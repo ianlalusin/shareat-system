@@ -7,7 +7,7 @@
 
 | | |
 |---|---|
-| **Version** | 1.1 — infrastructure decided |
+| **Version** | 1.2 — Phase 0 scaffold green |
 | **Created** | 2026-08-22 |
 | **Last amended** | 2026-08-22 |
 | **Status** | Accounting-correctness project (§1.1). All discovery complete. Root cause identified (§16.0). **Chart of accounts aligned and signed off.** Ready to write Phase 0/1 task specs. |
@@ -732,10 +732,12 @@ is misleading: unstyled pages and build errors pointing at files you never touch
 
 ### Git
 
-- ERPv2 is its own repository, initialised at Phase 0.
-- Work on feature branches; `main` stays green.
-- **Do not push until Ian has configured a remote and said so.** Commit locally.
+- Repository: **https://github.com/ianlalusin/ERPv2** (private), remote `origin`, default
+  branch `main`. Created 2026-08-22.
+- Work on feature branches; **`main` stays green** — CI runs typecheck, unit tests,
+  migrations, integration tests against a real Postgres, and the build on every push.
 - Commit after every green smoketest + build, not in one giant lump.
+- Never `--no-verify`, never skip CI.
 
 ---
 
@@ -933,6 +935,9 @@ just a patch.**
 | 62 | 2026-08-22 | **NEVER BUILD ON THE PRODUCTION DROPLET** — §2 rule 10, §8 Rule 1, and `CLAUDE.md` | 4 GB box runs the app; a Next.js build OOMs it. Build once, deploy many; the production host is not a build machine | No |
 | 63 | 2026-08-22 | ERP availability requirement is **lower than assumed** — POS and the customer app are independent, so ERP downtime costs back-office time, not revenue | Argues against over-engineering HA. Does **not** relax durability | Yes |
 | 64 | 2026-08-22 | Frappe/ERPNext backups in `shareat-erp-backups` are **retained**, Postgres backups go to a separate prefix, no expiry rule | They are the only remaining record of the ERPNext work and may serve as a migration reference | Yes |
+| 65 | 2026-08-22 | **PostgreSQL forbids DEFERRABLE on CHECK constraints.** Balance + minimum-two-lines must be a `CONSTRAINT TRIGGER ... DEFERRABLE INITIALLY DEFERRED`; per-row rules stay immediate CHECKs | Balance is inherently multi-row — an entry is legitimately unbalanced after its first line and need only be correct at COMMIT. Caught by the walking-skeleton test before Phase 1 was built on it | No |
+| 66 | 2026-08-22 | `esbuild` pinned via `overrides` to a single version | Two versions forced a nested copy whose platform-specific optional packages lost their `optional` flag, breaking `npm ci` on Linux | Yes |
+| 67 | 2026-08-22 | Money crosses the wire as a **string**, computed in integer centavos; `moneyFromLegacyFloat()` is the ETL-only escape hatch and **flags** every ambiguous source value | Reproduce v1's figure, surface the doubt (§11 rule 5) | No |
 
 ---
 
