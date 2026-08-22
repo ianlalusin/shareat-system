@@ -1,0 +1,30 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# next
+.next/
+out/
+build/
+next-env.d.ts.bak
+
+# env — NEVER commit real secrets. .env.example is the committed contract.
+.env
+.env.local
+.env.*.local
+*.pem
+*-service-account*.json
+
+# testing
+coverage/
+.vitest/
+
+# misc
+.DS_Store
+*.log
+npm-debug.log*
+tsconfig.tsbuildinfo
+.idea/
+.vscode/
+_scratch/

@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  verify:
+    name: typecheck, test, build
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: erpv2_test
+        ports: ['5433:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # CI-only throwaway values. Real secrets live in GitHub Secrets, never here.
+      NODE_ENV: test
+      APP_TIMEZONE: Asia/Manila
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5433/erpv2_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5433/erpv2_test
+      SESSION_SECRET: ci-only-not-a-real-secret-000000000000
+      FIREBASE_PROJECT_ID: ci-placeholder
+      FIREBASE_SERVICE_ACCOUNT_KEY: '{}'
+      NEXT_PUBLIC_FIREBASE_API_KEY: ci
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ci
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: ci
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ci
+      NEXT_PUBLIC_FIREBASE_APP_ID: ci
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test
+
+      - name: Apply migrations
+        run: npm run db:migrate
+
+      - name: Integration tests (real Postgres)
+        run: npm run test:integration
+
+      # PROJECT_BIBLE.md §2 rule 10 / §8 Rule 1:
+      # the production droplet NEVER builds. Builds happen here, and only here.
+      - name: Build
+        run: npm run build
