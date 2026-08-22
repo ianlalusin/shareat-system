@@ -188,14 +188,31 @@ audit_log       (id, actor_person_id, action, entity, entity_id,
 
 **Enforcement, in the database — not in application code:**
 
-- **Balance** — a deferred constraint trigger on commit: `Σ debit = Σ credit` per entry.
-- **Minimum two lines** — same trigger. This closes `balancer.ts:64-67` permanently.
-- **Closed period** — trigger rejecting insert/update where the period is not `open`.
-- **Posted immutability** — trigger blocking UPDATE/DELETE of lines on a posted entry.
-- **Postable account** — FK plus a CHECK that `is_postable` is true.
+| Rule | Mechanism | Timing |
+|---|---|---|
+| `debit >= 0`, `credit >= 0` | `CHECK` | immediate |
+| exactly one of debit/credit populated | `CHECK ((debit = 0) <> (credit = 0))` | immediate |
+| **Σ debit = Σ credit per entry** | **`CONSTRAINT TRIGGER … DEFERRABLE INITIALLY DEFERRED`** | **at COMMIT** |
+| **at least two lines per entry** | same constraint trigger | at COMMIT |
+| closed period | trigger rejecting insert/update where period ≠ `open` | immediate |
+| posted immutability | trigger blocking UPDATE/DELETE on a posted entry | immediate |
+| postable account | FK + `CHECK is_postable` | immediate |
 
-Deferred constraint triggers are the right tool: lines are inserted, then balance is
-verified at COMMIT. Application code cannot forget to call a validator.
+> ⚠️ **PostgreSQL does not allow CHECK constraints to be DEFERRABLE.**
+> `ERROR: CHECK constraints cannot be marked DEFERRABLE`. Only FOREIGN KEY, UNIQUE,
+> PRIMARY KEY, EXCLUDE and **CONSTRAINT TRIGGERS** can be deferred.
+>
+> This matters because balance is inherently a **multi-row** rule: after the first line is
+> inserted the entry is legitimately unbalanced, and it only has to be correct at COMMIT.
+> So balance and minimum-two-lines **must** be a deferrable constraint trigger; per-row
+> rules stay ordinary immediate CHECKs.
+>
+> Verified in `tests/integration/database.test.ts`, which proves an unbalanced state is
+> tolerated mid-transaction and rejected at COMMIT with the whole unit rolled back.
+> *(Found by that test — the first draft of it used a deferrable CHECK and Postgres
+> refused it.)*
+
+Application code cannot forget to call a validator, because there is no validator to call.
 
 ---
 
