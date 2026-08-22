@@ -9,26 +9,62 @@ something worked, say "done" — not the value.
 
 ---
 
-## ☐ TASK 1 — Install PostgreSQL 16 locally (~10 min)
+## ☐ TASK 1 — Install PostgreSQL locally (~10 min)
 
-Needed so local dev and tests run against a real Postgres, never production.
+> **Corrected 2026-08-22.** The original instruction said to use the EDB installer from
+> postgresql.org. **EDB no longer ships Windows installers** — every Windows column on
+> that page reads "Not supported". Ian spotted this. Use `winget` instead; the package is
+> published by the PostgreSQL Global Development Group itself.
 
-1. Download the Windows installer: **https://www.postgresql.org/download/windows/**
-   (the EDB installer). Pick **PostgreSQL 16**.
-2. Run it. During setup:
-   - **Port: `5433`** ← *not the default 5432.* This is deliberate, so any existing
-     Postgres on your machine is never disturbed.
-   - Set a password for the `postgres` superuser and **keep it somewhere safe**.
-   - Components: PostgreSQL Server + Command Line Tools. pgAdmin optional.
-   - Skip Stack Builder at the end.
-3. Verify — open a **new** Git Bash window and run:
-   ```bash
-   psql --version
-   ```
-   If that says `command not found`, add PostgreSQL's `bin` folder to your PATH
-   (typically `C:\Program Files\PostgreSQL\16\bin`) and reopen the terminal.
+### Do this in order — the version must match production
 
-**Tell me:** "local postgres done" — I'll create the `erpv2_dev` database and wire it up.
+**1a. Check DigitalOcean's version first.** Start Task 2, and on the create-cluster
+screen look at the PostgreSQL **version dropdown**. Note the newest version offered
+(likely **17**). Local and production should be the same major version, so a query that
+works in dev cannot fail in production on a version difference.
+
+**1b. Install that same version locally:**
+
+```bash
+# if DO offers 17 (most likely)
+winget install --id PostgreSQL.PostgreSQL.17 -e --interactive
+
+# if DO's newest is 16
+winget install --id PostgreSQL.PostgreSQL.16 -e --interactive
+```
+
+`--interactive` matters: it opens the setup wizard so you can set the port and password
+yourself, rather than the installer silently defaulting and putting a password on the
+command line where it would land in shell history.
+
+**In the wizard:**
+
+| Setting | Value |
+|---|---|
+| **Port** | **`5433`** ← *not* the default 5432. Deliberate, so any other Postgres on this machine is never disturbed |
+| Password | For the `postgres` superuser. Keep it safe; you will put it in `.env.local` |
+| Components | PostgreSQL Server + Command Line Tools. pgAdmin optional |
+| Stack Builder | Skip at the end |
+
+**1c. Verify** — open a **new** Git Bash window (PATH changes need a fresh shell):
+
+```bash
+psql --version
+```
+
+If it says `command not found`, add the install's `bin` folder to PATH
+(e.g. `C:\Program Files\PostgreSQL\17\bin`) and reopen the terminal.
+
+**Tell me:** "local postgres done, version NN" — I will create the `erpv2_dev` and
+`erpv2_test` databases and wire up `.env.local`.
+
+### Alternatives, if winget gives you trouble
+
+- **Docker** (installed here, v29.6.1): `docker run -d --name erpv2-pg -e POSTGRES_PASSWORD=... -p 5433:5432 postgres:17`
+  Fast, but Docker Desktop/WSL2 has been flaky on this machine before, so it is the fallback rather than the default.
+- **WSL2 Ubuntu** (already your default distro): `sudo apt install postgresql-17`.
+  Linux builds *are* still published, so this works — it just puts the database behind
+  the WSL network boundary, which is one more thing to reason about.
 
 ---
 
@@ -39,7 +75,7 @@ Needed so local dev and tests run against a real Postgres, never production.
 
    | Field | Value | Why |
    |---|---|---|
-   | Engine | **PostgreSQL 16** | Matches local |
+   | Engine | **newest offered (likely 17)** | Note it — install the SAME major version locally in Task 1 |
    | Region | **Singapore / SGP1** | **Must match the droplet** or you lose private networking |
    | VPC Network | **the same VPC as SharEat-Droplet** | This is what keeps the DB off the public internet |
    | Plan | Basic — smallest node | Resizes later; start small |
@@ -77,20 +113,55 @@ stray cron jobs.
 
 ---
 
-## ☐ TASK 4 — Optional: install `doctl` (~5 min)
+## ☐ TASK 4 — Credentials: what I need, and what I must never see
 
-Lets me manage DO resources directly instead of handing you console steps.
+Three DIFFERENT credentials are involved. They are not interchangeable, and I handle
+none of them directly.
+
+| Credential | What it is for | How I get access |
+|---|---|---|
+| **DO API token** | Create/manage the database cluster, trusted sources, read droplet info | **You** authenticate `doctl`. I run `doctl` commands. **I never see the token.** |
+| **Spaces access key + secret** | Postgres backups shipping to `shareat-erp-backups` (Phase 0/1) | Goes straight into the backup config on the droplet. Never into the repo, never into chat. |
+| **SSH access to the droplet** | Deploying, and reading what is running | Your call — see below |
+
+### 4a. DO API token → install and authenticate `doctl` yourself
 
 ```bash
 winget install --id DigitalOcean.Doctl
 ```
-Then create a token at **DO → API → Generate New Token** (read+write) and run:
+
+Then create a token: **DO Console → API → Tokens → Generate New Token**
+- Scopes: **read + write** (needed to create the database cluster)
+- **Set an expiry** — 90 days is plenty; it can always be regenerated
+- If DO offers granular scopes, limit it to `database` and `droplet`
+
 ```bash
 doctl auth init
 ```
-Paste the token **into that prompt only** — not into chat.
 
-Skip this if you'd rather drive the console yourself.
+**Paste the token into that prompt and nowhere else.** Not into chat, not into a file,
+not into a commit. Once `doctl` holds it, I can run commands against your account without
+the value ever passing through me.
+
+Verify it worked:
+```bash
+doctl account get
+```
+
+**This is optional.** If you would rather drive the DO console yourself, skip it entirely
+and I will hand you console steps instead — nothing in the plan depends on `doctl`.
+
+### 4b. SSH to the droplet — decide later, not now
+
+For Phase 0 I only need the **output** of the commands in Task 3, which you can paste.
+
+Real deploys eventually need either an SSH key I can use, or you running a deploy command.
+**Recommendation: neither, long-term.** Deployment should run from **GitHub Actions** with
+a deploy key held in GitHub Secrets — so no human and no agent needs standing shell access
+to the production box, and every deploy is logged and repeatable. That is the industry
+norm and it is also the safest arrangement here.
+
+We can decide this when we get to deployment. It does not block anything now.
 
 ---
 
