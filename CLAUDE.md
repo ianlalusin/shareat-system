@@ -1,5 +1,9 @@
 # ERPv2
 
+> ### 👉 New machine or fresh session? Run **`/handoff`**, or read [`HANDOFF.md`](./HANDOFF.md).
+> It walks the full cold start: toolchain, cloning the reference repo, installing
+> PostgreSQL, configuring `.env.local`, verifying the build, and what to work on next.
+
 **Before doing anything in this repo, read [`PROJECT_BIBLE.md`](./PROJECT_BIBLE.md) in full.**
 
 It is the authority on this project: architecture, execution model, data conventions,
@@ -30,6 +34,7 @@ you are acting as the Opus planner.
 
 | Path | What |
 |---|---|
+| `HANDOFF.md` | Cold-start guide for a new machine or fresh session |
 | `PROJECT_BIBLE.md` | The authority. Read first. |
 | `docs/discovery/` | Read-only findings from ERP-rebuild |
 | `docs/plans/` | Phase plans |
