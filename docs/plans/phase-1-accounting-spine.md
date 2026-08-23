@@ -307,6 +307,21 @@ reconciliation report on every run (source count, target count, sums both sides)
 
 ---
 
+## Before the next phase is planned — bible §3.6
+
+**Phase 2 and Phase 3 each get a research pass before their plan is written.** Phase 1 was
+planned from first principles and got away with it because double-entry is the most documented
+structure in accounting. The next two are not like that:
+
+| Phase | What to research first | Why it cannot be invented |
+|---|---|---|
+| **2 — source documents** | Period close and year-end mechanics; retained-earnings roll-forward; prior-period adjustment handling | We have `fiscal_periods` with open/closed/locked and **no close routine at all**. This is the largest blank in the system, and December needs it |
+| **3 — inventory** | Valuation method (weighted average vs FIFO vs standard) for food businesses; when COGS posts; wastage, spoilage and count-variance treatment; **inter-company transfer and elimination** | The commissary→branch pipeline is ~24 capabilities that double-count by construction if the elimination is wrong |
+
+The first of these is already running (`docs/discovery/17-industry-erp-patterns.md`).
+
+---
+
 ## H. Task sequence
 
 | # | Task | Depends on |

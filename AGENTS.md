@@ -73,6 +73,11 @@ opening it. Read them as *requirements*, not as design (bible section 1.2b).
   deliberate Opus pass, and genuinely intricate data-shape design. *"It was hard"* is not the
   bar for escalation; a systematic pass must have been made and failed. Equally, do not spend
   Opus on what Sonnet does well.
+- **Research before planning** (bible §3.6). A new phase or module, or any data shape that is
+  expensive to undo, gets a bounded research pass into how mature systems solve it *before*
+  the plan is written — with a document under `docs/discovery/`. Research **informs**; it
+  does not decide. The target is the midpoint (§1.1), so the output must name what we are
+  **not** adopting and why, or it becomes a shopping list.
 - **Tests before implementation**, and integration tests run against a **real** PostgreSQL,
   never a mock.
 - **Verify, do not claim.** Run the command and report its actual output. A task reported

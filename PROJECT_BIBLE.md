@@ -426,6 +426,51 @@ agent-facing checks stay out of that block.
 
 ---
 
+### 3.6 Research before planning — *Ian, 2026-08-23*
+
+> *"Before planning one part or feature, research first, to help plan the correct data
+> handling."*
+
+**A phase or module plan is not written from first principles.** Before designing how data
+moves through a domain we have not built yet, spend a bounded pass learning how mature systems
+solve it — then plan with that in hand.
+
+The reason is narrow and practical: **data-shape mistakes are the expensive kind.** A wrong
+screen is a week; a wrong ledger shape is a migration. People have built inventory valuation,
+period close and payroll accrual for decades, and the patterns that survived did so because the
+alternatives failed somewhere.
+
+**Sequencing:** research → plan → spec → implement. We did Phase 1 in the other order and got
+away with it because the double-entry ledger is the most documented structure in accounting.
+That will not hold for inventory valuation, period close, or the commissary pipeline.
+
+### When it applies
+
+| Do research first | Skip it |
+|---|---|
+| A new **phase** or module (Phase 2 source documents, Phase 3 inventory, Phase 5 payroll) | Executing a written spec |
+| Any **data shape expensive to undo** — a table everything else references, a posting pattern, a valuation method | A bug fix, a rename, a test |
+| A domain where we have **no prior art in the reference repos**, or where v1's version is known-broken | Something already researched and recorded — check §13 and `docs/discovery/` **first** |
+
+### Four guards, or this degrades into delay
+
+1. **Time-boxed, and it produces a written artifact** under `docs/discovery/`. Research with no
+   document is procrastination with a nicer name.
+2. **Research informs; it does not decide.** §1.1 is unchanged: the target is the midpoint —
+   *ERPNext's rigour, none of its generality*. **"SAP does it" is not a reason.** A system built
+   for thousands of customers makes choices that are actively wrong for a seven-store business.
+3. **The output must name what we are NOT adopting, and why.** Research that returns only a
+   list of things to add has become a shopping list, and shopping lists are how a rebuild
+   acquires the generality it decided not to carry.
+4. **Distinguish genuinely standard from one vendor's choice**, with sources. That distinction
+   is the difference between a lesson and an opinion.
+
+**Who does it:** a **Sonnet** explorer produces the research (§3.1a — reading a lot of material
+is exactly what Sonnet is for). **Opus** decides what we adopt. The research document is
+evidence, never a plan.
+
+---
+
 ## 4. Architecture — the relational core
 
 ### 4.1 Stack
@@ -1069,6 +1114,7 @@ just a patch.**
 | 93 | 2026-08-23 | **Model selection is a deliberate choice per task, not a default (§3.1a): Sonnet explores and implements, Opus plans and reviews, Fable is reserved for two specific cases** | Ian: *"juggle Fable, Opus and Sonnet for the specific task that needs them."* Sonnet is the default for delegated work — code reading, discovery, capability inventories, executing a written spec. Opus owns planning, architecture, specs, review, and anything landing in §13. **Fable is reserved for (1) a bug that has already survived a deliberate Opus pass, and (2) genuinely intricate data-shape design where getting the shape wrong is expensive to undo.** Two guards recorded with it: "Opus found it hard" is **not** the bar for escalation — a systematic pass must have been made and failed — and **Opus must not be spent on what Sonnet does well**, because every Opus turn on mechanical reading is a decision not being made | Yes |
 | 94 | 2026-08-23 | **Parallel agents must share no STATE, not merely no files** (§3.4) | Observed running T-106 and T-107 concurrently: both were correctly scoped to disjoint files and still collided, because both ran `test:integration` against the single `shareat_test` database and truncated each other's fixtures mid-run — producing sporadic failures in files **neither agent had touched**. The final serialised run was 136/136 clean, so the collision was pure noise, but noise that looks exactly like a real regression is expensive. Before parallelising, ask what else is shared: the test database, `migrations/meta/_journal.json`, a port, an external service | Yes |
 | 95 | 2026-08-23 | **A guard written against the states that exist today stops guarding when a new state appears** (DEF-036) | Migration `0004`'s immutability check tested `entry_status = 'posted'` only. Correct when written — nothing produced a `'reversed'` entry yet. T-106 introduced that transition, which would have left every reversed entry's lines editable by raw SQL, breaking invariant 6. Found by the T-106 implementer while implementing something else and outside its own contract. **Any status added to `journal_entries` must be checked against every trigger that switches on status** | No |
+| 96 | 2026-08-23 | **Research before planning: a phase or module plan is preceded by a bounded research pass into how mature systems solve it** (§3.6) | Ian: *"before planning one part or feature, research first, to help plan the correct data handling."* **Data-shape mistakes are the expensive kind** — a wrong screen is a week, a wrong ledger shape is a migration. Phase 1 was planned in the *other* order and got away with it only because double-entry is the most documented structure in accounting; that will not hold for inventory valuation, period close, or the commissary pipeline. **Four guards recorded so this does not become delay:** time-boxed with a written artifact under `docs/discovery/`; research **informs, never decides** (§1.1's midpoint stands — "SAP does it" is not a reason); **the output must name what we are NOT adopting and why**, or it becomes a shopping list and a rebuild acquires the generality it chose not to carry; and *standard* must be distinguished from *one vendor's choice*, with sources. Sonnet researches, Opus decides | No |
 
 ---
 
