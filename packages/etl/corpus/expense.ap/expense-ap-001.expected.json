@@ -17,7 +17,9 @@
           "debit": "0.00",
           "credit": "8500.00",
           "lineMemo": "AP payment #1",
-          "channelId": null
+          "channelId": null,
+          "partyType": "supplier",
+          "partyId": "SUP-0450"
         },
         {
           "accountCode": "6300",
@@ -25,7 +27,9 @@
           "debit": "8500.00",
           "credit": "0.00",
           "lineMemo": "Utilities",
-          "channelId": null
+          "channelId": null,
+          "partyType": null,
+          "partyId": null
         }
       ]
     }

@@ -56,6 +56,10 @@ export interface ChartOfAccountsSeedAccount {
   isPostable: boolean;
   legacyCode: string | null;
   status: SeedAccountStatus;
+  /** T-118 (docs/tasks/118-subledger-party-on-line.md, closing DEF-037) — true on exactly
+   * the nine control accounts COA-ALIGNMENT names "CONTROL + subledger". Always false for
+   * headers (not postable, so never carry a line) and every other leaf. */
+  requiresParty: boolean;
 }
 
 const header = (
@@ -72,6 +76,7 @@ const header = (
   isPostable: false,
   legacyCode: null,
   status: 'active',
+  requiresParty: false,
 });
 
 const leaf = (
@@ -80,7 +85,7 @@ const leaf = (
   type: AccountType,
   normalBalance: NormalBalance,
   parentCode: string,
-  opts: { legacyCode?: string; status?: SeedAccountStatus } = {},
+  opts: { legacyCode?: string; status?: SeedAccountStatus; requiresParty?: boolean } = {},
 ): ChartOfAccountsSeedAccount => ({
   code,
   name,
@@ -90,6 +95,7 @@ const leaf = (
   isPostable: true,
   legacyCode: opts.legacyCode ?? null,
   status: opts.status ?? 'active',
+  requiresParty: opts.requiresParty ?? false,
 });
 
 export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
@@ -113,15 +119,15 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
   leaf('1120', 'Cash on hand — staff custodian', 'asset', 'debit', '1000', { legacyCode: 'cash__staff' }),
   leaf('1130', 'Cash on hand — office', 'asset', 'debit', '1000', { legacyCode: 'cash__office' }),
   leaf('1140', 'E-wallet / online channels', 'asset', 'debit', '1000'), // control; online__{id} per-entity
-  leaf('1210', 'Accounts receivable', 'asset', 'debit', '1000'), // control; ar__{customerId} per-entity
-  leaf('1220', 'Channel receivable', 'asset', 'debit', '1000'), // control; ar__channel_{id} per-entity
+  leaf('1210', 'Accounts receivable', 'asset', 'debit', '1000', { requiresParty: true }), // control; ar__{customerId} per-entity — T-118 party_type=customer
+  leaf('1220', 'Channel receivable', 'asset', 'debit', '1000', { requiresParty: true }), // control; ar__channel_{id} per-entity — T-118 party_type=channel
   leaf('1221', 'Channel clearing — Grab', 'asset', 'debit', '1000', { legacyCode: 'clearing__grab' }),
   leaf('1222', 'Channel clearing — Foodpanda', 'asset', 'debit', '1000', {
     legacyCode: 'clearing__foodpanda',
   }),
-  leaf('1230', 'Advances to employees', 'asset', 'debit', '1000'), // control; staff_advance__{staffId}
-  leaf('1240', 'Advances to suppliers', 'asset', 'debit', '1000'), // control; supplier_advance__{supplierId}
-  leaf('1250', 'Due from related store', 'asset', 'debit', '1000'), // asset__due_from_{storeKey}, ar__{branchAsCustomer}
+  leaf('1230', 'Advances to employees', 'asset', 'debit', '1000', { requiresParty: true }), // control; staff_advance__{staffId} — T-118 party_type=employee
+  leaf('1240', 'Advances to suppliers', 'asset', 'debit', '1000', { requiresParty: true }), // control; supplier_advance__{supplierId} — T-118 party_type=supplier
+  leaf('1250', 'Due from related store', 'asset', 'debit', '1000', { requiresParty: true }), // asset__due_from_{storeKey}, ar__{branchAsCustomer} — T-118 party_type=store
   leaf('1310', 'Inventory — raw materials', 'asset', 'debit', '1000'), // 🆕
   leaf('1320', 'Inventory — supplies and packaging', 'asset', 'debit', '1000'), // 🆕
   leaf('1330', 'Inventory — prepped / commissary goods', 'asset', 'debit', '1000'), // 🆕
@@ -140,13 +146,15 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
   // ---------------------------------------------------------------------------------
   // Liabilities 2xxx
   // ---------------------------------------------------------------------------------
-  leaf('2110', 'Accounts payable', 'liability', 'credit', '2000'), // control; ap__{supplierId}
-  leaf('2130', 'Reimbursements payable to employees', 'liability', 'credit', '2000'), // staff_reimbursable__{staffId}
+  leaf('2110', 'Accounts payable', 'liability', 'credit', '2000', { requiresParty: true }), // control; ap__{supplierId} — T-118 party_type=supplier
+  leaf('2130', 'Reimbursements payable to employees', 'liability', 'credit', '2000', {
+    requiresParty: true,
+  }), // staff_reimbursable__{staffId} — T-118 party_type=employee
   leaf('2140', 'Customer store credits payable', 'liability', 'credit', '2000', {
     legacyCode: 'others__store_credits',
   }),
   leaf('2145', 'Unredeemed vouchers', 'liability', 'credit', '2000', { status: 'reserved' }),
-  leaf('2150', 'Due to related store', 'liability', 'credit', '2000'), // liability__due_to_{storeKey}, ap__{commissaryMirror}
+  leaf('2150', 'Due to related store', 'liability', 'credit', '2000', { requiresParty: true }), // liability__due_to_{storeKey}, ap__{commissaryMirror} — T-118 party_type=store
   leaf('2210', 'SSS payable', 'liability', 'credit', '2000'), // 🆕
   leaf('2220', 'PhilHealth payable', 'liability', 'credit', '2000'), // 🆕
   leaf('2230', 'Pag-IBIG payable', 'liability', 'credit', '2000'), // 🆕
@@ -155,7 +163,7 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
   leaf('2300', 'Salaries and wages payable', 'liability', 'credit', '2000', {
     legacyCode: 'liability__salaries_payable',
   }),
-  leaf('2400', 'Loans payable', 'liability', 'credit', '2000'), // control; liability__loan_{loanId}
+  leaf('2400', 'Loans payable', 'liability', 'credit', '2000', { requiresParty: true }), // control; liability__loan_{loanId} — T-118 party_type=supplier (the lender)
   leaf('2900', 'Suspense — void cash', 'liability', 'credit', '2000', {
     legacyCode: 'liability__void_cash_suspense',
   }),
@@ -347,13 +355,14 @@ export async function seedChartOfAccounts(sql: postgres.Sql, orgId: string): Pro
     normal_balance: h.normalBalance,
     legacy_code: h.legacyCode,
     status: h.status,
+    requires_party: h.requiresParty,
   }));
 
   const headerRows = await sql<{ id: string }[]>`
-    insert into accounts (org_id, code, name, type, normal_balance, parent_id, is_postable, is_system, legacy_code, status)
-    select ${orgId}::uuid, v.code, v.name, v.type, v.normal_balance, null, false, true, v.legacy_code, v.status
+    insert into accounts (org_id, code, name, type, normal_balance, parent_id, is_postable, is_system, legacy_code, status, requires_party)
+    select ${orgId}::uuid, v.code, v.name, v.type, v.normal_balance, null, false, true, v.legacy_code, v.status, v.requires_party
     from jsonb_to_recordset(${sql.json(headerPayload)})
-      as v(code text, name text, type text, normal_balance text, legacy_code text, status text)
+      as v(code text, name text, type text, normal_balance text, legacy_code text, status text, requires_party boolean)
     on conflict (org_id, code) do nothing
     returning accounts.id
   `;
@@ -366,13 +375,14 @@ export async function seedChartOfAccounts(sql: postgres.Sql, orgId: string): Pro
     parent_code: l.parentCode,
     legacy_code: l.legacyCode,
     status: l.status,
+    requires_party: l.requiresParty,
   }));
 
   const leafRows = await sql<{ id: string }[]>`
-    insert into accounts (org_id, code, name, type, normal_balance, parent_id, is_postable, is_system, legacy_code, status)
-    select ${orgId}::uuid, v.code, v.name, v.type, v.normal_balance, p.id, true, true, v.legacy_code, v.status
+    insert into accounts (org_id, code, name, type, normal_balance, parent_id, is_postable, is_system, legacy_code, status, requires_party)
+    select ${orgId}::uuid, v.code, v.name, v.type, v.normal_balance, p.id, true, true, v.legacy_code, v.status, v.requires_party
     from jsonb_to_recordset(${sql.json(leafPayload)})
-      as v(code text, name text, type text, normal_balance text, parent_code text, legacy_code text, status text)
+      as v(code text, name text, type text, normal_balance text, parent_code text, legacy_code text, status text, requires_party boolean)
     join accounts p on p.org_id = ${orgId}::uuid and p.code = v.parent_code
     on conflict (org_id, code) do nothing
     returning accounts.id
@@ -385,6 +395,13 @@ export async function seedChartOfAccounts(sql: postgres.Sql, orgId: string): Pro
  * test suite's expectation and the seed data can never silently drift apart. */
 export const RESERVED_CODES: readonly string[] = CHART_OF_ACCOUNTS.filter(
   (a) => a.status === 'reserved',
+).map((a) => a.code);
+
+/** Every requires_party = true code in the seed — T-118 Contract §2 (the nine control
+ * accounts). Exported so the test suite's expectation and the seed data can never
+ * silently drift apart, same precedent as RESERVED_CODES above. */
+export const REQUIRES_PARTY_CODES: readonly string[] = CHART_OF_ACCOUNTS.filter(
+  (a) => a.requiresParty,
 ).map((a) => a.code);
 
 /** Sanity check used by the test suite — every header code referenced by a leaf must

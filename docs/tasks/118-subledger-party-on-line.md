@@ -1,6 +1,8 @@
 # T-118 — The subledger: `party_type` + `party_id` on the journal line
 
-> **Status:** spec ready. **Depends on:** T-103, T-105 (done). **Blocks:** Phase 2's first AP
+> **Status:** ✅ **COMPLETE 2026-08-23** — 9/9 invariants. Invariant 6 demonstrated for the
+> first time: 150.00 + 75.00 across two suppliers = 225.00, exactly the 2110 control balance.
+> **Was:** spec ready. **Depends on:** T-103, T-105 (done). **Blocks:** Phase 2's first AP
 > or AR posting. **Closes:** DEF-037. **Decided by Ian:** bible §13 row 98.
 > **Written by:** Opus planner, 2026-08-23.
 
@@ -132,3 +134,26 @@ backfill nothing needs.
 - [ ] **DEF-037 marked `fixed`** in `docs/DEFECTS-REGISTER.md`, naming invariant 8 as the closer.
 - [ ] The missing-FK exception (§4) **reported** for the planner to record.
 - [ ] Any spec defect **reported, not silently worked around**.
+
+
+---
+
+## Implementation notes — resolved 2026-08-23
+
+**1. It correctly broke the ETL, and did not paper over it.** Requiring a party on 2110 made
+the corpus specimen `expense-ap-001` unconvertible — its raw source carries
+`supplierId: "SUP-0450"`, but `convert.ts` never carried it onto the AP line. `packages/etl`
+was outside this task's scope, so the implementer **reported it rather than weakening the
+trigger**, which would have defeated the entire task.
+
+Fixed by the planner: `ConvertedLine` now carries `partyType`/`partyId`, the AP and
+reimbursable funding lines read the supplier and staff id from the source document, and an AP
+expense **with no supplier now quarantines with a named reason** rather than posting an
+unattributable control line. All 8 golden fixtures were re-derived and diffed.
+
+**2. It found a landmine worth more than the task — DEF-039.** `drizzle-kit generate` stamped
+`0007` with a `when` numerically *smaller* than `0006`'s hand-picked future value, and the
+migrator **silently skipped it on both databases with exit code 0**. Now guarded by a test
+asserting the journal is strictly ascending.
+
+**3. The missing FK is recorded as DEF-040**, to be tightened in Phase 2.

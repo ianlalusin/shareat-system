@@ -17,7 +17,9 @@
           "debit": "0.00",
           "credit": "60000.00",
           "lineMemo": "cash payment #1",
-          "channelId": null
+          "channelId": null,
+          "partyType": null,
+          "partyId": null
         },
         {
           "accountCode": "1510",
@@ -25,7 +27,9 @@
           "debit": "60000.00",
           "credit": "0.00",
           "lineMemo": "capitalised: AST-2026-001",
-          "channelId": null
+          "channelId": null,
+          "partyType": null,
+          "partyId": null
         }
       ]
     }

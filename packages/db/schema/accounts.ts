@@ -6,6 +6,14 @@
  * prefix). `is_system` rows may be deactivated but never deleted, and their `code` is
  * stable forever (bible §4.4) — nothing here deletes a row; that discipline lives in the
  * application layer that seeds and edits this table (T-102).
+ *
+ * `requires_party` — docs/tasks/118-subledger-party-on-line.md, closing DEF-037. True on
+ * exactly the nine control accounts COA-ALIGNMENT names as "CONTROL + subledger" (2110 AP,
+ * 1210 AR, 1220, 1230, 1240, 2130, 1250, 2150, 2400 — see
+ * packages/db/seed/chart-of-accounts.ts). Enforced both directions by a hand-added
+ * cross-table trigger on journal_lines (migration 0007) — never derivable from `type` or
+ * `code`, matching this file's own `normal_balance` precedent of declaring rather than
+ * inferring.
  */
 import { sql } from 'drizzle-orm';
 import {
@@ -37,6 +45,11 @@ export const accounts = pgTable(
       onDelete: 'restrict',
     }),
     isPostable: boolean('is_postable').notNull().default(true),
+    // T-118 — docs/tasks/118-subledger-party-on-line.md. Whether a journal_lines row
+    // targeting this account MUST carry a party_type/party_id (control accounts with a
+    // subledger) or MUST NOT (every other account). Enforced both directions by a
+    // trigger, not by TypeScript — see this file's top comment.
+    requiresParty: boolean('requires_party').notNull().default(false),
     isSystem: boolean('is_system').notNull().default(false),
     legacyCode: text('legacy_code'),
     status: text('status', { enum: ['active', 'reserved', 'archived'] })

@@ -121,6 +121,11 @@ export interface ConvertedLine {
   credit: Money;
   lineMemo: string | null;
   channelId: string | null;
+  /** T-118: the subledger counterparty. A line targeting a `requires_party` control
+   *  account (2110 AP, 2130 reimbursements, …) MUST carry both; the database rejects it
+   *  otherwise, and rejects a party on an account that does not take one. Both or neither. */
+  partyType: 'supplier' | 'customer' | 'employee' | 'store' | 'channel' | null;
+  partyId: string | null;
 }
 
 export interface ConvertedEntry {
@@ -149,7 +154,12 @@ function line(
   storeCode: string | null,
   side: 'debit' | 'credit',
   amount: Money,
-  opts: { lineMemo?: string | null; channelId?: string | null } = {},
+  opts: {
+    lineMemo?: string | null;
+    channelId?: string | null;
+    partyType?: ConvertedLine['partyType'];
+    partyId?: string | null;
+  } = {},
 ): ConvertedLine {
   return {
     accountCode,
@@ -158,6 +168,9 @@ function line(
     credit: side === 'credit' ? amount : ZERO,
     lineMemo: opts.lineMemo ?? null,
     channelId: opts.channelId ?? null,
+    // T-118: both or neither — the database CHECK enforces it, so never emit one alone.
+    partyType: opts.partyType ?? null,
+    partyId: opts.partyId ?? null,
   };
 }
 
@@ -269,6 +282,7 @@ function fundingLine(
   storeCode: string | null,
   payment: ExpensePaymentSplit,
   idx: number,
+  doc: ExpenseDoc,
 ): ConvertedLine | { error: string } {
   const amount = money(payment.amount);
   switch (payment.method) {
@@ -280,10 +294,29 @@ function fundingLine(
           : ACCOUNTS.CASH_CASHIER;
       return line(account, storeCode, 'credit', amount, { lineMemo: `cash payment #${idx}` });
     }
-    case 'credit':
-      return line(ACCOUNTS.AP, storeCode, 'credit', amount, { lineMemo: `AP payment #${idx}` });
-    case 'reimbursable':
-      return line(ACCOUNTS.REIMBURSABLE_TO_EMPLOYEES, storeCode, 'credit', amount, { lineMemo: `reimbursable payment #${idx}` });
+    case 'credit': {
+      // T-118: 2110 is a CONTROL account — the database refuses a line without a party.
+      // v1 carries the supplier on the expense document, not on the journal leg, so it is
+      // read from the source doc. No supplier means the subledger cannot be reconstructed,
+      // and a quarantine is the honest outcome (T-113 §3 rule 1 — never guess).
+      const supplierId = doc.supplierId ?? null;
+      if (!supplierId) {
+        return { error: `expense ${doc.id}: an AP (credit) payment has no supplierId — 2110 is a control account and its subledger cannot be reconstructed without one` };
+      }
+      return line(ACCOUNTS.AP, storeCode, 'credit', amount, {
+        lineMemo: `AP payment #${idx}`, partyType: 'supplier', partyId: supplierId,
+      });
+    }
+    case 'reimbursable': {
+      // 2130 is likewise a control account, keyed by the employee owed.
+      const staffId = payment.staffId ?? null;
+      if (!staffId) {
+        return { error: `expense ${doc.id}: a reimbursable payment has no staffId — 2130 is a control account and its subledger cannot be reconstructed without one` };
+      }
+      return line(ACCOUNTS.REIMBURSABLE_TO_EMPLOYEES, storeCode, 'credit', amount, {
+        lineMemo: `reimbursable payment #${idx}`, partyType: 'employee', partyId: staffId,
+      });
+    }
     case 'online':
       return line(ACCOUNTS.ONLINE, storeCode, 'credit', amount, { lineMemo: `online payment #${idx}` });
     case 'other':
@@ -317,7 +350,7 @@ export function convertExpense(specimenId: string, caseClass: CaseClass, doc: Ex
   const lines: ConvertedLine[] = [];
   for (const [idx, payment] of payments.entries()) {
     if (isZero(money(payment.amount))) continue;
-    const result = fundingLine(specimenId, caseClass, storeCode, payment, idx + 1);
+    const result = fundingLine(specimenId, caseClass, storeCode, payment, idx + 1, doc);
     if ('error' in result) {
       return quarantined(specimenId, caseClass, `expense ${doc.id}: ${result.error}`);
     }

@@ -17,7 +17,9 @@
           "debit": "0.00",
           "credit": "15000.00",
           "lineMemo": "cash payment #1",
-          "channelId": null
+          "channelId": null,
+          "partyType": null,
+          "partyId": null
         },
         {
           "accountCode": "6200",
@@ -25,7 +27,9 @@
           "debit": "15000.00",
           "credit": "0.00",
           "lineMemo": "Rent",
-          "channelId": null
+          "channelId": null,
+          "partyType": null,
+          "partyId": null
         }
       ]
     }

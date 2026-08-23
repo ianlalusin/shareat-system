@@ -175,8 +175,8 @@ async function replayEntry(entry: ConversionResult['entries'][number]): Promise<
       const accountId = await resolveAccount(l.accountCode);
       const lineStoreId = resolveStore(l.storeCode);
       await trx`
-        insert into journal_lines (entry_id, line_no, account_id, store_id, channel_id, debit, credit, line_memo)
-        values (${entryId}, ${lineNo}, ${accountId}, ${lineStoreId}, ${l.channelId}, ${l.debit}, ${l.credit}, ${l.lineMemo})
+        insert into journal_lines (entry_id, line_no, account_id, store_id, channel_id, debit, credit, line_memo, party_type, party_id)
+        values (${entryId}, ${lineNo}, ${accountId}, ${lineStoreId}, ${l.channelId}, ${l.debit}, ${l.credit}, ${l.lineMemo}, ${l.partyType}, ${l.partyId})
       `;
       lineNo++;
     }

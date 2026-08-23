@@ -149,18 +149,38 @@ describe('convertExpense — cash (OPEX)', () => {
 });
 
 describe('convertExpense — AP (OPEX)', () => {
-  it('credits 2110 AP instead of cash', () => {
+  it('credits 2110 AP instead of cash, and carries the supplier as the subledger party', () => {
+    const doc = baseExpense({
+      totalAmount: 8500,
+      expenseEntryGroup: 'OPEX',
+      category: 'Utilities',
+      supplierId: 'SUP-0450',
+      payments: [{ method: 'credit', amount: 8500 }],
+    });
+    const result = convertExpense('spec-9', 'expense.ap', doc);
+    expect(result.status).toBe('converted');
+    const lines = result.entries[0]!.lines;
+    const ap = lines.find((l) => l.accountCode === ACCOUNTS.AP);
+    expect(ap?.credit).toBe('8500.00');
+    // T-118: 2110 is a control account. Without the party the subledger cannot be
+    // reconstructed and the database rejects the line outright.
+    expect(ap?.partyType).toBe('supplier');
+    expect(ap?.partyId).toBe('SUP-0450');
+    expect(lines.some((l) => l.accountCode === '6300' && l.debit === '8500.00')).toBe(true);
+  });
+
+  it('QUARANTINES an AP expense with no supplierId rather than posting an unattributable control line', () => {
+    // The alternative — posting to 2110 with a null party — is what the database now
+    // refuses, and refusing here gives the ETL a named reason instead of a constraint error.
     const doc = baseExpense({
       totalAmount: 8500,
       expenseEntryGroup: 'OPEX',
       category: 'Utilities',
       payments: [{ method: 'credit', amount: 8500 }],
     });
-    const result = convertExpense('spec-9', 'expense.ap', doc);
-    expect(result.status).toBe('converted');
-    const lines = result.entries[0]!.lines;
-    expect(lines.some((l) => l.accountCode === ACCOUNTS.AP && l.credit === '8500.00')).toBe(true);
-    expect(lines.some((l) => l.accountCode === '6300' && l.debit === '8500.00')).toBe(true);
+    const result = convertExpense('spec-9b', 'expense.ap', doc);
+    expect(result.status).toBe('quarantined');
+    expect(JSON.stringify(result)).toMatch(/supplierId/);
   });
 });
 

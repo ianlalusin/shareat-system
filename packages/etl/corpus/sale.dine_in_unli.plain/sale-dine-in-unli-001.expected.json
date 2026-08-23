@@ -17,7 +17,9 @@
           "debit": "45000.00",
           "credit": "0.00",
           "lineMemo": "cash tender",
-          "channelId": null
+          "channelId": null,
+          "partyType": null,
+          "partyId": null
         },
         {
           "accountCode": "1140",
@@ -25,7 +27,9 @@
           "debit": "5000.00",
           "credit": "0.00",
           "lineMemo": "online: gcash",
-          "channelId": null
+          "channelId": null,
+          "partyType": null,
+          "partyId": null
         },
         {
           "accountCode": "4100",
@@ -33,7 +37,9 @@
           "debit": "0.00",
           "credit": "50000.00",
           "lineMemo": "dine-in unlimited",
-          "channelId": null
+          "channelId": null,
+          "partyType": null,
+          "partyId": null
         }
       ]
     }

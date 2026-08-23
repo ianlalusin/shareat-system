@@ -50,6 +50,13 @@
       "when": 1787491000000,
       "tag": "0006_coa_expense_category_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787492000000,
+      "tag": "0007_subledger_party_on_line",
+      "breakpoints": true
     }
   ]
 }

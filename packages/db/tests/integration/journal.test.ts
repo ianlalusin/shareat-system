@@ -1,6 +1,10 @@
 import { config } from 'dotenv';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import { migrate } from 'drizzle-orm/postgres-js/migrator';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /**
  * Proves the 19 invariants of docs/tasks/103-journal-tables.md against a real PostgreSQL
@@ -17,6 +21,11 @@ import postgres from 'postgres';
  * Written FIRST, before the migration existed, to confirm the initial run fails for the
  * right reason — "relation journal_entries does not exist" — not a typo or a wrong import.
  * See the task report for the actual first-run output.
+ *
+ * T-118 addendum (docs/tasks/118-subledger-party-on-line.md, closing DEF-037): the
+ * "T-118 invariant N" blocks near the end of this file prove the nine numbered
+ * invariants of that task — independently numbered from the 19 above, same convention
+ * chart-of-accounts.test.ts already uses for its own "T-102b invariant N" section.
  */
 config({ path: '.env.local' });
 
@@ -76,6 +85,10 @@ type LineSpec = {
   credit: string;
   storeId?: string | null;
   channelId?: string | null;
+  // T-118: the counterparty, nullable and always both-or-neither (enforced by
+  // journal_lines_party_both_or_neither_check).
+  partyType?: string | null;
+  partyId?: string | null;
 };
 
 type EntrySpec = {
@@ -119,8 +132,8 @@ async function insertEntryWithLines(
     let lineNo = 1;
     for (const line of lines) {
       await trx`
-        insert into journal_lines (entry_id, line_no, account_id, store_id, channel_id, debit, credit)
-        values (${entryId}, ${lineNo}, ${line.accountId}, ${line.storeId ?? null}, ${line.channelId ?? null}, ${line.debit}, ${line.credit})
+        insert into journal_lines (entry_id, line_no, account_id, store_id, channel_id, debit, credit, party_type, party_id)
+        values (${entryId}, ${lineNo}, ${line.accountId}, ${line.storeId ?? null}, ${line.channelId ?? null}, ${line.debit}, ${line.credit}, ${line.partyType ?? null}, ${line.partyId ?? null})
       `;
       lineNo++;
     }
@@ -682,5 +695,186 @@ describe('bonus — period-open resolution: draft→posted into a closed period 
     await sql`update journal_entries set status = 'reversed' where id = ${entryId}`;
     const [row] = await sql<{ status: string }[]>`select status from journal_entries where id = ${entryId}`;
     expect(row!.status).toBe('reversed');
+  });
+});
+
+// =========================================================================================
+// T-118 — docs/tasks/118-subledger-party-on-line.md, closing DEF-037. Gives journal lines
+// a counterparty so the AP/AR subledgers exist. The 9 invariants below are numbered per
+// that task spec, independently of the 19 numbered above (same convention
+// chart-of-accounts.test.ts already uses for its own "T-102b invariant N" section).
+//
+// Invariant 8 is the point of the task, not the columns: it proves the subledger — a
+// GROUP BY party_id over journal_lines — reconciles EXACTLY to the 2110 control balance.
+// That is bible invariant 6 ("subsidiary ledgers reconcile to control accounts")
+// demonstrated for the first time in this codebase.
+// =========================================================================================
+
+describe('T-118 invariant 1 — a line with party_type and party_id on a party-requiring account posts', () => {
+  it('debits opex, credits 2110 AP for one supplier, and commits', async () => {
+    const { orgId, periodId, opex } = await baseFixture('t118-inv1');
+    const ap = await accountId(orgId, '2110');
+    const entryId = await insertEntryWithLines(orgId, periodId, [
+      { accountId: opex, debit: '100.00', credit: '0' },
+      { accountId: ap, debit: '0', credit: '100.00', partyType: 'supplier', partyId: 'supplier-a' },
+    ]);
+    const rows = await sql`select id from journal_entries where id = ${entryId}`;
+    expect(rows).toHaveLength(1);
+    const [line] = await sql<{ party_type: string; party_id: string }[]>`
+      select party_type, party_id from journal_lines where entry_id = ${entryId} and account_id = ${ap}
+    `;
+    expect(line!.party_type).toBe('supplier');
+    expect(line!.party_id).toBe('supplier-a');
+  });
+});
+
+describe('T-118 invariant 2 — a line on a party-requiring account without a party is rejected, naming the account', () => {
+  it('fails immediately on the INSERT, and the error names account 2110', async () => {
+    const { orgId, periodId, cash, opex } = await baseFixture('t118-inv2');
+    const ap = await accountId(orgId, '2110');
+    const entryId = await insertValidEntry(orgId, periodId, cash, opex, 't118-inv2-1');
+    await expect(
+      sql`
+        insert into journal_lines (entry_id, line_no, account_id, debit, credit)
+        values (${entryId}, 3, ${ap}, '0', '10.00')
+      `,
+    ).rejects.toThrow(/2110/);
+  });
+});
+
+describe('T-118 invariant 3 — a party on an account that does not require one is rejected', () => {
+  it('fails immediately on the INSERT when a party is given on the opex (6900) account', async () => {
+    const { orgId, periodId, cash, opex } = await baseFixture('t118-inv3');
+    const entryId = await insertValidEntry(orgId, periodId, cash, opex, 't118-inv3-1');
+    await expect(
+      sql`
+        insert into journal_lines (entry_id, line_no, account_id, debit, credit, party_type, party_id)
+        values (${entryId}, 3, ${opex}, '10.00', '0', 'supplier', 'supplier-a')
+      `,
+    ).rejects.toThrow(/6900/);
+  });
+});
+
+describe('T-118 invariant 4 — party_type alone, or party_id alone, is rejected by the CHECK', () => {
+  it('rejects party_type given without party_id', async () => {
+    const { orgId, periodId, cash, opex } = await baseFixture('t118-inv4a');
+    const ap = await accountId(orgId, '2110');
+    const entryId = await insertValidEntry(orgId, periodId, cash, opex, 't118-inv4a-1');
+    await expect(
+      sql`
+        insert into journal_lines (entry_id, line_no, account_id, debit, credit, party_type)
+        values (${entryId}, 3, ${ap}, '0', '10.00', 'supplier')
+      `,
+    ).rejects.toThrow();
+  });
+
+  it('rejects party_id given without party_type', async () => {
+    const { orgId, periodId, cash, opex } = await baseFixture('t118-inv4b');
+    const ap = await accountId(orgId, '2110');
+    const entryId = await insertValidEntry(orgId, periodId, cash, opex, 't118-inv4b-1');
+    await expect(
+      sql`
+        insert into journal_lines (entry_id, line_no, account_id, debit, credit, party_id)
+        values (${entryId}, 3, ${ap}, '0', '10.00', 'supplier-a')
+      `,
+    ).rejects.toThrow();
+  });
+});
+
+describe('T-118 invariant 5 — an invalid party_type value is rejected', () => {
+  it('fails the CHECK for a party_type outside the five allowed values', async () => {
+    const { orgId, periodId, cash, opex } = await baseFixture('t118-inv5');
+    const ap = await accountId(orgId, '2110');
+    const entryId = await insertValidEntry(orgId, periodId, cash, opex, 't118-inv5-1');
+    await expect(
+      sql`
+        insert into journal_lines (entry_id, line_no, account_id, debit, credit, party_type, party_id)
+        values (${entryId}, 3, ${ap}, '0', '10.00', 'vendor', 'supplier-a')
+      `,
+    ).rejects.toThrow();
+  });
+});
+
+describe('T-118 invariant 6 — an ordinary line (cash, expense) with neither party continues to post — no regression', () => {
+  it('a plain two-line entry with no party on either line still commits', async () => {
+    const { orgId, periodId, cash, opex } = await baseFixture('t118-inv6');
+    const entryId = await insertEntryWithLines(orgId, periodId, [
+      { accountId: opex, debit: '20.00', credit: '0' },
+      { accountId: cash, debit: '0', credit: '20.00' },
+    ]);
+    const rows = await sql`select id from journal_entries where id = ${entryId}`;
+    expect(rows).toHaveLength(1);
+  });
+});
+
+describe('T-118 invariant 8 — the subledger query: GROUP BY party_id over 2110 sums exactly to the control balance', () => {
+  it('three AP lines across two suppliers reconcile exactly — bible invariant 6, demonstrated', async () => {
+    const { orgId, periodId, opex } = await baseFixture('t118-inv8');
+    const ap = await accountId(orgId, '2110');
+
+    // Supplier A: two lines (100 + 50). Supplier B: one line (75).
+    await insertEntryWithLines(orgId, periodId, [
+      { accountId: opex, debit: '100.00', credit: '0' },
+      { accountId: ap, debit: '0', credit: '100.00', partyType: 'supplier', partyId: 'supplier-a' },
+    ]);
+    await insertEntryWithLines(orgId, periodId, [
+      { accountId: opex, debit: '50.00', credit: '0' },
+      { accountId: ap, debit: '0', credit: '50.00', partyType: 'supplier', partyId: 'supplier-a' },
+    ]);
+    await insertEntryWithLines(orgId, periodId, [
+      { accountId: opex, debit: '75.00', credit: '0' },
+      { accountId: ap, debit: '0', credit: '75.00', partyType: 'supplier', partyId: 'supplier-b' },
+    ]);
+
+    // The subledger — a GROUP BY over journal_lines, not a second table.
+    const bySupplier = await sql<{ party_id: string; total: string }[]>`
+      select party_id, sum(credit - debit)::numeric(14,2) as total
+      from journal_lines
+      where account_id = ${ap} and party_id is not null
+      group by party_id
+      order by party_id
+    `;
+    expect(bySupplier).toHaveLength(2);
+    const supplierA = bySupplier.find((r) => r.party_id === 'supplier-a');
+    const supplierB = bySupplier.find((r) => r.party_id === 'supplier-b');
+    expect(supplierA).toBeDefined();
+    expect(supplierB).toBeDefined();
+    expect(supplierA!.total).toBe('150.00');
+    expect(supplierB!.total).toBe('75.00');
+
+    // The control balance — the same account, no GROUP BY.
+    const [controlRow] = await sql<{ control: string }[]>`
+      select sum(credit - debit)::numeric(14,2) as control
+      from journal_lines
+      where account_id = ${ap}
+    `;
+    expect(controlRow!.control).toBe('225.00');
+
+    // The point of the task: per-supplier totals sum EXACTLY to the control balance.
+    const subledgerTotal = bySupplier.reduce((sum, r) => sum + Number(r.total), 0);
+    expect(subledgerTotal).toBe(Number(controlRow!.control));
+  });
+});
+
+describe('T-118 invariant 9 — re-running the migration is a no-op', () => {
+  it('the migrator applies cleanly a second time with no error, and no duplicate trigger is created', async () => {
+    // Same tool the real "npm run db:migrate" uses (packages/db/migrate.ts), pointed at
+    // this file's own TEST_DATABASE_URL connection — proving the actual mechanism the
+    // task's Method step ("apply, re-run to prove the no-op") describes, not a
+    // hand-rolled substitute for it.
+    const migrationsFolder = join(
+      fileURLToPath(new URL('.', import.meta.url)),
+      '..',
+      '..',
+      'migrations',
+    );
+    const db = drizzle(sql);
+    await expect(migrate(db, { migrationsFolder })).resolves.toBeUndefined();
+    await expect(migrate(db, { migrationsFolder })).resolves.toBeUndefined();
+
+    const [countRow] = await sql<{ count: string }[]>`
+      select count(*)::int as count from pg_trigger where tgname = 'journal_lines_party_requirement'
+    `;
+    expect(Number(countRow!.count)).toBe(1);
   });
 });

@@ -36,6 +36,17 @@
  *
  * See the migration file for the full trigger bodies and the task report for the reasoning
  * behind each design choice above that the Contract text left ambiguous.
+ *
+ * T-118 addendum (docs/tasks/118-subledger-party-on-line.md, closing DEF-037): adds
+ * `party_type` / `party_id` to journal_lines — the counterparty, on the line itself,
+ * following ERPNext and Odoo (docs/discovery/17 §4) rather than a second subledger table
+ * that has to be kept in step by hand. The immediate, per-row shape rules (both-or-neither,
+ * valid party_type) are plain CHECK constraints below; the cross-table rule ("does THIS
+ * account require/forbid a party") is a hand-added trigger in migration 0007, same reason
+ * account-eligibility is a trigger and not a CHECK — it has to look at `accounts`.
+ * `party_id` deliberately carries NO foreign key — `suppliers`/`customers`/`channels`
+ * arrive in Phase 2 and cannot be referenced before they exist. See the task report for
+ * this recorded exception to bible §4.2 rule 3.
  */
 import { sql } from 'drizzle-orm';
 import {
@@ -128,6 +139,13 @@ export const journalLines = pgTable(
     // The second reporting dimension (bible §13 row 44 / Contract §2 note). Free text, no
     // FK — channels are not a table in this schema (bible §16.4: no dimension framework).
     channelId: text('channel_id'),
+    // T-118 — the counterparty. Nullable; both-or-neither (never one alone) per the CHECK
+    // below. NO foreign key, deliberately — see this file's top comment and the task
+    // report: suppliers/customers/channels don't exist yet (Phase 2), and stores/persons
+    // already do, so a generic `parties` table to work around the missing FK would just
+    // be a second source of truth for data that already has a home.
+    partyType: text('party_type'),
+    partyId: text('party_id'),
     debit: numeric('debit', { precision: 14, scale: 2 }).notNull().default('0'),
     credit: numeric('credit', { precision: 14, scale: 2 }).notNull().default('0'),
     lineMemo: text('line_memo'),
@@ -138,9 +156,24 @@ export const journalLines = pgTable(
     index('journal_lines_entry_id_idx').on(t.entryId),
     index('journal_lines_store_id_idx').on(t.storeId),
     index('journal_lines_channel_id_idx').on(t.channelId),
+    // T-118 — this is what makes a subledger query fast, and it is the whole point of
+    // the two columns above: `GROUP BY party_id ... WHERE account_id = <control account>`
+    // over journal_lines IS the subledger.
+    index('journal_lines_party_type_party_id_idx').on(t.partyType, t.partyId),
     // Immediate, per-row CHECKs (Contract §2) — these CAN be plain CHECK constraints
     // because they only ever look at the row being written, never another row.
     check('journal_lines_amounts_nonnegative_check', sql`${t.debit} >= 0 AND ${t.credit} >= 0`),
     check('journal_lines_exactly_one_side_check', sql`(${t.debit} = 0) <> (${t.credit} = 0)`),
+    // T-118 — immediate, per-row CHECKs for the counterparty's own shape. The CROSS-TABLE
+    // rule (does the line's ACCOUNT require or forbid a party) cannot be a CHECK — see
+    // journal_lines_check_party_requirement in migration 0007.
+    check(
+      'journal_lines_party_both_or_neither_check',
+      sql`(${t.partyType} is null) = (${t.partyId} is null)`,
+    ),
+    check(
+      'journal_lines_party_type_check',
+      sql`${t.partyType} is null or ${t.partyType} in ('supplier', 'customer', 'employee', 'store', 'channel')`,
+    ),
   ],
 );

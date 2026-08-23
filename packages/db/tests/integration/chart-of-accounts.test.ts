@@ -39,6 +39,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 import {
   CHART_OF_ACCOUNTS,
   RESERVED_CODES,
+  REQUIRES_PARTY_CODES,
   seedChartOfAccounts,
 } from '../../seed/chart-of-accounts';
 
@@ -71,6 +72,7 @@ type AccountRow = {
   is_system: boolean;
   legacy_code: string | null;
   status: string;
+  requires_party: boolean;
 };
 
 async function fetchAccounts(orgId: string): Promise<AccountRow[]> {
@@ -656,5 +658,58 @@ describe('5170 carries the COA-ALIGNMENT §4.1 inter-store elimination warning (
     expect(nearby, '5170 comment must mention the double-counting risk').toMatch(
       /(double.count|counted twice|twice)/,
     );
+  });
+});
+
+// =====================================================================================
+// T-118 — docs/tasks/118-subledger-party-on-line.md, closing DEF-037.
+//
+// Gives journal lines a counterparty (`party_type`/`party_id`) so the AP/AR subledgers
+// exist as a GROUP BY over journal_lines rather than a second, hand-kept-in-step table.
+// `requires_party` on `accounts` is what makes that enforceable rather than hoped for.
+// This is that task's own invariant 7 — independently numbered from every "invariant N"
+// block above, exactly like the T-102b section is its own numbering.
+//
+// The full posting-side proof (a line on a requires_party account without a party is
+// rejected, a party on a non-requires_party account is rejected, and the GROUP BY
+// reconciliation itself) lives in journal.test.ts, since it needs real journal_lines
+// rows across a balanced entry — this file only proves the SEED flags the right nine
+// accounts.
+// =====================================================================================
+
+/** The nine control accounts named in the task Contract §2 table. Written out literally
+ * here (not derived from REQUIRES_PARTY_CODES) so a mistake in the seed's OWN flagging
+ * can't silently agree with itself — same defensive shape as RESERVED_CODES's own test
+ * above. */
+const REQUIRES_PARTY_EXPECTED_CODES = [
+  '2110', // Accounts payable -> supplier
+  '1210', // Accounts receivable -> customer
+  '1220', // Channel receivable -> channel
+  '1230', // Advances to employees -> employee
+  '1240', // Advances to suppliers -> supplier
+  '2130', // Reimbursements payable -> employee
+  '1250', // Due from related store -> store
+  '2150', // Due to related store -> store
+  '2400', // Loans payable -> supplier (the lender)
+];
+
+describe('T-118 invariant 7 — exactly the nine control accounts are requires_party = true; every other account is false', () => {
+  it('REQUIRES_PARTY_CODES matches the Contract §2 table exactly', () => {
+    expect(new Set(REQUIRES_PARTY_CODES)).toEqual(new Set(REQUIRES_PARTY_EXPECTED_CODES));
+  });
+
+  it('the database reflects requires_party correctly after seeding', async () => {
+    const orgId = await insertOrg('t118-inv7');
+    await seedChartOfAccounts(sql, orgId);
+    const rows = await fetchAccounts(orgId);
+
+    const flagged = rows.filter((r) => r.requires_party).map((r) => r.code);
+    expect(new Set(flagged)).toEqual(new Set(REQUIRES_PARTY_EXPECTED_CODES));
+
+    const others = rows.filter((r) => !flagged.includes(r.code));
+    expect(others.length).toBeGreaterThan(0);
+    for (const r of others) {
+      expect(r.requires_party, `${r.code} must NOT require a party`).toBe(false);
+    }
   });
 });
