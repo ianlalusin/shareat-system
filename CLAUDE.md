@@ -6,6 +6,12 @@
 
 **Before doing anything in this repo, read [`PROJECT_BIBLE.md`](./PROJECT_BIBLE.md) in full.**
 
+> Also read [`docs/GLOSSARY.md`](./docs/GLOSSARY.md) before naming anything. Several field
+> names in this domain mean the opposite of what they look like — `dineInSales` is
+> package-only, `takeOutSales` is a residual, `receiptSeq` is not a monotonic key.
+>
+> [`AGENTS.md`](./AGENTS.md) is the same orientation for non-Claude agents.
+
 It is the authority on this project: architecture, execution model, data conventions,
 security model, phase plan, and the landmines carried over from ERP-rebuild. It
 outranks any habit, any prompt, and any preference of your own. If your task conflicts
