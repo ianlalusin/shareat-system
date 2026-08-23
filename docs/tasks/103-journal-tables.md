@@ -1,6 +1,8 @@
 # T-103 — `journal_entries`, `journal_lines`, and the constraint triggers
 
-> **Status:** spec ready. **Depends on:** T-101, T-102 (both done). **Blocks:** T-104, T-105,
+> **Status:** ✅ **COMPLETE 2026-08-23** — 19 invariants + 10 extra cases green; verified in the
+> live database (both balance triggers `deferrable=true, initdeferred=true`).
+> **Was:** spec ready. **Depends on:** T-101, T-102 (both done). **Blocks:** T-104, T-105,
 > T-107, T-110, T-112 — effectively the rest of Phase 1.
 > **Written by:** Opus planner, 2026-08-23. Bible §3.3 format.
 
@@ -198,3 +200,47 @@ ETL (T-112+) · any UI.
       database is not a unit test, and CI runs unit tests **before** migrations.
 - [ ] No file outside **Scope** modified.
 - [ ] Any spec defect is **reported, not silently worked around**.
+
+
+---
+
+## Implementation notes — resolved 2026-08-23
+
+Seven issues surfaced during implementation, all reported rather than worked around.
+
+**1. A real gap the implementer found, not me: an entry with ZERO lines.** A deferred trigger
+anchored only to `journal_lines` events never fires for an entry that never receives a line —
+so an empty entry would commit silently. Closed with a **second** deferrable constraint trigger
+on `journal_entries` itself. Both are confirmed `deferrable=true, initdeferred=true` in the
+live database. **My contract's enforcement table implied one trigger; one is not enough.**
+
+**2. §6 and §7 contradicted each other on period close.** §6 said reject any *update* to an
+entry in a non-open period; §7 said `posted → reversed` stays legal. Read literally, §6 makes
+§7 impossible in the most realistic reversal case — correcting an entry after its period has
+closed. **Resolved:** the period check applies to genuine *posting* acts only (`period_id`
+changing, or `draft → posted`), explicitly exempting `posted → reversed`. Both directions are
+tested.
+
+**3. Posted-immutability INSERT hole — logged as DEF-031, assigned to T-105.** See the register.
+The implementer over-implemented a blanket INSERT block, found it made building a posted entry
+within one transaction impossible, and reverted rather than shipping a broken constraint. The
+right call, and the residual gap is recorded rather than hidden.
+
+**4. `store_id` lives on the LINE, not the entry.** Bible §16.3's illustrative sketch shows it
+on the entry; the contract's column list puts it on the line, matching the bible's own prose and
+required by invariant 6 — inter-store reciprocal elimination needs per-line store attribution.
+The contract was right.
+
+**5. `journal_lines` carries no `created_at` / `updated_at` / `created_by` — deliberate.**
+Lines are append-only children of an entry, immutable once posted; their creation time *is*
+their entry's, and attribution lives on the entry (`posted_by`) plus `audit_log` (bible §7
+rule 7, and the same resolution T-101 reached). This is also the highest-volume table in the
+system, where three redundant columns per row is a real cost. **Confirmed deliberate.**
+
+**6. "Financial column" was ambiguous in §7.** The implementer took the broader, safer reading
+from bible invariant 5: the entire posted row is frozen except the explicit `posted → reversed`
+transition. Correct — a mutable `memo` on a posted entry is still a mutated posted entry.
+
+**7. Six triggers, not the four the Method named.** Period-status and posted-immutability each
+span two tables per the contract's own wording ("an entry **or line**"), so each is a matched
+pair. My Method under-counted; the implementation is right.
