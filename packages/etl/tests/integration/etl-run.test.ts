@@ -517,3 +517,76 @@ describe('modes — invariants 19-21', () => {
     expect(rows[1]!.credit).toBe('100.00');
   });
 });
+
+// =========================================================================================
+// DEF-041 — landing immutability, enforced by the DATABASE (migration 0009)
+//
+// Invariant 5 above proves our own repo code never calls update/delete on the landing
+// table. That is a fact about OUR code, and bible §15 / RULES.md §6.3 are explicit that
+// the database enforces the rules — a rule phrased as "our code does not do X" is a
+// convention, not a constraint. Verified empirically before 0009 was written: a plain
+// UPDATE rewrote a landed payload and a plain DELETE removed the row, silently.
+//
+// It matters more than the original phrasing implied. The entire "land before you convert"
+// argument rests on the September bytes being the December bytes; a payload that can be
+// silently rewritten destroys that WITHOUT A SIGNAL — reconciliation still balances, every
+// count still ties, and the audit report quietly describes data that no longer exists.
+// =========================================================================================
+
+describe('DEF-041 — the landing table is immutable in the database', () => {
+  async function landOne(hash: string, payload: Record<string, number>): Promise<string> {
+    const [run] = await sql<{ id: string }[]>`
+      insert into etl_runs (source_system, mode, status)
+      values ('erp_v1', 'capture', 'running') returning id
+    `;
+    await sql`
+      insert into etl_source_documents
+        (run_id, source_system, collection_path, doc_path, doc_id, payload, content_hash)
+      values
+        (${run!.id}, 'erp_v1', 'c', 'stores/STORE-A/salesDays/2026-01-05', '2026-01-05',
+         ${sql.json(payload)}, ${hash})
+    `;
+    return run!.id;
+  }
+
+  it('raw SQL cannot UPDATE a landed payload, even outside the framework', async () => {
+    await landOne('hash-a', { totalSales: 100 });
+    await expect(
+      sql`update etl_source_documents set payload = ${sql.json({ totalSales: 999_999 })}`,
+    ).rejects.toThrow(/append-only/i);
+
+    const [row] = await sql<{ payload: { totalSales: number } }[]>`
+      select payload from etl_source_documents
+    `;
+    expect(row!.payload.totalSales, 'the original bytes must be untouched').toBe(100);
+  });
+
+  it('raw SQL cannot DELETE a landed row', async () => {
+    await landOne('hash-b', { totalSales: 100 });
+    await expect(sql`delete from etl_source_documents`).rejects.toThrow(/append-only/i);
+    const [count] = await sql<{ c: number }[]>`select count(*)::int c from etl_source_documents`;
+    expect(count!.c).toBe(1);
+  });
+
+  it('INSERT stays open — a CHANGED source document re-lands as a new row beside the old', async () => {
+    // The point of the trigger is append-only, NOT frozen. Re-landing a changed document is
+    // the designed behaviour (invariant 4) and must not be collateral damage of the fix.
+    const runId = await landOne('hash-c', { totalSales: 100 });
+    await sql`
+      insert into etl_source_documents
+        (run_id, source_system, collection_path, doc_path, doc_id, payload, content_hash)
+      values
+        (${runId}, 'erp_v1', 'c', 'stores/STORE-A/salesDays/2026-01-05', '2026-01-05',
+         ${sql.json({ totalSales: 250 })}, 'hash-c2')
+    `;
+    const [count] = await sql<{ c: number }[]>`select count(*)::int c from etl_source_documents`;
+    expect(count!.c, 'both versions coexist — history is added to, never overwritten').toBe(2);
+  });
+
+  it('the error names the document, so an operator can act on it', async () => {
+    await landOne('hash-d', { totalSales: 100 });
+    await expect(sql`update etl_source_documents set doc_id = 'x'`).rejects.toThrow(
+      /stores\/STORE-A\/salesDays\/2026-01-05/,
+    );
+  });
+});

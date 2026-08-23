@@ -1,6 +1,9 @@
 # T-112 — The ETL framework: runs, landing, quarantine, reconciliation
 
-> **Status:** spec ready. **Depends on:** T-103, T-105, T-107, T-113, T-118 (all done).
+> **Status:** ✅ **COMPLETE 2026-08-23** — 22/22 invariants, +4 added closing DEF-041.
+> See the notes at the end: **invariant 5 as I wrote it was too weak**, and the implementer found
+> a real spec gap (DEF-042) it was right to refuse to work around.
+> **Was:** spec ready. **Depends on:** T-103, T-105, T-107, T-113, T-118 (all done).
 > **Blocks:** T-114 (Stage 1 analysis + audit report), T-115 (Stage 2 load).
 > **Written by:** Opus planner, 2026-08-23. Bible §3.3 format.
 
@@ -252,3 +255,49 @@ the audit report's content and narrative (T-114) · the opening-balance/detail l
 - [ ] `packages/etl` still imports nothing from `apps/`, and now imports nothing from Firebase.
 - [ ] Self-reviewed line by line; committed with a message explaining *why*.
 - [ ] Any spec defect **reported, not silently worked around**.
+
+
+---
+
+## Implementation notes — resolved 2026-08-23
+
+**1. My invariant 5 was phrased as a convention, not a constraint — DEF-041.**
+It read *"the framework never UPDATEs or DELETEs a landed row."* That is a statement about
+**our code's behaviour**, and the implementer satisfied it exactly and honestly: its test greps
+`repo/etl.ts` for `.update(etlSourceDocuments)`. Verifying the report rather than accepting it
+turned up the obvious consequence — a plain `UPDATE` rewrote a landed payload from 100 to
+999999, and a plain `DELETE` removed the row, both silently.
+
+That matters more than my wording implied. **This whole task's central argument** — land before
+you convert, so the September bytes are the December bytes — rests on the landed row being
+immutable. A payload that can be silently rewritten destroys the argument **without a signal**:
+reconciliation still balances, every count still ties, and the audit report quietly describes
+data that no longer exists.
+
+Closed by migration `0009_etl_landing_immutable.sql`, a `BEFORE UPDATE OR DELETE` trigger —
+the same treatment DEF-031 got, for the same reason. INSERT stays open, because landing is
+**append-only, not frozen**, and a test asserts re-landing a changed document was not collateral
+damage of the fix.
+
+> **The general lesson, worth carrying into every future spec: an invariant phrased as "our code
+> does not do X" is a convention. Phrase it as what the DATABASE refuses, or it is not an
+> invariant.** Bible §15 and RULES.md §6.3 already say this; my own spec did not follow it.
+
+**2. The implementer found a real spec gap and correctly refused to work around it — DEF-042.**
+§4 requires an aggregable `reason_code`, but `convert.ts` emits only a free-text sentence and no
+code. Deriving one by pattern-matching that prose would have been exactly the guessing bible §11
+rule 5 forbids. It instead made `reasonCode` an explicit required input on the `Converter` seam
+and reported the gap. **T-114 must extend `convert.ts` to emit an enumerated `reasonCode`
+alongside its existing `reason`** — not classify by regex over the text.
+
+**3. Two disclosed departures from the literal Scope, both accepted.**
+
+| | |
+|---|---|
+| "Current" document resolution is a typed `selectDistinctOn` query, not a literal `CREATE VIEW` | Same *derive, never maintain a flag* principle, one fewer database object. Accepted |
+| `packages/etl/package.json` gained `@shareat/db` and `@shareat/domain` as dependencies, where Scope said "exports map only" | `run.ts` genuinely writes through the repo and posts through `postEntry`. **Leaving them undeclared would have been a dishonest dependency graph** — the right call, and reported rather than done quietly |
+
+**4. Verified independently, not taken on trust.** typecheck clean · 236 unit · 217 integration ·
+`npm run build` succeeds · migration journal strictly ascending (`0009` at 1787494634426 after
+`0008` at 1787493293449) · all four `etl_*` tables present in both databases · the three partial
+unique indexes confirmed in the applied SQL (landing identity, one-run-at-a-time, open-quarantine).
