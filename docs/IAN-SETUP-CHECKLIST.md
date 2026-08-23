@@ -56,12 +56,12 @@ psql --version
 If it says `command not found`, add the install's `bin` folder to PATH
 (e.g. `C:\Program Files\PostgreSQL\18\bin`) and reopen the terminal.
 
-**Tell me:** "local postgres done, version NN" — I will create the `erpv2_dev` and
-`erpv2_test` databases and wire up `.env.local`.
+**Tell me:** "local postgres done, version NN" — I will create the `shareat_dev` and
+`shareat_test` databases and wire up `.env.local`.
 
 ### Alternatives, if winget gives you trouble
 
-- **Docker** (installed here, v29.6.1): `docker run -d --name erpv2-pg -e POSTGRES_PASSWORD=... -p 5435:5432 postgres:18`
+- **Docker** (installed here, v29.6.1): `docker run -d --name shareat-system-pg -e POSTGRES_PASSWORD=... -p 5435:5432 postgres:18`
   Fast, but Docker Desktop/WSL2 has been flaky on this machine before, so it is the fallback rather than the default.
 - **WSL2 Ubuntu** (already your default distro): `sudo apt install postgresql-17`.
   Linux builds *are* still published, so this works — it just puts the database behind
@@ -80,7 +80,7 @@ If it says `command not found`, add the install's `bin` folder to PATH
    | Region | **Singapore / SGP1** | **Must match the droplet** or you lose private networking |
    | VPC Network | **the same VPC as SharEat-Droplet** | This is what keeps the DB off the public internet |
    | Plan | Basic — smallest node | Resizes later; start small |
-   | Name | `erpv2-db` | |
+   | Name | `shareat-system-db` | |
 
 3. After it provisions → **Settings → Trusted Sources** → add **SharEat-Droplet**.
    This restricts connections to that droplet only.
@@ -169,7 +169,7 @@ We can decide this when we get to deployment. It does not block anything now.
 ## ☐ TASK 5 — Confirm the GitHub repo name
 
 `gh` is already authenticated as **ianlalusin**, so I can create the repo myself. Default
-plan: **private** repo named **`ERPv2`**.
+plan: **private** repo named **`Shareat System`**.
 
 **Tell me** if you want a different name or visibility. Otherwise I'll proceed with that.
 

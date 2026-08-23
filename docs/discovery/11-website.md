@@ -1,6 +1,6 @@
 # 11 — Website (shareat.net) Integration & Data Inventory
 
-Scope: `C:\Users\ianla\webapps\Shareat Website` (Astro project, Firebase-hosted, project id `shareat-website`). Read-only discovery for the ERPv2 unified-Postgres-backend architect. Every claim is `[VERIFIED]` (read in the code) or `INFERRED` (reasoned from structure); surprising/fragile behaviour is flagged **RISK**.
+Scope: `C:\Users\ianla\webapps\Shareat Website` (Astro project, Firebase-hosted, project id `shareat-website`). Read-only discovery for the Shareat System unified-Postgres-backend architect. Every claim is `[VERIFIED]` (read in the code) or `INFERRED` (reasoned from structure); surprising/fragile behaviour is flagged **RISK**.
 
 ---
 

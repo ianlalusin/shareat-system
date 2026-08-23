@@ -247,7 +247,7 @@ this ERP is internal-use only — not a VAT-compliant system. VAT here is just a
 
 Design consequences, recorded so nobody re-derives them later:
 
-1. **ERPv2 is a management ledger, not the statutory filing basis.** It must never be
+1. **Shareat System is a management ledger, not the statutory filing basis.** It must never be
    described, labelled, or exported as BIR-ready output. Anyone later assuming it is would be
    wrong, and that assumption is exactly what a document like this exists to prevent.
 2. **No VAT engine.** No output-VAT liability accounts, no input/output netting, no BIR
@@ -275,7 +275,11 @@ you want those two told apart in the P&L?
 
 ### 6.7 ⏳ OPEN — align POS online-order handling **before** online goes live
 
-Ian: there are **no online transactions yet**, and POS can still be changed.
+Ian: there are **no online transactions yet**, so no historical online data exists to migrate.
+
+> **SUPERSEDED 2026-08-23.** This section originally recommended changing POS. The standing
+> rule now makes all four reference repos read-only (bible §13 row 80), so **nothing is fixed
+> in POS**. The finding stands and is logged as DEF-004; the fix lands in the rebuild.
 
 That is the ideal moment, because the current shape has a real defect. Online-order receipts
 are written with `sessionMode: "alacarte"` and then tagged
@@ -292,9 +296,10 @@ tag. `sessionMode` then means what it says — how the *session* was sold (packa
 carte) — and fulfilment says where the food went. Those are two different questions, and the
 COA needs both: `sessionMode` drives 4100 vs 4150/4200, fulfilment drives 4150 vs 4200.
 
-This is a POS-repo change and therefore Ian's call to schedule (bible §1.2a — v1 is
-hands-off, but POS is not v1). It blocks nothing in Phase 1; it prevents a migration problem
-in Phase 3.
+**In the rebuild, not in POS.** `fulfilment` becomes a required column on the receipt table
+from day one. The concept already exists in POS as `onlineOrders.fulfillment.type`
+(`pickup | delivery`) — it is simply never carried onto the receipt. That is a rule to
+**harvest**, not a change to make in POS.
 
 ---
 

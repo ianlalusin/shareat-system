@@ -2,7 +2,7 @@
 
 Source repo: `C:\Users\ianla\webapps\ERP-rebuild` (read-only discovery — nothing modified). Live Firestore project read: `studio-7300228488-a394e` (read-only queries only — no writes, no credential material captured or printed anywhere in this doc or in the discovery script).
 
-Purpose: exhaustive inventory of every expense category/particular ("expense entry") the ERP currently uses, as raw input to mapping each one onto a proper chart-of-accounts expense line in ERPv2. **No redesign, no recommendation — inventory and description only**, matching the format of `07-chart-of-accounts-inventory.md`.
+Purpose: exhaustive inventory of every expense category/particular ("expense entry") the ERP currently uses, as raw input to mapping each one onto a proper chart-of-accounts expense line in Shareat System. **No redesign, no recommendation — inventory and description only**, matching the format of `07-chart-of-accounts-inventory.md`.
 
 Evidence format: `file:LINE`. Anything not directly verified is marked **UNCERTAIN**.
 

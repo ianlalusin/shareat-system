@@ -22,8 +22,8 @@ type Sql = ReturnType<typeof postgres>;
  * exhaust the managed cluster's connection limit. Cache on globalThis outside production.
  */
 const globalForDb = globalThis as unknown as {
-  __erpv2_sql?: Sql;
-  __erpv2_db?: ReturnType<typeof drizzle<typeof schema>>;
+  __shareat_sql?: Sql;
+  __shareat_db?: ReturnType<typeof drizzle<typeof schema>>;
 };
 
 function createClient(): Sql {
@@ -44,17 +44,17 @@ function createClient(): Sql {
 
 /** The raw postgres.js client. Prefer `db`; use this only for health checks and DDL. */
 export function getSql(): Sql {
-  if (!globalForDb.__erpv2_sql) {
-    globalForDb.__erpv2_sql = createClient();
+  if (!globalForDb.__shareat_sql) {
+    globalForDb.__shareat_sql = createClient();
   }
-  return globalForDb.__erpv2_sql;
+  return globalForDb.__shareat_sql;
 }
 
 export function getDb() {
-  if (!globalForDb.__erpv2_db) {
-    globalForDb.__erpv2_db = drizzle(getSql(), { schema });
+  if (!globalForDb.__shareat_db) {
+    globalForDb.__shareat_db = drizzle(getSql(), { schema });
   }
-  return globalForDb.__erpv2_db;
+  return globalForDb.__shareat_db;
 }
 
 export type Database = ReturnType<typeof getDb>;
@@ -83,9 +83,9 @@ export async function transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
 
 /** Close the pool. Scripts and tests only — never call this from request code. */
 export async function closeDb(): Promise<void> {
-  if (globalForDb.__erpv2_sql) {
-    await globalForDb.__erpv2_sql.end({ timeout: 5 });
-    globalForDb.__erpv2_sql = undefined;
-    globalForDb.__erpv2_db = undefined;
+  if (globalForDb.__shareat_sql) {
+    await globalForDb.__shareat_sql.end({ timeout: 5 });
+    globalForDb.__shareat_sql = undefined;
+    globalForDb.__shareat_db = undefined;
   }
 }

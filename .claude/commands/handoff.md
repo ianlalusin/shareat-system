@@ -1,5 +1,5 @@
 ---
-description: Orient a fresh session on this machine and continue ERPv2 work
+description: Orient a fresh session on this machine and continue Shareat System work
 ---
 
 You are starting fresh on this machine with no memory of prior conversations about this
@@ -12,7 +12,7 @@ project. Orient yourself properly before doing anything.
    assume, never skip, never paper over a failure:
    - toolchain: `git --version`, `node --version`, `npm --version`
    - both repos cloned side by side under a `webapps` folder:
-     - this repo (ERPv2)
+     - this repo (Shareat System)
      - the reference repo, cloned from `https://github.com/ianlalusin/studio.git` into a
        folder named `ERP-rebuild`, on branch `upgrade-next16` — **READ-ONLY, never modify
        it, never run git in it, never npm install in it**

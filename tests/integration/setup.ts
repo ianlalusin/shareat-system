@@ -19,7 +19,7 @@ if (!url) {
   );
 }
 
-if (!/erpv2_test|_test(\?|$)/.test(url)) {
+if (!/shareat_test|_test(\?|$)/.test(url)) {
   throw new Error(
     `Refusing to run integration tests against ${url.replace(/:\/\/[^@]*@/, '://***@')} — ` +
       'the database name must contain "_test". These tests TRUNCATE tables.',

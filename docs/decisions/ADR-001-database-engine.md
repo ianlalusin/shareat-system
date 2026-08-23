@@ -10,11 +10,11 @@
 ## Context
 
 ERP-rebuild already contains a written relational-rebuild plan:
-`docs/MARIADB_REBUILD_PLAN.md` (236 lines). It is a good document and ERPv2 adopts
-most of it. It specifies **MariaDB**. This ADR is the one place where ERPv2
+`docs/MARIADB_REBUILD_PLAN.md` (236 lines). It is a good document and Shareat System adopts
+most of it. It specifies **MariaDB**. This ADR is the one place where Shareat System
 deliberately diverges, so the divergence is recorded rather than silently made.
 
-**Where the prior plan and ERPv2 already agree** — these are not in dispute and are
+**Where the prior plan and Shareat System already agree** — these are not in dispute and are
 carried forward:
 
 - Relational DB as transactional system of record; not a table-for-table Firestore clone
@@ -32,7 +32,7 @@ carried forward:
 
 ## Decision
 
-**PostgreSQL 18** is the system of record for ERPv2.
+**PostgreSQL 18** is the system of record for Shareat System.
 
 ## Rationale
 
@@ -40,7 +40,7 @@ The workload is an accounting + reporting system. The differentiators favour Pos
 
 | Need | Postgres | MariaDB |
 |---|---|---|
-| **Materialised views** for report read-models (replacing Firestore projection docs — the single biggest source of drift bugs in v1) | Native | **Not supported.** Would require hand-maintained summary tables — reintroducing the exact "derived data maintained by a separate writer" pattern ERPv2 exists to eliminate |
+| **Materialised views** for report read-models (replacing Firestore projection docs — the single biggest source of drift bugs in v1) | Native | **Not supported.** Would require hand-maintained summary tables — reintroducing the exact "derived data maintained by a separate writer" pattern Shareat System exists to eliminate |
 | **Transactional DDL** — a failed migration rolls back whole | Yes | No. Partially-applied migrations leave the schema in an undefined state |
 | Partial + expression indexes (e.g. index only unposted rows) | Yes | Limited |
 | `EXCLUDE` constraints, rich `CHECK`, domains | Yes | Weaker |
@@ -65,13 +65,13 @@ tooling constrains the choice.
 ## The one real argument for MariaDB
 
 Ian is concurrently running an **ERPNext/Frappe migration** (`webapps\MIGRATION`),
-and **Frappe runs on MariaDB**. Choosing MariaDB for ERPv2 would mean one engine, one
+and **Frappe runs on MariaDB**. Choosing MariaDB for Shareat System would mean one engine, one
 set of ops knowledge, one backup story across both efforts.
 
 That is a genuine operational argument, and it is Ian's call, not mine. It does not
 change the technical assessment above, but it may outweigh it.
 
-**A prior question sits underneath this one:** ERPv2 and the ERPNext migration may be
+**A prior question sits underneath this one:** Shareat System and the ERPNext migration may be
 two solutions to the same problem. That should be resolved before Phase 1 — see
 `docs/decisions/OPEN-DECISIONS.md`, item 0.
 

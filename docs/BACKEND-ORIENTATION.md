@@ -1,4 +1,4 @@
-# ERPv2 — Backend Orientation
+# Shareat System — Backend Orientation
 
 How the server side is organised, and what happens when someone clicks Save.
 
@@ -191,7 +191,7 @@ tests/
 
 ## 6. What is actually different from v1
 
-| | v1 | ERPv2 |
+| | v1 | Shareat System |
 |---|---|---|
 | Business logic | 144 action files talking to Firestore directly; rules scattered across them | Services own rules; actions are 4 lines |
 | SQL / data access | Firestore calls inline in actions, pages, and hooks | One repository layer; nothing else touches the DB |

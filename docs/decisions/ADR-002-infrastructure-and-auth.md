@@ -128,13 +128,13 @@ Ian, 2026-08-22: `shareat-erp-backups` holds **only Frappe/ERPNext backups**, no
 project.
 
 **Do not delete them when Frappe is retired.** Those backups are the only remaining record
-of the ERPNext work and may be useful as a reference or data source during ERPv2's
+of the ERPNext work and may be useful as a reference or data source during Shareat System's
 migration. Plan:
 
 - Postgres backups go to a **separate prefix** (`postgres/`) or a dedicated bucket — never
   interleaved with the Frappe archive.
 - **No lifecycle/expiry rule** that could silently age out the Frappe objects.
-- Revisit deleting them only once ERPv2 is cut over and reconciled, and only on Ian's
+- Revisit deleting them only once Shareat System is cut over and reconciled, and only on Ian's
   explicit say-so.
 
 ## 2. Auth — unchanged for your staff
@@ -178,13 +178,13 @@ figures derived from punches.
 
 ## 3. What each Firebase service keeps doing
 
-| Service | Role in ERPv2 | Change |
+| Service | Role in Shareat System | Change |
 |---|---|---|
 | **Firebase Auth** | Identity provider | None for users |
 | **Firebase Storage** | Receipt photos, proof images, exports. **Postgres stores the path, never the bytes** | Uploads brokered server-side after `authorize()` — closes the "any signed-in user can write to any store's folder" gap |
 | **Firestore** | **Hot lane only** — mirror + inbox for offline clock terminals (§5) | Shrinks dramatically. ~90 collections → a handful. Rules go from 523 lines to ~30 |
 | **App Hosting** | Runs the Next.js app | None |
-| **Cloud Scheduler** | The 9 cron jobs | None — same pattern, pointed at ERPv2 routes |
+| **Cloud Scheduler** | The 9 cron jobs | None — same pattern, pointed at Shareat System routes |
 
 ---
 
@@ -199,7 +199,7 @@ figures derived from punches.
 | **Data** | Seeded reference data + a sanitised subset. **Never a live production connection from a dev machine** |
 
 That last line is deliberate. v1 currently has service-account credentials in `.env.local`
-that reach **production** Firestore. ERPv2 does not repeat that: local points at local.
+that reach **production** Firestore. Shareat System does not repeat that: local points at local.
 
 ---
 
@@ -252,7 +252,7 @@ No single terrifying switchover night.
 2. **Decommission the DigitalOcean droplet** once Frappe is retired? It stops a bill.
    Confirm nothing else is running on it first.
 3. **Same GCP project as ERP-rebuild, or a new one?** *Recommend a **new** project* —
-   clean IAM boundary, no chance of ERPv2 work touching v1's resources, and a separate bill
+   clean IAM boundary, no chance of Shareat System work touching v1's resources, and a separate bill
    line so you can see what v2 actually costs. Firebase Auth users can be shared across
    projects, but that needs checking before committing.
 4. **Confirm Firebase Auth stays** as the identity provider (recommended).

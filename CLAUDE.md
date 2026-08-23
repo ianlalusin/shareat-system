@@ -1,4 +1,4 @@
-# ERPv2
+# Shareat System
 
 > ### 👉 New machine or fresh session? Run **`/handoff`**, or read [`HANDOFF.md`](./HANDOFF.md).
 > It walks the full cold start: toolchain, cloning the reference repo, installing
@@ -17,7 +17,7 @@ you are acting as the Opus planner.
 - **Postgres owns the truth. Firebase owns the edge.** Every entity's authoritative
   state lives in PostgreSQL. Firestore holds only a narrow, read-mostly mirror plus an
   append-only inbox, so clock terminals keep working offline.
-- **ERPv2 is a re-platform of `C:\Users\ianla\webapps\ERP-rebuild`, not a rewrite.**
+- **Shareat System is a re-platform of `C:\Users\ianla\webapps\ERP-rebuild`, not a rewrite.**
   Same product, same business rules, new persistence layer.
 - **`ERP-rebuild` is READ-ONLY.** Never edit it, branch it, or run git in it.
 - **Never touch `C:\Users\ianla\webapps\inactive projects`.**

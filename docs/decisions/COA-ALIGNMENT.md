@@ -1,4 +1,4 @@
-# Chart of Accounts — Alignment Map (v1 → ERPv2)
+# Chart of Accounts — Alignment Map (v1 → Shareat System)
 
 **Status:** Draft for Ian's review. Blocks task T-102.
 **Date:** 2026-08-22
@@ -260,7 +260,7 @@ is paid. That is a genuine business constraint, not sloppiness.
 
 But the standard accounting toolkit already solves it, and better:
 
-| | Today | ERPv2 |
+| | Today | Shareat System |
 |---|---|---|
 | While adjusting | Cash goes out, gross parked against `liability__salaries_payable`, which carries a **debit balance** (wrong side for a liability) until a separate expense entry lands | Pay run is a **draft document**. No GL posting yet. Adjustments are edits to a draft, which is what drafts are for |
 | On approval | Expense recognised separately, once per period | **Dr** 6100 Salaries + 6110–6130 employer contributions · **Cr** 2300 Salaries payable + 2210–2240 statutory payables |

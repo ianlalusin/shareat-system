@@ -2,13 +2,13 @@
 
 | | |
 |---|---|
-| **Status** | Accepted 2026-08-23 — sequencing confirmed by Ian; **project name still pending** |
+| **Status** | Accepted 2026-08-23. Sequencing and name confirmed by Ian |
 | **Supersedes** | Nothing. Extends ADR-001 (Postgres) and ADR-002 (infrastructure) |
 | **Evidence** | `docs/discovery/09-pos-system.md`, `10-customer-app.md`, `11-website.md`, `12-shared-infrastructure.md`, `docs/CROSS-APP-MAP.md` |
 
 ## Context
 
-ERPv2 began as an accounting-correctness rebuild of one application. Discovery across all four
+This project began as **ERPv2**, an accounting-correctness rebuild of one application. Discovery across all four
 applications on 2026-08-23 showed that framing was too narrow.
 
 **The four apps are already one system — badly.** Not by design, but by accretion:
@@ -125,13 +125,16 @@ against one parent mints an identical receipt number
   `takeOutSales` being a subtraction.
 - One deploy can no longer break another app's security rules.
 - `float` money, duplicated rounding, and three identity schemes collapse into the primitives
-  ERPv2 already built.
+  Shareat System already built.
 
 **Open:**
 
 | # | Question | Blocks |
 |---|---|---|
-| 1 | Project name — "Shareat System" vs "Shareat System v1" | The rename commit |
-| 2 | Does dine-in à la carte need its own account (4150), or is à la carte always take-out? | T-113 §6.6 |
-| 3 | Opening-balance date for the detail load | T-115 |
-| 4 | Does POS get the typed `fulfilment` field now, as a stopgap before POSv2? | Nothing — cheap either way |
+| 1 | Does dine-in à la carte need its own account (4150), or is à la carte always take-out? | T-113 §6.6 |
+| 2 | Opening-balance date for the detail load | T-115 |
+
+*Resolved 2026-08-23: the project is named **Shareat System** (no version — "v1" already means
+the legacy ERP in 170 places). The earlier question "should POS get a typed `fulfilment` field
+as a stopgap" is **void**: the standing rule makes all four reference repos read-only (§13
+row 80), so nothing is changed in POS. The fix lands in the rebuild as DEF-004/DEF-005.*

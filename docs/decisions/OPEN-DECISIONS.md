@@ -6,11 +6,11 @@ change later; the rest can ride for a while.
 
 ---
 
-## 0. ERPv2 vs the Frappe/ERPNext migration ✅ **RESOLVED — ERPNext retired**
+## 0. Shareat System vs the Frappe/ERPNext migration ✅ **RESOLVED — ERPNext retired**
 
 **Ian, 2026-08-22:** *"I'm really ready to retire the ERPNext/Frappe migration, because it
 basically is maintaining 2 DBs for 1 project with different form — for me it's really 2
-separate projects. With ERPv2 it's like 1. I know the full front and backend. For ERPNext
+separate projects. With Shareat System it's like 1. I know the full front and backend. For ERPNext
 I feel lost — though I know the advantage, it is correct and really correct, but I can't
 work efficiently when I'm not familiar with it. It's like having the best gun but not
 knowing how to aim it."*
@@ -24,13 +24,13 @@ behind a wall of unfamiliarity. The two-database, two-shapes situation was also 
 cost with no offsetting benefit.
 
 **What is genuinely given up, stated plainly:** ERPNext's correctness is battle-tested
-across thousands of businesses and many years. ERPv2's correctness will not be. We buy
+across thousands of businesses and many years. Shareat System's correctness will not be. We buy
 that assurance back deliberately — with the ten invariants (§16.1) enforced as database
 constraints and CI tests, worked examples computed by hand, and continuous
 reconciliation. **That test suite is not optional overhead; it is the thing standing in
 for ERPNext's track record.** Skimping on it would forfeit the trade.
 
-**Consequences:** Postgres is settled (item 1). ERPv2 is now the single destination, not
+**Consequences:** Postgres is settled (item 1). Shareat System is now the single destination, not
 a hedge — so it inherits the full weight of being the system of record, and the
 cutover plan (§15.3, Phase 8) matters more, not less.
 
@@ -47,7 +47,7 @@ Reversible before Phase 1 if you re-commit to Frappe.
 
 ---
 
-## 2. Is ERPv2 allowed to change behaviour, or is it parity-only? ✅ **DECIDED**
+## 2. Is Shareat System allowed to change behaviour, or is it parity-only? ✅ **DECIDED**
 
 **Ian, 2026-08-22:** *"the new repo will mirror how it works today but the data handling
 might be different so long as it is durable, scalable and secured."*

@@ -1,4 +1,4 @@
-# ERPv2
+# Shareat System
 
 Accounting-correctness rebuild of the Shareat ERP, on PostgreSQL.
 
@@ -19,7 +19,7 @@ nominal ledger.** Revenue and expense are never posted as journal legs, a single
 is treated as "trivially balanced", and the income statement is a hand-maintained scan
 list. Most other defects are downstream of that one design choice.
 
-**ERPv2 is not primarily a database migration — it is an accounting-correctness project
+**Shareat System is not primarily a database migration — it is an accounting-correctness project
 that requires one.** PostgreSQL is the means; books you can trust are the end.
 
 - **Postgres owns the truth. Firebase owns the edge.** Every entity's authoritative state

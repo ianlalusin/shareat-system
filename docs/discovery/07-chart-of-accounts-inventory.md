@@ -1,7 +1,7 @@
 # 07 — Chart of Accounts Inventory & Posting Patterns
 
 Source repo: `C:\Users\ianla\webapps\ERP-rebuild` (read-only discovery — nothing modified).
-Purpose: exhaustive inventory of every account and posting pattern in the current system, as raw input to the ERPv2 chart-of-accounts alignment. **No redesign, no recommendation — inventory and description only.**
+Purpose: exhaustive inventory of every account and posting pattern in the current system, as raw input to the Shareat System chart-of-accounts alignment. **No redesign, no recommendation — inventory and description only.**
 
 Primary sources read in full: `src/lib/financial/ACCOUNTING_BLUEPRINT.md` (1218 lines), `src/lib/financial/accounts/account-defs.ts`, `src/lib/financial/accounts/account-registry.ts`, `src/lib/financial/accounts/account-resolver.ts`, `src/lib/financial/balance-sheet-classify.ts`, `src/lib/financial/journal/journal-writer.ts`, `src/lib/financial/balancer/balancer.ts`, `src/types/financial.ts`, all 22 files under `src/lib/financial/journal/builders/`, `src/lib/financial/channel-settlement/{posting,fees,channel-settlement-map,cross-store-loan.legs}.ts`, `src/lib/financial/commissary/{branch-sale-ar,autobook,receive-hook}.ts`, `src/lib/financial/salary-advance/account-allowlists.ts`, `src/lib/actions/income-statement.actions.ts` (the P&L read path — read closely since it determines which journal-native accounts actually reach a report), `AGENTS/ERP Guardian/SCHEMA_MAP.md` (accounts + journal sections). Plus targeted greps across all 36 files in `src/lib/actions/` that call a journal builder or `commitJournalLegs`/`addJournalEntriesToTransaction` directly, and the UI pages under `src/app/manager/accounts/`, `src/app/accounting/`.
 

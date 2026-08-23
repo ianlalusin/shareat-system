@@ -1,6 +1,6 @@
-# ERPv2 — PROJECT BIBLE
+# Shareat System — PROJECT BIBLE
 
-> **This file is the single source of authority for how ERPv2 is built.**
+> **This file is the single source of authority for how Shareat System is built.**
 > If anything — a prompt, a subagent, a habit carried over from ERP-rebuild, a
 > clever idea mid-task — conflicts with this file, **this file wins.**
 > Read it before touching the project. Amend it via §14, never silently.
@@ -13,7 +13,7 @@
 | **Status** | Accounting-correctness project (§1.1). All discovery complete. Root cause identified (§16.0). **Chart of accounts aligned and signed off.** Ready to write Phase 0/1 task specs. |
 | **Scale being replatformed** | 149 page routes (~53,700 LOC of pages), 20 API routes, 9 cron jobs, ~90 Firestore collection paths, 144 server-action modules / 578 exported functions |
 | **Source project** | `C:\Users\ianla\webapps\ERP-rebuild` (branch `upgrade-next16`) — **READ-ONLY, NEVER MODIFY** |
-| **This project** | `C:\Users\ianla\webapps\ERPv2` |
+| **This project** | `C:\Users\ianla\webapps\Shareat System` |
 
 ---
 
@@ -86,7 +86,7 @@ once, properly — do not re-litigate a decision Ian has already made after hear
 
 ## 1. Prime directive
 
-ERPv2 exists to give this business **books it can trust**, on a schema that is correct
+Shareat System exists to give this business **books it can trust**, on a schema that is correct
 by standard accounting practice and no more complicated than the business needs. It is a
 **re-platform of ERP-rebuild, not a rewrite of it** — the product stays, the foundation
 is rebuilt.
@@ -113,12 +113,12 @@ that's one of the goals: make the accounting, inventory and other data shape and
 industry standard, correct and simple." And: "ERPNext's data structure is superb, but my
 business is not an empire — that level of sophistication is overkill."*
 
-**ERPv2 is not primarily a database migration. It is an accounting correctness project
+**Shareat System is not primarily a database migration. It is an accounting correctness project
 that happens to require one.** Moving to SQL is the means; correct books are the end.
 
 The target is the **midpoint between v1 and ERPNext**:
 
-| | v1 (ERP-rebuild) | **ERPv2 — the target** | ERPNext |
+| | v1 (ERP-rebuild) | **Shareat System — the target** | ERPNext |
 |---|---|---|---|
 | Correctness | Gaps, being discovered | **Rigorous** | Rigorous |
 | Complexity | Ad hoc | **Minimal that is still correct** | Enterprise-general |
@@ -156,10 +156,12 @@ This doctrine **relaxes** the workflow-parity rule below: v2 is not a pixel-copy
 is v1 with the wrong parts corrected, the missing parts added, and the redundant parts
 gone.
 
-### 1.2a v1 ownership — hands off
+### 1.2a Reference repos — hands off, ALL of them
 
-ERP-rebuild is **not ours to edit**, and now for a second reason beyond §2: it is actively
-owned by someone else, alongside the Frappe work.
+**No reference repo is ours to edit** — `ERP-rebuild`, `POS`, `CUSTOMER`, `Shareat Website`.
+ERP-rebuild has a second reason beyond §2 (it is actively owned by someone else alongside the
+Frappe work), but as of 2026-08-23 the rule is the same for all four: they are **live
+production systems and read-only references**. We copy from them; we never write to them.
 
 - **Never** modify, branch, or run git operations in `ERP-rebuild`. Read-only, always.
 - Findings about v1 are **reported to Ian**, never acted on. If discovery shows a live v1
@@ -240,7 +242,7 @@ dual-writer projection drift, "cleaned but changed nothing" merge semantics, rul
 that deploy green and silently deny, invariants held together by hand-rolled
 transactions across documents, derived summary docs that go stale — are all
 symptoms of forcing a relational, transaction-heavy, report-heavy accounting system
-into a document store. ERPv2 fixes the category of bug, not the instances.
+into a document store. Shareat System fixes the category of bug, not the instances.
 
 ### What is explicitly NOT in scope
 
@@ -255,8 +257,13 @@ into a document store. ERPv2 fixes the category of bug, not the instances.
 
 These are absolute. Violating one is a defect regardless of whether tests pass.
 
-1. **ERP-rebuild is read-only.** No edits, no branches, no "small fixes," no
-   `git` operations in that directory. Discovery reads it; nothing writes it.
+1. **ALL FOUR reference repos are read-only.** `ERP-rebuild`, `POS`, `CUSTOMER`, and
+   `Shareat Website`. No edits, no branches, no "small fixes," no `git` operations in any
+   of those directories. Discovery reads them; nothing writes them.
+   *Standing rule, Ian 2026-08-23 (§13 row 80): "we won't touch any of it — we will copy
+   them into a new project, pick what's clean, clean what's not, omit what's not needed,
+   add what's missing."* A defect found in a reference repo is **logged in
+   `docs/DEFECTS-REGISTER.md` and fixed in the rebuild**, never patched at the source.
 2. **`webapps\inactive projects` does not exist.** Never browse, search, glob,
    grep, or resolve a name into it.
 3. **Postgres is the sole system of record.** No entity's authoritative state
@@ -276,7 +283,7 @@ These are absolute. Violating one is a defect regardless of whether tests pass.
 10. **NEVER BUILD ON THE PRODUCTION SERVER.** No `next build`, no `npm install --build`,
     no compile step of any kind on the droplet. **The production host is not a build
     machine.** Builds run in CI; the server receives a finished artifact only. See §8.
-11. **Port 9008 is ERPv2's, and only ERPv2's.** See §8.
+11. **Port 9008 is Shareat System's, and only Shareat System's.** See §8.
 
 ---
 
@@ -438,12 +445,12 @@ construction* rather than *by remembering* (§16.7).
 
 ## 5. Architecture — the Firebase hot lane
 
-This is ERPv2's defining feature, and its most dangerous surface. The contract below
+This is Shareat System's defining feature, and its most dangerous surface. The contract below
 is not negotiable at implementation time.
 
 ### 5.1 The two-lane contract
 
-Every Firestore document in ERPv2 is exactly one of two kinds. There is no third kind.
+Every Firestore document in Shareat System is exactly one of two kinds. There is no third kind.
 
 #### Lane A — **MIRROR** (Postgres -> Firestore, read-only to clients)
 
@@ -472,7 +479,7 @@ Every Firestore document in ERPv2 is exactly one of two kinds. There is no third
 
 **Forbidden by construction:** a Firestore document that is both read as truth and
 written by a client. That shape is the origin of the dual-writer bug class and it does
-not exist in ERPv2.
+not exist in Shareat System.
 
 ### 5.2 What v1 actually does offline — and why v2 changes it
 
@@ -672,7 +679,7 @@ approved, who charged, who counted — rests on a value the client supplies.
 ### Layout
 
 ```
-ERPv2/
+Shareat System/
   PROJECT_BIBLE.md          <- this file. The authority.
   CLAUDE.md                 <- loader; points every session at this file
   docs/
@@ -701,8 +708,8 @@ ERPv2/
 
 | Thing | Port |
 |---|---|
-| ERPv2 Next.js dev | **9008** |
-| ERPv2 local Postgres | **5435** |
+| Shareat System Next.js dev | **9008** |
+| Shareat System local Postgres | **5435** |
 
 `9002`–`9007` and `8000` belong to other repos and are off limits.
 Never pass a different `-p`. Never start a second server on a port you don't own.
@@ -740,7 +747,7 @@ is misleading: unstyled pages and build errors pointing at files you never touch
 
 ### Git
 
-- Repository: **https://github.com/ianlalusin/ERPv2** (private), remote `origin`, default
+- Repository: **https://github.com/ianlalusin/Shareat System** (private), remote `origin`, default
   branch `main`. Created 2026-08-22.
 - Work on feature branches; **`main` stays green** — CI runs typecheck, unit tests,
   migrations, integration tests against a real Postgres, and the build on every push.
@@ -828,7 +835,7 @@ track** without blocking the accounting sequence.
 
 ## 12. Inherited landmines — do not repeat these
 
-Failure modes ERP-rebuild actually hit in production. ERPv2's architecture must make
+Failure modes ERP-rebuild actually hit in production. Shareat System's architecture must make
 each one **structurally impossible**, not merely avoided by care.
 
 | # | The failure | How v2 prevents it structurally |
@@ -901,7 +908,7 @@ just a patch.**
 | 20 | 2026-08-22 | Strangler Fig with per-module feature flags; no big-bang cutover (§15.3) | Big-bang rewrites of live production systems are the best-documented failure mode in the industry | No |
 | 21 | 2026-08-22 | No dual-write between v1 and v2 (§15.4) | Silent divergence; one writer per module at any moment | No |
 | 22 | 2026-08-22 | Event sourcing / CQRS explicitly rejected; append-only ledgers only (§15.10) | Overkill for a single-business ERP with one operator | Yes |
-| 23 | 2026-08-22 | **ERPv2 reframed: an accounting-correctness project, not a DB migration** (§1.1) | Ian: v1 is vibecoded with accounting gaps; correctness is the goal, SQL is the means | No |
+| 23 | 2026-08-22 | **Shareat System reframed: an accounting-correctness project, not a DB migration** (§1.1) | Ian: v1 is vibecoded with accounting gaps; correctness is the goal, SQL is the means | No |
 | 24 | 2026-08-22 | **SUPERSEDES #17.** Parity splits three ways: workflow FIXED, accounting NOT parity, data handling FREE (§1.3) | Golden-mastering accounting against v1 would certify v1's defects as v2's requirements | No |
 | 25 | 2026-08-22 | Accounting oracle is double-entry law, not v1; divergences logged in `ACCOUNTING-DIVERGENCES.md` (§16.2) | v1 is a comparison subject, not a target | No |
 | 26 | 2026-08-22 | Target is the midpoint: correct like ERPNext, simple for one business (§16.4) | Ian: ERPNext's structure is superb but overkill; the business is not an empire | No |
@@ -909,11 +916,11 @@ just a patch.**
 | 28 | 2026-08-22 | **Phases resequenced: accounting spine 4→1, attendance 2→4** | Everything posts into the ledger; attendance risk retired by a Phase-0 spike instead | Yes |
 | 29 | 2026-08-22 | The ETL doubles as an audit of v1's books (§1.4) | A schema with real constraints rejects exactly the entries that are wrong | No |
 | 30 | 2026-08-22 | PH statutory rates are effective-dated data in one module, never inline constants (§16.5) | Historical runs must reproduce their original figures | No |
-| 31 | 2026-08-22 | **Root cause identified: v1 has no nominal ledger** (§16.0). Building one is ERPv2's single most important deliverable | Revenue/expense are not journal legs; the P&L is hand-assembled. Most other defects are downstream of this | No |
+| 31 | 2026-08-22 | **Root cause identified: v1 has no nominal ledger** (§16.0). Building one is Shareat System's single most important deliverable | Revenue/expense are not journal legs; the P&L is hand-assembled. Most other defects are downstream of this | No |
 | 32 | 2026-08-22 | Invariants go from nine to ten: nominal ledger and control accounts split out | Discovery showed v1 lacks both entirely | No |
 | 33 | 2026-08-22 | Minimum two lines per journal entry, enforced by CHECK constraint; no single-leg escape hatch | `balancer.ts:64-67` is the hole everything leaked through | No |
 | 34 | 2026-08-22 | §16.7 known-defect table is the acceptance criteria for Phases 1–3, not a wish list | Turns diagnosis into testable requirements | Yes |
-| 35 | 2026-08-22 | **ERPNext/Frappe migration retired. ERPv2 is the single destination** | Ian: two DBs and two shapes for one project; he knows ERPv2 end to end and cannot work efficiently in ERPNext. Operability by the maintainer is a legitimate criterion | Hard |
+| 35 | 2026-08-22 | **ERPNext/Frappe migration retired. Shareat System is the single destination** | Ian: two DBs and two shapes for one project; he knows Shareat System end to end and cannot work efficiently in ERPNext. Operability by the maintainer is a legitimate criterion | Hard |
 | 36 | 2026-08-22 | The invariant suite substitutes for ERPNext's battle-testing, so it is **not optional** | We gave up a track record; constraints + CI + worked examples buy it back | No |
 | 37 | 2026-08-22 | Account lifecycle `active` / `reserved` / `archived` (§16.9) — nice-to-haves are reserved, not active | Keeps everything without the miscoding and report-noise cost of unused active accounts | Yes |
 | 38 | 2026-08-22 | Per-counterparty GL accounts become **control account + subledger** | v1 has one GL account per supplier/customer; no independent check on the total | No |
@@ -952,11 +959,12 @@ just a patch.**
 | 71 | 2026-08-23 | Firebase Admin credentials are **required in production only**, until the auth bridge lands (T-006) | `env.ts` hard-required them, contradicting HANDOFF §4's promise that Firebase can stay blank, and blocking local dev and `/api/health` on credentials **no code path reads**. §7 rule 9 is about secrets that are *used* failing closed — not about demanding unused ones. Production stays hard-required via `superRefine`, and eight tests now assert both halves | Yes — reverts naturally at T-006 |
 | 73 | 2026-08-23 | **Beverage is ONE account (4400).** The 4410/4420 alcoholic split is withdrawn | Ian: one lump-sum record. §1.1 — carry no generality the business does not have. POS aggregates `addonSalesAmountByCategory`, so a later split is a reporting change, not a re-migration | Yes |
 | 74 | 2026-08-23 | `comps` are **contra-revenue** (4950), not marketing expense | Ian, confirmed | Yes |
-| 75 | 2026-08-23 | **ERPv2 is a management ledger, not a statutory filing basis. VAT is a label, not a tax engine** | Ian: the business is VAT-registered but reported sales are not all sales; this ERP is internal-use only and not VAT-compliant. Consequences: no VAT engine, no output-VAT liability accounts, no BIR report builders; SC/PWD discounts are plain contra-revenue into 4900; v1's dormant `vatableSales`/`outputVatAmount` fields are NOT migrated. §16.5's PH rules narrow to payroll statutory, which is real and does post. **ERPv2 must never be labelled or exported as BIR-ready output.** A statutory basis, if ever needed, is a separate reporting layer over the same ledger — not a retrofit of these accounts | No — shapes the whole chart |
+| 75 | 2026-08-23 | **Shareat System is a management ledger, not a statutory filing basis. VAT is a label, not a tax engine** | Ian: the business is VAT-registered but reported sales are not all sales; this ERP is internal-use only and not VAT-compliant. Consequences: no VAT engine, no output-VAT liability accounts, no BIR report builders; SC/PWD discounts are plain contra-revenue into 4900; v1's dormant `vatableSales`/`outputVatAmount` fields are NOT migrated. §16.5's PH rules narrow to payroll statutory, which is real and does post. **Shareat System must never be labelled or exported as BIR-ready output.** A statutory basis, if ever needed, is a separate reporting layer over the same ledger — not a retrofit of these accounts | No — shapes the whole chart |
 | 76 | 2026-08-23 | **`docs/CROSS-APP-MAP.md` is a living document**, maintained as work touches each seam between POS / ERP / CUSTOMER / Website | Ian: document every finding and connection across the apps, we will touch them one by one. The POS→ERP sales feed alone carries two semantics that are wrong if assumed (`dineInSales` = package only; `takeOutSales` = residual) | No |
 | 77 | 2026-08-23 | **Offline scope is CLOSED: POS selling + ERP biometric/attendance clock. Nothing else. Availability tolerance is 10 minutes to 1 hour** | Ian, asked directly: those are the only two offline needs, and an outage of 10 minutes up to an hour is workable. This is a **major simplification**. CUSTOMER and the Website become online-only. POS does not need a local database per store or bidirectional sync — the two-lane Firestore model already designed in §5 is sufficient, because a one-hour tolerance turns offline from a correctness problem into a queue-and-replay problem. The remaining hard case is receipt numbering while offline, which needs its own design (pre-allocated blocks or device-prefixed sequences reconciled on reconnect) | Widening this later is expensive — treat as closed |
 | 78 | 2026-08-23 | **Integration plumbing between apps is DELETED, not migrated. But its business rules are harvested first** | Ian: drop all the mapping that exists only to let the apps talk to each other. Correct — with one backend, the `api/external/*` routes, external API keys and key-scoping, the POS→ERP sales pull and its field mapping, the payment-method mapping layer, the storefront-catalog feed, and the cross-app idempotency/dedup maps all become dead weight. They are workarounds for separation, and separation is gone. **The hard caveat:** that code also encodes business semantics learned the expensive way — void-cash-retained disposition, branch-sale reconciliation, payment-method classification, refill timer anchoring. Deleting the plumbing is right; losing the rules inside it is not. Discovery docs 09–12 and `CROSS-APP-MAP.md` exist to harvest them BEFORE anything is deleted. **Two things that are NOT app-to-app linking and must survive:** the Lane A/B Firestore edge cache (offline, §5 + row 77) and the historical ETL mapping (T-113 — history was recorded in the old shape and still has to load) | No |
 | 79 | 2026-08-23 | **ADR-003: one PostgreSQL backend, four front-ends. The project's scope is the platform, not the ERP** | Discovery across all four apps found they are already one system held together by accretion: six Firestore collections written by BOTH POS and CUSTOMER, one shared Firebase project where a CUSTOMER deploy can overwrite POS's 800-line ruleset, a cross-project service account (`HUB_SA_KEY`) from the Website into POS's database, one Auth tenant used in both directions, and 8 HTTP routes existing only to move data between apps. §4.2 rule 8 (one writer per table) is violated six times across a process boundary. **Sequencing confirmed by Ian: ledger first, then front-ends one at a time behind feature flags, never two at once** — §13 row 20's ban on big-bang rewrites still binds. Consequence: **T-101 is designed for four consumers, not one** | No — foundational |
+| 80 | 2026-08-23 | **STANDING RULE: all four reference repos are read-only — `ERP-rebuild`, `POS`, `CUSTOMER`, `Shareat Website`. Nothing is ever fixed at the source** | Ian, verbatim: *"we won't touch the current reference firebase repos pos, erp rebuild, customer, shareat website — we won't touch any of it. We will copy them into a new project, pick what's clean, clean what's not, omit what's not needed, add what's missing."* This **widens §2 rule 1 and §1.2a from ERP-rebuild alone to all four**, and extends the four verbs (§1.2) to the whole platform. Supersedes every earlier note in this repo suggesting POS could be changed — those are corrected in place. Every defect found in a reference repo is logged in `docs/DEFECTS-REGISTER.md` and fixed **in the rebuild** | No |
 | 72 | 2026-08-23 | `/api/health` reports configuration and database failures **separately** | It caught every error and reported `database: unreachable`. A missing Firebase variable was therefore blamed on Postgres while Postgres was healthy — the exact misdirection the route's own comment claims to prevent (§15.6). Error text is returned outside production only; the endpoint is unauthenticated | Yes |
 
 ---
@@ -983,7 +991,7 @@ This file is **maintained, not written once.**
 
 ## 15. Engineering standards — the industry practices this project follows
 
-Per §0.2, boring and standard wins. These are the named, established practices ERPv2
+Per §0.2, boring and standard wins. These are the named, established practices Shareat System
 adopts. Deviating from one requires an ADR.
 
 ### 15.1 Build order: walking skeleton first
@@ -1010,7 +1018,7 @@ boundary, feature-flagged per module and per store. A module migrates only when 
 golden-master suite is green, and it can be **flipped back in one config change**.
 
 There is never a single terrifying switchover night. Big-bang rewrites of running
-production systems are the best-documented failure mode in our industry; ERPv2 does not
+production systems are the best-documented failure mode in our industry; Shareat System does not
 attempt one.
 
 ### 15.4 No dual-write
@@ -1074,7 +1082,7 @@ system.** It has no test suite, no track record, and no certification. It cannot
 wrong number — only a test can.
 
 **Therefore: never treat an installed skill as an assurance control.** Installing an
-unvetted third-party accounting skill and trusting it would repeat the exact mistake ERPv2
+unvetted third-party accounting skill and trusting it would repeat the exact mistake Shareat System
 was created to avoid — adopting something whose correctness cannot be verified in
 operation. An authoritative-sounding but wrong accounting skill is **worse than none**,
 because it manufactures false confidence.
@@ -1098,7 +1106,7 @@ surface deltas. Reconciliation is how you find out you are wrong before the busi
 
 ## 16. The accounting spine
 
-This is the heart of ERPv2 (§1.1). It is written before any schema so that every other
+This is the heart of Shareat System (§1.1). It is written before any schema so that every other
 module is built to post into a ledger that is already correct.
 
 ### 16.0 What we are actually fixing — the diagnosis
@@ -1127,7 +1135,7 @@ This was a deliberate build-cost decision, documented in `ACCOUNTING_BLUEPRINT.m
 The decision was recorded; its consequence was not — it has already produced one
 confirmed double-count (platform fees) and at least one unaudited gap.
 
-**Therefore the single most important thing ERPv2 builds is a real nominal ledger.**
+**Therefore the single most important thing Shareat System builds is a real nominal ledger.**
 Revenue and expense become actual journal legs. The income statement becomes a
 `GROUP BY account_type` over `journal_lines` — a query, not a maintained list. Almost
 every defect in the discovery report is downstream of this one design choice, and fixing

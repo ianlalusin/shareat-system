@@ -1,4 +1,4 @@
-# ERPv2 — Machine Handoff
+# Shareat System — Machine Handoff
 
 **Read this first if you are a Claude Code session starting fresh on a new machine.**
 You have no memory of the conversation that produced this repository. Everything you need
@@ -11,7 +11,7 @@ is written down. Work through this document top to bottom.
 
 ## 0. The 60-second orientation
 
-**ERPv2 is an accounting-correctness rebuild of an existing production ERP.**
+**Shareat System is an accounting-correctness rebuild of an existing production ERP.**
 
 The existing system (`ERP-rebuild`, live, in daily use by a Philippine restaurant business)
 is backed by Firestore. Discovery found its accounting is structurally broken: **it has no
@@ -19,7 +19,7 @@ nominal ledger.** Revenue and expense are never posted as journal legs, a single
 is treated as "trivially balanced", and the income statement is a hand-maintained scan
 list. Most other defects are downstream of that.
 
-ERPv2 re-platforms it onto **PostgreSQL** with real double-entry bookkeeping, keeping
+Shareat System re-platforms it onto **PostgreSQL** with real double-entry bookkeeping, keeping
 Firebase only as an offline edge cache for clock terminals.
 
 **`PROJECT_BIBLE.md` is the authority on this project.** Read it in full before doing
@@ -71,7 +71,7 @@ paths in the docs assume it.
 
 ```
 C:\Users\<you>\webapps\
-    ERPv2\           ← this repo (the work)
+    Shareat System\           ← this repo (the work)
     ERP-rebuild\     ← reference only, READ-ONLY
 ```
 
@@ -79,8 +79,8 @@ C:\Users\<you>\webapps\
 
 ```bash
 mkdir -p ~/webapps && cd ~/webapps
-git clone https://github.com/ianlalusin/ERPv2.git
-cd ERPv2
+git clone https://github.com/ianlalusin/Shareat System.git
+cd Shareat System
 ```
 
 ### 2b. Clone the reference repo — REQUIRED
@@ -110,7 +110,7 @@ The parts you will actually read:
 | `AGENTS/ERP Guardian/SCHEMA_MAP.md` | 1,000-line Firestore schema map |
 | `AGENTS/ERP Guardian/OPEN_CONCERNS.md` | Known defects, 951 lines |
 | `AGENTS/ERP Guardian/DECISION_LOG.md` | Why things are the way they are |
-| `docs/MARIADB_REBUILD_PLAN.md` | A prior relational-rebuild plan; ERPv2 adopts most of it |
+| `docs/MARIADB_REBUILD_PLAN.md` | A prior relational-rebuild plan; Shareat System adopts most of it |
 | `src/lib/actions/*.actions.ts` | 144 modules of business logic to port |
 
 ---
@@ -161,17 +161,17 @@ psql --version
 
 If not found, add `C:\Program Files\PostgreSQL\18\bin` to PATH and reopen the terminal.
 
-**Fallbacks if winget misbehaves:** Docker (`docker run -d --name erpv2-pg -e POSTGRES_PASSWORD=... -p 5435:5432 postgres:18`)
+**Fallbacks if winget misbehaves:** Docker (`docker run -d --name shareat-system-pg -e POSTGRES_PASSWORD=... -p 5435:5432 postgres:18`)
 or WSL2 Ubuntu (`sudo apt install postgresql-17`). Linux builds are still published.
 
 ### 3c. Create the databases
 
 ```bash
-psql -U postgres -p 5435 -c "CREATE DATABASE erpv2_dev;"
-psql -U postgres -p 5435 -c "CREATE DATABASE erpv2_test;"
+psql -U postgres -p 5435 -c "CREATE DATABASE shareat_dev;"
+psql -U postgres -p 5435 -c "CREATE DATABASE shareat_test;"
 ```
 
-`erpv2_test` is **truncated between test runs**. The integration-test guard refuses any
+`shareat_test` is **truncated between test runs**. The integration-test guard refuses any
 database whose name lacks `_test`, so this naming is load-bearing.
 
 ---
@@ -179,7 +179,7 @@ database whose name lacks `_test`, so this naming is load-bearing.
 ## 4. Configure and verify
 
 ```bash
-cd ~/webapps/ERPv2
+cd ~/webapps/Shareat System
 cp .env.example .env.local
 ```
 
@@ -190,8 +190,8 @@ there, and startup fails loudly with a readable list if any required one is miss
 Minimum to get running locally:
 
 ```
-DATABASE_URL=postgresql://postgres:<password>@localhost:5435/erpv2_dev
-TEST_DATABASE_URL=postgresql://postgres:<password>@localhost:5435/erpv2_test
+DATABASE_URL=postgresql://postgres:<password>@localhost:5435/shareat_dev
+TEST_DATABASE_URL=postgresql://postgres:<password>@localhost:5435/shareat_test
 SESSION_SECRET=<generate: openssl rand -base64 48>
 ```
 
@@ -205,7 +205,7 @@ Firebase values can stay blank until the auth bridge is wired in Phase 0 T-006.
 npm ci
 npm run typecheck          # must be clean
 npm run test               # 32 unit tests must pass
-npm run test:integration   # needs erpv2_test to exist
+npm run test:integration   # needs shareat_test to exist
 npm run build              # must succeed
 ```
 
@@ -217,7 +217,7 @@ npm run dev                # http://localhost:9008
 
 Check `http://localhost:9008/api/health` — it should report the database reachable.
 
-> **Port 9008 is reserved for ERPv2.** Other repos own 9002–9007 and 8000. Never pass a
+> **Port 9008 is reserved for Shareat System.** Other repos own 9002–9007 and 8000. Never pass a
 > different `-p`.
 > **Stop the dev server before `npm run build`** — the build overwrites the `.next` the
 > dev server is serving, producing unstyled pages and phantom errors on untouched files.
@@ -290,7 +290,7 @@ Be aware of these gaps — do not assume the previous environment:
   memory — that is exactly why so much was written down.
 - **`node_modules`** — run `npm ci`.
 - **`.env.local`** — never committed. Recreate it from `.env.example` (§4).
-- **Other repos** in the old `webapps` folder are unrelated to ERPv2.
+- **Other repos** in the old `webapps` folder are unrelated to Shareat System.
 
 ---
 

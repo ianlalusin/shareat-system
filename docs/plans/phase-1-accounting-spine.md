@@ -14,7 +14,7 @@ Build a **real double-entry general ledger** on PostgreSQL — with the complete
 ledger v1 never had — enforce the ten invariants as database constraints and CI tests,
 and load real historical data through it so that the books demonstrably tie.
 
-Phase 1 is the smallest thing that proves ERPv2 is worth building. It is deliberately
+Phase 1 is the smallest thing that proves Shareat System is worth building. It is deliberately
 scoped so it can be finished and judged.
 
 ### Exit gate — all must be true

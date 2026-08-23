@@ -43,7 +43,7 @@ const REDACT_PATHS = [
 export const logger = pino({
   level,
   redact: { paths: REDACT_PATHS, censor: '[REDACTED]' },
-  base: { app: 'erpv2' },
+  base: { app: 'shareat-system' },
   ...(isDev
     ? {
         transport: {

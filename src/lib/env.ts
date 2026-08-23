@@ -106,7 +106,7 @@ function loadServerEnv(): ServerEnv {
     const message =
       '\n' +
       '='.repeat(72) +
-      '\nERPv2 REFUSED TO START — environment is incomplete or invalid.\n' +
+      '\nShareat System REFUSED TO START — environment is incomplete or invalid.\n' +
       '='.repeat(72) +
       '\n' +
       formatIssues(parsed.error) +

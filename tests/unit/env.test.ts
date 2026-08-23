@@ -13,7 +13,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
  */
 
 const BASE = {
-  DATABASE_URL: 'postgresql://postgres:pw@localhost:5435/erpv2_dev',
+  DATABASE_URL: 'postgresql://postgres:pw@localhost:5435/shareat_dev',
   SESSION_SECRET: 'x'.repeat(48),
   APP_TIMEZONE: 'Asia/Manila',
 };

@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'ERPv2',
+  title: 'Shareat System',
   description: 'Shareat ERP — correct books, simply modelled',
 };
 

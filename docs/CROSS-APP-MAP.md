@@ -24,8 +24,10 @@
    A remembered fact is not a verified one.
 2. **Direction matters.** Record who calls whom. "They share data" is not a finding.
 3. **Record the contract, not the vibe.** Fields, auth, failure mode.
-4. **Never edit `ERP-rebuild`** (bible §2 rule 1). POS, CUSTOMER, and Website are *not* v1 and
-   may be changed — but only deliberately, and never as a side effect of ERPv2 work.
+4. **Never edit ANY of the four reference repos** — `ERP-rebuild`, `POS`, `CUSTOMER`,
+   `Shareat Website`. Standing rule, Ian 2026-08-23 (bible §2 rule 1, §13 row 80). They are
+   read-only references. Everything is rebuilt in the new project by copying, keeping what is
+   clean, cleaning what is not, omitting what is not needed, and adding what is missing.
 5. A connection that turns out to matter for the ledger gets a line in `PROJECT_BIBLE.md` §13.
 
 | | Status |
@@ -44,7 +46,7 @@
 | **ERP** (v1) | `webapps/ERP-rebuild` | 9002 | Back office, books, payroll, inventory. **READ-ONLY to us** |
 | **CUSTOMER** | `webapps/CUSTOMER` | 9004 | Diner-facing ordering, refills, loyalty |
 | **Website** | `webapps/Shareat Website` | 9007 | Public site, storefront, reservations (Astro) |
-| **ERPv2** | `webapps/ERPv2` | 9008 | This project. Will replace ERP v1's persistence |
+| **Shareat System** | `webapps/Shareat System` | 9008 | This project. Will replace ERP v1's persistence |
 
 ### Firebase projects — THREE, not four ✅ verified 2026-08-23
 
@@ -140,7 +142,7 @@ const isDineIn = r.sessionMode === 'package_dinein';
 const mode = isDineIn ? "dineIn" : "walkIn";
 ```
 
-À la carte and online both fall into `walkIn`. This is why ERPv2 can map `dineInSales`
+À la carte and online both fall into `walkIn`. This is why Shareat System can map `dineInSales`
 straight to **4100 Food sales — dine-in, unlimited** with no reconstruction (T-113 §6.1).
 
 **2. `takeOutSales` is a residual, not a measurement.**
@@ -171,7 +173,9 @@ to `liability__void_cash_suspense` at posting. Receipt-level fields: `voidCashPa
 
 ## 2. POS online orders — not yet live ⚠️ ✅
 
-Ian, 2026-08-23: **no online transactions as of now**, and POS can still be changed.
+Ian, 2026-08-23: **no online transactions as of now** — so there is no historical online data
+to migrate. (An earlier note here said POS could be changed to fix this; **superseded** by the
+standing rule — POS is read-only. The fix lands in the rebuild, not in POS.)
 
 `POS/src/app/api/admin/online-orders/route.ts:503` writes a receipt with
 `sessionMode: "alacarte"`, then line 518:
@@ -359,8 +363,8 @@ receiptNumber: `RF-${parentReceipt.receiptNumber}`,
 
 Every refund gets `receiptSeq: 0`, and the number is the parent's with an `RF-` prefix and
 **no sequence suffix**. A **second partial refund against the same parent mints an identical
-receipt number.** Real, current, and audit-relevant. POS is not v1 and is changeable —
-flagged for Ian, not fixed here.
+receipt number.** Real, current, and audit-relevant. **POS is read-only** (standing rule) —
+logged in `docs/DEFECTS-REGISTER.md` as DEF-001 and fixed in the rebuild, never in POS.
 
 ### There is no take-out flag — at all ✅
 
@@ -392,7 +396,7 @@ That shipped for the core write paths. Two gaps remain:
 
 ### Money is float, twice ⚠️
 
-Stored as JS floats in decimal pesos, not integer centavos — the same defect ERPv2's
+Stored as JS floats in decimal pesos, not integer centavos — the same defect Shareat System's
 `src/lib/money.ts` exists to eliminate (bible §12). Worse, there are **two duplicate rounding
 implementations**: `lib/money.ts` and an inline copy in `lib/tax.ts`.
 
@@ -405,12 +409,12 @@ a rebuild silently zeroes kitchen and per-staff stats.**
 
 ---
 
-## 6. What this means for ERPv2
+## 6. What this means for Shareat System
 
 The ledger's **revenue** depends entirely on §1, and its **inventory cost** will depend on
 `sold-items` / `inventory-items`. Two consequences already recorded in T-113:
 
-1. ERPv2 must treat the POS feed as a **source document with known semantics**, not as raw
+1. Shareat System must treat the POS feed as a **source document with known semantics**, not as raw
    truth — `takeOutSales` in particular is derived, and derived figures need a reconciliation
    rule, not a direct posting.
 2. The historical window is clean **only because online does not exist yet**. That is a
