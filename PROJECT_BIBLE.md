@@ -168,6 +168,50 @@ production systems and read-only references**. We copy from them; we never write
   bug, it goes in the report and into v2's fix list — we do not go fix it.
 - Do not propose v1 remediation work as ours to do.
 
+### 1.2b How to read the reference repos — intent is authoritative, implementation is not
+
+*Ian, 2026-08-23: "you are open to read, scrutinize and study the current version 1 repo if you
+need clarification to anything — but whatever you discover there is made by me, not 100% sure
+correct, might need correction. But **the intent I put is always there.** I made features there
+because we use it in day-to-day operations. Implementation might be flawed, but get the idea
+and refine it to correct execution."*
+
+**Read v1 as a requirements document that happens to be written in TypeScript.**
+
+Every feature in it exists because the business needed it badly enough to build it. That need
+is real and proven by daily use. The code expressing that need was written under time pressure,
+without a second pair of eyes, and may be wrong in its details. **Both things are true at once**,
+and confusing them is the main way this project could go wrong.
+
+> **v1 is authoritative about WHAT the business needs.
+> It is never authoritative about HOW it should be built.**
+
+This is §0.1 applied to a codebase. Ian sets WHAT and Claude owns HOW — and **v1 is the most
+detailed statement of WHAT that exists anywhere**, more complete than any spec, because it was
+written by the person who runs the business, for the business he runs.
+
+**Two opposite failure modes this guards against:**
+
+| Failure | Why it is wrong |
+|---|---|
+| *"This implementation is poor, so the feature is not needed."* | The implementation is evidence of a **need**, not a proposal. Staff use it daily. Dropping it silently removes a capability someone depends on — and §1.2 already reserves that call for Ian |
+| *"v1 is the oracle for workflow, so I must reproduce this faithfully."* | §1.3 makes workflow fixed, not **mechanism**. Reproducing a flawed implementation imports the defect and calls it a requirement |
+
+**In practice, when reading v1:**
+
+1. Ask **what problem was this solving** before asking whether the code is good.
+2. If a feature looks pointless, that is a signal to **ask Ian**, not to delete it. Something in
+   daily operations probably explains it.
+3. If the implementation is flawed, **log it** (`docs/DEFECTS-REGISTER.md`), harvest the intent,
+   and build it correctly here. Never patch it there (§2 rule 1).
+4. If v1 and correct accounting practice disagree, **practice wins** and the divergence is
+   recorded (§1.3) — but say what v1 was *trying* to achieve, because that intent still has to
+   be satisfied by whatever replaces it.
+
+**The four verbs (§1.2) are how this gets applied.** "Correct what's wrong" means correcting the
+*execution* while keeping the *intent*. It never means discarding the intent because the
+execution was poor.
+
 ### 1.3 The parity contract — what is fixed, what is free
 
 Three categories, not two. **Getting this wrong means either retraining staff for no
@@ -970,6 +1014,7 @@ just a patch.**
 | 81 | 2026-08-23 | **ADR-004: one npm-workspaces monorepo — `apps/` + `packages/`. The Website is IN** | Ian, asked directly: "go in", "move now". The schema is shared by all four front-ends; across separate repos that is either a published versioned package or duplicated code, and both are worse for a solo operator. Decisive evidence: **the existing landmine list is almost entirely cross-repo drift** — a loyalty scope helper duplicated with a note to "keep identical", two copies of rounding inside POS alone, three sources of branch identity in the Website, `dineInSales` semantics known in POS and assumed in ERP. A monorepo makes "keep identical" impossible to get wrong. **The cost, stated honestly:** it trades a coupling the filesystem enforced for one only a rule enforces — apps must never import from apps. npm workspaces only; no Turborepo until build times actually hurt | Splitting the Website back out later is cheap; splitting POS would not be |
 | 82 | 2026-08-23 | **Two food revenue accounts only: 4100 unlimited and 4150 à la carte. 4200 take-out is WITHDRAWN, folded into 4150** | Ian: "à la carte and unli only — fold the take-out into à la carte." Discovery had already shown POS **cannot** distinguish a seated à la carte diner from a counter take-out customer: à la carte sessions are table-less and there is no take-out flag anywhere (DEF-005). A 4150/4200 split would have created an account the source data can never populate correctly — the chart would have promised a number the business cannot produce. **Consequence: the sale mapping is now fully determinate** — `dineInSales` → 4100, `takeOutSales` → 4150, nothing quarantined on this axis (T-113 §6.6). If the dine-in/take-out split is ever wanted it comes from the `channel_id` dimension on journal lines, never a second revenue account | Yes — reversing means a new account, not a re-migration |
 | 83 | 2026-08-23 | **ADR-005: BOOKS-FIRST cutover on 2027-01-01. Phases 1, 2 and a Phase 6 subset cross over; inventory, attendance and payroll follow through Q1** | Ian set the shape (build Oct–Nov, clean data in December, onboard in January) and gave the decisive reason: **close 2026 in the old system, adjustments and all, so the opening balance is a settled artifact rather than a snapshot of a moving target.** Scope had to be cut because eight phases cannot fit in fourteen weeks — and pretending otherwise would ship payroll and inventory, the modules where wrong numbers hurt people, with the least confidence. **The opening balance is balance-sheet only**, which works precisely because v1 is wrong about the P&L and broadly right about the balance sheet: the cutover inherits the half it gets right. **2027 is year one of trustworthy P&L**; 2026 comparatives are labelled legacy-basis and unaudited, never loaded as real. Temporary bridges are named with retirement triggers — notably **the POS→ledger seam SURVIVES the cutover** until POSv2, which ADR-003's end state does not by itself imply. Go/no-go is **15 Nov**; a no-go moves to 1 April, the next clean quarter boundary | Date is movable; the books-first shape is not |
+| 84 | 2026-08-23 | **The reference repos are read as REQUIREMENTS, not as design. Intent is authoritative; implementation is not** (§1.2b) | Ian: *"whatever you discover there is made by me, not 100% sure correct... but the intent I put is always there. I made features there because we use it in day-to-day operations. Implementation might be flawed but get the idea, refine it to correct execution."* **v1 is the most detailed statement of WHAT this business needs that exists anywhere** — more complete than any spec, because the person who runs the business wrote it for the business he runs. This closes the gap between §1.3 (workflow is fixed) and §2 rule 1 (read-only): an agent must neither dismiss a feature because its code is poor, nor faithfully reproduce a flaw because "v1 is the oracle". A feature that looks pointless is a signal to **ask**, never to delete | No |
 | 72 | 2026-08-23 | `/api/health` reports configuration and database failures **separately** | It caught every error and reported `database: unreachable`. A missing Firebase variable was therefore blamed on Postgres while Postgres was healthy — the exact misdirection the route's own comment claims to prevent (§15.6). Error text is returned outside production only; the endpoint is unauthenticated | Yes |
 
 ---

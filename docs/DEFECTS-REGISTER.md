@@ -3,6 +3,12 @@
 > **Living document.** Ian, 2026-08-23: *"these surfacing gaps, bugs and defects — document
 > them so we can fix as we build this project."*
 >
+> ### A defect here is never an argument against the feature
+> Bible §1.2b — every feature in a reference repo exists because the business needed it and
+> uses it daily. **A flawed implementation is evidence of a real need, not a proposal to drop.**
+> Log the defect, harvest the intent, build it correctly here. If a feature looks pointless,
+> **ask Ian** — something in daily operations probably explains it.
+>
 > ### ⛔ Nothing here is fixed at the source
 > All four reference repos — `ERP-rebuild`, `POS`, `CUSTOMER`, `Shareat Website` — are
 > **read-only** (bible §2 rule 1, §13 row 80). Every entry below is fixed **in the rebuild**.

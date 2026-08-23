@@ -14,6 +14,13 @@ authority**; if this file and the bible ever disagree, the bible wins and this f
    clean, clean what is not, omit what is not needed, add what is missing. A defect you find
    there is **logged in [`docs/DEFECTS-REGISTER.md`](./docs/DEFECTS-REGISTER.md) and fixed
    here**, never patched at the source.
+
+   **Read them freely — but read them as REQUIREMENTS, not as design** (bible §1.2b). Every
+   feature exists because the business needed it enough to build it, and staff use it daily.
+   The code may be wrong in its details; the *need* is proven. **They are authoritative about
+   WHAT the business needs and never about HOW to build it.** So: do not dismiss a feature
+   because its implementation is poor, and do not faithfully reproduce a flaw because "v1 is
+   the oracle". **If a feature looks pointless, ask — never delete.**
 2. **Never touch `C:\Users\ianla\webapps\inactive projects`** — retired work. Exclude it from
    every recursive search.
 3. **An app may never import from another app.** Apps depend on `packages/`; packages never
