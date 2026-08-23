@@ -1,6 +1,8 @@
 # T-102 — Chart of accounts seed
 
-> **Status:** spec ready. **Depends on:** T-101 (done). **Blocks:** T-103, T-108, T-113/T-114.
+> **Status:** ✅ **COMPLETE 2026-08-23** — 75 accounts, 51 integration tests green.
+> Two follow-ups: migration `0002` corrects 3200; 1520/1530 left unseeded pending Ian.
+> **Was:** spec ready. **Depends on:** T-101 (done). **Blocks:** T-103, T-108, T-113/T-114.
 > **Written by:** Opus planner, 2026-08-23. Bible §3.3 format.
 > **Source of truth for the account list:** `docs/decisions/COA-ALIGNMENT.md`, signed off by
 > Ian 2026-08-22, amended 2026-08-23 (beverage collapsed to one account).
@@ -70,14 +72,16 @@ table and COA-ALIGNMENT disagree, **COA-ALIGNMENT wins and this spec is a bug**:
 
 Asset and expense → `debit`. Liability, equity and income → `credit`.
 
-**Two deliberate exceptions**, and they are the whole reason this is a column:
+**Six accounts break the rule**, and they are the whole reason this is a column:
 
-- **1590 accumulated depreciation** is a *contra-asset*: `type = 'asset'`,
-  `normal_balance = 'credit'`.
-- **4900 / 4910 / 4920 / 4950** are *contra-revenue*: `type = 'income'`,
-  `normal_balance = 'debit'`.
+- **1590 accumulated depreciation** — *contra-asset*: `type='asset'`, `normal_balance='credit'`.
+- **3200 owner's drawings** — *contra-equity*: `type='equity'`, `normal_balance='debit'`.
+  Drawings **reduce** equity. *(Corrected 2026-08-23: this spec originally said "six" but
+  enumerated only five. The implementer flagged the inconsistency instead of guessing, which
+  is the only reason it was caught. Fixed forward by migration `0002`.)*
+- **4900 / 4910 / 4920 / 4950** — *contra-revenue*: `type='income'`, `normal_balance='debit'`.
 
-> A rule that derives `normal_balance` from `type` gets all six of these wrong. The legacy
+> A rule that derives `normal_balance` from `type` gets all **six** of these wrong. The legacy
 > system derived it from an account-name prefix, which is how it got them wrong. **Set the
 > column explicitly per account.**
 

@@ -25,7 +25,11 @@ export default defineConfig({
         test: {
           name: 'unit',
           include: ['tests/unit/**/*.test.ts', 'packages/**/*.test.ts', 'apps/**/*.test.ts'],
-          exclude: ['**/node_modules/**', '**/.next/**'],
+          // A test that needs a database is not a unit test. CI runs the unit project
+          // BEFORE migrations are applied, so a DB-touching test here fails on a fresh
+          // database with "relation does not exist". Convention: anything under a
+          // `tests/integration/` directory, anywhere, is an integration test.
+          exclude: ['**/node_modules/**', '**/.next/**', '**/tests/integration/**'],
           environment: 'node',
         },
       },
@@ -33,7 +37,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'integration',
-          include: ['tests/integration/**/*.test.ts'],
+          include: ['tests/integration/**/*.test.ts', 'packages/**/tests/integration/**/*.test.ts'],
           exclude: ['**/node_modules/**', '**/.next/**'],
           environment: 'node',
           setupFiles: ['tests/integration/setup.ts'],

@@ -1,0 +1,352 @@
+/**
+ * Chart of accounts — the seeded reference data. docs/tasks/102-chart-of-accounts-seed.md.
+ *
+ * Source of truth: docs/decisions/COA-ALIGNMENT.md §2, amended 2026-08-23 by Ian (revenue
+ * collapsed to two accounts — see the REVENUE AMENDMENT note below). Where this file and
+ * COA-ALIGNMENT.md disagree in the future, COA-ALIGNMENT.md wins and this file is the bug.
+ *
+ * This is reference data, not a fixture (bible §4.4 / §16.9):
+ *   - every row is `isSystem: true` — deactivate (status: 'archived'), never delete
+ *   - applied idempotently by (org_id, code) — see `seedChartOfAccounts()` below
+ *   - `normalBalance` is DECLARED per row, never derived from `type` (bible §13 row 39 —
+ *     the legacy system inferred it from an `accountId` prefix and got six rows wrong)
+ *
+ * Structure: seven non-postable header accounts (1000/2000/.../7000), each the DIRECT
+ * parent of every account in its number range. The hierarchy is flat — two levels, never
+ * three — so `parentCode` is either `null` (this row IS a header) or one of the seven
+ * header codes. Every non-header row is postable (T-101's `accounts_postable_no_children`
+ * trigger would reject anything else once a child references it).
+ *
+ * `legacyCode` is set ONLY where a v1 account id is a fixed, stable, 1:1 predecessor —
+ * never for a per-entity prefix (`ap__{supplierId}`, `ar__{customerId}`,
+ * `staff_advance__{staffId}`, `prepaid__{id}`, `asset__{id}`, `online__{id}`, and the
+ * store-keyed pair `asset__due_from_{storeKey}` / `liability__due_to_{storeKey}`) — those
+ * are thousands of v1 rows collapsing onto ONE v2 control account each, mapped by prefix
+ * at ETL time (T-113/T-114), not by this column. See the task report for two further
+ * legacy_code omissions this rule implies that the task spec didn't spell out by name:
+ * 1590's `contra_asset__{assetId}` (per-entity despite its ✅ marker in COA-ALIGNMENT) and
+ * 7350, which TWO fixed v1 ids collapse onto (`others__remittance_overage` and
+ * `others__remittance_variance`) — a 2:1 collision, not a 1:1 predecessor, so neither
+ * qualifies under Contract §5's "only a stable 1:1" rule either.
+ */
+import type postgres from 'postgres';
+
+export type AccountType = 'asset' | 'liability' | 'equity' | 'income' | 'expense';
+export type NormalBalance = 'debit' | 'credit';
+/** Seeded rows only ever start 'active' or 'reserved' — 'archived' is a later lifecycle
+ * transition (bible §16.9), never a seed-time value. */
+export type SeedAccountStatus = 'active' | 'reserved';
+
+export interface ChartOfAccountsSeedAccount {
+  code: string;
+  name: string;
+  type: AccountType;
+  normalBalance: NormalBalance;
+  /** null for the seven header rows themselves; otherwise the header code for this row's range. */
+  parentCode: string | null;
+  isPostable: boolean;
+  legacyCode: string | null;
+  status: SeedAccountStatus;
+}
+
+const header = (
+  code: string,
+  name: string,
+  type: AccountType,
+  normalBalance: NormalBalance,
+): ChartOfAccountsSeedAccount => ({
+  code,
+  name,
+  type,
+  normalBalance,
+  parentCode: null,
+  isPostable: false,
+  legacyCode: null,
+  status: 'active',
+});
+
+const leaf = (
+  code: string,
+  name: string,
+  type: AccountType,
+  normalBalance: NormalBalance,
+  parentCode: string,
+  opts: { legacyCode?: string; status?: SeedAccountStatus } = {},
+): ChartOfAccountsSeedAccount => ({
+  code,
+  name,
+  type,
+  normalBalance,
+  parentCode,
+  isPostable: true,
+  legacyCode: opts.legacyCode ?? null,
+  status: opts.status ?? 'active',
+});
+
+export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
+  // ---------------------------------------------------------------------------------
+  // Headers — Contract §1. Type/normal_balance follow the range's dominant type; 7000
+  // is a genuine judgment call (see task report) because it rolls up BOTH income and
+  // expense sub-accounts and neither source document states its type explicitly.
+  // ---------------------------------------------------------------------------------
+  header('1000', 'Assets', 'asset', 'debit'),
+  header('2000', 'Liabilities', 'liability', 'credit'),
+  header('3000', 'Equity', 'equity', 'credit'),
+  header('4000', 'Revenue', 'income', 'credit'),
+  header('5000', 'Cost of sales', 'expense', 'debit'),
+  header('6000', 'Operating expenses', 'expense', 'debit'),
+  header('7000', 'Other income and expense', 'income', 'credit'), // FLAGGED — see task report
+
+  // ---------------------------------------------------------------------------------
+  // Assets 1xxx
+  // ---------------------------------------------------------------------------------
+  leaf('1110', 'Cash on hand — cashier', 'asset', 'debit', '1000', { legacyCode: 'cash__cashier' }),
+  leaf('1120', 'Cash on hand — staff custodian', 'asset', 'debit', '1000', { legacyCode: 'cash__staff' }),
+  leaf('1130', 'Cash on hand — office', 'asset', 'debit', '1000', { legacyCode: 'cash__office' }),
+  leaf('1140', 'E-wallet / online channels', 'asset', 'debit', '1000'), // control; online__{id} per-entity
+  leaf('1210', 'Accounts receivable', 'asset', 'debit', '1000'), // control; ar__{customerId} per-entity
+  leaf('1220', 'Channel receivable', 'asset', 'debit', '1000'), // control; ar__channel_{id} per-entity
+  leaf('1221', 'Channel clearing — Grab', 'asset', 'debit', '1000', { legacyCode: 'clearing__grab' }),
+  leaf('1222', 'Channel clearing — Foodpanda', 'asset', 'debit', '1000', {
+    legacyCode: 'clearing__foodpanda',
+  }),
+  leaf('1230', 'Advances to employees', 'asset', 'debit', '1000'), // control; staff_advance__{staffId}
+  leaf('1240', 'Advances to suppliers', 'asset', 'debit', '1000'), // control; supplier_advance__{supplierId}
+  leaf('1250', 'Due from related store', 'asset', 'debit', '1000'), // asset__due_from_{storeKey}, ar__{branchAsCustomer}
+  leaf('1310', 'Inventory — raw materials', 'asset', 'debit', '1000'), // 🆕
+  leaf('1320', 'Inventory — supplies and packaging', 'asset', 'debit', '1000'), // 🆕
+  leaf('1330', 'Inventory — prepped / commissary goods', 'asset', 'debit', '1000'), // 🆕
+  leaf('1340', 'Inventory in transit (branch orders)', 'asset', 'debit', '1000'), // 🆕
+  leaf('1400', 'Prepaid expenses', 'asset', 'debit', '1000'), // control; prepaid__{id} per-entity
+  // 1510 only — 1520/1530 deliberately NOT seeded. See task report: COA-ALIGNMENT gives
+  // this concept a single name across a code RANGE ("1510-1530 Property and equipment"),
+  // unlike every other multi-code row in the same document, which gives one distinct
+  // name per code. Inventing two more account names with no basis in either source
+  // document is exactly the fabrication this project exists to stop (bible §4.4).
+  // 1520/1530 are a genuine reserved NUMBER GAP per bible §16.9, not database rows.
+  leaf('1510', 'Property and equipment', 'asset', 'debit', '1000'), // control; asset__{assetId}
+  // Contra-asset exception — Contract §3.
+  leaf('1590', 'Accumulated depreciation', 'asset', 'credit', '1000'), // contra_asset__{assetId}, per-entity
+
+  // ---------------------------------------------------------------------------------
+  // Liabilities 2xxx
+  // ---------------------------------------------------------------------------------
+  leaf('2110', 'Accounts payable', 'liability', 'credit', '2000'), // control; ap__{supplierId}
+  leaf('2130', 'Reimbursements payable to employees', 'liability', 'credit', '2000'), // staff_reimbursable__{staffId}
+  leaf('2140', 'Customer store credits payable', 'liability', 'credit', '2000', {
+    legacyCode: 'others__store_credits',
+  }),
+  leaf('2145', 'Unredeemed vouchers', 'liability', 'credit', '2000', { status: 'reserved' }),
+  leaf('2150', 'Due to related store', 'liability', 'credit', '2000'), // liability__due_to_{storeKey}, ap__{commissaryMirror}
+  leaf('2210', 'SSS payable', 'liability', 'credit', '2000'), // 🆕
+  leaf('2220', 'PhilHealth payable', 'liability', 'credit', '2000'), // 🆕
+  leaf('2230', 'Pag-IBIG payable', 'liability', 'credit', '2000'), // 🆕
+  leaf('2240', 'Withholding tax payable', 'liability', 'credit', '2000'), // 🆕
+  leaf('2250', 'VAT payable', 'liability', 'credit', '2000', { status: 'reserved' }), // bible §13 row 75
+  leaf('2300', 'Salaries and wages payable', 'liability', 'credit', '2000', {
+    legacyCode: 'liability__salaries_payable',
+  }),
+  leaf('2400', 'Loans payable', 'liability', 'credit', '2000'), // control; liability__loan_{loanId}
+  leaf('2900', 'Suspense — void cash', 'liability', 'credit', '2000', {
+    legacyCode: 'liability__void_cash_suspense',
+  }),
+
+  // ---------------------------------------------------------------------------------
+  // Equity 3xxx
+  // ---------------------------------------------------------------------------------
+  leaf('3100', "Owner's capital", 'equity', 'credit', '3000', { legacyCode: 'equity__capital' }),
+  // FLAGGED — see task report. Standard practice treats Owner's Drawings as CONTRA-equity
+  // (debit-normal). Contract §3 names "two deliberate exceptions" totalling six accounts
+  // but its own list only enumerates five (1590 + four contra-revenue), and 3200 is not
+  // among the six named. Implemented literally as the blanket equity rule states —
+  // credit — pending confirmation this omission wasn't the missing sixth exception.
+  // CONTRA-EQUITY. Drawings REDUCE owner's equity, so the normal balance is DEBIT even
+  // though the type is 'equity'. This is the sixth account that breaks derive-from-type,
+  // alongside 1590 and the four contra-revenue accounts. Corrected 2026-08-23 (T-102 spec
+  // named six exceptions but enumerated only five; the implementer flagged it rather than
+  // guessing, which is why it is right).
+  leaf('3200', "Owner's drawings", 'equity', 'debit', '3000'), // 🆕 — never used in v1
+  leaf('3300', 'Retained earnings', 'equity', 'credit', '3000'), // 🆕
+  leaf('3900', 'Opening balance equity', 'equity', 'credit', '3000', {
+    legacyCode: 'equity__opening_balance',
+  }),
+
+  // ---------------------------------------------------------------------------------
+  // Revenue 4xxx — REVENUE AMENDMENT (Ian, 2026-08-23, superseding COA-ALIGNMENT.md and
+  // the task spec's original Contract §2/§4 for this range): only TWO food accounts.
+  // Take-out folds into à la carte; 4200 is REMOVED (not seeded). 4150 is ACTIVE, not
+  // reserved — POS cannot split seated à la carte from counter take-out (no take-out
+  // flag anywhere in POS), so a 4200 split would be an account the source data can never
+  // populate correctly. A future channel-level split, if wanted, comes from the
+  // `channel_id` dimension on journal lines, not a new account.
+  // ---------------------------------------------------------------------------------
+  leaf('4100', 'Food sales — unlimited (unli)', 'income', 'credit', '4000'), // 🆕
+  leaf('4150', 'Food sales — à la carte (dine-in, take-out and delivery)', 'income', 'credit', '4000'), // 🆕, active
+  leaf('4400', 'Beverage sales', 'income', 'credit', '4000'), // 🆕 — one lump account, amended 2026-08-23
+  // Contra-revenue exceptions — Contract §3.
+  leaf('4900', 'Sales discounts', 'income', 'debit', '4000'), // 🆕 — senior/PWD, currently hardcoded to zero
+  leaf('4910', 'Loyalty points redeemed', 'income', 'debit', '4000', { legacyCode: 'others__points' }),
+  leaf('4920', 'Vouchers redeemed', 'income', 'debit', '4000', {
+    legacyCode: 'others__voucher',
+    status: 'reserved',
+  }),
+  leaf('4950', 'Sales returns and voids', 'income', 'debit', '4000'), // 🆕
+
+  // ---------------------------------------------------------------------------------
+  // Cost of sales 5xxx — the coarse §2 list only. The granular 5110-5170 COGS
+  // sub-accounts and the expense-category -> account mapping live in COA-ALIGNMENT §4,
+  // explicitly its own task per this spec's "Out of scope" section.
+  // ---------------------------------------------------------------------------------
+  leaf('5100', 'COGS — food', 'expense', 'debit', '5000'), // 🆕
+  leaf('5200', 'COGS — beverage', 'expense', 'debit', '5000'), // 🆕
+  leaf('5300', 'Wastage and spoilage', 'expense', 'debit', '5000', {
+    legacyCode: 'expense__order_wastage',
+  }), // moved from OPEX to COGS
+  leaf('5400', 'Inventory adjustment', 'expense', 'debit', '5000'), // 🆕
+
+  // ---------------------------------------------------------------------------------
+  // Operating expenses 6xxx
+  // ---------------------------------------------------------------------------------
+  leaf('6100', 'Salaries and wages', 'expense', 'debit', '6000', { legacyCode: 'expense__salary' }),
+  leaf('6110', 'Employer SSS contributions', 'expense', 'debit', '6000'), // 🆕
+  leaf('6120', 'Employer PhilHealth contributions', 'expense', 'debit', '6000'), // 🆕
+  leaf('6130', 'Employer Pag-IBIG contributions', 'expense', 'debit', '6000'), // 🆕
+  leaf('6140', '13th month pay', 'expense', 'debit', '6000'), // 🆕
+  leaf('6150', 'Salary additions and allowances', 'expense', 'debit', '6000', {
+    legacyCode: 'expense__salary_additions',
+  }),
+  leaf('6200', 'Rent', 'expense', 'debit', '6000'), // 🆕
+  leaf('6300', 'Utilities', 'expense', 'debit', '6000'), // 🆕
+  leaf('6400', 'Platform and channel fees', 'expense', 'debit', '6000', {
+    legacyCode: 'expense__platform_fee',
+  }),
+  leaf('6410', 'Online order expenses', 'expense', 'debit', '6000', {
+    legacyCode: 'expense__online_order_expenses',
+  }),
+  leaf('6500', 'Supplies', 'expense', 'debit', '6000'), // 🆕
+  leaf('6600', 'Repairs and maintenance', 'expense', 'debit', '6000'), // 🆕
+  leaf('6700', 'Depreciation', 'expense', 'debit', '6000', { legacyCode: 'expense__depreciation' }),
+  leaf('6750', 'Amortisation', 'expense', 'debit', '6000', { legacyCode: 'expense__amortization' }),
+  leaf('6800', 'Taxes and licences', 'expense', 'debit', '6000', { legacyCode: 'expense__tax' }), // confirmed §3
+  leaf('6900', 'Other operating expenses', 'expense', 'debit', '6000'), // 🆕 catch-all
+
+  // ---------------------------------------------------------------------------------
+  // Other income and expense 7xxx
+  // ---------------------------------------------------------------------------------
+  leaf('7100', 'Platform settlement gain', 'income', 'credit', '7000', {
+    legacyCode: 'income__platform_settlement_gain',
+  }),
+  leaf('7200', 'Interest expense', 'expense', 'debit', '7000', { legacyCode: 'expense__interest' }),
+  leaf('7310', 'Staff charge recovery', 'income', 'credit', '7000', {
+    legacyCode: 'income__charge_recovery',
+  }),
+  leaf('7320', 'Wastage recovery', 'income', 'credit', '7000', {
+    legacyCode: 'income__wastage_recovery',
+  }),
+  // FLAGGED — see task report. COA-ALIGNMENT types this "Income/Expense" (it swings
+  // either way) rather than picking one — the schema's `type` column cannot hold both.
+  // Implemented as expense/debit (the dominant textbook convention for "cash over and
+  // short"). TWO fixed v1 ids collapse onto this one account
+  // (`others__remittance_overage`, `others__remittance_variance`) — a 2:1 relationship,
+  // so neither gets `legacyCode` under Contract §5's "stable 1:1" rule.
+  leaf('7350', 'Cash over and short', 'expense', 'debit', '7000'),
+  leaf('7400', 'Loss on disposal of assets', 'expense', 'debit', '7000', {
+    legacyCode: 'expense__loss_on_disposal',
+  }), // confirmed §3
+] as const;
+
+/** Every header code — used by `seedChartOfAccounts` to split the two insert phases. */
+const HEADER_CODES: readonly string[] = CHART_OF_ACCOUNTS.filter((a) => a.parentCode === null).map(
+  (a) => a.code,
+);
+
+export interface SeedResult {
+  headersInserted: number;
+  leavesInserted: number;
+}
+
+/**
+ * Applies the chart of accounts to ONE organization, idempotently by (org_id, code).
+ *
+ * Two phases because leaves reference their header's surrogate id, which only exists
+ * once the header row is committed:
+ *   1. Insert the seven headers (ON CONFLICT (org_id, code) DO NOTHING).
+ *   2. Insert every leaf, resolving parent_id via a join back to the org's own headers
+ *      (ON CONFLICT (org_id, code) DO NOTHING).
+ *
+ * `DO NOTHING` (never `DO UPDATE`) is deliberate: re-running this must change zero
+ * existing rows, not just avoid duplicate codes (Contract §6, invariant 6). Editing an
+ * already-seeded row's name/type is a new, explicit migration, never a silent upsert.
+ *
+ * This function is the single implementation the migration's raw SQL mirrors and the
+ * test suite exercises directly — see docs/tasks/102-chart-of-accounts-seed.md Method.
+ * A future "create organization" flow should call this directly for a brand-new org
+ * rather than waiting on a migration that can only ever reach orgs that already existed
+ * when it ran (see task report — this migration seeds every org THAT EXISTS AT
+ * MIGRATION-APPLY TIME; a new org created afterward needs this function called for it).
+ */
+export async function seedChartOfAccounts(sql: postgres.Sql, orgId: string): Promise<SeedResult> {
+  const headers = CHART_OF_ACCOUNTS.filter((a) => a.parentCode === null);
+  const leaves = CHART_OF_ACCOUNTS.filter((a) => a.parentCode !== null);
+
+  // postgres.js's `sql(array)` helper only builds a plain `(cols) values (...)` clause
+  // for a direct `insert into t ${sql(array)}` — it cannot be used as a joinable table
+  // expression inside `from ... as v(...)`, which the leaf phase needs (it joins back to
+  // the header rows). `jsonb_to_recordset` does the same "array of rows in, one bind
+  // parameter" job and works uniformly as a FROM-clause source for both phases. It must
+  // be bound via `sql.json(...)`, not a pre-stringified string cast with `::jsonb` — the
+  // latter reaches Postgres double-encoded (a jsonb STRING holding JSON text, which
+  // `jsonb_to_recordset` correctly refuses as "not an array") — confirmed against the
+  // real local Postgres while writing this.
+  const headerPayload = headers.map((h) => ({
+    code: h.code,
+    name: h.name,
+    type: h.type,
+    normal_balance: h.normalBalance,
+    legacy_code: h.legacyCode,
+    status: h.status,
+  }));
+
+  const headerRows = await sql<{ id: string }[]>`
+    insert into accounts (org_id, code, name, type, normal_balance, parent_id, is_postable, is_system, legacy_code, status)
+    select ${orgId}::uuid, v.code, v.name, v.type, v.normal_balance, null, false, true, v.legacy_code, v.status
+    from jsonb_to_recordset(${sql.json(headerPayload)})
+      as v(code text, name text, type text, normal_balance text, legacy_code text, status text)
+    on conflict (org_id, code) do nothing
+    returning accounts.id
+  `;
+
+  const leafPayload = leaves.map((l) => ({
+    code: l.code,
+    name: l.name,
+    type: l.type,
+    normal_balance: l.normalBalance,
+    parent_code: l.parentCode,
+    legacy_code: l.legacyCode,
+    status: l.status,
+  }));
+
+  const leafRows = await sql<{ id: string }[]>`
+    insert into accounts (org_id, code, name, type, normal_balance, parent_id, is_postable, is_system, legacy_code, status)
+    select ${orgId}::uuid, v.code, v.name, v.type, v.normal_balance, p.id, true, true, v.legacy_code, v.status
+    from jsonb_to_recordset(${sql.json(leafPayload)})
+      as v(code text, name text, type text, normal_balance text, parent_code text, legacy_code text, status text)
+    join accounts p on p.org_id = ${orgId}::uuid and p.code = v.parent_code
+    on conflict (org_id, code) do nothing
+    returning accounts.id
+  `;
+
+  return { headersInserted: headerRows.length, leavesInserted: leafRows.length };
+}
+
+/** Every reserved code in the seed — Contract §4, amended 2026-08-23. Exported so the
+ * test suite's expectation and the seed data can never silently drift apart. */
+export const RESERVED_CODES: readonly string[] = CHART_OF_ACCOUNTS.filter(
+  (a) => a.status === 'reserved',
+).map((a) => a.code);
+
+/** Sanity check used by the test suite — every header code referenced by a leaf must
+ * actually exist as a header in this same array. */
+export function isHeaderCode(code: string): boolean {
+  return HEADER_CODES.includes(code);
+}
