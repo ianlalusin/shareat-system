@@ -1,6 +1,8 @@
 # T-113 — Nominal-leg mapping table
 
-> **Status:** awaiting Ian's review. Blocks T-114 (ETL Stage 1) and therefore T-115.
+> **Status:** ✅ **IMPLEMENTED 2026-08-23.** Ian's review complete. **§1/§2's `sourceType` names
+> are WRONG — see the correction at the end.** `packages/etl/src/leg-mapping.ts` is authoritative.
+> **Was:** awaiting Ian's review. Blocks T-114 (ETL Stage 1) and therefore T-115.
 > **Written by:** Opus planner, 2026-08-23. Bible §3.3 format.
 > **Skill invoked:** `accounting-systems` (bible §13 row 59 — required before any posting pattern).
 
@@ -385,3 +387,81 @@ With §6.1–6.3 and §6.5 answered, the sale mapping is **fully determinate for
 **The historical window is clean precisely because online does not exist yet.** Every
 pre-cutover `takeOutSales` peso is à la carte by construction. That property ends the day
 online orders launch, which is why §6.7 should land before then.
+
+
+---
+
+## ⚠️ Corrections — 2026-08-23, after implementation
+
+### 1. The `sourceType` names in §1 and §2 are wrong. All of them.
+
+I wrote kebab-case pretty names. **v1 writes snake_case**, and several of my names collapse or
+split against reality. Verified by grepping every builder:
+
+| I wrote | v1 actually writes |
+|---|---|
+| `expense` | **`expense_payment`** |
+| `liability-charge` | **`balance_adjustment`** |
+| `equity-movement` | **`capital_contribution`** + a drawings variant |
+| `cash-request` | **`cash_request_release`** + **`cash_request_return`** |
+| `legacy-balance-import` | **five** values: `ap_legacy_import`, `ar_legacy_import`, `staff_advance_legacy_import`, `staff_reimbursable_legacy_import`, `cash_legacy_import` |
+| `loan` | **`loan_disbursement`** (never nominal) + **`loan_payment`** (nominal only when interest > 0) |
+| `ar-charge` **and** `sale` | **the same literal `'sale'`** — written by *both* `ar-charge.builder.ts` and `sale.builder.ts` |
+
+> **A classification table keyed on my names would have matched nothing at all.**
+> `leg-mapping.ts` keys on the real values. **It is authoritative; this document is not.**
+
+**`ar-charge` and `sale` sharing one literal is the important one.** They are distinguishable
+only by `sourceId` (an arTransaction id vs a salesDay id) and by which leg exists (`ar__*` vs
+`cash__*`/`online__*`) — **never by `sourceType` alone.** Any Stage 1 logic that switches on
+`sourceType` to tell revenue-on-account from a cash sale is wrong by construction.
+
+### 2. Four `sourceType`s this document never named
+
+`prepaid_writeoff` · `prepaid_refund` · `prepaid_legacy_import` (a sixth legacy-import flavour,
+living in `prepaid-purchase.builder.ts` rather than the legacy-import builder) ·
+`online_remittance`. All are `complete`, so Stage 1 is unaffected — **but §1's claim to cover
+"every v1 `sourceType`" was not true.**
+
+### 3. "Nominal" is mostly *conditional*, not fixed
+
+§1's table implies each Class A nominal type always posts to one account. Reading the builders
+rather than their header comments shows most only *sometimes* do:
+
+- `asset_disposal` skips the loss leg entirely for a fully-depreciated asset
+- `payroll_payout` posts `income__charge_recovery` **only** on a late charge — most payouts post
+  **zero** P&L lines
+- `remittance` / `online_remittance` reach 7350 only on an **overage**; a shortage goes to
+  `staff_advance__*`, which is not P&L at all
+- `salary_advance` is nominal only for the rarer `charge` type — disbursement and repayment,
+  the common cases, never touch P&L
+- `balance_adjustment` takes a **fully caller-supplied** counter account
+
+None of this breaks the rule that matters — every one is still self-balanced by v1's own
+builder, so zero synthesis is still correct. But **§1's single-fixed-account framing is
+optimistic**, and T-114 must not rely on it.
+
+### 4. `transfer` can carry a real expense leg
+
+`transfer.builder.ts:71-79` posts an optional fee leg to a caller-chosen account. Still needs
+**zero synthesis**, but §1's framing of it as purely balance-sheet is not quite right.
+
+### 5. My Test 7 was stale — and was correctly not implemented
+
+Test 7 said *"a sale day with `dineInSales > 0` quarantines until Ian decides."* **§6.1 of this
+same document already resolved that** — `dineInSales` *is* the unli figure and 4100 needs no
+reconstruction. Implementing Test 7 literally would have made **every dine-in-unli day
+permanently unconvertible**.
+
+The implementer refused to build it, documented the contradiction in `convert.ts`, and added a
+corrected regression test instead. **Test 7 is struck.**
+
+> A spec that contradicts itself between two sections is worse than one that is merely wrong,
+> because both halves look authoritative.
+
+### 6. One mapping left ambiguous rather than guessed
+
+COA-ALIGNMENT §4.5 says *"Pest Control split two ways | Merge into 6620"* but — unlike its Rent
+and Smallwares rows — never names the **second** literal category string. Not guessed. Recorded
+in `AMBIGUOUS_CATEGORY_FINDINGS`, and any unmapped Pest-Control-adjacent category quarantines.
+**Needs Ian, before T-114.**

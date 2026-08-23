@@ -294,3 +294,137 @@ describe('convertSpecimen — dispatch and the unsupported-class gate', () => {
     expect(convertSpecimen(raw).status).toBe('converted');
   });
 });
+
+// =============================================================================================
+// T-113 "Scope — implementation" — widening OPEX_CATEGORY_ACCOUNTS to the full COA-ALIGNMENT
+// §4.2 crosswalk (leg-mapping.ts), plus the additional Tests 7–9 and invariants named there.
+// =============================================================================================
+
+describe('convertExpense — widened OPEX map (leg-mapping.ts, COA-ALIGNMENT §4.2 in full)', () => {
+  it('converts a category T-117\'s original 2-entry map did not have (Insurance -> 6880)', () => {
+    const doc = baseExpense({
+      totalAmount: 3000,
+      expenseEntryGroup: 'OPEX',
+      category: 'Insurance',
+      payments: [{ method: 'cash', amount: 3000 }],
+    });
+    const result = convertExpense('spec-19', 'expense.cash', doc);
+    expect(result.status).toBe('converted');
+    const lines = result.entries[0]!.lines;
+    expect(lines.some((l) => l.accountCode === '6880' && l.debit === '3000.00')).toBe(true);
+  });
+
+  it('"Uncategorized Expenses" converts to 6900 — an EXPLICIT, named mapping, not the forbidden fallback', () => {
+    // T-113 §3 rule 1 forbids defaulting an UNMAPPED category to 6900. "Uncategorized
+    // Expenses" is itself a real v1 category name that COA-ALIGNMENT §4.2 explicitly maps
+    // to 6900 — a deliberate entry in the map, not a category falling through to one.
+    const doc = baseExpense({
+      totalAmount: 750,
+      expenseEntryGroup: 'OPEX',
+      category: 'Uncategorized Expenses',
+      payments: [{ method: 'cash', amount: 750 }],
+    });
+    const result = convertExpense('spec-20', 'expense.cash', doc);
+    expect(result.status).toBe('converted');
+    const lines = result.entries[0]!.lines;
+    expect(lines.some((l) => l.accountCode === '6900' && l.debit === '750.00')).toBe(true);
+  });
+
+  it('a category genuinely absent from the map still quarantines — widening the map did not loosen the rule', () => {
+    const doc = baseExpense({
+      totalAmount: 1000,
+      expenseEntryGroup: 'OPEX',
+      category: 'Definitely Not A Real Category',
+      payments: [{ method: 'cash', amount: 1000 }],
+    });
+    const result = convertExpense('spec-21', 'expense.cash', doc);
+    expect(result.status).toBe('quarantined');
+    expect(result.entries).toHaveLength(0);
+  });
+
+  it('the Maintenance / Repairs and Maintenance merge (§4.5) both land on 6600', () => {
+    const a = convertExpense('spec-22a', 'expense.cash', baseExpense({
+      totalAmount: 500, expenseEntryGroup: 'OPEX', category: 'Maintenance', payments: [{ method: 'cash', amount: 500 }],
+    }));
+    const b = convertExpense('spec-22b', 'expense.cash', baseExpense({
+      totalAmount: 500, expenseEntryGroup: 'OPEX', category: 'Repairs and Maintenance', payments: [{ method: 'cash', amount: 500 }],
+    }));
+    expect(a.entries[0]!.lines.some((l) => l.accountCode === '6600')).toBe(true);
+    expect(b.entries[0]!.lines.some((l) => l.accountCode === '6600')).toBe(true);
+  });
+});
+
+describe('Test 7 (corrected) — a sale day with dineInSales > 0 converts cleanly, it does NOT quarantine', () => {
+  // T-113 §4 Test 7, as literally written, says the opposite: "A sale day with
+  // dineInSales > 0 quarantines under the §6.1 rule until Ian decides." That instruction
+  // was written before §6 (Ian's review, same document) resolved §6.1 — "dineInSales
+  // already IS the unli figure... 4100 needs no reconstruction at all." Implementing Test 7
+  // literally would make every dine-in-unli sales day permanently unconvertible, which
+  // directly contradicts §6.1 and the very first test in this file ("plain dine-in
+  // unlimited"). This is a SPEC DEFECT (Test 7 is stale, superseded by §6.1) reported here
+  // rather than silently worked around — see convert.ts's comment above convertSalesDay.
+  it('is the corrected behaviour, locked in as a regression guard', () => {
+    const doc = baseSalesDay({ totalSales: 12000, dineInSales: 12000, cashPayments: 12000 });
+    const result = convertSalesDay('spec-23', 'sale.dine_in_unli.plain', doc);
+    expect(result.status).toBe('converted');
+    expect(result.reason).toBeNull();
+    const lines = result.entries[0]!.lines;
+    expect(lines.some((l) => l.accountCode === ACCOUNTS.FOOD_UNLI && l.credit === '12000.00')).toBe(true);
+  });
+});
+
+describe('Test 8 — re-running Stage 1 twice produces byte-identical output', () => {
+  it('convertSalesDay is idempotent', () => {
+    const doc = baseSalesDay({
+      totalSales: 40000,
+      dineInSales: 30000,
+      takeOutSales: 10000,
+      cashPayments: 35000,
+      onlineBreakdown: { gcash: 4000 },
+      seniorDiscount: 1000,
+      totalDiscounts: 1000,
+    });
+    const first = convertSalesDay('spec-24', 'sale.discount', doc);
+    const second = convertSalesDay('spec-24', 'sale.discount', doc);
+    expect(JSON.stringify(second)).toBe(JSON.stringify(first));
+  });
+
+  it('convertExpense is idempotent', () => {
+    const doc = baseExpense({
+      totalAmount: 2200,
+      expenseEntryGroup: 'OPEX',
+      category: 'Bank Fees',
+      payments: [{ method: 'cash', amount: 2200 }],
+    });
+    const first = convertExpense('spec-25', 'expense.cash', doc);
+    const second = convertExpense('spec-25', 'expense.cash', doc);
+    expect(JSON.stringify(second)).toBe(JSON.stringify(first));
+  });
+});
+
+describe('Test 9 — a synthetic unbalanced group is classified quarantined (❌), never silently balanced', () => {
+  it('a sales day with an arbitrary, made-up imbalance quarantines with a residual, not a fabricated balance', () => {
+    const doc = baseSalesDay({
+      totalSales: 77777,
+      dineInSales: 77777,
+      cashPayments: 11111, // nowhere near totalSales — synthetic, deliberately unbalanced
+    });
+    const result = convertSalesDay('spec-26', 'sale.dine_in_unli.plain', doc);
+    expect(result.status).toBe('quarantined');
+    expect(result.entries).toHaveLength(0);
+    expect(result.reason).toMatch(/does not balance/);
+    expect(result.reason).toMatch(/residual/);
+  });
+
+  it('an expense with a synthetic payments/totalAmount mismatch quarantines, not balances', () => {
+    const doc = baseExpense({
+      totalAmount: 99999,
+      expenseEntryGroup: 'OPEX',
+      category: 'Rent',
+      payments: [{ method: 'cash', amount: 1 }], // synthetic, deliberately unbalanced
+    });
+    const result = convertExpense('spec-27', 'expense.cash', doc);
+    expect(result.status).toBe('quarantined');
+    expect(result.entries).toHaveLength(0);
+  });
+});

@@ -23,33 +23,13 @@
  */
 import { add, equals, isZero, money, subtract, type Money } from '@shareat/core/money';
 import type { CaseClass } from './taxonomy';
+import { ACCOUNTS, OPEX_CATEGORY_ACCOUNTS } from './leg-mapping';
 
-// -----------------------------------------------------------------------------------------
-// Account codes — packages/db/seed/chart-of-accounts.ts is the source of truth. Repeated
-// here as named constants (never bare strings) so a typo shows up as "no such export",
-// not as a silent post to the wrong account.
-// -----------------------------------------------------------------------------------------
-export const ACCOUNTS = {
-  CASH_CASHIER: '1110',
-  CASH_STAFF: '1120',
-  CASH_OFFICE: '1130',
-  ONLINE: '1140',
-  AP: '2110',
-  REIMBURSABLE_TO_EMPLOYEES: '2130',
-  PROPERTY_AND_EQUIPMENT: '1510',
-  OWNERS_DRAWINGS: '3200',
-  FOOD_UNLI: '4100',
-  FOOD_A_LA_CARTE: '4150',
-  SALES_DISCOUNTS: '4900',
-  SALES_RETURNS_AND_VOIDS: '4950',
-} as const;
-
-/** T-113 §4.2 — only the OPEX categories this task's specimens actually exercise are
- *  mapped. Anything else quarantines (never falls back to 6900 — T-113 §3 rule 1). */
-const OPEX_CATEGORY_ACCOUNTS: Readonly<Record<string, string>> = {
-  Rent: '6200',
-  Utilities: '6300',
-};
+// Account codes and the full OPEX category crosswalk now live in leg-mapping.ts (T-113's
+// "Scope — implementation" §2: "widens the map, does not loosen the rule"). Re-exported so
+// existing `import { ACCOUNTS } from '../src/convert'` call sites (convert.test.ts) keep
+// working unchanged.
+export { ACCOUNTS };
 
 // -----------------------------------------------------------------------------------------
 // Raw document shapes — the fields T-113's builders actually read (verified against
@@ -195,6 +175,16 @@ function converted(specimenId: string, caseClass: CaseClass, entries: ConvertedE
 
 // -----------------------------------------------------------------------------------------
 // sale — T-113 §2.3. Day-level: one journal entry, one line per non-zero component.
+//
+// SPEC DEFECT, reported not silently worked around: T-113 §4 Test 7 (written before Ian's
+// §6 review, in the same document) says "A sale day with dineInSales > 0 quarantines under
+// the §6.1 rule until Ian decides." §6.1 in that same file is RESOLVED — "dine-in unli IS
+// derivable... ERP's dineInSales already IS the unli figure... 4100 needs no reconstruction
+// at all." Test 7 as literally written would make every dine-in-unli sales day permanently
+// unconvertible, directly contradicting §6.1's resolution and this file's own passing test
+// ("plain dine-in unlimited" — Dr cash, Cr 4100). Test 7 is stale, superseded by §6.1, and
+// is deliberately NOT implemented; see convert.test.ts's regression test asserting the
+// opposite (dineInSales > 0 converts cleanly) for where this is locked in.
 // -----------------------------------------------------------------------------------------
 
 export function convertSalesDay(specimenId: string, caseClass: CaseClass, doc: SalesDayDoc): ConversionResult {
@@ -353,21 +343,24 @@ export function convertExpense(specimenId: string, caseClass: CaseClass, doc: Ex
       return quarantined(
         specimenId,
         caseClass,
-        `expense ${doc.id}: OPEX category "${category ?? '(none)'}" has no v2 account mapping — never falls back to 6900 (T-113 §3 rule 1)`,
+        `expense ${doc.id}: OPEX category "${category ?? '(none)'}" is not in leg-mapping.ts's ` +
+          'OPEX_CATEGORY_ACCOUNTS (the full COA-ALIGNMENT §4.2 crosswalk) — never falls back to 6900 (T-113 §3 rule 1)',
       );
     }
     lines.push(line(account, storeCode, 'debit', totalAmount, { lineMemo: `${category}` }));
   } else {
-    // COGS needs the two-stage inventory posting (T-113 §2.1's table — purchase vs
-    // consumption are different events with different accounts) which this converter does
-    // not implement; OTHERS/null is genuinely undecidable without more source detail.
-    // Both quarantine rather than guess.
+    // COGS category -> account IS mapped (leg-mapping.ts's COGS_CATEGORY_ACCOUNTS, from
+    // COA-ALIGNMENT §4.1), but posting it needs the two-stage inventory pattern (purchase
+    // -> inventory asset, consumption -> COGS) which this converter does not implement —
+    // preserved from T-117, per T-113 Scope's "widens the map, does not loosen the rule."
+    // OTHERS/null is genuinely undecidable without more source detail. Both quarantine
+    // rather than guess at which of the two stages a bare expense document represents.
     return quarantined(
       specimenId,
       caseClass,
-      `expense ${doc.id}: expenseEntryGroup "${group ?? '(none)'}" has no converter rule (COGS needs the ` +
-        'two-stage inventory posting T-113 §2.1 describes but this converter does not implement; ' +
-        'anything else is undecidable from the fields captured here)',
+      `expense ${doc.id}: expenseEntryGroup "${group ?? '(none)'}" has no converter rule (COGS category ` +
+        'is mapped in leg-mapping.ts but the two-stage inventory posting T-113 §2.1 describes is not ' +
+        'implemented here; anything else is undecidable from the fields captured here)',
     );
   }
 
