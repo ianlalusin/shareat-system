@@ -1,6 +1,8 @@
 # T-101 — Core schema
 
-> **Status:** spec ready for implementation. **Phase 1, first task.**
+> **Status:** ✅ **COMPLETE 2026-08-23.** Verified against the live database: 7 tables,
+> `btree_gist`, the EXCLUDE constraint, the trigger, and the expression index all present.
+> Gate green — typecheck clean, 40/40 unit, 25/25 integration, build clean.
 > **Depends on:** Phase 0 (green). **Blocks:** T-102 (COA seed), T-103 (journal tables).
 > **Written by:** Opus planner, 2026-08-23. Bible §3.3 format.
 
@@ -61,7 +63,7 @@ Anything else is out of bounds. In particular: **do not touch** `src/lib/env.ts`
 |---|---|
 | Primary key | `uuid PRIMARY KEY DEFAULT uuidv7()` — **PostgreSQL 18 native**, no extension (bible §13 row 70) |
 | Timestamps | `created_at timestamptz NOT NULL DEFAULT now()`, `updated_at timestamptz` |
-| Actor | `created_by uuid REFERENCES persons(id)` where an actor exists |
+| Actor | **`audit_log` is the actor record** (bible §7 rule 7), not a `created_by` column on every table. Add `created_by` only where a table's own spec lists it. *Resolved 2026-08-23 — the original wording conflicted with the per-table lists in §2–§7; a blanket `created_by` would duplicate the audit log and is chicken-and-egg on `persons` itself.* |
 | Foreign keys | Always declared. `ON DELETE RESTRICT` by default |
 | Enums | Postgres `CHECK`-constrained text, not `pg_enum` — adding a value later is a migration, not a type rewrite |
 | Store scoping | `store_id` on every store-scoped table, indexed |
@@ -200,3 +202,34 @@ reporting views · anything under `src/`.
 - [ ] `npm run typecheck` clean · `npm run test` green · `npm run test:integration` green ·
       `npm run build` succeeds with the dev server stopped.
 - [ ] No file outside **Scope** modified.
+
+
+---
+
+## Implementation notes — resolved 2026-08-23
+
+Four spec issues surfaced during implementation. All were reported rather than worked around,
+and all are resolved here so T-102/T-103 do not re-litigate them.
+
+1. **"A postable account may not have children" cannot be a CHECK constraint.** It is a
+   cross-row rule — it depends on a *different* row's `is_postable` — and Postgres CHECK
+   constraints see only one row. Implemented as a `BEFORE INSERT OR UPDATE` trigger
+   (`accounts_postable_no_children`), enforced in **both** directions: a child cannot point at
+   a postable parent, and a parent with children cannot be marked postable. Correct call; two
+   extra tests cover it, beyond the required 11.
+
+2. **`created_by` — resolved above.** The `audit_log` is the actor record. Do not add a
+   blanket `created_by` column.
+
+3. **`audit_log` has no `updated_at`, deliberately.** An append-only log with an
+   `updated_at` column contradicts itself. `occurred_at` is the only timestamp it needs.
+
+4. **My Method §4 was over-broad.** The partial unique index
+   `UNIQUE (org_id, legacy_code) WHERE legacy_code IS NOT NULL` did **not** need hand-augmenting
+   — Drizzle expresses it directly via `uniqueIndex(...).where(sql...)`. Only three things
+   genuinely required hand-augmentation: `btree_gist`, the `EXCLUDE` constraint, and the
+   `lower(trim(value))` expression index.
+
+**One file outside Scope changed:** `next-env.d.ts`, auto-rewritten by Next.js when switching
+between dev and build type-reference paths. Not a deliberate edit; reverting it only invites
+the next build to regenerate it.
