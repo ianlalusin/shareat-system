@@ -7,6 +7,26 @@ This file exists so that any agent — Claude Code, Codex, Cursor, or anything e
 the same rules. It is a pointer, not a second source of truth. **`PROJECT_BIBLE.md` is the
 authority**; if this file and the bible ever disagree, the bible wins and this file is a bug.
 
+
+## WARNING — the four reference repos, their real names, and the trap
+
+Docs call these "v1", "the legacy ERP", or "the reference repos". **None of them is named
+`v1` on disk.** Worse, one is named as if it were this project:
+
+| Referred to as | Actual path | Notes |
+|---|---|---|
+| **v1 · the legacy ERP** | `C:\Users\ianla\webapps\ERP-rebuild` | **The name lies.** This is the OLD, live production ERP. It is **NOT** the rebuild, despite being called `ERP-rebuild` |
+| **POS** | `C:\Users\ianla\webapps\POS` | Live. Branch `sev5_advanced` |
+| **CUSTOMER** | `C:\Users\ianla\webapps\CUSTOMER` | Live. Diner app |
+| **the Website** | `C:\Users\ianla\webapps\Shareat Website` | Live. Astro — note the space in the folder name |
+| **THIS project** | `C:\Users\ianla\webapps\shareat-system` | The rebuild. The only repo you write to |
+
+**All four references are READ-ONLY. This project is the only one you write to.**
+
+**Reading them needs no permission and no announcement.** Read freely and often — you cannot
+break anything by reading, and guessing what the old system does is far more dangerous than
+opening it. Read them as *requirements*, not as design (bible section 1.2b).
+
 ## The five things that will get you in trouble
 
 1. **All four reference repos are READ-ONLY** — `ERP-rebuild`, `POS`, `CUSTOMER`,

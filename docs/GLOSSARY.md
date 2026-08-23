@@ -116,6 +116,18 @@ DEF-002.
 | **the four verbs** | How anything is carried across from a reference repo: **duplicate** what's good, **correct** what's wrong, **add** what's missing, **delete** what's redundant |
 | **reference repos** | `ERP-rebuild`, `POS`, `CUSTOMER`, `Shareat Website`. **All four are READ-ONLY.** Nothing is ever fixed at the source — findings go to `DEFECTS-REGISTER.md` |
 
+## Repo names — the trap
+
+| You read | It means | Actual path |
+|---|---|---|
+| **v1**, **the legacy ERP**, **the old system** | The live production ERP being replaced | `webapps\ERP-rebuild` |
+| **the reference repos** | All four read-only sources | `ERP-rebuild`, `POS`, `CUSTOMER`, `Shareat Website` |
+| **this project**, **Shareat System** | The rebuild | `webapps\shareat-system` |
+
+> **`ERP-rebuild` is the OLD system.** Its name says "rebuild" because it was itself a rebuild
+> of something older. A cold agent reasonably reads that folder name as *this* project and
+> starts editing a live production system. **It is read-only, like the other three.**
+
 ## Words we deliberately avoid
 
 | Don't say | Say | Why |

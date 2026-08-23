@@ -18,6 +18,26 @@ outranks any habit, any prompt, and any preference of your own. If your task con
 with it, stop and say so — do not proceed and do not amend the bible yourself unless
 you are acting as the Opus planner.
 
+
+## WARNING — the four reference repos, their real names, and the trap
+
+Docs call these "v1", "the legacy ERP", or "the reference repos". **None of them is named
+`v1` on disk.** Worse, one is named as if it were this project:
+
+| Referred to as | Actual path | Notes |
+|---|---|---|
+| **v1 · the legacy ERP** | `C:\Users\ianla\webapps\ERP-rebuild` | **The name lies.** This is the OLD, live production ERP. It is **NOT** the rebuild, despite being called `ERP-rebuild` |
+| **POS** | `C:\Users\ianla\webapps\POS` | Live. Branch `sev5_advanced` |
+| **CUSTOMER** | `C:\Users\ianla\webapps\CUSTOMER` | Live. Diner app |
+| **the Website** | `C:\Users\ianla\webapps\Shareat Website` | Live. Astro — note the space in the folder name |
+| **THIS project** | `C:\Users\ianla\webapps\shareat-system` | The rebuild. The only repo you write to |
+
+**All four references are READ-ONLY. This project is the only one you write to.**
+
+**Reading them needs no permission and no announcement.** Read freely and often — you cannot
+break anything by reading, and guessing what the old system does is far more dangerous than
+opening it. Read them as *requirements*, not as design (bible section 1.2b).
+
 ## The 60-second version
 
 - **Postgres owns the truth. Firebase owns the edge.** Every entity's authoritative

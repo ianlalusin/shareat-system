@@ -302,7 +302,11 @@ into a document store. Shareat System fixes the category of bug, not the instanc
 These are absolute. Violating one is a defect regardless of whether tests pass.
 
 1. **ALL FOUR reference repos are read-only.** `ERP-rebuild`, `POS`, `CUSTOMER`, and
-   `Shareat Website`. No edits, no branches, no "small fixes," no `git` operations in any
+   `Shareat Website`.
+   > **Naming trap:** `ERP-rebuild` is the **OLD** system, despite its name. It was itself a
+   > rebuild of something older. **This** project is `webapps\shareat-system`. An agent that
+   > reads the folder name as "the rebuild" will start editing live production.
+   > **Reading any reference repo requires no approval — read freely and often.** No edits, no branches, no "small fixes," no `git` operations in any
    of those directories. Discovery reads them; nothing writes them.
    *Standing rule, Ian 2026-08-23 (§13 row 80): "we won't touch any of it — we will copy
    them into a new project, pick what's clean, clean what's not, omit what's not needed,
