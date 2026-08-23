@@ -207,3 +207,20 @@ in `0005` with `entry_status IN ('posted','reversed')`, covered by an extra test
 
 > **The general lesson, recorded as bible §13 row 95:** a guard written against the states that
 > exist today silently stops guarding when a new state is introduced.
+
+---
+
+## Note added 2026-08-23 — §4's closed-period branch is now the COMMON path
+
+ADR-006 §7.3 was revised after this task shipped: **every period now closes on the 15th of the
+following month.** §4 rejects a reversal whose original sits in a closed period unless the caller
+supplies a `reversalDate`. That branch was written when a closed period was rare. **It is now the
+normal case for any correction to last month.**
+
+**Nothing in `reverseEntry` changes.** The rule is right: a closed period is closed, and a
+prior-period correction posts to the current open period. What changes is the *caller's*
+obligation — the reversal UI must **default `reversalDate` to today's open period** rather than
+letting the user meet a rejection they cannot act on. Owned by the reversal screen, not by this
+function.
+
+Recorded here rather than as a defect: the domain layer is behaving exactly as specced.

@@ -1,4 +1,4 @@
-# ADR-006 — Period close: month is a lock, year posts one entry
+# ADR-006 — Period close: every period closes on the 15th; only the year posts an entry
 
 | | |
 |---|---|
@@ -23,6 +23,9 @@ ledger holds a year of data**, which is exactly why it is designed now.
 `status` flips `open → closed`. The existing trigger does the rest. **No new posting logic at
 all**, because invariants 2 and 3 already make a month-range P&L a live query.
 
+**Every period — month and year alike — closes on the 15th of the following month** (§7.3).
+One rule, no exceptions: December's 15 January close is not a special case, it *is* the rule.
+
 ### Year close does that, plus exactly one journal entry.
 
 Every income and expense balance for the year zeroes into **3300 Retained earnings**, posted by
@@ -46,8 +49,8 @@ immutable. A mistake in it is corrected by the **existing `reverseEntry`**.
 |---|---|
 | No draft entries dated in the period | **Hard** |
 | Trial balance ties (invariant 10) | **Hard** — already a continuous CI check; costs nothing new |
-| Every `requires_party` control account's subledger sums to its control balance | **Hard**, year close — one `GROUP BY` per account, thanks to T-118 |
-| No earlier period in the org still open | **Hard** |
+| Every `requires_party` control account's subledger sums to its control balance | **Hard, EVERY close** — one `GROUP BY` per account, thanks to T-118. Monthly closing is what makes this cheap: a subledger break is caught in the month it happens, not eleven months later |
+| No earlier period in the org still open | **Hard.** With monthly close this is nearly always already satisfied — and on 15 January the order is fixed: **close December first, then run the year close** |
 | Bank reconciliation complete | **Warning, never a gate** — no system studied enforces it, and it depends on a third party nobody here controls |
 
 ### ⚠️ The year-close entry must be distinguishable in queries
@@ -151,42 +154,57 @@ period, and the books need time to settle. December stays `open` into January an
 | **The window must be used, not consumed** | Fifteen days spent entirely in the last three is a rushed close with extra steps. The gates in this ADR are the checklist |
 | **The binding constraint is the INPUTS, not the window** | If a supplier routinely bills December on 20 January, the 15th closes knowing that invoice carries into the next year. Not fatal — under never-reopen it carries either way — but **chosen knowingly rather than discovered**. If that turns out to be common, the date moves; it is not re-argued each January |
 
-### 3. Month close is NOT enforced — but analytics is monthly
+### 3. Months close too — on the 15th of the following month
 
-No hard gate at month end. Postings into an earlier month stay legal all year.
+**Revised the same day.** Ian's first answer was that month close would not be enforced; he then
+decided months close as well. **That is the better decision, and my recommendation against it
+was wrong for a reason worth naming rather than glossing.**
 
-> **Stated once, because it is a real consequence:** if months never close, **a monthly figure
-> can change until year-end.** An error found in November and dated March posts to March — so
-> "March revenue" is not stable for eight months, and comparing March to April compares two
-> numbers that can both still move.
->
-**Asked directly whether I recommend a monthly close, the answer is no** — and the reasoning
-runs opposite to the intuition, so it is recorded rather than asserted:
+My argument was frequency-blind. The cost I emphasised — an error found in November dated March
+landing in **November** rather than March — is a **rare** event: with daily POS reconciliation
+most errors surface within days, comfortably inside a 15-day window. The benefit — monthly
+figures that **stop moving** — is what Ian actually uses, **every month**. I weighed a rare cost
+against a constant benefit and got the trade backwards.
 
-| | An error found in November, dated March |
+It also serves the stated purpose better. §7 recorded *"analytics is always scoped monthly for
+internal analysis and reporting."* **Monthly close is precisely what makes those numbers final.**
+After 15 April, March is settled; every month-on-month comparison is between two numbers that
+have stopped moving.
+
+### The rule: one date, no exceptions
+
+| | |
 |---|---|
-| **Months stay open** (chosen) | Posts to **March**. March's reported figure changes retroactively — but the money sits in the period it actually happened, and at year-end everything is in its right month |
-| **Months hard-close** | Posts to **November** as a prior-period adjustment. March stays frozen — but November now carries a March error, and the monthly comparison is quietly polluted |
+| **Every period closes on the 15th of the following month** | March closes 15 April. December closes 15 January |
+| **December is not special** | Its 15 January close, decided in §7.2, is simply this rule applied. **An exception has been removed from the design, not added** |
+| **15 days is the whole close calendar** | Roughly ten working days. Standard practice is 5–10 business days for a month-end; this is at the generous end, uniformly |
 
-**For internal management analysis, accuracy-by-period beats stability of the reported number,
-and not narrowly.** If March is compared to April to judge a promotion, March should reflect what
-happened in March. A hard close would push that correction into an unrelated month and make the
-comparison *worse*. Ian's instinct here is right, and this is the argument for it rather than a
-concession to it.
+### Three consequences, all of which land on work already done
 
-### The recommendation instead: a soft "reviewed" marker — RECOMMENDED, not yet built
+**1. Prior-period adjustment goes from rare to routine — which settles the `[prior period]`
+question for good.** With annual close only, correcting a closed period was an occasional event.
+Now **every** correction to a month closed more than 15 days ago takes that path. The structured,
+queryable field decided above is no longer a nicety; it is the field that answers *"what did we
+book in April that actually belongs to March?"* — a question that will now be asked routinely. It
+must carry the **target period**, and reports must be able to show a month **as booked** and **as
+belonging**.
 
-The genuine cost of never closing is not accuracy, it is **accountability**: a month reviewed,
-acted on, and later changed leaves that decision resting on a number that no longer exists.
+**2. `reverseEntry`'s "closed period" branch stops being the exception and becomes the norm —
+and as specced it will error at the user.** T-106 §4 rejects a reversal whose original sits in a
+closed period unless the caller supplies a `reversalDate`. That was written when closed periods
+were rare. **Any correction to last month now hits it.** The *rule* is right and does not change;
+the **UI must default** `reversalDate` to today's open period rather than surfacing a rejection.
+Logged as a task note against T-106, not a change to it — the domain function is correct.
 
-- A month is marked **reviewed**, with who and when.
-- Postings into a reviewed month stay **legal** — nothing is blocked, honouring the decision above.
-- They are **flagged**, so *"what changed in March after I reviewed it, and why?"* is answerable.
-- Analytics shows each month as **provisional** or **reviewed**.
+**3. A subledger break is now caught in the month it happens.** The tie-out gate above moves from
+year-close-only to every close. Eleven months of drift in an AP control account is a forensic
+exercise; one month of it is an afternoon.
 
-Accuracy, a stability signal, and accountability, with **no operational burden** — a flag, a
-timestamp, and one query. **The review is the monthly discipline; the lock never was.** Awaiting
-Ian's go-ahead.
+### The soft "reviewed" marker — WITHDRAWN
+
+It existed to give an *unclosed* month a stability signal. **Closing the month is that signal, and
+a stronger one.** Keeping both would be two mechanisms for one job. Removed rather than left
+standing as a stale recommendation.
 
 ### 4. Who may close: **admin and manager**
 
