@@ -73,6 +73,37 @@ comparative comes from a hand-maintained scan list, not a ledger. Such figures a
 **"legacy basis, unaudited"** and are **never loaded as if they were real comparatives**.
 Loading known-bad numbers as a baseline would quietly undermine the whole point.
 
+## ⚠️ Scope gap found 2026-08-23 — Phase 2 as written is not enough
+
+The financial capability inventory (`docs/discovery/13-capabilities-financial.md`) found
+**nine capabilities with no owner in the eight-phase plan.** Five of them **post to the
+ledger today** and therefore cannot wait past January without leaving the books incomplete
+from their first day:
+
+| Capability | v1 journal builder | Why January needs it |
+|---|---|---|
+| Fixed assets + **depreciation** | `depreciation.builder.ts`, `asset-purchase`, `asset-disposal` | Monthly depreciation is a real P&L expense. Omit it and expenses are understated every month |
+| Prepaid items + **amortisation** | `amortization.builder.ts`, `prepaid-purchase` | Same shape — a real expense recognised over time |
+| **Loans** | `loan.builder.ts` | Interest expense and principal movement |
+| **Owner equity movements** | `equity-movement.builder.ts` | Capital in, drawings out (3100 / 3200) |
+| Generic **liability accounts** | `liability-charge`, `liability-payment` | Statutory and other payables |
+
+These are not new features. **v1 already posts all five**, and this ADR's in-scope list —
+"expenses, AP, AR, payments, cash requests, sales day, settlements" — silently omits them.
+
+**Consequence for the plan:** Phase 2's January scope is larger than this ADR originally
+stated. That does not change the date yet, but it materially changes what "Phase 2 feature
+complete" means at the **15 November go/no-go**, and the checkpoint must be judged against
+the corrected list, not the original one.
+
+**Can wait past January** (not ledger-posting, or automation over a capability that is in
+scope): expense budgets · recurring-expense automation · the standing books-tie-out audit
+tool · the depreciation/amortisation-gap watchdog.
+
+> **This is exactly what the capability inventory was for.** The gap was invisible while the
+> plan was compared against itself; it appeared the moment the plan was compared against
+> what the business actually does.
+
 ## Temporary bridges — named, and each with a retirement trigger
 
 **The integration layer does not all die in January.** ADR-003 deletes it when the apps are

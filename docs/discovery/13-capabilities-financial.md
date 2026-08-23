@@ -3,7 +3,11 @@
 Source: `C:\Users\ianla\webapps\ERP-rebuild` (read-only). Scope: `src/lib/actions/*.actions.ts` for
 expenses · AP · AR · payments/collections · cash requests/advances/liquidation · remittance/cash
 handling · sales day/sales report · channel settlements · budgets · recurring expenses · loans ·
-fixed assets/depreciation · prepaid items · equity · bank/e-wallet accounts. ~55 action files read
+fixed assets/depreciation · prepaid items · equity · bank/e-wallet accounts, plus the statement/
+reconciliation/migration layer (`income-statement`, `balance-sheet`, `integrity-check`, `reports`,
+`report-export`, `excel-export`, `monthly-runs`, `legacy-import`, `backfill-legacy-projections`
+`.actions.ts`) and supporting pure-logic modules under `src/lib/financial/` (journal builders,
+`account-defs.ts`, `balancer.ts`, `vat.ts`, `cash-request/liquidation.ts`). ~63 action files read
 in full; every row below was read directly, not inferred from file names.
 
 Read first (not re-derived here): `docs/discovery/06-accounting-gaps.md` (the structural defects —
@@ -163,6 +167,23 @@ sales day, settlements") · **P3** = inventory · **P5** = payroll · **P6** = r
 | Void an equity movement | Reverses a contribution or drawing. | Admin only | `equity.actions.ts:321-411` | *(same)* | ADD |
 | Generic liability account (charge/payment) | Books a miscellaneous accrual/liability (e.g. an accrued tax not otherwise modeled) outside the AP/statutory-specific flows. | Manager, admin | `liability.actions.ts` | not named; §16.5 (statutory obligations subledger, decision #49) is a narrower, purpose-built replacement for the statutory subset | **NOT PLANNED** — CORRECT (the statutory subset is explicitly getting a proper subledger in v2, per decision #49; the *generic* liability-account capability itself has no named owner) |
 
+## G. Financial statements, reconciliation & migration
+
+| Capability | What problem it solves | Who | v1 (`file:line`) | ERPv2 plan? | Verdict |
+|---|---|---|---|---|---|
+| Generate an Income Statement | Builds a P&L for a date range from five independently-scanned sources (verified salesDays revenue, branch-sale AR, posted expense docs by frozen category, plus four journal-only scans for loan interest/platform fees/salary/salary-additions that have no backing expense doc) because v1 has no real nominal ledger. Revenue is recognized only from **verified/partially_remitted/remitted** sales days — a draft or voided day never reaches the P&L (policy dated 2026-06-20). Branch-sale revenue is deliberately read from the commissary-dispatch AR, not the salesDay, so it is recognized exactly once regardless of whether that day's cashier report exists yet. | Manager, admin | `income-statement.actions.ts:55-505` | **P1** (the fix — `v_income_statement` as a `GROUP BY` query over `journal_lines` retires every one of these hand-added scan blocks by construction, per bible decision #31/#40) | CORRECT — the need (a trustworthy period P&L) is proven daily; the hand-scan implementation is exactly the defect P1 exists to remove |
+| Save / list / delete a saved Income Statement | Lets a manager snapshot a generated statement as a permanent, dated record instead of a disposable on-screen report — e.g. for board/loan-application use. | Manager, admin | `income-statement.actions.ts:509-576` | **P1/P6** | DUPLICATE |
+| Generate a Balance Sheet (live or "as of" a past date) | Reads the unified accounts collection and buckets every balance-tracking account by prefix into Assets/Liabilities/Equity; Retained Earnings is computed as the plug (assets − liabilities − explicit equity) because v1's journal never posts a revenue/expense leg, so RE has to absorb all P&L activity implicitly. A past-date view recomputes every account from posted journal legs ≤ that date instead of trusting the live running balance. | Manager, admin | `balance-sheet.actions.ts:125-317` | **P1** — a real nominal ledger + control accounts means RE is a genuine derived figure, not a forced plug that silently hides misclassification | CORRECT |
+| Unclassified-account tripwire (balance sheet) | Any account carrying a real balance that the classifier can't bucket is surfaced loudly instead of silently vanishing into the RE plug — this is exactly the failure mode of a real historical bug (a new `supplier_advance__` prefix that briefly had nowhere to go, understating assets and equity by the same amount with no visible error). | System (surfaced to admin) | `balance-sheet.actions.ts:99-106,236-244` | **P1** (a declared, enumerated chart with FK-constrained account types makes an "unknown prefix" structurally impossible — decision #39) | CORRECT — the *tripwire instinct* is exactly right even though P1's design removes the specific failure class it detects |
+| On-demand ledger reconciliation ("does the ledger tie out") | Re-sums every posted journal leg per account from scratch and reports drift against the stored running balance — the only check that proves the stored number against raw history rather than against another copy of itself. Persists a dated log so a passive "reconciled / N drifting" signal is visible without re-running it. | Admin | `integrity-check.actions.ts:72-122`, `balancer.ts:143-211` | **P1** (invariant 1/10: the trial balance ties by construction; a Postgres CHECK+trigger design removes the *need* to periodically catch drift after the fact) | CORRECT |
+| Financial integrity audit — 15 targeted drift detectors | A battery of read-only checks, each written to catch one specific, previously-real production incident: dashboard-summary counters vs. source docs, channel-AR missing after a re-record, stale shift roll-ups after a void, voided salesDays lingering in the live collection, AR collections with a floating unallocated residual, clearing/suspense accounts not netted to zero, deliveries cleared with no backing expense, supplier payments allocated to a voided/missing expense, branch-sale AR with no matching branch expense, void-cash suspense not resolved, salesDay cash+online vs. the actual posted sale journal, branch-sale display-mirror drift, and slicer-payroll production-summary drift. Optional one-click auto-fix re-runs the matching rebuild and reports before/after. | Admin | `integrity-check.actions.ts:1-1143` | mostly **NOT PLANNED as a standing tool** — P1's constraints (single ledger, enforced balance, control accounts) make roughly half these specific drift classes structurally impossible, but the *general capability* ("run a battery of sanity checks against the books on demand") has no named owner in any phase | ADD — the specific detectors retire with the bugs they were built for, but "a button that proves the books are internally consistent" is a real, load-bearing admin habit that deserves a designed home, not just an emergent side-effect of better constraints |
+| Cash/ledger report snapshot (by preset or custom range) | Aggregates posted journal legs into the day/domain/source-type rollups the cash and ledger report pages render, computed live from the journal (no cache) so it's never stale. | Any store member with access | `reports.actions.ts:44-140` | **P6** | DUPLICATE |
+| Cash account balances / ledger page / day-entries drill-down | Per-account balance list and transaction-level drill-down so a manager can trace "why does this account read what it reads" down to individual legs. | Any store member with access | `reports.actions.ts:144+` | **P6** | DUPLICATE |
+| Workbook / print export of financial reports | Generates `.xlsx` server-side (expenses, receipts, AR, AP, and more) for a date range, and a structured payload for a browser print view — the way figures leave the system for an accountant, a lender, or a filing. | Manager, admin | `report-export.actions.ts`, `excel-export.actions.ts` | **P6** | DUPLICATE |
+| Pending monthly-close checker (depreciation/amortization) | Scans a date range for every asset/prepaid item that *should* have posted its monthly depreciation/amortization but hasn't, estimates the amount, and runs all of it in one click — the safety net that stops a forgotten month from silently understating expense forever (surfaces as a blocking banner on the income statement, balance sheet, and daily-snapshot pages). | Admin (run), manager (see banner) | `monthly-runs.actions.ts:66-226` | *(not named — depends on P1's fixed and P2's expense-recognition modules, but no phase names the periodic "did we close everything" check itself)* | **NOT PLANNED** |
+| Legacy opening-balance import (AP/AR/cash/staff-advance/staff-reimbursable) | The one-time bridge for bringing a store's pre-system balances into the ledger without restating history — posts balance-sheet-only journal entries against `equity__opening_balance`, idempotent per caller-supplied import id. | Admin | `legacy-import.actions.ts:1-300+` | **P1/ETL** (bible §G "Stage 2 — opening-balance entry as of a chosen date" is exactly this capability, generalized) | DUPLICATE |
+| Bulk backfill from legacy projections | The same opening-balance import, automated across every counterparty in one pass (cash, AR, AP, assets, loans, liabilities, salary-advance balances) instead of one-by-one; dry-run mode previews the write set before committing. | Admin | `backfill-legacy-projections.actions.ts:1-100+` | **P1/ETL** | DUPLICATE |
+
 ---
 
 ## Capabilities with no home in the plan
@@ -211,6 +232,20 @@ never rebuilt. This is the primary deliverable of this pass.
    visibility, the safe-cash-routing-away-from-cashier-till default, and the self-healing
    idempotent auto-pay that currently turns a missed cron run into a caught-up run instead of a
    missed bill.
+
+8. **A standing "prove the books tie out" admin tool** (Group G — the 15-detector integrity audit
+   and its passive reconciliation log). P1's constraints retire the specific bugs most of these
+   detectors were built to catch, but nobody has named an owner for the *habit* itself: an admin,
+   today, can push one button before trusting a number and get a dated, itemized answer. Without an
+   equivalent in v2, the first time something looks wrong there is no fast, already-built way to
+   confirm whether it's real drift or a one-off — someone has to improvise a query instead of
+   clicking a report that has existed for months.
+
+9. **The periodic "did we close everything" check** (Group G — `monthly-runs.actions.ts`'s pending
+   depreciation/amortization scanner). Even a correct posting engine doesn't *notice* on its own
+   that March's depreciation was never run — something has to scan for the gap and surface it before
+   the income statement quietly understates expense for a month that never got its entry. No phase
+   names this specific watchdog, only the modules (assets, prepaid) it watches.
 
 ## Intent worth preserving
 
@@ -311,3 +346,64 @@ incident, a specific edge case, or a deliberate trade-off — not an accident of
   `apAlreadyHandled` is a pure operator self-declaration surfaced to the UI — informational, never
   enforced or automated. This was a considered scope decision, not an oversight; confirm with Ian
   before ever making it enforce anything on the AP side. `supplier-return.actions.ts:1-9`.
+- **Revenue is recognized only from a verified sales day.** A draft/submitted or voided day
+  contributes ₱0 to the Income Statement — a cashier filling in a form does not move the P&L until a
+  manager verifies it. Policy dated 2026-06-20, enforced by an explicit status allow-list, not an
+  absence-of-void check. `income-statement.actions.ts:95-101`.
+- **Branch-sale revenue is read from the commissary-dispatch receivable, not the salesDay,
+  specifically so it can never be missed or double-counted.** It is recognized once, at the moment
+  the branch's AR posts, independent of whether that branch's own cashier report exists yet for that
+  date — closing a documented gap where a recognized inter-branch sale could sit with AR booked but
+  no revenue showing (or the reverse). `income-statement.actions.ts:125-153`.
+- **A P&L category is frozen onto the expense at post time and never re-derived later.** The income
+  statement reads the `expenseEntryGroup` copied onto each expense the moment it posted, not a live
+  lookup against the category master — so relabeling a category (COGS→OPEX) tomorrow can never
+  silently rewrite last month's statement. `income-statement.actions.ts:167-172`.
+- **The balance sheet's Retained Earnings is a plug, and the code treats that as a liability, not a
+  convenience** — it ships its own tripwire (`unclassifiedAccounts`) specifically because a plug
+  formula can never itself detect a misclassified account; the balance sheet would still "balance"
+  while quietly understating both assets and equity by the same amount. This is a real, previously
+  observed failure shape (a new account prefix falling through the classifier), not a hypothetical.
+  `balance-sheet.actions.ts:94-106,236-244`.
+- **A historical ("as of" a past date) balance sheet is restated from the journal, not read from
+  today's running balances**, and voided legs are excluded regardless of when the void happened
+  (status-flip void, not a dated reversal) — so a past-dated report reflects what was true as of
+  that date under today's understanding of what's still valid, not a frozen snapshot of what the
+  balances literally read back then. `balance-sheet.actions.ts:118-122,161-165`.
+- **Order wastage the store absorbs is booked as a net-zero memo, not a P&L hit** — `DEBIT
+  expense__order_wastage / CREDIT income__wastage_writeoff_contra`. The cooked item's raw-material
+  cost already flowed through COGS at purchase time, so a second charge here would double-count the
+  same physical loss; the memo exists purely to keep an auditable, queryable trail of *how much*
+  wastage happened without moving net income. `wastage-expense.builder.ts:1-16`.
+- **Void-cash-retained is deliberately never recognized as a sale.** Cash collected on a receipt
+  that's later voided without a refund sits in the drawer backing no transaction; at remittance it's
+  parked in a dedicated suspense liability (`liability__void_cash_suspense`) pending re-ring, refund,
+  or a deliberate management decision to recognize it — instead of being folded into ordinary sales
+  cash, which would recognize revenue that was never actually earned. A lingering non-zero balance
+  is a standing integrity signal, not routine. `account-defs.ts:205-211`, `integrity-check.actions.ts:816-839`.
+- **An unexplained cash surplus at remittance time is a liability, not income, until someone
+  explains it.** `others__remittance_overage` is credit-nature specifically because a surplus could
+  be tips, a miscounted prior deposit, or an error — the system refuses to guess that it's earned
+  revenue by defaulting it there. `account-defs.ts:94-98`.
+- **An overpayment to a supplier is tracked as the store's own asset (unapplied credit), not an
+  error to correct.** `supplier_advance__{id}` lets a payment that exceeds allocated invoices become
+  usable credit against a future invoice instead of failing the payment or requiring an immediate
+  refund. `account-defs.ts:456-481`, `payment.actions.ts:283-285`.
+- **When a delivery platform pays more than a locked sales report recorded, the excess is booked as
+  other income on the settlement's own date rather than reopening the locked report.** Editing a
+  closed period to fix a staff under-report was explicitly rejected in favor of recognizing the gain
+  where it was actually discovered. `account-defs.ts:197-203`.
+- **The integrity-check suite's detectors are each a scar from one specific incident, not generic
+  hygiene** — e.g. the "deliveries cleared without a backing expense" check exists because a
+  real bulk data-entry event (2026-05-01 to 06-15, all stores) left goods in inventory with no AP
+  ever booked for them, and the check quantifies exactly how much liability is still unrecorded.
+  Losing the *habit* of writing a targeted detector the moment a real data gap is found — not just
+  losing these 15 specific checks — is the actual risk to carry forward. `integrity-check.actions.ts:628-672`.
+- **VAT/SC-PWD compliance is explicitly out of scope for v2, by Ian's own decision, not an
+  oversight to fix.** `06-accounting-gaps.md` flags v1's senior/PWD discount amounts being
+  hardcoded to zero on the live sales-entry path as a real BIR-compliance gap — but
+  `PROJECT_BIBLE.md` decision #75 already resolves this at the design level: **Shareat System is a
+  management ledger, not a statutory filing basis.** No VAT engine, no output-VAT liability
+  accounts, no BIR report builder; SC/PWD discounts become plain contra-revenue (4900) like any
+  other discount. Anyone picking up the "senior/PWD" thread from `06-accounting-gaps.md` should read
+  it as **already decided**, not as an open NOT-PLANNED gap in this document.
