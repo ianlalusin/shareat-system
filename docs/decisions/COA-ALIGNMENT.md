@@ -345,7 +345,7 @@ cost of delivering that product — COGS, not supplies. Worth watching as a per-
 | Supplies and Stocks | **6500** Supplies | ✅ |
 | Smallwares | **6510** Smallwares | ⚠️ *also exists as CAPEX — see §4.5* |
 | Repairs and Maintenance · **Maintenance** | **6600** Repairs and maintenance | ⚠️ *merge — two categories, one concept* |
-| Pest Control and Waste Management | **6620** Pest control and waste management | 🆕 |
+| Pest Control and Waste Management · **Pest Control and Sanitation** | **6620** Pest control and waste management | 🆕 ⚠️ *merge — two categories, one concept (§4.5)* |
 | Vehicle Expense | **6630** Vehicle and transportation | 🆕 |
 | Marketing and Advertising | **6650** Marketing and advertising | 🆕 |
 | Depreciation | **6700** Depreciation | ✅ |
@@ -395,7 +395,7 @@ anywhere, and your equity is overstated by the cumulative total.
 | **Smallwares** — OPEX `SE_EX85` and CAPEX `sys_capex_smallwares`, both `capitalizesToAsset` | Same real spend routed two ways depending on who records it. Resolve with the ₱5,000 threshold: below → 6510, above → CAPEX |
 | **Maintenance** vs **Repairs and Maintenance** | Merge into 6600 |
 | **Subscriptions** vs **Subscriptions (OTHER)** | Merge into 6890 |
-| **Pest Control** split two ways | Merge into 6620 |
+| **Pest Control and Waste Management** vs **Pest Control and Sanitation** | Merge into **6620** — *second category named by Ian, 2026-08-23* |
 
 ### 4.6 Catch-alls — the real accuracy risk
 

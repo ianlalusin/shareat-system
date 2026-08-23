@@ -264,8 +264,14 @@ describe('invariant 11 — COGS + OPEX category maps cover exactly what §4 name
     expect(overlap).toEqual([]);
   });
 
-  it('records the one documented ambiguous category (Pest Control second variant) rather than guessing it', () => {
-    expect(AMBIGUOUS_CATEGORY_FINDINGS.length).toBeGreaterThan(0);
+  it('resolves the Pest Control pair, and still refuses a bare "Pest Control" it was never told about', () => {
+    // COA-ALIGNMENT §4.5 merged two categories into 6620 but named only one. It was reported
+    // rather than guessed; Ian named the second on 2026-08-23. Both now map.
+    expect(AMBIGUOUS_CATEGORY_FINDINGS).toEqual([]);
+    expect(OPEX_CATEGORY_ACCOUNTS['Pest Control and Waste Management']).toBe('6620');
+    expect(OPEX_CATEGORY_ACCOUNTS['Pest Control and Sanitation']).toBe('6620');
+    // The no-fallback rule is unchanged: a THIRD variant nobody has named still quarantines
+    // rather than being pattern-matched into 6620 because it happens to contain the words.
     expect(OPEX_CATEGORY_ACCOUNTS['Pest Control']).toBeUndefined();
   });
 });
@@ -285,5 +291,22 @@ describe('invariant 12 (data) — CAPEX and PERSONAL fixed account constants', (
   it("OWNERS_DRAWINGS is 3200 and exists in the seeded chart", () => {
     expect(ACCOUNTS.OWNERS_DRAWINGS).toBe('3200');
     expect(chartCodes.has(ACCOUNTS.OWNERS_DRAWINGS)).toBe(true);
+  });
+});
+
+describe('COA-ALIGNMENT §4.5 merges — two v1 categories, one account', () => {
+  // Each of these is a pair of near-duplicate free-text categories that v1 accumulated and
+  // COA-ALIGNMENT deliberately merges. Mapping only one of each pair would silently
+  // quarantine real spend — and quarantined spend is spend missing from the P&L.
+  it.each([
+    ['Pest Control and Waste Management', 'Pest Control and Sanitation', '6620'],
+    ['Repairs and Maintenance', 'Maintenance', '6600'],
+  ])('%s and %s both map to %s', (a, b, account) => {
+    expect(OPEX_CATEGORY_ACCOUNTS[a]).toBe(account);
+    expect(OPEX_CATEGORY_ACCOUNTS[b]).toBe(account);
+  });
+
+  it('has no unresolved category ambiguities left', () => {
+    expect(AMBIGUOUS_CATEGORY_FINDINGS).toEqual([]);
   });
 });

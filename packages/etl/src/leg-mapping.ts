@@ -146,6 +146,9 @@ export const OPEX_CATEGORY_ACCOUNTS: Readonly<Record<string, string>> = {
   'Repairs and Maintenance': '6600',
   'Maintenance': '6600', // §4.5 merge — same concept, two v1 category strings
   'Pest Control and Waste Management': '6620',
+  // COA-ALIGNMENT §4.5 merges two v1 categories into 6620. The second was unnamed in the
+  // document and was deliberately NOT guessed; Ian named it 2026-08-23.
+  'Pest Control and Sanitation': '6620',
   'Vehicle Expense': '6630',
   'Marketing and Advertising': '6650',
   'Depreciation': '6700',
@@ -175,11 +178,16 @@ export const OPEX_CATEGORY_ACCOUNTS: Readonly<Record<string, string>> = {
  * up that is obviously the missing "Pest Control" variant, it will quarantine (never
  * silently fall to 6900) until COA-ALIGNMENT names the exact string.
  */
-export const AMBIGUOUS_CATEGORY_FINDINGS: readonly string[] = [
-  'COA-ALIGNMENT §4.5 "Pest Control split two ways" never names the second v1 category ' +
-    'string (contrast: Rent and Smallwares rows both name their two literal strings) — not ' +
-    'guessed here.',
-];
+/**
+ * Categories COA-ALIGNMENT leaves genuinely ambiguous. Anything listed here quarantines
+ * rather than being guessed (T-113 §3 rule 1) — a catch-all that silently absorbs the
+ * unknown is how the legacy books reached their current state.
+ *
+ * RESOLVED 2026-08-23 — the §4.5 "Pest Control split two ways" entry never named its second
+ * v1 category string. It was reported rather than guessed, and Ian named it:
+ * **"Pest Control and Sanitation"**. Both categories now map to 6620.
+ */
+export const AMBIGUOUS_CATEGORY_FINDINGS: readonly string[] = [];
 
 // -----------------------------------------------------------------------------------------
 // §1/§2 — the sourceType classification. Keyed on the REAL v1 `sourceType` field value

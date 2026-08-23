@@ -459,9 +459,15 @@ corrected regression test instead. **Test 7 is struck.**
 > A spec that contradicts itself between two sections is worse than one that is merely wrong,
 > because both halves look authoritative.
 
-### 6. One mapping left ambiguous rather than guessed
+### 6. ✅ RESOLVED — the ambiguous mapping, named rather than guessed
 
-COA-ALIGNMENT §4.5 says *"Pest Control split two ways | Merge into 6620"* but — unlike its Rent
-and Smallwares rows — never names the **second** literal category string. Not guessed. Recorded
-in `AMBIGUOUS_CATEGORY_FINDINGS`, and any unmapped Pest-Control-adjacent category quarantines.
-**Needs Ian, before T-114.**
+COA-ALIGNMENT §4.5 said *"Pest Control split two ways | Merge into 6620"* but never named the
+**second** literal category string. The implementer **refused to guess it** and recorded it in
+`AMBIGUOUS_CATEGORY_FINDINGS`.
+
+**Ian, 2026-08-23: the second category is `"Pest Control and Sanitation"`.** Both now map to
+6620, COA-ALIGNMENT §4.2 and §4.5 name both, and `AMBIGUOUS_CATEGORY_FINDINGS` is empty.
+
+**The no-fallback rule is unchanged, and tested:** a bare `"Pest Control"` — a third variant
+nobody has named — still **quarantines**. It is not pattern-matched into 6620 merely because it
+contains the words. Guessing from a substring is how a catch-all starts.
