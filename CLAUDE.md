@@ -36,6 +36,7 @@ you are acting as the Opus planner.
 |---|---|
 | `HANDOFF.md` | Cold-start guide for a new machine or fresh session |
 | `PROJECT_BIBLE.md` | The authority. Read first. |
+| `docs/CROSS-APP-MAP.md` | **Living map** of every seam between POS / ERP / CUSTOMER / Website |
 | `docs/discovery/` | Read-only findings from ERP-rebuild |
 | `docs/plans/` | Phase plans |
 | `docs/tasks/` | Task specs — one per unit of implementation work |

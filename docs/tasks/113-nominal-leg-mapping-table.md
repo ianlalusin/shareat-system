@@ -125,16 +125,31 @@ The identity Stage 1 must test per sales day:
 `otherPayments`, `totalDiscounts`, `seniorDiscount`, `pwdDiscount`, `otherDiscount`, `comps`,
 and `salesChannelBreakdown`.
 
-What that **does** support:
+**What `dineInSales` actually means — verified in POS, 2026-08-23.** ERP does not compute this
+field; it pulls it from POS `/api/external/sales`. In POS `analytics/daily.ts:263`:
+
+```ts
+const isDineIn = r.sessionMode === 'package_dinein';
+const mode = isDineIn ? "dineIn" : "walkIn";
+```
+
+So **ERP's `dineInSales` is the unlimited-package figure and nothing else** — package sales plus
+dine-in addons. À la carte and online both fall into POS's "walkIn", and ERP's `takeOutSales` is
+then computed as a **residual**, `Math.max(0, totalGross - dineInSales)`
+(`POS/src/app/api/external/sales/route.ts:53`).
 
 | → v2 | Derived from | Confidence |
 |---|---|---|
-| **4200** Take-out / à la carte | `takeOutSales + deliverySales` | ✅ direct. COA folds delivery into take-out |
+| **4100** Food sales — dine-in, unlimited | `dineInSales` | ✅ this *is* the unli figure |
+| **4150 + 4200** combined | `takeOutSales` (residual) | ⚠️ conflated — split needs POS (§6.1) |
+| **4400** Beverage sales | — | ❌ not in ERP; §6.2 makes it a lump account |
 | **4900** Sales discounts (contra) | `seniorDiscount + pwdDiscount + otherDiscount` | ✅ direct |
-| **4950** Sales returns and voids (contra) | `comps` | ⚠️ see §6.3 |
+| **4950** Sales returns and voids (contra) | `comps` | ✅ confirmed contra-revenue (§6.3) |
 | `channel_id` dimension | `salesChannelBreakdown` keys | ✅ direct. Bible §13 row 44 |
 
-What it **does not** support — see §6.
+> **`takeOutSales` is a residual, not a measurement.** It absorbs anything `totalGross` counts
+> that `dineInSales` does not. Stage 1 must therefore treat a non-zero residual as a
+> reconciliation signal, never as a revenue figure to trust on its own.
 
 ---
 
@@ -185,52 +200,117 @@ Rules, all non-negotiable:
 
 ---
 
-## 6. Decisions needed from Ian — this is the review gate
+## 6. Ian's review — answered 2026-08-23
 
-### 6.1 ⛔ Historical dine-in cannot be split into unli vs à la carte
+### 6.1 ✅ RESOLVED — dine-in unli IS derivable. My earlier claim was wrong.
 
-The approved COA splits dine-in into **4100 unlimited** and **4150 à la carte**, and
-COA-ALIGNMENT says unli deserves its own line because it is "the single most important margin
-signal in the business."
+I originally reported that dine-in could not be split into unli vs à la carte. That was
+wrong, and the correction matters:
 
-**`salesDays` has one `dineInSales` number.** There is no unli/à-la-carte breakdown anywhere on
-the document. The split cannot be derived from ERP history at any confidence.
+**ERP's `dineInSales` already *is* the unli figure.** ERP does not compute it — it pulls it
+from POS, and POS defines dine-in as `sessionMode === 'package_dinein'` and nothing else
+(`POS/src/lib/analytics/daily.ts:263`). So **4100 needs no reconstruction at all**; it maps
+straight from `salesDays.dineInSales`.
 
-Options:
+What is genuinely conflated is the *other* side: `takeOutSales` is a residual
+(`totalGross − dineInSales`) holding à la carte **and** online together.
 
-| | Approach | Cost |
+**POS resolves it at receipt level.** `Receipt` (`POS/src/lib/types.ts`) carries
+`sessionMode: 'package_dinein' | 'alacarte'` on every receipt, and lines carry `category`.
+So the split is recoverable per receipt, not merely per day. No blended pre-cutover account
+and no fabricated ratio is needed. **The 4190 account I proposed is withdrawn.**
+
+### 6.2 ✅ RESOLVED — beverage is one lump account
+
+Ian: one lump-sum record. **4410 and 4420 collapse into a single 4400 Beverage sales.**
+COA-ALIGNMENT is amended accordingly; the licensing argument for splitting beer does not
+outweigh carrying a split the business does not want to maintain (bible §1.1 — carry no
+generality this business does not have).
+
+*Recoverable later if wanted:* POS already aggregates `addonSalesAmountByCategory` and
+`addonSalesByItem`, so a beverage split is a reporting change, not a re-migration.
+
+### 6.3 ✅ RESOLVED — `comps` are contra-revenue
+
+Confirmed by Ian. **4950 Sales returns and voids.** Not a marketing expense.
+
+### 6.4 ⏳ OPEN — opening-balance date
+
+Less constrained than it looked, since §6.1 means unli history is intact. Still recommend an
+opening-balance entry at the start of the current fiscal year with full detail forward.
+Stage 1 audits all history regardless (bible §1.4).
+
+### 6.5 ✅ RESOLVED — VAT is a label, not a tax engine
+
+Ian, 2026-08-23: the business is VAT-registered, but **reported sales are not all sales, and
+this ERP is internal-use only — not a VAT-compliant system. VAT here is just a label.**
+
+Design consequences, recorded so nobody re-derives them later:
+
+1. **ERPv2 is a management ledger, not the statutory filing basis.** It must never be
+   described, labelled, or exported as BIR-ready output. Anyone later assuming it is would be
+   wrong, and that assumption is exactly what a document like this exists to prevent.
+2. **No VAT engine.** No output-VAT liability accounts, no input/output netting, no BIR
+   report builders. Bible §16.5's "PH-specific rules" narrows to payroll statutory
+   (SSS/PhilHealth/Pag-IBIG/withholding), which *is* real and does post.
+3. **SC/PWD discounts are plain contra-revenue** into 4900. No VAT-exempt carve-out.
+4. The dormant `vatableSales` / `outputVatAmount` fields on `SalesDayPlain` are **not
+   migrated**. They were written by zero code paths in v1 and have no meaning in v2.
+5. If a statutory basis is ever needed, it is a **separate reporting layer over the same
+   ledger**, not a retrofit of these accounts.
+
+### 6.6 ⏳ OPEN — does 4150 (dine-in à la carte) have real volume?
+
+POS's à la carte sessions are **table-less** — `tableId` is forced to `null` whenever
+`sessionMode === 'alacarte'` (`POS/src/components/cashier/firestore.ts:650`). Combined with
+the store flag *"Offers Unlimited (Dine-in) — turn off for take-out-only kiosks"*, that
+suggests à la carte is in practice a take-out/counter flow rather than seated dining.
+
+If that is true, **4150 should be `reserved`, not active**, and all à la carte revenue posts
+to 4200. If seated à la carte diners are a real and separate thing you want to see, 4150
+stays active and POS needs the distinction recorded (§6.7).
+
+*Answer needed:* when someone orders à la carte, are they eating in or taking away — and do
+you want those two told apart in the P&L?
+
+### 6.7 ⏳ OPEN — align POS online-order handling **before** online goes live
+
+Ian: there are **no online transactions yet**, and POS can still be changed.
+
+That is the ideal moment, because the current shape has a real defect. Online-order receipts
+are written with `sessionMode: "alacarte"` and then tagged
+`(receipt as any).source = "online"` (`POS/src/app/api/admin/online-orders/route.ts:503,518`)
+— an **untyped field bolted on via an `as any` cast**, absent from the `Receipt` type. Once
+online volume exists, that cast is the only thing separating 4200 from 4150, and nothing
+type-checks it.
+
+**Recommendation — a small POS change now, not an ETL workaround later:** put a typed,
+required fulfilment discriminator on `Receipt` (for example
+`fulfilment: 'dine_in' | 'take_out' | 'delivery'`), set explicitly on every write path
+including the online route, and stop inferring revenue class from `sessionMode` + an untyped
+tag. `sessionMode` then means what it says — how the *session* was sold (package vs à la
+carte) — and fulfilment says where the food went. Those are two different questions, and the
+COA needs both: `sessionMode` drives 4100 vs 4150/4200, fulfilment drives 4150 vs 4200.
+
+This is a POS-repo change and therefore Ian's call to schedule (bible §1.2a — v1 is
+hands-off, but POS is not v1). It blocks nothing in Phase 1; it prevents a migration problem
+in Phase 3.
+
+---
+
+## 7. Net effect on the ETL
+
+With §6.1–6.3 and §6.5 answered, the sale mapping is **fully determinate for history**:
+
+| → v2 | Source | Status |
 |---|---|---|
-| **A** *(recommended)* | Historical dine-in posts to a single **4190 Food sales — dine-in (pre-cutover)**, reserved and archived after cutover. The 4100/4150 split starts at go-live | One extra account; history stays honest about what it does not know |
-| **B** | Reconstruct from POS item-level data rather than ERP salesDays | Unknown until the POS archive is checked; a separate discovery task |
-| **C** | Apply a fixed historical ratio | **Not recommended** — invents a number and puts it in the ledger |
+| **4100** dine-in unlimited | `salesDays.dineInSales` | ✅ direct |
+| **4200** take-out / à la carte | `salesDays.takeOutSales` | ✅ direct *while no online exists* |
+| **4150** dine-in à la carte | — | ⏳ reserved pending §6.6 |
+| **4400** beverage | — | lump; not separated in history |
+| **4900** discounts (contra) | `seniorDiscount + pwdDiscount + otherDiscount` | ✅ |
+| **4950** comps (contra) | `comps` | ✅ |
 
-Option A is the standard treatment: you do not fabricate detail you never captured. It also
-costs nothing going forward, because the split is a *reporting* need and reporting starts from
-cutover regardless.
-
-### 6.2 ⛔ Beverage revenue cannot be separated from food
-
-**4410** non-alcoholic and **4420** alcoholic exist in the COA — 4420 is separate partly for
-licensing. `salesDays` carries no beverage breakdown at all. Same three options as §6.1;
-recommendation is the same (a pre-cutover blended account).
-
-### 6.3 `comps` — contra-revenue or an expense?
-
-Mapped to **4950** above as a placeholder. A comp given as a service recovery is arguably
-marketing expense, not a sales return. Which is it in your business? This is a small number but
-it changes gross-margin readability.
-
-### 6.4 Opening-balance date
-
-§6.1 and §6.2 make this sharper than it looked. If historical revenue cannot carry the split
-the COA is built around, **loading years of detail buys progressively less** — Stage 1 still
-audits all history either way (bible §1.4). Recommend an opening-balance entry at the start of
-the current fiscal year and full detail forward from there.
-
-### 6.5 Output VAT is not recoverable from history
-
-`SalesDayPlain` declares `vatableSales`, `vatExemptSales`, `zeroRatedSales`, `outputVatAmount`
-— and the schema map records these as **written by zero code paths**. Historical sales
-therefore carry no output-VAT split. Senior/PWD discounts are VAT-exempt in PH, so this is not
-cosmetic. Flagging now because it constrains any attempt to rebuild BIR-facing reports from v1
-data; it does not block Phase 1.
+**The historical window is clean precisely because online does not exist yet.** Every
+pre-cutover `takeOutSales` peso is à la carte by construction. That property ends the day
+online orders launch, which is why §6.7 should land before then.

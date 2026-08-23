@@ -155,8 +155,8 @@ the beverages sold are canned soft drinks, milk drinks, and beer.
 | **4100** Food sales — dine-in, **unlimited** | Income | 🆕 | The core product; deserves its own line |
 | **4150** Food sales — dine-in, à la carte | Income | 🆕 | |
 | **4200** Food sales — take-out / à la carte | Income | 🆕 | **Includes delivery** |
-| **4410** Beverage sales — non-alcoholic | Income | 🆕 | Soft drinks, milk drinks |
-| **4420** Beverage sales — alcoholic | Income | 🆕 | Beer — different margin, and separate for licensing |
+| **4400** Beverage sales | Income | 🆕 | **One lump account** — Ian, 2026-08-23. Soft drinks, milk drinks, beer |
+| ~~4410 / 4420 non-alcoholic / alcoholic split~~ | — | ❌ | **Withdrawn 2026-08-23.** The licensing argument did not outweigh carrying a split the business does not want to maintain (bible §1.1). POS already aggregates `addonSalesAmountByCategory`, so splitting later is a reporting change, not a re-migration |
 | **4900** Sales discounts *(contra-revenue)* | Contra-income | 🆕 | Senior / PWD — currently hardcoded to zero |
 | **4950** Sales returns and voids *(contra-revenue)* | Contra-income | 🆕 | |
 
