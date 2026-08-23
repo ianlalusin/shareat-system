@@ -116,6 +116,70 @@ Every one of the remaining 33 is classified against this, in order:
 **A gap being deferred is a decision. A gap being unclassified is not.** The point of assigning
 all 33 is that "later" becomes a place on the plan rather than an absence from it.
 
+## Phase assignment — every gap now has an owner
+
+*Revised 2026-08-23 against Ian's triage rule (bible §13 row 87). Phase numbers are bible §10's.
+Nothing here is unassigned; "deferred" is a placement, not an omission.*
+
+### Foundation → **Phase 2**, and therefore in the January cutover
+
+| Gap | Why it cannot wait |
+|---|---|
+| Fixed assets + depreciation | Posts to the ledger monthly |
+| Prepaid + amortisation | Posts to the ledger monthly |
+| Loans | Interest expense and principal |
+| Owner equity movements | Capital and drawings |
+| Generic liability accounts | Statutory and other payables |
+
+> **This expands ADR-005's January scope.** The 15 November go/no-go is judged against this
+> corrected list.
+
+### Need-to-have → **Phase 3**, and the largest single omission
+
+| Gap | Phase | Note |
+|---|---|---|
+| **Commissary ↔ branch pipeline (~24 caps)** | **3** | **Named explicitly as its own deliverable.** It got lost precisely because it straddles Phase 2 (AR, settlement) and Phase 3 (stock movement) and was fully owned by neither. For a branch store this *is* replenishment |
+| POS item mapping + usage pull | 3 | Without it stock never decrements from sales |
+| Meat production / slicing conversion | 3 | Stock conversion half |
+| Order / channel wastage disposition | 3 | Includes the 15-day auto-charge backstop |
+| Branch low-stock auto-order | 3 | Turns the low-stock signal into an action |
+| Supplier returns — scope decision | 3 | **Needs Ian**: v1 deliberately does *not* touch AP/journal. ERPv2's stricter stock↔GL coupling (§16.11) may change that. Porting the compromise silently would port a known gap |
+
+### Need-to-have → **Phases 4–6**
+
+| Gap | Phase |
+|---|---|
+| Staff master record + position taxonomy | **4** — load-bearing for 4 and 5; previously unowned |
+| Absentee / leave tracking | 4 |
+| Slicer per-piece pay | 5 |
+| **13th-month pay** 🆕 | 5 — confirmed ADD. Account 6140 already seeded |
+| **Separation / final-pay / clearance** 🆕 | 5 — confirmed ADD |
+| Reimbursement payout as a distinct liability | 2 |
+| Expense budgets · recurring-expense automation | 6 |
+| Books-tie-out audit · depreciation-gap watchdog | 6 |
+| Infractions / discipline | 7 — used *by* performance scoring |
+| Store provisioning / readiness | 7 |
+| Admin danger-zone tooling | 7 |
+| Kiosk shell UI mode | 7 |
+
+### Nice-to-have → **deferred past cutover**
+
+AI insights / briefing layer · OIL lapse-detection engine · in-app notifications ·
+smart-reorder (revive, row 89) · AI-assisted data entry · settlement→HR infraction filing ·
+reconciliation certification · self-heal / drift-repair tooling.
+
+**Consolidate, do not triple-port:** Manager Daily Review + Manager Daily Report + Task Inbox
+are three overlapping day-accountability surfaces. One survives; Ian picks which.
+
+### Already solved, no work needed
+
+| Gap | Resolved by |
+|---|---|
+| Cross-store staff-identity linking | **T-101's `person_identities`** — one person, many identities, already shipped |
+| Flutter handheld app | **Dropped** (row 88) — not ported |
+
+---
+
 ## What this means for the timeline
 
 **January is intact.** It is books-only, and only §1's five items affect it. They are real work

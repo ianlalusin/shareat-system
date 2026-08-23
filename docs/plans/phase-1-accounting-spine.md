@@ -314,7 +314,7 @@ reconciliation report on every run (source count, target count, sums both sides)
 | T-101 | Core schema: organizations, stores, persons, accounts, fiscal_periods | Phase 0 |
 | T-102 | Chart of accounts seed + `legacy_code` mapping | T-101, **Ian's review** |
 | T-103 | `journal_entries` + `journal_lines` + all constraint triggers | T-101 |
-| T-104 | Constraint tests — prove the database refuses bad data | T-103 |
+| ~~T-104~~ | ~~Constraint tests~~ — **ABSORBED BY T-103, 2026-08-23.** T-103 shipped 27 tests across all 19 invariants against real Postgres, proving the database refuses a single-leg entry, a zero-line entry, an unbalanced entry, a closed- or locked-period posting, a header or reserved account as a posting target, an edit or delete of a posted entry, and a duplicate idempotency key. Specifying T-104 separately would build duplicates | — |
 | T-105 | Posting engine: `postEntry`, idempotency | T-103 |
 | T-106 | `reverseEntry` + immutability enforcement | T-105 |
 | T-107 | Builder adapter: in/out → debit/credit | T-105 |
