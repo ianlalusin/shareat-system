@@ -43,6 +43,13 @@
       "when": 1787490000000,
       "tag": "0005_reverse_entry_exemptions",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787491000000,
+      "tag": "0006_coa_expense_category_accounts",
+      "breakpoints": true
     }
   ]
 }

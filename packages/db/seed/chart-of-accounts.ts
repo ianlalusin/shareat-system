@@ -1,9 +1,18 @@
 /**
- * Chart of accounts — the seeded reference data. docs/tasks/102-chart-of-accounts-seed.md.
+ * Chart of accounts — the seeded reference data. docs/tasks/102-chart-of-accounts-seed.md,
+ * extended by docs/tasks/102b-chart-of-accounts-completion.md (closing DEF-035).
  *
- * Source of truth: docs/decisions/COA-ALIGNMENT.md §2, amended 2026-08-23 by Ian (revenue
- * collapsed to two accounts — see the REVENUE AMENDMENT note below). Where this file and
- * COA-ALIGNMENT.md disagree in the future, COA-ALIGNMENT.md wins and this file is the bug.
+ * Source of truth: docs/decisions/COA-ALIGNMENT.md §2 (account GROUPS) AND §4 (the
+ * expense-category -> account MAPPING, which introduces a finer breakdown §2 only
+ * gestures at), amended 2026-08-23 by Ian (revenue collapsed to two accounts — see the
+ * REVENUE AMENDMENT note below). Where this file and COA-ALIGNMENT.md disagree in the
+ * future, COA-ALIGNMENT.md wins and this file is the bug.
+ *
+ * T-102 seeded only §2 (75 accounts) — its spec said "take the complete list from §2",
+ * but §2's own summary rows for 5xxx/6xxx point at §4 for detail. That left the chart
+ * unable to express 17 accounts §4 actually names (5110-5170 COGS breakdown, plus 10
+ * OPEX accounts: 6160, 6510, 6620, 6630, 6650, 6850, 6860, 6870, 6880, 6890) — DEF-035,
+ * closed by T-102b. They are marked "T-102b" inline below, next to each `leaf(...)` call.
  *
  * This is reference data, not a fixture (bible §4.4 / §16.9):
  *   - every row is `isSystem: true` — deactivate (status: 'archived'), never delete
@@ -193,11 +202,32 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
   leaf('4950', 'Sales returns and voids', 'income', 'debit', '4000'), // 🆕
 
   // ---------------------------------------------------------------------------------
-  // Cost of sales 5xxx — the coarse §2 list only. The granular 5110-5170 COGS
-  // sub-accounts and the expense-category -> account mapping live in COA-ALIGNMENT §4,
-  // explicitly its own task per this spec's "Out of scope" section.
+  // Cost of sales 5xxx — the coarse §2 list, PLUS (T-102b) the granular 5110-5170 COGS
+  // sub-accounts from COA-ALIGNMENT §4.1's expense-category -> account mapping table.
+  //
+  // T-102 seeded only the §2 list and left these 7 out — closing DEF-035. §2's own
+  // summary row for this range ("5100 COGS — food · 5200 COGS — beverage") points at §4
+  // for the detail; T-102's spec pointed only at §2, so the detail never got seeded even
+  // though the source document always named it. See docs/tasks/102b-... task report.
   // ---------------------------------------------------------------------------------
   leaf('5100', 'COGS — food', 'expense', 'debit', '5000'), // 🆕
+  leaf('5110', 'COGS — meat', 'expense', 'debit', '5000'), // 🆕 — T-102b, §4.1
+  leaf('5120', 'COGS — sides', 'expense', 'debit', '5000'), // 🆕 — T-102b, §4.1
+  leaf('5130', 'COGS — condiments and seasoning', 'expense', 'debit', '5000'), // 🆕 — T-102b, §4.1
+  leaf('5140', 'COGS — sauces and dips', 'expense', 'debit', '5000'), // 🆕 — T-102b, §4.1
+  leaf('5150', 'COGS — packaging', 'expense', 'debit', '5000'), // 🆕 — T-102b, §4.1
+  leaf('5160', 'COGS — retail and consumables', 'expense', 'debit', '5000'), // 🆕 — T-102b, §4.1
+  // 5170 — INTER-STORE WARNING (COA-ALIGNMENT §4.1, "Things that will bite" #5 in the
+  // T-102b task spec). Commissary Purchases is not a third-party cost: at store level it
+  // is real spend, but CONSOLIDATED it must ELIMINATE against the commissary's
+  // transfer-out, or the same peso is COUNTED TWICE — once when the commissary buys the
+  // raw material (into 1330), again when the branch "buys" from the commissary (into
+  // this account). That is exactly why it is kept separate from 5110 rather than folded
+  // in. Same reciprocal-elimination shape as the 1250/2150 due-from/due-to pair. No DB
+  // column exists for a memo/comment on `accounts` (schema is out of scope for this
+  // task), so the warning lives here, next to the account it describes, and in this
+  // migration's own header comment.
+  leaf('5170', 'COGS — commissary transfers', 'expense', 'debit', '5000'), // 🆕 — T-102b, §4.1
   leaf('5200', 'COGS — beverage', 'expense', 'debit', '5000'), // 🆕
   leaf('5300', 'Wastage and spoilage', 'expense', 'debit', '5000', {
     legacyCode: 'expense__order_wastage',
@@ -205,7 +235,9 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
   leaf('5400', 'Inventory adjustment', 'expense', 'debit', '5000'), // 🆕
 
   // ---------------------------------------------------------------------------------
-  // Operating expenses 6xxx
+  // Operating expenses 6xxx — the §2 list, PLUS (T-102b) 10 accounts from COA-ALIGNMENT
+  // §4.2's OPEX-category -> account mapping table that T-102 left out. Closing DEF-035;
+  // see the 5xxx block above and docs/tasks/102b-... task report for the full story.
   // ---------------------------------------------------------------------------------
   leaf('6100', 'Salaries and wages', 'expense', 'debit', '6000', { legacyCode: 'expense__salary' }),
   leaf('6110', 'Employer SSS contributions', 'expense', 'debit', '6000'), // 🆕
@@ -215,6 +247,7 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
   leaf('6150', 'Salary additions and allowances', 'expense', 'debit', '6000', {
     legacyCode: 'expense__salary_additions',
   }),
+  leaf('6160', 'Employee benefits and welfare', 'expense', 'debit', '6000'), // 🆕 — T-102b, §4.2
   leaf('6200', 'Rent', 'expense', 'debit', '6000'), // 🆕
   leaf('6300', 'Utilities', 'expense', 'debit', '6000'), // 🆕
   leaf('6400', 'Platform and channel fees', 'expense', 'debit', '6000', {
@@ -224,10 +257,19 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
     legacyCode: 'expense__online_order_expenses',
   }),
   leaf('6500', 'Supplies', 'expense', 'debit', '6000'), // 🆕
+  leaf('6510', 'Smallwares', 'expense', 'debit', '6000'), // 🆕 — T-102b, §4.2; below-threshold half of the CAPEX/OPEX split, §4.5
   leaf('6600', 'Repairs and maintenance', 'expense', 'debit', '6000'), // 🆕
+  leaf('6620', 'Pest control and waste management', 'expense', 'debit', '6000'), // 🆕 — T-102b, §4.2
+  leaf('6630', 'Vehicle and transportation', 'expense', 'debit', '6000'), // 🆕 — T-102b, §4.2
+  leaf('6650', 'Marketing and advertising', 'expense', 'debit', '6000'), // 🆕 — T-102b, §4.2
   leaf('6700', 'Depreciation', 'expense', 'debit', '6000', { legacyCode: 'expense__depreciation' }),
   leaf('6750', 'Amortisation', 'expense', 'debit', '6000', { legacyCode: 'expense__amortization' }),
   leaf('6800', 'Taxes and licences', 'expense', 'debit', '6000', { legacyCode: 'expense__tax' }), // confirmed §3
+  leaf('6850', 'Administrative expenses', 'expense', 'debit', '6000'), // 🆕 — T-102b, §4.2
+  leaf('6860', 'Bad debt expense', 'expense', 'debit', '6000'), // 🆕 — T-102b, §4.2
+  leaf('6870', 'Bank charges', 'expense', 'debit', '6000'), // 🆕 — T-102b, §4.2
+  leaf('6880', 'Insurance', 'expense', 'debit', '6000'), // 🆕 — T-102b, §4.2
+  leaf('6890', 'Subscriptions and software', 'expense', 'debit', '6000'), // 🆕 — T-102b, §4.2
   leaf('6900', 'Other operating expenses', 'expense', 'debit', '6000'), // 🆕 catch-all
 
   // ---------------------------------------------------------------------------------

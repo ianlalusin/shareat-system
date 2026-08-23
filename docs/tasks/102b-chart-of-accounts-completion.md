@@ -1,6 +1,8 @@
 # T-102b — Seed the 17 accounts T-102 missed
 
-> **Status:** spec ready. **Depends on:** T-102 (done). **Blocks:** T-113 (expense mapping).
+> **Status:** ✅ **COMPLETE 2026-08-23** — 7/7 invariants, 92 accounts, DEF-035 fixed.
+> Invariant 7 verified failing before the change, naming exactly the 17.
+> **Was:** spec ready. **Depends on:** T-102 (done). **Blocks:** T-113 (expense mapping).
 > **Closes:** DEF-035. **Written by:** Opus planner, 2026-08-23.
 
 ## Goal
@@ -94,3 +96,38 @@ Do **not** modify schema files. Migrations already applied are **never edited** 
       still pass**) · `build` succeeds.
 - [ ] **DEF-035 marked `fixed`** in `docs/DEFECTS-REGISTER.md`, naming the closing test.
 - [ ] Any spec defect **reported, not silently worked around**.
+
+
+---
+
+## Implementation notes — resolved 2026-08-23
+
+**1. My invariant 7 contained a trap, and the implementer found it.**
+I wrote *"parse §4 for every account code."* Taken literally, that extracts `1530` from §4.3's
+prose phrase **"1510–1530 Property and equipment"** — and then demands account `1530` exist.
+But Ian decided earlier the same day that **1520/1530 are an intentional number gap** and that
+*"seeding fabricated names here would be worse than an empty range"* (bible §13 row, and
+COA-ALIGNMENT §2).
+
+**A literal reading of my invariant would have manufactured a false requirement contradicting
+an explicit, dated decision in the same document it was parsing.**
+
+Resolved by restricting the parser to **markdown table rows with codes bold-delimited as
+`**NNNN**`** — the format every real §4 mapping entry uses — which naturally excludes the prose
+range. Parser-sanity tests now assert 1520 and 1530 are correctly **not** in the required set,
+so the exclusion is enforced rather than incidental.
+
+> The general shape: *"check X against the document"* is only safe when the parse is specified
+> as precisely as the requirement. A vaguer parser does not fail loudly — it invents work.
+
+**2. The 5170 warning is not queryable.** `accounts` has no `memo`/`description` column, and
+schema was out of scope. The inter-store elimination warning lives in source comments (seed and
+migration header) with a test that greps for it. That satisfies the spec's letter, but **if
+`accounts` ever gains a memo column, move it there** — a warning that only exists in a comment
+is invisible to anyone reading the chart from the database.
+
+**3. No further gaps.** The same parser over all of §4 yields exactly **33** required codes:
+the 16 T-102 already had, plus these 17. DEF-035's list was accurate and complete.
+
+**4. T-102's own count assertions were forward-corrected** from 75 to 92, since this task
+deliberately amends that number.
