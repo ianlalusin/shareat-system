@@ -4,7 +4,8 @@
 > Each read the legacy system as a **requirements document** (bible §1.2b) and asked *"what
 > problem was this solving?"* rather than *"how does this work?"*
 >
-> **34 capabilities have no home in the eight-phase plan.**
+> **34 capabilities had no home in the eight-phase plan. Three are now resolved by Ian
+> (2026-08-23); 33 remain** — one dropped, one deferred, two confirmed as builds.
 
 ## Why this document exists
 
@@ -71,27 +72,49 @@ neither.
 
 ## 3. Surprises worth their own line
 
-**A whole client surface nobody mentioned.** Eight authenticated REST routes —
-`/api/inventory/{count,thresholds,transfer}`, `/api/meat/adjust`,
-`/api/production/{cook,void-record}`, `/api/deliveries/{receive,void}` — give a **Flutter
-handheld app** the same receive/count/transfer/adjust/cook powers as the web UI. All eight
-verified present. The bible does not mention it anywhere. **Ask Ian whether it is in active
-use** before assuming it is abandoned.
+**~~A whole client surface nobody mentioned.~~ ✅ RESOLVED — DROPPED.**
+Ian, 2026-08-23: *"no, I dropped it."* The Flutter handheld app is not in use. Its eight
+routes — `/api/inventory/{count,thresholds,transfer}`, `/api/meat/adjust`,
+`/api/production/{cook,void-record}`, `/api/deliveries/{receive,void}` — are **dead code in
+v1 and are NOT ported.** This is a DELETE under the four verbs, and it is Ian's call to make
+because it removes a user-facing capability (§1.2). **Gap count drops from 34 to 33.**
 
 **A regression, not a gap.** `archive/TODO-smart-reorder.md` is stamped DONE, `firestore.rules`
 still carries live rule blocks naming a **deleted** `reorder.actions.ts`, and the item master
 still exposes `reorderPoint` / `reorderQuantity` fields that fed it. Real functionality —
 14-day projection, seasonality, AI recommendations, an alerts dashboard — existed and was
-removed, leaving debris. **Ask Ian why before reviving or writing it off.**
+removed, leaving debris. **✅ RESOLVED — revive, but later.** Ian, 2026-08-23: *"revive, but later — addition to what
+we will build. We'll just build the foundation first; the need-to-have then nice-to-have will
+follow."* Classified **ADD, deferred past cutover.** Not a Phase 1 or 2 concern.
 
 **Three overlapping day-accountability surfaces.** Manager Daily Review, Manager Daily Report,
 and Task Inbox. Flagged for **consolidation, not triple-porting**.
 
-**Two things missing from v1 as well.** 13th-month pay and a separation / final-pay / clearance
-workflow. Both are statutory or near-statutory in PH. Neither exists in the legacy system, so
-neither is a porting gap — they are **genuine additions**, and Ian's call.
+**Two things missing from v1 as well — ✅ CONFIRMED as builds.** Ian, 2026-08-23: *"yes, we
+need to build it."* **13th-month pay** and a **separation / final-pay / clearance workflow**.
+Neither exists in the legacy system, so these are not porting gaps — they are **genuine ADDs**,
+the first confirmed entries under the fourth verb.
+
+Note **6140 13th month pay already exists in the approved chart of accounts** — the account was
+provisioned, the workflow that posts to it never was. Both belong to Phase 5 (payroll), which
+is post-January under ADR-005.
 
 ---
+
+## Triage rule — Ian, 2026-08-23
+
+> *"Build the foundation first; the need-to-have then nice-to-have will follow."*
+
+Every one of the remaining 33 is classified against this, in order:
+
+1. **Foundation** — the ledger and the things that post to it. Nothing works correctly without
+   these, and they cannot be retrofitted cheaply once data exists.
+2. **Need-to-have** — the business cannot operate day to day without it. The commissary→branch
+   pipeline is the clearest example: a branch store has no other way to restock.
+3. **Nice-to-have** — real value, deferrable. Smart-reorder, AI insights, the OIL engine.
+
+**A gap being deferred is a decision. A gap being unclassified is not.** The point of assigning
+all 33 is that "later" becomes a place on the plan rather than an absence from it.
 
 ## What this means for the timeline
 
@@ -103,7 +126,7 @@ alone is a phase-sized domain sitting in the gap between two phases. Any judgeme
 "Phase 2 feature-complete" at the **15 November go/no-go** must be made against the corrected
 scope, not the original.
 
-**Recommended next step:** a phase-plan revision that assigns every one of these 34 an owner —
+**Recommended next step:** a phase-plan revision that assigns every one of these 33 an owner —
 even if the owner is "explicitly deferred past cutover." An unowned capability is not a
 decision; it is a thing nobody has looked at. The four verbs require a verdict on each, and
-right now 34 have none.
+right now 33 have none.
