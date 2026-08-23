@@ -153,8 +153,8 @@ the beverages sold are canned soft drinks, milk drinks, and beer.
 | → v2 | Type | | Note |
 |---|---|---|---|
 | **4100** Food sales — dine-in, **unlimited** | Income | 🆕 | The core product; deserves its own line |
-| **4150** Food sales — dine-in, à la carte | Income | 🆕 | |
-| **4200** Food sales — take-out / à la carte | Income | 🆕 | **Includes delivery** |
+| **4150** Food sales — à la carte | Income | 🆕 | **Includes dine-in à la carte, take-out AND delivery.** Ian 2026-08-23 |
+| ~~4200 Food sales — take-out~~ | — | ❌ | **Withdrawn 2026-08-23 — folded into 4150.** POS cannot distinguish a seated à la carte diner from a counter take-out customer (à la carte sessions are table-less; there is no take-out flag at all), so the split would create an account the source data can never populate correctly. Recoverable via the `channel_id` dimension if ever wanted |
 | **4400** Beverage sales | Income | 🆕 | **One lump account** — Ian, 2026-08-23. Soft drinks, milk drinks, beer |
 | ~~4410 / 4420 non-alcoholic / alcoholic split~~ | — | ❌ | **Withdrawn 2026-08-23.** The licensing argument did not outweigh carrying a split the business does not want to maintain (bible §1.1). POS already aggregates `addonSalesAmountByCategory`, so splitting later is a reporting change, not a re-migration |
 | **4900** Sales discounts *(contra-revenue)* | Contra-income | 🆕 | Senior / PWD — currently hardcoded to zero |

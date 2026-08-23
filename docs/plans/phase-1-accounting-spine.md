@@ -118,7 +118,7 @@ types, `legacy_code` carrying v1's string ids so every ETL mapping survives.
 
 ### 4000 — Revenue 🆕 *(absent as journal legs in v1 — this is the core gap)*
 ```
-4100  Food sales — dine-in       4200  Food sales — takeout
+4100  Food sales — unlimited     4150  Food sales — à la carte (incl. take-out)
 4300  Food sales — delivery / channel              4400  Beverage sales
 4900  Sales discounts  (contra-revenue)  🆕 ← senior / PWD, currently hardcoded to zero
 4950  Sales returns and voids (contra-revenue)

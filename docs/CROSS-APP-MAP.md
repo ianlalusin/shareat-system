@@ -154,7 +154,8 @@ const takeOutSales = Math.max(0, totalGross - dineInSales);
 
 It absorbs everything `totalGross` counts that `dineInSales` does not. Today that is à la
 carte only — **because no online transactions exist yet** (Ian, 2026-08-23). The day online
-launches, this figure silently starts mixing 4150 and 4200. See §2.
+launches, this figure mixes dine-in à la carte with take-out — which no longer matters for
+revenue classification (both are 4150) but does matter for the `channel_id` dimension. See §2.
 
 **3. Payment-method classification is string matching.** `cashKeys`/`eWalletKeys`/`cardKeys`
 are hardcoded lowercase substring lists (`route.ts:61-63`); anything unmatched falls to
@@ -378,7 +379,9 @@ to satisfy the type.
 online sales silently fold into the `walkIn` bucket — which is what feeds ERP's
 `takeOutSales`. This confirms the §1 prediction with its mechanism.
 
-> **This settles T-113 §6.6/§6.7.** 4150 vs 4200 is not derivable from POS today. But
+> **This settled T-113 §6.6/§6.7.** 4150 vs 4200 was not derivable from POS — and on
+> 2026-08-23 Ian withdrew the split entirely: two food accounts only (4100 unli, 4150 à la
+> carte incl. take-out). The chart now matches what the source data can support. Separately,
 > `fulfillment.type` already exists on `onlineOrders` and is the right field to promote onto
 > the receipt — the concept is present, just not carried where the ledger needs it.
 

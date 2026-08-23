@@ -141,7 +141,7 @@ then computed as a **residual**, `Math.max(0, totalGross - dineInSales)`
 | → v2 | Derived from | Confidence |
 |---|---|---|
 | **4100** Food sales — dine-in, unlimited | `dineInSales` | ✅ this *is* the unli figure |
-| **4150 + 4200** combined | `takeOutSales` (residual) | ⚠️ conflated — split needs POS (§6.1) |
+| **4150** à la carte *(incl. take-out + delivery)* | `takeOutSales` (residual) | ✅ direct — the split was withdrawn (§6.6) |
 | **4400** Beverage sales | — | ❌ not in ERP; §6.2 makes it a lump account |
 | **4900** Sales discounts (contra) | `seniorDiscount + pwdDiscount + otherDiscount` | ✅ direct |
 | **4950** Sales returns and voids (contra) | `comps` | ✅ confirmed contra-revenue (§6.3) |
@@ -259,7 +259,7 @@ Design consequences, recorded so nobody re-derives them later:
 5. If a statutory basis is ever needed, it is a **separate reporting layer over the same
    ledger**, not a retrofit of these accounts.
 
-### 6.6 ⏳ OPEN — does 4150 (dine-in à la carte) have real volume?
+### 6.6 ✅ RESOLVED — two food accounts only; take-out folds into à la carte
 
 POS's à la carte sessions are **table-less** — `tableId` is forced to `null` whenever
 `sessionMode === 'alacarte'` (`POS/src/components/cashier/firestore.ts:650`). Combined with
@@ -310,8 +310,7 @@ With §6.1–6.3 and §6.5 answered, the sale mapping is **fully determinate for
 | → v2 | Source | Status |
 |---|---|---|
 | **4100** dine-in unlimited | `salesDays.dineInSales` | ✅ direct |
-| **4200** take-out / à la carte | `salesDays.takeOutSales` | ✅ direct *while no online exists* |
-| **4150** dine-in à la carte | — | ⏳ reserved pending §6.6 |
+| **4150** à la carte *(incl. take-out + delivery)* | `salesDays.takeOutSales` | ✅ direct |
 | **4400** beverage | — | lump; not separated in history |
 | **4900** discounts (contra) | `seniorDiscount + pwdDiscount + otherDiscount` | ✅ |
 | **4950** comps (contra) | `comps` | ✅ |
