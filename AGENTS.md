@@ -1,7 +1,12 @@
 # Shareat System — start here
 
-**You are an AI agent working in this repository. Read this file, then read
-[`PROJECT_BIBLE.md`](./PROJECT_BIBLE.md) in full before doing anything else.**
+**You are an AI agent working in this repository.**
+
+1. Read **[`docs/RULES.md`](./docs/RULES.md)** — every operating rule on one page.
+2. Then read **[`PROJECT_BIBLE.md`](./PROJECT_BIBLE.md)** in full before deciding anything.
+
+RULES.md is a digest and cites the bible for every rule. **The bible wins any
+disagreement** — if they differ, RULES.md is stale and that is a bug.
 
 This file exists so that any agent — Claude Code, Codex, Cursor, or anything else — lands on
 the same rules. It is a pointer, not a second source of truth. **`PROJECT_BIBLE.md` is the

@@ -4,7 +4,10 @@
 > It walks the full cold start: toolchain, cloning the reference repo, installing
 > PostgreSQL, configuring `.env.local`, verifying the build, and what to work on next.
 
-**Before doing anything in this repo, read [`PROJECT_BIBLE.md`](./PROJECT_BIBLE.md) in full.**
+### 👉 Start with [`docs/RULES.md`](./docs/RULES.md) — every operating rule in one page.
+
+**Then read [`PROJECT_BIBLE.md`](./PROJECT_BIBLE.md) in full before deciding anything.**
+RULES.md is a digest that cites the bible for every rule; the bible wins any disagreement.
 
 > Also read [`docs/GLOSSARY.md`](./docs/GLOSSARY.md) before naming anything. Several field
 > names in this domain mean the opposite of what they look like — `dineInSales` is
@@ -61,7 +64,8 @@ opening it. Read them as *requirements*, not as design (bible section 1.2b).
 | Path | What |
 |---|---|
 | `HANDOFF.md` | Cold-start guide for a new machine or fresh session |
-| `PROJECT_BIBLE.md` | The authority. Read first. |
+| `docs/RULES.md` | **Every operating rule on one page** — the fastest way to start working |
+| `PROJECT_BIBLE.md` | The authority. Wins any disagreement. |
 | `docs/CROSS-APP-MAP.md` | **Living map** of every seam between POS / ERP / CUSTOMER / Website |
 | `docs/CAPABILITY-GAPS.md` | **What the business does that the plan does not cover** — 33 unowned capabilities |
 | `docs/DEFECTS-REGISTER.md` | Gaps and bugs found in the reference repos, fixed here, never at the source |

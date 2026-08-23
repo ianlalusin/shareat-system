@@ -418,6 +418,28 @@ Every spec must contain, or the Sonnet agent must refuse it:
   service. File ownership is necessary, not sufficient.
 - A subagent that handles credentials **redacts, never writes the real value**.
 
+### 3.4a Report a spec defect; never work around it silently
+
+If a spec is wrong, ambiguous, or impossible — **say so and stop, or implement the defensible
+reading and flag it.** Never quietly substitute something that works.
+
+This is not politeness. On 2026-08-23 it caught, among others:
+
+- a spec claiming **six** exception accounts while listing **five** — the sixth was real
+- an invariant that would have **manufactured a false requirement** contradicting a dated
+  decision in the very document it was parsing
+- a fix that **broke four existing tests** — where the tests were wrong, not the fix
+- a **dormant hole** (`DEF-036`) found while implementing something unrelated
+- a suggested mechanism that **could not work at all**, replaced by a better one
+
+**A planner's spec is a hypothesis.** An implementer who silently patches around a defect
+destroys the only evidence that the hypothesis was wrong, and the same error is then written
+into the next three specs.
+
+**Corollary — verify, do not claim.** Report the command's actual output. A task reported
+complete with a failing gate is worse than one reported blocked, because the failure is now
+hidden instead of merely present.
+
 ### 3.5 Reporting to Ian
 
 Every substantive report ends with a **`FOR IAN`** block: plain-language, what
@@ -1115,6 +1137,7 @@ just a patch.**
 | 94 | 2026-08-23 | **Parallel agents must share no STATE, not merely no files** (§3.4) | Observed running T-106 and T-107 concurrently: both were correctly scoped to disjoint files and still collided, because both ran `test:integration` against the single `shareat_test` database and truncated each other's fixtures mid-run — producing sporadic failures in files **neither agent had touched**. The final serialised run was 136/136 clean, so the collision was pure noise, but noise that looks exactly like a real regression is expensive. Before parallelising, ask what else is shared: the test database, `migrations/meta/_journal.json`, a port, an external service | Yes |
 | 95 | 2026-08-23 | **A guard written against the states that exist today stops guarding when a new state appears** (DEF-036) | Migration `0004`'s immutability check tested `entry_status = 'posted'` only. Correct when written — nothing produced a `'reversed'` entry yet. T-106 introduced that transition, which would have left every reversed entry's lines editable by raw SQL, breaking invariant 6. Found by the T-106 implementer while implementing something else and outside its own contract. **Any status added to `journal_entries` must be checked against every trigger that switches on status** | No |
 | 96 | 2026-08-23 | **Research before planning: a phase or module plan is preceded by a bounded research pass into how mature systems solve it** (§3.6) | Ian: *"before planning one part or feature, research first, to help plan the correct data handling."* **Data-shape mistakes are the expensive kind** — a wrong screen is a week, a wrong ledger shape is a migration. Phase 1 was planned in the *other* order and got away with it only because double-entry is the most documented structure in accounting; that will not hold for inventory valuation, period close, or the commissary pipeline. **Four guards recorded so this does not become delay:** time-boxed with a written artifact under `docs/discovery/`; research **informs, never decides** (§1.1's midpoint stands — "SAP does it" is not a reason); **the output must name what we are NOT adopting and why**, or it becomes a shopping list and a rebuild acquires the generality it chose not to carry; and *standard* must be distinguished from *one vendor's choice*, with sources. Sonnet researches, Opus decides | No |
+| 97 | 2026-08-23 | **Report a spec defect; never silently work around it. Verify, do not claim** (§3.4a) | Written down because it has produced more value today than any other practice, while existing only inside individual agent prompts. It caught a spec claiming six exceptions and listing five, an invariant that would have manufactured a false requirement contradicting a dated decision in the document it was parsing, a fix that broke four tests where the tests were wrong, a dormant hole found while implementing something unrelated (DEF-036), and a suggested mechanism that could not work at all. **A planner's spec is a hypothesis** — an implementer who silently patches around a defect destroys the only evidence it was wrong, and the same error is then written into the next three specs | No |
 
 ---
 
