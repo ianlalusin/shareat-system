@@ -148,3 +148,123 @@ describe('sampleCandidates — the coverage-driven sampler (invariants 1–2 wir
     expect(JSON.stringify(result.sampled[0]!.redactedDoc)).not.toContain('Real Name');
   });
 });
+
+// -------------------------------------------------------------------------------------------
+// Credential FILES — Ian supplies the two service accounts as JSON files under secrets/
+// (gitignored) rather than pasting them into env values. See secrets/README.md.
+//
+// Every test here injects a fake reader: proving the path branch must never require a real
+// service-account key on disk, and a test suite that needs one is a test suite that invites
+// someone to put one there.
+// -------------------------------------------------------------------------------------------
+describe('loadCaptureCredentials — credential files', () => {
+  const validKey = JSON.stringify({
+    type: 'service_account',
+    project_id: 'erp-v1',
+    client_email: 'reader@erp-v1.iam.gserviceaccount.com',
+    private_key: 'not-a-real-key',
+  });
+
+  const fileEnv = {
+    CAPTURE_HUB_SA_KEY_FILE: './secrets/hub.sa.json',
+    CAPTURE_ERP_SA_KEY_FILE: './secrets/erp.sa.json',
+    CAPTURE_SALT: 'salty',
+  };
+
+  it('loads both service accounts from files', () => {
+    const seen: string[] = [];
+    const result = loadCaptureCredentials(fileEnv, (path) => {
+      seen.push(path);
+      return validKey;
+    });
+
+    expect('skipped' in result).toBe(false);
+    if (!('skipped' in result)) {
+      expect(result.erpSaKey).toBe(validKey);
+      expect(result.hubSaKey).toBe(validKey);
+      expect(result.salt).toBe('salty');
+    }
+    expect(seen).toEqual(['./secrets/hub.sa.json', './secrets/erp.sa.json']);
+  });
+
+  it('the two forms may be MIXED — one file, one inline', () => {
+    const result = loadCaptureCredentials(
+      { CAPTURE_HUB_SA_KEY: validKey, CAPTURE_ERP_SA_KEY_FILE: './secrets/erp.sa.json', CAPTURE_SALT: 's' },
+      () => validKey,
+    );
+    expect('skipped' in result).toBe(false);
+  });
+
+  it('setting BOTH forms for one credential is REJECTED, not silently resolved', () => {
+    // A precedence rule is a rule nobody remembers under pressure, and "which key did it
+    // actually use" is the worst question to have to ask about a production credential.
+    const result = loadCaptureCredentials(
+      { ...fileEnv, CAPTURE_ERP_SA_KEY: validKey },
+      () => validKey,
+    );
+    expect('skipped' in result).toBe(true);
+    if ('skipped' in result) expect(result.reason).toContain('BOTH set');
+  });
+
+  it('an unreadable path fails naming the PATH, and never touches the filesystem twice', () => {
+    const result = loadCaptureCredentials(fileEnv, () => {
+      throw new Error('ENOENT: no such file');
+    });
+    expect('skipped' in result).toBe(true);
+    if ('skipped' in result) {
+      expect(result.reason).toContain('./secrets/erp.sa.json');
+      expect(result.reason).toContain('could not be read');
+    }
+  });
+
+  it('a file that is not valid JSON is caught at LOAD, not at auth time', () => {
+    const result = loadCaptureCredentials(fileEnv, () => 'this is not json');
+    expect('skipped' in result).toBe(true);
+    if ('skipped' in result) expect(result.reason).toContain('not valid JSON');
+  });
+
+  it('valid JSON that is not a service account is rejected by shape', () => {
+    const result = loadCaptureCredentials(fileEnv, () => JSON.stringify({ hello: 'world' }));
+    expect('skipped' in result).toBe(true);
+    if ('skipped' in result) expect(result.reason).toContain('does not look like a service-account key');
+  });
+
+  it('an OAuth client secret mistaken for a service account is rejected by type', () => {
+    // The realistic wrong-file case: both live in the same console, both are JSON.
+    const result = loadCaptureCredentials(fileEnv, () =>
+      JSON.stringify({
+        type: 'authorized_user',
+        project_id: 'erp-v1',
+        client_email: 'x@y.z',
+        private_key: 'k',
+      }),
+    );
+    expect('skipped' in result).toBe(true);
+    if ('skipped' in result) expect(result.reason).toContain('expected "service_account"');
+  });
+
+  it('NEVER leaks key material into the failure reason', () => {
+    // The whole point of the file form is that the key stops appearing in places that get
+    // copied around. An error message is exactly such a place.
+    const secret = 'SUPER-SECRET-PRIVATE-KEY-MATERIAL';
+    const result = loadCaptureCredentials(fileEnv, () =>
+      JSON.stringify({ type: 'authorized_user', project_id: 'p', client_email: 'e', private_key: secret }),
+    );
+    expect('skipped' in result).toBe(true);
+    if ('skipped' in result) {
+      expect(result.reason).not.toContain(secret);
+      expect(JSON.stringify(result)).not.toContain(secret);
+    }
+  });
+
+  it('missing[] stays a list of variable NAMES, never prose', () => {
+    // Regression guard: `missing` is machine-readable and a caller may match on it. The
+    // "or use the _FILE form" explanation belongs in `reason`.
+    const result = loadCaptureCredentials({}, () => validKey);
+    expect('skipped' in result).toBe(true);
+    if ('skipped' in result) {
+      expect(result.missing).toEqual(['CAPTURE_HUB_SA_KEY', 'CAPTURE_ERP_SA_KEY', 'CAPTURE_SALT']);
+      expect(result.reason).toContain('CAPTURE_*_SA_KEY_FILE');
+    }
+  });
+});

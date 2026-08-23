@@ -14,7 +14,19 @@ next-env.d.ts.bak
 .env.local
 .env.*.local
 *.pem
+
+# Service-account key files. The ETL capture credentials live in secrets/ as
+# JSON files; the directory is ignored wholesale and only its README is tracked.
+# The filename patterns below are deliberately ALSO matched outside secrets/,
+# because the real failure mode is a key downloaded to the repo root and swept
+# up by `git add -A` before anyone notices. Google's own download name matches
+# *firebase-adminsdk*.json.
+secrets/*
+!secrets/README.md
 *-service-account*.json
+*serviceaccount*.json
+*firebase-adminsdk*.json
+*.sa.json
 
 # testing
 coverage/
