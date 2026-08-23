@@ -68,7 +68,7 @@ So no reopen path exists, and none can be abused. Every correction to a closed y
 **prior-period adjustment carried into the following year**, using `reverseEntry`, which already
 does exactly that.
 
-> This is why §7.2's 31-day window matters and why the two decisions belong together: a window
+> This is why §7.2's 15-day window matters and why the two decisions belong together: a window
 > is what makes never-reopen fair rather than brutal.
 
 ## Decisions I am making, and why
@@ -121,11 +121,16 @@ being revisited. It is simply not sufficient *alone* at the year boundary.
 An error found afterwards is **carried into the following year** as a prior-period adjustment —
 the mechanism `reverseEntry` already implements. No reopen path is built, so none can be abused.
 
-### 2. The close date is **31 January**, not 31 December
+### 2. The close date is **15 January**, not 31 December
 
-December gets a **31-day correction window**: the holidays are the busiest and messiest trading
-period, and the books need time to settle. December stays `open` through January and closes on
-the 31st, alongside the year close.
+December gets a **15-day correction window**: the holidays are the busiest and messiest trading
+period, and the books need time to settle. December stays `open` into January and closes on the
+**15th**, alongside the year close.
+
+> *Revised from 31 January the same day, at Ian's call.* **The shorter window is the better
+> one.** Fifteen days is roughly ten working days after the New Year holiday — a normal
+> *month-end* close window applied to a year-end, and this business has no external audit and no
+> statutory filing to satisfy. A short hard window creates urgency; a long one invites drift.
 
 > **This is standard practice, not an indulgence.** No real operation closes a period on the day
 > it ends — invoices arrive late, statements clear the following month, counts reconcile after
@@ -135,15 +140,16 @@ the 31st, alongside the year close.
 > **It is also what makes never-reopen fair.** The two are complements: never-reopen with a
 > same-day close would be brutal; never-reopen with a real window is discipline. The schema
 > already supports it — multiple periods may be `open` at once, so Dec 2027 and Jan 2028 coexist
-> until the 31st.
+> until the 15th.
 
 **Three obligations this creates:**
 
 | | |
 |---|---|
-| **The date must be hard** | A window's value is that it *closes*. Slip 31 Jan once and it slips every year. The routine treats it as a deadline it reports against |
-| **December figures are provisional for a month** | Anyone pulling a December P&L on 20 January reads a number that can still change. **Reports must say "provisional — period still open."** A requirement, not a nicety |
-| **The window must be used, not consumed** | 31 days spent entirely in the last three is a rushed close with extra steps. The gates in this ADR are the checklist |
+| **The date must be hard** | A window's value is that it *closes*. Slip 15 Jan once and it slips every year. The routine treats it as a deadline it reports against |
+| **December figures are provisional for a fortnight** | Anyone pulling a December P&L on 10 January reads a number that can still change. **Reports must say "provisional — period still open."** A requirement, not a nicety |
+| **The window must be used, not consumed** | Fifteen days spent entirely in the last three is a rushed close with extra steps. The gates in this ADR are the checklist |
+| **The binding constraint is the INPUTS, not the window** | If a supplier routinely bills December on 20 January, the 15th closes knowing that invoice carries into the next year. Not fatal — under never-reopen it carries either way — but **chosen knowingly rather than discovered**. If that turns out to be common, the date moves; it is not re-argued each January |
 
 ### 3. Month close is NOT enforced — but analytics is monthly
 
@@ -154,10 +160,33 @@ No hard gate at month end. Postings into an earlier month stay legal all year.
 > "March revenue" is not stable for eight months, and comparing March to April compares two
 > numbers that can both still move.
 >
-> For internal management analysis this may be entirely acceptable; Ian has run the business this
-> way for years. **Not being re-litigated.** If a month should ever stop moving *without* a hard
-> gate, the cheap version is a **soft "reviewed" marker** the database still permits posting
-> through, so analytics can distinguish provisional from settled. Offered, not built.
+**Asked directly whether I recommend a monthly close, the answer is no** — and the reasoning
+runs opposite to the intuition, so it is recorded rather than asserted:
+
+| | An error found in November, dated March |
+|---|---|
+| **Months stay open** (chosen) | Posts to **March**. March's reported figure changes retroactively — but the money sits in the period it actually happened, and at year-end everything is in its right month |
+| **Months hard-close** | Posts to **November** as a prior-period adjustment. March stays frozen — but November now carries a March error, and the monthly comparison is quietly polluted |
+
+**For internal management analysis, accuracy-by-period beats stability of the reported number,
+and not narrowly.** If March is compared to April to judge a promotion, March should reflect what
+happened in March. A hard close would push that correction into an unrelated month and make the
+comparison *worse*. Ian's instinct here is right, and this is the argument for it rather than a
+concession to it.
+
+### The recommendation instead: a soft "reviewed" marker — RECOMMENDED, not yet built
+
+The genuine cost of never closing is not accuracy, it is **accountability**: a month reviewed,
+acted on, and later changed leaves that decision resting on a number that no longer exists.
+
+- A month is marked **reviewed**, with who and when.
+- Postings into a reviewed month stay **legal** — nothing is blocked, honouring the decision above.
+- They are **flagged**, so *"what changed in March after I reviewed it, and why?"* is answerable.
+- Analytics shows each month as **provisional** or **reviewed**.
+
+Accuracy, a stability signal, and accountability, with **no operational burden** — a flag, a
+timestamp, and one query. **The review is the monthly discipline; the lock never was.** Awaiting
+Ian's go-ahead.
 
 ### 4. Who may close: **admin and manager**
 
