@@ -28,6 +28,17 @@ secrets/*
 *firebase-adminsdk*.json
 *.sa.json
 
+# The GCP console names a downloaded key <project-id>-<12 hex chars>.json, which
+# matched NOTHING above. A real key landed at the repo root un-ignored on
+# 2026-08-23 and was caught only because it had not been staged yet. Both halves
+# of the fix are below: the generic shape, and the four project ids by name.
+# gitignore has character classes but no quantifiers, hence twelve brackets.
+*-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].json
+studio-7300228488-a394e*.json
+studio-9137697931-f4a93*.json
+shareat-hub-v2*.json
+shareatv5*.json
+
 # testing
 coverage/
 .vitest/

@@ -77,17 +77,43 @@ describe('runCapture — the actual path this environment takes', () => {
     expect(warnSpy).toHaveBeenCalledOnce();
   });
 
-  it("this repo's actual .env.local has no capture credentials set — runCapture(realDotEnvLocal) skips", async () => {
+  it("runCapture against this repo's REAL .env.local never silently no-ops, whatever is set", async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
-    // Proves the REAL path this environment takes, against the REAL .env.local file (read
-    // directly above, not process.env — see the file-level comment for why process.env
-    // alone would prove nothing in a unit test). If this ever starts failing because
-    // someone adds CAPTURE_* to .env.local, that is expected — Part 2 stops being
-    // guard-only at that point, which is a real environment change, not a broken test.
-    const result = await runCapture(realDotEnvLocal);
-    expect(result.skipped).toBe(true);
-    if (result.skipped) {
-      expect(result.missing).toEqual(['CAPTURE_HUB_SA_KEY', 'CAPTURE_ERP_SA_KEY', 'CAPTURE_SALT']);
+    // REWRITTEN 2026-08-23. This test previously asserted that .env.local contains NO capture
+    // credentials, and listed all three as missing. That was true when written and stopped
+    // being true the moment Ian supplied the first real key — which the original correctly
+    // predicted in its own comment ("a real environment change, not a broken test").
+    //
+    // Re-pinning it to the NEW environment state would just schedule the same failure for
+    // when the second key arrives. So it now asserts the property that must hold in EVERY
+    // credential state, which is what the test was really protecting:
+    //
+    //   partial/absent credentials -> a skip result naming exactly what is missing
+    //   complete credentials       -> a THROW, because Part 2 execution is not implemented
+    //
+    // What must never happen, in any state, is a silent success that captured nothing.
+    let result: Awaited<ReturnType<typeof runCapture>> | undefined;
+    let threw: unknown;
+    try {
+      result = await runCapture(realDotEnvLocal);
+    } catch (e) {
+      threw = e;
+    }
+
+    if (threw !== undefined) {
+      // Fully credentialed: the only acceptable outcome is the explicit not-implemented throw.
+      expect(String(threw)).toMatch(/not implemented/);
+      return;
+    }
+
+    expect(result!.skipped, 'a partially-credentialed environment must SKIP, never quietly succeed').toBe(true);
+    if (result!.skipped) {
+      // Whatever is missing must be named, and every name must be a real variable — never
+      // prose, so a caller can act on it programmatically.
+      expect(result!.missing.length).toBeGreaterThan(0);
+      for (const name of result!.missing) {
+        expect(name).toMatch(/^CAPTURE_(HUB_SA_KEY|ERP_SA_KEY|SALT)$/);
+      }
     }
   });
 
