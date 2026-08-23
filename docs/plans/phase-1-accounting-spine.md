@@ -315,7 +315,7 @@ structure in accounting. The next two are not like that:
 
 | Phase | What to research first | Why it cannot be invented |
 |---|---|---|
-| **2 — source documents** | Period close and year-end mechanics; retained-earnings roll-forward; prior-period adjustment handling | We have `fiscal_periods` with open/closed/locked and **no close routine at all**. This is the largest blank in the system, and December needs it |
+| ~~2 — source documents~~ | ✅ **DONE** — `docs/discovery/18-period-close.md` → **ADR-006**. Month close is a pure lock; year close posts one entry into 3300 via the existing `postEntry` | *(Correction: December needs **v1's** close, not ours. Per ADR-005 the old system closes 2026 — our first month-close is ~Feb 2027, our first year-close Dec 2027.)* |
 | **3 — inventory** | Valuation method (weighted average vs FIFO vs standard) for food businesses; when COGS posts; wastage, spoilage and count-variance treatment; **inter-company transfer and elimination** | The commissary→branch pipeline is ~24 capabilities that double-count by construction if the elimination is wrong |
 
 The first of these is already running (`docs/discovery/17-industry-erp-patterns.md`).
