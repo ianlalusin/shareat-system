@@ -25,22 +25,37 @@
       }
     ],
     "paths": {
-      "@/*": [
-        "./src/*"
+      "@shareat/core": [
+        "./packages/core/src/index.ts"
       ],
-      "@db/*": [
-        "./db/*"
+      "@shareat/core/*": [
+        "./packages/core/src/*"
+      ],
+      "@shareat/db": [
+        "./packages/db/src/index.ts"
+      ],
+      "@shareat/db/schema": [
+        "./packages/db/schema/index.ts"
+      ],
+      "@shareat/db/client": [
+        "./packages/db/src/client.ts"
+      ],
+      "@/*": [
+        "./apps/erp/src/*"
       ]
     }
   },
   "include": [
-    "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
+    "apps/**/*.ts",
+    "apps/**/*.tsx",
+    "packages/**/*.ts",
+    "tests/**/*.ts",
+    "etl/**/*.ts",
+    "apps/erp/next-env.d.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "**/node_modules",
+    "**/.next"
   ]
 }

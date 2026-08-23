@@ -1,0 +1,21 @@
+{
+  "name": "@shareat/erp",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 9008",
+    "build": "next build",
+    "start": "next start -p 9008"
+  },
+  "dependencies": {
+    "@shareat/core": "*",
+    "@shareat/db": "*",
+    "firebase-admin": "^13.0.2",
+    "next": "^16.1.6",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.7"
+  }
+}

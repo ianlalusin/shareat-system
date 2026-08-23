@@ -77,6 +77,7 @@
 |---|---|---|---|---|
 | **DEF-027** | 🔸 | **No linter at all.** No ESLint config in the repo, `next lint` removed in Next 16, no CI lint step — behind a `next.config.js` key that claimed to enforce lint-on-build and was silently ignored | `verified` | Open. ESLint 9 flat config + Next plugin + a CI gate |
 | **DEF-028** | ⚠️ | `env.ts` hard-required Firebase credentials no code path reads, blocking local dev and `/api/health` | **`fixed`** | Required in production only, `superRefine`. 8 tests guard both halves. Bible row 71 |
+| **DEF-030** | ⛔ | **Credential leaked into a log by a lazy redaction regex.** `migrate.ts` redacted its connection string with `/:\/\/[^@]*@/`, which stops at the **first** `@`. A password containing `@` leaked its tail to stdout on every migration run. Observed live 2026-08-23 | **`fixed`** | Greedy `/:\/\/.*@/` matches to the last `@`. 5 tests in `packages/db/tests/redaction.test.ts` cover `@` in the password, all-`@` passwords, and no-credential URLs |
 | **DEF-029** | ⚠️ | `/api/health` reported `database: unreachable` for *any* error — a missing env var was blamed on Postgres while it was healthy | **`fixed`** | Configuration and database reported separately; detail withheld in production. Bible row 72 |
 
 ---
@@ -95,4 +96,5 @@
 
 | Date | Change |
 |---|---|
+| 2026-08-23 | DEF-030 added: a credential leaked into logs via a lazy redaction regex, found by reading migration output during the monorepo restructure. Fixed same day.
 | 2026-08-23 | Created. Seeded with 29 entries from the four-app discovery pass. 12 verified by hand, 2 already fixed, 2 agent security claims investigated and dismissed as non-issues. |

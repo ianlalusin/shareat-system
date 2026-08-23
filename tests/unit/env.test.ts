@@ -40,7 +40,7 @@ afterEach(() => {
 });
 
 async function loadEnv() {
-  const mod = await import('@/lib/env');
+  const mod = await import('@shareat/core/env');
   return mod.env();
 }
 

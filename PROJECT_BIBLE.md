@@ -679,30 +679,32 @@ approved, who charged, who counted — rests on a value the client supplies.
 ### Layout
 
 ```
-Shareat System/
-  PROJECT_BIBLE.md          <- this file. The authority.
-  CLAUDE.md                 <- loader; points every session at this file
+shareat-system/                 <- npm workspaces monorepo (ADR-004)
+  PROJECT_BIBLE.md              <- this file. The authority.
+  CLAUDE.md                     <- loader; points every session at this file
   docs/
-    discovery/              <- read-only findings from ERP-rebuild (Sonnet-produced)
-    plans/                  <- Opus phase plans
-    tasks/                  <- NNN-<slug>.md task specs
-    decisions/              <- ADRs, one per irreversible choice
-  db/
-    schema/                 <- Drizzle table definitions (the ONLY place tables exist)
-    migrations/             <- generated SQL, committed, never edited after apply
-    seed/                   <- reference + dev fixture data
-  etl/                      <- Firestore -> Postgres migration jobs
-  src/
-    app/                    <- routes + pages (ported from ERP-rebuild)
-    components/             <- UI (ported)
-    lib/
-      actions/              <- thin server actions
-      services/             <- business rules; owns transactions
-      db/repo/              <- the ONLY place SQL is written
-      sync/                 <- publisher (Lane A) + ingestor (Lane B)
-      auth/                 <- the single authorize() module
-  tests/
+    CROSS-APP-MAP.md            <- every seam between the four apps
+    DEFECTS-REGISTER.md         <- gaps/bugs found, fixed in the rebuild
+    discovery/ plans/ tasks/ decisions/
+  packages/                     <- shared by every front-end. ONE copy of each truth
+    core/   money, datetime, logger, env
+    db/     schema/ (the ONLY place tables are defined), migrations/, client, repo/
+    domain/ services, business rules, posting engine        (arrives with T-105)
+    auth/   the single authorize() module                   (arrives with its task)
+    ui/     shared components                               (arrives with a front-end)
+  apps/                         <- front-ends. They import packages, NEVER each other
+    erp/       9008
+    pos/       9003
+    customer/  9004
+    website/   9007
+  tests/                        <- cross-cutting unit + integration suites
+  etl/                          <- Firestore -> Postgres migration jobs
 ```
+
+> **The one rule that keeps this honest: an app may never import from another app.**
+> Apps depend on `packages/`; packages never depend on apps. In separate repos the
+> filesystem enforced that. Here it is a rule, and breaking it silently rebuilds the
+> coupling ADR-003 deleted.
 
 ### Ports — reserved, never shared
 
@@ -965,6 +967,7 @@ just a patch.**
 | 78 | 2026-08-23 | **Integration plumbing between apps is DELETED, not migrated. But its business rules are harvested first** | Ian: drop all the mapping that exists only to let the apps talk to each other. Correct — with one backend, the `api/external/*` routes, external API keys and key-scoping, the POS→ERP sales pull and its field mapping, the payment-method mapping layer, the storefront-catalog feed, and the cross-app idempotency/dedup maps all become dead weight. They are workarounds for separation, and separation is gone. **The hard caveat:** that code also encodes business semantics learned the expensive way — void-cash-retained disposition, branch-sale reconciliation, payment-method classification, refill timer anchoring. Deleting the plumbing is right; losing the rules inside it is not. Discovery docs 09–12 and `CROSS-APP-MAP.md` exist to harvest them BEFORE anything is deleted. **Two things that are NOT app-to-app linking and must survive:** the Lane A/B Firestore edge cache (offline, §5 + row 77) and the historical ETL mapping (T-113 — history was recorded in the old shape and still has to load) | No |
 | 79 | 2026-08-23 | **ADR-003: one PostgreSQL backend, four front-ends. The project's scope is the platform, not the ERP** | Discovery across all four apps found they are already one system held together by accretion: six Firestore collections written by BOTH POS and CUSTOMER, one shared Firebase project where a CUSTOMER deploy can overwrite POS's 800-line ruleset, a cross-project service account (`HUB_SA_KEY`) from the Website into POS's database, one Auth tenant used in both directions, and 8 HTTP routes existing only to move data between apps. §4.2 rule 8 (one writer per table) is violated six times across a process boundary. **Sequencing confirmed by Ian: ledger first, then front-ends one at a time behind feature flags, never two at once** — §13 row 20's ban on big-bang rewrites still binds. Consequence: **T-101 is designed for four consumers, not one** | No — foundational |
 | 80 | 2026-08-23 | **STANDING RULE: all four reference repos are read-only — `ERP-rebuild`, `POS`, `CUSTOMER`, `Shareat Website`. Nothing is ever fixed at the source** | Ian, verbatim: *"we won't touch the current reference firebase repos pos, erp rebuild, customer, shareat website — we won't touch any of it. We will copy them into a new project, pick what's clean, clean what's not, omit what's not needed, add what's missing."* This **widens §2 rule 1 and §1.2a from ERP-rebuild alone to all four**, and extends the four verbs (§1.2) to the whole platform. Supersedes every earlier note in this repo suggesting POS could be changed — those are corrected in place. Every defect found in a reference repo is logged in `docs/DEFECTS-REGISTER.md` and fixed **in the rebuild** | No |
+| 81 | 2026-08-23 | **ADR-004: one npm-workspaces monorepo — `apps/` + `packages/`. The Website is IN** | Ian, asked directly: "go in", "move now". The schema is shared by all four front-ends; across separate repos that is either a published versioned package or duplicated code, and both are worse for a solo operator. Decisive evidence: **the existing landmine list is almost entirely cross-repo drift** — a loyalty scope helper duplicated with a note to "keep identical", two copies of rounding inside POS alone, three sources of branch identity in the Website, `dineInSales` semantics known in POS and assumed in ERP. A monorepo makes "keep identical" impossible to get wrong. **The cost, stated honestly:** it trades a coupling the filesystem enforced for one only a rule enforces — apps must never import from apps. npm workspaces only; no Turborepo until build times actually hurt | Splitting the Website back out later is cheap; splitting POS would not be |
 | 72 | 2026-08-23 | `/api/health` reports configuration and database failures **separately** | It caught every error and reported `database: unreachable`. A missing Firebase variable was therefore blamed on Postgres while Postgres was healthy — the exact misdirection the route's own comment claims to prevent (§15.6). Error text is returned outside production only; the endpoint is unauthenticated | Yes |
 
 ---

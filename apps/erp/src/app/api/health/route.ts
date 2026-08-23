@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getSql } from '@/lib/db/client';
-import { env } from '@/lib/env';
-import { logger } from '@/lib/logger';
+import { getSql } from '@shareat/db/client';
+import { env } from '@shareat/core/env';
+import { logger } from '@shareat/core/logger';
 
 export const dynamic = 'force-dynamic';
 

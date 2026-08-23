@@ -8,9 +8,9 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 
-config({ path: '.env.local' });
+config({ path: '../../.env.local' });
 
-const MIGRATIONS_DIR = './db/migrations';
+const MIGRATIONS_DIR = './migrations';
 
 async function main() {
   const url = process.env.DATABASE_URL;
@@ -18,7 +18,11 @@ async function main() {
     throw new Error('DATABASE_URL is not set. Copy .env.example to .env.local first.');
   }
 
-  const redacted = url.replace(/:\/\/[^@]*@/, '://***:***@');
+  // Redact credentials before logging. The `.*` is GREEDY on purpose: it must match to
+  // the LAST '@', not the first. A password containing '@' (or any URL-special character)
+  // otherwise leaks its tail into the log — which this exact line did until 2026-08-23.
+  // See docs/DEFECTS-REGISTER.md DEF-030. Never make this lazy.
+  const redacted = url.replace(/:\/\/.*@/, '://***:***@');
 
   // Drizzle needs a generated journal. Before the first `npm run db:generate` there is
   // nothing to apply. That is a legitimate empty state, not a failure — but say so

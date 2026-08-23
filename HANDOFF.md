@@ -236,10 +236,10 @@ Four foundation modules encoding v1's worst landmines as code:
 
 | Module | What it prevents |
 |---|---|
-| `src/lib/money.ts` | v1 stored every peso as a JS float. Integer centavos behind a string type; `0.1 + 0.2` sums to exactly `0.30`; `allocate()` never loses a centavo; zero is a value, not "unset" |
-| `src/lib/datetime.ts` | v1 had four date idioms, one unpinned, putting PH times 8h behind on the server. One `Asia/Manila` helper, one business-day definition |
-| `src/lib/env.ts` | v1 shipped a deploy with blank env vars; its passcode secret fell back to a public value and failed OPEN. Fail-closed, no defaults on secrets |
-| `src/lib/logger.ts` | Silent failure is v1's defining pathology. Structured, redacting, with `jobResult()` so a background job can never report a bare "done" |
+| `packages/core/src/money.ts` | v1 stored every peso as a JS float. Integer centavos behind a string type; `0.1 + 0.2` sums to exactly `0.30`; `allocate()` never loses a centavo; zero is a value, not "unset" |
+| `packages/core/src/datetime.ts` | v1 had four date idioms, one unpinned, putting PH times 8h behind on the server. One `Asia/Manila` helper, one business-day definition |
+| `packages/core/src/env.ts` | v1 shipped a deploy with blank env vars; its passcode secret fell back to a public value and failed OPEN. Fail-closed, no defaults on secrets |
+| `packages/core/src/logger.ts` | Silent failure is v1's defining pathology. Structured, redacting, with `jobResult()` so a background job can never report a bare "done" |
 
 ### Next — Phase 1: the accounting spine
 

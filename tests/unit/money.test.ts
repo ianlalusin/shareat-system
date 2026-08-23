@@ -13,7 +13,7 @@ import {
   fromCentavos,
   ZERO,
   moneyFromLegacyFloat,
-} from '@/lib/money';
+} from '@shareat/core/money';
 
 describe('money — the float trap', () => {
   // PROJECT_BIBLE.md §12 landmine 25. In v1 every peso was a JS float, and drift was

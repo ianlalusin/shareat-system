@@ -8,12 +8,12 @@ How the server side is organised, and what happens when someone clicks Save.
 
 ```
   ┌──────────────────────────────────────────────────────────────┐
-  │  UI — src/app/**, src/components/**                          │
+  │  UI — apps/*/src/app/**, apps/*/src/components/**                          │
   │  React. Knows nothing about SQL. Ported from v1.             │
   └──────────────────────────┬───────────────────────────────────┘
                              │  calls a server action
   ┌──────────────────────────▼───────────────────────────────────┐
-  │  SERVER ACTIONS — src/lib/actions/                           │
+  │  SERVER ACTIONS — apps/*/src/lib/actions/                           │
   │  THIN. Exactly four jobs:                                    │
   │    1. resolve the actor from the session (never a parameter) │
   │    2. authorize(actor, action, resource)                     │
@@ -23,21 +23,21 @@ How the server side is organised, and what happens when someone clicks Save.
   └──────────────────────────┬───────────────────────────────────┘
                              │
   ┌──────────────────────────▼───────────────────────────────────┐
-  │  SERVICES — src/lib/services/                                │
+  │  SERVICES — packages/domain/                                │
   │  Where the business lives. Owns the transaction.             │
   │  Business rules, posting patterns, orchestration.            │
   │  Calls repositories. Never writes raw SQL itself.            │
   └──────────────────────────┬───────────────────────────────────┘
                              │
   ┌──────────────────────────▼───────────────────────────────────┐
-  │  REPOSITORIES — src/lib/db/repo/                             │
+  │  REPOSITORIES — packages/db/src/repo/                             │
   │  The ONLY place SQL is written. Dumb by design:              │
   │  no business rules, no authorization, no orchestration.      │
   │  Every store-scoped function filters on store_id — always.   │
   └──────────────────────────┬───────────────────────────────────┘
                              │
   ┌──────────────────────────▼───────────────────────────────────┐
-  │  SCHEMA — db/schema/  (Drizzle)                              │
+  │  SCHEMA — packages/db/schema/ (Drizzle)                              │
   │  The ONLY place tables are defined.                          │
   └──────────────────────────┬───────────────────────────────────┘
                              │
@@ -57,7 +57,7 @@ it. An action never touches a repository. A repository never enforces a rule.
 ## 2. Traced example — "record a ₱5,000 cash expense for Rent"
 
 ### Step 1 — UI
-A form in `src/app/financial/expenses/` calls the server action. It passes *what happened*,
+A form in `apps/erp/src/app/financial/expenses/` calls the server action. It passes *what happened*,
 never *who did it*.
 
 ```ts
@@ -65,7 +65,7 @@ await createExpense({ storeId, entryId: "sys_rent", amount: 5000,
                       paidFrom: "cash__cashier", documentUrl, date })
 ```
 
-### Step 2 — Server action (`src/lib/actions/expense.actions.ts`)
+### Step 2 — Server action (`apps/erp/src/lib/actions/expense.actions.ts`)
 
 ```ts
 export async function createExpense(input: unknown) {

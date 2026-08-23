@@ -6,7 +6,7 @@ import {
   businessDayRange,
   addDays,
   formatBusinessDateTime,
-} from '@/lib/datetime';
+} from '@shareat/core/datetime';
 
 describe('datetime — the UTC drift trap', () => {
   // PROJECT_BIBLE.md §12 landmine 7: server runtimes are UTC, so naive formatting puts

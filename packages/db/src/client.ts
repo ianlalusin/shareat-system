@@ -12,8 +12,8 @@
  */
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { env } from '@/lib/env';
-import * as schema from '@db/schema';
+import { env } from '@shareat/core/env';
+import * as schema from '@shareat/db/schema';
 
 type Sql = ReturnType<typeof postgres>;
 

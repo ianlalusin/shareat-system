@@ -41,13 +41,15 @@ you are acting as the Opus planner.
 | `docs/plans/` | Phase plans |
 | `docs/tasks/` | Task specs — one per unit of implementation work |
 | `docs/decisions/` | ADRs |
-| `db/schema/` | Drizzle tables — the only place tables are defined |
-| `db/migrations/` | Generated SQL, committed, never edited after apply |
+| `packages/db/schema/` | Drizzle tables — the only place tables are defined |
+| `packages/db/migrations/` | Generated SQL, committed, never edited after apply |
 | `etl/` | Firestore -> Postgres migration jobs |
-| `src/lib/db/repo/` | The only place SQL is written |
-| `src/lib/services/` | Business rules; owns transactions |
-| `src/lib/sync/` | Firestore publisher (mirror) + ingestor (inbox) |
-| `src/lib/auth/` | The single `authorize()` module |
+| `packages/db/src/repo/` | The only place SQL is written |
+| `packages/domain/` | Business rules; owns transactions |
+| `packages/domain/sync/` | Firestore publisher (mirror) + ingestor (inbox) |
+| `packages/auth/` | The single `authorize()` module |
+| `packages/core/` | money · datetime · logger · env — shared by every front-end |
+| `apps/erp/` | ERP front-end, port 9008. `apps/{pos,customer,website}` reserved |
 
 <!-- BEGIN:nextjs-agent-rules -->
 
