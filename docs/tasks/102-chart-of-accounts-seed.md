@@ -1,7 +1,8 @@
 # T-102 — Chart of accounts seed
 
 > **Status:** ✅ **COMPLETE 2026-08-23** — 75 accounts, 51 integration tests green.
-> Two follow-ups: migration `0002` corrects 3200; 1520/1530 left unseeded pending Ian.
+> Follow-up: migration `0002` corrects 3200. **1520/1530 confirmed by Ian as an intentional
+> number gap — resolved, not pending.**
 > **Was:** spec ready. **Depends on:** T-101 (done). **Blocks:** T-103, T-108, T-113/T-114.
 > **Written by:** Opus planner, 2026-08-23. Bible §3.3 format.
 > **Source of truth for the account list:** `docs/decisions/COA-ALIGNMENT.md`, signed off by
@@ -60,7 +61,7 @@ table and COA-ALIGNMENT disagree, **COA-ALIGNMENT wins and this spec is a bug**:
 
 | Range | Accounts |
 |---|---|
-| **Assets 1xxx** | 1110 cash-cashier · 1120 cash-staff · 1130 cash-office · 1140 e-wallet/online *(control)* · 1210 AR *(control)* · 1220 channel receivable *(control)* · 1221 clearing-Grab · 1222 clearing-Foodpanda · 1230 advances to employees *(control)* · 1240 advances to suppliers *(control)* · 1250 due from related store · 1310/1320/1330/1340 inventory · 1400 prepaid *(control)* · 1510/1520/1530 property & equipment · 1590 accumulated depreciation *(contra-asset)* |
+| **Assets 1xxx** | 1110 cash-cashier · 1120 cash-staff · 1130 cash-office · 1140 e-wallet/online *(control)* · 1210 AR *(control)* · 1220 channel receivable *(control)* · 1221 clearing-Grab · 1222 clearing-Foodpanda · 1230 advances to employees *(control)* · 1240 advances to suppliers *(control)* · 1250 due from related store · 1310/1320/1330/1340 inventory · 1400 prepaid *(control)* · 1510 property & equipment *(1520/1530 = intentional gap)* · 1590 accumulated depreciation *(contra-asset)* |
 | **Liabilities 2xxx** | 2110 AP *(control)* · 2130 reimbursements payable · 2140 customer store credits · 2145 unredeemed vouchers · 2150 due to related store · 2210 SSS · 2220 PhilHealth · 2230 Pag-IBIG · 2240 withholding tax · 2250 VAT payable · 2300 salaries payable · 2400 loans payable *(control)* · 2900 suspense — void cash |
 | **Equity 3xxx** | 3100 owner's capital · 3200 owner's drawings · 3300 retained earnings · 3900 opening balance equity |
 | **Revenue 4xxx** | 4100 food — unlimited · 4150 food — **à la carte, including take-out and delivery** *(4200 withdrawn)* · 4400 beverage · 4900 sales discounts *(contra)* · 4910 loyalty points redeemed *(contra)* · 4920 vouchers redeemed *(contra)* · 4950 sales returns and voids *(contra)* |

@@ -111,7 +111,8 @@ transaction" is exposed to.
 | v1 account | → v2 | Type | |
 |---|---|---|---|
 | `prepaid__{prepaidItemId}` | **1400** Prepaid expenses *(control)* + subledger | Asset | 🔀 |
-| `asset__{assetId}` | **1510–1530** Property and equipment *(control)* + fixed-asset register | Asset | 🔀 |
+| `asset__{assetId}` | **1510** Property and equipment *(control)* + fixed-asset register | Asset | 🔀 |
+| — | ~~1520 / 1530~~ | — | **Intentional number gap. Ian, 2026-08-23: "1520 and 1530 don't need names, keep the gap."** Do NOT invent account names to fill it. Reserved room for future asset classes; a gap in a chart of accounts is normal and deliberate (§16.9 account lifecycle). Seeding fabricated names here would be worse than an empty range |
 | `contra_asset__{assetId}` | **1590** Accumulated depreciation | Contra-asset | ✅ |
 
 ### Liabilities
