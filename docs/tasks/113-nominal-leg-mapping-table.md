@@ -37,6 +37,73 @@ read-only on 2026-08-23. Target account codes are from `docs/decisions/COA-ALIGN
 
 ---
 
+## Scope — implementation, added 2026-08-23
+
+Everything above this line is the **design**, and Ian's review of it is complete (§6). What
+follows is the §3.3 task spec for building it.
+
+**T-117 already built a partial version.** `packages/etl/src/convert.ts` has an
+`OPEX_CATEGORY_ACCOUNTS` map covering only the categories its eight specimens exercise, and it
+correctly **quarantines an unmapped category rather than falling back to 6900**. That behaviour
+is right and must be preserved — this task widens the map, it does not loosen the rule.
+
+### Files
+
+Create or modify **only**:
+
+```
+packages/etl/src/leg-mapping.ts        the full sourceType + category mapping — NEW
+packages/etl/src/convert.ts            consume the mapping; keep the quarantine behaviour
+packages/etl/tests/leg-mapping.test.ts NEW — unit, no database
+packages/etl/tests/convert.test.ts     extend
+```
+
+Do **not** modify `packages/domain/**`, `packages/db/**`, the corpus fixtures, or anything under
+`apps/`. **Do not touch `PROJECT_BIBLE.md`** (§14).
+
+### What to build
+
+**1. The `sourceType` classification (§1–§2 above).** Every v1 `sourceType` resolves to exactly
+one class:
+
+- **Class A — complete.** 11 that already carry a nominal leg, plus the 11 that are
+  balance-sheet-to-balance-sheet and must synthesise **nothing**. A synthesised leg on that
+  second list is a **bug, not a finding** — assert zero synthesis for it.
+- **Class B — synthesise.** `expense`, `ar-charge`, `sale`.
+- **Class C — quarantine** with a named reason.
+
+**2. The complete expense-category mapping**, from `COA-ALIGNMENT.md` **§4** — *not* §2. All
+COGS categories (5110–5170, 5200), all OPEX categories (6100–6900), and the two that leave the
+P&L entirely: **`CAPEX` → fixed asset**, **`PERSONAL` → 3200 owner's drawings**.
+
+> Those two exits are the likeliest thing to get wrong. A naive `expenseEntryGroup → 6xxx`
+> routing puts a capital purchase and an owner's personal spend into operating expenses, which
+> overstates costs and understates both assets and drawings.
+
+**3. Preserve the no-fallback rule.** An unmapped category **quarantines with its name in the
+reason**. It never falls back to 6900 Other. A catch-all that silently absorbs the unknown is
+how the legacy books reached their current state (§3 rule 1).
+
+### Implementation invariants — in addition to Tests 1–9 above
+
+10. Every `sourceType` named in §1 and §2 resolves to a class; **none is unclassified**.
+11. **Every COGS and OPEX category named in `COA-ALIGNMENT.md` §4 resolves to an account**, and
+    every account it resolves to **exists in the seeded chart**. Parse §4 for this — a
+    hand-maintained list has the same blind spot that produced DEF-035.
+12. `CAPEX` never produces a P&L line; `PERSONAL` always resolves to 3200.
+13. An unmapped category quarantines, naming the category, and **never** yields 6900.
+14. The 11 balance-sheet-only `sourceType`s synthesise **zero** lines.
+
+### Done when
+
+- [ ] Tests 1–9 (above) and 10–14 pass.
+- [ ] `npm run typecheck` clean · `test` green · `test:integration` green (**all existing tests
+      still pass**) · `build` succeeds.
+- [ ] No file outside **Files** modified.
+- [ ] Any spec defect **reported, not silently worked around**.
+
+---
+
 ## 1. Class A — already complete, no synthesis
 
 These builders already emit a P&L leg. Stage 1 asserts they balance and maps the account.
