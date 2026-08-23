@@ -1,0 +1,25 @@
+{
+  "specimenId": "sale-dine-in-unli-001",
+  "caseClass": "sale.dine_in_unli.plain",
+  "kind": "salesDay",
+  "storeCode": "STORE-A",
+  "provenance": "Hand-written fixture — Part 1, T-117. Never real captured data; there is nothing to redact. See docs/tasks/117-replay-harness-stage-a.md.",
+  "doc": {
+    "id": "2026-01-05",
+    "storeId": "STORE-A",
+    "status": "verified",
+    "totalSales": 50000,
+    "dineInSales": 50000,
+    "takeOutSales": 0,
+    "cashPayments": 45000,
+    "onlineBreakdown": { "gcash": 5000 },
+    "seniorDiscount": 0,
+    "pwdDiscount": 0,
+    "otherDiscount": 0,
+    "totalDiscounts": 0,
+    "comps": 0,
+    "submittedByUid": "b3f1a2c4-0000-4000-8000-000000000001",
+    "submittedByName": "Alon Abante",
+    "verifiedByUid": "b3f1a2c4-0000-4000-8000-000000000002"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "specimenId": "sale-voided-001",
+  "caseClass": "sale.voided",
+  "kind": "salesDay",
+  "storeCode": "STORE-A",
+  "provenance": "Hand-written fixture — Part 1, T-117. Never real captured data; there is nothing to redact.",
+  "doc": {
+    "id": "2026-01-12",
+    "storeId": "STORE-A",
+    "status": "voided",
+    "totalSales": 8000,
+    "dineInSales": 8000,
+    "takeOutSales": 0,
+    "cashPayments": 8000,
+    "onlineBreakdown": {},
+    "seniorDiscount": 0,
+    "pwdDiscount": 0,
+    "otherDiscount": 0,
+    "totalDiscounts": 0,
+    "comps": 0,
+    "voidedByUid": "b3f1a2c4-0000-4000-8000-000000000006",
+    "voidReason": "duplicate day submitted in error"
+  }
+}

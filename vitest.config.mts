@@ -14,6 +14,7 @@ const alias = {
   '@shareat/db/schema': `${root}packages/db/schema/index.ts`,
   '@shareat/db/client': `${root}packages/db/src/client.ts`,
   '@shareat/db': `${root}packages/db/src/index.ts`,
+  '@shareat/etl': `${root}packages/etl/src/index.ts`,
 };
 
 export default defineConfig({

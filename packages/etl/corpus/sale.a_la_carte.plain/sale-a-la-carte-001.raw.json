@@ -1,0 +1,24 @@
+{
+  "specimenId": "sale-a-la-carte-001",
+  "caseClass": "sale.a_la_carte.plain",
+  "kind": "salesDay",
+  "storeCode": "STORE-A",
+  "provenance": "Hand-written fixture — Part 1, T-117. Never real captured data; there is nothing to redact.",
+  "doc": {
+    "id": "2026-01-08",
+    "storeId": "STORE-A",
+    "status": "verified",
+    "totalSales": 32000,
+    "dineInSales": 0,
+    "takeOutSales": 32000,
+    "cashPayments": 20000,
+    "onlineBreakdown": { "gcash": 12000 },
+    "seniorDiscount": 0,
+    "pwdDiscount": 0,
+    "otherDiscount": 0,
+    "totalDiscounts": 0,
+    "comps": 0,
+    "submittedByUid": "b3f1a2c4-0000-4000-8000-000000000003",
+    "submittedByName": "Bina Bello"
+  }
+}

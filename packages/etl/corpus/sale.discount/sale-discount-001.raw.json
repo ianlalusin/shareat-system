@@ -1,0 +1,24 @@
+{
+  "specimenId": "sale-discount-001",
+  "caseClass": "sale.discount",
+  "kind": "salesDay",
+  "storeCode": "STORE-A",
+  "provenance": "Hand-written fixture — Part 1, T-117. Never real captured data; there is nothing to redact.",
+  "doc": {
+    "id": "2026-01-09",
+    "storeId": "STORE-A",
+    "status": "verified",
+    "totalSales": 51000,
+    "dineInSales": 45000,
+    "takeOutSales": 6000,
+    "cashPayments": 40000,
+    "onlineBreakdown": { "gcash": 10000 },
+    "seniorDiscount": 800,
+    "pwdDiscount": 200,
+    "otherDiscount": 0,
+    "totalDiscounts": 1000,
+    "comps": 0,
+    "submittedByUid": "b3f1a2c4-0000-4000-8000-000000000004",
+    "submittedByName": "Caro Cortez"
+  }
+}

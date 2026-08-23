@@ -1,0 +1,20 @@
+{
+  "specimenId": "sale-a-la-carte-001",
+  "caseClass": "sale.a_la_carte.plain",
+  "status": "converted",
+  "reason": null,
+  "entries": [
+    {
+      "entryDate": "2026-01-08",
+      "sourceType": "sale",
+      "sourceId": "2026-01-08",
+      "idempotencyKey": "etl:sale-a-la-carte-001",
+      "memo": "Sales day 2026-01-08, store STORE-A",
+      "lines": [
+        { "accountCode": "1110", "debit": "20000.00", "credit": "0.00", "lineMemo": "cash tender", "channelId": null },
+        { "accountCode": "1140", "debit": "12000.00", "credit": "0.00", "lineMemo": "online: gcash", "channelId": null },
+        { "accountCode": "4150", "debit": "0.00", "credit": "32000.00", "lineMemo": "à la carte (incl. take-out)", "channelId": null }
+      ]
+    }
+  ]
+}

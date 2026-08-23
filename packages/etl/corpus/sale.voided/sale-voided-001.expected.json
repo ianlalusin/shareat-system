@@ -1,0 +1,7 @@
+{
+  "specimenId": "sale-voided-001",
+  "caseClass": "sale.voided",
+  "status": "skipped",
+  "reason": "sales day 2026-01-12 is voided — cancelled sale, nothing to post",
+  "entries": []
+}

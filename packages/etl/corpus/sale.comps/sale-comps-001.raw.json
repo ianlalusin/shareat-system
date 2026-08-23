@@ -1,0 +1,24 @@
+{
+  "specimenId": "sale-comps-001",
+  "caseClass": "sale.comps",
+  "kind": "salesDay",
+  "storeCode": "STORE-A",
+  "provenance": "Hand-written fixture — Part 1, T-117. Never real captured data; there is nothing to redact.",
+  "doc": {
+    "id": "2026-01-10",
+    "storeId": "STORE-A",
+    "status": "verified",
+    "totalSales": 25000,
+    "dineInSales": 20000,
+    "takeOutSales": 5000,
+    "cashPayments": 22000,
+    "onlineBreakdown": { "gcash": 2500 },
+    "seniorDiscount": 0,
+    "pwdDiscount": 0,
+    "otherDiscount": 0,
+    "totalDiscounts": 0,
+    "comps": 500,
+    "submittedByUid": "b3f1a2c4-0000-4000-8000-000000000005",
+    "submittedByName": "Dael Dimalanta"
+  }
+}
