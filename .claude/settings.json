@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "deny": [
+      "Edit(//C:/Users/ianla/webapps/ERP-rebuild/**)",
+      "Write(//C:/Users/ianla/webapps/ERP-rebuild/**)",
+      "Edit(//C:/Users/ianla/webapps/POS/**)",
+      "Write(//C:/Users/ianla/webapps/POS/**)",
+      "Edit(//C:/Users/ianla/webapps/CUSTOMER/**)",
+      "Write(//C:/Users/ianla/webapps/CUSTOMER/**)",
+      "Edit(//C:/Users/ianla/webapps/Shareat Website/**)",
+      "Write(//C:/Users/ianla/webapps/Shareat Website/**)"
+    ]
+  }
+}
