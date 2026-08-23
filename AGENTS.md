@@ -67,6 +67,12 @@ opening it. Read them as *requirements*, not as design (bible section 1.2b).
 - **Opus plans, Sonnet implements.** No implementation without a written task spec in
   `docs/tasks/` (bible §3). A spec names the exact files you may touch — **stay inside it**,
   and if you must go outside, say so explicitly in your report.
+- **Pick the model for the task** (bible §3.1a). **Sonnet** is the default for delegated work:
+  code reading, discovery, executing a spec, writing tests. **Opus** plans, reviews, and makes
+  decisions. **Fable** is reserved for two cases only — a bug that has already survived a
+  deliberate Opus pass, and genuinely intricate data-shape design. *"It was hard"* is not the
+  bar for escalation; a systematic pass must have been made and failed. Equally, do not spend
+  Opus on what Sonnet does well.
 - **Tests before implementation**, and integration tests run against a **real** PostgreSQL,
   never a mock.
 - **Verify, do not claim.** Run the command and report its actual output. A task reported

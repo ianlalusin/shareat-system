@@ -343,8 +343,34 @@ These are absolute. Violating one is a defect regardless of whether tests pass.
 |---|---|---|---|
 | **Planner** | **Opus** | Reads discovery, designs schema, decides architecture, writes task specs, reviews every diff, amends this bible | Writes feature code |
 | **Implementer** | **Sonnet** subagent | Executes one written task spec, writes code + tests, reports back | Invents scope, changes architecture, amends the bible |
-| **Explorer** | **Sonnet** subagent | Read-only discovery, produces a doc under `docs/discovery/` | Writes production code |
+| **Explorer** | **Sonnet** subagent | Read-only discovery, code reading, exploration; produces a doc under `docs/discovery/` | Writes production code |
+| **Specialist** | **Fable** subagent | Debugging that has resisted Opus; brainstorming genuinely intricate data shapes | Routine implementation, routine exploration |
 | **Reviewer** | **Opus** | Self-review of every change before it is called done | Rubber-stamps |
+
+### 3.1a Which model, and why — *Ian, 2026-08-23*
+
+> *"Juggle Fable, Opus and Sonnet for the specific task that needs them. Discovery, code
+> reading and exploration can be done by a Sonnet agent; Opus for planning and brainstorming;
+> Fable for debugging that can't be handled easily by Opus, or brainstorming sophisticated
+> data shapes."*
+
+| Reach for | When |
+|---|---|
+| **Sonnet** | **The default for delegated work.** Reading code, discovery passes, capability inventories, executing a written spec, writing tests. Most work is this |
+| **Opus** | Planning, architecture, task specs, review, brainstorming, any decision that lands in §13 |
+| **Fable** | **Only two cases.** (1) A bug that has already survived a deliberate Opus pass — not a bug Opus has not yet looked at. (2) Data-shape design that is genuinely intricate: the two-lane sync contract, the ETL quarantine taxonomy, reconciliation topology, anything where getting the *shape* wrong is expensive to undo |
+
+**Fable is not a default and not an escalation reflex.** "Opus tried once and it was hard" is
+not the bar — the bar is *a systematic pass has been made and the problem survived it.*
+Reaching for a bigger model before understanding the problem produces a more expensive version
+of the same confusion.
+
+**Symmetrically: do not use Opus for what Sonnet does well.** Reading forty files to find where
+a rule lives is Sonnet work. Opus time is for the decisions, and every Opus turn spent on
+mechanical reading is a decision not being made.
+
+**Invocation:** the Agent tool's `model` parameter — `"sonnet"`, `"opus"`, `"fable"`. A
+subagent prompt is always self-contained (§3.4) regardless of which model runs it.
 
 **Rule: no Sonnet agent starts without a written task spec from Opus.**
 **Rule: no Opus plan is written without discovery evidence to back it.**
@@ -1033,6 +1059,7 @@ just a patch.**
 | 90 | 2026-08-23 | **13th-month pay and a separation / final-pay / clearance workflow are confirmed BUILDS — the first true ADDs** | Ian: *"yes, we need to build it."* Neither exists in the legacy system, so these are not porting gaps but genuine additions under the fourth verb. Both are statutory or near-statutory in PH. **Account 6140 13th month pay already exists in the approved chart** — the account was provisioned, the workflow that posts to it never was. Both belong to Phase 5 (payroll), post-January under ADR-005 | No |
 | 91 | 2026-08-23 | **Phase plan revised: every one of the 33 unowned capabilities now has a phase** (`docs/CAPABILITY-GAPS.md`) | Phase 2 gains the five ledger-posting financial modules it silently omitted, which expands the January cutover scope. **Phase 3 gains the commissary→branch pipeline as a named deliverable** — ~24 capabilities that straddled Phases 2 and 3 and were owned by neither, which is exactly how a branch store's entire replenishment path went unplanned. Staff master record and position taxonomy move to Phase 4 as explicit prerequisites of 4 and 5. Nice-to-haves are **deferred, not unassigned** — row 87's distinction | No |
 | 92 | 2026-08-23 | **T-104 (constraint tests) is ABSORBED by T-103, not built separately** | T-103 shipped 27 tests across all 19 invariants against real Postgres, already proving the database refuses a single-leg entry, a zero-line entry, an unbalanced entry, a closed/locked-period posting, a header or reserved posting target, an edit or delete of a posted entry, and a duplicate idempotency key. A separate T-104 would build duplicates of tests that already exist. Phase 1's task count drops from 16 to 15 | Yes |
+| 93 | 2026-08-23 | **Model selection is a deliberate choice per task, not a default (§3.1a): Sonnet explores and implements, Opus plans and reviews, Fable is reserved for two specific cases** | Ian: *"juggle Fable, Opus and Sonnet for the specific task that needs them."* Sonnet is the default for delegated work — code reading, discovery, capability inventories, executing a written spec. Opus owns planning, architecture, specs, review, and anything landing in §13. **Fable is reserved for (1) a bug that has already survived a deliberate Opus pass, and (2) genuinely intricate data-shape design where getting the shape wrong is expensive to undo.** Two guards recorded with it: "Opus found it hard" is **not** the bar for escalation — a systematic pass must have been made and failed — and **Opus must not be spent on what Sonnet does well**, because every Opus turn on mechanical reading is a decision not being made | Yes |
 
 ---
 
