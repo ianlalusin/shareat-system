@@ -63,13 +63,16 @@ opening it. Read them as *requirements*, not as design (bible section 1.2b).
 | `HANDOFF.md` | Cold-start guide for a new machine or fresh session |
 | `PROJECT_BIBLE.md` | The authority. Read first. |
 | `docs/CROSS-APP-MAP.md` | **Living map** of every seam between POS / ERP / CUSTOMER / Website |
+| `docs/CAPABILITY-GAPS.md` | **What the business does that the plan does not cover** — 33 unowned capabilities |
+| `docs/DEFECTS-REGISTER.md` | Gaps and bugs found in the reference repos, fixed here, never at the source |
+| `docs/GLOSSARY.md` | **Read before naming anything** — several field names mean the opposite of what they look like |
 | `docs/discovery/` | Read-only findings from ERP-rebuild |
 | `docs/plans/` | Phase plans |
 | `docs/tasks/` | Task specs — one per unit of implementation work |
 | `docs/decisions/` | ADRs |
 | `packages/db/schema/` | Drizzle tables — the only place tables are defined |
 | `packages/db/migrations/` | Generated SQL, committed, never edited after apply |
-| `etl/` | Firestore -> Postgres migration jobs |
+| `packages/etl/` | Firestore -> Postgres ETL, the specimen corpus, and the replay harness |
 | `packages/db/src/repo/` | The only place SQL is written |
 | `packages/domain/` | Business rules; owns transactions |
 | `packages/domain/sync/` | Firestore publisher (mirror) + ingestor (inbox) |
