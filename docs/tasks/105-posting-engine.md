@@ -1,6 +1,8 @@
 # T-105 — The posting engine: `postEntry` and idempotency
 
-> **Status:** spec ready. **Depends on:** T-101, T-102, T-103 (all done).
+> **Status:** ✅ **COMPLETE 2026-08-23** — 16/16 invariants, DEF-031 closed and verified in the
+> live database (`journal_lines_posted_immutable` now fires on INSERT UPDATE DELETE).
+> **Was:** spec ready. **Depends on:** T-101, T-102, T-103 (all done).
 > **Blocks:** T-106 (reversal), T-107 (builder adapter), T-108, T-109, T-112.
 > **Also closes:** DEF-031 — the posted-immutability hole on INSERT.
 > **Written by:** Opus planner, 2026-08-23. Bible §3.3 format.
@@ -167,3 +169,31 @@ T-101's or T-102's schema.
 - [ ] `npm run typecheck` clean · `test` green · `test:integration` green · `build` succeeds.
 - [ ] **DEF-031 marked `fixed`** in `docs/DEFECTS-REGISTER.md` with the closing test named.
 - [ ] Any spec defect **reported, not silently worked around**.
+
+
+---
+
+## Implementation notes — resolved 2026-08-23
+
+**1. The idempotency check runs FIRST, before period and account resolution — endorsed.**
+The contract's pseudocode did not state an order. The implementer chose to short-circuit on
+`idempotencyKey` before resolving anything else, so **a retry of an already-completed post is
+a safe no-op even if the period has since closed or an account code has since been retired.**
+
+That is exactly the situation offline replay, webhooks and crons produce, and the alternative —
+resolving first — would make a *successful* prior post fail on retry for reasons that have
+nothing to do with it. **Adopted as the rule**, not just this implementation's choice.
+
+**2. Fixing DEF-031 broke four pre-existing T-103 tests. The tests were wrong, not the fix.**
+T-103's `insertEntryWithLines` fixture built posted entries the old way — insert the entry at
+its final status, *then* add lines. Migration `0004` makes that unbuildable, which is the whole
+point: **it is precisely the shape DEF-031 described.**
+
+The implementer reported this rather than patching a file outside its scope or quietly calling
+a 4-failure gate green. Correct on both counts. The planner updated the helper to be
+draft-first — create as `draft`, insert lines, then set the final status — matching the
+canonical pattern `postEntry` uses. **All 111 integration tests pass.**
+
+> Worth stating plainly: a rule that breaks existing tests is not automatically wrong. Here the
+> tests encoded the very pattern the rule exists to forbid, and weakening the trigger to keep
+> them green would have reopened the defect while appearing to pass.

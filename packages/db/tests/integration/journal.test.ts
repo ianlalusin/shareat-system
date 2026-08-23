@@ -111,7 +111,7 @@ async function insertEntryWithLines(
       values
         (${orgId}, ${opts.entryDate ?? '2026-01-15'}, ${periodId}, ${opts.memo ?? null},
          ${opts.sourceType ?? 'test'}, ${opts.sourceId ?? `test-${Date.now()}-${Math.random()}`},
-         ${opts.idempotencyKey ?? null}, ${opts.status ?? 'draft'}, ${opts.postedAt ?? null},
+         ${opts.idempotencyKey ?? null}, 'draft', ${opts.postedAt ?? null},
          ${opts.postedBy ?? null})
       returning id
     `;
@@ -123,6 +123,19 @@ async function insertEntryWithLines(
         values (${entryId}, ${lineNo}, ${line.accountId}, ${line.storeId ?? null}, ${line.channelId ?? null}, ${line.debit}, ${line.credit})
       `;
       lineNo++;
+    }
+
+    // DRAFT FIRST, ALWAYS. The entry is created as 'draft' regardless of the caller's
+    // requested status, the lines go on, and only then is the status set. Migration 0004
+    // (T-105, closing DEF-031) makes it impossible to INSERT a line onto an entry that is
+    // not draft — which is the whole point: a posted entry's content can never change.
+    //
+    // This helper originally inserted the entry at its final status and then added lines.
+    // That pattern is now unbuildable, and rightly so: it is exactly the shape DEF-031
+    // described. Updated 2026-08-23 rather than weakening the trigger.
+    const finalStatus = opts.status ?? 'draft';
+    if (finalStatus !== 'draft') {
+      await trx`update journal_entries set status = ${finalStatus} where id = ${entryId}`;
     }
     return entryId;
   });

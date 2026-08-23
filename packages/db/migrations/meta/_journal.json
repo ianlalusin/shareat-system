@@ -29,6 +29,13 @@
       "when": 1787473194324,
       "tag": "0003_journal_entries_and_lines",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787483785570,
+      "tag": "0004_journal_lines_posted_immutable_insert",
+      "breakpoints": true
     }
   ]
 }

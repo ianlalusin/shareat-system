@@ -40,6 +40,12 @@
       "@shareat/db/client": [
         "./packages/db/src/client.ts"
       ],
+      "@shareat/domain": [
+        "./packages/domain/src/index.ts"
+      ],
+      "@shareat/domain/*": [
+        "./packages/domain/src/*"
+      ],
       "@shareat/etl": [
         "./packages/etl/src/index.ts"
       ],
