@@ -16,7 +16,7 @@ project. Orient yourself properly before doing anything.
      - the reference repo, cloned from `https://github.com/ianlalusin/studio.git` into a
        folder named `ERP-rebuild`, on branch `upgrade-next16` — **READ-ONLY, never modify
        it, never run git in it, never npm install in it**
-   - PostgreSQL installed and listening on **port 5433** (`psql --version`)
+   - PostgreSQL installed and listening on **port 5435** (`psql --version`)
    - `.env.local` exists (create from `.env.example` if not)
    - `npm ci`, `npm run typecheck`, `npm run test`, `npm run build`
 4. Tell Ian exactly what is missing and walk him through it. **Installing PostgreSQL is
@@ -29,4 +29,4 @@ Do not start writing feature code until steps 1–4 are done and reported.
 Three rules you must never break:
 - `ERP-rebuild` is read-only; it is live production owned by someone else.
 - Never run a build on the production droplet (`159.223.78.207`) — builds run in CI.
-- Port 9008 for dev, 5433 for Postgres. Nothing else.
+- Port 9008 for dev, 5435 for Postgres. Nothing else.

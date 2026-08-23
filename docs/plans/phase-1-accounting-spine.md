@@ -57,7 +57,7 @@ Mechanical, but nothing in Phase 1 can start without them.
 | Task | Delivers |
 |---|---|
 | **T-001** | Next.js 16 + TS + Tailwind + shadcn scaffold, dev on **port 9008** |
-| **T-002** | Local PostgreSQL 16 on **port 5433**, Drizzle, forward-only migration runner |
+| **T-002** | Local PostgreSQL 18 on **port 5435**, Drizzle, forward-only migration runner |
 | **T-003** | Env validation that **fails closed** on a missing var (§7 rule 9) + committed `.env.example` |
 | **T-004** | Observability: structured logging with correlation ids, error tracking, slow-query log, health endpoint (§15.6) |
 | **T-005** | Test harness: vitest unit + integration against **real Postgres**, CI running typecheck/lint/test on every push (§15.7) |

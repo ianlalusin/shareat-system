@@ -121,16 +121,24 @@ The parts you will actually read:
 > "Not supported" for every Windows row. Use `winget`; the package is published by the
 > PostgreSQL Global Development Group.
 
-### 3a. Decide the version FIRST
+### 3a. The version is **18** — already decided
 
-Local and production must be the **same major version**, so a query that works in dev
-cannot fail in production. Ian: open the DigitalOcean create-database screen (§6 Task 2)
-and note the newest PostgreSQL version offered — likely **17**.
+Local, CI, and production must all be the **same major version**, so a query that works
+in dev cannot fail elsewhere. The project is pinned to **PostgreSQL 18**: CI runs
+`postgres:18` (`.github/workflows/ci.yml`), bible §4.1 specifies 18, and DigitalOcean
+Managed Postgres supports 18. Do not install 16 or 17.
+
+The deciding reason for 18 is **native `uuidv7()`** — bible §4.2 rule 1 wants v7 UUIDs for
+primary keys, and on 16 that needs an extension or app-side generation.
+
+When the DigitalOcean Managed cluster is created (§6 Task 2), select **18** there too.
+Changing the project's major version is a bible amendment (§14), not a setup-time
+choice. *(See bible §13 row 25, which supersedes rows 24 and the original "likely 17".)*
 
 ### 3b. Install it
 
 ```bash
-winget install --id PostgreSQL.PostgreSQL.17 -e --interactive
+winget install --id PostgreSQL.PostgreSQL.18 -e --interactive
 ```
 
 `--interactive` opens the wizard, which matters — you set the port and password there
@@ -140,7 +148,7 @@ rather than passing a password on a command line into shell history.
 
 | Setting | Value |
 |---|---|
-| **Port** | **`5433`** ← *not* the default 5432. Deliberate: nothing else on the machine is disturbed |
+| **Port** | **`5435`** ← *not* the default 5432, and *not* 5433 (already bound by another project's container on this machine). Deliberate: nothing else is disturbed |
 | Password | For the `postgres` superuser. Ian keeps this; it goes in `.env.local` |
 | Components | PostgreSQL Server + Command Line Tools (pgAdmin optional) |
 | Stack Builder | Skip |
@@ -151,16 +159,16 @@ rather than passing a password on a command line into shell history.
 psql --version
 ```
 
-If not found, add `C:\Program Files\PostgreSQL\17\bin` to PATH and reopen the terminal.
+If not found, add `C:\Program Files\PostgreSQL\18\bin` to PATH and reopen the terminal.
 
-**Fallbacks if winget misbehaves:** Docker (`docker run -d --name erpv2-pg -e POSTGRES_PASSWORD=... -p 5433:5432 postgres:17`)
+**Fallbacks if winget misbehaves:** Docker (`docker run -d --name erpv2-pg -e POSTGRES_PASSWORD=... -p 5435:5432 postgres:18`)
 or WSL2 Ubuntu (`sudo apt install postgresql-17`). Linux builds are still published.
 
 ### 3c. Create the databases
 
 ```bash
-psql -U postgres -p 5433 -c "CREATE DATABASE erpv2_dev;"
-psql -U postgres -p 5433 -c "CREATE DATABASE erpv2_test;"
+psql -U postgres -p 5435 -c "CREATE DATABASE erpv2_dev;"
+psql -U postgres -p 5435 -c "CREATE DATABASE erpv2_test;"
 ```
 
 `erpv2_test` is **truncated between test runs**. The integration-test guard refuses any
@@ -182,8 +190,8 @@ there, and startup fails loudly with a readable list if any required one is miss
 Minimum to get running locally:
 
 ```
-DATABASE_URL=postgresql://postgres:<password>@localhost:5433/erpv2_dev
-TEST_DATABASE_URL=postgresql://postgres:<password>@localhost:5433/erpv2_test
+DATABASE_URL=postgresql://postgres:<password>@localhost:5435/erpv2_dev
+TEST_DATABASE_URL=postgresql://postgres:<password>@localhost:5435/erpv2_test
 SESSION_SECRET=<generate: openssl rand -base64 48>
 ```
 
@@ -262,7 +270,7 @@ new machine starts from zero.
 
 | | Task | Blocks |
 |---|---|---|
-| ☐ 1 | Install PostgreSQL locally on port 5433 (§3) | Local dev and integration tests |
+| ☐ 1 | Install PostgreSQL locally on port 5435 (§3) | Local dev and integration tests |
 | ☐ 2 | Create the DO Managed Postgres (SGP1, same VPC as the droplet, trusted source = droplet) | Production only — **not** Phase 1 work |
 | ☐ 3 | Report what is running on the droplet | Planning its second life |
 | ☐ 4 | Optionally install + authenticate `doctl` (Ian pastes the token; the agent never sees it) | Nothing — console works too |

@@ -19,11 +19,11 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16
+        image: postgres:18
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: erpv2_test
-        ports: ['5433:5432']
+        ports: ['5435:5432']
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -34,8 +34,8 @@ jobs:
       # CI-only throwaway values. Real secrets live in GitHub Secrets, never here.
       NODE_ENV: test
       APP_TIMEZONE: Asia/Manila
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5433/erpv2_test
-      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5433/erpv2_test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5435/erpv2_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5435/erpv2_test
       SESSION_SECRET: ci-only-not-a-real-secret-000000000000
       FIREBASE_PROJECT_ID: ci-placeholder
       FIREBASE_SERVICE_ACCOUNT_KEY: '{}'

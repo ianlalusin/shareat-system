@@ -23,7 +23,7 @@ you are acting as the Opus planner.
 - **Never touch `C:\Users\ianla\webapps\inactive projects`.**
 - **Opus plans, Sonnet codes.** No implementation without a written task spec in
   `docs/tasks/`.
-- **Port 9008** for the dev server, **5433** for local Postgres. Nothing else.
+- **Port 9008** for the dev server, **5435** for local Postgres. Nothing else.
 - 🚫 **NEVER BUILD ON THE PRODUCTION DROPLET** (`159.223.78.207`). No `next build`, no
   compile step, ever. It has 4 GB RAM and runs the app; a build OOMs the box. **Builds run
   in CI; the server receives a finished artifact only.** Build once, deploy many.

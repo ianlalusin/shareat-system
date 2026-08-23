@@ -18,19 +18,20 @@ something worked, say "done" — not the value.
 
 ### Do this in order — the version must match production
 
-**1a. Check DigitalOcean's version first.** Start Task 2, and on the create-cluster
-screen look at the PostgreSQL **version dropdown**. Note the newest version offered
-(likely **17**). Local and production should be the same major version, so a query that
-works in dev cannot fail in production on a version difference.
+**1a. The version is already decided: PostgreSQL 18.** No need to check DigitalOcean
+first — DO supports 18, CI runs `postgres:18`, and bible §4.1 specifies 18. Local must be
+18 so your machine matches the pipeline that gates every commit. The deciding reason is
+native `uuidv7()` (bible §4.2 rule 1). When you create the DO cluster in Task 2, pick
+**18** there as well.
 
 **1b. Install that same version locally:**
 
 ```bash
 # if DO offers 17 (most likely)
-winget install --id PostgreSQL.PostgreSQL.17 -e --interactive
+winget install --id PostgreSQL.PostgreSQL.18 -e --interactive
 
 # if DO's newest is 16
-winget install --id PostgreSQL.PostgreSQL.16 -e --interactive
+winget install --id PostgreSQL.PostgreSQL.18 -e --interactive
 ```
 
 `--interactive` matters: it opens the setup wizard so you can set the port and password
@@ -41,7 +42,7 @@ command line where it would land in shell history.
 
 | Setting | Value |
 |---|---|
-| **Port** | **`5433`** ← *not* the default 5432. Deliberate, so any other Postgres on this machine is never disturbed |
+| **Port** | **`5435`** ← *not* the default 5432, and *not* 5433 (taken by `amianai-postgres`). Deliberate, so no other Postgres on this machine is disturbed |
 | Password | For the `postgres` superuser. Keep it safe; you will put it in `.env.local` |
 | Components | PostgreSQL Server + Command Line Tools. pgAdmin optional |
 | Stack Builder | Skip at the end |
@@ -53,14 +54,14 @@ psql --version
 ```
 
 If it says `command not found`, add the install's `bin` folder to PATH
-(e.g. `C:\Program Files\PostgreSQL\17\bin`) and reopen the terminal.
+(e.g. `C:\Program Files\PostgreSQL\18\bin`) and reopen the terminal.
 
 **Tell me:** "local postgres done, version NN" — I will create the `erpv2_dev` and
 `erpv2_test` databases and wire up `.env.local`.
 
 ### Alternatives, if winget gives you trouble
 
-- **Docker** (installed here, v29.6.1): `docker run -d --name erpv2-pg -e POSTGRES_PASSWORD=... -p 5433:5432 postgres:17`
+- **Docker** (installed here, v29.6.1): `docker run -d --name erpv2-pg -e POSTGRES_PASSWORD=... -p 5435:5432 postgres:18`
   Fast, but Docker Desktop/WSL2 has been flaky on this machine before, so it is the fallback rather than the default.
 - **WSL2 Ubuntu** (already your default distro): `sudo apt install postgresql-17`.
   Linux builds *are* still published, so this works — it just puts the database behind
@@ -75,7 +76,7 @@ If it says `command not found`, add the install's `bin` folder to PATH
 
    | Field | Value | Why |
    |---|---|---|
-   | Engine | **newest offered (likely 17)** | Note it — install the SAME major version locally in Task 1 |
+   | Engine | **PostgreSQL 18** | Must match CI and local (bible §13 row 25) |
    | Region | **Singapore / SGP1** | **Must match the droplet** or you lose private networking |
    | VPC Network | **the same VPC as SharEat-Droplet** | This is what keeps the DB off the public internet |
    | Plan | Basic — smallest node | Resizes later; start small |

@@ -45,7 +45,7 @@ that requires one.** PostgreSQL is the means; books you can trust are the end.
 
 ## Stack
 
-Next.js 16 · TypeScript · Tailwind · Drizzle ORM · PostgreSQL 17 · Firebase Auth (identity
+Next.js 16 · TypeScript · Tailwind · Drizzle ORM · PostgreSQL 18 · Firebase Auth (identity
 only; authority lives in Postgres) · Vitest · GitHub Actions
 
 ## Local development
@@ -68,7 +68,7 @@ npm run build                  # stop the dev server first
 1. **`ERP-rebuild` is READ-ONLY.** Live production, owned by someone else. Never modify it.
 2. 🚫 **Never build on the production droplet.** Builds run in CI; the server receives a
    finished artifact only. Build once, deploy many.
-3. **Port 9008** for dev, **5433** for local Postgres. Nothing else.
+3. **Port 9008** for dev, **5435** for local Postgres. Nothing else.
 4. **Money is never a float.** `numeric` in the database, integer centavos in code.
 5. **No client-side-only authorization.** Every gate exists server-side.
 

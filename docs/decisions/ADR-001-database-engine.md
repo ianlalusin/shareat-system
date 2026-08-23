@@ -32,7 +32,7 @@ carried forward:
 
 ## Decision
 
-**PostgreSQL 16** is the system of record for ERPv2.
+**PostgreSQL 18** is the system of record for ERPv2.
 
 ## Rationale
 

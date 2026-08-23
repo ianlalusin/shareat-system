@@ -114,4 +114,4 @@ Postgres + Drizzle · Firebase Auth retained as IdP, roles in Postgres · Firest
 two-lane mirror/inbox replacing the IndexedDB sync engine · clock terminal on the
 client SDK · face templates permanently excluded · biometric mirror device-only ·
 one `person` spine with server-issued sessions · attendance config added to the hot
-set · ports 9008/5433 · attendance is Phase 2.
+set · ports 9008/5435 · attendance is Phase 2.
