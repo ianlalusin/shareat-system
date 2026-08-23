@@ -409,6 +409,13 @@ Every spec must contain, or the Sonnet agent must refuse it:
   files don't.
 - Parallelise only genuinely independent work. Two agents must never touch the
   same file.
+- **Disjoint files are not enough — check shared STATE too.** Two agents running
+  `test:integration` against the one `shareat_test` database `TRUNCATE` each other's
+  fixtures mid-run, producing failures in files neither agent touched. Observed
+  2026-08-23 running T-106 and T-107 in parallel: both were correctly scoped to disjoint
+  files and still collided in the database. **Before parallelising, ask what else they
+  share** — the test database, `migrations/meta/_journal.json`, a port, an external
+  service. File ownership is necessary, not sufficient.
 - A subagent that handles credentials **redacts, never writes the real value**.
 
 ### 3.5 Reporting to Ian
@@ -1060,6 +1067,8 @@ just a patch.**
 | 91 | 2026-08-23 | **Phase plan revised: every one of the 33 unowned capabilities now has a phase** (`docs/CAPABILITY-GAPS.md`) | Phase 2 gains the five ledger-posting financial modules it silently omitted, which expands the January cutover scope. **Phase 3 gains the commissary→branch pipeline as a named deliverable** — ~24 capabilities that straddled Phases 2 and 3 and were owned by neither, which is exactly how a branch store's entire replenishment path went unplanned. Staff master record and position taxonomy move to Phase 4 as explicit prerequisites of 4 and 5. Nice-to-haves are **deferred, not unassigned** — row 87's distinction | No |
 | 92 | 2026-08-23 | **T-104 (constraint tests) is ABSORBED by T-103, not built separately** | T-103 shipped 27 tests across all 19 invariants against real Postgres, already proving the database refuses a single-leg entry, a zero-line entry, an unbalanced entry, a closed/locked-period posting, a header or reserved posting target, an edit or delete of a posted entry, and a duplicate idempotency key. A separate T-104 would build duplicates of tests that already exist. Phase 1's task count drops from 16 to 15 | Yes |
 | 93 | 2026-08-23 | **Model selection is a deliberate choice per task, not a default (§3.1a): Sonnet explores and implements, Opus plans and reviews, Fable is reserved for two specific cases** | Ian: *"juggle Fable, Opus and Sonnet for the specific task that needs them."* Sonnet is the default for delegated work — code reading, discovery, capability inventories, executing a written spec. Opus owns planning, architecture, specs, review, and anything landing in §13. **Fable is reserved for (1) a bug that has already survived a deliberate Opus pass, and (2) genuinely intricate data-shape design where getting the shape wrong is expensive to undo.** Two guards recorded with it: "Opus found it hard" is **not** the bar for escalation — a systematic pass must have been made and failed — and **Opus must not be spent on what Sonnet does well**, because every Opus turn on mechanical reading is a decision not being made | Yes |
+| 94 | 2026-08-23 | **Parallel agents must share no STATE, not merely no files** (§3.4) | Observed running T-106 and T-107 concurrently: both were correctly scoped to disjoint files and still collided, because both ran `test:integration` against the single `shareat_test` database and truncated each other's fixtures mid-run — producing sporadic failures in files **neither agent had touched**. The final serialised run was 136/136 clean, so the collision was pure noise, but noise that looks exactly like a real regression is expensive. Before parallelising, ask what else is shared: the test database, `migrations/meta/_journal.json`, a port, an external service | Yes |
+| 95 | 2026-08-23 | **A guard written against the states that exist today stops guarding when a new state appears** (DEF-036) | Migration `0004`'s immutability check tested `entry_status = 'posted'` only. Correct when written — nothing produced a `'reversed'` entry yet. T-106 introduced that transition, which would have left every reversed entry's lines editable by raw SQL, breaking invariant 6. Found by the T-106 implementer while implementing something else and outside its own contract. **Any status added to `journal_entries` must be checked against every trigger that switches on status** | No |
 
 ---
 

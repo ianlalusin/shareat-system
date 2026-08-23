@@ -3,3 +3,4 @@
  * transactions (PROJECT_BIBLE.md §4.3). Never imports from `apps/` (bible §8).
  */
 export * from './ledger/post-entry';
+export * from './ledger/reverse-entry';

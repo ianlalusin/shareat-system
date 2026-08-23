@@ -1,6 +1,8 @@
 # T-107 — The legacy leg adapter: `direction: in|out` → debit / credit
 
-> **Status:** spec ready. **Depends on:** T-102 (COA seeded), T-105 (`postEntry`).
+> **Status:** ✅ **COMPLETE 2026-08-23** — 19/19 invariants. See the correction at the end:
+> my §4 motivation overstated how many accounts will actually flag.
+> **Was:** spec ready. **Depends on:** T-102 (COA seeded), T-105 (`postEntry`).
 > **Blocks:** T-112 / T-114 — the ETL cannot read v1's journal without this.
 > **Written by:** Opus planner, 2026-08-23. Bible §3.3 format.
 > **Runs alongside T-106.** Scope is disjoint by construction — see below.
@@ -189,3 +191,32 @@ schema change · anything in T-106's scope.
       still pass**) · `build` succeeds.
 - [ ] No file outside the three named in **Scope** modified.
 - [ ] Any spec defect **reported, not silently worked around**.
+
+
+---
+
+## Correction — my §4 motivation was overstated
+
+The implementer reproduced v1's prefix table faithfully and then checked it against the real
+`legacyCode`s in the seeded chart. **Three of the six accounts I named do not actually
+disagree:**
+
+| Account | Why no disagreement |
+|---|---|
+| **1590** accumulated depreciation | v1 already special-cases `contra_asset__*` as **credit** — matching 1590's declared credit-normal exactly |
+| **4910** loyalty points redeemed | v1 buckets generic `others__*` as **debit** — matching 4910's declared debit-normal contra-revenue |
+| **4920** vouchers redeemed | same |
+
+**v1's heuristic is better than I gave it credit for.** It special-cases the contra-asset
+prefix and, by accident of bucketing, gets the `others__` contra-revenue cases right too.
+
+A genuine disagreement only appears where a legacy id carries a domain-intuitive prefix the
+table does *not* special-case — `equity__owner_drawings` → 3200 is the clear example, since
+drawings are credit by the `equity__` rule and debit by declaration. The unit test for
+invariant 14 uses that case rather than one of the three that would never fire.
+
+**Nothing in the implementation changes** — §4 says reproduce the table exactly, and it does.
+What changes is the expectation: **the disagreement check will flag fewer accounts than I
+implied**, and how many depends entirely on which real legacy prefixes T-113's mapping
+resolves them from. The check is still worth having; the claim that six accounts were
+landmines was not evidence, it was inference.

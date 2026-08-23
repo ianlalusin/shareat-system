@@ -1,6 +1,8 @@
 # T-106 — `reverseEntry`: corrections as new entries, never edits
 
-> **Status:** spec ready. **Depends on:** T-103, T-105 (both done).
+> **Status:** ✅ **COMPLETE 2026-08-23** — 19/19 invariants + 2 extra. §5 solved with a
+> transaction-local GUC, not the mechanism I suggested. Found and fixed DEF-036 on the way.
+> **Was:** spec ready. **Depends on:** T-103, T-105 (both done).
 > **Blocks:** T-107, T-108, T-109, T-112 (the ETL needs to unwind a bad load).
 > **Written by:** Opus planner, 2026-08-23. Bible §3.3 format.
 
@@ -169,3 +171,39 @@ semantics (a void is a *document* concept and is not the same as a reversal — 
       tests still pass**) · `build` succeeds.
 - [ ] `reverseEntry` reuses `postEntry` rather than duplicating its ordering logic.
 - [ ] Any spec defect **reported, not silently worked around**.
+
+
+---
+
+## Implementation notes — resolved 2026-08-23
+
+**1. My suggested §5 mechanism does not work; the implementer found a better one.**
+I proposed exempting the eligibility trigger on `reversal_of_entry_id IS NOT NULL`. That column
+**cannot be populated before the reversal's lines are inserted** — `postEntry` has no field for
+it, and by the time `postEntry` returns the entry is already `posted` and frozen. There is no
+reachable moment in between without either editing `postEntry` (forbidden) or hand-rolling a
+second posting path (forbidden).
+
+The implementation uses a **transaction-local GUC** instead:
+`set_config('app.reversal_posting', 'on', true)`. It is cleared automatically at commit or
+rollback, is invisible to any other transaction, and survives connection pooling safely
+because the `true` flag scopes it to the transaction rather than the session.
+
+`is_postable` stays enforced **unconditionally** — a header account is rejected even with the
+GUC set. Only the `status <> 'active'` check is skipped.
+
+**2. My "only if §5 requires one" was wrong — §2 forces a migration by itself.**
+`reverseEntry` must backfill `reversal_of_entry_id` *after* `postEntry` returns, and T-103's
+immutability trigger freezes every column of a posted entry. Migration `0005` adds one narrow
+additive exception: a posted entry may have `reversal_of_entry_id` set exactly once
+(`NULL` → a value), with nothing else changing in that statement, gated on `posted.created` so
+an idempotency-race loser never double-processes.
+
+**3. It found a dormant hole outside its own contract — DEF-036.**
+Migration `0004` froze lines only when `entry_status = 'posted'`. Nothing had ever produced a
+`'reversed'` entry, so it was dormant — and T-106 would have created the first one, leaving
+**the original's own lines mutable the instant it was reversed**, breaking invariant 6. Fixed
+in `0005` with `entry_status IN ('posted','reversed')`, covered by an extra test.
+
+> **The general lesson, recorded as bible §13 row 95:** a guard written against the states that
+> exist today silently stops guarding when a new state is introduced.

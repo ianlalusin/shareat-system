@@ -225,3 +225,170 @@ export async function postDraftEntry(tx: Tx, entryId: string, postedBy: string |
     );
   }
 }
+
+// -----------------------------------------------------------------------------------------
+// Reversal (docs/tasks/106-reverse-entry.md) — extends this same repo. reverseEntry
+// (packages/domain/src/ledger/reverse-entry.ts) drives these; it reuses postEntry above
+// for the actual draft -> lines -> posted write of the reversal entry itself and only
+// calls the functions below for what postEntry cannot do on its own: reading the
+// original entry back, exempting its OWN lines from the active-account check, and
+// linking the two entries together afterward.
+// -----------------------------------------------------------------------------------------
+
+export interface JournalEntryRow {
+  id: string;
+  orgId: string;
+  entryDate: string;
+  periodId: string;
+  status: 'draft' | 'posted' | 'reversed';
+  sourceType: string;
+  sourceId: string;
+  memo: string | null;
+  reversalOfEntryId: string | null;
+}
+
+/** The entry itself, by id — undefined if it does not exist. No org filter: the caller
+ * (reverseEntry) does not know the org in advance, and derives it FROM this row. */
+export async function findEntryById(tx: Tx, entryId: string): Promise<JournalEntryRow | undefined> {
+  const [row] = await tx
+    .select({
+      id: journalEntries.id,
+      orgId: journalEntries.orgId,
+      entryDate: journalEntries.entryDate,
+      periodId: journalEntries.periodId,
+      status: journalEntries.status,
+      sourceType: journalEntries.sourceType,
+      sourceId: journalEntries.sourceId,
+      memo: journalEntries.memo,
+      reversalOfEntryId: journalEntries.reversalOfEntryId,
+    })
+    .from(journalEntries)
+    .where(eq(journalEntries.id, entryId))
+    .limit(1);
+  return row as JournalEntryRow | undefined;
+}
+
+/** The fiscal period by id (as opposed to `findPeriodForDate`, keyed by date) — reverseEntry
+ * needs the ORIGINAL entry's own period's current status, not a new date-based lookup. */
+export async function findPeriodById(tx: Tx, periodId: string): Promise<PeriodForDate | undefined> {
+  const [row] = await tx
+    .select({
+      id: fiscalPeriods.id,
+      status: fiscalPeriods.status,
+      startsOn: fiscalPeriods.startsOn,
+      endsOn: fiscalPeriods.endsOn,
+    })
+    .from(fiscalPeriods)
+    .where(eq(fiscalPeriods.id, periodId))
+    .limit(1);
+  return row;
+}
+
+/** The entry (if any) whose `reversal_of_entry_id` names `originalEntryId` — used only
+ * to name the existing reversal when a caller tries to reverse an already-reversed
+ * entry a second time (Contract §6 / invariant 8). */
+export async function findReversalOfEntry(
+  tx: Tx,
+  orgId: string,
+  originalEntryId: string,
+): Promise<{ id: string } | undefined> {
+  const [row] = await tx
+    .select({ id: journalEntries.id })
+    .from(journalEntries)
+    .where(and(eq(journalEntries.orgId, orgId), eq(journalEntries.reversalOfEntryId, originalEntryId)))
+    .limit(1);
+  return row;
+}
+
+export interface EntryLineWithAccountCode {
+  lineNo: number;
+  accountCode: string;
+  storeId: string | null;
+  channelId: string | null;
+  debit: string;
+  credit: string;
+  lineMemo: string | null;
+}
+
+/** A posted entry's own lines, joined back to `accounts.code` — postEntry's
+ * PostEntryLine takes an accountCode, never an accountId (Contract §1), so reverseEntry
+ * needs the code back to hand the mirrored lines to postEntry the same way any other
+ * caller would. */
+export async function findLinesForEntryWithAccountCodes(
+  tx: Tx,
+  entryId: string,
+): Promise<EntryLineWithAccountCode[]> {
+  const rows = await tx
+    .select({
+      lineNo: journalLines.lineNo,
+      accountCode: accounts.code,
+      storeId: journalLines.storeId,
+      channelId: journalLines.channelId,
+      debit: journalLines.debit,
+      credit: journalLines.credit,
+      lineMemo: journalLines.lineMemo,
+    })
+    .from(journalLines)
+    .innerJoin(accounts, eq(accounts.id, journalLines.accountId))
+    .where(eq(journalLines.entryId, entryId))
+    .orderBy(journalLines.lineNo);
+  return rows;
+}
+
+/**
+ * Sets a transaction-LOCAL flag (`set_config(..., true)` — cleared at commit/rollback,
+ * never visible to any other transaction or pooled connection) that exempts this
+ * transaction's journal_lines INSERTs from the active-account-status check (migration
+ * 0005). Must be called BEFORE postEntry builds the reversal's lines within the SAME
+ * transaction reverseEntry owns. Never called by ordinary postEntry callers — see
+ * invariant 17 (the exemption must not leak into ordinary postings).
+ */
+export async function beginReversalPostingContext(tx: Tx): Promise<void> {
+  await tx.execute(sql`select set_config('app.reversal_posting', 'on', true)`);
+}
+
+/**
+ * Backfills the reversal entry's OWN `reversal_of_entry_id`, pointing at the original it
+ * unwinds (Contract §2). Necessarily an UPDATE, after postEntry has already posted the
+ * new entry — postEntry (T-105, untouched by this task) has no field for it, and the
+ * row does not exist to be linked until postEntry creates it. Relies on migration
+ * 0005's narrow immutability exception (NULL -> a value, once, nothing else changing in
+ * the same statement). Throws if the target row does not exist, is not posted, or
+ * already has a reversal_of_entry_id set (the exception's own guard would otherwise
+ * reject a second call with a less specific error).
+ */
+export async function setReversalOfEntryId(
+  tx: Tx,
+  entryId: string,
+  originalEntryId: string,
+): Promise<void> {
+  const updated = await tx
+    .update(journalEntries)
+    .set({ reversalOfEntryId: originalEntryId, updatedAt: sql`now()` })
+    .where(and(eq(journalEntries.id, entryId), sql`${journalEntries.reversalOfEntryId} is null`))
+    .returning({ id: journalEntries.id });
+
+  if (updated.length === 0) {
+    throw new Error(
+      `setReversalOfEntryId: entry ${entryId} does not exist or already has a reversal_of_entry_id`,
+    );
+  }
+}
+
+/**
+ * Flips the ORIGINAL entry's status posted -> reversed (Contract §2's "the original
+ * transitions posted -> reversed. T-103 already permits exactly that transition and no
+ * other mutation" — migration 0003's trigger already allows this; migration 0005 only
+ * adds the separate reversal_of_entry_id-backfill exception above, for the NEW entry).
+ */
+export async function markEntryReversed(tx: Tx, entryId: string): Promise<void> {
+  const updated = await tx
+    .update(journalEntries)
+    .set({ status: 'reversed', updatedAt: sql`now()` })
+    .where(and(eq(journalEntries.id, entryId), eq(journalEntries.status, 'posted')))
+    .returning({ id: journalEntries.id });
+
+  if (updated.length === 0) {
+    throw new Error(`markEntryReversed: entry ${entryId} was not a posted entry`);
+  }
+}
