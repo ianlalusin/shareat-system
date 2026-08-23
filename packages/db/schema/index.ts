@@ -3,7 +3,9 @@
  *
  * T-101 laid the core schema: organizations, stores, persons + person_identities,
  * accounts, fiscal_periods, audit_log. T-103 adds journal_entries / journal_lines — the
- * nominal ledger (docs/tasks/103-journal-tables.md).
+ * nominal ledger (docs/tasks/103-journal-tables.md). T-112 adds etl_runs /
+ * etl_source_documents / etl_quarantine / etl_reconciliation — the ETL framework
+ * (docs/tasks/112-etl-framework.md).
  */
 
 export * from './organizations';
@@ -13,3 +15,4 @@ export * from './accounts';
 export * from './fiscal-periods';
 export * from './audit-log';
 export * from './journal';
+export * from './etl';

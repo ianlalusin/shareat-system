@@ -10,7 +10,10 @@
     "./pseudonymise": "./src/pseudonymise.ts",
     "./capture": "./src/capture.ts",
     "./convert": "./src/convert.ts",
-    "./report": "./src/report.ts"
+    "./report": "./src/report.ts",
+    "./source-reader": "./src/source-reader.ts",
+    "./reconcile": "./src/reconcile.ts",
+    "./run": "./src/run.ts"
   },
-  "dependencies": { "@shareat/core": "*" }
+  "dependencies": { "@shareat/core": "*", "@shareat/db": "*", "@shareat/domain": "*" }
 }
