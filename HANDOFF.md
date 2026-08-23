@@ -133,7 +133,7 @@ primary keys, and on 16 that needs an extension or app-side generation.
 
 When the DigitalOcean Managed cluster is created (§6 Task 2), select **18** there too.
 Changing the project's major version is a bible amendment (§14), not a setup-time
-choice. *(See bible §13 row 25, which supersedes rows 24 and the original "likely 17".)*
+choice. *(See bible §13 row 70, which supersedes rows 69 and the original "likely 17".)*
 
 ### 3b. Install it
 

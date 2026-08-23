@@ -16,6 +16,18 @@ import { z } from 'zod';
 
 const isServer = typeof window === 'undefined';
 
+/**
+ * Not-yet-required config. An unset variable in a .env file arrives as the EMPTY
+ * STRING, not `undefined`, so a bare `.optional()` does not accept it — `.min(1)`
+ * still rejects `''`. Normalise blank to undefined first, then allow absence.
+ * This never substitutes a value; absent stays absent.
+ */
+const blankAsAbsent = () =>
+  z.preprocess(
+    (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+    z.string().trim().min(1).optional(),
+  );
+
 /** A secret that must be present and non-trivial. No default, ever. */
 const requiredSecret = (minLength = 16) =>
   z
@@ -39,8 +51,21 @@ const serverSchema = z.object({
 
   DATABASE_POOL_MAX: z.coerce.number().int().positive().max(100).default(10),
 
-  FIREBASE_PROJECT_ID: z.string().trim().min(1, 'is required'),
-  FIREBASE_SERVICE_ACCOUNT_KEY: z.string().trim().min(1, 'is required'),
+  /**
+   * Firebase Admin credentials — the IdP side of §7.1.
+   *
+   * REQUIRED IN PRODUCTION, optional in development/test until the auth bridge
+   * lands (Phase 0 T-006). Nothing reads these yet, and Phase 1 is schema and the
+   * posting engine — no auth on the path. Demanding them now blocks local dev on
+   * credentials the code does not use, which is what HANDOFF.md §4 already promised
+   * you would not have to supply ("Firebase values can stay blank until T-006").
+   *
+   * This is NOT a §7 rule 9 fallback: nothing is defaulted, and no insecure value is
+   * substituted. The variable is simply not yet required by any code path. In
+   * production it stays hard-required, enforced by the superRefine below.
+   */
+  FIREBASE_PROJECT_ID: blankAsAbsent(),
+  FIREBASE_SERVICE_ACCOUNT_KEY: blankAsAbsent(),
 
   /** Signs shared-terminal session tokens (bible §7.1). Never defaulted. */
   SESSION_SECRET: requiredSecret(32),
@@ -48,7 +73,21 @@ const serverSchema = z.object({
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace'])
     .default('info'),
-});
+})
+  .superRefine((cfg, ctx) => {
+    // Fail closed in production: the auth bridge is live there, so a missing
+    // credential must abort startup rather than degrade silently.
+    if (cfg.NODE_ENV !== 'production') return;
+    for (const key of ['FIREBASE_PROJECT_ID', 'FIREBASE_SERVICE_ACCOUNT_KEY'] as const) {
+      if (!cfg[key]) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: 'is required in production',
+        });
+      }
+    }
+  });
 
 export type ServerEnv = z.infer<typeof serverSchema>;
 

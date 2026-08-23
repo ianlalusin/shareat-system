@@ -76,7 +76,7 @@ If it says `command not found`, add the install's `bin` folder to PATH
 
    | Field | Value | Why |
    |---|---|---|
-   | Engine | **PostgreSQL 18** | Must match CI and local (bible §13 row 25) |
+   | Engine | **PostgreSQL 18** | Must match CI and local (bible §13 row 70) |
    | Region | **Singapore / SGP1** | **Must match the droplet** or you lose private networking |
    | VPC Network | **the same VPC as SharEat-Droplet** | This is what keeps the DB off the public internet |
    | Plan | Basic — smallest node | Resizes later; start small |

@@ -192,7 +192,7 @@ figures derived from punches.
 
 | | |
 |---|---|
-| **Postgres** | Native install, **port 5435** (a non-default port, so no other Postgres on the machine is disturbed; 5433 was the original pick and proved to be taken — see bible §13 row 23). Docker optional — Docker Desktop/WSL2 is flaky on this machine, so native is the safer default |
+| **Postgres** | Native install, **port 5435** (a non-default port, so no other Postgres on the machine is disturbed; 5433 was the original pick and proved to be taken — see bible §13 row 68). Docker optional — Docker Desktop/WSL2 is flaky on this machine, so native is the safer default |
 | **App** | `npm run dev` on **port 9008** |
 | **Auth** | Points at the real Firebase project, same as v1 dev does today |
 | **Migrations** | Always applied to local first, then promoted. Forward-only, committed |

@@ -7,7 +7,7 @@
 
 | | |
 |---|---|
-| **Version** | 1.4 — Phase 0 scaffold green; local env pinned (port 5435, Postgres 18) |
+| **Version** | 1.5 — Phase 0 verified end to end on real Postgres 18; local env pinned (port 5435) |
 | **Created** | 2026-08-22 |
 | **Last amended** | 2026-08-23 |
 | **Status** | Accounting-correctness project (§1.1). All discovery complete. Root cause identified (§16.0). **Chart of accounts aligned and signed off.** Ready to write Phase 0/1 task specs. |
@@ -346,7 +346,7 @@ agent-facing checks stay out of that block.
 |---|---|---|
 | **Database** | **PostgreSQL 18** | Native `uuidv7()` for primary keys (§4.2 rule 1) without an extension — the deciding factor. Plus real transactions, FK + CHECK constraints, `numeric` money, window functions for aging/ledger/payroll, partial + expression indexes, materialised views for report read-models |
 | **Prod hosting** | **Cloud SQL for PostgreSQL** | Same GCP project/region as the existing app; private IP from Firebase App Hosting |
-| **Local dev** | Postgres 18, port **5435** | A non-default port, so no other Postgres on the machine is disturbed. Was 5433; moved 2026-08-23 after 5433 was found already bound by another project's container (§13 row 23). Docker optional — Docker Desktop/WSL2 is flaky on this machine; a native install is the safer default |
+| **Local dev** | Postgres 18, port **5435** | A non-default port, so no other Postgres on the machine is disturbed. Was 5433; moved 2026-08-23 after 5433 was found already bound by another project's container (§13 row 68). Docker optional — Docker Desktop/WSL2 is flaky on this machine; a native install is the safer default |
 | **ORM / query** | **Drizzle ORM** | SQL-first and typed; migrations are plain reviewable SQL; **no native binary engine**, which avoids the Next.js server-bundling class of failure that a binary-engine ORM drags in |
 | **App** | Next.js 16 App Router, TypeScript, Tailwind, shadcn/Radix | Carried over from ERP-rebuild unchanged |
 | **Identity** | **Firebase Auth stays** as the IdP | Staff already have accounts; the phone/APK flows already work. Postgres owns roles and permissions, not Firebase |
@@ -619,6 +619,14 @@ Device identities authenticate with a server-issued credential, and that credent
 9. **Secrets fail closed.** A missing secret aborts startup. It never falls back to a
    default, a public value, or a dev constant. *(v1's passcode HMAC secret falls back
    to a public value if the production secret is unset — it fails **open**.)*
+   **Scope note (2026-08-23, §13 row 71):** "fails closed" governs secrets a code path
+   actually uses. A credential for a subsystem not yet wired may be declared
+   *not-yet-required outside production* — never defaulted, never substituted, and still
+   hard-required in production. Demanding a credential nothing reads does not add
+   safety; it just blocks local development. Two traps to remember: an unset variable in
+   a `.env` file arrives as the **empty string, not `undefined`**, so `.optional()` alone
+   does not accept it; and a relaxation like this must be **covered by a test asserting
+   the production path still refuses**, or it silently becomes permanent.
 10. **Field-level authorization, not just row-level.** Store membership must not imply
     the right to read pay rates, salary-advance balances, infractions, or ledgers.
     Sensitive columns are gated per `(action, resource)`, and repositories expose
@@ -893,9 +901,6 @@ just a patch.**
 | 20 | 2026-08-22 | Strangler Fig with per-module feature flags; no big-bang cutover (§15.3) | Big-bang rewrites of live production systems are the best-documented failure mode in the industry | No |
 | 21 | 2026-08-22 | No dual-write between v1 and v2 (§15.4) | Silent divergence; one writer per module at any moment | No |
 | 22 | 2026-08-22 | Event sourcing / CQRS explicitly rejected; append-only ledgers only (§15.10) | Overkill for a single-business ERP with one operator | Yes |
-| 23 | 2026-08-23 | **Local Postgres port 5433 → 5435. Supersedes row 5** (port 9008 is unchanged) | Row 5 assumed 5433 was free. On Ian's machine it is bound by `amianai-postgres` (the AGENCY stack, `postgres:16-alpine`, Docker). The *reasoning* in row 5 was right — avoid the default 5432 so no other Postgres is disturbed — only the number was wrong. 5435 verified free alongside 5432/5436 | Yes |
-| 24 | 2026-08-23 | ~~Local Postgres major version pinned to **16**~~ — **superseded by row 25 the same day** | CI pins `postgres:16` and §4.1 specifies 16; HANDOFF §3a said "likely 17". Installing 17 locally would have made dev diverge from CI — the exact class of bug §3a exists to prevent. The DO Managed cluster must also be created as 16 | Superseded — see row 25 |
-| 25 | 2026-08-23 | **PostgreSQL 18 project-wide (local + CI + DO). Supersedes rows 24 and §4.1's original 16** | Row 24 treated CI's `postgres:16` as a constraint; it was only the scaffold-time default, and §4.1's rationale (transactions, constraints, `numeric`, window functions, partial indexes, matviews) is satisfied by every version from 16 up — so nothing actually pinned 16. **18 earns the change on its own merits: native `uuidv7()`**, which §4.2 rule 1 wants for primary keys and which 16 needs an extension or app-side generation to provide. DigitalOcean Managed Postgres supports 18, so local == CI == prod holds. Cost is one line in `ci.yml` and some docs, because no schema or data exists yet | Yes, until Phase 1 data exists — then expensive |
 | 23 | 2026-08-22 | **ERPv2 reframed: an accounting-correctness project, not a DB migration** (§1.1) | Ian: v1 is vibecoded with accounting gaps; correctness is the goal, SQL is the means | No |
 | 24 | 2026-08-22 | **SUPERSEDES #17.** Parity splits three ways: workflow FIXED, accounting NOT parity, data handling FREE (§1.3) | Golden-mastering accounting against v1 would certify v1's defects as v2's requirements | No |
 | 25 | 2026-08-22 | Accounting oracle is double-entry law, not v1; divergences logged in `ACCOUNTING-DIVERGENCES.md` (§16.2) | v1 is a comparison subject, not a target | No |
@@ -941,6 +946,11 @@ just a patch.**
 | 65 | 2026-08-22 | **PostgreSQL forbids DEFERRABLE on CHECK constraints.** Balance + minimum-two-lines must be a `CONSTRAINT TRIGGER ... DEFERRABLE INITIALLY DEFERRED`; per-row rules stay immediate CHECKs | Balance is inherently multi-row — an entry is legitimately unbalanced after its first line and need only be correct at COMMIT. Caught by the walking-skeleton test before Phase 1 was built on it | No |
 | 66 | 2026-08-22 | `esbuild` pinned via `overrides` to a single version | Two versions forced a nested copy whose platform-specific optional packages lost their `optional` flag, breaking `npm ci` on Linux | Yes |
 | 67 | 2026-08-22 | Money crosses the wire as a **string**, computed in integer centavos; `moneyFromLegacyFloat()` is the ETL-only escape hatch and **flags** every ambiguous source value | Reproduce v1's figure, surface the doubt (§11 rule 5) | No |
+| 68 | 2026-08-23 | **Local Postgres port 5433 → 5435. Supersedes row 5** (port 9008 is unchanged) | Row 5 assumed 5433 was free. On Ian's machine it is bound by `amianai-postgres` (the AGENCY stack, `postgres:16-alpine`, Docker). The *reasoning* in row 5 was right — avoid the default 5432 so no other Postgres is disturbed — only the number was wrong. 5435 verified free alongside 5432/5436 | Yes |
+| 69 | 2026-08-23 | ~~Local Postgres major version pinned to **16**~~ — **superseded by row 70 the same day** | CI pins `postgres:16` and §4.1 specifies 16; HANDOFF §3a said "likely 17". Installing 17 locally would have made dev diverge from CI — the exact class of bug §3a exists to prevent. The DO Managed cluster must also be created as 16 | Superseded — see row 70 |
+| 70 | 2026-08-23 | **PostgreSQL 18 project-wide (local + CI + DO). Supersedes rows 69 and §4.1's original 16** | Row 69 treated CI's `postgres:16` as a constraint; it was only the scaffold-time default, and §4.1's rationale (transactions, constraints, `numeric`, window functions, partial indexes, matviews) is satisfied by every version from 16 up — so nothing actually pinned 16. **18 earns the change on its own merits: native `uuidv7()`**, which §4.2 rule 1 wants for primary keys and which 16 needs an extension or app-side generation to provide. DigitalOcean Managed Postgres supports 18, so local == CI == prod holds. Cost is one line in `ci.yml` and some docs, because no schema or data exists yet | Yes, until Phase 1 data exists — then expensive |
+| 71 | 2026-08-23 | Firebase Admin credentials are **required in production only**, until the auth bridge lands (T-006) | `env.ts` hard-required them, contradicting HANDOFF §4's promise that Firebase can stay blank, and blocking local dev and `/api/health` on credentials **no code path reads**. §7 rule 9 is about secrets that are *used* failing closed — not about demanding unused ones. Production stays hard-required via `superRefine`, and eight tests now assert both halves | Yes — reverts naturally at T-006 |
+| 72 | 2026-08-23 | `/api/health` reports configuration and database failures **separately** | It caught every error and reported `database: unreachable`. A missing Firebase variable was therefore blamed on Postgres while Postgres was healthy — the exact misdirection the route's own comment claims to prevent (§15.6). Error text is returned outside production only; the endpoint is unauthenticated | Yes |
 
 ---
 
