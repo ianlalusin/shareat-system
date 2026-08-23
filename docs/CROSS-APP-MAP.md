@@ -46,7 +46,7 @@
 | **ERP** (v1) | `webapps/ERP-rebuild` | 9002 | Back office, books, payroll, inventory. **READ-ONLY to us** |
 | **CUSTOMER** | `webapps/CUSTOMER` | 9004 | Diner-facing ordering, refills, loyalty |
 | **Website** | `webapps/Shareat Website` | 9007 | Public site, storefront, reservations (Astro) |
-| **Shareat System** | `webapps/Shareat System` | 9008 | This project. Will replace ERP v1's persistence |
+| **Shareat System** | `webapps/shareat-system` | 9008 | **This project.** One backend for all four |
 
 ### Firebase projects — THREE, not four ✅ verified 2026-08-23
 

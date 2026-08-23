@@ -13,7 +13,7 @@
 | **Status** | Accounting-correctness project (§1.1). All discovery complete. Root cause identified (§16.0). **Chart of accounts aligned and signed off.** Ready to write Phase 0/1 task specs. |
 | **Scale being replatformed** | 149 page routes (~53,700 LOC of pages), 20 API routes, 9 cron jobs, ~90 Firestore collection paths, 144 server-action modules / 578 exported functions |
 | **Source project** | `C:\Users\ianla\webapps\ERP-rebuild` (branch `upgrade-next16`) — **READ-ONLY, NEVER MODIFY** |
-| **This project** | `C:\Users\ianla\webapps\Shareat System` |
+| **This project** | **Shareat System** — `C:\Users\ianla\webapps\shareat-system` |
 
 ---
 

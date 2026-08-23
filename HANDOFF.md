@@ -179,7 +179,7 @@ database whose name lacks `_test`, so this naming is load-bearing.
 ## 4. Configure and verify
 
 ```bash
-cd ~/webapps/Shareat System
+cd ~/webapps/shareat-system
 cp .env.example .env.local
 ```
 
