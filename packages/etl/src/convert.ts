@@ -133,6 +133,10 @@ export interface RawSpecimen {
 
 export interface ConvertedLine {
   accountCode: string;
+  /** The specimen's `storeCode` (bible §4.2 rule 2 — every store-scoped table carries
+   *  store_id). NOT yet a resolved Postgres id — the replay test resolves storeCode ->
+   *  a real stores.id at insert time, the same way it resolves accountCode -> accounts.id. */
+  storeCode: string | null;
   debit: Money;
   credit: Money;
   lineMemo: string | null;
@@ -160,9 +164,16 @@ export interface ConversionResult {
 
 const ZERO = money('0');
 
-function line(accountCode: string, side: 'debit' | 'credit', amount: Money, opts: { lineMemo?: string | null; channelId?: string | null } = {}): ConvertedLine {
+function line(
+  accountCode: string,
+  storeCode: string | null,
+  side: 'debit' | 'credit',
+  amount: Money,
+  opts: { lineMemo?: string | null; channelId?: string | null } = {},
+): ConvertedLine {
   return {
     accountCode,
+    storeCode,
     debit: side === 'debit' ? amount : ZERO,
     credit: side === 'credit' ? amount : ZERO,
     lineMemo: opts.lineMemo ?? null,
@@ -229,16 +240,17 @@ export function convertSalesDay(specimenId: string, caseClass: CaseClass, doc: S
     );
   }
 
+  const storeCode = doc.storeId;
   const lines: ConvertedLine[] = [];
-  if (!isZero(cash)) lines.push(line(ACCOUNTS.CASH_CASHIER, 'debit', cash, { lineMemo: 'cash tender' }));
+  if (!isZero(cash)) lines.push(line(ACCOUNTS.CASH_CASHIER, storeCode, 'debit', cash, { lineMemo: 'cash tender' }));
   for (const [acct, amt] of onlineEntries) {
     const m = money(amt);
-    if (!isZero(m)) lines.push(line(ACCOUNTS.ONLINE, 'debit', m, { lineMemo: `online: ${acct}` }));
+    if (!isZero(m)) lines.push(line(ACCOUNTS.ONLINE, storeCode, 'debit', m, { lineMemo: `online: ${acct}` }));
   }
-  if (!isZero(discounts)) lines.push(line(ACCOUNTS.SALES_DISCOUNTS, 'debit', discounts, { lineMemo: 'senior/PWD/other discount' }));
-  if (!isZero(comps)) lines.push(line(ACCOUNTS.SALES_RETURNS_AND_VOIDS, 'debit', comps, { lineMemo: 'comps' }));
-  if (!isZero(dineIn)) lines.push(line(ACCOUNTS.FOOD_UNLI, 'credit', dineIn, { lineMemo: 'dine-in unlimited' }));
-  if (!isZero(aLaCarte)) lines.push(line(ACCOUNTS.FOOD_A_LA_CARTE, 'credit', aLaCarte, { lineMemo: 'à la carte (incl. take-out)' }));
+  if (!isZero(discounts)) lines.push(line(ACCOUNTS.SALES_DISCOUNTS, storeCode, 'debit', discounts, { lineMemo: 'senior/PWD/other discount' }));
+  if (!isZero(comps)) lines.push(line(ACCOUNTS.SALES_RETURNS_AND_VOIDS, storeCode, 'debit', comps, { lineMemo: 'comps' }));
+  if (!isZero(dineIn)) lines.push(line(ACCOUNTS.FOOD_UNLI, storeCode, 'credit', dineIn, { lineMemo: 'dine-in unlimited' }));
+  if (!isZero(aLaCarte)) lines.push(line(ACCOUNTS.FOOD_A_LA_CARTE, storeCode, 'credit', aLaCarte, { lineMemo: 'à la carte (incl. take-out)' }));
 
   if (lines.length < 2) {
     return quarantined(specimenId, caseClass, `sales day ${doc.id} produced fewer than two non-zero lines — cannot form a balanced entry`);
@@ -261,7 +273,13 @@ export function convertSalesDay(specimenId: string, caseClass: CaseClass, doc: S
 // exactly one classification leg, which depends on expenseEntryGroup.
 // -----------------------------------------------------------------------------------------
 
-function fundingLine(specimenId: string, caseClass: CaseClass, payment: ExpensePaymentSplit, idx: number): ConvertedLine | { error: string } {
+function fundingLine(
+  specimenId: string,
+  caseClass: CaseClass,
+  storeCode: string | null,
+  payment: ExpensePaymentSplit,
+  idx: number,
+): ConvertedLine | { error: string } {
   const amount = money(payment.amount);
   switch (payment.method) {
     case 'cash': {
@@ -270,14 +288,14 @@ function fundingLine(specimenId: string, caseClass: CaseClass, payment: ExpenseP
         : payment.accountId === 'office'
           ? ACCOUNTS.CASH_OFFICE
           : ACCOUNTS.CASH_CASHIER;
-      return line(account, 'credit', amount, { lineMemo: `cash payment #${idx}` });
+      return line(account, storeCode, 'credit', amount, { lineMemo: `cash payment #${idx}` });
     }
     case 'credit':
-      return line(ACCOUNTS.AP, 'credit', amount, { lineMemo: `AP payment #${idx}` });
+      return line(ACCOUNTS.AP, storeCode, 'credit', amount, { lineMemo: `AP payment #${idx}` });
     case 'reimbursable':
-      return line(ACCOUNTS.REIMBURSABLE_TO_EMPLOYEES, 'credit', amount, { lineMemo: `reimbursable payment #${idx}` });
+      return line(ACCOUNTS.REIMBURSABLE_TO_EMPLOYEES, storeCode, 'credit', amount, { lineMemo: `reimbursable payment #${idx}` });
     case 'online':
-      return line(ACCOUNTS.ONLINE, 'credit', amount, { lineMemo: `online payment #${idx}` });
+      return line(ACCOUNTS.ONLINE, storeCode, 'credit', amount, { lineMemo: `online payment #${idx}` });
     case 'other':
     case 'ar_collection':
       // T-113 §1's Class A list marks `ar-collection` complete (maps to 6400 platform
@@ -305,10 +323,11 @@ export function convertExpense(specimenId: string, caseClass: CaseClass, doc: Ex
     );
   }
 
+  const storeCode = doc.storeId;
   const lines: ConvertedLine[] = [];
   for (const [idx, payment] of payments.entries()) {
     if (isZero(money(payment.amount))) continue;
-    const result = fundingLine(specimenId, caseClass, payment, idx + 1);
+    const result = fundingLine(specimenId, caseClass, storeCode, payment, idx + 1);
     if ('error' in result) {
       return quarantined(specimenId, caseClass, `expense ${doc.id}: ${result.error}`);
     }
@@ -323,10 +342,10 @@ export function convertExpense(specimenId: string, caseClass: CaseClass, doc: Ex
     if (!doc.assetId) {
       return quarantined(specimenId, caseClass, `expense ${doc.id} is CAPEX but has no assetId to post the asset leg against`);
     }
-    lines.push(line(ACCOUNTS.PROPERTY_AND_EQUIPMENT, 'debit', totalAmount, { lineMemo: `capitalised: ${doc.assetId}` }));
+    lines.push(line(ACCOUNTS.PROPERTY_AND_EQUIPMENT, storeCode, 'debit', totalAmount, { lineMemo: `capitalised: ${doc.assetId}` }));
   } else if (group === 'PERSONAL') {
     // T-113 §2.1 / bible §13 row 42: owner drawings, equity — not an expense.
-    lines.push(line(ACCOUNTS.OWNERS_DRAWINGS, 'debit', totalAmount, { lineMemo: "owner's drawing" }));
+    lines.push(line(ACCOUNTS.OWNERS_DRAWINGS, storeCode, 'debit', totalAmount, { lineMemo: "owner's drawing" }));
   } else if (group === 'OPEX') {
     const category = doc.category ?? null;
     const account = category ? OPEX_CATEGORY_ACCOUNTS[category] : undefined;
@@ -337,7 +356,7 @@ export function convertExpense(specimenId: string, caseClass: CaseClass, doc: Ex
         `expense ${doc.id}: OPEX category "${category ?? '(none)'}" has no v2 account mapping — never falls back to 6900 (T-113 §3 rule 1)`,
       );
     }
-    lines.push(line(account, 'debit', totalAmount, { lineMemo: `${category}` }));
+    lines.push(line(account, storeCode, 'debit', totalAmount, { lineMemo: `${category}` }));
   } else {
     // COGS needs the two-stage inventory posting (T-113 §2.1's table — purchase vs
     // consumption are different events with different accounts) which this converter does

@@ -1,0 +1,33 @@
+{
+  "specimenId": "expense-capex-001",
+  "caseClass": "expense.capex",
+  "status": "converted",
+  "reason": null,
+  "entries": [
+    {
+      "entryDate": "2026-01-11",
+      "sourceType": "expense",
+      "sourceId": "exp-1003",
+      "idempotencyKey": "etl:expense-capex-001",
+      "memo": "Purchase of walk-in chiller",
+      "lines": [
+        {
+          "accountCode": "1110",
+          "storeCode": "STORE-A",
+          "debit": "0.00",
+          "credit": "60000.00",
+          "lineMemo": "cash payment #1",
+          "channelId": null
+        },
+        {
+          "accountCode": "1510",
+          "storeCode": "STORE-A",
+          "debit": "60000.00",
+          "credit": "0.00",
+          "lineMemo": "capitalised: AST-2026-001",
+          "channelId": null
+        }
+      ]
+    }
+  ]
+}

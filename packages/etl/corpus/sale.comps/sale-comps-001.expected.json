@@ -11,11 +11,46 @@
       "idempotencyKey": "etl:sale-comps-001",
       "memo": "Sales day 2026-01-10, store STORE-A",
       "lines": [
-        { "accountCode": "1110", "debit": "22000.00", "credit": "0.00", "lineMemo": "cash tender", "channelId": null },
-        { "accountCode": "1140", "debit": "2500.00", "credit": "0.00", "lineMemo": "online: gcash", "channelId": null },
-        { "accountCode": "4950", "debit": "500.00", "credit": "0.00", "lineMemo": "comps", "channelId": null },
-        { "accountCode": "4100", "debit": "0.00", "credit": "20000.00", "lineMemo": "dine-in unlimited", "channelId": null },
-        { "accountCode": "4150", "debit": "0.00", "credit": "5000.00", "lineMemo": "à la carte (incl. take-out)", "channelId": null }
+        {
+          "accountCode": "1110",
+          "storeCode": "STORE-A",
+          "debit": "22000.00",
+          "credit": "0.00",
+          "lineMemo": "cash tender",
+          "channelId": null
+        },
+        {
+          "accountCode": "1140",
+          "storeCode": "STORE-A",
+          "debit": "2500.00",
+          "credit": "0.00",
+          "lineMemo": "online: gcash",
+          "channelId": null
+        },
+        {
+          "accountCode": "4950",
+          "storeCode": "STORE-A",
+          "debit": "500.00",
+          "credit": "0.00",
+          "lineMemo": "comps",
+          "channelId": null
+        },
+        {
+          "accountCode": "4100",
+          "storeCode": "STORE-A",
+          "debit": "0.00",
+          "credit": "20000.00",
+          "lineMemo": "dine-in unlimited",
+          "channelId": null
+        },
+        {
+          "accountCode": "4150",
+          "storeCode": "STORE-A",
+          "debit": "0.00",
+          "credit": "5000.00",
+          "lineMemo": "à la carte (incl. take-out)",
+          "channelId": null
+        }
       ]
     }
   ]

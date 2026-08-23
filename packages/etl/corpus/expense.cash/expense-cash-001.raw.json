@@ -1,0 +1,22 @@
+{
+  "specimenId": "expense-cash-001",
+  "caseClass": "expense.cash",
+  "kind": "expense",
+  "storeCode": "STORE-A",
+  "provenance": "Hand-written fixture — Part 1, T-117. Never real captured data; there is nothing to redact.",
+  "doc": {
+    "id": "exp-1001",
+    "dayKey": "2026-01-06",
+    "storeId": "STORE-A",
+    "totalAmount": 15000,
+    "expenseEntryGroup": "OPEX",
+    "category": "Rent",
+    "particulars": "January store rent",
+    "payments": [{ "method": "cash", "amount": 15000, "accountId": null, "cashRequestId": null }],
+    "supplierId": "SUP-0900",
+    "supplierName": "Erin Esguerra Realty",
+    "staffName": "Faro Fajardo",
+    "createdByUid": "b3f1a2c4-0000-4000-8000-000000000010",
+    "updatedByUid": "b3f1a2c4-0000-4000-8000-000000000010"
+  }
+}

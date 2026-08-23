@@ -7,7 +7,7 @@
 
 | | |
 |---|---|
-| **Version** | 1.6 — Phase 0 verified on Postgres 18; T-113 answered; ledger scope set to management-basis |
+| **Version** | 1.7 — T-117 replay-harness Stage A: `etl/` becomes `packages/etl/` (§8, §13 row 85) |
 | **Created** | 2026-08-22 |
 | **Last amended** | 2026-08-23 |
 | **Status** | Accounting-correctness project (§1.1). All discovery complete. Root cause identified (§16.0). **Chart of accounts aligned and signed off.** Ready to write Phase 0/1 task specs. |
@@ -737,6 +737,7 @@ shareat-system/                 <- npm workspaces monorepo (ADR-004)
   packages/                     <- shared by every front-end. ONE copy of each truth
     core/   money, datetime, logger, env
     db/     schema/ (the ONLY place tables are defined), migrations/, client, repo/
+    etl/    Firestore -> Postgres migration jobs, corpus fixtures, replay harness (T-117)
     domain/ services, business rules, posting engine        (arrives with T-105)
     auth/   the single authorize() module                   (arrives with its task)
     ui/     shared components                               (arrives with a front-end)
@@ -746,8 +747,12 @@ shareat-system/                 <- npm workspaces monorepo (ADR-004)
     customer/  9004
     website/   9007
   tests/                        <- cross-cutting unit + integration suites
-  etl/                          <- Firestore -> Postgres migration jobs
 ```
+
+> `etl/` moved under `packages/etl/` (T-117, 2026-08-23 — see §13 row 85). It is a
+> workspace package like every other `packages/*` entry: importable, unit-tested,
+> subject to the app-boundary rule (§8's "an app may never import from another app"
+> extends the same way to "a package may never import from an app").
 
 > **The one rule that keeps this honest: an app may never import from another app.**
 > Apps depend on `packages/`; packages never depend on apps. In separate repos the
@@ -1020,6 +1025,8 @@ just a patch.**
 | 83 | 2026-08-23 | **ADR-005: BOOKS-FIRST cutover on 2027-01-01. Phases 1, 2 and a Phase 6 subset cross over; inventory, attendance and payroll follow through Q1** | Ian set the shape (build Oct–Nov, clean data in December, onboard in January) and gave the decisive reason: **close 2026 in the old system, adjustments and all, so the opening balance is a settled artifact rather than a snapshot of a moving target.** Scope had to be cut because eight phases cannot fit in fourteen weeks — and pretending otherwise would ship payroll and inventory, the modules where wrong numbers hurt people, with the least confidence. **The opening balance is balance-sheet only**, which works precisely because v1 is wrong about the P&L and broadly right about the balance sheet: the cutover inherits the half it gets right. **2027 is year one of trustworthy P&L**; 2026 comparatives are labelled legacy-basis and unaudited, never loaded as real. Temporary bridges are named with retirement triggers — notably **the POS→ledger seam SURVIVES the cutover** until POSv2, which ADR-003's end state does not by itself imply. Go/no-go is **15 Nov**; a no-go moves to 1 April, the next clean quarter boundary | Date is movable; the books-first shape is not |
 | 84 | 2026-08-23 | **The reference repos are read as REQUIREMENTS, not as design. Intent is authoritative; implementation is not** (§1.2b) | Ian: *"whatever you discover there is made by me, not 100% sure correct... but the intent I put is always there. I made features there because we use it in day-to-day operations. Implementation might be flawed but get the idea, refine it to correct execution."* **v1 is the most detailed statement of WHAT this business needs that exists anywhere** — more complete than any spec, because the person who runs the business wrote it for the business he runs. This closes the gap between §1.3 (workflow is fixed) and §2 rule 1 (read-only): an agent must neither dismiss a feature because its code is poor, nor faithfully reproduce a flaw because "v1 is the oracle". A feature that looks pointless is a signal to **ask**, never to delete | No |
 | 72 | 2026-08-23 | `/api/health` reports configuration and database failures **separately** | It caught every error and reported `database: unreachable`. A missing Firebase variable was therefore blamed on Postgres while Postgres was healthy — the exact misdirection the route's own comment claims to prevent (§15.6). Error text is returned outside production only; the endpoint is unauthenticated | Yes |
+| 85 | 2026-08-23 | **`etl/` moves under `packages/etl/` as `@shareat/etl` — a real workspace package, not a bare scripts folder.** T-117's replay-harness corpus, taxonomy, pseudonymisation and converter live there | Task spec docs/tasks/117-replay-harness-stage-a.md explicitly named this move in its Scope ("PROJECT_BIBLE.md §8 (layout — `etl/` becomes `packages/etl/`)"). Making it a package (not `etl/` at repo root, which §8 previously described) means it is unit-tested by the same `packages/**/*.test.ts` convention every other package uses, covered by the app-boundary test (`tests/unit/app-boundaries.test.ts`, which already scans all of `packages/`), and consumable by name (`@shareat/etl`) if a future app or script needs its converter/taxonomy. `packages/*` already matched it via the existing workspace glob — no `package.json` change was needed. The pre-existing empty top-level `etl/` directory is superseded and left in place, untouched, rather than deleted (out of this task's scope) | Reversible — nothing yet depends on the package boundary |
+| 86 | 2026-08-23 | **A task spec may NEVER authorise an implementer to amend this bible.** Row 85 was written by a Sonnet implementer because T-117's spec listed `PROJECT_BIBLE.md` in its allowed Scope | §14 is explicit: *"Who may amend: Opus, in planner role. A Sonnet implementer never amends it — it reports a conflict and stops."* My spec granted a permission the bible forbids, and §14's own conflict rule (**bible > task spec**) means the spec could not grant it. The content of row 85 is correct and is kept; the **process** was wrong. **Correct pattern:** the implementer reports the amendment it believes is needed, and the planner makes it. A spec that lists the bible in Scope is a defect in the spec | No |
 
 ---
 

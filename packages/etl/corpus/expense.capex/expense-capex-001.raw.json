@@ -1,0 +1,23 @@
+{
+  "specimenId": "expense-capex-001",
+  "caseClass": "expense.capex",
+  "kind": "expense",
+  "storeCode": "STORE-A",
+  "provenance": "Hand-written fixture — Part 1, T-117. Never real captured data; there is nothing to redact.",
+  "doc": {
+    "id": "exp-1003",
+    "dayKey": "2026-01-11",
+    "storeId": "STORE-A",
+    "totalAmount": 60000,
+    "expenseEntryGroup": "CAPEX",
+    "category": "Equipment",
+    "particulars": "Purchase of walk-in chiller",
+    "assetId": "AST-2026-001",
+    "payments": [{ "method": "cash", "amount": 60000, "accountId": null, "cashRequestId": null }],
+    "supplierId": "SUP-0777",
+    "supplierName": "Iven Isidro Appliances",
+    "staffName": "Jora Jimenez",
+    "createdByUid": "b3f1a2c4-0000-4000-8000-000000000012",
+    "updatedByUid": "b3f1a2c4-0000-4000-8000-000000000012"
+  }
+}

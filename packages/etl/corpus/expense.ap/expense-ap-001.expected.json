@@ -1,0 +1,33 @@
+{
+  "specimenId": "expense-ap-001",
+  "caseClass": "expense.ap",
+  "status": "converted",
+  "reason": null,
+  "entries": [
+    {
+      "entryDate": "2026-01-07",
+      "sourceType": "expense",
+      "sourceId": "exp-1002",
+      "idempotencyKey": "etl:expense-ap-001",
+      "memo": "January electricity bill (on account)",
+      "lines": [
+        {
+          "accountCode": "2110",
+          "storeCode": "STORE-A",
+          "debit": "0.00",
+          "credit": "8500.00",
+          "lineMemo": "AP payment #1",
+          "channelId": null
+        },
+        {
+          "accountCode": "6300",
+          "storeCode": "STORE-A",
+          "debit": "8500.00",
+          "credit": "0.00",
+          "lineMemo": "Utilities",
+          "channelId": null
+        }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { config as loadDotenv } from 'dotenv';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   loadCaptureCredentials,
@@ -10,6 +11,17 @@ import {
 } from '../src/capture';
 
 const packageRoot = join(fileURLToPath(new URL('.', import.meta.url)), '..');
+
+/**
+ * This is a UNIT test (packages/etl/tests/, not tests/integration/) — vitest's unit
+ * project never runs tests/integration/setup.ts, so `process.env` here would otherwise
+ * NOT reflect .env.local at all, and a test claiming to check "the real .env.local" would
+ * actually just be checking a blank environment, which passes for the wrong reason. Load
+ * .env.local explicitly, into its own object (never mutating `process.env`), so the one
+ * test below that claims to check it actually does.
+ */
+const dotenvResult = loadDotenv({ path: join(packageRoot, '..', '..', '.env.local'), processEnv: {} as Record<string, string> });
+const realDotEnvLocal: Record<string, string | undefined> = dotenvResult.parsed ?? {};
 
 describe('invariant 10 — capture skips cleanly without credentials', () => {
   it('skips with all three variables listed as missing when none are set', () => {
@@ -65,13 +77,18 @@ describe('runCapture — the actual path this environment takes', () => {
     expect(warnSpy).toHaveBeenCalledOnce();
   });
 
-  it('this repo\'s actual .env.local has no capture credentials set — runCapture(process.env) skips', async () => {
+  it("this repo's actual .env.local has no capture credentials set — runCapture(realDotEnvLocal) skips", async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const result = await runCapture();
-    // Whatever this machine's .env.local holds, it must not include the three capture
-    // variables (per the task spec's stated environment) — proving the REAL path, not a
-    // synthetic one.
+    // Proves the REAL path this environment takes, against the REAL .env.local file (read
+    // directly above, not process.env — see the file-level comment for why process.env
+    // alone would prove nothing in a unit test). If this ever starts failing because
+    // someone adds CAPTURE_* to .env.local, that is expected — Part 2 stops being
+    // guard-only at that point, which is a real environment change, not a broken test.
+    const result = await runCapture(realDotEnvLocal);
     expect(result.skipped).toBe(true);
+    if (result.skipped) {
+      expect(result.missing).toEqual(['CAPTURE_HUB_SA_KEY', 'CAPTURE_ERP_SA_KEY', 'CAPTURE_SALT']);
+    }
   });
 
   it('throws (does not silently no-op) if credentials WERE present, because Part 2 execution is not implemented', async () => {

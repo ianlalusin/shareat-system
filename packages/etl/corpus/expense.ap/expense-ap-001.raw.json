@@ -1,0 +1,22 @@
+{
+  "specimenId": "expense-ap-001",
+  "caseClass": "expense.ap",
+  "kind": "expense",
+  "storeCode": "STORE-A",
+  "provenance": "Hand-written fixture — Part 1, T-117. Never real captured data; there is nothing to redact.",
+  "doc": {
+    "id": "exp-1002",
+    "dayKey": "2026-01-07",
+    "storeId": "STORE-A",
+    "totalAmount": 8500,
+    "expenseEntryGroup": "OPEX",
+    "category": "Utilities",
+    "particulars": "January electricity bill (on account)",
+    "payments": [{ "method": "credit", "amount": 8500 }],
+    "supplierId": "SUP-0450",
+    "supplierName": "Gwen Gatchalian Power Co.",
+    "staffName": "Halo Hilario",
+    "createdByUid": "b3f1a2c4-0000-4000-8000-000000000011",
+    "updatedByUid": "b3f1a2c4-0000-4000-8000-000000000011"
+  }
+}
