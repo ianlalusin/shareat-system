@@ -81,7 +81,10 @@ the pathology without the platform that forced it.
   day one.** Costs almost nothing now; retrofitting tenancy later is painful. Note there
   is a second entity in play (SEBN) in the ERPNext work, which may force this.
 
-## 6. Account IDs: keep string codes like `cash__cashier`, or numeric?
+## 6. Account IDs: keep string codes like `cash__cashier`, or numeric? ✅ **RESOLVED — NUMERIC**
+
+> Settled by T-102: the seeded chart uses four-digit numeric codes (`1110`, `2110`, …) with v1's
+> string id carried on `legacy_code` for traceability. 92 accounts, live and in use.
 
 - **Recommended: surrogate PK + `legacy_code` as a UNIQUE column.** Keeps every ETL
   mapping and every existing reference working, without carrying string keys as
@@ -98,7 +101,12 @@ behaviour than it first appeared — it just needs to be uniform.
   flagged that this must be **consistent across all modules**; v1 is not.
 - Cost: more rows, and void UI must show the reversal link.
 
-## 8. Historical data: migrate everything, or from a cutoff?
+## 8. Historical data: migrate everything, or from a cutoff? ✅ **RESOLVED 2026-08-24 — NEITHER**
+
+> **Bible row 106: no historical data is migrated, ever.** v2 always assumes a zero starting
+> point. The books open with one balance-sheet entry of counted, present-day facts; 2026 stays
+> entirely in v1 plus Ian's spreadsheet. T-115 (the detail load) is **cancelled**. The text below
+> is kept as the reasoning that was superseded.
 
 - **Recommended: full migration of closed periods, then freeze them read-only.**
   Reporting continuity matters in an ERP.
@@ -189,6 +197,35 @@ is exactly the kind of thing a migration is the natural excuse for.
 > **Pair it with the inventory count (row 9).** Both are physical December counts across the same
 > four stores. **One trip, one team, one exercise** — scheduled together, they cost barely more
 > than either alone. Scheduled separately, the second one gets skipped.
+
+## 11. Where the opening equity lands — 3100 Owner's capital, or 3300 Retained earnings?
+
+**Raised 2026-08-24 by T-108's opening-balance fixture.** ADR-005 requires 3900 Opening Balance
+Equity to net to exactly zero but does not say what clears it, so the implementer had to choose.
+
+The mechanism is settled and correct: **two entries.** The first posts assets and liabilities with
+the balancing figure parked in **3900**; the second clears 3900 into an equity account. That
+two-step is what the research found (§7.1: *"the residual moved into Retained Earnings/Owner's
+Equity only once verified"*) and it is what makes *"3900 nets to zero"* **provable** rather than
+true by definition.
+
+**What is open is only the destination.**
+
+| | |
+|---|---|
+| **3100 Owner's capital** | Says *"this is money I put into the business."* |
+| **3300 Retained earnings** ⭐ | Says *"this is profit the business kept."* |
+
+**Recommended: 3300.** Ian's opening net assets at 1 January 2027 are overwhelmingly **accumulated
+profit**, not fresh capital introduced on that date. Sending them to 3100 would overstate
+contributed capital and understate accumulated earnings.
+
+**It only matters if the distinction is ever wanted** — *"how much did I put in, versus how much
+did the business make?"* If it is, the opening figure can split across both, and Ian is the only
+one who knows the actual capital history. If it is not, either account balances the books
+identically and this is cosmetic.
+
+**Low urgency:** nothing is blocked, and the fixture currently uses 3100. Changing it is one line.
 
 ---
 
