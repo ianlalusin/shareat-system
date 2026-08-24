@@ -1421,11 +1421,11 @@ nobody re-litigates it or "helpfully" adds it back:
 | Multi-company consolidation | One org, `organizations` table reserved for the second entity |
 | Cost centres, projects, arbitrary accounting dimensions | Exactly **two** dimensions: `store_id` (on every line) and a nullable `channel_id` (revenue and channel-fee lines only). No dimension framework, no third dimension without an ADR |
 | Configurable tax engine / tax templates | PH VAT written directly as code (§16.5) |
-| Serial/batch tracking, landed-cost vouchers, multiple valuation methods | Weighted average, per item per location |
+| Serial/batch tracking, landed-cost vouchers, multiple valuation methods | **FIFO cost layers**, per item per location — *corrected 2026-08-24: this row said “weighted average”, which **row 110 superseded**. FIFO still means ONE method, not “multiple valuation methods”, so the omission stands* |
 | Full BOM/MRP | The existing recipe/production model, simplified |
 | Workflow engine, custom doctypes | Fixed status enums and explicit code |
 | Budgeting and variance modules | Existing budget feature only |
-| Payment-terms schedules, dunning, credit scoring | Due date + aging buckets |
+| Payment-terms schedules, dunning, credit **scoring** | Due date + aging buckets, **plus a simple credit LIMIT** — *clarified 2026-08-24 (discovery 19 §4): a credit **limit** is a stored number compared against an outstanding balance; credit **scoring** is predictive risk modelling. The limit is IN scope and enforced at exactly one gate; scoring stays out. The distinction is written down because the original wording was ambiguous enough that a reader could skip a control this scale of receivable genuinely needs* |
 
 **Rule:** adding any of these back requires an ADR naming the business need. "It might be
 useful later" is not one.
