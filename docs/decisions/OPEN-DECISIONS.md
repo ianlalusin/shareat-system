@@ -106,6 +106,44 @@ behaviour than it first appeared — it just needs to be uniform.
   **non-rebuildable** after a purge — those migrate as-is or not at all, and the gap
   must be recorded rather than silently produce zeroes.
 
+## 9. Opening INVENTORY at 1 Jan 2027 — zero, or counted value? ⏰ HAS A DEADLINE
+
+**Context, confirmed by Ian 2026-08-24:** *"Inventory is linked to expense, that's where the value
+goes by linking it — that is exactly why we need this v2 project, to simplify and correct it."*
+
+v1 has **no inventory asset at all**. Stock is quantity-only; cost hits the P&L when a delivery is
+manually linked to an expense document, so COGS is **purchase-basis** and count adjustments have
+*"no direct GL effect"* by the blueprint's own words. v2 fixes this with perpetual inventory —
+`DR Inventory / CR AP` on receipt, `DR COGS / CR Inventory` on consumption. The accounts are
+already reserved: **1310–1340** and **5100–5400**. Design belongs to **Phase 3**, which gets a
+research pass first (valuation method, when COGS posts, wastage, inter-store elimination).
+
+**But the cutover cannot wait for Phase 3**, because whatever v2 does, 1 January 2027 needs an
+opening inventory figure — or an explicit decision that it is zero.
+
+| Option | |
+|---|---|
+| **(a) Open at ZERO** | Consistent with how 2026 was actually accounted: every item on the shelf at 31 Dec was **already expensed** under v1's purchase-basis model, so capitalising it now would count it twice unless the offset is handled. Simplest, and matches *"as if starting a new book"* |
+| **(b) Open at COUNTED VALUE** ⭐ recommended | The offset goes to **3900 Opening Balance Equity**, which is exactly what 3900 is for — it absorbs opening positions without touching P&L. More correct balance sheet, and it is an explicit, stated change in accounting policy rather than a silent one |
+
+**Why (b), despite (a) being simpler.** Under (a) the first months of 2027 consume stock that cost
+nothing, so **January's gross margin is fictional** and then normalises. That distortion lands in
+precisely the month everyone will be scrutinising the new system's numbers — the worst possible
+moment to have to explain that the margin is not real. A restaurant typically holds one to three
+weeks of COGS in stock, so this is not a rounding difference.
+
+### ⏰ What it requires, and by when
+
+**A valued physical count on 31 December 2026** — quantities × unit cost, per store. This is an
+**operational commitment with a fixed date**, not a data-migration task: the count cannot be
+reconstructed afterwards, because v1 never held a value to reconstruct from.
+
+**It must be on the December calendar now.** Its absence is the kind of thing discovered on
+2 January, when it is unfixable.
+
+*(Choosing (a) is entirely legitimate — but it should be a decision, not an accident of nobody
+having scheduled a count.)*
+
 ---
 
 ## Already decided (not open) — see bible §13
