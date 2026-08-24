@@ -147,6 +147,23 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
   // Liabilities 2xxx
   // ---------------------------------------------------------------------------------
   leaf('2110', 'Accounts payable', 'liability', 'credit', '2000', { requiresParty: true }), // control; ap__{supplierId} — T-118 party_type=supplier
+  // Goods received, not yet invoiced (ADR-009 amendment, bible row 117). A delivery posts a
+  // PROVISIONAL valued inventory layer on receipt and credits this; when the expense document
+  // links, the provisional cost is corrected and this clears into 2110 AP.
+  //
+  // It exists because posting nothing until the manual link happens IS the expensing lag
+  // ADR-009 measured (91% -> 76%, worst in the most recent month) — and that is exactly the
+  // stock the December count has to value.
+  //
+  // Requested as 2140; 2140 was already 'Customer store credits payable'. 2120 is both free and
+  // the better home: GRNI is an accrued liability, and it sits directly after 2110 in the flow
+  // goods received -> GRNI -> AP.
+  //
+  // NO requiresParty. The supplier is known on the delivery, but until the invoice arrives the
+  // amount owed to that specific supplier is not yet established — forcing a party here would
+  // assert a subledger balance the business has not yet agreed. It clears INTO 2110, which does
+  // carry the party.
+  leaf('2120', 'Goods received not invoiced', 'liability', 'credit', '2000'),
   leaf('2130', 'Reimbursements payable to employees', 'liability', 'credit', '2000', {
     requiresParty: true,
   }), // staff_reimbursable__{staffId} — T-118 party_type=employee
