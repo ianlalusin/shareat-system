@@ -71,6 +71,13 @@
       "when": 1787494634426,
       "tag": "0009_etl_landing_immutable",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1787567419047,
+      "tag": "0010_reporting_views",
+      "breakpoints": true
     }
   ]
 }

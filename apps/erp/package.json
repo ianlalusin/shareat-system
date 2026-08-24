@@ -10,6 +10,7 @@
   "dependencies": {
     "@shareat/core": "*",
     "@shareat/db": "*",
+    "@shareat/domain": "*",
     "firebase-admin": "^13.0.2",
     "next": "^16.1.6",
     "react": "^18.3.1",

@@ -13,7 +13,7 @@ const nextConfig = {
   // Workspace packages ship TypeScript source, not a build artefact. Next must
   // compile them like first-party code. This is what keeps `@shareat/core` a
   // single copy of the truth rather than a published, versioned duplicate.
-  transpilePackages: ['@shareat/core', '@shareat/db'],
+  transpilePackages: ['@shareat/core', '@shareat/db', '@shareat/domain'],
   // Native/Node-only packages must not be bundled into the server build.
   // See PROJECT_BIBLE.md §12 landmine: Next.js server bundling of native deps.
   serverExternalPackages: ['postgres', 'firebase-admin', 'pino'],

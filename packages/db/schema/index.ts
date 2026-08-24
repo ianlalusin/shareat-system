@@ -5,7 +5,9 @@
  * accounts, fiscal_periods, audit_log. T-103 adds journal_entries / journal_lines — the
  * nominal ledger (docs/tasks/103-journal-tables.md). T-112 adds etl_runs /
  * etl_source_documents / etl_quarantine / etl_reconciliation — the ETL framework
- * (docs/tasks/112-etl-framework.md).
+ * (docs/tasks/112-etl-framework.md). T-110 adds the three reporting views — declared
+ * here for typing only; the DDL is hand-written in migration 0010, not generated (see
+ * views.ts's own top comment for why).
  */
 
 export * from './organizations';
@@ -16,3 +18,4 @@ export * from './fiscal-periods';
 export * from './audit-log';
 export * from './journal';
 export * from './etl';
+export * from './views';

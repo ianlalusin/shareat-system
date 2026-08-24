@@ -4,3 +4,5 @@
  */
 export * from './ledger/post-entry';
 export * from './ledger/reverse-entry';
+export * from './reports/trial-balance';
+export * from './reports/income-statement';
