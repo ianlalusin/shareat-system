@@ -155,3 +155,72 @@ happens twice, move `manage_users` to manager scoped to their own org.
 3. **Enforced server-side, at the mutation.** Never in a component, never by hiding a screen —
    that is DEF-051 exactly.
 4. **Scope is checked separately and always.** Holding a capability is never sufficient on its own.
+
+---
+
+# B. "Manager takes over when there is no admin" — asked 2026-08-25
+
+Ian: *"When a store has an admin assigned, admin handles sensitive info, especially financial.
+When a store has no admin, manager takes over. So the moment a franchise hires an outside manager
+and dedicates themselves as admin, the role adjusts automatically. Is this model fragile?"*
+
+**The goal is right. The mechanism is fragile in one specific way, and it is the way that matters.**
+
+## What is right about it
+
+A one-person operation needs that person to do everything, and a grown one should separate duties.
+Any model that cannot express both is wrong. And avoiding a painful manual migration between them
+is a real benefit, not a convenience.
+
+## The one fragility that decides it
+
+> **Removing an admin would silently PROMOTE every manager in that org.**
+
+An admin leaves, is deactivated, or is deleted in a tidy-up — and at that moment every manager
+gains financial control. Nobody granted it. Nobody was told. **A privilege escalation triggered by
+an HR event, invisible in the data, with no record that it happened.**
+
+That is the failure this project has already met twice under different names: v1's signup flow that
+demoted an admin and created a lockout, and `canAcceptRemittance` (DEF-052) whose enforcement
+nobody could locate. **A permission that changes because some other row disappeared is the same
+species.**
+
+Four more, briefly, all downstream of the same choice:
+
+| | |
+|---|---|
+| **"Can this person set a credit limit?" stops having a stable answer** | It depends on a row somewhere else. Reasoning, testing and reviewing all get harder |
+| **"Has an admin" is a fuzzy predicate** | Deactivated? On leave? Account exists but never logged in? Fuzzy predicates in authorization are where holes live |
+| **Auditing becomes time-travel** | *"Who could have set that limit on 3 March?"* needs the org's admin population **as it was that day**. Not answerable from current state |
+| **Every sensitive capability gets two behaviours** | And each multiplies against store scope. The test matrix doubles for a rule nobody can see |
+
+## ⭐ The version that is not fragile: automatic at GRANT time, static at CHECK time
+
+Ian's goal survives intact if the fallback moves earlier — out of the permission check and into the
+moment the manager is created.
+
+| | Ian's version | Recommended |
+|---|---|---|
+| **When is it decided?** | On every check, from live data | **Once, when the manager is appointed** |
+| **Where does it live?** | Nowhere — it is inferred | **A row.** Visible, dated, attributable |
+| **Admin removed** | Managers **silently gain** power | **Nothing changes.** Grants are unaffected by someone else's departure |
+| **Admin appointed** | Managers silently lose power | One deliberate revoke — an act, with a record |
+| **Audit** | Reconstruct history | `select` |
+
+**Concretely:** creating a manager in an org that has no admin **automatically proposes and applies
+the elevated grants**. That is the automatic behaviour Ian wants, and it happens exactly where a
+human is already present and paying attention. From then on the grants are ordinary stored grants —
+one code path, one answer, one thing to test.
+
+When the franchise later hires a manager and the owner takes the admin seat, **Ian revokes the
+elevated grants in one action.** Once per franchise, per lifetime.
+
+> **The rule worth keeping beyond this decision: nothing anyone DELETES should give anyone else
+> more power.** Deletion may break a feature loudly — it must never widen access quietly.
+
+## What this costs
+
+One deliberate action per franchise, on the day it grows. In exchange: every permission is a row
+you can query, the audit answers itself, and no HR event ever changes who can touch the money.
+
+**Recorded as recommended, not decided — it is Ian's call.**
