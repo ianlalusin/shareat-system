@@ -1,7 +1,7 @@
 # T-121 — Roles and access: the structure is mine, the matrix is Ian's
 
-> **Status:** ⏸ **Structure proposed 2026-08-25. The capability matrix needs a session with Ian
-> BEFORE Wave 1 builds screens that gate on it.**
+> **Status:** ✅ **Structure ANSWERED by Ian 2026-08-25 — §A below. The capability matrix (which
+> cell is yes) still needs a session before Wave 1 builds screens that gate on it.**
 > **Depends on:** T-120 (done — the org boundary already holds).
 > **Written by:** Opus planner, from `docs/discovery/04-auth-and-permissions.md`.
 
@@ -130,3 +130,99 @@ cell:
 
 Attendance-specific adjudication (Phase 4) · the customer principal, which has no role at all and
 is deliberately not part of this matrix (ADR-008 §10) · any UI.
+
+---
+
+# A. Ian's answers — 2026-08-25
+
+## A.1 Four levels, and `manager` is the operational centre of gravity
+
+| Level | Who | Scope |
+|---|---|---|
+| **Super-admin** | **Ian only.** App-wide data control | Every org — see A.3, this needs care |
+| **Org admin** | Org-wide control. **Every org must have one.** Held by Ian for a franchise until its owner is ready | One org |
+| **Store manager** | **In a franchise this is the OWNER.** Assigned to one or more stores | Named stores within one org |
+| **Staff** | | Their store |
+
+**`manager` means exactly the same thing in Ian's org and in a franchise** (Ian, answering
+question 1). One role catalogue applied inside an org boundary — no franchise-specific role.
+
+**What a manager does**, in Ian's own words: enrolment of staff, **supplier and buyer verification
+and approval**, and other store settings tied to operation. That is a substantial role, and
+deliberately so: it is the level at which the business actually runs.
+
+> ⚠️ **Buyer approval is a credit decision, not just an operational one.** A manager approving a
+> wholesale buyer who then trades on terms is accepting receivable risk. Discovery 19 §4 puts the
+> **credit-limit override** at admin/manager, which is consistent — but *approving the buyer* and
+> *setting how much they may owe* should be separable cells in the matrix, because the second is
+> materially riskier than the first.
+
+## A.2 Store scoping is required — "yes, very much important"
+
+A manager holds **one or more stores**, and capabilities are checked against that list. This is
+the axis that makes a manager of Lipa different from a manager of everything, and it is why v1's
+`admin` bypass of store access does not carry forward.
+
+## A.3 ⚠️ Super-admin: needed, but it should not be Ian's everyday login
+
+Ian wants app-wide data control, and he should have it — he operates the platform, restores the
+backups and debugs the failures. **My earlier draft said "no global super-admin" and that was too
+absolute.** The platform operator is a real role.
+
+**But it must not be the account he uses every day**, for one reason:
+
+> Ian wears two hats. As **platform operator** he needs technical reach into every org. As
+> **franchisor** his visibility into a franchisee's books is limited by contract to sales
+> (ADR-008 §5). If his normal login carries super-admin, then a phished or borrowed session
+> exposes another business's costs, payroll and profit — **and "did Ian look at my numbers?"
+> becomes unanswerable.**
+
+**Proposal — break-glass, which is the standard shape:**
+
+| | |
+|---|---|
+| **Ian's daily account** | Admin of **his own org**. Nothing more |
+| **Super-admin** | A separate, deliberately awkward path — re-authentication, and a **stated reason** |
+| **Every use is logged** | Who, when, which org, what was read or changed. Visible to the franchisee too, if the agreement says so |
+| **It is not a role, it is an event** | Normal operation never uses it. If it is used weekly, something else is wrong |
+
+**This protects Ian more than it constrains him.** A franchisee asking whether their books were
+read gets an answer from the log rather than an assurance.
+
+## A.4 Who holds a franchise's org-admin — Ian's open question
+
+Ian: *"admin needs technical know-how… if I hand that to owners of the stores they might have a
+hard time navigating it. So the admin per org can be done, but who to have it is what I am
+contemplating."*
+
+**The concern is real, and it points at the bundle rather than at the owners.**
+
+> **If "admin" contains things a competent business owner cannot handle, the problem is that
+> "admin" is a bundle of unrelated powers — not that owners need training.**
+
+Look at what org-admin would actually contain:
+
+| Capability | Does a franchise owner need it? |
+|---|---|
+| Close a period | **Yes — and they already have it as manager** (bible row 101: admin *and* manager) |
+| Enrol staff, approve suppliers and buyers | **Yes — already manager** (A.1) |
+| Grant a grant to their own people | **Yes, eventually.** Their staff, their call |
+| Chart-of-accounts structure | **No.** Rarely, and with support |
+| Integrations, system settings | **No** |
+
+**Most of what an owner needs is already `manager`.** What is left in `admin` is the technical
+residue — which is precisely the part Ian is right to worry about handing over.
+
+**Recommendation:**
+
+1. **Ian holds each franchise's org-admin initially.** Not as super-admin — as an explicit,
+   visible grant of *that org's* admin role. He can hold several; each one is a row, not a bypass.
+2. **It must be transferable by data, never by a code change.** When an owner is ready, it is one
+   grant, not a release.
+3. **Design manager to be sufficient for normal operation**, so an owner never *needs* admin to
+   run their restaurant. If they hit an admin wall weekly, the boundary is drawn in the wrong
+   place and the fix is to move the capability, not to promote the person.
+
+**Left open for Ian:** whether a franchise owner eventually gets org-admin at all, or stays a
+manager permanently with Ian as their admin. Both are defensible; it is a relationship question,
+not a technical one, and nothing in the design forces it either way.
