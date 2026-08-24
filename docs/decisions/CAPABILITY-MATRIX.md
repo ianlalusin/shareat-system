@@ -109,7 +109,9 @@ they need weekly, the boundary is wrong.
 
 ---
 
-## ⚠️ Open — three cells I will not decide alone
+## ⚠️ Open — two cells I will not decide alone
+
+*(The third, `manage_users`, was closed by §B.1 — the grant-time fallback covers it.)*
 
 ### 1. `set_credit_limit` — admin only, or manager too?
 
@@ -223,4 +225,26 @@ elevated grants in one action.** Once per franchise, per lifetime.
 One deliberate action per franchise, on the day it grows. In exchange: every permission is a row
 you can query, the audit answers itself, and no HR event ever changes who can touch the money.
 
-**Recorded as recommended, not decided — it is Ian's call.**
+✅ **DECIDED 2026-08-25 — Ian: *“go with the safe version.”***
+
+## B.1 It also resolves §Open 3, which I had left as friction to live with
+
+I flagged that a franchise owner (a `manager`) could not appoint a manager for a second store,
+because `manage_users` sits with admin — correct today, but the first thing to chafe as a franchise
+grows.
+
+**The grant-time fallback answers it.** A manager created in an org with **no admin** receives the
+elevated grants at that moment — and `manage_users` is one of them. So a franchise owner running
+their own org *can* appoint their second store's manager, without any inferred rule and without
+Ian in the loop.
+
+When they later hire a dedicated admin, those grants are revoked in the single deliberate action
+§B already describes.
+
+> **Ian's instinct was right and mine was too narrow.** I had treated "no admin in this org" as a
+> gap to be covered by Ian; it is better read as a *state the org is legitimately in*, which
+> deserves its own grant set. The only thing that needed changing was **when** the question is
+> asked — once, at appointment, instead of on every check.
+
+**§Open 3 is therefore closed.** The two remaining open cells are `set_credit_limit` and
+`close_period`.
