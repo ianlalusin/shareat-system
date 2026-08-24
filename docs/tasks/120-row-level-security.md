@@ -1,7 +1,8 @@
 # T-120 — Row Level Security: org isolation the database enforces
 
-> **Status:** spec ready. **Depends on:** T-119 (running — both touch the schema; do not run them
-> in parallel). **Blocks:** every Phase 2 table.
+> **Status:** ✅ **COMPLETE 2026-08-24** — built by the planner. 10 isolation invariants against
+> two seeded orgs; both build guards demonstrated failing on a deliberate probe.
+> **Was:** spec ready. **Depends on:** T-119 (done). **Blocks:** every Phase 2 table.
 > **Written by:** Opus planner, 2026-08-24. Bible row 112, ADR-008 §9–§10.
 
 ## Goal
