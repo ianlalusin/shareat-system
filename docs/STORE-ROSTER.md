@@ -9,7 +9,7 @@ Confirmed by Ian 2026-08-24. **This is the mapping the `stores` table seeds from
 | `dZUyvX4q824JBSVDAfE9` | **SharEat Malvar** | operating | 6,732 |
 | `iGOW7q2pZbeHWV832UNh` | **SharEat Banay-Banay** | operating | 2,864 |
 | `eVYKj6wABdakk8RgEotW` | **SharEat Davao** | operating, opened ~2026-08-16 | 294 |
-| `y1DMgfisuTHBF57cNL6i` | SharEat Padre Garcia | **not operating yet** — 0 documents | — |
+| `y1DMgfisuTHBF57cNL6i` | **SharEat Padre Garcia** | ⚠️ **A FRANCHISE — separate owner.** 0 documents; not yet trading, and when it does it is a **separate company**, not a store of Ian's org. See ADR-008 | — |
 | `XbkyEgZqunmj2wzhicNf` | TEST | test store — **exclude** | — |
 | `TEST` | Test Commissary | test store — **exclude** | — |
 

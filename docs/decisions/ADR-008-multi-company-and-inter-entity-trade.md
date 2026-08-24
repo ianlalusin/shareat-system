@@ -2,11 +2,32 @@
 
 | | |
 |---|---|
-| **Status** | Proposed 2026-08-24 |
+| **Status** | ⚠️ **Proposed 2026-08-24 — and NOT future-proofing. A franchise exists NOW.** |
 | **Follows** | Bible rows 111 (multi-company, franchises with separate owners) and 106 (zero starting point) |
 | **Gates** | Phase 3 (inventory), and it corrects a pattern already in `docs/POSTING-PATTERNS.md` |
 
 ## Context
+
+> ### ⚠️ This is live, not hypothetical
+>
+> Ian, 2026-08-24: *"franchise is existing now. SharEat Padre Garcia, a franchise, will be using
+> the app."*
+>
+> `y1DMgfisuTHBF57cNL6i` — the store the capture found with **zero documents**, which I recorded as
+> *"configured, not operating yet."* The zero is now explained: it has not started trading, **and
+> when it does it will be a separate company on this system from its first transaction.**
+>
+> **Three consequences, all immediate:**
+>
+> 1. **It should not be a `store` of Ian's org.** It is currently modelled as one, inherited from
+>    v1's flat store list. A franchise with a separate owner is an **organization**.
+> 2. **Org-scoped access stops being theoretical.** This is the first user of this system who must
+>    **not** be able to see everything, and that is a security property, not a filter someone
+>    remembers to apply.
+> 3. **It starts with no history — which is ideal.** Bible row 106 already says v2 assumes a zero
+>    starting point; Padre Garcia genuinely has one. **It is the cleanest possible first tenant**,
+>    and a far better multi-tenancy test than a retrofit would be.
+
 
 Ian, 2026-08-24: *"multi company — future users are not umbrella but franchise with separate
 owners"*, and then: *"configure for mix internal and external client… I guess we can have the
@@ -108,13 +129,28 @@ of checks.
 **Whether v2 posts the franchisee's side automatically is open** (§Open 2). If the franchisee runs
 their own instance, it may arrive as a document rather than a posting.
 
-### 5. No cross-org consolidation by default
+### 5. Visibility is not all-or-nothing — the FRANCHISOR sees some of the franchisee
 
-**A franchisee sees their own books and nothing else.** Every query is org-scoped and enforced
-server-side, not by a filter someone remembered to add.
+**My first draft said only *"a franchisee sees their own books and nothing else"* and stopped
+there. That is half the model.** A franchisor normally has a contractual right to see franchisee
+**sales** — royalties and franchise fees are usually a percentage of them — while having no claim
+on the franchisee's own cost structure, payroll or profit.
 
-A group-level view across orgs is a **deliberate, separately-authorised feature** for Ian only —
-not a default, and not something any franchise role can reach.
+So there are **three** visibility levels, not two:
+
+| | |
+|---|---|
+| **Franchisee sees** | Their own books, entirely. Nothing of Ian's, nothing of another franchise |
+| **Franchisor (Ian) sees** | **Franchisee SALES** — whatever the franchise agreement grants, for royalty computation. **Not** their P&L, payroll or expenses |
+| **Group view** | Ian's own orgs consolidated. A deliberate, separately-authorised feature — never a default, never reachable by a franchise role |
+
+**The middle row is the one that must be designed, not assumed.** "Ian is admin so he sees
+everything" is the easy implementation and it is wrong: it would expose a separate owner's cost
+structure to their franchisor, which is a commercial and probably contractual problem, not a
+technical one. **What Ian may see is set by the franchise agreement, and the system should enforce
+exactly that and no more.**
+
+Every rule here is **enforced server-side**, never by a filter in a query someone remembered to add.
 
 ---
 
