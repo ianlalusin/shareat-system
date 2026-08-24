@@ -195,6 +195,66 @@ trade in v1, it does.
 change, not a patch. **Recorded so the risk is chosen rather than discovered**, and so the v2
 design is understood as a correction rather than a preference.
 
+### 8. Commissary ordering: ONE flow, TWO accounting treatments
+
+Ian asked whether the franchisee simply sees their order and its fulfilment, or whether the
+commissary needs **two modes** (branch vs franchise), or a **separate ordering system for external
+customers**.
+
+**The decisive observation: a franchise order and an external-customer order are the SAME
+transaction. The branch requisition is the odd one out.**
+
+| | Branch | Franchise | External customer |
+|---|---|---|---|
+| **Warehouse work** | Pick, pack, dispatch | Pick, pack, dispatch | Pick, pack, dispatch |
+| **Price** | Optional (transfer price) | **Required** | **Required** |
+| **Accounting** | Internal transfer, eliminates | **Sale — revenue + receivable** | **Sale — revenue + receivable** |
+| **Credit risk** | None | **Real** | **Real** |
+
+So the split is **not** branch-vs-franchise. It is **internal-vs-external**, and franchise sits
+firmly on the external side — which is precisely what §2's derived treatment already encodes.
+
+#### The recommendation
+
+**One ordering and fulfilment flow. Two accounting treatments, derived from the counterparty.**
+
+**Fulfilment is identical; the accounting is not.** The commissary staff are doing the same job —
+pick, pack, dispatch — regardless of who is receiving. Splitting that into two screens gives them
+two places to learn, and gives us two code paths to fix every bug in. The genuine difference lives
+entirely in the posting and in whether a price is required, and both of those are already derived
+from the counterparty link.
+
+The franchisee sees **their own order and its fulfilment status** — Ian's option (a) — and that
+falls out for free, because it is their document in their org. No feature needed.
+
+#### Why not two modes
+
+Two modes drift. The day someone adds a field to the branch flow and not the franchise flow, the
+two silently diverge, and nobody notices until a franchise order is missing something. **A mode is
+a fork; a derived treatment is a fact.**
+
+#### The honest counter-argument, and why it does not win here
+
+**ERPNext genuinely does split these** — Material Request and Stock Entry for internal movement,
+Sales Order and Delivery Note for external sale. That is a real, mainstream design and not a
+mistake.
+
+It wins in an organisation where internal requisition and external selling are **run by different
+teams with different approval chains**. Here they are the **same commissary staff, packing the same
+crates on the same morning**. Adopting the split would import an organisational boundary this
+business does not have — the exact generality bible §1.1 says to leave out.
+
+**What would change this answer:** if the commissary ever sells to third parties at volume, with
+quotes, credit limits and negotiated terms, the external side outgrows a shared document and should
+split then. **That is a decision with a visible trigger, not a guess to make now.**
+
+#### What the one document needs
+
+- A **counterparty** (a `customers` row, per §2) — which decides everything else.
+- A **price**, required when the counterparty is external, optional when internal.
+- One fulfilment lifecycle: ordered → picked → dispatched → received.
+- The receiving side posts in the counterparty's org when external (§4), and nothing when internal.
+
 ---
 
 ## What this changes today
