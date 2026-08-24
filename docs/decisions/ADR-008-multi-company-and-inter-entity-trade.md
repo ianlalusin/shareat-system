@@ -255,6 +255,64 @@ split then. **That is a decision with a visible trigger, not a guess to make now
 - One fulfilment lifecycle: ordered → picked → dispatched → received.
 - The receiving side posts in the counterparty's org when external (§4), and nothing when internal.
 
+### 9. One app, not a franchisee app — and org isolation belongs in the DATABASE
+
+Ian asked whether to ship franchisees a separate thin app (financial, inventory, sales) and said
+plainly he does not know how this is normally done. So: the mechanism, then the recommendation.
+
+#### First, the thing that is easy to get backwards
+
+**A thin app buys no security.** If the server enforces org scoping, the full app is exactly as
+safe. If it does not, a thin app saves nothing — the API is still there and can be called
+directly. **Hiding a screen is not a control.** Whatever else is decided, the boundary has to be
+enforced server-side, so the app split is a question about user experience, not safety.
+
+#### Second, "thin" is an illusion here
+
+A franchise restaurant runs the same operation as a branch — that is what a franchise *is*. They
+need sales, inventory receiving, counts, wastage, expenses, cash, staff and reports. That is
+**almost the entire ERP**. The only things they genuinely do not need are commissary operations and
+cross-store consolidation, and **both are already excluded by the org boundary** (§7).
+
+So a "thin franchisee app" would start at roughly 90% of the full app and converge on 100% as they
+ask for the rest. **It would become a fork**, and every fix would need doing twice — the failure
+mode ADR-004 (one monorepo) exists to avoid.
+
+#### Recommendation: one app, org-scoped, with navigation derived from what the org HAS
+
+Not `if (isFranchise) hideCommissary()`. **The commissary section does not render for a franchisee
+because their org has no commissary** — there is nothing to show. Same principle as §7: structural,
+not rule-based. A conditional would be a rule that can be forgotten on the next screen someone adds.
+
+#### ⭐ How the isolation is actually done: Postgres Row Level Security
+
+This is the part Ian asked about, and it has a specific answer.
+
+The naive approach is `WHERE org_id = $currentOrg` on every query. **It works until the one query
+that forgets** — and that query will exist, written months from now by someone who did not know the
+rule. It is application discipline, and discipline is not a control.
+
+**Row Level Security** puts it in the database instead. A policy on each table says *"you may only
+see rows whose `org_id` matches the current session's org."* The connection sets that org once, at
+request boundary, and from then on **the database itself refuses to return another org's rows** —
+to every query, including one someone forgot to filter, a report, an ad-hoc script, or a bug.
+
+| | |
+|---|---|
+| **Enforced where?** | The database, not the application |
+| **What if a query forgets its filter?** | It returns nothing extra. The policy still applies |
+| **What does the app do?** | Sets the org on the connection once, per request |
+| **Cost** | Policies on every org-scoped table, and care with the connection pool so an org never leaks between requests |
+
+**This is the same principle already applied to the ledger**: balance, immutability and period rules
+live in triggers rather than TypeScript, because a second copy in application code drifts (bible
+§15, RULES §6.3). **Org isolation is exactly that argument, applied to the most consequential rule
+in a multi-tenant system** — and the one where being wrong means showing one owner another owner's
+books.
+
+**Needs Ian's go-ahead** — it is a real implementation commitment, and it should be adopted
+*before* Phase 2 builds tables rather than retrofitted onto them.
+
 ---
 
 ## What this changes today
