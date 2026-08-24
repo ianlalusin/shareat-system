@@ -166,6 +166,14 @@ async function runReverseEntry(tx: Tx, input: ReverseEntryInput): Promise<Revers
     accountCode: line.accountCode,
     storeId: line.storeId,
     channelId: line.channelId,
+    // DEF-049: the party travels with the account, unchanged — only debit/credit swap
+    // (Contract §2). Without this, a reversal of any party-bearing line (AP, AR, a staff
+    // advance, ...) would insert with no party and be rejected by the same
+    // requires_party trigger the original posting satisfied — turning "always reversible"
+    // (Contract §5 / bible invariant 5) into false for exactly the control accounts that
+    // matter most.
+    partyType: line.partyType,
+    partyId: line.partyId,
     // The mirror: debit and credit swapped, everything else identical (Contract §2).
     debit: line.credit,
     credit: line.debit,

@@ -182,6 +182,12 @@ export interface InsertLineInput {
   accountId: string;
   storeId: string | null;
   channelId: string | null;
+  /** T-118's counterparty, threaded through by DEF-049's fix — see post-entry.ts's
+   * PostEntryLine comment for the full story. Both-or-neither and the requires_party
+   * cross-table rule are enforced by triggers, not here (T-105's own "do not re-implement"
+   * precedent). */
+  partyType: string | null;
+  partyId: string | null;
   debit: string;
   credit: string;
   lineMemo: string | null;
@@ -196,6 +202,8 @@ export async function insertLines(tx: Tx, entryId: string, lines: InsertLineInpu
       accountId: line.accountId,
       storeId: line.storeId,
       channelId: line.channelId,
+      partyType: line.partyType,
+      partyId: line.partyId,
       debit: line.debit,
       credit: line.credit,
       lineMemo: line.lineMemo,
@@ -305,6 +313,12 @@ export interface EntryLineWithAccountCode {
   accountCode: string;
   storeId: string | null;
   channelId: string | null;
+  /** T-118's counterparty, added by DEF-049's fix so a party-bearing line (e.g. an AP or
+   * staff-advance line) can actually be reversed — without this, reverseEntry silently
+   * dropped party on the mirrored line, and the reversal insert would then be rejected by
+   * the very requires_party trigger the original posting satisfied. */
+  partyType: string | null;
+  partyId: string | null;
   debit: string;
   credit: string;
   lineMemo: string | null;
@@ -324,6 +338,8 @@ export async function findLinesForEntryWithAccountCodes(
       accountCode: accounts.code,
       storeId: journalLines.storeId,
       channelId: journalLines.channelId,
+      partyType: journalLines.partyType,
+      partyId: journalLines.partyId,
       debit: journalLines.debit,
       credit: journalLines.credit,
       lineMemo: journalLines.lineMemo,

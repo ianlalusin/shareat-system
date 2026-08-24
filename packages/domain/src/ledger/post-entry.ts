@@ -31,6 +31,21 @@ export interface PostEntryLine {
   accountCode: string;
   storeId?: string | null;
   channelId?: string | null;
+  /**
+   * The counterparty (T-118, docs/tasks/118-subledger-party-on-line.md). Both-or-neither —
+   * the same CHECK `journal_lines_party_both_or_neither_check` enforces at the row. Required
+   * on the nine `requires_party` control accounts (2110, 1210, 1220, 1230, 1240, 2130, 1250,
+   * 2150, 2400) and forbidden everywhere else — `journal_lines_check_party_requirement`
+   * (migration 0007) rejects both directions; postEntry does not re-check this itself, same
+   * "do not re-implement a DB-enforced rule" precedent as every other invariant here.
+   *
+   * DEF-049: added post-T-108. T-118 gave the schema and the trigger a party but never
+   * threaded one through this, the ONLY sanctioned write path — every one of T-118's own
+   * tests posted party via raw SQL, never through postEntry, which hid the gap. See
+   * docs/DEFECTS-REGISTER.md DEF-049 and the T-108 task report.
+   */
+  partyType?: string | null;
+  partyId?: string | null;
   /** Money as a decimal string, matching numeric(14,2). Defaults to '0'. */
   debit?: string;
   credit?: string;
@@ -116,6 +131,8 @@ async function runPostEntry(tx: Tx, input: PostEntryInput): Promise<PostEntryRes
       accountId: await journalRepo.resolveAccountId(tx, input.orgId, line.accountCode),
       storeId: line.storeId ?? null,
       channelId: line.channelId ?? null,
+      partyType: line.partyType ?? null,
+      partyId: line.partyId ?? null,
       debit: line.debit ?? '0',
       credit: line.credit ?? '0',
       lineMemo: line.lineMemo ?? null,
