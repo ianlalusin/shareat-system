@@ -144,6 +144,52 @@ reconstructed afterwards, because v1 never held a value to reconstruct from.
 *(Choosing (a) is entirely legitimate — but it should be a decision, not an accident of nobody
 having scheduled a count.)*
 
+## 10. Fixed assets at cutover — DECIDED 2026-08-24, with one open sub-question
+
+**Ian:** *"We'll do it in v2. We can even make an inventory audit on v2 so we enter existing
+depreciable assets and book their current value, so v2 is clean again."*
+
+### Settled
+
+**No depreciation cron is built in v1.** v2 takes over on 1 January 2027, leaving only four v1
+month-ends (Sep–Dec). Writing a production route and scheduler into a repo we deliberately froze,
+for four uses, is poor value against real risk — and v2 should own scheduled depreciation properly
+(`6700` and `1590` are already reserved). **July and August 2026 still get run manually** from
+Inventory → Assets, as does each remaining month-end.
+
+**Assets come across as a verified list, not as migrated history.** v1 holds 52 asset documents
+carrying `accumulatedDepreciation` and `bookValue`, so the figures are available; the *decision* is
+that they are re-entered against a physical check rather than trusted wholesale.
+
+### ⚠️ The field that actually decides whether this works: REMAINING USEFUL LIFE
+
+Whichever presentation is chosen below, **v2 cannot depreciate an asset forward without knowing how
+much life is left.** A book value alone is a dead number — it tells you what the asset is worth and
+nothing about what to charge next month. **This is the migration-critical field, and it is the one
+easiest to overlook**, because the value is the figure everyone looks at.
+
+### The open sub-question: what the opening entry looks like
+
+| | |
+|---|---|
+| **(a) Cost + accumulated depreciation** — `1510` at original cost, `1590` at accumulated | Standard presentation. The data already exists in v1, so it costs **one extra line per asset** and nothing else. Keeps gross PPE visible, which matters for insurance, for disposal gain/loss, and for telling a nearly-new asset from a nearly-written-off one |
+| **(b) Net book value only** — `1510` at book value, `1590` at zero ⭐ *Ian's stated preference* | Simpler, and consistent with the balance-forward choice made for AR/AP (row 105). Treats each asset as if bought at cutover for what it is now worth. Loses the gross/accumulated split permanently |
+
+**Both are legitimate.** (a) preserves more for the same effort since v1 already stores both
+figures; (b) is simpler and matches the principle Ian already chose elsewhere. **The choice matters
+far less than carrying remaining life** — which is why that is called out above and not left inside
+this table.
+
+### The operational win Ian identified
+
+A **physical asset verification** at cutover finds assets that are disposed, broken, or simply gone
+but still sitting on the books accruing depreciation. That is real value beyond bookkeeping, and it
+is exactly the kind of thing a migration is the natural excuse for.
+
+> **Pair it with the inventory count (row 9).** Both are physical December counts across the same
+> four stores. **One trip, one team, one exercise** — scheduled together, they cost barely more
+> than either alone. Scheduled separately, the second one gets skipped.
+
 ---
 
 ## Already decided (not open) — see bible §13
