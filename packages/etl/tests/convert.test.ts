@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   ACCOUNTS,
+  REASON_CODES,
   UNSUPPORTED_CLASSES,
   convertExpense,
   convertSalesDay,
   convertSpecimen,
   type ExpenseDoc,
   type RawSpecimen,
+  type ReasonCode,
   type SalesDayDoc,
 } from '../src/convert';
 
@@ -446,5 +448,127 @@ describe('Test 9 — a synthetic unbalanced group is classified quarantined (❌
     const result = convertExpense('spec-27', 'expense.cash', doc);
     expect(result.status).toBe('quarantined');
     expect(result.entries).toHaveLength(0);
+  });
+});
+
+// =============================================================================================
+// DEF-042 — every quarantine carries a `reasonCode` from the closed union (T-114b Contract §1).
+// Invariants 14/15: GROUP BY reason_code returns usable counts; no code is ever derived by
+// pattern-matching `reason`'s free text. Proved here by asserting each ACTUAL branch produces
+// the reasonCode assigned to it explicitly in convert.ts, not by inspecting the prose.
+// =============================================================================================
+
+describe('DEF-042 — reasonCode on every quarantined result', () => {
+  it('a converted result carries NO reasonCode key at all (not even null) — replay.test.ts relies on this', () => {
+    const doc = baseSalesDay({ totalSales: 100, dineInSales: 100, cashPayments: 100 });
+    const result = convertSalesDay('spec-rc-0a', 'sale.dine_in_unli.plain', doc);
+    expect(result.status).toBe('converted');
+    expect('reasonCode' in result).toBe(false);
+  });
+
+  it('a skipped result (voided sales day) carries NO reasonCode key either', () => {
+    const doc = baseSalesDay({ status: 'voided', totalSales: 1, dineInSales: 1, cashPayments: 1 });
+    const result = convertSalesDay('spec-rc-0b', 'sale.voided', doc);
+    expect(result.status).toBe('skipped');
+    expect('reasonCode' in result).toBe(false);
+  });
+
+  const cases: Array<{ label: string; expected: ReasonCode; run: () => { status: string; reasonCode?: ReasonCode } }> = [
+    {
+      label: 'sales day tender != totalSales',
+      expected: 'unbalanced_source_group',
+      run: () => convertSalesDay('rc-1', 'sale.dine_in_unli.plain', baseSalesDay({ totalSales: 100, dineInSales: 100, cashPayments: 1 })),
+    },
+    {
+      label: 'sales day dineInSales + takeOutSales != totalSales',
+      expected: 'unbalanced_source_group',
+      run: () => convertSalesDay('rc-2', 'sale.dine_in_unli.plain', baseSalesDay({ totalSales: 100, dineInSales: 1, cashPayments: 100 })),
+    },
+    {
+      label: 'expense with zero payment splits',
+      expected: 'unbalanced_source_group',
+      run: () => convertExpense('rc-3', 'expense.cash', baseExpense({ totalAmount: 0, payments: [] })),
+    },
+    {
+      label: 'expense sum(payments) != totalAmount',
+      expected: 'unbalanced_source_group',
+      run: () => convertExpense('rc-4', 'expense.cash', baseExpense({
+        totalAmount: 100, expenseEntryGroup: 'OPEX', category: 'Rent', payments: [{ method: 'cash', amount: 1 }],
+      })),
+    },
+    {
+      label: 'AP payment missing supplierId',
+      expected: 'missing_supplier_party',
+      run: () => convertExpense('rc-5', 'expense.ap', baseExpense({
+        totalAmount: 100, expenseEntryGroup: 'OPEX', category: 'Utilities', payments: [{ method: 'credit', amount: 100 }],
+      })),
+    },
+    {
+      label: 'reimbursable payment missing staffId',
+      expected: 'missing_supplier_party',
+      run: () => convertExpense('rc-6', 'expense.cash', baseExpense({
+        totalAmount: 100, expenseEntryGroup: 'OPEX', category: 'Rent', payments: [{ method: 'reimbursable', amount: 100 }],
+      })),
+    },
+    {
+      label: 'unimplemented payment method',
+      expected: 'unimplemented_payment_method',
+      run: () => convertExpense('rc-7', 'expense.cash', baseExpense({
+        totalAmount: 100, expenseEntryGroup: 'OPEX', category: 'Rent', payments: [{ method: 'other', amount: 100 }],
+      })),
+    },
+    {
+      label: 'CAPEX missing assetId',
+      expected: 'missing_source_document',
+      run: () => convertExpense('rc-8', 'expense.capex', baseExpense({
+        totalAmount: 100, expenseEntryGroup: 'CAPEX', payments: [{ method: 'cash', amount: 100 }],
+      })),
+    },
+    {
+      label: 'unmapped OPEX category',
+      expected: 'unmapped_expense_category',
+      run: () => convertExpense('rc-9', 'expense.cash', baseExpense({
+        totalAmount: 100, expenseEntryGroup: 'OPEX', category: 'Not A Real Category', payments: [{ method: 'cash', amount: 100 }],
+      })),
+    },
+    {
+      label: 'COGS group has no converter rule',
+      expected: 'unsupported_case_class',
+      run: () => convertExpense('rc-10', 'expense.cash', baseExpense({
+        totalAmount: 100, expenseEntryGroup: 'COGS', category: 'Meat', payments: [{ method: 'cash', amount: 100 }],
+      })),
+    },
+    {
+      label: 'a case class in UNSUPPORTED_CLASSES',
+      expected: 'unsupported_case_class',
+      run: () => convertSpecimen({
+        specimenId: 'rc-11', caseClass: 'ticket.cancelled', kind: 'salesDay', storeCode: 'STORE-A', doc: baseSalesDay(),
+      }),
+    },
+  ];
+
+  for (const { label, expected, run } of cases) {
+    it(`${label} -> reasonCode '${expected}'`, () => {
+      const result = run();
+      expect(result.status).toBe('quarantined');
+      expect(result.reasonCode).toBe(expected);
+      // Invariant 14 — the code is a member of the closed union, always.
+      expect(REASON_CODES).toContain(result.reasonCode);
+    });
+  }
+
+  it('invariant 14 — GROUP BY reason_code (a plain reduce, no database) returns usable counts', () => {
+    const results = cases.map((c) => c.run());
+    const counts = new Map<string, number>();
+    for (const r of results) {
+      const code = (r as { reasonCode?: ReasonCode }).reasonCode!;
+      counts.set(code, (counts.get(code) ?? 0) + 1);
+    }
+    expect(counts.get('unbalanced_source_group')).toBe(4);
+    expect(counts.get('missing_supplier_party')).toBe(2);
+    expect(counts.get('unimplemented_payment_method')).toBe(1);
+    expect(counts.get('missing_source_document')).toBe(1);
+    expect(counts.get('unmapped_expense_category')).toBe(1);
+    expect(counts.get('unsupported_case_class')).toBe(2);
   });
 });

@@ -21,7 +21,7 @@
  * quarantine with a named reason. None of them throw past the caller — `convertSpecimen`
  * always returns a `ConversionResult`, per Contract §4's "never a bare failure".
  */
-import { add, equals, isZero, money, subtract, type Money } from '@shareat/core/money';
+import { add, equals, isZero, money, moneyFromLegacyFloat, subtract, type Money } from '@shareat/core/money';
 import type { CaseClass } from './taxonomy';
 import { ACCOUNTS, OPEX_CATEGORY_ACCOUNTS } from './leg-mapping';
 
@@ -139,15 +139,77 @@ export interface ConvertedEntry {
 
 export type ConversionStatus = 'converted' | 'skipped' | 'quarantined';
 
+// -----------------------------------------------------------------------------------------
+// DEF-042 — the closed reasonCode union. docs/tasks/114b-audit-report.md Contract §1.
+//
+// This is the ONE place the union lives — T-114b's audit (packages/etl/src/audit/*.ts)
+// imports it from here rather than re-declaring it, so "closed" actually means one
+// definition, not two that can drift. Every name is assigned EXPLICITLY at each call
+// site below, matched to what is actually wrong at that branch — never derived by
+// pattern-matching `reason`'s free text (bible §11 rule 5 / the T-112 implementer's own
+// refusal, DEF-042). Two names are deliberately broader than their literal spelling
+// suggests, both documented at their call sites:
+//   - `missing_supplier_party` also covers a REIMBURSABLE payment missing its staffId.
+//     The closed union has no separate "missing_employee_party" code; this is the only
+//     "a control account needs a party the source document doesn't carry" code available,
+//     so it is used for both control accounts T-113/T-117 actually reach (2110, 2130).
+//   - `unsupported_case_class` also covers convertExpense's COGS/OTHERS branch (no
+//     posting pattern defined for that expenseEntryGroup yet) and CAPEX's missing-assetId
+//     branch's sibling `missing_source_document` is used there instead — see that call
+//     site's own comment for why.
+// -----------------------------------------------------------------------------------------
+export const REASON_CODES = [
+  'unmapped_expense_category',
+  'unbalanced_source_group',
+  'missing_supplier_party',
+  'unsupported_case_class',
+  'unimplemented_payment_method',
+  'non_positive_amount',
+  'missing_source_document',
+  'precision_loss',
+] as const;
+
+export type ReasonCode = (typeof REASON_CODES)[number];
+
 export interface ConversionResult {
   specimenId: string;
   caseClass: CaseClass;
   status: ConversionStatus;
   reason: string | null;
+  /**
+   * Present ONLY when `status === 'quarantined'` — deliberately OPTIONAL (never `null`)
+   * rather than always-present, so a 'converted' or 'skipped' result carries no
+   * `reasonCode` key at all. This is not cosmetic: packages/etl/tests/integration/
+   * replay.test.ts diffs the live `convertSpecimen` output against committed
+   * `corpus/**\/*.expected.json` fixtures with `toEqual` (Scope forbids editing the
+   * corpus), and `toEqual` treats an `undefined`-valued property as absent — matching
+   * every existing fixture, none of which has this key. A `reasonCode: null` default
+   * would instead be a REAL mismatch against every one of those fixtures. Confirmed
+   * against vitest's actual toEqual behaviour before choosing this shape (task report).
+   */
+  reasonCode?: ReasonCode;
   entries: ConvertedEntry[];
 }
 
 const ZERO = money('0');
+
+/**
+ * DEF-046. Every amount arriving from a v1 document is a **JS float** (bible §12), and
+ * `money()` THROWS on one that is not exact to two decimals. Real v1 data contains such
+ * values — the first full capture hit `648.6479999999999` — so `money(doc.someAmount)`
+ * crashes the whole conversion on live data while passing every hand-written corpus
+ * specimen, because those were authored with clean 2dp figures.
+ *
+ * `moneyFromLegacyFloat` is the ETL-only helper built for exactly this: it rounds half away
+ * from zero, **matching v1's own `roundMoney()`** so a migrated figure reproduces v1's, and
+ * it reports rather than throws. Precision loss is surfaced downstream — the group audit
+ * classifies a residual imbalance carrying `precision_loss` rather than swallowing it.
+ *
+ * Never call `money()` on a value that came out of a v1 payload. Use this.
+ */
+function legacyMoney(value: number): Money {
+  return moneyFromLegacyFloat(value).value;
+}
 
 function line(
   accountCode: string,
@@ -178,8 +240,13 @@ function skipped(specimenId: string, caseClass: CaseClass, reason: string): Conv
   return { specimenId, caseClass, status: 'skipped', reason, entries: [] };
 }
 
-function quarantined(specimenId: string, caseClass: CaseClass, reason: string): ConversionResult {
-  return { specimenId, caseClass, status: 'quarantined', reason, entries: [] };
+function quarantined(
+  specimenId: string,
+  caseClass: CaseClass,
+  reasonCode: ReasonCode,
+  reason: string,
+): ConversionResult {
+  return { specimenId, caseClass, status: 'quarantined', reason, reasonCode, entries: [] };
 }
 
 function converted(specimenId: string, caseClass: CaseClass, entries: ConvertedEntry[]): ConversionResult {
@@ -211,14 +278,14 @@ export function convertSalesDay(specimenId: string, caseClass: CaseClass, doc: S
     return skipped(specimenId, caseClass, `sales day ${doc.id} is voided — cancelled sale, nothing to post`);
   }
 
-  const cash = money(doc.cashPayments);
+  const cash = legacyMoney(doc.cashPayments);
   const onlineEntries = Object.entries(doc.onlineBreakdown ?? {});
-  const onlineTotal = onlineEntries.reduce((sum, [, amt]) => add(sum, money(amt)), ZERO);
-  const discounts = money(doc.totalDiscounts);
-  const comps = money(doc.comps);
-  const dineIn = money(doc.dineInSales);
-  const aLaCarte = money(doc.takeOutSales);
-  const gross = money(doc.totalSales);
+  const onlineTotal = onlineEntries.reduce((sum, [, amt]) => add(sum, legacyMoney(amt)), ZERO);
+  const discounts = legacyMoney(doc.totalDiscounts);
+  const comps = legacyMoney(doc.comps);
+  const dineIn = legacyMoney(doc.dineInSales);
+  const aLaCarte = legacyMoney(doc.takeOutSales);
+  const gross = legacyMoney(doc.totalSales);
 
   // T-113 §2.3's balance identity, with no AR delta (branch-sale / on-account revenue is
   // Contract §1's separate `sale.branch_sale` class — out of scope for this converter;
@@ -229,6 +296,7 @@ export function convertSalesDay(specimenId: string, caseClass: CaseClass, doc: S
     return quarantined(
       specimenId,
       caseClass,
+      'unbalanced_source_group',
       `sales day ${doc.id} does not balance: totalSales (${gross}) != cash+online+discounts+comps ` +
         `(${tenderSide}), residual ${residual} — a finding about v1 data (T-113 §3), not a converter bug`,
     );
@@ -239,6 +307,7 @@ export function convertSalesDay(specimenId: string, caseClass: CaseClass, doc: S
     return quarantined(
       specimenId,
       caseClass,
+      'unbalanced_source_group',
       `sales day ${doc.id}: dineInSales + takeOutSales (${declaredRevenue}) != totalSales (${gross})`,
     );
   }
@@ -247,7 +316,7 @@ export function convertSalesDay(specimenId: string, caseClass: CaseClass, doc: S
   const lines: ConvertedLine[] = [];
   if (!isZero(cash)) lines.push(line(ACCOUNTS.CASH_CASHIER, storeCode, 'debit', cash, { lineMemo: 'cash tender' }));
   for (const [acct, amt] of onlineEntries) {
-    const m = money(amt);
+    const m = legacyMoney(amt);
     if (!isZero(m)) lines.push(line(ACCOUNTS.ONLINE, storeCode, 'debit', m, { lineMemo: `online: ${acct}` }));
   }
   if (!isZero(discounts)) lines.push(line(ACCOUNTS.SALES_DISCOUNTS, storeCode, 'debit', discounts, { lineMemo: 'senior/PWD/other discount' }));
@@ -256,7 +325,12 @@ export function convertSalesDay(specimenId: string, caseClass: CaseClass, doc: S
   if (!isZero(aLaCarte)) lines.push(line(ACCOUNTS.FOOD_A_LA_CARTE, storeCode, 'credit', aLaCarte, { lineMemo: 'à la carte (incl. take-out)' }));
 
   if (lines.length < 2) {
-    return quarantined(specimenId, caseClass, `sales day ${doc.id} produced fewer than two non-zero lines — cannot form a balanced entry`);
+    return quarantined(
+      specimenId,
+      caseClass,
+      'unbalanced_source_group',
+      `sales day ${doc.id} produced fewer than two non-zero lines — cannot form a balanced entry`,
+    );
   }
 
   const entry: ConvertedEntry = {
@@ -283,8 +357,8 @@ function fundingLine(
   payment: ExpensePaymentSplit,
   idx: number,
   doc: ExpenseDoc,
-): ConvertedLine | { error: string } {
-  const amount = money(payment.amount);
+): ConvertedLine | { reasonCode: ReasonCode; error: string } {
+  const amount = legacyMoney(payment.amount);
   switch (payment.method) {
     case 'cash': {
       const account = payment.cashRequestId
@@ -301,17 +375,26 @@ function fundingLine(
       // and a quarantine is the honest outcome (T-113 §3 rule 1 — never guess).
       const supplierId = doc.supplierId ?? null;
       if (!supplierId) {
-        return { error: `expense ${doc.id}: an AP (credit) payment has no supplierId — 2110 is a control account and its subledger cannot be reconstructed without one` };
+        return {
+          reasonCode: 'missing_supplier_party',
+          error: `expense ${doc.id}: an AP (credit) payment has no supplierId — 2110 is a control account and its subledger cannot be reconstructed without one`,
+        };
       }
       return line(ACCOUNTS.AP, storeCode, 'credit', amount, {
         lineMemo: `AP payment #${idx}`, partyType: 'supplier', partyId: supplierId,
       });
     }
     case 'reimbursable': {
-      // 2130 is likewise a control account, keyed by the employee owed.
+      // 2130 is likewise a control account, keyed by the employee owed. DEF-042: the
+      // closed reasonCode union has no separate "missing_employee_party" — reused from
+      // the AP branch above (see this file's REASON_CODES comment for why that is a
+      // documented choice, not a guess).
       const staffId = payment.staffId ?? null;
       if (!staffId) {
-        return { error: `expense ${doc.id}: a reimbursable payment has no staffId — 2130 is a control account and its subledger cannot be reconstructed without one` };
+        return {
+          reasonCode: 'missing_supplier_party',
+          error: `expense ${doc.id}: a reimbursable payment has no staffId — 2130 is a control account and its subledger cannot be reconstructed without one`,
+        };
       }
       return line(ACCOUNTS.REIMBURSABLE_TO_EMPLOYEES, storeCode, 'credit', amount, {
         lineMemo: `reimbursable payment #${idx}`, partyType: 'employee', partyId: staffId,
@@ -326,22 +409,26 @@ function fundingLine(
       // METHOD on an ordinary expense doc — and no v2 account is defined anywhere for a
       // bare "other" expense payment method (`others__{otherType}` in v1 has no COA row).
       // Never guess (T-113 §3 rule 1) — quarantine by name instead.
-      return { error: `expense payment method "${payment.method}" has no v2 account mapping defined yet (T-113 does not resolve it)` };
+      return {
+        reasonCode: 'unimplemented_payment_method',
+        error: `expense payment method "${payment.method}" has no v2 account mapping defined yet (T-113 does not resolve it)`,
+      };
   }
 }
 
 export function convertExpense(specimenId: string, caseClass: CaseClass, doc: ExpenseDoc): ConversionResult {
   const payments = doc.payments ?? [];
   if (payments.length === 0) {
-    return quarantined(specimenId, caseClass, `expense ${doc.id} has zero payment splits`);
+    return quarantined(specimenId, caseClass, 'unbalanced_source_group', `expense ${doc.id} has zero payment splits`);
   }
 
-  const paidTotal = payments.reduce((sum, p) => add(sum, money(p.amount)), ZERO);
-  const totalAmount = money(doc.totalAmount);
+  const paidTotal = payments.reduce((sum, p) => add(sum, legacyMoney(p.amount)), ZERO);
+  const totalAmount = legacyMoney(doc.totalAmount);
   if (!equals(paidTotal, totalAmount)) {
     return quarantined(
       specimenId,
       caseClass,
+      'unbalanced_source_group',
       `expense ${doc.id}: sum(payments) (${paidTotal}) != totalAmount (${totalAmount}) — inconsistent source document`,
     );
   }
@@ -349,10 +436,10 @@ export function convertExpense(specimenId: string, caseClass: CaseClass, doc: Ex
   const storeCode = doc.storeId;
   const lines: ConvertedLine[] = [];
   for (const [idx, payment] of payments.entries()) {
-    if (isZero(money(payment.amount))) continue;
+    if (isZero(legacyMoney(payment.amount))) continue;
     const result = fundingLine(specimenId, caseClass, storeCode, payment, idx + 1, doc);
     if ('error' in result) {
-      return quarantined(specimenId, caseClass, `expense ${doc.id}: ${result.error}`);
+      return quarantined(specimenId, caseClass, result.reasonCode, `expense ${doc.id}: ${result.error}`);
     }
     lines.push(result);
   }
@@ -363,7 +450,17 @@ export function convertExpense(specimenId: string, caseClass: CaseClass, doc: Ex
     // T-113 §2.1: CAPEX is "not an expense" — the funding legs pair with an asset DR,
     // never a P&L account. Synthesising a P&L leg here would be wrong (T-113 §2.1 table).
     if (!doc.assetId) {
-      return quarantined(specimenId, caseClass, `expense ${doc.id} is CAPEX but has no assetId to post the asset leg against`);
+      // The asset RECORD this leg needs to reference (to name what was capitalised) does
+      // not exist on the source document — closest fit in the closed union is
+      // `missing_source_document`, not `unbalanced_source_group`: the numbers here are
+      // internally consistent (payments == totalAmount), what's missing is the linked
+      // reference, not a balance.
+      return quarantined(
+        specimenId,
+        caseClass,
+        'missing_source_document',
+        `expense ${doc.id} is CAPEX but has no assetId to post the asset leg against`,
+      );
     }
     lines.push(line(ACCOUNTS.PROPERTY_AND_EQUIPMENT, storeCode, 'debit', totalAmount, { lineMemo: `capitalised: ${doc.assetId}` }));
   } else if (group === 'PERSONAL') {
@@ -376,6 +473,7 @@ export function convertExpense(specimenId: string, caseClass: CaseClass, doc: Ex
       return quarantined(
         specimenId,
         caseClass,
+        'unmapped_expense_category',
         `expense ${doc.id}: OPEX category "${category ?? '(none)'}" is not in leg-mapping.ts's ` +
           'OPEX_CATEGORY_ACCOUNTS (the full COA-ALIGNMENT §4.2 crosswalk) — never falls back to 6900 (T-113 §3 rule 1)',
       );
@@ -391,6 +489,7 @@ export function convertExpense(specimenId: string, caseClass: CaseClass, doc: Ex
     return quarantined(
       specimenId,
       caseClass,
+      'unsupported_case_class',
       `expense ${doc.id}: expenseEntryGroup "${group ?? '(none)'}" has no converter rule (COGS category ` +
         'is mapped in leg-mapping.ts but the two-stage inventory posting T-113 §2.1 describes is not ' +
         'implemented here; anything else is undecidable from the fields captured here)',
@@ -398,7 +497,12 @@ export function convertExpense(specimenId: string, caseClass: CaseClass, doc: Ex
   }
 
   if (lines.length < 2) {
-    return quarantined(specimenId, caseClass, `expense ${doc.id} produced fewer than two non-zero lines — cannot form a balanced entry`);
+    return quarantined(
+      specimenId,
+      caseClass,
+      'unbalanced_source_group',
+      `expense ${doc.id} produced fewer than two non-zero lines — cannot form a balanced entry`,
+    );
   }
 
   const entry: ConvertedEntry = {
@@ -454,6 +558,7 @@ export function convertSpecimen(raw: RawSpecimen): ConversionResult {
     return quarantined(
       raw.specimenId,
       raw.caseClass,
+      'unsupported_case_class',
       `case class "${raw.caseClass}" has no defined conversion rule yet — see UNSUPPORTED_CLASSES in convert.ts`,
     );
   }

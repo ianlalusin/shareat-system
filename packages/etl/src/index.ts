@@ -12,3 +12,7 @@ export * from './capture';
 export * from './source-reader';
 export * from './reconcile';
 export * from './run';
+export * from './audit/balances';
+export * from './audit/groups';
+export * from './audit/compare';
+export * from './audit/report';

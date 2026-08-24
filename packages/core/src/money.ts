@@ -183,7 +183,14 @@ export function moneyFromLegacyFloat(value: number): { value: Money; rounded: bo
   const abs = Math.abs(scaled);
   // Half away from zero, matching v1's roundMoney() so migrated figures reproduce.
   const roundedAbs = Math.floor(abs + 0.5);
-  const lostPrecision = Math.abs(roundedAbs - abs) > 1e-9;
+  // DEF-047. The tolerance is 1e-6, NOT 1e-9, and it matches `money()`'s above on purpose.
+  // Float representation error scales with magnitude: 333992.46 — a figure exact to the
+  // centavo — computes `value * 100` as 33399245.999999996, an error of 3.7e-9 that a 1e-9
+  // threshold reports as precision loss. The first audit over real v1 data produced 468
+  // `precision_loss` findings, the large majority of them this false positive, which buries
+  // the genuine ones (263.888…, 648.648) in noise and makes the whole finding class
+  // unreadable. 1e-6 still flags both of those and neither of the exact values.
+  const lostPrecision = Math.abs(roundedAbs - abs) > 1e-6;
 
   return {
     value: fromCentavos(BigInt(negative ? -roundedAbs : roundedAbs)),

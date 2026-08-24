@@ -2,8 +2,13 @@
   "name": "shareat-system",
   "version": "0.1.0",
   "private": true,
-  "workspaces": ["packages/*", "apps/erp"],
-  "engines": { "node": ">=20" },
+  "workspaces": [
+    "packages/*",
+    "apps/erp"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "npm run dev -w @shareat/erp",
     "build": "npm run build -w @shareat/erp",
@@ -17,7 +22,8 @@
     "db:generate": "npm run db:generate -w @shareat/db",
     "db:migrate": "npm run db:migrate -w @shareat/db",
     "db:studio": "npm run db:studio -w @shareat/db",
-    "check": "npm run typecheck && npm run test"
+    "check": "npm run typecheck && npm run test",
+    "audit": "tsx scripts/audit.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
@@ -33,5 +39,7 @@
     "typescript": "^5.7.3",
     "vitest": "^4.1.8"
   },
-  "overrides": { "esbuild": "^0.28.2" }
+  "overrides": {
+    "esbuild": "^0.28.2"
+  }
 }
