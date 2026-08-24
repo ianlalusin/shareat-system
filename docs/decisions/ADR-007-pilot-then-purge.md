@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Proposed 2026-08-24, from Ian's design brief |
+| **Status** | ✅ **Accepted 2026-08-24.** Ian: *“agreed, no per-row flag.”* |
 | **Follows** | ADR-005 (books-first cutover) · bible row 106 (v2 always assumes a zero starting point) |
 
 ## Context
