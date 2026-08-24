@@ -310,8 +310,64 @@ live in triggers rather than TypeScript, because a second copy in application co
 in a multi-tenant system** — and the one where being wrong means showing one owner another owner's
 books.
 
-**Needs Ian's go-ahead** — it is a real implementation commitment, and it should be adopted
-*before* Phase 2 builds tables rather than retrofitted onto them.
+✅ **ADOPTED 2026-08-24** — Ian: *“yes adopt it.”* It goes in **before Phase 2 builds tables**;
+retrofitting policies onto twenty existing tables is far worse than adding one as each is created.
+
+### 10. External customer ordering — the trigger fired, and it introduces a THIRD kind of actor
+
+§8 said the shared order document should split *“if the commissary ever sells to third parties at
+volume… a decision with a visible trigger, not a guess to make now.”* Ian, 2026-08-24: *“then we
+design an external customer ordering system so all external customers can order.”* **The trigger
+fired the same day.**
+
+#### What does NOT change
+
+**Still one order document.** The trigger was about *volume and terms*, not about who may create
+the row. Fulfilment is still pick-pack-dispatch; accounting is still derived from the counterparty
+(§2). Splitting the document now would forfeit everything §8 argued for and buy nothing.
+
+#### What DOES change: a third kind of actor, with a different security shape
+
+Until now every user belonged to an **organization** — Ian's, or a franchise's. An external
+customer placing their own order is **neither**:
+
+| Actor | Belongs to | Sees |
+|---|---|---|
+| **Internal staff** | Ian's org | That org's books, by role |
+| **Franchise staff** | Their own org | Their own org's books, by role |
+| **External customer** ⭐ NEW | **No org at all** — a `customers` row | **Their own orders, invoices and statement. No books of any kind** |
+
+**This is the narrowest access in the system and it must be designed as such, not as a weak org
+role.** An external customer has no books here, no ledger, no reports — they have a catalogue, their
+prices, their orders and what they owe. Modelling them as “an org with very few permissions” would
+put them one misconfigured role away from data they should never be able to reach.
+
+#### How RLS extends to cover it
+
+The §9 mechanism generalises cleanly. The connection carries a **principal**, not merely an org:
+
+- Staff principal → `org_id = :org` policies, exactly as §9 describes.
+- **Customer principal → `customer_id = :customer` policies**, on the small set of tables a customer
+  may touch (orders, order lines, their invoices, their statement). **Every other table has no
+  policy admitting a customer principal at all**, so the default is refusal rather than an
+  allow-list someone maintains.
+
+**Refusal by default is the whole point.** A new table is invisible to customers until someone
+deliberately writes a policy for it — the same shape as T-119's classification guard, where the
+absence of a decision is a failure rather than a permissive assumption.
+
+#### Open, and it materially changes the build
+
+1. **Self-service portal, or staff-entered?** *“So all external customers can order”* reads as
+   self-service. That is the larger build — it needs external logins, a catalogue view, and a
+   public-facing surface. **Staff-entered is a fraction of the work** and is often how B2B ordering
+   actually starts.
+2. **Who are these customers?** Other restaurants, resellers, walk-in wholesale? It decides whether
+   credit terms, credit limits and statements are needed on day one or later.
+3. **Does it reuse the existing CUSTOMER app or the Website storefront?** Both exist and both are
+   consumer-facing (diners ordering meals). **B2B wholesale ordering is a different product** —
+   sharing a codebase with the diner app is likely a false economy, but that is a real question, not
+   an assumption.
 
 ---
 
