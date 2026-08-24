@@ -178,3 +178,51 @@ per-store P&L comparison · the ETL · any change to posting logic.
       this box is not tickable from a terminal.*
 - [ ] No maintained summary table was created. Every figure is a view.
 - [ ] Any spec defect **reported, not silently worked around**.
+
+---
+
+## Implementation notes — resolved 2026-08-24
+
+**1. My invariant 10 was wrong, and the implementer was right to deviate.**
+
+I wrote *"Net income = revenue − contra − COGS − opex"* and called it net income. **That is
+OPERATING income.** The 7000-series — interest income, interest expense, other income — sits
+*below* operating profit and still has to reach the bottom line. My formula would have silently
+excluded every one of those postings from net income.
+
+**That is this project's founding defect, reproduced for a different subset of accounts.** v1's
+income statement is a hand-assembled scan list, so an account nobody remembered stays invisible;
+my formula would have made 7000 invisible by arithmetic instead of by omission. Same outcome.
+
+The implementation shows **two distinct lines** — `operatingIncome` (matching invariant 10 exactly,
+so the test still pins the figure I specified) and `netIncome = operatingIncome + otherIncomeExpense`.
+That is also the standard presentation, so the fix costs nothing and reads better. **Adopted as the
+rule, not just accepted as this implementation's choice.**
+
+**2. Invariant 6 referenced a task that does not exist — a real defect in this spec.**
+
+It requires the trial balance to tie "over the **T-108 worked examples** as a corpus." **T-108 was
+never built**: no `docs/tasks/108-*.md`, and `tests/worked-examples/` is an empty placeholder. This
+spec does not even list T-108 as a dependency, so the reference was careless rather than a
+sequencing error.
+
+The implementer built its own multi-store, multi-period corpus, **stated the substitution at the
+top of both test files**, and reported it. Correct on every count — the alternative was pretending
+an empty directory satisfied the requirement.
+
+**T-108 remains genuinely worth building** (exit-gate item 4 is *"every worked example posts exactly
+the expected lines"*, and its scope — a canonical posting pattern per business event — is broader
+than reporting fixtures). It stays open; this task's corpus does not replace it.
+
+**3. Scope was exceeded in two places, both disclosed and both correct.**
+
+`apps/erp` needed `@shareat/domain` wired into its `package.json`, `next.config.js`
+(`transpilePackages`) and `tsconfig.json` — without it the pages cannot import the service layer at
+all. And the two pages query `organizations`/`stores` directly for their filter pickers, there being
+no repo file for either in Scope. Reported rather than done quietly, which is the whole point of
+the rule.
+
+**4. The zero-organizations branch is the one thing not proven live.** The classifier blocked a
+`TRUNCATE` against `shareat_dev`, and the implementer respected the block rather than working
+around it — the right call. The branch is a single type-checked `if (orgs.length === 0)` and the
+database was confirmed empty before seeding, so the risk is low, but it is **unproven, not proven**.
