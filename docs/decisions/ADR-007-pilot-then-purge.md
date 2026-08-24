@@ -116,6 +116,28 @@ remaining purpose is a liability, and "we'll get to it" is how it stays for thre
 
 ---
 
+## The pilot is ROLLING — added 2026-08-24
+
+**It is not gated on Phase 2 being feature-complete** (bible row 113). Highest priority ships
+first, staff pilot whatever is ready, and the rest keeps being built through the window. **A module
+not ready in October simply keeps running in v1 for another month**, which costs nothing because v1
+is live until 31 December anyway.
+
+**What this does to ADR-005's checkpoints:** the dates hold, the question changes. They stop asking
+*"is Phase 2 done?"* and ask **"is the 1 January cutover still safe?"** A checkpoint that judges a
+rolling build against a fixed feature list fails every time it is run, and a checkpoint that always
+fails is one everybody learns to ignore — which is worse than not having it.
+
+**Priority order becomes load-bearing**, and it is set in this order:
+
+1. **Foundations that must precede tables** — RLS policies and the T-119 classification guard.
+   Neither is a feature; both are far cheaper per-table than retrofitted.
+2. **Real transaction volume**, now measured rather than guessed — `expense_payment` and `sale`
+   are 88% of all activity. The pilot should spend its longest time on the paths carrying the most
+   money.
+3. **Ledger completeness for January** — the five gap modules that already post in v1, whose
+   omission would leave the books understated from their first day.
+
 ## What this changes about Oct–Dec
 
 Nothing about how the app is built. **The pilot needs no special mode, no "test data" banner, no
