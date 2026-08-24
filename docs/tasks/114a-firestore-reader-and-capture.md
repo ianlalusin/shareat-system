@@ -306,3 +306,33 @@ including the absence of `opening_balance`.
 > **Carry into T-114b:** any sampling of this collection that pages by document id is biased by
 > sourceType. A representative sample must page by something else, or take the whole collection —
 > which at 15,584 legs is affordable anyway.
+
+
+---
+
+## Correction 2 — 2026-08-24: the store list was CAPPED and I treated it as complete
+
+The counts above say "all five stores" and total 21,879. **Both are wrong.** There are **seven**
+stores; the listing that produced the five was `.limit(5)`, and its output was used as the whole
+set without checking.
+
+It silently omitted **SharEat Banay-Banay — the third-largest store, 2,864 documents** — and
+SharEat Padre Garcia. Ian caught it by naming a store that was not on the list.
+
+**Corrected, and now captured in full** (`docs/STORE-ROSTER.md`):
+
+| Store | Documents |
+|---|---:|
+| SharEat Lipa | 9,468 |
+| SharEat Malvar | 6,732 |
+| SharEat Banay-Banay | 2,864 |
+| SharEat Davao (opened ~16 Aug) | 294 |
+| **Total landed** | **19,358** |
+
+Padre Garcia has **zero** documents and is not operating yet; the two test stores are excluded.
+
+> **The lesson, which is not "be more careful":** a cap added for safety becomes a silent
+> correctness bug the instant its output is treated as the complete set — and nothing in the
+> output says it was truncated. **If a listing is capped, the cap must be printed next to the
+> number.** Had the AP/AR audit run on that list, Banay-Banay would have been missing from every
+> per-party figure, and the totals would still have looked entirely reasonable.
