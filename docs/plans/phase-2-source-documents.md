@@ -82,6 +82,15 @@ postings are never silent.
 
 ### Wave 0 — foundations (must precede every table below)
 
+> ⚠️ **Status 2026-08-25: T-119 ✅ and T-120 ✅ are done. T-121 is NOT** — it is decided in
+> documents and unbuilt in code. **I declared Wave 0 complete after two of three** and specced
+> T-122 on top, which then needed capability enforcement against a roles system that does not
+> exist. Recorded as DEF-053.
+>
+> **T-121 is built before T-122.** The risk table below names *“Wave 0 slipping”* as the one slip
+> that compounds — written by the same person who then slipped it.
+
+
 | # | Task |
 |---|---|
 | **T-119** | Data classification registry + build-failure guard + the cutover purge (**specced**) |
