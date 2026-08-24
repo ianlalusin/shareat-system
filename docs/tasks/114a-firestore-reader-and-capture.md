@@ -276,3 +276,33 @@ was right: the rail also covers landing real PII, and that premise had not chang
 **2. No Firestore index created.** Ordering `salesDays` by `__name__` descending needs a composite
 index this project lacks. Creating one is a **WRITE to Ian's production project** and out of bounds
 for a read-only task, so the query was rewritten to read ids ascending instead (~115 per store).
+
+
+---
+
+## Correction — 2026-08-24, same day
+
+**Two claims above are too strong. Both were mine, and both change what the cutover needs.**
+
+### 1. "v1's books begin 1 May 2026" is wrong as stated
+
+It is true of **sales**: the earliest `salesDays` document for both main stores is `2026-05-01`.
+It is **not** true of the journal. Landed legs carry `businessDate` values as early as
+**2026-01-31** — prepaid `amortization` schedules, entered with back-dated business dates.
+
+So the accurate statement is: **operational/sales recording starts 1 May 2026; the journal
+contains dated entries reaching back to at least January.** Whether v1 was *seeded* with an
+opening balance covering Jan–Apr is **unresolved** — and it is the question that decides whether
+v1's 31 Dec 2026 balance sheet is complete or is missing every pre-May position.
+
+### 2. The 200-document sample is NOT representative — it is the alphabetical head
+
+`--limit 200` pages by document id, and v1's journal id is `sourceType:sourceId:legKey`. Ordering
+by id therefore orders by **sourceType alphabetically**. The sample came back
+`amortization` / `ap_payment` / `ar_collection` and nothing else — not because those dominate,
+but because they sort first. **No conclusion about sourceType distribution can be drawn from it**,
+including the absence of `opening_balance`.
+
+> **Carry into T-114b:** any sampling of this collection that pages by document id is biased by
+> sourceType. A representative sample must page by something else, or take the whole collection —
+> which at 15,584 legs is affordable anyway.
