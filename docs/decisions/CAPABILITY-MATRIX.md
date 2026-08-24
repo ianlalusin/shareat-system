@@ -248,3 +248,43 @@ When they later hire a dedicated admin, those grants are revoked in the single d
 
 **§Open 3 is therefore closed.** The two remaining open cells are `set_credit_limit` and
 `close_period`.
+
+## B.2 The authority chain — Ian, 2026-08-25
+
+> *"Only super-admin can assign admin. Once admin is assigned, admin can then touch managers'
+> access level. When an admin is deactivated or removed, managers' access won't change unless
+> ticked by super-admin."*
+
+✅ **Adopted. This completes §B rather than amending it**, and it closes a gap I had left open.
+
+| | Who may do it | Why that one |
+|---|---|---|
+| **Assign an org's admin** | **Super-admin only** | Who runs an org is a commercial decision, not an operational one. It also stops an admin minting a peer admin — a lateral move that would be invisible from above |
+| **Set a manager's access level** | **That org's admin** | Each tier manages the tier below. No one reaches past their own level |
+| **Re-elevate managers after an admin leaves** | **Super-admin, by an explicit tick** | The right person by elimination: at that moment the org **has no admin** to do it |
+
+**The gap this closes.** §B said grants are unaffected by anyone's departure — true, but silent on
+what happens when an org genuinely now has no admin and its managers were never elevated. Ian's
+answer supplies it: **super-admin ticks it, deliberately.** Nothing infers, nothing escalates, and
+the action lands on the only role that still exists.
+
+### ⭐ One addition: the absence of a change must be VISIBLE
+
+Not granting automatically is right. **Not noticing is not.**
+
+An org can now sit with **no admin and un-elevated managers**, and nothing says so — until someone
+cannot do their job, probably at month end, probably while closing.
+
+> **So deactivating an admin raises a notice to super-admin: *"Org X has no admin. Its managers do
+> not hold elevated grants. Elevate them?"*** A prompt, never an action.
+
+That keeps the safety property whole — **nothing changes without a human deciding** — while
+removing the failure it would otherwise create: a quiet gap nobody is looking for. **A design that
+refuses to escalate silently should also refuse to degrade silently.**
+
+### Worth being conscious of, not fixing
+
+Two things now depend on Ian personally: **assigning an admin**, and **re-elevating managers**.
+That is correct at this scale — both are rare and both are genuinely his decisions. It is worth
+saying out loud only so that if a franchise ever needs an urgent change while he is unreachable,
+nobody is surprised by it. **A known dependency, not a flaw.**
