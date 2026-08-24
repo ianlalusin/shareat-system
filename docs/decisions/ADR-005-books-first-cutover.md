@@ -178,3 +178,63 @@ confidence in every number thereafter.
 - The old system's final close is used as designed, rather than being cut off mid-year.
 - January 1 is a clean fiscal boundary: pure balance-sheet opening balance, no YTD carry, no
   split-year comparatives.
+
+---
+
+## Amendment — 2026-08-24: the opening balance is BALANCE-FORWARD per party, not open-item
+
+**Ian's call, and it is the better one.** Recorded with the reasoning because it removes a whole
+task from the plan rather than adding one.
+
+### The decision
+
+> *"We can always use the simplest cleanest approach as if we are just starting the business with
+> a new book. For AR and AP we will lump-sum their balances per vendor, then apply payments to
+> total until we cover the whole balance. As to allocation, leave it to me — I'll handle it
+> manually in the spreadsheet. We'll just capture money movement until we catch up. So we can date
+> all AR and AP January 1 and start from there."*
+
+| | |
+|---|---|
+| **AR / AP opening** | **One lump balance per party**, dated `2027-01-01`. No per-invoice open items are migrated |
+| **Payments against it** | Draw the party balance down until covered. **Oldest first**, which the opening lump automatically is — it is dated 1 January, so it always precedes any 2027 invoice |
+| **Pre-cutover invoice detail and aging** | Lives in Ian's spreadsheet. **Deliberately not in the new system** |
+| **2026 as a whole** | Closed in the old ERP and the spreadsheet: Jan–Apr already closed on the sheet, May–Dec exported from v1 and appended |
+
+### Why this is right, not merely convenient
+
+**An opening balance is a snapshot of positions, not a replay of history.** January-to-April's
+transactions are already inside the 31 December figures; nothing about them needs to reach the new
+system. That is what makes the append a *reporting* exercise rather than a cutover dependency, and
+it is why the simplification costs nothing structural.
+
+**Per-party lump sums are standard practice**, not a shortcut — it is what commercial systems do
+when you decline to import individual invoices. And the control-vs-subledger discipline survives
+intact: the per-party balances must still sum exactly to the 2110/1210 control account, which is
+invariant 6, still enforced, still worth having.
+
+**Balance-forward for the opening, open-item for everything new.** The two coexist cleanly in one
+control account precisely because the lump is dated first.
+
+### ⚠️ The discipline this makes MORE important, not less
+
+**3900 Opening Balance Equity must still net to exactly zero.** With figures typed from a
+spreadsheet rather than derived from a load, the temptation to plug a residual is much higher than
+it would be otherwise. Research §7.2 is explicit that a lingering or force-zeroed residual is a
+sign of an incomplete load and **never a formality to clear**. A non-zero residual **halts and is
+investigated**. That rule was written for a detail load; it matters more here.
+
+### What this removes from the plan
+
+**T-115 (ETL Stage 2 — opening balance + detail load) should probably not exist.** If the books
+open with hand-entered per-party lump sums, loading 15,584 legs of known-broken v1 history into
+clean books adds nothing — the whole point of the rebuild is that the new books are not the old
+ones.
+
+**T-114b (Stage 1 analysis + audit report) matters MORE, and its purpose changes.** It is no longer
+groundwork for a load. It is the instrument that tells Ian **whether the numbers he is about to
+type are right** — per-supplier AP totals, per-customer AR totals, and every place v1's own books
+do not balance. **The audit is now the deliverable, exactly as the phase plan said it might be:**
+*"Stage 1 has value even if Stage 2 never runs."*
+
+Not deleting T-115 unilaterally — flagged here, decided when T-114b's report exists.
