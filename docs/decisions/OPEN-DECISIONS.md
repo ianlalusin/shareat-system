@@ -69,13 +69,18 @@ the pathology without the platform that forced it.
   page in the app (1,398 LOC) but is an internal design tool — it should not shape v2 scoping.
 - A full per-route keep/drop list gets built in Phase 1 and signed off before porting.
 
-## 4. Inventory costing: weighted average or FIFO? — *leaning decided*
+## 4. Inventory costing: weighted average or FIFO? ✅ **RESOLVED — FIFO** (bible row 110)
 
 - **Recommended: weighted average** — matches the prior plan's recommendation and is
   simpler to reconcile. **This is a business/accounting call, not a technical one.**
   FIFO is materially more work and changes reported margins.
 
-## 5. Single company with many stores, or true multi-company tenancy?
+## 5. Single company with many stores, or true multi-company tenancy? ✅ **RESOLVED — MULTI-COMPANY**
+
+> Bible row 111 / **ADR-008**. Future tenants are **franchises with separate owners**, not one
+> umbrella group. `organizations` is a real boundary. **Consequence: a commissary dispatch to a
+> franchise is a SALE, not an eliminating transfer** — which corrects a pattern already shipped in
+> `POSTING-PATTERNS.md`.
 
 - **Recommended: single company, many stores — but keep an `organizations` table from
   day one.** Costs almost nothing now; retrofitting tenancy later is painful. Note there

@@ -413,6 +413,14 @@ Of the ₱2,000 float, ₱350 is unspent and returned.
 
 ## Commissary dispatch (`commissary_dispatch`) — 70 legs, the inter-store elimination case
 
+> ⚠️ **THIS PATTERN IS FOR AN INTERNAL STORE ONLY — it is WRONG for a franchise.**
+> Ian confirmed 2026-08-24 that future tenants are **franchises with separate owners** (bible row
+> 111). A dispatch to a franchise crosses a **legal entity boundary**: nothing eliminates, the
+> commissary recognises **revenue and COGS**, and the franchisee recognises **inventory and a
+> payable**. The due-from/due-to pair below is correct only when the counterparty is another store
+> of the **same company**. The second pattern is specified in **ADR-008 §4** and is not yet
+> written here. **Do not use this one for a franchise.**
+
 No v1 leg-mapping entry exists for this shape (v1's `commissary_receive` sourceType is dead at
 the financial layer and name-collides with a live inventory-ledger type of the same string —
 COA-ALIGNMENT §2 "Retire" table). This is a genuine v2 design, built from the reciprocal-account
