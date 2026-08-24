@@ -369,6 +369,65 @@ absence of a decision is a failure rather than a permissive assumption.
    sharing a codebase with the diner app is likely a false economy, but that is a real question, not
    an assumption.
 
+### 11. Scoped 2026-08-24: B2B wholesale only, staff-entered, and it is an ERP MODULE
+
+Ian: *“staff-entered for now, new app not the customer app — this one is for wholesalers,
+resellers, not retail orders. Retail orders of à la carte menu remain on the website handled by
+each store. The external customers I am mentioning are for the bulk orders of meat — other restos
+to whom we sell raw materials. For external customers it can be an org, these restos, or an
+individual, the customer of the website, the one who orders kimbap, coke etc.”*
+
+#### What this is, precisely
+
+**The commissary selling raw materials to other restaurants.** Low volume, high value, named
+counterparties, probably credit terms. It is **not** retail: à la carte menu orders stay on the
+Website, handled per store, and nothing here touches them.
+
+#### ⭐ The line that matters: retail diners are NOT accounting customers
+
+Ian mentioned both kinds in one breath — wholesale restos, and website diners ordering kimbap and
+coke. **They should not be the same record, and the distinguishing test is not org-vs-individual.**
+
+> **A `customers` row exists because there is a BALANCE or a credit relationship. A diner who pays
+> at the point of sale has neither.**
+
+| | Wholesale buyer | Retail diner |
+|---|---|---|
+| Resto **or** individual | Either — irrelevant | Individual |
+| Pays | On terms, later | **Immediately** |
+| Creates a receivable | **Yes** — an AR party with a subledger balance | **No** |
+| Belongs in `customers` | **Yes** | **No** — a loyalty/profile record in the CUSTOMER app |
+| Sale posts | `DR 1210 AR (party)` / `CR revenue` | `DR cash-or-online` / `CR revenue`. **No party** |
+
+**An individual CAN be a wholesale customer** — someone buying bulk meat on terms is an AR party
+whether or not they are a company. The axis is the **balance**, not the legal form.
+
+**Why this matters practically:** putting tens of thousands of walk-in diners into the same table as
+a dozen wholesale buyers would bury the AR subledger in rows that can never carry a balance, make
+every aging report scan noise, and eventually invite someone to “clean up” the customer list and
+delete an actual debtor. Invariant 6 — subledger sums to control — stays meaningful only if the
+subledger contains parties that can actually owe something.
+
+#### It is a MODULE in the ERP, not a new deployable app
+
+Ian said *“new app, not the customer app.”* Agreed on the second half — **do not build this into the
+diner app**; B2B wholesale and consumer food ordering are different products and sharing that
+codebase would be a false economy.
+
+But **staff-entered ordering does not need a new app at all.** The people entering these orders are
+commissary staff who already sign in to the ERP. A wholesale-orders section there is a fraction of
+the work of a new deployable, and building a third app would contradict §9's own argument — a
+separate surface that must be maintained, deployed and secured in parallel forever.
+
+**The new app becomes justified when the customer self-serves** (§10 open 1). That is a genuinely
+different surface — external logins, a public catalogue, a public attack surface — and it should be
+its own app when it arrives. **Not before.**
+
+| | |
+|---|---|
+| **Now** | Wholesale orders module in the ERP. Staff-entered. Reuses the one order document (§8) and the derived counterparty treatment (§2) |
+| **Later, if wanted** | `apps/wholesale-portal` — customer self-service, customer principal under RLS (§10) |
+
 ---
 
 ## What this changes today
