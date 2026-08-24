@@ -1,0 +1,755 @@
+# Posting patterns — the canonical entry for every business event
+
+**Status:** Phase 1 deliverable, T-108. **Source of truth:** `tests/worked-examples/fixtures.ts`.
+**Proved against real Postgres by:** `tests/integration/posting-patterns.test.ts`.
+
+> **This document and the fixtures cannot disagree.** `tests/unit/posting-patterns-doc.test.ts`
+> parses this file for every `` ### `fixture.id` `` heading and asserts, in both directions, that
+> the set matches `tests/worked-examples/fixtures.ts` exactly — the same technique
+> `chart-of-accounts.test.ts` uses to parse `COA-ALIGNMENT.md` for account codes rather than
+> keeping a hand-written list. If you change an account, an amount, or a party here, the fixture
+> is now wrong until you change it too (or the other way around) — the test will not let the two
+> drift.
+
+## How to read this
+
+Each pattern states: the business event in one sentence, the exact T-account lines (account,
+side, amount, party), and — where one exists — **the trap**: the field that lies, the account
+that looks right and is not, or the double-count this shape exists to prevent.
+
+Every one of these has been **posted through the real `postEntry`, against real Postgres,
+read back from `journal_lines`, and reversed through the real `reverseEntry`** — proven, not
+merely balanced. A wrong-account entry balances perfectly too.
+
+**No VAT is computed anywhere.** Shareat System is a management ledger, not a statutory filing
+basis (bible decision #75) — do not read a discount or a tax-looking account name as VAT
+compliance.
+
+**Money is always a decimal string**, never a float — bible §6, DEF-046.
+
+---
+
+## Expense payment (`expense_payment`) — 4,396 legs, 88%-of-activity, #1
+
+v1 posts the funding leg(s) only (cash / AP / online OUT) and **never the classification
+leg** — bible §16.0's diagnosis in one word. Every pattern below restores the missing expense
+line.
+
+### `expense.cash.simple` — Cash expense, single payment
+
+A ₱1,200 delivery of pork paid in cash from the cashier drawer. A COGS category (meat) is
+expensed **directly on receipt** — the correct Phase 1 treatment. The two-stage
+purchase→inventory→consumption posting (COA-ALIGNMENT §4.1) needs real inventory tracking,
+which is Phase 3; until then a COGS purchase is the same shape as any other cash expense, just
+posted to a 5xxx account instead of a 6xxx one.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 5100 COGS — food | 1,200.00 | | — |
+| 1110 Cash on hand — cashier | | 1,200.00 | — |
+
+**Trap:** do not "wait for Phase 3" before posting expenses — the classification leg is required
+**now**; the two-stage inventory refinement changes *where* the debit lands later, it is not a
+reason to omit it today.
+
+### `expense.split.cash-online` — Split-payment expense, one entry, several credit lines
+
+A ₱3,500 supplies order paid ₱2,000 from the cashier drawer and ₱1,500 from an online wallet.
+**The single most common shape in the whole v1 dataset**: one expense, several payment methods,
+one journal entry with several credit lines.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 6500 Supplies | 3,500.00 | | — |
+| 1110 Cash on hand — cashier | | 2,000.00 | — |
+| 1140 E-wallet / online channels | | 1,500.00 | — |
+
+### `expense.credit.ap` — Credit expense, books to AP
+
+A ₱8,000 supplies order on 30-day terms from a named supplier. No cash moves; the obligation
+grows the AP control account instead.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 6500 Supplies | 8,000.00 | | — |
+| 2110 Accounts payable | | 8,000.00 | supplier |
+
+**Trap:** 2110 is a control account (T-118, DEF-037) — every credit-method payment **must**
+carry the supplier as a party or the database rejects the line outright. A credit expense with
+no `supplierId` quarantines rather than posting an unattributable control line.
+
+### `expense.reimbursable` — Reimbursable expense, staff paid out of pocket
+
+A staff member fronted ₱650 for an emergency repair. The company now owes **them** — a
+liability, not an asset (COA-ALIGNMENT §3 answer #1: *"we owe to staff — staff own money they
+spend for business needs"*).
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 6600 Repairs and maintenance | 650.00 | | — |
+| 2130 Reimbursements payable to employees | | 650.00 | employee |
+
+**Trap:** reimbursement is expense-**first**, cash-**later** — the opposite of a salary advance
+(cash-first, an asset). Booking this as an asset is the live v1 misclassification
+COA-ALIGNMENT corrects: today it defaults to the debit side because `inferAccountNature` has no
+rule for `staff_reimbursable__`, understating liabilities.
+
+### `reimbursement.payout` — Settling the reimbursement above
+
+The ₱650 owed from `expense.reimbursable` is paid out in cash. Pure balance sheet — the expense
+was already recognised when the liability was created.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 2130 Reimbursements payable to employees | 650.00 | | employee |
+| 1110 Cash on hand — cashier | | 650.00 | — |
+
+---
+
+## Sale (`sale`) — 2,945 legs, #2
+
+v1's own `sale.builder.ts` posts **only** the cash/online legs — zero revenue, zero discount,
+zero comp lines, ever (confirmed by reading it directly, read-only). This is bible §16.0's
+diagnosis at its starkest: a 2,945-leg sourceType with **no nominal leg at all**. The pattern
+below is what `packages/etl/src/convert.ts`'s `convertSalesDay` (already implemented and tested
+against real Postgres by T-113/T-117) already synthesises — this document formalises that
+already-decided pattern, not a new one.
+
+### `sale.unli.simple` — Dine-in unlimited, cash only
+
+A ₱5,600 day of pure unli sales, paid entirely in cash. `dineInSales` maps straight to 4100 —
+GLOSSARY.md: `dineInSales` means **unlimited-package sales only**, not "all dine-in", and it
+needs no reconstruction because POS already computes it that way.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 1110 Cash on hand — cashier | 5,600.00 | | — |
+| 4100 Food sales — unlimited (unli) | | 5,600.00 | — |
+
+### `sale.alacarte.simple` — À la carte, includes take-out and delivery
+
+A ₱780 day of à la carte sales, cash only. `takeOutSales` is the field name, but GLOSSARY.md
+warns it is a **residual** — `Math.max(0, totalGross - dineInSales)` — that absorbs dine-in à la
+carte, take-out, **and** delivery alike, because POS has no take-out flag at all
+(COA-ALIGNMENT §2: 4200 was withdrawn for exactly this reason). It all posts to 4150.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 1110 Cash on hand — cashier | 780.00 | | — |
+| 4150 Food sales — à la carte (dine-in, take-out and delivery) | | 780.00 | — |
+
+**Trap:** `takeOutSales` is **not** a measurement of take-out orders — never chart it as one. A
+non-zero value is everything that is not unli, all mixed together. Treat it as a reconciliation
+signal, never a revenue breakdown.
+
+### `sale.discount.senior-pwd` — Senior/PWD discount, contra-revenue
+
+A ₱1,000 unli sale with a ₱200 senior-citizen discount; ₱800 cash actually tendered. In v1 this
+discount is **hardcoded to zero** on the live sales-entry path (bible §16.7 defect #3) — this
+worked example is what it **should** be, and the gap is the finding.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 1110 Cash on hand — cashier | 800.00 | | — |
+| 4900 Sales discounts | 200.00 | | — |
+| 4100 Food sales — unlimited (unli) | | 1,000.00 | — |
+
+**Trap:** no VAT is computed anywhere. This discount reduces revenue for internal management
+reporting; it is not a BIR VAT-exemption computation and must never be presented as one.
+
+### `sale.comps` — Comps, contra-revenue, never marketing expense
+
+A ₱500 unli sale where ₱100 was comped (given away complimentary); ₱400 cash tendered. Ian
+confirmed directly: comps are revenue foregone, never a cost incurred.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 1110 Cash on hand — cashier | 400.00 | | — |
+| 4950 Sales returns and voids | 100.00 | | — |
+| 4100 Food sales — unlimited (unli) | | 500.00 | — |
+
+**Trap:** comps post to **4950** (Sales returns and voids), **not 4900** (Sales discounts) —
+confirmed by bible decision-log row 74 (*"comps are contra-revenue (4950), not marketing
+expense"*), `docs/GLOSSARY.md`'s own comps entry, and `packages/etl/src/convert.ts`'s
+already-tested `ACCOUNTS.SALES_RETURNS_AND_VOIDS` mapping. **T-108's own original task spec text
+said "DR 4900" for comps — that line was wrong**, contradicted by three independent,
+already-decided sources, and is reported as a spec defect in the T-108 task report rather than
+followed. 4900 is reserved for senior/PWD/other **discounts**; comps are a distinct account.
+
+### `sale.mixed` — The full pattern: cash, online, unli, à la carte, discount and comps together
+
+A ₱5,450 day: ₱3,000 cash, ₱2,000 online, ₱300 discount, ₱150 comps, ₱4,450 of it unli and
+₱1,000 à la carte. The complete shape every module should copy — debits (tender + contra-revenue)
+first, credits (revenue) last.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 1110 Cash on hand — cashier | 3,000.00 | | — |
+| 1140 E-wallet / online channels | 2,000.00 | | — |
+| 4900 Sales discounts | 300.00 | | — |
+| 4950 Sales returns and voids | 150.00 | | — |
+| 4100 Food sales — unlimited (unli) | | 4,450.00 | — |
+| 4150 Food sales — à la carte | | 1,000.00 | — |
+
+**Trap:** the balance identity is **two** separate checks, not one — (1) cash + online +
+discounts + comps = totalSales (the tender side), **and** (2) dineInSales + takeOutSales =
+totalSales (the revenue side). A sales day that fails either quarantines rather than posting a
+guessed entry.
+
+---
+
+## Salary advance (`salary_advance`) — 1,488 legs, #3
+
+Disbursement and repayment (the common cases) are **pure balance sheet, never P&L** — only the
+rarer "charge" txType touches a counter account. 1230 is a `requires_party` control account
+(party = employee).
+
+### `salary_advance.disbursement` — Cash out, an asset grows
+
+A staff member draws a ₱3,000 salary advance in cash. An advance is **cash-first** — an asset —
+the mirror image of a reimbursement (expense-first, a liability).
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 1230 Advances to employees | 3,000.00 | | employee |
+| 1110 Cash on hand — cashier | | 3,000.00 | — |
+
+### `salary_advance.repayment` — A payroll deduction settles it
+
+A ₱500 payroll deduction repays part of the same advance.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 1110 Cash on hand — cashier | 500.00 | | — |
+| 1230 Advances to employees | | 500.00 | employee |
+
+**Trap:** most `salary_advance` legs (disbursement, repayment) **never** touch P&L — only the
+rare "charge" txType does, and even then the counter-account is caller-supplied. Do not assume
+this sourceType is nominal by default.
+
+---
+
+## Transfer (`transfer`) — 926 legs, #4
+
+"Source OUT + target IN, both balance-sheet" — but a genuine finding: with a fee, a **third**
+leg posts to an expense account. Not party-requiring — ordinary asset-to-asset cash movement,
+not inter-store (that is `commissary_dispatch`, below).
+
+### `transfer.cash.simple` — Cashier drawer to the office
+
+A routine ₱15,000 move from the cashier drawer to the office safe.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 1130 Cash on hand — office | 15,000.00 | | — |
+| 1110 Cash on hand — cashier | | 15,000.00 | — |
+
+### `transfer.cash.with-fee` — With a bank fee, NOT always pure balance sheet
+
+A ₱10,000 online-to-office transfer costs a ₱50 bank fee, so only ₱9,950 lands.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 1130 Cash on hand — office | 9,950.00 | | — |
+| 6870 Bank charges | 50.00 | | — |
+| 1140 E-wallet / online channels | | 10,000.00 | — |
+
+**Trap:** do not assume every transfer is P&L-free. When a fee applies, a real expense leg exists
+and must be included — omitting it would silently understate the fee expense while the entry
+still balances (the entry balances either way; only the *account* would be wrong).
+
+---
+
+## Depreciation (`depreciation`) — 362 legs, #5
+
+Always both legs, no conditionality. One of ADR-005's five capabilities that "cannot wait past
+January."
+
+### `depreciation.monthly` — Monthly depreciation, always posted in the period earned
+
+A ₱4,200 monthly depreciation charge on kitchen equipment. Bible DEF-044: v1's depreciation
+scheduler stopped running for two straight months, confirmed by Ian — this fixture pins what
+**should** run every month without fail.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 6700 Depreciation | 4,200.00 | | — |
+| 1590 Accumulated depreciation | | 4,200.00 | — |
+
+---
+
+## Loan payment and disbursement (`loan_payment` 221 legs / `loan_disbursement` 4 legs)
+
+Disbursement is **always** pure balance sheet (no interest leg, ever); payment is nominal
+**only** when `interestAmount > 0`. 2400 requires party — the lender, filed under
+`party_type = 'supplier'` (see the trap below).
+
+### `loan_payment.principal-only` — Zero P&L lines
+
+A ₱5,000 principal-only repayment on a term loan.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 2400 Loans payable | 5,000.00 | | supplier |
+| 1110 Cash on hand — cashier | | 5,000.00 | — |
+
+**Trap:** 2400's documented party_type is **"supplier"** even though the counterparty is a
+lender, not a supplier of goods (T-118 Contract §2). This is a deliberate reuse of the closed
+`party_type` enum — do not invent a "lender" party_type.
+
+### `loan_payment.with-interest` — The conditional P&L leg appears
+
+A ₱4,800 instalment: ₱4,500 principal, ₱300 interest.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 2400 Loans payable | 4,500.00 | | supplier |
+| 7200 Interest expense | 300.00 | | — |
+| 1110 Cash on hand — cashier | | 4,800.00 | — |
+
+### `loan_disbursement.simple` — Cash in, a liability grows, never P&L
+
+A ₱50,000 term loan is drawn down.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 1110 Cash on hand — cashier | 50,000.00 | | — |
+| 2400 Loans payable | | 50,000.00 | supplier |
+
+---
+
+## AR collection with a platform fee (`ar_collection`) — 176 legs
+
+**The marquee example.** v1 recognised a platform fee **twice** and it cost ₱198,148.29 across
+two stores, 37 duplicate expense documents voided (discovery `06` §3.2). Three legs, always
+distinct: gross receivable cleared, cash actually received, fee expensed — never any other
+combination.
+
+### `ar_collection.with-platform-fee` — The double-count this prevents
+
+A ₱5,000 receivable from a Grab settlement collects with a ₱250 platform fee deducted at
+source; only ₱4,750 actually lands in the bank.
+
+| Account | Debit | Credit | Party | Channel |
+|---|---:|---:|---|---|
+| 1110 Cash on hand — cashier | 4,750.00 | | — | grab |
+| 6400 Platform and channel fees | 250.00 | | — | grab |
+| 1210 Accounts receivable | | 5,000.00 | customer | grab |
+
+**Trap:** this platform fee is booked **here, once**, as part of the collection. It must
+**never** also be booked as a separate expense document for the same settlement — that double
+posting is the confirmed v1 defect that cost ₱198,148.29. A module that both posts this
+collection AND lets someone manually expense "platform fee" for the same settlement has
+reintroduced the bug.
+
+### `ar_collection.no-fee` — The conditional leg genuinely absent
+
+A ₱2,000 receivable collects in full, no platform fee applies. Two legs only — 6400 does not
+appear at all.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 1110 Cash on hand — cashier | 2,000.00 | | — |
+| 1210 Accounts receivable | | 2,000.00 | customer |
+
+---
+
+## AP payment (`ap_payment`) — 93 legs
+
+"Source cash/online OUT + ap OUT (allocated) + optional supplier_advance IN (overpayment)."
+Bible §16.10's own rule: overpayment goes to a **named** home account, never to nowhere.
+
+### `ap_payment.simple` — Clears exactly what is owed
+
+A ₱12,000 payment to a supplier, applied exactly against the outstanding AP balance.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 2110 Accounts payable | 12,000.00 | | supplier |
+| 1110 Cash on hand — cashier | | 12,000.00 | — |
+
+### `ap_payment.overpayment` — Never floats to nowhere
+
+An ₱8,000 AP balance is paid with ₱8,500, ₱500 more than owed.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 2110 Accounts payable | 8,000.00 | | supplier |
+| 1240 Advances to suppliers | 500.00 | | supplier |
+| 1110 Cash on hand — cashier | | 8,500.00 | — |
+
+**Trap:** payments must name the open items they settle. Overpayment goes to 1240 (Advances to
+suppliers) — a real, party-carrying asset — **never** to an unallocated cash-in-limbo state. The
+same supplier both owes and is owed simultaneously here, and that is correct, not a
+contradiction.
+
+---
+
+## Cash request release and return (`cash_request_release` 82 legs / `cash_request_return` 52 legs)
+
+The pair, together. 1120 (staff-custodian cash) is **not** a `requires_party` account — it is a
+plain asset, not a control account with a subledger.
+
+### `cash_request.release` — A float handed to a staff custodian
+
+A ₱2,000 cash float is released from the cashier drawer for a market run. The operational
+**request** itself has no GL effect at all (bible §16.10) — only the release does.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 1120 Cash on hand — staff custodian | 2,000.00 | | — |
+| 1110 Cash on hand — cashier | | 2,000.00 | — |
+
+### `cash_request.return` — The unused float comes back
+
+Of the ₱2,000 float, ₱350 is unspent and returned.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 1110 Cash on hand — cashier | 350.00 | | — |
+| 1120 Cash on hand — staff custodian | | 350.00 | — |
+
+---
+
+## Commissary dispatch (`commissary_dispatch`) — 70 legs, the inter-store elimination case
+
+No v1 leg-mapping entry exists for this shape (v1's `commissary_receive` sourceType is dead at
+the financial layer and name-collides with a live inventory-ledger type of the same string —
+COA-ALIGNMENT §2 "Retire" table). This is a genuine v2 design, built from the reciprocal-account
+pattern COA-ALIGNMENT §2 already specifies for due-from/due-to. Bible landmine #27's fix ("one
+real ACID transaction; both stores are rows in one database") makes this **one journal entry
+spanning two stores**, not v1's "fake distributed transaction" (two best-effort writes). Phase 3
+owns valuation (weighted average, real stock movement); this pattern owns the **shape** only.
+
+### `commissary_dispatch.transfer` — One entry, two stores, must eliminate
+
+₱18,000 of prepped commissary goods ships from the Malvar commissary to the Lipa branch.
+
+| Account | Store | Debit | Credit | Party |
+|---|---|---:|---:|---|
+| 1330 Inventory — prepped / commissary goods | commissary | | 18,000.00 | — |
+| 1250 Due from related store | commissary | 18,000.00 | | store |
+| 1330 Inventory — prepped / commissary goods | branch | 18,000.00 | | — |
+| 2150 Due to related store | branch | | 18,000.00 | store |
+
+**Trap:** this must **eliminate** at entity level — total 1250 (Due from related store) across
+all stores must equal total 2150 (Due to related store) — bible invariant 6's reciprocal check.
+If they do not net to zero, an inter-store transfer went missing. `party_id` for a
+`party_type='store'` line is the **other store's `code`**, not a database id — there is no party
+FK yet (DEF-040) and store codes are stable, human-chosen identifiers.
+
+---
+
+## Amortization (`amortization`) — 38 legs
+
+Always both legs, same shape as depreciation. One of ADR-005's five January-required
+capabilities.
+
+### `amortization.monthly` — Monthly amortisation of a prepaid item
+
+A ₱1,100 monthly slice of a prepaid insurance policy is recognised as expense.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 6750 Amortisation | 1,100.00 | | — |
+| 1400 Prepaid expenses | | 1,100.00 | — |
+
+---
+
+## Wastage (`wastage_expense`) — 16 legs
+
+v2 wastage debits 5300 and credits inventory **directly** — COA-ALIGNMENT §2's "Retire" table
+explicitly retires v1's net-zero memo-pair (`income__wastage_writeoff_contra`): "a real economic
+entry, no memo needed."
+
+### `wastage_expense.spoilage` — A real cost of sales, straight against inventory
+
+₱640 of spoiled pork belly is written off. Moved from OPEX to **cost of sales** per
+COA-ALIGNMENT §1 rule 5 — the standard treatment, and it will make reported gross margin more
+correct, not more flattering.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 5300 Wastage and spoilage | 640.00 | | — |
+| 1310 Inventory — raw materials | | 640.00 | — |
+
+**Trap:** do **not** port v1's net-zero contra-memo pair forward — this is a real, single
+economic entry: an expense against an asset, not an expense against an income-side memo that
+cancels itself out.
+
+---
+
+## Remittance (`remittance`) — 10 legs
+
+Cash-cashier OUT + cash-office IN, **always**. Then either 1230 IN (shortage, not P&L) or 7350
+IN (overage, P&L) — **never both**, and neither when expected equals actual. Bible §16.6: fee
+and variance accounts "net as a signed total... never clamp at zero" — the same discipline
+applies to 7350.
+
+### `remittance.exact` — The conditional leg genuinely absent
+
+The cashier remits ₱12,000, and expected and counted match exactly. Two legs only.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 1130 Cash on hand — office | 12,000.00 | | — |
+| 1110 Cash on hand — cashier | | 12,000.00 | — |
+
+### `remittance.overage` — 7350 swings positive
+
+Expected ₱10,000, actually counted ₱10,080 — ₱80 more than the books say should be there.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 1130 Cash on hand — office | 10,080.00 | | — |
+| 1110 Cash on hand — cashier | | 10,000.00 | — |
+| 7350 Cash over and short | | 80.00 | — |
+
+### `remittance.shortage` — Charged to the responsible cashier, not P&L
+
+Expected ₱10,000, only ₱9,850 counted — a ₱150 shortage, charged to the cashier.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 1130 Cash on hand — office | 9,850.00 | | — |
+| 1230 Advances to employees | 150.00 | | employee |
+| 1110 Cash on hand — cashier | | 10,000.00 | — |
+
+**Trap:** 7350 is **one** account that swings **either** way — never a separate account per
+direction. A shortage does not touch 7350 at all; it goes to 1230, not P&L.
+
+---
+
+## Balance adjustment (`balance_adjustment`) — 10 legs — THE ANTI-PATTERN
+
+**Required, and explicitly marked as the pattern to design out.** v1's real sourceType for what
+T-113 called "liability-charge".
+
+### `balance_adjustment.plug` — Included so nobody ports it forward
+
+An SSS payable balance is found ₱850 too low after a manual reconciliation. Instead of finding
+and reversing the entry that got it wrong, someone plugs the difference directly.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 6110 Employer SSS contributions | 850.00 | | — |
+| 2210 SSS payable | | 850.00 | — |
+
+**Trap:** THIS IS THE PATTERN TO DESIGN OUT. v2 should make it unnecessary: a correction is a
+**reversal with a reason** (T-106), not an adjusting line that references nothing. This fixture
+exists to be pointed at, not copied — if a Phase 2 module reaches for this shape to "fix" a
+wrong balance, the right move is `reverseEntry` on the entry that was actually wrong, not a plug
+like this one.
+
+---
+
+## Prepaid purchase (`prepaid_purchase` 4 legs) / asset purchase (`asset_purchase` 2 legs)
+
+"Include; cheap, pins a pattern." Both: control asset IN + source OUT (cash) or AP IN (on
+account).
+
+### `prepaid_purchase.cash` — An asset, not an immediate expense
+
+A ₱24,000 annual insurance premium is paid up front — an asset until amortised (see
+`amortization.monthly` above).
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 1400 Prepaid expenses | 24,000.00 | | — |
+| 1110 Cash on hand — cashier | | 24,000.00 | — |
+
+### `asset_purchase.cash` — Fixed asset purchase, cash
+
+A ₱45,000 commercial grill bought outright.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 1510 Property and equipment | 45,000.00 | | — |
+| 1110 Cash on hand — cashier | | 45,000.00 | — |
+
+### `asset_purchase.credit` — Fixed asset purchase, on account
+
+A ₱60,000 walk-in chiller bought on 30-day supplier terms.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 1510 Property and equipment | 60,000.00 | | — |
+| 2110 Accounts payable | | 60,000.00 | supplier |
+
+---
+
+## Slicer/payroll payout (`slicer_payment`) — 4 legs
+
+"liability__salaries_payable OUT (park) + cash/online OUT splits — payroll park pattern." No
+P&L leg — preserves the intent of v1's park-then-lump-sum payroll model (bible §16.8).
+
+### `slicer_payment.park` — Settling an already-parked liability
+
+A ₱18,500 payout clears an already-parked salaries-payable balance.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 2300 Salaries and wages payable | 18,500.00 | | — |
+| 1110 Cash on hand — cashier | | 18,500.00 | — |
+
+---
+
+## Statutory remittance (`liability_payment`)
+
+"Cash OUT + liability OUT. Pure balance sheet." Not in the v1 frequency table by leg count, but
+ADR-005's scope-gap section names "generic liability accounts" as one of five capabilities that
+cannot wait past January. Doubles as bible §16.5's worked "remit to agency" example.
+
+### `liability_payment.statutory-remittance` — Settling what was withheld, not new expense
+
+₱5,000 of withheld SSS contributions is actually remitted to the agency. Bible §16.5: "if you
+never remit, the liability sits there and grows — that is the feature, not a gap." This is the
+**remit** step, distinct from withholding it and from the employer share, both already booked
+earlier at payroll time.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 2210 SSS payable | 5,000.00 | | — |
+| 1110 Cash on hand — cashier | | 5,000.00 | — |
+
+**Trap:** this is **not** a new expense — the expense (employer share) and the withholding
+(employee share) were already recognised when payroll posted. Posting this again as an expense
+would double the true statutory cost — the same shape of bug as the AR platform-fee double-count
+above.
+
+---
+
+## Owner equity movements (`capital_contribution` / `drawing`)
+
+Not in T-108's own v1-leg-count frequency table (too rare in the historical corpus), but
+ADR-005's scope-gap section names "owner equity movements" explicitly as one of five
+capabilities v1 already posts that cannot wait past January, and bible §16.10's minimum pattern
+list names "owner drawings" by name. COA-ALIGNMENT §4.7 #2: drawings were **never used** in v1 —
+this is an **add**, not a **correct**, designed right from the start rather than migrating a
+broken pattern.
+
+### `equity.capital_contribution` — Cash in, equity grows
+
+The owner injects ₱100,000 of fresh capital into the business.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 1110 Cash on hand — cashier | 100,000.00 | | — |
+| 3100 Owner's capital | | 100,000.00 | — |
+
+### `equity.drawing` — Reduces equity, on the books at last
+
+The owner withdraws ₱25,000 for personal use. 3200 is **debit-normal** (contra-equity) — one of
+the six accounts across the whole chart that breaks derive-from-type, alongside 1590 and the
+four contra-revenue accounts.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 3200 Owner's drawings | 25,000.00 | | — |
+| 1110 Cash on hand — cashier | | 25,000.00 | — |
+
+**Trap:** 3200 is `type='equity'` but `normal_balance='debit'`. A drawing **debits** 3200 to
+increase it (reduce equity) — the same mechanic as accumulated depreciation debiting-to-increase
+on the asset side. Do not assume every equity account credits to increase.
+
+---
+
+## Year close (`year_close`) — v2-only, ADR-006
+
+Every income and expense balance for the year zeroes into 3300 Retained earnings, posted through
+the **same** `postEntry` every other entry uses, dated the first day of the following year,
+carrying `source_type = 'year_close'` so a date-range P&L can exclude it while a
+balance-sheet-as-of includes it.
+
+### `year_close.annual` — One entry, into 3300, dated the following January 1st
+
+A small year of activity: ₱20,000 of unli revenue, ₱8,000 of OPEX. Net income ₱12,000 for the
+year zeroes into Retained Earnings on 2028-01-01 — ADR-006's own dating convention, matching the
+opening balance's own 2027-01-01 precedent for "one clean artifact."
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 4100 Food sales — unlimited (unli) | 20,000.00 | | — |
+| 6900 Other operating expenses | | 8,000.00 | — |
+| 3300 Retained earnings | | 12,000.00 | — |
+
+**Trap:** the year-close entry is an **ordinary** posted entry — balanced, traceable to a source
+document (the archived year-end trial balance), immutable, correctable only by `reverseEntry`.
+It needs no bespoke closing-voucher entity. A date-range P&L over 2027 must **exclude** this
+entry (it is dated 2028); a balance-sheet-as-of on or after 2028-01-01 must **include** it — both
+directions depend on filtering by `source_type = 'year_close'`, never by a date heuristic.
+
+---
+
+## Opening balance (`opening_balance`) — v2-only, ADR-005 (amended 2026-08-24) + bible row 106
+
+One entry dated 2027-01-01, per-party lump sums for AR/AP, balancing to 3900. **3900 must net to
+exactly zero once loaded and reconciled** — a residual halts, never gets plugged. This pair
+(load then reconcile) is the accounting judgement T-108 required: ADR-005 says 3900 must net to
+zero but does not spell out the two-step mechanism that makes that provable rather than
+definitionally true — see the T-108 task report.
+
+### `opening_balance.load` — The 2027-01-01 load, balance-sheet only, per-party lump sums
+
+The closed, adjusted trial balance from the old ERP as at 2026-12-31, loaded as one entry dated
+2027-01-01. AR and AP are **one lump sum per party** (Ian: *"we will lump-sum their balances per
+vendor... date all AR and AP January 1 and start from there"*) — no per-invoice detail is
+migrated; that lives in the spreadsheet, deliberately. Every other balance-sheet account books
+against 3900, the temporary clearing account this whole load nets through.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 1110 Cash on hand — cashier | 80,000.00 | | — |
+| 1210 Accounts receivable | 15,000.00 | | customer |
+| 1510 Property and equipment | 300,000.00 | | — |
+| 1590 Accumulated depreciation | | 40,000.00 | — |
+| 2110 Accounts payable | | 22,000.00 | supplier |
+| 3900 Opening balance equity | | 333,000.00 | — |
+
+**Trap:** v2 assumes a **zero** starting point everywhere else (bible row 106) — this is the
+**one** exception, and only for balance-sheet positions, never for history. Nothing here is a
+replay of 2026 transactions; it is a snapshot of where things stood on 31 December. AR and AP
+open as one balance per party — the opening lump is always dated first, so it is always oldest
+and payments draw it down before any 2027 invoice.
+
+### `opening_balance.reconcile` — Reconciling 3900 to exactly zero
+
+The load above leaves a ₱333,000 balance sitting in 3900 — a temporary clearing figure, not a
+final one. Reconciliation reclassifies it into the owner's real capital account. ADR-005: "3900
+must net to exactly zero once loaded and reconciled — a residual balance means the migration did
+not balance." This second entry is what makes that **provable** rather than merely asserted:
+load creates the balance, reconcile clears it, and only after both does 3900 net to zero.
+
+| Account | Debit | Credit | Party |
+|---|---:|---:|---|
+| 3900 Opening balance equity | 333,000.00 | | — |
+| 3100 Owner's capital | | 333,000.00 | — |
+
+**Trap:** a lingering or force-zeroed residual on 3900 is never a formality to clear — it is a
+sign of an incomplete load, and it **halts** for investigation. The temptation to plug a residual
+is higher here than in an automated load, precisely because these figures are typed by hand from
+a spreadsheet.
+
+---
+
+## Reversal — the correction path (T-106)
+
+Not its own business event; the mechanism every pattern above shares. **Every single fixture in
+this document has been posted, then reversed, through the real `reverseEntry`, and proved to net
+to exactly zero per account** (`tests/integration/posting-patterns.test.ts`'s own "(reversal)"
+pass). A posted entry is never edited — a correction is a new, dated, opposite entry
+(`reverseEntry`), never a quiet change to history.
+
+Two things a Phase 2 module must get right, proved here for the hardest cases (control
+accounts, inter-store, opening balance, year close):
+
+1. **Party travels with the reversal.** A line on a `requires_party` control account (AP, AR, a
+   staff advance, a loan, an inter-store due-from/due-to) reverses with the **same** party — only
+   debit and credit swap. DEF-049 found this did not work at all until this task's own fix
+   (see the T-108 task report).
+2. **A closed-period original needs an explicit `reversalDate` in an open period**, and the
+   reversal's memo is prefixed `[prior period]` — T-106's own contract, unchanged by this task.
+
+**`balance_adjustment.plug`, above, is the anti-pattern reversal exists to remove**: a correction
+that references nothing it corrects. Reach for `reverseEntry` on the entry that was actually
+wrong, never a plug.

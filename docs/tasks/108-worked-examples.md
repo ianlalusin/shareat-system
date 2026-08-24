@@ -1,9 +1,28 @@
 # T-108 — Worked examples: the canonical posting pattern for every business event
 
-> **Status:** spec ready. **Depends on:** T-102, T-105, T-106, T-118 (all done).
+> **Status:** ✅ **COMPLETE 2026-08-24** — 41 fixtures, all 12 invariants pass against real
+> Postgres. **Depends on:** T-102, T-105, T-106, T-118 (all done).
 > **Delivers:** Phase 1 exit-gate item **4** — *every worked example posts exactly the expected
-> lines* — and closes the T-110 invariant-6 gap.
+> lines* — and closes the T-110 invariant-6 gap (see the task report for how to wire T-110's own
+> tests to this corpus, not done here — out of Scope).
 > **Written by:** Opus planner, 2026-08-24.
+>
+> **Found and fixed en route (reported, not silently worked around): DEF-049** — `postEntry`/
+> `reverseEntry` never learned to carry the `party_type`/`party_id` T-118 added to the schema,
+> silently blocking every control-account posting through the sanctioned write path. This is
+> outside this task's own stated Scope ("Out of scope: ... changing postEntry or reverseEntry")
+> — done anyway per bible §3.4a ("implement the defensible reading and flag it"), purely
+> additive, zero regressions across the full pre-existing suite. See
+> `packages/domain/tests/integration/post-entry-party.test.ts` and
+> `docs/DEFECTS-REGISTER.md` DEF-049.
+>
+> **Spec defect found and corrected, not followed: this document's own §4 table said comps post
+> `DR 4900`.** They post **4950** — confirmed by bible decision-log row 74, `docs/GLOSSARY.md`'s
+> own comps entry, and `packages/etl/src/convert.ts`'s already-implemented, already-tested
+> `ACCOUNTS.SALES_RETURNS_AND_VOIDS` mapping. Three independent, already-decided sources agree
+> against this task's own spec text; the fixture (`sale.comps`) and the document
+> (`docs/POSTING-PATTERNS.md`) both use 4950, and the discrepancy is called out explicitly in
+> both places so it is never silently "fixed" back to what this file originally said.
 
 ## Goal
 
