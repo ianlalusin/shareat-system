@@ -241,14 +241,32 @@ Four foundation modules encoding v1's worst landmines as code:
 | `packages/core/src/env.ts` | v1 shipped a deploy with blank env vars; its passcode secret fell back to a public value and failed OPEN. Fail-closed, no defaults on secrets |
 | `packages/core/src/logger.ts` | Silent failure is v1's defining pathology. Structured, redacting, with `jobResult()` so a background job can never report a bare "done" |
 
-### Next — Phase 1: the accounting spine
+### Phase 1 — the accounting spine — is **14 of 15 done** (2026-08-24)
 
-Read **`docs/plans/phase-1-accounting-spine.md`**. It is fully specified: chart of
-accounts, schema, posting engine, the ten invariants, reporting views, the ETL, and 16
-sequenced tasks (T-101 … T-116).
+| | |
+|---|---|
+| **Ledger core** | Schema, chart of accounts (92 accounts), journal tables with every rule as a **database constraint or trigger**, `postEntry` (draft-first, idempotent), `reverseEntry`, the legacy leg adapter, and the subledger party columns |
+| **Migration harness** | ETL run ledger, append-only content-hashed landing, re-drivable quarantine, reconciliation. `packages/etl-firestore` is the **only** package that can reach Firestore |
+| **v1 captured** | **19,358+ real documents** landed in Postgres from four operating stores. Read-only, reproducible, costs nothing to re-analyse |
+| **The audit** | `docs/reviews/v1-audit-*.md` — cash/AP/AR per party, a cross-check against v1's own counters, and every group that cannot balance |
+| **Reports** | `v_account_balance`, `v_trial_balance`, `v_income_statement` — **views, never maintained tables** — plus two screens on 9008 |
 
-**Start with T-101** (core schema) and **T-102** (chart of accounts seed). The chart is
-already aligned and signed off by Ian — see `docs/decisions/COA-ALIGNMENT.md`.
+**Remaining:** T-108 (worked examples), T-109 (the ten invariants as a standing CI suite),
+T-111 (property tests). **T-115 is CANCELLED** — bible row 106, v2 migrates no history.
+
+### Commands you will actually use
+
+```bash
+npm run dev                 # 9008 — /reports/trial-balance and /reports/income-statement
+npm run db:migrate          # applies to DATABASE_URL; point it at TEST_DATABASE_URL for the test db
+npm run typecheck && npm test && npm run test:integration
+npm run capture -- --store <id> --collection journal          # COUNTS ONLY. --fetch to read
+npm run audit -- --as-of 2026-08-24                           # regenerates the v1 audit
+```
+
+**`npm run capture` reads LIVE production Firestore.** It counts by default and reads nothing
+without `--fetch`. Credentials are read-only service accounts in `secrets/` (gitignored) —
+see `secrets/README.md`. `npm run audit` reads Postgres only and can never touch production.
 
 ### Read these before writing code
 
@@ -265,20 +283,17 @@ already aligned and signed off by Ian — see `docs/decisions/COA-ALIGNMENT.md`.
 
 ## 6. Ian's outstanding tasks
 
-Tracked in `docs/IAN-SETUP-CHECKLIST.md`. **None were done before this handoff** — the
-new machine starts from zero.
-
-| | Task | Blocks |
+| | Task | Why it matters |
 |---|---|---|
-| ☐ 1 | Install PostgreSQL locally on port 5435 (§3) | Local dev and integration tests |
-| ☐ 2 | Create the DO Managed Postgres (SGP1, same VPC as the droplet, trusted source = droplet) | Production only — **not** Phase 1 work |
-| ☐ 3 | Report what is running on the droplet | Planning its second life |
-| ☐ 4 | Optionally install + authenticate `doctl` (Ian pastes the token; the agent never sees it) | Nothing — console works too |
+| ⏰ **1** | **Book July + August 2026 depreciation in v1** — Inventory → Assets, per store, per month | The scheduler is not running (DEF-044, confirmed). Net income and net fixed assets are **overstated and compounding**, and these figures feed the 2026 close and therefore the opening balance |
+| ☐ 2 | Decide **open decision 9** — opening inventory at zero, or at counted value | If counted: a **valued physical count on 31 December 2026** is required and cannot be reconstructed afterwards |
+| ☐ 3 | Decide **open decision 10** — assets at cost+accumulated, or at net book value | Either way, **remaining useful life** must come across or v2 cannot depreciate anything |
+| ☐ 4 | Confirm the **hub** service account is `roles/datastore.viewer` | The ERP one is verified. The Admin SDK bypasses Firestore rules, so the IAM role is the only control |
+| ☐ 5 | Create the DO Managed Postgres (SGP1, same VPC, trusted source = droplet) | Production only — **not** Phase 1 work |
 
-**Only Task 1 blocks development.** Phase 1 is schema and business logic; it needs a local
-Postgres, not a cloud one.
-
----
+> **December is one calendar entry with three jobs:** the valued stock count, the asset
+> verification, and the **final v1 depreciation run**. That last one lands directly in the opening
+> balance and is the one most likely to be forgotten in a handover week.
 
 ## 7. What did NOT come across from the old machine
 
