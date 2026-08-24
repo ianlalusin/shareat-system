@@ -13,6 +13,7 @@
     "test:watch": "vitest --project unit",
     "test:integration": "vitest run --project integration",
     "test:all": "vitest run",
+    "capture": "tsx scripts/capture.ts",
     "db:generate": "npm run db:generate -w @shareat/db",
     "db:migrate": "npm run db:migrate -w @shareat/db",
     "db:studio": "npm run db:studio -w @shareat/db",

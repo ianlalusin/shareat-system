@@ -52,6 +52,12 @@
       "@shareat/etl/*": [
         "./packages/etl/src/*"
       ],
+      "@shareat/etl-firestore": [
+        "./packages/etl-firestore/src/index.ts"
+      ],
+      "@shareat/etl-firestore/*": [
+        "./packages/etl-firestore/src/*"
+      ],
       "@/*": [
         "./apps/erp/src/*"
       ]
@@ -63,6 +69,7 @@
     "packages/**/*.ts",
     "tests/**/*.ts",
     "etl/**/*.ts",
+    "scripts/**/*.ts",
     "apps/erp/next-env.d.ts"
   ],
   "exclude": [

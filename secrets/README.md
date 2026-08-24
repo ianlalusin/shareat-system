@@ -48,3 +48,18 @@ the way a local pre-commit hook can (`--no-verify`).
 
 It protects the repository, not your working copy: a key sitting here uncommitted is fine and
 expected — that is what this directory is for.
+
+## Downstream consequence: `etl_source_documents` now holds real PII
+
+T-114a (`npm run capture`, `@shareat/etl-firestore`) uses these keys to land REAL v1 documents
+— staff names, customer identifiers, live figures — into Postgres's `etl_source_documents`
+table, unmodified. That is correct for a migration (this is not the pseudonymised specimen
+corpus path — `pseudonymise.ts`, T-117 — which exists for a different purpose: committed test
+fixtures).
+
+**Consequence, not solved here:** once a capture run has landed data, `etl_source_documents`
+must be treated the same way this directory is — **never exported, never dumped into a shared
+artifact or report, never copied into a test fixture or corpus.** No anonymisation layer exists
+for this table (deliberately out of scope for T-114a). Anyone querying it directly (`psql`,
+Drizzle Studio, a debugging script) is looking at production data and should treat the output
+accordingly.
