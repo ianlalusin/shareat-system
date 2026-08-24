@@ -147,3 +147,76 @@ project. It just has to happen *first*.
 > **Worth stating plainly: nobody would have found this by reasoning about it.** The turnover
 > argument is sound, the recency argument is sound, and the conclusion they jointly imply is the
 > opposite of what either suggests alone. It took counting.
+
+---
+
+## Amendment 2026-08-25 — from discovery 20, and one basis question nobody had raised
+
+Three recommendations from `docs/discovery/20-expense-delivery-inventory-shape.md`, **all adopted**:
+
+### 1. ✅ A delivery posts a PROVISIONAL valued layer on receipt, corrected when the expense links
+
+Today nothing posts until the manual link happens, which **is** the expensing lag this ADR
+measured (91% → 76%, worst in the most recent month). Posting at receipt on a provisional cost and
+correcting on link **closes that lag permanently**, rather than asking people to be more diligent.
+
+**It does not require the two-document split** (Purchase Receipt + Purchase Invoice) that mature
+systems use and this ADR already argued against at ~30 deliveries a month. **One document, two
+postings.**
+
+> ⚠️ **This needs a “goods received, not yet invoiced” account** — a liability that exists between
+> receipt and the linked expense. `1340 Inventory in transit` is an asset and is not it. **Settle
+> the account before T-122 is revised**, because a provisional posting with nowhere to put the
+> credit is not a design, it is a gap.
+
+### 2. ✅ `isExpensed` / `partiallyExpensed` become DERIVED, not hand-set
+
+They are currently maintained by hand at three call sites. ERPNext's `per_billed` and Odoo's
+`invoice_status` are both **re-derived, never hand-written**.
+
+**This is the same failure shape that has already produced real drift in this business**: v1's AP
+tile was wired at 3 of 8+ write paths and silently drifted low while looking live. **A
+hand-maintained flag with three writers has three chances to be wrong and no way to notice.**
+
+### 3. ✅ Voiding a delivery becomes ONE transaction
+
+v1's own code documents the cascade as **explicitly non-atomic, accepted risk OC-14** — void
+delivery, then void each linked expense, then the receipt, then reverse inventory, each committing
+separately, with a documented tolerance for inconsistent intermediate states.
+
+**This costs nothing to fix in v2.** `postEntry`/`reverseEntry` already run in one transaction;
+this is the case they were built for. *Accepting a risk because the platform could not do better is
+not the same as accepting it when the platform can.*
+
+---
+
+## ⚠️ The basis question the research surfaced without naming it
+
+`tie-out.server.ts:381` — verified directly:
+
+> *“D2 (informational): valuation = Σ onHand × item **weighted-avg** cost.”*
+
+**v1 already computes an inventory valuation, and it does so on a WEIGHTED-AVERAGE basis. Ian chose
+FIFO** (bible row 110). Those are different numbers.
+
+**Not a conflict, but it must be stated or someone will trip on it in January:**
+
+| | |
+|---|---|
+| **The 31 December opening layer** | Necessarily **weighted-average** — it is what the data supports, and a single opening layer at an average cost is the standard way to open FIFO books |
+| **From 1 January** | **FIFO**, layer by layer, because every layer from then on is a real delivery with a real cost |
+
+**So the basis changes exactly once, at the boundary, by design.** Recorded because a year-on-year
+comparison of inventory value spanning the cutover compares two bases — and someone will make that
+comparison without knowing.
+
+## What this changes about the approach generally
+
+The research found that v1 **already has** a working, tested off-ledger valuation, and an in-flight
+internal migration (`items` replacing the `meatProducts`/`inventoryProducts` split — stated in
+`types/item.ts:3`) that independently arrived near the industry-correct shape.
+
+> **The instruction was to fit v1's shape to the correct one. In several places v1 had already
+> started doing that itself.** This project should **port more and invent less** than assumed — and
+> the `commissaryItemMap` case is the warning: it *looked* like duplication and is a genuinely
+> separate concern. A shallower read would have deleted a table that is not redundant.
