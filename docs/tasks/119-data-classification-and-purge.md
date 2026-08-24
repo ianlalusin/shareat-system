@@ -1,6 +1,8 @@
 # T-119 — Data classification, enforced at build time, and the cutover purge
 
-> **Status:** spec ready. **Depends on:** ADR-007 (accepted), bible row 108.
+> **Status:** ✅ **COMPLETE 2026-08-24** — built by the planner after the implementing agent
+> stalled twice without producing a file. Guard demonstrated failing on a deliberate probe.
+> **Was:** spec ready. **Depends on:** ADR-007 (accepted), bible row 108.
 > **Blocks:** nothing today — and that is exactly why it must be built **now**, not in December.
 > **Written by:** Opus planner, 2026-08-24.
 
