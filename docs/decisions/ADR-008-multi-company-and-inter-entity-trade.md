@@ -152,6 +152,49 @@ exactly that and no more.**
 
 Every rule here is **enforced server-side**, never by a filter in a query someone remembered to add.
 
+### 6. The franchisee's access: the same ROLE, a different BOUNDARY
+
+Ian, 2026-08-24: *"the franchisee must be shipped with ERP and POS. They have access to what a
+branch owner can access, of course store-scoped. They have no access to commissary because they
+are not. v1 treats them as a branch but they are not actually."*
+
+**No franchise role is invented.** A franchise owner is a **branch owner of their own company** —
+the same role definition, the same capabilities, applied inside a different org boundary. One role
+catalogue, applied within an org.
+
+### ⭐ "No commissary access" needs no rule — and that is the test of the design
+
+The commissary is a function of **Ian's** org. A franchisee's org does not contain one, so there is
+**nothing to deny**. The exclusion is **structural**, falling out of the org boundary rather than
+resting on a permission that could be misconfigured, forgotten on a new screen, or granted by an
+over-broad role.
+
+> **This is the check on whether the boundary is modelled correctly: if a rule is ever needed to
+> keep a franchisee out of the commissary, the boundary is wrong.** In v1, where Padre Garcia is a
+> store, such a rule *would* be needed — which is the defect, stated as a design smell.
+
+**What they DO see of the commissary relationship** is their own side of it: the goods they
+received and the amount they owe — an inbound receipt and a payable, exactly as with any supplier.
+**Receiving a delivery is not access to the commissary.** They never see its stock, its costs, its
+margins, its dispatch planning, or what it charges anyone else.
+
+### 7. ⚠️ v1 models a franchise as a branch — and the consequence is live
+
+This is a **v1 defect** (DEF-050), and it is the clearest single justification for ADR-008.
+
+In v1, `y1DMgfisuTHBF57cNL6i` is a `stores/{storeId}` document in **Ian's Firebase project**, under
+the same store-scoped security rules as Lipa and Malvar. So a separate company's books would sit
+**inside Ian's database**, reachable by v1's store wildcard, and swept into any query that walks the
+store list — including consolidated figures, which would silently add a company Ian does not own to
+his own totals.
+
+**It has not bitten yet only because Padre Garcia has posted zero documents.** The moment they
+trade in v1, it does.
+
+**Not fixed in v1** — the reference repos are read-only (bible §2 rule 1) and this is a modelling
+change, not a patch. **Recorded so the risk is chosen rather than discovered**, and so the v2
+design is understood as a correction rather than a preference.
+
 ---
 
 ## What this changes today
