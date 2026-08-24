@@ -340,7 +340,7 @@ The first of these is already running (`docs/discovery/17-industry-erp-patterns.
 | T-112 | ETL framework + reconciliation reporter | T-103 |
 | T-113 | Nominal-leg mapping table | **Ian's review** |
 | T-114 | ETL Stage 1 — analysis mode + audit report | T-112, T-113 |
-| T-115 | ETL Stage 2 — opening balance + detail load | T-114 |
+| ~~T-115~~ | ~~ETL Stage 2 — opening balance + detail load~~ — **CANCELLED 2026-08-24, bible row 106.** v2 assumes a zero starting point; no historical data is migrated at all. The books open with one balance-sheet entry of counted, present-day facts. **Loading 15,584 legs of known-broken history into clean books adds nothing when the point of the rebuild is that the new books are not the old ones** | — |
 | T-116 | Trial-balance + GL screens (walking skeleton) | T-110 |
 
 Each becomes a `docs/tasks/NNN-<slug>.md` spec (bible §3.3) before a Sonnet agent starts.
