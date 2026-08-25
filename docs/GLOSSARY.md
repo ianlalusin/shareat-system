@@ -38,6 +38,38 @@ reconstruction needed.
 **Never treat it as a revenue figure on its own**; treat a non-zero value as a reconciliation
 signal.
 
+### `deliverySales` ⚠️ ✅ — **means neither delivery NOR one consistent thing**
+
+**Two different meanings depending on which document wrote it**
+(`ERP-rebuild/src/lib/financial/sales-report/derive-totals.ts:88-96`):
+
+| Document | What `deliverySales` actually holds |
+|---|---|
+| **DAY doc** | *"the full channel sum + branchDelta (i.e. **it currently equals `totalSales`**)"* — a duplicate of the total, **not** delivery |
+| **SHIFT doc** | `nonRemittedChannelsTotal` = `max(0, totalSales − remittedChannelsTotal)` — the channels whose money never reaches the till (Foodpanda, Grab, …) |
+
+⚠️ The day-doc behaviour is a known wart frozen in place — *"preserved verbatim so create and
+adjust agree."* **Never read this field as delivery revenue.** The useful concept underneath is
+**non-remitted channels**, which is what `SalesChannel.isRemittedDaily` decides.
+
+### `dineInSales` — ⚠️ ALSO means something different in the ERP than in POS
+
+The entry above defines POS's meaning (unlimited-package sales). **The ERP's sales-report form
+stores something else in the same field:** *"Stored `dineInSales` — the **remitted-daily
+channels**"* (`derive-totals.ts:83-85`). **One field name, two meanings, depending on which system
+wrote the row.** Anything reconciling ERP against POS must know which it is holding.
+
+### `cashPayments` ⚠️ — a floored residual, not a measurement
+
+*"cash is DERIVED: remitted channels − online − credit − other, floored at 0"* (`derive-totals.ts`).
+**Flooring at zero hides a negative**, and a negative here would be a real signal that the tender
+figures disagree. Same family as `takeOutSales`: a residual wearing a measurement's name.
+
+### `creditCardPayments` ⚠️ — **always 0**
+
+*"Always 0 — card tenders are captured through the online accounts."* The field exists; nothing
+populates it. Do not build a card-tender breakdown on it.
+
 ### `sessionMode` ⚠️ ✅
 
 Two values only: `'package_dinein' | 'alacarte'`. **Walk-in à la carte and in-store take-out

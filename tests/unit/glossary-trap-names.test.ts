@@ -25,7 +25,17 @@ import { describe, expect, it } from 'vitest';
 const repoRoot = join(import.meta.dirname, '..', '..');
 
 /** Marked ⚠️ in docs/GLOSSARY.md — a name whose meaning is the opposite of its reading. */
-const TRAP_NAMES = ['dineInSales', 'takeOutSales', 'receiptSeq', 'billOnServe', 'voidCashRetained'] as const;
+const TRAP_NAMES = [
+  'dineInSales',
+  'takeOutSales',
+  'receiptSeq',
+  'billOnServe',
+  'voidCashRetained',
+  // Added 2026-08-25 after reading ERP's derive-totals.ts rather than its type definitions —
+  // the TYPE says `deliverySales: number` and says nothing about what it holds.
+  'deliverySales', // on a DAY doc it equals totalSales; on a SHIFT doc it is non-remitted channels
+  'creditCardPayments', // "Always 0 — card tenders are captured through the online accounts"
+] as const;
 
 /**
  * Paths where a trap name is CORRECT rather than a mistake.
