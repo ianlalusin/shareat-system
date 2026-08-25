@@ -235,4 +235,13 @@ computation**.
    filed it.
 2. **What if POS's figure changes after verification?** A late void moves recognised revenue.
    **Suggest an OIL finding (T-135), never a silent re-post.**
-3. **§3's decomposition** — the real one, and it needs Ian.
+3. ✅ **§3's decomposition — ANSWERED (bible row 132): per shift AND per day, both.** The till
+   position (**B**) is per cashier per shift — the grain that makes a variance attributable to one
+   person. The sales day (**A**) stays per store per day — the grain revenue recognition and the
+   period close need. **Shifts roll up into a day; they are two levels of one hierarchy, not
+   competing grains**, and v1 already carries both.
+4. ✅ **Senior/PWD stays contra-revenue at 4900** (row 132). No change to `POSTING-PATTERNS.md`.
+5. ⛔ **The statutory logbook is now a REQUIREMENT** (row 132) — Ian: *"we only require the ID
+   today… yes, we can require the logbook too."* **Only POS holds transaction-level detail**, so a
+   daily total cannot produce it and the ERP cannot reconstruct a name that was never recorded.
+   Tracked as a POS capture requirement with an ERP reporting surface.

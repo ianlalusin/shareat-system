@@ -63,35 +63,35 @@
 - `1034–1068 ` 10. Phase plan
 - `1069–1085 ` 11. Migration & ETL rules
 - `1086–1134` 12. Inherited landmines — do not repeat these
-- `1135–1272` 13. Decision log
-- `1273–1292` 14. Amendment protocol
-- `1293–1297` 15. Engineering standards — the industry practices this project follows
-  - `1298–1303` 15.1 Build order: walking skeleton first
-  - `1304–1315` 15.2 Golden-master testing — the most important practice here
-  - `1316–1324` 15.3 Strangler Fig, not big-bang cutover
-  - `1325–1329` 15.4 No dual-write
-  - `1330–1334` 15.5 Expand/contract migrations
-  - `1335–1343` 15.6 Observability from day zero, not later
-  - `1344–1348` 15.7 CI gates
-  - `1349–1353` 15.8 Backups and a tested restore
-  - `1354–1358` 15.9 Twelve-Factor config
-  - `1359–1366` 15.10 Append-only ledgers — but not event sourcing
-  - `1367–1371` 15.11 Defence in depth
-  - `1372–1400` 15.12 Skills are lenses, not assurance
-  - `1401–1407` 15.13 Reconciliation is a permanent feature
-- `1408–1412` 16. The accounting spine
-  - `1413–1444` 16.0 What we are actually fixing — the diagnosis
-  - `1445–1488` 16.1 The ten invariants — non-negotiable
-  - `1489–1503` 16.2 The oracle: how "correct" is tested
-  - `1504–1525` 16.3 The model — header + lines, not legs
-  - `1526–1545` 16.4 Deliberately simpler than ERPNext
-  - `1546–1612` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1613–1637` 16.6 What v1 already gets right — preserve the intent
-  - `1638–1659` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1660–1674` 16.8 What v1's accounting already gets right
-  - `1675–1718` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1719–1769` 16.10 Posting patterns — one canonical pattern per business event
-  - `1770–1787` 16.11 Inventory's accounting integration
+- `1135–1273` 13. Decision log
+- `1274–1293` 14. Amendment protocol
+- `1294–1298` 15. Engineering standards — the industry practices this project follows
+  - `1299–1304` 15.1 Build order: walking skeleton first
+  - `1305–1316` 15.2 Golden-master testing — the most important practice here
+  - `1317–1325` 15.3 Strangler Fig, not big-bang cutover
+  - `1326–1330` 15.4 No dual-write
+  - `1331–1335` 15.5 Expand/contract migrations
+  - `1336–1344` 15.6 Observability from day zero, not later
+  - `1345–1349` 15.7 CI gates
+  - `1350–1354` 15.8 Backups and a tested restore
+  - `1355–1359` 15.9 Twelve-Factor config
+  - `1360–1367` 15.10 Append-only ledgers — but not event sourcing
+  - `1368–1372` 15.11 Defence in depth
+  - `1373–1401` 15.12 Skills are lenses, not assurance
+  - `1402–1408` 15.13 Reconciliation is a permanent feature
+- `1409–1413` 16. The accounting spine
+  - `1414–1445` 16.0 What we are actually fixing — the diagnosis
+  - `1446–1489` 16.1 The ten invariants — non-negotiable
+  - `1490–1504` 16.2 The oracle: how "correct" is tested
+  - `1505–1526` 16.3 The model — header + lines, not legs
+  - `1527–1546` 16.4 Deliberately simpler than ERPNext
+  - `1547–1613` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1614–1638` 16.6 What v1 already gets right — preserve the intent
+  - `1639–1660` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1661–1675` 16.8 What v1's accounting already gets right
+  - `1676–1719` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1720–1770` 16.10 Posting patterns — one canonical pattern per business event
+  - `1771–1788` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1267,6 +1267,7 @@ just a patch.**
 | 129 | 2026-08-25 | **Remittance cadence is PER STORE, and an un-remitted CEILING forces a remittance regardless of where the cycle is. The mechanism is settled; the peso numbers are Ian's, per store** (T-136 §4) | Ian: *“yes per store.”* Right — a branch two minutes from the office and one an hour away have genuinely different logistics, so a single global cadence would be wrong for at least one of them. **Consequence: cadence is a configuration ROW, never a constant** — and ⚠️ a store with none configured must not silently mean “never”. **Default to daily**, the safe end, and what every store does today; an unset cadence is the same defect class as an unmapped expense category. ⭐ **Per-store cadence makes the ceiling MORE necessary, not less** — a store on a weekly cadence accumulates seven days of cash, and ₱200/day versus ₱20,000/day is the same number of days and a completely different amount sitting in a drawer. **The risk is the AMOUNT, not the days**, so the pooled balance is watched continuously and crossing the ceiling forces a remittance mid-cycle — the same shape as row 122's checker, which watches the condition rather than only the deadline. ⚠️ **“Forces” means what it means everywhere else here: the pile becomes visible and unignorable to the person who can clear it, never a blocked till.** A cashier is never stopped from selling because a remittance is overdue (discovery 22 §4). **I settled the mechanism and deliberately did NOT pick the numbers** — a peso ceiling and an imprest amount are business policy, and they belong to whoever carries the risk | Yes |
 | 130 | 2026-08-25 | **⭐ POS TRANSACTS, ERP ACCOUNTS. The cash handover folds to the ERP — one computation, one owner. And platform sales (Foodpanda / Grab) stay MANUALLY entered, because their own terminals are the system of record** (discovery 23, T-123 §7) | Ian: *“for v2 POS will only transact — its job is getting the order, passing order to kitchen and server, computing and processing payment. Just that. ERP will handle the money: where it goes, is it used in operations, remitted to manager etc. POS frontend, ERP backend.”* **The existing configuration already sorts almost perfectly along that line** (discovery 23 §3), which is a good sign the split is natural rather than imposed. ⭐ **On the handover, his reason is the decisive one and it is better than “pick one to avoid duplication”:** POS computes `expectedCash = startingCash + cashSales − deductions[]`, **but POS does not know the deductions** — a cashier-paid expense, a released cash request, an online-to-cash conversion, an AP payment from the till are every one of them ERP documents. **So POS's `deductions[]` can only be filled by the cashier re-entering what the ERP already knows — a second entry point for one fact, which is exactly how two figures come to disagree.** An expected-cash figure is only as good as its deduction data, and only one system has it. POS may still take the physical count at the drawer, but it **submits evidence, it does not compute expected cash.** ⚠️ **Design for, do not discover:** POS sells offline and the ERP may be unreachable at shift change — **a count is not a sale**, so it may go on paper and be entered late, but the flow must say so rather than failing. On platforms: Foodpanda and Grab run their own terminals and **encoding each order into POS at peak is physically impossible**, so the ERP takes an end-of-day total per channel. Not a workaround to remove — **the platform is the system of record for its own orders**, and an API integration is the only thing that would change that. This is why `posSourced` exists on the sales day and why per-channel `isRemittedDaily` is what makes expected remittance computable at all | Yes |
 | 131 | 2026-08-25 | **The cash-custody research: the account is UNDEPOSITED FUNDS (I had the term wrong), the till reconciles PER CASHIER PER SHIFT with denomination counts, v1's `less`/`plus` is AHEAD of ERPNext — and a mandatory per-transaction PWD/senior LOGBOOK exists that nothing captures today** (discovery 24) | ⚠️ **Correction first: I wrote “cash in transit / undeposited funds” in rows 127 and 128 as if interchangeable and they are not.** *Undeposited funds* is our books versus where the money physically is; *deposit in transit* is our books versus **the bank's** — a bank-reconciliation timing item with nothing to do with a till. Using the wrong one would have invited someone to reconcile a till against a bank statement. ⭐ **Row 129's ceiling is retro-justified by the field:** vendors describe batched deposits as the ordinary case for undeposited funds, AND warn it is *“one of the accounts most likely to cause a business's financial statements to be incorrect”* because money piles up in it forever when the deposit step is never done. **A pooled-remittance design without a ceiling is that failure with extra steps.** **From ERPNext's POS Opening/Closing Entry, three things to adopt:** reconciliation **per cashier per shift** (v1 is per store per day, which cannot attribute a variance when two cashiers worked — and attribution is the whole custody control), **denomination-level counting** (quantity of each note and coin, not one total), and **expected/closing/difference PER PAYMENT METHOD**, which is row 127's owner/instrument split doing reconciliation work. ⛔ **But ERPNext does NOT solve the problem Ian named — it assumes it away:** its expected cash is just *opening + takings* because its till never PAYS anything. **v1's `less`/`plus` models a real practice ERPNext handles by forbidding it, so v1 is ahead here and “simplifying” toward ERPNext would delete the arithmetic that makes expected cash correct.** Same finding answers `coverageEvents`: no standard name exists because systems that forbid till-paid expenses never need the concept — **port it as-is.** ⛔ **The new finding: RR 5-2017 makes a separate PWD discount LOGBOOK mandatory** — ID number, name, date, original and discounted amount, signatory — **per transaction.** The ERP's daily `seniorDiscount`/`pwdDiscount` totals cannot satisfy it and **only POS holds transaction detail; neither side captures it today.** Also flagged, not settled: BIR guidance points at an *“Expenses – PWD Discounts”* account while we post to **4900 contra-revenue** — a genuine tax-versus-financial-reporting tension. **`POSTING-PATTERNS.md`'s existing disclaimer that this is management reporting and NOT a BIR VAT computation is doing real work and must not be quietly dropped when someone later wires VAT** | Yes — logbook and account treatment need Ian |
+| 132 | 2026-08-25 | **Senior/PWD discounts stay CONTRA-REVENUE (4900). The till reconciles PER SHIFT and the sales day stays PER DAY — both, not one. And the statutory discount LOGBOOK becomes a requirement: today only the ID is captured** | Ian, answering discovery 24's three opens. ⚠️ **One reading stated rather than assumed:** he answered *“contra asset”*, and I am taking that as **contra-REVENUE** — the choice on the table was contra-revenue (4900, current) versus BIR's *“Expenses – PWD Discounts”*, and *contra* is the operative half. **A sales discount is not a contra-asset** (that class is accumulated depreciation, allowance for doubtful accounts — a valuation account against something the business owns). So 4900 stands unchanged and `POSTING-PATTERNS.md`'s `sale.discount.senior-pwd` needs no edit. **If he meant something else this is the line to correct.** ⭐ **Per shift AND per day is the right answer and it settles T-123 §3's decomposition:** the till position (split B) is **per cashier per shift**, which is what makes a variance attributable to one person; the sales day (split A) stays **per store per day**, which is what revenue recognition and the period close need. **Shifts roll up into a day — they are not competing grains, they are two levels of one hierarchy**, and v1 already carries both (its `derive-totals.ts` branches on whether it is writing a shift doc or a day doc). ⛔ **On the logbook: today the business captures only the ID.** RR 5-2017 requires a separate PWD discount logbook — ID number, name, date, original and discounted amount, signatory — **per transaction**, and Ian has said to require it. **Only POS holds transaction-level detail**, so this is a POS capture requirement with an ERP reporting surface: a daily total cannot produce it, and no amount of ERP work can reconstruct a name that was never recorded | Yes |
 
 ---
 
