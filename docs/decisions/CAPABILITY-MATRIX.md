@@ -59,7 +59,7 @@ they need weekly, the boundary is wrong.
 |---|---|:--:|:--:|:--:|:--:|---|
 | `approve_supplier` | store | ✅ | ✅ | ✅ | ✗ | Ian's list |
 | `approve_buyer` | store | ✅ | ✅ | ✅ | ✗ | Ian's list — **operational** judgement |
-| ⚠️ `set_credit_limit` | org | ✅ | ✅ | ✗ | ✗ | **Split out deliberately.** Approving a buyer is operational; deciding how much of your money they may owe is not. **Ian to confirm** — see §Open 1 |
+| `set_credit_limit` | org | ✅ | ✅ | ✅ | ✗ | ✅ **Ian 2026-08-25 — manager too.** Coherent: managers already approve the buyer, and a **franchise** manager setting their own buyers' limits is risking their own money. Still split from `approve_buyer` — two decisions, not one |
 | `override_credit_limit` | store | ✅ | ✅ | ✅ | ✗ | Discovery 19 §2 — one gate, with an override. Every use logged |
 | `record_ap_payment` | store | ✅ | ✅ | ✅ | ✗ | |
 | `record_ar_collection` | store | ✅ | ✅ | ✅ | ✗ | |
@@ -109,7 +109,9 @@ they need weekly, the boundary is wrong.
 
 ---
 
-## ⚠️ Open — two cells I will not decide alone
+## ⚠️ Open — one cell left
+
+*(`set_credit_limit` closed 2026-08-25: manager too. `manage_users` closed by §B.1.)*
 
 *(The third, `manage_users`, was closed by §B.1 — the grant-time fallback covers it.)*
 
@@ -334,3 +336,55 @@ than a missing row.
 
 *This is the same shape as row 115 and for the same reason: decide once, at the moment a human is
 present, and store the answer — rather than inferring it on every check.*
+
+---
+
+# D. Period close — four things beyond the permission, raised 2026-08-25
+
+Ian asked what he might be missing about `close_period`. The permission is the least of it.
+
+### D.1 ⭐ The day AFTER a close is where the pain lands
+
+Someone posts to the closed month, is rejected, and does not know why or what to do instead. The
+correct path is a **prior-period adjustment into the current open period** — already built
+(`reverseEntry`, row 101).
+
+> **The rejection must name the PATH, not just the rule.** *“Period 2027-01 is closed”* tells a
+> cashier they have failed. *“Period 2027-01 closed on 15 Feb. Record this as a prior-period
+> adjustment dated today — it will carry into February with its original date noted”* tells them
+> what to do.
+
+**An error message that only states the rule sends people looking for a workaround**, and in an
+accounting system the workarounds are all worse than the rule.
+
+### D.2 A close is IRREVERSIBLE and must never look like Save
+
+Row 101: a closed year is never reopened. If the control sits among ordinary actions with ordinary
+styling, someone clicks it on the 3rd instead of the 15th — and there is no undo.
+
+It needs confirmation naming **which period** and **what becomes impossible**, in the way the
+purge script demands the database name typed back. **Ceremony proportional to consequence.**
+
+### D.3 Closing is ORG-wide; managers are STORE-scoped — a coordination problem, not only a permission one
+
+A manager needs org-wide store scope to close (§Open 2's resolution). But the deeper issue is that
+**Lipa closing stops Malvar posting.**
+
+- Whoever closes should see **whether the other stores are actually finished** — unposted drafts,
+  unverified sales days — before the button is available.
+- The other stores should be **told it happened**. Discovering it by rejection is discovering it
+  the worst way.
+
+### D.4 A BLOCKED close must be louder than a successful one
+
+If the trial balance does not tie, or a store still has drafts, the close is refused. **Then
+nothing happens — and nothing happening is silent.** The month stays open, and it is noticed in
+February.
+
+**A refused close should raise something a person sees.** Success can be quiet; failure cannot.
+
+### D.5 One sequencing note
+
+**December and the year both close on 15 January** (ADR-006) — **December first, then the year.**
+The year close gates on *“no earlier period still open”*, so the order is forced; it is the one
+month where two closes stack, and the only month where getting the order wrong blocks both.
