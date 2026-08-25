@@ -144,6 +144,18 @@ they are not lost:
 
 ---
 
+### ⛔ Remittance does NOT live on the sales day — do not port v1's fields
+
+v1 stores `actualRemittanceCash`, `actualRemittanceOnline`, `remittanceRefNo`,
+`remittanceDiscrepancyCash`/`Online` **as fields on the sales day**, plus `partially_remitted` /
+`remitted` statuses. **That makes a remittance unable to span days by construction** — and Ian has
+asked for pooled remittance (3-day, weekly), which T-136 records.
+
+**So T-123 must NOT bake those fields onto the day.** The day carries revenue recognition; a
+separate remittance document (T-136) references the days it covers, and **the day's remittance
+status is derived from what covers it.** Porting v1's shape here would block pooling before it
+starts, and unpicking it later means touching every reader.
+
 ## 5. The channel gap — this is T-123's problem, not POS v2's
 
 Discovery 22 §3.3: POS stamps `receipt.source = "online"` and **never reads it**. Online-order
