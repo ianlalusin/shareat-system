@@ -6,10 +6,16 @@
  * Thin adapters: parse `FormData`, call the domain, redirect. **No business rule is
  * re-implemented here** — `createSalesDay` / `submitSalesDay` / `verifySalesDay` / `voidSalesDay`
  * own every invariant, including the create-block and its carve-outs.
+ *
+ * ⭐ **The actor comes from `requireActor()`, never from the form** (T-138, bible §7.1). Until
+ * 2026-08-25 these actions read an `actingPersonId` the browser supplied, which meant
+ * `verify_sales_day` being a different capability from `submit_sales_day` proved nothing — anyone
+ * could claim to be anyone. **The segregation only became real when this line changed.**
  */
 import { redirect } from 'next/navigation';
 import { createSalesDay, submitSalesDay, verifySalesDay, voidSalesDay, SalesDayBlockedError } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
+import { requireActor } from '../../lib/session';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -32,21 +38,18 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/** Only the FILTER state travels in the URL now. The org and the person come from the session,
+ *  and a store here names which store a day belongs to — not who is acting. */
 function carryQs(fd: FormData): string {
   const params = new URLSearchParams();
-  const org = str(fd, 'orgId');
   const store = str(fd, 'storeId');
-  const as = str(fd, 'actingPersonId');
-  if (org) params.set('org', org);
   if (store) params.set('store', store);
-  if (as) params.set('as', as);
   return params.toString();
 }
 
 export async function createSalesDayAction(formData: FormData): Promise<void> {
-  const orgId = str(formData, 'orgId');
+  const actor = await requireActor();
   const storeId = str(formData, 'storeId');
-  const actingPersonId = str(formData, 'actingPersonId');
   const qs = carryQs(formData);
 
   // Channel rows arrive as channel_<id> / nosales_<id> pairs — the id is in the field name, so
@@ -65,11 +68,9 @@ export async function createSalesDayAction(formData: FormData): Promise<void> {
 
   let newId: string;
   try {
-    if (!orgId || !storeId || !actingPersonId) {
-      throw new Error('Organization, store and "acting as" are all required.');
-    }
-    const result = await withOrgPrincipal(orgId, (tx) =>
-      createSalesDay(tx, { personId: actingPersonId, orgId }, {
+    if (!storeId) throw new Error('Choose a store.');
+    const result = await withOrgPrincipal(actor.orgId, (tx) =>
+      createSalesDay(tx, actor, {
         storeId,
         businessDate: str(formData, 'businessDate'),
         posSourced: formData.get('posSourced') === 'on',
@@ -96,12 +97,11 @@ export async function createSalesDayAction(formData: FormData): Promise<void> {
 }
 
 export async function submitSalesDayAction(formData: FormData): Promise<void> {
-  const orgId = str(formData, 'orgId');
-  const actingPersonId = str(formData, 'actingPersonId');
+  const actor = await requireActor();
   const id = str(formData, 'salesDayId');
   const qs = carryQs(formData);
   try {
-    await withOrgPrincipal(orgId, (tx) => submitSalesDay(tx, { personId: actingPersonId, orgId }, id));
+    await withOrgPrincipal(actor.orgId, (tx) => submitSalesDay(tx, actor, id));
   } catch (err) {
     redirect(`/sales-days/${id}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
   }
@@ -109,12 +109,11 @@ export async function submitSalesDayAction(formData: FormData): Promise<void> {
 }
 
 export async function verifySalesDayAction(formData: FormData): Promise<void> {
-  const orgId = str(formData, 'orgId');
-  const actingPersonId = str(formData, 'actingPersonId');
+  const actor = await requireActor();
   const id = str(formData, 'salesDayId');
   const qs = carryQs(formData);
   try {
-    await withOrgPrincipal(orgId, (tx) => verifySalesDay(tx, { personId: actingPersonId, orgId }, id));
+    await withOrgPrincipal(actor.orgId, (tx) => verifySalesDay(tx, actor, id));
   } catch (err) {
     redirect(`/sales-days/${id}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
   }
@@ -122,14 +121,11 @@ export async function verifySalesDayAction(formData: FormData): Promise<void> {
 }
 
 export async function voidSalesDayAction(formData: FormData): Promise<void> {
-  const orgId = str(formData, 'orgId');
-  const actingPersonId = str(formData, 'actingPersonId');
+  const actor = await requireActor();
   const id = str(formData, 'salesDayId');
   const qs = carryQs(formData);
   try {
-    await withOrgPrincipal(orgId, (tx) =>
-      voidSalesDay(tx, { personId: actingPersonId, orgId }, id, str(formData, 'reason')),
-    );
+    await withOrgPrincipal(actor.orgId, (tx) => voidSalesDay(tx, actor, id, str(formData, 'reason')));
   } catch (err) {
     redirect(`/sales-days/${id}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
   }

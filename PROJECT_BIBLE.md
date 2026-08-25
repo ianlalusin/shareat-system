@@ -63,35 +63,35 @@
 - `1034–1068 ` 10. Phase plan
 - `1069–1085 ` 11. Migration & ETL rules
 - `1086–1134` 12. Inherited landmines — do not repeat these
-- `1135–1278` 13. Decision log
-- `1279–1298` 14. Amendment protocol
-- `1299–1303` 15. Engineering standards — the industry practices this project follows
-  - `1304–1309` 15.1 Build order: walking skeleton first
-  - `1310–1321` 15.2 Golden-master testing — the most important practice here
-  - `1322–1330` 15.3 Strangler Fig, not big-bang cutover
-  - `1331–1335` 15.4 No dual-write
-  - `1336–1340` 15.5 Expand/contract migrations
-  - `1341–1349` 15.6 Observability from day zero, not later
-  - `1350–1354` 15.7 CI gates
-  - `1355–1359` 15.8 Backups and a tested restore
-  - `1360–1364` 15.9 Twelve-Factor config
-  - `1365–1372` 15.10 Append-only ledgers — but not event sourcing
-  - `1373–1377` 15.11 Defence in depth
-  - `1378–1406` 15.12 Skills are lenses, not assurance
-  - `1407–1413` 15.13 Reconciliation is a permanent feature
-- `1414–1418` 16. The accounting spine
-  - `1419–1450` 16.0 What we are actually fixing — the diagnosis
-  - `1451–1494` 16.1 The ten invariants — non-negotiable
-  - `1495–1509` 16.2 The oracle: how "correct" is tested
-  - `1510–1531` 16.3 The model — header + lines, not legs
-  - `1532–1551` 16.4 Deliberately simpler than ERPNext
-  - `1552–1618` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1619–1643` 16.6 What v1 already gets right — preserve the intent
-  - `1644–1665` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1666–1680` 16.8 What v1's accounting already gets right
-  - `1681–1724` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1725–1775` 16.10 Posting patterns — one canonical pattern per business event
-  - `1776–1793` 16.11 Inventory's accounting integration
+- `1135–1279` 13. Decision log
+- `1280–1299` 14. Amendment protocol
+- `1300–1304` 15. Engineering standards — the industry practices this project follows
+  - `1305–1310` 15.1 Build order: walking skeleton first
+  - `1311–1322` 15.2 Golden-master testing — the most important practice here
+  - `1323–1331` 15.3 Strangler Fig, not big-bang cutover
+  - `1332–1336` 15.4 No dual-write
+  - `1337–1341` 15.5 Expand/contract migrations
+  - `1342–1350` 15.6 Observability from day zero, not later
+  - `1351–1355` 15.7 CI gates
+  - `1356–1360` 15.8 Backups and a tested restore
+  - `1361–1365` 15.9 Twelve-Factor config
+  - `1366–1373` 15.10 Append-only ledgers — but not event sourcing
+  - `1374–1378` 15.11 Defence in depth
+  - `1379–1407` 15.12 Skills are lenses, not assurance
+  - `1408–1414` 15.13 Reconciliation is a permanent feature
+- `1415–1419` 16. The accounting spine
+  - `1420–1451` 16.0 What we are actually fixing — the diagnosis
+  - `1452–1495` 16.1 The ten invariants — non-negotiable
+  - `1496–1510` 16.2 The oracle: how "correct" is tested
+  - `1511–1532` 16.3 The model — header + lines, not legs
+  - `1533–1552` 16.4 Deliberately simpler than ERPNext
+  - `1553–1619` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1620–1644` 16.6 What v1 already gets right — preserve the intent
+  - `1645–1666` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1667–1681` 16.8 What v1's accounting already gets right
+  - `1682–1725` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1726–1776` 16.10 Posting patterns — one canonical pattern per business event
+  - `1777–1794` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1273,6 +1273,7 @@ just a patch.**
 | 135 | 2026-08-25 | **⭐ Service charge is a FLOAT at 2160 — neither revenue nor accounts payable. It touches the balance sheet only and never the P&L. This SUPERSEDES row 134's liability-vs-income framing** (T-123) | Three passes, and Ian rejected two treatments for two different and correct reasons before landing here. **(1)** *“It will go with the salary and later be expensed, so it must be collection first, revenue first — don't push to accounts payable.”* The AP half is right and worth stating: **AP is money owed to SUPPLIERS**, with a party, an age and a payment process, and this is none of those. **(2)** Then, on his own proposal: *“but it will bloat the revenue.”* Also right — ₱1M of food plus ₱100k of service charge would read as ₱1.1M of income, **₱100k of which was never the business's money.** **(3)** *“Let it not touch accounting? How do other platforms handle it?”* ⛔ **It cannot be kept out entirely, and the reason is physical: the cash enters the drawer.** ₱1,100 tendered on a ₱1,000 bill leaves ₱1,100 in the till, so books recording ₱1,000 never reconcile against a count. It must land somewhere; **the float is the treatment that touches accounting least** — balance sheet only, self-clearing. ⭐ **The research settles it, and the field's dividing line is WHOSE MONEY IT IS, not what the bill calls it:** tips are voluntary and belong to staff, so they go to a **liability clearing account** (“Tips Payable”) cleared through payroll; service charges elsewhere are the RESTAURANT's money to distribute or not, so they are **revenue with the payout as wage expense**. **RA 11360 moves PH service charge across that line** — with 100% distribution mandated there is no discretion, the money is not the business's, and it therefore behaves like tips do elsewhere. **So this is the standard pattern applied to the case the law creates, not an invention.** Chart stays at 95 (4600 was added and removed within the hour). ⚠️ If Ian's accountant prefers the international service-charge reading, it is a one-line change — the alternative is recorded, not buried | Yes — accountant's nod still worth having |
 | 136 | 2026-08-25 | **The service-charge float is DISTRIBUTED on a per-store cadence — and ⛔ MONTHLY IS NOT LAWFUL, so the setting must not be able to express it** (T-136 §6) | Ian: *“yes we float it, and distribute per day, per week or per month.”* The float is settled (row 135); this is how it empties. **Daily and weekly are fine. Monthly is not:** RA 11360 requires distribution **at least twice a month, at intervals not exceeding sixteen days**, so a monthly cadence is a breach by construction rather than by accident. ⭐ **The design consequence is the interesting part: the configuration must not be able to hold the wrong answer.** Same instinct as `is_remitted_daily` being NOT NULL with no default — **if a setting can be set to something unlawful, eventually it will be, and nobody notices**, because a float that keeps growing reads as a healthy balance rather than an overdue obligation. ⭐ **So an ageing 2160 is a FINDING, not a balance** — it belongs in the OIL feed (T-135) as *“service charge float older than 16 days”*, derived from the condition so it cannot be resolved while still true. ⚠️ **It shares its shape with the remittance cadence (row 129) and deliberately NOT its number:** both are per-store cash movements on a configurable rhythm, but remittance is bounded by how much cash you are willing to hold in a drawer and this one is bounded by STATUTE. **A store that remits weekly may still have to distribute twice a month**, so collapsing the two settings into one would quietly make the lawful cadence follow the convenient one | Yes |
 | 137 | 2026-08-25 | **T-138 started, and reading v1 first HALVED it: the browser session is already fixed there, so §7.1's “~24 client-asserted server actions” is now true only of the PIN half** | Ian: *“go auth now, start.”* ⭐ **The correction is worth more than the spec.** Bible §7.1 and discovery 04 describe acting identity as a client-asserted parameter across ~24 server actions. **`policies/server-context.ts` shows v1 has since fixed the BROWSER half**: identity comes from a verified `__session` cookie, and *“session present + actorUid mismatch → hard Unauthorized.”* **So v2's work is narrower and clearer than the bible implies** — the shared-terminal PIN “session” living in `localStorage` with no server token is the part that remains. Three things ported rather than invented: **a mismatch is a HARD failure**, not a preference for the cookie, so a stale tab acting as the wrong user is detectable instead of silently corrected; the cookie is **re-minted on sign-in, page load and hourly refresh**, so *“a missing cookie means re-authenticate, not trust me”*; and cookieless callers get **one named escape hatch** (`runWithVerifiedPrincipal`) for a genuinely different verified credential, rather than a scatter of special cases. ⛔ **DEF-062 found in the same read** — the passcode HMAC falls back to a secret hardcoded in the source, does not fail closed, and rotating it invalidates every stored hash, which is exactly why an unset secret stays unset. v2 **fails closed at startup**. ⚠️ **The reason this is next at all: I shipped T-122 and T-123 with capability checks gated on a DROPDOWN.** *“The person who submits should not be the one who verifies”* is theatre until a login exists — the DEF-052 shape, added knowingly, and this is the task that makes it real | Yes |
+| 138 | 2026-08-25 | **T-138 SHIPPED: the "acting as" dropdown is gone, and §7.1's binding rule is now enforced by a repo-wide guard rather than by discipline** | Ian: *"retain the current 6-digit passcode… link to biometric next time"*, and *"yes both"* on expiry. ⭐ **The biometric answer was a constraint on the schema TODAY, not a future one:** credential KIND is a column, so adding biometrics is a row and a service rather than a migration and a rewrite of every read. `biometric` is declared and stores nothing — templates stay Phase 4 under §5.3. **"Both" is two columns because they fail differently:** `expires_at` catches a terminal nobody signed out of; `ended_at` closes the session the moment responsibility transfers rather than up to a TTL later. ⭐ **The finding that mattered most is what did NOT change: not one line of `packages/domain`.** It always took `(tx, actor, …)` and never asked where the actor came from — which is precisely why replacing a dropdown with a real session was a boundary change and not a rewrite. **The layering paid off exactly where it was supposed to.** ⛔ **And the thing this closes is one I opened knowingly:** T-122's approve and T-123's verify both gated on a person the BROWSER named, so *“the person who submits should not be the one who verifies”* was theatre — the DEF-052 shape, added deliberately with `lib.ts` documenting it. The exemption list in `tests/unit/no-client-supplied-actor.test.ts` held those two screens for **hours, not months**, and is now **empty**. ⚠️ **An entry in that list is a confession that a screen can be impersonated through, not a config knob** — and a second test refuses a stale one, because an exemption matching nothing makes the rule look narrower than it is. Verified in a browser end to end: unauthenticated → 307 to sign-in carrying `next`, wrong PIN refused with the same message an unknown PIN gets, correct PIN lands on the requested page | Yes |
 
 ---
 

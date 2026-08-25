@@ -3,10 +3,12 @@
 /**
  * Server actions for the expenses screens — docs/tasks/122-expenses.md.
  *
- * Every action here is a thin adapter: parse `FormData`, build the domain layer's own
- * input shape, run it inside `withOrgPrincipal` (real RLS — see lib.ts's top comment for
- * why `orgId`/`actingPersonId` are read from the submitted form rather than a session),
- * and redirect. No business rule is re-implemented here — `createExpense` / `approveExpense`
+ * Every action here is a thin adapter: parse `FormData`, build the domain layer's own input
+ * shape, run it inside `withOrgPrincipal` (real RLS), and redirect.
+ *
+ * ⭐ **The actor comes from `requireActor()`, never from the form** (T-138, bible §7.1). Until
+ * 2026-08-25 these read a person the browser supplied, which made the create/approve segregation
+ * unenforceable. No business rule is re-implemented here — `createExpense` / `approveExpense`
  * / `editExpense` / `voidExpense` (packages/domain/src/expenses/*.ts) already own every
  * invariant; this file only wires HTML forms to them.
  */
@@ -20,6 +22,7 @@ import {
   type ExpensePaymentMethod,
 } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
+import { requireActor } from '../../lib/session';
 
 const PAYMENT_ROW_COUNT = 4;
 const PAYMENT_METHODS = new Set<string>(['cash', 'online', 'credit', 'reimbursable', 'other', 'ar_collection']);
@@ -36,21 +39,17 @@ function errorMessage(err: unknown): string {
 /** Every action ends up back on a page carrying `org`/`store`/`as` (the "acting as"
  *  filter state the reports screens already use for org/store) so the picker state
  *  survives the round trip. */
+/** Only filter state travels in the URL now — the org and the person come from the session. */
 function carryQs(fd: FormData): string {
   const params = new URLSearchParams();
-  const org = str(fd, 'orgId');
   const store = str(fd, 'storeId');
-  const as = str(fd, 'actingPersonId');
-  if (org) params.set('org', org);
   if (store) params.set('store', store);
-  if (as) params.set('as', as);
   return params.toString();
 }
 
 export async function createExpenseAction(formData: FormData): Promise<void> {
-  const orgId = str(formData, 'orgId');
+  const actor = await requireActor();
   const storeId = str(formData, 'storeId');
-  const actingPersonId = str(formData, 'actingPersonId');
   const qs = carryQs(formData);
 
   const businessDate = str(formData, 'businessDate');
@@ -79,14 +78,12 @@ export async function createExpenseAction(formData: FormData): Promise<void> {
 
   let newId: string;
   try {
-    if (!orgId || !storeId || !actingPersonId) {
-      throw new Error('Organization, store and "acting as" are all required.');
-    }
+    if (!storeId) throw new Error('Choose a store.');
     if (payments.length === 0) {
       throw new Error('At least one payment row (method + amount) is required.');
     }
-    const result = await withOrgPrincipal(orgId, (tx) =>
-      createExpense(tx, { personId: actingPersonId, orgId }, {
+    const result = await withOrgPrincipal(actor.orgId, (tx) =>
+      createExpense(tx, actor, {
         storeId,
         businessDate,
         categoryId,
@@ -104,13 +101,12 @@ export async function createExpenseAction(formData: FormData): Promise<void> {
 }
 
 export async function approveExpenseAction(formData: FormData): Promise<void> {
-  const orgId = str(formData, 'orgId');
-  const actingPersonId = str(formData, 'actingPersonId');
+  const actor = await requireActor();
   const expenseId = str(formData, 'expenseId');
   const qs = carryQs(formData);
 
   try {
-    await withOrgPrincipal(orgId, (tx) => approveExpense(tx, { personId: actingPersonId, orgId }, expenseId));
+    await withOrgPrincipal(actor.orgId, (tx) => approveExpense(tx, actor, expenseId));
   } catch (err) {
     redirect(`/expenses/${expenseId}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
   }
@@ -118,14 +114,13 @@ export async function approveExpenseAction(formData: FormData): Promise<void> {
 }
 
 export async function voidExpenseAction(formData: FormData): Promise<void> {
-  const orgId = str(formData, 'orgId');
-  const actingPersonId = str(formData, 'actingPersonId');
+  const actor = await requireActor();
   const expenseId = str(formData, 'expenseId');
   const reason = str(formData, 'reason');
   const qs = carryQs(formData);
 
   try {
-    await withOrgPrincipal(orgId, (tx) => voidExpense(tx, { personId: actingPersonId, orgId }, expenseId, reason));
+    await withOrgPrincipal(actor.orgId, (tx) => voidExpense(tx, actor, expenseId, reason));
   } catch (err) {
     redirect(`/expenses/${expenseId}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
   }
@@ -139,8 +134,7 @@ export async function voidExpenseAction(formData: FormData): Promise<void> {
  *  payments too; a screen for that is a reasonable follow-up, not required for this task's
  *  smoketest. */
 export async function updateDraftAction(formData: FormData): Promise<void> {
-  const orgId = str(formData, 'orgId');
-  const actingPersonId = str(formData, 'actingPersonId');
+  const actor = await requireActor();
   const expenseId = str(formData, 'expenseId');
   const qs = carryQs(formData);
 
@@ -149,8 +143,8 @@ export async function updateDraftAction(formData: FormData): Promise<void> {
   const receiptPhotoUrl = str(formData, 'receiptPhotoUrl');
 
   try {
-    await withOrgPrincipal(orgId, (tx) =>
-      editExpense(tx, { personId: actingPersonId, orgId }, expenseId, {
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      editExpense(tx, actor, expenseId, {
         categoryId: categoryId || undefined,
         particulars: particulars || undefined,
         receiptPhotoUrl: receiptPhotoUrl || undefined,
@@ -166,13 +160,12 @@ export async function updateDraftAction(formData: FormData): Promise<void> {
  *  back to the record: there is no record any more, and sending the browser to a page that
  *  now 404s would make a successful delete look like a failure. */
 export async function deleteDraftAction(formData: FormData): Promise<void> {
-  const orgId = str(formData, 'orgId');
-  const actingPersonId = str(formData, 'actingPersonId');
+  const actor = await requireActor();
   const expenseId = str(formData, 'expenseId');
   const qs = carryQs(formData);
 
   try {
-    await withOrgPrincipal(orgId, (tx) => deleteExpenseDraft(tx, { personId: actingPersonId, orgId }, expenseId));
+    await withOrgPrincipal(actor.orgId, (tx) => deleteExpenseDraft(tx, actor, expenseId));
   } catch (err) {
     redirect(`/expenses/${expenseId}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
   }

@@ -1,15 +1,14 @@
 import { transaction, salesDaysRepo } from '@shareat/db';
 import { formatMoney, money } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
-import { listOrgs, listStores, listActingPersons } from './lib';
+import { listStores } from './lib';
+import { requireSession } from '../../lib/session';
 
 export const metadata = { title: 'Sales days — Shareat System' };
 export const dynamic = 'force-dynamic';
 
 interface SearchParams {
-  org?: string;
   store?: string;
-  as?: string;
   status?: string;
 }
 
@@ -23,27 +22,13 @@ const STATUS_LABEL: Record<string, string> = {
 export default async function SalesDaysPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
 
-  const orgs = await listOrgs();
-  if (orgs.length === 0) {
-    return (
-      <main className="mx-auto max-w-5xl space-y-6 p-8">
-        <h1 className="text-2xl font-semibold">Sales days</h1>
-        <div className="rounded-lg border border-dashed border-neutral-300 p-8 text-center text-sm text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
-          No organization exists in this database yet.
-        </div>
-      </main>
-    );
-  }
-
-  const orgId = sp.org && orgs.some((o) => o.id === sp.org) ? sp.org : orgs[0]!.id;
-  const currentOrg = orgs.find((o) => o.id === orgId)!;
-  const [stores, persons] = await Promise.all([listStores(orgId), listActingPersons(orgId)]);
+  // ⭐ The org comes from the SESSION, not the URL. A person cannot browse another org's sales
+  // days by editing a query string, and RLS refuses them underneath even if they try.
+  const { actor } = await requireSession('/sales-days');
+  const stores = await listStores(actor.orgId);
+  const orgId = actor.orgId;
 
   const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : undefined;
-  const actingPersonId =
-    sp.as && persons.some((p) => p.id === sp.as)
-      ? sp.as
-      : (persons.find((p) => p.role === 'manager')?.id ?? persons[0]?.id ?? '');
   const status =
     sp.status === 'open' || sp.status === 'submitted' || sp.status === 'verified' || sp.status === 'voided'
       ? sp.status
@@ -55,9 +40,7 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
   const storeById = new Map(stores.map((s) => [s.id, s]));
 
   const carry = new URLSearchParams();
-  carry.set('org', orgId);
   if (storeId) carry.set('store', storeId);
-  if (actingPersonId) carry.set('as', actingPersonId);
 
   // ⭐ The create-block, surfaced BEFORE the user tries. Unrecognised revenue is the thing the
   // rule exists to prevent, so the screen should say which day is holding everything up rather
@@ -100,7 +83,6 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
         action="/sales-days"
         className="flex flex-wrap items-end gap-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm dark:border-neutral-800 dark:bg-neutral-900"
       >
-        <Picker name="org" label="Organization" value={orgId} options={orgs.map((o) => ({ v: o.id, t: `${o.name} (${o.code})` }))} />
         <Picker
           name="store"
           label="Store"
@@ -118,12 +100,6 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
             { v: 'verified', t: 'Verified' },
             { v: 'voided', t: 'Voided' },
           ]}
-        />
-        <Picker
-          name="as"
-          label="Acting as (no login yet)"
-          value={actingPersonId}
-          options={persons.map((p) => ({ v: p.id, t: `${p.displayName} (${p.role})` }))}
         />
         <button
           type="submit"
@@ -180,7 +156,7 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
       )}
 
       <p className="text-xs text-neutral-400 dark:text-neutral-600">
-        {currentOrg.name} · {toBusinessDate()} today (Asia/Manila)
+        {toBusinessDate()} today (Asia/Manila)
       </p>
     </main>
   );

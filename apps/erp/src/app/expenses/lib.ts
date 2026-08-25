@@ -1,32 +1,18 @@
 /**
- * Shared, server-only data helpers for the expenses screens (docs/tasks/122-expenses.md,
- * "apps/erp/src/app/expenses/**").
+ * Shared, server-only data helpers for the expenses screens (docs/tasks/122-expenses.md).
  *
- * ## ⚠️ There is no session/login bridge in apps/erp yet — read this before touching auth
+ * ## ✅ The auth stand-in is GONE (T-138, 2026-08-25)
  *
- * Every screen under `apps/erp/src/app/reports/` (the only screens that existed before
- * this task) is READ-ONLY and never calls `authorize()` — they read straight off the
- * owner connection (`getDb()`), with no concept of "who is asking" at all. Bible §7.1
- * plans a real identity bridge (Firebase Auth -> a verified server session -> `Actor`),
- * but no task has built it yet, and building one is well outside T-122's scope (it is a
- * cross-cutting concern for every future screen, not an expenses-specific one).
+ * This file used to open with a long warning: there was no session bridge, so the acting person
+ * travelled as an unsigned form field, *"a KNOWING, TEMPORARY departure from bible §7.1."*
  *
- * Expenses is the FIRST screen that must actually MUTATE through `authorize()`-gated
- * domain functions, which require a real `{ personId, orgId }`. Absent a session, the
- * only honest options were: (a) block screen-building entirely until an auth bridge task
- * lands, or (b) let the acting person be chosen explicitly in the UI, exactly like the
- * existing reports screens already let the org and store be chosen via `?org=`/`?store=`
- * query parameters with no verification at all.
+ * **It is no longer temporary and no longer a departure.** `apps/erp/src/lib/session.ts` resolves
+ * the actor from an httpOnly session cookie, and `tests/unit/no-client-supplied-actor.test.ts`
+ * fails the build if any server boundary reads a person id out of client input again.
  *
- * **This file takes (b), and says so loudly.** `actingPersonId` travels the same way
- * `orgId`/`storeId` already do on the reports screens — a plain, client-supplied form
- * field / query parameter, unsigned, unverified. That is a KNOWING, TEMPORARY departure
- * from bible §7.1's "no server action ever accepts an actor identity as a parameter" (a
- * rule aimed at a CLIENT supplying its own identity to a session-bearing app — there is
- * no session here for it to bypass). It is reported as a spec gap in the task report, not
- * silently normalised. Replace `withOrgPrincipal`'s caller-supplied `orgId`/`actingPersonId`
- * with values read from a verified session the moment the identity bridge exists — nothing
- * about the RLS wiring below needs to change, only where these two ids come from.
+ * ⭐ **Note what did NOT change to make that true**: not one line of `packages/domain`. The domain
+ * always took `(tx, actor, …)` and never asked where the actor came from — which is exactly why
+ * swapping a dropdown for a real session was a boundary change and not a rewrite.
  */
 import { asc, and, eq, isNull } from 'drizzle-orm';
 import { sql as dsql } from 'drizzle-orm';

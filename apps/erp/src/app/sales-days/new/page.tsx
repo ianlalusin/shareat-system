@@ -1,15 +1,14 @@
 import { notFound } from 'next/navigation';
 import { toBusinessDate } from '@shareat/core/datetime';
-import { listOrgs, listStores, listActingPersons, listChannels } from '../lib';
+import { listStores, listChannels } from '../lib';
+import { requireSession } from '../../../lib/session';
 import { createSalesDayAction } from '../actions';
 
 export const metadata = { title: 'New sales day — Shareat System' };
 export const dynamic = 'force-dynamic';
 
 interface SearchParams {
-  org?: string;
   store?: string;
-  as?: string;
   error?: string;
 }
 
@@ -20,24 +19,16 @@ const LABEL = 'text-xs font-medium text-neutral-500 dark:text-neutral-400';
 export default async function NewSalesDayPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
 
-  const orgs = await listOrgs();
-  if (orgs.length === 0) notFound();
-  const orgId = sp.org && orgs.some((o) => o.id === sp.org) ? sp.org : orgs[0]!.id;
-
-  const [stores, persons] = await Promise.all([listStores(orgId), listActingPersons(orgId)]);
+  const { actor } = await requireSession('/sales-days/new');
+  const orgId = actor.orgId;
+  const stores = await listStores(orgId);
   const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;
-  const actingPersonId =
-    sp.as && persons.some((p) => p.id === sp.as)
-      ? sp.as
-      : (persons.find((p) => p.role === 'manager')?.id ?? persons[0]?.id ?? '');
 
   const channels = storeId ? await listChannels(orgId, storeId) : [];
   const activeChannels = channels.filter((c) => c.isActive);
 
   const carry = new URLSearchParams();
-  carry.set('org', orgId);
   if (storeId) carry.set('store', storeId);
-  if (actingPersonId) carry.set('as', actingPersonId);
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 p-8">
@@ -62,9 +53,8 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
       )}
 
       <form action={createSalesDayAction} className="space-y-6 text-sm">
-        <input type="hidden" name="orgId" value={orgId} />
-
-        <section className="grid gap-4 sm:grid-cols-3">
+        {/* ⭐ No orgId and no "acting as" — both come from the session now (T-138). */}
+        <section className="grid gap-4 sm:grid-cols-2">
           <label className="flex flex-col gap-1">
             <span className={LABEL}>Store</span>
             <select
@@ -87,22 +77,6 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
               defaultValue={toBusinessDate()}
               className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
             />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className={LABEL}>
-              Acting as <span className="italic">(no login yet)</span>
-            </span>
-            <select
-              name="actingPersonId"
-              defaultValue={actingPersonId}
-              className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
-            >
-              {persons.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.displayName} ({p.role})
-                </option>
-              ))}
-            </select>
           </label>
         </section>
 

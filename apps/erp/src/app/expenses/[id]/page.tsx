@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation';
 import { transaction, expensesRepo, journalRepo } from '@shareat/db';
 import { formatMoney, money } from '@shareat/core/money';
-import { listOrgs, listStores, listActingPersons, listCategoriesGrouped } from '../lib';
+import { listStores, listActingPersons, listCategoriesGrouped } from '../lib';
+import { requireSession } from '../../../lib/session';
 import { approveExpenseAction, voidExpenseAction, updateDraftAction, deleteDraftAction } from '../actions';
 
 // Derived from the repo function rather than re-declared — the table renders exactly what
@@ -14,9 +15,7 @@ export const metadata = { title: 'Expense — Shareat System' };
 export const dynamic = 'force-dynamic';
 
 interface SearchParams {
-  org?: string;
   store?: string;
-  as?: string;
   error?: string;
 }
 
@@ -39,9 +38,8 @@ export default async function ExpenseDetailPage({
   const { id } = await params;
   const sp = await searchParams;
 
-  const orgs = await listOrgs();
-  if (orgs.length === 0) notFound();
-  const orgId = sp.org && orgs.some((o) => o.id === sp.org) ? sp.org : orgs[0]!.id;
+  const { actor } = await requireSession(`/expenses/${id}`);
+  const orgId = actor.orgId;
 
   const expense = await transaction((tx) => expensesRepo.getExpenseById(tx, orgId, id));
   if (!expense) notFound();
@@ -75,10 +73,6 @@ export default async function ExpenseDetailPage({
       })
     : { lines: [], reversalId: null, reversalLines: [] };
 
-  const actingPersonId =
-    sp.as && persons.some((p) => p.id === sp.as)
-      ? sp.as
-      : (persons.find((p) => p.role === 'manager')?.id ?? persons[0]?.id ?? '');
 
   const storeById = new Map(stores.map((s) => [s.id, s]));
   const categoryLabel = (() => {
@@ -89,9 +83,7 @@ export default async function ExpenseDetailPage({
     personId ? (persons.find((p) => p.id === personId)?.displayName ?? personId) : '—';
 
   const qs = new URLSearchParams();
-  qs.set('org', orgId);
   if (sp.store) qs.set('store', sp.store);
-  if (actingPersonId) qs.set('as', actingPersonId);
   const carry = qs.toString();
 
   const isDraft = expense.status === 'draft';
@@ -101,9 +93,7 @@ export default async function ExpenseDetailPage({
   // and these fields only decide what is worth OFFERING.
   const hiddenIds = (
     <>
-      <input type="hidden" name="orgId" value={orgId} />
       <input type="hidden" name="storeId" value={sp.store ?? ''} />
-      <input type="hidden" name="actingPersonId" value={actingPersonId} />
       <input type="hidden" name="expenseId" value={expense.id} />
     </>
   );

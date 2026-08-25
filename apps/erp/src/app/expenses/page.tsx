@@ -1,7 +1,8 @@
 import { transaction, expensesRepo } from '@shareat/db';
 import { formatMoney, money } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
-import { listOrgs, listStores, listActingPersons, listCategoriesGrouped } from './lib';
+import { listStores, listCategoriesGrouped } from './lib';
+import { requireSession } from '../../lib/session';
 
 export const metadata = { title: 'Expenses — Shareat System' };
 
@@ -10,9 +11,7 @@ export const metadata = { title: 'Expenses — Shareat System' };
 export const dynamic = 'force-dynamic';
 
 interface SearchParams {
-  org?: string;
   store?: string;
-  as?: string;
   status?: string;
 }
 
@@ -21,33 +20,13 @@ const STATUS_LABEL: Record<string, string> = { draft: 'Draft', posted: 'Posted',
 export default async function ExpensesListPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
 
-  const orgs = await listOrgs();
-  if (orgs.length === 0) {
-    return (
-      <main className="mx-auto max-w-5xl space-y-6 p-8">
-        <h1 className="text-2xl font-semibold">Expenses</h1>
-        <div className="rounded-lg border border-dashed border-neutral-300 p-8 text-center text-sm text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
-          No organization exists in this database yet.
-        </div>
-      </main>
-    );
-  }
+  // ⭐ The org comes from the SESSION (T-138), never the URL — a person cannot reach another
+  // org's spend by editing a query string, and RLS refuses them underneath in any case.
+  const { actor } = await requireSession('/expenses');
+  const orgId = actor.orgId;
 
-  const orgId = sp.org && orgs.some((o) => o.id === sp.org) ? sp.org : orgs[0]!.id;
-  const currentOrg = orgs.find((o) => o.id === orgId)!;
-
-  const [storeRows, persons, categories] = await Promise.all([
-    listStores(orgId),
-    listActingPersons(orgId),
-    listCategoriesGrouped(orgId),
-  ]);
-
+  const [storeRows, categories] = await Promise.all([listStores(orgId), listCategoriesGrouped(orgId)]);
   const storeId = sp.store && storeRows.some((s) => s.id === sp.store) ? sp.store : undefined;
-
-  const actingPersonId =
-    sp.as && persons.some((p) => p.id === sp.as)
-      ? sp.as
-      : (persons.find((p) => p.role === 'manager')?.id ?? persons[0]?.id ?? '');
 
   const status = sp.status === 'draft' || sp.status === 'posted' || sp.status === 'voided' ? sp.status : undefined;
 
@@ -59,9 +38,7 @@ export default async function ExpensesListPage({ searchParams }: { searchParams:
   );
 
   const qs = new URLSearchParams();
-  qs.set('org', orgId);
   if (storeId) qs.set('store', storeId);
-  if (actingPersonId) qs.set('as', actingPersonId);
   const carry = qs.toString();
 
   return (
@@ -82,33 +59,11 @@ export default async function ExpensesListPage({ searchParams }: { searchParams:
         </a>
       </div>
 
-      {!actingPersonId && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
-          No person with an active role exists in this org yet — nothing can be created,
-          approved or voided until one does.
-        </div>
-      )}
-
       <form
         method="GET"
         action="/expenses"
         className="flex flex-wrap items-end gap-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm dark:border-neutral-800 dark:bg-neutral-900"
       >
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Organization</span>
-          <select
-            name="org"
-            defaultValue={orgId}
-            className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
-          >
-            {orgs.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name} ({o.code})
-              </option>
-            ))}
-          </select>
-        </label>
-
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Store</span>
           <select
@@ -136,23 +91,6 @@ export default async function ExpensesListPage({ searchParams }: { searchParams:
             <option value="draft">Draft</option>
             <option value="posted">Posted</option>
             <option value="voided">Voided</option>
-          </select>
-        </label>
-
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
-            Acting as <span className="italic">(no login yet — see task report)</span>
-          </span>
-          <select
-            name="as"
-            defaultValue={actingPersonId}
-            className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
-          >
-            {persons.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.displayName} ({p.role})
-              </option>
-            ))}
           </select>
         </label>
 
@@ -204,7 +142,7 @@ export default async function ExpensesListPage({ searchParams }: { searchParams:
       )}
 
       <p className="text-xs text-neutral-400 dark:text-neutral-600">
-        {currentOrg.name} · {toBusinessDate()} today (Asia/Manila)
+        {toBusinessDate()} today (Asia/Manila)
       </p>
     </main>
   );

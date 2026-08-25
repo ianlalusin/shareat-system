@@ -23,12 +23,12 @@ import { describe, expect, it } from 'vitest';
  * function takes `(tx, actor, …)`, and that actor came from `resolveActor` at the boundary. The
  * rule is about where an actor is *born*, not where it travels.
  *
- * ## The current exemption, and why it is written down rather than silent
+ * ## Exemptions are confessions, and the list is currently EMPTY
  *
- * `apps/erp/src/app/{expenses,sales-days}` still carry the "acting as" picker T-122 and T-123
- * shipped with, documented in their own `lib.ts` as a knowing, temporary departure. **They are
- * listed here by name, so the exemption is a visible debt with an owner rather than a hole.**
- * Removing a path from this list is how that debt gets paid, and the test then holds it closed.
+ * It briefly held the two screens T-122 and T-123 shipped with an "acting as" picker. Both came
+ * off the same day they started reading the session. **An entry here says a screen can be
+ * impersonated through** — it is not a config knob, and a second test refuses a stale one, because
+ * an exemption that no longer matches anything makes the rule look narrower than it is.
  */
 
 const repoRoot = join(import.meta.dirname, '..', '..');
@@ -37,15 +37,15 @@ const repoRoot = join(import.meta.dirname, '..', '..');
 const ACTOR_FIELDS = ['actorPersonId', 'actingPersonId', 'actorUid', 'actorId', 'currentPersonId'] as const;
 
 /**
- * ⚠️ KNOWN DEBT, not permission. Each entry is a screen still using the pre-T-138 picker, and each
- * is expected to disappear once its screens read the session instead. **A path listed here must be
- * a real path** — the test below fails if an exemption stops matching anything, so a stale entry
- * cannot quietly grant cover to something else.
+ * ✅ **EMPTY, and that is the point.** This list held `apps/erp/src/app/expenses/` and
+ * `apps/erp/src/app/sales-days/` for exactly as long as those screens carried the "acting as"
+ * picker — hours, not months. **Both were removed on 2026-08-25 when they started reading the
+ * session**, and the debt is paid rather than grandfathered.
+ *
+ * ⚠️ **Adding an entry here is admitting a screen can be impersonated through.** It is not a
+ * config knob; it is a confession with a name attached, and the test below refuses a stale one.
  */
-const KNOWN_PICKER_PATHS = [
-  'apps/erp/src/app/expenses/',
-  'apps/erp/src/app/sales-days/',
-] as const;
+const KNOWN_PICKER_PATHS: readonly string[] = [];
 
 function trackedFiles(): string[] {
   const out = execFileSync('git', ['ls-files', '-z'], {
@@ -83,7 +83,9 @@ describe('§7.1 — no server action accepts an actor identity as a parameter', 
 
   it('every known exemption still matches a real file — a stale entry cannot grant cover', () => {
     // An exemption that stops matching anything is worse than none: it looks like the rule is
-    // narrower than it is, and the next person widens it by adding a neighbour.
+    // narrower than it is, and the next person widens it by adding a neighbour. Vacuously true
+    // while the list is empty, and that is the desired state — it starts mattering the moment
+    // somebody adds one.
     const files = trackedFiles();
     for (const prefix of KNOWN_PICKER_PATHS) {
       expect(files.some((f) => f.startsWith(prefix)), `exemption "${prefix}" matches no file`).toBe(true);
@@ -94,7 +96,7 @@ describe('§7.1 — no server action accepts an actor identity as a parameter', 
     const offenders: string[] = [];
 
     for (const rel of trackedFiles()) {
-      if (KNOWN_PICKER_PATHS.some((p) => rel.startsWith(p))) continue;
+      if (KNOWN_PICKER_PATHS.some((p: string) => rel.startsWith(p))) continue;
       let content: string;
       try {
         content = readFileSync(join(repoRoot, rel), 'utf8');

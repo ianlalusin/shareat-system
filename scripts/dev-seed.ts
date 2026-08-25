@@ -22,14 +22,18 @@ import postgres from 'postgres';
 
 config({ path: '.env.local' });
 
+import { setPin } from '../packages/auth/src/sessions';
+import { transaction } from '../packages/db/src/client';
 import { seedChartOfAccounts } from '../packages/db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../packages/db/seed/expense-categories';
 
-/** Roles seeded, in the order a real org acquires them. */
+/** Roles seeded, in the order a real org acquires them, each with a memorable dev PIN.
+ *  ⚠️ These PINs are printed on the sign-in page in development ONLY — see that page's
+ *  NODE_ENV guard. A convenience that reaches production is not a convenience. */
 const SEED_PEOPLE = [
-  { displayName: 'Dev Admin', role: 'admin' as const },
-  { displayName: 'Dev Manager', role: 'manager' as const },
-  { displayName: 'Dev Cashier', role: 'staff' as const },
+  { displayName: 'Dev Admin', role: 'admin' as const, pin: '111111' },
+  { displayName: 'Dev Manager', role: 'manager' as const, pin: '222222' },
+  { displayName: 'Dev Cashier', role: 'staff' as const, pin: '333333' },
 ];
 
 function databaseNameOf(url: string): string {
@@ -140,7 +144,27 @@ async function main(): Promise<void> {
       }
     }
 
+    // A PIN per person per store. Without one there is no way into the app at all now that the
+    // "acting as" picker is gone — which is the point, but it makes this part of the minimum.
+    let pinsAdded = 0;
+    for (const person of SEED_PEOPLE) {
+      const [row] = await sql<{ id: string }[]>`
+        select id from persons where org_id = ${org.id} and display_name = ${person.displayName}
+      `;
+      if (!row) continue;
+      for (const store of stores) {
+        const [existing] = await sql<{ id: string }[]>`
+          select id from person_credentials
+          where person_id = ${row.id} and store_id = ${store.id} and kind = 'pin' and revoked_at is null
+        `;
+        if (existing) continue;
+        await transaction((tx) => setPin(tx, { personId: row.id, storeId: store.id, pin: person.pin }));
+        pinsAdded++;
+      }
+    }
+
     console.log(`sales channels     : ${channelsAdded} inserted across ${stores.length} store(s)`);
+    console.log(`terminal PINs      : ${pinsAdded} set`);
     console.log(`people             : ${peopleAdded} inserted (${SEED_PEOPLE.length} expected in total)`);
     console.log(`store scopes       : ${scopesAdded} inserted across ${stores.length} store(s)`);
     console.log(`\nSeeded "${org.name}" in ${dbName}. Reload http://localhost:9008/expenses`);

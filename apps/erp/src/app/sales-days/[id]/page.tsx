@@ -1,16 +1,15 @@
 import { notFound } from 'next/navigation';
 import { transaction, salesDaysRepo, journalRepo } from '@shareat/db';
 import { formatMoney, money } from '@shareat/core/money';
-import { listOrgs, listStores, listActingPersons } from '../lib';
+import { listStores, listActingPersons } from '../lib';
+import { requireSession } from '../../../lib/session';
 import { submitSalesDayAction, verifySalesDayAction, voidSalesDayAction } from '../actions';
 
 export const metadata = { title: 'Sales day — Shareat System' };
 export const dynamic = 'force-dynamic';
 
 interface SearchParams {
-  org?: string;
   store?: string;
-  as?: string;
   error?: string;
 }
 
@@ -24,9 +23,8 @@ export default async function SalesDayDetailPage({
   const { id } = await params;
   const sp = await searchParams;
 
-  const orgs = await listOrgs();
-  if (orgs.length === 0) notFound();
-  const orgId = sp.org && orgs.some((o) => o.id === sp.org) ? sp.org : orgs[0]!.id;
+  const { actor } = await requireSession(`/sales-days/${id}`);
+  const orgId = actor.orgId;
 
   const day = await transaction((tx) => salesDaysRepo.getById(tx, orgId, id));
   if (!day) notFound();
@@ -52,29 +50,23 @@ export default async function SalesDayDetailPage({
       })
     : { lines: [], reversalId: null, reversalLines: [] };
 
-  const actingPersonId =
-    sp.as && persons.some((p) => p.id === sp.as)
-      ? sp.as
-      : (persons.find((p) => p.role === 'manager')?.id ?? persons[0]?.id ?? '');
   const personName = (pid: string | null) =>
     pid ? (persons.find((p) => p.id === pid)?.displayName ?? pid) : '—';
   const storeName = stores.find((s) => s.id === day.storeId)?.name ?? day.storeId;
 
   const carry = new URLSearchParams();
-  carry.set('org', orgId);
   if (sp.store) carry.set('store', sp.store);
-  if (actingPersonId) carry.set('as', actingPersonId);
 
   const discountsTotal =
     Number(day.seniorDiscount) + Number(day.pwdDiscount) + Number(day.otherDiscount);
   const nonRemitted = channels.filter((c) => !c.isRemittedDaily);
   const nonRemittedTotal = nonRemitted.reduce((a, c) => a + Number(c.amount), 0);
 
+  // ⭐ Only the DOCUMENT is named here. Who is acting comes from the session (T-138) — this used
+  // to carry an actingPersonId, which is what made the submit/verify segregation unenforceable.
   const hiddenIds = (
     <>
-      <input type="hidden" name="orgId" value={orgId} />
       <input type="hidden" name="storeId" value={sp.store ?? ''} />
-      <input type="hidden" name="actingPersonId" value={actingPersonId} />
       <input type="hidden" name="salesDayId" value={day.id} />
     </>
   );

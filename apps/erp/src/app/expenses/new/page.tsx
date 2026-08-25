@@ -1,14 +1,13 @@
 import { toBusinessDate } from '@shareat/core/datetime';
-import { listOrgs, listStores, listActingPersons, listCategoriesGrouped } from '../lib';
+import { listStores, listCategoriesGrouped } from '../lib';
+import { requireSession } from '../../../lib/session';
 import { createExpenseAction } from '../actions';
 
 export const metadata = { title: 'New expense — Shareat System' };
 export const dynamic = 'force-dynamic';
 
 interface SearchParams {
-  org?: string;
   store?: string;
-  as?: string;
   error?: string;
 }
 
@@ -17,24 +16,11 @@ const PAYMENT_ROWS = [1, 2, 3, 4];
 export default async function NewExpensePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
 
-  const orgs = await listOrgs();
-  if (orgs.length === 0) {
-    return (
-      <main className="mx-auto max-w-3xl space-y-6 p-8">
-        <h1 className="text-2xl font-semibold">New expense</h1>
-        <p className="text-sm text-neutral-500">No organization exists yet.</p>
-      </main>
-    );
-  }
-  const orgId = sp.org && orgs.some((o) => o.id === sp.org) ? sp.org : orgs[0]!.id;
+  const { actor } = await requireSession('/expenses/new');
+  const orgId = actor.orgId;
 
-  const [storeRows, persons, categories] = await Promise.all([
-    listStores(orgId),
-    listActingPersons(orgId),
-    listCategoriesGrouped(orgId),
-  ]);
+  const [storeRows, categories] = await Promise.all([listStores(orgId), listCategoriesGrouped(orgId)]);
   const storeId = sp.store && storeRows.some((s) => s.id === sp.store) ? sp.store : (storeRows[0]?.id ?? '');
-  const actingPersonId = sp.as && persons.some((p) => p.id === sp.as) ? sp.as : (persons[0]?.id ?? '');
 
   const groups: Array<'COGS' | 'OPEX' | 'PERSONAL' | 'CAPEX'> = ['COGS', 'OPEX', 'PERSONAL', 'CAPEX'];
 
@@ -54,15 +40,14 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
         </div>
       )}
 
-      {!actingPersonId || !storeId ? (
+      {!storeId ? (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
-          This org needs at least one store and one person with an active role before an
-          expense can be created. Go back to the <a className="underline" href="/expenses">expenses list</a>.
+          This org needs at least one store before an expense can be created. Go back to the{' '}
+          <a className="underline" href="/expenses">expenses list</a>.
         </div>
       ) : (
         <form action={createExpenseAction} className="space-y-6">
-          <input type="hidden" name="orgId" value={orgId} />
-
+          {/* ⭐ No orgId, no "acting as" — the session supplies both (T-138). */}
           <div className="grid grid-cols-2 gap-4">
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Store</span>
@@ -79,20 +64,6 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
               </select>
             </label>
 
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Acting as</span>
-              <select
-                name="actingPersonId"
-                defaultValue={actingPersonId}
-                className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
-              >
-                {persons.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.displayName} ({p.role})
-                  </option>
-                ))}
-              </select>
-            </label>
 
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Business date</span>
