@@ -330,9 +330,9 @@ export interface SalesDayChannelRow {
 
 /**
  * ⭐ Joined to the channel's own configuration, so `isRemittedDaily` is read from the ONE place it
- * is defined. That is what lets the remitted / non-remitted totals be derived rather than stored —
- * and it is why `deliverySales` does not exist here (docs/GLOSSARY.md: on a v1 day doc it silently
- * held a copy of `totalSales`).
+ * is defined. That is what lets the remitted / non-remitted totals be derived rather than stored,
+ * and it is why v1's stored non-remitted-total field has no counterpart here — on a v1 day
+ * document that field silently held a copy of the day's own total (docs/GLOSSARY.md).
  */
 export async function getChannelsForDay(tx: Tx, salesDayId: string): Promise<SalesDayChannelRow[]> {
   return tx

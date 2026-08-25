@@ -22,17 +22,14 @@
  * ## ⚠️ Why none of v1's figure names survive
  *
  * Reading `ERP-rebuild/src/lib/financial/sales-report/derive-totals.ts` — the DERIVATION, not the
- * type — shows four of them do not mean what they say (docs/GLOSSARY.md, and the build fails if
- * any appear in v2 source):
+ * type — showed that four of v1's figure names mean something other than what they say. Two of
+ * them mean *different* things depending on which system or which document wrote the row.
  *
- *   - `deliverySales`      -> on a DAY doc it EQUALS `totalSales`; on a SHIFT doc it is the
- *                             non-remitted channels. Neither is "delivery".
- *   - `dineInSales`        -> unlimited-package sales in POS, but "the remitted-daily channels" in
- *                             the ERP's own form. One name, two meanings.
- *   - `takeOutSales`       -> a residual, `max(0, total - dineIn)`, absorbing everything else.
- *   - `creditCardPayments` -> always 0; card tenders run through the online accounts.
- *
- * The columns below are named for what they hold.
+ * **All four are documented and banned in `docs/GLOSSARY.md`, which is the one place they are
+ * explained.** They cannot appear here — `tests/unit/glossary-trap-names.test.ts` fails the build
+ * on any v2 source file that names one, comments included, and that absoluteness is the point: a
+ * guard with an "unless you are explaining it" exception is a guard someone will argue their way
+ * past. **Read the glossary; the columns below are named for what they hold.**
  *
  * ## Two splits, and they are NOT the same split
  *
@@ -40,7 +37,8 @@
  *   2. **The remittance split** — which CHANNEL the money came through, and therefore whether it
  *      reaches the till at all. Foodpanda settles to a bank; cash does not.
  *
- * v1 conflates them, which is how `deliverySales` ended up holding a copy of the total. Here they
+ * v1 conflates them, which is how its non-remitted-total field ended up holding a copy of the
+ * day's own total (docs/GLOSSARY.md). Here they
  * are independent: (1) is two columns, (2) is `sales_day_channels` rows joined to the channel's
  * own `is_remitted_daily`. **The remitted/non-remitted totals are DERIVED, never stored** — so
  * they cannot drift from the channel configuration that defines them.
@@ -120,7 +118,7 @@ export const salesDays = pgTable(
       .notNull()
       .default('open'),
 
-    /** ⭐ Provenance on the figure itself — v1's `posSourced`, and worth keeping. A day pulled
+    /** ⭐ Provenance on the figure itself — ported from v1, and worth keeping. A day pulled
      *  from POS and a day typed in by hand are not equally trustworthy, and a reader that cannot
      *  tell them apart will treat them as if they were. */
     posSourced: boolean('pos_sourced').notNull().default(false),
@@ -128,10 +126,12 @@ export const salesDays = pgTable(
 
     // ── Revenue: the POSTING split (which account), not the channel split ──────────────
     totalSales: numeric('total_sales', { precision: 14, scale: 2 }).notNull(),
-    /** -> 4100 Food sales — unlimited. POS's `dineInSales`, renamed to what it means. */
+    /** -> 4100 Food sales — unlimited. Renamed from a v1 field whose name means the opposite
+     *  of how it reads (docs/GLOSSARY.md). */
     unliSales: numeric('unli_sales', { precision: 14, scale: 2 }).notNull(),
-    /** -> 4150 Food sales — à la carte (absorbs dine-in à la carte, take-out AND delivery, because
-     *  POS has no take-out flag at all). POS's `takeOutSales` residual, renamed. */
+    /** -> 4150 Food sales — à la carte. Absorbs dine-in à la carte, take-out AND delivery alike,
+     *  because POS has no take-out flag at all. In v1 this is a RESIDUAL wearing a measurement's
+     *  name (docs/GLOSSARY.md) — here it is stated, not inferred. */
     alaCarteSales: numeric('ala_carte_sales', { precision: 14, scale: 2 }).notNull(),
 
     // ── Contra-revenue. Two accounts, NOT interchangeable ─────────────────────────────
@@ -151,10 +151,11 @@ export const salesDays = pgTable(
      *  cashier/office owner split (bible row 127) does not arise here; it arises on the
      *  REMITTANCE that moves it afterwards (T-136). */
     cashCollected: numeric('cash_collected', { precision: 14, scale: 2 }).notNull().default('0'),
-    /** -> 1140 E-wallet / online channels. ⚠️ Card tenders run through here too — v1's
-     *  `creditCardPayments` is always 0 and is not modelled. */
+    /** -> 1140 E-wallet / online channels. ⚠️ Card tenders run through here too: v1 has a
+     *  separate card-tender field that nothing ever populates (docs/GLOSSARY.md), so it is not
+     *  modelled rather than carried forward empty. */
     onlineCollected: numeric('online_collected', { precision: 14, scale: 2 }).notNull().default('0'),
-    /** -> 1210 Accounts receivable. **Not cash** — a sale on account. v1's `creditSales`. */
+    /** -> 1210 Accounts receivable. **Not cash** — a sale on account. */
     creditSales: numeric('credit_sales', { precision: 14, scale: 2 }).notNull().default('0'),
 
     // Set by verify() — the posting step. Never set any other way.
@@ -217,10 +218,10 @@ export const salesDays = pgTable(
 /**
  * ⭐ **Rows, not a `Record<string, number>`** — so a channel can be joined to its configuration
  * and the remitted / non-remitted totals are **derived rather than stored**. That is what removes
- * `deliverySales` entirely: v1 had to keep a stored copy of "non-remitted total", and on a day doc
- * that copy silently became a duplicate of `totalSales`.
+ * v1's stored "non-remitted total" entirely — a copy that, on a day document, silently became a
+ * duplicate of the day's own total (docs/GLOSSARY.md).
  *
- * ⚠️ **`noSales` is not decoration.** v1's `noSalesChannelIds` exists to *"let a reviewer tell
+ * ⚠️ **`noSales` is not decoration.** Its v1 equivalent exists to *"let a reviewer tell
  * 'confirmed no sales' apart from 'forgot to fill this in'"* — the same distinction the cutover
  * wizard draws for a counted zero (T-134 B3). **An absent row and a zero row must not mean the
  * same thing**, so a confirmed-zero is a row with `noSales = true`.
