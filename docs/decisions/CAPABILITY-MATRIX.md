@@ -288,3 +288,49 @@ Two things now depend on Ian personally: **assigning an admin**, and **re-elevat
 That is correct at this scale — both are rare and both are genuinely his decisions. It is worth
 saying out loud only so that if a franchise ever needs an urgent change while he is unreachable,
 nobody is surprised by it. **A known dependency, not a flaw.**
+
+---
+
+# C. Two findings from the T-121 implementation — 2026-08-25
+
+## C.1 ⚠️ `manage_users` cannot express the authority chain on its own
+
+**Bible row 116:** only **super-admin** assigns an org's **admin**; that admin then sets
+**managers'** access.
+
+**But `manage_users` is one boolean.** An admin holding it can, as far as `authorize()` is
+concerned, assign *any* role — including another admin. That is precisely the lateral move row 116
+exists to prevent, and it is invisible from above.
+
+**Not fixable inside `authorize()`**, which answers *"may this actor use this capability?"* and
+correctly says yes. The missing check is about the **target**: *assigning the `admin` role
+additionally requires `super_admin`.*
+
+> **The rule, stated so the next person does not have to rediscover it: a capability answers
+> "what may you do", never "to whom". Where the target's own level matters, the check belongs at
+> the call site and must be tested there.**
+
+**Resolution:** the role-assignment server action carries that extra condition, with its own denial
+test. Recorded here because the screen does not exist yet and this is exactly the kind of
+requirement that gets lost between tasks.
+
+## C.2 ⚠️ An admin currently has NO store scope — resolved: materialise rows at assignment
+
+The implementer took *"v1 lets admin bypass store scope, v2 should not"* literally and gave admin
+no structural bypass. **Correct, and it exposes a gap I left:** an admin appointed today is
+authorised for **nothing store-scoped** until someone grants them store rows. That contradicts
+*"org admin = org-wide control"* (bible row 114).
+
+**Both halves are right; the resolution is the one already used for grants (row 115):**
+
+> **Assigning the admin role materialises a `person_store_scope` row for every store in that org,
+> at assignment time.** It stays **rows, never a bypass** — so *"who can see Davao?"* is still a
+> `select` — and the admin has genuine org-wide control from the moment they are appointed.
+
+**The consequence that is easy to miss:** a store created *later* appears in nobody's scope. So
+**creating a store must add scope rows for that org's existing admins** — otherwise a new branch is
+invisible to the person who just opened it, and the failure looks like a permissions bug rather
+than a missing row.
+
+*This is the same shape as row 115 and for the same reason: decide once, at the moment a human is
+present, and store the answer — rather than inferring it on every check.*

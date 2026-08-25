@@ -281,7 +281,7 @@ authorize(actor, capability, { storeId?, orgId? }) → void | throws
 ### 3. The matrix is typed, exhaustive, and fails the build
 
 `CAPABILITY_MATRIX: Record<Capability, Record<Role, boolean>>` over a **closed union** of
-capabilities, transcribed from `docs/decisions/CAPABILITY-MATRIX.md` — 36 rows.
+capabilities, transcribed from `docs/decisions/CAPABILITY-MATRIX.md` — 38 rows.
 
 **Adding a capability without a decision for all four roles must not compile.** Same shape as
 T-119 and T-120. **No default.**
@@ -314,7 +314,7 @@ Creating a manager in an org with **no admin** applies the elevated grants **the
 
 **authorize — integration**
 4. A role holding the capability, in scope, **passes**.
-5. ⭐ **Each of the 36 capabilities DENIES a role that lacks it.** *A capability with no denial
+5. ⭐ **Each of the 38 capabilities DENIES a role that lacks it.** *A capability with no denial
    test is a checkbox, not a control — DEF-051 and DEF-052 are both exactly that.*
 6. Holding a capability but **not the store** is denied — scope is checked separately, always.
 7. Holding a capability in **another org** is denied.
@@ -333,7 +333,7 @@ Creating a manager in an org with **no admin** applies the elevated grants **the
 ## Done when
 
 - [ ] All 13 invariants pass; 1–3 with no database.
-- [ ] **Invariant 5 covers all 36 capabilities** — not a sample.
+- [ ] **Invariant 5 covers all 38 capabilities** — not a sample.
 - [ ] Migration applies; `migration-journal.test.ts` run immediately after generating it.
 - [ ] `typecheck` · `test` · `test:integration` green · `build` succeeds.
 - [ ] Any spec defect **reported, not silently worked around**.
