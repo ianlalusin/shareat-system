@@ -17,3 +17,17 @@ export type { Actor, AuthorizeContext } from './authorize';
 
 export { assignRole, elevateManager } from './roles';
 export type { AssignRoleInput, AssignRoleResult } from './roles';
+
+export {
+  signInWithPin,
+  signInWithFirebase,
+  resolveActor,
+  signOut,
+  endShift,
+  setPin,
+  AuthenticationError,
+  PIN_SESSION_TTL_MS,
+  BROWSER_SESSION_TTL_MS,
+} from './sessions';
+export type { SignInResult, ResolvedSession } from './sessions';
+export { hashPin, verifyPin, pinLookupHash, isValidPinFormat, newSessionToken, sessionTokenHash } from './credentials';
