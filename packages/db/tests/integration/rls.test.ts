@@ -23,6 +23,8 @@ const sql = postgres(url, { max: 3 });
 
 let orgA: string;
 let orgB: string;
+let alice: string;
+let bob: string;
 
 /** One transaction, acting as the app role with `org` as the principal. */
 async function asOrg<T>(org: string | null, fn: (tx: postgres.TransactionSql) => Promise<T>): Promise<T> {
@@ -37,7 +39,8 @@ async function asOrg<T>(org: string | null, fn: (tx: postgres.TransactionSql) =>
 
 beforeEach(async () => {
   await sql`
-    truncate table journal_lines, journal_entries, audit_log, fiscal_periods,
+    truncate table person_grants, person_store_scope, person_roles,
+      journal_lines, journal_entries, audit_log, fiscal_periods,
       accounts, person_identities, persons, stores, organizations restart identity cascade
   `;
   const [a] = await sql<{ id: string }[]>`insert into organizations (name, code) values ('Org A','org-a') returning id`;
@@ -46,7 +49,10 @@ beforeEach(async () => {
   orgB = b!.id;
   await sql`insert into stores (org_id, code, name) values
     (${orgA}, 'A1', 'A One'), (${orgA}, 'A2', 'A Two'), (${orgB}, 'B1', 'B One')`;
-  await sql`insert into persons (org_id, display_name) values (${orgA}, 'Alice'), (${orgB}, 'Bob')`;
+  const [aliceRow] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgA}, 'Alice') returning id`;
+  const [bobRow] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgB}, 'Bob') returning id`;
+  alice = aliceRow!.id;
+  bob = bobRow!.id;
 });
 
 afterAll(async () => {
@@ -167,5 +173,61 @@ describe('T-120 — RLS org isolation', () => {
     // And the owner connection is unaffected by any of it.
     const [owner] = await sql<{ c: number }[]>`select count(*)::int c from stores`;
     expect(owner!.c).toBe(3);
+  });
+
+  describe('T-121 invariant 13 — org A cannot read org B\'s roles, grants or scope', () => {
+    // person_roles is org_column (carries org_id directly); person_store_scope and
+    // person_grants are derived through the person they name (registry.ts). Both
+    // mechanisms are exercised here, against the same two-org fixture the rest of this
+    // file already seeds.
+    beforeEach(async () => {
+      await sql`insert into person_roles (person_id, org_id, role) values (${alice}, ${orgA}, 'manager'), (${bob}, ${orgB}, 'admin')`;
+      const [storeA1] = await sql<{ id: string }[]>`select id from stores where org_id = ${orgA} and code = 'A1'`;
+      const [storeB1] = await sql<{ id: string }[]>`select id from stores where org_id = ${orgB} and code = 'B1'`;
+      await sql`insert into person_store_scope (person_id, store_id) values (${alice}, ${storeA1!.id}), (${bob}, ${storeB1!.id})`;
+      await sql`insert into person_grants (person_id, grant_name) values (${alice}, 'manage_users'), (${bob}, 'manage_price_lists')`;
+    });
+
+    it('person_roles — org A sees only Alice\'s role, never Bob\'s', async () => {
+      const rows = await asOrg(orgA, async (tx) => tx<{ role: string }[]>`select role from person_roles`);
+      expect(rows.map((r) => r.role)).toEqual(['manager']);
+      const seen = await asOrg(orgA, async (tx) => (await tx<{ c: number }[]>`select count(*)::int c from person_roles where org_id = ${orgB}`)[0]!.c);
+      expect(seen, 'org B\'s role row must be unreachable even by an explicit org_id filter').toBe(0);
+    });
+
+    it('person_store_scope — derived via person, org A cannot see Bob\'s store scope', async () => {
+      const seen = await asOrg(orgA, async (tx) => (await tx<{ c: number }[]>`select count(*)::int c from person_store_scope`)[0]!.c);
+      expect(seen).toBe(1); // Alice's row only
+      const ownedByBob = await asOrg(orgA, async (tx) => (await tx<{ c: number }[]>`select count(*)::int c from person_store_scope where person_id = ${bob}`)[0]!.c);
+      expect(ownedByBob, 'even an explicit person_id filter for Bob returns nothing under org A\'s principal').toBe(0);
+    });
+
+    it('person_grants — derived via person, org A cannot see Bob\'s grants', async () => {
+      const rows = await asOrg(orgA, async (tx) => tx<{ grant_name: string }[]>`select grant_name from person_grants`);
+      expect(rows.map((r) => r.grant_name)).toEqual(['manage_users']);
+    });
+
+    it('org B, symmetrically, cannot see org A\'s roles, scope or grants', async () => {
+      const roles = await asOrg(orgB, async (tx) => tx<{ role: string }[]>`select role from person_roles`);
+      expect(roles.map((r) => r.role)).toEqual(['admin']);
+      const scope = await asOrg(orgB, async (tx) => (await tx<{ c: number }[]>`select count(*)::int c from person_store_scope`)[0]!.c);
+      expect(scope).toBe(1);
+      const grants = await asOrg(orgB, async (tx) => tx<{ grant_name: string }[]>`select grant_name from person_grants`);
+      expect(grants.map((g) => g.grant_name)).toEqual(['manage_price_lists']);
+    });
+
+    it('no principal set — zero rows from all three tables, same default-deny as every other org-scoped table', async () => {
+      const roles = await asOrg(null, async (tx) => (await tx<{ c: number }[]>`select count(*)::int c from person_roles`)[0]!.c);
+      const scope = await asOrg(null, async (tx) => (await tx<{ c: number }[]>`select count(*)::int c from person_store_scope`)[0]!.c);
+      const grants = await asOrg(null, async (tx) => (await tx<{ c: number }[]>`select count(*)::int c from person_grants`)[0]!.c);
+      expect([roles, scope, grants]).toEqual([0, 0, 0]);
+    });
+
+    it('the owner (system principal) still sees both orgs\' rows — the migrator and audit must not break', async () => {
+      const [roles] = await sql<{ c: number }[]>`select count(*)::int c from person_roles`;
+      const [scope] = await sql<{ c: number }[]>`select count(*)::int c from person_store_scope`;
+      const [grants] = await sql<{ c: number }[]>`select count(*)::int c from person_grants`;
+      expect([roles!.c, scope!.c, grants!.c]).toEqual([2, 2, 2]);
+    });
   });
 });

@@ -17,3 +17,6 @@ export * as journalRepo from './repo/journal';
 export * as etlRepo from './repo/etl';
 export * as reportsRepo from './repo/reports';
 export * as accessRepo from './repo/access';
+// Re-exported so a caller establishing a principal around an authorize() call (T-121) does
+// not need to reach into packages/db/src/rls/registry.ts directly.
+export { APP_ROLE } from './rls/registry';
