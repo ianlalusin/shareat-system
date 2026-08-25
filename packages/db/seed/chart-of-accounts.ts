@@ -163,7 +163,7 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
   // amount owed to that specific supplier is not yet established — forcing a party here would
   // assert a subledger balance the business has not yet agreed. It clears INTO 2110, which does
   // carry the party.
-  leaf('2120', 'Goods received not invoiced', 'liability', 'credit', '2000'),
+  leaf('2120', 'Goods received not invoiced', 'liability', 'credit', '2000', { status: 'reserved' }),
   leaf('2130', 'Reimbursements payable to employees', 'liability', 'credit', '2000', {
     requiresParty: true,
   }), // staff_reimbursable__{staffId} — T-118 party_type=employee

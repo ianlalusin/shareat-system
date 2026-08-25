@@ -374,7 +374,7 @@ describe('invariant 9 — posting to a header account (is_postable = false) is r
 });
 
 describe("invariant 10 — posting to a 'reserved' account is rejected", () => {
-  it.each(['2145', '2250', '4920'])('rejects posting to reserved account %s', async (code) => {
+  it.each(['2120', '2145', '2250', '4920'])('rejects posting to reserved account %s', async (code) => {
     const { orgId, periodId, cash, opex } = await baseFixture(`inv10-${code}`);
     const reserved = await accountId(orgId, code);
     const entryId = await insertValidEntry(orgId, periodId, cash, opex, `inv10-${code}`);

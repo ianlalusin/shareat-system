@@ -1,0 +1,27 @@
+-- 0013 — 2120 Goods received not invoiced becomes RESERVED, not active.
+--
+-- Ian, 2026-08-25: "For our business it's not that common that a supplier will deliver and we
+-- will not receive an invoice. Even if we already agreed to the price, thus we know the amount
+-- and can book AP. We could skip GRNI — it just adds a step and complexity. But don't get me
+-- wrong, I still want it to be correct; yet simplicity is better."
+--
+-- He is right, and the reasoning reaches further than the account.
+--
+-- GRNI exists for ONE situation: goods received while the amount owed is still unknown. In this
+-- business the price is agreed when the order is placed, so at receipt the amount IS known —
+-- even for weight-based items, where an agreed rate times an actual weight is still a known
+-- figure. The situation GRNI solves does not arise.
+--
+-- Follow that one step further and it removes more than an account. If a delivery can book AP
+-- directly, the delivery→expense LINK is not needed either — and the expensing lag ADR-009
+-- measured (91% → 76%) was never about a missing amount. It was a second document waiting to be
+-- typed. Remove the second document and there is nothing left to fall behind.
+--
+-- So the provisional-posting design (bible row 117) added machinery to MANAGE a lag, where
+-- booking AP at receipt removes the thing that CREATES it. Simpler and more correct at once.
+--
+-- The account is kept rather than dropped, at status 'reserved' — the same treatment 2145 and
+-- 2250 already have. It costs nothing, it documents a considered decision, and if a genuine
+-- receive-before-price case ever appears (a new supplier, a spot purchase) the account is there
+-- and this comment explains when to use it. Dropping it would throw away the reasoning with it.
+UPDATE "accounts" SET "status" = 'reserved' WHERE "code" = '2120';

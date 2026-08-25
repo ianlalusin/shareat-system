@@ -239,7 +239,7 @@ describe('invariant 7 — legacy_code is unique and never contains a per-entity 
 
 describe('invariant 8 — reserved accounts are exactly {2145, 2250, 4920}; every other account is active', () => {
   it('RESERVED_CODES matches the amended Contract §4 list exactly', () => {
-    expect(new Set(RESERVED_CODES)).toEqual(new Set(['2145', '2250', '4920']));
+    expect(new Set(RESERVED_CODES)).toEqual(new Set(['2120', '2145', '2250', '4920']));
   });
 
   it('the database reflects reserved vs active correctly after seeding', async () => {
@@ -248,7 +248,7 @@ describe('invariant 8 — reserved accounts are exactly {2145, 2250, 4920}; ever
     const rows = await fetchAccounts(orgId);
 
     const reserved = rows.filter((r) => r.status === 'reserved').map((r) => r.code);
-    expect(new Set(reserved)).toEqual(new Set(['2145', '2250', '4920']));
+    expect(new Set(reserved)).toEqual(new Set(['2120', '2145', '2250', '4920']));
 
     const others = rows.filter((r) => !reserved.includes(r.code));
     for (const r of others) {
