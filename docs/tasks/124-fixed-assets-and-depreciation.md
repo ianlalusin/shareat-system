@@ -160,27 +160,75 @@ to make and document, so the useful question is what each choice costs.
 | **Per-category useful lives** | ✅ **ADOPT**, defaulting to 5. PH prescribes nothing; common anchors are vehicles 5, buildings 20, PPE generally 5–10. A flat 5 applied to a building is wrong by fifteen years |
 | **One method** | ✅ **CONFIRMED, with a better reason than simplicity: changing depreciation method requires BIR approval.** A dropdown offering declining-balance would let someone create a filing obligation with a click |
 | **Zero salvage default** | ✅ Keep. Conservative, and editable where a resale value is genuinely known |
-| **₱5,000 threshold** | ⚠️ **Unresolved by design — Ian's call, see below** |
+| **Threshold** | ✅ **₱10,000** — Ian, 2026-08-26, doubling v1's ₱5,000 |
 
-### ⛔ The threshold silently sets the length of the December walk-round
+### ✅ Threshold raised to ₱10,000 (Ian, 2026-08-26)
 
-Nothing prescribes a threshold; it is a **materiality** decision. The trade-off in the literature
-is recordkeeping burden versus expense smoothing — and **here the burden is physical**: at ₱5,000
-a rice cooker and a decent chair are depreciating assets, four stores' worth of them are hundreds
-of rows, and **T-134 step B2 requires a person to stand in front of every one of them in
-December.**
+Nothing prescribes a threshold; it is a **materiality** decision, and the trade-off is
+recordkeeping burden against expense smoothing. **Here the burden is physical** — every
+capitalised item is a row someone stands in front of during T-134's December walk-round.
 
-⚠️ **And the number itself deserves one look:** the most-cited convention anywhere is **$5,000**
-(the US IRS de minimis safe harbor), and **₱5,000 is roughly $85** — the same digits, about sixty
-times apart. That may be entirely deliberate. Nothing in v1 explains where it came from.
+**Doubling it removes the cheap end of the register**: a ₱6,000 chair or a ₱8,000 rice cooker is
+now expensed on the day it is bought rather than tracked, depreciated and counted for five years.
+⚠️ **That is a TIMING difference, not a permanent one** — the same money reaches the P&L either
+way, just sooner.
 
-## 10. Open
+**⭐ Where the number LIVES matters as much as the number.** v1 reads it from a config document
+with a constant as fallback (§8), and refuses to post if it cannot read it. **Port that exactly**:
+the threshold is configuration, and a threshold nobody can read must stop the posting rather than
+silently substitute a default.
 
-1. ⭐ **Is ₱5,000 deliberate, or borrowed from the $5,000 convention?** The answer decides whether
-   it is a policy or an accident — and it decides how long December takes.
-2. **The per-category lives themselves.** Buildings 20 and vehicles 5 are the common anchors; the
-   rest is judgement. Worth agreeing once with the accountant and never revisiting.
-3. ⭐ **Does depreciation post per asset or per category per period?** Per asset is more
+---
+
+## 10. ⭐ Useful lives: the logic, then the table
+
+Ian asked what makes a building 20 and a vehicle 5. **The answer is one question, and it is not
+"how long could this last?"**
+
+> ### How long until we would realistically REPLACE it?
+>
+> Not its engineering life — the point at which this business actually buys another one. That is
+> what makes depreciation match reality instead of a manufacturer's brochure.
+
+**Three things drive it, and a restaurant is unusual in the third:**
+
+| Driver | |
+|---|---|
+| **Physical wear** | How hard is it used? A commercial kitchen is brutal — heat, grease, water, twelve-hour days. The same fridge lasts far longer in an office |
+| **Obsolescence** | Replaced because something better exists, not because it broke. Tablets and terminals go this way |
+| ⭐ **Aesthetic life** | **Replaced because the place looks tired.** Furniture in a restaurant is retired long before it is broken — and this is the one most businesses forget to price |
+
+**So a building is 20 because it is structural, sheltered and maintained; a vehicle is 5 because it
+is used daily and wears mechanically.** Everything else sits between those two on the same scale.
+
+### The proposed table — ⚠️ a starting point for Ian and his accountant, not a decision
+
+| Category | Years | Why |
+|---|---:|---|
+| **Building** | **20** | Structural and maintained. The common PH anchor |
+| **Machinery** | **10** | Heavy kitchen plant — ranges, chillers, exhaust. Built for it, and used hard |
+| **Equipment** | **7** | General equipment. Lighter duty than machinery, heavier than an office's |
+| **Furniture & Fixture** | **5** | ⭐ **Aesthetic life, not physical.** A dining room is refreshed long before the chairs break |
+| **Appliances** | **5** | Aircon and refrigeration run continuously in this climate. Rarely reach seven |
+| **Vehicles** | **5** | The common PH anchor, and it matches when a vehicle stops being reliable |
+| **Smallwares** | **3** | Consumed, broken and replaced. Five years overstates every one of them |
+
+### ⚠️ Raising the threshold partly hollows out Smallwares
+
+At ₱10,000, **almost nothing a kitchen calls a smallware clears the bar** — pans, utensils and
+plates are expensed on purchase. **The category is not wrong, it is now rarely used**, and an item
+expensive enough to be capitalised is probably not really a smallware.
+
+> **Worth knowing rather than fixing.** A category that legitimately goes quiet is fine; a
+> category quietly collecting things that do not belong in it is not. If Smallwares starts filling
+> up, the threshold or the categorisation is being worked around.
+
+## 11. Open
+
+1. **The lives above want the accountant's nod once.** Agree them, then leave them — §9 notes that
+   changing the *method* needs BIR approval, and while changing a *life* does not, an estimate
+   that keeps moving is one nobody trusts.
+2. ⭐ **Does depreciation post per asset or per category per period?** Per asset is more
    traceable; per category is far fewer lines. **Suggest per asset** — with a few hundred assets
    this is not a volume problem, and *"which asset is this ₱4,000 for?"* is a question somebody
    will ask.

@@ -112,14 +112,22 @@ obviously).
 |---|---|
 | **Useful lives** | ✅ Per-category, defaulting to 5. Adopted — it is standard practice and the enum exists |
 | **One method** | ✅ Confirmed, and now with a REASON beyond simplicity: changing method needs BIR approval |
-| **Threshold** | ⚠️ Unresolved by design. **₱5,000 stays until Ian says otherwise** — but §2's coincidence and the walk-round cost both go to him |
+| **Threshold** | ✅ **₱10,000** — Ian decided on 2026-08-26, doubling v1's figure. See below |
 | **Salvage** | ✅ Zero default, editable |
 
-## Open — for Ian
+## ✅ Decided 2026-08-26 (bible row 139)
 
-1. ⭐ **Is ₱5,000 deliberate, or did it come from the $5,000 convention?** The answer decides
-   whether this is a policy or an accident.
-2. **What should the per-category lives be?** Buildings 20 and vehicles 5 are the common anchors;
-   the rest is judgement. **Worth agreeing once with the accountant and never revisiting.**
-3. ⚠️ **Whatever the threshold ends up being, it decides how much walking December involves.**
-   That decision wants making *before* the walk-round is planned, not after.
+**Threshold: ₱10,000**, doubling v1's ₱5,000 — Ian, without needing the coincidence resolved. The
+December walk-round shortens accordingly, and the cheap end of the register is expensed on
+purchase instead: **a timing difference, not a permanent one.**
+
+**Per-category lives adopted**, with T-124 §10 carrying the reasoning and a proposed table. The
+durable part is the question a life answers — *"when would we realistically replace it?"*, never
+*"how long could it last?"* — and the restaurant-specific driver most businesses forget: **aesthetic
+life**, because a dining room is refreshed long before its chairs break.
+
+### Still open
+
+- **The lives themselves want the accountant's nod once.** Changing a life does not need BIR
+  approval the way changing the *method* does — but an estimate that keeps moving is one nobody
+  trusts, so agree them and leave them.

@@ -63,35 +63,35 @@
 - `1034–1068 ` 10. Phase plan
 - `1069–1085 ` 11. Migration & ETL rules
 - `1086–1134` 12. Inherited landmines — do not repeat these
-- `1135–1279` 13. Decision log
-- `1280–1299` 14. Amendment protocol
-- `1300–1304` 15. Engineering standards — the industry practices this project follows
-  - `1305–1310` 15.1 Build order: walking skeleton first
-  - `1311–1322` 15.2 Golden-master testing — the most important practice here
-  - `1323–1331` 15.3 Strangler Fig, not big-bang cutover
-  - `1332–1336` 15.4 No dual-write
-  - `1337–1341` 15.5 Expand/contract migrations
-  - `1342–1350` 15.6 Observability from day zero, not later
-  - `1351–1355` 15.7 CI gates
-  - `1356–1360` 15.8 Backups and a tested restore
-  - `1361–1365` 15.9 Twelve-Factor config
-  - `1366–1373` 15.10 Append-only ledgers — but not event sourcing
-  - `1374–1378` 15.11 Defence in depth
-  - `1379–1407` 15.12 Skills are lenses, not assurance
-  - `1408–1414` 15.13 Reconciliation is a permanent feature
-- `1415–1419` 16. The accounting spine
-  - `1420–1451` 16.0 What we are actually fixing — the diagnosis
-  - `1452–1495` 16.1 The ten invariants — non-negotiable
-  - `1496–1510` 16.2 The oracle: how "correct" is tested
-  - `1511–1532` 16.3 The model — header + lines, not legs
-  - `1533–1552` 16.4 Deliberately simpler than ERPNext
-  - `1553–1619` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1620–1644` 16.6 What v1 already gets right — preserve the intent
-  - `1645–1666` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1667–1681` 16.8 What v1's accounting already gets right
-  - `1682–1725` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1726–1776` 16.10 Posting patterns — one canonical pattern per business event
-  - `1777–1794` 16.11 Inventory's accounting integration
+- `1135–1280` 13. Decision log
+- `1281–1300` 14. Amendment protocol
+- `1301–1305` 15. Engineering standards — the industry practices this project follows
+  - `1306–1311` 15.1 Build order: walking skeleton first
+  - `1312–1323` 15.2 Golden-master testing — the most important practice here
+  - `1324–1332` 15.3 Strangler Fig, not big-bang cutover
+  - `1333–1337` 15.4 No dual-write
+  - `1338–1342` 15.5 Expand/contract migrations
+  - `1343–1351` 15.6 Observability from day zero, not later
+  - `1352–1356` 15.7 CI gates
+  - `1357–1361` 15.8 Backups and a tested restore
+  - `1362–1366` 15.9 Twelve-Factor config
+  - `1367–1374` 15.10 Append-only ledgers — but not event sourcing
+  - `1375–1379` 15.11 Defence in depth
+  - `1380–1408` 15.12 Skills are lenses, not assurance
+  - `1409–1415` 15.13 Reconciliation is a permanent feature
+- `1416–1420` 16. The accounting spine
+  - `1421–1452` 16.0 What we are actually fixing — the diagnosis
+  - `1453–1496` 16.1 The ten invariants — non-negotiable
+  - `1497–1511` 16.2 The oracle: how "correct" is tested
+  - `1512–1533` 16.3 The model — header + lines, not legs
+  - `1534–1553` 16.4 Deliberately simpler than ERPNext
+  - `1554–1620` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1621–1645` 16.6 What v1 already gets right — preserve the intent
+  - `1646–1667` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1668–1682` 16.8 What v1's accounting already gets right
+  - `1683–1726` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1727–1777` 16.10 Posting patterns — one canonical pattern per business event
+  - `1778–1795` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1274,6 +1274,7 @@ just a patch.**
 | 136 | 2026-08-25 | **The service-charge float is DISTRIBUTED on a per-store cadence — and ⛔ MONTHLY IS NOT LAWFUL, so the setting must not be able to express it** (T-136 §6) | Ian: *“yes we float it, and distribute per day, per week or per month.”* The float is settled (row 135); this is how it empties. **Daily and weekly are fine. Monthly is not:** RA 11360 requires distribution **at least twice a month, at intervals not exceeding sixteen days**, so a monthly cadence is a breach by construction rather than by accident. ⭐ **The design consequence is the interesting part: the configuration must not be able to hold the wrong answer.** Same instinct as `is_remitted_daily` being NOT NULL with no default — **if a setting can be set to something unlawful, eventually it will be, and nobody notices**, because a float that keeps growing reads as a healthy balance rather than an overdue obligation. ⭐ **So an ageing 2160 is a FINDING, not a balance** — it belongs in the OIL feed (T-135) as *“service charge float older than 16 days”*, derived from the condition so it cannot be resolved while still true. ⚠️ **It shares its shape with the remittance cadence (row 129) and deliberately NOT its number:** both are per-store cash movements on a configurable rhythm, but remittance is bounded by how much cash you are willing to hold in a drawer and this one is bounded by STATUTE. **A store that remits weekly may still have to distribute twice a month**, so collapsing the two settings into one would quietly make the lawful cadence follow the convenient one | Yes |
 | 137 | 2026-08-25 | **T-138 started, and reading v1 first HALVED it: the browser session is already fixed there, so §7.1's “~24 client-asserted server actions” is now true only of the PIN half** | Ian: *“go auth now, start.”* ⭐ **The correction is worth more than the spec.** Bible §7.1 and discovery 04 describe acting identity as a client-asserted parameter across ~24 server actions. **`policies/server-context.ts` shows v1 has since fixed the BROWSER half**: identity comes from a verified `__session` cookie, and *“session present + actorUid mismatch → hard Unauthorized.”* **So v2's work is narrower and clearer than the bible implies** — the shared-terminal PIN “session” living in `localStorage` with no server token is the part that remains. Three things ported rather than invented: **a mismatch is a HARD failure**, not a preference for the cookie, so a stale tab acting as the wrong user is detectable instead of silently corrected; the cookie is **re-minted on sign-in, page load and hourly refresh**, so *“a missing cookie means re-authenticate, not trust me”*; and cookieless callers get **one named escape hatch** (`runWithVerifiedPrincipal`) for a genuinely different verified credential, rather than a scatter of special cases. ⛔ **DEF-062 found in the same read** — the passcode HMAC falls back to a secret hardcoded in the source, does not fail closed, and rotating it invalidates every stored hash, which is exactly why an unset secret stays unset. v2 **fails closed at startup**. ⚠️ **The reason this is next at all: I shipped T-122 and T-123 with capability checks gated on a DROPDOWN.** *“The person who submits should not be the one who verifies”* is theatre until a login exists — the DEF-052 shape, added knowingly, and this is the task that makes it real | Yes |
 | 138 | 2026-08-25 | **T-138 SHIPPED: the "acting as" dropdown is gone, and §7.1's binding rule is now enforced by a repo-wide guard rather than by discipline** | Ian: *"retain the current 6-digit passcode… link to biometric next time"*, and *"yes both"* on expiry. ⭐ **The biometric answer was a constraint on the schema TODAY, not a future one:** credential KIND is a column, so adding biometrics is a row and a service rather than a migration and a rewrite of every read. `biometric` is declared and stores nothing — templates stay Phase 4 under §5.3. **"Both" is two columns because they fail differently:** `expires_at` catches a terminal nobody signed out of; `ended_at` closes the session the moment responsibility transfers rather than up to a TTL later. ⭐ **The finding that mattered most is what did NOT change: not one line of `packages/domain`.** It always took `(tx, actor, …)` and never asked where the actor came from — which is precisely why replacing a dropdown with a real session was a boundary change and not a rewrite. **The layering paid off exactly where it was supposed to.** ⛔ **And the thing this closes is one I opened knowingly:** T-122's approve and T-123's verify both gated on a person the BROWSER named, so *“the person who submits should not be the one who verifies”* was theatre — the DEF-052 shape, added deliberately with `lib.ts` documenting it. The exemption list in `tests/unit/no-client-supplied-actor.test.ts` held those two screens for **hours, not months**, and is now **empty**. ⚠️ **An entry in that list is a confession that a screen can be impersonated through, not a config knob** — and a second test refuses a stale one, because an exemption matching nothing makes the rule look narrower than it is. Verified in a browser end to end: unauthenticated → 307 to sign-in carrying `next`, wrong PIN refused with the same message an unknown PIN gets, correct PIN lands on the requested page | Yes |
+| 139 | 2026-08-26 | **Capitalisation threshold raised to ₱10,000, and useful lives become PER CATEGORY — the question a life answers is “when would we REPLACE it”, not “how long could it last”** (T-124, discovery 25) | Ian: *“let's raise it to 10k”*, then *“what's with building being 20 and vehicle 5 — what is logical to assign?”* ⭐ **The threshold is a materiality judgement with a physical cost here**: every capitalised item is a row someone must stand in front of during T-134's December walk-round, so doubling it removes the cheap end of the register. **A timing difference, not a permanent one** — a ₱8,000 rice cooker reaches the P&L on the day it is bought instead of over five years. ⚠️ **Where the number lives matters as much as the number**: v1 reads it from config and REFUSES TO POST if it cannot be read, because a silent fallback *“understates depreciation by ~60%”* — ported exactly. ⭐ **On the lives, the reasoning is the durable part and the numbers are not:** a life answers *“how long until we would realistically replace this?”*, never *“how long could it last?”* — the second is a manufacturer's brochure, the first is what makes depreciation match reality. Three drivers: **physical wear** (a commercial kitchen is brutal — the same fridge lasts far longer in an office), **obsolescence** (replaced because something better exists), and ⭐ **AESTHETIC life — replaced because the place looks tired**, which is the one most businesses forget to price and the reason restaurant furniture is retired long before it breaks. So a building is 20 because it is structural, sheltered and maintained; a vehicle is 5 because it is used daily and wears mechanically; everything else sits between them on the same scale. Proposed, for the accountant to confirm once: **Building 20 · Machinery 10 · Equipment 7 · Furniture & Fixture 5 · Appliances 5 · Vehicles 5 · Smallwares 3**. ⚠️ **A side-effect worth knowing rather than fixing: at ₱10,000 almost nothing a kitchen calls a smallware clears the bar**, so that category goes quiet — which is fine. **If it starts filling up, the threshold or the categorisation is being worked around** | Yes — lives want the accountant's nod once |
 
 ---
 
