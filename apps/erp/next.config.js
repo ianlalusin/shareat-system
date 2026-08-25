@@ -13,7 +13,12 @@ const nextConfig = {
   // Workspace packages ship TypeScript source, not a build artefact. Next must
   // compile them like first-party code. This is what keeps `@shareat/core` a
   // single copy of the truth rather than a published, versioned duplicate.
-  transpilePackages: ['@shareat/core', '@shareat/db', '@shareat/domain'],
+  // `@shareat/auth` added by T-122: the expenses screens are the first apps/erp code
+  // to reach `authorize()` (transitively, through @shareat/domain's expense services) —
+  // without this, `next build` cannot compile @shareat/domain's own `import ... from
+  // '@shareat/auth'` statements. Found because it was never needed until now: the
+  // existing reports screens read the database directly and never call authorize().
+  transpilePackages: ['@shareat/core', '@shareat/db', '@shareat/domain', '@shareat/auth'],
   // Native/Node-only packages must not be bundled into the server build.
   // See PROJECT_BIBLE.md §12 landmine: Next.js server bundling of native deps.
   serverExternalPackages: ['postgres', 'firebase-admin', 'pino'],
