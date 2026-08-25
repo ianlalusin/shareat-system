@@ -226,3 +226,118 @@ residue — which is precisely the part Ian is right to worry about handing over
 **Left open for Ian:** whether a franchise owner eventually gets org-admin at all, or stays a
 manager permanently with Ian as their admin. Both are defensible; it is a relationship question,
 not a technical one, and nothing in the design forces it either way.
+
+---
+
+# B. Implementation contract — added 2026-08-25
+
+> **This is Wave 0's third task, and I skipped it** (DEF-053). T-122 then needed capability
+> enforcement against a roles system that exists only in these documents. **Built before T-122.**
+
+## Scope
+
+```
+packages/db/schema/access.ts              person_roles · person_store_scope · person_grants
+packages/db/migrations/00NN_*.sql         + RLS policies for each new table
+packages/db/src/cutover/classification.ts classify all three (build FAILS otherwise)
+packages/db/src/rls/registry.ts           declare scoping (build FAILS otherwise)
+packages/db/src/repo/access.ts            the ONLY place access SQL lives
+packages/auth/src/capabilities.ts         the typed matrix + the build guard
+packages/auth/src/authorize.ts            the ONE function every mutation calls
+packages/auth/package.json                @shareat/auth — this task creates it
+tests/unit/capability-matrix.test.ts      exhaustiveness guard — no database
+packages/auth/tests/integration/authorize.test.ts
+```
+
+**Do not modify** `postEntry`, `reverseEntry`, the ledger schema, or anything under `apps/`.
+
+## Contract
+
+### 1. Three tables, because the three axes are independent (bible row 114)
+
+```
+person_roles         person_id, org_id, role            -- super_admin | admin | manager | staff
+person_store_scope   person_id, store_id                -- rows, never a bypass. "All" = every row
+person_grants        person_id, grant_name, granted_by, granted_at, revoked_at?
+```
+
+**`person_store_scope` is rows, not a flag.** v1 let `admin` bypass store access; a bypass is
+invisible in the data and impossible to review. *"Who can see Davao?"* must be a `select`.
+
+**`person_grants` is append-and-revoke, never delete** — `revoked_at` rather than a `DELETE`, so
+*"who could do this in March?"* stays answerable. Grants are exactly what an audit asks about.
+
+### 2. `authorize()` — one function, and nothing bypasses it
+
+```ts
+authorize(actor, capability, { storeId?, orgId? }) → void | throws
+```
+
+- Checks **all three axes**: capability from the matrix, org from the principal, store from scope.
+- **Throws.** A boolean invites `if (can) {…}` with no else, which is DEF-051 — a check whose
+  failure path does nothing.
+- Called **server-side, at the mutation**. Never in a component (DEF-051 again).
+
+### 3. The matrix is typed, exhaustive, and fails the build
+
+`CAPABILITY_MATRIX: Record<Capability, Record<Role, boolean>>` over a **closed union** of
+capabilities, transcribed from `docs/decisions/CAPABILITY-MATRIX.md` — 36 rows.
+
+**Adding a capability without a decision for all four roles must not compile.** Same shape as
+T-119 and T-120. **No default.**
+
+Two open cells (`set_credit_limit`, `close_period`) take the matrix document's recommendation and
+carry a `// OPEN — Ian to confirm` comment. `close_period` for a manager additionally requires
+**org-wide store scope** — the resolution of the row 101 / row 114 conflict.
+
+### 4. The grant-time fallback (bible rows 115, 116)
+
+Creating a manager in an org with **no admin** applies the elevated grants **then**, as real rows.
+
+- **Evaluated once, at appointment. Never at check time.**
+- Removing an admin changes **nothing**.
+- Re-elevating after an admin leaves is a **super-admin action**.
+- Deactivating an admin **raises a notice** — *"Org X has no admin. Elevate its managers?"* A
+  prompt, never an action.
+
+### 5. Super-admin is break-glass
+
+`cross_org_access` is not a role someone holds all day. It requires re-authentication and a
+**stated reason**, and **every use is logged**: who, when, which org, what was touched.
+
+## Invariants
+
+**Matrix — unit, no database**
+1. Every capability has an explicit decision for all four roles.
+2. A capability added without decisions **fails to compile or fails the test** — demonstrated.
+3. The typed matrix matches `CAPABILITY-MATRIX.md` exactly — parsed, not hand-compared.
+
+**authorize — integration**
+4. A role holding the capability, in scope, **passes**.
+5. ⭐ **Each of the 36 capabilities DENIES a role that lacks it.** *A capability with no denial
+   test is a checkbox, not a control — DEF-051 and DEF-052 are both exactly that.*
+6. Holding a capability but **not the store** is denied — scope is checked separately, always.
+7. Holding a capability in **another org** is denied.
+8. `close_period` is denied to a manager whose store scope is not org-wide.
+
+**Grants**
+9. A manager created in an admin-less org receives the elevated grants **at creation**.
+10. Removing the org's admin leaves every grant **unchanged**.
+11. A revoked grant stops authorising, and **remains queryable** with its revocation date.
+
+**Wave 0 holds**
+12. All three tables classified for cutover and declared in the RLS registry — both guards seen
+    failing first.
+13. Person A in org A cannot read org B's roles, grants or scope.
+
+## Done when
+
+- [ ] All 13 invariants pass; 1–3 with no database.
+- [ ] **Invariant 5 covers all 36 capabilities** — not a sample.
+- [ ] Migration applies; `migration-journal.test.ts` run immediately after generating it.
+- [ ] `typecheck` · `test` · `test:integration` green · `build` succeeds.
+- [ ] Any spec defect **reported, not silently worked around**.
+
+> **The measure: delete an `authorize()` call from any mutation and a test fails.** If the only
+> thing standing between a staff member and voiding a sales day is that someone remembered to
+> check, this task did not work.
