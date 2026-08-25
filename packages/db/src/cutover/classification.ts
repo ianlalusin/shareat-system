@@ -77,6 +77,24 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     class: 'keep',
     reason: 'Login identities for the roster above. Purging them would lock every user out.',
   },
+  person_roles: {
+    class: 'keep',
+    reason:
+      'Access configuration for the staff roster above, not a transactional fact. Purging it ' +
+      'at cutover would leave every pilot user with no role at all on 1 January — the opposite ' +
+      'of the "pilot users keep their logins" decision this mirrors (ADR-007 open 2).',
+  },
+  person_store_scope: {
+    class: 'keep',
+    reason: 'Which stores a person may see — configuration, like the role it accompanies. Same reasoning as person_roles.',
+  },
+  person_grants: {
+    class: 'keep',
+    reason:
+      'Per-person capability overrides, including the grant-time-fallback rows for managers in ' +
+      'admin-less orgs (bible row 115). These are access configuration, not pilot activity — ' +
+      'purging them would silently strip capability from staff who need it on day one.',
+  },
   accounts: {
     class: 'keep',
     reason:

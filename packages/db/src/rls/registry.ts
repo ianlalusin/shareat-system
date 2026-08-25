@@ -64,6 +64,31 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     reason: 'Login identities hang off persons, which carries the org.',
   },
 
+  // T-121 — the three access axes (docs/tasks/121-roles-and-access.md, bible row 114).
+  person_roles: {
+    scope: 'org_column',
+    reason:
+      'Who holds what role is per-org data — a franchise owner must not see, let alone infer, ' +
+      'Ian\'s own org role assignments. Carries org_id directly (a person can hold different ' +
+      'roles in different orgs, e.g. Ian holding several franchises\' admin — bible row 114 A.4).',
+  },
+  person_store_scope: {
+    scope: 'derived',
+    via: 'exists (select 1 from persons p where p.id = person_store_scope.person_id and p.org_id = app_current_org())',
+    reason:
+      'No org_id of its own — "which stores can this person see" is reached only through the ' +
+      'person it names, same reasoning as person_identities. A store list is exactly the kind ' +
+      'of data a franchise owner must not read for another org\'s staff.',
+  },
+  person_grants: {
+    scope: 'derived',
+    via: 'exists (select 1 from persons p where p.id = person_grants.person_id and p.org_id = app_current_org())',
+    reason:
+      'No org_id of its own — grants hang off the person they were given to. DEF-052\'s lesson ' +
+      'generalised: a grant with no locatable enforcement is a checkbox, and a grant no other ' +
+      'org can even query is one less place that checkbox could leak.',
+  },
+
   audit_log: {
     scope: 'system_only',
     reason:

@@ -7,7 +7,8 @@
  * etl_source_documents / etl_quarantine / etl_reconciliation — the ETL framework
  * (docs/tasks/112-etl-framework.md). T-110 adds the three reporting views — declared
  * here for typing only; the DDL is hand-written in migration 0010, not generated (see
- * views.ts's own top comment for why).
+ * views.ts's own top comment for why). T-121 adds person_roles / person_store_scope /
+ * person_grants — the three access axes (docs/tasks/121-roles-and-access.md).
  */
 
 export * from './organizations';
@@ -19,3 +20,4 @@ export * from './audit-log';
 export * from './journal';
 export * from './etl';
 export * from './views';
+export * from './access';
