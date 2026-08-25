@@ -156,7 +156,19 @@ future rule like "a void needs biometric confirmation" needs the second one.
 templates readable only by a provisioned device identity, **face templates never mirrored or
 cached, ever.** This task makes room for the credential; it does not store biometric data.
 
-## 7. Still open
+## 7. ⚠️ Shipped without rate limiting — DEF-063
+
+**Raised and deferred on 2026-08-25.** The shape around the PIN is right — store-scoped lookup,
+exactly one KDF compare, identical messages for wrong and unknown — **but nothing slows an
+attacker down**, and scrypt at these parameters is milliseconds, so a million guesses is a day's
+work for anyone who can reach the route.
+
+**Deferring is legitimate right now** (no real staff, no real data) and **it must not reach a
+cashier's terminal without a fix.** Tracked as DEF-063: per-store and per-device throttling with a
+lockout, and the attempt log feeding T-135 — *repeated failed sign-ins at one terminal* is a
+finding, not a log line.
+
+## 8. Still open
 
 - **Is Firebase Auth still the browser mechanism in v2?** Suggest keeping it — it already works,
   and replacing an auth provider is a project, not a task. Not blocking: §3.1's kind column means
