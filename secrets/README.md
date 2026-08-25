@@ -63,3 +63,23 @@ artifact or report, never copied into a test fixture or corpus.** No anonymisati
 for this table (deliberately out of scope for T-114a). Anyone querying it directly (`psql`,
 Drizzle Studio, a debugging script) is looking at production data and should treat the output
 accordingly.
+
+## ⏰ These keys have an END DATE: 31 January 2027
+
+**A credential with no remaining purpose is a liability**, and *“we'll get to it”* is how one stays
+for three years. Same reasoning that dates the ETL tables' purge (ADR-007 §6) — and the same date,
+because they die of the same cause: the ETL finishing.
+
+| When | What |
+|---|---|
+| **Now** | Keep. The audit re-runs and the December capture still needs them |
+| **Outstanding** | ⚠️ **Verify the HUB key's IAM role.** The ERP one is confirmed `roles/datastore.viewer`; the hub's is not. `read-only-sa@shareat-hub-v2` *sounds* right — **the name is not the grant** |
+| **31 Jan 2027** | **REVOKE both in GCP.** Not “delete the file” — delete the KEY, so any copy anywhere becomes useless |
+
+```bash
+gcloud projects get-iam-policy shareat-hub-v2   --flatten="bindings[].members"   --filter="bindings.members:read-only-sa@shareat-hub-v2.iam.gserviceaccount.com"   --format="value(bindings.role)"
+```
+
+> **Deleting the local file is not revocation.** A key file that has ever existed may have been
+> copied, backed up or synced; only revoking it in GCP makes those copies worthless. **Revoke
+> first, then delete.**

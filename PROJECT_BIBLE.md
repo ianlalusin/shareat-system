@@ -6,64 +6,64 @@
 > generated from the headings below and verified by `tests/unit/toc-freshness.test.ts` —
 > if they are wrong, the build fails rather than misdirecting you.
 
-- ` 116–120   ` 0. Standing directive — how Claude engages
-  - ` 121–133   ` 0.1 The division of authority
-  - ` 134–149   ` 0.2 Brainstorm before executing
-  - ` 150–157   ` 0.3 Side with the project
-  - ` 158–173   ` 0.4 Push back — including hard
-  - ` 174–182   ` 0.5 What this does not license
-- ` 183–203  ` 1. Prime directive
-  - ` 204–229  ` 1.1 The real goal: CORRECT and SIMPLE accounting
-  - ` 230–254  ` 1.2 The four verbs — the editorial doctrine
-  - ` 255–266  ` 1.2a Reference repos — hands off, ALL of them
-  - ` 267–310  ` 1.2b How to read the reference repos — intent is authoritative, implementation is not
-  - ` 311–341  ` 1.3 The parity contract — what is fixed, what is free
-  - ` 342–356  ` 1.4 The migration is the audit
-  - ` 357–377  ` 1.5 The three tests for data-layer decisions
-  - ` 378–386  ` Why re-platform at all
-  - ` 387–395  ` What is explicitly NOT in scope
-- ` 396–433  ` 2. Non-negotiables
-- ` 434–435  ` 3. Execution model — how work gets done
-  - ` 436–445  ` 3.1 The division of labour
-  - ` 446–473  ` 3.1a Which model, and why — Ian, 2026-08-23
-  - ` 474–485  ` 3.2 The work loop
-  - ` 486–498  ` 3.3 Task spec format (docs/tasks/NNN-<slug>.md)
-  - ` 499–516  ` 3.4 Subagent rules
-  - ` 517–538  ` 3.4a Report a spec defect; never work around it silently
-  - ` 539–546  ` 3.5 Reporting to Ian
-  - ` 547–564  ` 3.6 Research before planning — Ian, 2026-08-23
-  - ` 565–572  ` When it applies
-  - ` 573–591  ` Four guards, or this degrades into delay
-- ` 592–593  ` 4. Architecture — the relational core
-  - ` 594–610  ` 4.1 Stack
-  - ` 611–638  ` 4.2 Schema principles
-  - ` 639–659  ` 4.3 Application layering
-  - ` 660–689  ` 4.4 Reference data and seeds — how the duplicate-Rent problem dies
-- ` 690–694  ` 5. Architecture — the Firebase hot lane
-  - ` 695–727  ` 5.1 The two-lane contract
-  - ` 728–756  ` 5.2 What v1 actually does offline — and why v2 changes it
-  - ` 757–795  ` 5.3 The hot set — closed list
-  - ` 796–797  ` 5.4 Offline write-back rules
-  - ` 798–808  ` 5.3 Offline write-back rules
-- ` 809–810  ` 6. Data conventions
-  - ` 811–818  ` Money
-  - ` 819–829  ` Dates & time
-  - ` 830–835  ` Identifiers
-  - ` 836–840  ` Naming
-  - ` 841–846  ` Nulls
-- ` 847–889  ` 7. Security model
-  - ` 890–920  ` 7.1 Identity — the v1 mess, and the v2 rule
-- ` 921–922  ` 8. Repo & environment
-  - ` 923–957  ` Layout
-  - ` 958–967  ` Ports — reserved, never shared
-  - ` 968–998  ` Build discipline — two rules, both absolute
-  - ` 999–1009 ` Git
-- `1010–1026 ` 9. Definition of done
-  - `1027–1034 ` Parity gate
-- `1035–1069 ` 10. Phase plan
-- `1070–1086 ` 11. Migration & ETL rules
-- `1087–1135` 12. Inherited landmines — do not repeat these
-- `1136–1262` 13. Decision log
+- ` 115–119   ` 0. Standing directive — how Claude engages
+  - ` 120–132   ` 0.1 The division of authority
+  - ` 133–148   ` 0.2 Brainstorm before executing
+  - ` 149–156   ` 0.3 Side with the project
+  - ` 157–172   ` 0.4 Push back — including hard
+  - ` 173–181   ` 0.5 What this does not license
+- ` 182–202  ` 1. Prime directive
+  - ` 203–228  ` 1.1 The real goal: CORRECT and SIMPLE accounting
+  - ` 229–253  ` 1.2 The four verbs — the editorial doctrine
+  - ` 254–265  ` 1.2a Reference repos — hands off, ALL of them
+  - ` 266–309  ` 1.2b How to read the reference repos — intent is authoritative, implementation is not
+  - ` 310–340  ` 1.3 The parity contract — what is fixed, what is free
+  - ` 341–355  ` 1.4 The migration is the audit
+  - ` 356–376  ` 1.5 The three tests for data-layer decisions
+  - ` 377–385  ` Why re-platform at all
+  - ` 386–394  ` What is explicitly NOT in scope
+- ` 395–432  ` 2. Non-negotiables
+- ` 433–434  ` 3. Execution model — how work gets done
+  - ` 435–444  ` 3.1 The division of labour
+  - ` 445–472  ` 3.1a Which model, and why — Ian, 2026-08-23
+  - ` 473–484  ` 3.2 The work loop
+  - ` 485–497  ` 3.3 Task spec format (docs/tasks/NNN-<slug>.md)
+  - ` 498–515  ` 3.4 Subagent rules
+  - ` 516–537  ` 3.4a Report a spec defect; never work around it silently
+  - ` 538–545  ` 3.5 Reporting to Ian
+  - ` 546–563  ` 3.6 Research before planning — Ian, 2026-08-23
+  - ` 564–571  ` When it applies
+  - ` 572–590  ` Four guards, or this degrades into delay
+- ` 591–592  ` 4. Architecture — the relational core
+  - ` 593–609  ` 4.1 Stack
+  - ` 610–637  ` 4.2 Schema principles
+  - ` 638–658  ` 4.3 Application layering
+  - ` 659–688  ` 4.4 Reference data and seeds — how the duplicate-Rent problem dies
+- ` 689–693  ` 5. Architecture — the Firebase hot lane
+  - ` 694–726  ` 5.1 The two-lane contract
+  - ` 727–755  ` 5.2 What v1 actually does offline — and why v2 changes it
+  - ` 756–794  ` 5.3 The hot set — closed list
+  - ` 795–796  ` 5.4 Offline write-back rules
+  - ` 797–807  ` 5.3 Offline write-back rules
+- ` 808–809  ` 6. Data conventions
+  - ` 810–817  ` Money
+  - ` 818–828  ` Dates & time
+  - ` 829–834  ` Identifiers
+  - ` 835–839  ` Naming
+  - ` 840–845  ` Nulls
+- ` 846–888  ` 7. Security model
+  - ` 889–919  ` 7.1 Identity — the v1 mess, and the v2 rule
+- ` 920–921  ` 8. Repo & environment
+  - ` 922–956  ` Layout
+  - ` 957–966  ` Ports — reserved, never shared
+  - ` 967–997  ` Build discipline — two rules, both absolute
+  - ` 998–1008 ` Git
+- `1009–1025 ` 9. Definition of done
+  - `1026–1033 ` Parity gate
+- `1034–1068 ` 10. Phase plan
+- `1069–1085 ` 11. Migration & ETL rules
+- `1086–1134` 12. Inherited landmines — do not repeat these
+- `1135–1262` 13. Decision log
 - `1263–1282` 14. Amendment protocol
 - `1283–1287` 15. Engineering standards — the industry practices this project follows
   - `1288–1293` 15.1 Build order: walking skeleton first
@@ -94,7 +94,6 @@
   - `1760–1777` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
-
 
 > **This file is the single source of authority for how Shareat System is built.**
 > If anything — a prompt, a subagent, a habit carried over from ERP-rebuild, a
@@ -1257,6 +1256,7 @@ just a patch.**
 | 118 | 2026-08-25 | **⭐ STANDING PRINCIPLE — prefer the design that REMOVES a problem over the design that MANAGES it. Correctness is not negotiable; complexity beyond it is** | Ian: *“for reference let's simplify future decisions like this… we could skip GRNI, it just adds a step and complexity. But don't get me wrong, I still want it to be correct — yet simplicity is better.”* **This is feedback about HOW to decide, not only about GRNI.** The test to apply: *does this machinery exist because the business has the problem, or because the pattern is standard?* GRNI solves “goods received, amount unknown” — a situation that does not arise here, because the price is agreed at order time and an agreed rate times an actual weight is still a known figure. **Adopting it would have imported a solved problem from businesses that have it.** Bible §1.1 already says the target is the midpoint; this row says how to find it when the correct-looking answer is also the more complex one | Yes |
 | 119 | 2026-08-25 | **A delivery books AP DIRECTLY at receipt. No GRNI, and no delivery→expense link. 2120 becomes `reserved`** (migration 0013) — **row 117's provisional-posting design is SUPERSEDED** | Ian's simplification, followed one step further than he stated it. If a delivery can book AP directly then the delivery→expense **link is not needed either** — and **the expensing lag (91%→76%) was never about a missing amount. It was a second document waiting to be typed.** Remove the second document and there is nothing left to fall behind. **Row 117 added machinery to MANAGE that lag; this removes what CREATES it** — simpler and more correct at once, and it also retires `isExpensed`/`partiallyExpensed` rather than merely deriving them. **Consequence for the model: a DELIVERY is a purchase in its own right, and an EXPENSE is a non-inventory spend** — two document types for two different things, instead of one bolted onto the other. 2120 is kept at `reserved` rather than dropped: it costs nothing, records a considered decision, and is there if a genuine receive-before-price case ever appears | Yes |
 | 120 | 2026-08-25 | **Assigning the ADMIN role materialises a store-scope row for every store in that org. Rows, never a bypass. And creating a store must add rows for that org's existing admins** (CAPABILITY-MATRIX §C.2) | The T-121 implementer took *“admin does not bypass store scope”* literally — correct — and that **exposed a gap I left**: an admin appointed today was authorised for nothing store-scoped, contradicting *“org admin = org-wide control”* (row 114). Both halves are right; the fix is row 115's own pattern — **decide once, at the moment a human is present, and store the answer**, rather than inferring it on every check. Keeps *“who can see Davao?”* a `select`. ⚠️ **The easily-missed half: a store created LATER appears in nobody's scope**, so store creation backfills admin rows — otherwise a new branch is invisible to the person who just opened it and it looks like a permissions bug rather than a missing row. **Also recorded (§C.1): a capability answers “what may you do”, never “to whom”.** `manage_users` cannot express row 116's authority chain alone — assigning the `admin` role additionally requires `super_admin`, and that check belongs at the call site with its own denial test | Yes |
+| 121 | 2026-08-25 | **`set_credit_limit` goes to MANAGER as well as admin. And the ETL service-account keys are REVOKED in GCP on 31 January 2027, the same date the ETL tables purge** | Ian: *“yes to credit limit.”* Coherent — managers already approve the buyer, and a franchise manager setting their own buyers' limits is risking their own money. **Still split from `approve_buyer`**: approving someone and deciding how much of your money they may owe are two decisions. On the keys: **a credential with no remaining purpose is a liability**, the same argument that dates the landing-table purge, and they die of the same cause — the ETL finishing. ⚠️ **Revoking is not deleting the file.** A key file that has existed may have been copied, backed up or synced; **only revocation in GCP makes those copies worthless.** Revoke first, then delete. Outstanding: the HUB key's IAM role is still unverified — its name reads right, and **the name is not the grant** | Yes |
 
 ---
 
