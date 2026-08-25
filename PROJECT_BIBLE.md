@@ -63,35 +63,35 @@
 - `1034–1068 ` 10. Phase plan
 - `1069–1085 ` 11. Migration & ETL rules
 - `1086–1134` 12. Inherited landmines — do not repeat these
-- `1135–1277` 13. Decision log
-- `1278–1297` 14. Amendment protocol
-- `1298–1302` 15. Engineering standards — the industry practices this project follows
-  - `1303–1308` 15.1 Build order: walking skeleton first
-  - `1309–1320` 15.2 Golden-master testing — the most important practice here
-  - `1321–1329` 15.3 Strangler Fig, not big-bang cutover
-  - `1330–1334` 15.4 No dual-write
-  - `1335–1339` 15.5 Expand/contract migrations
-  - `1340–1348` 15.6 Observability from day zero, not later
-  - `1349–1353` 15.7 CI gates
-  - `1354–1358` 15.8 Backups and a tested restore
-  - `1359–1363` 15.9 Twelve-Factor config
-  - `1364–1371` 15.10 Append-only ledgers — but not event sourcing
-  - `1372–1376` 15.11 Defence in depth
-  - `1377–1405` 15.12 Skills are lenses, not assurance
-  - `1406–1412` 15.13 Reconciliation is a permanent feature
-- `1413–1417` 16. The accounting spine
-  - `1418–1449` 16.0 What we are actually fixing — the diagnosis
-  - `1450–1493` 16.1 The ten invariants — non-negotiable
-  - `1494–1508` 16.2 The oracle: how "correct" is tested
-  - `1509–1530` 16.3 The model — header + lines, not legs
-  - `1531–1550` 16.4 Deliberately simpler than ERPNext
-  - `1551–1617` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1618–1642` 16.6 What v1 already gets right — preserve the intent
-  - `1643–1664` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1665–1679` 16.8 What v1's accounting already gets right
-  - `1680–1723` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1724–1774` 16.10 Posting patterns — one canonical pattern per business event
-  - `1775–1792` 16.11 Inventory's accounting integration
+- `1135–1278` 13. Decision log
+- `1279–1298` 14. Amendment protocol
+- `1299–1303` 15. Engineering standards — the industry practices this project follows
+  - `1304–1309` 15.1 Build order: walking skeleton first
+  - `1310–1321` 15.2 Golden-master testing — the most important practice here
+  - `1322–1330` 15.3 Strangler Fig, not big-bang cutover
+  - `1331–1335` 15.4 No dual-write
+  - `1336–1340` 15.5 Expand/contract migrations
+  - `1341–1349` 15.6 Observability from day zero, not later
+  - `1350–1354` 15.7 CI gates
+  - `1355–1359` 15.8 Backups and a tested restore
+  - `1360–1364` 15.9 Twelve-Factor config
+  - `1365–1372` 15.10 Append-only ledgers — but not event sourcing
+  - `1373–1377` 15.11 Defence in depth
+  - `1378–1406` 15.12 Skills are lenses, not assurance
+  - `1407–1413` 15.13 Reconciliation is a permanent feature
+- `1414–1418` 16. The accounting spine
+  - `1419–1450` 16.0 What we are actually fixing — the diagnosis
+  - `1451–1494` 16.1 The ten invariants — non-negotiable
+  - `1495–1509` 16.2 The oracle: how "correct" is tested
+  - `1510–1531` 16.3 The model — header + lines, not legs
+  - `1532–1551` 16.4 Deliberately simpler than ERPNext
+  - `1552–1618` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1619–1643` 16.6 What v1 already gets right — preserve the intent
+  - `1644–1665` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1666–1680` 16.8 What v1's accounting already gets right
+  - `1681–1724` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1725–1775` 16.10 Posting patterns — one canonical pattern per business event
+  - `1776–1793` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1272,6 +1272,7 @@ just a patch.**
 | 134 | 2026-08-25 | **⭐ v2 records GROSS with discounts AND charges on their own lines. And the two kinds of “charge” are OPPOSITE: service charge is a LIABILITY (2160, RA 11360), other charges are INCOME (4500)** (T-123) | Ian, in two steps. First: *“when the ERP pulls sales from POS it's NET, not gross, so discounts and charges are accounted”* — which describes v1. Then: *“but for v2 I agree it's better to include discounts and charges in the sales report so they both have clear lines and the data can easily be used.”* **So `totalSales` is gross food revenue and every adjustment to it is a line somebody can read**, rather than a number already absorbed into another number. ⛔ **The consequential half is the charge split, and Ian's own framing found it:** *“we charge leftover charge, packaging charge and other charges — I want them all in ONE account, separated from service charge.”* Separating them turns out to be far more than tidiness. **RA 11360 sends 100% of service charge to rank-and-file employees, at least twice a month**, so the business collects it **as an agent and keeps none of it** — it is a **payable from the moment it is taken**, not income. Leftover and packaging charges the business does keep, so those really are income. **Two things that look identical on a bill and sit on opposite sides of the balance sheet.** ⚠️ **The asymmetry decides it even before an accountant confirms:** booking service charge as income overstates profit AND hides a payable, and it does **not** self-correct; the reverse error self-corrects the moment the money is distributed. *Ian should still confirm with his accountant.* Chart 93 → 95 accounts — the count is a PIN, so the addition had to be deliberate, and it was the pin that caught it. **Also found by verifying in the browser rather than trusting a green suite:** an org seeded BEFORE an account existed simply does not have it, and the posting was refused with *“unknown account code '4500'”* — `postEntry` doing its job, but baffling if you assume the chart is static. `dev:seed` now re-seeds the chart too; `ON CONFLICT DO NOTHING` makes that additive and safe | Yes — the service-charge treatment wants an accountant's nod |
 | 135 | 2026-08-25 | **⭐ Service charge is a FLOAT at 2160 — neither revenue nor accounts payable. It touches the balance sheet only and never the P&L. This SUPERSEDES row 134's liability-vs-income framing** (T-123) | Three passes, and Ian rejected two treatments for two different and correct reasons before landing here. **(1)** *“It will go with the salary and later be expensed, so it must be collection first, revenue first — don't push to accounts payable.”* The AP half is right and worth stating: **AP is money owed to SUPPLIERS**, with a party, an age and a payment process, and this is none of those. **(2)** Then, on his own proposal: *“but it will bloat the revenue.”* Also right — ₱1M of food plus ₱100k of service charge would read as ₱1.1M of income, **₱100k of which was never the business's money.** **(3)** *“Let it not touch accounting? How do other platforms handle it?”* ⛔ **It cannot be kept out entirely, and the reason is physical: the cash enters the drawer.** ₱1,100 tendered on a ₱1,000 bill leaves ₱1,100 in the till, so books recording ₱1,000 never reconcile against a count. It must land somewhere; **the float is the treatment that touches accounting least** — balance sheet only, self-clearing. ⭐ **The research settles it, and the field's dividing line is WHOSE MONEY IT IS, not what the bill calls it:** tips are voluntary and belong to staff, so they go to a **liability clearing account** (“Tips Payable”) cleared through payroll; service charges elsewhere are the RESTAURANT's money to distribute or not, so they are **revenue with the payout as wage expense**. **RA 11360 moves PH service charge across that line** — with 100% distribution mandated there is no discretion, the money is not the business's, and it therefore behaves like tips do elsewhere. **So this is the standard pattern applied to the case the law creates, not an invention.** Chart stays at 95 (4600 was added and removed within the hour). ⚠️ If Ian's accountant prefers the international service-charge reading, it is a one-line change — the alternative is recorded, not buried | Yes — accountant's nod still worth having |
 | 136 | 2026-08-25 | **The service-charge float is DISTRIBUTED on a per-store cadence — and ⛔ MONTHLY IS NOT LAWFUL, so the setting must not be able to express it** (T-136 §6) | Ian: *“yes we float it, and distribute per day, per week or per month.”* The float is settled (row 135); this is how it empties. **Daily and weekly are fine. Monthly is not:** RA 11360 requires distribution **at least twice a month, at intervals not exceeding sixteen days**, so a monthly cadence is a breach by construction rather than by accident. ⭐ **The design consequence is the interesting part: the configuration must not be able to hold the wrong answer.** Same instinct as `is_remitted_daily` being NOT NULL with no default — **if a setting can be set to something unlawful, eventually it will be, and nobody notices**, because a float that keeps growing reads as a healthy balance rather than an overdue obligation. ⭐ **So an ageing 2160 is a FINDING, not a balance** — it belongs in the OIL feed (T-135) as *“service charge float older than 16 days”*, derived from the condition so it cannot be resolved while still true. ⚠️ **It shares its shape with the remittance cadence (row 129) and deliberately NOT its number:** both are per-store cash movements on a configurable rhythm, but remittance is bounded by how much cash you are willing to hold in a drawer and this one is bounded by STATUTE. **A store that remits weekly may still have to distribute twice a month**, so collapsing the two settings into one would quietly make the lawful cadence follow the convenient one | Yes |
+| 137 | 2026-08-25 | **T-138 started, and reading v1 first HALVED it: the browser session is already fixed there, so §7.1's “~24 client-asserted server actions” is now true only of the PIN half** | Ian: *“go auth now, start.”* ⭐ **The correction is worth more than the spec.** Bible §7.1 and discovery 04 describe acting identity as a client-asserted parameter across ~24 server actions. **`policies/server-context.ts` shows v1 has since fixed the BROWSER half**: identity comes from a verified `__session` cookie, and *“session present + actorUid mismatch → hard Unauthorized.”* **So v2's work is narrower and clearer than the bible implies** — the shared-terminal PIN “session” living in `localStorage` with no server token is the part that remains. Three things ported rather than invented: **a mismatch is a HARD failure**, not a preference for the cookie, so a stale tab acting as the wrong user is detectable instead of silently corrected; the cookie is **re-minted on sign-in, page load and hourly refresh**, so *“a missing cookie means re-authenticate, not trust me”*; and cookieless callers get **one named escape hatch** (`runWithVerifiedPrincipal`) for a genuinely different verified credential, rather than a scatter of special cases. ⛔ **DEF-062 found in the same read** — the passcode HMAC falls back to a secret hardcoded in the source, does not fail closed, and rotating it invalidates every stored hash, which is exactly why an unset secret stays unset. v2 **fails closed at startup**. ⚠️ **The reason this is next at all: I shipped T-122 and T-123 with capability checks gated on a DROPDOWN.** *“The person who submits should not be the one who verifies”* is theatre until a login exists — the DEF-052 shape, added knowingly, and this is the task that makes it real | Yes |
 
 ---
 
