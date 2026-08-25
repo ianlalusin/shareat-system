@@ -89,8 +89,11 @@ what makes expected remittance computable**, and it is already there.
 
 ### ⚠️ Two smaller landmines in the settlement wiring
 
-- **`foodpandaPartnerCode` is explicitly NOT unique** — *"Lipa and the TEST sandbox deliberately
-  share O6JZ."* Anything keying on it must not assume one store.
+- **`foodpandaPartnerCode` is documented as NOT unique** — *"Lipa and the TEST sandbox deliberately
+  share O6JZ."* ✅ **Not a real constraint, and v2 should drop it:** Ian, 2026-08-25 — *"never mind
+  TEST, it's a test store, not real."* The only collision is with a sandbox that does not carry
+  forward (ADR-007 purges it), so **v2 may treat the partner code as unique per store** and gets a
+  simpler key for free. *Recorded because the comment reads like a business rule and is not one.*
 - **`matchLabels` / `fileHints`** route uploaded settlement PDFs/CSVs by **outlet-name text match
   and filename substring** (`"lip 15.zip"` → Lipa). Works, and is fragile in the same way as §2.
 
