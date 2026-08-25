@@ -180,6 +180,25 @@ to **drafts only**.
     failing first**.
 16. An expense in org A is invisible to org B, **with no `WHERE org_id` written anywhere**.
 
+**Added 2026-08-25 — the draft's ending**
+17. **A draft is DELETED; a posted or voided expense never is.** Ian: *"delete for simplicity."*
+    `voidExpense` refuses a draft (*"nothing has been posted yet to void"*) and until now there
+    was no discard, so a mistaken draft had no ending at all.
+
+    > **A draft is not a financial record** — no entry, no balance touched, nobody asserted it.
+    > It is a form somebody started filling in. Everything posted is reversed, never removed.
+
+    **Deliberately no new capability: deleting a draft is the LAST EDIT you can make to it.**
+    The gate is `editExpense`'s exactly — `edit_own_expense` for the creator inside the 48-hour
+    window, `edit_any_expense` for anyone else. There is no coherent answer under which a person
+    may rewrite every field of a draft but not remove it, and reusing the pair means **the edit
+    window cannot drift, because there is only one window.** A cashier can undo their own mistake
+    without finding a manager — friction on a self-correction is what produces abandoned drafts.
+
+    Proven: the creator deletes and the payment rows go with it (they do not cascade); posted and
+    voided both refuse, for an admin too; outside the window the creator is denied and a manager
+    can still clear it.
+
 ## Out of scope
 
 **Deliveries and anything inventory-valued (Phase 3)** · AP invoices and payments (T-130) ·

@@ -52,7 +52,7 @@ import { CUTOVER_CLASSIFICATION } from '../../../db/src/cutover/classification';
 import { RLS_REGISTRY } from '../../../db/src/rls/registry';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
-import { approveExpense, createExpense, editExpense, voidExpense, routeExpense } from '@shareat/domain';
+import { approveExpense, createExpense, deleteExpenseDraft, editExpense, voidExpense, routeExpense } from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
 
@@ -838,5 +838,114 @@ describe('invariant 16 — an expense in org A is invisible to org B, with no WH
 
     const categoriesSeenByB = await asOrgRaw(orgB, (tx) => tx<{ c: number }[]>`select count(*)::int c from expense_categories`);
     expect(categoriesSeenByB[0]!.c).toBe(0);
+  });
+});
+
+describe('invariant 17 — a DRAFT is deletable; a posted or voided expense never is', () => {
+  // Ian 2026-08-25: "delete for simplicity." A draft is not a financial record — no entry,
+  // no balance touched, nobody asserted it. Everything posted is reversed, never removed.
+
+  it('the creator deletes their own draft, and its payment rows go with it', async () => {
+    const f = await setup('inv17a');
+    const catId = await categoryId(f.orgId, 'Smallwares');
+
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: 'Wrong store, start again',
+        payments: [
+          { method: 'cash', amount: '120.00' },
+          { method: 'online', amount: '80.00' },
+        ],
+      }),
+    );
+
+    const before = await sql<{ c: number }[]>`select count(*)::int c from expense_payments where expense_id = ${created.id}`;
+    expect(before[0]!.c).toBe(2);
+
+    await asPerson(f.orgId, (tx) => deleteExpenseDraft(tx, actor(f.orgId, f.staffId), created.id));
+
+    const rows = await sql<{ c: number }[]>`select count(*)::int c from expenses where id = ${created.id}`;
+    expect(rows[0]!.c).toBe(0);
+    // The child rows must go too — expense_payments does not cascade, so a delete that
+    // forgot them would either fail or orphan them. Proven, not assumed.
+    const after = await sql<{ c: number }[]>`select count(*)::int c from expense_payments where expense_id = ${created.id}`;
+    expect(after[0]!.c).toBe(0);
+  });
+
+  it('a POSTED expense is not deletable, by anyone — including an admin', async () => {
+    const f = await setup('inv17b');
+    const catId = await categoryId(f.orgId, 'Insurance');
+
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.managerId), {
+        storeId: f.storeId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: 'Posted, therefore permanent',
+        receiptPhotoUrl: 'https://example.com/r17b.jpg',
+        payments: [{ method: 'cash', amount: '500.00' }],
+      }),
+    );
+    await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
+
+    await expect(
+      asPerson(f.orgId, (tx) => deleteExpenseDraft(tx, actor(f.orgId, f.adminId), created.id)),
+    ).rejects.toThrow(/only a draft may be deleted/);
+
+    const rows = await sql<{ c: number }[]>`select count(*)::int c from expenses where id = ${created.id}`;
+    expect(rows[0]!.c).toBe(1);
+  });
+
+  it('a VOIDED expense is not deletable either — the reversal must stay visible', async () => {
+    const f = await setup('inv17c');
+    const catId = await categoryId(f.orgId, 'Insurance');
+
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.managerId), {
+        storeId: f.storeId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: 'Voided, and it stays',
+        receiptPhotoUrl: 'https://example.com/r17c.jpg',
+        payments: [{ method: 'cash', amount: '500.00' }],
+      }),
+    );
+    await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
+    await asPerson(f.orgId, (tx) => voidExpense(tx, actor(f.orgId, f.managerId), created.id, 'wrong supplier'));
+
+    await expect(
+      asPerson(f.orgId, (tx) => deleteExpenseDraft(tx, actor(f.orgId, f.adminId), created.id)),
+    ).rejects.toThrow(/only a draft may be deleted/);
+  });
+
+  it('outside the 48h window the creator (staff) is DENIED — same gate as editing', async () => {
+    // The whole point of reusing edit_own/edit_any rather than minting a delete capability:
+    // the window cannot drift, because there is only one window.
+    const f = await setup('inv17d');
+    const catId = await categoryId(f.orgId, 'Smallwares');
+
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: 'Aging draft nobody finished',
+        payments: [{ method: 'cash', amount: '99.00' }],
+      }),
+    );
+    await sql`update expenses set created_at = now() - interval '49 hours' where id = ${created.id}`;
+
+    await expect(
+      asPerson(f.orgId, (tx) => deleteExpenseDraft(tx, actor(f.orgId, f.staffId), created.id)),
+    ).rejects.toThrow(AuthorizationError);
+
+    // A manager holds edit_any_expense and can still clear it — the window governs who may
+    // act unsupervised, it does not strand the draft forever.
+    await asPerson(f.orgId, (tx) => deleteExpenseDraft(tx, actor(f.orgId, f.managerId), created.id));
+    const rows = await sql<{ c: number }[]>`select count(*)::int c from expenses where id = ${created.id}`;
+    expect(rows[0]!.c).toBe(0);
   });
 });

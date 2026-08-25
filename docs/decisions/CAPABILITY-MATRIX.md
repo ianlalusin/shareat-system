@@ -39,8 +39,8 @@ they need weekly, the boundary is wrong.
 | Capability | Scope | super | admin | manager | staff | Notes |
 |---|---|:--:|:--:|:--:|:--:|---|
 | `create_expense` | store | ✅ | ✅ | ✅ | ✅ | Staff record what they spend |
-| `edit_own_expense` | store | ✅ | ✅ | ✅ | ✅ | **Time-boxed** — v1 gives cashiers 48h on their own. Preserve the window |
-| `edit_any_expense` | store | ✅ | ✅ | ✅ | ✗ | |
+| `edit_own_expense` | store | ✅ | ✅ | ✅ | ✅ | **Time-boxed** — v1 gives cashiers 48h on their own. Preserve the window. ⭐ **Also gates DELETING a draft** (2026-08-25) — deleting is the last edit you can make to it, so no separate capability exists and the window cannot drift |
+| `edit_any_expense` | store | ✅ | ✅ | ✅ | ✗ | Also gates deleting a draft once the window has closed, or when the actor is not its creator |
 | `void_expense` | store | ✅ | ✅ | ✅ | ✗ | |
 | `approve_expense` | store | ✅ | ✅ | ✅ | ✗ | |
 

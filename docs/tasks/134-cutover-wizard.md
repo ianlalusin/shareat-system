@@ -77,7 +77,7 @@ limit.**
 | C1 | **Backup taken and restore REHEARSED** | ✍️ attested + ✅ *a restore actually ran* | Bible §15.8. *"A backup was taken"* is not the claim that matters |
 | C2 | **Run the purge** | ⚙️ `cutover:purge` | Dry-run first, always. Post-conditions assert inside the transaction (T-119) |
 | C3 | **Enter opening balances** | ⚙️ a **draft** entry, built up over days | Mutable until locked, and the wizard tells you what is still missing |
-| C4 | **3900 nets to exactly zero** | ✅ | **A residual HALTS.** Never plugged — see below |
+| C4 | **3900 nets to exactly zero** | ✅ | **A residual HALTS.** Never plugged — see below. The running residual is **visible throughout C3**, not revealed here |
 | C5 | **Trial balance ties, then POST** | ✅ then ⚙️ | Posting is what makes C3 immutable. The books are open |
 
 ---
@@ -244,6 +244,27 @@ Named so the next person does not add them back thinking they were forgotten:
    personally available: none of that constraint applies.** We halt. *This is the most consequential
    finding in discovery 21 — the divergence is deliberate and scale-driven, not us being more
    careful for its own sake.*
+
+   > ### ⭐ But borrow the half of it that is actually useful
+   >
+   > Ian asked (2026-08-25) whether the halt is enough or whether we should mirror the field.
+   > **Keep the halt** — but notice *what the plug account actually buys those vendors*, because
+   > it is two things and only one of them is bad:
+   >
+   > | What auto-plugging gives | Keep it? |
+   > |---|---|
+   > | The residual becomes a **visible number** you can watch and chase | ✅ **Yes** |
+   > | The residual becomes **postable**, so the books open while still wrong | ❌ **No** |
+   >
+   > So C3 shows a **running residual the whole time you are entering** — *"difference: ₱4,820.50"*
+   > — updating as figures land. That is the early-warning the suspense account provides, without
+   > the escape hatch. **An imbalance found on the tenth supplier is a typo; the same imbalance
+   > found after the last one is an investigation.**
+   >
+   > And because C3 is now a **draft** (correction 3), the halt costs nothing: an unbalanced entry
+   > is simply an entry that cannot post yet. **Nothing is lost, no session is abandoned, and no
+   > fictional account is created.** That is strictly better than the plug — same convenience, none
+   > of the harm.
 3. **CSV import of the chart of accounts.** Ours is a fixed ~90-account set, already seeded.
 4. **Comparative-balances screens.** ADR-005 declines to load 2026 comparatives as if they were
    real; a screen would invite treating a hand-scanned figure as audited because it sits next to

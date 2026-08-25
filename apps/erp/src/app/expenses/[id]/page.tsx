@@ -1,12 +1,12 @@
 import { notFound } from 'next/navigation';
 import { transaction, expensesRepo, journalRepo } from '@shareat/db';
+import { formatMoney, money } from '@shareat/core/money';
+import { listOrgs, listStores, listActingPersons, listCategoriesGrouped } from '../lib';
+import { approveExpenseAction, voidExpenseAction, updateDraftAction, deleteDraftAction } from '../actions';
 
 // Derived from the repo function rather than re-declared — the table renders exactly what
 // that reader returns, so the two cannot drift.
 type EntryLineWithAccountCode = Awaited<ReturnType<typeof journalRepo.findLinesForEntryWithAccountCodes>>[number];
-import { formatMoney, money } from '@shareat/core/money';
-import { listOrgs, listStores, listActingPersons, listCategoriesGrouped } from '../lib';
-import { approveExpenseAction, voidExpenseAction, updateDraftAction } from '../actions';
 
 export const metadata = { title: 'Expense — Shareat System' };
 
@@ -272,11 +272,30 @@ export default async function ExpenseDetailPage({
         </section>
       )}
 
-      {/* Void is offered for a POSTED expense only. `voidExpense` refuses a draft outright —
-          "nothing has been posted yet to void; edit or discard it instead" — so offering the
-          button on a draft would be a control that only ever produces an error. ⚠️ There is
-          no discard path either: nothing in expensesRepo deletes a draft, so a mistaken draft
-          currently has no ending. Reported rather than invented here. */}
+      {/* ⭐ The two endings, and they are deliberately NOT the same control.
+          A draft is DELETED — it is not a financial record, so nothing needs to survive it.
+          A posted expense is VOIDED, which reverses and leaves both entries standing.
+          Each is offered only in the state where it is legal, so neither button can produce
+          a guaranteed error, and the wording of each says which kind of ending it is. */}
+      {isDraft && (
+        <form
+          action={deleteDraftAction}
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800"
+        >
+          {hiddenIds}
+          <p className="text-neutral-600 dark:text-neutral-400">
+            <strong className="text-neutral-900 dark:text-neutral-100">Delete this draft.</strong> Nothing
+            has posted, so there is nothing to reverse — it is removed outright.
+          </p>
+          <button
+            type="submit"
+            className="rounded border border-neutral-300 px-4 py-1.5 font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+          >
+            Delete draft
+          </button>
+        </form>
+      )}
+
       {isPosted && (
         <form
           action={voidExpenseAction}

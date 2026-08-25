@@ -318,3 +318,28 @@ export async function replacePayments(tx: Tx, expenseId: string, payments: Inser
   await tx.delete(expensePayments).where(eq(expensePayments.expenseId, expenseId));
   await insertPayments(tx, expenseId, payments);
 }
+
+/**
+ * Deletes a DRAFT expense and its payment rows. The caller (domain/expenses/delete.ts)
+ * has already proven status === 'draft' and the edit window; this just writes.
+ *
+ * ⚠️ The status predicate is repeated in the WHERE clause on purpose, exactly as
+ * `updateExpenseDraft` does: a concurrent approve() between the caller's read and this
+ * write must NOT let a posted expense be deleted out from under its journal entry. A
+ * delete that silently affected zero rows would be indistinguishable from success, so a
+ * zero-row result throws.
+ *
+ * Payments go first — `expense_payments.expense_id` references `expenses.id` and the
+ * schema does not cascade (bible §4.2 rule 3 reserves ON DELETE CASCADE for identities),
+ * so the child rows must be removed explicitly or the parent delete is rejected.
+ */
+export async function deleteExpenseDraft(tx: Tx, orgId: string, id: string): Promise<void> {
+  await tx.delete(expensePayments).where(eq(expensePayments.expenseId, id));
+  const deleted = await tx
+    .delete(expenses)
+    .where(and(eq(expenses.id, id), eq(expenses.orgId, orgId), eq(expenses.status, 'draft')))
+    .returning({ id: expenses.id });
+  if (deleted.length === 0) {
+    throw new Error(`deleteExpenseDraft: expense ${id} does not exist, is not in org ${orgId}, or is not a draft`);
+  }
+}

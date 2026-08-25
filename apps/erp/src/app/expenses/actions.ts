@@ -11,7 +11,14 @@
  * invariant; this file only wires HTML forms to them.
  */
 import { redirect } from 'next/navigation';
-import { createExpense, approveExpense, editExpense, voidExpense, type ExpensePaymentMethod } from '@shareat/domain';
+import {
+  createExpense,
+  approveExpense,
+  editExpense,
+  voidExpense,
+  deleteExpenseDraft,
+  type ExpensePaymentMethod,
+} from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 
 const PAYMENT_ROW_COUNT = 4;
@@ -153,4 +160,21 @@ export async function updateDraftAction(formData: FormData): Promise<void> {
     redirect(`/expenses/${expenseId}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
   }
   redirect(`/expenses/${expenseId}?${qs}`);
+}
+
+/** Deleting a DRAFT — Ian 2026-08-25: "delete for simplicity." Redirects to the LIST, not
+ *  back to the record: there is no record any more, and sending the browser to a page that
+ *  now 404s would make a successful delete look like a failure. */
+export async function deleteDraftAction(formData: FormData): Promise<void> {
+  const orgId = str(formData, 'orgId');
+  const actingPersonId = str(formData, 'actingPersonId');
+  const expenseId = str(formData, 'expenseId');
+  const qs = carryQs(formData);
+
+  try {
+    await withOrgPrincipal(orgId, (tx) => deleteExpenseDraft(tx, { personId: actingPersonId, orgId }, expenseId));
+  } catch (err) {
+    redirect(`/expenses/${expenseId}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+  }
+  redirect(`/expenses?${qs}`);
 }
