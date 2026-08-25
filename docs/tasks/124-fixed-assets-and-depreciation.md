@@ -150,13 +150,36 @@ happen.**
 
 **Port the refusal. Port the reasoning in the message.**
 
-## 9. Open
+## 9. ✅ Researched — `docs/discovery/25-depreciation-policy.md`
 
-1. **Are 5 years / zero salvage / ₱5,000 still right?** Ian's call. They are v1's defaults, and
-   defaults that have never been revisited are worth one look before they carry into a new ledger.
-2. **Per-category useful lives instead of one number?** A vehicle and a smallware do not wear out
-   at the same rate, and the category enum already exists. **Suggest yes, defaulting to 5** — the
-   cost is a lookup table and the benefit is depreciation that is not obviously wrong.
+**There is no standard to comply with.** Both numbers are judgement calls the business is expected
+to make and document, so the useful question is what each choice costs.
+
+| | Verdict |
+|---|---|
+| **Per-category useful lives** | ✅ **ADOPT**, defaulting to 5. PH prescribes nothing; common anchors are vehicles 5, buildings 20, PPE generally 5–10. A flat 5 applied to a building is wrong by fifteen years |
+| **One method** | ✅ **CONFIRMED, with a better reason than simplicity: changing depreciation method requires BIR approval.** A dropdown offering declining-balance would let someone create a filing obligation with a click |
+| **Zero salvage default** | ✅ Keep. Conservative, and editable where a resale value is genuinely known |
+| **₱5,000 threshold** | ⚠️ **Unresolved by design — Ian's call, see below** |
+
+### ⛔ The threshold silently sets the length of the December walk-round
+
+Nothing prescribes a threshold; it is a **materiality** decision. The trade-off in the literature
+is recordkeeping burden versus expense smoothing — and **here the burden is physical**: at ₱5,000
+a rice cooker and a decent chair are depreciating assets, four stores' worth of them are hundreds
+of rows, and **T-134 step B2 requires a person to stand in front of every one of them in
+December.**
+
+⚠️ **And the number itself deserves one look:** the most-cited convention anywhere is **$5,000**
+(the US IRS de minimis safe harbor), and **₱5,000 is roughly $85** — the same digits, about sixty
+times apart. That may be entirely deliberate. Nothing in v1 explains where it came from.
+
+## 10. Open
+
+1. ⭐ **Is ₱5,000 deliberate, or borrowed from the $5,000 convention?** The answer decides whether
+   it is a policy or an accident — and it decides how long December takes.
+2. **The per-category lives themselves.** Buildings 20 and vehicles 5 are the common anchors; the
+   rest is judgement. Worth agreeing once with the accountant and never revisiting.
 3. ⭐ **Does depreciation post per asset or per category per period?** Per asset is more
    traceable; per category is far fewer lines. **Suggest per asset** — with a few hundred assets
    this is not a volume problem, and *"which asset is this ₱4,000 for?"* is a question somebody
