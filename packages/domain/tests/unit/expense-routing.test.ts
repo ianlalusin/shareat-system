@@ -1,0 +1,229 @@
+import { describe, expect, it } from 'vitest';
+import { money } from '@shareat/core/money';
+import { routeExpense, EXPENSE_FUNDING_ACCOUNTS, type RoutingPayment } from '../../src/expenses/routing';
+
+/**
+ * docs/tasks/122-expenses.md — the posting invariants (1-10), proven pure/DB-free first.
+ * The full round trip through real postEntry is
+ * packages/domain/tests/integration/expenses.test.ts.
+ */
+
+function cash(amount: string): RoutingPayment {
+  return { method: 'cash', amount: money(amount) };
+}
+
+describe('routeExpense', () => {
+  it('invariant 1 — a single cash expense posts exactly the lines POSTING-PATTERNS.md declares', () => {
+    // expense.cash.simple: DR 5100 COGS — food 1,200 / CR 1110 cash 1,200.
+    const result = routeExpense({
+      totalAmount: money('1200.00'),
+      supplierId: null,
+      categoryName: 'Meat',
+      categoryAccountCode: '5100',
+      payments: [cash('1200.00')],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.lines).toEqual([
+      { accountCode: EXPENSE_FUNDING_ACCOUNTS.CASH_CASHIER, side: 'credit', amount: money('1200.00'), lineMemo: 'cash payment #1' },
+      { accountCode: '5100', side: 'debit', amount: money('1200.00'), lineMemo: 'Meat' },
+    ]);
+  });
+
+  it('invariant 2 — a three-way split produces ONE set of lines with three credit lines, not three entries', () => {
+    const result = routeExpense({
+      totalAmount: money('3000.00'),
+      supplierId: null,
+      categoryName: 'Supplies and Stocks',
+      categoryAccountCode: '6500',
+      payments: [cash('1000.00'), { method: 'online', amount: money('1000.00') }, { method: 'cash', amount: money('1000.00'), cashRequestId: 'cr-1' }],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const credits = result.lines.filter((l) => l.side === 'credit');
+    const debits = result.lines.filter((l) => l.side === 'debit');
+    expect(credits).toHaveLength(3);
+    expect(debits).toHaveLength(1);
+    expect(credits.map((l) => l.accountCode)).toEqual([
+      EXPENSE_FUNDING_ACCOUNTS.CASH_CASHIER,
+      EXPENSE_FUNDING_ACCOUNTS.ONLINE,
+      EXPENSE_FUNDING_ACCOUNTS.CASH_STAFF,
+    ]);
+  });
+
+  it('invariant 3 — reimbursable credits 2130 WITH the staff party', () => {
+    const result = routeExpense({
+      totalAmount: money('650.00'),
+      supplierId: null,
+      categoryName: 'Repairs and Maintenance',
+      categoryAccountCode: '6600',
+      payments: [{ method: 'reimbursable', amount: money('650.00'), staffId: 'staff-1' }],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const funding = result.lines.find((l) => l.side === 'credit')!;
+    expect(funding.accountCode).toBe(EXPENSE_FUNDING_ACCOUNTS.REIMBURSABLE_TO_EMPLOYEES);
+    expect(funding.partyType).toBe('employee');
+    expect(funding.partyId).toBe('staff-1');
+  });
+
+  it('invariant 3 (denial) — reimbursable WITHOUT a staff party is rejected, not posted unattributed', () => {
+    const result = routeExpense({
+      totalAmount: money('650.00'),
+      supplierId: null,
+      categoryName: 'Repairs and Maintenance',
+      categoryAccountCode: '6600',
+      payments: [{ method: 'reimbursable', amount: money('650.00') }],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toMatch(/staffId/);
+  });
+
+  it('a credit (AP) payment carries the supplier party, mirroring convert.ts', () => {
+    const result = routeExpense({
+      totalAmount: money('8000.00'),
+      supplierId: 'sup-1',
+      categoryName: 'Supplies and Stocks',
+      categoryAccountCode: '6500',
+      payments: [{ method: 'credit', amount: money('8000.00') }],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const funding = result.lines.find((l) => l.side === 'credit')!;
+    expect(funding.accountCode).toBe(EXPENSE_FUNDING_ACCOUNTS.AP);
+    expect(funding.partyType).toBe('supplier');
+    expect(funding.partyId).toBe('sup-1');
+  });
+
+  it('a credit payment with no supplierId is rejected, never posted unattributed', () => {
+    const result = routeExpense({
+      totalAmount: money('8000.00'),
+      supplierId: null,
+      categoryName: 'Supplies and Stocks',
+      categoryAccountCode: '6500',
+      payments: [{ method: 'credit', amount: money('8000.00') }],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toMatch(/supplierId/);
+  });
+
+  it('invariant 7 — an unmapped category BLOCKS, naming the category, never falls back to 6900', () => {
+    const result = routeExpense({
+      totalAmount: money('500.00'),
+      supplierId: null,
+      categoryName: 'Some Unmapped Category',
+      categoryAccountCode: null,
+      payments: [cash('500.00')],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toContain('Some Unmapped Category');
+    // ok:false carries no `lines` at all — the type itself proves nothing was routed to
+    // 6900 or anywhere else; "6900" appears in `reason` only as prose naming the rule.
+  });
+
+  it('invariant 8 — PERSONAL routes to 3200, contra-equity, not an expense account', () => {
+    const result = routeExpense({
+      totalAmount: money('1000.00'),
+      supplierId: null,
+      categoryName: "Personal — owner's drawing",
+      categoryAccountCode: '3200',
+      payments: [cash('1000.00')],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const classification = result.lines.find((l) => l.side === 'debit')!;
+    expect(classification.accountCode).toBe('3200');
+  });
+
+  it('invariant 9 — CAPEX routes to a 15xx asset, not a P&L line', () => {
+    const result = routeExpense({
+      totalAmount: money('25000.00'),
+      supplierId: null,
+      categoryName: 'Capital expenditure',
+      categoryAccountCode: '1510',
+      payments: [cash('25000.00')],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const classification = result.lines.find((l) => l.side === 'debit')!;
+    expect(classification.accountCode).toBe('1510');
+  });
+
+  it('invariant 10 — "other" BLOCKS posting with a named reason (DEF-054)', () => {
+    const result = routeExpense({
+      totalAmount: money('300.00'),
+      supplierId: null,
+      categoryName: 'Rent',
+      categoryAccountCode: '6200',
+      payments: [{ method: 'other', amount: money('300.00') }],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toContain('other');
+    expect(result.reason).toContain('DEF-054');
+  });
+
+  it('invariant 10 — "ar_collection" BLOCKS posting with a named reason (DEF-054)', () => {
+    const result = routeExpense({
+      totalAmount: money('300.00'),
+      supplierId: null,
+      categoryName: 'Rent',
+      categoryAccountCode: '6200',
+      payments: [{ method: 'ar_collection', amount: money('300.00') }],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toContain('ar_collection');
+  });
+
+  it('cash routes to 1120 (staff) when a cashRequestId is present, mirroring leg-mapping.ts', () => {
+    const result = routeExpense({
+      totalAmount: money('200.00'),
+      supplierId: null,
+      categoryName: 'Rent',
+      categoryAccountCode: '6200',
+      payments: [{ method: 'cash', amount: money('200.00'), cashRequestId: 'cr-9' }],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.lines.find((l) => l.side === 'credit')!.accountCode).toBe(EXPENSE_FUNDING_ACCOUNTS.CASH_STAFF);
+  });
+
+  it('cash routes to 1130 (office) when accountCode is "office", mirroring convert.ts', () => {
+    const result = routeExpense({
+      totalAmount: money('200.00'),
+      supplierId: null,
+      categoryName: 'Rent',
+      categoryAccountCode: '6200',
+      payments: [{ method: 'cash', amount: money('200.00'), accountCode: 'office' }],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.lines.find((l) => l.side === 'credit')!.accountCode).toBe(EXPENSE_FUNDING_ACCOUNTS.CASH_OFFICE);
+  });
+
+  it('rejects when sum(payments) != totalAmount', () => {
+    const result = routeExpense({
+      totalAmount: money('100.00'),
+      supplierId: null,
+      categoryName: 'Rent',
+      categoryAccountCode: '6200',
+      payments: [cash('50.00')],
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects an expense with zero payments', () => {
+    const result = routeExpense({
+      totalAmount: money('0.00'),
+      supplierId: null,
+      categoryName: 'Rent',
+      categoryAccountCode: '6200',
+      payments: [],
+    });
+    expect(result.ok).toBe(false);
+  });
+});
