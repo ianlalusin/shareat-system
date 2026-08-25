@@ -160,9 +160,32 @@ before anything is built.**
 
 ## 7. ⚠️ Research required before building (bible §3.6)
 
-1. **How the daily till position is modelled** where remittance is pooled — the A/B/C split in §3.
-   POS already keeps `cashHandovers` (expected/counted/variance): **does B belong to POS, to the
-   ERP, or to both?** Getting this wrong duplicates a control or drops one.
+### ✅ Question 1 is ANSWERED — the till position belongs to the ERP (Ian, 2026-08-25)
+
+> *"The cash handover is duplicated in POS and ERP shift report. Let's simplify — fold that to ERP
+> or POS, not both. We choose one. I suggest ERP, because the cash handover is affected by
+> deductions like expenses paid by cashier, cash requests released by cashier, online payments
+> converted to cash, AP paid by cashier."*
+
+**Agreed, and the reason is the decisive one.** POS's `cashHandovers` computes
+`expectedCash = startingCash + cashSales − deductions[]` — but **POS does not know the
+deductions.** Every one of them (a cashier-paid expense, a released cash request, an AP payment
+from the till) is an ERP document.
+
+> **So POS's `deductions[]` can only be filled by the cashier re-entering what the ERP already
+> knows — a second entry point for the same fact, which is exactly how two figures come to
+> disagree.** An expected-cash figure is only as good as its deduction data, and only one of the
+> two systems has it.
+
+**This also settles §3's A/B/C split**: **B lives in the ERP**, beside the `less`/`plus` blocks
+that already compute it (§2.4). POS keeps the physical count if it is convenient at the terminal,
+but **it is evidence submitted to the ERP, never a second computation of expected cash.**
+
+⚠️ **One consequence to design for, not discover:** POS sells offline by design (discovery 22 §4);
+the ERP may not be reachable at shift change. **A count is not a sale** — it can be recorded on
+paper and entered late — but the shift-close flow must say so rather than simply failing.
+### Still open
+
 2. **How reference systems handle a till float** (`openingBudget`) — imprest, or a running
    balance? This overlaps T-136 §5 and should be the same pass.
 3. **Statutory discount reporting in PH** — senior/PWD are broken out for a reason; confirm what
