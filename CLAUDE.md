@@ -41,6 +41,28 @@ Docs call these "v1", "the legacy ERP", or "the reference repos". **None of them
 break anything by reading, and guessing what the old system does is far more dangerous than
 opening it. Read them as *requirements*, not as design (bible section 1.2b).
 
+## ⭐ What am I doing? — read THIS, not everything
+
+A task-to-document router. **Most work needs two or three of these, not the whole `docs/` tree.**
+
+| If you are… | Read |
+|---|---|
+| **Starting cold / resuming** | `HANDOFF.md` — the resume point: what is done, what is in flight, what is next |
+| **About to write any code** | `docs/RULES.md` (one page) — then the bible sections it cites for your area |
+| **Naming a field, table or type** | `docs/GLOSSARY.md` — **first, always.** Several v1 names mean the OPPOSITE of what they look like |
+| **Posting anything to the ledger** | `docs/POSTING-PATTERNS.md` — 41 verified examples. **Look it up; do not decide** |
+| **Adding a table** | The build will stop you until you classify it in `packages/db/src/cutover/classification.ts` AND `packages/db/src/rls/registry.ts`. That is the guard working |
+| **Adding a capability or a permission** | `docs/decisions/CAPABILITY-MATRIX.md` — and every ✅ needs a test proving the ✗ fires |
+| **Asking “why is it like this?”** | `PROJECT_BIBLE.md` **§13**, the decision log — 120 rows, newest last. Then `docs/decisions/` for the ADRs |
+| **Asking “what does v1 do?”** | `docs/discovery/` — 21 read-only findings. **Read v1 as REQUIREMENTS, never as design** |
+| **Asking “what is already broken?”** | `docs/DEFECTS-REGISTER.md` — 55 entries |
+| **Picking up a task** | `docs/tasks/NNN-*.md`, and `docs/plans/phase-2-source-documents.md` for the sequence |
+| **Wondering what the business does that we have not covered** | `docs/CAPABILITY-GAPS.md` |
+
+> **`PROJECT_BIBLE.md` and `docs/POSTING-PATTERNS.md` both open with a line-range table of
+> contents.** Read the index, then `offset`/`limit` to the one section you need — neither is meant
+> to be read whole, and the ranges are build-verified so they cannot misdirect you.
+
 ## The 60-second version
 
 - **Postgres owns the truth. Firebase owns the edge.** Every entity's authoritative
