@@ -241,18 +241,44 @@ Four foundation modules encoding v1's worst landmines as code:
 | `packages/core/src/env.ts` | v1 shipped a deploy with blank env vars; its passcode secret fell back to a public value and failed OPEN. Fail-closed, no defaults on secrets |
 | `packages/core/src/logger.ts` | Silent failure is v1's defining pathology. Structured, redacting, with `jobResult()` so a background job can never report a bare "done" |
 
-### Phase 1 — the accounting spine — is **14 of 15 done** (2026-08-24)
+### ⭐ RESUME POINT — 2026-08-25
+
+**Phase 1: COMPLETE (15/15).** **Phase 2 Wave 0: COMPLETE.** **Wave 1: T-122 in flight.**
 
 | | |
 |---|---|
-| **Ledger core** | Schema, chart of accounts (92 accounts), journal tables with every rule as a **database constraint or trigger**, `postEntry` (draft-first, idempotent), `reverseEntry`, the legacy leg adapter, and the subledger party columns |
-| **Migration harness** | ETL run ledger, append-only content-hashed landing, re-drivable quarantine, reconciliation. `packages/etl-firestore` is the **only** package that can reach Firestore |
-| **v1 captured** | **19,358+ real documents** landed in Postgres from four operating stores. Read-only, reproducible, costs nothing to re-analyse |
-| **The audit** | `docs/reviews/v1-audit-*.md` — cash/AP/AR per party, a cross-check against v1's own counters, and every group that cannot balance |
-| **Reports** | `v_account_balance`, `v_trial_balance`, `v_income_statement` — **views, never maintained tables** — plus two screens on 9008 |
+| **Ledger core** | Schema, 93-account chart, every rule a DB constraint or trigger, `postEntry` (draft-first, idempotent), `reverseEntry`, subledger party, **41 machine-verified posting patterns** |
+| **Migration harness** | Run ledger, append-only content-hashed landing, quarantine, reconciliation. **19,358 real v1 documents landed** and audited |
+| **Reports** | `v_trial_balance`, `v_income_statement`, `v_account_balance` — **views, never maintained tables** — plus two screens on 9008 |
+| **Wave 0** | **T-119** cutover classification + purge · **T-120** Row Level Security · **T-121** roles, grants, `authorize()`. **All three enforce themselves with build-failing guards** |
+| **T-122 (in flight)** | Schema, migration, routing and the domain layer are **committed and green**. **Remaining: the integration tests and the `apps/erp` screens** |
 
-**Remaining:** T-108 (worked examples), T-109 (the ten invariants as a standing CI suite),
-T-111 (property tests). **T-115 is CANCELLED** — bible row 106, v2 migrates no history.
+**Next actions, in order:** finish T-122 (tests + screens) → T-123 sales day → Wave 2's five
+ledger-completeness modules. `docs/plans/phase-2-source-documents.md` is the sequence.
+
+### ⚠️ What a fresh session must know before touching anything
+
+**Three build guards will fail you, and that is them working.** Adding a table without (a) a
+cutover classification, (b) an RLS scoping declaration, or adding a capability without a decision
+for all four roles — **fails `npm test` with an actionable message.** Answer them; never add a
+permissive default.
+
+**The decision log is where the reasoning lives — §13 of the bible, 120 rows.** Twenty landed on
+24–25 August alone. The ones that most change how you build:
+
+| Row | |
+|---|---|
+| **106** | **v2 always assumes a ZERO starting point.** No historical data is migrated, ever |
+| **112** | Org isolation is **Postgres RLS**, not application filters |
+| **114–116** | Four-level access; store scope is **rows, never a bypass**; fallback decided at grant time |
+| **118** | **Prefer the design that REMOVES a problem over the one that MANAGES it** |
+| **119** | A delivery books AP **directly**; no GRNI, no delivery→expense link |
+| **120** | A capability answers *“what may you do”*, never *“to whom”* |
+
+**The four reference repos are READ-ONLY**, and `ERP-rebuild` is the OLD live system despite its
+name. Read them freely as **requirements**; never write.
+
+**Ian's outstanding items** are in §6 below — the December count is the one with a real deadline.
 
 ### Commands you will actually use
 
