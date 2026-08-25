@@ -128,6 +128,26 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'deleted ids is worse than no audit trail: it looks authoritative and resolves to nothing.',
   },
 
+  // ---- T-122: expenses ------------------------------------------------------------------
+  expense_categories: {
+    class: 'keep',
+    reason:
+      'The seeded category -> account crosswalk (docs/tasks/122-expenses.md), configuration ' +
+      'exactly like accounts itself — re-seeding it at cutover risks changing the ids real ' +
+      'pilot expenses reference. Same reasoning as the accounts entry above.',
+  },
+  expenses: {
+    class: 'purge',
+    reason:
+      'Operational financial activity — a non-inventory spend document, same class as ' +
+      'journal_entries. Replaced wholesale by the 2027-01-01 opening entry (row 106); no ' +
+      'pilot expense survives the cutover.',
+  },
+  expense_payments: {
+    class: 'purge',
+    reason: 'As expenses — its child rows. Purged first — children before parents (see PURGE_ORDER_HINT).',
+  },
+
   // ---- ETL: purged, but LATER ---------------------------------------------------------
   etl_source_documents: {
     class: 'purge',
@@ -163,6 +183,8 @@ export function tablesInClass(cls: CutoverClass): string[] {
  * when the graph is unavailable, and it is deliberately explicit rather than clever.
  */
 export const PURGE_ORDER_HINT: readonly string[] = [
+  'expense_payments',
+  'expenses',
   'journal_lines',
   'journal_entries',
   'audit_log',

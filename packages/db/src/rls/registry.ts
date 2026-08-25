@@ -98,6 +98,24 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'direction**: a missing policy breaks a feature loudly instead of leaking quietly.',
   },
 
+  // T-122 — expenses: non-inventory spend (docs/tasks/122-expenses.md, bible rows 118-120).
+  expense_categories: {
+    scope: 'org_column',
+    reason: 'The seeded category -> account crosswalk is per-org configuration, same reasoning as accounts.',
+  },
+  expenses: {
+    scope: 'org_column',
+    reason: 'A source document that posts into the ledger — org-scoped exactly like journal_entries, for the same reason: a franchise owner must never see another org’s spend.',
+  },
+  expense_payments: {
+    scope: 'derived',
+    via: 'exists (select 1 from expenses e where e.id = expense_payments.expense_id and e.org_id = app_current_org())',
+    reason:
+      'No org_id of its own — reachable only through the expense it belongs to, same pattern as ' +
+      'journal_lines through journal_entries: one source of truth for which org a payment belongs ' +
+      'to, so a copied column can never drift from its parent.',
+  },
+
   etl_runs: { scope: 'system_only', reason: 'ETL machinery. Never reachable by a tenant or a customer — only the migrator, crons and the audit.' },
   etl_source_documents: {
     scope: 'system_only',
