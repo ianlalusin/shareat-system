@@ -51,3 +51,4 @@ tsconfig.tsbuildinfo
 .idea/
 .vscode/
 _scratch/
+.claude/daily-review-last-run.log
