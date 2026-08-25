@@ -7,3 +7,4 @@ export * from './ledger/reverse-entry';
 export * from './reports/trial-balance';
 export * from './reports/income-statement';
 export * from './expenses';
+export * from './sales-days';

@@ -42,9 +42,18 @@ recorded at the till.
 ## Sequencing
 
 ⚠️ **This is a live obligation, not a v2 feature.** POS v2 is a phase after January
-(discovery 22 §5), so **waiting for it means waiting a year.** If the gap matters now, the capture
-change belongs in POS v1 — which is a decision for Ian, since v1 is live and this project does not
-write to it (bible §2 rule 1).
+(discovery 22 §5), so **waiting for it means waiting a year.**
+
+### ✅ DECIDED 2026-08-25 — v1 is not touched. Ian: *"don't touch v1, let it be."*
+
+So the software capture lands with **POS v2, after January**, and until then the obligation is met
+however it is met today — on paper, at the store. **That is a deliberate choice with a stated
+cost, not an oversight**, and it is recorded here so nobody later reads the gap as something we
+missed.
+
+> This is bible §2 rule 1 holding under pressure: the reference repos are read-only **even when
+> changing one would be convenient.** A live system with a working process is not improved by a
+> rebuild project reaching into it.
 
 ## Open
 
