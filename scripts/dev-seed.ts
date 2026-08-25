@@ -107,6 +107,31 @@ async function main(): Promise<void> {
       }
     }
 
+    // Sales channels, per store. Two shapes on purpose: one REMITTED (its money reaches the
+    // till) and one NOT (a platform that settles to a bank days later). The non-remitted one
+    // must name where its receivable lands — the schema refuses it otherwise, which is DEF-059
+    // made impossible rather than merely documented.
+    let channelsAdded = 0;
+    for (const store of stores) {
+      for (const ch of [
+        { name: 'Walk-in', remitted: true, receivable: null as string | null },
+        { name: 'Foodpanda', remitted: false, receivable: '1220' },
+        { name: 'GrabFood', remitted: false, receivable: '1220' },
+      ]) {
+        const [existing] = await sql<{ id: string }[]>`
+          select id from sales_channels where store_id = ${store.id} and name = ${ch.name}
+        `;
+        if (!existing) {
+          await sql`
+            insert into sales_channels (org_id, store_id, name, is_remitted_daily, receivable_account_code)
+            values (${org.id}, ${store.id}, ${ch.name}, ${ch.remitted}, ${ch.receivable})
+          `;
+          channelsAdded++;
+        }
+      }
+    }
+
+    console.log(`sales channels     : ${channelsAdded} inserted across ${stores.length} store(s)`);
     console.log(`people             : ${peopleAdded} inserted (${SEED_PEOPLE.length} expected in total)`);
     console.log(`store scopes       : ${scopesAdded} inserted across ${stores.length} store(s)`);
     console.log(`\nSeeded "${org.name}" in ${dbName}. Reload http://localhost:9008/expenses`);
