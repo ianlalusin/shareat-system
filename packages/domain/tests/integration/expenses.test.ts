@@ -1,0 +1,842 @@
+import { config } from 'dotenv';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import postgres from 'postgres';
+import { sql as dsql } from 'drizzle-orm';
+
+/**
+ * Proves the 16 invariants of docs/tasks/122-expenses.md against a real PostgreSQL
+ * (PROJECT_BIBLE.md §9 rule 3) — never a mock. `packages/domain/src/expenses/*.ts`
+ * (create · approve · edit · void) and `packages/db/src/repo/expenses.ts` already exist
+ * and are exercised here for the first time at the integration level; `routing.ts`'s own
+ * pure-function invariants 6-10 are re-proven THROUGH `approveExpense`, not just at the
+ * routing layer, because the point of this file is the WIRING (does the service actually
+ * call `postEntry`/`authorize` correctly), not the pure logic in isolation.
+ *
+ * Two test-execution patterns are borrowed, one for each half of what this file proves:
+ *
+ *  - `asPerson` (packages/auth/tests/integration/authorize.test.ts) — opens a Drizzle
+ *    transaction, applies the RLS principal via `set local role` + `set_config`, and
+ *    hands that SAME `tx` into the domain function under test (every one of
+ *    create/approve/edit/voidExpense accepts `tx: Tx | null` for exactly this reason).
+ *    Used for every test that calls a service function, so every posting and every
+ *    authorize() check in this file runs under real RLS, not the owner connection.
+ *
+ *  - `asOrgRaw` (packages/db/tests/integration/rls.test.ts) — a raw postgres.js
+ *    transaction with the same principal applied, used ONLY for invariant 16's bare,
+ *    unfiltered `select count(*)` — the literal proof that org isolation holds with "no
+ *    WHERE org_id written anywhere", which a Drizzle query builder could not demonstrate
+ *    (it always writes SOME where clause).
+ *
+ * Fixtures are built once per test via `setup(hint)` (mirrors post-entry-party.test.ts's
+ * `baseFixture`) rather than shared across a describe block — this file mutates expense
+ * and journal-entry status heavily (approve, void, edit), and a fresh org per test is
+ * cheaper to reason about than tracking which prior test already posted or voided a given
+ * row. Org codes are uid()-unique, so no truncation is needed between tests, only once at
+ * the start (bible §3.4 row 94 — no two tests may share mutable state).
+ */
+config({ path: '.env.local' });
+
+const url = process.env.TEST_DATABASE_URL;
+if (!url) {
+  throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
+}
+if (!/shareat_test|_test(\?|$)/.test(url)) {
+  throw new Error(
+    `Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} — the database name must contain "_test".`,
+  );
+}
+
+import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
+import { seedExpenseCategories } from '../../../db/seed/expense-categories';
+import { CUTOVER_CLASSIFICATION } from '../../../db/src/cutover/classification';
+import { RLS_REGISTRY } from '../../../db/src/rls/registry';
+import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
+import { AuthorizationError, type Actor } from '@shareat/auth';
+import { approveExpense, createExpense, editExpense, voidExpense, routeExpense } from '@shareat/domain';
+
+const sql = postgres(url, { max: 5 });
+
+let seq = 0;
+function uid(prefix: string): string {
+  return `${prefix}-${Date.now()}-${++seq}`;
+}
+
+// ---------------------------------------------------------------------------------------
+// Fixture helpers
+// ---------------------------------------------------------------------------------------
+
+async function insertOrg(hint: string): Promise<string> {
+  const code = uid(`exp-${hint}`);
+  const [row] = await sql<{ id: string }[]>`
+    insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id
+  `;
+  return row!.id;
+}
+
+async function insertStore(orgId: string, hint: string): Promise<string> {
+  const [row] = await sql<{ id: string }[]>`
+    insert into stores (org_id, code, name) values (${orgId}, ${uid(hint)}, ${`Store ${hint}`}) returning id
+  `;
+  return row!.id;
+}
+
+async function insertPerson(orgId: string, name: string): Promise<string> {
+  const [row] = await sql<{ id: string }[]>`
+    insert into persons (org_id, display_name) values (${orgId}, ${name}) returning id
+  `;
+  return row!.id;
+}
+
+async function insertRoleRaw(personId: string, orgId: string, role: 'super_admin' | 'admin' | 'manager' | 'staff'): Promise<void> {
+  await sql`insert into person_roles (person_id, org_id, role) values (${personId}, ${orgId}, ${role})`;
+}
+
+async function insertStoreScopeRaw(personId: string, storeId: string): Promise<void> {
+  await sql`insert into person_store_scope (person_id, store_id) values (${personId}, ${storeId})`;
+}
+
+async function revokeStoreScopeRaw(personId: string, storeId: string): Promise<void> {
+  await sql`delete from person_store_scope where person_id = ${personId} and store_id = ${storeId}`;
+}
+
+async function insertPeriod(orgId: string, startsOn: string, endsOn: string): Promise<string> {
+  const [row] = await sql<{ id: string }[]>`
+    insert into fiscal_periods (org_id, starts_on, ends_on, status)
+    values (${orgId}, ${startsOn}, ${endsOn}, 'open')
+    returning id
+  `;
+  return row!.id;
+}
+
+interface Fixture {
+  orgId: string;
+  storeId: string;
+  storeId2: string;
+  staffId: string;
+  managerId: string;
+  adminId: string;
+}
+
+/** One org, one open 2026-01 period, a full chart of accounts, the seeded expense
+ *  category crosswalk, and a store + one persona per role — everyone scoped to `storeId`
+ *  only (never `storeId2`), so a test can prove a store-scope denial without any extra
+ *  setup. */
+async function setup(hint: string): Promise<Fixture> {
+  const orgId = await insertOrg(hint);
+  await seedChartOfAccounts(sql, orgId);
+  await seedExpenseCategories(sql, orgId);
+  await insertPeriod(orgId, '2026-01-01', '2026-01-31');
+  const storeId = await insertStore(orgId, `${hint}-s1`);
+  const storeId2 = await insertStore(orgId, `${hint}-s2`);
+  const staffId = await insertPerson(orgId, `${hint} Staff`);
+  const managerId = await insertPerson(orgId, `${hint} Manager`);
+  const adminId = await insertPerson(orgId, `${hint} Admin`);
+  await insertRoleRaw(staffId, orgId, 'staff');
+  await insertRoleRaw(managerId, orgId, 'manager');
+  await insertRoleRaw(adminId, orgId, 'admin');
+  await insertStoreScopeRaw(staffId, storeId);
+  await insertStoreScopeRaw(managerId, storeId);
+  await insertStoreScopeRaw(adminId, storeId);
+  return { orgId, storeId, storeId2, staffId, managerId, adminId };
+}
+
+async function categoryId(orgId: string, category: string): Promise<string> {
+  const [row] = await sql<{ id: string }[]>`
+    select id from expense_categories where org_id = ${orgId} and category = ${category}
+  `;
+  if (!row) throw new Error(`fixture: category "${category}" not found for org ${orgId}`);
+  return row.id;
+}
+
+/** Inserts a category with a NULL account_code — the state invariant 7 exists to reject.
+ *  Never produced by `seedExpenseCategories` itself (every seeded row is mapped), so this
+ *  goes straight at the table. */
+async function insertUnmappedCategory(orgId: string, name: string): Promise<string> {
+  const [row] = await sql<{ id: string }[]>`
+    insert into expense_categories (org_id, "group", category, account_code)
+    values (${orgId}, 'OPEX', ${name}, null)
+    returning id
+  `;
+  return row!.id;
+}
+
+/** Runs `fn` inside one Drizzle transaction with the 'staff' RLS principal applied for
+ *  `orgId` — mirrors packages/auth/tests/integration/authorize.test.ts's `asPerson`
+ *  exactly, so a service function called through this runs under the same RLS every real
+ *  request would. */
+async function asPerson<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return transaction(async (tx) => {
+    await tx.execute(dsql.raw(`set local role ${APP_ROLE}`));
+    await tx.execute(dsql`select set_config('app.principal_kind', 'staff', true)`);
+    await tx.execute(dsql`select set_config('app.org_id', ${orgId}, true)`);
+    return fn(tx);
+  });
+}
+
+/** Raw postgres.js transaction with the same principal — used ONLY for invariant 16's
+ *  bare, unfiltered query (packages/db/tests/integration/rls.test.ts's `asOrg`). */
+async function asOrgRaw<T>(orgId: string, fn: (tx: postgres.TransactionSql) => Promise<T>): Promise<T> {
+  return (await sql.begin(async (tx) => {
+    await tx.unsafe(`set local role ${APP_ROLE}`);
+    await tx`select set_config('app.org_id', ${orgId}, true)`;
+    return (await fn(tx)) as never;
+  })) as T;
+}
+
+interface Line {
+  code: string;
+  debit: string;
+  credit: string;
+  party_type: string | null;
+  party_id: string | null;
+}
+
+async function linesFor(entryId: string): Promise<Line[]> {
+  return sql<Line[]>`
+    select a.code, jl.debit, jl.credit, jl.party_type, jl.party_id
+    from journal_lines jl
+    join accounts a on a.id = jl.account_id
+    where jl.entry_id = ${entryId}
+    order by jl.line_no
+  `;
+}
+
+async function expenseRow(orgId: string, id: string) {
+  const [row] = await sql<
+    { status: string; journal_entry_id: string | null; total_amount: string; receipt_photo_url: string | null }[]
+  >`select status, journal_entry_id, total_amount, receipt_photo_url from expenses where id = ${id} and org_id = ${orgId}`;
+  return row;
+}
+
+function actor(orgId: string, personId: string): Actor {
+  return { personId, orgId };
+}
+
+beforeAll(async () => {
+  await sql`
+    truncate table
+      expense_payments, expenses, expense_categories,
+      person_grants, person_store_scope, person_roles,
+      journal_lines, journal_entries, audit_log, fiscal_periods, accounts,
+      person_identities, persons, stores, organizations
+    restart identity cascade
+  `;
+});
+
+afterAll(async () => {
+  await closeDb();
+  await sql.end({ timeout: 5 });
+});
+
+const BUSINESS_DATE = '2026-01-15';
+
+// =========================================================================================
+// Posting — invariants 1-5
+// =========================================================================================
+
+describe('invariant 1 — a single cash expense posts exactly POSTING-PATTERNS.md\'s expense.cash.simple', () => {
+  it('DR 5100 / CR 1110, no more, no less', async () => {
+    const f = await setup('inv1');
+    const catId = await categoryId(f.orgId, 'Cost of Goods Sold — General');
+
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: 'Pork delivery, cash',
+        receiptPhotoUrl: 'https://example.com/r1.jpg',
+        payments: [{ method: 'cash', amount: '1200.00' }],
+      }),
+    );
+
+    const posted = await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
+    expect(posted.created).toBe(true);
+
+    const lines = await linesFor(posted.journalEntryId);
+    expect(lines).toHaveLength(2);
+    const debit = lines.find((l) => l.debit !== '0.00')!;
+    const credit = lines.find((l) => l.credit !== '0.00')!;
+    expect(debit.code).toBe('5100');
+    expect(debit.debit).toBe('1200.00');
+    expect(credit.code).toBe('1110');
+    expect(credit.credit).toBe('1200.00');
+  });
+});
+
+describe('invariant 2 — a three-way split posts ONE entry with three credit lines', () => {
+  it('cash + online + reimbursable, one journal_entries row, four lines', async () => {
+    const f = await setup('inv2');
+    const catId = await categoryId(f.orgId, 'Supplies and Stocks');
+
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: 'Supplies, three-way split',
+        receiptPhotoUrl: 'https://example.com/r2.jpg',
+        payments: [
+          { method: 'cash', amount: '1500.00' },
+          { method: 'online', amount: '1000.00' },
+          { method: 'reimbursable', amount: '1000.00', staffId: f.staffId },
+        ],
+      }),
+    );
+
+    const posted = await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
+    expect(posted.created).toBe(true);
+
+    // Exactly ONE journal_entries row for this source document.
+    const [entryCount] = await sql<{ c: number }[]>`
+      select count(*)::int c from journal_entries where source_type = 'expense_payment' and source_id = ${created.id}
+    `;
+    expect(entryCount!.c).toBe(1);
+
+    const lines = await linesFor(posted.journalEntryId);
+    expect(lines).toHaveLength(4);
+    const debits = lines.filter((l) => l.debit !== '0.00');
+    const credits = lines.filter((l) => l.credit !== '0.00');
+    expect(debits).toHaveLength(1);
+    expect(credits).toHaveLength(3);
+    expect(debits[0]!.code).toBe('6500');
+    expect(debits[0]!.debit).toBe('3500.00');
+    expect(credits.map((c) => c.code).sort()).toEqual(['1110', '1140', '2130']);
+    expect(credits.find((c) => c.code === '1110')!.credit).toBe('1500.00');
+    expect(credits.find((c) => c.code === '1140')!.credit).toBe('1000.00');
+    const reimbursableLine = credits.find((c) => c.code === '2130')!;
+    expect(reimbursableLine.credit).toBe('1000.00');
+    expect(reimbursableLine.party_type).toBe('employee');
+    expect(reimbursableLine.party_id).toBe(f.staffId);
+  });
+});
+
+describe('invariant 3 — reimbursable credits 2130 with the staff party; without it, rejected', () => {
+  it('positive case already proven by invariant 2\'s reimbursable line (2130, party_type employee)', () => {
+    // Kept as a named marker so the invariant list in this file matches the spec 1:1 —
+    // the actual proof is invariant 2's assertion above, since a reimbursable-only
+    // expense would otherwise duplicate that test almost verbatim.
+    expect(true).toBe(true);
+  });
+
+  it('a reimbursable payment with no staffId is rejected at approve, never posted', async () => {
+    const f = await setup('inv3');
+    const catId = await categoryId(f.orgId, 'Repairs and Maintenance');
+
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: 'Emergency repair, no staffId supplied',
+        receiptPhotoUrl: 'https://example.com/r3.jpg',
+        payments: [{ method: 'reimbursable', amount: '650.00' }],
+      }),
+    );
+
+    await expect(
+      asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id)),
+    ).rejects.toThrow(/staffId/);
+
+    // Nothing posted — the expense is unchanged, still a draft, no journal entry.
+    const row = await expenseRow(f.orgId, created.id);
+    expect(row!.status).toBe('draft');
+    expect(row!.journal_entry_id).toBeNull();
+  });
+});
+
+describe('invariant 4 — re-posting is idempotent: one entry, created:false the second time', () => {
+  it('approving an already-posted expense returns the same journalEntryId and writes nothing new', async () => {
+    const f = await setup('inv4');
+    const catId = await categoryId(f.orgId, 'Utilities');
+
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: 'Electric bill',
+        receiptPhotoUrl: 'https://example.com/r4.jpg',
+        payments: [{ method: 'cash', amount: '3000.00' }],
+      }),
+    );
+
+    const first = await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
+    expect(first.created).toBe(true);
+
+    const second = await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
+    expect(second.created).toBe(false);
+    expect(second.journalEntryId).toBe(first.journalEntryId);
+
+    const [entryCount] = await sql<{ c: number }[]>`
+      select count(*)::int c from journal_entries where source_type = 'expense_payment' and source_id = ${created.id}
+    `;
+    expect(entryCount!.c).toBe(1);
+  });
+});
+
+describe('invariant 5 — a void reverses through reverseEntry and every account nets to zero', () => {
+  it('voidExpense reverses the entry, and 5100/1110 both net to 0 across the pair', async () => {
+    const f = await setup('inv5');
+    const catId = await categoryId(f.orgId, 'Cost of Goods Sold — General');
+
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: 'Wrong delivery, to be voided',
+        receiptPhotoUrl: 'https://example.com/r5.jpg',
+        payments: [{ method: 'cash', amount: '800.00' }],
+      }),
+    );
+    const posted = await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
+
+    const voided = await asPerson(f.orgId, (tx) => voidExpense(tx, actor(f.orgId, f.managerId), created.id, 'Wrong supplier'));
+    expect(voided.created).toBe(true);
+
+    const row = await expenseRow(f.orgId, created.id);
+    expect(row!.status).toBe('voided');
+
+    for (const code of ['5100', '1110']) {
+      const [net] = await sql<{ net: string }[]>`
+        select coalesce(sum(jl.debit - jl.credit), 0)::numeric(14,2) as net
+        from journal_lines jl
+        join accounts a on a.id = jl.account_id
+        where a.code = ${code} and jl.entry_id in (${posted.journalEntryId}, ${voided.reversalEntryId})
+      `;
+      expect(Number(net!.net)).toBe(0);
+    }
+  });
+});
+
+// =========================================================================================
+// Routing — invariants 6-10 (proven through approveExpense, not routing.ts directly)
+// =========================================================================================
+
+describe('invariant 6 — a mapped category routes to its declared account', () => {
+  it('an OPEX category (Rent -> 6200) debits exactly 6200', async () => {
+    const f = await setup('inv6');
+    const catId = await categoryId(f.orgId, 'Rent');
+
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: 'Monthly rent',
+        receiptPhotoUrl: 'https://example.com/r6.jpg',
+        payments: [{ method: 'cash', amount: '25000.00' }],
+      }),
+    );
+    const posted = await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
+    const lines = await linesFor(posted.journalEntryId);
+    const debit = lines.find((l) => l.debit !== '0.00')!;
+    expect(debit.code).toBe('6200');
+  });
+});
+
+describe('invariant 7 — an unmapped category BLOCKS, naming the category, never falls back to 6900', () => {
+  it('a category seeded with account_code NULL cannot post', async () => {
+    const f = await setup('inv7');
+    const catId = await insertUnmappedCategory(f.orgId, 'Mystery Spend');
+
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: 'Nobody knows what this was for',
+        receiptPhotoUrl: 'https://example.com/r7.jpg',
+        payments: [{ method: 'cash', amount: '500.00' }],
+      }),
+    );
+
+    await expect(
+      asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id)),
+    ).rejects.toThrow(/Mystery Spend/);
+
+    // And specifically NEVER 6900 — the forbidden fallback (spec §4).
+    const row = await expenseRow(f.orgId, created.id);
+    expect(row!.status).toBe('draft');
+    expect(row!.journal_entry_id).toBeNull();
+  });
+
+  it('routeExpense names the category, and does not route to 6900 as a fallback account', () => {
+    const result = routeExpense({
+      totalAmount: '500.00' as never,
+      supplierId: null,
+      categoryName: 'Mystery Spend',
+      categoryAccountCode: null,
+      payments: [{ method: 'cash', amount: '500.00' as never }],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toContain('Mystery Spend');
+      // The rejection message legitimately MENTIONS 6900 to explain what it refused to do
+      // (see routing.ts) — the actual proof of "never falls back" is that no line was
+      // produced at all: `result.ok === false` above, and invariant 7's other test
+      // confirms nothing posted (status stays 'draft', journal_entry_id stays null).
+      expect(result.ok).toBe(false);
+    }
+  });
+});
+
+describe('invariant 8 — PERSONAL routes to 3200 owner\'s drawings, an equity account, never a P&L expense', () => {
+  it('debits 3200, and 3200 is typed equity, not expense', async () => {
+    const f = await setup('inv8');
+    const catId = await categoryId(f.orgId, "Owner's Personal Expense");
+
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: "Owner's personal withdrawal",
+        receiptPhotoUrl: 'https://example.com/r8.jpg',
+        payments: [{ method: 'cash', amount: '2000.00' }],
+      }),
+    );
+    const posted = await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
+    const lines = await linesFor(posted.journalEntryId);
+    const debit = lines.find((l) => l.debit !== '0.00')!;
+    expect(debit.code).toBe('3200');
+
+    const [account] = await sql<{ type: string }[]>`select type from accounts where org_id = ${f.orgId} and code = '3200'`;
+    expect(account!.type).toBe('equity');
+  });
+});
+
+describe('invariant 9 — CAPEX routes to a 15xx asset, never a P&L line', () => {
+  it('debits 1510, and 1510 is typed asset, not expense', async () => {
+    const f = await setup('inv9');
+    const catId = await categoryId(f.orgId, 'Capital Expenditure');
+
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: 'New grill purchase',
+        receiptPhotoUrl: 'https://example.com/r9.jpg',
+        payments: [{ method: 'cash', amount: '45000.00' }],
+      }),
+    );
+    const posted = await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
+    const lines = await linesFor(posted.journalEntryId);
+    const debit = lines.find((l) => l.debit !== '0.00')!;
+    expect(debit.code).toBe('1510');
+
+    const [account] = await sql<{ type: string }[]>`select type from accounts where org_id = ${f.orgId} and code = '1510'`;
+    expect(account!.type).toBe('asset');
+  });
+});
+
+describe('invariant 10 — "other" and "ar_collection" BLOCK posting with a named reason (DEF-054)', () => {
+  it.each(['other', 'ar_collection'] as const)('a %s payment cannot post', async (method) => {
+    const f = await setup(`inv10-${method}`);
+    const catId = await categoryId(f.orgId, 'Bank Fees');
+
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: `Paid via ${method}`,
+        receiptPhotoUrl: 'https://example.com/r10.jpg',
+        payments: [{ method, amount: '100.00' }],
+      }),
+    );
+
+    await expect(
+      asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id)),
+    ).rejects.toThrow(/DEF-054/);
+  });
+});
+
+// =========================================================================================
+// Controls — invariants 11-14
+// =========================================================================================
+
+describe('invariant 11 — no photo, no posting, enforced server-side at approve (DEF-055)', () => {
+  it('approveExpense rejects a draft with no receiptPhotoUrl, called directly (never through a form)', async () => {
+    const f = await setup('inv11');
+    const catId = await categoryId(f.orgId, 'Marketing and Advertising');
+
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: 'No photo attached',
+        payments: [{ method: 'cash', amount: '300.00' }],
+      }),
+    );
+
+    await expect(
+      asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id)),
+    ).rejects.toThrow(/receipt photo/);
+
+    // Attaching the photo and retrying succeeds — proves the gate is the photo, nothing else.
+    await asPerson(f.orgId, (tx) =>
+      editExpense(tx, actor(f.orgId, f.staffId), created.id, { receiptPhotoUrl: 'https://example.com/r11.jpg' }),
+    );
+    const posted = await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
+    expect(posted.created).toBe(true);
+  });
+});
+
+describe('invariant 12 — the creator edits their own draft inside 48h; outside it, they cannot', () => {
+  it('within the window, the creator (staff) edits successfully', async () => {
+    const f = await setup('inv12a');
+    const catId = await categoryId(f.orgId, 'Smallwares');
+
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: 'Original particulars',
+        receiptPhotoUrl: 'https://example.com/r12a.jpg',
+        payments: [{ method: 'cash', amount: '150.00' }],
+      }),
+    );
+
+    await asPerson(f.orgId, (tx) =>
+      editExpense(tx, actor(f.orgId, f.staffId), created.id, { particulars: 'Corrected particulars' }),
+    );
+    const [row] = await sql<{ particulars: string }[]>`select particulars from expenses where id = ${created.id}`;
+    expect(row!.particulars).toBe('Corrected particulars');
+  });
+
+  it('outside the window, the same creator (staff) is denied — they lack edit_any_expense', async () => {
+    const f = await setup('inv12b');
+    const catId = await categoryId(f.orgId, 'Smallwares');
+
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: 'Aging draft',
+        receiptPhotoUrl: 'https://example.com/r12b.jpg',
+        payments: [{ method: 'cash', amount: '150.00' }],
+      }),
+    );
+    // Backdate created_at past the 48h window — the ONLY way to reach this state without
+    // waiting two real days; every other field is untouched.
+    await sql`update expenses set created_at = now() - interval '49 hours' where id = ${created.id}`;
+
+    await expect(
+      asPerson(f.orgId, (tx) =>
+        editExpense(tx, actor(f.orgId, f.staffId), created.id, { particulars: 'Too late' }),
+      ),
+    ).rejects.toThrow(AuthorizationError);
+
+    // A manager (who DOES hold edit_any_expense) can still fix it — the window is about
+    // WHO may act unsupervised, not a permanent freeze.
+    await asPerson(f.orgId, (tx) =>
+      editExpense(tx, actor(f.orgId, f.managerId), created.id, { particulars: 'Fixed by a manager' }),
+    );
+    const [row] = await sql<{ particulars: string }[]>`select particulars from expenses where id = ${created.id}`;
+    expect(row!.particulars).toBe('Fixed by a manager');
+  });
+});
+
+describe('invariant 13 — a posted expense cannot be edited by anyone, including an admin', () => {
+  it('editExpense rejects a posted expense before authorize() is even reached', async () => {
+    const f = await setup('inv13');
+    const catId = await categoryId(f.orgId, 'Insurance');
+
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: 'Annual premium',
+        receiptPhotoUrl: 'https://example.com/r13.jpg',
+        payments: [{ method: 'cash', amount: '5000.00' }],
+      }),
+    );
+    await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
+
+    await expect(
+      asPerson(f.orgId, (tx) =>
+        editExpense(tx, actor(f.orgId, f.adminId), created.id, { particulars: 'Admin tries to sneak a change in' }),
+      ),
+    ).rejects.toThrow(/only a draft may be edited/);
+  });
+});
+
+describe('invariant 14 — each of the five capabilities denies an actor lacking it', () => {
+  // create_expense and edit_own_expense are ✅ for ALL FOUR roles in CAPABILITY-MATRIX.md
+  // — there is no ROLE that lacks them (packages/auth's own authorize.test.ts calls this
+  // set UNIVERSALLY_GRANTED and exempts it from role-based denial for the same reason).
+  // Denial is still proven for both, on the only axis that remains: no role at all for
+  // create_expense, and a store-scope gap for edit_own_expense — reported in the task
+  // report as a spec-defect finding, since T-122 §6 implies all five have a denying role.
+
+  it('create_expense denies a person with NO role at all in the org', async () => {
+    const f = await setup('inv14-create');
+    const nobody = await insertPerson(f.orgId, 'Unconfigured');
+    const catId = await categoryId(f.orgId, 'Bank Fees');
+
+    await expect(
+      asPerson(f.orgId, (tx) =>
+        createExpense(tx, actor(f.orgId, nobody), {
+          storeId: f.storeId,
+          businessDate: BUSINESS_DATE,
+          categoryId: catId,
+          particulars: 'Should never be created',
+          payments: [{ method: 'cash', amount: '10.00' }],
+        }),
+      ),
+    ).rejects.toThrow(AuthorizationError);
+  });
+
+  it('edit_own_expense denies the creator once their store scope is revoked', async () => {
+    const f = await setup('inv14-edit-own');
+    const catId = await categoryId(f.orgId, 'Bank Fees');
+
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: 'Creator about to lose store scope',
+        payments: [{ method: 'cash', amount: '10.00' }],
+      }),
+    );
+    await revokeStoreScopeRaw(f.staffId, f.storeId);
+
+    await expect(
+      asPerson(f.orgId, (tx) =>
+        editExpense(tx, actor(f.orgId, f.staffId), created.id, { particulars: 'Should be denied' }),
+      ),
+    ).rejects.toThrow(AuthorizationError);
+  });
+
+  it('edit_any_expense denies staff (matrix-false for staff)', async () => {
+    const f = await setup('inv14-edit-any');
+    const catId = await categoryId(f.orgId, 'Bank Fees');
+    // Created by the MANAGER, so staff is never the creator and always routes to
+    // edit_any_expense regardless of timing.
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.managerId), {
+        storeId: f.storeId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: 'Created by manager',
+        payments: [{ method: 'cash', amount: '10.00' }],
+      }),
+    );
+
+    await expect(
+      asPerson(f.orgId, (tx) =>
+        editExpense(tx, actor(f.orgId, f.staffId), created.id, { particulars: 'Staff should not be able to' }),
+      ),
+    ).rejects.toThrow(AuthorizationError);
+  });
+
+  it('void_expense denies staff (matrix-false for staff)', async () => {
+    const f = await setup('inv14-void');
+    const catId = await categoryId(f.orgId, 'Bank Fees');
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: 'Posted then staff tries to void',
+        receiptPhotoUrl: 'https://example.com/r14v.jpg',
+        payments: [{ method: 'cash', amount: '10.00' }],
+      }),
+    );
+    await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
+
+    await expect(
+      asPerson(f.orgId, (tx) => voidExpense(tx, actor(f.orgId, f.staffId), created.id, 'staff attempt')),
+    ).rejects.toThrow(AuthorizationError);
+  });
+
+  it('approve_expense denies staff (matrix-false for staff)', async () => {
+    const f = await setup('inv14-approve');
+    const catId = await categoryId(f.orgId, 'Bank Fees');
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: 'Staff tries to self-approve',
+        receiptPhotoUrl: 'https://example.com/r14a.jpg',
+        payments: [{ method: 'cash', amount: '10.00' }],
+      }),
+    );
+
+    await expect(
+      asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.staffId), created.id)),
+    ).rejects.toThrow(AuthorizationError);
+  });
+});
+
+// =========================================================================================
+// Wave 0 holds — invariants 15-16
+// =========================================================================================
+
+describe('invariant 15 — all three tables classified for cutover and declared in the RLS registry', () => {
+  it('expenses, expense_payments and expense_categories all carry a cutover classification', () => {
+    expect(CUTOVER_CLASSIFICATION.expenses?.class).toBe('purge');
+    expect(CUTOVER_CLASSIFICATION.expense_payments?.class).toBe('purge');
+    expect(CUTOVER_CLASSIFICATION.expense_categories?.class).toBe('keep');
+  });
+
+  it('all three carry an RLS registry entry', () => {
+    expect(RLS_REGISTRY.expenses?.scope).toBe('org_column');
+    expect(RLS_REGISTRY.expense_categories?.scope).toBe('org_column');
+    expect(RLS_REGISTRY.expense_payments?.scope).toBe('derived');
+    expect(RLS_REGISTRY.expense_payments?.via).toContain('app_current_org()');
+  });
+
+  it('RLS is actually ENABLED and FORCED for all three, in real Postgres — a registry entry is a promise, this is the control', async () => {
+    const rows = await sql<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }[]>`
+      select relname, relrowsecurity, relforcerowsecurity
+      from pg_class
+      where relnamespace = 'public'::regnamespace
+        and relname in ('expenses', 'expense_payments', 'expense_categories')
+    `;
+    expect(rows).toHaveLength(3);
+    for (const r of rows) {
+      expect(r.relrowsecurity, `${r.relname}: RLS not enabled`).toBe(true);
+      expect(r.relforcerowsecurity, `${r.relname}: RLS enabled but not FORCED — the owner still bypasses`).toBe(true);
+    }
+  });
+});
+
+describe('invariant 16 — an expense in org A is invisible to org B, with no WHERE org_id written anywhere', () => {
+  it('a bare, unfiltered select from org B sees zero of org A\'s expenses and payments', async () => {
+    const fA = await setup('inv16-a');
+    const orgB = await insertOrg('inv16-b');
+
+    const catId = await categoryId(fA.orgId, 'Bank Fees');
+    await asPerson(fA.orgId, (tx) =>
+      createExpense(tx, actor(fA.orgId, fA.staffId), {
+        storeId: fA.storeId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: "Org A's own expense",
+        payments: [{ method: 'cash', amount: '10.00' }],
+      }),
+    );
+
+    const seenByA = await asOrgRaw(fA.orgId, (tx) => tx<{ c: number }[]>`select count(*)::int c from expenses`);
+    expect(seenByA[0]!.c).toBeGreaterThan(0);
+
+    const seenByB = await asOrgRaw(orgB, (tx) => tx<{ c: number }[]>`select count(*)::int c from expenses`);
+    expect(seenByB[0]!.c).toBe(0);
+
+    const paymentsSeenByB = await asOrgRaw(orgB, (tx) => tx<{ c: number }[]>`select count(*)::int c from expense_payments`);
+    expect(paymentsSeenByB[0]!.c).toBe(0);
+
+    const categoriesSeenByB = await asOrgRaw(orgB, (tx) => tx<{ c: number }[]>`select count(*)::int c from expense_categories`);
+    expect(categoriesSeenByB[0]!.c).toBe(0);
+  });
+});

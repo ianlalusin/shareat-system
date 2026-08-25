@@ -129,11 +129,16 @@ export async function seedExpenseCategories(
     account_code: c.accountCode,
   }));
 
+  // `group` is a reserved word — both the recordset column NAME and every reference to
+  // it must be quoted, or Postgres's parser rejects it at `v.group` (bare `group` is not
+  // a valid column reference there). Found here because this function had never actually
+  // been called against real Postgres before: packages/db/tests/expense-categories-seed.test.ts
+  // is a unit test that only checks the plain EXPENSE_CATEGORY_SEED array, never this SQL.
   const rows = await sql<{ id: string }[]>`
     insert into expense_categories (org_id, "group", category, account_code)
-    select ${orgId}::uuid, v.group, v.category, v.account_code
+    select ${orgId}::uuid, v."group", v.category, v.account_code
     from jsonb_to_recordset(${sql.json(payload)})
-      as v(group text, category text, account_code text)
+      as v("group" text, category text, account_code text)
     on conflict (org_id, category) do nothing
     returning expense_categories.id
   `;
