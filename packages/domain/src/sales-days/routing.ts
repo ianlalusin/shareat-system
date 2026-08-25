@@ -8,11 +8,14 @@
  * `sale.mixed` are already pinned and verified by T-108. This function is their generalisation and
  * must agree with every one of them.
  *
- * ## ⭐ The balance identity is TWO checks, not one
+ * ## ⭐ The balance identity is THREE checks, not one
  *
  *   1. **Revenue side** — `unli + àlaCarte = totalSales`. Enforced by a CHECK constraint too, but
  *      re-asserted here so a caller gets a named reason rather than a constraint violation.
- *   2. **Tender side** — `cash + online + credit + nonRemittedChannels + discounts + comps =
+ *   2. **Channel side** — `Σ all channels = totalSales`, remitted and non-remitted together
+ *      (Ian, bible row 133). ⚠️ **This one was missing from the first cut** and its absence let a
+ *      smoketest pass a day whose channels summed to a ninth of its total.
+ *   3. **Tender side** — `cash + online + credit + nonRemittedChannels + discounts + comps =
  *      totalSales`. **Cannot be a CHECK**, because the non-remitted channel amounts live in
  *      `sales_day_channels`; it spans two tables and belongs here.
  *
@@ -95,6 +98,28 @@ export function routeSalesDay(input: RouteSalesDayInput): RouteSalesDayResult {
         `revenue split does not equal total sales: unli ${input.unliSales} + à la carte ` +
         `${input.alaCarteSales} = ${revenueSide}, but totalSales is ${input.totalSales}`,
     };
+  }
+
+  // ── Check 1b: the CHANNELS exhaust the total ─────────────────────────────────────────
+  // ⭐ Ian, 2026-08-25: "total sales are all sales channel sum, remitted daily and un-remitted
+  // daily combined." Confirmed at source — v1 derives `totalSales = channelsTotal + branchDelta`
+  // (`derive-totals.ts:143`). ⚠️ This identity was MISSING from the first cut, and its absence let
+  // a browser smoketest pass a day whose channels summed to ₱550 against a ₱6,000 total.
+  //
+  // Skipped entirely when NO channel rows exist: a day may legitimately report only its headline
+  // figures before channels are configured, and a store with no channels must not be unable to
+  // report at all. Once a single row exists, the breakdown is claiming to be the breakdown.
+  if (input.channels.length > 0) {
+    const channelsTotal = add(...input.channels.map((c) => c.amount));
+    if (!isZero(subtract(channelsTotal, input.totalSales))) {
+      return {
+        ok: false,
+        reason:
+          `channel breakdown does not equal total sales: the channels sum to ${channelsTotal}, ` +
+          `but totalSales is ${input.totalSales}. Every channel's takings are part of the total — ` +
+          `remitted and non-remitted alike`,
+      };
+    }
   }
 
   // ── Non-remitted channels: money that never reaches the till ─────────────────────────

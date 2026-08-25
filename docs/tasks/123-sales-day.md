@@ -222,6 +222,65 @@ a denial test · no posting into a **closed period**.
 ⚠️ **Not yet writable:** the balance identities (§6) and anything touching the till position,
 until §7 settles §3.
 
+---
+
+## ⛔ 10. CORRECTION 2026-08-25 — the input model is wrong, and so is a missing identity
+
+Ian: *"See how the current sales report doc looks — **total sales are all sales channel sum,
+remitted daily and un-remitted daily combined.**"*
+
+### 10.1 The missing identity
+
+**`totalSales = channelsTotal + branchDelta`** (`derive-totals.ts:143`). Σ of *every* channel.
+
+⚠️ **T-123 as built never enforces this**, and it shows: my own browser smoketest passed a day whose
+channel rows summed to ₱550 against a ₱6,000 total. **The identity I omitted is the one that would
+have caught it.** So there are THREE, not two:
+
+| # | Identity | Enforced where |
+|---|---|---|
+| 1 | `unli + àlaCarte = totalSales` | schema CHECK ✅ |
+| 2 | `cash + online + credit + nonRemitted + discounts + comps = totalSales` | `routeSalesDay` ✅ |
+| 3 | **`Σ all channels = totalSales`** | ⛔ **nowhere** |
+
+### 10.2 ⭐ The bigger finding: v1 DERIVES what I ask the user to type
+
+`deriveSalesReportTotals` takes a **small input set** and computes the rest:
+
+| Entered | Derived |
+|---|---|
+| per-channel amounts | **`totalSales`** |
+| per-account online breakdown | **`cashPayments`** — *remitted − online − credit − other* |
+| credit sales, other tenders | remitted / non-remitted totals |
+| *(shift)* opening float, cash counted | expected remittance, per-account expectations, cash variance |
+| **`less`/`plus` — AUTO-QUERIED**, not typed | expected ending cash, variance |
+
+> **The figures cannot disagree, because only one set is entered.** My form asks for total, unli,
+> à la carte, cash and online as five independent numbers and then *checks* they agree — **which
+> makes a data-entry error possible where v1 makes it impossible.** v1's shape is better and the
+> reason is structural, not cosmetic.
+
+**Two details worth keeping:**
+
+- **`cashierAccountIds` decides which online accounts count** — *"online sales into any other
+  account are not the cashier's to remit."* Bible row 127's owner dimension, load-bearing again.
+- **One pure derivation, three callers.** The module exists because creation and adjustment once
+  derived differently, leaving `totalSales` stale after a channel correction (Lipa 2026-07-12). No
+  `use server`, no React, no Firestore — so the form, the create path and the server-side
+  adjustment can never disagree again.
+
+### 10.3 ⚠️ The open question this creates — needs Ian
+
+**A hand-entered day has channels but NO unli / à-la-carte split**, and that split is what decides
+4100 vs 4150. Only a POS pull carries it (which is why `posSourced` exists). Two ways out:
+
+1. **A channel names its revenue account** — Foodpanda is à la carte by nature; Walk-in may be
+   either, which is the snag.
+2. **A hand-entered day supplies the split** — more typing, and it reintroduces exactly the
+   "figures that must agree" problem §10.2 is trying to remove.
+
+**Not decided.** It changes the form staff use, so it is Ian's call, not mine.
+
 ## Out of scope
 
 Replacing POS · the remittance document itself (**T-136**) · channel settlement (T-130/131) ·

@@ -197,6 +197,17 @@ describe('non-remitted channels — the money that never reaches the till', () =
     amount: money('1200'),
     noSales: false,
   };
+  /** ⚠️ Added when the channel identity landed: these fixtures previously declared ₱1,200 of
+   *  Foodpanda against a ₱2,000 total and nothing else — internally inconsistent, and the new
+   *  check was right to reject them. The remitted counterpart makes the breakdown whole. */
+  const walkIn = {
+    channelId: 'ch-wi',
+    channelName: 'Walk-in',
+    isRemittedDaily: true,
+    receivableAccountCode: null,
+    amount: money('800'),
+    noSales: false,
+  };
 
   it('debits the channel receivable, with the channel as the party', () => {
     const r = routeSalesDay(
@@ -204,7 +215,7 @@ describe('non-remitted channels — the money that never reaches the till', () =
         totalSales: money('2000'),
         alaCarteSales: money('2000'),
         cashCollected: money('800'),
-        channels: [foodpanda],
+        channels: [walkIn, foodpanda],
       }),
     );
     if (!r.ok) throw new Error(r.reason);
@@ -225,7 +236,7 @@ describe('non-remitted channels — the money that never reaches the till', () =
         totalSales: money('2000'),
         alaCarteSales: money('2000'),
         cashCollected: money('800'),
-        channels: [{ ...foodpanda, receivableAccountCode: null }],
+        channels: [walkIn, { ...foodpanda, receivableAccountCode: null }],
       }),
     );
     expect(r.ok).toBe(false);
@@ -264,5 +275,92 @@ describe('credit sales are refused, by name', () => {
     if (r.ok) throw new Error('unreachable');
     expect(r.reason).toMatch(/requires a party/);
     expect(r.reason).toMatch(/T-131/);
+  });
+});
+
+describe('⭐ the CHANNEL identity — Σ all channels = totalSales (bible row 133)', () => {
+  const walkIn = {
+    channelId: 'ch-wi',
+    channelName: 'Walk-in',
+    isRemittedDaily: true,
+    receivableAccountCode: null,
+    amount: money('0'),
+    noSales: false,
+  };
+  const foodpanda = {
+    channelId: 'ch-fp',
+    channelName: 'Foodpanda',
+    isRemittedDaily: false,
+    receivableAccountCode: '1220',
+    amount: money('0'),
+    noSales: false,
+  };
+
+  it('⛔ BLOCKS the exact day my own browser smoketest let through', () => {
+    // ₱6,000 total with only ₱550 of channels declared. This posted cleanly before the identity
+    // existed, because the tender and revenue checks both passed — the channels were simply
+    // never compared to anything. That is the whole reason this test names the case.
+    const r = routeSalesDay(
+      input({
+        totalSales: money('6000'),
+        unliSales: money('4450'),
+        alaCarteSales: money('1550'),
+        seniorDiscount: money('300'),
+        comps: money('150'),
+        cashCollected: money('3000'),
+        onlineCollected: money('2000'),
+        channels: [{ ...foodpanda, amount: money('550') }],
+      }),
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error('unreachable');
+    expect(r.reason).toMatch(/channel breakdown does not equal total sales/);
+    expect(r.reason).toMatch(/550/);
+    expect(r.reason).toMatch(/6000/);
+  });
+
+  it('passes when remitted and non-remitted channels TOGETHER make the total', () => {
+    // Ian: "total sales are all sales channel sum, remitted daily and un-remitted daily combined."
+    const r = routeSalesDay(
+      input({
+        totalSales: money('6000'),
+        unliSales: money('4450'),
+        alaCarteSales: money('1550'),
+        seniorDiscount: money('300'),
+        comps: money('150'),
+        cashCollected: money('3000'),
+        onlineCollected: money('2000'),
+        channels: [
+          { ...walkIn, amount: money('5450') },
+          { ...foodpanda, amount: money('550') },
+        ],
+      }),
+    );
+    if (!r.ok) throw new Error(r.reason);
+    expect(r.lines.find((l) => l.accountCode === '1220')?.amount).toBeDefined();
+  });
+
+  it('a day with NO channel rows is not blocked — the breakdown is optional, not partial', () => {
+    // A store with no channels configured must still be able to report. Once one row exists,
+    // the breakdown is claiming to BE the breakdown.
+    const r = routeSalesDay(
+      input({ totalSales: money('1000'), unliSales: money('1000'), cashCollected: money('1000') }),
+    );
+    expect(r.ok).toBe(true);
+  });
+
+  it('a "confirmed no sales" row counts as zero and does not break the identity', () => {
+    const r = routeSalesDay(
+      input({
+        totalSales: money('1000'),
+        unliSales: money('1000'),
+        cashCollected: money('1000'),
+        channels: [
+          { ...walkIn, amount: money('1000') },
+          { ...foodpanda, amount: money('0'), noSales: true },
+        ],
+      }),
+    );
+    expect(r.ok).toBe(true);
   });
 });
