@@ -1,215 +1,208 @@
 # T-123 — Sales day: the other half of the 88%
 
-> **Status:** spec 2026-08-25. **Wave 1, the last item.** The 30 September checkpoint asks whether
-> Wave 1 is in staff hands; T-122 shipped, this is what remains.
-> **Research-first:** the posting side was settled by T-108 (five verified patterns); the document
-> side is ported from v1's own `sales-report-draft.actions.ts` behaviour, not invented.
-> **Depends on:** T-121 (roles), T-105 (`postEntry`), ADR-006 (period close).
-> **Reads:** `docs/POSTING-PATTERNS.md` §sale.* · `docs/GLOSSARY.md` · `docs/discovery/22-pos-build-assessment.md`
+> **Status:** ⚠️ **SPEC REVISED 2026-08-25 — and the first version was badly under-scoped.**
+> I specced it from the posting patterns and started building a schema before reading v1's actual
+> `SalesDayPlain`. Ian stopped it: *"before building, look how v1 does it, correct if wrong,
+> improve if it can be improved, research about it — so we don't break anything working; we just
+> align and correct what needs alignment and correction."* **The read changed the design
+> fundamentally.** §2 is what v1 really carries; §3 is the decomposition question it raises.
+> **Not buildable until §7's research lands.**
+> **Depends on:** T-121 · T-105 (`postEntry`) · ADR-006 · **T-136** (remittance)
 
-## What this is
+## 1. What this is
 
-**The ERP's record of a day's selling, per store** — not the till. POS owns the sale; the sales day
-is the document that **recognises the revenue**. It is pulled from POS's read-only
-`/api/external/sales` endpoint (discovery 22 §5) and confirmed by a human.
-
-`sale` legs were **2,945** of the captured corpus against expenses' 4,396 — together 88% of all
-real activity, measured, not guessed.
+**The ERP's record of a day's selling, per store.** POS owns the sale; this document recognises
+the revenue. `sale` legs were **2,945** of the captured corpus against expenses' 4,396 — together
+88% of all real activity, measured, not guessed.
 
 ---
 
-## 1. The three rules, and all three already exist in v1
+## 2. ⭐ What v1's sales day ACTUALLY carries — and it is not a sales report
 
-Ian, 2026-08-25 (bible row 126). **Every one is a port** — `saveSalesDayDraftAction` in
-`ERP-rebuild` implements all three today, and the v1 behaviour carries carve-outs that matter.
+`ERP-rebuild/src/types/index.ts:1170-1330`. **~60 fields.** My first spec modelled seven of them.
 
-### 1.1 An unverified sales day recognises NO revenue
+### 2.1 Revenue — three channels, not two
 
-v1 recognises revenue only for status ∈ `{verified, partially_remitted, remitted}`.
+`totalSales` · `dineInSales` · `takeOutSales` · **`deliverySales`**
 
-> ⚠️ **In v1 this is enforced in THREE separate readers** — the income statement, the dashboard,
-> and the sales-report month roll-up — with a code note saying *"keep them in sync if you add a
-> 4th."* **A rule enforced in three places is a rule that will one day be enforced in two.**
+⚠️ I had modelled two. **The first two names are traps** (`docs/GLOSSARY.md`): `dineInSales` is
+unlimited-package sales only; `takeOutSales` is a residual. But `deliverySales` exists as its own
+figure and I had folded it into the residual.
 
-**v2 removes the problem instead of managing it: verification is what POSTS.** An unverified day
-has no journal entry, so *every* reader gets the rule for free and there is nothing to keep in
-sync. This is bible row 118 applied — prefer the design that removes a problem over the one that
-manages it.
+Plus the platform split: `foodpandaSales`, `grabSales`, `otherSales`, `salesChannelBreakdown`,
+and `branchSalesByOrder` (the commissary→branch mirror, with per-order idempotency).
 
-**Consequence, which Ian already accepted in v1:** the current day reads zero revenue until its
-report is verified.
+### 2.2 Tender — four methods, not two
 
-### 1.2 A new report cannot be created while an older one is unverified
+`cashPayments` · `eWalletPayments` · `creditCardPayments` · `otherPayments`, plus
+`onlineBreakdown` per account, `creditSales`, and `otherPaymentBreakdown[]` with notes.
 
-**The forcing function.** Without it, unrecognised revenue accumulates silently; with it, the pile
-cannot grow past one and the person who must act cannot do their next job until they do.
+⚠️ I had modelled cash + online. **Credit card and "other" are distinct tender types** and
+`creditSales` is a receivable, not cash.
 
-⚠️ **v1's carve-outs are load-bearing and must be ported with the rule — they are what stop it
-deadlocking:**
+### 2.3 Discounts — itemised by statutory type
 
-| Always allowed, even when an older day is unverified | Why |
+`totalDiscounts` · **`seniorDiscount`** · **`pwdDiscount`** · `otherDiscount` · `comps`
+
+⚠️ I had one `discounts` figure. **Senior and PWD are broken out separately in v1, and that is not
+decoration** — they are statutory categories a business must be able to evidence.
+
+### 2.4 ⭐ The `less` / `plus` blocks — the part I missed entirely
+
+**This is the cashier's daily cash accountability, and it is the heart of the document:**
+
+| `less` — what left the till | `plus` — what entered it |
 |---|---|
-| **Editing the existing draft** | Otherwise the blocked day cannot be fixed |
-| **Backfilling an OLDER date** | You must be able to fill the gap that caused the block |
-| **Starting a shift** | The block is about recognition, never about trading |
+| `cashierExpense` | `arPaymentsCashier` |
+| `salaryAdvanceCashier` | `cashRequestReturnToCashier` |
+| `cashRequestReleasedCashier` | ⚠️ `voidCashRetained` — cash on voided receipts never refunded |
+| `apPaymentsCashier` | **`openingBudget`** |
+| `remittanceCash` / `remittanceOnline` | `vendorRefunds` · `otherCollections` |
+| `onlineDeductionsByAccount` (per account) | `onlineAdditionsByAccount` (per account) |
 
-**Admins bypass the block** (v1 flipped to this deliberately on 2026-06-20 at Ian's request —
-`docs/DEFECTS-REGISTER.md` discipline: do not "restore" the no-exemption version). Matches the
-standing admin/manager bypass pattern.
+> **⭐ This is Ian's "spending split" in its real form.** Money leaving the cashier's till for
+> expenses, salary advances, cash requests and AP payments is deducted from what they must remit.
+> **The sales day is where the till's whole day nets out** — not just its selling.
 
-### 1.3 The entry dates on the SALES DAY, never the posting date
+**Two things this reveals that were recorded elsewhere as gaps:**
 
-A 31 December sale confirmed on 2 January is **December revenue**. Without this the block would
-merely relocate the error into the wrong month.
+1. **`openingBudget` IS the store revolving fund** (T-136 §2, which I recorded as *"v1 has
+   nothing"*). ⚠️ **That was wrong** — v1 has no *petty-cash module*, but the till's opening float
+   is here and already flows through the arithmetic.
+2. `onlineDeductionsByAccount` / `onlineAdditionsByAccount` are **per cashier-owned payment
+   account** — bible row 127's owner dimension, already doing real work.
 
-> Together, 1.2 and 1.3 make the close honest: **the period cannot silently accumulate
-> unrecognised revenue, and nothing lands in the wrong month.**
+### 2.5 Coverage, sign-off, and shortage charges
 
----
-
-## 2. ⛔ The flaw v2 must not inherit: revenue comes from the LEDGER
-
-v1's income statement reads `Σ salesDays.totalSales` — **the mirror document is the revenue, not
-the journal.** That is why disabling the commissary auto-create mattered so much in v1, and why
-three readers had to agree.
-
-**In v2 the journal is the revenue.** The sales day is a source document that posts, exactly like
-an expense. It has no authority of its own.
-
-⚠️ **The v1 consequence to check for in the ETL:** commissary branch-sale revenue only reached the
-income statement if a report already existed for that day; otherwise the receivable was correct and
-the P&L revenue was simply **deferred indefinitely**. Any v1 figure we compare against carries that
-distortion.
+- **`coverageEvents[]`** — sales-day cash used *in place* to fund a cash-request release. The day
+  is settled when `coveredCash + actualRemittanceCash >= cashPayments`. **Cash that never
+  physically moved because it was spent directly.** Nothing in my spec had this concept.
+- **`signoff`** — `reportedBy` · `remittedBy` · `checkedBy` · `acceptedBy`. **Four roles**, which
+  is real segregation of duties, not a rubber stamp.
+- **`shortageCharges[]`** — a cash shortage allocated to one or more named staff, with amounts and
+  timestamps. This is the matrix's `charge_staff_for_discrepancy` doing its job.
 
 ---
 
-## 3. Posting — inherited from T-108, not re-decided
+## 3. ⭐ The design question this raises: v1 fuses THREE documents into one
 
-Five patterns are already pinned and verified in `docs/POSTING-PATTERNS.md`:
+**`SalesDayPlain` is three things wearing one hat:**
+
+| | What it is | Cadence it wants |
+|---|---|---|
+| **A** | **Revenue recognition** — sales, channels, discounts, comps → the journal entry | Per business day |
+| **B** | **The till's daily accountability** — opening float, sales in, outflows, inflows, expected close | **Per business day, always** |
+| **C** | **The remittance** — actual vs expected, discrepancy, shortage charges, sign-off | **Pooled** (T-136: 3-day, weekly, per store) |
+
+> **The fusion is exactly WHY remittance cannot span days** (bible row 128). It is not an oversight
+> in v1 — it is one document trying to serve three cadences, and C is the one that breaks.
+
+**And the decomposition is already implied by decisions we have taken:** T-136 §1 says *separate
+the COUNT from the TRANSFER* — that is precisely **B** from **C**. B stays daily and keeps the
+custody control; C pools.
+
+⚠️ **But this is not mine to decide alone, and it must not be decided from first principles.**
+Splitting a document staff use daily is exactly the change that "breaks something working." §7.
+
+---
+
+## 4. The three rules — all three are PORTS (bible row 126)
+
+`saveSalesDayDraftAction` implements all three in v1 today.
+
+### 4.1 An unverified sales day recognises NO revenue
+v1 recognises only for status ∈ `{verified, partially_remitted, remitted}`.
+
+> ⚠️ **v1 enforces this in THREE separate readers** — income statement, dashboard, month roll-up —
+> with a note saying *"keep them in sync if you add a 4th."* **A rule enforced in three places is a
+> rule that will one day be enforced in two.**
+
+**v2 removes the problem: verification is what POSTS.** No entry until verified, so every reader
+gets it free (bible row 118).
+
+### 4.2 A new report cannot be created while an older one is unverified
+**The forcing function.** ⚠️ v1's carve-outs are load-bearing and stop it deadlocking: **editing
+the existing draft**, **backfilling an OLDER date**, and **starting a shift** are never blocked.
+**Admins bypass** (v1 flipped to this deliberately in June — do not "restore" the original).
+
+### 4.3 The entry dates on the SALES DAY, never the posting date
+A 31 December sale confirmed on 2 January is December revenue.
+
+---
+
+## 5. ⛔ The flaw v2 must not inherit: revenue comes from the LEDGER
+
+v1's income statement reads `Σ salesDays.totalSales` — **the mirror document is the revenue.**
+In v2 the journal is the revenue and the sales day is a source document, exactly like an expense.
+
+⚠️ **Check in the ETL:** commissary branch-sale revenue only reached v1's income statement if a
+report already existed that day; otherwise the receivable was right and the P&L revenue was
+**deferred indefinitely.** Any v1 figure we reconcile against carries that distortion.
+
+## 6. Posting — inherited from T-108, not re-decided
+
 `sale.unli.simple` · `sale.alacarte.simple` · `sale.discount.senior-pwd` · `sale.comps` ·
-`sale.mixed`. **Look them up; do not decide.**
+`sale.mixed` are pinned and verified in `docs/POSTING-PATTERNS.md`. **Look them up.**
 
-Two traps they encode, both from `GLOSSARY.md`:
+**The balance identity is TWO checks, not one**, and a day failing either **quarantines** rather
+than posting a guess:
+1. tender: `cash + online + discounts + comps = totalSales`
+2. revenue: `unli + à la carte = totalSales`
 
-- **`dineInSales` is unlimited-package sales only** — not "all dine-in". Posts to 4100.
-- **`takeOutSales` is a RESIDUAL**, `max(0, totalGross − dineInSales)`. It absorbs dine-in à la
-  carte, take-out **and** delivery together, because POS has no take-out flag at all. Posts to
-  4150. **Never chart it as take-out.**
+⚠️ **§2 shows both are incomplete** — the real tender side has four methods plus credit sales, and
+the revenue side has three channels. **The identities must be restated against the real fields
+before anything is built.**
 
-> ⚠️ `POSTING-PATTERNS.md:184` records that **v1's own `sale.builder.ts` posts only the cash and
-> online legs — zero revenue, zero discount, zero comps.** Sales day in v2 is where the nominal
-> legs come into existence. **This is not a port; it is the repair.**
-
----
-
-## 4. Where the money lands — Ian's owner split, and the gap in it
-
-Ian, 2026-08-25: *"The accounts have 2 owners, cashier and office, and cashier has cash and online
-accounts — the cashier till always exists with cash and online, same for office-owned. This clearly
-shows money movement."*
-
-**This is a good model and it is retained.** It answers *"whose hands is this money in?"*, which is
-the question a till reconciliation actually asks.
-
-### What v1 has
-
-| | Mechanism |
-|---|---|
-| **Cash** | Three hardcoded accounts — `cash__cashier`, `cash__office`, `cash__staff` |
-| **Online** | `online__{paymentAccountId}`, with `owner?: 'cashier' \| 'office' \| null` **on the payment-account config doc** |
-
-### ⚠️ Two problems, and v2 currently inherits the worse one
-
-1. **v2's chart loses the owner split on online entirely.** Cash keeps it — 1110 cashier, 1120
-   staff custodian, 1130 office. But **1140 is a single "E-wallet / online channels" control**,
-   subdivided per provider, with **no owner dimension at all**. So *"how much online money is in
-   the cashier's hands versus the office's"* is currently unanswerable in v2. **Ian's split is only
-   half retained.**
-2. **v1 expresses the same concept two different ways** — owner is baked into the account code for
-   cash, and is a nullable field on a config doc for online. And because it is `owner?: ... | null`,
-   **an account with no owner is representable.**
-
-### Not designed here — flagged, with the shape of the answer
-
-Ian: *"or if industry has a better way of doing it, same to that effect."* **That comparison is a
-research pass, not a guess**, and it is not blocking this task. Two things worth naming now so
-they are not lost:
-
-- Every reference system treats **a real-world funds location as its own GL account** — so
-  "cashier till" and "office cash" being separate accounts is already the industry answer, not a
-  deviation. The fix is likely to *extend* the model to online, not replace it.
-- v1's `isRemittedDaily` flag suggests the till is remitted to the office daily. **The money that
-  has left the till but not yet reached the office is a real state with a standard name**
-  (*cash in transit* / *undeposited funds*). v1 has no account for it. Worth the research pass.
+> `POSTING-PATTERNS.md:184`: **v1's own `sale.builder.ts` posts only the cash and online legs —
+> zero revenue, zero discount, zero comps.** This is the repair, not the port.
 
 ---
 
-### ⛔ Remittance does NOT live on the sales day — do not port v1's fields
+## 7. ⚠️ Research required before building (bible §3.6)
 
-v1 stores `actualRemittanceCash`, `actualRemittanceOnline`, `remittanceRefNo`,
-`remittanceDiscrepancyCash`/`Online` **as fields on the sales day**, plus `partially_remitted` /
-`remitted` statuses. **That makes a remittance unable to span days by construction** — and Ian has
-asked for pooled remittance (3-day, weekly), which T-136 records.
+1. **How the daily till position is modelled** where remittance is pooled — the A/B/C split in §3.
+   POS already keeps `cashHandovers` (expected/counted/variance): **does B belong to POS, to the
+   ERP, or to both?** Getting this wrong duplicates a control or drops one.
+2. **How reference systems handle a till float** (`openingBudget`) — imprest, or a running
+   balance? This overlaps T-136 §5 and should be the same pass.
+3. **Statutory discount reporting in PH** — senior/PWD are broken out for a reason; confirm what
+   the evidence requirement actually is before collapsing or keeping the split.
+4. **Whether `coverageEvents` has a standard name.** *Cash spent directly rather than remitted* is
+   a real pattern; v1 invented a mechanism for it and it works. Find the industry treatment before
+   redesigning it.
 
-**So T-123 must NOT bake those fields onto the day.** The day carries revenue recognition; a
-separate remittance document (T-136) references the days it covers, and **the day's remittance
-status is derived from what covers it.** Porting v1's shape here would block pooling before it
-starts, and unpicking it later means touching every reader.
+## 8. Capabilities
 
-## 5. The channel gap — this is T-123's problem, not POS v2's
+`record_sale` · `submit_sales_day` (incl. staff) · `verify_sales_day` (**not staff**) ·
+`void_sales_day` (**not staff**) · `accept_remittance` (**not staff**, and **DEF-052**: a grant
+that enforced nothing in v1) · `charge_staff_for_discrepancy` (§2.5).
 
-Discovery 22 §3.3: POS stamps `receipt.source = "online"` and **never reads it**. Online-order
-sales fold into the same bucket as in-store à la carte. **A sales-channel dimension does not exist
-as one column anywhere in POS today.**
+> ⭐ **`submit` and `verify` are deliberately different capabilities** — *"the person who submits
+> should not be the one who verifies."* v1's four-role `signoff` block says the business already
+> knows this.
 
-But v1's ERP salesDay **does** carry `salesChannelBreakdown` — the ERP adds the dimension POS
-cannot supply. **So the channel breakdown is the ERP's to own, and it is reconstructed here, not
-read from POS.** Anything that presents it must state its basis, because it is derived from a
-residual (§3).
+## 9. Invariants — restated after §7
 
----
+Carried forward as still-correct: an unverified day has **no journal entry** (proven against the
+ledger, not a reader) · verifying posts, dated on the **business date** · the create-block holds
+**and its three carve-outs are proven** · **admins bypass**, with a test · voiding **reverses** ·
+the T-108 patterns post exactly as pinned · a verified day is **immutable** · every capability has
+a denial test · no posting into a **closed period**.
 
-## 6. Capabilities
-
-Already in the matrix, unchanged: `record_sale` (all four roles) · `submit_sales_day` (incl. staff
-— a cashier closes their own day) · `verify_sales_day` (**not staff**) · `void_sales_day` (**not
-staff**) · `accept_remittance` (**not staff**).
-
-> ⭐ **`submit` and `verify` are deliberately different capabilities.** *"The person who submits
-> should not be the one who verifies."* The matrix already says so; this task is where that
-> segregation first does real work.
-
-⚠️ **DEF-052** — `accept_remittance` in v1 is a grant that enforces nothing. **Every ✅ needs a
-test proving the ✗ fires.**
-
-## 7. Invariants
-
-1. An unverified sales day has **no journal entry**. Proven by asserting the ledger, not a reader.
-2. Verifying posts; the entry dates on the **business date**, not `now()`.
-3. **Creating a new day is blocked while an older one is unverified** — and *editing that draft,
-   backfilling an older date, and starting a shift are NOT blocked.* All four proven.
-4. An **admin bypasses** the create-block. With a test.
-5. Voiding a verified day **reverses** its entry; the original stands (bible §4).
-6. The five T-108 patterns post exactly as pinned, through `postEntry`.
-7. Cash posts to the **owning** account (1110 cashier / 1130 office); online posts to 1140.
-   ⚠️ A day whose split cannot be resolved **blocks** rather than defaulting to cashier —
-   an unmappable funding source is the same defect class as an unmapped expense category (T-122
-   invariant 7).
-8. A verified day is **immutable**; corrections are a void-and-reissue.
-9. Every capability has a denial test.
-10. No sales day posts into a **closed period** (ADR-006).
+⚠️ **Not yet writable:** the balance identities (§6) and anything touching the till position,
+until §7 settles §3.
 
 ## Out of scope
 
-Replacing POS · the remittance/handover workflow itself (`accept_remittance` is only gated here) ·
-the cash-in-transit research (§4) · channel settlement (T-130/131) · VAT computation — **§3's
-discount is management reporting, never a BIR VAT-exemption computation.**
+Replacing POS · the remittance document itself (**T-136**) · channel settlement (T-130/131) ·
+VAT computation — §6's discount is management reporting, **never a BIR VAT-exemption
+computation**.
 
 ## Open
 
-1. **Does the POS pull run on a schedule, or is it a button?** v1 is *"button-only creation"* by
-   deliberate decision — auto-creators were removed. Suggest porting that: a report should exist
-   because a person filed it.
-2. **What happens when POS's figure changes after verification?** A late void in POS moves a day
-   already recognised. Suggest: it does not silently re-post — it becomes an OIL finding (T-135).
-3. **Per-store or per-store-per-shift?** v1 is per store per business date. Suggest keeping that.
+1. **Scheduled pull or a button?** v1 is *"button-only creation"* by deliberate decision — the
+   auto-creators were removed. **Suggest porting that:** a report should exist because a person
+   filed it.
+2. **What if POS's figure changes after verification?** A late void moves recognised revenue.
+   **Suggest an OIL finding (T-135), never a silent re-post.**
+3. **§3's decomposition** — the real one, and it needs Ian.

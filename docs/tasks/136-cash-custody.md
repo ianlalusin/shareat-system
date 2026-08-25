@@ -96,9 +96,18 @@ document that **references** the days it covers:
 
 ## 2. The store revolving fund — a genuine ADD, and the industry answer is settled
 
-**v1 has nothing.** A search for `pettyCash` / `revolving` across `ERP-rebuild/src` returns
-**zero matches.** This is the fourth verb (bible row: duplicate / correct / add / delete), not a
-port.
+⚠️ **CORRECTED 2026-08-25 — I said "v1 has nothing" and that was wrong.** A search for
+`pettyCash` / `revolving` returns zero matches, and I stopped there. Reading `SalesDayPlain`
+properly (T-123 §2.4) shows **the till float is already in v1 and already flows through the
+arithmetic**: `openingBudget` sits in the sales day's `plus` block and is part of the expected-
+remittance computation.
+
+**So the correct statement is narrower and more useful:** v1 has **no petty-cash MODULE** — no
+fund entity, no replenishment cycle, no receipts-gated top-up — but it does have the **daily till
+float**, and any design here must fit what that already does rather than replace it.
+
+*The general lesson, recorded because it has now cost twice: a grep proves a NAME is absent, never
+that a CONCEPT is.*
 
 ### The standard model is an IMPREST fund, and it is self-checking
 
