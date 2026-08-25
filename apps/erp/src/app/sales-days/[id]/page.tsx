@@ -134,9 +134,10 @@ export default async function SalesDayDetailPage({
           {Number(day.otherCharges) > 0 && (
             <Row label="Other charges → 4500" value={formatMoney(money(day.otherCharges))} />
           )}
-          {/* ⛔ A liability, not income — RA 11360 sends 100% of it to employees. */}
+          {/* ⭐ A float — neither revenue nor AP. Fills here, empties through payroll, and never
+              reaches the P&L (bible row 135). */}
           {Number(day.serviceCharge) > 0 && (
-            <Row label="Service charge → 2160 (owed to staff)" value={formatMoney(money(day.serviceCharge))} />
+            <Row label="Service charge → 2160 float (held for staff)" value={formatMoney(money(day.serviceCharge))} />
           )}
         </Panel>
 

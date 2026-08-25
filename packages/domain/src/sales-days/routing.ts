@@ -30,17 +30,47 @@
  * lines and the data can easily be used."* So `totalSales` here is **gross food revenue**, and
  * every adjustment to it is a line somebody can read.
  *
- * ## ⛔ The two kinds of "charge" are OPPOSITE in the books
+ * ## ⭐ The two kinds of "charge", and only ONE of them is yours
  *
- * They look identical on a bill and could not be more different underneath:
- *
- *   - **Service charge → 2160, a LIABILITY.** RA 11360 sends **100%** of it to rank-and-file
- *     employees, at least twice a month. The business keeps nothing, so it collects as an agent.
  *   - **Other charges — leftover, packaging, similar → 4500, INCOME.** The business keeps these.
+ *   - **Service charge → 2160, a FLOAT.** Not revenue, and not accounts payable.
  *
- * ⚠️ **Booking service charge as income would overstate profit AND hide a payable, and it would
- * not self-correct.** The reverse error self-corrects when the money is distributed — an asymmetry
- * that decides the treatment even before an accountant confirms it. *Ian should still confirm it.*
+ * Ian ruled out both alternatives and was right on each. *"Don't push to accounts payable"* — AP
+ * is money owed to SUPPLIERS, with a party, an age and a payment process, and this is none of
+ * those. And *"it will bloat the revenue"* — it would: ₱1M of food plus ₱100k of service charge
+ * would read as ₱1.1M of income, ₱100k of which was never the business's money.
+ *
+ * ⭐ **So it touches neither.** The float fills on collection and empties when payroll distributes
+ * it (RA 11360: 100% to rank-and-file staff, at least twice a month). **No revenue on the way in
+ * and no expense on the way out** — money that was never yours cannot be a cost when you hand it
+ * over. That also removes the timing problem a revenue treatment would have created, where
+ * collection and distribution landing in different months makes a month-end read rich.
+ *
+ * ## "Can it just not touch accounting?" — no, and here is why the float is the closest thing
+ *
+ * **It cannot be kept out entirely: the cash physically enters the drawer.** A customer paying
+ * ₱1,100 on a ₱1,000 bill leaves ₱1,100 in the till, so books recording ₱1,000 never reconcile
+ * against a count. It has to land somewhere; the only question is where. **The float is the
+ * treatment that touches accounting least** — balance sheet only, invisible to the P&L, and it
+ * clears itself.
+ *
+ * ## How the field handles it — and why PH is the exception
+ *
+ * Practice draws the line at **whose money it is**, not at what the line is called on the bill:
+ *
+ *   - **Tips** — voluntary, belong to staff → **a liability clearing account** ("Tips Payable",
+ *     other current liabilities), cleared through payroll. *"Since tips do not belong to the
+ *     restaurant, the deposit should be accounted for as a liability."*
+ *   - **Service charges** — mandatory, and elsewhere they are the RESTAURANT's money to
+ *     distribute or not → **revenue**, with the payout as **wage expense**.
+ *
+ * ⭐ **RA 11360 moves PH service charge across that line.** With 100% distribution mandated, the
+ * restaurant has no discretion and the money is not its own — so it behaves like TIPS do
+ * elsewhere, and takes the tips treatment. **This is not an invention; it is the standard pattern
+ * applied to the case the law actually creates.**
+ *
+ * ⚠️ If Ian's accountant prefers the international service-charge reading, the change is one line:
+ * point this constant at an income account instead. The decision is recorded, not buried.
  *
  * ⚠️ **See DEF-061.** POS's endpoint reads a gross field and *falls back to a net computation
  * when it has not been backfilled*, with nothing to tell the caller which it returned — so a day's
@@ -74,8 +104,9 @@ export const SALES_DAY_ACCOUNTS = {
   /** ⚠️ Comps post HERE, not to 4900 and never to a marketing expense. Ian confirmed directly:
    *  comps are revenue foregone, not a cost incurred (bible row 74). */
   COMPS: '4950',
-  /** ⛔ A LIABILITY, not income — RA 11360 sends 100% of it to employees. See this file's header. */
-  SERVICE_CHARGE_PAYABLE: '2160',
+  /** ⭐ A FLOAT, not revenue and not AP. It fills on collection and empties when payroll
+   *  distributes it, and touches the P&L at neither end (bible row 135). */
+  SERVICE_CHARGE_FLOAT: '2160',
   /** Leftover, packaging and similar. The business KEEPS these, so unlike service charge they
    *  really are income (Ian: "all in one account, separated from service charge"). */
   OTHER_CHARGES: '4500',
@@ -98,7 +129,7 @@ export interface RouteSalesDayInput {
   pwdDiscount: Money;
   otherDiscount: Money;
   comps: Money;
-  /** ⛔ Collected on behalf of employees — a liability, never income (RA 11360). */
+  /** ⭐ Held, not earned. Neither revenue nor AP — see this file's header (bible row 135). */
   serviceCharge: Money;
   /** Leftover, packaging and similar. The business keeps these: income. */
   otherCharges: Money;
@@ -263,10 +294,10 @@ export function routeSalesDay(input: RouteSalesDayInput): RouteSalesDayResult {
   }
   if (!isZero(input.serviceCharge)) {
     lines.push({
-      accountCode: SALES_DAY_ACCOUNTS.SERVICE_CHARGE_PAYABLE,
+      accountCode: SALES_DAY_ACCOUNTS.SERVICE_CHARGE_FLOAT,
       side: 'credit',
       amount: input.serviceCharge,
-      lineMemo: 'service charge — owed in full to employees (RA 11360)',
+      lineMemo: 'service charge float — held for staff, distributed via payroll (RA 11360)',
     });
   }
 

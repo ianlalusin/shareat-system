@@ -408,9 +408,9 @@ describe('⛔ charges — two kinds that look alike and are opposite in the book
     const p = posted(r);
     expect(p['CR 2160']).toBe('100.00');
     expect(p['CR 4500']).toBe('50.00');
-    expect(SALES_DAY_ACCOUNTS.SERVICE_CHARGE_PAYABLE).not.toBe(SALES_DAY_ACCOUNTS.OTHER_CHARGES);
+    expect(SALES_DAY_ACCOUNTS.SERVICE_CHARGE_FLOAT).not.toBe(SALES_DAY_ACCOUNTS.OTHER_CHARGES);
     // And one is a liability while the other is income — the whole point.
-    expect(SALES_DAY_ACCOUNTS.SERVICE_CHARGE_PAYABLE.startsWith('2')).toBe(true);
+    expect(SALES_DAY_ACCOUNTS.SERVICE_CHARGE_FLOAT.startsWith('2')).toBe(true);
     expect(SALES_DAY_ACCOUNTS.OTHER_CHARGES.startsWith('4')).toBe(true);
   });
 

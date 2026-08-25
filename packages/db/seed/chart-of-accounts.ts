@@ -171,14 +171,22 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
     legacyCode: 'others__store_credits',
   }),
   leaf('2145', 'Unredeemed vouchers', 'liability', 'credit', '2000', { status: 'reserved' }),
-  // 🆕 2026-08-25 (T-123, bible row 134). ⭐ A LIABILITY, deliberately — not revenue.
-  // RA 11360 requires 100% of service charges collected by restaurants to be distributed to
-  // rank-and-file employees, at least twice a month. The establishment retains NOTHING, so it
-  // collects as an agent: the money is owed out from the moment it is taken.
-  // ⚠️ Booking it as income would overstate profit AND hide a payable, and it would not
-  // self-correct. The reverse error does self-correct on distribution — which is why the
-  // asymmetry decides this even before an accountant confirms it.
-  leaf('2160', 'Service charge payable to employees', 'liability', 'credit', '2000'),
+  // 🆕 2026-08-25 (T-123, bible row 135). ⭐ A FLOAT, and the word matters.
+  //
+  // Ian ruled out both alternatives, each for the right reason: *"don't push to accounts
+  // payable"* — AP is money owed to SUPPLIERS, with a party, an age and a payment process, and
+  // this is none of those — and then *"it will bloat the revenue"*, which it would: a month with
+  // ₱1M of food and ₱100k of service charge would read ₱1.1M of income, ₱100k of which was never
+  // the business's money.
+  //
+  // ⭐ **So it touches neither.** It fills as service charge is collected and empties as payroll
+  // distributes it (RA 11360: 100% to rank-and-file staff, at least twice a month). It never
+  // appears in the P&L — **no revenue on the way in, and no expense on the way out**, because
+  // money that was never yours cannot be a cost when you hand it over.
+  //
+  // The distribution is therefore a DEBIT here, not a salary expense. What the business spends on
+  // its own staff stays in 6100; what it merely passes through sits here until it is passed.
+  leaf('2160', 'Service charge float — held for staff', 'liability', 'credit', '2000'),
   leaf('2150', 'Due to related store', 'liability', 'credit', '2000', { requiresParty: true }), // liability__due_to_{storeKey}, ap__{commissaryMirror} — T-118 party_type=store
   leaf('2210', 'SSS payable', 'liability', 'credit', '2000'), // 🆕
   leaf('2220', 'PhilHealth payable', 'liability', 'credit', '2000'), // 🆕

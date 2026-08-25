@@ -137,14 +137,14 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
         <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="font-medium">Charges</h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            ⛔ <strong>These two are opposite in the books.</strong> A{' '}
-            <strong>service charge</strong> is <em>not</em> income — RA 11360 sends 100% of it to
-            employees, so it is a <strong>liability (2160)</strong> from the moment it is collected.
-            Leftover, packaging and other charges <strong>are</strong> income (4500), because the
-            business keeps them.
+            ⭐ <strong>Only one of these is yours.</strong> Leftover, packaging and other charges{' '}
+            <strong>are income (4500)</strong> — you keep them. A <strong>service charge</strong> is
+            neither income nor a payable: RA 11360 sends 100% of it to staff, so it sits in a{' '}
+            <strong>float (2160)</strong> that fills here and empties through payroll.{' '}
+            <strong>It never reaches the P&amp;L</strong>, so it cannot bloat revenue.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Money name="serviceCharge" label="Service charge (→ 2160, owed to staff)" />
+            <Money name="serviceCharge" label="Service charge (→ 2160 float, held for staff)" />
             <Money name="otherCharges" label="Other charges — leftover, packaging (→ 4500)" />
           </div>
         </section>
