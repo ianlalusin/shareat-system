@@ -53,7 +53,7 @@ A task-to-document router. **Most work needs two or three of these, not the whol
 | **Posting anything to the ledger** | `docs/POSTING-PATTERNS.md` — 41 verified examples. **Look it up; do not decide** |
 | **Adding a table** | The build will stop you until you classify it in `packages/db/src/cutover/classification.ts` AND `packages/db/src/rls/registry.ts`. That is the guard working |
 | **Adding a capability or a permission** | `docs/decisions/CAPABILITY-MATRIX.md` — and every ✅ needs a test proving the ✗ fires |
-| **Asking “why is it like this?”** | `PROJECT_BIBLE.md` **§13**, the decision log — 126 rows, newest last. Then `docs/decisions/` for the ADRs |
+| **Asking “why is it like this?”** | `PROJECT_BIBLE.md` **§13**, the decision log — 127 rows, newest last. Then `docs/decisions/` for the ADRs |
 | **Asking “what does v1 do?”** | `docs/discovery/` — 22 read-only findings. **Read v1 as REQUIREMENTS, never as design** |
 | **Asking “what is already broken?”** | `docs/DEFECTS-REGISTER.md` — 56 entries |
 | **Picking up a task** | `docs/tasks/NNN-*.md`, and `docs/plans/phase-2-source-documents.md` for the sequence |

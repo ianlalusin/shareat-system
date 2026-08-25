@@ -63,35 +63,35 @@
 - `1034–1068 ` 10. Phase plan
 - `1069–1085 ` 11. Migration & ETL rules
 - `1086–1134` 12. Inherited landmines — do not repeat these
-- `1135–1267` 13. Decision log
-- `1268–1287` 14. Amendment protocol
-- `1288–1292` 15. Engineering standards — the industry practices this project follows
-  - `1293–1298` 15.1 Build order: walking skeleton first
-  - `1299–1310` 15.2 Golden-master testing — the most important practice here
-  - `1311–1319` 15.3 Strangler Fig, not big-bang cutover
-  - `1320–1324` 15.4 No dual-write
-  - `1325–1329` 15.5 Expand/contract migrations
-  - `1330–1338` 15.6 Observability from day zero, not later
-  - `1339–1343` 15.7 CI gates
-  - `1344–1348` 15.8 Backups and a tested restore
-  - `1349–1353` 15.9 Twelve-Factor config
-  - `1354–1361` 15.10 Append-only ledgers — but not event sourcing
-  - `1362–1366` 15.11 Defence in depth
-  - `1367–1395` 15.12 Skills are lenses, not assurance
-  - `1396–1402` 15.13 Reconciliation is a permanent feature
-- `1403–1407` 16. The accounting spine
-  - `1408–1439` 16.0 What we are actually fixing — the diagnosis
-  - `1440–1483` 16.1 The ten invariants — non-negotiable
-  - `1484–1498` 16.2 The oracle: how "correct" is tested
-  - `1499–1520` 16.3 The model — header + lines, not legs
-  - `1521–1540` 16.4 Deliberately simpler than ERPNext
-  - `1541–1607` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1608–1632` 16.6 What v1 already gets right — preserve the intent
-  - `1633–1654` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1655–1669` 16.8 What v1's accounting already gets right
-  - `1670–1713` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1714–1764` 16.10 Posting patterns — one canonical pattern per business event
-  - `1765–1782` 16.11 Inventory's accounting integration
+- `1135–1268` 13. Decision log
+- `1269–1288` 14. Amendment protocol
+- `1289–1293` 15. Engineering standards — the industry practices this project follows
+  - `1294–1299` 15.1 Build order: walking skeleton first
+  - `1300–1311` 15.2 Golden-master testing — the most important practice here
+  - `1312–1320` 15.3 Strangler Fig, not big-bang cutover
+  - `1321–1325` 15.4 No dual-write
+  - `1326–1330` 15.5 Expand/contract migrations
+  - `1331–1339` 15.6 Observability from day zero, not later
+  - `1340–1344` 15.7 CI gates
+  - `1345–1349` 15.8 Backups and a tested restore
+  - `1350–1354` 15.9 Twelve-Factor config
+  - `1355–1362` 15.10 Append-only ledgers — but not event sourcing
+  - `1363–1367` 15.11 Defence in depth
+  - `1368–1396` 15.12 Skills are lenses, not assurance
+  - `1397–1403` 15.13 Reconciliation is a permanent feature
+- `1404–1408` 16. The accounting spine
+  - `1409–1440` 16.0 What we are actually fixing — the diagnosis
+  - `1441–1484` 16.1 The ten invariants — non-negotiable
+  - `1485–1499` 16.2 The oracle: how "correct" is tested
+  - `1500–1521` 16.3 The model — header + lines, not legs
+  - `1522–1541` 16.4 Deliberately simpler than ERPNext
+  - `1542–1608` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1609–1633` 16.6 What v1 already gets right — preserve the intent
+  - `1634–1655` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1656–1670` 16.8 What v1's accounting already gets right
+  - `1671–1714` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1715–1765` 16.10 Posting patterns — one canonical pattern per business event
+  - `1766–1783` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1262,6 +1262,7 @@ just a patch.**
 | 124 | 2026-08-25 | **The 31 December cutover is a CONVERSION, not an onboarding wizard — and research corrected three of my own draft's decisions: ordering narrows to FOUR named gates, the `REHEARSAL` flag is dropped, and the opening entry is a mutable DRAFT until posting locks it** (T-134, discovery 21) | I designed T-134 before researching it, which is backwards, and Ian said so: *“as always research before design.”* The pass found the draft's substance already right and its **vocabulary** wrong — “wizard/progress bar” pulled toward SaaS onboarding, where the real prior art is Xero's and Odoo's **conversion**: ~15 hardcoded steps, one correctness gate. **Correction 1 — “not startable until prerequisites verify” was too strong.** No reference system hard-blocks checklist steps on each other; hard gates live in close/reopen chains. Narrowed to A1→B1 (ADR-009's inversion), C2→C3, C3→C4, C4→C5 — everything else free-orderable. **Correction 2 — no rehearsal flag.** No system ships a rehearsal mode inside the live product; every one uses an isolated copy, which ADR-007 already provides, and ADR-007 §1 already rejected per-row markers for this exact reason: **a flag is a marker a code path can forget to set.** **Correction 3 — C3 is a draft until C5 posts it.** Xero and Odoo both treat the opening entry as editable until an explicit lock; forcing a formal reversal to fix a typo in a never-final document is ceremony, not control. ⚠️ **Also added: an opening-count variance posts against 3900, NEVER 5400** — v2 has no December P&L, so charging it to inventory adjustment would report December's shrinkage as January's result; it stays visible as a named line and an OIL finding. **And the verified list is capped at six**: ERPNext verifies 1 of 6 step types, Odoo 2 of 8 — a check that is really a tick is worse than an honest tick. **The one thing we keep diverging on is the 3900 halt.** Xero, Odoo and GnuCash all auto-plug an imbalance to suspense, so the majority behaviour is against us — **and the reason is scale, not diligence**: they serve millions of self-serve tenants who cannot get a human's attention per mismatch. One company, one cutover, Ian available. We halt | Yes |
 | 125 | 2026-08-25 | **A DRAFT expense is DELETED, and deleting it is governed by the EDIT capabilities — no new capability. And the 3900 halt stands, but the opening entry shows a RUNNING residual while you type** (T-122 invariant 17, T-134) | Ian: *“delete for simplicity.”* Correct, and it closes a real hole — `voidExpense` refuses a draft (*“nothing has been posted yet to void”*) and nothing discarded one, so **a mistaken draft had no ending at all.** The justification is narrow and worth stating so it is never widened: **a draft is not a financial record** — no entry, no balance touched, nobody asserted it. Everything posted is still reversed, never removed. ⭐ **The capability choice is the interesting half:** deleting a draft is the LAST EDIT you can make to it, so it reuses `edit_own_expense` / `edit_any_expense` rather than minting a `delete_expense`. **There is no coherent answer under which a person may rewrite every field of a draft but not remove it** (row 120), and reusing the pair means **the 48-hour window cannot drift, because there is only one window.** A cashier undoes their own mistake without finding a manager — friction on a self-correction is exactly what produces the abandoned drafts. On the halt: Ian asked whether to mirror the field, where Xero, Odoo and GnuCash all auto-plug an imbalance to suspense. **Keep the halt — but the plug account buys those vendors TWO things and only one is bad.** It makes the residual *visible* (good) and it makes the residual *postable* (bad). So C3 shows a running difference while figures are entered, which is the early warning without the escape hatch: **an imbalance found on the tenth supplier is a typo; the same one found after the last is an investigation.** And because C3 is a draft (row 124), halting costs nothing — an unbalanced entry is just one that cannot post yet | Yes |
 | 126 | 2026-08-25 | **An UNVERIFIED sales day records no revenue. A new sales report cannot be created while an older one is still unverified. And the entry dates on the SALES DAY, never the posting date** (T-123) | Ian, answering the three-part question. **Verification is what posts** — a sales figure nobody checked is exactly what verification exists to catch, so an unverified day is a document, not an entry. ⭐ **The second half is his, and it is better than what I proposed.** I suggested only dating on the business date, which fixes the period but lets an unverified day sit for weeks. **Blocking a new report while an older one is unverified bounds the lag structurally** — the pile cannot grow past one, so revenue is *hours* late rather than days, and the person who must act finds out immediately because they cannot do their next job until they do. **A forcing function beats a reminder**, and it is the same shape as row 122's unpostable-drafts pile: make the consequence immediate and visible to the person who can clear it. Dating on the sales day then puts a 31 December sale recorded on 2 January into December, where it happened — without which the block would merely relocate the error. **Together the two rules make the close honest:** the period cannot silently accumulate unrecognised revenue, and nothing lands in the wrong month | Yes |
+| 127 | 2026-08-25 | **Ian's cash-account OWNER split (cashier / office, each holding cash AND online) is retained — and v2 currently loses half of it: online has NO owner dimension at all** | Ian: *“the accounts have 2 owners, cashier and office, and cashier has cash and online accounts… this will clearly show money movement.”* The model is right and answers the question a till reconciliation actually asks — **whose hands is this money in.** ⚠️ **The gap, found checking rather than assuming:** v2's chart keeps the split for cash (1110 cashier, 1120 staff custodian, 1130 office) but **1140 “E-wallet / online channels” is ONE control subdivided by PROVIDER, with no owner** — so *“how much online money is in the cashier's hands versus the office's”* is unanswerable in v2 today. v1 does carry it, as `owner?: 'cashier' \| 'office' \| null` on the payment-account config doc. **Two mechanisms for one concept** — baked into the account code for cash, a nullable config field for online — and being nullable, **an account with no owner is representable.** Ian asked whether industry does it better; **that is a research pass, not a guess**, and it is not blocking T-123. Two things recorded so they are not lost: every reference system treats **a real-world funds location as its own GL account**, so separate cashier/office accounts is already the industry answer and the fix is likely to EXTEND the model to online rather than replace it; and v1's `isRemittedDaily` implies a daily till→office remittance, where **money that has left the till but not reached the office is a real state with a standard name** (cash in transit / undeposited funds) that v1 has no account for | Yes — needs the research pass before Phase 3 |
 
 ---
 
