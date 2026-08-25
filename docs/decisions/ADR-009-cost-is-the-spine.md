@@ -220,3 +220,37 @@ internal migration (`items` replacing the `meatProducts`/`inventoryProducts` spl
 > started doing that itself.** This project should **port more and invent less** than assumed — and
 > the `commissaryItemMap` case is the warning: it *looked* like duplication and is a genuinely
 > separate concern. A shallower read would have deleted a table that is not redundant.
+
+---
+
+## Verified 2026-08-25 — the delivery already carries the cost
+
+Ian asked whether the simplified design still gives an improved equivalent of what v1 does today.
+**It does, and the measurement shows the simplification asks for LESS data entry, not more:**
+
+| | |
+|---|---|
+| Delivery/expense pairs compared | **301** |
+| `delivery.totalAmount` **matches** the sum of its linked expenses exactly | **255 — 85%** |
+| Differ | 46 (partial expensing, or later correction) |
+
+**The expense document was recording a fact the delivery already had.** So booking AP from the
+delivery is not new data capture — it is removing a duplicate.
+
+### What v2 keeps, and what it adds
+
+| | v1 today | v2 |
+|---|---|---|
+| Delivery records items and quantities | ✅ | ✅ |
+| Cost captured at receipt | ✅ (`totalAmount`) | ✅ — and it POSTS |
+| **Inventory as a real asset** | ❌ none | ✅ 1310–1340 |
+| **COGS timed to consumption** | ❌ purchase-basis | ✅ FIFO layers, consumed |
+| **Count variance hits the P&L** | ❌ *"no direct GL effect"* | ✅ 5400 |
+| Wastage posts | partial | ✅ 5300 |
+| Void is atomic | ❌ accepted risk OC-14 | ✅ one transaction |
+| Linking step, `isExpensed` flags, the lag | required | **gone** |
+
+**Strictly more capability, less work.** The correction that matters most is COGS timing: on a
+purchase basis, gross margin moves with when you happened to buy rather than what you sold, which
+is why v1's margin is distorted by bulk buys. That is the number this whole design exists to make
+true.
