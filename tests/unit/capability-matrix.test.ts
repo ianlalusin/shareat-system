@@ -48,7 +48,8 @@ interface DocRow {
  * reformatted for the parser's convenience — the document is the decision; this adapts to
  * it, not the other way round.
  */
-function parseCapabilityMatrixDoc(): DocRow[] {
+function parseCapabilityMatrixDoc(): { rows: DocRow[]; unparsed: string[] } {
+  const unparsed: string[] = [];
   const raw = readFileSync(DOC_PATH, 'utf8');
   // Strip markdown bold globally first — it only ever wraps a single cell's content in
   // this document (a scope like **org**, or **conditional**), never spans a cell
@@ -79,20 +80,30 @@ function parseCapabilityMatrixDoc(): DocRow[] {
     }
 
     let conditionalManager = false;
+    let rowUnparsed = false;
     const toBool = (cell: string, roleLabel: string): boolean => {
       if (cell === '✅') return true;
       if (cell === '✗') return false;
       if (cell === 'conditional') {
         conditionalManager = true;
         // The document's own baseline: a manager CAN close (bible row 101), subject to
-        // the extra store-scope condition CAPABILITY-MATRIX.md §Open 2 describes — see
+        // the extra store-scope condition described in the notes column — see
         // packages/auth/src/capabilities.ts's CONDITIONAL_CAPABILITIES comment.
         return true;
       }
-      throw new Error(`capability-matrix.test.ts parser: unrecognised ${roleLabel} cell '${cell}' for '${capMatch[1]}'`);
+      // DEF-056: this used to THROW, and a throw here aborts the whole file before any
+      // assertion runs — so one prose cell ("✅ only with ORG-WIDE store scope") silently
+      // disabled every check in the suite whose entire job is catching document-vs-code
+      // drift, and a real drift went unnoticed underneath it. Record and continue: the
+      // offending row is reported as a named assertion failure below, and because the row
+      // is DROPPED, the "exactly 38 rows" check fails too. **Two loud signals instead of
+      // one silent one.**
+      unparsed.push(`${capMatch[1]} — ${roleLabel} cell '${cell}' is not ✅, ✗ or conditional`);
+      rowUnparsed = true;
+      return false;
     };
 
-    rows.push({
+    const parsed: DocRow = {
       capability: capMatch[1]!,
       scope,
       cells: [
@@ -102,16 +113,36 @@ function parseCapabilityMatrixDoc(): DocRow[] {
         toBool(roleCells[3]!, 'staff'),
       ],
       conditionalManager,
-    });
+    };
+    // A row whose cells could not be read is NOT pushed — a guessed boolean would be worse
+    // than a missing row, because the comparison tests would then "pass" against a value
+    // nobody wrote.
+    if (!rowUnparsed) rows.push(parsed);
   }
-  return rows;
+  return { rows, unparsed };
 }
 
 describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
+  it('every role cell is a closed enum — ✅, ✗ or conditional, never prose (DEF-056)', () => {
+    // The role columns are MACHINE-READABLE. A cell like "✅ only with org-wide scope" reads
+    // fine to a human and is unreadable here — and when this parser threw on one, the throw
+    // took the whole file down and hid a genuine document-vs-code drift underneath it.
+    // Conditions belong in the NOTES column; the cell stays an enum.
+    const { unparsed } = parseCapabilityMatrixDoc();
+    expect(
+      unparsed,
+      unparsed.length === 0
+        ? ''
+        : `Unreadable role cells in CAPABILITY-MATRIX.md:\n  ${unparsed.join('\n  ')}\n\n` +
+            'Role cells must be exactly ✅, ✗ or conditional. Put the condition in the notes ' +
+            'column instead — see packages/auth/src/capabilities.ts CONDITIONAL_CAPABILITIES.',
+    ).toEqual([]);
+  });
+
   it('finds capability rows at all', () => {
     // Sanity floor — an enumeration that silently found nothing would make every
     // assertion below pass vacuously, which invariant 3 exists specifically to prevent.
-    const rows = parseCapabilityMatrixDoc();
+    const { rows } = parseCapabilityMatrixDoc();
     expect(rows.length).toBeGreaterThan(5);
   });
 
@@ -123,19 +154,19 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // reported as a spec defect in the task report, not silently corrected in prose —
     // this test pins the ACTUAL count so a future edit to the document that changes it
     // is caught rather than re-drifting unnoticed.
-    const rows = parseCapabilityMatrixDoc();
+    const { rows } = parseCapabilityMatrixDoc();
     expect(rows.length).toBe(38);
   });
 
   it('has no duplicate capability names', () => {
-    const rows = parseCapabilityMatrixDoc();
+    const { rows } = parseCapabilityMatrixDoc();
     const names = rows.map((r) => r.capability);
     expect(new Set(names).size).toBe(names.length);
   });
 });
 
 describe('invariant 3 — the typed matrix matches CAPABILITY-MATRIX.md exactly, parsed not hand-compared', () => {
-  const rows = parseCapabilityMatrixDoc();
+  const { rows } = parseCapabilityMatrixDoc();
   const byName = new Map(rows.map((r) => [r.capability, r]));
 
   it('every row in the document exists in the typed Capability union', () => {
@@ -234,9 +265,11 @@ describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', (
     // manage_users is called out by name in §B.1 as one of the capabilities the fallback
     // must cover — pinned here so a matrix edit that accidentally drops it is caught.
     expect(ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER).toContain('manage_users' satisfies Capability);
+    // `set_credit_limit` LEFT this set on 2026-08-25 (bible row 121) and that is correct,
+    // not a regression: the fallback exists to lend a manager what only an admin holds, and
+    // a manager now holds credit limits in the baseline. Nothing to lend.
     expect([...ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER].sort()).toEqual(
       [
-        'set_credit_limit',
         'view_trial_balance',
         'manage_users',
         'grant_capability',

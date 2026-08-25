@@ -28,13 +28,20 @@
  * inferred from the matrix shape. See `authorize.ts`'s own comment at the `close_period`
  * branch.
  *
- * ## Two cells still open (CAPABILITY-MATRIX.md §Open)
+ * ## Every cell is now decided (2026-08-25)
  *
- * `set_credit_limit` (admin only, not manager) and `close_period` (see above) both carry
- * `// OPEN — Ian to confirm` at their row below, per Contract §3's instruction to take the
- * document's recommendation and mark it. Nothing about their DECIDEDNESS is soft — they
- * behave exactly as written until Ian says otherwise; the comment is a flag for the next
- * reader, not a hedge in the logic.
+ * The last two open cells closed together: `set_credit_limit` goes to manager as well as
+ * admin (bible row 121), and `close_period` is grantable to a manager but subject to
+ * store scope, so it needs org-wide scope (bible row 123). Their rows below now read
+ * `DECIDED` rather than `OPEN`.
+ *
+ * ⚠️ **`set_credit_limit` sat at `manager: false` in this file for a day after the document
+ * said ✅**, and the matrix test that exists to catch exactly that drift did not fire —
+ * because an unrelated parse error in the same test file aborted the whole suite before any
+ * assertion ran. **A guard that throws while parsing stops guarding.** That is why the
+ * document's role cells must stay a closed enum (`✅` / `✗` / `conditional`) and carry their
+ * prose in the notes column: an explanatory cell like "✅ only with org-wide scope" reads
+ * fine to a human and is a parser crash — and the crash hides every other check.
  */
 
 // -----------------------------------------------------------------------------------------
@@ -225,10 +232,11 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
 
   approve_supplier: { super_admin: true, admin: true, manager: true, staff: false },
   approve_buyer: { super_admin: true, admin: true, manager: true, staff: false },
-  // OPEN — Ian to confirm (CAPABILITY-MATRIX.md §Open 1). Split from approve_buyer
-  // deliberately: approving a buyer is operational; setting how much of the org's money
-  // they may owe is a credit decision. Admin only until Ian says manager should hold it.
-  set_credit_limit: { super_admin: true, admin: true, manager: false, staff: false },
+  // DECIDED — Ian 2026-08-25 (bible row 121): manager too. A manager already approves the
+  // buyer, and a FRANCHISE manager setting their own buyers' limits is risking their own
+  // money. Still split from approve_buyer deliberately: approving someone and deciding how
+  // much of your money they may owe are two decisions, not one.
+  set_credit_limit: { super_admin: true, admin: true, manager: true, staff: false },
   override_credit_limit: { super_admin: true, admin: true, manager: true, staff: false },
   record_ap_payment: { super_admin: true, admin: true, manager: true, staff: false },
   record_ar_collection: { super_admin: true, admin: true, manager: true, staff: false },
@@ -239,9 +247,10 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   view_financial_reports: { super_admin: true, admin: true, manager: true, staff: false },
   view_trial_balance: { super_admin: true, admin: true, manager: false, staff: false },
   reverse_entry: { super_admin: true, admin: true, manager: true, staff: false },
-  // OPEN — Ian to confirm (§Open 2). `true` here is the BASELINE decision (bible row 101:
-  // "admin and manager may close"); authorize.ts adds the org-wide-store-scope condition
-  // that resolves the conflict with row 114's store scoping. See this file's top comment.
+  // DECIDED — Ian 2026-08-25 (bible row 123): grantable, but subject to store scope. `true`
+  // here is the BASELINE decision (bible row 101: "admin and manager may close");
+  // authorize.ts adds the org-wide-store-scope condition that resolves the conflict with
+  // row 114's store scoping. See this file's top comment.
   close_period: { super_admin: true, admin: true, manager: true, staff: false },
   // "Nobody posts by hand" — reserved for break-glass repair, logged. Admin does NOT hold
   // it: entries come from source documents, never a form, not even an admin's.
