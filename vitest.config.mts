@@ -15,6 +15,7 @@ const alias = {
   '@shareat/db/client': `${root}packages/db/src/client.ts`,
   '@shareat/db': `${root}packages/db/src/index.ts`,
   '@shareat/domain': `${root}packages/domain/src/index.ts`,
+  '@shareat/auth': `${root}packages/auth/src/index.ts`,
   '@shareat/etl/run': `${root}packages/etl/src/run.ts`,
   '@shareat/etl/capture': `${root}packages/etl/src/capture.ts`,
   '@shareat/etl/source-reader': `${root}packages/etl/src/source-reader.ts`,

@@ -46,6 +46,12 @@
       "@shareat/domain/*": [
         "./packages/domain/src/*"
       ],
+      "@shareat/auth": [
+        "./packages/auth/src/index.ts"
+      ],
+      "@shareat/auth/*": [
+        "./packages/auth/src/*"
+      ],
       "@shareat/etl": [
         "./packages/etl/src/index.ts"
       ],

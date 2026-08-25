@@ -16,3 +16,4 @@ export type { Tx, Executor, Database } from './client';
 export * as journalRepo from './repo/journal';
 export * as etlRepo from './repo/etl';
 export * as reportsRepo from './repo/reports';
+export * as accessRepo from './repo/access';
