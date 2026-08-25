@@ -60,12 +60,19 @@ document that keeps running daily.*
 ### ⭐ And it requires exactly the account row 127 said was missing
 
 Cash that has been **counted and accepted but not yet physically moved** is a real state with a
-standard name — **cash in transit / undeposited funds**. v1 has no account for it.
+standard name — **undeposited funds**. v1 has no account for it.
+
+⚠️ **CORRECTED 2026-08-25 (discovery 24 §1): I originally wrote "cash in transit / undeposited
+funds" as if interchangeable. They are not.** *Undeposited funds* is our books versus the money's
+physical location; *deposit in transit* is our books versus **the bank's** books — a bank-
+reconciliation timing item with nothing to do with a till. **Undeposited funds is the right one**,
+and vendors describe batched deposits ("only going to the bank once or twice a week") as its
+ordinary case — which is exactly Ian's request.
 
 ```
 1110 Cash on hand — cashier      (the live till)
   ↓  daily count + handover, variance recorded here
-[NEW] Cash held for remittance   (counted, accepted, not yet moved)
+[NEW] Undeposited funds          (counted, accepted, not yet moved)
   ↓  the pooled remittance — one movement covering N days
 1130 Cash on hand — office       (arrived)
 ```

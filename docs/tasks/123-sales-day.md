@@ -188,11 +188,18 @@ paper and entered late — but the shift-close flow must say so rather than simp
 
 2. **How reference systems handle a till float** (`openingBudget`) — imprest, or a running
    balance? This overlaps T-136 §5 and should be the same pass.
-3. **Statutory discount reporting in PH** — senior/PWD are broken out for a reason; confirm what
-   the evidence requirement actually is before collapsing or keeping the split.
-4. **Whether `coverageEvents` has a standard name.** *Cash spent directly rather than remitted* is
-   a real pattern; v1 invented a mechanism for it and it works. Find the industry treatment before
-   redesigning it.
+3. ✅ **ANSWERED (discovery 24 §4) — and it is bigger than a reporting split.** The senior/PWD
+   breakout is statutory, so **it stays**. But ⛔ **a separate PWD discount LOGBOOK is mandatory
+   under RR 5-2017** — ID number, name, date, original amount, discounted amount, signatory — and
+   that is **per transaction**. A daily total cannot satisfy it, and **only POS holds
+   transaction-level detail.** Neither side captures it today. ⚠️ Also unresolved: BIR guidance
+   points at an *"Expenses – PWD Discounts"* account while we post to **4900 contra-revenue** — a
+   real tax-versus-financial-reporting tension, **not to be settled from a blog post.**
+4. ✅ **ANSWERED (discovery 24 §3) — `coverageEvents` has NO standard name**, because reference
+   systems forbid the practice that creates it: ERPNext's till cannot pay expenses, so its expected
+   cash is just *opening + takings*. **v1 invented the concept because this business needs it, and
+   v1's `less`/`plus` is genuinely ahead of the reference system here. Port it as-is** — do not
+   "simplify" toward ERPNext, which would delete the arithmetic that makes expected cash correct.
 
 ## 8. Capabilities
 
