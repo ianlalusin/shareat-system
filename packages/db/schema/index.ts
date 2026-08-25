@@ -10,7 +10,8 @@
  * views.ts's own top comment for why). T-121 adds person_roles / person_store_scope /
  * person_grants — the three access axes (docs/tasks/121-roles-and-access.md). T-122 adds
  * expenses / expense_payments / expense_categories — non-inventory spend
- * (docs/tasks/122-expenses.md).
+ * (docs/tasks/122-expenses.md). T-123 adds sales_days / sales_day_channels / sales_channels —
+ * the ERP's record of a day's selling, per store (docs/tasks/123-sales-day.md).
  */
 
 export * from './organizations';
@@ -24,3 +25,4 @@ export * from './etl';
 export * from './views';
 export * from './access';
 export * from './expenses';
+export * from './sales-days';

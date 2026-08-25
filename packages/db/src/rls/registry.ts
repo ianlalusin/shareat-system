@@ -116,6 +116,31 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'to, so a copied column can never drift from its parent.',
   },
 
+  // T-123 — sales day: the ERP's record of a day's selling (docs/tasks/123-sales-day.md).
+  sales_channels: {
+    scope: 'org_column',
+    reason:
+      'Per-store channel configuration. Org-scoped for the same reason as accounts: a franchise ' +
+      'owner configures their own channels and must never see, let alone edit, those of another org.',
+  },
+  sales_days: {
+    scope: 'org_column',
+    reason:
+      'A source document that posts into the ledger — org-scoped exactly like journal_entries ' +
+      'and expenses. Daily takings are among the most sensitive figures a franchise has, and ' +
+      'ADR-008 §5 limits the franchisor to sales-only visibility through a separate, explicit ' +
+      'grant — never through this table being readable.',
+  },
+  sales_day_channels: {
+    scope: 'derived',
+    via: 'exists (select 1 from sales_days sd where sd.id = sales_day_channels.sales_day_id and sd.org_id = app_current_org())',
+    reason:
+      'No org_id of its own — reachable only through the sales day it belongs to, the same ' +
+      'pattern as expense_payments through expenses and journal_lines through journal_entries. ' +
+      'One source of truth for which org a channel row belongs to, so a copied column cannot ' +
+      'drift from its parent.',
+  },
+
   etl_runs: { scope: 'system_only', reason: 'ETL machinery. Never reachable by a tenant or a customer — only the migrator, crons and the audit.' },
   etl_source_documents: {
     scope: 'system_only',

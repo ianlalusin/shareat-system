@@ -148,6 +148,27 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     reason: 'As expenses — its child rows. Purged first — children before parents (see PURGE_ORDER_HINT).',
   },
 
+  // ---- T-123: sales day -----------------------------------------------------------------
+  sales_channels: {
+    class: 'keep',
+    reason:
+      'Per-store configuration — the channel list and, critically, the per-channel ' +
+      '`is_remitted_daily` flag (v1 Store.salesChannels[]). Same class as expense_categories: ' +
+      're-seeding at cutover would change ids that pilot sales days reference, and the ' +
+      'remittable flag is a business decision about each channel, not pilot data.',
+  },
+  sales_days: {
+    class: 'purge',
+    reason:
+      'Operational revenue recognition — the same class as journal_entries and expenses. ' +
+      'Replaced wholesale by the 2027-01-01 opening entry (row 106); no pilot sales day ' +
+      'survives, and one that did would double-count January revenue.',
+  },
+  sales_day_channels: {
+    class: 'purge',
+    reason: 'As sales_days — its child rows. Purged first: children before parents (PURGE_ORDER_HINT).',
+  },
+
   // ---- ETL: purged, but LATER ---------------------------------------------------------
   etl_source_documents: {
     class: 'purge',
@@ -183,6 +204,8 @@ export function tablesInClass(cls: CutoverClass): string[] {
  * when the graph is unavailable, and it is deliberately explicit rather than clever.
  */
 export const PURGE_ORDER_HINT: readonly string[] = [
+  'sales_day_channels',
+  'sales_days',
   'expense_payments',
   'expenses',
   'journal_lines',
