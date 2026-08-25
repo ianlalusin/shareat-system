@@ -55,7 +55,7 @@ A task-to-document router. **Most work needs two or three of these, not the whol
 | **Adding a capability or a permission** | `docs/decisions/CAPABILITY-MATRIX.md` — and every ✅ needs a test proving the ✗ fires |
 | **Asking “why is it like this?”** | `PROJECT_BIBLE.md` **§13**, the decision log — 129 rows, newest last. Then `docs/decisions/` for the ADRs |
 | **Asking “what does v1 do?”** | `docs/discovery/` — 22 read-only findings. **Read v1 as REQUIREMENTS, never as design** |
-| **Asking “what is already broken?”** | `docs/DEFECTS-REGISTER.md` — 56 entries |
+| **Asking “what is already broken?”** | `docs/DEFECTS-REGISTER.md` — 58 entries |
 | **Picking up a task** | `docs/tasks/NNN-*.md`, and `docs/plans/phase-2-source-documents.md` for the sequence |
 | **Wondering what the business does that we have not covered** | `docs/CAPABILITY-GAPS.md` |
 
