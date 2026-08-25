@@ -187,9 +187,10 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
   // The distribution is therefore a DEBIT here, not a salary expense. What the business spends on
   // its own staff stays in 6100; what it merely passes through sits here until it is passed.
   //
-  // ⚠️ **The float must be CLEARED on a cadence, and the law caps it.** Ian: distribute *"per day,
-  // per week or per month."* RA 11360 requires distribution **at least twice a month, at intervals
-  // not exceeding sixteen days** — so daily and weekly are fine and **MONTHLY IS NOT COMPLIANT**.
+  // ⚠️ **The float must be CLEARED on a cadence, and the law caps it.** RA 11360 requires
+  // distribution **at least twice a month, at intervals not exceeding sixteen days**.
+  // ⭐ **Ian chose DAILY or WEEKLY only** — inside the floor rather than at its edge, so the
+  // closed list cannot express a breach and nobody has to remember the sixteen days.
   // A float left standing past that interval is not a balance, it is a breach; whatever surfaces
   // it (the OIL feed, T-135) should treat an ageing balance here as a finding, not a total.
   leaf('2160', 'Service charge float — held for staff', 'liability', 'credit', '2000'),

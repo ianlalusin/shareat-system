@@ -204,8 +204,13 @@ Ian, 2026-08-25: distribute *"per day, per week or per month."*
 |---|---|
 | **Daily** | ✅ |
 | **Weekly** | ✅ |
-| **Twice monthly / every 15 days** | ✅ — the statutory floor |
-| **Monthly** | ⛔ **Not compliant.** Do not offer it, or offer it only with the interval stated |
+| ~~Twice monthly~~ | Lawful, but **Ian, 2026-08-25: "daily or weekly only"** — not offered |
+| **Monthly** | ⛔ **Not compliant** (RA 11360's 16-day interval) |
+
+⭐ **Only two options, and that is stronger than three.** The statutory floor is twice a month, so
+Ian has chosen to sit comfortably inside it rather than at its edge — **the closed list cannot
+express a breach at all**, which means nobody has to remember the sixteen days when configuring a
+store.
 
 > **This is a case where the configuration must not be able to express the wrong answer.** Same
 > instinct as `is_remitted_daily` being NOT NULL: if a setting can be set to something unlawful,
