@@ -63,35 +63,35 @@
 - `1034–1068 ` 10. Phase plan
 - `1069–1085 ` 11. Migration & ETL rules
 - `1086–1134` 12. Inherited landmines — do not repeat these
-- `1135–1264` 13. Decision log
-- `1265–1284` 14. Amendment protocol
-- `1285–1289` 15. Engineering standards — the industry practices this project follows
-  - `1290–1295` 15.1 Build order: walking skeleton first
-  - `1296–1307` 15.2 Golden-master testing — the most important practice here
-  - `1308–1316` 15.3 Strangler Fig, not big-bang cutover
-  - `1317–1321` 15.4 No dual-write
-  - `1322–1326` 15.5 Expand/contract migrations
-  - `1327–1335` 15.6 Observability from day zero, not later
-  - `1336–1340` 15.7 CI gates
-  - `1341–1345` 15.8 Backups and a tested restore
-  - `1346–1350` 15.9 Twelve-Factor config
-  - `1351–1358` 15.10 Append-only ledgers — but not event sourcing
-  - `1359–1363` 15.11 Defence in depth
-  - `1364–1392` 15.12 Skills are lenses, not assurance
-  - `1393–1399` 15.13 Reconciliation is a permanent feature
-- `1400–1404` 16. The accounting spine
-  - `1405–1436` 16.0 What we are actually fixing — the diagnosis
-  - `1437–1480` 16.1 The ten invariants — non-negotiable
-  - `1481–1495` 16.2 The oracle: how "correct" is tested
-  - `1496–1517` 16.3 The model — header + lines, not legs
-  - `1518–1537` 16.4 Deliberately simpler than ERPNext
-  - `1538–1604` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1605–1629` 16.6 What v1 already gets right — preserve the intent
-  - `1630–1651` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1652–1666` 16.8 What v1's accounting already gets right
-  - `1667–1710` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1711–1761` 16.10 Posting patterns — one canonical pattern per business event
-  - `1762–1779` 16.11 Inventory's accounting integration
+- `1135–1265` 13. Decision log
+- `1266–1285` 14. Amendment protocol
+- `1286–1290` 15. Engineering standards — the industry practices this project follows
+  - `1291–1296` 15.1 Build order: walking skeleton first
+  - `1297–1308` 15.2 Golden-master testing — the most important practice here
+  - `1309–1317` 15.3 Strangler Fig, not big-bang cutover
+  - `1318–1322` 15.4 No dual-write
+  - `1323–1327` 15.5 Expand/contract migrations
+  - `1328–1336` 15.6 Observability from day zero, not later
+  - `1337–1341` 15.7 CI gates
+  - `1342–1346` 15.8 Backups and a tested restore
+  - `1347–1351` 15.9 Twelve-Factor config
+  - `1352–1359` 15.10 Append-only ledgers — but not event sourcing
+  - `1360–1364` 15.11 Defence in depth
+  - `1365–1393` 15.12 Skills are lenses, not assurance
+  - `1394–1400` 15.13 Reconciliation is a permanent feature
+- `1401–1405` 16. The accounting spine
+  - `1406–1437` 16.0 What we are actually fixing — the diagnosis
+  - `1438–1481` 16.1 The ten invariants — non-negotiable
+  - `1482–1496` 16.2 The oracle: how "correct" is tested
+  - `1497–1518` 16.3 The model — header + lines, not legs
+  - `1519–1538` 16.4 Deliberately simpler than ERPNext
+  - `1539–1605` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1606–1630` 16.6 What v1 already gets right — preserve the intent
+  - `1631–1652` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1653–1667` 16.8 What v1's accounting already gets right
+  - `1668–1711` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1712–1762` 16.10 Posting patterns — one canonical pattern per business event
+  - `1763–1780` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1259,6 +1259,7 @@ just a patch.**
 | 121 | 2026-08-25 | **`set_credit_limit` goes to MANAGER as well as admin. And the ETL service-account keys are REVOKED in GCP on 31 January 2027, the same date the ETL tables purge** | Ian: *“yes to credit limit.”* Coherent — managers already approve the buyer, and a franchise manager setting their own buyers' limits is risking their own money. **Still split from `approve_buyer`**: approving someone and deciding how much of your money they may owe are two decisions. On the keys: **a credential with no remaining purpose is a liability**, the same argument that dates the landing-table purge, and they die of the same cause — the ETL finishing. ⚠️ **Revoking is not deleting the file.** A key file that has existed may have been copied, backed up or synced; **only revocation in GCP makes those copies worthless.** Revoke first, then delete. Outstanding: the HUB key's IAM role is still unverified — its name reads right, and **the name is not the grant** | Yes |
 | 122 | 2026-08-25 | **A close-readiness checker runs daily 1st–15th. From the 16th, an unclosed prior month blocks back-office POSTING — never the till, never biometrics. Capture is always allowed; VERIFICATION is what is withheld** (ADR-006 §8) | Ian. The checker is adopted as proposed and **explains the window better than §7.2 did: the 15 days are the SETTLEMENT period, not slack** — an August electricity bill arriving 10 September means August cannot close on 1 September. **A recurring-expense template generates a CHECKLIST ITEM, never a posting**: the amount varies so it cannot be automated, but the obligation is knowable, which beats auto-posting a figure nobody agreed. **I pushed back on the wrong reading and Ian corrected it** — I took “block transactions” to include the till; he meant back-office entry, with POS and biometrics running. The one real cost left was that blocking entry does not stop the expense, only its timely recording — trading this month's accuracy for last month's closure. **His own sales-day answer generalised solves it: pending-and-unverifiable for all three.** Record the draft with its photo while memory is fresh; withhold posting. **A growing pile of unpostable drafts is a more legible signal than a greyed-out button**, and it is visible to the admin who can act. Daily unlock kept, **with a typed reason others can read** — friction exercised daily becomes muscle memory by the third day | Yes |
 | 123 | 2026-08-25 | **`close_period` requires ORG-WIDE store scope for a manager — the last open matrix cell, now closed. And the OIL integrity-findings layer is PORTED from v1, with one gap fixed: a finding is DERIVED, only the ACKNOWLEDGEMENT is stored** (T-135) | Ian. The scope answer keeps row 101 and row 114 both true: a period is org-wide, so a Lipa-only manager never closes Malvar's books. On OIL — **I assumed “AI insights” meant AI-generated findings and was wrong**; `integrity.ts` says *deterministic* and *pure observation layer, never touches the GL*, and both carry forward unchanged. **Second time research has found v1 already at the correct shape.** Two of its decisions are better than most systems manage: **`hardAlert` fires through a snooze**, closing the snooze-forever escape hatch, and **thresholds default in code so a misconfig cannot disable detection**. ⚠️ **The gap:** v1 stores `state` per finding key, so resolving one suppresses tomorrow's recompute **while the condition still holds** — the symptom hidden without the cause fixed. **Fix: derive the finding, store only the acknowledgement.** A finding cannot be resolved while it is still true; acknowledgement means *“seen and accepted for now”*, which is a different and honest statement. That also makes the manager scorecard safe — a score people are measured on is a score people manage, and this removes the way to game it. **The close-readiness checker is a FILTER over this feed, not a second engine** | Yes |
+| 124 | 2026-08-25 | **The 31 December cutover is a CONVERSION, not an onboarding wizard — and research corrected three of my own draft's decisions: ordering narrows to FOUR named gates, the `REHEARSAL` flag is dropped, and the opening entry is a mutable DRAFT until posting locks it** (T-134, discovery 21) | I designed T-134 before researching it, which is backwards, and Ian said so: *“as always research before design.”* The pass found the draft's substance already right and its **vocabulary** wrong — “wizard/progress bar” pulled toward SaaS onboarding, where the real prior art is Xero's and Odoo's **conversion**: ~15 hardcoded steps, one correctness gate. **Correction 1 — “not startable until prerequisites verify” was too strong.** No reference system hard-blocks checklist steps on each other; hard gates live in close/reopen chains. Narrowed to A1→B1 (ADR-009's inversion), C2→C3, C3→C4, C4→C5 — everything else free-orderable. **Correction 2 — no rehearsal flag.** No system ships a rehearsal mode inside the live product; every one uses an isolated copy, which ADR-007 already provides, and ADR-007 §1 already rejected per-row markers for this exact reason: **a flag is a marker a code path can forget to set.** **Correction 3 — C3 is a draft until C5 posts it.** Xero and Odoo both treat the opening entry as editable until an explicit lock; forcing a formal reversal to fix a typo in a never-final document is ceremony, not control. ⚠️ **Also added: an opening-count variance posts against 3900, NEVER 5400** — v2 has no December P&L, so charging it to inventory adjustment would report December's shrinkage as January's result; it stays visible as a named line and an OIL finding. **And the verified list is capped at six**: ERPNext verifies 1 of 6 step types, Odoo 2 of 8 — a check that is really a tick is worse than an honest tick. **The one thing we keep diverging on is the 3900 halt.** Xero, Odoo and GnuCash all auto-plug an imbalance to suspense, so the majority behaviour is against us — **and the reason is scale, not diligence**: they serve millions of self-serve tenants who cannot get a human's attention per mismatch. One company, one cutover, Ian available. We halt | Yes |
 
 ---
 
