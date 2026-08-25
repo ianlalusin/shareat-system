@@ -63,35 +63,35 @@
 - `1034–1068 ` 10. Phase plan
 - `1069–1085 ` 11. Migration & ETL rules
 - `1086–1134` 12. Inherited landmines — do not repeat these
-- `1135–1269` 13. Decision log
-- `1270–1289` 14. Amendment protocol
-- `1290–1294` 15. Engineering standards — the industry practices this project follows
-  - `1295–1300` 15.1 Build order: walking skeleton first
-  - `1301–1312` 15.2 Golden-master testing — the most important practice here
-  - `1313–1321` 15.3 Strangler Fig, not big-bang cutover
-  - `1322–1326` 15.4 No dual-write
-  - `1327–1331` 15.5 Expand/contract migrations
-  - `1332–1340` 15.6 Observability from day zero, not later
-  - `1341–1345` 15.7 CI gates
-  - `1346–1350` 15.8 Backups and a tested restore
-  - `1351–1355` 15.9 Twelve-Factor config
-  - `1356–1363` 15.10 Append-only ledgers — but not event sourcing
-  - `1364–1368` 15.11 Defence in depth
-  - `1369–1397` 15.12 Skills are lenses, not assurance
-  - `1398–1404` 15.13 Reconciliation is a permanent feature
-- `1405–1409` 16. The accounting spine
-  - `1410–1441` 16.0 What we are actually fixing — the diagnosis
-  - `1442–1485` 16.1 The ten invariants — non-negotiable
-  - `1486–1500` 16.2 The oracle: how "correct" is tested
-  - `1501–1522` 16.3 The model — header + lines, not legs
-  - `1523–1542` 16.4 Deliberately simpler than ERPNext
-  - `1543–1609` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1610–1634` 16.6 What v1 already gets right — preserve the intent
-  - `1635–1656` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1657–1671` 16.8 What v1's accounting already gets right
-  - `1672–1715` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1716–1766` 16.10 Posting patterns — one canonical pattern per business event
-  - `1767–1784` 16.11 Inventory's accounting integration
+- `1135–1270` 13. Decision log
+- `1271–1290` 14. Amendment protocol
+- `1291–1295` 15. Engineering standards — the industry practices this project follows
+  - `1296–1301` 15.1 Build order: walking skeleton first
+  - `1302–1313` 15.2 Golden-master testing — the most important practice here
+  - `1314–1322` 15.3 Strangler Fig, not big-bang cutover
+  - `1323–1327` 15.4 No dual-write
+  - `1328–1332` 15.5 Expand/contract migrations
+  - `1333–1341` 15.6 Observability from day zero, not later
+  - `1342–1346` 15.7 CI gates
+  - `1347–1351` 15.8 Backups and a tested restore
+  - `1352–1356` 15.9 Twelve-Factor config
+  - `1357–1364` 15.10 Append-only ledgers — but not event sourcing
+  - `1365–1369` 15.11 Defence in depth
+  - `1370–1398` 15.12 Skills are lenses, not assurance
+  - `1399–1405` 15.13 Reconciliation is a permanent feature
+- `1406–1410` 16. The accounting spine
+  - `1411–1442` 16.0 What we are actually fixing — the diagnosis
+  - `1443–1486` 16.1 The ten invariants — non-negotiable
+  - `1487–1501` 16.2 The oracle: how "correct" is tested
+  - `1502–1523` 16.3 The model — header + lines, not legs
+  - `1524–1543` 16.4 Deliberately simpler than ERPNext
+  - `1544–1610` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1611–1635` 16.6 What v1 already gets right — preserve the intent
+  - `1636–1657` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1658–1672` 16.8 What v1's accounting already gets right
+  - `1673–1716` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1717–1767` 16.10 Posting patterns — one canonical pattern per business event
+  - `1768–1785` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1264,6 +1264,7 @@ just a patch.**
 | 126 | 2026-08-25 | **An UNVERIFIED sales day records no revenue. A new sales report cannot be created while an older one is still unverified. And the entry dates on the SALES DAY, never the posting date** (T-123) | Ian, answering the three-part question. **Verification is what posts** — a sales figure nobody checked is exactly what verification exists to catch, so an unverified day is a document, not an entry. ⭐ **The second half is his, and it is better than what I proposed.** I suggested only dating on the business date, which fixes the period but lets an unverified day sit for weeks. **Blocking a new report while an older one is unverified bounds the lag structurally** — the pile cannot grow past one, so revenue is *hours* late rather than days, and the person who must act finds out immediately because they cannot do their next job until they do. **A forcing function beats a reminder**, and it is the same shape as row 122's unpostable-drafts pile: make the consequence immediate and visible to the person who can clear it. Dating on the sales day then puts a 31 December sale recorded on 2 January into December, where it happened — without which the block would merely relocate the error. **Together the two rules make the close honest:** the period cannot silently accumulate unrecognised revenue, and nothing lands in the wrong month | Yes |
 | 127 | 2026-08-25 | **Ian's cash-account OWNER split (cashier / office, each holding cash AND online) is retained — and v2 currently loses half of it: online has NO owner dimension at all** | Ian: *“the accounts have 2 owners, cashier and office, and cashier has cash and online accounts… this will clearly show money movement.”* The model is right and answers the question a till reconciliation actually asks — **whose hands is this money in.** ⚠️ **The gap, found checking rather than assuming:** v2's chart keeps the split for cash (1110 cashier, 1120 staff custodian, 1130 office) but **1140 “E-wallet / online channels” is ONE control subdivided by PROVIDER, with no owner** — so *“how much online money is in the cashier's hands versus the office's”* is unanswerable in v2 today. v1 does carry it, as `owner?: 'cashier' \| 'office' \| null` on the payment-account config doc. **Two mechanisms for one concept** — baked into the account code for cash, a nullable config field for online — and being nullable, **an account with no owner is representable.** Ian asked whether industry does it better; **that is a research pass, not a guess**, and it is not blocking T-123. Two things recorded so they are not lost: every reference system treats **a real-world funds location as its own GL account**, so separate cashier/office accounts is already the industry answer and the fix is likely to EXTEND the model to online rather than replace it; and v1's `isRemittedDaily` implies a daily till→office remittance, where **money that has left the till but not reached the office is a real state with a standard name** (cash in transit / undeposited funds) that v1 has no account for | Yes — needs the research pass before Phase 3 |
 | 128 | 2026-08-25 | **Remittance may be POOLED across days — but the till is still COUNTED daily, and remittance stops being a field on the sales day. Plus a store revolving fund, which v1 does not have at all** (T-136) | Ian asked whether remittance could follow the monthly-lock-plus-15-days pattern so three days, a week or a month could go in one remittance. **Yes on pooling, and it is safer than it sounds: revenue recognition does not depend on remittance** — a sale is revenue when it happens, wherever the cash sits, and remittance only moves money between two ASSET accounts. So pooling cannot make the books wrong. ⚠️ **But the cadence must NOT be patterned on the close.** The lock's 15 days exist for late-arriving invoices; cash custody is a different risk with a different clock — month-plus-grace means **up to 45 days of cash in a drawer, and a shortage found then is attributable to nobody.** ⭐ **The resolution keeps both: separate the COUNT from the TRANSFER.** Count and hand over the till daily — POS already does exactly this in `cashHandovers` with expected/counted/variance — and physically remit on whatever cadence suits. **The control Ian would be giving up is one he is not actually giving up**, because it lives in a different document that keeps running daily. ⭐ **This independently requires the cash-in-transit account row 127 flagged as missing from the unrelated online-owner direction — two needs pointing at one missing account.** ⛔ **Structural blocker: v1 stores remittance as FIELDS ON THE SALES DAY** (`actualRemittanceCash`, `remittanceRefNo`, `partially_remitted`), so a remittance **cannot span days by construction**. Pooling is a modelling change, not a setting: remittance becomes its own document referencing N days, and the day's remittance status becomes DERIVED. **On the revolving fund: v1 has NOTHING** — zero matches for pettyCash/revolving — so it is a genuine ADD. The settled industry answer is an **IMPREST fund**: fixed amount, spend and keep receipts, replenish by exactly the receipts total, **book balance never moves**. The self-check falls out for free — **cash + unreimbursed receipts must always equal the imprest amount** — so the control is arithmetic, not diligence. ⚠️ **Replenishment gated by receipts IS the design**; ungated, a revolving fund is an unlimited spending channel | Yes — one research pass covers this and row 127 |
+| 129 | 2026-08-25 | **Remittance cadence is PER STORE, and an un-remitted CEILING forces a remittance regardless of where the cycle is. The mechanism is settled; the peso numbers are Ian's, per store** (T-136 §4) | Ian: *“yes per store.”* Right — a branch two minutes from the office and one an hour away have genuinely different logistics, so a single global cadence would be wrong for at least one of them. **Consequence: cadence is a configuration ROW, never a constant** — and ⚠️ a store with none configured must not silently mean “never”. **Default to daily**, the safe end, and what every store does today; an unset cadence is the same defect class as an unmapped expense category. ⭐ **Per-store cadence makes the ceiling MORE necessary, not less** — a store on a weekly cadence accumulates seven days of cash, and ₱200/day versus ₱20,000/day is the same number of days and a completely different amount sitting in a drawer. **The risk is the AMOUNT, not the days**, so the pooled balance is watched continuously and crossing the ceiling forces a remittance mid-cycle — the same shape as row 122's checker, which watches the condition rather than only the deadline. ⚠️ **“Forces” means what it means everywhere else here: the pile becomes visible and unignorable to the person who can clear it, never a blocked till.** A cashier is never stopped from selling because a remittance is overdue (discovery 22 §4). **I settled the mechanism and deliberately did NOT pick the numbers** — a peso ceiling and an imprest amount are business policy, and they belong to whoever carries the risk | Yes |
 
 ---
 

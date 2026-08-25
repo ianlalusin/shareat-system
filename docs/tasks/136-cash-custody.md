@@ -140,14 +140,35 @@ unresolvable funding source must BLOCK, never default.**
    v1) gates the remittance document, not the day.
 3. The sales day's remittance status is **derived**.
 
-## 4. Not decided here
+## 4. Cadence and ceiling — decided 2026-08-25
 
-- The remittance cadence itself — per store, or global? **Suggest per store**, since a
-  four-branch group will not have one answer.
-- Whether an **un-remitted ceiling** should force a remittance regardless of schedule (*"remit when
-  the pooled amount exceeds ₱X"*). This is normal retail cash-handling policy and worth having,
-  because the risk is the *amount* sitting in a drawer, not the number of days.
-- The imprest amount per store, and who may change it.
+### ✅ The remittance cadence is PER STORE
+
+Ian: *"yes per store."* A four-branch group does not have one answer — a branch two minutes from
+the office and one an hour away have genuinely different logistics.
+
+**Consequence: the cadence is a per-store configuration row, never a constant.** ⚠️ And a store
+with **no** cadence configured must not silently fall back to "never" — an unset cadence is the
+same defect class as an unmapped expense category. **Default to daily**, which is the safe end and
+matches what every store does today.
+
+### ✅ An un-remitted CEILING exists too — because the risk is the amount, not the days
+
+> **Per-store cadence makes the ceiling MORE necessary, not less.** A store on a weekly cadence
+> accumulates seven days of cash. Two hundred pesos a day and twenty thousand a day are the same
+> number of days and a completely different amount of money sitting in a drawer.
+
+**So a remittance is forced when the pooled un-remitted balance exceeds the store's ceiling,
+regardless of where it is in the cycle** — normal retail cash-handling policy, and the same shape
+as row 122's close checker: the condition is watched continuously, not only at the deadline.
+
+⚠️ **"Forced" means the same thing it means everywhere else in this project — the pile becomes
+visible and unignorable to the person who can clear it, not a blocked till.** A cashier is never
+prevented from selling because a remittance is overdue (discovery 22 §4: a restaurant that cannot
+sell is not a restaurant).
+
+**The mechanism is settled; the NUMBER is Ian's, per store** — as is the imprest amount and who may
+change either. Both are store configuration, and both belong to whoever carries the risk.
 
 ## 5. ⚠️ Research required before designing this (bible §3.6)
 
