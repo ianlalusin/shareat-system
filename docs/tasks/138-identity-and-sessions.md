@@ -132,13 +132,32 @@ ERP's browser and terminal, not the punch device) · password reset flows · SSO
 6. Every existing capability denial test still passes **through the real session**, not a
    hand-built `Actor`.
 
-## 6. Open — for Ian
+## 6. ✅ Answered by Ian, 2026-08-25
 
-1. ⭐ **How should a cashier sign in?** v1 uses a **6-digit PIN on a shared terminal**, which is
-   right for a till and wrong for an office. **Suggest porting exactly that** — an email and
-   password at a busy counter is a worse control, not a better one, because it gets shared.
-2. **Does a terminal session end at shift end, on a timer, or both?** Suggest both: a TTL, plus an
-   explicit end-of-shift sign-out that the handover already implies.
-3. **Is Firebase Auth still the browser mechanism in v2**, or does the ERP own its own passwords?
-   Suggest keeping Firebase — it already works, and replacing an auth provider is a project, not a
-   task.
+1. **The 6-digit passcode is retained** for the terminal. *An email and password at a busy counter
+   is a worse control, not a better one, because it gets shared.*
+2. **A terminal session ends BOTH ways** — on a TTL **and** at shift end. Two mechanisms because
+   they fail differently: a timer catches a terminal nobody signed out of, and an explicit sign-out
+   ends the session the moment responsibility actually transfers, rather than up to a TTL later.
+3. ⭐ **Biometrics link to the same credential later** — Ian: *"link to biometric next time so it's
+   more reliable."* **This is a design constraint on THIS task, not a future one.**
+
+### 3.1 What "biometric later" requires of the model NOW
+
+> **The credential KIND must be a column, not the shape of the table.** If PIN specifics are baked
+> into `person_credentials`' columns, adding biometrics is a migration and a rewrite of every
+> read. If kind is a value, it is a row.
+
+So: one credential table, `kind ∈ {pin, firebase, biometric}`, and **a session records which kind
+issued it** — because *"who is this?"* and *"how sure are we?"* are different questions, and a
+future rule like "a void needs biometric confirmation" needs the second one.
+
+⚠️ **The templates themselves are still Phase 4 and still bound by bible §5.3** — fingerprint
+templates readable only by a provisioned device identity, **face templates never mirrored or
+cached, ever.** This task makes room for the credential; it does not store biometric data.
+
+## 7. Still open
+
+- **Is Firebase Auth still the browser mechanism in v2?** Suggest keeping it — it already works,
+  and replacing an auth provider is a project, not a task. Not blocking: §3.1's kind column means
+  the browser credential can change without touching sessions.

@@ -26,3 +26,4 @@ export * from './views';
 export * from './access';
 export * from './expenses';
 export * from './sales-days';
+export * from './sessions';

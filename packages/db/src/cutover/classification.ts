@@ -169,6 +169,23 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     reason: 'As sales_days — its child rows. Purged first: children before parents (PURGE_ORDER_HINT).',
   },
 
+  // ---- T-138: identity and sessions ----------------------------------------------------
+  person_credentials: {
+    class: 'keep',
+    reason:
+      'How a real person signs in. Same class as persons and person_roles, and for the same ' +
+      'reason: the pilot is run by the actual staff, and purging their credentials on 1 January ' +
+      'would lock the business out of its own books on the morning the books open.',
+  },
+  sessions: {
+    class: 'purge',
+    reason:
+      'Live sign-in state, not configuration. Every session is short-lived by design and none ' +
+      'should outlive the cutover — a token minted in December has no business being valid in ' +
+      'January. Purging them forces a clean re-authentication, which is the correct posture for ' +
+      'the first day of a new ledger.',
+  },
+
   // ---- ETL: purged, but LATER ---------------------------------------------------------
   etl_source_documents: {
     class: 'purge',
@@ -204,6 +221,7 @@ export function tablesInClass(cls: CutoverClass): string[] {
  * when the graph is unavailable, and it is deliberately explicit rather than clever.
  */
 export const PURGE_ORDER_HINT: readonly string[] = [
+  'sessions',
   'sales_day_channels',
   'sales_days',
   'expense_payments',

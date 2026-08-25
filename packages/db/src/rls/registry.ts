@@ -141,6 +141,25 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'drift from its parent.',
   },
 
+  // T-138 — identity and sessions (docs/tasks/138-identity-and-sessions.md, bible §7.1).
+  person_credentials: {
+    scope: 'derived',
+    via: 'exists (select 1 from persons p where p.id = person_credentials.person_id and p.org_id = app_current_org())',
+    reason:
+      'No org_id of its own — reachable only through the person it belongs to, the same pattern ' +
+      'as expense_payments through expenses. ⚠️ And the org boundary matters more here than ' +
+      'almost anywhere: a credential row readable across orgs would expose which staff exist in ' +
+      'another franchise, before any question of the secrets themselves.',
+  },
+  sessions: {
+    scope: 'derived',
+    via: 'exists (select 1 from persons p where p.id = sessions.person_id and p.org_id = app_current_org())',
+    reason:
+      'Reachable through its person, same as person_credentials. ⭐ A session row is a live ' +
+      'authentication fact — who is signed in, where, and until when — so cross-org visibility ' +
+      'would leak the shape of another franchise’s operation even with the token hashed.',
+  },
+
   etl_runs: { scope: 'system_only', reason: 'ETL machinery. Never reachable by a tenant or a customer — only the migrator, crons and the audit.' },
   etl_source_documents: {
     scope: 'system_only',
