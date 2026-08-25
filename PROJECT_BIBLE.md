@@ -63,35 +63,35 @@
 - `1034–1068 ` 10. Phase plan
 - `1069–1085 ` 11. Migration & ETL rules
 - `1086–1134` 12. Inherited landmines — do not repeat these
-- `1135–1262` 13. Decision log
-- `1263–1282` 14. Amendment protocol
-- `1283–1287` 15. Engineering standards — the industry practices this project follows
-  - `1288–1293` 15.1 Build order: walking skeleton first
-  - `1294–1305` 15.2 Golden-master testing — the most important practice here
-  - `1306–1314` 15.3 Strangler Fig, not big-bang cutover
-  - `1315–1319` 15.4 No dual-write
-  - `1320–1324` 15.5 Expand/contract migrations
-  - `1325–1333` 15.6 Observability from day zero, not later
-  - `1334–1338` 15.7 CI gates
-  - `1339–1343` 15.8 Backups and a tested restore
-  - `1344–1348` 15.9 Twelve-Factor config
-  - `1349–1356` 15.10 Append-only ledgers — but not event sourcing
-  - `1357–1361` 15.11 Defence in depth
-  - `1362–1390` 15.12 Skills are lenses, not assurance
-  - `1391–1397` 15.13 Reconciliation is a permanent feature
-- `1398–1402` 16. The accounting spine
-  - `1403–1434` 16.0 What we are actually fixing — the diagnosis
-  - `1435–1478` 16.1 The ten invariants — non-negotiable
-  - `1479–1493` 16.2 The oracle: how "correct" is tested
-  - `1494–1515` 16.3 The model — header + lines, not legs
-  - `1516–1535` 16.4 Deliberately simpler than ERPNext
-  - `1536–1602` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1603–1627` 16.6 What v1 already gets right — preserve the intent
-  - `1628–1649` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1650–1664` 16.8 What v1's accounting already gets right
-  - `1665–1708` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1709–1759` 16.10 Posting patterns — one canonical pattern per business event
-  - `1760–1777` 16.11 Inventory's accounting integration
+- `1135–1263` 13. Decision log
+- `1264–1283` 14. Amendment protocol
+- `1284–1288` 15. Engineering standards — the industry practices this project follows
+  - `1289–1294` 15.1 Build order: walking skeleton first
+  - `1295–1306` 15.2 Golden-master testing — the most important practice here
+  - `1307–1315` 15.3 Strangler Fig, not big-bang cutover
+  - `1316–1320` 15.4 No dual-write
+  - `1321–1325` 15.5 Expand/contract migrations
+  - `1326–1334` 15.6 Observability from day zero, not later
+  - `1335–1339` 15.7 CI gates
+  - `1340–1344` 15.8 Backups and a tested restore
+  - `1345–1349` 15.9 Twelve-Factor config
+  - `1350–1357` 15.10 Append-only ledgers — but not event sourcing
+  - `1358–1362` 15.11 Defence in depth
+  - `1363–1391` 15.12 Skills are lenses, not assurance
+  - `1392–1398` 15.13 Reconciliation is a permanent feature
+- `1399–1403` 16. The accounting spine
+  - `1404–1435` 16.0 What we are actually fixing — the diagnosis
+  - `1436–1479` 16.1 The ten invariants — non-negotiable
+  - `1480–1494` 16.2 The oracle: how "correct" is tested
+  - `1495–1516` 16.3 The model — header + lines, not legs
+  - `1517–1536` 16.4 Deliberately simpler than ERPNext
+  - `1537–1603` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1604–1628` 16.6 What v1 already gets right — preserve the intent
+  - `1629–1650` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1651–1665` 16.8 What v1's accounting already gets right
+  - `1666–1709` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1710–1760` 16.10 Posting patterns — one canonical pattern per business event
+  - `1761–1778` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1257,6 +1257,7 @@ just a patch.**
 | 119 | 2026-08-25 | **A delivery books AP DIRECTLY at receipt. No GRNI, and no delivery→expense link. 2120 becomes `reserved`** (migration 0013) — **row 117's provisional-posting design is SUPERSEDED** | Ian's simplification, followed one step further than he stated it. If a delivery can book AP directly then the delivery→expense **link is not needed either** — and **the expensing lag (91%→76%) was never about a missing amount. It was a second document waiting to be typed.** Remove the second document and there is nothing left to fall behind. **Row 117 added machinery to MANAGE that lag; this removes what CREATES it** — simpler and more correct at once, and it also retires `isExpensed`/`partiallyExpensed` rather than merely deriving them. **Consequence for the model: a DELIVERY is a purchase in its own right, and an EXPENSE is a non-inventory spend** — two document types for two different things, instead of one bolted onto the other. 2120 is kept at `reserved` rather than dropped: it costs nothing, records a considered decision, and is there if a genuine receive-before-price case ever appears | Yes |
 | 120 | 2026-08-25 | **Assigning the ADMIN role materialises a store-scope row for every store in that org. Rows, never a bypass. And creating a store must add rows for that org's existing admins** (CAPABILITY-MATRIX §C.2) | The T-121 implementer took *“admin does not bypass store scope”* literally — correct — and that **exposed a gap I left**: an admin appointed today was authorised for nothing store-scoped, contradicting *“org admin = org-wide control”* (row 114). Both halves are right; the fix is row 115's own pattern — **decide once, at the moment a human is present, and store the answer**, rather than inferring it on every check. Keeps *“who can see Davao?”* a `select`. ⚠️ **The easily-missed half: a store created LATER appears in nobody's scope**, so store creation backfills admin rows — otherwise a new branch is invisible to the person who just opened it and it looks like a permissions bug rather than a missing row. **Also recorded (§C.1): a capability answers “what may you do”, never “to whom”.** `manage_users` cannot express row 116's authority chain alone — assigning the `admin` role additionally requires `super_admin`, and that check belongs at the call site with its own denial test | Yes |
 | 121 | 2026-08-25 | **`set_credit_limit` goes to MANAGER as well as admin. And the ETL service-account keys are REVOKED in GCP on 31 January 2027, the same date the ETL tables purge** | Ian: *“yes to credit limit.”* Coherent — managers already approve the buyer, and a franchise manager setting their own buyers' limits is risking their own money. **Still split from `approve_buyer`**: approving someone and deciding how much of your money they may owe are two decisions. On the keys: **a credential with no remaining purpose is a liability**, the same argument that dates the landing-table purge, and they die of the same cause — the ETL finishing. ⚠️ **Revoking is not deleting the file.** A key file that has existed may have been copied, backed up or synced; **only revocation in GCP makes those copies worthless.** Revoke first, then delete. Outstanding: the HUB key's IAM role is still unverified — its name reads right, and **the name is not the grant** | Yes |
+| 122 | 2026-08-25 | **A close-readiness checker runs daily 1st–15th. From the 16th, an unclosed prior month blocks back-office POSTING — never the till, never biometrics. Capture is always allowed; VERIFICATION is what is withheld** (ADR-006 §8) | Ian. The checker is adopted as proposed and **explains the window better than §7.2 did: the 15 days are the SETTLEMENT period, not slack** — an August electricity bill arriving 10 September means August cannot close on 1 September. **A recurring-expense template generates a CHECKLIST ITEM, never a posting**: the amount varies so it cannot be automated, but the obligation is knowable, which beats auto-posting a figure nobody agreed. **I pushed back on the wrong reading and Ian corrected it** — I took “block transactions” to include the till; he meant back-office entry, with POS and biometrics running. The one real cost left was that blocking entry does not stop the expense, only its timely recording — trading this month's accuracy for last month's closure. **His own sales-day answer generalised solves it: pending-and-unverifiable for all three.** Record the draft with its photo while memory is fresh; withhold posting. **A growing pile of unpostable drafts is a more legible signal than a greyed-out button**, and it is visible to the admin who can act. Daily unlock kept, **with a typed reason others can read** — friction exercised daily becomes muscle memory by the third day | Yes |
 
 ---
 

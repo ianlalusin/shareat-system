@@ -215,3 +215,76 @@ and the year-close posting only.
 
 Automatic once the following year's close posts successfully. With never-reopen, `closed` is
 already terminal in practice; `locked` records that a later year now depends on it.
+
+---
+
+# 8. The close-readiness checker and the 16th escalation — Ian, 2026-08-25
+
+## 8.1 ✅ The daily checker, 1st–15th — adopted as proposed
+
+**The strongest idea in the close design**, and it explains the window better than §7.2 did:
+**the fifteen days are not slack, they are the settlement period.** An August electricity bill
+arriving on 10 September means August genuinely cannot close on 1 September.
+
+Runs daily and reports what is outstanding for the closing month:
+
+| | |
+|---|---|
+| **Recurring expenses with no instance** | Per template, per store — *“Electricity, Malvar: no August instance”* |
+| **Depreciation / amortisation not booked** | **DEF-044 is the proof this is needed** — it stopped silently for two months |
+| **Unposted drafts dated in the period** | Already a hard close gate; surfaced early rather than found on the 15th |
+| **Unverified sales days** | Same |
+| **Trial balance not tying** | Same |
+
+### ⭐ A recurring-expense template generates a CHECKLIST ITEM, never a posting
+
+They cannot be auto-posted — the amount varies every month. **But the obligation is knowable:**
+rent recurs, electricity recurs. So the template produces a to-do.
+
+**Better than either extreme:** auto-posting invents a figure nobody agreed; doing nothing means
+the bill is either remembered or it is not.
+
+## 8.2 The 16th escalation — scoped to back-office POSTING, never to operations
+
+Ian's first phrasing read as blocking all transactions, and the objection to that was that it
+stops the restaurant trading because the books are late. **He clarified, and the clarification is
+the design:**
+
+> *“When I say block, cashier can't create expense receipt, but all in-app biometrics will push
+> through… don't block POS, but block submitting the daily sales report — make it pending,
+> unverifiable unless last month is closed. For receipts, reject new entries, and expenses too.”*
+
+**No revenue is blocked. The till runs, staff clock in.**
+
+### The one remaining cost, and Ian's own answer to it
+
+Blocking *entry* does not stop the expense happening — it stops it being **recorded when it
+happens**. A cashier buys ice at 3pm on the 16th, enters it on the 20th from memory, or never.
+**That trades this month's accuracy for pressure to close last month.**
+
+**His sales-day answer solves it, generalised to all three:** *pending and unverifiable.*
+
+| | |
+|---|---|
+| **Always allowed** | POS · biometrics · **recording** an expense or receipt as a draft, with its photo, while the memory is fresh |
+| **Blocked until the prior month closes** | Sales-day **submission / verification** · **posting** an expense or receipt to the ledger |
+
+**Nothing is lost, and the pressure improves.** A growing pile of unpostable drafts is a more
+legible signal than a greyed-out button — and it is visible to the **admin**, who is the person who
+can actually close the month.
+
+### The daily-renewed unlock — kept, with one addition
+
+Admin may release a day at a time, as Ian proposed. **It requires a typed reason, and the reason
+is visible to others.**
+
+> **Friction exercised daily stops being informative.** Unlock every day for a week and by the
+> third day it is muscle memory. A reason someone must write, and others will read, stays
+> informative; a button marked *Unlock* does not.
+
+## 8.3 Open
+
+1. **Does the checker notify, or only display?** A report nobody opens on the 12th is a report
+   read on the 16th. Suggested: display daily, **notify from the 10th**.
+2. **Do drafts blocked from posting expire?** Suggested no — they are the pressure. But somebody
+   should own the pile.
