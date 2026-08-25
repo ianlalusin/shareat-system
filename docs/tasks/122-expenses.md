@@ -1,177 +1,197 @@
-# T-122 — Expenses: the module 88% of the business runs through
+# T-122 — Expenses: non-inventory spend
 
-> **Status:** spec ready. **Depends on:** T-108 (posting patterns), T-119, T-120 (Wave 0 — both
-> done), the capability matrix.
-> **Wave 1.** The highest-volume path in the system: `expense_payment`, **4,396 journal legs**.
-> **Written by:** Opus planner, 2026-08-25.
+> **Status:** ⚠️ **REVISED 2026-08-25.** The first version was wrong in scope: it treated an
+> expense as standalone when a third are delivery-linked, and it inherited the GRNI design Ian
+> then simplified away. **Rewritten against bible rows 118–120.**
+> **Depends on:** T-119, T-120, **T-121** (all done — T-121 was missing from v1 of this spec, DEF-053).
+> **Wave 1.**
 
-## Goal
+## What changed, and why the scope is smaller
 
-Let staff record what the business spends, and have it post correctly — every time, including the
-messy cases that are the majority rather than the exception.
+Two decisions since the first draft:
 
-**This is the first module real pilot users will touch daily.** If it is awkward, they will work
-around it, and a workaround in an expense system is a hole in the books.
+**A delivery books AP directly at receipt** (row 119). No GRNI, no delivery→expense link, no
+`isExpensed` flags. So a delivery is **a purchase in its own right**, and an expense is **a
+non-inventory spend**. Two document types for two different things, rather than one bolted onto
+the other.
 
----
+**Which means deliveries are not in this task.** A delivery posts `DR Inventory / CR AP`, and the
+inventory asset does not exist until Phase 3. Building deliveries now would force them to post
+purchase-basis COGS — reproducing the exact defect the rebuild exists to correct.
 
-## What the capture actually says about this module
+| | Documents | Where |
+|---|---:|---|
+| Delivery-linked (become **deliveries**) | **2,272 — 36%** | **Phase 3**, with inventory |
+| **Non-inventory spend** | **3,954 — 64%** | **This task** |
 
-Not guesses — measured from v1 on 2026-08-24:
+**Deliveries keep running in v1 through the pilot.** That is what the rolling pilot is for
+(row 113) — nothing breaks, because v1 is live until 31 December regardless.
 
-| | |
-|---|---|
-| **4,396 journal legs** from `expense_payment` | The largest single source of ledger activity |
-| **6,007 expense documents** across four stores | ~25 per store per trading day |
-| **Split payments are normal, not exceptional** | One expense, several payment methods, several credit lines |
-| **132 expense categories** in the live list | Two-level, both free text, with real data-quality problems (discovery 08 §5) |
+### The scope, measured
 
-**Design for the messy case.** A module that handles a single cash payment cleanly and makes a
-three-way split painful has optimised for the minority.
+| Group | Docs | Posts to |
+|---|---:|---|
+| OPEX | 2,873 | 6xxx |
+| **COGS without a delivery** | **801** | 5xxx — see the flag below |
+| PERSONAL | 181 | **3200 owner's drawings** — contra-equity, not an expense |
+| CAPEX | 37 | 15xx asset, not a P&L line |
+| *(unset)* | 62 | **Blocks** — an expense with no group cannot be routed |
+
+> ⚠️ **The 801 COGS-without-a-delivery are a known simplification, recorded rather than hidden.**
+> They are food bought outside the delivery flow — market runs, top-ups — and in this task they
+> post purchase-basis (`DR 5100 / CR cash`), exactly as v1 does. **That is the very timing defect
+> the rebuild corrects**, and it is accepted here only because the alternative is stalling 64% of
+> the module on Phase 3. **Phase 3 must revisit them:** ideally they create an inventory receipt
+> like any other purchase.
 
 ---
 
 ## Scope
 
-Create or modify **only**:
-
 ```
-packages/db/schema/expenses.ts                  expenses + expense_payments + categories
-packages/db/migrations/00NN_*.sql               a NEW migration — DEF-039 applies
-packages/db/src/cutover/classification.ts       classify the new tables (build FAILS otherwise)
-packages/db/src/rls/registry.ts                 declare their scoping (build FAILS otherwise)
+packages/db/schema/expenses.ts                  expenses · expense_payments · expense_categories
+packages/db/migrations/00NN_*.sql               + RLS policies for each new table
+packages/db/src/cutover/classification.ts       classify all three (build FAILS otherwise)
+packages/db/src/rls/registry.ts                 declare scoping (build FAILS otherwise)
 packages/db/src/repo/expenses.ts                the ONLY place expense SQL lives
-packages/domain/src/expenses/*.ts               create / approve / void, posting via postEntry
+packages/domain/src/expenses/*.ts               create · approve · void, posting via postEntry
 apps/erp/src/app/expenses/**                    the screens
 packages/domain/tests/integration/expenses.test.ts
 ```
 
-> ⭐ **The two registry files are not optional and not an afterthought.** Wave 0 exists precisely so
-> that a new table cannot be added without answering *"does it survive the cutover?"* and *"how is
-> it org-scoped?"*. **The build will fail until both are answered** — that is the design working,
-> not an obstacle.
+**Do not modify** `postEntry`, `reverseEntry`, the ledger schema, `packages/auth/**`,
+`packages/etl/**`, or migrations `0000`–`0014`. **Do not touch `PROJECT_BIBLE.md`.**
 
-**Do not modify** `postEntry`, `reverseEntry`, the ledger schema, `packages/etl/**`, or migrations
-`0000`–`0011`. **Do not touch `PROJECT_BIBLE.md`.**
+**No `delivery_id` column.** A delivery is a different document (Phase 3), not a flavour of this
+one. Adding a nullable link "for later" invites someone to use it.
 
 ---
 
 ## Contract
 
-### 1. The shape, taken from what v1 proved it needs
+### 1. Shape
 
 ```
 expenses
   id, org_id, store_id, business_date, total_amount
-  supplier_id?          -- party, when it is a supplier purchase
-  category_id           -- see §3
-  particulars           -- free text; what it was actually for
-  receipt_photo_url?    -- see §4
-  status                -- draft | posted | voided
-  created_by, approved_by?, posted_at?
+  category_id       -> expense_categories
+  supplier_id?      -- opaque text; no suppliers table until Wave 3
+  particulars       -- what it was actually for
+  receipt_photo_url?
+  status            -- draft | posted | voided
+  journal_entry_id? -- set on post
+  created_by, approved_by?, posted_at?, voided_by?/at?/reason?
 
-expense_payments        -- ONE expense, MANY payments. This is the normal case
-  id, expense_id, method, amount
-  account_id?           -- which cash/bank account
-  staff_id?             -- reimbursable: who is owed
-  cash_request_id?      -- when it draws on a released cash request
+expense_payments    -- ONE expense, MANY payments. The normal case, not the exception
+  id, expense_id, method, amount, account_code?, staff_id?, cash_request_id?
+
+expense_categories
+  id, org_id, group, category, sub_category, account_code?  -- NULLABLE on purpose (§3)
 ```
 
-**Payment methods**, from v1: `cash · online · credit · reimbursable · ar_collection · other`.
-Each posts a different credit line — `POSTING-PATTERNS.md` has all of them worked, and **that
-document is the authority, not this spec.**
+### 2. Posting — through `postEntry`, always
 
-### 2. It posts through `postEntry`, and only through it
+`idempotencyKey` = `expense:{id}:post`. A split posts **one entry with several credit lines** —
+it is one business event. Reimbursable credits **2130 with the staff party**; without it the
+trigger rejects the line, correctly (DEF-049).
 
-The expense document is the source; the entry is derived. **No expense screen writes
-`journal_lines`.**
+**Funding accounts mirror `leg-mapping.ts` exactly** — cash→1110 (1120 when a `cash_request_id`
+is present), online→1140, credit→2110 with the supplier party. **Do not re-derive them**; a second
+copy of a mapping is a second source of truth.
 
-- `idempotencyKey` = `expense:{id}:post` — derived from the document, never from a timestamp.
-- The split becomes **one entry with several credit lines**, not several entries. It is one
-  business event.
-- A **reimbursable** payment credits `2130` **with the staff member as the party** (T-118 /
-  DEF-049). Without a party the trigger rejects it — correctly.
+### 3. ⚠️ Two payment methods have NO account, and never did — DEF-054
 
-### 3. ⚠️ Categories: v1's list has real problems, and importing it blindly imports them
+`other` and `ar_collection` appear in v1's data. **`convert.ts` already quarantines both** as
+`unimplemented_payment_method`, and `POSTING-PATTERNS.md` has worked examples for only `cash`,
+`online`, `credit` and `reimbursable`.
 
-Discovery 08 found **132 entries, two-level, both levels free text**, with duplicates and
-inconsistent casing (§5). The COA crosswalk exists (`leg-mapping.ts`, T-113) and DEF-035 added the
-17 missing accounts.
+**They are accepted on the document and BLOCK posting**, with a named message — exactly as an
+unmapped category does. **An unmappable payment is the same defect as an unmappable category and
+gets the same treatment**, not a silent drop from the enum. Ian will decide whether they need real
+mappings or should be retired.
 
-**Do not free-text the category.** A category is a **row with an account mapping** — that is what
-makes an expense post to the right place without a human deciding each time.
+### 4. Categories: mapped, or it does not post — and never a fallback
 
-**Unmapped is a first-class state**, not an error: a category with no account **blocks posting**
-with a clear message rather than silently landing in a catch-all. *Silently landing in
-`6900 Other` is how a P&L becomes uninformative one expense at a time.*
+Seed from the **already-decided crosswalk** in `leg-mapping.ts`, not from v1's 132 free-text
+entries with their duplicates and inconsistent casing (discovery 08 §5).
 
-### 4. The receipt-photo gate — Ian's existing rule
+`account_code` is **nullable**, and null **blocks posting** with a clear message.
 
-An **external** receipt requires a photo before posting. This is a real v1 control and it carries
-forward.
+> **Never fall back to `6900 Other`.** Silently routing an unknown category to a catch-all is how
+> a P&L becomes uninformative one expense at a time — and nobody ever notices, because the books
+> still balance.
 
-**Enforce it server-side at post, not in the form.** A form check is a convenience; the control is
+`PERSONAL` routes to **3200 owner's drawings** (contra-equity, bible row 39) and `CAPEX` to a
+**15xx asset**. Neither is a P&L expense, and getting either wrong overstates costs.
+
+### 5. The receipt-photo gate — DEF-055, now defined
+
+The original rule said *"an **external** receipt requires a photo"* with nothing defining
+"external". In v1 that distinction lives on a `Receipt` entity this task does not carry forward.
+
+**Definition adopted: every expense recorded through this module is external.** Internal movement
+is a delivery or a transfer, neither of which is an expense here. **So the gate is simply: no
+photo, no posting.**
+
+**Enforced server-side at post, never in the form.** A form check is a convenience; the control is
 that an expense without a photo cannot reach `posted`.
 
-### 5. Editing, and the 48-hour window
+### 6. Capabilities — `authorize()` exists now, so use it
 
-v1 gives a cashier **48 hours to edit their own** expense (`policy.ts:80-90`). Preserve it: it is
-the mechanism that stops staff needing a manager for a typo, which is what keeps the manager
-available for things that matter.
+`create_expense` · `edit_own_expense` (creator, **48h**, draft only) · `edit_any_expense` ·
+`approve_expense` · `void_expense`.
 
-- `edit_own_expense` — creator, within the window, **draft only**.
-- `edit_any_expense` — manager and above.
-- **A posted expense is never edited.** It is voided and re-entered, and the void reverses the
-  entry via `reverseEntry` (T-106). Same discipline as the ledger, for the same reason.
+Call `authorize()` from `@shareat/auth` at **every mutation**. It throws. **Each of the five needs
+a test proving the denial fires** — v1 shipped two permissions that permitted nothing (DEF-051,
+DEF-052).
 
-### 6. Capabilities — from the matrix, enforced server-side
+### 7. Void, never edit
 
-`create_expense` staff · `edit_own_expense` staff, time-boxed · `edit_any_expense` manager ·
-`approve_expense` manager · `void_expense` manager. **Every one needs a test proving the denial
-fires** (DEF-051, DEF-052 are both permissions that permitted nothing).
+A posted expense is **never** edited. It is voided, and the void **reverses the entry through
+`reverseEntry`** — same discipline as the ledger, for the same reason. The 48-hour window applies
+to **drafts only**.
 
 ---
 
-## Invariants the tests must prove
+## Invariants
 
 **Posting**
-1. A single-payment cash expense posts exactly the lines `POSTING-PATTERNS.md` declares.
-2. **A three-way split posts ONE entry with three credit lines** — not three entries.
-3. A reimbursable payment credits `2130` carrying the staff party; **without the party it is
-   rejected**.
-4. Re-posting the same expense is idempotent — one entry, `created: false` on the second call.
-5. A voided expense reverses through `reverseEntry`, and every account nets to zero.
+1. A single cash expense posts exactly the lines `POSTING-PATTERNS.md` declares.
+2. **A three-way split posts ONE entry with three credit lines**, not three entries.
+3. Reimbursable credits 2130 with the staff party; **without the party it is rejected**.
+4. Re-posting is idempotent — one entry, `created: false` on the second call.
+5. A void reverses through `reverseEntry` and every account nets to exactly zero.
 
-**Categories**
+**Routing**
 6. A mapped category routes to its declared account.
-7. **An unmapped category BLOCKS posting with a named message** — it never falls back to `6900`.
+7. **An unmapped category BLOCKS, naming the category.** It never reaches `6900`.
+8. `PERSONAL` routes to **3200**, not to an expense account.
+9. `CAPEX` routes to a **15xx asset**, not to a P&L line.
+10. **`other` and `ar_collection` BLOCK posting** with a named reason (DEF-054).
 
 **Controls**
-8. An external expense **without a photo cannot reach `posted`** — enforced server-side, proven by
-   calling the service directly rather than through the form.
-9. The creator can edit their own draft inside 48 hours; **outside it, they cannot**.
-10. A posted expense **cannot be edited by anyone**, including an admin.
-11. Each capability's **denial** fires for a role that lacks it.
+11. **No photo, no posting** — proven by calling the service directly, not through the form.
+12. The creator edits their own draft inside 48h; outside it, they cannot.
+13. A posted expense cannot be edited by anyone, **including an admin**.
+14. **Each of the five capabilities denies a role that lacks it.**
 
-**Wave 0 still holds**
-12. The new tables are classified for cutover and declared in the RLS registry — **both guards
-    pass, and both were seen failing first.**
-13. An expense created in org A is **invisible to org B**, with no `WHERE org_id` written anywhere
-    in the query.
+**Wave 0 holds**
+15. All three tables classified for cutover and declared in the RLS registry — **both guards seen
+    failing first**.
+16. An expense in org A is invisible to org B, **with no `WHERE org_id` written anywhere**.
 
 ## Out of scope
 
-Recurring expenses and budgets (ADR-005's *"can wait past January"*) · AP invoices and payments
-(T-130) · approval chains beyond a single approver · OCR · any change to `postEntry`.
+**Deliveries and anything inventory-valued (Phase 3)** · AP invoices and payments (T-130) ·
+recurring expenses and budgets · approval chains beyond one approver · OCR · any change to
+`postEntry`, `reverseEntry` or `@shareat/auth`.
 
 ## Done when
 
-- [ ] All 13 invariants pass against real Postgres.
+- [ ] All 16 invariants pass against real Postgres.
 - [ ] Migration applies; `migration-journal.test.ts` **run immediately after generating it**.
-- [ ] `typecheck` · `test` · `test:integration` green · `build` succeeds.
-- [ ] ⭐ **Smoketested in the running app on 9008** — create a split-payment expense, post it, void
-      it, and confirm the trial balance still ties. *Not tickable from a terminal.*
-- [ ] Any spec defect **reported, not silently worked around**.
-
-> **The test of this module is not that it posts correctly. It is that a cashier at 11pm, with a
-> handful of receipts and three payment methods, finds it faster than the paper it replaces.**
+- [ ] `typecheck` · `test` · `test:integration` green, **every pre-existing test still passing** ·
+      `build` succeeds (check port 9008 first; skip and **say so** if a dev server is live).
+- [ ] ⭐ **Smoketested on 9008** — create a split-payment expense, post it, void it, confirm the
+      trial balance still ties. *Not tickable from a terminal.*
+- [ ] Any spec defect **reported, not silently worked around**. *This spec has already had four.*
