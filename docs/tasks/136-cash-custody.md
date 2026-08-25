@@ -186,6 +186,46 @@ sell is not a restaurant).
 **The mechanism is settled; the NUMBER is Ian's, per store** — as is the imprest amount and who may
 change either. Both are store configuration, and both belong to whoever carries the risk.
 
+---
+
+## 6. 🆕 The service-charge float, and its distribution cadence (bible rows 135, 136)
+
+Service charge collected on a sales day credits **2160, a float** — neither revenue nor AP
+(T-123, row 135). **It has to be cleared, and clearing it is a cash movement, which puts it here
+rather than with revenue recognition.**
+
+Ian, 2026-08-25: distribute *"per day, per week or per month."*
+
+### ⛔ Monthly is not lawful, and the option list must say so
+
+**RA 11360 requires distribution at least twice a month, at intervals not exceeding sixteen days.**
+
+| Cadence | |
+|---|---|
+| **Daily** | ✅ |
+| **Weekly** | ✅ |
+| **Twice monthly / every 15 days** | ✅ — the statutory floor |
+| **Monthly** | ⛔ **Not compliant.** Do not offer it, or offer it only with the interval stated |
+
+> **This is a case where the configuration must not be able to express the wrong answer.** Same
+> instinct as `is_remitted_daily` being NOT NULL: if a setting can be set to something unlawful,
+> eventually it will be — and nobody will notice, because a float that keeps growing looks like a
+> healthy balance rather than an overdue obligation.
+
+### ⭐ An ageing float is a FINDING, not a balance
+
+**2160 growing is the symptom of a missed distribution**, and it is invisible if you only read the
+balance sheet. It belongs in the OIL feed (T-135) as a derived finding: *"service charge float
+older than 16 days."* Same shape as every other finding there — derived from the condition, so it
+cannot be resolved while it is still true.
+
+### It shares its shape with remittance, and deliberately not its cadence
+
+Both are per-store cash movements on a configurable rhythm (§4). ⚠️ **But they are not the same
+setting and must not be collapsed into one**: remittance is bounded by how much cash you are
+willing to hold, and this is bounded by *statute*. A store that remits weekly may still have to
+distribute twice a month.
+
 ## 5. ⚠️ Research required before designing this (bible §3.6)
 
 1. **How reference systems model a cash-in-transit / undeposited-funds account** — and whether
