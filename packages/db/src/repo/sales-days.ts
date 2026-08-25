@@ -35,6 +35,8 @@ export interface SalesDayRow {
   pwdDiscount: string;
   otherDiscount: string;
   comps: string;
+  serviceCharge: string;
+  otherCharges: string;
   cashCollected: string;
   onlineCollected: string;
   creditSales: string;
@@ -65,6 +67,8 @@ const COLUMNS = {
   pwdDiscount: salesDays.pwdDiscount,
   otherDiscount: salesDays.otherDiscount,
   comps: salesDays.comps,
+  serviceCharge: salesDays.serviceCharge,
+  otherCharges: salesDays.otherCharges,
   cashCollected: salesDays.cashCollected,
   onlineCollected: salesDays.onlineCollected,
   creditSales: salesDays.creditSales,
@@ -123,6 +127,8 @@ export interface InsertSalesDayInput {
   pwdDiscount: string;
   otherDiscount: string;
   comps: string;
+  serviceCharge: string;
+  otherCharges: string;
   cashCollected: string;
   onlineCollected: string;
   creditSales: string;
@@ -230,6 +236,8 @@ export interface UpdateDraftInput {
   pwdDiscount?: string;
   otherDiscount?: string;
   comps?: string;
+  serviceCharge?: string;
+  otherCharges?: string;
   cashCollected?: string;
   onlineCollected?: string;
   creditSales?: string;

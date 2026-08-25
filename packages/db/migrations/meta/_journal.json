@@ -120,6 +120,13 @@
       "when": 1787658808600,
       "tag": "0016_t123_sales_day",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1787665323409,
+      "tag": "0017_t123_charges",
+      "breakpoints": true
     }
   ]
 }

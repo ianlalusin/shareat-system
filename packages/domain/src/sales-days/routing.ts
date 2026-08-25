@@ -23,6 +23,31 @@
  * ETL applies to a leg it cannot map, and the same reason: a balanced-looking entry built from
  * figures that disagree with each other is worse than no entry, because it looks finished.
  *
+ * ## ⭐ v2 records GROSS, with discounts and charges on their own lines
+ *
+ * Ian, 2026-08-25: v1's pull is net — *"so discounts and charges are accounted"* — **but for v2**
+ * *"it is better to include discounts and charges in the sales report so they both have clear
+ * lines and the data can easily be used."* So `totalSales` here is **gross food revenue**, and
+ * every adjustment to it is a line somebody can read.
+ *
+ * ## ⛔ The two kinds of "charge" are OPPOSITE in the books
+ *
+ * They look identical on a bill and could not be more different underneath:
+ *
+ *   - **Service charge → 2160, a LIABILITY.** RA 11360 sends **100%** of it to rank-and-file
+ *     employees, at least twice a month. The business keeps nothing, so it collects as an agent.
+ *   - **Other charges — leftover, packaging, similar → 4500, INCOME.** The business keeps these.
+ *
+ * ⚠️ **Booking service charge as income would overstate profit AND hide a payable, and it would
+ * not self-correct.** The reverse error self-corrects when the money is distributed — an asymmetry
+ * that decides the treatment even before an accountant confirms it. *Ian should still confirm it.*
+ *
+ * ⚠️ **See DEF-061.** POS's endpoint reads a gross field and *falls back to a net computation
+ * when it has not been backfilled*, with nothing to tell the caller which it returned — so a day's
+ * figures may not be on the basis this module assumes. **The reconciliation below is the
+ * protection**: net figures arriving where gross is expected fail loudly rather than posting
+ * revenue on one basis and cash on another.
+ *
  * ## ⚠️ v1 floors its derived cash at zero. We refuse instead
  *
  * `derive-totals.ts` computes cash as *"remitted channels − online − credit − other, floored at
@@ -49,6 +74,11 @@ export const SALES_DAY_ACCOUNTS = {
   /** ⚠️ Comps post HERE, not to 4900 and never to a marketing expense. Ian confirmed directly:
    *  comps are revenue foregone, not a cost incurred (bible row 74). */
   COMPS: '4950',
+  /** ⛔ A LIABILITY, not income — RA 11360 sends 100% of it to employees. See this file's header. */
+  SERVICE_CHARGE_PAYABLE: '2160',
+  /** Leftover, packaging and similar. The business KEEPS these, so unlike service charge they
+   *  really are income (Ian: "all in one account, separated from service charge"). */
+  OTHER_CHARGES: '4500',
 } as const;
 
 export interface SalesDayChannelInput {
@@ -68,6 +98,10 @@ export interface RouteSalesDayInput {
   pwdDiscount: Money;
   otherDiscount: Money;
   comps: Money;
+  /** ⛔ Collected on behalf of employees — a liability, never income (RA 11360). */
+  serviceCharge: Money;
+  /** Leftover, packaging and similar. The business keeps these: income. */
+  otherCharges: Money;
   cashCollected: Money;
   onlineCollected: Money;
   creditSales: Money;
@@ -150,10 +184,13 @@ export function routeSalesDay(input: RouteSalesDayInput): RouteSalesDayResult {
     });
   }
 
+  // ── Check 3: what was COLLECTED reconciles to gross revenue plus charges ─────────────
+  // Everything taken in, plus everything given away, must equal everything earned:
+  //   collected + discounts + comps  =  gross sales + service charge + other charges
+  // ⚠️ Charges sit on the RIGHT because they are amounts the customer additionally owed — the
+  // service charge on behalf of the staff, the other charges on the business's own account.
   const discountsTotal = add(input.seniorDiscount, input.pwdDiscount, input.otherDiscount);
-
-  // ── Check 2: the tender side exhausts the total ──────────────────────────────────────
-  const tenderSide = add(
+  const collectedSide = add(
     input.cashCollected,
     input.onlineCollected,
     input.creditSales,
@@ -161,14 +198,16 @@ export function routeSalesDay(input: RouteSalesDayInput): RouteSalesDayResult {
     discountsTotal,
     input.comps,
   );
-  if (!isZero(subtract(tenderSide, input.totalSales))) {
+  const earnedSide = add(input.totalSales, input.serviceCharge, input.otherCharges);
+  if (!isZero(subtract(collectedSide, earnedSide))) {
     return {
       ok: false,
       reason:
-        `tender split does not equal total sales: cash ${input.cashCollected} + online ` +
-        `${input.onlineCollected} + credit ${input.creditSales} + non-remitted channels ` +
-        `${nonRemittedTotal} + discounts ${discountsTotal} + comps ${input.comps} = ${tenderSide}, ` +
-        `but totalSales is ${input.totalSales}`,
+        `the day does not reconcile: collected ${input.cashCollected} cash + ` +
+        `${input.onlineCollected} online + ${input.creditSales} credit + ${nonRemittedTotal} ` +
+        `non-remitted, plus ${discountsTotal} discounts + ${input.comps} comps = ${collectedSide}; ` +
+        `but gross sales ${input.totalSales} + service charge ${input.serviceCharge} + other ` +
+        `charges ${input.otherCharges} = ${earnedSide}`,
     };
   }
 
@@ -212,6 +251,23 @@ export function routeSalesDay(input: RouteSalesDayInput): RouteSalesDayResult {
   }
   if (!isZero(input.alaCarteSales)) {
     lines.push({ accountCode: SALES_DAY_ACCOUNTS.ALA_CARTE, side: 'credit', amount: input.alaCarteSales });
+  }
+
+  if (!isZero(input.otherCharges)) {
+    lines.push({
+      accountCode: SALES_DAY_ACCOUNTS.OTHER_CHARGES,
+      side: 'credit',
+      amount: input.otherCharges,
+      lineMemo: 'leftover, packaging and similar charges',
+    });
+  }
+  if (!isZero(input.serviceCharge)) {
+    lines.push({
+      accountCode: SALES_DAY_ACCOUNTS.SERVICE_CHARGE_PAYABLE,
+      side: 'credit',
+      amount: input.serviceCharge,
+      lineMemo: 'service charge — owed in full to employees (RA 11360)',
+    });
   }
 
   if (lines.length === 0) {

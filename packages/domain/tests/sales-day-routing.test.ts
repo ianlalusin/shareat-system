@@ -22,6 +22,8 @@ function input(over: Partial<RouteSalesDayInput>): RouteSalesDayInput {
     pwdDiscount: ZERO,
     otherDiscount: ZERO,
     comps: ZERO,
+    serviceCharge: ZERO,
+    otherCharges: ZERO,
     cashCollected: ZERO,
     onlineCollected: ZERO,
     creditSales: ZERO,
@@ -171,7 +173,7 @@ describe('the balance identity is TWO checks, and a failure BLOCKS rather than g
     expect(r.reason).toMatch(/revenue split does not equal total sales/);
   });
 
-  it('blocks when the TENDER split does not equal the total — the check a CHECK constraint cannot do', () => {
+  it('blocks when what was COLLECTED does not reconcile — the check a CHECK constraint cannot do', () => {
     // This is the half that spans two tables (non-remitted channel amounts live in
     // sales_day_channels), which is exactly why it lives here rather than in the schema.
     const r = routeSalesDay(
@@ -179,7 +181,7 @@ describe('the balance identity is TWO checks, and a failure BLOCKS rather than g
     );
     expect(r.ok).toBe(false);
     if (r.ok) throw new Error('unreachable');
-    expect(r.reason).toMatch(/tender split does not equal total sales/);
+    expect(r.reason).toMatch(/does not reconcile/);
   });
 
   it('a day with no figures at all posts nothing', () => {
@@ -362,5 +364,88 @@ describe('⭐ the CHANNEL identity — Σ all channels = totalSales (bible row 1
       }),
     );
     expect(r.ok).toBe(true);
+  });
+});
+
+describe('⛔ charges — two kinds that look alike and are opposite in the books (row 134)', () => {
+  it('service charge credits 2160, a LIABILITY — never income', () => {
+    // RA 11360 sends 100% of it to rank-and-file employees. The business collects as an agent
+    // and keeps nothing, so booking it as revenue would overstate profit AND hide a payable.
+    const r = routeSalesDay(
+      input({
+        totalSales: money('1000'),
+        unliSales: money('1000'),
+        serviceCharge: money('100'),
+        cashCollected: money('1100'),
+      }),
+    );
+    expect(posted(r)).toEqual({ 'DR 1110': '1100.00', 'CR 4100': '1000.00', 'CR 2160': '100.00' });
+  });
+
+  it('other charges credit 4500, INCOME — the business keeps these', () => {
+    const r = routeSalesDay(
+      input({
+        totalSales: money('1000'),
+        unliSales: money('1000'),
+        otherCharges: money('50'),
+        cashCollected: money('1050'),
+      }),
+    );
+    expect(posted(r)).toEqual({ 'DR 1110': '1050.00', 'CR 4100': '1000.00', 'CR 4500': '50.00' });
+  });
+
+  it('⭐ the two never share an account — that separation IS the requirement', () => {
+    // Ian: "all [other charges] in one account, separated from service charge."
+    const r = routeSalesDay(
+      input({
+        totalSales: money('1000'),
+        unliSales: money('1000'),
+        serviceCharge: money('100'),
+        otherCharges: money('50'),
+        cashCollected: money('1150'),
+      }),
+    );
+    const p = posted(r);
+    expect(p['CR 2160']).toBe('100.00');
+    expect(p['CR 4500']).toBe('50.00');
+    expect(SALES_DAY_ACCOUNTS.SERVICE_CHARGE_PAYABLE).not.toBe(SALES_DAY_ACCOUNTS.OTHER_CHARGES);
+    // And one is a liability while the other is income — the whole point.
+    expect(SALES_DAY_ACCOUNTS.SERVICE_CHARGE_PAYABLE.startsWith('2')).toBe(true);
+    expect(SALES_DAY_ACCOUNTS.OTHER_CHARGES.startsWith('4')).toBe(true);
+  });
+
+  it('charges sit on the EARNED side of the reconciliation, not the collected side', () => {
+    // A day where the customer paid gross + charges − discount. Everything taken in plus
+    // everything given away must equal everything earned.
+    const r = routeSalesDay(
+      input({
+        totalSales: money('1000'),
+        unliSales: money('1000'),
+        seniorDiscount: money('200'),
+        serviceCharge: money('100'),
+        otherCharges: money('50'),
+        cashCollected: money('950'), // 1000 + 100 + 50 − 200
+      }),
+    );
+    if (!r.ok) throw new Error(r.reason);
+    const sum = (side: 'debit' | 'credit') =>
+      r.lines.filter((l) => l.side === side).reduce((acc, l) => acc + Number(l.amount), 0);
+    expect(sum('debit')).toBe(sum('credit'));
+    expect(sum('debit')).toBe(1150);
+  });
+
+  it('a charge that does not reconcile BLOCKS, naming both sides', () => {
+    const r = routeSalesDay(
+      input({
+        totalSales: money('1000'),
+        unliSales: money('1000'),
+        serviceCharge: money('100'),
+        cashCollected: money('1000'), // forgot to collect the service charge
+      }),
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error('unreachable');
+    expect(r.reason).toMatch(/does not reconcile/);
+    expect(r.reason).toMatch(/service charge/);
   });
 });

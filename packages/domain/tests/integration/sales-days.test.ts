@@ -478,7 +478,7 @@ describe('invariant 6 — a day that cannot balance blocks, and stays fixable', 
     ).rejects.toThrow(/revenue_identity/);
   });
 
-  it('a TENDER mismatch blocks at verify, and the day is left untouched and re-verifiable', async () => {
+  it('a COLLECTED-vs-EARNED mismatch blocks at verify, and the day is left untouched and re-verifiable', async () => {
     // The tender identity spans two tables, so it cannot be a CHECK — it surfaces at posting.
     const f = await setup('inv6b');
     const { id } = await asPerson(f.orgId, (tx) =>
@@ -493,7 +493,7 @@ describe('invariant 6 — a day that cannot balance blocks, and stays fixable', 
     );
     await expect(
       asPerson(f.orgId, (tx) => verifySalesDay(tx, actor(f.orgId, f.managerId), id)),
-    ).rejects.toThrow(/tender split does not equal total sales/);
+    ).rejects.toThrow(/does not reconcile/);
 
     // ⭐ Unchanged and still fixable — a failed verify is not a state change.
     const row = await dayRow(id);

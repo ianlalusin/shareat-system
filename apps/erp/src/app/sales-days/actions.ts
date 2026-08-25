@@ -80,6 +80,8 @@ export async function createSalesDayAction(formData: FormData): Promise<void> {
         pwdDiscount: amount(formData, 'pwdDiscount'),
         otherDiscount: amount(formData, 'otherDiscount'),
         comps: amount(formData, 'comps'),
+        serviceCharge: amount(formData, 'serviceCharge'),
+        otherCharges: amount(formData, 'otherCharges'),
         cashCollected: amount(formData, 'cashCollected'),
         onlineCollected: amount(formData, 'onlineCollected'),
         creditSales: amount(formData, 'creditSales'),

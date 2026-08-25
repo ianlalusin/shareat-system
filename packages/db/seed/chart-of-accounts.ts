@@ -171,6 +171,14 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
     legacyCode: 'others__store_credits',
   }),
   leaf('2145', 'Unredeemed vouchers', 'liability', 'credit', '2000', { status: 'reserved' }),
+  // 🆕 2026-08-25 (T-123, bible row 134). ⭐ A LIABILITY, deliberately — not revenue.
+  // RA 11360 requires 100% of service charges collected by restaurants to be distributed to
+  // rank-and-file employees, at least twice a month. The establishment retains NOTHING, so it
+  // collects as an agent: the money is owed out from the moment it is taken.
+  // ⚠️ Booking it as income would overstate profit AND hide a payable, and it would not
+  // self-correct. The reverse error does self-correct on distribution — which is why the
+  // asymmetry decides this even before an accountant confirms it.
+  leaf('2160', 'Service charge payable to employees', 'liability', 'credit', '2000'),
   leaf('2150', 'Due to related store', 'liability', 'credit', '2000', { requiresParty: true }), // liability__due_to_{storeKey}, ap__{commissaryMirror} — T-118 party_type=store
   leaf('2210', 'SSS payable', 'liability', 'credit', '2000'), // 🆕
   leaf('2220', 'PhilHealth payable', 'liability', 'credit', '2000'), // 🆕
@@ -217,6 +225,12 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
   leaf('4100', 'Food sales — unlimited (unli)', 'income', 'credit', '4000'), // 🆕
   leaf('4150', 'Food sales — à la carte (dine-in, take-out and delivery)', 'income', 'credit', '4000'), // 🆕, active
   leaf('4400', 'Beverage sales', 'income', 'credit', '4000'), // 🆕 — one lump account, amended 2026-08-23
+  // 🆕 2026-08-25 (T-123, bible row 134). Ian: "we charge leftover charge, packaging charge and
+  // other charges — I want them all in ONE account, separated from service charge."
+  // ⭐ These are the BUSINESS's income and it keeps them. Service charge is the opposite: RA 11360
+  // sends 100% of it to employees, so that one is a LIABILITY at 2160. Two kinds of "charge" that
+  // look alike on a bill and are opposite in the books — which is exactly why they are separated.
+  leaf('4500', 'Other charges — leftover, packaging and similar', 'income', 'credit', '4000'),
   // Contra-revenue exceptions — Contract §3.
   leaf('4900', 'Sales discounts', 'income', 'debit', '4000'), // 🆕 — senior/PWD, currently hardcoded to zero
   leaf('4910', 'Loyalty points redeemed', 'income', 'debit', '4000', { legacyCode: 'others__points' }),

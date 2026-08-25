@@ -22,6 +22,7 @@ import postgres from 'postgres';
 
 config({ path: '.env.local' });
 
+import { seedChartOfAccounts } from '../packages/db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../packages/db/seed/expense-categories';
 
 /** Roles seeded, in the order a real org acquires them. */
@@ -68,6 +69,14 @@ async function main(): Promise<void> {
     if (stores.length === 0) {
       throw new Error(`dev-seed: org "${org.name}" has no stores — nothing to scope a person to.`);
     }
+
+    // ⚠️ Re-seed the CHART too, not just categories. The chart grows as the project does — T-123
+    // added 2160 and 4500 — and an org seeded before an account existed simply does not have it.
+    // The symptom is a posting refused with "unknown account code", which is postEntry doing its
+    // job but is baffling if you assume the chart is static. `ON CONFLICT DO NOTHING` makes this
+    // additive and safe to re-run: existing accounts are untouched, missing ones appear.
+    const chart = await seedChartOfAccounts(sql, org.id);
+    console.log(`chart of accounts  : ${chart.headersInserted + chart.leavesInserted} inserted (missing ones only)`);
 
     const categories = await seedExpenseCategories(sql, org.id);
     console.log(`expense categories : ${categories.categoriesInserted} inserted`);

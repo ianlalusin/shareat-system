@@ -63,35 +63,35 @@
 - `1034–1068 ` 10. Phase plan
 - `1069–1085 ` 11. Migration & ETL rules
 - `1086–1134` 12. Inherited landmines — do not repeat these
-- `1135–1274` 13. Decision log
-- `1275–1294` 14. Amendment protocol
-- `1295–1299` 15. Engineering standards — the industry practices this project follows
-  - `1300–1305` 15.1 Build order: walking skeleton first
-  - `1306–1317` 15.2 Golden-master testing — the most important practice here
-  - `1318–1326` 15.3 Strangler Fig, not big-bang cutover
-  - `1327–1331` 15.4 No dual-write
-  - `1332–1336` 15.5 Expand/contract migrations
-  - `1337–1345` 15.6 Observability from day zero, not later
-  - `1346–1350` 15.7 CI gates
-  - `1351–1355` 15.8 Backups and a tested restore
-  - `1356–1360` 15.9 Twelve-Factor config
-  - `1361–1368` 15.10 Append-only ledgers — but not event sourcing
-  - `1369–1373` 15.11 Defence in depth
-  - `1374–1402` 15.12 Skills are lenses, not assurance
-  - `1403–1409` 15.13 Reconciliation is a permanent feature
-- `1410–1414` 16. The accounting spine
-  - `1415–1446` 16.0 What we are actually fixing — the diagnosis
-  - `1447–1490` 16.1 The ten invariants — non-negotiable
-  - `1491–1505` 16.2 The oracle: how "correct" is tested
-  - `1506–1527` 16.3 The model — header + lines, not legs
-  - `1528–1547` 16.4 Deliberately simpler than ERPNext
-  - `1548–1614` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1615–1639` 16.6 What v1 already gets right — preserve the intent
-  - `1640–1661` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1662–1676` 16.8 What v1's accounting already gets right
-  - `1677–1720` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1721–1771` 16.10 Posting patterns — one canonical pattern per business event
-  - `1772–1789` 16.11 Inventory's accounting integration
+- `1135–1275` 13. Decision log
+- `1276–1295` 14. Amendment protocol
+- `1296–1300` 15. Engineering standards — the industry practices this project follows
+  - `1301–1306` 15.1 Build order: walking skeleton first
+  - `1307–1318` 15.2 Golden-master testing — the most important practice here
+  - `1319–1327` 15.3 Strangler Fig, not big-bang cutover
+  - `1328–1332` 15.4 No dual-write
+  - `1333–1337` 15.5 Expand/contract migrations
+  - `1338–1346` 15.6 Observability from day zero, not later
+  - `1347–1351` 15.7 CI gates
+  - `1352–1356` 15.8 Backups and a tested restore
+  - `1357–1361` 15.9 Twelve-Factor config
+  - `1362–1369` 15.10 Append-only ledgers — but not event sourcing
+  - `1370–1374` 15.11 Defence in depth
+  - `1375–1403` 15.12 Skills are lenses, not assurance
+  - `1404–1410` 15.13 Reconciliation is a permanent feature
+- `1411–1415` 16. The accounting spine
+  - `1416–1447` 16.0 What we are actually fixing — the diagnosis
+  - `1448–1491` 16.1 The ten invariants — non-negotiable
+  - `1492–1506` 16.2 The oracle: how "correct" is tested
+  - `1507–1528` 16.3 The model — header + lines, not legs
+  - `1529–1548` 16.4 Deliberately simpler than ERPNext
+  - `1549–1615` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1616–1640` 16.6 What v1 already gets right — preserve the intent
+  - `1641–1662` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1663–1677` 16.8 What v1's accounting already gets right
+  - `1678–1721` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1722–1772` 16.10 Posting patterns — one canonical pattern per business event
+  - `1773–1790` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1269,6 +1269,7 @@ just a patch.**
 | 131 | 2026-08-25 | **The cash-custody research: the account is UNDEPOSITED FUNDS (I had the term wrong), the till reconciles PER CASHIER PER SHIFT with denomination counts, v1's `less`/`plus` is AHEAD of ERPNext — and a mandatory per-transaction PWD/senior LOGBOOK exists that nothing captures today** (discovery 24) | ⚠️ **Correction first: I wrote “cash in transit / undeposited funds” in rows 127 and 128 as if interchangeable and they are not.** *Undeposited funds* is our books versus where the money physically is; *deposit in transit* is our books versus **the bank's** — a bank-reconciliation timing item with nothing to do with a till. Using the wrong one would have invited someone to reconcile a till against a bank statement. ⭐ **Row 129's ceiling is retro-justified by the field:** vendors describe batched deposits as the ordinary case for undeposited funds, AND warn it is *“one of the accounts most likely to cause a business's financial statements to be incorrect”* because money piles up in it forever when the deposit step is never done. **A pooled-remittance design without a ceiling is that failure with extra steps.** **From ERPNext's POS Opening/Closing Entry, three things to adopt:** reconciliation **per cashier per shift** (v1 is per store per day, which cannot attribute a variance when two cashiers worked — and attribution is the whole custody control), **denomination-level counting** (quantity of each note and coin, not one total), and **expected/closing/difference PER PAYMENT METHOD**, which is row 127's owner/instrument split doing reconciliation work. ⛔ **But ERPNext does NOT solve the problem Ian named — it assumes it away:** its expected cash is just *opening + takings* because its till never PAYS anything. **v1's `less`/`plus` models a real practice ERPNext handles by forbidding it, so v1 is ahead here and “simplifying” toward ERPNext would delete the arithmetic that makes expected cash correct.** Same finding answers `coverageEvents`: no standard name exists because systems that forbid till-paid expenses never need the concept — **port it as-is.** ⛔ **The new finding: RR 5-2017 makes a separate PWD discount LOGBOOK mandatory** — ID number, name, date, original and discounted amount, signatory — **per transaction.** The ERP's daily `seniorDiscount`/`pwdDiscount` totals cannot satisfy it and **only POS holds transaction detail; neither side captures it today.** Also flagged, not settled: BIR guidance points at an *“Expenses – PWD Discounts”* account while we post to **4900 contra-revenue** — a genuine tax-versus-financial-reporting tension. **`POSTING-PATTERNS.md`'s existing disclaimer that this is management reporting and NOT a BIR VAT computation is doing real work and must not be quietly dropped when someone later wires VAT** | Yes — logbook and account treatment need Ian |
 | 132 | 2026-08-25 | **Senior/PWD discounts stay CONTRA-REVENUE (4900). The till reconciles PER SHIFT and the sales day stays PER DAY — both, not one. And the statutory discount LOGBOOK becomes a requirement: today only the ID is captured** | Ian, answering discovery 24's three opens. ⚠️ **One reading stated rather than assumed:** he answered *“contra asset”*, and I am taking that as **contra-REVENUE** — the choice on the table was contra-revenue (4900, current) versus BIR's *“Expenses – PWD Discounts”*, and *contra* is the operative half. **A sales discount is not a contra-asset** (that class is accumulated depreciation, allowance for doubtful accounts — a valuation account against something the business owns). So 4900 stands unchanged and `POSTING-PATTERNS.md`'s `sale.discount.senior-pwd` needs no edit. **If he meant something else this is the line to correct.** ⭐ **Per shift AND per day is the right answer and it settles T-123 §3's decomposition:** the till position (split B) is **per cashier per shift**, which is what makes a variance attributable to one person; the sales day (split A) stays **per store per day**, which is what revenue recognition and the period close need. **Shifts roll up into a day — they are not competing grains, they are two levels of one hierarchy**, and v1 already carries both (its `derive-totals.ts` branches on whether it is writing a shift doc or a day doc). ⛔ **On the logbook: today the business captures only the ID.** RR 5-2017 requires a separate PWD discount logbook — ID number, name, date, original and discounted amount, signatory — **per transaction**, and Ian has said to require it. **Only POS holds transaction-level detail**, so this is a POS capture requirement with an ERP reporting surface: a daily total cannot produce it, and no amount of ERP work can reconstruct a name that was never recorded | Yes |
 | 133 | 2026-08-25 | **⛔ `totalSales` is the SUM OF ALL CHANNELS, remitted and non-remitted together — and v1's sales report DERIVES almost everything from a small input set, where mine asks the user to type figures that must agree. My form has the shape wrong** (T-123, `derive-totals.ts`) | Ian: *“see how the current sales report doc looks — total sales are all sales channel sum, remitted daily and un-remitted daily combined.”* Confirmed at source: **`totalSales = channelsTotal + branchDelta`**, where `channelsTotal` is Σ of every channel. ⚠️ **I never enforced that**, so my own browser smoketest passed a day whose channels summed to ₱550 against a ₱6,000 total — the identity I omitted is exactly the one that would have caught it. ⭐ **The bigger finding is the INPUT model, and v1's is better than mine by construction.** v1 takes per-channel amounts, a per-account online breakdown, credit and other tenders, and **auto-queries the cashier's `less`/`plus`** — then derives `totalSales`, `cashPayments`, the remittance expectations and the rest. **Cash is DERIVED** (remitted channels − online − credit − other), never typed. **So the figures cannot disagree with each other, because only one set is entered.** Mine asks for total, unli, à la carte, cash and online as five independent numbers and then checks they agree — **which makes a data-entry error possible where v1 makes it impossible.** Two further details worth keeping: `cashierAccountIds` decides which online accounts count, because *“online sales into any other account are not the cashier's to remit”* — bible row 127's owner dimension doing real work — and the module exists at all because creation and adjustment once derived differently, leaving `totalSales` stale after a channel correction (Lipa 2026-07-12). **One pure derivation, three callers, no `use server` and no React** is the pattern, and it is the right one. ⚠️ **Open, and it needs Ian: a hand-entered day has channels but no unli/à-la-carte split**, which is what decides 4100 vs 4150 — only a POS pull carries it. Either a channel names its revenue account, or a hand-entered day must supply the split | Yes — the input model is Ian's call |
+| 134 | 2026-08-25 | **⭐ v2 records GROSS with discounts AND charges on their own lines. And the two kinds of “charge” are OPPOSITE: service charge is a LIABILITY (2160, RA 11360), other charges are INCOME (4500)** (T-123) | Ian, in two steps. First: *“when the ERP pulls sales from POS it's NET, not gross, so discounts and charges are accounted”* — which describes v1. Then: *“but for v2 I agree it's better to include discounts and charges in the sales report so they both have clear lines and the data can easily be used.”* **So `totalSales` is gross food revenue and every adjustment to it is a line somebody can read**, rather than a number already absorbed into another number. ⛔ **The consequential half is the charge split, and Ian's own framing found it:** *“we charge leftover charge, packaging charge and other charges — I want them all in ONE account, separated from service charge.”* Separating them turns out to be far more than tidiness. **RA 11360 sends 100% of service charge to rank-and-file employees, at least twice a month**, so the business collects it **as an agent and keeps none of it** — it is a **payable from the moment it is taken**, not income. Leftover and packaging charges the business does keep, so those really are income. **Two things that look identical on a bill and sit on opposite sides of the balance sheet.** ⚠️ **The asymmetry decides it even before an accountant confirms:** booking service charge as income overstates profit AND hides a payable, and it does **not** self-correct; the reverse error self-corrects the moment the money is distributed. *Ian should still confirm with his accountant.* Chart 93 → 95 accounts — the count is a PIN, so the addition had to be deliberate, and it was the pin that caught it. **Also found by verifying in the browser rather than trusting a green suite:** an org seeded BEFORE an account existed simply does not have it, and the posting was refused with *“unknown account code '4500'”* — `postEntry` doing its job, but baffling if you assume the chart is static. `dev:seed` now re-seeds the chart too; `ON CONFLICT DO NOTHING` makes that additive and safe | Yes — the service-charge treatment wants an accountant's nod |
 
 ---
 

@@ -135,10 +135,26 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
         </section>
 
         <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <h2 className="font-medium">Charges</h2>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            ⛔ <strong>These two are opposite in the books.</strong> A{' '}
+            <strong>service charge</strong> is <em>not</em> income — RA 11360 sends 100% of it to
+            employees, so it is a <strong>liability (2160)</strong> from the moment it is collected.
+            Leftover, packaging and other charges <strong>are</strong> income (4500), because the
+            business keeps them.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Money name="serviceCharge" label="Service charge (→ 2160, owed to staff)" />
+            <Money name="otherCharges" label="Other charges — leftover, packaging (→ 4500)" />
+          </div>
+        </section>
+
+        <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="font-medium">Tender — where the money went</h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Cash + online + credit + non-remitted channels + discounts + comps{' '}
-            <strong>must equal the total</strong>. Card tenders go through online.
+            Everything taken in plus everything given away{' '}
+            <strong>must equal everything earned</strong> — cash + online + credit + non-remitted
+            channels + discounts + comps = gross sales + charges. Card tenders go through online.
           </p>
           <div className="grid gap-3 sm:grid-cols-3">
             <Money name="cashCollected" label="Cash (→ 1110 cashier)" />

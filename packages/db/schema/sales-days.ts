@@ -146,6 +146,15 @@ export const salesDays = pgTable(
      *  directly: comps are revenue foregone, not a cost incurred (bible row 74). */
     comps: numeric('comps', { precision: 14, scale: 2 }).notNull().default('0'),
 
+    // ── Charges. ⛔ Two kinds, OPPOSITE in the books ──────────────────────────────────
+    /** ⛔ -> 2160, a LIABILITY. RA 11360 sends 100% of service charge to rank-and-file employees
+     *  at least twice a month, so the business collects it as an agent and keeps none of it.
+     *  Booking it as income would overstate profit and hide a payable (bible row 134). */
+    serviceCharge: numeric('service_charge', { precision: 14, scale: 2 }).notNull().default('0'),
+    /** -> 4500, INCOME. Leftover, packaging and similar — Ian: "all in one account, separated
+     *  from service charge." The business keeps these, which is the whole difference. */
+    otherCharges: numeric('other_charges', { precision: 14, scale: 2 }).notNull().default('0'),
+
     // ── The tender side: where the money went ─────────────────────────────────────────
     /** -> 1110 Cash on hand — cashier. Selling cash always enters the till first, so the
      *  cashier/office owner split (bible row 127) does not arise here; it arises on the
@@ -194,7 +203,7 @@ export const salesDays = pgTable(
     check('sales_days_non_negative_check', sql`
       ${t.totalSales} >= 0 and ${t.unliSales} >= 0 and ${t.alaCarteSales} >= 0
       and ${t.seniorDiscount} >= 0 and ${t.pwdDiscount} >= 0 and ${t.otherDiscount} >= 0
-      and ${t.comps} >= 0
+      and ${t.comps} >= 0 and ${t.serviceCharge} >= 0 and ${t.otherCharges} >= 0
       and ${t.cashCollected} >= 0 and ${t.onlineCollected} >= 0 and ${t.creditSales} >= 0
     `),
     /** ⭐ The revenue side of the balance identity: the posting split must exhaust the total.

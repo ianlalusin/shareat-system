@@ -131,6 +131,13 @@ export default async function SalesDayDetailPage({
           )}
           <Row label="Discounts → 4900" value={formatMoney(money(String(discountsTotal)))} />
           <Row label="Comps → 4950" value={formatMoney(money(day.comps))} />
+          {Number(day.otherCharges) > 0 && (
+            <Row label="Other charges → 4500" value={formatMoney(money(day.otherCharges))} />
+          )}
+          {/* ⛔ A liability, not income — RA 11360 sends 100% of it to employees. */}
+          {Number(day.serviceCharge) > 0 && (
+            <Row label="Service charge → 2160 (owed to staff)" value={formatMoney(money(day.serviceCharge))} />
+          )}
         </Panel>
 
         <Panel title="Discounts, itemised">

@@ -50,6 +50,8 @@ export interface CreateSalesDayInput {
   pwdDiscount?: string;
   otherDiscount?: string;
   comps?: string;
+  serviceCharge?: string;
+  otherCharges?: string;
   cashCollected?: string;
   onlineCollected?: string;
   creditSales?: string;
@@ -120,6 +122,8 @@ async function runCreate(tx: Tx, actor: Actor, input: CreateSalesDayInput): Prom
     pwdDiscount: money(input.pwdDiscount ?? '0'),
     otherDiscount: money(input.otherDiscount ?? '0'),
     comps: money(input.comps ?? '0'),
+    serviceCharge: money(input.serviceCharge ?? '0'),
+    otherCharges: money(input.otherCharges ?? '0'),
     cashCollected: money(input.cashCollected ?? '0'),
     onlineCollected: money(input.onlineCollected ?? '0'),
     creditSales: money(input.creditSales ?? '0'),
@@ -140,6 +144,8 @@ async function runCreate(tx: Tx, actor: Actor, input: CreateSalesDayInput): Prom
     pwdDiscount: String(figures.pwdDiscount),
     otherDiscount: String(figures.otherDiscount),
     comps: String(figures.comps),
+    serviceCharge: String(figures.serviceCharge),
+    otherCharges: String(figures.otherCharges),
     cashCollected: String(figures.cashCollected),
     onlineCollected: String(figures.onlineCollected),
     creditSales: String(figures.creditSales),

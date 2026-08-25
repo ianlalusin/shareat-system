@@ -92,6 +92,8 @@ async function runVerify(tx: Tx, actor: Actor, salesDayId: string): Promise<Veri
     pwdDiscount: money(day.pwdDiscount),
     otherDiscount: money(day.otherDiscount),
     comps: money(day.comps),
+    serviceCharge: money(day.serviceCharge),
+    otherCharges: money(day.otherCharges),
     cashCollected: money(day.cashCollected),
     onlineCollected: money(day.onlineCollected),
     creditSales: money(day.creditSales),
