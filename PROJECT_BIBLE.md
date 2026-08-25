@@ -63,35 +63,35 @@
 - `1034–1068 ` 10. Phase plan
 - `1069–1085 ` 11. Migration & ETL rules
 - `1086–1134` 12. Inherited landmines — do not repeat these
-- `1135–1263` 13. Decision log
-- `1264–1283` 14. Amendment protocol
-- `1284–1288` 15. Engineering standards — the industry practices this project follows
-  - `1289–1294` 15.1 Build order: walking skeleton first
-  - `1295–1306` 15.2 Golden-master testing — the most important practice here
-  - `1307–1315` 15.3 Strangler Fig, not big-bang cutover
-  - `1316–1320` 15.4 No dual-write
-  - `1321–1325` 15.5 Expand/contract migrations
-  - `1326–1334` 15.6 Observability from day zero, not later
-  - `1335–1339` 15.7 CI gates
-  - `1340–1344` 15.8 Backups and a tested restore
-  - `1345–1349` 15.9 Twelve-Factor config
-  - `1350–1357` 15.10 Append-only ledgers — but not event sourcing
-  - `1358–1362` 15.11 Defence in depth
-  - `1363–1391` 15.12 Skills are lenses, not assurance
-  - `1392–1398` 15.13 Reconciliation is a permanent feature
-- `1399–1403` 16. The accounting spine
-  - `1404–1435` 16.0 What we are actually fixing — the diagnosis
-  - `1436–1479` 16.1 The ten invariants — non-negotiable
-  - `1480–1494` 16.2 The oracle: how "correct" is tested
-  - `1495–1516` 16.3 The model — header + lines, not legs
-  - `1517–1536` 16.4 Deliberately simpler than ERPNext
-  - `1537–1603` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1604–1628` 16.6 What v1 already gets right — preserve the intent
-  - `1629–1650` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1651–1665` 16.8 What v1's accounting already gets right
-  - `1666–1709` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1710–1760` 16.10 Posting patterns — one canonical pattern per business event
-  - `1761–1778` 16.11 Inventory's accounting integration
+- `1135–1264` 13. Decision log
+- `1265–1284` 14. Amendment protocol
+- `1285–1289` 15. Engineering standards — the industry practices this project follows
+  - `1290–1295` 15.1 Build order: walking skeleton first
+  - `1296–1307` 15.2 Golden-master testing — the most important practice here
+  - `1308–1316` 15.3 Strangler Fig, not big-bang cutover
+  - `1317–1321` 15.4 No dual-write
+  - `1322–1326` 15.5 Expand/contract migrations
+  - `1327–1335` 15.6 Observability from day zero, not later
+  - `1336–1340` 15.7 CI gates
+  - `1341–1345` 15.8 Backups and a tested restore
+  - `1346–1350` 15.9 Twelve-Factor config
+  - `1351–1358` 15.10 Append-only ledgers — but not event sourcing
+  - `1359–1363` 15.11 Defence in depth
+  - `1364–1392` 15.12 Skills are lenses, not assurance
+  - `1393–1399` 15.13 Reconciliation is a permanent feature
+- `1400–1404` 16. The accounting spine
+  - `1405–1436` 16.0 What we are actually fixing — the diagnosis
+  - `1437–1480` 16.1 The ten invariants — non-negotiable
+  - `1481–1495` 16.2 The oracle: how "correct" is tested
+  - `1496–1517` 16.3 The model — header + lines, not legs
+  - `1518–1537` 16.4 Deliberately simpler than ERPNext
+  - `1538–1604` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1605–1629` 16.6 What v1 already gets right — preserve the intent
+  - `1630–1651` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1652–1666` 16.8 What v1's accounting already gets right
+  - `1667–1710` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1711–1761` 16.10 Posting patterns — one canonical pattern per business event
+  - `1762–1779` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1258,6 +1258,7 @@ just a patch.**
 | 120 | 2026-08-25 | **Assigning the ADMIN role materialises a store-scope row for every store in that org. Rows, never a bypass. And creating a store must add rows for that org's existing admins** (CAPABILITY-MATRIX §C.2) | The T-121 implementer took *“admin does not bypass store scope”* literally — correct — and that **exposed a gap I left**: an admin appointed today was authorised for nothing store-scoped, contradicting *“org admin = org-wide control”* (row 114). Both halves are right; the fix is row 115's own pattern — **decide once, at the moment a human is present, and store the answer**, rather than inferring it on every check. Keeps *“who can see Davao?”* a `select`. ⚠️ **The easily-missed half: a store created LATER appears in nobody's scope**, so store creation backfills admin rows — otherwise a new branch is invisible to the person who just opened it and it looks like a permissions bug rather than a missing row. **Also recorded (§C.1): a capability answers “what may you do”, never “to whom”.** `manage_users` cannot express row 116's authority chain alone — assigning the `admin` role additionally requires `super_admin`, and that check belongs at the call site with its own denial test | Yes |
 | 121 | 2026-08-25 | **`set_credit_limit` goes to MANAGER as well as admin. And the ETL service-account keys are REVOKED in GCP on 31 January 2027, the same date the ETL tables purge** | Ian: *“yes to credit limit.”* Coherent — managers already approve the buyer, and a franchise manager setting their own buyers' limits is risking their own money. **Still split from `approve_buyer`**: approving someone and deciding how much of your money they may owe are two decisions. On the keys: **a credential with no remaining purpose is a liability**, the same argument that dates the landing-table purge, and they die of the same cause — the ETL finishing. ⚠️ **Revoking is not deleting the file.** A key file that has existed may have been copied, backed up or synced; **only revocation in GCP makes those copies worthless.** Revoke first, then delete. Outstanding: the HUB key's IAM role is still unverified — its name reads right, and **the name is not the grant** | Yes |
 | 122 | 2026-08-25 | **A close-readiness checker runs daily 1st–15th. From the 16th, an unclosed prior month blocks back-office POSTING — never the till, never biometrics. Capture is always allowed; VERIFICATION is what is withheld** (ADR-006 §8) | Ian. The checker is adopted as proposed and **explains the window better than §7.2 did: the 15 days are the SETTLEMENT period, not slack** — an August electricity bill arriving 10 September means August cannot close on 1 September. **A recurring-expense template generates a CHECKLIST ITEM, never a posting**: the amount varies so it cannot be automated, but the obligation is knowable, which beats auto-posting a figure nobody agreed. **I pushed back on the wrong reading and Ian corrected it** — I took “block transactions” to include the till; he meant back-office entry, with POS and biometrics running. The one real cost left was that blocking entry does not stop the expense, only its timely recording — trading this month's accuracy for last month's closure. **His own sales-day answer generalised solves it: pending-and-unverifiable for all three.** Record the draft with its photo while memory is fresh; withhold posting. **A growing pile of unpostable drafts is a more legible signal than a greyed-out button**, and it is visible to the admin who can act. Daily unlock kept, **with a typed reason others can read** — friction exercised daily becomes muscle memory by the third day | Yes |
+| 123 | 2026-08-25 | **`close_period` requires ORG-WIDE store scope for a manager — the last open matrix cell, now closed. And the OIL integrity-findings layer is PORTED from v1, with one gap fixed: a finding is DERIVED, only the ACKNOWLEDGEMENT is stored** (T-135) | Ian. The scope answer keeps row 101 and row 114 both true: a period is org-wide, so a Lipa-only manager never closes Malvar's books. On OIL — **I assumed “AI insights” meant AI-generated findings and was wrong**; `integrity.ts` says *deterministic* and *pure observation layer, never touches the GL*, and both carry forward unchanged. **Second time research has found v1 already at the correct shape.** Two of its decisions are better than most systems manage: **`hardAlert` fires through a snooze**, closing the snooze-forever escape hatch, and **thresholds default in code so a misconfig cannot disable detection**. ⚠️ **The gap:** v1 stores `state` per finding key, so resolving one suppresses tomorrow's recompute **while the condition still holds** — the symptom hidden without the cause fixed. **Fix: derive the finding, store only the acknowledgement.** A finding cannot be resolved while it is still true; acknowledgement means *“seen and accepted for now”*, which is a different and honest statement. That also makes the manager scorecard safe — a score people are measured on is a score people manage, and this removes the way to game it. **The close-readiness checker is a FILTER over this feed, not a second engine** | Yes |
 
 ---
 

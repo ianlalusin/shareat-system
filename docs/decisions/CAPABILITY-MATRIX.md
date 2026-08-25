@@ -78,7 +78,7 @@ they need weekly, the boundary is wrong.
 | `view_financial_reports` | store | ✅ | ✅ | ✅ | ✗ | **DEF-051** — in v1 this hid the UI while the data stayed readable. Here it gates the DATA |
 | `view_trial_balance` | org | ✅ | ✅ | ✗ | ✗ | Org-wide by nature; a store manager has no store-level trial balance to see |
 | `reverse_entry` | store | ✅ | ✅ | ✅ | ✗ | The only correction path (T-106). Must be reachable, or people find worse ways |
-| ⚠️ `close_period` | **org** | ✅ | ✅ | **conditional** | ✗ | Bible row 101 says admin **and** manager. **But a period is org-wide and a manager is store-scoped** — see §Open 2 |
+| `close_period` | **org** | ✅ | ✅ | **✅ only with ORG-WIDE store scope** | ✗ | ✅ **Ian 2026-08-25 — store-scoped.** Keeps row 101 (admin *and* manager may close) true alongside row 114 (capabilities are store-scoped): a period is org-wide, so a manager closes only when their scope covers every store. A Lipa-only manager never closes Malvar's books |
 | `post_journal_entry` (direct) | org | ✅ | ✗ | ✗ | ✗ | **Nobody posts by hand.** Entries come from source documents. Reserved for break-glass repair, logged |
 
 ## People
@@ -109,9 +109,10 @@ they need weekly, the boundary is wrong.
 
 ---
 
-## ⚠️ Open — one cell left
+## ✅ Open cells — all closed
 
-*(`set_credit_limit` closed 2026-08-25: manager too. `manage_users` closed by §B.1.)*
+*`set_credit_limit` (manager too) and `close_period` (org-wide scope required) closed 2026-08-25;
+`manage_users` closed by §B.1. **Every cell in the matrix is now decided.***
 
 *(The third, `manage_users`, was closed by §B.1 — the grant-time fallback covers it.)*
 
