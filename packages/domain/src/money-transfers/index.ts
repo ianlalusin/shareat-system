@@ -24,6 +24,7 @@ import {
   type MoneyAccountRow,
   type Tx,
 } from '@shareat/db';
+import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry, type PostEntryLine } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 
@@ -55,11 +56,20 @@ export interface CreateMoneyTransferInput {
   notes?: string | null;
 }
 
+export interface CreateMoneyTransferResult {
+  id: string;
+  entryId: string;
+  fee: string;
+  /** ⚠️ Present when the source could not cover the draw but was allowed anyway — a cashier
+   *  account whose day is not yet verified. Show it; never swallow it. */
+  warning?: string;
+}
+
 export async function createMoneyTransfer(
   tx: Tx | null,
   actor: Actor,
   input: CreateMoneyTransferInput,
-): Promise<{ id: string; entryId: string; fee: string }> {
+): Promise<CreateMoneyTransferResult> {
   if (tx) return runCreate(tx, actor, input);
   return transaction((trx) => runCreate(trx, actor, input));
 }
@@ -89,7 +99,7 @@ async function runCreate(
   tx: Tx,
   actor: Actor,
   input: CreateMoneyTransferInput,
-): Promise<{ id: string; entryId: string; fee: string }> {
+): Promise<CreateMoneyTransferResult> {
   if (input.fromMoneyAccountId === input.toMoneyAccountId) {
     throw new Error('createMoneyTransfer: the source and destination must be different accounts.');
   }
@@ -154,22 +164,16 @@ async function runCreate(
     );
   }
 
-  // ⛔ NO OVERDRAWING (Ian, 2026-08-26: *"for transfer block overdraw"*).
+  // ⛔/⚠️ OVERDRAWING — blocked for an office or staff account, WARNED for a cashier one.
   //
-  // A drawer cannot hand over money it does not hold — a negative cash balance is always an error,
-  // never a real position. Checked against the LEDGER, like every other figure here.
+  // The whole rule lives in `checkDraw` (bible row 154) so this and `approveExpense` cannot
+  // drift: the same act must not be legal on one screen and refused on the next.
   //
   // ⚠️ Deliberately NOT applied to a reversal. Voiding takes money back out of the destination,
   // which can overdraw it if the money has since moved on — but refusing the reversal would leave
   // a wrong entry with no way to correct it. A correction must always be possible; the resulting
   // negative is the signal to fix what came after it.
-  const available = await moneyAccountsRepo.balanceOf(tx, actor.orgId, from);
-  if (out > Number(available)) {
-    throw new Error(
-      `createMoneyTransfer: "${from.name}" holds ${available} — it cannot transfer out ` +
-        `${input.amountOut}. Record the money coming in first, or correct the amount.`,
-    );
-  }
+  const warning = await checkDraw(tx, actor.orgId, from, out, 'createMoneyTransfer');
 
   const fee = (out - inn).toFixed(2);
   const feeAccountCode = Number(fee) > 0 ? (input.feeAccountCode ?? DEFAULT_FEE_ACCOUNT_CODE) : null;
@@ -271,7 +275,7 @@ async function runCreate(
     createdBy: actor.personId,
   });
 
-  return { id: row.id, entryId: posted.entryId, fee };
+  return { id: row.id, entryId: posted.entryId, fee, ...(warning ? { warning } : {}) };
 }
 
 /**

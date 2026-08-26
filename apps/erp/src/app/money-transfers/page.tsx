@@ -17,6 +17,7 @@ export const dynamic = 'force-dynamic';
 interface SearchParams {
   error?: string;
   ok?: string;
+  warning?: string;
 }
 
 export default async function MoneyTransfersPage({
@@ -42,6 +43,8 @@ export default async function MoneyTransfersPage({
   // ⚠️ The grouping is for disambiguation, NOT a same-store restriction: office-to-office across
   // stores is allowed (bible row 152). The rule that matters there is about the CUSTODIAN, not
   // the store, so the domain enforces it and says why rather than the picker hiding options.
+  const overdrawn = accounts.filter((a) => Number(a.balance) < 0);
+
   const byStore = stores
     .map((s) => ({ store: s, accounts: accounts.filter((a) => a.storeId === s.id) }))
     .filter((g) => g.accounts.length > 0);
@@ -71,6 +74,31 @@ export default async function MoneyTransfersPage({
           {sp.ok === 'created' ? 'Transfer recorded.' : 'Transfer reversed.'}
         </div>
       )}
+      {/* ⚠️ A warning is NOT an error — the transfer posted. Shown in amber beside the green
+          confirmation rather than in place of it, so nobody reads it as a failure. */}
+      {sp.warning && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+          {sp.warning}
+        </div>
+      )}
+
+      {/* ⭐ OVERDRAWN ACCOUNTS — derived on every load, never a stored flag, so it cannot linger
+          after the money arrives or go missing when it does not. Bible row 154. */}
+      {overdrawn.length > 0 && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+          <strong className="font-medium">
+            {overdrawn.length === 1 ? 'One account is' : `${overdrawn.length} accounts are`} below
+            zero in the books.
+          </strong>{' '}
+          {overdrawn.map((a) => `${a.name} (${peso(a.balance)})`).join(', ')}.
+          <div className="mt-1 text-xs">
+            For a <strong>cashier</strong> drawer this is expected while the day&apos;s sales are
+            unverified — the cash is in the till before it is in the ledger. Verify the sales day
+            and it should clear. If it does not, or if the account is an office safe or a staff
+            float, the money is genuinely missing and needs counting.
+          </div>
+        </div>
+      )}
 
       {accounts.length < 2 && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
@@ -94,7 +122,15 @@ export default async function MoneyTransfersPage({
               >
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="text-sm font-medium">{a.name}</span>
-                  <span className="font-mono text-sm tabular-nums">{peso(a.balance)}</span>
+                  {/* ⚠️ A negative reads as an ordinary figure unless it is coloured — and a
+                      negative cash balance is never ordinary. */}
+                  <span
+                    className={`font-mono text-sm tabular-nums ${
+                      Number(a.balance) < 0 ? 'text-amber-600 dark:text-amber-400' : ''
+                    }`}
+                  >
+                    {peso(a.balance)}
+                  </span>
                 </div>
                 <div className="text-xs text-neutral-500 dark:text-neutral-400">
                   {storeById.get(a.storeId)?.code ?? '—'} ·{' '}
@@ -118,9 +154,11 @@ export default async function MoneyTransfersPage({
         <div>
           <h2 className="font-medium">Record a transfer</h2>
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            An account cannot send more than it holds, and a retired account cannot be either
-            end. <strong>Between stores, money moves office to office only</strong> — a store
-            remits to its own office first, and only office money can fund another store.
+            A retired account cannot be either end, and{' '}
+            <strong>between stores money moves office to office only</strong> — a store remits to
+            its own office first, and only office money can fund another store. An office safe
+            cannot send more than it holds; a cashier drawer can, and says so, because the till
+            holds the day&apos;s takings before the ledger does.
           </p>
         </div>
 

@@ -34,6 +34,7 @@ function errorMessage(err: unknown): string {
 
 export async function createMoneyTransferAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
+  let warning = '';
 
   try {
     const amountOut = str(formData, 'amountOut');
@@ -45,7 +46,7 @@ export async function createMoneyTransferAction(formData: FormData): Promise<voi
     // reconcile the two statements. Blank is a shortcut, not a default that hides a decision.
     const amountIn = str(formData, 'amountIn') || amountOut;
 
-    await withOrgPrincipal(actor.orgId, (tx) =>
+    const result = await withOrgPrincipal(actor.orgId, (tx) =>
       createMoneyTransfer(tx, actor, {
         fromMoneyAccountId: str(formData, 'fromMoneyAccountId'),
         toMoneyAccountId: str(formData, 'toMoneyAccountId'),
@@ -56,11 +57,19 @@ export async function createMoneyTransferAction(formData: FormData): Promise<voi
         notes: str(formData, 'notes') || null,
       }),
     );
+    // ⚠️ Carried out to the page, never swallowed. The transfer POSTED — this says the source
+    // could not cover it, which for a cashier drawer is expected and for anyone reading the
+    // books is worth knowing.
+    if (result.warning) warning = result.warning;
   } catch (err) {
     redirect(`/money-transfers?error=${encodeURIComponent(errorMessage(err))}`);
   }
 
-  redirect('/money-transfers?ok=created');
+  redirect(
+    warning
+      ? `/money-transfers?ok=created&warning=${encodeURIComponent(warning)}`
+      : '/money-transfers?ok=created',
+  );
 }
 
 export async function voidMoneyTransferAction(formData: FormData): Promise<void> {

@@ -420,46 +420,65 @@ describe('void — through reverseEntry, never a delete', () => {
 });
 
 describe('⛔ overdrawing (Ian, 2026-08-26: "for transfer block overdraw")', () => {
-  it('refuses to move more than the account holds, and allows it once the money is there', async () => {
+  it('⭐ a CASHIER drawer is WARNED, not refused — the till holds what the ledger cannot see', async () => {
     const f = await fixture('overdraw');
-    // The drawer is empty. A drawer cannot hand over money it does not hold.
-    await expect(
-      asOrg(f.orgId, (tx) =>
-        createMoneyTransfer(tx, f.admin, {
-          fromMoneyAccountId: f.drawer.id,
-          toMoneyAccountId: f.safe.id,
-          amountOut: '5000.00',
-          amountIn: '5000.00',
-          transferDate: '2026-01-10',
-        }),
-      ),
-    ).rejects.toThrow(/cannot transfer out 5000\.00/);
+    // The drawer reads ₱0 because today's sales are not verified yet. In the real world it is
+    // full of cash. Refusing here would refuse a shortfall that is not real.
+    const r = await asOrg(f.orgId, (tx) =>
+      createMoneyTransfer(tx, f.admin, {
+        fromMoneyAccountId: f.drawer.id,
+        toMoneyAccountId: f.safe.id,
+        amountOut: '5000.00',
+        amountIn: '5000.00',
+        transferDate: '2026-01-10',
+      }),
+    );
+    expect(r.warning).toMatch(/short 5000\.00/);
+    expect(r.warning).toMatch(/unverified/);
 
-    // Put PHP 5,000 in it, and the identical call now succeeds.
-    await postCash(f, '1110', '4100', '5000.00');
+    // ⭐ And it really posted — the warning is information, not a soft failure.
+    const legs = await legsOf(r.entryId);
+    expect(legs).toHaveLength(2);
+  });
+
+  it('⛔ an OFFICE safe is REFUSED — nothing is waiting to be posted into it', async () => {
+    const f = await fixture('officedraw');
     await expect(
       asOrg(f.orgId, (tx) =>
         createMoneyTransfer(tx, f.admin, {
-          fromMoneyAccountId: f.drawer.id,
-          toMoneyAccountId: f.safe.id,
+          fromMoneyAccountId: f.safe.id,
+          toMoneyAccountId: f.drawer.id,
           amountOut: '5000.00',
           amountIn: '5000.00',
           transferDate: '2026-01-10',
         }),
       ),
-    ).resolves.toBeTruthy();
+    ).rejects.toThrow(/balance is complete/);
+
+    // Fund the safe and the identical call succeeds, with nothing to warn about.
+    await postCash(f, '1130', '4100', '5000.00');
+    const r = await asOrg(f.orgId, (tx) =>
+      createMoneyTransfer(tx, f.admin, {
+        fromMoneyAccountId: f.safe.id,
+        toMoneyAccountId: f.drawer.id,
+        amountOut: '5000.00',
+        amountIn: '5000.00',
+        transferDate: '2026-01-10',
+      }),
+    );
+    expect(r.warning).toBeUndefined();
   });
 
   it('the guard reads the LEDGER, so money arriving from anywhere counts', async () => {
     const f = await fixture('ledgerbal');
-    // Not a transfer — a plain collection into the drawer. The guard has no idea where money
-    // came from, only what the account now holds, which is the point of deriving it.
-    await postCash(f, '1110', '4100', '750.00');
+    // Not a transfer — a plain collection into the safe. The guard has no idea where money came
+    // from, only what the account now holds, which is the point of deriving it.
+    await postCash(f, '1130', '4100', '750.00');
     await expect(
       asOrg(f.orgId, (tx) =>
         createMoneyTransfer(tx, f.admin, {
-          fromMoneyAccountId: f.drawer.id,
-          toMoneyAccountId: f.safe.id,
+          fromMoneyAccountId: f.safe.id,
+          toMoneyAccountId: f.drawer.id,
           amountOut: '750.01',
           amountIn: '750.01',
           transferDate: '2026-01-10',
@@ -561,6 +580,7 @@ describe('cross-store -- office to office only (Ian, 2026-08-26; bible row 152)'
     const f = await fixture('bypass');
     const lipa = await secondStore(f, uid('LIPA'));
     await postCash(f, '1110', '4100', '9000.00');
+    await postCash(f, '1130', '4100', '9000.00');
 
     // Exactly the "deeply wrong" move: reaching into Malvar's till to spend at Lipa.
     await expect(
@@ -577,7 +597,6 @@ describe('cross-store -- office to office only (Ian, 2026-08-26; bible row 152)'
 
     // And landing in the other store's till is refused too -- it would skip the office on the
     // receiving side and leave the due-from/due-to pair sitting against a cashier.
-    await postCash(f, '1130', '4100', '9000.00');
     await expect(
       asOrg(f.orgId, (tx) =>
         createMoneyTransfer(tx, f.admin, {

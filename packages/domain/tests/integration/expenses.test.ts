@@ -123,6 +123,7 @@ interface Fixture {
    *  owned the money, replacing the "office drawer" tickbox that let a cashier route cash away
    *  from their own till. */
   cashDrawerId: string;
+  officeSafeId: string;
 }
 
 /** One org, one open 2026-01 period, a full chart of accounts, the seeded expense
@@ -155,6 +156,14 @@ async function setup(hint: string): Promise<Fixture> {
     values (${orgId}, ${storeId}, 'Cashier drawer', 'cash', '1110', 'cashier')
     returning id
   `;
+  // ⭐ An OFFICE safe too. Since bible row 154 the overdraft rule turns on the CUSTODIAN — a
+  // cashier account only ever warns — so proving the blocking half needs an account whose
+  // balance is complete.
+  const [safe] = await sql<{ id: string }[]>`
+    insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian)
+    values (${orgId}, ${storeId}, 'Office safe', 'cash', '1130', 'office')
+    returning id
+  `;
 
   // ⭐ FUND BOTH ACCOUNTS. Since T-139's overdraw block, approving an expense requires the
   // account it draws on to actually hold the money — so a fixture that spends must first have
@@ -165,8 +174,9 @@ async function setup(hint: string): Promise<Fixture> {
   // never realistic; it was simply unchecked.
   await fundAccount(orgId, storeId, '1110', '500000.00', null);
   await fundAccount(orgId, storeId, '1140', '500000.00', wallet!.id);
+  await fundAccount(orgId, storeId, '1130', '500000.00', null);
 
-  return { orgId, storeId, storeId2, staffId, managerId, adminId , walletId: wallet!.id, cashDrawerId: drawer!.id };
+  return { orgId, storeId, storeId2, staffId, managerId, adminId , walletId: wallet!.id, cashDrawerId: drawer!.id, officeSafeId: safe!.id };
 }
 
 /**
@@ -1028,7 +1038,7 @@ describe('invariant 17 — a DRAFT is deletable; a posted or voided expense neve
 // T-139 extended — no expense may overdraw the account it draws on (Ian, 2026-08-26)
 // =========================================================================================
 
-describe('⛔ an expense cannot overdraw the account that funds it', () => {
+describe('overdrawing an expense account — warn for cashier, block for office (row 154)', () => {
   /** Drains an account to a known balance, so the ceiling in each test is exact. */
   async function drainTo(orgId: string, storeId: string, code: string, keep: string) {
     const [row] = await sql<{ total: string }[]>`
@@ -1067,7 +1077,7 @@ describe('⛔ an expense cannot overdraw the account that funds it', () => {
     });
   }
 
-  async function draftCash(f: Fixture, amount: string): Promise<string> {
+  async function draft(f: Fixture, amount: string, moneyAccountId: string): Promise<string> {
     const cat = await categoryId(f.orgId, 'Supplies and Stocks');
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.staffId), {
@@ -1076,38 +1086,48 @@ describe('⛔ an expense cannot overdraw the account that funds it', () => {
         categoryId: cat,
         particulars: 'Cleaning supplies',
         receiptPhotoUrl: 'https://example.com/r.jpg',
-        payments: [{ method: 'cash', amount, moneyAccountId: f.cashDrawerId }],
+        payments: [{ method: 'cash', amount, moneyAccountId }],
       }),
     );
     return created.id;
   }
 
-  it('refuses at APPROVE when the drawer does not hold it, naming the shortfall', async () => {
+  it('⭐ a CASHIER drawer POSTS with a warning — the till holds what the ledger cannot see', async () => {
     const f = await setup('od1');
     await drainTo(f.orgId, f.storeId, '1110', '1000.00');
-    const id = await draftCash(f, '1500.00');
+    const id = await draft(f, '1500.00', f.cashDrawerId);
 
-    await expect(
-      asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), id)),
-    ).rejects.toThrow(/holds 1000\.00 and this expense draws 1500\.00/);
+    // Ian, 2026-08-26: "warning for now, don't block ... only to cashier owned account, since
+    // only cashier owned account might experience this." A sales day posts at VERIFY, so at 2pm
+    // the drawer reads ₱0 while holding the day's takings.
+    const posted = await asPerson(f.orgId, (tx) =>
+      approveExpense(tx, actor(f.orgId, f.managerId), id),
+    );
+    expect(posted.journalEntryId).toBeTruthy();
+    expect(posted.warnings?.[0]).toMatch(/short 500\.00/);
+    expect(posted.warnings?.[0]).toMatch(/unverified/);
+
+    // ⭐ It really posted. The warning is information, not a soft failure.
+    const row = await expenseRow(f.orgId, id);
+    expect(row!.status).toBe('posted');
   });
 
-  it('⭐ the DRAFT is untouched and still approvable once the money is there', async () => {
+  it('⛔ an OFFICE safe is REFUSED, and the draft survives to be fixed', async () => {
     const f = await setup('od2');
-    await drainTo(f.orgId, f.storeId, '1110', '1000.00');
-    const id = await draftCash(f, '1500.00');
+    await drainTo(f.orgId, f.storeId, '1130', '1000.00');
+    const id = await draft(f, '1500.00', f.officeSafeId);
 
     await expect(
       asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), id)),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/balance is complete/);
 
     // ⚠️ The refusal must not consume the document. This is why the check lives at APPROVE and
-    // not at create: a draft naming money that has not arrived yet is a legitimate thing to be
-    // holding — only the moment it POSTS has to be true.
+    // not at create: a draft naming money that has not arrived yet is legitimate — only the
+    // moment it POSTS has to be true.
     const still = await expenseRow(f.orgId, id);
     expect(still!.status).toBe('draft');
 
-    await fundAccount(f.orgId, f.storeId, '1110', '5000.00', null);
+    await fundAccount(f.orgId, f.storeId, '1130', '5000.00', null);
     await expect(
       asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), id)),
     ).resolves.toBeTruthy();
@@ -1115,7 +1135,7 @@ describe('⛔ an expense cannot overdraw the account that funds it', () => {
 
   it('⭐ sums the SPLIT per account — two affordable lines that together are not', async () => {
     const f = await setup('od3');
-    await drainTo(f.orgId, f.storeId, '1110', '1000.00');
+    await drainTo(f.orgId, f.storeId, '1130', '1000.00');
 
     const cat = await categoryId(f.orgId, 'Supplies and Stocks');
     const created = await asPerson(f.orgId, (tx) =>
@@ -1123,11 +1143,11 @@ describe('⛔ an expense cannot overdraw the account that funds it', () => {
         storeId: f.storeId,
         businessDate: '2026-01-15',
         categoryId: cat,
-        particulars: 'Two cash lines, one drawer',
+        particulars: 'Two cash lines, one safe',
         receiptPhotoUrl: 'https://example.com/r.jpg',
         payments: [
-          { method: 'cash', amount: '600.00', moneyAccountId: f.cashDrawerId },
-          { method: 'cash', amount: '600.00', moneyAccountId: f.cashDrawerId },
+          { method: 'cash', amount: '600.00', moneyAccountId: f.officeSafeId },
+          { method: 'cash', amount: '600.00', moneyAccountId: f.officeSafeId },
         ],
       }),
     );
@@ -1137,12 +1157,13 @@ describe('⛔ an expense cannot overdraw the account that funds it', () => {
     // a split's rows are only ever right when considered together.
     await expect(
       asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id)),
-    ).rejects.toThrow(/holds 1000\.00 and this expense draws 1200\.00/);
+    ).rejects.toThrow(/holds 1000\.00 and this takes 1200\.00/);
   });
 
   it('a REIMBURSABLE expense is unaffected — it moves no store money now', async () => {
     const f = await setup('od4');
     await drainTo(f.orgId, f.storeId, '1110', '0.00');
+    await drainTo(f.orgId, f.storeId, '1130', '0.00');
 
     const cat = await categoryId(f.orgId, 'Supplies and Stocks');
     const created = await asPerson(f.orgId, (tx) =>
@@ -1159,8 +1180,9 @@ describe('⛔ an expense cannot overdraw the account that funds it', () => {
     // ⭐ Staff paying out of their own pocket from an empty drawer is not an overdraft — no store
     // money leaves today, it becomes a payable to them. The guard only ever looks at payments
     // that name a money account.
-    await expect(
-      asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id)),
-    ).resolves.toBeTruthy();
+    const posted = await asPerson(f.orgId, (tx) =>
+      approveExpense(tx, actor(f.orgId, f.managerId), created.id),
+    );
+    expect(posted.warnings).toBeUndefined();
   });
 });

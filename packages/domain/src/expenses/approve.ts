@@ -14,6 +14,7 @@
 import { authorize, type Actor } from '@shareat/auth';
 import { expensesRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
 import { money } from '@shareat/core/money';
+import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry } from '../ledger/post-entry';
 import { routeExpense } from './routing';
 import { capitalizeApprovedExpense } from '../fixed-assets/capitalize';
@@ -26,6 +27,10 @@ export interface ApproveExpenseResult {
    *  `null` for every non-CAPEX expense, and for a CAPEX one below the threshold — which is a
    *  normal outcome, not a failure (T-124 §6). */
   assetId?: string | null;
+  /** ⚠️ Present when a CASHIER account could not cover its share but the posting was allowed
+   *  anyway — the till holds money the ledger cannot see until the day is verified (bible row
+   *  154). The caller MUST surface these: a warning nobody sees is v1's disease. */
+  warnings?: string[];
 }
 
 export async function approveExpense(
@@ -101,7 +106,8 @@ async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promi
     }
   }
 
-  // ⛔ NO OVERDRAWING (Ian, 2026-08-26: *"yes extend"* — the same rule T-139 put on transfers).
+  // ⛔/⚠️ OVERDRAWING — blocked for an office or staff account, WARNED for a cashier one
+  // (bible row 154). The decision itself lives in `checkDraw`, shared with `createMoneyTransfer`.
   //
   // ⭐ **This is the surface that actually needed it.** Expense payment is ~34% of v1's ledger
   // activity against a transfer's 7%, so a drawer is far likelier to be driven negative by
@@ -123,16 +129,17 @@ async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promi
       (drawnPerAccount.get(p.moneyAccountId) ?? 0) + Number(p.amount),
     );
   }
+  const warnings: string[] = [];
   for (const [id, drawn] of drawnPerAccount) {
     const acct = await moneyAccountsRepo.getById(tx, actor.orgId, id);
-    const available = Number(await moneyAccountsRepo.balanceOf(tx, actor.orgId, acct!));
-    if (drawn > available) {
-      throw new Error(
-        `approveExpense: expense ${expenseId} cannot post — "${acct!.name}" holds ` +
-          `${available.toFixed(2)} and this expense draws ${drawn.toFixed(2)} from it. Record the ` +
-          'money coming in first, or fund the expense from somewhere that holds it.',
-      );
-    }
+    const warning = await checkDraw(
+      tx,
+      actor.orgId,
+      acct!,
+      drawn,
+      `approveExpense: expense ${expenseId} cannot post`,
+    );
+    if (warning) warnings.push(warning);
   }
 
   const routed = routeExpense({
@@ -203,5 +210,6 @@ async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promi
     journalEntryId: result.entryId,
     created: result.created,
     assetId: capitalised?.assetId ?? null,
+    ...(warnings.length > 0 ? { warnings } : {}),
   };
 }
