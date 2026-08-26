@@ -394,12 +394,66 @@ keeps working the way it works today, and the store an hour from the office opts
 simply N=1.** There is no separate "daily" code path to maintain — building two would guarantee
 they eventually disagree about a shortage.
 
-### 7.6 Still open
+### 7.6 ✅ It does NOT block — it gets its own table, so it cannot hide (Ian, 2026-08-26)
 
-⚠️ **Does a partially-settled day block the next remittance?** §7.5 gives it a name and a display;
-it does not say whether Jan 5 sitting at ₱4,000 short stops Jan 6–10 being remitted. Both are
-defensible — blocking forces the variance to be resolved while it is fresh, not blocking keeps cash
-moving — and it interacts with the ceiling (§4). Ian's call, and not urgent until the screen exists.
+> **Ian:** *"No, it won't block. But it must be flagged, and dedicate a separate table so it won't
+> hide from sight like v1 does."*
+
+**Not blocking is right**: a shortage on Jan 5 is not a reason to strand Jan 6–10's cash in a
+drawer, which would make the control cause the risk it exists to reduce.
+
+⭐ **And "like v1 does" is not a hunch — v1 proves it against itself.** §7.5 records the admin
+button v1 had to build for days *"stuck on `partially_remitted` even though all transfers are
+posted."* **A stuck status that needed a repair tool is a status nobody was watching.** It sat in a
+column, in a list, among days that all looked broadly similar — visible in the sense that it was
+rendered, invisible in the sense that no one acted on it. Ian's instruction is the fix for the
+thing that actually went wrong.
+
+#### The table holds the CASE. The amount stays derived.
+
+⚠️ A dedicated table is exactly right for the flag and exactly wrong for the figure, and the
+distinction is the whole design:
+
+| | Where it lives | Why |
+|---|---|---|
+| **How much is outstanding** | ⭐ **Derived** — expected (§8) less what remittances have settled | A stored balance is a second place the same pesos live. Rows 143 and 145 both refuse this |
+| **That there IS a case, and its life** | ⭐ **The table** | Who owns it, when it was raised, what was decided, whether it is closed. **None of this is derivable — it is a human process, and a process needs a record** |
+
+So the row is *"Lipa, 2026-01-05, outstanding, raised 2026-01-06, owner: —, unresolved"* and the
+peso figure on the screen is read from the ledger every time it renders. **The table can never
+disagree with the books, because it does not hold a number that could.**
+
+#### ⚠️ Three states, and conflating them is the trap
+
+The residual is not always the same thing, and the table must say which:
+
+| State | What happened | Is anyone answerable? |
+|---|---|---|
+| **Outstanding** | Counted, signed, simply not handed over yet | No — this is normal, and the ceiling (§4) governs it |
+| **Custody variance** | Counted and signed, but the money did not arrive | ⛔ Yes — §7.2, and the person must be named, never inferred from the date |
+| **Resolved** | Recovered, charged, or written off with a reason | Closed, and kept for the audit trail |
+
+⛔ **Collapsing "not yet handed over" into "short" would accuse a cashier of losing money they are
+holding perfectly properly** — and it is the easy mistake, because both look identical as a number.
+
+#### Flagged means counted, not coloured
+
+Same standard as T-125 §11.2, and for the same reason: **a status is a property of a row, and a row
+in a list is exactly what hid in v1.**
+
+- A **persistent count** on the module — *"3 days unsettled, ₱12,400"* — that reads zero when there
+  is nothing outstanding. ⚠️ A badge that is always present is a badge people stop seeing.
+- **Nothing expires or auto-closes it.** It stays until a human resolves it. An item ageing out
+  quietly is precisely v1's stuck status with a timer attached.
+- ⭐ **Age is the signal, not just amount.** ₱200 outstanding for 40 days is a worse finding than
+  ₱9,000 outstanding since yesterday. The count should surface the oldest, because that is the one
+  nobody is thinking about.
+
+#### Where it sits
+
+This is **T-136's table**, not T-135's. T-135 is the general findings layer and can read this like
+any other source once it exists — but this flag must not wait for T-135, because T-135 is on
+ADR-005's *can wait past January* list and cash sitting unremitted is not.
 
 ## 8. ✅ What "expected remittance" actually equals (Ian, 2026-08-26)
 
