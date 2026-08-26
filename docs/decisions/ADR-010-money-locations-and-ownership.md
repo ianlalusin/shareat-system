@@ -226,13 +226,60 @@ deferred. No department dimension is being added.
 **The party slot always names whatever makes the location specific**, and each control account uses
 it for its own natural entity — the pattern `2110`→supplier and `1230`→employee already established.
 
-### Still open, and deliberately not decided here
+### 8.1 ✅ Undeposited funds — CLOSED. It needs no account, because it is a derived state
 
-⚠️ **UNDEPOSITED FUNDS.** Money that has left the till but not reached the office is a real state
-with a standard name, and v1 has no account for it (rows 127, 131 — note row 131's correction:
-*undeposited funds*, not *cash in transit*, which is a bank-reconciliation item). This ADR makes the
-state expressible — it is a location whose custodian is none of the three — but whether to model it
-belongs with **T-136** and row 129's peso ceiling.
+> **Ian, 2026-08-26:** *"currently we treat that as cash cashier or cashier online. So cashier cash
+> is composed [of] sales made today and all other collections made by cashier — like receivables
+> from past days, return of staff from cash request. So cash from sales sitting on till is cash
+> cashier; online payments from sales is cashier online."*
+
+Rows 127 and 131 left this open on the assumption that *undeposited funds* needed **an account of
+its own**, because v1 has none. That assumption was wrong, and §2's test says why: nobody
+reconciles "undeposited funds" against an external document. **They reconcile the till** — and the
+till is `1110`.
+
+⭐ **Money is undeposited precisely while it sits in a cashier-custodian account.** So:
+
+```
+UNDEPOSITED FUNDS  =  balance of every money account WHERE custodian = 'cashier'
+                      (cash in the till + the cashier's online accounts)
+```
+
+**The model answers a question it was not designed for.** Making `custodian` first-class (§4) means
+the figure an accountant would want from an undeposited-funds account is now a `GROUP BY` over the
+ledger — no new account, no new posting, nothing extra to maintain, and nothing that can drift from
+the accounts it summarises. Row 129's peso ceiling applies to that same derived figure.
+
+⚠️ **The correction worth keeping visible:** the earlier rows treated "v1 has no account for it"
+as a gap to fill. It is not a gap — v1 is right, and so is current practice. Adding the account
+would have created a second place the same pesos are recorded, which is what §1 exists to prevent.
+
+### 8.2 ⛔ The consequence for T-136: expected cash is NOT today's sales
+
+Ian's sentence carries a second fact that matters more than the first. **The till is a mixed pot.**
+What lands in `1110` during a day is:
+
+| Inflow | |
+|---|---|
+| Today's cash sales | The obvious one |
+| **Collections on past-day receivables** | Money for a sale recognised days ago |
+| **Returned staff floats** | Cash going back from `1120`, not new money at all |
+| *(less)* cash paid out of the till | Expenses funded from the drawer |
+
+So **"expected cash in the drawer" ≠ "today's sales cash"**, and a reconciliation built on that
+equation would report a variance every single day that a receivable was collected or a float came
+back.
+
+⭐ This is exactly what bible row 131 already found from the other direction: *"v1's `less`/`plus`
+models a real practice ERPNext handles by forbidding it, so v1 is ahead here, and 'simplifying'
+toward ERPNext would delete the arithmetic that makes expected cash correct."* ERPNext's expected
+cash is just *opening + takings* because **its till never pays anything and never receives anything
+but a sale**. Ian's description is the counter-example, from the business that actually runs it.
+
+⚠️ **Checked, and v2 has not made this mistake yet** — nothing in `packages/domain` computes an
+expected remittance, and `sales-days.ts` already states that the till position and the remittance
+are T-136's, not the sales day's. T-136 must build expected cash as the full arithmetic above,
+never as the sales figure.
 
 ### What builds against this
 
