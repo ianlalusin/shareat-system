@@ -86,7 +86,7 @@ the worst shape a control can take, because absence looks exactly like nothing-t
 |---|---|
 | **Capitalisation** | DR 1510, CR the funding side — already what T-122 does for a CAPEX expense |
 | **Depreciation** | DR depreciation expense, CR **accumulated depreciation (contra-asset)** |
-| **Disposal** | DR accumulated depreciation, DR loss on disposal (6xxx) for the remaining book value, CR 1510 |
+| **Disposal** | DR accumulated depreciation (1590), DR **loss on disposal 7400** for the remaining book value, CR 1510 |
 
 ⚠️ **Accumulated depreciation is a CONTRA-ASSET account, not a reduction of 1510.** The asset's
 cost stays visible at cost for its whole life; the contra account carries what has been consumed.
@@ -182,6 +182,10 @@ silently substitute a default.
 
 ## 10. ⭐ Useful lives: the logic, then the table
 
+> ⚠️ **Superseded in part by §11.1 (Ian, 2026-08-26).** The *reasoning* below stands and is still
+> how a life should be chosen. The **unit and the default do not**: a life is a **month count**
+> defaulting to **24**, set per asset, not a per-category table of years agreed once.
+
 Ian asked what makes a building 20 and a vehicle 5. **The answer is one question, and it is not
 "how long could this last?"**
 
@@ -223,12 +227,52 @@ expensive enough to be capitalised is probably not really a smallware.
 > category quietly collecting things that do not belong in it is not. If Smallwares starts filling
 > up, the threshold or the categorisation is being worked around.
 
-## 11. Open
+## 11. Settled — Ian, 2026-08-26
 
-1. **The lives above want the accountant's nod once.** Agree them, then leave them — §9 notes that
-   changing the *method* needs BIR approval, and while changing a *life* does not, an estimate
-   that keeps moving is one nobody trusts.
-2. ⭐ **Does depreciation post per asset or per category per period?** Per asset is more
-   traceable; per category is far fewer lines. **Suggest per asset** — with a few hundred assets
-   this is not a volume problem, and *"which asset is this ₱4,000 for?"* is a question somebody
-   will ask.
+All three questions this section used to hold are now answered. Nothing here is open.
+
+### 11.1 Useful life is measured in MONTHS, and the default is 24
+
+> **Ian:** *"default to 24 months, make configurable by months."*
+
+**This supersedes §10's per-category table of YEARS and the accountant's-nod question with it.**
+A life is now a **month count**, defaulted to **24**, and editable per asset.
+
+Two consequences, and the first is the one that bites:
+
+- **`usefulLifeYears` is the wrong column.** Years cannot express 30 months, and rounding to 2 or 3
+  is exactly the silent imprecision §3 exists to refuse. It becomes **`usefulLifeMonths`**, and the
+  interval maps to a month step rather than a per-year count.
+- §10's reasoning is **kept, not deleted** — "how long until we would realistically REPLACE it" is
+  still the right question and still the thing to think with. What changed is the unit it is
+  answered in and who answers it: **per asset, at the point it is added**, rather than a table
+  agreed once and applied by category.
+
+`asset_category_lives` survives as the place a per-category default lives, now in months and
+seeded to 24 across the board — so a category can be given its own default later without a
+migration, and until then every category simply answers 24.
+
+### 11.2 Depreciation posts PER ASSET, per period
+
+> **Ian:** *"per asset per period."*
+
+Confirms the suggestion. `source_type='depreciation'`, `source_id` = the asset,
+`idempotencyKey = asset:{id}:depreciation:{period}` — so *"which asset is this ₱4,000 for?"*
+is answerable from the entry alone, and catch-up stays a re-run.
+
+### 11.3 The interval is chosen per asset, and SEMI-ANNUAL is added
+
+> **Ian:** *"for period when asset is added user may configure monthly quarterly semi anual annual."*
+
+The interval is set **when the asset is added**, per asset, from four choices:
+
+| Interval | Periods / year | Month step |
+|---|---|---|
+| Monthly | 12 | 1 |
+| Quarterly | 4 | 3 |
+| **Semi-annual** — **new** | **2** | **6** |
+| Annual | 1 | 12 |
+
+⚠️ **`semiannual` does not exist yet** — not in the schema enum, not in the CHECK constraint, and
+not in `schedule.ts`'s interval map. Migration `0019` is applied, so this is a **new** migration,
+never an edit to that one (RULES.md rule 9).
