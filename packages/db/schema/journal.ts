@@ -173,7 +173,7 @@ export const journalLines = pgTable(
     ),
     check(
       'journal_lines_party_type_check',
-      sql`${t.partyType} is null or ${t.partyType} in ('supplier', 'customer', 'employee', 'store', 'channel')`,
+      sql`${t.partyType} is null or ${t.partyType} in ('supplier', 'customer', 'employee', 'store', 'channel', 'money_account')`,
     ),
   ],
 );

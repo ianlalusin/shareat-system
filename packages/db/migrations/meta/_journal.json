@@ -148,6 +148,20 @@
       "when": 1787801507084,
       "tag": "0020_t124_useful_life_months",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1787887907084,
+      "tag": "0021_t136_money_accounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1787974307084,
+      "tag": "0022_t136_money_account_party",
+      "breakpoints": true
     }
   ]
 }

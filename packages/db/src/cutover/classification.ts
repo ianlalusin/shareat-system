@@ -187,6 +187,14 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
   },
 
   // ---- T-124: fixed assets ---------------------------------------------------------------
+  money_accounts: {
+    class: 'keep',
+    reason:
+      'The places money sits — the cashier drawer, the office safe, each wallet — plus who ' +
+      'holds each one (ADR-010). Configuration, not activity: a drawer does not stop being a ' +
+      'drawer on 1 January. Purging it would orphan every journal line that names a wallet as ' +
+      'its party and leave the internal custodian view unanswerable for all of 2027.',
+  },
   asset_policy: {
     class: 'keep',
     reason:

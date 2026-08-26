@@ -1,0 +1,109 @@
+/**
+ * `money_accounts` — every place money physically sits. ADR-010, bible rows 142–147.
+ *
+ * ## ⭐ Why this table exists at all
+ *
+ * Ian: *"we do 2 levels of accounting here — the general one, business-wide, where all cash
+ * whoever the owner is is business cash … and the other level curated to our needs, the one with
+ * these owners … for internal only. How can we model it cleanly?"*
+ *
+ * **One ledger, two views.** A journal line records WHERE money is; who holds it is an attribute
+ * of that place. The general view groups lines by GL account (all cash is business cash — the
+ * trial balance an accountant recognises); the internal view groups the SAME lines by these rows'
+ * `custodian`. Two views over one set of lines cannot disagree.
+ *
+ * ⛔ **Two ledgers always eventually do**, and v1 is proving it in the live books: its AP control
+ * says ₱669,829.84 while its own subledger sums to ₱1,567,980.87, and 34 of 115 account/store
+ * combinations disagree with a reconstruction from raw legs. That is what maintaining one fact
+ * twice costs, measured.
+ *
+ * ## The rule that put things here rather than in the chart
+ *
+ * **Does it get reconciled against something outside the books?** A drawer is counted, a safe is
+ * counted, a GCash wallet and a BDO account each have a statement — so each is a real place and
+ * earns a row. Nobody reconciles *"the cashier"* against an external document, so ownership is an
+ * ATTRIBUTE of the place, never a tick on a transaction (DEF-058: *"the owner belongs to the
+ * ACCOUNT — it should be derived, never ticked"*).
+ *
+ * ⚠️ **A new wallet is a new ROW, never a chart change.** The chart is governed reference data
+ * (bible §4.4) and must not move every time the business opens a GCash account. This is also why
+ * v1's `online__{id}` per-entity GL accounts are NOT copied — they made the chart grow with the
+ * business, and every one of them rolled up into a single line in the audit anyway.
+ */
+import { sql } from 'drizzle-orm';
+import { boolean, check, index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { organizations } from './organizations';
+import { stores } from './stores';
+
+/**
+ * Who holds the money. **The internal view** (bible row 142).
+ *
+ * ⭐ `staff` is Ian's addition and it fills a hole v1 left: v1's owner enum is `cashier|office`
+ * only, so its staff float sat outside the ownership model entirely, treated as "not cashier
+ * owned" without anything saying whose it was.
+ *
+ * ⚠️ **`staff` is PLURAL where the other two are singular** — one drawer, one safe, but many
+ * people each holding their own float. So a `staff` location is made specific by the journal
+ * line's party (`party_type = 'employee'`), exactly as `1230` already names which employee owes
+ * money. The custodian says what KIND of place; the party says WHICH one.
+ */
+export const CUSTODIANS = ['cashier', 'office', 'staff'] as const;
+export type Custodian = (typeof CUSTODIANS)[number];
+
+/** What kind of place it is. Not the same question as which GL account it rolls into — two
+ *  wallets with different providers are both `ewallet` and both roll into 1140. */
+export const MONEY_INSTRUMENTS = ['cash', 'ewallet', 'bank'] as const;
+export type MoneyInstrument = (typeof MONEY_INSTRUMENTS)[number];
+
+export const moneyAccounts = pgTable(
+  'money_accounts',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    /** ⚠️ NOT nullable. Money always sits somewhere, and "somewhere" is always at a store — a
+     *  drawer belongs to a branch, and so does the wallet its cashier collects into. */
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id, { onDelete: 'restrict' }),
+
+    /** What staff call it: "Cashier drawer", "GCash — Lipa cashier", "BDO — office". */
+    name: text('name').notNull(),
+    instrument: text('instrument', { enum: MONEY_INSTRUMENTS }).notNull(),
+
+    /**
+     * Which GL account this rolls up into. ⭐ **This is the general view.**
+     *
+     * ⚠️ A CODE, not an FK to `accounts.id`. Accounts are seeded per org, so an id here would
+     * bind a money account to one org's copy of the chart; the code is the stable identity the
+     * whole codebase already routes on (`routeExpense`, `postEntry`).
+     */
+    glAccountCode: text('gl_account_code').notNull(),
+
+    /** ⭐ The internal view. See {@link CUSTODIANS}. */
+    custodian: text('custodian', { enum: CUSTODIANS }).notNull(),
+
+    /** Retire a wallet without deleting its history. ⛔ Never delete a money account — its
+     *  journal lines outlive it, and an orphaned line is the DEF-065 class of problem. */
+    isActive: boolean('is_active').notNull().default(true),
+
+    notes: text('notes'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }),
+  },
+  (t) => [
+    /** One name per store. Two "GCash" rows at one branch is the ambiguity this table exists to
+     *  remove — per ACCOUNT not per provider (bible row 142), so they must be named apart. */
+    uniqueIndex('money_accounts_org_store_name_unique').on(t.orgId, t.storeId, t.name),
+    index('money_accounts_org_custodian_idx').on(t.orgId, t.custodian),
+    index('money_accounts_org_store_idx').on(t.orgId, t.storeId),
+    check('money_accounts_custodian_check', sql`${t.custodian} in ('cashier', 'office', 'staff')`),
+    check('money_accounts_instrument_check', sql`${t.instrument} in ('cash', 'ewallet', 'bank')`),
+    /** ⚠️ A money account must roll into a money-holding account. Restricting to the 11xx range
+     *  in the database stops a wallet being pointed at, say, 4100 revenue — which would make the
+     *  internal view silently include figures that are not money at all. */
+    check('money_accounts_gl_code_is_money_check', sql`${t.glAccountCode} ~ '^11[0-9]{2}$'`),
+    check('money_accounts_name_not_blank_check', sql`length(trim(${t.name})) > 0`),
+  ],
+);

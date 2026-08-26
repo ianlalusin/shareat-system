@@ -161,6 +161,12 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
   },
 
   // T-124 — fixed assets (docs/tasks/124-fixed-assets-and-depreciation.md).
+  money_accounts: {
+    scope: 'org_column',
+    reason:
+      'Where an org keeps its money, and who holds it. A franchise must never see another ' +
+      "org's wallets — the account names alone would disclose which providers and banks it uses.",
+  },
   asset_policy: {
     scope: 'org_column',
     reason:

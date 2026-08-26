@@ -28,3 +28,4 @@ export * from './expenses';
 export * from './sales-days';
 export * from './sessions';
 export * from './fixed-assets';
+export * from './money-accounts';
