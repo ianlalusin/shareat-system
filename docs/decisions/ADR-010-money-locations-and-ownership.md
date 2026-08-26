@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | 🔷 **PROPOSED 2026-08-26** — needs Ian. Nothing is built against it yet |
+| **Status** | ✅ **ACCEPTED 2026-08-26.** Ian answered all three questions; §7 records them and what evaluating them turned up |
 | **Answers** | Bible row 127's *"needs the research pass before Phase 3"*, and DEF-058's recorded resolution |
 | **Blocks** | T-136 (cash custody), T-130/T-131 (AP/AR), and any module that names where money is |
 | **Does not block** | T-125. Prepaid touches 1400, not a money location |
@@ -92,7 +92,7 @@ A `money_accounts` table. **Every place money sits is a row**, cash and online a
 | `name` | *"Cashier drawer"*, *"GCash — Lipa cashier"*, *"BDO — office"* — what staff call it |
 | `instrument` | `cash` · `ewallet` · `bank` — what KIND of place it is |
 | `gl_account_code` | Which GL account it rolls up into. **This is the general view** |
-| ⭐ `custodian` | `cashier` · `office` — **the internal view.** Not nullable |
+| ⭐ `custodian` | `cashier` · `office` · `staff` — **the internal view.** Not nullable. See §7.1: `staff` is plural, so its location is made specific by the line's party |
 | `is_active` | Retire a wallet without deleting its history |
 
 And the journal line names the location, using machinery **v2 already has and already proves**:
@@ -143,23 +143,99 @@ correction: *undeposited funds*, not *cash in transit*, which is a bank-reconcil
 ADR makes the state expressible — it is a money location whose custodian is neither — but does
 **not** decide whether to model it. That belongs with T-136 and its peso ceiling (row 129).
 
-⚠️ **DIVISIONS.** Ian named divisions alongside owners. Divisions almost certainly fail §2's test —
-nobody reconciles a division against an external document — so they are a **line dimension**, not a
-location. But no division list exists yet, and inventing one here would be fabricating reference
-data. Left open deliberately.
+✅ **DIVISIONS — withdrawn, not deferred.** This draft reserved a decision on divisions as a
+possible cost-centre dimension. §7.3 records Ian's clarification that "divisions" was the wrong
+word for what he meant, so there is nothing left to decide.
 
 ---
 
-## 7. For Ian — what I need
+## 7. Ian's answers, and what evaluating them found
 
-1. **Is `cashier | office` the complete list of custodians?** The staff float (`1120`) is a third
-   thing in practice: held by a named person, on their way to being spent or returned. v1's owner
-   enum has no value for it, so it sits outside v1's ownership model entirely.
-2. **Do you want one wallet per real account, or per provider?** *"GCash"* as one location, or
-   *"GCash — Lipa cashier"* and *"GCash — office"* as two? §2's test says: however many things you
-   reconcile separately.
-3. **Divisions — what are they?** A list, and whether money is ever held *by* a division rather
-   than merely spent *for* one. The answer decides dimension versus location.
+### 7.1 Custodians are `cashier` · `office` · `staff` — and asking for `staff` exposed a real gap
 
-⛔ **Nothing is built against this until it is accepted.** It touches the chart's contract and every
-module that names where money is, so a guess here is expensive to unwind.
+> **Ian:** *"lets make it cashier office and staff so when money is in staff it can clearly be
+> stated like petty cash given to a staff to buy something unliquidated yet. evaluate this"*
+
+**Evaluated, and it holds — for a better reason than symmetry.** `staff` passes §2's test on its own
+merits: an unliquidated float is a real place money sits, it is counted (the staff member has it or
+they do not), and the chart already has the location — `1120 Cash on hand — staff custodian`. This
+is not a third label added for neatness; it is a custody state the business already runs.
+
+⭐ **It also fills a hole v1 left open.** v1's owner enum is `'cashier' | 'office'` only, so
+`cash__staff` — the float account — **sits outside v1's ownership model entirely**: every other
+`cash__*` account is treated as "not cashier-owned" without anything saying whose it is. Ian's
+third value is the one v1 never had.
+
+#### ⚠️ But `staff` is PLURAL, and that changes the design
+
+`cashier` and `office` are singular per store — one drawer, one safe. **`staff` is many people, each
+holding their own float.** So a flat `custodian = 'staff'` answers *"how much is out with staff"*
+and **cannot** answer *"how much is Maria holding, unliquidated"* — which is the question Ian's own
+sentence is asking, and the only one that makes a float accountable.
+
+**Checked rather than assumed, and v2 currently cannot answer it:**
+
+| Account | `requiresParty` | Consequence |
+|---|---|---|
+| `1230` Advances to employees | ✅ **true**, `party_type = employee` | Money a staff member OWES is attributable per person |
+| `1120` Cash on hand — staff custodian | ⛔ **false** | Money a staff member HOLDS is **pooled anonymously** |
+
+So the debt is per-person and the custody is not — which is backwards, because custody is the
+state that comes first and the one somebody must be asked about.
+
+> ### The resolution: `1120` becomes party-required, `party_type = 'employee'`
+>
+> The custodian says *what kind of place*; the party says *which one*. Where a custodian is
+> singular the account alone is specific enough; where it is plural the party makes it specific.
+> **This is not a new mechanism** — `1230`, `2110` and `2130` already work exactly this way.
+
+⭐ **And it keeps the two staff states properly apart**, which v1 also gets right: `1120` is cash the
+business still owns, sitting in someone's pocket; `1230` is money that person now owes. An
+unreturned float moving `1120 → 1230` is custody becoming debt, and both being per-person is what
+makes that transition legible.
+
+### 7.2 A money account is per ACCOUNT, not per provider
+
+> **Ian:** *"per account not per provider."*
+
+*"GCash — Lipa cashier"* and *"GCash — office"* are **two rows**, not one row called *"GCash"*.
+Exactly what §2's test predicts: two things reconciled separately are two locations. It also means
+`custodian` can sit on the row honestly — one row per provider would have forced a single provider
+to carry two owners, which is the shape that cannot be modelled.
+
+### 7.3 "Divisions" was the wrong word — the question dissolves
+
+> **Ian:** *"no division wrong choice of word i mean separation or segregation of accounts."*
+
+✅ **Then there is nothing further to model.** Segregation of accounts by who holds them is precisely
+what this ADR does — §4's `custodian` **is** the segregation. The earlier draft treated "divisions"
+as a possible cost-centre dimension and reserved a decision for it; that decision is withdrawn, not
+deferred. No department dimension is being added.
+
+---
+
+## 8. The model, settled
+
+| GL | Location | `custodian` | What the line's party names |
+|---|---|---|---|
+| `1110` | Cashier drawer | `cashier` | — (one per store) |
+| `1120` | A staff member's float | **`staff`** | ⭐ **`employee`** — which staff member |
+| `1130` | Office safe | `office` | — (one per store) |
+| `1140` | Each wallet or bank account | `cashier` or `office`, per row | ⭐ **the money account** — which wallet |
+
+**The party slot always names whatever makes the location specific**, and each control account uses
+it for its own natural entity — the pattern `2110`→supplier and `1230`→employee already established.
+
+### Still open, and deliberately not decided here
+
+⚠️ **UNDEPOSITED FUNDS.** Money that has left the till but not reached the office is a real state
+with a standard name, and v1 has no account for it (rows 127, 131 — note row 131's correction:
+*undeposited funds*, not *cash in transit*, which is a bank-reconciliation item). This ADR makes the
+state expressible — it is a location whose custodian is none of the three — but whether to model it
+belongs with **T-136** and row 129's peso ceiling.
+
+### What builds against this
+
+⛔ **The chart change (`1120` requiring a party) is a migration and a seed change**, so it lands with
+**T-136**, not retrofitted now — nothing releases a float yet, so no anonymous `1120` data exists to
+repair. Recording it here means T-136 starts from the right model instead of rediscovering it.
