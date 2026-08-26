@@ -14,7 +14,7 @@ const base = {
   acquiredOn: '2026-01-15',
   cost: money('120000'),
   salvageValue: money('0'),
-  usefulLifeYears: 5,
+  usefulLifeMonths: 60,
   interval: 'monthly' as const,
 };
 
@@ -37,7 +37,7 @@ describe('the schedule covers exactly the depreciable amount', () => {
 
   it('⭐ an amount that does NOT divide evenly still sums exactly — the remainder goes to the last period', () => {
     // ₱10,000 over 3 years monthly = 36 periods of 277.777… A naive split loses centavos forever.
-    const s = buildSchedule({ ...base, cost: money('10000'), usefulLifeYears: 3 });
+    const s = buildSchedule({ ...base, cost: money('10000'), usefulLifeMonths: 36 });
     expect(s.length).toBe(36);
     expect(sum(s)).toBeCloseTo(10000, 2);
 
@@ -49,7 +49,7 @@ describe('the schedule covers exactly the depreciable amount', () => {
   });
 
   it('every earlier period is identical — that is what "straight line" means to a reader', () => {
-    const s = buildSchedule({ ...base, cost: money('10000'), usefulLifeYears: 3 });
+    const s = buildSchedule({ ...base, cost: money('10000'), usefulLifeMonths: 36 });
     const allButLast = new Set(s.slice(0, -1).map((p) => String(p.amount)));
     expect(allButLast.size).toBe(1);
   });
@@ -57,7 +57,7 @@ describe('the schedule covers exactly the depreciable amount', () => {
 
 describe('intervals', () => {
   it('quarterly gives 4 periods a year, and each entry dates at the END of its quarter', () => {
-    const s = buildSchedule({ ...base, acquiredOn: '2026-01-01', usefulLifeYears: 1, interval: 'quarterly' });
+    const s = buildSchedule({ ...base, acquiredOn: '2026-01-01', usefulLifeMonths: 12, interval: 'quarterly' });
     expect(s.length).toBe(4);
     expect(s.map((p) => p.period)).toEqual(['2026-03', '2026-06', '2026-09', '2026-12']);
     // ⚠️ A charge must land INSIDE the period it describes, or it lands in the wrong month's books.
@@ -69,21 +69,21 @@ describe('intervals', () => {
     // ⚠️ My first expectation here was 2026-12 / 2027-11 / 2028-10 — I stepped the END month
     // forward by 11 each time instead of stepping the START by 12. The code was right and the
     // test was wrong, which is the more useful way round for a test to fail.
-    const s = buildSchedule({ ...base, acquiredOn: '2026-01-01', usefulLifeYears: 3, interval: 'annually' });
+    const s = buildSchedule({ ...base, acquiredOn: '2026-01-01', usefulLifeMonths: 36, interval: 'annually' });
     expect(s.length).toBe(3);
     expect(s.map((p) => p.period)).toEqual(['2026-12', '2027-12', '2028-12']);
     expect(s.map((p) => p.entryDate)).toEqual(['2026-12-31', '2027-12-31', '2028-12-31']);
   });
 
   it('an annual asset acquired mid-year ends its periods mid-year too', () => {
-    const s = buildSchedule({ ...base, acquiredOn: '2026-07-01', usefulLifeYears: 2, interval: 'annually' });
+    const s = buildSchedule({ ...base, acquiredOn: '2026-07-01', usefulLifeMonths: 24, interval: 'annually' });
     expect(s.map((p) => p.period)).toEqual(['2027-06', '2028-06']);
   });
 
   it('monthly entry dates handle February and leap years without a lookup table', () => {
-    const s = buildSchedule({ ...base, acquiredOn: '2027-02-10', usefulLifeYears: 1 });
+    const s = buildSchedule({ ...base, acquiredOn: '2027-02-10', usefulLifeMonths: 12 });
     expect(s[0]!.entryDate).toBe('2027-02-28');
-    const leap = buildSchedule({ ...base, acquiredOn: '2028-02-10', usefulLifeYears: 1 });
+    const leap = buildSchedule({ ...base, acquiredOn: '2028-02-10', usefulLifeMonths: 12 });
     expect(leap[0]!.entryDate).toBe('2028-02-29');
   });
 });
@@ -138,20 +138,69 @@ describe('degenerate inputs produce nothing rather than nonsense', () => {
   });
 
   it('a zero or negative life produces no schedule', () => {
-    expect(buildSchedule({ ...base, usefulLifeYears: 0 })).toEqual([]);
-    expect(buildSchedule({ ...base, usefulLifeYears: -1 })).toEqual([]);
+    expect(buildSchedule({ ...base, usefulLifeMonths: 0 })).toEqual([]);
+    expect(buildSchedule({ ...base, usefulLifeMonths: -12 })).toEqual([]);
   });
 });
 
-describe('the per-category lives produce sane schedules (bible row 139)', () => {
+describe('lives are MONTHS now, and the default is 24 (bible row 140)', () => {
+  it('the default life of 24 months is 24 monthly periods', () => {
+    expect(buildSchedule({ ...base, usefulLifeMonths: 24 }).length).toBe(24);
+  });
+
+  // Row 139's per-category YEARS are superseded by row 140, but the arithmetic they exercised is
+  // still worth pinning — expressed in the unit the column now carries.
   it.each([
-    ['building', 20, 240],
-    ['machinery', 10, 120],
-    ['equipment', 7, 84],
-    ['furniture_and_fixture', 5, 60],
-    ['vehicles', 5, 60],
-    ['smallwares', 3, 36],
-  ])('%s at %i years is %i monthly periods', (_cat, years, expected) => {
-    expect(buildSchedule({ ...base, usefulLifeYears: years as number }).length).toBe(expected);
+    ['building', 240],
+    ['machinery', 120],
+    ['equipment', 84],
+    ['furniture_and_fixture', 60],
+    ['vehicles', 60],
+    ['smallwares', 36],
+  ])('%s at %i months is that many monthly periods', (_cat, months) => {
+    expect(buildSchedule({ ...base, usefulLifeMonths: months as number }).length).toBe(months);
+  });
+
+  it('a life that is not a whole number of years is now expressible at all', () => {
+    // The point of row 140. v1 stored years, so 30 months became 2.5 and any consumer reading it
+    // as an integer silently lost six months.
+    const s30 = buildSchedule({ ...base, usefulLifeMonths: 30 });
+    expect(s30.length).toBe(30);
+    expect(sum(s30)).toBe(120000);
+  });
+});
+
+describe('semi-annual (bible row 140)', () => {
+  it('charges twice a year, on the last day of each half', () => {
+    const s = buildSchedule({
+      ...base,
+      acquiredOn: '2026-01-01',
+      usefulLifeMonths: 24,
+      interval: 'semiannual',
+    });
+    expect(s.length).toBe(4);
+    expect(s.map((p) => p.entryDate)).toEqual(['2026-06-30', '2026-12-31', '2027-06-30', '2027-12-31']);
+    expect(sum(s)).toBe(120000);
+  });
+
+  it('sits between quarterly and annual, and all four agree on the total', () => {
+    const of = (interval: 'monthly' | 'quarterly' | 'semiannual' | 'annually') =>
+      buildSchedule({ ...base, acquiredOn: '2026-01-01', usefulLifeMonths: 24, interval });
+    expect([of('monthly').length, of('quarterly').length, of('semiannual').length, of('annually').length])
+      .toEqual([24, 8, 4, 2]);
+    // ⭐ The interval changes how often it charges, never how much it charges in total.
+    for (const i of ['monthly', 'quarterly', 'semiannual', 'annually'] as const) {
+      expect(sum(of(i))).toBe(120000);
+    }
+  });
+});
+
+describe('a life that does not divide evenly by its interval', () => {
+  it('CEILS to a stub final period rather than stopping short of the life', () => {
+    // 25 months charged quarterly is 8 1/3 periods. Rounding down would stop depreciating at
+    // month 24 and leave value on the books that the life says is gone.
+    const s = buildSchedule({ ...base, usefulLifeMonths: 25, interval: 'quarterly' });
+    expect(s.length).toBe(9);
+    expect(sum(s)).toBe(120000);
   });
 });

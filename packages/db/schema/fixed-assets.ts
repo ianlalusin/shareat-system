@@ -112,13 +112,15 @@ export const assetCategoryLives = pgTable(
       .notNull()
       .references(() => organizations.id, { onDelete: 'restrict' }),
     category: text('category', { enum: ASSET_CATEGORIES }).notNull(),
-    usefulLifeYears: integer('useful_life_years').notNull(),
+    /** MONTHS, not years (bible row 140). Defaulted to 24 for every category, so a category can
+     *  be given its own default later without a migration. */
+    usefulLifeMonths: integer('useful_life_months').notNull().default(24),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
   (t) => [
     uniqueIndex('asset_category_lives_org_id_category_unique').on(t.orgId, t.category),
-    check('asset_category_lives_positive_check', sql`${t.usefulLifeYears} > 0`),
+    check('asset_category_lives_positive_check', sql`${t.usefulLifeMonths} > 0`),
   ],
 );
 
@@ -148,14 +150,28 @@ export const fixedAssets = pgTable(
     salvageValue: numeric('salvage_value', { precision: 14, scale: 2 }).default('0'),
     /** Copied from the category default AT CAPITALISATION, not looked up at depreciation time.
      *  ⚠️ Deliberate: changing the org's default life must not silently rewrite the schedule of
-     *  every asset already on the books. A life is a decision made once, about one asset. */
-    usefulLifeYears: integer('useful_life_years').notNull(),
+     *  every asset already on the books. A life is a decision made once, about one asset.
+     *
+     *  ⭐ MONTHS, not years (bible row 140). v1 asked for months and divided by 12 to store, so a
+     *  30-month life round-tripped through 2.5 years and carried a rounding nobody was shown.
+     *  Storing the unit the user types removes the conversion instead of refining it. */
+    usefulLifeMonths: integer('useful_life_months').notNull().default(24),
 
     /** ⭐ One method, and it is not laziness: **changing the depreciation method requires BIR
      *  approval** (discovery 25). A dropdown offering declining-balance would let someone create
      *  a filing obligation with a click. The column exists to make the assumption explicit. */
     method: text('method', { enum: ['straight_line'] }).notNull().default('straight_line'),
-    interval: text('interval', { enum: ['monthly', 'quarterly', 'annually'] }).notNull().default('monthly'),
+    /** Free text. v1 carries one and its editor exposes it — restored rather than dropped,
+     *  because §11.1 moved the useful-life judgement onto the person adding the asset, and WHY
+     *  they chose 36 months is exactly what a reviewer wants a year later. */
+    notes: text('notes'),
+    /** ⚠️ Kept in step with `DepreciationInterval` in packages/domain/src/fixed-assets/schedule.ts
+     *  by `tests/unit/depreciation-intervals-parity.test.ts`, not by anyone remembering. The two
+     *  lists live apart on purpose: the engine is pure and must not import drizzle to stay that
+     *  way, and this column is the database's own enum. `semiannual` added by bible row 140. */
+    interval: text('interval', { enum: ['monthly', 'quarterly', 'semiannual', 'annually'] })
+      .notNull()
+      .default('monthly'),
 
     /**
      * ⭐ **`pending_valuation` is the CUTOVER SHELL STATE, made explicit rather than left as a
@@ -214,7 +230,7 @@ export const fixedAssets = pgTable(
       'fixed_assets_salvage_below_cost_check',
       sql`${t.salvageValue} is null or ${t.cost} is null or ${t.salvageValue} < ${t.cost}`,
     ),
-    check('fixed_assets_useful_life_positive_check', sql`${t.usefulLifeYears} > 0`),
+    check('fixed_assets_useful_life_positive_check', sql`${t.usefulLifeMonths} > 0`),
     check('fixed_assets_status_check', sql`${t.status} in ('active', 'disposed', 'pending_valuation')`),
     /**
      * ⭐ **The two shapes, kept apart by the database rather than by intent.** A valued asset MUST

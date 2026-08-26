@@ -20,13 +20,20 @@
  */
 import { add, money, subtract, type Money } from '@shareat/core/money';
 
-export type DepreciationInterval = 'monthly' | 'quarterly' | 'annually';
+export type DepreciationInterval = 'monthly' | 'quarterly' | 'semiannual' | 'annually';
 
-/** Periods per year, and the month step each one advances by. */
-const INTERVALS: Record<DepreciationInterval, { perYear: number; monthStep: number }> = {
-  monthly: { perYear: 12, monthStep: 1 },
-  quarterly: { perYear: 4, monthStep: 3 },
-  annually: { perYear: 1, monthStep: 12 },
+/** ⚠️ Kept in step with the `interval` column's enum in packages/db/schema/fixed-assets.ts by
+ *  `tests/unit/depreciation-intervals-parity.test.ts`. They live apart so this file stays pure —
+ *  importing the schema would pull drizzle into an engine whose whole value is needing no
+ *  database to prove. */
+export const DEPRECIATION_INTERVALS = ['monthly', 'quarterly', 'semiannual', 'annually'] as const;
+
+/** How many months each period covers. `semiannual` added by bible row 140. */
+const MONTH_STEP: Record<DepreciationInterval, number> = {
+  monthly: 1,
+  quarterly: 3,
+  semiannual: 6,
+  annually: 12,
 };
 
 export interface ScheduleInput {
@@ -34,7 +41,8 @@ export interface ScheduleInput {
   acquiredOn: string;
   cost: Money;
   salvageValue: Money;
-  usefulLifeYears: number;
+  /** MONTHS (bible row 140), not years. */
+  usefulLifeMonths: number;
   interval: DepreciationInterval;
 }
 
@@ -64,8 +72,16 @@ function lastDayOfMonth(year: number, month1: number): string {
  * filing obligation with a click.
  */
 export function buildSchedule(input: ScheduleInput): SchedulePeriod[] {
-  const { perYear, monthStep } = INTERVALS[input.interval];
-  const totalPeriods = Math.round(input.usefulLifeYears * perYear);
+  const monthStep = MONTH_STEP[input.interval];
+  if (!Number.isFinite(input.usefulLifeMonths) || input.usefulLifeMonths < 1) return [];
+
+  // ⭐ CEIL, not round. A life need not divide evenly by its interval — 25 months charged
+  // quarterly is 8⅓ periods. Rounding down to 8 stops depreciating at month 24 and leaves the
+  // asset carrying value it should have consumed; ceiling to 9 gives the last period a short
+  // stub, which is what actually happens. Either way the schedule still sums to exactly the
+  // depreciable amount (the remainder lands on the last period below), so the choice only moves
+  // WHEN it finishes — and finishing early is the one of the two that understates nothing.
+  const totalPeriods = Math.ceil(input.usefulLifeMonths / monthStep);
   if (totalPeriods < 1) return [];
 
   const depreciable = subtract(input.cost, input.salvageValue);
