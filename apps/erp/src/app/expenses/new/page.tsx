@@ -1,5 +1,5 @@
 import { toBusinessDate } from '@shareat/core/datetime';
-import { listStores, listCategoriesGrouped, PAYMENT_ROWS } from '../lib';
+import { listStores, listCategoriesGrouped, listOnlineMoneyAccounts, PAYMENT_ROWS } from '../lib';
 import { requireSession } from '../../../lib/session';
 import { createExpenseAction } from '../actions';
 
@@ -18,7 +18,11 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
   const { actor } = await requireSession('/expenses/new');
   const orgId = actor.orgId;
 
-  const [storeRows, categories] = await Promise.all([listStores(orgId), listCategoriesGrouped(orgId)]);
+  const [storeRows, categories, wallets] = await Promise.all([
+    listStores(orgId),
+    listCategoriesGrouped(orgId),
+    listOnlineMoneyAccounts(orgId),
+  ]);
   const storeId = sp.store && storeRows.some((s) => s.id === sp.store) ? sp.store : (storeRows[0]?.id ?? '');
 
   const groups: Array<'COGS' | 'OPEX' | 'PERSONAL' | 'CAPEX'> = ['COGS', 'OPEX', 'PERSONAL', 'CAPEX'];
@@ -152,6 +156,7 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
                     <th className="px-3 py-2 font-medium">Method</th>
                     <th className="px-3 py-2 font-medium">Amount</th>
                     <th className="px-3 py-2 font-medium">Staff (reimbursable)</th>
+                    <th className="px-3 py-2 font-medium">Wallet (online)</th>
                     <th className="px-3 py-2 font-medium">Cash request (optional)</th>
                     <th className="px-3 py-2 font-medium">Office drawer</th>
                   </tr>
@@ -189,6 +194,23 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
                           placeholder="Staff person id"
                           className="w-full rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
                         />
+                      </td>
+                      <td className="px-3 py-2">
+                        {/* ⭐ ADR-010: 1140 is ONE control account for every wallet, so an online
+                            payment must name which one. Required for online, ignored otherwise —
+                            `routeExpense` refuses the posting without it, naming the row. */}
+                        <select
+                          name={`moneyAccountId_${i}`}
+                          defaultValue=""
+                          className="w-full rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
+                        >
+                          <option value="">— none —</option>
+                          {wallets.map((w) => (
+                            <option key={w.id} value={w.id}>
+                              {w.name} ({w.custodian})
+                            </option>
+                          ))}
+                        </select>
                       </td>
                       <td className="px-3 py-2">
                         <input

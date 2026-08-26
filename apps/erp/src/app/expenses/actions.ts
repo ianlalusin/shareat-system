@@ -57,7 +57,7 @@ export async function createExpenseAction(formData: FormData): Promise<void> {
   const particulars = str(formData, 'particulars');
   const receiptPhotoUrl = str(formData, 'receiptPhotoUrl');
 
-  const payments: { method: ExpensePaymentMethod; amount: string; staffId?: string; cashRequestId?: string; accountCode?: string }[] = [];
+  const payments: { method: ExpensePaymentMethod; amount: string; staffId?: string; cashRequestId?: string; accountCode?: string; moneyAccountId?: string }[] = [];
   for (let i = 1; i <= PAYMENT_ROW_COUNT; i++) {
     const method = str(formData, `method_${i}`);
     const amount = str(formData, `amount_${i}`);
@@ -65,12 +65,14 @@ export async function createExpenseAction(formData: FormData): Promise<void> {
     if (!PAYMENT_METHODS.has(method)) continue;
     const staffId = str(formData, `staffId_${i}`);
     const cashRequestId = str(formData, `cashRequestId_${i}`);
+    const moneyAccountId = str(formData, `moneyAccountId_${i}`);
     const office = formData.get(`office_${i}`) === 'on';
     payments.push({
       method: method as ExpensePaymentMethod,
       amount,
       staffId: staffId || undefined,
       cashRequestId: cashRequestId || undefined,
+      moneyAccountId: moneyAccountId || undefined,
       accountCode: office ? 'office' : undefined,
     });
   }

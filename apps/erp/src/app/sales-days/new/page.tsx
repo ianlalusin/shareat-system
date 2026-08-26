@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { toBusinessDate } from '@shareat/core/datetime';
-import { listStores, listChannels } from '../lib';
+import { listStores, listChannels, listOnlineMoneyAccounts } from '../lib';
 import { requireSession } from '../../../lib/session';
 import { createSalesDayAction } from '../actions';
 
@@ -26,6 +26,7 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
 
   const channels = storeId ? await listChannels(orgId, storeId) : [];
   const activeChannels = channels.filter((c) => c.isActive);
+  const wallets = await listOnlineMoneyAccounts(orgId);
 
   const carry = new URLSearchParams();
   if (storeId) carry.set('store', storeId);
@@ -175,6 +176,42 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
                     </td>
                     <td className="py-2 text-center">
                       <input type="checkbox" name={`nosales_${c.id}`} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
+
+        {/* ⭐ DEF-068 — WHERE the online money landed. NOT the same question as the channel
+            breakdown above: a channel says where the sale came FROM, this says where the money
+            WENT. A Foodpanda sale can settle into any wallet, so neither answers the other. */}
+        {wallets.length > 0 && (
+          <section className="space-y-2 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+            <div>
+              <h2 className="font-medium">Where the online money landed</h2>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                Must add up to the online figure above. 1140 is one account for every wallet, so
+                each peso has to say which one it reached — otherwise &ldquo;how much is in the
+                cashier&apos;s hands&rdquo; cannot be answered.
+              </p>
+            </div>
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-neutral-200 text-left dark:border-neutral-800">
+                  <th className="py-2 font-medium">Wallet</th>
+                  <th className="py-2 font-medium">Held by</th>
+                  <th className="py-2 font-medium">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {wallets.map((w) => (
+                  <tr key={w.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                    <td className="py-2">{w.name}</td>
+                    <td className="py-2 text-xs text-neutral-500 dark:text-neutral-400">{w.custodian}</td>
+                    <td className="py-2">
+                      <input name={`tender_${w.id}`} placeholder="0.00" className={FIELD} />
                     </td>
                   </tr>
                 ))}

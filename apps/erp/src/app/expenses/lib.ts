@@ -16,7 +16,7 @@
  */
 import { asc, and, eq, isNull } from 'drizzle-orm';
 import { sql as dsql } from 'drizzle-orm';
-import { getDb, schema, transaction, expensesRepo, journalRepo, APP_ROLE, type Tx } from '@shareat/db';
+import { moneyAccountsRepo, getDb, schema, transaction, expensesRepo, journalRepo, APP_ROLE, type Tx } from '@shareat/db';
 
 /**
  * How many payment rows the expense form offers.
@@ -124,3 +124,18 @@ export async function withOrgPrincipal<T>(orgId: string, fn: (tx: Tx) => Promise
 }
 
 export { journalRepo };
+
+/** Active wallets and bank accounts, for the online payment picker (ADR-010).
+ *  ⚠️ Only `ewallet`/`bank` — a cash payment's destination is already unambiguous from its
+ *  sub-route (1110 cashier / 1120 float / 1130 office), so offering a cash location here would
+ *  imply a choice that does not exist. */
+export async function listOnlineMoneyAccounts(
+  orgId: string,
+): Promise<{ id: string; name: string; storeId: string; custodian: string }[]> {
+  return withOrgPrincipal(orgId, async (tx) => {
+    const rows = await moneyAccountsRepo.listMoneyAccounts(tx, orgId, {});
+    return rows
+      .filter((r) => r.instrument !== 'cash')
+      .map((r) => ({ id: r.id, name: r.name, storeId: r.storeId, custodian: r.custodian }));
+  });
+}

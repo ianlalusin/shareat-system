@@ -54,6 +54,16 @@ export async function createSalesDayAction(formData: FormData): Promise<void> {
 
   // Channel rows arrive as channel_<id> / nosales_<id> pairs — the id is in the field name, so
   // no index bookkeeping is needed and a missing row is simply absent.
+  // ⭐ DEF-068 — where the online money landed. Same field-name-carries-the-id trick the channel
+  // rows use, so a missing wallet is simply absent rather than an index to keep in step.
+  const tenders: { moneyAccountId: string; amount: string }[] = [];
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith('tender_') || typeof value !== 'string') continue;
+    const amount = value.trim();
+    if (!amount || Number(amount) <= 0) continue;
+    tenders.push({ moneyAccountId: key.slice('tender_'.length), amount });
+  }
+
   const channels: { channelId: string; amount: string; noSales: boolean }[] = [];
   for (const [key, value] of formData.entries()) {
     if (!key.startsWith('channel_') || typeof value !== 'string') continue;
@@ -87,6 +97,7 @@ export async function createSalesDayAction(formData: FormData): Promise<void> {
         onlineCollected: amount(formData, 'onlineCollected'),
         creditSales: amount(formData, 'creditSales'),
         channels,
+        tenders,
       }),
     );
     newId = result.id;

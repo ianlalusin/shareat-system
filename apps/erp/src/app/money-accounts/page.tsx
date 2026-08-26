@@ -1,0 +1,231 @@
+import { CUSTODIANS, MONEY_INSTRUMENTS } from '@shareat/db';
+import { requireSession } from '../../lib/session';
+import { createMoneyAccountAction, retireMoneyAccountAction } from './actions';
+import {
+  CUSTODIAN_LABEL,
+  GL_LABEL,
+  INSTRUMENT_LABEL,
+  listAll,
+  listStores,
+} from './lib';
+
+export const metadata = { title: 'Money accounts — Shareat System' };
+export const dynamic = 'force-dynamic';
+
+interface SearchParams {
+  error?: string;
+  ok?: string;
+}
+
+export default async function MoneyAccountsPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const sp = await searchParams;
+  const { actor } = await requireSession('/money-accounts');
+
+  const [stores, accounts] = await Promise.all([listStores(actor.orgId), listAll(actor.orgId)]);
+  const storeById = new Map(stores.map((s) => [s.id, s]));
+
+  const active = accounts.filter((a) => a.isActive);
+  const retired = accounts.filter((a) => !a.isActive);
+
+  return (
+    <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
+      <div>
+        <h1 className="text-2xl font-semibold">Money accounts</h1>
+        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+          Every place money sits — a drawer, a safe, each e-wallet and bank account — and{' '}
+          <strong>who holds it</strong>. The books group these by account; you group them by
+          custodian. Same ledger, two views.
+        </p>
+      </div>
+
+      {sp.error && (
+        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+          {sp.error}
+        </div>
+      )}
+      {sp.ok && (
+        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+          {sp.ok === 'created' ? 'Money account added.' : 'Money account retired.'}
+        </div>
+      )}
+
+      {active.length === 0 && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+          <strong className="font-medium">No money accounts yet.</strong> Until a store has at
+          least one, online money cannot be recorded at all — an online payment and a day&apos;s
+          online sales both have to say <em>which</em> account they moved.
+        </div>
+      )}
+
+      {/* ── The register ─────────────────────────────────────────────────────────────── */}
+      {accounts.length > 0 && (
+        <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
+          <table className="w-full min-w-[760px] border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
+                <th className="px-3 py-2 font-medium">Account</th>
+                <th className="px-3 py-2 font-medium">Store</th>
+                <th className="px-3 py-2 font-medium">Kind</th>
+                <th className="px-3 py-2 font-medium">Held by</th>
+                <th className="px-3 py-2 font-medium">Books</th>
+                <th className="px-3 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {[...active, ...retired].map((a) => (
+                <tr
+                  key={a.id}
+                  className={`border-b border-neutral-100 last:border-0 dark:border-neutral-900 ${
+                    a.isActive ? '' : 'opacity-50'
+                  }`}
+                >
+                  <td className="px-3 py-2">
+                    {a.name}
+                    {!a.isActive && (
+                      <span className="ml-2 rounded bg-neutral-200 px-1.5 py-0.5 text-xs font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
+                        Retired
+                      </span>
+                    )}
+                    {a.notes && (
+                      <div className="text-xs text-neutral-400 dark:text-neutral-600">{a.notes}</div>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">{storeById.get(a.storeId)?.code ?? '—'}</td>
+                  <td className="px-3 py-2">{INSTRUMENT_LABEL[a.instrument] ?? a.instrument}</td>
+                  <td className="px-3 py-2">
+                    <CustodianBadge custodian={a.custodian} />
+                  </td>
+                  <td className="px-3 py-2 text-xs text-neutral-500 dark:text-neutral-400">
+                    <span className="font-mono">{a.glAccountCode}</span>{' '}
+                    {GL_LABEL[a.glAccountCode] ?? ''}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    {a.isActive && (
+                      <form action={retireMoneyAccountAction}>
+                        <input type="hidden" name="moneyAccountId" value={a.id} />
+                        <button
+                          type="submit"
+                          className="rounded border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+                        >
+                          Retire
+                        </button>
+                      </form>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── Add one ──────────────────────────────────────────────────────────────────── */}
+      <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <div>
+          <h2 className="font-medium">Add a money account</h2>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">
+            ⛔ <strong>Admin only.</strong> A money account is an account in the books, not a
+            setting — every peso entering it lands on the balance sheet.
+          </p>
+        </div>
+
+        <form action={createMoneyAccountAction} className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Name" hint="What staff call it — “GCash — cashier”, “BDO — office”">
+              <input name="name" required maxLength={120} placeholder="GCash — cashier" className={INPUT} />
+            </Field>
+            <Field label="Store">
+              <select name="storeId" required defaultValue="" className={INPUT}>
+                <option value="">Choose a store…</option>
+                {stores.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.code})
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Kind">
+              <select name="instrument" defaultValue="ewallet" className={INPUT}>
+                {MONEY_INSTRUMENTS.map((i) => (
+                  <option key={i} value={i}>
+                    {INSTRUMENT_LABEL[i] ?? i}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field
+              label="Held by"
+              hint="A staff float is per person — the ledger names which one on each line"
+            >
+              <select name="custodian" defaultValue="cashier" className={INPUT}>
+                {CUSTODIANS.map((c) => (
+                  <option key={c} value={c}>
+                    {CUSTODIAN_LABEL[c] ?? c}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <Field label="Notes">
+            <input name="notes" className={INPUT} />
+          </Field>
+
+          {/* ⭐ No GL-code field, deliberately. The books account is DERIVED from kind + holder —
+              putting the chart of accounts in a form is how a typo becomes a wallet that reports
+              as cash. */}
+          <p className="text-xs text-neutral-400 dark:text-neutral-600">
+            The books account is chosen for you from the kind and the holder: cash lands in
+            1110/1120/1130 by who holds it, and every e-wallet or bank account shares 1140 —
+            the line names which one.
+          </p>
+
+          <button
+            type="submit"
+            className="rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+          >
+            Add money account
+          </button>
+        </form>
+      </section>
+    </main>
+  );
+}
+
+const INPUT =
+  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
+      {children}
+      {hint && <span className="text-xs text-neutral-400 dark:text-neutral-600">{hint}</span>}
+    </label>
+  );
+}
+
+function CustodianBadge({ custodian }: { custodian: string }) {
+  const cls =
+    custodian === 'cashier'
+      ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+      : custodian === 'office'
+        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+        : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
+  return (
+    <span className={`rounded px-2 py-0.5 text-xs font-medium ${cls}`}>
+      {CUSTODIAN_LABEL[custodian] ?? custodian}
+    </span>
+  );
+}

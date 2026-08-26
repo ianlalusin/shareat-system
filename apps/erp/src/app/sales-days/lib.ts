@@ -12,7 +12,13 @@
  */
 import { transaction, salesDaysRepo } from '@shareat/db';
 
-export { listOrgs, listStores, listActingPersons, withOrgPrincipal } from '../expenses/lib';
+export {
+  listOrgs,
+  listStores,
+  listActingPersons,
+  withOrgPrincipal,
+  listOnlineMoneyAccounts,
+} from '../expenses/lib';
 export type { OrgOption, StoreOption, PersonOption } from '../expenses/lib';
 
 export interface ChannelOption {
