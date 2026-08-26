@@ -9,3 +9,4 @@ export * from './reports/income-statement';
 export * from './expenses';
 export * from './sales-days';
 export * from './fixed-assets';
+export * from './money-accounts';

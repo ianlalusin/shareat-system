@@ -63,35 +63,35 @@
 - `1034–1068 ` 10. Phase plan
 - `1069–1085 ` 11. Migration & ETL rules
 - `1086–1134` 12. Inherited landmines — do not repeat these
-- `1135–1289` 13. Decision log
-- `1290–1309` 14. Amendment protocol
-- `1310–1314` 15. Engineering standards — the industry practices this project follows
-  - `1315–1320` 15.1 Build order: walking skeleton first
-  - `1321–1332` 15.2 Golden-master testing — the most important practice here
-  - `1333–1341` 15.3 Strangler Fig, not big-bang cutover
-  - `1342–1346` 15.4 No dual-write
-  - `1347–1351` 15.5 Expand/contract migrations
-  - `1352–1360` 15.6 Observability from day zero, not later
-  - `1361–1365` 15.7 CI gates
-  - `1366–1370` 15.8 Backups and a tested restore
-  - `1371–1375` 15.9 Twelve-Factor config
-  - `1376–1383` 15.10 Append-only ledgers — but not event sourcing
-  - `1384–1388` 15.11 Defence in depth
-  - `1389–1417` 15.12 Skills are lenses, not assurance
-  - `1418–1424` 15.13 Reconciliation is a permanent feature
-- `1425–1429` 16. The accounting spine
-  - `1430–1461` 16.0 What we are actually fixing — the diagnosis
-  - `1462–1505` 16.1 The ten invariants — non-negotiable
-  - `1506–1520` 16.2 The oracle: how "correct" is tested
-  - `1521–1542` 16.3 The model — header + lines, not legs
-  - `1543–1562` 16.4 Deliberately simpler than ERPNext
-  - `1563–1629` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1630–1654` 16.6 What v1 already gets right — preserve the intent
-  - `1655–1676` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1677–1691` 16.8 What v1's accounting already gets right
-  - `1692–1735` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1736–1786` 16.10 Posting patterns — one canonical pattern per business event
-  - `1787–1804` 16.11 Inventory's accounting integration
+- `1135–1290` 13. Decision log
+- `1291–1310` 14. Amendment protocol
+- `1311–1315` 15. Engineering standards — the industry practices this project follows
+  - `1316–1321` 15.1 Build order: walking skeleton first
+  - `1322–1333` 15.2 Golden-master testing — the most important practice here
+  - `1334–1342` 15.3 Strangler Fig, not big-bang cutover
+  - `1343–1347` 15.4 No dual-write
+  - `1348–1352` 15.5 Expand/contract migrations
+  - `1353–1361` 15.6 Observability from day zero, not later
+  - `1362–1366` 15.7 CI gates
+  - `1367–1371` 15.8 Backups and a tested restore
+  - `1372–1376` 15.9 Twelve-Factor config
+  - `1377–1384` 15.10 Append-only ledgers — but not event sourcing
+  - `1385–1389` 15.11 Defence in depth
+  - `1390–1418` 15.12 Skills are lenses, not assurance
+  - `1419–1425` 15.13 Reconciliation is a permanent feature
+- `1426–1430` 16. The accounting spine
+  - `1431–1462` 16.0 What we are actually fixing — the diagnosis
+  - `1463–1506` 16.1 The ten invariants — non-negotiable
+  - `1507–1521` 16.2 The oracle: how "correct" is tested
+  - `1522–1543` 16.3 The model — header + lines, not legs
+  - `1544–1563` 16.4 Deliberately simpler than ERPNext
+  - `1564–1630` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1631–1655` 16.6 What v1 already gets right — preserve the intent
+  - `1656–1677` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1678–1692` 16.8 What v1's accounting already gets right
+  - `1693–1736` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1737–1787` 16.10 Posting patterns — one canonical pattern per business event
+  - `1788–1805` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -102,7 +102,7 @@
 
 | | |
 |---|---|
-| **Version** | 2.6 — one split-payment shape everywhere; sales arrive from POS already split by payment account (§13 row 148) |
+| **Version** | 2.7 — only an admin may add an account to the books (§13 row 149) |
 | **Created** | 2026-08-22 |
 | **Last amended** | 2026-08-26 |
 | **Status** | Accounting-correctness project (§1.1). All discovery complete. Root cause identified (§16.0). **Chart of accounts aligned and signed off.** Ready to write Phase 0/1 task specs. |
@@ -1284,6 +1284,7 @@ just a patch.**
 | 146 | 2026-08-26 | **Batch remittance is ADDITIVE — daily remittance is not replaced — and a partially-settled day displays as `partially_remitted`, which v1 already has. ⛔ Correcting my own claim that it did not.** (T-136 §7.5) | Ian: *“the unsettled sales day displays as partially remitted just like v1. We do not take out the daily remittance functionality — batch remittance is additive.”* ⛔ **T-136 §7.5 asserted that “a partially-settled day is a state v1 has no name for”. That was wrong, and one grep settled it:** v1's enum is `open | submitted | verified | partially_remitted | remitted | voided` (`types/index.ts:1173`). The error was conflating two things — v1 genuinely cannot have ONE remittance cover FIVE days, but it has always been able to remit LESS than one day's expected, so the display state existed all along. **Pooling is the new capability; the status is not.** A reminder that “v1 has no X” is a claim to check, not an inference to draw from an adjacent limitation. ⭐ **Two things v1 already gets right and v2 ports:** the status is DERIVED from posted transfers rather than stamped (`applyRemittanceStatusFromTransfers`), and `verified`/`partially_remitted`/`remitted` are ALL recognised for the income statement — row 128's *“revenue recognition does not depend on remittance”* already true in v1's code. ⚠️ **One failure mode to design out, which v1 documents against itself:** it ships an admin “recompute remittance status” button for days *“stuck on partially_remitted even though all transfers are posted — businessDate mismatch on an older transfer, or a zero-expected account blocking the status flip”*. **A derived status needing a manual recompute is a derived status being cached somewhere.** v2 reads it from the legs at display time so it cannot go stale, and defines settled as **“nothing outstanding”, never “a transfer arrived”** — otherwise a day expecting ₱0 online waits forever for a transfer that will never come. **Additive means one-settles-many is the general case and one-settles-one is N=1** — no separate daily code path, because two paths would eventually disagree about a shortage. | Yes — constrains T-136's design only |
 | 147 | 2026-08-26 | **An unsettled remittance does NOT block the next one — it gets its OWN TABLE so it cannot hide. The table holds the CASE and its lifecycle; the peso figure stays DERIVED.** (T-136 §7.6) | Ian: *“no it won't block, but it must be flagged and dedicate a separate table so it won't hide from sight like v1 does.”* **Not blocking is right** — a shortage on Jan 5 is no reason to strand Jan 6–10's cash in a drawer, which would make the control cause the very risk it exists to reduce. ⭐ **And “like v1 does” is evidenced, not a hunch: v1 proves it against itself.** Row 146 records the admin button v1 had to build for days *“stuck on `partially_remitted` even though all transfers are posted”*. **A stuck status that needed a repair tool is a status nobody was watching** — rendered in a column, in a list, among days that all looked alike. Visible without being seen. ⚠️ **A table is exactly right for the flag and exactly wrong for the figure.** How much is outstanding stays DERIVED (expected per row 145, less what remittances have settled) — a stored balance is a second place the same pesos live, which rows 143 and 145 both refuse. What the table holds is what is NOT derivable: that a case exists, who owns it, when it was raised, what was decided, whether it is closed. **A human process needs a record; a number does not.** The table can never disagree with the books because it holds no number that could. ⛔ **Three states, and conflating them is the trap:** *outstanding* (counted, signed, not handed over yet — nobody is answerable, the ceiling governs it), *custody variance* (counted and signed but did not arrive — someone is answerable, named explicitly per row 144), and *resolved*. **Collapsing “not yet handed over” into “short” accuses a cashier of losing money they are holding perfectly properly**, and it is the easy mistake because both look identical as a number. **Flagged means COUNTED, not coloured** — same standard as T-125's review queue: a persistent count that reads zero when there is nothing to do, nothing that expires or auto-closes, and ⭐ **age surfaced as well as amount**, because ₱200 outstanding for 40 days is a worse finding than ₱9,000 since yesterday. T-136 owns the table, not T-135 — T-135 is on ADR-005's *can wait past January* list, and cash sitting unremitted is not. | Yes — constrains T-136's design only |
 | 148 | 2026-08-26 | **ONE split-payment shape for every money movement, each line naming its ACCOUNT and DIRECTION — and sales come in from POS already split, because POS is where the customer's payment mode is captured.** (DEF-068, ADR-010) | Ian: *“the cashier POS has this — it defines which mode of payment is used by customer … so for sales transaction it will go in from POS, and POS on billing screen has split payment; for other transaction it is ERP split payment. Both work — we introduce a dropdown picker to dictate direction and account.”* ⭐ **This answers ADR-010's last practical obstacle.** Attributing online money needs `1140` to require a party, and the blocker was that a sales day had nothing to supply — one `online_collected` figure, no wallet. It turns out the data was never missing: **POS captures it at the till and v1 already carries it** (`sale.builder.ts` takes `onlineBreakdown: Record<accountId, amount>` and posts one leg per account). T-123 simply did not carry it across — registered as DEF-068. ⚠️ **The axis confusion worth naming once: a CHANNEL is not a PAYMENT ACCOUNT.** `sales_day_channels` records where a sale came FROM (Walk-in, Foodpanda — revenue and receivables); a payment account records where the money WENT (custody). They are orthogonal — a Foodpanda sale can settle into any wallet — and v2 modelled the first while dropping the second. **The unifying decision:** one split shape everywhere, each line naming a money account and a direction, so a POS-sourced sale and a hand-entered AP payment describe movement identically. ⭐ This also generalises row 145 — if every movement names its account per line, then *“cashier's part only”* is free for every transaction type, not just expenses, because the leg IS the part. | Yes — shapes T-123's child table and the ERP split editor; nothing built on it yet |
+| 149 | 2026-08-26 | ⛔ **ONLY AN ADMIN MAY ADD AN ACCOUNT TO THE BOOKS — a standing rule, not a decision about one screen.** The gate is `manage_chart_of_accounts` (org-scoped, admin and super-admin only). | Ian: *“only admin can add accounts to the books”* … *“that must be the rule.”* ⚠️ **Recorded because I got it wrong first, and the wrong reasoning is the instructive part.** I gated `money_accounts` on `manage_store_settings` — manager-and-above, store-scoped — on the grounds that a branch manager adding the store's GCash account is ordinary configuration. **It is not configuration. A money account IS an account in the books**: every peso entering it lands on the balance sheet under a GL code, and creating one creates a place money can be attributed to. That is the same act as adding a chart-of-accounts row and belongs at the same level. ⭐ **The rule generalises past this table, which is why it is a row and not a code comment.** Anything that creates a place money or value can be recorded against — a money account today, a bank account, a new control account, a category that mints its own GL row — is an admin act. A manager RECORDS transactions; only an admin changes what the books can record them against. **A wallet is per-store while the capability is per-ORG, and that is correct rather than sloppy:** the store says where the money sits; the authority to open a new place for money to sit is the org's. An admin already holds org-wide scope, so nothing is widened. ⚠️ Retiring one is the same authority as creating it — it changes what accounts the books have. | No — it is a permission rule and lowering it later would be a deliberate loosening, not a refactor |
 
 ---
 
