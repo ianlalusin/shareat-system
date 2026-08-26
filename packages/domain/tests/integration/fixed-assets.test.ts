@@ -30,10 +30,12 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 }
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
+import { seedExpenseCategories } from '../../../db/seed/expense-categories';
 import { CUTOVER_CLASSIFICATION } from '../../../db/src/cutover/classification';
 import { RLS_REGISTRY } from '../../../db/src/rls/registry';
 import { closeDb, fixedAssetsRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
+import { createExpense, approveExpense } from '@shareat/domain';
 import {
   buildSchedule,
   createAsset,
@@ -66,6 +68,7 @@ async function setup(hint: string): Promise<Fixture> {
   `;
   const orgId = org!.id;
   await seedChartOfAccounts(sql, orgId);
+  await seedExpenseCategories(sql, orgId);
 
   // A year of open periods — depreciation spans months by nature, so a single-month period would
   // make every catch-up test fail for the wrong reason.
@@ -650,6 +653,106 @@ describe('the terms stamped on the asset', () => {
 
     expect(posted.map((p) => p.amount)).toEqual(expected.map((p) => String(p.amount)));
     expect(await ledgerTotal(f.orgId, assetId, '1590')).toBe('77777.77');
+  });
+});
+
+
+// =========================================================================================
+// The T-122 seam — an approved CAPEX expense becomes a register row
+// =========================================================================================
+
+async function capexExpense(f: Fixture, amount: string): Promise<string> {
+  const [cat] = await sql<{ id: string }[]>`
+    select id from expense_categories where org_id = ${f.orgId} and category = 'Capital Expenditure'
+  `;
+  const created = await asPerson(f.orgId, (tx) =>
+    createExpense(tx, actor(f.orgId, f.staffId), {
+      storeId: f.storeId,
+      businessDate: '2026-01-20',
+      categoryId: cat!.id,
+      particulars: 'Commercial deep fryer',
+      receiptPhotoUrl: 'https://example.com/receipt.jpg',
+      payments: [{ method: 'cash', amount }],
+    }),
+  );
+  return created.id;
+}
+
+describe('the capitalisation seam (spec §6)', () => {
+  it('an over-threshold CAPEX expense creates an asset flagged for review', async () => {
+    const f = await setup('seam');
+    const expenseId = await capexExpense(f, '45000.00');
+
+    const posted = await asPerson(f.orgId, (tx) =>
+      approveExpense(tx, actor(f.orgId, f.managerId), expenseId),
+    );
+    expect(posted.assetId).toBeTruthy();
+
+    const asset = await asPerson(f.orgId, (tx) =>
+      fixedAssetsRepo.getById(tx, f.orgId, posted.assetId!),
+    );
+    expect(asset).toMatchObject({
+      cost: '45000.00',
+      sourceExpenseId: expenseId,
+      // ⭐ The terms are a default nobody chose, so the register says so rather than
+      // presenting a guess as a decision.
+      needsReview: true,
+      usefulLifeMonths: 24,
+      status: 'active',
+    });
+    // The money is already in 1510 from T-122's own posting — capitalisation adds no entry.
+    expect(await ledgerTotal(f.orgId, posted.assetId!, '1510')).toBe('0');
+  });
+
+  it('⛔ a MANAGER can still approve a CAPEX expense — capitalisation is a consequence, not a second permission', async () => {
+    // The regression this pins: `manage_fixed_assets` is admin-only while `approve_expense` is a
+    // manager's. Gating the seam on the former meant no manager could approve CAPEX at all.
+    const f = await setup('seamrole');
+    const expenseId = await capexExpense(f, '30000.00');
+    const posted = await asPerson(f.orgId, (tx) =>
+      approveExpense(tx, actor(f.orgId, f.managerId), expenseId),
+    );
+    expect(posted.assetId).toBeTruthy();
+  });
+
+  it('a BELOW-threshold CAPEX expense creates no asset, and that is not an error', async () => {
+    const f = await setup('seamsmall');
+    const expenseId = await capexExpense(f, '2500.00');
+    const posted = await asPerson(f.orgId, (tx) =>
+      approveExpense(tx, actor(f.orgId, f.managerId), expenseId),
+    );
+    expect(posted.assetId).toBeNull();
+    const assets = await asPerson(f.orgId, (tx) => fixedAssetsRepo.listAssets(tx, f.orgId, {}));
+    expect(assets).toHaveLength(0);
+  });
+
+  it('approving twice does not mint a second asset', async () => {
+    const f = await setup('seamidem');
+    const expenseId = await capexExpense(f, '45000.00');
+    const first = await asPerson(f.orgId, (tx) =>
+      approveExpense(tx, actor(f.orgId, f.managerId), expenseId),
+    );
+    const second = await asPerson(f.orgId, (tx) =>
+      approveExpense(tx, actor(f.orgId, f.managerId), expenseId),
+    );
+    expect(second.created).toBe(false);
+    const assets = await asPerson(f.orgId, (tx) => fixedAssetsRepo.listAssets(tx, f.orgId, {}));
+    expect(assets).toHaveLength(1);
+    expect(assets[0]!.id).toBe(first.assetId);
+  });
+
+  it('the capitalised asset then depreciates like any other', async () => {
+    const f = await setup('seamdep');
+    const expenseId = await capexExpense(f, '48000.00');
+    const posted = await asPerson(f.orgId, (tx) =>
+      approveExpense(tx, actor(f.orgId, f.managerId), expenseId),
+    );
+    const charged = await asPerson(f.orgId, (tx) =>
+      depreciateAsset(tx, actor(f.orgId, f.adminId), { assetId: posted.assetId!, through: '2026-03' }),
+    );
+    // Acquired 2026-01-20, 48,000 over 24 months = 2,000/month, three months charged.
+    expect(charged.filter((c) => c.created)).toHaveLength(3);
+    expect(Number(await ledgerTotal(f.orgId, posted.assetId!, '1590'))).toBe(6000);
   });
 });
 

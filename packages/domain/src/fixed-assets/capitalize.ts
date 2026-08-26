@@ -141,14 +141,41 @@ export async function capitalizeFromExpense(
   actor: Actor,
   expenseId: string,
 ): Promise<CapitaliseFromExpenseResult> {
-  if (tx) return runCapitalise(tx, actor, expenseId);
-  return transaction((trx) => runCapitalise(trx, actor, expenseId));
+  if (tx) return runCapitalise(tx, actor, expenseId, true);
+  return transaction((trx) => runCapitalise(trx, actor, expenseId, true));
+}
+
+/**
+ * ⭐ The same thing, called as a CONSEQUENCE of approving the expense — and deliberately NOT
+ * gated on `manage_fixed_assets`.
+ *
+ * ⚠️ This distinction is not a convenience, and getting it wrong is a real regression I made and
+ * a test caught. `manage_fixed_assets` is admin-only, while `approve_expense` is a MANAGER's
+ * capability. Requiring both here would have meant **no manager could ever approve a CAPEX
+ * expense again** — `authorize: role 'manager' may not 'manage_fixed_assets'` — which is not a
+ * decision anybody made, just a consequence of calling the wrong function.
+ *
+ * The reasoning that settles it: the person is not "managing fixed assets", they are approving a
+ * purchase. The register row is something the SYSTEM must record because the money has already
+ * landed in 1510 — not a second, separately-permissioned action the approver is performing. The
+ * gate that matters is `approve_expense`, and the caller has already checked it.
+ *
+ * ⛔ Only `approveExpense` may call this. Any other caller is performing a deliberate act on the
+ * register and must go through {@link capitalizeFromExpense}, which authorizes.
+ */
+export async function capitalizeApprovedExpense(
+  tx: Tx,
+  actor: Actor,
+  expenseId: string,
+): Promise<CapitaliseFromExpenseResult> {
+  return runCapitalise(tx, actor, expenseId, false);
 }
 
 async function runCapitalise(
   tx: Tx,
   actor: Actor,
   expenseId: string,
+  checkCapability: boolean,
 ): Promise<CapitaliseFromExpenseResult> {
   const expense = await expensesRepo.getExpenseById(tx, actor.orgId, expenseId);
   if (!expense) {
@@ -157,9 +184,9 @@ async function runCapitalise(
     );
   }
 
-  // Store-scoped read BEFORE authorize, same reasoning as the expenses module: the capability is
-  // org-scoped but the store is a property of the expense, not of caller input.
-  await authorize(tx, actor, 'manage_fixed_assets', {});
+  if (checkCapability) {
+    await authorize(tx, actor, 'manage_fixed_assets', {});
+  }
 
   const existing = await fixedAssetsRepo.findBySourceExpense(tx, actor.orgId, expenseId);
   if (existing) {

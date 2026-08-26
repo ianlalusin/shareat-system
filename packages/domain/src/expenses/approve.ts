@@ -16,11 +16,16 @@ import { expensesRepo, transaction, type Tx } from '@shareat/db';
 import { money } from '@shareat/core/money';
 import { postEntry } from '../ledger/post-entry';
 import { routeExpense } from './routing';
+import { capitalizeApprovedExpense } from '../fixed-assets/capitalize';
 
 export interface ApproveExpenseResult {
   journalEntryId: string;
   /** false means this expense was already posted — nothing new was written. */
   created: boolean;
+  /** The fixed asset this CAPEX expense was capitalised into, if it cleared the threshold.
+   *  `null` for every non-CAPEX expense, and for a CAPEX one below the threshold — which is a
+   *  normal outcome, not a failure (T-124 §6). */
+  assetId?: string | null;
 }
 
 export async function approveExpense(
@@ -119,5 +124,22 @@ async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promi
     });
   }
 
-  return { journalEntryId: result.entryId, created: result.created };
+  // ⭐ T-124's seam. A CAPEX category's account IS 1510, so the line above has ALREADY put
+  // the money in the asset account — what is still missing is the REGISTER ROW that knows the
+  // ₱45,000 sitting there is a chest freezer with a life. Without this, the cost lands in 1510
+  // and nothing ever depreciates it.
+  //
+  // ⛔ Runs INSIDE the approving transaction, deliberately. If the capitalisation policy cannot
+  // be read this throws, and the whole approval rolls back — which is v1's behaviour and its
+  // reasoning: *"posting it now would capitalize the asset on default terms instead of yours"*,
+  // and those terms are permanent. An expense posted without its asset is worse than an expense
+  // not posted at all, because only one of those two states is obvious to anybody.
+  const capitalised =
+    category.group === 'CAPEX' ? await capitalizeApprovedExpense(tx, actor, expenseId) : null;
+
+  return {
+    journalEntryId: result.entryId,
+    created: result.created,
+    assetId: capitalised?.assetId ?? null,
+  };
 }
