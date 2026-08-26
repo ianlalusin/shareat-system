@@ -127,3 +127,24 @@ docs/       decisions/ · discovery/ · plans/ · tasks/
 ```
 
 Ports are reserved and never shared. Never pass a different `-p`.
+
+
+## ⭐ Ian's closing line — "wrap up today's work"
+
+**When Ian says *"wrap up today's work"*, run the `wrap-up` skill** (`.claude/skills/wrap-up/`).
+It is his closing ritual for **every** AI agent on this project, and it is not optional politeness:
+
+| It does | Because |
+|---|---|
+| Summarises since the last wrap-up | The next session starts informed, not cold |
+| Runs the real gates and reports real numbers | *"Verify, do not claim"* (§3.4a) |
+| **Records every decision Ian made** in the bible / register / task doc | ⭐ **A decision that lives only in a transcript is lost** |
+| Commits and pushes everything | Uncommitted work is invisible work |
+| Writes `docs/HANDOFF-TODAY.md` | The paste-ready prompt for whoever picks this up next |
+
+⚠️ **If the gates are red it still commits and pushes** — and the handoff opens with a
+`⛔ THE BUILD IS RED` banner. Losing work is worse than visible red on a `main` nothing deploys
+from.
+
+**Not to be confused with `/daily-review`**, which is a critic: it reviews a diff for defects, works
+on a branch, and never touches `main`. This one is a closer.
