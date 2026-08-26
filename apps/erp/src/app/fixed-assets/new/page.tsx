@@ -1,0 +1,171 @@
+import { ASSET_CATEGORIES } from '@shareat/db';
+import { formatMoney, money } from '@shareat/core/money';
+import { toBusinessDate } from '@shareat/core/datetime';
+import { requireSession } from '../../../lib/session';
+import { createAssetAction } from '../actions';
+import { CATEGORY_LABEL, INTERVAL_LABEL, listStores, readPolicyForDisplay } from '../lib';
+
+export const metadata = { title: 'Add asset — Shareat System' };
+export const dynamic = 'force-dynamic';
+
+interface SearchParams {
+  store?: string;
+  error?: string;
+}
+
+export default async function NewAssetPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const sp = await searchParams;
+  const { actor } = await requireSession('/fixed-assets/new');
+  const stores = await listStores(actor.orgId);
+  const policy = await readPolicyForDisplay(actor.orgId);
+  const today = toBusinessDate();
+
+  return (
+    <main className="mx-auto max-w-3xl space-y-6 p-4 sm:p-8">
+      <div>
+        <h1 className="text-2xl font-semibold">Add asset</h1>
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+          Adding it here records what the business owns.{' '}
+          <strong>It does not post the purchase</strong> — an asset bought through an expense is
+          already in 1510. Use this for something being brought onto the register directly.
+        </p>
+      </div>
+
+      {sp.error && (
+        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+          {sp.error}
+        </div>
+      )}
+
+      <form action={createAssetAction} className="space-y-6">
+        <input type="hidden" name="filterStore" value={sp.store ?? ''} />
+
+        <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <h2 className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
+            What it is
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Name" hint="What somebody would call it when pointing at it">
+              <input
+                name="name"
+                required
+                maxLength={200}
+                placeholder="Chest freezer — kitchen"
+                className={INPUT}
+              />
+            </Field>
+            <Field label="Store">
+              <select name="storeId" required defaultValue={sp.store ?? ''} className={INPUT}>
+                <option value="">Choose a store…</option>
+                {stores.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.code})
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Category">
+              <select name="category" required defaultValue="equipment" className={INPUT}>
+                {ASSET_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {CATEGORY_LABEL[c] ?? c}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Acquired on">
+              <input type="date" name="acquiredOn" required max={today} defaultValue={today} className={INPUT} />
+            </Field>
+          </div>
+        </section>
+
+        <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <h2 className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
+            What it costs, and how long it lasts
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Cost">
+              <input name="cost" required inputMode="decimal" placeholder="0.00" className={INPUT} />
+            </Field>
+            <Field
+              label="Salvage value"
+              hint={`Blank uses the policy default (${
+                policy ? formatMoney(money(policy.defaultSalvageValue)) : '₱0.00'
+              }). Must be below cost.`}
+            >
+              <input name="salvageValue" inputMode="decimal" placeholder="0.00" className={INPUT} />
+            </Field>
+            {/* ⭐ MONTHS, and the field says so. v1 asked for months too, then divided by 12 to
+                store years — so a 30-month life became 2.5 and carried a rounding nobody saw.
+                Bible row 140 removed the conversion rather than refining it. */}
+            <Field
+              label="Useful life (months)"
+              hint="Blank uses this category's default, then 24 months. How long until you would realistically REPLACE it — not how long it could last."
+            >
+              <input
+                type="number"
+                name="usefulLifeMonths"
+                min={1}
+                step={1}
+                placeholder="24"
+                className={INPUT}
+              />
+            </Field>
+            <Field label="Depreciation interval" hint="How often it charges. Set once, here.">
+              <select name="interval" defaultValue="monthly" className={INPUT}>
+                {(['monthly', 'quarterly', 'semiannual', 'annually'] as const).map((i) => (
+                  <option key={i} value={i}>
+                    {INTERVAL_LABEL[i]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <Field label="Notes" hint="Why this life? A year from now this is what a reviewer wants.">
+            <textarea name="notes" rows={2} className={INPUT} />
+          </Field>
+        </section>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="submit"
+            className="rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+          >
+            Add asset
+          </button>
+          <a
+            href={`/fixed-assets?${sp.store ? `store=${sp.store}` : ''}`}
+            className="text-sm underline hover:no-underline"
+          >
+            Cancel
+          </a>
+        </div>
+      </form>
+    </main>
+  );
+}
+
+const INPUT =
+  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
+      {children}
+      {hint && <span className="text-xs text-neutral-400 dark:text-neutral-600">{hint}</span>}
+    </label>
+  );
+}
