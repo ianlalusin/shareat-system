@@ -11,7 +11,7 @@
 > renames files, or opens a new domain, the reviewer updates the affected rows
 > and bumps the line below in the same run.
 >
-> **Verified against:** `main @ d404a70` (2026-08-26)
+> **Verified against:** `main @ 0948e8e` (2026-08-26)
 
 How to use this: find your topic, open the code paths it names, and read the
 governing docs **before** changing anything. `docs/RULES.md` §5 routes
@@ -43,7 +43,8 @@ field name.
 | Reconciliation & audit of the replay | `packages/etl/src/reconcile.ts` · `packages/etl/src/audit/` (balances, compare, groups, report) | T-114a · T-117 |
 | Firestore reading (v1 source) | `packages/etl-firestore/src/` (client, reader, plan) | T-114a · bible §11 |
 | **Sales day** — a day's selling, per store; verification is what POSTS | schema `packages/db/schema/sales-days.ts` · repo `packages/db/src/repo/sales-days.ts` · routing `packages/domain/src/sales-days/routing.ts` · services `create.ts`, `verify.ts` · screens `apps/erp/src/app/sales-days/` | T-123 · bible rows 126, 133, 134, 135 · POSTING-PATTERNS `sale.*` |
-| **Fixed assets & depreciation** — accumulated is DERIVED, never stored | schema `packages/db/schema/fixed-assets.ts` · schedule `packages/domain/src/fixed-assets/schedule.ts` | T-124 · bible row 139 · discovery 25 · DEF-044 |
+| **Fixed assets & depreciation** — accumulated and book value are DERIVED, never stored | schema `packages/db/schema/fixed-assets.ts` · repo `packages/db/src/repo/fixed-assets.ts` (`accumulatedFromLedger` is the whole point) · pure engine `packages/domain/src/fixed-assets/schedule.ts` · services `policy.ts` (the fail-closed read), `capitalize.ts`, `depreciate.ts`, `dispose.ts` · screens `apps/erp/src/app/fixed-assets/` | T-124 · bible rows 139, **140** · discovery 25 · DEF-044 |
+| **Capitalisation seam** — an approved CAPEX expense becomes a register row | `packages/domain/src/expenses/approve.ts` calls `capitalizeApprovedExpense` — ⚠️ the NON-authorizing entry point, because `manage_fixed_assets` is admin-only and `approve_expense` is a manager's | T-124 §6 · T-122 |
 
 ## Schema, migrations, and data rules
 
