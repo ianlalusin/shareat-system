@@ -14,7 +14,7 @@
  * accounts balance perfectly too.
  *
  * Ordered per the spec: expense_payment, sale, salary_advance, transfer, depreciation
- * first (88% of v1's 12,824-leg corpus), then the rest of the Required table, then the
+ * first (79% of v1's 12,824-leg corpus), then the rest of the Required table, then the
  * "Include; cheap" group, then three v2-only additions with no v1 sourceType (reversal is
  * proved generically over every fixture below rather than named per-fixture — see the
  * integration test's invariant 4).
