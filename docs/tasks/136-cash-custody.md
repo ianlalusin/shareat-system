@@ -243,3 +243,103 @@ distribute twice a month.
 
 **Do not design any of the three from first principles.** Row 127's answer and this task's answer
 are the same research pass, and it should be one pass.
+
+---
+
+## 7. ✅ How a pooled remittance SETTLES the days it covers (Ian, 2026-08-26)
+
+> **Ian:** *"So we preserve the daily cashier remittance locking — each sales day locks on
+> verified, so all remittable cash and online is recorded. But remittance may happen by batch. For
+> example Lipa has 5 sitting sales reports for January 1 to 5, all verified, money in cashier not
+> remitted yet — it can be remitted all at once, so remittance-01 can cover 5 dates. If the
+> remittance is short, cover the oldest sales report first, and record shortage/overage on the
+> last date."*
+
+**This is the allocation rule §1 left unstated, and it is consistent with everything already
+decided.** The daily lock is §1's COUNT; the batch is §1's TRANSFER. Row 129's ceiling still
+governs — a cadence with no ceiling is the failure that row names.
+
+### 7.1 The rule, and why the residual naturally lands last
+
+Oldest-first is **FIFO**, and FIFO does the placement on its own — no separate rule is needed for
+where the variance goes:
+
+```
+Jan 1–5 verified, ₱10,000 remittable each        expected  ₱50,000
+Cashier hands over                                actual    ₱46,000
+
+  Jan 1  ₱10,000  settled in full
+  Jan 2  ₱10,000  settled in full
+  Jan 3  ₱10,000  settled in full
+  Jan 4  ₱10,000  settled in full
+  Jan 5  ₱ 6,000  partially settled  →  ₱4,000 SHORT
+```
+
+⭐ Ian's *"record shortage on the last date"* is not an extra convention — **it is what FIFO
+produces**. A rule that falls out of the allocation cannot drift from it.
+
+An overage settles every day in full and leaves a positive residual on the same last date,
+symmetrically.
+
+### 7.2 ⚠️ The evaluation: this is a CUSTODY variance, not a COUNT variance
+
+**They are two different events and must not become one number**, or the daily count that §1 fought
+to keep stops meaning anything.
+
+| | When it is found | What it means | Who it belongs to |
+|---|---|---|---|
+| **Count variance** | At the daily close, per day | The till did not match what the day says it should | The cashier who worked **that day** |
+| **Custody variance** (this section) | At the batch handover | Money that was counted and signed for did not arrive | Whoever **held the pool** between count and handover |
+
+⭐ **Once the till is counted daily and signed, a batch shortage cannot be a counting error** — the
+counts already reconciled. It is a loss *in custody*, after the fact. That is a different question,
+asked of a possibly different person.
+
+⚠️ **So dating it on the last date is right; ATTRIBUTING it to the last date's cashier is not.**
+The last date is where the arithmetic puts the residual; it says nothing about who was holding the
+money. v1 already refuses to guess here — its remittance builder **throws** if a shortage is posted
+without an explicit `chargeToStaffId` rather than inferring one — and that refusal should be
+ported, because inferring the person from the date is exactly the wrong inference.
+
+⛔ This is row 128's warning arriving in a concrete form: *"a shortage found then is attributable to
+nobody."* Pooling does not remove attribution — but it moves the question from *"which day?"* to
+*"who was holding it?"*, and only the second one has an answer.
+
+### 7.3 Cash and online settle separately, in one document
+
+A batch covers N days, and each day carries **two** remittable figures. They are not the same act:
+
+- **Cash** is physically handed over. It can be short because notes are missing.
+- **Online** is a wallet-to-wallet transfer — cashier-custodian account to office-custodian account
+  (ADR-010 §8). It cannot be "short" in the same way; a mismatch there is a failed or partial
+  transfer, not a missing note.
+
+⚠️ So the remittance document holds **two settlement tracks**, allocated FIFO independently, with
+their own variances. v1 keeps separate cash and online remittance builders for this reason.
+Collapsing them into one figure would let an online surplus silently paper over a cash shortage —
+and the cash shortage is the one somebody has to answer for.
+
+### 7.4 ⭐ FIFO is a DOCUMENT concern, not a journal concern
+
+The ledger does not care which day a peso came from: `1110` is `1110`, and the days were already
+recognised as revenue when they happened (§1). So:
+
+- **One remittance = one journal entry**, moving the total actually handed over from the
+  cashier-custodian account to the office-custodian one, plus the variance leg.
+- **Which days it settles, and by how much, is subledger detail** on the remittance document — not
+  five journal entries, and not a leg per day.
+
+⚠️ **Resist the symmetry.** Posting per-day legs would look tidier and would immediately create the
+thing ADR-010 §1 exists to prevent: a second place the same pesos are recorded, drifting from the
+first. The allocation is an *answer about* the movement, not the movement.
+
+### 7.5 What this settles, and what it does not
+
+✅ **Settled:** the allocation order, where the residual lands, that cash and online allocate
+separately, and that allocation is document-level.
+
+⚠️ **Still open, and it is §5's research question, not a guess:** whether a partially-settled day
+blocks the next remittance, and what a day that is *"₱4,000 short"* looks like on the sales-day
+screen a week later. **A partially-settled day is a state v1 has no name for**, because v1 cannot
+pool at all (§ the structural blocker above).
+

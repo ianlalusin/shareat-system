@@ -63,35 +63,35 @@
 - `1034–1068 ` 10. Phase plan
 - `1069–1085 ` 11. Migration & ETL rules
 - `1086–1134` 12. Inherited landmines — do not repeat these
-- `1135–1284` 13. Decision log
-- `1285–1304` 14. Amendment protocol
-- `1305–1309` 15. Engineering standards — the industry practices this project follows
-  - `1310–1315` 15.1 Build order: walking skeleton first
-  - `1316–1327` 15.2 Golden-master testing — the most important practice here
-  - `1328–1336` 15.3 Strangler Fig, not big-bang cutover
-  - `1337–1341` 15.4 No dual-write
-  - `1342–1346` 15.5 Expand/contract migrations
-  - `1347–1355` 15.6 Observability from day zero, not later
-  - `1356–1360` 15.7 CI gates
-  - `1361–1365` 15.8 Backups and a tested restore
-  - `1366–1370` 15.9 Twelve-Factor config
-  - `1371–1378` 15.10 Append-only ledgers — but not event sourcing
-  - `1379–1383` 15.11 Defence in depth
-  - `1384–1412` 15.12 Skills are lenses, not assurance
-  - `1413–1419` 15.13 Reconciliation is a permanent feature
-- `1420–1424` 16. The accounting spine
-  - `1425–1456` 16.0 What we are actually fixing — the diagnosis
-  - `1457–1500` 16.1 The ten invariants — non-negotiable
-  - `1501–1515` 16.2 The oracle: how "correct" is tested
-  - `1516–1537` 16.3 The model — header + lines, not legs
-  - `1538–1557` 16.4 Deliberately simpler than ERPNext
-  - `1558–1624` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1625–1649` 16.6 What v1 already gets right — preserve the intent
-  - `1650–1671` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1672–1686` 16.8 What v1's accounting already gets right
-  - `1687–1730` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1731–1781` 16.10 Posting patterns — one canonical pattern per business event
-  - `1782–1799` 16.11 Inventory's accounting integration
+- `1135–1285` 13. Decision log
+- `1286–1305` 14. Amendment protocol
+- `1306–1310` 15. Engineering standards — the industry practices this project follows
+  - `1311–1316` 15.1 Build order: walking skeleton first
+  - `1317–1328` 15.2 Golden-master testing — the most important practice here
+  - `1329–1337` 15.3 Strangler Fig, not big-bang cutover
+  - `1338–1342` 15.4 No dual-write
+  - `1343–1347` 15.5 Expand/contract migrations
+  - `1348–1356` 15.6 Observability from day zero, not later
+  - `1357–1361` 15.7 CI gates
+  - `1362–1366` 15.8 Backups and a tested restore
+  - `1367–1371` 15.9 Twelve-Factor config
+  - `1372–1379` 15.10 Append-only ledgers — but not event sourcing
+  - `1380–1384` 15.11 Defence in depth
+  - `1385–1413` 15.12 Skills are lenses, not assurance
+  - `1414–1420` 15.13 Reconciliation is a permanent feature
+- `1421–1425` 16. The accounting spine
+  - `1426–1457` 16.0 What we are actually fixing — the diagnosis
+  - `1458–1501` 16.1 The ten invariants — non-negotiable
+  - `1502–1516` 16.2 The oracle: how "correct" is tested
+  - `1517–1538` 16.3 The model — header + lines, not legs
+  - `1539–1558` 16.4 Deliberately simpler than ERPNext
+  - `1559–1625` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1626–1650` 16.6 What v1 already gets right — preserve the intent
+  - `1651–1672` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1673–1687` 16.8 What v1's accounting already gets right
+  - `1688–1731` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1732–1782` 16.10 Posting patterns — one canonical pattern per business event
+  - `1783–1800` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -102,7 +102,7 @@
 
 | | |
 |---|---|
-| **Version** | 2.1 — ADR-010 completed: undeposited funds is derived, not an account; the till is a mixed pot (§13 rows 142–143) |
+| **Version** | 2.2 — pooled remittance settles FIFO; a batch shortage is a custody variance, not a count variance (§13 row 144) |
 | **Created** | 2026-08-22 |
 | **Last amended** | 2026-08-26 |
 | **Status** | Accounting-correctness project (§1.1). All discovery complete. Root cause identified (§16.0). **Chart of accounts aligned and signed off.** Ready to write Phase 0/1 task specs. |
@@ -1279,6 +1279,7 @@ just a patch.**
 | 141 | 2026-08-26 | **The capitalisation threshold drops to ₱5,000 — back to v1's figure — and ONE threshold now governs fixed assets AND prepaid items. This SUPERSEDES row 139's ₱10,000.** (T-124, T-125) | Ian: *“we seldomly use that prepaid capital and i suggest both asset and prepaid must be lowered to 5k since 10k might be a bit high to absorb in one accounting period.”* ⭐ **The reasoning runs the opposite way to intuition, and he has it the right way round.** A HIGHER threshold does not spread more cost — it expenses more of it immediately, because everything BELOW the line is absorbed in one period. ₱10,000 was therefore the setting that allowed a ₱9,999 purchase to land entirely in one month's P&L. Lowering to ₱5,000 sends more purchases into a schedule instead. **What row 139 traded away, and is now being traded back.** 139 raised the figure for materiality, and its cost was physical: every asset over the line is a row somebody stands in front of during the December walk-round (T-134 B2). Lowering it means MORE rows to count in December and a busier `needs_review` queue, since auto-capitalisation from a CAPEX expense flags every asset it creates. That is the accepted cost, not an oversight. **ONE threshold, deliberately.** v1 kept two — `appConfig/capitalization` (org-level) for assets and `stores/{id}/financialConfig/thresholds` (store-scoped) for prepaid — the same default by coincidence, different scope, never reconciled, and v1's own ACCOUNTING_BLUEPRINT still lists the split as unresolved. v2 has one value in `asset_policy`, read by both. If the two ever genuinely need to diverge, that is a column, not a second config surface. ⚠️ 139's ₱10,000 is superseded; 139's *reasoning about materiality* and 140's month-based lives both stand. | Reversible — one row in `asset_policy`, and no already-capitalised asset is re-priced by a later change |
 | 142 | 2026-08-26 | **ADR-010 ACCEPTED — ONE ledger, TWO views. Ownership belongs to the PLACE money sits, never to the transaction. Custodians are `cashier` · `office` · `staff`, a money account is per ACCOUNT not per provider, and `1120` must become party-required. This CLOSES row 127's research pass.** | Ian framed it and the framing was the answer: *“we do 2 levels of accounting here — the general one, business-wide, where all cash whoever the owner is is business cash … and the other level curated to our needs, the one with these owners … for internal only. How can we model it cleanly?”* ⭐ **They are not two sets of books.** A line records WHERE money is; who holds it is an attribute of that place. The general view groups lines by account, the internal view groups the SAME lines by the place's attributes. Two views over one set of lines cannot disagree — **two ledgers always eventually do, and v1 is proving it in the live books**: AP control ₱669,829.84 against a subledger of ₱1,567,980.87, and 34 of 115 account/store combinations disagreeing with a reconstruction from raw legs. **The rule that decides account-vs-attribute is a test, not taste: does it get reconciled against something outside the books?** A drawer is counted, a safe is counted, each wallet has a statement — accounts. Nobody reconciles “the cashier” against an external document — attribute. Ownership fails the test, which is exactly why DEF-058's *“the owner belongs to the ACCOUNT, derived never ticked”* is right. ⭐ **Asking for a third custodian exposed a live gap.** `staff` is a real custody state — an unliquidated float — and v1's owner enum never had it, leaving `cash__staff` outside its ownership model entirely. But `staff` is PLURAL where cashier and office are singular, and v2 cannot currently say WHICH staff member holds a float: `1230` (what they OWE) is party-required, `1120` (what they HOLD) is not. **The debt is attributable and the custody is not, which is backwards** — custody is the state that comes first. So `1120` becomes `requires_party`, `party_type='employee'`, matching `1230`. No new mechanism; the party slot names whatever makes a location specific, as `2110`→supplier already does. **Per account, not per provider** — “GCash — cashier” and “GCash — office” are two rows, because two things reconciled separately are two locations, and one row per provider would force a single provider to carry two owners. **“Divisions” was withdrawn, not deferred** — Ian: *“wrong choice of word, i mean separation or segregation of accounts”*, which is what `custodian` already is. No department dimension is being added. ⚠️ The chart change lands with **T-136**, not retrofitted: nothing releases a float yet, so no anonymous `1120` data exists to repair. | Reversible in principle — but it shapes the chart's contract and every module that names where money is, so unwinding it after T-136/T-130/T-131 build on it would be expensive |
 | 143 | 2026-08-26 | **UNDEPOSITED FUNDS needs NO account — it is a DERIVED state, the balance of every cashier-custodian account. And the till is a MIXED POT, so expected cash is not today's sales. This closes rows 127 and 131's last open item.** | Ian: *“currently we treat that as cash cashier or cashier online — so cashier cash is composed [of] sales made today and all other collections made by cashier, like receivables from past days, return of staff from cash request. Cash from sales sitting on till is cash cashier; online payments from sales is cashier online.”* ⭐ **Rows 127 and 131 assumed “v1 has no account for undeposited funds” was a GAP to fill. It is not — v1 is right.** §2's test says why: nobody reconciles “undeposited funds” against an external document; they reconcile the TILL, and the till is `1110`. Money is undeposited precisely while it sits in a cashier-custodian account, so the figure is `sum(balance) where custodian='cashier'` — a GROUP BY over the ledger, not a posting. **ADR-010's model answers a question it was not designed for**, and adding the account would have created a second place the same pesos are recorded, which is the exact failure ADR-010 §1 exists to prevent. Row 129's peso ceiling applies to the derived figure. ⛔ **The second half matters more.** The till is a MIXED POT: today's cash sales, PLUS collections on past-day receivables, PLUS returned staff floats, LESS cash paid out of the drawer. So **“expected cash” ≠ “today's sales cash”**, and a reconciliation built on that equation reports a false variance every day a receivable is collected or a float comes back. This is row 131's finding reached from the other direction — ERPNext's expected cash is *opening + takings* only because its till never pays anything and never receives anything but a sale; Ian's description is the counter-example from the business that runs it. ⚠️ Verified v2 has not made this mistake: nothing in `packages/domain` computes an expected remittance, and `sales-days.ts` already assigns the till position and the remittance to T-136. **T-136 must build expected cash as the full arithmetic, never as the sales figure.** | Yes — nothing is built on it yet; it constrains T-136's design rather than any existing code |
+| 144 | 2026-08-26 | **A pooled remittance settles the days it covers OLDEST FIRST, and the variance lands on the last date because that is where FIFO puts it. But a batch shortage is a CUSTODY variance, not a COUNT variance — date it on the last day, attribute it to whoever HELD the pool.** (T-136 §7) | Ian: *“each sales day locks on verified so all remittable cash and online is recorded, but remittance may happen by batch — Lipa has 5 sitting sales reports for January 1 to 5, all verified … it can be remitted all at once … if the remittance is short, cover the oldest sales report first, and record shortage/overage on the last date.”* The daily lock is row 128's COUNT; the batch is its TRANSFER, so this is that decision's allocation rule rather than a new one. ⭐ **“Record it on the last date” is not an extra convention — it is what FIFO produces**, and a rule that falls out of the allocation cannot drift from it. ⚠️ **The refinement, from evaluating it:** once the till is counted and signed daily, a batch shortage **cannot** be a counting error — the counts already reconciled. It is a loss in CUSTODY, after the fact, and therefore a different question asked of a possibly different person. So dating it on the last date is right and **attributing it to that date's cashier is not**: the last date is where the arithmetic puts the residual, and says nothing about who was holding the money. v1 already refuses to guess — its remittance builder THROWS if a shortage posts without an explicit `chargeToStaffId` — and that refusal is ported. This is row 128's *“a shortage found then is attributable to nobody”* in concrete form: pooling does not remove attribution, it moves the question from *which day* to *who held it*, and only the second has an answer. **Cash and online allocate on SEPARATE tracks** in one document — cash is handed over and can be short by missing notes; online is a wallet-to-wallet transfer between custodians (ADR-010) and a mismatch there is a failed transfer, not a missing note. Collapsing them would let an online surplus paper over a cash shortage, and the cash shortage is the one somebody must answer for. ⭐ **FIFO is a DOCUMENT concern, never a journal one.** One remittance = ONE entry moving the total actually handed over, plus the variance leg; which days it settles is subledger detail. Posting a leg per day would look tidier and would immediately create the second place the same pesos are recorded that ADR-010 §1 exists to prevent. | Yes — nothing is built on it; it constrains T-136's design |
 
 ---
 
