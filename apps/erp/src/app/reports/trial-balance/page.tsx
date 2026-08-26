@@ -1,6 +1,5 @@
-import { asc, eq } from 'drizzle-orm';
-import { getDb, schema } from '@shareat/db';
 import { getTrialBalance } from '@shareat/domain';
+import { reportScope, runReport } from '../lib';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { EmptyState } from '@/components/reports/EmptyState';
 import { ReportBasis } from '@/components/reports/ReportBasis';
@@ -21,7 +20,7 @@ function firstOfMonth(businessDate: string): string {
 }
 
 interface SearchParams {
-  org?: string;
+  // ⛔ No `org` — DEF-064. The organisation comes from the session, never the URL.
   store?: string;
   from?: string;
   to?: string;
@@ -34,39 +33,13 @@ export default async function TrialBalancePage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await searchParams;
-  const db = getDb();
 
-  // Reading `organizations`/`stores` directly here, rather than through a dedicated
-  // repo file, is a deliberate, small exception to bible §4.3 — this task's Scope names
-  // no orgs/stores repo, and these two SELECTs exist only to populate the filter form's
-  // pickers (bible §4.1 / organizations.ts: "nothing here or downstream may assume
-  // there is exactly one organization" — so a picker, not a hardcoded first-row read, is
-  // the correct minimum). See the task report.
-  const orgs = await db
-    .select({ id: schema.organizations.id, name: schema.organizations.name, code: schema.organizations.code })
-    .from(schema.organizations)
-    .where(eq(schema.organizations.isActive, true))
-    .orderBy(asc(schema.organizations.name));
-
-  if (orgs.length === 0) {
-    return (
-      <main className="mx-auto max-w-5xl space-y-6 p-8">
-        <h1 className="text-2xl font-semibold">Trial Balance</h1>
-        <EmptyState message="No organization exists in this database yet. Nothing to report." />
-      </main>
-    );
-  }
-
-  const orgId = sp.org && orgs.some((o) => o.id === sp.org) ? sp.org : orgs[0]!.id;
-  const currentOrg = orgs.find((o) => o.id === orgId)!;
-
-  const storeRows = await db
-    .select({ id: schema.stores.id, name: schema.stores.name, code: schema.stores.code })
-    .from(schema.stores)
-    .where(eq(schema.stores.orgId, orgId))
-    .orderBy(asc(schema.stores.name));
-
-  const storeId = sp.store && storeRows.some((s) => s.id === sp.store) ? sp.store : undefined;
+  // ⛔ DEF-064. The org comes from the SESSION and is never read from the URL, and the store
+  // list is what this person is actually scoped to. `sp.org` is deliberately ignored.
+  const scope = await reportScope('/reports/trial-balance', 'view_trial_balance', sp.store);
+  const orgId = scope.actor.orgId;
+  const storeRows = scope.stores;
+  const storeId = scope.storeId;
   const currentStore = storeId ? storeRows.find((s) => s.id === storeId) : undefined;
 
   const today = toBusinessDate();
@@ -77,7 +50,11 @@ export default async function TrialBalancePage({
   // top comment explains why this differs from the income statement's default).
   const includeYearClose = sp.yearClose === 'exclude' ? false : sp.yearClose === 'include' ? true : true;
 
-  const result = await getTrialBalance(db, { orgId, storeId, fromDate, toDate, includeYearClose });
+  // Under the RLS principal, so the database refuses a cross-org read even if this code is
+  // wrong — the backstop the reports never had.
+  const result = await runReport(orgId, (tx) =>
+    getTrialBalance(tx, { orgId, storeId, fromDate, toDate, includeYearClose }),
+  );
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 p-8">
@@ -91,7 +68,7 @@ export default async function TrialBalancePage({
 
       <ReportFilters
         basePath="/reports/trial-balance"
-        orgs={orgs.map((o) => ({ id: o.id, label: `${o.name} (${o.code})` }))}
+        orgs={[{ id: orgId, label: `${scope.orgName} (${scope.orgCode})` }]}
         currentOrgId={orgId}
         stores={storeRows.map((s) => ({ id: s.id, label: `${s.name} (${s.code})` }))}
         currentStoreId={storeId}
@@ -102,7 +79,7 @@ export default async function TrialBalancePage({
       />
 
       <ReportBasis
-        orgLabel={`${currentOrg.name} (${currentOrg.code})`}
+        orgLabel={`${scope.orgName} (${scope.orgCode})`}
         storeLabel={currentStore ? `${currentStore.name} (${currentStore.code})` : 'All stores'}
         fromDate={fromDate}
         toDate={toDate}
