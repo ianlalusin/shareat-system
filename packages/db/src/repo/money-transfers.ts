@@ -5,9 +5,10 @@
  * what an account holds is `moneyAccountsRepo.balanceOf`, read from the ledger. Both are exposed
  * as derived reads below so no caller is ever tempted to add a column for them.
  */
-import { and, desc, eq, gte, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { moneyAccounts } from '../../schema/money-accounts';
+import { stores } from '../../schema/stores';
 import { moneyTransfers, type MoneyTransferStatus } from '../../schema/money-transfers';
 
 export interface MoneyTransferRow {
@@ -166,4 +167,24 @@ export async function markVoided(
       `markVoided: money transfer ${id} does not exist in org ${orgId}, or is already voided`,
     );
   }
+}
+
+/**
+ * Store id → store CODE, for the two ends of a cross-store transfer.
+ *
+ * ⚠️ **A `party_type='store'` line carries the other store's CODE, not its database id**
+ * (POSTING-PATTERNS §Commissary: *"there is no party FK yet (DEF-040) and store codes are stable,
+ * human-chosen identifiers"*). Matching the convention the commissary legs already use is what
+ * lets one reciprocal check cover both.
+ */
+export async function storeCodes(
+  tx: Tx,
+  orgId: string,
+  storeIds: string[],
+): Promise<Map<string, string>> {
+  const rows = await tx
+    .select({ id: stores.id, code: stores.code })
+    .from(stores)
+    .where(and(eq(stores.orgId, orgId), inArray(stores.id, storeIds)));
+  return new Map(rows.map((r) => [r.id, r.code]));
 }

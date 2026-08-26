@@ -21,8 +21,16 @@ function str(fd: FormData, key: string): string {
   return typeof v === 'string' ? v.trim() : '';
 }
 
+/**
+ * The message a person should read.
+ *
+ * ⚠️ Domain errors are prefixed with the function that threw — `createMoneyTransfer: ...` — which
+ * is exactly right in a log and useless on screen. Strips a leading camelCase identifier and its
+ * colon, and nothing else: the sentence after it is already written for a human.
+ */
 function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+  const raw = err instanceof Error ? err.message : String(err);
+  return raw.replace(/^[a-z][A-Za-z0-9_]*:\s*/, '');
 }
 
 export async function createMoneyAccountAction(formData: FormData): Promise<void> {

@@ -97,14 +97,30 @@ has one.
 2. Source ≠ destination. v1 enforces this; so do we.
 3. Both accounts **active**, both in the actor's org. A retired account cannot be either end —
    it is exactly the "strand the money" case retirement already guards.
-4. ⚠️ **Same store, both ends.** Cross-store money movement is an inter-entity transaction that
-   must eliminate on consolidation (`commissary_dispatch`'s problem, POSTING-PATTERNS §Commissary).
-   Refused here, naming the reason. **OPEN — Ian to confirm** whether a central office holding
-   several stores' money needs this; if so it is its own task, not a widened check here.
-5. `amount_out > 0`, `amount_in > 0`, `amount_in <= amount_out`.
-6. Fee > 0 requires a fee account; defaults to `6870` Bank charges.
-7. Idempotency key `transfer:{id}:post`; reversal `transfer:{id}:void`.
-8. Void reverses through `reverseEntry` — never a hand-written opposite entry, never a delete.
+4. ⭐ **Cross-store is allowed, OFFICE TO OFFICE ONLY** — ✅ **DECIDED, Ian 2026-08-26**
+   (bible row 152), replacing this task's original blanket refusal.
+
+   > *"A manager of lipa and malvar who is not allowed to get remittance is able to collect money
+   > from malvar to spend on lipa, but that's deeply wrong. The right pattern is malvar remits to
+   > office first before lipa can use it."*
+
+   The abuse is a manager reaching into another store's **till**, so the fix is not to ban
+   cross-store movement — the business genuinely needs it — but to force it through the office.
+   A cashier or staff account at either end is refused, which makes the bypass *unrepresentable*
+   rather than merely discouraged. The entry gets the `1250`/`2150` due-from/due-to pair, the same
+   four-leg shape `commissary_dispatch.transfer` already uses, so it eliminates on consolidation.
+
+   ⚠️ **Still open, and bigger:** the rest of Ian's scenario — Malvar office cash funding a *cash
+   request* whose liquidated **expense belongs to Lipa**, with any return going back to Lipa.
+   Cash requests do not exist in v2 yet. This transfer is the foundation they will sit on, not a
+   substitute for them.
+5. ⛔ **No overdrawing** — ✅ **DECIDED, Ian 2026-08-26**: *"for transfer block overdraw."* An
+   account cannot send more than the ledger says it holds. ⚠️ Not applied to a reversal: refusing
+   one would leave a wrong entry uncorrectable.
+6. `amount_out > 0`, `amount_in > 0`, `amount_in <= amount_out`.
+7. Fee > 0 requires a fee account; defaults to `6870` Bank charges.
+8. Idempotency key `transfer:{id}:post`; reversal `transfer:{id}:void`.
+9. Void reverses through `reverseEntry` — never a hand-written opposite entry, never a delete.
 
 ## 6. Done when
 

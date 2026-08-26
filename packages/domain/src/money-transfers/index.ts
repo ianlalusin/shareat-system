@@ -24,7 +24,7 @@ import {
   type MoneyAccountRow,
   type Tx,
 } from '@shareat/db';
-import { postEntry } from '../ledger/post-entry';
+import { postEntry, type PostEntryLine } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 
 /** Where a fee lands when the transfer costs something. `6870` Bank charges — the account
@@ -97,14 +97,26 @@ async function runCreate(
   const from = await loadEnd(tx, actor, input.fromMoneyAccountId, 'source');
   const to = await loadEnd(tx, actor, input.toMoneyAccountId, 'destination');
 
-  // ⚠️ Both ends at the same store. Cross-store money movement is an inter-entity transaction that
-  // must eliminate on consolidation (POSTING-PATTERNS §Commissary) — a different problem with a
-  // different entry, not a widened check here. T-139 §5.4 records it as open for Ian.
-  if (from.storeId !== to.storeId) {
+  // ⭐ CROSS-STORE IS ALLOWED, BUT ONLY OFFICE TO OFFICE (bible row 152).
+  //
+  // > **Ian, 2026-08-26:** *"a manager of lipa and malvar who is not allowed to get remittance is
+  // > able to collect money from malvar to spend on lipa but that's deeply wrong … the right
+  // > pattern is malvar remits to office first before lipa can use it."*
+  //
+  // ⛔ **This check IS that rule.** The abuse is a manager reaching into another store's TILL, so
+  // the fix is not to ban cross-store movement — the business genuinely needs it — but to force it
+  // through the office. Malvar's cashier remits to Malvar's office in the ordinary way; only then
+  // can that money fund Lipa. A cashier or staff account at either end is refused, which makes the
+  // bypass unrepresentable rather than merely discouraged.
+  //
+  // Landing it in the destination's OFFICE (not straight into a till) keeps one due-from/due-to
+  // pair per movement; Lipa then moves it onward with an ordinary same-store transfer.
+  const crossStore = from.storeId !== to.storeId;
+  if (crossStore && (from.custodian !== 'office' || to.custodian !== 'office')) {
     throw new Error(
-      'createMoneyTransfer: both accounts must belong to the same store. Moving money between ' +
-        'stores is an inter-entity transfer that has to eliminate on consolidation, which this ' +
-        'entry does not do.',
+      `createMoneyTransfer: money moves between stores office to office only, and "${from.name}" ` +
+        `(${from.custodian}) → "${to.name}" (${to.custodian}) is not. A store remits to its own ` +
+        'office first; only office money can fund another store.',
     );
   }
 
@@ -125,6 +137,23 @@ async function runCreate(
     );
   }
 
+  // ⛔ NO OVERDRAWING (Ian, 2026-08-26: *"for transfer block overdraw"*).
+  //
+  // A drawer cannot hand over money it does not hold — a negative cash balance is always an error,
+  // never a real position. Checked against the LEDGER, like every other figure here.
+  //
+  // ⚠️ Deliberately NOT applied to a reversal. Voiding takes money back out of the destination,
+  // which can overdraw it if the money has since moved on — but refusing the reversal would leave
+  // a wrong entry with no way to correct it. A correction must always be possible; the resulting
+  // negative is the signal to fix what came after it.
+  const available = await moneyAccountsRepo.balanceOf(tx, actor.orgId, from);
+  if (out > Number(available)) {
+    throw new Error(
+      `createMoneyTransfer: "${from.name}" holds ${available} — it cannot transfer out ` +
+        `${input.amountOut}. Record the money coming in first, or correct the amount.`,
+    );
+  }
+
   const fee = (out - inn).toFixed(2);
   const feeAccountCode = Number(fee) > 0 ? (input.feeAccountCode ?? DEFAULT_FEE_ACCOUNT_CODE) : null;
 
@@ -136,8 +165,10 @@ async function runCreate(
     a.glAccountCode === '1140' ? { partyType: 'money_account' as const, partyId: a.id } : {};
 
   const memo = `Transfer — ${from.name} to ${to.name}`;
-  const lines = [
+  const lines: PostEntryLine[] = [
     { accountCode: to.glAccountCode, storeId: to.storeId, debit: input.amountIn, ...partyFor(to) },
+    // ⚠️ The fee sits at the SOURCE store, because the source is who paid it — it was deducted
+    // from their money, not the recipient's.
     ...(feeAccountCode
       ? [
           {
@@ -155,6 +186,43 @@ async function runCreate(
       ...partyFor(from),
     },
   ];
+
+  if (crossStore) {
+    // ⭐ THE DUE-FROM / DUE-TO PAIR — the same four-leg shape `commissary_dispatch.transfer`
+    // already uses, with cash in place of inventory. Without it each store's own books would not
+    // balance on their own: Malvar would show money leaving and nothing received, Lipa the
+    // reverse.
+    //
+    // ⚠️ These must ELIMINATE at entity level — total 1250 across all stores equals total 2150
+    // (bible invariant 6's reciprocal check). That is what makes the group's cash correct while
+    // each store still carries what it owes the other.
+    const codes = await moneyTransfersRepo.storeCodes(tx, actor.orgId, [from.storeId, to.storeId]);
+    const fromCode = codes.get(from.storeId);
+    const toCode = codes.get(to.storeId);
+    if (!fromCode || !toCode) {
+      throw new Error('createMoneyTransfer: could not resolve both store codes for the transfer.');
+    }
+    lines.push(
+      // The source is owed what actually LANDED — not what left. The fee is its own cost, not a
+      // debt the other store incurred.
+      {
+        accountCode: '1250',
+        storeId: from.storeId,
+        debit: input.amountIn,
+        partyType: 'store' as const,
+        partyId: toCode,
+        lineMemo: `Due from ${toCode} — ${memo}`,
+      },
+      {
+        accountCode: '2150',
+        storeId: to.storeId,
+        credit: input.amountIn,
+        partyType: 'store' as const,
+        partyId: fromCode,
+        lineMemo: `Due to ${fromCode} — ${memo}`,
+      },
+    );
+  }
 
   // The id is generated up front so the idempotency key and the row's own id agree — a retry of
   // the SAME transfer is a no-op, while a genuinely repeated transfer (two ₱500 top-ups on one

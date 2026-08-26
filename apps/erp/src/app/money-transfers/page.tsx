@@ -35,10 +35,13 @@ export default async function MoneyTransfersPage({
   const storeById = new Map(stores.map((s) => [s.id, s]));
   const today = new Date().toISOString().slice(0, 10);
 
-  // ⭐ Grouped by store, because a transfer must have both ends at ONE store — so the picker
-  // shows that rule instead of letting someone pick across stores and meet an error afterwards.
-  // ⚠️ Names repeat across stores ("Office safe" exists at every branch), which made a flat list
-  // genuinely unusable: two identical labels, different money.
+  // ⭐ Grouped by store because names REPEAT across stores — "Office safe" exists at every
+  // branch — and a flat list showed two identical labels holding different money, which made the
+  // picker genuinely unusable.
+  //
+  // ⚠️ The grouping is for disambiguation, NOT a same-store restriction: office-to-office across
+  // stores is allowed (bible row 152). The rule that matters there is about the CUSTODIAN, not
+  // the store, so the domain enforces it and says why rather than the picker hiding options.
   const byStore = stores
     .map((s) => ({ store: s, accounts: accounts.filter((a) => a.storeId === s.id) }))
     .filter((g) => g.accounts.length > 0);
@@ -115,7 +118,9 @@ export default async function MoneyTransfersPage({
         <div>
           <h2 className="font-medium">Record a transfer</h2>
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            Both accounts must be at the same store, and a retired account cannot be either end.
+            An account cannot send more than it holds, and a retired account cannot be either
+            end. <strong>Between stores, money moves office to office only</strong> — a store
+            remits to its own office first, and only office money can fund another store.
           </p>
         </div>
 
@@ -183,9 +188,11 @@ export default async function MoneyTransfersPage({
           </Field>
 
           <p className="text-xs text-neutral-400 dark:text-neutral-600">
-            Any gap between the two amounts is booked as a fee to <span className="font-mono">6870</span>{' '}
-            Bank charges — a real expense, not a rounding difference. Money that arrives without
-            leaving somewhere is income, and cannot be recorded here.
+            Any gap between the two amounts is booked as a fee to{' '}
+            <span className="font-mono">6870</span> Bank charges — a real expense, not a rounding
+            difference. Money that arrives without leaving somewhere is income, and cannot be
+            recorded here. A transfer between two stores also records what one owes the other, so
+            the group&apos;s books still balance while each store carries its own position.
           </p>
 
           <button

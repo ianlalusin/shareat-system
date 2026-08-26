@@ -36,14 +36,15 @@ async function newOrg(hint: string) {
     insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id
   `;
   await seedChartOfAccounts(sql, org!.id);
+  const storeCode = uid(hint);
   const [store] = await sql<{ id: string }[]>`
-    insert into stores (org_id, code, name) values (${org!.id}, ${uid(hint)}, ${`Store ${hint}`}) returning id
+    insert into stores (org_id, code, name) values (${org!.id}, ${storeCode}, ${`Store ${hint}`}) returning id
   `;
   await sql`
     insert into fiscal_periods (org_id, starts_on, ends_on, status)
     values (${org!.id}, '2026-01-01', '2026-01-31', 'open')
   `;
-  return { orgId: org!.id, storeId: store!.id };
+  return { orgId: org!.id, storeId: store!.id, storeCode };
 }
 
 async function person(orgId: string, storeId: string, name: string, role?: string) {
@@ -93,6 +94,73 @@ async function fixture(hint: string) {
   return { ...o, adminId, admin, drawer, safe, gcash };
 }
 
+type Fixture = Awaited<ReturnType<typeof fixture>>;
+
+/**
+ * Posts a plain balanced entry directly, bypassing every service.
+ *
+ * ⚠️ Deliberately raw: the overdraw guard reads the LEDGER, so proving it works means putting
+ * money in by a route the guard knows nothing about. If it only ever saw money that arrived via
+ * `createMoneyTransfer`, the test would be proving the service agrees with itself.
+ */
+async function postCash(f: Fixture, debitCode: string, creditCode: string, amount: string) {
+  const [period] = await sql<{ id: string }[]>`
+    select id from fiscal_periods where org_id = ${f.orgId} limit 1
+  `;
+  await sql.begin(async (tx) => {
+    const [e] = await tx<{ id: string }[]>`
+      insert into journal_entries (org_id, entry_date, period_id, source_type, source_id, status)
+      values (${f.orgId}, '2026-01-05', ${period!.id}, 'test', ${uid('src')}, 'draft') returning id
+    `;
+    let n = 0;
+    for (const [code, dr, cr] of [
+      [debitCode, amount, '0'],
+      [creditCode, '0', amount],
+    ] as const) {
+      const [acct] = await tx<{ id: string }[]>`
+        select id from accounts where org_id = ${f.orgId} and code = ${code}
+      `;
+      await tx`
+        insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit)
+        values (${e!.id}, ${++n}, ${acct!.id}, ${f.storeId}, ${dr}, ${cr})
+      `;
+    }
+    await tx`update journal_entries set status = 'posted' where id = ${e!.id}`;
+  });
+}
+
+/**
+ * Puts money into a 1140 wallet. ⚠️ Separate from `postCash` because `1140` is ONE control account
+ * for every wallet — a line without a party belongs to no wallet in particular, and `balanceOf`
+ * would not see it. This is the asymmetry ADR-010 §2 describes, showing up in a test fixture.
+ */
+async function fundWallet(f: Fixture, moneyAccountId: string, amount: string) {
+  const [period] = await sql<{ id: string }[]>`
+    select id from fiscal_periods where org_id = ${f.orgId} limit 1
+  `;
+  await sql.begin(async (tx) => {
+    const [e] = await tx<{ id: string }[]>`
+      insert into journal_entries (org_id, entry_date, period_id, source_type, source_id, status)
+      values (${f.orgId}, '2026-01-05', ${period!.id}, 'test', ${uid('src')}, 'draft') returning id
+    `;
+    const [wallet] = await tx<{ id: string }[]>`
+      select id from accounts where org_id = ${f.orgId} and code = '1140'
+    `;
+    const [rev] = await tx<{ id: string }[]>`
+      select id from accounts where org_id = ${f.orgId} and code = '4100'
+    `;
+    await tx`
+      insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit, party_type, party_id)
+      values (${e!.id}, 1, ${wallet!.id}, ${f.storeId}, ${amount}, '0', 'money_account', ${moneyAccountId})
+    `;
+    await tx`
+      insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit)
+      values (${e!.id}, 2, ${rev!.id}, ${f.storeId}, '0', ${amount})
+    `;
+    await tx`update journal_entries set status = 'posted' where id = ${e!.id}`;
+  });
+}
+
 beforeAll(async () => {
   await sql`
     truncate table
@@ -113,6 +181,7 @@ afterAll(async () => {
 describe('the posting — POSTING-PATTERNS.md §Transfer', () => {
   it('transfer.cash.simple — drawer to safe, two legs, no party on either', async () => {
     const f = await fixture('simple');
+    await postCash(f, '1110', '4100', '15000.00');
     const r = await asOrg(f.orgId, (tx) =>
       createMoneyTransfer(tx, f.admin, {
         fromMoneyAccountId: f.drawer.id,
@@ -135,6 +204,7 @@ describe('the posting — POSTING-PATTERNS.md §Transfer', () => {
 
   it('⭐ transfer.cash.with-fee — the THIRD leg, and it is a real expense', async () => {
     const f = await fixture('fee');
+    await fundWallet(f, f.gcash.id, '10000.00');
     // ₱10,000 leaves the wallet, ₱9,950 reaches the safe. The ₱50 is a bank charge.
     const r = await asOrg(f.orgId, (tx) =>
       createMoneyTransfer(tx, f.admin, {
@@ -187,6 +257,7 @@ describe('the refusals — T-139 §5', () => {
 
   it('⛔ money cannot arrive that never left — that is income, not a transfer', async () => {
     const f = await fixture('income');
+    await postCash(f, '1110', '4100', '200.00');
     await expect(
       asOrg(f.orgId, (tx) =>
         createMoneyTransfer(tx, f.admin, {
@@ -216,35 +287,9 @@ describe('the refusals — T-139 §5', () => {
     ).rejects.toThrow(/retired and cannot be the source/);
   });
 
-  it('⛔ both ends must be at the same store — cross-store has to eliminate', async () => {
-    const f = await fixture('crossstore');
-    const [other] = await sql<{ id: string }[]>`
-      insert into stores (org_id, code, name) values (${f.orgId}, ${uid('other')}, 'Other store')
-      returning id
-    `;
-    const far = await asOrg(f.orgId, (tx) =>
-      createMoneyAccount(tx, f.admin, {
-        storeId: other!.id,
-        name: 'Other office safe',
-        instrument: 'cash',
-        custodian: 'office',
-      }),
-    );
-    await expect(
-      asOrg(f.orgId, (tx) =>
-        createMoneyTransfer(tx, f.admin, {
-          fromMoneyAccountId: f.drawer.id,
-          toMoneyAccountId: far.id,
-          amountOut: '100.00',
-          amountIn: '100.00',
-          transferDate: '2026-01-10',
-        }),
-      ),
-    ).rejects.toThrow(/same store/);
-  });
-
   it('⛔ an account in another org is not reachable', async () => {
     const mine = await fixture('mine');
+    await postCash(mine, '1110', '4100', '200.00');
     const theirs = await fixture('theirs');
     await expect(
       asOrg(mine.orgId, (tx) =>
@@ -263,6 +308,7 @@ describe('the refusals — T-139 §5', () => {
 describe('bible row 150 — transfer_funds is MANAGER level', () => {
   it('⭐ a manager can move money between accounts that already exist', async () => {
     const f = await fixture('mgr');
+    await postCash(f, '1130', '4100', '2000.00');
     const managerId = await person(f.orgId, f.storeId, 'Manager', 'manager');
     // The distinction row 150 draws: this same manager may NOT create either account
     // (manage_chart_of_accounts, row 149), but moving money between them is recording, not
@@ -308,6 +354,7 @@ describe('bible row 150 — transfer_funds is MANAGER level', () => {
 describe('void — through reverseEntry, never a delete', () => {
   it('reverses the entry, marks the row, and leaves both entries in the ledger', async () => {
     const f = await fixture('void');
+    await postCash(f, '1110', '4100', '500.00');
     const r = await asOrg(f.orgId, (tx) =>
       createMoneyTransfer(tx, f.admin, {
         fromMoneyAccountId: f.drawer.id,
@@ -345,6 +392,7 @@ describe('void — through reverseEntry, never a delete', () => {
 
   it('⛔ refuses a second void, and refuses an empty reason', async () => {
     const f = await fixture('void2');
+    await postCash(f, '1110', '4100', '500.00');
     const r = await asOrg(f.orgId, (tx) =>
       createMoneyTransfer(tx, f.admin, {
         fromMoneyAccountId: f.drawer.id,
@@ -368,5 +416,196 @@ describe('void — through reverseEntry, never a delete', () => {
         voidMoneyTransfer(tx, f.admin, { moneyTransferId: r.id, reason: 'Again' }),
       ),
     ).rejects.toThrow(/already voided/);
+  });
+});
+
+describe('⛔ overdrawing (Ian, 2026-08-26: "for transfer block overdraw")', () => {
+  it('refuses to move more than the account holds, and allows it once the money is there', async () => {
+    const f = await fixture('overdraw');
+    // The drawer is empty. A drawer cannot hand over money it does not hold.
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        createMoneyTransfer(tx, f.admin, {
+          fromMoneyAccountId: f.drawer.id,
+          toMoneyAccountId: f.safe.id,
+          amountOut: '5000.00',
+          amountIn: '5000.00',
+          transferDate: '2026-01-10',
+        }),
+      ),
+    ).rejects.toThrow(/cannot transfer out 5000\.00/);
+
+    // Put PHP 5,000 in it, and the identical call now succeeds.
+    await postCash(f, '1110', '4100', '5000.00');
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        createMoneyTransfer(tx, f.admin, {
+          fromMoneyAccountId: f.drawer.id,
+          toMoneyAccountId: f.safe.id,
+          amountOut: '5000.00',
+          amountIn: '5000.00',
+          transferDate: '2026-01-10',
+        }),
+      ),
+    ).resolves.toBeTruthy();
+  });
+
+  it('the guard reads the LEDGER, so money arriving from anywhere counts', async () => {
+    const f = await fixture('ledgerbal');
+    // Not a transfer — a plain collection into the drawer. The guard has no idea where money
+    // came from, only what the account now holds, which is the point of deriving it.
+    await postCash(f, '1110', '4100', '750.00');
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        createMoneyTransfer(tx, f.admin, {
+          fromMoneyAccountId: f.drawer.id,
+          toMoneyAccountId: f.safe.id,
+          amountOut: '750.01',
+          amountIn: '750.01',
+          transferDate: '2026-01-10',
+        }),
+      ),
+    ).rejects.toThrow(/holds 750\.00/);
+  });
+
+  it('a REVERSAL is not blocked, even when it overdraws the destination', async () => {
+    const f = await fixture('reversedraw');
+    await postCash(f, '1110', '4100', '1000.00');
+    const t = await asOrg(f.orgId, (tx) =>
+      createMoneyTransfer(tx, f.admin, {
+        fromMoneyAccountId: f.drawer.id,
+        toMoneyAccountId: f.safe.id,
+        amountOut: '1000.00',
+        amountIn: '1000.00',
+        transferDate: '2026-01-10',
+      }),
+    );
+    // The safe then spends it, so reversing takes out money that is no longer there.
+    await postCash(f, '6160', '1130', '1000.00');
+
+    // Still allowed. Refusing would leave a wrong entry with no way to correct it -- a
+    // correction must always be possible, and the resulting negative is the signal to fix
+    // whatever came after it.
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        voidMoneyTransfer(tx, f.admin, { moneyTransferId: t.id, reason: 'Recorded twice' }),
+      ),
+    ).resolves.toBeTruthy();
+  });
+});
+
+describe('cross-store -- office to office only (Ian, 2026-08-26; bible row 152)', () => {
+  async function secondStore(f: Fixture, code: string) {
+    const [store] = await sql<{ id: string }[]>`
+      insert into stores (org_id, code, name) values (${f.orgId}, ${code}, ${'Store ' + code})
+      returning id
+    `;
+    const mk = (name: string, custodian: 'cashier' | 'office') =>
+      asOrg(f.orgId, (tx) =>
+        createMoneyAccount(tx, f.admin, {
+          storeId: store!.id,
+          name,
+          instrument: 'cash',
+          custodian,
+        }),
+      );
+    return {
+      id: store!.id,
+      code,
+      safe: await mk('Lipa office safe', 'office'),
+      drawer: await mk('Lipa drawer', 'cashier'),
+    };
+  }
+
+  it('refuses a TILL at either end -- the bypass Ian named is unrepresentable', async () => {
+    const f = await fixture('bypass');
+    const lipa = await secondStore(f, uid('LIPA'));
+    await postCash(f, '1110', '4100', '9000.00');
+
+    // Exactly the "deeply wrong" move: reaching into Malvar's till to spend at Lipa.
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        createMoneyTransfer(tx, f.admin, {
+          fromMoneyAccountId: f.drawer.id,
+          toMoneyAccountId: lipa.safe.id,
+          amountOut: '9000.00',
+          amountIn: '9000.00',
+          transferDate: '2026-01-10',
+        }),
+      ),
+    ).rejects.toThrow(/office to office only/);
+
+    // And landing in the other store's till is refused too -- it would skip the office on the
+    // receiving side and leave the due-from/due-to pair sitting against a cashier.
+    await postCash(f, '1130', '4100', '9000.00');
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        createMoneyTransfer(tx, f.admin, {
+          fromMoneyAccountId: f.safe.id,
+          toMoneyAccountId: lipa.drawer.id,
+          amountOut: '9000.00',
+          amountIn: '9000.00',
+          transferDate: '2026-01-10',
+        }),
+      ),
+    ).rejects.toThrow(/office to office only/);
+  });
+
+  it('office to office posts FOUR legs and eliminates', async () => {
+    const f = await fixture('interstore');
+    const lipa = await secondStore(f, uid('LIPA'));
+    // Malvar's cashier has already remitted to Malvar's office -- the pattern Ian requires.
+    await postCash(f, '1130', '4100', '20000.00');
+
+    const r = await asOrg(f.orgId, (tx) =>
+      createMoneyTransfer(tx, f.admin, {
+        fromMoneyAccountId: f.safe.id,
+        toMoneyAccountId: lipa.safe.id,
+        amountOut: '20000.00',
+        amountIn: '20000.00',
+        transferDate: '2026-01-10',
+        notes: 'Funding Lipa operations',
+      }),
+    );
+
+    const legs = await sql<
+      { code: string; debit: string; credit: string; party_id: string | null; store_id: string }[]
+    >`
+      select a.code, jl.debit::text, jl.credit::text, jl.party_id, jl.store_id::text
+      from journal_lines jl join accounts a on a.id = jl.account_id
+      where jl.entry_id = ${r.entryId} order by a.code, jl.debit desc
+    `;
+
+    // Four legs: cash out at Malvar, cash in at Lipa, and the reciprocal pair that lets each
+    // store's own books balance on their own.
+    expect(legs.map((l) => [l.code, l.debit, l.credit])).toEqual([
+      ['1130', '20000.00', '0.00'],
+      ['1130', '0.00', '20000.00'],
+      ['1250', '20000.00', '0.00'],
+      ['2150', '0.00', '20000.00'],
+    ]);
+
+    // The store-party lines carry the OTHER store's CODE, not its id -- the convention the
+    // commissary legs already use, so one reciprocal check covers both.
+    const dueFrom = legs.find((l) => l.code === '1250')!;
+    const dueTo = legs.find((l) => l.code === '2150')!;
+    expect(dueFrom.party_id).toBe(lipa.code);
+    expect(dueTo.party_id).toBe(f.storeCode);
+    expect(dueFrom.store_id).toBe(f.storeId);
+    expect(dueTo.store_id).toBe(lipa.id);
+
+    // THE ELIMINATION -- bible invariant 6's reciprocal check. Total 1250 across every store
+    // must equal total 2150. If they do not net, an inter-store movement went missing.
+    const [recip] = await sql<{ due_from: string; due_to: string }[]>`
+      select
+        coalesce(sum(case when a.code = '1250' then jl.debit - jl.credit else 0 end), 0)::text as due_from,
+        coalesce(sum(case when a.code = '2150' then jl.credit - jl.debit else 0 end), 0)::text as due_to
+      from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id
+      join accounts a on a.id = jl.account_id
+      where je.org_id = ${f.orgId} and je.status <> 'draft'
+    `;
+    expect(recip!.due_from).toBe('20000.00');
+    expect(recip!.due_to).toBe(recip!.due_from);
   });
 });
