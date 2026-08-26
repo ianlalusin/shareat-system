@@ -21,10 +21,9 @@ import {
   deleteExpenseDraft,
   type ExpensePaymentMethod,
 } from '@shareat/domain';
-import { withOrgPrincipal } from './lib';
+import { withOrgPrincipal, PAYMENT_ROW_COUNT } from './lib';
 import { requireActor } from '../../lib/session';
 
-const PAYMENT_ROW_COUNT = 4;
 const PAYMENT_METHODS = new Set<string>(['cash', 'online', 'credit', 'reimbursable', 'other', 'ar_collection']);
 
 function str(fd: FormData, key: string): string {

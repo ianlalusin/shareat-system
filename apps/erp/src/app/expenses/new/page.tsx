@@ -1,5 +1,5 @@
 import { toBusinessDate } from '@shareat/core/datetime';
-import { listStores, listCategoriesGrouped } from '../lib';
+import { listStores, listCategoriesGrouped, PAYMENT_ROWS } from '../lib';
 import { requireSession } from '../../../lib/session';
 import { createExpenseAction } from '../actions';
 
@@ -11,7 +11,6 @@ interface SearchParams {
   error?: string;
 }
 
-const PAYMENT_ROWS = [1, 2, 3, 4];
 
 export default async function NewExpensePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
