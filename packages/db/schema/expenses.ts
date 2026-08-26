@@ -24,7 +24,19 @@
  * account_code the chosen category resolves to is what gets debited.
  */
 import { sql } from 'drizzle-orm';
-import { check, date, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  check,
+  date,
+  index,
+  integer,
+  numeric,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 import { journalEntries } from './journal';
 import { organizations } from './organizations';
 import { persons } from './persons';
@@ -48,6 +60,14 @@ export const expenseCategories = pgTable(
     // NULLABLE ON PURPOSE (§4) — a category with no account mapped blocks posting rather
     // than defaulting to 6900 (invariant 7). Never given a default value.
     accountCode: text('account_code'),
+    /** ⭐ Spend in this category MAY be a prepayment (T-125 §11, option B). Insurance, permits,
+     *  multi-month rent advances — the things v1 marks `capitalizable` on its 22 seeded templates. */
+    prepaidEligible: boolean('prepaid_eligible').notNull().default(false),
+    /** The coverage term to apply when nobody has said otherwise. ⚠️ It is a GUESS — the invoice
+     *  knows ₱24,000, only a person knows it buys twelve months — which is why an auto-created
+     *  prepaid item is flagged `needs_review`. v1's `sys_rent` carries 1 here deliberately, so
+     *  ordinary monthly rent stays an immediate expense while a multi-month advance routes prepaid. */
+    defaultCoverageMonths: integer('default_coverage_months'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },

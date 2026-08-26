@@ -18,7 +18,8 @@
  *      the depreciable amount. ⚠️ Spreading it evenly and hoping is how a register ends up a few
  *      centavos off forever, which is the kind of error nobody can ever find time to chase.
  */
-import { add, money, subtract, type Money } from '@shareat/core/money';
+import { money, subtract, type Money } from '@shareat/core/money';
+import { buildStraightLine, type SchedulePeriod } from '../shared/straight-line';
 
 export type DepreciationInterval = 'monthly' | 'quarterly' | 'semiannual' | 'annually';
 
@@ -46,23 +47,9 @@ export interface ScheduleInput {
   interval: DepreciationInterval;
 }
 
-export interface SchedulePeriod {
-  /** `YYYY-MM` — the period this charge belongs to, and the key its posting is idempotent on. */
-  period: string;
-  /** The business date the entry posts on: the LAST day of the period's final month, so a charge
-   *  always lands inside the period it describes. */
-  entryDate: string;
-  amount: Money;
-  /** Cumulative through this period — what the ledger should show once it has posted. */
-  accumulatedAfter: Money;
-}
-
-function lastDayOfMonth(year: number, month1: number): string {
-  // month1 is 1-based. Day 0 of the NEXT month is the last day of this one, and it handles
-  // February and leap years without a table.
-  const d = new Date(Date.UTC(year, month1, 0));
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
-}
+/** Re-exported so existing callers keep importing it from here. The shape lives in
+ *  `shared/straight-line.ts` now, because amortisation produces the same thing. */
+export type { SchedulePeriod };
 
 /**
  * Every period this asset will ever charge, in order.
@@ -70,6 +57,10 @@ function lastDayOfMonth(year: number, month1: number): string {
  * Straight line only — and that is not laziness: **changing the depreciation method requires BIR
  * approval** (discovery 25), so offering a second method in a dropdown would let someone create a
  * filing obligation with a click.
+ *
+ * ⭐ The arithmetic itself lives in `shared/straight-line.ts`, shared with amortisation. What is
+ * SPECIFIC to depreciation stays here: salvage (a prepaid runs to zero), the interval (a prepaid
+ * is always monthly), and the ceil below.
  */
 export function buildSchedule(input: ScheduleInput): SchedulePeriod[] {
   const monthStep = MONTH_STEP[input.interval];
@@ -79,58 +70,22 @@ export function buildSchedule(input: ScheduleInput): SchedulePeriod[] {
   // quarterly is 8⅓ periods. Rounding down to 8 stops depreciating at month 24 and leaves the
   // asset carrying value it should have consumed; ceiling to 9 gives the last period a short
   // stub, which is what actually happens. Either way the schedule still sums to exactly the
-  // depreciable amount (the remainder lands on the last period below), so the choice only moves
-  // WHEN it finishes — and finishing early is the one of the two that understates nothing.
-  const totalPeriods = Math.ceil(input.usefulLifeMonths / monthStep);
-  if (totalPeriods < 1) return [];
+  // depreciable amount, so the choice only moves WHEN it finishes — and finishing late
+  // understates nothing.
+  const periods = Math.ceil(input.usefulLifeMonths / monthStep);
 
+  // ⚠️ Salvage is subtracted HERE, not inside the shared module. A prepaid has no salvage — it
+  // runs to zero — so the shared arithmetic takes the net amount and knows nothing about it.
   const depreciable = subtract(input.cost, input.salvageValue);
-  if (Number(depreciable) <= 0) return [];
 
-  // Work in centavos so the division is exact and the remainder is visible rather than rounded
-  // away. Money is already 2dp; this just makes the arithmetic integer.
-  const totalCentavos = Math.round(Number(depreciable) * 100);
-  const per = Math.floor(totalCentavos / totalPeriods);
-  const remainder = totalCentavos - per * totalPeriods;
-
-  const [y, m] = input.acquiredOn.split('-').map(Number) as [number, number, number];
-  const periods: SchedulePeriod[] = [];
-  let accumulated = money('0');
-
-  for (let i = 0; i < totalPeriods; i++) {
-    // ⭐ The remainder lands entirely on the LAST period. Every earlier charge is identical, which
-    // is what a reader expects of "straight line", and the schedule still sums to exactly the
-    // depreciable amount.
-    const centavos = i === totalPeriods - 1 ? per + remainder : per;
-    const amount = money((centavos / 100).toFixed(2));
-    accumulated = add(accumulated, amount);
-
-    const monthsIn = i * monthStep;
-    const endMonthIndex = m - 1 + monthsIn + (monthStep - 1);
-    const year = y + Math.floor(endMonthIndex / 12);
-    const month1 = (endMonthIndex % 12) + 1;
-
-    periods.push({
-      period: `${year}-${String(month1).padStart(2, '0')}`,
-      entryDate: lastDayOfMonth(year, month1),
-      amount,
-      accumulatedAfter: accumulated,
-    });
-  }
-
-  return periods;
+  return buildStraightLine({
+    startsOn: input.acquiredOn,
+    amount: depreciable,
+    periods,
+    monthStep,
+  });
 }
 
-/**
- * The single period due for `asOfPeriod` (`YYYY-MM`), or `null` if this asset owes nothing then —
- * because it had not been acquired yet, or is already fully depreciated, or its interval simply
- * does not charge in that month.
- *
- * ⚠️ **Returning null rather than zero is deliberate.** A zero charge would post an entry that
- * says nothing happened, and *"an asset with no depreciation posted for a closed period"* is the
- * OIL finding that catches DEF-044 — a stream of zero entries would hide exactly the signal that
- * finding depends on.
- */
 export function periodDue(input: ScheduleInput, asOfPeriod: string): SchedulePeriod | null {
   return buildSchedule(input).find((p) => p.period === asOfPeriod) ?? null;
 }

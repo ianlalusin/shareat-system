@@ -169,6 +169,12 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
   },
 
   // T-124 — fixed assets (docs/tasks/124-fixed-assets-and-depreciation.md).
+  prepaid_items: {
+    scope: 'org_column',
+    reason:
+      'What an org has paid for in advance — its insurers, its landlords, its licence renewals. ' +
+      'A franchise must never see another org’s contracts.',
+  },
   money_accounts: {
     scope: 'org_column',
     reason:

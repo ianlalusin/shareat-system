@@ -193,6 +193,14 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
   },
 
   // ---- T-124: fixed assets ---------------------------------------------------------------
+  prepaid_items: {
+    class: 'keep_shell',
+    reason:
+      'A prepaid contract survives the cutover — an insurance policy does not lapse on 1 January ' +
+      'because the books restarted. But its COST is re-entered from the December position, the ' +
+      'same treatment fixed_assets gets, so the item stays and its money is cleared.',
+    clearColumns: ['total_cost', 'coverage_start_date', 'coverage_months', 'source_expense_id'],
+  },
   money_accounts: {
     class: 'keep',
     reason:
