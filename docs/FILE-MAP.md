@@ -11,7 +11,7 @@
 > renames files, or opens a new domain, the reviewer updates the affected rows
 > and bumps the line below in the same run.
 >
-> **Verified against:** `main @ 2361c2a` (2026-08-24)
+> **Verified against:** `main @ d404a70` (2026-08-26)
 
 How to use this: find your topic, open the code paths it names, and read the
 governing docs **before** changing anything. `docs/RULES.md` §5 routes
@@ -25,7 +25,7 @@ field name.
 | Topic | Code lives in | Governed by |
 |---|---|---|
 | Money arithmetic (integer centavos, the ONLY implementation) | `packages/core/src/money.ts` · tests `tests/unit/money.test.ts` | Bible §6 · DEF-003 |
-| Chart of accounts — definition & seed (92 accounts) | `packages/db/seed/chart-of-accounts.ts` · schema `packages/db/schema/accounts.ts` | `docs/decisions/COA-ALIGNMENT.md` · T-102/T-102b · DEF-035 |
+| Chart of accounts — definition & seed (95 accounts) | `packages/db/seed/chart-of-accounts.ts` · schema `packages/db/schema/accounts.ts` | `docs/decisions/COA-ALIGNMENT.md` · T-102/T-102b · DEF-035 |
 | Journal tables (entries, lines, triggers) | `packages/db/schema/journal.ts` · SQL repo `packages/db/src/repo/journal.ts` (the ONLY place journal SQL is written) | T-103 · bible §16 |
 | Posting an entry (draft-first, idempotency) | `packages/domain/src/ledger/post-entry.ts` | T-105 · DEF-031 |
 | Reversing an entry | `packages/domain/src/ledger/reverse-entry.ts` | T-106 · DEF-036 · migration `0005` |
@@ -42,6 +42,8 @@ field name.
 | ETL framework — land, convert, quarantine, run | `packages/etl/src/run.ts`, `source-reader.ts`, `capture.ts`, `pseudonymise.ts` · landing table `packages/db/schema/etl.ts` + repo `packages/db/src/repo/etl.ts` | T-112 · DEF-041 (landing immutable, migration `0009`) |
 | Reconciliation & audit of the replay | `packages/etl/src/reconcile.ts` · `packages/etl/src/audit/` (balances, compare, groups, report) | T-114a · T-117 |
 | Firestore reading (v1 source) | `packages/etl-firestore/src/` (client, reader, plan) | T-114a · bible §11 |
+| **Sales day** — a day's selling, per store; verification is what POSTS | schema `packages/db/schema/sales-days.ts` · repo `packages/db/src/repo/sales-days.ts` · routing `packages/domain/src/sales-days/routing.ts` · services `create.ts`, `verify.ts` · screens `apps/erp/src/app/sales-days/` | T-123 · bible rows 126, 133, 134, 135 · POSTING-PATTERNS `sale.*` |
+| **Fixed assets & depreciation** — accumulated is DERIVED, never stored | schema `packages/db/schema/fixed-assets.ts` · schedule `packages/domain/src/fixed-assets/schedule.ts` | T-124 · bible row 139 · discovery 25 · DEF-044 |
 
 ## Schema, migrations, and data rules
 
@@ -64,6 +66,7 @@ field name.
 | **Auth / permissions — DOES NOT EXIST YET.** Planned as `packages/auth/` (single `authorize()`) | — nothing to edit; do not invent it without a spec | Bible §7 |
 | **Firestore sync (mirror + inbox) — DOES NOT EXIST YET.** Planned as `packages/domain/sync/` | — | Bible §5 |
 | POS / CUSTOMER / Website apps — placeholders only | `apps/pos/`, `apps/customer/`, `apps/website/` (README each) | ADR-003 |
+| **Identity & sessions** — the ONLY way an `Actor` is produced | schema `packages/db/schema/sessions.ts` · repo `packages/db/src/repo/sessions.ts` · crypto `packages/auth/src/credentials.ts` · services `packages/auth/src/sessions.ts` · request boundary `apps/erp/src/lib/session.ts` · sign-in `apps/erp/src/app/sign-in/` | T-138 · bible §7.1, row 138 · DEF-062 · DEF-063 |
 
 ## Tests and gates
 
@@ -73,6 +76,7 @@ field name.
 | Secrets guard | `tests/unit/no-committed-secrets.test.ts` | Bible §15 |
 | Ledger invariants / worked examples / golden | `tests/invariants/`, `tests/worked-examples/`, `tests/golden/` (being populated — T-108/T-109) | Bible §16 |
 | Integration suites (real Postgres, 5435) | `packages/*/tests/integration/` | Bible §9.3 — DB tests must live under `tests/integration/` |
+| No server action accepts a client-supplied actor | `tests/unit/no-client-supplied-actor.test.ts` — repo-wide scan; the exemption list is EMPTY | T-138 invariant 1 · bible §7.1 |
 
 ## Docs and governance
 

@@ -52,3 +52,4 @@ tsconfig.tsbuildinfo
 .vscode/
 _scratch/
 .claude/daily-review-last-run.log
+.claude/daily-review-state.json
