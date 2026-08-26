@@ -91,7 +91,7 @@ describe('expense routing mirrors leg-mapping.ts / convert.ts exactly', () => {
   it('online -> 1140, matching convertExpense', () => {
     const doc: ExpenseDoc = {
       id: 'e4', dayKey: '2026-01-01', storeId: 'S1', totalAmount: 100,
-      payments: [{ method: 'online', amount: 100 }],
+      payments: [{ method: 'online', amount: 100, accountId: 'gcash-main' }],
       expenseEntryGroup: 'OPEX', category: 'Rent',
     };
     expect(fundingCodesFromConvert(doc)).toEqual([EXPENSE_FUNDING_ACCOUNTS.ONLINE]);

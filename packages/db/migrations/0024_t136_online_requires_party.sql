@@ -1,0 +1,29 @@
+-- 0024 — ADR-010 / bible row 142: `1140 E-wallet / online channels` starts REQUIRING a party.
+--
+-- This is the CONTRACT half of the expand/contract 0022 opened (bible §15.5). 0022 widened
+-- `party_type` to accept `money_account`; nothing could use it, because
+-- `journal_lines_party_requirement` is BIDIRECTIONAL — it refuses a party on an account whose
+-- `requires_party` is false exactly as it refuses a missing one where it is true. So the widening
+-- was inert until this flip.
+--
+-- ## Why 1140 and not the cash accounts
+--
+-- `1110`, `1120` and `1130` are already unambiguous: the CODE is the location, so a line against
+-- 1110 needs nothing further to say the money is in the cashier's drawer. `1140` is the exception
+-- — ONE control account covers every wallet the business owns, exactly as `2110` covers every
+-- supplier — so the wallet rides on the line as its party. Requiring a party on all four would be
+-- ceremony for three of them.
+--
+-- ## ⛔ This is a breaking change, and it is deliberate that it breaks loudly
+--
+-- Every existing posting to 1140 becomes invalid. That is the point: an online payment with no
+-- named wallet is precisely the untracked money ADR-010 exists to eliminate, and the same
+-- discipline the chart already applies elsewhere — an expense category with no account mapped
+-- BLOCKS posting rather than defaulting to a catch-all (invariant 7).
+--
+-- ⚠️ Safe to do now and not later: v2 holds no production data. The books open on 1 January from
+-- counted, present-day facts (ADR-005), so there is no history to migrate and no live posting to
+-- strand. The same change after cutover would need a backfill of wallets nobody recorded.
+
+--> statement-breakpoint
+UPDATE "accounts" SET "requires_party" = true WHERE "code" = '1140';

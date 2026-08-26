@@ -22,6 +22,9 @@ export interface CreateExpensePaymentInput {
   /** Decimal string, e.g. "1200.00". */
   amount: string;
   staffId?: string | null;
+  /** ⭐ WHICH wallet an online payment leaves (ADR-010). Required for `online`; `routeExpense`
+   *  blocks the posting without it, naming the payment row. */
+  moneyAccountId?: string | null;
   cashRequestId?: string | null;
   accountCode?: string | null;
 }
@@ -91,6 +94,7 @@ async function runCreateExpense(tx: Tx, actor: Actor, input: CreateExpenseInput)
       amount: amounts[i]!,
       accountCode: p.accountCode ?? null,
       staffId: p.staffId ?? null,
+      moneyAccountId: p.moneyAccountId ?? null,
       cashRequestId: p.cashRequestId ?? null,
     })),
   );

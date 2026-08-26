@@ -27,7 +27,7 @@
  * commit — the exemption is the newer decision.
  */
 import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
-import { salesDaysRepo, transaction, type Tx } from '@shareat/db';
+import { moneyAccountsRepo, salesDaysRepo, transaction, type Tx } from '@shareat/db';
 import { add, money, type Money } from '@shareat/core/money';
 
 export interface CreateSalesDayChannelInput {
@@ -37,6 +37,11 @@ export interface CreateSalesDayChannelInput {
    *  blank. **An absent row and a confirmed zero must not mean the same thing** (v1's
    *  `noSalesChannelIds`, and the same distinction T-134 draws for a counted zero). */
   noSales?: boolean;
+}
+
+export interface CreateSalesDayTenderInput {
+  moneyAccountId: string;
+  amount: string;
 }
 
 export interface CreateSalesDayInput {
@@ -56,6 +61,10 @@ export interface CreateSalesDayInput {
   onlineCollected?: string;
   creditSales?: string;
   channels?: CreateSalesDayChannelInput[];
+  /** ⭐ WHERE the online money landed — one row per wallet (DEF-068). Required whenever
+   *  `onlineCollected` is non-zero: `1140` is a control account and `verifySalesDay` refuses to
+   *  post a day whose wallets do not sum to its online total. */
+  tenders?: CreateSalesDayTenderInput[];
 }
 
 /** Thrown when an older unverified day blocks this one. A named type, not a bare Error, because
@@ -155,6 +164,9 @@ async function runCreate(tx: Tx, actor: Actor, input: CreateSalesDayInput): Prom
   if (input.channels && input.channels.length > 0) {
     await writeChannels(tx, actor, input.storeId, id, input.channels);
   }
+  if (input.tenders && input.tenders.length > 0) {
+    await writeTenders(tx, actor, input.storeId, id, input.tenders);
+  }
 
   return { id };
 }
@@ -226,4 +238,50 @@ export function sumTender(input: {
   comps: Money;
 }): Money {
   return add(input.cashCollected, input.onlineCollected, input.creditSales, input.discountsTotal, input.comps);
+}
+
+/**
+ * Persists the day's tender breakdown.
+ *
+ * ⚠️ Every wallet must belong to THIS store, checked the same way a channel is. A day reporting
+ * money into another branch's wallet is either a typo or a cross-store leak, and both should stop
+ * here rather than reach the ledger — where the line would still post, because
+ * `journal_lines.party_id` carries no FK by design (DEF-040).
+ */
+async function writeTenders(
+  tx: Tx,
+  actor: Actor,
+  storeId: string,
+  salesDayId: string,
+  tenders: CreateSalesDayTenderInput[],
+): Promise<void> {
+  const available = await moneyAccountsRepo.listMoneyAccounts(tx, actor.orgId, { storeId });
+  const byId = new Map(available.map((m) => [m.id, m]));
+
+  const seen = new Set<string>();
+  const rows = tenders.map((t) => {
+    const cfg = byId.get(t.moneyAccountId);
+    if (!cfg) {
+      throw new Error(
+        `sales day tenders: money account ${t.moneyAccountId} is not an active account for store ` +
+          `${storeId} — a day may only report money into its own store's wallets`,
+      );
+    }
+    if (seen.has(t.moneyAccountId)) {
+      throw new Error(
+        `sales day tenders: "${cfg.name}" appears twice — one row per wallet, summed by the caller`,
+      );
+    }
+    seen.add(t.moneyAccountId);
+    const amount = money(t.amount);
+    if (Number(amount) <= 0) {
+      throw new Error(
+        `sales day tenders: "${cfg.name}" carries ${amount} — a tender row of zero says money ` +
+          `moved and the amount was nothing, which is not a fact about anything. Omit the row`,
+      );
+    }
+    return { moneyAccountId: t.moneyAccountId, amount: String(amount) };
+  });
+
+  await salesDaysRepo.replaceTenders(tx, salesDayId, rows);
 }

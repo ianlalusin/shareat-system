@@ -162,6 +162,27 @@
       "when": 1787974307084,
       "tag": "0022_t136_money_account_party",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1788060707084,
+      "tag": "0023_t123_sales_day_tenders",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1788147107084,
+      "tag": "0024_t136_online_requires_party",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1788233507084,
+      "tag": "0025_t122_payment_money_account",
+      "breakpoints": true
     }
   ]
 }

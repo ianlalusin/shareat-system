@@ -85,6 +85,7 @@ async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promi
       staffId: p.staffId,
       cashRequestId: p.cashRequestId,
       accountCode: p.accountCode,
+      moneyAccountId: p.moneyAccountId,
     })),
   });
 

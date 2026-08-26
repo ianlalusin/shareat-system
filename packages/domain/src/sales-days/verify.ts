@@ -83,6 +83,7 @@ async function runVerify(tx: Tx, actor: Actor, salesDayId: string): Promise<Veri
   }
 
   const channels = await salesDaysRepo.getChannelsForDay(tx, salesDayId);
+  const tenders = await salesDaysRepo.getTendersForDay(tx, salesDayId);
 
   const routed = routeSalesDay({
     totalSales: money(day.totalSales),
@@ -97,6 +98,7 @@ async function runVerify(tx: Tx, actor: Actor, salesDayId: string): Promise<Veri
     cashCollected: money(day.cashCollected),
     onlineCollected: money(day.onlineCollected),
     creditSales: money(day.creditSales),
+    tenders: tenders.map((t) => ({ moneyAccountId: t.moneyAccountId, amount: money(t.amount) })),
     channels: channels.map((c) => ({
       channelId: c.channelId,
       channelName: c.channelName,

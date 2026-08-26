@@ -683,10 +683,16 @@ describe('5170 carries the COA-ALIGNMENT §4.1 inter-store elimination warning (
 // accounts.
 // =====================================================================================
 
-/** The nine control accounts named in the task Contract §2 table. Written out literally
- * here (not derived from REQUIRES_PARTY_CODES) so a mistake in the seed's OWN flagging
- * can't silently agree with itself — same defensive shape as RESERVED_CODES's own test
- * above. */
+/** The TEN control accounts: T-118's Contract §2 table, plus `1140` added by ADR-010. Written
+ * out literally here (not derived from REQUIRES_PARTY_CODES) so a mistake in the seed's OWN
+ * flagging can't silently agree with itself — same defensive shape as RESERVED_CODES's own test
+ * above.
+ *
+ * ⚠️ **This duplication is deliberate and must stay.** The identical-looking hardcoded set in
+ * `tests/integration/posting-patterns.test.ts` was NOT deliberate — it carried no such reasoning,
+ * went stale the moment 1140 changed, and was replaced with the derived list. The difference is
+ * the point: here the second copy is an independent statement of intent, and deriving it would
+ * destroy the only thing it checks. */
 const REQUIRES_PARTY_EXPECTED_CODES = [
   '2110', // Accounts payable -> supplier
   '1210', // Accounts receivable -> customer
@@ -697,9 +703,13 @@ const REQUIRES_PARTY_EXPECTED_CODES = [
   '1250', // Due from related store -> store
   '2150', // Due to related store -> store
   '2400', // Loans payable -> supplier (the lender)
+  // ⭐ ADR-010: ONE control account covers every e-wallet and bank account the business holds,
+  // so the line names WHICH one — the same shape 2110 uses for suppliers. v1 minted an
+  // `online__{id}` GL account per wallet instead, and its chart grew with the business.
+  '1140', // E-wallet / online channels -> money_account
 ];
 
-describe('T-118 invariant 7 — exactly the nine control accounts are requires_party = true; every other account is false', () => {
+describe('T-118 invariant 7 (+ ADR-010) — exactly the ten control accounts are requires_party = true; every other account is false', () => {
   it('REQUIRES_PARTY_CODES matches the Contract §2 table exactly', () => {
     expect(new Set(REQUIRES_PARTY_CODES)).toEqual(new Set(REQUIRES_PARTY_EXPECTED_CODES));
   });

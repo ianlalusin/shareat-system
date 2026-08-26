@@ -36,6 +36,7 @@ import { seedChartOfAccounts } from '../../packages/db/seed/chart-of-accounts';
 import { closeDb, getDb } from '@shareat/db';
 import { postEntry, reverseEntry } from '@shareat/domain';
 import { getIncomeStatement, getTrialBalance } from '@shareat/domain';
+import { REQUIRES_PARTY_CODES as REQUIRES_PARTY_CODES_FROM_CHART } from '../../packages/db/seed/chart-of-accounts';
 import { WORKED_EXAMPLES, WORKED_EXAMPLE_IDS, type FixtureLine, type WorkedExample } from '../worked-examples/fixtures';
 
 const sql = postgres(url, { max: 5 });
@@ -236,7 +237,11 @@ describe.each(WORKED_EXAMPLES)('$id — $title', (fixture) => {
   });
 
   it('invariant 5 — every requires_party line carries its party; every other line carries none', async () => {
-    const REQUIRES_PARTY_CODES = new Set(['2110', '1210', '1220', '1230', '1240', '2130', '1250', '2150', '2400']);
+    // ⚠️ Read from the CHART, never retyped here. This line used to be a hardcoded set, and it
+    // went stale the moment ADR-010 made 1140 party-bearing — the invariant then asserted the
+    // opposite of the truth and failed three fixtures that were correct. A guard carrying its own
+    // copy of the thing it guards is a guard that eventually disagrees with it.
+    const REQUIRES_PARTY_CODES = new Set(REQUIRES_PARTY_CODES_FROM_CHART);
     for (const line of fixture.expect) {
       if (REQUIRES_PARTY_CODES.has(line.accountCode)) {
         expect(line.party, `${fixture.id}: ${line.accountCode} requires a party but the fixture declares none`).not.toBeNull();

@@ -36,7 +36,7 @@ describe('routeExpense', () => {
       supplierId: null,
       categoryName: 'Supplies and Stocks',
       categoryAccountCode: '6500',
-      payments: [cash('1000.00'), { method: 'online', amount: money('1000.00') }, { method: 'cash', amount: money('1000.00'), cashRequestId: 'cr-1' }],
+      payments: [cash('1000.00'), { method: 'online', amount: money('1000.00'), moneyAccountId: 'wallet-1' }, { method: 'cash', amount: money('1000.00'), cashRequestId: 'cr-1' }],
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;

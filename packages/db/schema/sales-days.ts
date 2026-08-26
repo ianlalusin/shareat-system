@@ -49,6 +49,7 @@ import { journalEntries } from './journal';
 import { organizations } from './organizations';
 import { persons } from './persons';
 import { stores } from './stores';
+import { moneyAccounts } from './money-accounts';
 
 // -------------------------------------------------------------------------------------
 // sales_channels — per-store configuration. v1's Store.salesChannels[], as rows.
@@ -255,5 +256,61 @@ export const salesDayChannels = pgTable(
     check('sales_day_channels_amount_non_negative_check', sql`${t.amount} >= 0`),
     /** A "confirmed no sales" row carrying money is a contradiction. */
     check('sales_day_channels_no_sales_is_zero_check', sql`${t.noSales} = false or ${t.amount} = 0`),
+  ],
+);
+
+
+/**
+ * ⭐ WHERE THE MONEY LANDED — one row per money account the day's online tender went into.
+ * DEF-068, ADR-010, bible row 148.
+ *
+ * ## ⚠️ This is NOT `sales_day_channels`, and confusing the two is the whole point of this comment
+ *
+ * They are orthogonal axes and a day needs both:
+ *
+ * | | Answers | Used for |
+ * |---|---|---|
+ * | `sales_day_channels` | Where the sale came FROM — Walk-in, Foodpanda | Revenue and receivables |
+ * | **this table** | Where the money WENT — GCash-cashier, BDO-office | **Custody** |
+ *
+ * A Foodpanda sale can settle into any wallet, so neither answers the other's question.
+ *
+ * ## Why it exists
+ *
+ * v2 recorded ONE `online_collected` figure and posted it to `1140` undifferentiated, which made
+ * ADR-010's headline question — *"how much online money is in the cashier's hands versus the
+ * office's"* — unanswerable on the side that matters most, since collections are the largest
+ * inflow. v1 never had this problem: its sale builder takes `onlineBreakdown` as
+ * `Record<accountId, amount>` and posts a leg per account.
+ *
+ * ⭐ **The data was never missing.** Ian: *"the cashier POS has this — it defines which mode of
+ * payment is used by customer."* POS captures it at the till; T-123 did not carry it across.
+ */
+export const salesDayTenders = pgTable(
+  'sales_day_tenders',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    salesDayId: uuid('sales_day_id')
+      .notNull()
+      .references(() => salesDays.id, { onDelete: 'cascade' }),
+    /** ⚠️ `restrict`, not `cascade` — a wallet that has received money can never be deleted, only
+     *  retired. Deleting it would orphan the day's tender exactly as v1's hard-deletes orphan
+     *  journal legs (DEF-065). */
+    moneyAccountId: uuid('money_account_id')
+      .notNull()
+      .references(() => moneyAccounts.id, { onDelete: 'restrict' }),
+    amount: numeric('amount', { precision: 14, scale: 2 }).notNull().default('0'),
+  },
+  (t) => [
+    uniqueIndex('sales_day_tenders_sales_day_id_money_account_id_unique').on(
+      t.salesDayId,
+      t.moneyAccountId,
+    ),
+    index('sales_day_tenders_money_account_id_idx').on(t.moneyAccountId),
+    /** ⛔ Strictly positive, unlike a channel row. A channel may legitimately be zero — the
+     *  reporter confirming "no Foodpanda sales today" is information. A tender row of zero says
+     *  money went into a wallet and the amount was nothing, which is not a fact about anything;
+     *  the row simply should not exist. */
+    check('sales_day_tenders_amount_positive_check', sql`${t.amount} > 0`),
   ],
 );

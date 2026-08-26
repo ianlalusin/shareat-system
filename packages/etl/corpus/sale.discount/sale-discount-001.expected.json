@@ -28,8 +28,8 @@
           "credit": "0.00",
           "lineMemo": "online: gcash",
           "channelId": null,
-          "partyType": null,
-          "partyId": null
+          "partyType": "money_account",
+          "partyId": "gcash"
         },
         {
           "accountCode": "4900",
@@ -56,7 +56,7 @@
           "storeCode": "STORE-A",
           "debit": "0.00",
           "credit": "6000.00",
-          "lineMemo": "\u00e0 la carte (incl. take-out)",
+          "lineMemo": "à la carte (incl. take-out)",
           "channelId": null,
           "partyType": null,
           "partyId": null

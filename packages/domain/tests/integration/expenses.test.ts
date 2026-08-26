@@ -115,6 +115,10 @@ interface Fixture {
   staffId: string;
   managerId: string;
   adminId: string;
+  /** ⭐ The wallet an online payment leaves. Since ADR-010, `1140` is a control account keyed by
+   *  the money account, so an online payment with no wallet is refused — by `routeExpense` with a
+   *  reason, and by the database underneath it. */
+  walletId: string;
 }
 
 /** One org, one open 2026-01 period, a full chart of accounts, the seeded expense
@@ -137,7 +141,13 @@ async function setup(hint: string): Promise<Fixture> {
   await insertStoreScopeRaw(staffId, storeId);
   await insertStoreScopeRaw(managerId, storeId);
   await insertStoreScopeRaw(adminId, storeId);
-  return { orgId, storeId, storeId2, staffId, managerId, adminId };
+  const [wallet] = await sql<{ id: string }[]>`
+    insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian)
+    values (${orgId}, ${storeId}, 'GCash — cashier', 'ewallet', '1140', 'cashier')
+    returning id
+  `;
+
+  return { orgId, storeId, storeId2, staffId, managerId, adminId , walletId: wallet!.id };
 }
 
 async function categoryId(orgId: string, category: string): Promise<string> {
@@ -215,6 +225,7 @@ function actor(orgId: string, personId: string): Actor {
 beforeAll(async () => {
   await sql`
     truncate table
+      money_accounts,
       expense_payments, expenses, expense_categories,
       person_grants, person_store_scope, person_roles,
       journal_lines, journal_entries, audit_log, fiscal_periods, accounts,
@@ -278,7 +289,7 @@ describe('invariant 2 — a three-way split posts ONE entry with three credit li
         receiptPhotoUrl: 'https://example.com/r2.jpg',
         payments: [
           { method: 'cash', amount: '1500.00' },
-          { method: 'online', amount: '1000.00' },
+          { method: 'online', amount: '1000.00', moneyAccountId: f.walletId },
           { method: 'reimbursable', amount: '1000.00', staffId: f.staffId },
         ],
       }),
@@ -857,7 +868,7 @@ describe('invariant 17 — a DRAFT is deletable; a posted or voided expense neve
         particulars: 'Wrong store, start again',
         payments: [
           { method: 'cash', amount: '120.00' },
-          { method: 'online', amount: '80.00' },
+          { method: 'online', amount: '80.00', moneyAccountId: f.walletId },
         ],
       }),
     );

@@ -10,7 +10,13 @@
  */
 import { and, asc, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
-import { salesChannels, salesDayChannels, salesDays } from '../../schema/sales-days';
+import {
+  salesChannels,
+  salesDayChannels,
+  salesDayTenders,
+  salesDays,
+} from '../../schema/sales-days';
+import { moneyAccounts } from '../../schema/money-accounts';
 
 export type SalesDayStatus = 'open' | 'submitted' | 'verified' | 'voided';
 
@@ -369,4 +375,53 @@ export async function replaceChannels(tx: Tx, salesDayId: string, rows: InsertCh
   await tx.delete(salesDayChannels).where(eq(salesDayChannels.salesDayId, salesDayId));
   if (rows.length === 0) return;
   await tx.insert(salesDayChannels).values(rows.map((r) => ({ salesDayId, ...r })));
+}
+
+// -------------------------------------------------------------------------------------
+// ⭐ Tenders — WHERE the online money landed (DEF-068)
+//
+// ⚠️ Deliberately a separate pair from the channel functions above, not a widening of them.
+// A channel says where the sale came FROM; a tender says where the money WENT. They are
+// orthogonal, and folding them into one shape is precisely the conflation that let v2 ship
+// without the second axis at all.
+// -------------------------------------------------------------------------------------
+
+export interface SalesDayTenderRow {
+  id: string;
+  moneyAccountId: string;
+  moneyAccountName: string;
+  custodian: string;
+  amount: string;
+}
+
+export async function getTendersForDay(tx: Tx, salesDayId: string): Promise<SalesDayTenderRow[]> {
+  return tx
+    .select({
+      id: salesDayTenders.id,
+      moneyAccountId: salesDayTenders.moneyAccountId,
+      moneyAccountName: moneyAccounts.name,
+      custodian: moneyAccounts.custodian,
+      amount: salesDayTenders.amount,
+    })
+    .from(salesDayTenders)
+    .innerJoin(moneyAccounts, eq(moneyAccounts.id, salesDayTenders.moneyAccountId))
+    .where(eq(salesDayTenders.salesDayId, salesDayId))
+    .orderBy(asc(moneyAccounts.name));
+}
+
+export interface InsertTenderInput {
+  moneyAccountId: string;
+  amount: string;
+}
+
+/** Replace-wholesale, the same technique `replaceChannels` uses: a day's tender breakdown is
+ *  one fact, and diffing rows would let a stale wallet survive an edit. */
+export async function replaceTenders(
+  tx: Tx,
+  salesDayId: string,
+  rows: InsertTenderInput[],
+): Promise<void> {
+  await tx.delete(salesDayTenders).where(eq(salesDayTenders.salesDayId, salesDayId));
+  if (rows.length === 0) return;
+  await tx.insert(salesDayTenders).values(rows.map((r) => ({ salesDayId, ...r })));
 }

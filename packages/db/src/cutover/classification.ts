@@ -164,6 +164,12 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'Replaced wholesale by the 2027-01-01 opening entry (row 106); no pilot sales day ' +
       'survives, and one that did would double-count January revenue.',
   },
+  sales_day_tenders: {
+    class: 'purge',
+    reason:
+      'As sales_days — its child rows, recording which money account the online tender of a day ' +
+      'landed in. Purged first: children before parents (PURGE_ORDER_HINT).',
+  },
   sales_day_channels: {
     class: 'purge',
     reason: 'As sales_days — its child rows. Purged first: children before parents (PURGE_ORDER_HINT).',

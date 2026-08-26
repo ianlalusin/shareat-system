@@ -28,6 +28,7 @@ function input(over: Partial<RouteSalesDayInput>): RouteSalesDayInput {
     onlineCollected: ZERO,
     creditSales: ZERO,
     channels: [],
+    tenders: [],
     ...over,
   };
 }
@@ -131,6 +132,9 @@ describe('sale.mixed — the full pattern', () => {
         comps: money('150'),
         cashCollected: money('3000'),
         onlineCollected: money('2000'),
+        // ⭐ DEF-068: online money must name the wallet it landed in. The identity that the
+        // breakdown equals the day's online total is checked in `routeSalesDay`.
+        tenders: [{ moneyAccountId: 'wallet-gcash', amount: money('2000') }],
       }),
     );
     expect(posted(r)).toEqual({
@@ -153,6 +157,9 @@ describe('sale.mixed — the full pattern', () => {
         comps: money('150'),
         cashCollected: money('3000'),
         onlineCollected: money('2000'),
+        // ⭐ DEF-068: online money must name the wallet it landed in. The identity that the
+        // breakdown equals the day's online total is checked in `routeSalesDay`.
+        tenders: [{ moneyAccountId: 'wallet-gcash', amount: money('2000') }],
       }),
     );
     if (!r.ok) throw new Error(r.reason);
@@ -311,6 +318,9 @@ describe('⭐ the CHANNEL identity — Σ all channels = totalSales (bible row 1
         comps: money('150'),
         cashCollected: money('3000'),
         onlineCollected: money('2000'),
+        // ⭐ DEF-068: online money must name the wallet it landed in. The identity that the
+        // breakdown equals the day's online total is checked in `routeSalesDay`.
+        tenders: [{ moneyAccountId: 'wallet-gcash', amount: money('2000') }],
         channels: [{ ...foodpanda, amount: money('550') }],
       }),
     );
@@ -332,6 +342,9 @@ describe('⭐ the CHANNEL identity — Σ all channels = totalSales (bible row 1
         comps: money('150'),
         cashCollected: money('3000'),
         onlineCollected: money('2000'),
+        // ⭐ DEF-068: online money must name the wallet it landed in. The identity that the
+        // breakdown equals the day's online total is checked in `routeSalesDay`.
+        tenders: [{ moneyAccountId: 'wallet-gcash', amount: money('2000') }],
         channels: [
           { ...walkIn, amount: money('5450') },
           { ...foodpanda, amount: money('550') },

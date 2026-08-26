@@ -28,8 +28,8 @@
           "credit": "0.00",
           "lineMemo": "online: gcash",
           "channelId": null,
-          "partyType": null,
-          "partyId": null
+          "partyType": "money_account",
+          "partyId": "gcash"
         },
         {
           "accountCode": "4100",

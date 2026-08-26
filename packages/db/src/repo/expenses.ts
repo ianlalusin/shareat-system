@@ -270,6 +270,7 @@ export interface ExpensePaymentRow {
   amount: string;
   accountCode: string | null;
   staffId: string | null;
+  moneyAccountId: string | null;
   cashRequestId: string | null;
 }
 
@@ -278,6 +279,7 @@ export interface InsertPaymentInput {
   amount: string;
   accountCode?: string | null;
   staffId?: string | null;
+  moneyAccountId?: string | null;
   cashRequestId?: string | null;
 }
 
@@ -290,6 +292,7 @@ export async function insertPayments(tx: Tx, expenseId: string, payments: Insert
       amount: p.amount,
       accountCode: p.accountCode ?? null,
       staffId: p.staffId ?? null,
+      moneyAccountId: p.moneyAccountId ?? null,
       cashRequestId: p.cashRequestId ?? null,
     })),
   );
@@ -304,6 +307,7 @@ export async function getPaymentsForExpense(tx: Tx, expenseId: string): Promise<
       amount: expensePayments.amount,
       accountCode: expensePayments.accountCode,
       staffId: expensePayments.staffId,
+      moneyAccountId: expensePayments.moneyAccountId,
       cashRequestId: expensePayments.cashRequestId,
     })
     .from(expensePayments)

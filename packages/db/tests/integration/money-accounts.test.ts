@@ -183,35 +183,54 @@ describe('invariant 2 — custodian positions are read from journal_lines', () =
     expect(byKey.get('office:1130')).toBe(-1200);
   });
 
-  it('⛔ ONLINE attribution is NOT enabled yet — 1140 still refuses a party', async () => {
+  it('⭐ attributes ONLINE money by the wallet named on the line', async () => {
     const f = await setup('online');
-    const wallet = await asOrg(f.orgId, (tx) =>
-      moneyAccountsRepo.insertMoneyAccount(tx, {
-        orgId: f.orgId,
-        storeId: f.storeId,
-        name: 'GCash — cashier',
-        instrument: 'ewallet',
-        glAccountCode: '1140',
-        custodian: 'cashier',
-      }),
-    );
+    const mk = (name: string, custodian: 'cashier' | 'office') =>
+      asOrg(f.orgId, (tx) =>
+        moneyAccountsRepo.insertMoneyAccount(tx, {
+          orgId: f.orgId,
+          storeId: f.storeId,
+          name,
+          instrument: 'ewallet',
+          glAccountCode: '1140',
+          custodian,
+        }),
+      );
+    const cashierWallet = await mk('GCash — cashier', 'cashier');
+    const officeWallet = await mk('BDO — office', 'office');
 
-    // ⚠️ This is the CONTRACT step ADR-010 needs and this slice deliberately did not take.
-    // `journal_lines_party_requirement` is bidirectional: it refuses a party on an account whose
-    // `requires_party` is false, exactly as it refuses a missing one where it is true. So naming a
-    // wallet is impossible until 1140 is flipped — and flipping it breaks BOTH shipped posting
-    // sites (expenses/routing.ts and sales-days/routing.ts), the second of which has one
-    // `online_collected` figure per day with no per-wallet breakdown to supply.
-    //
-    // ⭐ Pinned as a test rather than left as a comment, because this is the precise boundary of
-    // what was built: the model exists and cash works; online waits for a task that reshapes
-    // T-123's data, not for someone to remember.
+    await postLegs(f, '2026-01-07', [
+      { code: '1140', debit: '3000.00', credit: '0', partyType: 'money_account', partyId: cashierWallet.id },
+      { code: '4100', debit: '0', credit: '3000.00' },
+    ]);
+    await postLegs(f, '2026-01-08', [
+      { code: '1140', debit: '8000.00', credit: '0', partyType: 'money_account', partyId: officeWallet.id },
+      { code: '4100', debit: '0', credit: '8000.00' },
+    ]);
+
+    const rows = await asOrg(f.orgId, (tx) =>
+      moneyAccountsRepo.custodianPositions(tx, f.orgId, { asOf: '2026-01-31' }),
+    );
+    const byKey = new Map(rows.map((r) => [`${r.custodian}:${r.glAccountCode}`, Number(r.balance)]));
+
+    // ⭐ The question v2 could not answer before ADR-010, and the whole reason the table exists:
+    // how much ONLINE money is in the cashier's hands versus the office's. One control account,
+    // two answers, from the same lines the trial balance reads.
+    expect(byKey.get('cashier:1140')).toBe(3000);
+    expect(byKey.get('office:1140')).toBe(8000);
+  });
+
+  it('⛔ 1140 still refuses a line with NO wallet — untracked online money cannot be posted', async () => {
+    const f = await setup('nowallet');
+    // The other half of the same guarantee. Attribution is only real if the unattributed case is
+    // impossible, not merely discouraged — the same discipline as an expense category with no
+    // account mapped blocking the posting rather than defaulting to a catch-all.
     await expect(
       postLegs(f, '2026-01-07', [
-        { code: '1140', debit: '3000.00', credit: '0', partyType: 'money_account', partyId: wallet.id },
+        { code: '1140', debit: '3000.00', credit: '0' },
         { code: '4100', debit: '0', credit: '3000.00' },
       ]),
-    ).rejects.toThrow(/does not accept a party/);
+    ).rejects.toThrow(/requires a party/);
   });
 
   it('a staff float is attributed to staff by its GL code (1120)', async () => {
@@ -257,12 +276,27 @@ describe('invariant 2 — custodian positions are read from journal_lines', () =
 // =========================================================================================
 
 describe('invariant 3 — undeposited funds is a GROUP BY, not an account', () => {
-  it('⭐ equals the cashier custodian total, and excludes the office safe', async () => {
+  it('⭐ spans cash AND online for the cashier, and excludes the office safe', async () => {
     const f = await setup('undep');
+    const wallet = await asOrg(f.orgId, (tx) =>
+      moneyAccountsRepo.insertMoneyAccount(tx, {
+        orgId: f.orgId,
+        storeId: f.storeId,
+        name: 'Maya — cashier',
+        instrument: 'ewallet',
+        glAccountCode: '1140',
+        custodian: 'cashier',
+      }),
+    );
     // ₱6,000 cash in the till, not remitted.
     await postLegs(f, '2026-01-11', [
       { code: '1110', debit: '6000.00', credit: '0' },
       { code: '4100', debit: '0', credit: '6000.00' },
+    ]);
+    // ₱2,500 in the cashier's OWN wallet — undeposited too, and invisible before ADR-010.
+    await postLegs(f, '2026-01-11', [
+      { code: '1140', debit: '2500.00', credit: '0', partyType: 'money_account', partyId: wallet.id },
+      { code: '4100', debit: '0', credit: '2500.00' },
     ]);
     // The office safe holds far more — and it is NOT undeposited. This is the distinction the
     // figure exists to make: undeposited means "has not reached the office yet", not "is cash".
@@ -279,10 +313,10 @@ describe('invariant 3 — undeposited funds is a GROUP BY, not an account', () =
     const undeposited = await asOrg(f.orgId, (tx) =>
       moneyAccountsRepo.undepositedFunds(tx, f.orgId, { asOf: '2026-01-31' }),
     );
-    expect(undeposited).toBe('6000.00');
+    expect(undeposited).toBe('8500.00');
 
-    // ⚠️ Once 1140 carries a wallet, a cashier-custodian wallet's balance joins this figure with
-    // no change to `undepositedFunds` itself — the join is already written.
+    // ⭐ ₱6,000 cash + ₱2,500 online. The office's ₱90,000 and the staff float's ₱2,000 are money
+    // the business holds and are NOT undeposited — the distinction the figure exists to make.
   });
 
   it('falls to zero once the cashier remits, with no separate account to clear', async () => {

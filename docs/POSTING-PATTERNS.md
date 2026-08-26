@@ -134,7 +134,7 @@ one journal entry with several credit lines.
 |---|---:|---:|---|
 | 6500 Supplies | 3,500.00 | | — |
 | 1110 Cash on hand — cashier | | 2,000.00 | — |
-| 1140 E-wallet / online channels | | 1,500.00 | — |
+| 1140 E-wallet / online channels | | 1,500.00 | money_account:gcash-cashier |
 
 ### `expense.credit.ap` — Credit expense, books to AP
 
@@ -257,7 +257,7 @@ first, credits (revenue) last.
 | Account | Debit | Credit | Party |
 |---|---:|---:|---|
 | 1110 Cash on hand — cashier | 3,000.00 | | — |
-| 1140 E-wallet / online channels | 2,000.00 | | — |
+| 1140 E-wallet / online channels | 2,000.00 | | money_account:gcash-main |
 | 4900 Sales discounts | 300.00 | | — |
 | 4950 Sales returns and voids | 150.00 | | — |
 | 4100 Food sales — unlimited (unli) | | 4,450.00 | — |
@@ -324,7 +324,7 @@ A ₱10,000 online-to-office transfer costs a ₱50 bank fee, so only ₱9,950 l
 |---|---:|---:|---|
 | 1130 Cash on hand — office | 9,950.00 | | — |
 | 6870 Bank charges | 50.00 | | — |
-| 1140 E-wallet / online channels | | 10,000.00 | — |
+| 1140 E-wallet / online channels | | 10,000.00 | money_account:gcash-main |
 
 **Trap:** do not assume every transfer is P&L-free. When a fee applies, a real expense leg exists
 and must be included — omitting it would silently understate the fee expense while the entry

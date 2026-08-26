@@ -124,7 +124,7 @@ export interface ConvertedLine {
   /** T-118: the subledger counterparty. A line targeting a `requires_party` control
    *  account (2110 AP, 2130 reimbursements, …) MUST carry both; the database rejects it
    *  otherwise, and rejects a party on an account that does not take one. Both or neither. */
-  partyType: 'supplier' | 'customer' | 'employee' | 'store' | 'channel' | null;
+  partyType: 'supplier' | 'customer' | 'employee' | 'store' | 'channel' | 'money_account' | null;
   partyId: string | null;
 }
 
@@ -317,7 +317,20 @@ export function convertSalesDay(specimenId: string, caseClass: CaseClass, doc: S
   if (!isZero(cash)) lines.push(line(ACCOUNTS.CASH_CASHIER, storeCode, 'debit', cash, { lineMemo: 'cash tender' }));
   for (const [acct, amt] of onlineEntries) {
     const m = legacyMoney(amt);
-    if (!isZero(m)) lines.push(line(ACCOUNTS.ONLINE, storeCode, 'debit', m, { lineMemo: `online: ${acct}` }));
+    // ⭐ The wallet was already here — as PROSE. `acct` is v1's `online__{id}` entity, and it was
+    // being written into a line memo where nothing could read it. ADR-010 made 1140 a control
+    // account keyed by the wallet, so the same fact now lands where it can be queried: v1's
+    // per-entity account collapsing onto one v2 control account plus a party, exactly as
+    // `ap__{supplierId}` -> 2110 already does.
+    if (!isZero(m)) {
+      lines.push(
+        line(ACCOUNTS.ONLINE, storeCode, 'debit', m, {
+          lineMemo: `online: ${acct}`,
+          partyType: 'money_account',
+          partyId: acct,
+        }),
+      );
+    }
   }
   if (!isZero(discounts)) lines.push(line(ACCOUNTS.SALES_DISCOUNTS, storeCode, 'debit', discounts, { lineMemo: 'senior/PWD/other discount' }));
   if (!isZero(comps)) lines.push(line(ACCOUNTS.SALES_RETURNS_AND_VOIDS, storeCode, 'debit', comps, { lineMemo: 'comps' }));
@@ -400,8 +413,25 @@ function fundingLine(
         lineMemo: `reimbursable payment #${idx}`, partyType: 'employee', partyId: staffId,
       });
     }
-    case 'online':
-      return line(ACCOUNTS.ONLINE, storeCode, 'credit', amount, { lineMemo: `online payment #${idx}` });
+    case 'online': {
+      // 1140 became a control account keyed by the wallet (ADR-010, migration 0024), so this
+      // branch now behaves exactly like the AP and reimbursable ones above: the party is
+      // mandatory, and an unknown one is quarantined rather than guessed (T-113 §3 rule 1).
+      // ⚠️ Without a wallet the money is untracked, which is the precise thing ADR-010 exists to
+      // end — so posting it anyway would defeat the change that made this line necessary.
+      const onlineAccountId = payment.accountId ?? null;
+      if (!onlineAccountId) {
+        return {
+          reasonCode: 'missing_supplier_party',
+          error: `expense ${doc.id}: an online payment has no accountId — 1140 is a control account and cannot say which wallet the money left`,
+        };
+      }
+      return line(ACCOUNTS.ONLINE, storeCode, 'credit', amount, {
+        lineMemo: `online payment #${idx}`,
+        partyType: 'money_account',
+        partyId: onlineAccountId,
+      });
+    }
     case 'other':
     case 'ar_collection':
       // T-113 §1's Class A list marks `ar-collection` complete (maps to 6400 platform

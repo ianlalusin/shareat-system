@@ -29,6 +29,7 @@ import { journalEntries } from './journal';
 import { organizations } from './organizations';
 import { persons } from './persons';
 import { stores } from './stores';
+import { moneyAccounts } from './money-accounts';
 
 // -------------------------------------------------------------------------------------
 // expense_categories — reference data, seeded from the already-decided crosswalk.
@@ -147,6 +148,15 @@ export const expensePayments = pgTable(
     // reason earlier. References persons directly: staff, unlike suppliers, already have
     // a table (T-101).
     staffId: uuid('staff_id').references(() => persons.id, { onDelete: 'restrict' }),
+    /** ⭐ WHICH wallet an ONLINE payment moved (ADR-010, migration 0025). `1140` is a control
+     *  account covering every wallet, so the posting names one as its party — the same shape
+     *  `2110` uses for suppliers. Null for cash: 1110/1120/1130 already say where the money is.
+     *  ⚠️ A real FK, unlike `journal_lines.party_id` — a source document has no reason to defer
+     *  referential integrity the way that narrow, multi-party column does (DEF-040). */
+    moneyAccountId: uuid('money_account_id').references(() => moneyAccounts.id, {
+      onDelete: 'restrict',
+    }),
+
     // Opaque text, not a FK — cash requests are not yet a table in this schema (their own
     // future task; POSTING-PATTERNS.md's cash_request_release/_return sourceTypes exist
     // independently of this column). Presence alone routes a cash payment to 1120 instead

@@ -118,7 +118,11 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
   leaf('1110', 'Cash on hand — cashier', 'asset', 'debit', '1000', { legacyCode: 'cash__cashier' }),
   leaf('1120', 'Cash on hand — staff custodian', 'asset', 'debit', '1000', { legacyCode: 'cash__staff' }),
   leaf('1130', 'Cash on hand — office', 'asset', 'debit', '1000', { legacyCode: 'cash__office' }),
-  leaf('1140', 'E-wallet / online channels', 'asset', 'debit', '1000'), // control; online__{id} per-entity
+  /** ⭐ requiresParty since ADR-010 (migration 0024): ONE control account covers every wallet,
+   *  so the line names WHICH one via `party_type='money_account'` — the same shape 2110 uses
+   *  for suppliers. v1 minted `online__{id}` GL accounts instead and its chart grew with the
+   *  business; every one of them rolled back up into a single line in the audit anyway. */
+  leaf('1140', 'E-wallet / online channels', 'asset', 'debit', '1000', { requiresParty: true }),
   leaf('1210', 'Accounts receivable', 'asset', 'debit', '1000', { requiresParty: true }), // control; ar__{customerId} per-entity — T-118 party_type=customer
   leaf('1220', 'Channel receivable', 'asset', 'debit', '1000', { requiresParty: true }), // control; ar__channel_{id} per-entity — T-118 party_type=channel
   leaf('1221', 'Channel clearing — Grab', 'asset', 'debit', '1000', { legacyCode: 'clearing__grab' }),

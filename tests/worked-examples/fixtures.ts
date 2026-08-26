@@ -25,7 +25,7 @@
  * literal).
  */
 
-export type PartyType = 'supplier' | 'customer' | 'employee' | 'store' | 'channel';
+export type PartyType = 'supplier' | 'customer' | 'employee' | 'store' | 'channel' | 'money_account';
 
 export interface PartyRef {
   type: PartyType;
@@ -155,7 +155,7 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
     expect: [
       D('6500', '3500.00', null, { lineMemo: 'Kitchen supplies' }),
       C('1110', '2000.00', null, { lineMemo: 'cash payment #1' }),
-      C('1140', '1500.00', null, { lineMemo: 'online payment #2' }),
+      C('1140', '1500.00', { type: 'money_account', id: 'money_account:gcash-cashier' }, { lineMemo: 'online payment #2' }),
     ],
     entryDate: '2026-01-15',
   },
@@ -316,7 +316,7 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
     },
     expect: [
       D('1110', '3000.00', null, { lineMemo: 'cash tender' }),
-      D('1140', '2000.00', null, { lineMemo: 'online: gcash-main' }),
+      D('1140', '2000.00', { type: 'money_account', id: 'money_account:gcash-main' }, { lineMemo: 'online: gcash-main' }),
       D('4900', '300.00', null, { lineMemo: 'senior/PWD/other discount' }),
       D('4950', '150.00', null, { lineMemo: 'comps' }),
       C('4100', '4450.00', null, { lineMemo: 'dine-in unlimited' }),
@@ -399,7 +399,7 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
     expect: [
       D('1130', '9950.00', null, { lineMemo: 'received net of fee' }),
       D('6870', '50.00', null, { lineMemo: 'bank charges' }),
-      C('1140', '10000.00', null, { lineMemo: 'transferred from online' }),
+      C('1140', '10000.00', { type: 'money_account', id: 'money_account:gcash-main' }, { lineMemo: 'transferred from online' }),
     ],
     entryDate: '2026-01-22',
     trap: 'Do not assume every transfer is P&L-free. When `feeAccountId` is set, a real expense ' +

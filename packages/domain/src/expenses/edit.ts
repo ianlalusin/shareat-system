@@ -96,6 +96,7 @@ async function runEditExpense(tx: Tx, actor: Actor, expenseId: string, input: Ed
         amount: amounts[i]!,
         accountCode: p.accountCode ?? null,
         staffId: p.staffId ?? null,
+        moneyAccountId: p.moneyAccountId ?? null,
         cashRequestId: p.cashRequestId ?? null,
       })),
     );

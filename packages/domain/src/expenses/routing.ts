@@ -78,6 +78,9 @@ export interface RoutingPayment {
   /** The 'office' cash sub-route (1130) — see this file's top comment. No other value
    *  is ever read. */
   accountCode?: string | null;
+  /** ⭐ WHICH wallet an online payment left (ADR-010). `1140` is a control account covering every
+   *  wallet, so the line names one as its party. Required for `online`, ignored otherwise. */
+  moneyAccountId?: string | null;
 }
 
 export type RoutingLineSide = 'debit' | 'credit';
@@ -86,7 +89,7 @@ export interface RoutingLine {
   accountCode: string;
   side: RoutingLineSide;
   amount: Money;
-  partyType?: 'supplier' | 'employee';
+  partyType?: 'supplier' | 'employee' | 'money_account';
   partyId?: string | null;
   lineMemo?: string | null;
 }
@@ -107,13 +110,26 @@ function fundingLine(
           : EXPENSE_FUNDING_ACCOUNTS.CASH_CASHIER;
       return { accountCode, side: 'credit', amount: payment.amount, lineMemo: `cash payment #${index}` };
     }
-    case 'online':
+    case 'online': {
+      // ⭐ Since ADR-010, 1140 is a control account keyed by the wallet — so this branch behaves
+      // exactly like the credit one below, and for the same reason: an online payment that cannot
+      // say which wallet it left is untracked money, which is the precise thing ADR-010 exists to
+      // end. Blocking is also what the database would do anyway (1140 requires a party); doing it
+      // here means the caller gets the payment number and the reason instead of a constraint name.
+      if (!payment.moneyAccountId) {
+        return {
+          error: `payment #${index}: an online payment names no money account — 1140 is a control account and cannot say which wallet the money left`,
+        };
+      }
       return {
         accountCode: EXPENSE_FUNDING_ACCOUNTS.ONLINE,
         side: 'credit',
         amount: payment.amount,
         lineMemo: `online payment #${index}`,
+        partyType: 'money_account',
+        partyId: payment.moneyAccountId,
       };
+    }
     case 'credit': {
       // T-118: 2110 is a control account — a credit payment with no supplier cannot be
       // reconstructed in the subledger, so it blocks rather than posting unattributed

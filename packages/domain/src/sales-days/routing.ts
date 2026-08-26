@@ -138,13 +138,25 @@ export interface RouteSalesDayInput {
   creditSales: Money;
   /** Every channel row on the day, remitted and not. */
   channels: SalesDayChannelInput[];
+  /** ⭐ WHERE the online money landed — one row per money account (DEF-068, bible row 148).
+   *
+   *  ⚠️ NOT the same axis as `channels`. A channel says where the sale came FROM (Walk-in,
+   *  Foodpanda); a tender says where the money WENT (GCash-cashier, BDO-office). A Foodpanda sale
+   *  can settle into any wallet, so neither answers the other's question — and v2 modelled only
+   *  the first until DEF-068. */
+  tenders: SalesDayTenderInput[];
+}
+
+export interface SalesDayTenderInput {
+  moneyAccountId: string;
+  amount: Money;
 }
 
 export interface RoutedLine {
   accountCode: string;
   side: 'debit' | 'credit';
   amount: Money;
-  partyType?: 'customer' | 'channel' | null;
+  partyType?: 'customer' | 'channel' | 'money_account' | null;
   partyId?: string | null;
   lineMemo?: string | null;
 }
@@ -250,7 +262,29 @@ export function routeSalesDay(input: RouteSalesDayInput): RouteSalesDayResult {
     lines.push({ accountCode: SALES_DAY_ACCOUNTS.CASH_CASHIER, side: 'debit', amount: input.cashCollected });
   }
   if (!isZero(input.onlineCollected)) {
-    lines.push({ accountCode: SALES_DAY_ACCOUNTS.ONLINE, side: 'debit', amount: input.onlineCollected });
+    // ⭐ ONE LEG PER WALLET, never one lump to 1140. Since ADR-010, 1140 is a control account
+    // keyed by the money account — so a day that cannot say which wallet its online money reached
+    // cannot post at all. That is deliberate: collections are the largest inflow, so unattributed
+    // online sales would make "how much is in the cashier's hands" wrong by exactly the amount
+    // that matters most, and undeposited funds (bible row 143) is defined from that figure.
+    const tendersTotal = input.tenders.length === 0 ? money('0') : add(...input.tenders.map((t) => t.amount));
+    if (!isZero(subtract(tendersTotal, input.onlineCollected))) {
+      return {
+        ok: false,
+        reason:
+          `the online tender breakdown does not equal online collected: the wallets sum to ` +
+          `${tendersTotal}, the day reports ${input.onlineCollected}`,
+      };
+    }
+    for (const t of input.tenders) {
+      lines.push({
+        accountCode: SALES_DAY_ACCOUNTS.ONLINE,
+        side: 'debit',
+        amount: t.amount,
+        partyType: 'money_account',
+        partyId: t.moneyAccountId,
+      });
+    }
   }
   if (!isZero(input.creditSales)) {
     // ⚠️ 1210 has requires_party — the posting trigger rejects a line without one regardless;

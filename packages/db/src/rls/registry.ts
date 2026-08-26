@@ -131,6 +131,14 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'ADR-008 §5 limits the franchisor to sales-only visibility through a separate, explicit ' +
       'grant — never through this table being readable.',
   },
+  sales_day_tenders: {
+    scope: 'derived',
+    via: 'exists (select 1 from sales_days sd where sd.id = sales_day_tenders.sales_day_id and sd.org_id = app_current_org())',
+    reason:
+      'No org_id of its own — reachable only through the sales day it belongs to, the same ' +
+      'pattern as sales_day_channels beside it. One source of truth for which org a tender row ' +
+      'belongs to, so a copied column cannot drift from its parent.',
+  },
   sales_day_channels: {
     scope: 'derived',
     via: 'exists (select 1 from sales_days sd where sd.id = sales_day_channels.sales_day_id and sd.org_id = app_current_org())',

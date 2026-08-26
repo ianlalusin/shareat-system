@@ -179,7 +179,8 @@ function simpleDay(storeId: string, businessDate: string) {
 beforeAll(async () => {
   await sql`
     truncate table
-      sales_day_channels, sales_days, sales_channels,
+      money_accounts,
+      sales_day_tenders, sales_day_channels, sales_days, sales_channels,
       expense_payments, expenses, expense_categories,
       person_grants, person_store_scope, person_roles,
       journal_lines, journal_entries, audit_log, fiscal_periods, accounts,
@@ -534,6 +535,99 @@ describe('invariant 7 — the denials fire', () => {
     await expect(
       asPerson(f.orgId, (tx) => createSalesDay(tx, actor(f.orgId, f.managerId), simpleDay(f.storeId2, D1))),
     ).rejects.toThrow(AuthorizationError);
+  });
+});
+
+// =========================================================================================
+// DEF-068 — the day says WHERE the online money landed
+// =========================================================================================
+
+describe('DEF-068 — online tender names its wallet', () => {
+  async function wallets(f: Fixture) {
+    const mk = async (name: string, custodian: string) => {
+      const [r] = await sql<{ id: string }[]>`
+        insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian)
+        values (${f.orgId}, ${f.storeId}, ${name}, 'ewallet', '1140', ${custodian})
+        returning id
+      `;
+      return r!.id;
+    };
+    return { cashier: await mk('GCash — cashier', 'cashier'), office: await mk('BDO — office', 'office') };
+  }
+
+  const dayWithOnline = (storeId: string, businessDate: string) => ({
+    storeId,
+    businessDate,
+    totalSales: '5000.00',
+    unliSales: '5000.00',
+    alaCarteSales: '0.00',
+    cashCollected: '2000.00',
+    onlineCollected: '3000.00',
+  });
+
+  it('⭐ posts ONE leg per wallet, not one lump to 1140', async () => {
+    const f = await setup('def068');
+    const w = await wallets(f);
+
+    const { id } = await asPerson(f.orgId, (tx) =>
+      createSalesDay(tx, actor(f.orgId, f.staffId), {
+        ...dayWithOnline(f.storeId, D1),
+        tenders: [
+          { moneyAccountId: w.cashier, amount: '1800.00' },
+          { moneyAccountId: w.office, amount: '1200.00' },
+        ],
+      }),
+    );
+    const res = await asPerson(f.orgId, (tx) => verifySalesDay(tx, actor(f.orgId, f.managerId), id));
+
+    const lines = await linesFor(res.journalEntryId);
+    const online = lines.filter((l) => l.code === '1140');
+    expect(online).toHaveLength(2);
+    expect(online.map((l) => l.debit).sort()).toEqual(['1200.00', '1800.00']);
+    // ⭐ And each says WHOSE wallet it is — the question v2 could not answer before ADR-010.
+    expect(online.every((l) => l.party_type === 'money_account')).toBe(true);
+    expect(online.map((l) => l.party_id).sort()).toEqual([w.cashier, w.office].sort());
+  });
+
+  it('⛔ refuses a day whose wallets do not sum to its online total', async () => {
+    const f = await setup('def068sum');
+    const w = await wallets(f);
+    const { id } = await asPerson(f.orgId, (tx) =>
+      createSalesDay(tx, actor(f.orgId, f.staffId), {
+        ...dayWithOnline(f.storeId, D1),
+        tenders: [{ moneyAccountId: w.cashier, amount: '1800.00' }],
+      }),
+    );
+    await expect(
+      asPerson(f.orgId, (tx) => verifySalesDay(tx, actor(f.orgId, f.managerId), id)),
+    ).rejects.toThrow(/tender breakdown does not equal online collected/);
+  });
+
+  it('⛔ refuses online money with no wallet at all', async () => {
+    const f = await setup('def068none');
+    const { id } = await asPerson(f.orgId, (tx) =>
+      createSalesDay(tx, actor(f.orgId, f.staffId), dayWithOnline(f.storeId, D1)),
+    );
+    await expect(
+      asPerson(f.orgId, (tx) => verifySalesDay(tx, actor(f.orgId, f.managerId), id)),
+    ).rejects.toThrow(/tender breakdown does not equal online collected/);
+  });
+
+  it("⛔ refuses another store's wallet", async () => {
+    const f = await setup('def068store');
+    const [other] = await sql<{ id: string }[]>`
+      insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian)
+      values (${f.orgId}, ${f.storeId2}, 'GCash — other branch', 'ewallet', '1140', 'cashier')
+      returning id
+    `;
+    await expect(
+      asPerson(f.orgId, (tx) =>
+        createSalesDay(tx, actor(f.orgId, f.staffId), {
+          ...dayWithOnline(f.storeId, D1),
+          tenders: [{ moneyAccountId: other!.id, amount: '3000.00' }],
+        }),
+      ),
+    ).rejects.toThrow(/is not an active account for store/);
   });
 });
 
