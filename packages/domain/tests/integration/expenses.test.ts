@@ -119,6 +119,10 @@ interface Fixture {
    *  the money account, so an online payment with no wallet is refused — by `routeExpense` with a
    *  reason, and by the database underneath it. */
   walletId: string;
+  /** ⭐ And since DEF-058, CASH names its place too: the account decides both the GL code and who
+   *  owned the money, replacing the "office drawer" tickbox that let a cashier route cash away
+   *  from their own till. */
+  cashDrawerId: string;
 }
 
 /** One org, one open 2026-01 period, a full chart of accounts, the seeded expense
@@ -146,8 +150,13 @@ async function setup(hint: string): Promise<Fixture> {
     values (${orgId}, ${storeId}, 'GCash — cashier', 'ewallet', '1140', 'cashier')
     returning id
   `;
+  const [drawer] = await sql<{ id: string }[]>`
+    insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian)
+    values (${orgId}, ${storeId}, 'Cashier drawer', 'cash', '1110', 'cashier')
+    returning id
+  `;
 
-  return { orgId, storeId, storeId2, staffId, managerId, adminId , walletId: wallet!.id };
+  return { orgId, storeId, storeId2, staffId, managerId, adminId , walletId: wallet!.id, cashDrawerId: drawer!.id };
 }
 
 async function categoryId(orgId: string, category: string): Promise<string> {
@@ -257,7 +266,7 @@ describe('invariant 1 — a single cash expense posts exactly POSTING-PATTERNS.m
         categoryId: catId,
         particulars: 'Pork delivery, cash',
         receiptPhotoUrl: 'https://example.com/r1.jpg',
-        payments: [{ method: 'cash', amount: '1200.00' }],
+        payments: [{ method: 'cash', amount: '1200.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
 
@@ -288,7 +297,7 @@ describe('invariant 2 — a three-way split posts ONE entry with three credit li
         particulars: 'Supplies, three-way split',
         receiptPhotoUrl: 'https://example.com/r2.jpg',
         payments: [
-          { method: 'cash', amount: '1500.00' },
+          { method: 'cash', amount: '1500.00', moneyAccountId: f.cashDrawerId },
           { method: 'online', amount: '1000.00', moneyAccountId: f.walletId },
           { method: 'reimbursable', amount: '1000.00', staffId: f.staffId },
         ],
@@ -368,7 +377,7 @@ describe('invariant 4 — re-posting is idempotent: one entry, created:false the
         categoryId: catId,
         particulars: 'Electric bill',
         receiptPhotoUrl: 'https://example.com/r4.jpg',
-        payments: [{ method: 'cash', amount: '3000.00' }],
+        payments: [{ method: 'cash', amount: '3000.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
 
@@ -398,7 +407,7 @@ describe('invariant 5 — a void reverses through reverseEntry and every account
         categoryId: catId,
         particulars: 'Wrong delivery, to be voided',
         receiptPhotoUrl: 'https://example.com/r5.jpg',
-        payments: [{ method: 'cash', amount: '800.00' }],
+        payments: [{ method: 'cash', amount: '800.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
     const posted = await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
@@ -437,7 +446,7 @@ describe('invariant 6 — a mapped category routes to its declared account', () 
         categoryId: catId,
         particulars: 'Monthly rent',
         receiptPhotoUrl: 'https://example.com/r6.jpg',
-        payments: [{ method: 'cash', amount: '25000.00' }],
+        payments: [{ method: 'cash', amount: '25000.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
     const posted = await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
@@ -459,7 +468,7 @@ describe('invariant 7 — an unmapped category BLOCKS, naming the category, neve
         categoryId: catId,
         particulars: 'Nobody knows what this was for',
         receiptPhotoUrl: 'https://example.com/r7.jpg',
-        payments: [{ method: 'cash', amount: '500.00' }],
+        payments: [{ method: 'cash', amount: '500.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
 
@@ -479,7 +488,9 @@ describe('invariant 7 — an unmapped category BLOCKS, naming the category, neve
       supplierId: null,
       categoryName: 'Mystery Spend',
       categoryAccountCode: null,
-      payments: [{ method: 'cash', amount: '500.00' as never }],
+      // A pure-routing check: the account only has to be NAMED for the category failure to
+      // be the one that surfaces. `routeExpense` never looks an id up — it is given the code.
+      payments: [{ method: 'cash', amount: '500.00' as never, moneyAccountId: 'drawer', moneyAccountGlCode: '1110' }],
     });
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -505,7 +516,7 @@ describe('invariant 8 — PERSONAL routes to 3200 owner\'s drawings, an equity a
         categoryId: catId,
         particulars: "Owner's personal withdrawal",
         receiptPhotoUrl: 'https://example.com/r8.jpg',
-        payments: [{ method: 'cash', amount: '2000.00' }],
+        payments: [{ method: 'cash', amount: '2000.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
     const posted = await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
@@ -530,7 +541,7 @@ describe('invariant 9 — CAPEX routes to a 15xx asset, never a P&L line', () =>
         categoryId: catId,
         particulars: 'New grill purchase',
         receiptPhotoUrl: 'https://example.com/r9.jpg',
-        payments: [{ method: 'cash', amount: '45000.00' }],
+        payments: [{ method: 'cash', amount: '45000.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
     const posted = await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
@@ -580,7 +591,7 @@ describe('invariant 11 — no photo, no posting, enforced server-side at approve
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: 'No photo attached',
-        payments: [{ method: 'cash', amount: '300.00' }],
+        payments: [{ method: 'cash', amount: '300.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
 
@@ -609,7 +620,7 @@ describe('invariant 12 — the creator edits their own draft inside 48h; outside
         categoryId: catId,
         particulars: 'Original particulars',
         receiptPhotoUrl: 'https://example.com/r12a.jpg',
-        payments: [{ method: 'cash', amount: '150.00' }],
+        payments: [{ method: 'cash', amount: '150.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
 
@@ -631,7 +642,7 @@ describe('invariant 12 — the creator edits their own draft inside 48h; outside
         categoryId: catId,
         particulars: 'Aging draft',
         receiptPhotoUrl: 'https://example.com/r12b.jpg',
-        payments: [{ method: 'cash', amount: '150.00' }],
+        payments: [{ method: 'cash', amount: '150.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
     // Backdate created_at past the 48h window — the ONLY way to reach this state without
@@ -666,7 +677,7 @@ describe('invariant 13 — a posted expense cannot be edited by anyone, includin
         categoryId: catId,
         particulars: 'Annual premium',
         receiptPhotoUrl: 'https://example.com/r13.jpg',
-        payments: [{ method: 'cash', amount: '5000.00' }],
+        payments: [{ method: 'cash', amount: '5000.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
     await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
@@ -699,7 +710,7 @@ describe('invariant 14 — each of the five capabilities denies an actor lacking
           businessDate: BUSINESS_DATE,
           categoryId: catId,
           particulars: 'Should never be created',
-          payments: [{ method: 'cash', amount: '10.00' }],
+          payments: [{ method: 'cash', amount: '10.00', moneyAccountId: f.cashDrawerId }],
         }),
       ),
     ).rejects.toThrow(AuthorizationError);
@@ -715,7 +726,7 @@ describe('invariant 14 — each of the five capabilities denies an actor lacking
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: 'Creator about to lose store scope',
-        payments: [{ method: 'cash', amount: '10.00' }],
+        payments: [{ method: 'cash', amount: '10.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
     await revokeStoreScopeRaw(f.staffId, f.storeId);
@@ -738,7 +749,7 @@ describe('invariant 14 — each of the five capabilities denies an actor lacking
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: 'Created by manager',
-        payments: [{ method: 'cash', amount: '10.00' }],
+        payments: [{ method: 'cash', amount: '10.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
 
@@ -759,7 +770,7 @@ describe('invariant 14 — each of the five capabilities denies an actor lacking
         categoryId: catId,
         particulars: 'Posted then staff tries to void',
         receiptPhotoUrl: 'https://example.com/r14v.jpg',
-        payments: [{ method: 'cash', amount: '10.00' }],
+        payments: [{ method: 'cash', amount: '10.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
     await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
@@ -779,7 +790,7 @@ describe('invariant 14 — each of the five capabilities denies an actor lacking
         categoryId: catId,
         particulars: 'Staff tries to self-approve',
         receiptPhotoUrl: 'https://example.com/r14a.jpg',
-        payments: [{ method: 'cash', amount: '10.00' }],
+        payments: [{ method: 'cash', amount: '10.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
 
@@ -834,7 +845,7 @@ describe('invariant 16 — an expense in org A is invisible to org B, with no WH
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: "Org A's own expense",
-        payments: [{ method: 'cash', amount: '10.00' }],
+        payments: [{ method: 'cash', amount: '10.00', moneyAccountId: fA.cashDrawerId }],
       }),
     );
 
@@ -867,7 +878,7 @@ describe('invariant 17 — a DRAFT is deletable; a posted or voided expense neve
         categoryId: catId,
         particulars: 'Wrong store, start again',
         payments: [
-          { method: 'cash', amount: '120.00' },
+          { method: 'cash', amount: '120.00', moneyAccountId: f.cashDrawerId },
           { method: 'online', amount: '80.00', moneyAccountId: f.walletId },
         ],
       }),
@@ -897,7 +908,7 @@ describe('invariant 17 — a DRAFT is deletable; a posted or voided expense neve
         categoryId: catId,
         particulars: 'Posted, therefore permanent',
         receiptPhotoUrl: 'https://example.com/r17b.jpg',
-        payments: [{ method: 'cash', amount: '500.00' }],
+        payments: [{ method: 'cash', amount: '500.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
     await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
@@ -921,7 +932,7 @@ describe('invariant 17 — a DRAFT is deletable; a posted or voided expense neve
         categoryId: catId,
         particulars: 'Voided, and it stays',
         receiptPhotoUrl: 'https://example.com/r17c.jpg',
-        payments: [{ method: 'cash', amount: '500.00' }],
+        payments: [{ method: 'cash', amount: '500.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
     await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
@@ -944,7 +955,7 @@ describe('invariant 17 — a DRAFT is deletable; a posted or voided expense neve
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: 'Aging draft nobody finished',
-        payments: [{ method: 'cash', amount: '99.00' }],
+        payments: [{ method: 'cash', amount: '99.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
     await sql`update expenses set created_at = now() - interval '49 hours' where id = ${created.id}`;

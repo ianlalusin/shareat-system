@@ -13,7 +13,7 @@
  * combinations disagreeing with a reconstruction from raw legs. **A number worth showing is worth
  * deriving.**
  */
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { accounts } from '../../schema/accounts';
 import { journalEntries, journalLines } from '../../schema/journal';
@@ -217,6 +217,45 @@ export async function custodianPositions(
     glAccountCode: r.glAccountCode ?? (r as unknown as { gl_account_code: string }).gl_account_code,
     balance: r.balance,
   }));
+}
+
+/**
+ * What ONE money account is holding, as at today — debits less credits on its own lines.
+ *
+ * ⚠️ Only meaningful for a party-bearing location (`1140`). A cash location shares its GL code
+ * with every other location of the same custodian at that store, so its balance is the code's
+ * balance — which is why the service refuses a second cash location per custodian in the first
+ * place, and why this function takes the account rather than guessing.
+ */
+export async function balanceOf(
+  tx: Tx,
+  orgId: string,
+  account: { id: string; glAccountCode: string; storeId: string },
+): Promise<string> {
+  // ⚠️ No leading `and` — these go INSIDE drizzle's `and(...)`, which supplies the operator.
+  // Writing one produced `WHERE … AND and …` and a syntax error the retire test caught.
+  const partyFilter =
+    account.glAccountCode === '1140'
+      ? and(
+          eq(journalLines.partyType, 'money_account'),
+          eq(journalLines.partyId, account.id),
+        )
+      : eq(journalLines.storeId, account.storeId);
+
+  const [row] = await tx
+    .select({ total: sql<string>`coalesce(sum(${journalLines.debit} - ${journalLines.credit}), 0)::text` })
+    .from(journalLines)
+    .innerJoin(journalEntries, eq(journalLines.entryId, journalEntries.id))
+    .innerJoin(accounts, eq(journalLines.accountId, accounts.id))
+    .where(
+      and(
+        eq(journalEntries.orgId, orgId),
+        ne(journalEntries.status, 'draft'),
+        eq(accounts.code, account.glAccountCode),
+        partyFilter,
+      ),
+    );
+  return row?.total ?? '0';
 }
 
 /**

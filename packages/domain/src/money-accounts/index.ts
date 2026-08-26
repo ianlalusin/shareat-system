@@ -138,5 +138,24 @@ async function runRetire(
   }
   // Retiring is the same authority as creating: it changes what accounts the books have.
   await authorize(tx, actor, 'manage_chart_of_accounts', {});
+
+  // ⛔ AN ACCOUNT HOLDING MONEY CANNOT BE RETIRED (Ian, 2026-08-26).
+  //
+  // Retiring hides it from every picker, so the money inside becomes unreachable: nothing can
+  // transfer out of a place nobody can select. The balance would keep counting toward the trial
+  // balance and toward the custodian position — real pesos, in a location the system has stopped
+  // offering. **A wallet is emptied first and retired second, never the other way round.**
+  //
+  // ⚠️ Checked against the LEDGER, not a stored figure, so the guard cannot be fooled by a stale
+  // column — there is no column. It is the same number the register shows.
+  const balance = await moneyAccountsRepo.balanceOf(tx, actor.orgId, account);
+  if (Number(balance) !== 0) {
+    throw new Error(
+      `retireMoneyAccount: "${account.name}" still holds ${balance}. Transfer the balance out ` +
+        `first — retiring it would hide the account from every picker and strand the money in a ` +
+        `place nothing can select.`,
+    );
+  }
+
   await moneyAccountsRepo.retireMoneyAccount(tx, actor.orgId, input.moneyAccountId);
 }

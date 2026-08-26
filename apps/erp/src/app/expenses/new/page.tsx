@@ -1,5 +1,5 @@
 import { toBusinessDate } from '@shareat/core/datetime';
-import { listStores, listCategoriesGrouped, listOnlineMoneyAccounts, PAYMENT_ROWS } from '../lib';
+import { listStores, listCategoriesGrouped, listMoneyAccountsForPicker, PAYMENT_ROWS } from '../lib';
 import { requireSession } from '../../../lib/session';
 import { createExpenseAction } from '../actions';
 
@@ -21,7 +21,7 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
   const [storeRows, categories, wallets] = await Promise.all([
     listStores(orgId),
     listCategoriesGrouped(orgId),
-    listOnlineMoneyAccounts(orgId),
+    listMoneyAccountsForPicker(orgId),
   ]);
   const storeId = sp.store && storeRows.some((s) => s.id === sp.store) ? sp.store : (storeRows[0]?.id ?? '');
 
@@ -156,9 +156,8 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
                     <th className="px-3 py-2 font-medium">Method</th>
                     <th className="px-3 py-2 font-medium">Amount</th>
                     <th className="px-3 py-2 font-medium">Staff (reimbursable)</th>
-                    <th className="px-3 py-2 font-medium">Wallet (online)</th>
+                    <th className="px-3 py-2 font-medium">Paid from</th>
                     <th className="px-3 py-2 font-medium">Cash request (optional)</th>
-                    <th className="px-3 py-2 font-medium">Office drawer</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -196,15 +195,17 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
                         />
                       </td>
                       <td className="px-3 py-2">
-                        {/* ⭐ ADR-010: 1140 is ONE control account for every wallet, so an online
-                            payment must name which one. Required for online, ignored otherwise —
-                            `routeExpense` refuses the posting without it, naming the row. */}
+                        {/* ⭐ DEF-058: the account IS the answer. Choosing "Office safe" routes to
+                            1130 and marks it office money; choosing the cashier's GCash routes to
+                            1140 and names the wallet. There is no separate "office drawer" tick,
+                            because the owner belongs to the account and should be derived, never
+                            ticked — a tickbox let a cashier route cash away from their own till. */}
                         <select
                           name={`moneyAccountId_${i}`}
                           defaultValue=""
                           className="w-full rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
                         >
-                          <option value="">— none —</option>
+                          <option value="">— choose —</option>
                           {wallets.map((w) => (
                             <option key={w.id} value={w.id}>
                               {w.name} ({w.custodian})
@@ -219,9 +220,6 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
                           placeholder="cash_request id"
                           className="w-full rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
                         />
-                      </td>
-                      <td className="px-3 py-2 text-center">
-                        <input type="checkbox" name={`office_${i}`} />
                       </td>
                     </tr>
                   ))}

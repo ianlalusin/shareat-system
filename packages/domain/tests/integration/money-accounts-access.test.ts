@@ -34,7 +34,7 @@ import {
   assignRole,
   type Actor,
 } from '@shareat/auth';
-import { createMoneyAccount } from '@shareat/domain';
+import { createMoneyAccount, retireMoneyAccount } from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
 
@@ -166,5 +166,62 @@ describe('rows 115–116 — and in the ABSENCE of an admin, a manager can', () 
     await expect(
       asOrg(o.orgId, (tx) => createMoneyAccount(tx, actor(o.orgId, managerId), wallet(o.storeId))),
     ).rejects.toThrow(AuthorizationError);
+  });
+});
+
+describe('⛔ an account holding money cannot be retired (Ian, 2026-08-26)', () => {
+  it('refuses while the balance is non-zero, and allows it once transferred out', async () => {
+    const o = await newOrg('retire');
+    const adminId = await person(o.orgId, o.storeId, 'Admin', 'admin');
+    const a = actor(o.orgId, adminId);
+
+    const { id } = await asOrg(o.orgId, (tx) =>
+      createMoneyAccount(tx, a, {
+        storeId: o.storeId,
+        name: 'GCash — closing',
+        instrument: 'ewallet',
+        custodian: 'cashier',
+      }),
+    );
+
+    // ₱4,000 collected into it.
+    const [period] = await sql<{ id: string }[]>`
+      insert into fiscal_periods (org_id, starts_on, ends_on, status)
+      values (${o.orgId}, '2026-01-01', '2026-01-31', 'open') returning id
+    `;
+    const post = async (debitCode: string, creditCode: string, amount: string) => {
+      await sql.begin(async (tx) => {
+        const [e] = await tx<{ id: string }[]>`
+          insert into journal_entries (org_id, entry_date, period_id, source_type, source_id, status)
+          values (${o.orgId}, '2026-01-10', ${period!.id}, 'test', ${uid('src')}, 'draft') returning id
+        `;
+        let n = 0;
+        for (const [code, dr, cr] of [[debitCode, amount, '0'], [creditCode, '0', amount]] as const) {
+          const [acct] = await tx<{ id: string }[]>`
+            select id from accounts where org_id = ${o.orgId} and code = ${code}
+          `;
+          const party = code === '1140' ? id : null;
+          await tx`
+            insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit, party_type, party_id)
+            values (${e!.id}, ${++n}, ${acct!.id}, ${o.storeId}, ${dr}, ${cr},
+                    ${party ? 'money_account' : null}, ${party})
+          `;
+        }
+        await tx`update journal_entries set status = 'posted' where id = ${e!.id}`;
+      });
+    };
+    await post('1140', '4100', '4000.00');
+
+    // ⛔ Retiring would hide it from every picker, so nothing could ever transfer the ₱4,000 out.
+    // A wallet is emptied first and retired second, never the other way round.
+    await expect(
+      asOrg(o.orgId, (tx) => retireMoneyAccount(tx, a, { moneyAccountId: id })),
+    ).rejects.toThrow(/still holds 4000\.00/);
+
+    // Move it to the office safe, and the same call now succeeds.
+    await post('1130', '1140', '4000.00');
+    await expect(
+      asOrg(o.orgId, (tx) => retireMoneyAccount(tx, a, { moneyAccountId: id })),
+    ).resolves.toBeUndefined();
   });
 });

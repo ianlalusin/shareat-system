@@ -12,7 +12,7 @@
  * checked first" philosophy.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { expensesRepo, transaction, type Tx } from '@shareat/db';
+import { expensesRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
 import { money } from '@shareat/core/money';
 import { postEntry } from '../ledger/post-entry';
 import { routeExpense } from './routing';
@@ -74,6 +74,21 @@ async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promi
 
   const payments = await expensesRepo.getPaymentsForExpense(tx, expenseId);
 
+  // ⭐ Resolve each payment's money account to its GL code HERE. `routeExpense` is pure and cannot
+  // look one up, and the account is what decides both where the credit lands and who owned it
+  // (DEF-058). A named account that does not exist blocks the posting rather than defaulting.
+  const walletIds = [...new Set(payments.map((p) => p.moneyAccountId).filter(Boolean))] as string[];
+  const wallets = new Map<string, string>();
+  for (const id of walletIds) {
+    const acct = await moneyAccountsRepo.getById(tx, actor.orgId, id);
+    if (!acct) {
+      throw new Error(
+        `approveExpense: expense ${expenseId} names money account ${id}, which does not exist in this org`,
+      );
+    }
+    wallets.set(id, acct.glAccountCode);
+  }
+
   const routed = routeExpense({
     totalAmount: money(expense.totalAmount),
     supplierId: expense.supplierId,
@@ -84,8 +99,8 @@ async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promi
       amount: money(p.amount),
       staffId: p.staffId,
       cashRequestId: p.cashRequestId,
-      accountCode: p.accountCode,
       moneyAccountId: p.moneyAccountId,
+      moneyAccountGlCode: p.moneyAccountId ? wallets.get(p.moneyAccountId) : null,
     })),
   });
 

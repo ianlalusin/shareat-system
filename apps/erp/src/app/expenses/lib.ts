@@ -125,17 +125,24 @@ export async function withOrgPrincipal<T>(orgId: string, fn: (tx: Tx) => Promise
 
 export { journalRepo };
 
-/** Active wallets and bank accounts, for the online payment picker (ADR-010).
- *  ⚠️ Only `ewallet`/`bank` — a cash payment's destination is already unambiguous from its
- *  sub-route (1110 cashier / 1120 float / 1130 office), so offering a cash location here would
- *  imply a choice that does not exist. */
-export async function listOnlineMoneyAccounts(
+/** ⭐ EVERY active money account — cash locations included (DEF-058).
+ *
+ *  ⚠️ This deliberately reverses an earlier call. The picker first offered only e-wallets and
+ *  bank accounts, on the reasoning that a cash payment's destination was already unambiguous from
+ *  its sub-route. It was unambiguous only because a CHECKBOX was carrying the office/cashier
+ *  distinction — and that tickbox is what let a cashier route cash away from their own till.
+ *  With the checkbox gone, the cash drawer and the office safe are themselves choices, so they
+ *  belong in the list. */
+export async function listMoneyAccountsForPicker(
   orgId: string,
 ): Promise<{ id: string; name: string; storeId: string; custodian: string }[]> {
   return withOrgPrincipal(orgId, async (tx) => {
     const rows = await moneyAccountsRepo.listMoneyAccounts(tx, orgId, {});
-    return rows
-      .filter((r) => r.instrument !== 'cash')
-      .map((r) => ({ id: r.id, name: r.name, storeId: r.storeId, custodian: r.custodian }));
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      storeId: r.storeId,
+      custodian: r.custodian,
+    }));
   });
 }

@@ -176,6 +176,7 @@ async function anAsset(f: Fixture, over: Record<string, unknown> = {}): Promise<
 beforeAll(async () => {
   await sql`
     truncate table
+      money_accounts,
       fixed_assets, asset_category_lives, asset_policy,
       sales_day_channels, sales_days, sales_channels,
       expense_payments, expenses, expense_categories,
@@ -666,6 +667,13 @@ async function capexExpense(f: Fixture, amount: string): Promise<string> {
   const [cat] = await sql<{ id: string }[]>`
     select id from expense_categories where org_id = ${f.orgId} and category = 'Capital Expenditure'
   `;
+  // ⭐ DEF-058: cash names the place it left. One drawer per store, created on demand here.
+  const [drawer] = await sql<{ id: string }[]>`
+    insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian)
+    values (${f.orgId}, ${f.storeId}, 'Cashier drawer', 'cash', '1110', 'cashier')
+    on conflict (org_id, store_id, name) do update set updated_at = now()
+    returning id
+  `;
   const created = await asPerson(f.orgId, (tx) =>
     createExpense(tx, actor(f.orgId, f.staffId), {
       storeId: f.storeId,
@@ -673,7 +681,7 @@ async function capexExpense(f: Fixture, amount: string): Promise<string> {
       categoryId: cat!.id,
       particulars: 'Commercial deep fryer',
       receiptPhotoUrl: 'https://example.com/receipt.jpg',
-      payments: [{ method: 'cash', amount }],
+      payments: [{ method: 'cash', amount, moneyAccountId: drawer!.id }],
     }),
   );
   return created.id;

@@ -17,7 +17,7 @@ export {
   listStores,
   listActingPersons,
   withOrgPrincipal,
-  listOnlineMoneyAccounts,
+  listMoneyAccountsForPicker,
 } from '../expenses/lib';
 export type { OrgOption, StoreOption, PersonOption } from '../expenses/lib';
 

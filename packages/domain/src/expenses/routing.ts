@@ -75,12 +75,16 @@ export interface RoutingPayment {
   staffId?: string | null;
   /** Cash paid from a staff-held float — routes to 1120 instead of 1110. */
   cashRequestId?: string | null;
-  /** The 'office' cash sub-route (1130) — see this file's top comment. No other value
-   *  is ever read. */
+  /** @deprecated ⛔ The 'office' free-text flag, replaced by the money account (DEF-058). Kept on
+   *  the type only so an old caller fails to typecheck rather than silently posting to the wrong
+   *  drawer. Nothing reads it. */
   accountCode?: string | null;
-  /** ⭐ WHICH wallet an online payment left (ADR-010). `1140` is a control account covering every
-   *  wallet, so the line names one as its party. Required for `online`, ignored otherwise. */
+  /** ⭐ WHICH money account this payment moved (ADR-010, DEF-058). Required for `cash` and
+   *  `online`: the account decides BOTH the GL code and who owns it. */
   moneyAccountId?: string | null;
+  /** That account's GL code, resolved by the caller — this module is pure and cannot look it up.
+   *  `1110`/`1120`/`1130` for cash by custodian, `1140` for every wallet and bank account. */
+  moneyAccountGlCode?: string | null;
 }
 
 export type RoutingLineSide = 'debit' | 'credit';
@@ -102,33 +106,36 @@ function fundingLine(
   supplierId: string | null,
 ): RoutingLine | { error: string } {
   switch (payment.method) {
-    case 'cash': {
-      const accountCode = payment.cashRequestId
-        ? EXPENSE_FUNDING_ACCOUNTS.CASH_STAFF
-        : payment.accountCode === 'office'
-          ? EXPENSE_FUNDING_ACCOUNTS.CASH_OFFICE
-          : EXPENSE_FUNDING_ACCOUNTS.CASH_CASHIER;
-      return { accountCode, side: 'credit', amount: payment.amount, lineMemo: `cash payment #${index}` };
-    }
+    // ⭐ CASH AND ONLINE ARE ONE BRANCH NOW (DEF-058). Both say "money left a place we hold it",
+    // and the place is the money account. Its GL code decides where the credit lands and its
+    // custodian decides who owned it — neither is a separate thing the user states.
+    //
+    // ⛔ This replaces the free-text `accountCode === 'office'` flag. Ian: *"payments must
+    // automatically know who owns the account chosen from the dropdown, so the office drawer
+    // checkbox must not exist."* Which is DEF-058's recorded resolution reached from the user's
+    // side: *"the owner belongs to the ACCOUNT — it should be derived, never ticked."* A tickbox
+    // let a cashier route cash to the office drawer; choosing an account they are not offered
+    // cannot.
+    case 'cash':
     case 'online': {
-      // ⭐ Since ADR-010, 1140 is a control account keyed by the wallet — so this branch behaves
-      // exactly like the credit one below, and for the same reason: an online payment that cannot
-      // say which wallet it left is untracked money, which is the precise thing ADR-010 exists to
-      // end. Blocking is also what the database would do anyway (1140 requires a party); doing it
-      // here means the caller gets the payment number and the reason instead of a constraint name.
-      if (!payment.moneyAccountId) {
+      if (!payment.moneyAccountId || !payment.moneyAccountGlCode) {
         return {
-          error: `payment #${index}: an online payment names no money account — 1140 is a control account and cannot say which wallet the money left`,
+          error: `payment #${index}: a ${payment.method} payment names no money account — every peso has to leave somewhere nameable`,
         };
       }
-      return {
-        accountCode: EXPENSE_FUNDING_ACCOUNTS.ONLINE,
+      const line: RoutingLine = {
+        accountCode: payment.moneyAccountGlCode,
         side: 'credit',
         amount: payment.amount,
-        lineMemo: `online payment #${index}`,
-        partyType: 'money_account',
-        partyId: payment.moneyAccountId,
+        lineMemo: `${payment.method} payment #${index}`,
       };
+      // Only 1140 is ambiguous — one control account for every wallet — so only it needs the
+      // party. 1110/1120/1130 ARE the location, and the trigger refuses a party on them.
+      if (payment.moneyAccountGlCode === EXPENSE_FUNDING_ACCOUNTS.ONLINE) {
+        line.partyType = 'money_account';
+        line.partyId = payment.moneyAccountId;
+      }
+      return line;
     }
     case 'credit': {
       // T-118: 2110 is a control account — a credit payment with no supplier cannot be

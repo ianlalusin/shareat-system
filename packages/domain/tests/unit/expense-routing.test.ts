@@ -8,8 +8,10 @@ import { routeExpense, EXPENSE_FUNDING_ACCOUNTS, type RoutingPayment } from '../
  * packages/domain/tests/integration/expenses.test.ts.
  */
 
+/** Cash from the cashier's own drawer — the ordinary case. ⭐ Since DEF-058 the ACCOUNT decides
+ *  where the credit lands and who owned the money, so every cash payment names one. */
 function cash(amount: string): RoutingPayment {
-  return { method: 'cash', amount: money(amount) };
+  return { method: 'cash', amount: money(amount), moneyAccountId: 'drawer', moneyAccountGlCode: '1110' };
 }
 
 describe('routeExpense', () => {
@@ -36,7 +38,7 @@ describe('routeExpense', () => {
       supplierId: null,
       categoryName: 'Supplies and Stocks',
       categoryAccountCode: '6500',
-      payments: [cash('1000.00'), { method: 'online', amount: money('1000.00'), moneyAccountId: 'wallet-1' }, { method: 'cash', amount: money('1000.00'), cashRequestId: 'cr-1' }],
+      payments: [cash('1000.00'), { method: 'online', amount: money('1000.00'), moneyAccountId: 'wallet-1', moneyAccountGlCode: '1140' }, { method: 'cash', amount: money('1000.00'), moneyAccountId: 'float', moneyAccountGlCode: '1120', cashRequestId: 'cr-1' }],
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -179,30 +181,59 @@ describe('routeExpense', () => {
     expect(result.reason).toContain('ar_collection');
   });
 
-  it('cash routes to 1120 (staff) when a cashRequestId is present, mirroring leg-mapping.ts', () => {
+  // ⭐ These two used to assert the FLAGS: a `cashRequestId` routed to 1120 and a free-text
+  // `accountCode: 'office'` routed to 1130. DEF-058 removed both — Ian: *"payments must
+  // automatically know who owns the account chosen from the dropdown, so the office drawer
+  // checkbox must not exist."* The destination is unchanged; what changed is that the user picks
+  // a PLACE instead of ticking a property of one.
+  it('a staff float routes to 1120 — because the ACCOUNT says so, not a cashRequestId', () => {
     const result = routeExpense({
       totalAmount: money('200.00'),
       supplierId: null,
       categoryName: 'Rent',
       categoryAccountCode: '6200',
-      payments: [{ method: 'cash', amount: money('200.00'), cashRequestId: 'cr-9' }],
+      payments: [
+        {
+          method: 'cash',
+          amount: money('200.00'),
+          moneyAccountId: 'float-maria',
+          moneyAccountGlCode: '1120',
+          // Still carried, now as metadata: WHICH request funded the float, not where it posts.
+          cashRequestId: 'cr-9',
+        },
+      ],
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.lines.find((l) => l.side === 'credit')!.accountCode).toBe(EXPENSE_FUNDING_ACCOUNTS.CASH_STAFF);
   });
 
-  it('cash routes to 1130 (office) when accountCode is "office", mirroring convert.ts', () => {
+  it('the office safe routes to 1130 — a chosen account, not a ticked checkbox', () => {
     const result = routeExpense({
       totalAmount: money('200.00'),
       supplierId: null,
       categoryName: 'Rent',
       categoryAccountCode: '6200',
-      payments: [{ method: 'cash', amount: money('200.00'), accountCode: 'office' }],
+      payments: [
+        { method: 'cash', amount: money('200.00'), moneyAccountId: 'safe', moneyAccountGlCode: '1130' },
+      ],
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.lines.find((l) => l.side === 'credit')!.accountCode).toBe(EXPENSE_FUNDING_ACCOUNTS.CASH_OFFICE);
+  });
+
+  it('⛔ cash with NO account is refused — every peso leaves somewhere nameable', () => {
+    const result = routeExpense({
+      totalAmount: money('200.00'),
+      supplierId: null,
+      categoryName: 'Rent',
+      categoryAccountCode: '6200',
+      payments: [{ method: 'cash', amount: money('200.00') }],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toContain('names no money account');
   });
 
   it('rejects when sum(payments) != totalAmount', () => {

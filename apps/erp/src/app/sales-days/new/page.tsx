@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { toBusinessDate } from '@shareat/core/datetime';
-import { listStores, listChannels, listOnlineMoneyAccounts } from '../lib';
+import { listStores, listChannels, listMoneyAccountsForPicker } from '../lib';
 import { requireSession } from '../../../lib/session';
 import { createSalesDayAction } from '../actions';
 
@@ -26,7 +26,7 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
 
   const channels = storeId ? await listChannels(orgId, storeId) : [];
   const activeChannels = channels.filter((c) => c.isActive);
-  const wallets = await listOnlineMoneyAccounts(orgId);
+  const wallets = await listMoneyAccountsForPicker(orgId);
 
   const carry = new URLSearchParams();
   if (storeId) carry.set('store', storeId);

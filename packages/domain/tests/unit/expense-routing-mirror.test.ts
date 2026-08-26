@@ -16,6 +16,11 @@ import { routeExpense, EXPENSE_FUNDING_ACCOUNTS } from '../../src/expenses/routi
  * that this repo owns is fine to read; packages/etl itself is Scope-excluded from T-122's
  * edits, not from being read by a same-repo test).
  */
+// ⚠️ The two sides no longer take the same INPUT, and that is the point of DEF-058. v1 encodes
+// where cash came from as flags on the payment (`cashRequestId`, `accountId: 'office'`), because
+// that is what v1's data contains and the ETL must keep reading it. v2 names a money account
+// instead. What still has to agree — and what this file asserts — is the OUTPUT: both arrive at
+// the same GL code for the same real-world event.
 describe('expense routing mirrors leg-mapping.ts / convert.ts exactly', () => {
   it('the funding account codes agree with leg-mapping.ts ACCOUNTS', () => {
     expect(EXPENSE_FUNDING_ACCOUNTS.CASH_CASHIER).toBe(ETL_ACCOUNTS.CASH_CASHIER);
@@ -53,7 +58,7 @@ describe('expense routing mirrors leg-mapping.ts / convert.ts exactly', () => {
 
     const routed = routeExpense({
       totalAmount: money('100.00'), supplierId: null, categoryName: 'Rent', categoryAccountCode: '6200',
-      payments: [{ method: 'cash', amount: money('100.00') }],
+      payments: [{ method: 'cash', amount: money('100.00'), moneyAccountId: 'drawer', moneyAccountGlCode: '1110' }],
     });
     expect(routed.ok && routed.lines[0]!.accountCode).toBe(EXPENSE_FUNDING_ACCOUNTS.CASH_CASHIER);
   });
@@ -68,7 +73,7 @@ describe('expense routing mirrors leg-mapping.ts / convert.ts exactly', () => {
 
     const routed = routeExpense({
       totalAmount: money('100.00'), supplierId: null, categoryName: 'Rent', categoryAccountCode: '6200',
-      payments: [{ method: 'cash', amount: money('100.00'), cashRequestId: 'cr-1' }],
+      payments: [{ method: 'cash', amount: money('100.00'), moneyAccountId: 'float', moneyAccountGlCode: '1120', cashRequestId: 'cr-1' }],
     });
     expect(routed.ok && routed.lines[0]!.accountCode).toBe(EXPENSE_FUNDING_ACCOUNTS.CASH_STAFF);
   });
@@ -83,7 +88,7 @@ describe('expense routing mirrors leg-mapping.ts / convert.ts exactly', () => {
 
     const routed = routeExpense({
       totalAmount: money('100.00'), supplierId: null, categoryName: 'Rent', categoryAccountCode: '6200',
-      payments: [{ method: 'cash', amount: money('100.00'), accountCode: 'office' }],
+      payments: [{ method: 'cash', amount: money('100.00'), moneyAccountId: 'safe', moneyAccountGlCode: '1130' }],
     });
     expect(routed.ok && routed.lines[0]!.accountCode).toBe(EXPENSE_FUNDING_ACCOUNTS.CASH_OFFICE);
   });
