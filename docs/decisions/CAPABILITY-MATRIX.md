@@ -33,6 +33,7 @@ they need weekly, the boundary is wrong.
 | `verify_sales_day` | store | ✅ | ✅ | ✅ | ✗ | **Segregation:** the person who submits should not be the one who verifies |
 | `void_sales_day` | store | ✅ | ✅ | ✅ | ✗ | v1's `canVoidRecords`, promoted to a role-level capability |
 | `accept_remittance` | store | ✅ | ✅ | ✅ | ✗ | **DEF-052** — in v1 this grant enforced nothing. Here it must have a denial test |
+| `transfer_funds` | store | ✅ | ✅ | ✅ | ✗ | Row 150. Moving money between accounts that already exist is RECORDING, not changing what the books can record against — that is `manage_chart_of_accounts` |
 
 ## Expenses
 

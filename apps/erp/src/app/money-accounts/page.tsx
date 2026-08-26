@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { CUSTODIANS, MONEY_INSTRUMENTS } from '@shareat/db';
 import { requireSession } from '../../lib/session';
 import { createMoneyAccountAction, retireMoneyAccountAction } from './actions';
@@ -38,7 +39,11 @@ export default async function MoneyAccountsPage({
         <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
           Every place money sits — a drawer, a safe, each e-wallet and bank account — and{' '}
           <strong>who holds it</strong>. The books group these by account; you group them by
-          custodian. Same ledger, two views.
+          custodian. Same ledger, two views.{' '}
+          <Link href="/money-transfers" className="underline underline-offset-2">
+            Move money between them
+          </Link>
+          .
         </p>
       </div>
 

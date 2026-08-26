@@ -53,11 +53,12 @@ export const ROLES = ['super_admin', 'admin', 'manager', 'staff'] as const;
 export type Role = (typeof ROLES)[number];
 
 // -----------------------------------------------------------------------------------------
-// The 38 capabilities, exactly as CAPABILITY-MATRIX.md lists them (grep-counted against
+// The 39 capabilities, exactly as CAPABILITY-MATRIX.md lists them (grep-counted against
 // the document, not hand-counted — see the task report: the document's own prose says
-// "36 rows" in two places, but the table itself has 38 entries including the two
-// ⚠️-flagged open cells and the two platform-only rows. Invariant 3's parser is the proof:
-// it fails loudly if this list and the document ever disagree, in EITHER direction).
+// "36 rows" in two places, but the table itself had 38 entries including the two
+// ⚠️-flagged open cells and the two platform-only rows, and transfer_funds (row 150) is
+// the 39th. Invariant 3's parser is the proof: it fails loudly if this list and the
+// document ever disagree, in EITHER direction).
 // -----------------------------------------------------------------------------------------
 
 export type Capability =
@@ -67,6 +68,7 @@ export type Capability =
   | 'verify_sales_day'
   | 'void_sales_day'
   | 'accept_remittance'
+  | 'transfer_funds'
   // Expenses
   | 'create_expense'
   | 'edit_own_expense'
@@ -115,6 +117,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'verify_sales_day',
   'void_sales_day',
   'accept_remittance',
+  'transfer_funds',
   'create_expense',
   'edit_own_expense',
   'edit_any_expense',
@@ -164,6 +167,8 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   verify_sales_day: 'store',
   void_sales_day: 'store',
   accept_remittance: 'store',
+  // A transfer names two money accounts, and a money account belongs to a store.
+  transfer_funds: 'store',
 
   create_expense: 'store',
   edit_own_expense: 'store',
@@ -218,6 +223,13 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   verify_sales_day: { super_admin: true, admin: true, manager: true, staff: false },
   void_sales_day: { super_admin: true, admin: true, manager: true, staff: false },
   accept_remittance: { super_admin: true, admin: true, manager: true, staff: false },
+  // DECIDED — Ian 2026-08-26 (bible row 150): manager, deliberately NOT admin-only.
+  // ⭐ Row 149 made OPENING an account admin-only, and the distinction between the two is
+  // the point: adding an account changes what the books can record against, while moving
+  // money between accounts that already exist is RECORDING something that happened. A
+  // manager who may accept a remittance — the single largest transfer the business makes,
+  // cashier to office — cannot coherently be barred from moving ₱500 between two drawers.
+  transfer_funds: { super_admin: true, admin: true, manager: true, staff: false },
 
   create_expense: { super_admin: true, admin: true, manager: true, staff: true },
   edit_own_expense: { super_admin: true, admin: true, manager: true, staff: true },

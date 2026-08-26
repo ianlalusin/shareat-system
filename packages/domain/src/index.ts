@@ -10,3 +10,4 @@ export * from './expenses';
 export * from './sales-days';
 export * from './fixed-assets';
 export * from './money-accounts';
+export * from './money-transfers';

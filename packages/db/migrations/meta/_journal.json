@@ -190,6 +190,13 @@
       "when": 1788319907084,
       "tag": "0026_t125_prepaid_items",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1788406307084,
+      "tag": "0027_t139_money_transfers",
+      "breakpoints": true
     }
   ]
 }

@@ -201,6 +201,14 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'same treatment fixed_assets gets, so the item stays and its money is cleared.',
     clearColumns: ['total_cost', 'coverage_start_date', 'coverage_months', 'source_expense_id'],
   },
+  money_transfers: {
+    class: 'purge',
+    reason:
+      'A transfer is ACTIVITY, not configuration — one recorded movement of money on one date. ' +
+      'The accounts it moved between survive (money_accounts is `keep`); the movements do not, ' +
+      'the same treatment every other posted document gets. v2 always assumes a zero starting ' +
+      'point, and a transfer that predates the books has nothing left to reconcile against.',
+  },
   money_accounts: {
     class: 'keep',
     reason:

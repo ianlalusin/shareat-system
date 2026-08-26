@@ -175,6 +175,13 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'What an org has paid for in advance — its insurers, its landlords, its licence renewals. ' +
       'A franchise must never see another org’s contracts.',
   },
+  money_transfers: {
+    scope: 'org_column',
+    reason:
+      'Every movement of an org’s money between its own accounts, with amounts and bank ' +
+      'references. A franchise seeing another org’s transfers would learn its cash position, ' +
+      'its float, and which of its wallets it actually uses.',
+  },
   money_accounts: {
     scope: 'org_column',
     reason:
