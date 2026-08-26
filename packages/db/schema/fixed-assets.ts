@@ -55,6 +55,9 @@ export const ASSET_CATEGORIES = [
   'smallwares',
 ] as const;
 
+/** The category union, derived from the list above so the two can never disagree. */
+export type AssetCategory = (typeof ASSET_CATEGORIES)[number];
+
 // -------------------------------------------------------------------------------------
 // Policy — read, never defaulted silently
 // -------------------------------------------------------------------------------------

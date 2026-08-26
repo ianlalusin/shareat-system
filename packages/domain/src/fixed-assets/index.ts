@@ -1,2 +1,5 @@
-/** @shareat/domain's fixed-assets module — docs/tasks/124-fixed-assets-and-depreciation.md. */
 export * from './schedule';
+export * from './policy';
+export * from './capitalize';
+export * from './depreciate';
+export * from './dispose';
