@@ -333,17 +333,73 @@ recognised as revenue when they happened (§1). So:
 thing ADR-010 §1 exists to prevent: a second place the same pesos are recorded, drifting from the
 first. The allocation is an *answer about* the movement, not the movement.
 
-### 7.5 What this settles, and what it does not
+### 7.5 ✅ A partially-settled day shows as PARTIALLY REMITTED — and batch is ADDITIVE
 
-✅ **Settled:** the allocation order, where the residual lands, that cash and online allocate
-separately, and that allocation is document-level.
+> **Ian, 2026-08-26:** *"The unsettled sales day displays as partially remitted, just like v1. We
+> do not take out the daily remittance functionality — batch remittance is additive."*
 
-⚠️ **Still open, and it is §5's research question, not a guess:** whether a partially-settled day
-blocks the next remittance, and what a day that is *"₱4,000 short"* looks like on the sales-day
-screen a week later. **A partially-settled day is a state v1 has no name for**, because v1 cannot
-pool at all (§ the structural blocker above).
+#### ⛔ Correcting this spec: v1 *does* have a name for it, and I said it did not
 
----
+An earlier draft of this section claimed *"a partially-settled day is a state v1 has no name for,
+because v1 cannot pool at all."* **That was wrong, and checking took one grep.** v1's sales-day
+status enum is:
+
+```ts
+// ERP-rebuild/src/types/index.ts:1173
+status: 'open' | 'submitted' | 'verified' | 'partially_remitted' | 'remitted' | 'voided'
+```
+
+⭐ **The error was conflating two different things.** v1 cannot have ONE remittance covering FIVE
+days — that part of the blocker stands. But v1 has always been able to remit *less than a day's
+expected*, so the **display state** was there all along. Pooling is the new capability; the status
+is not.
+
+#### What v1 already gets right here, and should be ported
+
+1. ⭐ **The status is DERIVED, not set.** `applyRemittanceStatusFromTransfers` computes it from the
+   posted transfers rather than a caller stamping it — the same principle as everything else in
+   this design.
+2. ⭐ **Revenue does not wait for remittance.** `verified`, `partially_remitted` and `remitted` are
+   all recognised statuses for the income statement and the integrity check
+   (`income-statement.actions.ts:98`, `integrity-check.actions.ts:43`). This is row 128's *"revenue
+   recognition does not depend on remittance"* already true in v1's code.
+
+#### ⚠️ And one failure mode to design out, which v1 documents against itself
+
+v1 ships an **admin repair action** whose comment explains why it exists
+(`admin-record-ops.actions.ts:880-887`):
+
+> *"Use when a sales day is stuck on `partially_remitted` even though all transfers are posted
+> (e.g. due to businessDate mismatch on an older transfer, or a zero-expected account blocking the
+> status flip)."*
+
+⛔ **A derived status that needs a manual recompute button is a derived status that is being
+cached somewhere.** Both named causes are the same bug in different clothes: the status was
+computed once and stored, so a later-arriving or mis-dated transfer never re-triggered it.
+
+**v2 must not need that button.** If the status is genuinely derived — read from the legs at the
+moment it is displayed, the way §8 derives expected remittance — it cannot go stale, and a
+mis-dated transfer shows up as the wrong number rather than a stuck state. ⚠️ The
+*zero-expected* case is the sharper warning: a day expecting ₱0 online must not be waiting forever
+for an online transfer that will never come. **Settled must be defined as "nothing outstanding",
+never as "a transfer arrived".**
+
+#### Batch is ADDITIVE — daily remittance is not replaced
+
+Daily remittance stays exactly as it is; pooling is a **capability a store may use**, not a new
+mandatory shape. This is consistent with §4's *default to daily* — a store that changes nothing
+keeps working the way it works today, and the store an hour from the office opts into a cadence.
+
+⚠️ **Which means one remittance-settles-many-days is the general case, and one-settles-one is
+simply N=1.** There is no separate "daily" code path to maintain — building two would guarantee
+they eventually disagree about a shortage.
+
+### 7.6 Still open
+
+⚠️ **Does a partially-settled day block the next remittance?** §7.5 gives it a name and a display;
+it does not say whether Jan 5 sitting at ₱4,000 short stops Jan 6–10 being remitted. Both are
+defensible — blocking forces the variance to be resolved while it is fresh, not blocking keeps cash
+moving — and it interacts with the ceiling (§4). Ian's call, and not urgent until the screen exists.
 
 ## 8. ✅ What "expected remittance" actually equals (Ian, 2026-08-26)
 

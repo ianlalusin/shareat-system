@@ -63,35 +63,35 @@
 - `1034–1068 ` 10. Phase plan
 - `1069–1085 ` 11. Migration & ETL rules
 - `1086–1134` 12. Inherited landmines — do not repeat these
-- `1135–1286` 13. Decision log
-- `1287–1306` 14. Amendment protocol
-- `1307–1311` 15. Engineering standards — the industry practices this project follows
-  - `1312–1317` 15.1 Build order: walking skeleton first
-  - `1318–1329` 15.2 Golden-master testing — the most important practice here
-  - `1330–1338` 15.3 Strangler Fig, not big-bang cutover
-  - `1339–1343` 15.4 No dual-write
-  - `1344–1348` 15.5 Expand/contract migrations
-  - `1349–1357` 15.6 Observability from day zero, not later
-  - `1358–1362` 15.7 CI gates
-  - `1363–1367` 15.8 Backups and a tested restore
-  - `1368–1372` 15.9 Twelve-Factor config
-  - `1373–1380` 15.10 Append-only ledgers — but not event sourcing
-  - `1381–1385` 15.11 Defence in depth
-  - `1386–1414` 15.12 Skills are lenses, not assurance
-  - `1415–1421` 15.13 Reconciliation is a permanent feature
-- `1422–1426` 16. The accounting spine
-  - `1427–1458` 16.0 What we are actually fixing — the diagnosis
-  - `1459–1502` 16.1 The ten invariants — non-negotiable
-  - `1503–1517` 16.2 The oracle: how "correct" is tested
-  - `1518–1539` 16.3 The model — header + lines, not legs
-  - `1540–1559` 16.4 Deliberately simpler than ERPNext
-  - `1560–1626` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1627–1651` 16.6 What v1 already gets right — preserve the intent
-  - `1652–1673` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1674–1688` 16.8 What v1's accounting already gets right
-  - `1689–1732` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1733–1783` 16.10 Posting patterns — one canonical pattern per business event
-  - `1784–1801` 16.11 Inventory's accounting integration
+- `1135–1287` 13. Decision log
+- `1288–1307` 14. Amendment protocol
+- `1308–1312` 15. Engineering standards — the industry practices this project follows
+  - `1313–1318` 15.1 Build order: walking skeleton first
+  - `1319–1330` 15.2 Golden-master testing — the most important practice here
+  - `1331–1339` 15.3 Strangler Fig, not big-bang cutover
+  - `1340–1344` 15.4 No dual-write
+  - `1345–1349` 15.5 Expand/contract migrations
+  - `1350–1358` 15.6 Observability from day zero, not later
+  - `1359–1363` 15.7 CI gates
+  - `1364–1368` 15.8 Backups and a tested restore
+  - `1369–1373` 15.9 Twelve-Factor config
+  - `1374–1381` 15.10 Append-only ledgers — but not event sourcing
+  - `1382–1386` 15.11 Defence in depth
+  - `1387–1415` 15.12 Skills are lenses, not assurance
+  - `1416–1422` 15.13 Reconciliation is a permanent feature
+- `1423–1427` 16. The accounting spine
+  - `1428–1459` 16.0 What we are actually fixing — the diagnosis
+  - `1460–1503` 16.1 The ten invariants — non-negotiable
+  - `1504–1518` 16.2 The oracle: how "correct" is tested
+  - `1519–1540` 16.3 The model — header + lines, not legs
+  - `1541–1560` 16.4 Deliberately simpler than ERPNext
+  - `1561–1627` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1628–1652` 16.6 What v1 already gets right — preserve the intent
+  - `1653–1674` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1675–1689` 16.8 What v1's accounting already gets right
+  - `1690–1733` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1734–1784` 16.10 Posting patterns — one canonical pattern per business event
+  - `1785–1802` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -102,7 +102,7 @@
 
 | | |
 |---|---|
-| **Version** | 2.3 — expected remittance is the cashier accounts’ net movement, derived not enumerated (§13 row 145) |
+| **Version** | 2.4 — batch remittance is additive; `partially_remitted` exists in v1 after all (§13 row 146) |
 | **Created** | 2026-08-22 |
 | **Last amended** | 2026-08-26 |
 | **Status** | Accounting-correctness project (§1.1). All discovery complete. Root cause identified (§16.0). **Chart of accounts aligned and signed off.** Ready to write Phase 0/1 task specs. |
@@ -1281,6 +1281,7 @@ just a patch.**
 | 143 | 2026-08-26 | **UNDEPOSITED FUNDS needs NO account — it is a DERIVED state, the balance of every cashier-custodian account. And the till is a MIXED POT, so expected cash is not today's sales. This closes rows 127 and 131's last open item.** | Ian: *“currently we treat that as cash cashier or cashier online — so cashier cash is composed [of] sales made today and all other collections made by cashier, like receivables from past days, return of staff from cash request. Cash from sales sitting on till is cash cashier; online payments from sales is cashier online.”* ⭐ **Rows 127 and 131 assumed “v1 has no account for undeposited funds” was a GAP to fill. It is not — v1 is right.** §2's test says why: nobody reconciles “undeposited funds” against an external document; they reconcile the TILL, and the till is `1110`. Money is undeposited precisely while it sits in a cashier-custodian account, so the figure is `sum(balance) where custodian='cashier'` — a GROUP BY over the ledger, not a posting. **ADR-010's model answers a question it was not designed for**, and adding the account would have created a second place the same pesos are recorded, which is the exact failure ADR-010 §1 exists to prevent. Row 129's peso ceiling applies to the derived figure. ⛔ **The second half matters more.** The till is a MIXED POT: today's cash sales, PLUS collections on past-day receivables, PLUS returned staff floats, LESS cash paid out of the drawer. So **“expected cash” ≠ “today's sales cash”**, and a reconciliation built on that equation reports a false variance every day a receivable is collected or a float comes back. This is row 131's finding reached from the other direction — ERPNext's expected cash is *opening + takings* only because its till never pays anything and never receives anything but a sale; Ian's description is the counter-example from the business that runs it. ⚠️ Verified v2 has not made this mistake: nothing in `packages/domain` computes an expected remittance, and `sales-days.ts` already assigns the till position and the remittance to T-136. **T-136 must build expected cash as the full arithmetic, never as the sales figure.** | Yes — nothing is built on it yet; it constrains T-136's design rather than any existing code |
 | 144 | 2026-08-26 | **A pooled remittance settles the days it covers OLDEST FIRST, and the variance lands on the last date because that is where FIFO puts it. But a batch shortage is a CUSTODY variance, not a COUNT variance — date it on the last day, attribute it to whoever HELD the pool.** (T-136 §7) | Ian: *“each sales day locks on verified so all remittable cash and online is recorded, but remittance may happen by batch — Lipa has 5 sitting sales reports for January 1 to 5, all verified … it can be remitted all at once … if the remittance is short, cover the oldest sales report first, and record shortage/overage on the last date.”* The daily lock is row 128's COUNT; the batch is its TRANSFER, so this is that decision's allocation rule rather than a new one. ⭐ **“Record it on the last date” is not an extra convention — it is what FIFO produces**, and a rule that falls out of the allocation cannot drift from it. ⚠️ **The refinement, from evaluating it:** once the till is counted and signed daily, a batch shortage **cannot** be a counting error — the counts already reconciled. It is a loss in CUSTODY, after the fact, and therefore a different question asked of a possibly different person. So dating it on the last date is right and **attributing it to that date's cashier is not**: the last date is where the arithmetic puts the residual, and says nothing about who was holding the money. v1 already refuses to guess — its remittance builder THROWS if a shortage posts without an explicit `chargeToStaffId` — and that refusal is ported. This is row 128's *“a shortage found then is attributable to nobody”* in concrete form: pooling does not remove attribution, it moves the question from *which day* to *who held it*, and only the second has an answer. **Cash and online allocate on SEPARATE tracks** in one document — cash is handed over and can be short by missing notes; online is a wallet-to-wallet transfer between custodians (ADR-010) and a mismatch there is a failed transfer, not a missing note. Collapsing them would let an online surplus paper over a cash shortage, and the cash shortage is the one somebody must answer for. ⭐ **FIFO is a DOCUMENT concern, never a journal one.** One remittance = ONE entry moving the total actually handed over, plus the variance leg; which days it settles is subledger detail. Posting a leg per day would look tidier and would immediately create the second place the same pesos are recorded that ADR-010 §1 exists to prevent. | Yes — nothing is built on it; it constrains T-136's design |
 | 145 | 2026-08-26 | **Expected remittance is the cashier accounts' NET MOVEMENT, derived from the ledger — not a sum over document types. Ian's inventory of ins and outs is the DOCUMENTATION of what posts there, never the computation.** (T-136 §8) | Ian: *“today's remittance = all money in less all money out touched by cashier. In: sales, collections, returns, refunds from vendors. Out: expense with payment from cashier (cashier's part only, not necessarily the whole expense amount), cash request released by cashier, salary advance released by cashier, payment to payables by cashier, other out to be determined.”* ⭐ **Checked all eight against the worked examples, no exceptions: money IN is a debit to a cashier-custodian account, money OUT is a credit.** So `expected = Σdebits − Σcredits where custodian='cashier'`, over the period being remitted — row 143's “derived, not maintained” applied one level up. ⛔ **“Other out to be determined” is the tell for why the list must NOT be implemented as a list.** Summed over enumerated document types, that phrase is a live hole: any transaction touching the till and missing from the enumeration silently breaks the reconciliation, **in the direction that makes a cashier look short.** DEF-044's shape again — a figure maintained beside the ledger rather than read from it. Derived from the account, *other out* needs no determining: anything crediting the cashier's account is already counted, **including transaction types nobody has thought of yet, because posting IS registering.** ⭐ **And “cashier's part only” becomes free — the split-payment model paying off.** A ₱3,500 expense split ₱2,000 cashier cash / ₱1,500 office online posts two legs; summing the cashier's account picks up ₱2,000 because the leg already IS the cashier's share. ⚠️ Computed from documents instead, reading the expense's `total_amount` would subtract ₱3,500 from a remittance the cashier paid ₱2,000 of and report a ₱1,500 shortage that does not exist. **The split is only innocent if the arithmetic runs on legs.** ⚠️ Open, per store: whether a RETAINED FLOAT exists. *In minus out* is a net movement and assumes the drawer keeps what it started with; remitting to zero would make expected the closing BALANCE instead. v1's envelope mode implies cash does sit across days. One line either way, and it belongs with the per-store cadence (§4). | Yes — nothing built on it; it constrains T-136 |
+| 146 | 2026-08-26 | **Batch remittance is ADDITIVE — daily remittance is not replaced — and a partially-settled day displays as `partially_remitted`, which v1 already has. ⛔ Correcting my own claim that it did not.** (T-136 §7.5) | Ian: *“the unsettled sales day displays as partially remitted just like v1. We do not take out the daily remittance functionality — batch remittance is additive.”* ⛔ **T-136 §7.5 asserted that “a partially-settled day is a state v1 has no name for”. That was wrong, and one grep settled it:** v1's enum is `open | submitted | verified | partially_remitted | remitted | voided` (`types/index.ts:1173`). The error was conflating two things — v1 genuinely cannot have ONE remittance cover FIVE days, but it has always been able to remit LESS than one day's expected, so the display state existed all along. **Pooling is the new capability; the status is not.** A reminder that “v1 has no X” is a claim to check, not an inference to draw from an adjacent limitation. ⭐ **Two things v1 already gets right and v2 ports:** the status is DERIVED from posted transfers rather than stamped (`applyRemittanceStatusFromTransfers`), and `verified`/`partially_remitted`/`remitted` are ALL recognised for the income statement — row 128's *“revenue recognition does not depend on remittance”* already true in v1's code. ⚠️ **One failure mode to design out, which v1 documents against itself:** it ships an admin “recompute remittance status” button for days *“stuck on partially_remitted even though all transfers are posted — businessDate mismatch on an older transfer, or a zero-expected account blocking the status flip”*. **A derived status needing a manual recompute is a derived status being cached somewhere.** v2 reads it from the legs at display time so it cannot go stale, and defines settled as **“nothing outstanding”, never “a transfer arrived”** — otherwise a day expecting ₱0 online waits forever for a transfer that will never come. **Additive means one-settles-many is the general case and one-settles-one is N=1** — no separate daily code path, because two paths would eventually disagree about a shortage. | Yes — constrains T-136's design only |
 
 ---
 
