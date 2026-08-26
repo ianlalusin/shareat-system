@@ -186,6 +186,35 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'the first day of a new ledger.',
   },
 
+  // ---- T-124: fixed assets ---------------------------------------------------------------
+  asset_policy: {
+    class: 'keep',
+    reason:
+      'The capitalisation threshold and salvage default — a documented policy decision (bible ' +
+      'row 139), not pilot data. Purging it would leave the org with no policy at all, and the ' +
+      'service refuses to capitalise anything when it cannot read one, so the first CAPEX ' +
+      'expense of January would be blocked rather than mis-posted.',
+  },
+  asset_category_lives: {
+    class: 'keep',
+    reason: 'As asset_policy — agreed useful lives per category are configuration, not activity.',
+  },
+  fixed_assets: {
+    class: 'keep_shell',
+    clearColumns: ['cost', 'salvage_value', 'acquired_on', 'source_expense_id'],
+    reason:
+      'ADR-007 §3 names this case exactly: "fixed assets keep name, category and remaining ' +
+      'useful life; cost and accumulated depreciation are re-entered." The physical asset still ' +
+      'exists on 1 January — a fridge does not stop being a fridge — so the ROW survives and its ' +
+      'financial columns are cleared and re-entered from the December walk-round (T-134 B2). ' +
+      '⭐ Accumulated depreciation needs no clearing here BECAUSE IT IS NOT STORED: it is derived ' +
+      'from journal_entries, which purge, so it returns to zero on its own. ⚠️ Classifying this ' +
+      'table is what revealed the shell could not physically EXIST: cost was NOT NULL, so the ' +
+      'purge could not have cleared it. fixed_assets.status gained an explicit ' +
+      '`pending_valuation` state, and the cutover leaves every surviving row in it — which also ' +
+      'makes T-134s "what is still missing" list a plain query rather than a reconciliation.',
+  },
+
   // ---- ETL: purged, but LATER ---------------------------------------------------------
   etl_source_documents: {
     class: 'purge',

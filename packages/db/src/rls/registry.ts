@@ -160,6 +160,25 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'would leak the shape of another franchise’s operation even with the token hashed.',
   },
 
+  // T-124 — fixed assets (docs/tasks/124-fixed-assets-and-depreciation.md).
+  asset_policy: {
+    scope: 'org_column',
+    reason:
+      'Per-org policy — the capitalisation threshold is a decision one org makes, and a franchise ' +
+      'setting its own must never see or alter another one.',
+  },
+  asset_category_lives: {
+    scope: 'org_column',
+    reason: 'As asset_policy — agreed useful lives are per-org configuration.',
+  },
+  fixed_assets: {
+    scope: 'org_column',
+    reason:
+      'The asset register. Org-scoped like every other document table. ⚠️ Worth naming the reason ' +
+      'beyond habit: a register lists what a business OWNS, so cross-org visibility would hand a ' +
+      'franchisee an inventory of another franchisee’s equipment and what it cost them.',
+  },
+
   etl_runs: { scope: 'system_only', reason: 'ETL machinery. Never reachable by a tenant or a customer — only the migrator, crons and the audit.' },
   etl_source_documents: {
     scope: 'system_only',

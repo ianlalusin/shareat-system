@@ -8,3 +8,4 @@ export * from './reports/trial-balance';
 export * from './reports/income-statement';
 export * from './expenses';
 export * from './sales-days';
+export * from './fixed-assets';
