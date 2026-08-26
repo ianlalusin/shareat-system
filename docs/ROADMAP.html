@@ -1,0 +1,633 @@
+<title>Shareat System Roadmap</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+
+<style>
+  :root {
+    --ground: #f7f8f7;
+    --surface: #ffffff;
+    --surface-2: #eef1ef;
+    --ink: #1a2421;
+    --ink-2: #3d4a45;
+    --muted: #5f6b66;
+    --faint: #98a49f;
+    --rule: #dbe1de;
+    --rule-strong: #c3ccc8;
+
+    --accent: #14594a;
+    --accent-soft: #e2efea;
+    --accent-ink: #0e4034;
+
+    --done: #14594a;
+    --done-soft: #e2efea;
+    --active: #9a5b12;
+    --active-soft: #f9edda;
+    --queued: #5f6b66;
+    --queued-soft: #eceeed;
+    --critical: #a32e2e;
+    --critical-soft: #f8e6e4;
+
+    --shadow: 0 1px 2px rgba(26, 36, 33, .05), 0 8px 24px -12px rgba(26, 36, 33, .12);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #101614;
+      --surface: #182220;
+      --surface-2: #1f2b28;
+      --ink: #e8edea;
+      --ink-2: #c3cec9;
+      --muted: #8a9a94;
+      --faint: #5f706a;
+      --rule: #2a3835;
+      --rule-strong: #3a4a46;
+
+      --accent: #4fbfa0;
+      --accent-soft: #16302a;
+      --accent-ink: #7fd6bd;
+
+      --done: #4fbfa0;
+      --done-soft: #16302a;
+      --active: #d99a4e;
+      --active-soft: #33260f;
+      --queued: #8a9a94;
+      --queued-soft: #212c29;
+      --critical: #e0736b;
+      --critical-soft: #3a1d1b;
+
+      --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px -12px rgba(0, 0, 0, .6);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #101614;
+    --surface: #182220;
+    --surface-2: #1f2b28;
+    --ink: #e8edea;
+    --ink-2: #c3cec9;
+    --muted: #8a9a94;
+    --faint: #5f706a;
+    --rule: #2a3835;
+    --rule-strong: #3a4a46;
+
+    --accent: #4fbfa0;
+    --accent-soft: #16302a;
+    --accent-ink: #7fd6bd;
+
+    --done: #4fbfa0;
+    --done-soft: #16302a;
+    --active: #d99a4e;
+    --active-soft: #33260f;
+    --queued: #8a9a94;
+    --queued-soft: #212c29;
+    --critical: #e0736b;
+    --critical-soft: #3a1d1b;
+
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px -12px rgba(0, 0, 0, .6);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: clamp(28px, 5vw, 64px) clamp(18px, 4vw, 40px) 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 56px;
+  }
+
+  h1, h2, h3 { text-wrap: balance; margin: 0; }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* ---------- masthead ---------- */
+  .masthead { display: flex; flex-direction: column; gap: 18px; }
+
+  .masthead h1 {
+    font-family: Newsreader, Georgia, serif;
+    font-size: clamp(38px, 6vw, 62px);
+    font-weight: 600;
+    line-height: 1.04;
+    letter-spacing: -0.015em;
+  }
+
+  .standfirst {
+    font-family: Newsreader, Georgia, serif;
+    font-size: clamp(18px, 2.2vw, 21px);
+    line-height: 1.5;
+    color: var(--ink-2);
+    max-width: 62ch;
+  }
+
+  .masthead-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 28px;
+    padding-top: 6px;
+    border-top: 1px solid var(--rule);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .masthead-meta b { color: var(--ink); font-weight: 500; }
+
+  /* ---------- date rail ---------- */
+  .rail-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap; margin-bottom: 14px;
+  }
+  .rail-head h2 {
+    font-family: Newsreader, Georgia, serif;
+    font-size: 26px; font-weight: 600;
+  }
+  .rail-note { font-size: 13.5px; color: var(--muted); max-width: 48ch; }
+
+  .rail {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(178px, 1fr));
+    gap: 2px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .stop {
+    background: var(--surface);
+    padding: 16px 16px 18px;
+    display: flex; flex-direction: column; gap: 7px;
+  }
+  .stop.is-critical { background: var(--critical-soft); }
+
+  .stop-date {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 15px; font-weight: 600; letter-spacing: -.01em;
+    font-variant-numeric: tabular-nums;
+  }
+  .stop.is-critical .stop-date { color: var(--critical); }
+  .stop-away {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums;
+  }
+  .stop-what { font-size: 13.5px; line-height: 1.45; color: var(--ink-2); }
+  .stop-what b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- section ---------- */
+  section { display: flex; flex-direction: column; gap: 20px; }
+  .sec-head { display: flex; flex-direction: column; gap: 8px; }
+  .sec-head h2 {
+    font-family: Newsreader, Georgia, serif;
+    font-size: clamp(26px, 3.4vw, 34px); font-weight: 600; line-height: 1.15;
+  }
+  .sec-head p { margin: 0; color: var(--muted); font-size: 15px; max-width: 68ch; }
+
+  /* ---------- phase spine ---------- */
+  .spine { display: flex; flex-direction: column; gap: 14px; }
+
+  .phase {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule-strong);
+    border-radius: 8px;
+    padding: 18px 20px;
+    display: grid;
+    grid-template-columns: 62px 1fr;
+    gap: 4px 18px;
+    box-shadow: var(--shadow);
+  }
+  .phase.s-done { border-left-color: var(--done); }
+  .phase.s-active { border-left-color: var(--active); background: linear-gradient(90deg, var(--active-soft) 0%, var(--surface) 42%); }
+  .phase.s-queued { border-left-color: var(--rule-strong); }
+
+  .ph-num {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 30px; font-weight: 600; line-height: 1;
+    color: var(--faint); font-variant-numeric: tabular-nums;
+    grid-row: 1 / span 3; padding-top: 2px;
+  }
+  .phase.s-done .ph-num { color: var(--done); }
+  .phase.s-active .ph-num { color: var(--active); }
+
+  .ph-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .ph-name {
+    font-family: Newsreader, Georgia, serif;
+    font-size: 21px; font-weight: 600; line-height: 1.2;
+  }
+  .ph-body { font-size: 14.5px; color: var(--ink-2); line-height: 1.55; }
+  .ph-gate {
+    font-size: 13px; color: var(--muted);
+    border-top: 1px dotted var(--rule-strong);
+    padding-top: 8px; margin-top: 4px;
+  }
+  .ph-gate b {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--faint); font-weight: 500; display: block; margin-bottom: 2px;
+  }
+
+  .chip {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px; font-weight: 600; letter-spacing: .08em;
+    text-transform: uppercase;
+    padding: 3px 8px; border-radius: 4px; white-space: nowrap;
+  }
+  .c-done { background: var(--done-soft); color: var(--done); }
+  .c-active { background: var(--active-soft); color: var(--active); }
+  .c-queued { background: var(--queued-soft); color: var(--queued); }
+  .c-part { background: var(--critical-soft); color: var(--critical); }
+
+  /* ---------- wave / task grid ---------- */
+  .waves { display: flex; flex-direction: column; gap: 22px; }
+  .wave { display: flex; flex-direction: column; gap: 10px; }
+  .wave-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .wave-head h3 {
+    font-family: "IBM Plex Sans", sans-serif;
+    font-size: 15px; font-weight: 600; letter-spacing: -.005em;
+  }
+  .wave-head .why { font-size: 13px; color: var(--muted); }
+
+  .tasks { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 8px; }
+
+  .task {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 7px;
+    padding: 11px 13px;
+    display: flex; flex-direction: column; gap: 5px;
+  }
+  .task.t-done { border-color: color-mix(in srgb, var(--done) 34%, var(--rule)); }
+  .task.t-active { border-color: color-mix(in srgb, var(--active) 46%, var(--rule)); background: var(--active-soft); }
+
+  .task-id {
+    display: flex; align-items: center; gap: 8px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px; font-weight: 600; color: var(--ink);
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--queued); }
+  .task.t-done .dot { background: var(--done); }
+  .task.t-active .dot { background: var(--active); }
+  .task-what { font-size: 13.5px; line-height: 1.45; color: var(--ink-2); }
+  .task-note { font-size: 12px; color: var(--muted); font-style: italic; }
+
+  /* ---------- callout ---------- */
+  .callout {
+    background: var(--accent-soft);
+    border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+    border-radius: 9px;
+    padding: 18px 20px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .callout h3 {
+    font-family: Newsreader, Georgia, serif;
+    font-size: 19px; font-weight: 600; color: var(--accent-ink);
+  }
+  .callout p { margin: 0; font-size: 14.5px; color: var(--ink-2); line-height: 1.55; }
+
+  .callout.warn { background: var(--critical-soft); border-color: color-mix(in srgb, var(--critical) 26%, transparent); }
+  .callout.warn h3 { color: var(--critical); }
+
+  /* ---------- table ---------- */
+  .tablewrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 9px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: 14px; }
+  thead th {
+    text-align: left; padding: 11px 14px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--rule);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); white-space: nowrap;
+  }
+  tbody td { padding: 11px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; color: var(--ink-2); }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody td:first-child {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12.5px; font-weight: 600; color: var(--ink); white-space: nowrap;
+  }
+
+  /* ---------- deferred list ---------- */
+  .deferred { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+  .def {
+    border: 1px dashed var(--rule-strong); border-radius: 7px;
+    padding: 12px 14px; display: flex; flex-direction: column; gap: 4px;
+    background: transparent;
+  }
+  .def-name { font-size: 14px; font-weight: 600; color: var(--ink); }
+  .def-why { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+
+  footer {
+    border-top: 1px solid var(--rule);
+    padding-top: 18px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11.5px; color: var(--faint); line-height: 1.7;
+  }
+
+  @media (max-width: 560px) {
+    .phase { grid-template-columns: 1fr; gap: 8px; }
+    .ph-num { grid-row: auto; font-size: 22px; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">Shareat System &middot; re-platform of the live ERP</div>
+    <h1>The road to 1 January 2027</h1>
+    <p class="standfirst">
+      Nine phases, sequenced so the riskiest work is proven first. The accounting spine came before
+      everything because every other module posts into it &mdash; and because a wrong ledger found in
+      Phase&nbsp;4 invalidates Phases 2 and 3.
+    </p>
+    <div class="masthead-meta">
+      <span>As at <b>26 August 2026</b></span>
+      <span>Now in <b>Phase 2 &middot; Wave 2</b></span>
+      <span>Gates <b>typecheck &middot; 533 unit &middot; 761 integration &middot; build</b></span>
+    </div>
+  </header>
+
+  <section>
+    <div class="rail-head">
+      <h2>What actually binds</h2>
+      <p class="rail-note">
+        The phases are ordered by dependency. These five dates are ordered by the calendar, and they
+        are the ones that do not move.
+      </p>
+    </div>
+    <div class="rail">
+      <div class="stop">
+        <div class="stop-date">30 Sep 2026</div>
+        <div class="stop-away">~5 weeks away</div>
+        <div class="stop-what"><b>Wave 0 done, Wave 1 in staff hands.</b> If Wave 0 has slipped, that is the signal &mdash; it is the only part that gets more expensive with delay.</div>
+      </div>
+      <div class="stop">
+        <div class="stop-date">Oct &ndash; Dec 2026</div>
+        <div class="stop-away">the pilot</div>
+        <div class="stop-what"><b>v2 runs for real</b> alongside v1, which stays live until 31 December. The pilot exercises the paths carrying the most money.</div>
+      </div>
+      <div class="stop">
+        <div class="stop-date">31 Oct 2026</div>
+        <div class="stop-away">~9 weeks away</div>
+        <div class="stop-what">Are Waves 1&ndash;2 posting <b>real transactions daily</b>, and does the trial balance still tie over pilot data?</div>
+      </div>
+      <div class="stop is-critical">
+        <div class="stop-date">15 Nov 2026</div>
+        <div class="stop-away">~11 weeks away</div>
+        <div class="stop-what"><b>Go / no-go for 1 January</b>, plus the purge rehearsal against a restored copy. Judged on whether the cutover is safe &mdash; never on the task list.</div>
+      </div>
+      <div class="stop is-critical">
+        <div class="stop-date">1 Jan 2027</div>
+        <div class="stop-away">~18 weeks away</div>
+        <div class="stop-what"><b>Books-first cutover.</b> 2026 pilot data is purged, 2027 stays, and v2 becomes the system of record.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>Where we are: Phase 2</h2>
+      <p>
+        Money-moving source documents, built in priority order while the pilot runs. Phase&nbsp;2 has
+        <em>no feature-completeness gate</em> &mdash; a module not ready in October simply keeps running
+        in v1 for another month.
+      </p>
+    </div>
+
+    <div class="waves">
+
+      <div class="wave">
+        <div class="wave-head">
+          <h3>Wave 0 &mdash; foundations</h3>
+          <span class="chip c-done">complete</span>
+          <span class="why">Must precede every table above it. The one slip that compounds.</span>
+        </div>
+        <div class="tasks">
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-119</div><div class="task-what">Data classification registry, build-failure guard, and the cutover purge</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-120</div><div class="task-what">Row-level security: principal model, policies on every table, connection-pool safety</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-121</div><div class="task-what">Organizations become real; org-scoped roles; franchise sales-only visibility</div><div class="task-note">Was declared done after two of three &mdash; DEF-053</div></div>
+        </div>
+      </div>
+
+      <div class="wave">
+        <div class="wave-head">
+          <h3>Wave 1 &mdash; the 88%</h3>
+          <span class="chip c-done">complete</span>
+          <span class="why">The two document types that carry almost all the volume.</span>
+        </div>
+        <div class="tasks">
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-122</div><div class="task-what">Expenses: categories, split payments, receipt photo gate, posting via <code>postEntry</code></div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-123</div><div class="task-what">Sales day: unli / &agrave; la carte / discounts / comps, per store. Verifying is what posts</div></div>
+        </div>
+      </div>
+
+      <div class="wave">
+        <div class="wave-head">
+          <h3>Wave 2 &mdash; ledger completeness for January</h3>
+          <span class="chip c-active">in progress</span>
+          <span class="why">All five post to the ledger in v1 today. Omit them and the books open incomplete.</span>
+        </div>
+        <div class="tasks">
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-124</div><div class="task-what">Fixed assets and depreciation</div><div class="task-note">Shipped 26 Aug &mdash; scheduler still outstanding</div></div>
+          <div class="task t-active"><div class="task-id"><span class="dot"></span>T-125</div><div class="task-what">Prepaid items and amortisation</div><div class="task-note">Spec being written now</div></div>
+          <div class="task"><div class="task-id"><span class="dot"></span>T-126</div><div class="task-what">Loans: disbursement, payment, interest</div></div>
+          <div class="task"><div class="task-id"><span class="dot"></span>T-127</div><div class="task-what">Owner equity: capital contributions, drawings</div></div>
+          <div class="task"><div class="task-id"><span class="dot"></span>T-128</div><div class="task-what">Generic liabilities: charge and payment</div></div>
+        </div>
+      </div>
+
+      <div class="wave">
+        <div class="wave-head">
+          <h3>Wave 3 &mdash; relationships</h3>
+          <span class="chip c-queued">not started</span>
+          <span class="why">The subledgers that tie to control accounts.</span>
+        </div>
+        <div class="tasks">
+          <div class="task"><div class="task-id"><span class="dot"></span>T-129</div><div class="task-what">Customers and price lists. Retail diners are <em>not</em> customers</div></div>
+          <div class="task"><div class="task-id"><span class="dot"></span>T-130</div><div class="task-what">Accounts payable: supplier invoices, payments, open-item allocation</div></div>
+          <div class="task"><div class="task-id"><span class="dot"></span>T-131</div><div class="task-what">Accounts receivable: collections, allocation, aging</div></div>
+        </div>
+      </div>
+
+      <div class="wave">
+        <div class="wave-head">
+          <h3>Wave 4 &mdash; new capability</h3>
+          <span class="chip c-queued">not started</span>
+          <span class="why">The only genuinely new build in Phase 2.</span>
+        </div>
+        <div class="tasks">
+          <div class="task"><div class="task-id"><span class="dot"></span>T-132</div><div class="task-what">Wholesale orders in the ERP, staff-entered</div></div>
+          <div class="task"><div class="task-id"><span class="dot"></span>T-133</div><div class="task-what">Inter-entity trade: seller posts at dispatch, buyer at receipt, and the two reconcile</div></div>
+        </div>
+      </div>
+
+      <div class="wave">
+        <div class="wave-head">
+          <h3>Cross-cutting &mdash; specced outside the waves</h3>
+          <span class="chip c-part">mixed</span>
+          <span class="why">Four are designed on paper only; one has shipped.</span>
+        </div>
+        <div class="tasks">
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-138</div><div class="task-what">Identity and sessions &mdash; PIN sign-in, server-side sessions</div><div class="task-note">Shipped. Removed the &ldquo;acting as&rdquo; dropdown</div></div>
+          <div class="task"><div class="task-id"><span class="dot"></span>T-134</div><div class="task-what">The 31 December conversion &mdash; a guided, verified switch</div><div class="task-note">Designed. Runs twice: Nov rehearsal, then the real thing</div></div>
+          <div class="task"><div class="task-id"><span class="dot"></span>T-135</div><div class="task-what">Integrity findings (OIL) &mdash; the standing books watchdog</div><div class="task-note">Designed only</div></div>
+          <div class="task"><div class="task-id"><span class="dot"></span>T-136</div><div class="task-what">Cash custody</div><div class="task-note">Designed only</div></div>
+          <div class="task"><div class="task-id"><span class="dot"></span>T-137</div><div class="task-what">Statutory discount logbook</div><div class="task-note">Designed only</div></div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>The five that cannot wait past January</h2>
+      <p>
+        A capability inventory found nine items with no owner in the eight-phase plan. Five of them
+        post to the ledger today, so omitting any one leaves the books incomplete from their first
+        day. They are not new features &mdash; v1 already posts all five.
+      </p>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Capability</th><th>Why January needs it</th><th>State</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>T-124 &middot; Fixed assets + depreciation</td><td>Monthly depreciation is a real P&amp;L expense. Omit it and expenses are understated every month.</td><td><span class="chip c-done">shipped</span></td></tr>
+          <tr><td>T-125 &middot; Prepaid + amortisation</td><td>The same shape &mdash; a real expense recognised over time rather than on the day it is paid.</td><td><span class="chip c-active">next</span></td></tr>
+          <tr><td>T-126 &middot; Loans</td><td>Interest expense and principal movement.</td><td><span class="chip c-queued">queued</span></td></tr>
+          <tr><td>T-127 &middot; Owner equity</td><td>Capital in, drawings out.</td><td><span class="chip c-queued">queued</span></td></tr>
+          <tr><td>T-128 &middot; Generic liabilities</td><td>Statutory and other payables.</td><td><span class="chip c-queued">queued</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>All nine phases</h2>
+      <p>
+        Resequenced in August once accounting correctness was confirmed as the point of the project.
+        Attendance moved out to Phase&nbsp;4 because it touches the ledger only through payroll; its
+        real risk is technical, and technical risk was retired by a spike in Phase&nbsp;0.
+      </p>
+    </div>
+
+    <div class="spine">
+
+      <div class="phase s-done">
+        <div class="ph-num">0</div>
+        <div class="ph-top"><span class="ph-name">Foundation &amp; walking skeleton</span><span class="chip c-done">complete</span></div>
+        <div class="ph-body">Repo scaffold, Postgres&nbsp;18 on 5435, Drizzle, migrations, CI, observability, backups, port&nbsp;9008. One thin end-to-end slice, plus a time-boxed offline spike proving the Firestore two-lane contract.</div>
+        <div class="ph-gate"><b>Exit gate</b>Skeleton runs end to end; the spike proves an offline write survives and reconciles.</div>
+      </div>
+
+      <div class="phase s-done">
+        <div class="ph-num">1</div>
+        <div class="ph-top"><span class="ph-name">The accounting spine</span><span class="chip c-done">complete</span><span class="chip c-part">2 gaps</span></div>
+        <div class="ph-body">Chart of accounts (95 accounts), journal entries and lines, the posting engine, reversal, fiscal periods, trial balance. Every invariant enforced by the database rather than the service layer.</div>
+        <div class="ph-gate"><b>Exit gate</b>Invariant suite green; worked examples post correctly; trial balance ties. &mdash; Two carried gaps: <code>tests/invariants/</code> and <code>tests/golden/</code> are still empty directories (the invariants live inside the posting-patterns suite instead), and T-111&rsquo;s property-based tests were never written.</div>
+      </div>
+
+      <div class="phase s-active">
+        <div class="ph-num">2</div>
+        <div class="ph-top"><span class="ph-name">Money-moving source documents</span><span class="chip c-active">in progress</span></div>
+        <div class="ph-body">Expenses, AP, AR, payments, cash requests, sales day, settlements &mdash; plus the five ledger-posting capabilities the original plan silently omitted. Each posts into the spine.</div>
+        <div class="ph-gate"><b>Exit gate</b>Subledgers tie to control accounts; a real closed period reconciles; divergences from v1 logged.</div>
+      </div>
+
+      <div class="phase s-queued">
+        <div class="ph-num">3</div>
+        <div class="ph-top"><span class="ph-name">Inventory &amp; inventory accounting</span><span class="chip c-queued">not started</span></div>
+        <div class="ph-body">Items, locations, stock ledger, receiving, transfers, usage, wastage, counts, weighted-average valuation, COGS postings. Plus the commissary&ndash;branch order pipeline, roughly 24 capabilities that straddled Phases 2 and 3 and were owned by neither.</div>
+        <div class="ph-gate"><b>Exit gate</b>Inventory control account equals the sum of on-hand valuations; the stock ledger reconciles.</div>
+      </div>
+
+      <div class="phase s-queued">
+        <div class="ph-num">4</div>
+        <div class="ph-top"><span class="ph-name">Attendance, biometrics &amp; the hot lane</span><span class="chip c-queued">not started</span></div>
+        <div class="ph-body">Punch model, server-side adjudication, the Firestore mirror publisher and inbox ingestor, offline clock terminal. Can run as a parallel track if capacity allows.</div>
+        <div class="ph-gate"><b>Exit gate</b>A terminal clocks in with the network pulled and reconciles cleanly on reconnect.</div>
+      </div>
+
+      <div class="phase s-queued">
+        <div class="ph-num">5</div>
+        <div class="ph-top"><span class="ph-name">Payroll</span><span class="chip c-queued">not started</span></div>
+        <div class="ph-body">Periods, effective-dated compensation, late and overtime policy, salary advances, immutable pay runs, GL postings.</div>
+        <div class="ph-gate"><b>Exit gate</b>Parity on a historical payroll run, peso for peso; postings balance.</div>
+      </div>
+
+      <div class="phase s-queued">
+        <div class="ph-num">6</div>
+        <div class="ph-top"><span class="ph-name">Reporting &amp; dashboards</span><span class="chip c-queued">not started</span></div>
+        <div class="ph-body">Sales report, dashboards, insights &mdash; as views and materialised views over the ledger, never hand-maintained totals. The trial balance and income statement already exist from Phase&nbsp;1&rsquo;s walking skeleton.</div>
+        <div class="ph-gate"><b>Exit gate</b>Statements tie; report figures reconcile for the same date range.</div>
+      </div>
+
+      <div class="phase s-queued">
+        <div class="ph-num">7</div>
+        <div class="ph-top"><span class="ph-name">Peripheral modules</span><span class="chip c-queued">not started</span></div>
+        <div class="ph-body">Admin, onboarding, memos, performance, checklists, cookbook.</div>
+        <div class="ph-gate"><b>Exit gate</b>Feature parity checklist complete.</div>
+      </div>
+
+      <div class="phase s-queued">
+        <div class="ph-num">8</div>
+        <div class="ph-top"><span class="ph-name">Cutover</span><span class="chip c-queued">not started</span><span class="chip c-part">dated</span></div>
+        <div class="ph-body">Per-module strangler cutover, <strong>opening-balance migration only</strong> &mdash; not full history. Daily reconciliation and a rollback plan. v2 always assumes a zero starting point: the books open with one balance-sheet entry of counted, present-day facts.</div>
+        <div class="ph-gate"><b>Exit gate</b>Ian signs off on a reconciled dual-run.</div>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <div class="callout warn">
+      <h3>31 December is one calendar entry with three jobs</h3>
+      <p>
+        A valued stock count, a physical asset verification, and the <strong>final v1 depreciation
+        run</strong>. The asset walk-round is why the capitalisation threshold matters as a number
+        somebody can see and edit &mdash; it decides how many things get counted by hand that day.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>Deliberately deferred past January</h2>
+      <p>Each of these is either not ledger-posting, or automation over a capability already in scope.</p>
+    </div>
+    <div class="deferred">
+      <div class="def"><div class="def-name">Expense budgets</div><div class="def-why">Not ledger-posting.</div></div>
+      <div class="def"><div class="def-name">Recurring-expense automation</div><div class="def-why">Automation over expenses, which are already in scope.</div></div>
+      <div class="def"><div class="def-name">The books tie-out audit tool</div><div class="def-why">A standing check, not a posting path.</div></div>
+      <div class="def"><div class="def-name">Depreciation &amp; amortisation gap watchdog</div><div class="def-why">The detector, not the run. The run itself must happen monthly from January.</div></div>
+    </div>
+  </section>
+
+  <footer>
+    Sources &mdash; PROJECT_BIBLE.md &sect;10 (phase plan) &middot; docs/plans/phase-1-accounting-spine.md &middot;
+    docs/plans/phase-2-source-documents.md &middot; ADR-005 (books-first cutover) &middot;
+    ADR-006 (period close) &middot; ADR-007 (pilot then purge).<br>
+    Status verified against the working tree at commit d93c1bd, 26 August 2026. Phase 1&rsquo;s two gaps
+    were confirmed by inspection, not taken from the plan.
+  </footer>
+
+</div>
