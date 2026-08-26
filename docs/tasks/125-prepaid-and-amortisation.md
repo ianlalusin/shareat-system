@@ -89,7 +89,7 @@ Identical to the asset hole T-124 recorded. **v2 has no delete path for either.*
 v1's expense editor shows a banner when the picked template is `capitalizable`, and its button
 does `router.push('/inventory/prepaid')` with **no data handed over at all**
 (`expense-editor.tsx:896-918`) — no amount, no date, no supplier. The user re-types everything.
-See §11: v2 should carry the data, and the reason v1 does not auto-create is still sound.
+**Fixed by §11** — v2 carries amount, date, supplier and the source expense id across.
 
 ---
 
@@ -237,8 +237,8 @@ this for free — the elapsed periods are simply never posted.
 | **Salvage** | Yes — depreciates to salvage | ⛔ None — runs to zero |
 | **Interval** | monthly / quarterly / semi-annual / annual (row 140) | ⛔ **Monthly only** |
 | **Life** | `useful_life_months`, an ESTIMATE of replacement | `coverage_months`, a **contractual term** |
-| **Auto-created from an expense** | Yes, over threshold, flagged `needs_review` | ⛔ No — see §11 |
-| **`needs_review`** | Yes — the terms were guessed | ⛔ Not applicable — the term is on the invoice |
+| **Auto-created from an expense** | Yes, over threshold, flagged `needs_review` | ✅ Yes — from a `prepaid_eligible` category (§11) |
+| **`needs_review`** | Yes — life and salvage were guessed | ✅ Yes — the **coverage term** is guessed (§11.1) |
 | **Early termination** | Disposal: write off remaining book value | Write-off **plus optional refund** |
 | **Ends when** | Fully depreciated, or disposed | Fully amortised, written off, or refunded |
 
@@ -249,42 +249,73 @@ A prepaid's term is **contractual**: a 12-month policy covers 12 months. Chargin
 would recognise a cost for months not yet covered, which is the error prepaid accounting exists to
 prevent. v1 offers no interval here either, and is right not to.
 
-### Why `needs_review` does not apply
+### `needs_review` — and why §11 changed the answer
 
-T-124 flags an auto-capitalised asset because its life and salvage were **guessed** from policy.
-A prepaid's coverage months come from the document being paid — the policy period, the permit's
-validity. Nothing is guessed, so there is nothing to review. ⚠️ This holds **only** while prepaid
-items are not auto-created from an expense; §11 would change it.
+This section originally argued the flag did not apply: a prepaid's coverage comes from the document
+being paid, so nothing is guessed. **Choosing option B makes that false**, and the correction is
+worth keeping visible rather than silently rewriting.
 
----
-
-## 11. Open — one question, and it needs Ian
-
-### ⭐ How does an expense become a prepaid item?
-
-**v2 has no way to express "this expense should become a prepaid."** `expense_categories` carries
-`group` (OPEX · COGS · CAPEX · PERSONAL) and nothing else — no `capitalizable` flag, no prepaid
-group. Assets have a clean seam (a CAPEX category whose account is 1510); **prepaid has none**.
-
-v1 did not solve this either — its handoff is a button that navigates and loses the data (§3.4) —
-and the reason it did not auto-create is sound: **the expense does not carry the coverage term.**
-An invoice knows ₱24,000; only a human knows it buys twelve months.
-
-Three ways forward. **I recommend B.**
-
-| | Approach | Cost |
-|---|---|---|
-| **A** | Prepaid items are created only by hand. The expense screen links across. | Simplest. Repeats v1's re-typing, and nothing connects the payment to the item |
-| **B** ⭐ | A `prepaid_eligible` flag plus `default_coverage_months` on the expense category. An over-threshold expense in such a category creates the item **carrying amount, date, supplier and the source expense id**, with the default term applied and flagged for review | One column pair on `expense_categories`, and `needs_review` becomes meaningful for prepaid after all (§10) — the term IS then a guess |
-| **C** | A prepaid group alongside OPEX/COGS/CAPEX | Changes seeded reference data (bible §4.4) and re-opens the chart mapping. Out of proportion |
-
-**B** is v1's 22 seeded templates rebuilt on v2's category table — the same idea (`capitalizable` +
-`defaultCoverageMonths`), attached to the thing v2 already has, and it fixes v1's data-losing
-handoff rather than porting it.
-
-⛔ **Not started until Ian answers**, because A and B produce different tables.
+The amount and date do come from the invoice. **The term does not** — it is the category's default,
+applied because the expense cannot know that this particular permit runs 24 months rather than 12.
+A wrong term is wrong in every period it posts, so it is flagged, counted, and reviewed (§11.2).
 
 ---
+
+## 11. Settled — the expense seam is option B (Ian, 2026-08-26)
+
+**v2 had no way to express "this expense should become a prepaid."** `expense_categories` carried
+only `group` (OPEX · COGS · CAPEX · PERSONAL) — no `capitalizable` flag, no prepaid group. Fixed
+assets have a clean seam (a CAPEX category whose account is 1510); prepaid had none.
+
+> **Ian:** *"ok lets do B. but design that the review is obvious not just a toast notif — I suggest
+> a prepaid expenses page with a counter of pending items to be decided."*
+
+### 11.1 The seam
+
+Two columns on `expense_categories`:
+
+| Column | Meaning |
+|---|---|
+| `prepaid_eligible` (boolean, default false) | Spend in this category may be a prepayment |
+| `default_coverage_months` (integer, nullable) | The term to apply when nobody has said otherwise |
+
+An approved expense in a `prepaid_eligible` category that clears the **₱5,000** threshold
+(bible row 141) creates a prepaid item carrying **amount, business date, supplier and the source
+expense id** — the four things v1 threw away — with the default term applied and
+`needs_review = true`.
+
+⭐ This is v1's 22 seeded templates (`capitalizable` + `defaultCoverageMonths`) rebuilt on the table
+v2 already has, rather than a new taxonomy. It also **fixes** v1's handoff, which was a button that
+navigated to an empty form and lost every value the user had typed.
+
+⚠️ **`needs_review` now means something for prepaid, reversing §10.** The amount and date come from
+the invoice, but **the coverage term is a guess** — the default for the category, not the term
+written on the document. A 12-month default applied to a 24-month permit is wrong by half, silently,
+for two years. That is precisely what the flag is for.
+
+### 11.2 ⛔ The review must be a place, not a notification
+
+> **Ian:** *"design that the review is obvious not just a toast notif."*
+
+A toast is gone in four seconds and is seen by whoever happened to be looking. **The review lives
+on the page**, and the page is the thing the business opens.
+
+| Requirement | |
+|---|---|
+| **A pending counter, on the module** | `/prepaid` shows *"N items need a term confirmed"* as a persistent banner and a filter, not a dismissible alert. It reads zero when there is nothing to do — a counter that is only ever present is a counter people stop seeing |
+| **Nothing expires the queue** | An item stays pending until a human confirms or changes the term. There is no auto-accept after N days: a default silently becoming permanent is exactly the failure this whole task is built against |
+| **Confirming is one action** | Opening the item, seeing the guessed term next to the source expense, and either accepting or correcting it. Confirming clears the flag — the same rule T-124 already uses: only a human editing the terms clears `needs_review` |
+| **The source expense is one click away** | The reviewer's first question is *"what did we actually buy?"*, and `source_expense_id` can answer it |
+
+⭐ **The counter is the whole design.** An auto-created prepaid item with a guessed term is a
+liability that gets worse with time — it posts a wrong amount every month, quietly, and the only
+thing standing between that and the books is somebody noticing. A number on a page that does not go
+away until the work is done is what noticing looks like.
+
+⚠️ **T-124's assets have the same problem and a weaker answer.** `/fixed-assets` shows a
+needs-review banner today, but nothing counts *across* modules. If a third auto-capitalising
+source ever appears, this becomes a dashboard concern rather than a per-module one — noted, not
+built here.
 
 ## 12. Done when
 
