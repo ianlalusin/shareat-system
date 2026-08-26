@@ -674,6 +674,34 @@ async function capexExpense(f: Fixture, amount: string): Promise<string> {
     on conflict (org_id, store_id, name) do update set updated_at = now()
     returning id
   `;
+  // ⭐ And the drawer has to actually HOLD the money since T-139's overdraw block — a store
+  // buying a ₱45,000 fryer out of a till containing ₱0 was never realistic, only unchecked.
+  const [period] = await sql<{ id: string }[]>`
+    select id from fiscal_periods where org_id = ${f.orgId} limit 1
+  `;
+  await sql.begin(async (tx) => {
+    const [e] = await tx<{ id: string }[]>`
+      insert into journal_entries (org_id, entry_date, period_id, source_type, source_id, status)
+      values (${f.orgId}, '2026-01-19', ${period!.id}, 'opening_balance', ${uid('open')}, 'draft')
+      returning id
+    `;
+    const [cash] = await tx<{ id: string }[]>`
+      select id from accounts where org_id = ${f.orgId} and code = '1110'
+    `;
+    const [equity] = await tx<{ id: string }[]>`
+      select id from accounts where org_id = ${f.orgId} and code = '3200'
+    `;
+    await tx`
+      insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit)
+      values (${e!.id}, 1, ${cash!.id}, ${f.storeId}, '500000.00', '0')
+    `;
+    await tx`
+      insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit)
+      values (${e!.id}, 2, ${equity!.id}, ${f.storeId}, '0', '500000.00')
+    `;
+    await tx`update journal_entries set status = 'posted' where id = ${e!.id}`;
+  });
+
   const created = await asPerson(f.orgId, (tx) =>
     createExpense(tx, actor(f.orgId, f.staffId), {
       storeId: f.storeId,

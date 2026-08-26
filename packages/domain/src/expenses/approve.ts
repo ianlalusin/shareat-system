@@ -87,6 +87,52 @@ async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promi
       );
     }
     wallets.set(id, acct.glAccountCode);
+
+    // ⭐ FUNDING AN EXPENSE FROM ANOTHER STORE'S ACCOUNT IS CROSS-STORE MONEY MOVEMENT
+    // (Ian, 2026-08-26; bible row 153) — *"cross store money movement will only be possible for
+    // manager initiated transactions, with manager having access … to both stores."*
+    //
+    // ⚠️ The rule is about the MOVEMENT, not the screen it was reached through. An expense at
+    // Lipa paid from Malvar's safe moves Malvar's money just as surely as a transfer does, and
+    // `approve_expense` above only ever proved the actor answers for **Lipa**. Without this,
+    // gating transfers alone would leave the identical act reachable one menu across.
+    if (acct.storeId !== expense.storeId) {
+      await authorize(tx, actor, 'transfer_funds', { storeId: acct.storeId });
+    }
+  }
+
+  // ⛔ NO OVERDRAWING (Ian, 2026-08-26: *"yes extend"* — the same rule T-139 put on transfers).
+  //
+  // ⭐ **This is the surface that actually needed it.** Expense payment is ~34% of v1's ledger
+  // activity against a transfer's 7%, so a drawer is far likelier to be driven negative by
+  // spending than by moving money. Nothing checked it before.
+  //
+  // ⚠️ Checked at APPROVE, never at create — this file's own rule, and correct here for a second
+  // reason: a draft is not a posting, so a draft naming money that has not arrived yet is a
+  // legitimate thing to be holding. Only the moment it posts has to be true.
+  //
+  // ⚠️ Summed PER ACCOUNT across the split, not per payment row. Two ₱600 cash lines against one
+  // ₱1,000 drawer are individually affordable and together are not — checking them one at a time
+  // would let exactly that through (the DEF-065 family of error: a split's rows are only ever
+  // right when considered together).
+  const drawnPerAccount = new Map<string, number>();
+  for (const p of payments) {
+    if (!p.moneyAccountId) continue; // credit, reimbursable and cash-request legs move no money now
+    drawnPerAccount.set(
+      p.moneyAccountId,
+      (drawnPerAccount.get(p.moneyAccountId) ?? 0) + Number(p.amount),
+    );
+  }
+  for (const [id, drawn] of drawnPerAccount) {
+    const acct = await moneyAccountsRepo.getById(tx, actor.orgId, id);
+    const available = Number(await moneyAccountsRepo.balanceOf(tx, actor.orgId, acct!));
+    if (drawn > available) {
+      throw new Error(
+        `approveExpense: expense ${expenseId} cannot post — "${acct!.name}" holds ` +
+          `${available.toFixed(2)} and this expense draws ${drawn.toFixed(2)} from it. Record the ` +
+          'money coming in first, or fund the expense from somewhere that holds it.',
+      );
+    }
   }
 
   const routed = routeExpense({

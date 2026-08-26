@@ -540,3 +540,41 @@ remit to zero    →  expected = closing balance
 
 ⛔ Not guessed here. It interacts with the per-store cadence (§4) and belongs with it.
 
+---
+
+## ⭐ Cross-store cash requests — the rule, recorded before the feature exists
+
+> **Ian, 2026-08-26:** *"for cash request later, document that cross store money movement will
+> only be possible for manager initiated transactions, with manager having access like
+> hasStoreAccess to both stores."*
+
+**Bible row 153.** Written here because this is the document whoever builds cash requests will
+read, and the rule has to reach them rather than being rediscovered.
+
+### The scenario it governs
+
+> *"Office cash of Malvar can be used to cash request for Lipa. Then when this cash request is
+> liquidated the expense still belongs to Lipa, and the return, if there is, may be returned to
+> Lipa."*
+
+⭐ **Note what is NOT symmetric here:** the money comes from Malvar, the **expense belongs to
+Lipa**, and any unspent return goes back to **Lipa** — not to the store that funded it. So the
+funding leaves a standing position between the two stores that a later settlement clears. That is
+the `1250` / `2150` due-from/due-to pair, exactly as T-139's cross-store transfer already posts
+it, and it must eliminate on consolidation (bible invariant 6).
+
+### What is already enforced, and what is not
+
+| | State |
+|---|---|
+| Money moves between stores **office to office only** | ✅ Built (row 152, `createMoneyTransfer`) |
+| Actor needs store access to **both** stores | ✅ Built for transfers, and for an expense funded from another store's account (row 153) |
+| No overdrawing the funding account | ✅ Built for transfers and expenses |
+| **Cash requests themselves** | ⛔ **Do not exist in v2 yet** |
+| Liquidation attributing the expense to the *other* store | ⛔ Not built |
+| Returning the unspent balance to the *requesting* store | ⛔ Not built |
+
+⚠️ **A cash request must apply the same both-stores check**, and for the same reason: it is money
+movement between stores, whatever screen it is reached through. Gating the transfer screen alone
+would leave the identical act reachable one menu across — which is exactly the mistake T-139
+made first and row 153 corrects.

@@ -123,6 +123,23 @@ async function runCreate(
   // Store-scoped: the authority is over THIS store's money.
   await authorize(tx, actor, 'transfer_funds', { storeId: from.storeId });
 
+  // ⭐ A CROSS-STORE MOVE NEEDS STORE ACCESS TO **BOTH** ENDS (Ian, 2026-08-26; bible row 153).
+  //
+  // > *"cross store money movement will only be possible for manager initiated transactions,
+  // > with manager having access … to both stores."*
+  //
+  // ⚠️ **Authorising only the source was a real hole**, and it is the same hole Ian described
+  // from the other side: a manager scoped to Malvar alone could push Malvar's office money into
+  // Lipa — a store they have no standing in — and Lipa would simply find money it did not ask
+  // for and now owes for. Requiring scope at BOTH ends means only someone who actually answers
+  // for both stores can create a debt between them.
+  //
+  // `authorize` checks `personHasStoreScope` per call, so a second call IS the rule — no new
+  // helper, and the denial message names the store that is missing.
+  if (crossStore) {
+    await authorize(tx, actor, 'transfer_funds', { storeId: to.storeId });
+  }
+
   const out = Number(input.amountOut);
   const inn = Number(input.amountIn);
   if (!(out > 0) || !(inn > 0)) {

@@ -156,7 +156,59 @@ async function setup(hint: string): Promise<Fixture> {
     returning id
   `;
 
+  // ⭐ FUND BOTH ACCOUNTS. Since T-139's overdraw block, approving an expense requires the
+  // account it draws on to actually hold the money — so a fixture that spends must first have
+  // something to spend, exactly as a real store has a float in the drawer and collections in the
+  // wallet before anyone buys anything.
+  //
+  // ⚠️ Every test in this file previously posted expenses out of accounts holding ₱0. That was
+  // never realistic; it was simply unchecked.
+  await fundAccount(orgId, storeId, '1110', '500000.00', null);
+  await fundAccount(orgId, storeId, '1140', '500000.00', wallet!.id);
+
   return { orgId, storeId, storeId2, staffId, managerId, adminId , walletId: wallet!.id, cashDrawerId: drawer!.id };
+}
+
+/**
+ * Puts opening money into one account, as a plain balanced entry against equity.
+ *
+ * ⚠️ `moneyAccountId` is required for `1140` and must be null for cash: 1140 is ONE control
+ * account for every wallet, so a line without a party belongs to no wallet in particular and
+ * `balanceOf` would not see it. Cash codes name their location already.
+ */
+async function fundAccount(
+  orgId: string,
+  storeId: string,
+  code: string,
+  amount: string,
+  moneyAccountId: string | null,
+): Promise<void> {
+  const [period] = await sql<{ id: string }[]>`
+    select id from fiscal_periods where org_id = ${orgId} limit 1
+  `;
+  await sql.begin(async (tx) => {
+    const [e] = await tx<{ id: string }[]>`
+      insert into journal_entries (org_id, entry_date, period_id, source_type, source_id, status)
+      values (${orgId}, '2026-01-02', ${period!.id}, 'opening_balance', ${uid('open')}, 'draft')
+      returning id
+    `;
+    const [target] = await tx<{ id: string }[]>`
+      select id from accounts where org_id = ${orgId} and code = ${code}
+    `;
+    const [equity] = await tx<{ id: string }[]>`
+      select id from accounts where org_id = ${orgId} and code = '3200'
+    `;
+    await tx`
+      insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit, party_type, party_id)
+      values (${e!.id}, 1, ${target!.id}, ${storeId}, ${amount}, '0',
+              ${moneyAccountId ? 'money_account' : null}, ${moneyAccountId})
+    `;
+    await tx`
+      insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit)
+      values (${e!.id}, 2, ${equity!.id}, ${storeId}, '0', ${amount})
+    `;
+    await tx`update journal_entries set status = 'posted' where id = ${e!.id}`;
+  });
 }
 
 async function categoryId(orgId: string, category: string): Promise<string> {
@@ -969,5 +1021,146 @@ describe('invariant 17 — a DRAFT is deletable; a posted or voided expense neve
     await asPerson(f.orgId, (tx) => deleteExpenseDraft(tx, actor(f.orgId, f.managerId), created.id));
     const rows = await sql<{ c: number }[]>`select count(*)::int c from expenses where id = ${created.id}`;
     expect(rows[0]!.c).toBe(0);
+  });
+});
+
+// =========================================================================================
+// T-139 extended — no expense may overdraw the account it draws on (Ian, 2026-08-26)
+// =========================================================================================
+
+describe('⛔ an expense cannot overdraw the account that funds it', () => {
+  /** Drains an account to a known balance, so the ceiling in each test is exact. */
+  async function drainTo(orgId: string, storeId: string, code: string, keep: string) {
+    const [row] = await sql<{ total: string }[]>`
+      select coalesce(sum(jl.debit - jl.credit), 0)::text as total
+      from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id
+      join accounts a on a.id = jl.account_id
+      where je.org_id = ${orgId} and je.status <> 'draft' and a.code = ${code}
+        and jl.store_id = ${storeId}
+    `;
+    const excess = (Number(row!.total) - Number(keep)).toFixed(2);
+    if (Number(excess) <= 0) return;
+    const [period] = await sql<{ id: string }[]>`
+      select id from fiscal_periods where org_id = ${orgId} limit 1
+    `;
+    await sql.begin(async (tx) => {
+      const [e] = await tx<{ id: string }[]>`
+        insert into journal_entries (org_id, entry_date, period_id, source_type, source_id, status)
+        values (${orgId}, '2026-01-03', ${period!.id}, 'test', ${uid('drain')}, 'draft') returning id
+      `;
+      const [cash] = await tx<{ id: string }[]>`
+        select id from accounts where org_id = ${orgId} and code = ${code}
+      `;
+      const [equity] = await tx<{ id: string }[]>`
+        select id from accounts where org_id = ${orgId} and code = '3200'
+      `;
+      await tx`
+        insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit)
+        values (${e!.id}, 1, ${equity!.id}, ${storeId}, ${excess}, '0')
+      `;
+      await tx`
+        insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit)
+        values (${e!.id}, 2, ${cash!.id}, ${storeId}, '0', ${excess})
+      `;
+      await tx`update journal_entries set status = 'posted' where id = ${e!.id}`;
+    });
+  }
+
+  async function draftCash(f: Fixture, amount: string): Promise<string> {
+    const cat = await categoryId(f.orgId, 'Supplies and Stocks');
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        businessDate: '2026-01-15',
+        categoryId: cat,
+        particulars: 'Cleaning supplies',
+        receiptPhotoUrl: 'https://example.com/r.jpg',
+        payments: [{ method: 'cash', amount, moneyAccountId: f.cashDrawerId }],
+      }),
+    );
+    return created.id;
+  }
+
+  it('refuses at APPROVE when the drawer does not hold it, naming the shortfall', async () => {
+    const f = await setup('od1');
+    await drainTo(f.orgId, f.storeId, '1110', '1000.00');
+    const id = await draftCash(f, '1500.00');
+
+    await expect(
+      asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), id)),
+    ).rejects.toThrow(/holds 1000\.00 and this expense draws 1500\.00/);
+  });
+
+  it('⭐ the DRAFT is untouched and still approvable once the money is there', async () => {
+    const f = await setup('od2');
+    await drainTo(f.orgId, f.storeId, '1110', '1000.00');
+    const id = await draftCash(f, '1500.00');
+
+    await expect(
+      asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), id)),
+    ).rejects.toThrow();
+
+    // ⚠️ The refusal must not consume the document. This is why the check lives at APPROVE and
+    // not at create: a draft naming money that has not arrived yet is a legitimate thing to be
+    // holding — only the moment it POSTS has to be true.
+    const still = await expenseRow(f.orgId, id);
+    expect(still!.status).toBe('draft');
+
+    await fundAccount(f.orgId, f.storeId, '1110', '5000.00', null);
+    await expect(
+      asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), id)),
+    ).resolves.toBeTruthy();
+  });
+
+  it('⭐ sums the SPLIT per account — two affordable lines that together are not', async () => {
+    const f = await setup('od3');
+    await drainTo(f.orgId, f.storeId, '1110', '1000.00');
+
+    const cat = await categoryId(f.orgId, 'Supplies and Stocks');
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        businessDate: '2026-01-15',
+        categoryId: cat,
+        particulars: 'Two cash lines, one drawer',
+        receiptPhotoUrl: 'https://example.com/r.jpg',
+        payments: [
+          { method: 'cash', amount: '600.00', moneyAccountId: f.cashDrawerId },
+          { method: 'cash', amount: '600.00', moneyAccountId: f.cashDrawerId },
+        ],
+      }),
+    );
+
+    // ⛔ ₱600 and ₱600 are each affordable against ₱1,000; together they are not. Checking one
+    // payment row at a time would let exactly this through — the DEF-065 family of error, where
+    // a split's rows are only ever right when considered together.
+    await expect(
+      asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id)),
+    ).rejects.toThrow(/holds 1000\.00 and this expense draws 1200\.00/);
+  });
+
+  it('a REIMBURSABLE expense is unaffected — it moves no store money now', async () => {
+    const f = await setup('od4');
+    await drainTo(f.orgId, f.storeId, '1110', '0.00');
+
+    const cat = await categoryId(f.orgId, 'Supplies and Stocks');
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        businessDate: '2026-01-15',
+        categoryId: cat,
+        particulars: 'Staff paid out of pocket',
+        receiptPhotoUrl: 'https://example.com/r.jpg',
+        payments: [{ method: 'reimbursable', amount: '9000.00', staffId: f.staffId }],
+      }),
+    );
+
+    // ⭐ Staff paying out of their own pocket from an empty drawer is not an overdraft — no store
+    // money leaves today, it becomes a payable to them. The guard only ever looks at payments
+    // that name a money account.
+    await expect(
+      asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id)),
+    ).resolves.toBeTruthy();
   });
 });

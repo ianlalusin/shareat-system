@@ -509,6 +509,10 @@ describe('cross-store -- office to office only (Ian, 2026-08-26; bible row 152)'
           custodian,
         }),
       );
+    // ⭐ The actor is scoped into the second store. Bible row 153: a cross-store move needs
+    // store access at BOTH ends, so a fixture that performs one must grant both — and the
+    // denial test below proves the grant is doing real work.
+    await sql`insert into person_store_scope (person_id, store_id) values (${f.adminId}, ${store!.id})`;
     return {
       id: store!.id,
       code,
@@ -516,6 +520,42 @@ describe('cross-store -- office to office only (Ian, 2026-08-26; bible row 152)'
       drawer: await mk('Lipa drawer', 'cashier'),
     };
   }
+
+  it('⛔ REFUSES when the actor has no store scope at the far end (bible row 153)', async () => {
+    const f = await fixture('noscope');
+    const lipa = await secondStore(f, uid('LIPA'));
+    await postCash(f, '1130', '4100', '5000.00');
+
+    // A manager who answers for Malvar only. ⚠️ This is Ian's scenario from the other side:
+    // without the far-end check, they could push Malvar's money into a store they have no
+    // standing in, and Lipa would find money it never asked for and now owes for.
+    const outsiderId = await person(f.orgId, f.storeId, 'Malvar-only manager', 'manager');
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        createMoneyTransfer(tx, actor(f.orgId, outsiderId), {
+          fromMoneyAccountId: f.safe.id,
+          toMoneyAccountId: lipa.safe.id,
+          amountOut: '5000.00',
+          amountIn: '5000.00',
+          transferDate: '2026-01-10',
+        }),
+      ),
+    ).rejects.toThrow(AuthorizationError);
+
+    // ⭐ Same person, same transfer, once they are scoped into Lipa too.
+    await sql`insert into person_store_scope (person_id, store_id) values (${outsiderId}, ${lipa.id})`;
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        createMoneyTransfer(tx, actor(f.orgId, outsiderId), {
+          fromMoneyAccountId: f.safe.id,
+          toMoneyAccountId: lipa.safe.id,
+          amountOut: '5000.00',
+          amountIn: '5000.00',
+          transferDate: '2026-01-10',
+        }),
+      ),
+    ).resolves.toBeTruthy();
+  });
 
   it('refuses a TILL at either end -- the bypass Ian named is unrepresentable', async () => {
     const f = await fixture('bypass');

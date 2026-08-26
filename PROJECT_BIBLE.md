@@ -63,35 +63,35 @@
 - `1034–1068 ` 10. Phase plan
 - `1069–1085 ` 11. Migration & ETL rules
 - `1086–1134` 12. Inherited landmines — do not repeat these
-- `1135–1293` 13. Decision log
-- `1294–1313` 14. Amendment protocol
-- `1314–1318` 15. Engineering standards — the industry practices this project follows
-  - `1319–1324` 15.1 Build order: walking skeleton first
-  - `1325–1336` 15.2 Golden-master testing — the most important practice here
-  - `1337–1345` 15.3 Strangler Fig, not big-bang cutover
-  - `1346–1350` 15.4 No dual-write
-  - `1351–1355` 15.5 Expand/contract migrations
-  - `1356–1364` 15.6 Observability from day zero, not later
-  - `1365–1369` 15.7 CI gates
-  - `1370–1374` 15.8 Backups and a tested restore
-  - `1375–1379` 15.9 Twelve-Factor config
-  - `1380–1387` 15.10 Append-only ledgers — but not event sourcing
-  - `1388–1392` 15.11 Defence in depth
-  - `1393–1421` 15.12 Skills are lenses, not assurance
-  - `1422–1428` 15.13 Reconciliation is a permanent feature
-- `1429–1433` 16. The accounting spine
-  - `1434–1465` 16.0 What we are actually fixing — the diagnosis
-  - `1466–1509` 16.1 The ten invariants — non-negotiable
-  - `1510–1524` 16.2 The oracle: how "correct" is tested
-  - `1525–1546` 16.3 The model — header + lines, not legs
-  - `1547–1566` 16.4 Deliberately simpler than ERPNext
-  - `1567–1633` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1634–1658` 16.6 What v1 already gets right — preserve the intent
-  - `1659–1680` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1681–1695` 16.8 What v1's accounting already gets right
-  - `1696–1739` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1740–1790` 16.10 Posting patterns — one canonical pattern per business event
-  - `1791–1808` 16.11 Inventory's accounting integration
+- `1135–1294` 13. Decision log
+- `1295–1314` 14. Amendment protocol
+- `1315–1319` 15. Engineering standards — the industry practices this project follows
+  - `1320–1325` 15.1 Build order: walking skeleton first
+  - `1326–1337` 15.2 Golden-master testing — the most important practice here
+  - `1338–1346` 15.3 Strangler Fig, not big-bang cutover
+  - `1347–1351` 15.4 No dual-write
+  - `1352–1356` 15.5 Expand/contract migrations
+  - `1357–1365` 15.6 Observability from day zero, not later
+  - `1366–1370` 15.7 CI gates
+  - `1371–1375` 15.8 Backups and a tested restore
+  - `1376–1380` 15.9 Twelve-Factor config
+  - `1381–1388` 15.10 Append-only ledgers — but not event sourcing
+  - `1389–1393` 15.11 Defence in depth
+  - `1394–1422` 15.12 Skills are lenses, not assurance
+  - `1423–1429` 15.13 Reconciliation is a permanent feature
+- `1430–1434` 16. The accounting spine
+  - `1435–1466` 16.0 What we are actually fixing — the diagnosis
+  - `1467–1510` 16.1 The ten invariants — non-negotiable
+  - `1511–1525` 16.2 The oracle: how "correct" is tested
+  - `1526–1547` 16.3 The model — header + lines, not legs
+  - `1548–1567` 16.4 Deliberately simpler than ERPNext
+  - `1568–1634` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1635–1659` 16.6 What v1 already gets right — preserve the intent
+  - `1660–1681` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1682–1696` 16.8 What v1's accounting already gets right
+  - `1697–1740` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1741–1791` 16.10 Posting patterns — one canonical pattern per business event
+  - `1792–1809` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1288,6 +1288,7 @@ just a patch.**
 | 150 | 2026-08-26 | ⭐ **MOVING money between accounts is MANAGER level; OPENING one stays admin-only.** New capability `transfer_funds` (store-scoped, manager and up). | Ian: *“yes manager level money transfer.”* ⭐ **The pairing with row 149 is the decision, not the level.** Row 149 made adding an account admin-only because it changes *what the books can record against*. A transfer changes nothing about the books' shape — it RECORDS something that already happened to money that is already there. Those are different acts and they earn different levels. The concrete test: a manager may already `accept_remittance`, which is **the single largest transfer this business makes** (a whole day's takings, cashier to office). Barring that same manager from moving ₱500 between two drawers would be incoherent. ⚠️ **`transfer_funds` is manager-TRUE, so it does NOT join `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER`** — that set is derived as admin-yes/manager-no, and a manager holds this one outright. Nothing to grant, nothing to remember. ⭐ Adding it forced edits to `CAPABILITY-MATRIX.md`, `capabilities.ts` and three pinned counts (38 → 39) — **that friction is the guard working**: a capability cannot reach the enforcement without also reaching the document people read. | No — a permission rule |
 | 151 | 2026-08-26 | ⭐ **A TRANSFER STATES BOTH AMOUNTS — what left AND what arrived. The fee is DERIVED, never entered or stored.** (T-139 §3) | ⚠️ **Found by two of our own sources disagreeing.** v1's builder takes one `amount` meaning *what arrives* and charges the source `amount + fee`; `POSTING-PATTERNS.md`'s worked example narrates the same three legs the other way round, as *“a ₱10,000 transfer that costs ₱50, so only ₱9,950 lands.”* **The posted legs are identical either way** — which is exactly why nobody noticed — but the same figure typed in the same box produces two different transfers. ⭐ **And both readings are real here:** a bank wire ADDS its fee to the source (send ₱10,000, get debited ₱10,050); a GCash cash-out DEDUCTS it from the target (cash out ₱10,000, receive ₱9,950). So the answer is to refuse the convention entirely rather than pick one and document it. Both figures are **observable facts** — one on each statement being reconciled — which is what makes a transfer checkable at all, and the fee is whatever went missing between them. ⛔ No `fee` column, and `amount_in > amount_out` is refused: money that arrives without leaving somewhere is income, not a transfer. | No |
 | 152 | 2026-08-26 | ⭐ **MONEY MOVES BETWEEN STORES OFFICE TO OFFICE ONLY — a cashier or staff account at either end is REFUSED.** And ⛔ **no transfer may overdraw its source.** | Ian, describing what actually happens: *“a manager of lipa and malvar who is not allowed to get remittance is able to collect money from malvar to spend on lipa — but that’s deeply wrong. The right pattern is malvar remits to office first before lipa can use it.”* ⭐ **The rule is about the CUSTODIAN, not the store, and that is the whole insight.** The abuse is someone reaching into another store’s **till**; banning cross-store movement outright would be wrong because the business genuinely needs it. Forcing it through the office makes the bypass **unrepresentable** rather than merely discouraged — and it restores the control that was being sidestepped, since remittance is exactly the step a manager without `accept_remittance` was skipping. ⚠️ **The receiving end must be an office too**, so one due-from/due-to pair covers each movement; the destination store then moves it onward with an ordinary same-store transfer. ⭐ **This cost almost nothing to build because the shape already existed:** `1250` Due from / `2150` Due to related store, `party_type='store'` carrying the other store’s CODE, and bible invariant 6’s reciprocal check — the same four legs `commissary_dispatch.transfer` posts for inventory, with cash in place of goods. ⚠️ **Still unbuilt, and the larger half of Ian’s scenario:** Malvar office cash funding a **cash request** whose liquidated expense belongs to **Lipa**, with any return going back to Lipa. Cash requests do not exist in v2 yet; this transfer is the foundation they sit on, not a substitute. ⚠️ The overdraw block is deliberately **not** applied to a reversal — refusing one would leave a wrong entry with no way to correct it, and a correction must always be possible. | No — both are money-safety rules |
+| 153 | 2026-08-26 | ⭐ **CROSS-STORE MONEY MOVEMENT REQUIRES STORE ACCESS TO *BOTH* STORES — and this is a rule about the MOVEMENT, not about the screen it was reached through.** It applies to transfers today and to cash requests when they are built. **⛔ And no expense may overdraw the account that funds it**, checked at APPROVE. | Ian: *“cross store money movement will only be possible for manager initiated transactions, with manager having access like hasStoreAccess to both stores”*, and *“yes extend”* (the overdraw block, from transfers to expenses). ⚠️ **Authorising only the SOURCE store was a real hole** — the same abuse as row 152 seen from the other side: a manager scoped to Malvar alone could push Malvar's money into Lipa, a store they have no standing in, and Lipa would find money it never asked for and now owes for. ⭐ **`authorize()` already checks `personHasStoreScope` per call, so a second call IS the rule** — no new helper, and the denial names the missing store. ⭐ **The reason this is framed as being about the movement:** an expense at Lipa paid from Malvar's safe moves Malvar's money exactly as a transfer does. Gating transfers alone would have left the identical act reachable one menu across, so `approveExpense` applies the same check whenever a payment names an account belonging to another store. ⭐ **On overdraw, expenses were the surface that actually needed it:** expense payment is ~34% of ledger activity against a transfer's 7%, so a drawer is far likelier to go negative through spending than through moving money. ⚠️ Summed **per account across the split**, never per payment row — two ₱600 cash lines against a ₱1,000 drawer are individually affordable and together are not (the DEF-065 family: a split's rows are only ever right considered together). ⚠️ **Checked at APPROVE, never at create** — a draft is not a posting, so a draft naming money that has not arrived yet is legitimate; only the moment it posts has to be true, and a refusal leaves the draft intact and re-approvable. ⚠️ **KNOWN ORDERING HAZARD, Ian to rule on:** a sales day posts to the ledger only at **verify** (`sales-days/verify.ts`), so today's cash takings are invisible to this guard until end of day. A store spending beyond its float before verifying will be refused for a shortfall that is not real. The float makes this survivable, not impossible — if it bites, the fix is to relax the expense check to a warning, not to remove it. | No — money-safety and access rules |
 
 ---
 
