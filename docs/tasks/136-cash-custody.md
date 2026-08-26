@@ -343,3 +343,90 @@ blocks the next remittance, and what a day that is *"₱4,000 short"* looks like
 screen a week later. **A partially-settled day is a state v1 has no name for**, because v1 cannot
 pool at all (§ the structural blocker above).
 
+---
+
+## 8. ✅ What "expected remittance" actually equals (Ian, 2026-08-26)
+
+> **Ian:** *"Today's remittance = all money in less all money out touched by cashier. Money in:
+> sales, collections, returns, refunds from vendors. Out: expense with payment from cashier
+> (cashier's part only, not necessarily the whole expense amount), cash request released by
+> cashier, salary advance released by cashier, payment to payables by cashier, other out to be
+> determined."*
+
+This completes bible row 143's mixed pot with the actual inventory. **And evaluating it, the
+formula collapses into something much smaller than the list.**
+
+### 8.1 ⭐ Every item on that list already posts to the cashier's accounts
+
+Checked against the worked examples rather than assumed — all eight, no exceptions:
+
+| Ian's item | Pattern | Leg |
+|---|---|---|
+| Sales | `sale.unli.simple` | **DR** 1110 |
+| Collections | `ar_collection.no-fee` | **DR** 1110 |
+| Returns (staff float) | `cash_request.return` | **DR** 1110 |
+| Expense from cashier | `expense.cash.simple` | **CR** 1110 |
+| Expense, cashier's share of a split | `expense.split.cash-online` | **CR** 1110 |
+| Cash request released | `cash_request.release` | **CR** 1110 |
+| Salary advance released | `salary_advance.disbursement` | **CR** 1110 |
+| Payment to payables | `ap_payment.simple` | **CR** 1110 |
+
+Money in is a **debit** to a cashier-custodian account. Money out is a **credit**. Without
+exception.
+
+> ### So the formula is not a sum over documents. It is the account's net movement.
+>
+> ```
+> expected remittance  =  Σ debits − Σ credits
+>                         on every money account WHERE custodian = 'cashier'
+>                         over the period being remitted
+> ```
+
+⭐ **This is bible row 143's "derived, not maintained" applied one level up.** Ian's list stops
+being the *computation* and becomes the *documentation* — a description of what a reader should
+expect to find there, not a checklist the code walks.
+
+### 8.2 ⛔ Which is why the list must NOT be implemented as a list
+
+*"Other out to be determined"* is the tell. Implemented literally — sum the sales, add the
+collections, subtract the expenses, subtract the advances — that phrase is a **live hole**: any
+transaction type that touches the till and is not in the enumeration silently breaks the
+reconciliation, and it breaks it in the direction that looks like a cashier is short.
+
+⚠️ **That is DEF-044's shape again**: a figure maintained alongside the ledger instead of read from
+it, drifting the moment something new is added and blaming a person for the difference.
+
+Derived from the account, *"other out"* needs no determining. **Anything that credits the cashier's
+account is already counted, including the transaction types nobody has thought of yet.** A future
+module cannot forget to register itself, because posting IS registering.
+
+### 8.3 ⭐ "Cashier's part only" is free, and it is the split-payment model paying off
+
+Ian's parenthesis — *"cashier's part only, not necessarily the whole expense amount"* — is the
+subtle one, and it needs no special handling at all.
+
+A ₱3,500 expense split ₱2,000 cashier cash / ₱1,500 office online posts **two** legs: `CR 1110
+₱2,000` and `CR 1140 ₱1,500`. Summing the cashier's account picks up ₱2,000 and ignores the rest,
+**because the leg is already the cashier's share.**
+
+⚠️ Computed from documents instead, this is a real trap: reading the expense's `total_amount`
+would subtract ₱3,500 from an expected remittance the cashier only ever paid ₱2,000 of — and
+report a ₱1,500 shortage that does not exist. **The split is only innocent if the arithmetic runs
+on legs.**
+
+### 8.4 What is still open
+
+⚠️ **Is there a RETAINED FLOAT?** Ian's formula is *in minus out*, which is a **net movement** and
+therefore assumes the drawer keeps whatever it started with. If a store instead remits the drawer
+down to zero, expected remittance is the account **balance**, not the movement — a different
+number whenever an opening float exists. v1's "envelope" mode (a release drawing on prior days'
+unremitted cash) implies cash does sit across days, so this needs answering per store, and it is
+one line either way:
+
+```
+retained float   →  expected = net movement over the period
+remit to zero    →  expected = closing balance
+```
+
+⛔ Not guessed here. It interacts with the per-store cadence (§4) and belongs with it.
+
