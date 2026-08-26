@@ -160,9 +160,16 @@ to make and document, so the useful question is what each choice costs.
 | **Per-category useful lives** | ✅ **ADOPT**, defaulting to 5. PH prescribes nothing; common anchors are vehicles 5, buildings 20, PPE generally 5–10. A flat 5 applied to a building is wrong by fifteen years |
 | **One method** | ✅ **CONFIRMED, with a better reason than simplicity: changing depreciation method requires BIR approval.** A dropdown offering declining-balance would let someone create a filing obligation with a click |
 | **Zero salvage default** | ✅ Keep. Conservative, and editable where a resale value is genuinely known |
-| **Threshold** | ✅ **₱10,000** — Ian, 2026-08-26, doubling v1's ₱5,000 |
+| **Threshold** | ✅ **₱5,000** — raised to ₱10,000 and returned to ₱5,000 the same day (bible row 141 supersedes 139). **One threshold, shared with prepaid items** |
 
-### ✅ Threshold raised to ₱10,000 (Ian, 2026-08-26)
+### ✅ Threshold: ₱10,000, then back to ₱5,000 the same day (Ian, 2026-08-26)
+
+> ⚠️ **Superseded within hours, and the reversal is the more instructive half.** Row 139 raised
+> it; row 141 put it back. Ian: *"10k might be a bit high to absorb in one accounting period."*
+> **A higher threshold does not spread more cost — it expenses more of it immediately**, because
+> everything below the line is absorbed in one period. ₱10,000 was what let a ₱9,999 purchase
+> land entirely in one month's P&L. The paragraph below records the original raise; it is kept
+> because its materiality reasoning still holds, only its number does not.
 
 Nothing prescribes a threshold; it is a **materiality** decision, and the trade-off is
 recordkeeping burden against expense smoothing. **Here the burden is physical** — every
@@ -219,7 +226,7 @@ is used daily and wears mechanically.** Everything else sits between those two o
 
 ### ⚠️ Raising the threshold partly hollows out Smallwares
 
-At ₱10,000, **almost nothing a kitchen calls a smallware clears the bar** — pans, utensils and
+⚠️ *Written when the threshold was ₱10,000; at ₱5,000 this bites less, but not none.* At ₱10,000, **almost nothing a kitchen calls a smallware clears the bar** — pans, utensils and
 plates are expensed on purchase. **The category is not wrong, it is now rarely used**, and an item
 expensive enough to be capitalised is probably not really a smallware.
 
@@ -322,7 +329,7 @@ happening again in v2** — and it is not surfaced anywhere either.
 months per category), both with repo upserts and both read by the domain.
 
 **What does not:** any way to edit them outside SQL. The register footer honestly says
-*"₱10,000.00 (default — no policy set)"*, which is true and will stay true until someone inserts
+*"₱5,000.00 (default — no policy set)"*, which is true and will stay true until someone inserts
 a row.
 
 **What it needs.** One small screen under `/fixed-assets/settings`, gated on

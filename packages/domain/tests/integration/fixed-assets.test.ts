@@ -45,6 +45,7 @@ import {
   runDepreciation,
 } from '@shareat/domain';
 import { money } from '@shareat/core/money';
+import { CAPITALISATION_DEFAULTS } from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
 
@@ -753,6 +754,55 @@ describe('the capitalisation seam (spec §6)', () => {
     // Acquired 2026-01-20, 48,000 over 24 months = 2,000/month, three months charged.
     expect(charged.filter((c) => c.created)).toHaveLength(3);
     expect(Number(await ledgerTotal(f.orgId, posted.assetId!, '1590'))).toBe(6000);
+  });
+});
+
+
+describe('the capitalisation threshold (bible row 141)', () => {
+  it('defaults to ₱5,000 when no policy row exists', () => {
+    // ⭐ Pinned because this number moved TWICE in one day — ₱5,000 -> ₱10,000 (row 139) ->
+    // ₱5,000 (row 141). A figure that has already proven it can change is exactly the one that
+    // should not be able to change silently.
+    expect(CAPITALISATION_DEFAULTS.threshold).toBe('5000.00');
+  });
+
+  it('capitalises AT the threshold, and not one centavo below it', async () => {
+    const f = await setup('thresh');
+
+    const under = await capexExpense(f, '4999.99');
+    const underPosted = await asPerson(f.orgId, (tx) =>
+      approveExpense(tx, actor(f.orgId, f.managerId), under),
+    );
+    expect(underPosted.assetId).toBeNull();
+
+    const at = await capexExpense(f, '5000.00');
+    const atPosted = await asPerson(f.orgId, (tx) =>
+      approveExpense(tx, actor(f.orgId, f.managerId), at),
+    );
+    expect(atPosted.assetId).toBeTruthy();
+
+    // Only the second one reached the register.
+    const assets = await asPerson(f.orgId, (tx) => fixedAssetsRepo.listAssets(tx, f.orgId, {}));
+    expect(assets).toHaveLength(1);
+    expect(assets[0]!.cost).toBe('5000.00');
+  });
+
+  it('an org policy row overrides the default in both directions', async () => {
+    const f = await setup('threshpolicy');
+    await asPerson(f.orgId, (tx) =>
+      fixedAssetsRepo.upsertPolicy(tx, {
+        orgId: f.orgId,
+        capitalizationThreshold: '20000.00',
+        defaultSalvageValue: '0.00',
+      }),
+    );
+
+    // ₱8,000 clears the DEFAULT but not this org's policy.
+    const expenseId = await capexExpense(f, '8000.00');
+    const posted = await asPerson(f.orgId, (tx) =>
+      approveExpense(tx, actor(f.orgId, f.managerId), expenseId),
+    );
+    expect(posted.assetId).toBeNull();
   });
 });
 

@@ -78,9 +78,17 @@ export const assetPolicy = pgTable(
     orgId: uuid('org_id')
       .notNull()
       .references(() => organizations.id, { onDelete: 'restrict' }),
-    /** ⭐ ₱10,000 (Ian, 2026-08-26 — bible row 139), doubling v1's ₱5,000. Nothing prescribes a
-     *  threshold; it is a materiality decision, and here it also sets how many rows a person
-     *  must physically stand in front of during the December walk-round (T-134 B2). */
+    /** ⭐ ₱5,000 (Ian, 2026-08-26 — bible row 141, which SUPERSEDES row 139's ₱10,000 and lands
+     *  back on v1's figure). Nothing prescribes a threshold; it is a materiality decision, and it
+     *  runs in two directions at once. Raising it absorbs more into a single period — a ₱9,999
+     *  purchase hitting one month's P&L in full is what ₱10,000 permitted. Lowering it spreads
+     *  more, at the cost of more rows a person must physically stand in front of during the
+     *  December walk-round (T-134 B2), and a busier `needs_review` queue.
+     *
+     *  ⚠️ This ONE threshold governs prepaid items too, not only fixed assets. v1 kept two —
+     *  `appConfig/capitalization` for assets and `stores/{id}/financialConfig/thresholds` for
+     *  prepaid — same default by coincidence, different scope, never reconciled, and v1's own
+     *  blueprint still lists the split as unresolved. One row here is the fix. */
     capitalizationThreshold: numeric('capitalization_threshold', { precision: 14, scale: 2 }).notNull(),
     /** Zero by default — conservative, since it depreciates the full cost and never overstates
      *  the asset. Overridden per asset where a resale value is genuinely known. */

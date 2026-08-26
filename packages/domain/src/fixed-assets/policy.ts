@@ -33,12 +33,17 @@ export const DEFAULT_USEFUL_LIFE_MONTHS = 24;
 /**
  * Applied only when NO policy row exists for the org.
  *
- * ⚠️ The threshold is ₱10,000, not v1's ₱5,000 — Ian doubled it on 2026-08-26 (bible row 139).
- * It is a materiality judgement whose cost is physical: every asset over the line is a row
- * somebody walks up to and counts in December.
+ * ⚠️ ₱5,000 — bible row 141 (Ian, 2026-08-26), which SUPERSEDES row 139's ₱10,000 and returns to
+ * v1's figure. His reasoning, and it is the right way round: a HIGHER threshold expenses more in
+ * full, so ₱10,000 was the setting that let a ₱9,999 purchase land entirely in one month's P&L.
+ * *"10k might be a bit high to absorb in one accounting period."*
+ *
+ * ⭐ **This threshold governs PREPAID ITEMS as well.** v1 had two disconnected ones — an org-level
+ * doc for assets, a store-scoped doc for prepaid — with the same default by coincidence and no
+ * reconciliation; its own blueprint still lists the split as unresolved. One value, one place.
  */
 export const CAPITALISATION_DEFAULTS = {
-  threshold: '10000.00',
+  threshold: '5000.00',
   salvageValue: '0.00',
 } as const;
 

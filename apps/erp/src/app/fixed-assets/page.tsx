@@ -269,7 +269,7 @@ export default async function FixedAssetsPage({
 
       <p className="text-xs text-neutral-400 dark:text-neutral-600">
         {toBusinessDate()} today (Asia/Manila). Capitalisation threshold{' '}
-        {policy ? formatMoney(money(policy.capitalizationThreshold)) : '₱10,000.00 (default — no policy set)'}.
+        {policy ? formatMoney(money(policy.capitalizationThreshold)) : '₱5,000.00 (default — no policy set)'}.
         Categories: {ASSET_CATEGORIES.length}.
       </p>
     </main>
