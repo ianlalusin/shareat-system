@@ -1,6 +1,6 @@
 # T-143 — Pooled remittance: one handover settling many days
 
-> **Status:** SPEC, 2026-08-27. Written before implementation (bible §1.2a).
+> **Status:** ✅ **BUILT, 2026-08-27.** Written before implementation (bible §1.2a).
 > **Requirements:** T-136 §1 and §7 — this is their **design**. Bible rows **128–129, 144–147**.
 > **Depends on:** T-139 money transfers, T-142's five foundation accounts, ADR-010's custodians.
 > **⛔ Not in scope:** T-136 §2's imprest revolving fund. Its §5 research pass (ERPNext/Odoo
@@ -160,5 +160,6 @@ negative short, positive over), `status` (`open` · `charged` · `written_off`),
 - [x] Integration tests — 8, including the five-day worked example to the peso, the additive
       second batch, the DEF-052 denial, and ⛔ the shortage that cannot be charged to nobody.
       Plus 8 unit tests on FIFO itself.
-- [ ] Driven end to end in a browser.
-- [ ] Gates: typecheck · unit · integration.
+- [x] Driven end to end in a browser: ₱25,000 against ₱27,250 owed — **Aug 02 Remitted, Aug 03
+      Partly remitted (₱6,500 of ₱8,750), short ₱2,250 open on Aug 03 with *“Nobody yet…”*.**
+- [x] Gates: typecheck · unit 553 · integration 865.

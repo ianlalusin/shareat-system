@@ -280,9 +280,13 @@ export async function resolveRemittanceVariance(
 export function remittanceStateOf(report: {
   movement: string;
   allocated: string;
-}): 'unremitted' | 'partially_remitted' | 'remitted' {
+}): 'nothing_owed' | 'unremitted' | 'partially_remitted' | 'remitted' {
   const owed = Number(report.movement);
   const done = Number(report.allocated);
+  // ⚠️ A day the cashier paid MORE out of than came in owes nothing — the office is out of pocket,
+  // not the till. Calling that "not remitted" would put it on a list of things somebody has to
+  // chase, which is the opposite of true.
+  if (owed <= 0 && done <= 0) return 'nothing_owed';
   if (done <= 0) return 'unremitted';
   if (done >= owed) return 'remitted';
   return 'partially_remitted';
