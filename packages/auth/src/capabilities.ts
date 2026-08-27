@@ -53,12 +53,13 @@ export const ROLES = ['super_admin', 'admin', 'manager', 'staff'] as const;
 export type Role = (typeof ROLES)[number];
 
 // -----------------------------------------------------------------------------------------
-// The 39 capabilities, exactly as CAPABILITY-MATRIX.md lists them (grep-counted against
+// The 41 capabilities, exactly as CAPABILITY-MATRIX.md lists them (grep-counted against
 // the document, not hand-counted — see the task report: the document's own prose says
 // "36 rows" in two places, but the table itself had 38 entries including the two
 // ⚠️-flagged open cells and the two platform-only rows, and transfer_funds (row 150) is
-// the 39th. Invariant 3's parser is the proof: it fails loudly if this list and the
-// document ever disagree, in EITHER direction).
+// the 39th; T-125's manage_prepaid_items and run_amortisation make 41. Invariant 3's parser
+// is the proof: it fails loudly if this list and the document ever disagree, in EITHER
+// direction).
 // -----------------------------------------------------------------------------------------
 
 export type Capability =
@@ -106,6 +107,8 @@ export type Capability =
   | 'manage_price_lists'
   | 'manage_fixed_assets'
   | 'run_depreciation'
+  | 'manage_prepaid_items'
+  | 'run_amortisation'
   | 'manage_chart_of_accounts'
   // Platform — super-admin only
   | 'cross_org_access'
@@ -148,6 +151,8 @@ export const CAPABILITIES: readonly Capability[] = [
   'manage_price_lists',
   'manage_fixed_assets',
   'run_depreciation',
+  'manage_prepaid_items',
+  'run_amortisation',
   'manage_chart_of_accounts',
   'cross_org_access',
   'view_franchise_sales',
@@ -206,6 +211,10 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   manage_price_lists: 'org',
   manage_fixed_assets: 'org',
   run_depreciation: 'org',
+  // Org-scoped like their fixed-asset twins: a policy or a licence is bought by the business,
+  // not by a till.
+  manage_prepaid_items: 'org',
+  run_amortisation: 'org',
   manage_chart_of_accounts: 'org',
 
   cross_org_access: 'platform',
@@ -277,6 +286,15 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   manage_price_lists: { super_admin: true, admin: true, manager: false, staff: false },
   manage_fixed_assets: { super_admin: true, admin: true, manager: false, staff: false },
   run_depreciation: { super_admin: true, admin: true, manager: false, staff: false },
+  // ⭐ Mirrors manage_fixed_assets / run_depreciation exactly, and is SEPARATE from them on
+  // purpose: someone trusted with the asset register is not automatically trusted with the
+  // insurance policies and licences, and a reviewer asking "who may write off a prepaid?"
+  // should find a row rather than infer one.
+  //
+  // ⚠️ Both are admin-yes/manager-no, so they enrol themselves into
+  // ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — that set is DERIVED, so nobody has to remember.
+  manage_prepaid_items: { super_admin: true, admin: true, manager: false, staff: false },
+  run_amortisation: { super_admin: true, admin: true, manager: false, staff: false },
   manage_chart_of_accounts: { super_admin: true, admin: true, manager: false, staff: false },
 
   cross_org_access: { super_admin: true, admin: false, manager: false, staff: false },

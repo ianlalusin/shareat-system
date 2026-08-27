@@ -22,6 +22,8 @@ export type { Custodian, MoneyInstrument } from '../schema/money-accounts';
 export type { MoneyTransferStatus } from '../schema/money-transfers';
 export type { MoneyAccountRow } from './repo/money-accounts';
 export type { MoneyTransferRow, MoneyTransferListRow } from './repo/money-transfers';
+export type { PrepaidCategory, PrepaidStatus } from '../schema/prepaid';
+export type { PrepaidItemRow } from './repo/prepaid';
 export * as journalRepo from './repo/journal';
 export * as etlRepo from './repo/etl';
 export * as reportsRepo from './repo/reports';
@@ -31,6 +33,7 @@ export * as salesDaysRepo from './repo/sales-days';
 export * as fixedAssetsRepo from './repo/fixed-assets';
 export * as moneyAccountsRepo from './repo/money-accounts';
 export * as moneyTransfersRepo from './repo/money-transfers';
+export * as prepaidRepo from './repo/prepaid';
 export * as sessionsRepo from './repo/sessions';
 // Re-exported so a caller establishing a principal around an authorize() call (T-121) does
 // not need to reach into packages/db/src/rls/registry.ts directly.

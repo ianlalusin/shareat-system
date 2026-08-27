@@ -99,6 +99,8 @@ they need weekly, the boundary is wrong.
 | `manage_price_lists` | org | ✅ | ✅ | ✗ | ✗ | Pricing is a commercial decision, not an operational one |
 | `manage_fixed_assets` | org | ✅ | ✅ | ✗ | ✗ | |
 | `run_depreciation` | org | ✅ | ✅ | ✗ | ✗ | **Scheduled, not clicked** — v1's stopped scheduler is DEF-044 |
+| `manage_prepaid_items` | org | ✅ | ✅ | ✗ | ✗ | T-125. Separate from `manage_fixed_assets` on purpose — the asset register and the insurance policies are not the same trust |
+| `run_amortisation` | org | ✅ | ✅ | ✗ | ✗ | **Scheduled, not clicked**, same as `run_depreciation`. v1's stopped scheduler is DEF-044 |
 | `manage_chart_of_accounts` | org | ✅ | ✅ | ✗ | ✗ | The technical residue. Exactly what Ian was right not to hand over |
 
 ## Platform — super-admin only

@@ -18,7 +18,7 @@ import {
  * `docs/decisions/CAPABILITY-MATRIX.md` IS the decision; `packages/auth/src/capabilities.ts`
  * is the enforcement. Invariant 3 requires the two to match "exactly — parsed, not
  * hand-compared", so this file PARSES the markdown table with a regex rather than trusting
- * a human transcription (including this test's own author's) to have gotten all 39 rows
+ * a human transcription (including this test's own author's) to have gotten all 41 rows
  * right by eye.
  *
  * Invariants 1 and 2 ("every capability has an explicit decision for all four roles" /
@@ -146,7 +146,7 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     expect(rows.length).toBeGreaterThan(5);
   });
 
-  it('finds exactly 39 capability rows — NOT the "36" the task documents say in prose', () => {
+  it('finds exactly 41 capability rows — NOT the "36" the task documents say in prose', () => {
     // docs/tasks/121-roles-and-access.md and CAPABILITY-MATRIX.md's own Contract section
     // both say "36 rows" / "36 capabilities". The table itself had 38: the two
     // ⚠️-flagged open cells (set_credit_limit, close_period) plus the two platform-only
@@ -155,11 +155,12 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // this test pins the ACTUAL count so a future edit to the document that changes it
     // is caught rather than re-drifting unnoticed.
     //
-    // ⭐ 39 since bible row 150 added `transfer_funds`. Having to edit this number is the
+    // ⭐ 39 since bible row 150 added `transfer_funds`, 41 since T-125 added
+    // `manage_prepaid_items` and `run_amortisation`. Having to edit this number is the
     // guard WORKING: a capability cannot be slipped into the enforcement without also
     // being written into the document people actually read, and vice versa.
     const { rows } = parseCapabilityMatrixDoc();
-    expect(rows.length).toBe(39);
+    expect(rows.length).toBe(41);
   });
 
   it('has no duplicate capability names', () => {
@@ -230,10 +231,10 @@ describe('invariant 1 — every capability has an explicit decision for all four
     expect(problems).toEqual([]);
   });
 
-  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 39 capabilities', () => {
-    expect(CAPABILITIES.length).toBe(39);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(39);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(39);
+  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 41 capabilities', () => {
+    expect(CAPABILITIES.length).toBe(41);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(41);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(41);
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));
   });
@@ -280,6 +281,12 @@ describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', (
         'manage_price_lists',
         'manage_fixed_assets',
         'run_depreciation',
+        // ⭐ T-125's two JOINED this set with no edit to any list — they are admin-yes /
+        // manager-no, and the set is derived from exactly that. Updating this pinned copy is the
+        // only manual step, and it exists so the enrolment is NOTICED rather than silent: a
+        // capability quietly gaining a fallback grant is how access widens without a decision.
+        'manage_prepaid_items',
+        'run_amortisation',
         'manage_chart_of_accounts',
       ].sort(),
     );
