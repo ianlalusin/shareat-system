@@ -32,4 +32,5 @@ export * from './money-accounts';
 export * from './money-transfers';
 export * from './scheduler';
 export * from './remittance';
+export * from './stored-files';
 export * from './prepaid';

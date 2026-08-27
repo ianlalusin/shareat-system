@@ -9,7 +9,11 @@
     "./money": "./src/money.ts",
     "./datetime": "./src/datetime.ts",
     "./logger": "./src/logger.ts",
-    "./env": "./src/env.ts"
+    "./env": "./src/env.ts",
+    "./exif": "./src/exif.ts"
   },
-  "dependencies": { "pino": "^9.6.0", "zod": "^3.24.2" }
+  "dependencies": {
+    "pino": "^9.6.0",
+    "zod": "^3.24.2"
+  }
 }

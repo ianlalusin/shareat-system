@@ -85,6 +85,8 @@ export interface ExpenseRow {
   supplierId: string | null;
   particulars: string;
   receiptPhotoUrl: string | null;
+  /** ⭐ The brokered receipt (T-141). The gate checks THIS, not the URL string. */
+  receiptFileId: string | null;
   status: ExpenseStatus;
   journalEntryId: string | null;
   createdBy: string;
@@ -106,6 +108,7 @@ const EXPENSE_COLUMNS = {
   supplierId: expenses.supplierId,
   particulars: expenses.particulars,
   receiptPhotoUrl: expenses.receiptPhotoUrl,
+  receiptFileId: expenses.receiptFileId,
   status: expenses.status,
   journalEntryId: expenses.journalEntryId,
   createdBy: expenses.createdBy,

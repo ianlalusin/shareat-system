@@ -14,6 +14,7 @@
 import { authorize, type Actor } from '@shareat/auth';
 import { expensesRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
 import { money } from '@shareat/core/money';
+import { filesRepo } from '@shareat/db';
 import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry } from '../ledger/post-entry';
 import { routeExpense } from './routing';
@@ -66,7 +67,30 @@ async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promi
   // merely in the form (DEF-055: every expense recorded through this module is external
   // by construction, so the gate is simply "no photo, no posting", with no further
   // condition to evaluate).
-  if (!expense.receiptPhotoUrl || !expense.receiptPhotoUrl.trim()) {
+  //
+  // ⭐ T-141: the gate now checks a ROW, not a string. `receipt_photo_url` is a plain text field,
+  // so the old check was satisfied by typing `x` — the rule was real, the evidence behind it was
+  // not. A brokered file cannot be forged: its path is derived from the session.
+  //
+  // ⚠️ EXPAND PHASE (bible §15.5): a legacy URL still satisfies the gate while old drafts exist.
+  // Contracting to file-only is a later, deliberate step — not a silent one.
+  if (expense.receiptFileId) {
+    const file = await filesRepo.getById(tx, actor.orgId, expense.receiptFileId);
+    // ⛔ The org check is implicit (RLS + the orgId argument), but the STORE check is not, and it
+    // is the one that matters: a receipt belonging to another store is not evidence for this
+    // expense, however real the file is.
+    if (!file) {
+      throw new Error(
+        `approveExpense: expense ${expenseId} names a receipt file that does not exist in this org`,
+      );
+    }
+    if (file.storeId && file.storeId !== expense.storeId) {
+      throw new Error(
+        `approveExpense: expense ${expenseId} names a receipt belonging to another store — ` +
+          'a photo from somewhere else is not evidence for this expense',
+      );
+    }
+  } else if (!expense.receiptPhotoUrl || !expense.receiptPhotoUrl.trim()) {
     throw new Error(
       `approveExpense: expense ${expenseId} has no receipt photo — cannot post (invariant 11, DEF-055)`,
     );

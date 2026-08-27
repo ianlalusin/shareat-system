@@ -10,6 +10,7 @@ const alias = {
   '@shareat/core/datetime': `${root}packages/core/src/datetime.ts`,
   '@shareat/core/logger': `${root}packages/core/src/logger.ts`,
   '@shareat/core/env': `${root}packages/core/src/env.ts`,
+  '@shareat/core/exif': `${root}packages/core/src/exif.ts`,
   '@shareat/core': `${root}packages/core/src/index.ts`,
   '@shareat/db/schema': `${root}packages/db/schema/index.ts`,
   '@shareat/db/client': `${root}packages/db/src/client.ts`,

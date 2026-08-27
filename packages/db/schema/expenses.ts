@@ -114,6 +114,9 @@ export const expenses = pgTable(
     // never merely in the form. Nullable here because a DRAFT may exist before the photo
     // is attached.
     receiptPhotoUrl: text('receipt_photo_url'),
+    /** ⭐ The brokered file behind the photo gate (T-141). ⚠️ `receipt_photo_url` above stays
+     *  during the expand phase; contracting it is a separate migration once nothing reads it. */
+    receiptFileId: uuid('receipt_file_id'),
     status: text('status', { enum: ['draft', 'posted', 'voided'] })
       .notNull()
       .default('draft'),

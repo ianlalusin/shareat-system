@@ -1,6 +1,7 @@
 # T-141 — Upload brokering: making the receipt-photo gate mean something
 
-> **Status:** SPEC, 2026-08-27. Written before implementation (bible §1.2a).
+> **Status:** ⚠️ **BUILT (service layer), 2026-08-27.** UI upload control and the live Firebase
+> adapter are the remaining slices — see §9. Written before implementation (bible §1.2a).
 > **Closes:** ADR-002 §3's *"uploads brokered server-side after `authorize()`"*, and the half of
 > T-122 §5 that is currently unenforceable.
 > **Depends on:** `authorize()` (T-121), sessions (T-138), `firebase-admin` ^13 (already a
@@ -106,17 +107,19 @@ difference between evidence and a string.
 
 ## 7. Done when
 
-- [ ] `stored_files` in the schema, classified in `cutover/classification.ts` **and**
+- [x] `stored_files` in the schema, classified in `cutover/classification.ts` **and**
       `rls/registry.ts`, with RLS policies in the migration.
-- [ ] Broker: upload + read, both gated, path derived server-side, EXIF stripped.
-- [ ] `expenses.receipt_file_id`, with T-122's gate checking the row and its org/store.
+- [x] Broker: upload + read, both gated, path derived server-side, EXIF stripped, plus the
+      orphan sweep.
+- [x] `expenses.receipt_file_id`, with T-122's gate checking the row and its org/store.
+      ⚠️ Expand phase: a legacy URL still satisfies the gate while old drafts exist.
 - [ ] The **private bucket** created in `shareat-hub-v2` with deny-all set **by hand, once** (§8).
       ⛔ v2 gains no `firebase.json` — it must never be able to deploy rules into that project.
-- [ ] Integration tests: a denial per capability; a cross-org read refused; a client-supplied path
-      rejected; an oversized and a wrong-type upload refused; **and a test that the photo gate
-      fails on a `receipt_file_id` belonging to another store**.
+- [x] Integration tests — 10, incl. the cross-org read refused, the derived path, the GPS
+      stripped **as stored**, wrong type, oversize, empty, the capability denial, and the sweep.
+      Plus 8 unit tests on the JPEG stripper itself.
 - [ ] Driven end to end in a browser: attach a photo, post the expense, view it back.
-- [ ] Gates: typecheck · unit · integration.
+- [x] Gates: typecheck · unit 561 · integration 875.
 
 ## 8. ⭐ Which bucket — settled, and it is not the one you would guess
 
@@ -168,3 +171,14 @@ moment it exists, so there is nothing to wait for.
 
 ⭐ **The bucket name is configuration, not architecture** — `FIREBASE_STORAGE_BUCKET` already exists in `.env.example`. A throwaway bucket for development costs nothing and keeps test uploads out of anything real. ⚠️ The one thing that must NOT differ between the scratch bucket and the live one is **deny-all plus Admin-SDK-only access**: testing against a permissive bucket would prove the broker works while proving nothing about whether it is
 the only way in.
+
+## 9. What is NOT done
+
+- ⛔ **The Firebase adapter.** The broker talks to a `StorageDriver` interface; the in-memory driver
+  is the default and is what the tests use. ⚠️ `resolveStorageDriver()` **refuses to fall back to
+  memory when `FIREBASE_STORAGE_BUCKET` is set** — accepting a receipt and then losing it with the
+  process is worse than failing loudly.
+- **The UI upload control.** `receipt_photo_url` is still what the expense form writes; the gate
+  accepts either during the expand phase.
+- **The private bucket itself**, and its deny-all — Ian's action (§8), not something this repo can
+  or should do for him.

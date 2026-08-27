@@ -175,6 +175,13 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'What an org has paid for in advance — its insurers, its landlords, its licence renewals. ' +
       'A franchise must never see another org’s contracts.',
   },
+  stored_files: {
+    scope: 'org_column',
+    reason:
+      "Which documents an org holds, and where they sit. ⭐ THE POINT OF T-141: the bucket "
+      + "itself has no org isolation (DEF-070), so this row is where it comes from \u2014 a read "
+      + 'is brokered only after `authorize()` has matched this org.',
+  },
   remittances: {
     scope: 'org_column',
     reason: "What an org handed over, when, and who accepted it \u2014 its cash custody trail.",

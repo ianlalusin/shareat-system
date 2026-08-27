@@ -201,6 +201,16 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'same treatment fixed_assets gets, so the item stays and its money is cleared.',
     clearColumns: ['total_cost', 'coverage_start_date', 'coverage_months', 'source_expense_id'],
   },
+  stored_files: {
+    class: 'keep_shell',
+    reason:
+      'The pointer to a document that proves something. ⚠️ KEEP_SHELL rather than purge: the ' +
+      'BYTES live in a bucket this purge cannot reach, so deleting the rows would orphan every ' +
+      'object with no way left to find it — the row IS the index. What is cleared is the LINK, ' +
+      'because whatever it pointed at is gone; the file then ages out through the orphan sweep ' +
+      'like any other unclaimed upload.',
+    clearColumns: ['linked_to'],
+  },
   remittances: {
     class: 'purge',
     reason:
