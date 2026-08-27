@@ -1,0 +1,281 @@
+/**
+ * The only place SQL is written for loans. T-126, bible row 158.
+ *
+ * ## ⭐ `positionOf` and `paymentsFor` are the point of this file
+ *
+ * v1 kept **four** running totals on the loan, a `loanPayments` collection, and a `LoanLedgerEntry`
+ * with its own `balanceBefore` — three registers of one debt, and the ERPNext migration measured
+ * the result: *"NEITHER figure is usable."* Here both come from the ledger, so there is nothing to
+ * diverge.
+ *
+ * ⚠️ **Attribution is `source_type` + `source_id`, not the account.** `2400` is one control account
+ * for every loan in the org, so the account cannot say whose debt a line is — the `party_id` and
+ * the entry's `source_id` do.
+ */
+import { and, asc, desc, eq, isNull, ne, sql } from 'drizzle-orm';
+import type { Tx } from '../client';
+import { accounts } from '../../schema/accounts';
+import { journalEntries, journalLines } from '../../schema/journal';
+import {
+  loans,
+  type InterestMethod,
+  type LoanStatus,
+  type PaymentFrequency,
+  type RatePeriod,
+} from '../../schema/loans';
+
+export const LOAN_LIABILITY_CODE = '2400';
+export const INTEREST_EXPENSE_CODE = '7200';
+export const DISBURSEMENT_SOURCE = 'loan_disbursement';
+export const PAYMENT_SOURCE = 'loan_payment';
+
+export interface LoanRow {
+  id: string;
+  orgId: string;
+  storeId: string;
+  lenderName: string;
+  name: string;
+  principalAmount: string;
+  interestRate: string;
+  ratePeriod: RatePeriod;
+  interestMethod: InterestMethod;
+  paymentFrequency: PaymentFrequency;
+  termPeriods: number;
+  startDate: string;
+  status: LoanStatus;
+  closedOn: string | null;
+  closeReason: string | null;
+  notes: string | null;
+  createdAt: Date;
+}
+
+export interface InsertLoanInput {
+  orgId: string;
+  storeId: string;
+  lenderName: string;
+  name: string;
+  principalAmount: string;
+  interestRate: string;
+  ratePeriod: RatePeriod;
+  interestMethod: InterestMethod;
+  paymentFrequency: PaymentFrequency;
+  termPeriods: number;
+  startDate: string;
+  notes?: string | null;
+  createdBy: string;
+}
+
+export async function insertLoan(tx: Tx, input: InsertLoanInput): Promise<{ id: string }> {
+  const [row] = await tx.insert(loans).values(input).returning({ id: loans.id });
+  return row!;
+}
+
+export async function getById(tx: Tx, orgId: string, id: string): Promise<LoanRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(loans)
+    .where(and(eq(loans.id, id), eq(loans.orgId, orgId)))
+    .limit(1);
+  return row as LoanRow | undefined;
+}
+
+export async function listLoans(
+  tx: Tx,
+  orgId: string,
+  filter: { storeId?: string; status?: LoanStatus } = {},
+): Promise<LoanRow[]> {
+  const conditions = [eq(loans.orgId, orgId)];
+  if (filter.storeId) conditions.push(eq(loans.storeId, filter.storeId));
+  if (filter.status) conditions.push(eq(loans.status, filter.status));
+  const rows = await tx
+    .select()
+    .from(loans)
+    .where(and(...conditions))
+    .orderBy(desc(loans.startDate));
+  return rows as LoanRow[];
+}
+
+export async function setStatus(
+  tx: Tx,
+  orgId: string,
+  id: string,
+  input: { status: LoanStatus; closedOn?: string | null; closeReason?: string | null },
+): Promise<void> {
+  await tx
+    .update(loans)
+    .set({ ...input, updatedAt: sql`now()` })
+    .where(and(eq(loans.id, id), eq(loans.orgId, orgId)));
+}
+
+// -------------------------------------------------------------------------------------
+// ⭐ Derived — from the ledger, never from a column
+// -------------------------------------------------------------------------------------
+
+export interface LoanPosition {
+  /** Principal actually disbursed. ⚠️ Not the agreed principal — a loan can be drawn in stages. */
+  disbursed: string;
+  /** Principal repaid: debits to `2400` on payment entries. */
+  principalPaid: string;
+  /** Interest recognised: debits to `7200` on this loan's entries. */
+  interestPaid: string;
+  /** `disbursed − principalPaid`. ⛔ Never a column. */
+  outstanding: string;
+}
+
+/**
+ * What this loan currently owes, summed from the ledger.
+ *
+ * ## ⚠️ Reversed entries are INCLUDED, and that is the correction
+ *
+ * The obvious filter — `status <> 'reversed'` — is **worse than no filter at all**, and the tests
+ * caught it. A reversal is itself a posted entry carrying the same `source_type` and `source_id`,
+ * so excluding the original while keeping its mirror leaves the mirror counting **in the opposite
+ * direction**: a reversed ₱1,000 payment made the loan owe ₱2,000.
+ *
+ * ⭐ **The ledger already nets.** The original and its reversal sum to zero on their own, which is
+ * the whole reason reversal is preferred to deletion — filtering is not merely unnecessary here,
+ * it actively breaks the arithmetic it was meant to protect.
+ */
+export async function positionOf(tx: Tx, orgId: string, loanId: string): Promise<LoanPosition> {
+  const [row] = await tx.execute(sql`
+    select
+      coalesce(sum(case when a.code = ${LOAN_LIABILITY_CODE} and je.source_type = ${DISBURSEMENT_SOURCE}
+                        then jl.credit - jl.debit else 0 end), 0)::text as disbursed,
+      coalesce(sum(case when a.code = ${LOAN_LIABILITY_CODE} and je.source_type = ${PAYMENT_SOURCE}
+                        then jl.debit - jl.credit else 0 end), 0)::text as principal_paid,
+      coalesce(sum(case when a.code = ${INTEREST_EXPENSE_CODE}
+                        then jl.debit - jl.credit else 0 end), 0)::text as interest_paid
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId}
+      and je.source_id = ${loanId}
+      and je.source_type in (${DISBURSEMENT_SOURCE}, ${PAYMENT_SOURCE})
+      and je.status <> 'draft'
+  `) as unknown as Record<string, string>[];
+
+  const disbursed = Number(row?.disbursed ?? 0);
+  const principalPaid = Number(row?.principal_paid ?? row?.principalPaid ?? 0);
+  const interestPaid = Number(row?.interest_paid ?? row?.interestPaid ?? 0);
+
+  return {
+    disbursed: disbursed.toFixed(2),
+    principalPaid: principalPaid.toFixed(2),
+    interestPaid: interestPaid.toFixed(2),
+    outstanding: (disbursed - principalPaid).toFixed(2),
+  };
+}
+
+export interface LoanPaymentRow {
+  entryId: string;
+  paidOn: string;
+  principal: string;
+  interest: string;
+  total: string;
+  memo: string | null;
+}
+
+/**
+ * ⭐ The payment history, read from the ledger — **there is no `loan_payments` table.**
+ *
+ * A payment is not a thing that happens alongside the ledger; it *is* a ledger entry. Giving it a
+ * second home is how v1 ended up with three registers of one debt.
+ */
+export async function paymentsFor(
+  tx: Tx,
+  orgId: string,
+  loanId: string,
+): Promise<LoanPaymentRow[]> {
+  const rows = await tx.execute(sql`
+    select je.id::text                                   as entry_id,
+           je.entry_date::text                           as paid_on,
+           je.memo                                       as memo,
+           coalesce(sum(case when a.code = ${LOAN_LIABILITY_CODE} then jl.debit - jl.credit else 0 end), 0)::text as principal,
+           coalesce(sum(case when a.code = ${INTEREST_EXPENSE_CODE} then jl.debit - jl.credit else 0 end), 0)::text as interest
+    from journal_entries je
+    join journal_lines jl on jl.entry_id = je.id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId}
+      and je.source_id = ${loanId}
+      and je.source_type = ${PAYMENT_SOURCE}
+      and je.status <> 'draft'
+      -- ⚠️ A LIST is not a SUM, so here both halves go: the reversed original AND the reversal
+      -- itself (reversal_of_entry_id is not null). Netting is right for a figure and wrong for a
+      -- history — nobody wants to read a payment beside its own undo.
+      and je.status <> 'reversed'
+      and je.reversal_of_entry_id is null
+    group by je.id, je.entry_date, je.memo
+    order by je.entry_date asc, je.created_at asc
+  `);
+
+  return (rows as unknown as Record<string, unknown>[]).map((r) => {
+    const principal = Number(r.principal ?? 0);
+    const interest = Number(r.interest ?? 0);
+    return {
+      entryId: String(r.entry_id ?? r.entryId),
+      paidOn: String(r.paid_on ?? r.paidOn),
+      principal: principal.toFixed(2),
+      interest: interest.toFixed(2),
+      total: (principal + interest).toFixed(2),
+      memo: (r.memo ?? null) as string | null,
+    };
+  });
+}
+
+/** The last payment date, or null — what interest accrues FROM. */
+export async function lastPaymentDate(
+  tx: Tx,
+  orgId: string,
+  loanId: string,
+): Promise<string | null> {
+  const [row] = await tx
+    .select({ d: sql<string>`max(${journalEntries.entryDate})::text` })
+    .from(journalEntries)
+    .where(
+      and(
+        eq(journalEntries.orgId, orgId),
+        eq(journalEntries.sourceId, loanId),
+        eq(journalEntries.sourceType, PAYMENT_SOURCE),
+        ne(journalEntries.status, 'draft'),
+        // Interest accrues from the last payment that still STANDS — a reversed one never happened.
+        ne(journalEntries.status, 'reversed'),
+        isNull(journalEntries.reversalOfEntryId),
+      ),
+    );
+  return row?.d ?? null;
+}
+
+/** Every loan's position in one query — the register screen's N+1 guard. */
+export async function positionsByLoan(tx: Tx, orgId: string): Promise<Map<string, LoanPosition>> {
+  const rows = await tx.execute(sql`
+    select je.source_id::text as loan_id,
+      coalesce(sum(case when a.code = ${LOAN_LIABILITY_CODE} and je.source_type = ${DISBURSEMENT_SOURCE}
+                        then jl.credit - jl.debit else 0 end), 0)::text as disbursed,
+      coalesce(sum(case when a.code = ${LOAN_LIABILITY_CODE} and je.source_type = ${PAYMENT_SOURCE}
+                        then jl.debit - jl.credit else 0 end), 0)::text as principal_paid,
+      coalesce(sum(case when a.code = ${INTEREST_EXPENSE_CODE}
+                        then jl.debit - jl.credit else 0 end), 0)::text as interest_paid
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId}
+      and je.source_type in (${DISBURSEMENT_SOURCE}, ${PAYMENT_SOURCE})
+      -- ⚠️ Reversed entries stay IN: they and their reversals net to zero. See positionOf.
+      and je.status <> 'draft'
+    group by je.source_id
+  `);
+
+  const map = new Map<string, LoanPosition>();
+  for (const r of rows as unknown as Record<string, string>[]) {
+    const disbursed = Number(r.disbursed ?? 0);
+    const principalPaid = Number(r.principal_paid ?? r.principalPaid ?? 0);
+    const interestPaid = Number(r.interest_paid ?? r.interestPaid ?? 0);
+    map.set(String(r.loan_id ?? r.loanId), {
+      disbursed: disbursed.toFixed(2),
+      principalPaid: principalPaid.toFixed(2),
+      interestPaid: interestPaid.toFixed(2),
+      outstanding: (disbursed - principalPaid).toFixed(2),
+    });
+  }
+  return map;
+}

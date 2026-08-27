@@ -201,6 +201,15 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'same treatment fixed_assets gets, so the item stays and its money is cleared.',
     clearColumns: ['total_cost', 'coverage_start_date', 'coverage_months', 'source_expense_id'],
   },
+  loans: {
+    class: 'keep',
+    reason:
+      'A debt does not stop existing because the books restarted \u2014 the lender still expects ' +
+      'the money. ⚠️ KEEP, but the outstanding balance is NOT inherited: it is derived from the ' +
+      'ledger, which is purged, so T-134 must re-enter the position as an opening balance. ' +
+      '⛔ And v1\u2019s stored figures must not be used for it \u2014 the ERPNext migration ' +
+      'measured both live Grab loans and found "NEITHER figure is usable".',
+  },
   stored_files: {
     class: 'keep_shell',
     reason:

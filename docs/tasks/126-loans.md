@@ -1,6 +1,6 @@
 # T-126 — Loans: disbursement, payment, interest
 
-> **Status:** SPEC, 2026-08-27. Written before implementation (bible §1.2a).
+> **Status:** ⚠️ **BUILT (service layer), 2026-08-27.** Screens remain. Written before implementation (bible §1.2a).
 > **Plan:** phase-2 §Financial, after T-125.
 > **Accounts already seeded:** `2400` Loans payable (**control, party-requiring — the lender**) and
 > `7200` Interest expense.
@@ -88,11 +88,11 @@ inter-store payable — it needs T-133 and rows 152–153's due-from/due-to pair
 
 ## 7. Done when
 
-- [ ] `loans` in the schema, classified in `cutover/classification.ts` **and** `rls/registry.ts`,
+- [x] `loans` in the schema, classified in `cutover/classification.ts` **and** `rls/registry.ts`,
       with RLS policies in the migration.
-- [ ] Interest and split arithmetic in a **pure module**, unit-tested against the three methods.
-- [ ] Repo + services (disburse · pay · void), with outstanding derived.
-- [ ] Integration tests: the postings; a payment split; a payment larger than the debt refused; a
-      denial test; and a test that none of v1's four totals exists as a column.
+- [x] Interest and split arithmetic in a **pure module**, 14 unit tests across the three methods.
+- [x] Repo + services (disburse · pay · void), with outstanding derived.
+- [x] Integration tests — 10, incl. the postings, the computed split, the overpayment refused,
+      the denial, and that neither v1's four totals nor a `loan_payments` table exists.
 - [ ] Screens, driven end to end in a browser.
-- [ ] Gates: typecheck · unit · integration.
+- [x] Gates: typecheck · unit 575 · integration 885. ⚠️ Screens still to do.

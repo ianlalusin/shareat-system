@@ -15,3 +15,4 @@ export * from './prepaid';
 export * from './scheduler';
 export * from './remittance';
 export * from './files';
+export * from './loans';

@@ -63,35 +63,35 @@
 - `1034–1068 ` 10. Phase plan
 - `1069–1085 ` 11. Migration & ETL rules
 - `1086–1134` 12. Inherited landmines — do not repeat these
-- `1135–1298` 13. Decision log
-- `1299–1318` 14. Amendment protocol
-- `1319–1323` 15. Engineering standards — the industry practices this project follows
-  - `1324–1329` 15.1 Build order: walking skeleton first
-  - `1330–1341` 15.2 Golden-master testing — the most important practice here
-  - `1342–1350` 15.3 Strangler Fig, not big-bang cutover
-  - `1351–1355` 15.4 No dual-write
-  - `1356–1360` 15.5 Expand/contract migrations
-  - `1361–1369` 15.6 Observability from day zero, not later
-  - `1370–1374` 15.7 CI gates
-  - `1375–1379` 15.8 Backups and a tested restore
-  - `1380–1384` 15.9 Twelve-Factor config
-  - `1385–1392` 15.10 Append-only ledgers — but not event sourcing
-  - `1393–1397` 15.11 Defence in depth
-  - `1398–1426` 15.12 Skills are lenses, not assurance
-  - `1427–1433` 15.13 Reconciliation is a permanent feature
-- `1434–1438` 16. The accounting spine
-  - `1439–1470` 16.0 What we are actually fixing — the diagnosis
-  - `1471–1514` 16.1 The ten invariants — non-negotiable
-  - `1515–1529` 16.2 The oracle: how "correct" is tested
-  - `1530–1551` 16.3 The model — header + lines, not legs
-  - `1552–1571` 16.4 Deliberately simpler than ERPNext
-  - `1572–1638` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1639–1663` 16.6 What v1 already gets right — preserve the intent
-  - `1664–1685` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1686–1700` 16.8 What v1's accounting already gets right
-  - `1701–1744` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1745–1795` 16.10 Posting patterns — one canonical pattern per business event
-  - `1796–1813` 16.11 Inventory's accounting integration
+- `1135–1299` 13. Decision log
+- `1300–1319` 14. Amendment protocol
+- `1320–1324` 15. Engineering standards — the industry practices this project follows
+  - `1325–1330` 15.1 Build order: walking skeleton first
+  - `1331–1342` 15.2 Golden-master testing — the most important practice here
+  - `1343–1351` 15.3 Strangler Fig, not big-bang cutover
+  - `1352–1356` 15.4 No dual-write
+  - `1357–1361` 15.5 Expand/contract migrations
+  - `1362–1370` 15.6 Observability from day zero, not later
+  - `1371–1375` 15.7 CI gates
+  - `1376–1380` 15.8 Backups and a tested restore
+  - `1381–1385` 15.9 Twelve-Factor config
+  - `1386–1393` 15.10 Append-only ledgers — but not event sourcing
+  - `1394–1398` 15.11 Defence in depth
+  - `1399–1427` 15.12 Skills are lenses, not assurance
+  - `1428–1434` 15.13 Reconciliation is a permanent feature
+- `1435–1439` 16. The accounting spine
+  - `1440–1471` 16.0 What we are actually fixing — the diagnosis
+  - `1472–1515` 16.1 The ten invariants — non-negotiable
+  - `1516–1530` 16.2 The oracle: how "correct" is tested
+  - `1531–1552` 16.3 The model — header + lines, not legs
+  - `1553–1572` 16.4 Deliberately simpler than ERPNext
+  - `1573–1639` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1640–1664` 16.6 What v1 already gets right — preserve the intent
+  - `1665–1686` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1687–1701` 16.8 What v1's accounting already gets right
+  - `1702–1745` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1746–1796` 16.10 Posting patterns — one canonical pattern per business event
+  - `1797–1814` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1293,6 +1293,7 @@ just a patch.**
 | 155 | 2026-08-27 | ⭐ **ONE AUTH TENANT (`shareat-hub-v2`), AND STORAGE SPLIT BY SENSITIVITY — NOT BY APP.** ERP staff sign in with the same Firebase identity they use in POS. Public CDN content stays in the world-readable default bucket; accounting documents go in a **separate private bucket, reached only through the Admin SDK**. ⛔ **v2 never deploys Storage or Firestore rules.** | Ian: *“yes same firebase identity as POS — that’s the whole point of the system we are building, we will combine the backend of these separate apps as much as possible, so 1 auth yes”*, and *“storage can be separated yes, since POS and CUSTOMER app are public facing the menu photo must not be strictly accessed.”* ⭐ **The split is by what the FILE is, not by which app wrote it**, and that is the whole insight. `shareat-hub-v2`’s bucket is `allow read;` — **no condition, world-readable, unauthenticated** — which is CORRECT for menu photos, logos and loyalty images served to diners, and would be catastrophic for supplier invoices. ⚠️ POS already hit this and could not fix it: its own rules note that for customer payment proofs *“Storage rules OR across matching blocks, so a stricter `allow read` accomplishes nothing”*, leaving them to rely on an unguessable UUID path and a 15-day lifecycle delete. **Receipt photos are not payment proofs** — they carry suppliers, prices and volumes, and they are kept for years, so security-by-unguessable-URL is not an accounting control. ⭐ Putting the private bucket in the SAME project as Auth avoids a cross-project service-account credential, which ADR-003 lists as evidence of the very sprawl this rebuild exists to end (the Website’s `HUB_SA_KEY`). ⛔ **And the rule against deploying rules is load-bearing:** POS’s `firebase.json` declares `"storage": { "rules": "storage.rules" }` with **no bucket target**, so any repo deploying storage from that project overwrites POS’s production ruleset — CUSTOMER has already done exactly this. v2 has **no `firebase.json` at all** today; keep it that way. The private bucket’s deny-all is set once, by hand, and never redeployed — the Admin SDK bypasses rules, so v2 needs none. | No — an infrastructure boundary |
 | 156 | 2026-08-26 | ⭐ **EVERY STORE IS BORN WITH FIVE MONEY ACCOUNTS, AND CANNOT CLOSE THEM WHILE IT TRADES.** Cashier cash · cashier online · office cash · office online · staff float. **Names are editable; the shape is not.** | Ian: *“all stores must have these accounts, seeded and configurable but can never be terminated as long as store is active … these 5 accounts must always be present and available since they are the foundation of money movement”*, and *“cashier cash may be renamed to counter till, office cash may be office vault … unretirable but configurable in ui esp name.”* ⭐ **Enforced by a TRIGGER on `stores`, not by a service call**, because there is no `createStore` service: stores arrive from the seed, the ETL, the cutover and one day a screen — four paths, and an invariant should not be a step any of them has to remember. Same reasoning that already put ledger balance and period-open in triggers. ⚠️ **And it is load-bearing NOW:** since row 150's work a cash payment must NAME a money account, so a store created without these silently cannot record a cash expense at all. ⭐ **`is_foundation` is a FLAG, not an inference from instrument + custodian**, and that is the crux: a store may open a SECOND cashier wallet (another GCash, a bank account) and that one is ordinary — retirable like anything else. Nothing about its shape distinguishes it from the seeded one, so only a flag can. ⚠️ **Backfill ADOPTS before it seeds**, and only an account that is the store's ONLY active one of that shape: a hand-made “Cashier drawer” keeps its name, its notes and its **journal history**, where seeding first would have left two tills per store — one holding every peso ever counted and one holding nothing. A RETIRED account is never adopted, because resurrecting something deliberately closed as un-retirable is worse than seeding a fresh one. ⚠️ Renaming is admin (`manage_chart_of_accounts`, row 149): a money account's name is what every picker, report and reviewer reads, so renaming “Office vault” to “Petty cash” changes what people believe a balance means without moving a peso. ⛔ Custodian and instrument stay uneditable — they decide the GL code, so changing them would move money between accounts by editing a label. | No — a structural guarantee |
 | 157 | 2026-08-27 | ⭐ **WHAT IS REMITTED IS THE END-DAY REPORT, NOT THE SALES REPORT — and they are ONE thing, not two. A day is owed the CASHIER'S NET MOVEMENT for that date, not its remittable sales.** | Ian: *“remittance is derived from sales report — they are one, actually. It must be END DAY REPORT, not sales report. The sales report is PART OF that remittance / end-day report… the sales day is sum of sales, collection etc enclosed in same sales day. So for cleaner reporting, the sales-day report generates on POS; the one that is remitted is the remittance or end-day report — the composition of all money movement of the day across transactions.”* ⭐ **This dissolves a gap I had raised as an open question.** I had modelled a day as owing its remittable SALES, and asked what to do with the rest of the till — a ₱5,000 collection and a ₱2,000 expense that no sales day is owed. There is no remainder, because the day is not its sales: **it is everything the cashier touched.** Row 145 (“expected remittance is the cashier accounts’ net movement”) and the FIFO rule (row 144) turn out to be the SAME figure, one totalled and one per date. ⚠️ **`sales_days` is not renamed and does not grow.** It stays the POS-sourced SALES component and, critically, the LOCK — a date becomes remittable when its sales day is verified. The end-day report **contains** it. ⭐ **And the end-day report is DERIVED**: the cashier-custodian accounts’ net movement for one store on one date, read from the ledger. No table, no stored expected, and it picks up a new document type the day one appears — which a query enumerating document types would not. ⚠️ Allocations therefore key on **(store, business date)**, not on a sales-day id: a collection banked on a day the store did not trade is still money the cashier holds, and it must be remittable even though no sales day exists for it. | No |
+| 158 | 2026-08-27 | ⭐ **LOANS GET A STANDARD MODEL, NOT v1'S. ONE REGISTER — THE LEDGER — AND THE PRINCIPAL/INTEREST SPLIT IS COMPUTED, NEVER TYPED.** | Ian: *“that loan model in v1 is really flawed. I suggest build a standard one for loan and we will build on top of it later to cater our case.”* ⛔ **v1 recorded the same debt in THREE places:** four running totals on the loan (`totalPaid`, `principalPaid`, `interestPaid`, `outstandingBalance` — the last commented *“principalAmount - principalPaid”*, a stored copy of a subtraction), a `loanPayments` collection, and a `LoanLedgerEntry` carrying its own `balanceBefore`. ⚠️ **They drifted, and it was MEASURED rather than guessed:** the ERPNext migration read both live Grab loans and concluded *“NEITHER figure is usable”* — one stale by fourteen days of unrecorded settlements, the other reading zero payments because every settlement routed through a single `channelCfg.loanId`, *“a wiring artifact, not a fact.”* ⭐ **So there is no `loan_payments` table**: a payment is not a thing beside the ledger, it IS a ledger entry, and giving it a second home is how v1 got three. ⭐ **The party on a `2400` line is THE LOAN, not the lender** — which looks like the wrong noun until you ask what a party is for: it makes each balance on a shared control account attributable, and **a lender can hold two loans**, which v1's own data proves. ⭐ **The split is computed** — v1 takes it from the caller with a suggestion the caller may ignore, so the number deciding how fast a debt retires is hand-typed. Interest accrued since the last payment is taken first; principal takes the remainder. ⚠️ That handles the NORMAL case: *“the history shows Grab repeatedly deducting less than the instalment when the day's net is small.”* ⚠️ `rate_period` is **NOT NULL with no default**, because in v1 absent meant *different things on different rows* — annual on legacy loans, monthly on new ones. ⛔ Interest stays **cash-basis** as v1 has it; accruing monthly is more correct in principle and is named in T-126 §4 so the omission is a decision. ⛔ Out of scope and deliberately so: channel auto-deduct (T-140's runner owns scheduling now, not a second cron) and the cross-store paydown (needs T-133 and rows 152–153's due-from/due-to pair). | No |
 
 ---
 

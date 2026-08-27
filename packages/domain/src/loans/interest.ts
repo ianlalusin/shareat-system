@@ -112,7 +112,7 @@ export function splitPayment(input: SplitInput): PaymentSplit {
   };
 }
 
-export interface ScheduleInput {
+export interface InstalmentInput {
   principal: Money;
   ratePercent: number;
   ratePeriod: RatePeriod;
@@ -130,7 +130,7 @@ export interface ScheduleInput {
  * ⚠️ Kept separate from `splitPayment` on purpose: conflating "what was due" with "what turned up"
  * is how a register ends up asserting a debt was serviced on a day nobody paid.
  */
-export function scheduledInstalment(input: ScheduleInput): Money {
+export function scheduledInstalment(input: InstalmentInput): Money {
   const p = Number(input.principal);
   if (p <= 0 || input.periods < 1) return money('0');
 
