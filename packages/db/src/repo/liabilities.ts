@@ -198,3 +198,67 @@ export async function accountKind(
   if (!row) return undefined;
   return { type: String(row.type), isPostable: Boolean(row.is_postable ?? row.isPostable) };
 }
+
+export interface LiabilityMovement {
+  entryId: string;
+  entryDate: string;
+  sourceType: string;
+  memo: string | null;
+  charged: string;
+  paid: string;
+}
+
+/**
+ * Every movement on this obligation.
+ *
+ * ⚠️ **Reversals INCLUDED.** They and their originals both stay on the ledger, and a trail that
+ * hid one would not add up to the balance printed beside it.
+ */
+export async function movementsFor(
+  tx: Tx,
+  orgId: string,
+  liabilityId: string,
+): Promise<LiabilityMovement[]> {
+  const rows = (await tx.execute(sql`
+    select je.id as entry_id, je.entry_date::text as entry_date, je.source_type, je.memo,
+           coalesce(jl.credit, 0)::text as charged,
+           coalesce(jl.debit, 0)::text as paid
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId}
+      and jl.party_type = ${PARTY_TYPE}
+      and jl.party_id = ${liabilityId}
+      and a.code = ${LIABILITY_CONTROL_CODE}
+      and je.status <> 'draft'
+    order by je.entry_date asc, je.created_at asc
+  `)) as unknown as Record<string, string>[];
+  return rows.map((r) => ({
+    entryId: String(r.entry_id ?? r.entryId),
+    entryDate: String(r.entry_date ?? r.entryDate),
+    sourceType: String(r.source_type ?? r.sourceType),
+    memo: (r.memo as string | null) ?? null,
+    charged: Number(r.charged ?? 0).toFixed(2),
+    paid: Number(r.paid ?? 0).toFixed(2),
+  }));
+}
+
+/**
+ * Accounts a charge may land on — the positive form of the service's refusal list.
+ *
+ * ⚠️ Expense and asset only. A charge records what the obligation was FOR, and offering a
+ * liability account in the picker would invite the posting the service then refuses.
+ */
+export async function chargeableAccounts(
+  tx: Tx,
+  orgId: string,
+): Promise<{ code: string; name: string; type: string }[]> {
+  const rows = (await tx.execute(sql`
+    select code, name, type from accounts
+    where org_id = ${orgId} and is_postable and status = 'active'
+      and type in ('expense', 'asset')
+    order by code
+  `)) as unknown as Record<string, string>[];
+  return rows.map((r) => ({ code: String(r.code), name: String(r.name), type: String(r.type) }));
+}
+

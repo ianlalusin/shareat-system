@@ -87,12 +87,34 @@ surfacing · screens.
 
 ## 6. Done when
 
-- [ ] `liabilities` in the schema, classified in `cutover/classification.ts` **and** registered in
+- [x] `liabilities` in the schema, classified in `cutover/classification.ts` **and** registered in
       `rls/registry.ts`.
-- [ ] `2500` seeded and party-requiring; `party_type` widened to `'liability'`.
-- [ ] Services: create · charge · payment · reverse, with the position derived.
-- [ ] Integration tests: ⭐ **`2500` nets to zero when it is settled**; ⭐ **a statutory account is
+- [x] `2500` seeded and party-requiring; `party_type` widened to `'liability'`.
+- [x] Services: create · charge · payment · reverse, with the position derived.
+- [x] Integration tests: ⭐ **`2500` nets to zero when it is settled**; ⭐ **a statutory account is
       refused, naming the reason**; a reversal nets out; two obligations on one account are told
       apart; overdue is computed from `due_on`.
-- [ ] Screens, driven end to end in a browser.
-- [ ] Gates: typecheck · unit · integration · build.
+- [x] Screens, driven end to end in a browser.
+- [x] Gates: typecheck · unit · integration · build.
+
+---
+
+## 7. Verified in a browser, 2026-08-27
+
+An accrued rent on Lipa: recorded → charged ₱45,000 to `6200` → paid ₱20,000 from the office safe.
+The screen afterwards read **charged ₱45,000 · paid ₱20,000 · outstanding ₱25,000**, all three summed
+from `2500`, with a movements trail that adds up to the balance printed above it.
+
+⭐ **The overdraft guard fired on the way**, and correctly: paying ₱45,000 from *"Office online"*
+(balance ₱0) was **blocked**, not warned — an office account's balance is complete, so a shortfall is
+real, where a cashier drawer's is expected while the day is unverified (bible row 154). Two accounts,
+two behaviours, both right.
+
+## 8. Still not done
+
+- Everything in §5's out-list — recurring charges, cross-charge allocation, interest on a late
+  obligation.
+- ⚠️ **A liability is per store.** An obligation the whole org owes (a group insurance policy, a
+  franchise fee) has to be recorded per store or not at all. Named here because it is the first thing
+  someone will hit that this design does not cover.
+

@@ -42,7 +42,7 @@ export { CASH_REQUEST_STATUSES } from '../schema/cash-requests';
 export type { CashRequestStatus } from '../schema/cash-requests';
 export type { CashRequestRow, FloatPosition } from './repo/cash-requests';
 export type { OwnerRow, OwnerPosition, DrawingCloseRow, AgedReceivable } from './repo/owners';
-export type { LiabilityRow, LiabilityPosition } from './repo/liabilities';
+export type { LiabilityRow, LiabilityPosition, LiabilityMovement } from './repo/liabilities';
 export * as journalRepo from './repo/journal';
 export * as etlRepo from './repo/etl';
 export * as reportsRepo from './repo/reports';

@@ -1,0 +1,305 @@
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
+import { requireSession } from '../../../lib/session';
+import { chargeAction, payAction, retireAction, reverseAction } from '../actions';
+import {
+  CATEGORY_LABEL,
+  SOURCE_LABEL,
+  chargeableAccounts,
+  getDetail,
+  listStores,
+  moneyAccounts,
+  peso,
+  today,
+} from '../lib';
+
+export const metadata = { title: 'Liability — Shareat System' };
+export const dynamic = 'force-dynamic';
+
+interface SearchParams {
+  error?: string;
+  ok?: string;
+}
+
+export default async function LiabilityPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<SearchParams>;
+}) {
+  const { id } = await params;
+  const sp = await searchParams;
+  const { actor } = await requireSession(`/liabilities/${id}`);
+
+  const liability = await getDetail(actor.orgId, id);
+  if (!liability) notFound();
+
+  const [accounts, targets, stores] = await Promise.all([
+    moneyAccounts(actor.orgId, liability.storeId),
+    chargeableAccounts(actor.orgId),
+    listStores(actor.orgId),
+  ]);
+  const store = stores.find((s) => s.id === liability.storeId);
+  const outstanding = Number(liability.position.outstanding);
+
+  return (
+    <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+      <div>
+        <Link href="/liabilities" className="text-sm underline underline-offset-2">
+          ← Liabilities
+        </Link>
+        <h1 className="mt-2 text-2xl font-semibold">{liability.name}</h1>
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+          {CATEGORY_LABEL[liability.category] ?? liability.category} · {store?.name ?? '—'} ·{' '}
+          {liability.dueOn ? `due ${liability.dueOn}` : 'no due date'}
+          {liability.overdue && (
+            <span className="text-amber-700 dark:text-amber-400"> · overdue</span>
+          )}
+        </p>
+      </div>
+
+      {sp.error && (
+        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+          {sp.error}
+        </div>
+      )}
+      {sp.ok && (
+        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+          {sp.ok}
+        </div>
+      )}
+
+      <section className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Figure label="Charged" value={peso(liability.position.charged)} />
+          <Figure label="Paid" value={peso(liability.position.paid)} />
+          <Figure label="Outstanding" value={peso(liability.position.outstanding)} emphasis />
+        </div>
+        <p className="text-xs text-neutral-500 dark:text-neutral-500">
+          ⭐ <strong>Outstanding</strong> is the balance of <code>2500</code> for this obligation.
+          Charged and paid are the same balance split by what happened — which is why they cannot
+          disagree with it, and why nothing here is stored.
+          {outstanding <= 0.005 && liability.position.charged !== '0.00' && (
+            <> It has reached <strong>zero</strong>, so this is settled.</>
+          )}
+        </p>
+      </section>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <div>
+            <h2 className="font-medium">Charge it</h2>
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              The obligation is incurred. ⚠️ Name what it was <strong>for</strong> — an expense, or
+              an asset. Charging it to another liability would move a debt without settling it.
+            </p>
+          </div>
+          <form action={chargeAction} className="space-y-3">
+            <input type="hidden" name="liabilityId" value={liability.id} />
+            <Field label="Amount">
+              <input name="amount" required type="number" step="0.01" min="0.01" className={INPUT} />
+            </Field>
+            <Field label="For">
+              <select name="againstAccountCode" required defaultValue="" className={INPUT}>
+                <option value="" disabled>
+                  Choose…
+                </option>
+                {targets.map((a) => (
+                  <option key={a.code} value={a.code}>
+                    {a.code} — {a.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="On">
+              <input name="on" type="date" required defaultValue={today()} className={INPUT} />
+            </Field>
+            <button
+              type="submit"
+              className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
+            >
+              Charge
+            </button>
+          </form>
+        </section>
+
+        <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <div>
+            <h2 className="font-medium">Pay it</h2>
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              {outstanding > 0 ? (
+                <>
+                  <strong>{peso(liability.position.outstanding)}</strong> is owed. Paying more than
+                  that is refused — it would turn a debt into a receivable.
+                </>
+              ) : (
+                'Nothing is owed on this obligation.'
+              )}
+            </p>
+          </div>
+          {outstanding > 0 && (
+            <form action={payAction} className="space-y-3">
+              <input type="hidden" name="liabilityId" value={liability.id} />
+              <Field label="Amount">
+                <input
+                  name="amount"
+                  required
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  defaultValue={liability.position.outstanding}
+                  className={INPUT}
+                />
+              </Field>
+              <Field label="From" hint="Balances shown are derived from the ledger.">
+                <select name="fromMoneyAccountId" required defaultValue="" className={INPUT}>
+                  <option value="" disabled>
+                    Choose…
+                  </option>
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} — {peso(a.balance)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="On">
+                <input name="on" type="date" required defaultValue={today()} className={INPUT} />
+              </Field>
+              <button
+                type="submit"
+                className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
+              >
+                Pay
+              </button>
+            </form>
+          )}
+        </section>
+      </div>
+
+      {/* ── The trail ────────────────────────────────────────────────────────────────── */}
+      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="font-medium">Movements</h2>
+        {liability.entries.length > 0 ? (
+          <div className="overflow-x-auto rounded border border-neutral-200 dark:border-neutral-800">
+            <table className="w-full min-w-[680px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
+                  <th className="px-3 py-2 font-medium">Date</th>
+                  <th className="px-3 py-2 font-medium">What</th>
+                  <th className="px-3 py-2 text-right font-medium">Charged</th>
+                  <th className="px-3 py-2 text-right font-medium">Paid</th>
+                  <th className="px-3 py-2 font-medium">Reverse</th>
+                </tr>
+              </thead>
+              <tbody>
+                {liability.entries.map((e) => (
+                  <tr
+                    key={e.entryId}
+                    className="border-b border-neutral-100 last:border-0 dark:border-neutral-900"
+                  >
+                    <td className="px-3 py-2 font-mono text-xs">{e.entryDate}</td>
+                    <td className="px-3 py-2">
+                      {SOURCE_LABEL[e.sourceType] ?? e.sourceType}
+                      {e.memo && (
+                        <div className="text-xs text-neutral-400 dark:text-neutral-600">
+                          {e.memo}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums">
+                      {e.charged === '0.00' ? '—' : peso(e.charged)}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums">
+                      {e.paid === '0.00' ? '—' : peso(e.paid)}
+                    </td>
+                    <td className="px-3 py-2">
+                      <form action={reverseAction} className="flex items-center gap-2">
+                        <input type="hidden" name="liabilityId" value={liability.id} />
+                        <input type="hidden" name="entryId" value={e.entryId} />
+                        <input
+                          name="reason"
+                          placeholder="Reason…"
+                          className="w-32 rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
+                        />
+                        <button
+                          type="submit"
+                          className="rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700"
+                        >
+                          Reverse
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-sm text-neutral-500 dark:text-neutral-400">
+            Nothing charged yet — this obligation exists but owes nothing.
+          </p>
+        )}
+        <p className="text-xs text-neutral-500 dark:text-neutral-500">
+          ⚠️ A reversal writes the opposite entry; both stay here and net to nothing. Nothing is ever
+          deleted, so this list always adds up to the balance above it.
+        </p>
+      </section>
+
+      {/* ── Retire ───────────────────────────────────────────────────────────────────── */}
+      {outstanding <= 0.005 && !liability.retiredAt && (
+        <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <div>
+            <h2 className="font-medium">Retire</h2>
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              Stop using this obligation. ⚠️ Retiring is not settling — it says nobody expects to
+              charge it again. It stays on the ledger and its history is untouched.
+            </p>
+          </div>
+          <form action={retireAction}>
+            <input type="hidden" name="liabilityId" value={liability.id} />
+            <button
+              type="submit"
+              className="rounded border border-neutral-300 px-4 py-2 text-sm font-medium dark:border-neutral-700"
+            >
+              Retire
+            </button>
+          </form>
+        </section>
+      )}
+    </main>
+  );
+}
+
+const INPUT =
+  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+
+function Figure({ label, value, emphasis }: { label: string; value: string; emphasis?: boolean }) {
+  return (
+    <div className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
+      <div className="text-xs text-neutral-500 dark:text-neutral-400">{label}</div>
+      <div className={`font-mono tabular-nums ${emphasis ? 'text-lg font-medium' : 'text-lg'}`}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
+      {children}
+      {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
+    </label>
+  );
+}
