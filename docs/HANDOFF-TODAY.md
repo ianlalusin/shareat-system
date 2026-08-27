@@ -1,180 +1,149 @@
-# Handoff — 2026-08-26
-
-*Written by the `wrap-up` skill. **Overwritten every wrap-up** — for the review's separate,
-defect-focused prompt see `docs/reviews/NEXT-PROMPT.md`.*
-
----
+# Handoff — 2026-08-27
 
 ## Where things stand
 
-**Wave 1 is complete and behind a real login.** Expenses (T-122) and the sales day (T-123) both
-post to the ledger, both are driven end to end in a browser, and the staff-picker dropdown that
-used to stand in for authentication is **gone** — a repo-wide test now fails the build if anyone
-reintroduces a client-supplied actor.
+**Wave 2 is finished and Wave 3 has started.** Every source-document module through T-129 is built,
+tested and driven in a browser: fixed assets, prepaid, loans, cash requests, owner equity, generic
+liabilities, money transfers, pooled remittance, the month-end scheduler, and now customers and
+price lists. **Storage is live and verified** against a real private bucket. Nothing is half-built;
+the next task starts clean.
 
-**T-124 (fixed assets + depreciation) is half-built**: spec, research, schema, migration `0019`
-and the pure depreciation engine are done and green. **The service layer and screens are not.**
-That is where the next session starts.
+⚠️ The one thing that is *designed but not executed*: several items in each task doc's "still not
+done" list, all named deliberately. None of them block T-130.
 
-## Gates at `c66f835`
+## Gates at `7e4927c`
 
 | Gate | Result |
 |---|---|
-| `npm run typecheck` | ✅ pass |
-| `npm test` | ✅ **522 / 522** (31 files) |
-| `npm run test:integration` | ✅ **730 / 730** (20 files) |
-| `npm run build` | ⏭️ skipped — dev server live on 9008 (bible §2.9) |
+| `typecheck` | ✅ exit 0 |
+| `npm test` (unit) | ✅ **592 / 592** |
+| `npm run test:integration` | ✅ **969 / 969** |
+| `npm run build` | ✅ exit 0 |
 
-Everything is committed and pushed to `main`. `daily-review/2026-08-26` has been **merged**.
-
----
+⚠️ **There is no `lint` script in this repo** (DEF-027). Earlier in the session I reported "lint OK"
+from a piped exit code that could not fail — it never ran. Four gates, not five.
 
 ## What happened this session
 
-### 1. The process correction that shaped everything after it
+### Modules built, in order
 
-> **Ian:** *"Before building, as I've said before, look how v1 does it — correct if wrong, improve
-> if it can be improved, research about it, so we don't break anything working. We just align and
-> correct what needs alignment and correction."*
+| | |
+|---|---|
+| **T-139** money transfers | Manager-level; the fee is derived from two stated amounts, never typed |
+| **T-142** foundation accounts | Every store born with five money accounts, un-retirable while it trades |
+| **T-143** pooled remittance | Settles **end-day reports**, not sales reports — Ian's correction |
+| **T-140** month-end scheduler | Closed the live half of DEF-044 |
+| **T-141** upload brokering | Firebase adapter, and the bucket verified private |
+| **T-126** loans | One register, a computed principal/interest split |
+| **T-144** cash requests | A float that nets to zero; `1120` gains a party |
+| **T-127** owner equity | A drawing limit that actually fires, and a monthly close that locks |
+| **T-128** liabilities | The residual control account, with a boundary that refuses |
+| **T-129** customers + price lists | The treatment is derived from two links, never declared |
 
-I had started T-123's schema from our own posting patterns. Reverted and read v1 first: its
-`SalesDayPlain` carries ~60 fields to my 7. **I had under-scoped the task roughly eight-fold.**
-Every task since has opened with v1.
-
-⭐ It paid immediately in T-138: reading v1's auth showed the browser half was **already correct**,
-which halved the task.
-
-### 2. Sales day (T-123) — shipped
-
-Three tables, none of v1's figure names surviving (`dineInSales` is package-only; `takeOutSales` is
-a residual — see GLOSSARY). Three identities enforced, two in the schema:
-
-```
-unli + àlaCarte                = totalSales              (schema CHECK)
-Σ all channels                 = totalSales              (added after Ian's correction)
-collected + discounts + comps  = gross + charges         (spans two tables)
-```
-
-⚠️ **The channel identity was missing from my first cut**, and my own browser smoketest had
-happily passed a ₱6,000 day carrying ₱550 of channels. Ian caught it by looking at a real sales
-report. It is now a test.
-
-**Decided:** an unverified sales day recognises **no revenue**; creating a new one is **blocked**
-while an unverified one exists; revenue is dated by **sales day**, not entry date. (Bible 126.)
-
-### 3. Service charge — five corrections, and Ian was right each time
-
-Liability → revenue → **float**. It is now **neither revenue nor AP**, held at **2160**, and
-distributed **daily or weekly** — never monthly, which is not lawful under RA 11360.
-"Other charges" (leftover, packaging) are a **separate** account and *are* income. Bible 134–136.
-
-### 4. Auth (T-138) — shipped
-
-6-digit PIN, `scrypt` (no native dependency), store-scoped lookup hash, domain-separated HMAC keys.
-`kind` is a **column** (`pin | firebase | biometric`) so adding biometrics is a row, not a
-migration. Sessions end **both ways** — `expires_at` and `ended_at`/`ended_reason`.
-
-### 5. Fixed assets (T-124) — schema + engine
-
-**No `accumulated_depreciation` column, no `book_value` column.** Both are **derived from the
-ledger**; storing them is how v1's register drifts. The schedule is a pure function so every
-rounding case is proven without a database — the remainder lands on the **last** period, and
-`periodDue` returns **null, never zero** (a zero entry would hide the OIL finding that catches
-DEF-044).
-
-### 6. Cash custody (T-136) and the POS/ERP seam
-
-Pooled remittance is a **modelling change, not a setting**; per-store cadence with an un-remitted
-ceiling; store imprest fund. And the seam is settled: **POS transacts, ERP accounts** — cash
-handover was duplicated in both and now folds to ERP alone. Bible 127–130.
-
-### Decisions Ian made, and where each is recorded
+### ⭐ Decisions Ian made, and where each is recorded
 
 | Decision | Recorded in |
 |---|---|
-| Unverified sales day recognises no revenue; create-block; date by sales day | Bible **126** |
-| Owner split (cashier/office × cash/online) retained | Bible **127** |
-| Pooled remittance + per-store cadence and ceiling | Bible **128–129**, T-136 |
-| POS transacts, ERP accounts; cash handover folds to ERP | Bible **130** |
-| `totalSales` = Σ all channels | Bible **133**, schema CHECK |
-| Service charge is a FLOAT at 2160; other charges are income | Bible **134–135** |
-| Distribution daily or weekly; monthly unlawful | Bible **136** |
-| 6-digit PIN retained, biometric-ready; sessions end both ways | Bible **137–138**, T-138 |
-| Capitalisation threshold **₱10,000**; per-category lives | Bible **139**, discovery 25, T-124 §10 |
-| *"Wrap up today's work"* is the closing ritual for every agent | `.claude/skills/wrap-up/`, CLAUDE.md, AGENTS.md |
+| Money moves between stores **office to office only** | Bible row **152** |
+| Cross-store movement needs access to **both** stores | Bible row **153** |
+| Overdraft **warns** a cashier drawer, **blocks** an office safe | Bible row **154** |
+| One Auth tenant; storage split by **sensitivity, not app** | Bible row **155** |
+| Every store born with **five** money accounts | Bible row **156** |
+| What is remitted is the **END-DAY REPORT**, not the sales report | Bible row **157** |
+| v1's loan model is flawed — build a **standard** one | Bible row **158** |
+| A cash request is a float that **nets to zero** | Bible row **159** |
+| A personal expense routes by **whether it is expected back**; drawings get a monthly close | Bible row **160** |
+| A cashier overdraft is **capped, per account, admin-set** | Bible row **161** |
+| DEF-070 **accepted and deferred** until after cutover | `DEFECTS-REGISTER.md` DEF-070 |
+| Cash repayment + pay recovery first, write-off after | `docs/tasks/127-owner-equity.md` §9, §10 |
+| Storage stays on Firebase — **costed**, not assumed | `docs/tasks/141-file-upload-brokering.md` §8 |
 
-**Nothing decided today is unrecorded.**
+⭐ **Nothing Ian decided is left in the transcript only.** The Supabase question he re-raised needed
+no new row — the bible already records it as rejected (§4.1) — but the *costing* behind reaffirming
+it is now in T-141 §8 so it is not run a third time.
 
----
+### Defects registered
+
+**DEF-071** ⛔ a monthly owner drawing limit is displayed on screen and enforced by nothing ·
+**DEF-072** owner equity in three registers · **DEF-073** ⚠️ *ours* — `db:generate` is unusable
+(39 migrations, 12 snapshots, chain dead since 0019) · **DEF-074** liabilities in three registers ·
+**DEF-075** a stored `outstandingBalance`, the fifth and sixth time.
+
+⭐ **DEF-072, 074 and 075 are the same defect found in four more modules.** At this point the
+finding is not the column, it is the **habit**: six modules, written at different times, each
+independently deciding the ledger needed a companion number.
+
+### Bugs the BROWSER found that tests did not
+
+1. ⛔ **The drawing limit counted unrelated staff advances.** An owner's cap reported *"₱600 already"*
+   against an empty account — that ₱600 was a cash-request float shortage, same human, different
+   role. Scoped to the owner's own recoveries; pinned by a test.
+2. ⛔ **A credential path resolved from the wrong directory.** `./secrets/…` worked in
+   `storage-smoke` and killed `next dev` at boot, because Next runs with `cwd = apps/erp`.
+3. ⛔ **A price re-quote blanked the item's label and unit.** Re-pricing the normal way — a code and
+   a number — erased "Pork belly" and "kg".
+4. ⚠️ **Five copies of `peso()` rendered a negative as `₱-27,850.00`** — symbol first, sign second, on
+   exactly the figure the overdraft guard exists to raise.
 
 ## Pick up here
 
-**1. T-124 service layer + screens.** Schema, migration `0019` and
-`packages/domain/src/fixed-assets/schedule.ts` are done and green. What is missing: the repo, the
-service (acquire · post a period · dispose · the catch-up run), and the screens. Read
-`docs/tasks/124-fixed-assets-and-depreciation.md` §5–7 first — §7's invariants are the test list.
+**1. T-130 — Accounts payable.** Supplier invoices, payments, and open-item allocation against the
+`2110` subledger. ⭐ It is the first module to **use** a party subledger for real rather than
+deriving a balance from an empty one, so it will exercise machinery five tasks have been building.
+⚠️ `expenses.supplier_id` is opaque text today and T-130 is when a real `suppliers` table lands —
+`price_list_items.item_code` is waiting on the same kind of decision for items.
 
-⭐ **The catch-up is the point.** DEF-044 is v1's scheduler stopping for two months with nobody
-noticing. Make each period's posting **idempotent on `(asset, period)`** and catching up is not a
-repair script — it is running the same call again and letting the posted periods no-op.
-`periodsThrough()` already returns the list.
+**2. T-131 — AR**, which finally posts to the `1210` T-129 already derives from.
 
-**2. Then T-125 (prepaid + amortisation)** — the same shape as T-124 and much cheaper right after it.
-
-**3. `docs/reviews/2026-08-26.md`** holds the review's findings; they are merged but not all acted on.
-
----
+**3. T-132 — wholesale orders**, the document that consumes a price list.
 
 ## Do not decide these alone — they are Ian's
 
-| Open | The recommendation already on the table |
+| Question | The recommendation already on the table |
 |---|---|
-| **Service-charge float treatment** | Ian is checking with his accountant. Built as decided; do not re-litigate |
-| **Per-category useful lives** | Proposed table in T-124 §10. Wants the accountant's nod **once**, then leave them — an estimate that keeps moving is one nobody trusts. ⚠️ Changing the *method* needs BIR approval; changing a *life* does not |
-| **DEF-063 — sign-in has no rate limiting** | Deferred deliberately. ⛔ **Must land before a terminal reaches a real cashier** |
+| **Entity structure** — sole proprietorship, partnership or corporation? | It changes how an unpaid owner receivable is treated on examination. ⚠️ **Worth one conversation with the accountant before go-live** |
+| An obligation the **whole org** owes (group insurance, a franchise fee) | Today it must be recorded per store or not at all. Needs a decision before someone hits it |
+| `ownership_percentage` is recorded and **drives nothing** | Carried because v1 carries it. If it should drive profit distribution, that is a different task |
 
----
+### ⛔ Still Ian's to do, outside the repo
 
-## Traps live in this area right now
+- **Install the month-end cron** on the droplet:
+  `0 2 1 * * cd /srv/shareat && /usr/bin/npm run month-end >> /var/log/shareat-month-end.log 2>&1`
+- **True both Grab loan balances** to Grab's statements for 07-23 → cutover. Both live figures are
+  unusable — one stale by fourteen days, the other *"a wiring artifact, not a fact."*
 
-- **`ERP-rebuild` is the OLD live ERP, not this rebuild.** The name lies. All four reference repos
-  are read-only.
-- **Piping the test run to `tail` always exits 0.** Check the pipe's first exit status — I
-  committed a red suite this way.
-- **Derived, not maintained.** The single most repeated correction of the session. No stored
-  accumulated depreciation, no stored book value, no stored balances.
-- **Read v1 as requirements, never as design** (bible §1.2b).
-- **Trap names**: `dineInSales` is package-only, `takeOutSales` is a residual, `receiptSeq` is not
-  monotonic. Check `docs/GLOSSARY.md` before naming anything — the banned-names test is absolute
-  and will fail on your comments too.
+## Traps that have actually bitten, live in this area right now
 
----
+- ⛔ **`npm run db:generate` is unusable** (DEF-073). Hand-write migrations, and journal them with
+  `previous.when + 86400000` — `Date.now()` sorts *before* the synthetic series and the migration is
+  **silently skipped** (DEF-069).
+- ⛔ **Never put a backtick inside a `` sql`` `` template**, even in a SQL comment. It terminates the
+  template. Bit twice today.
+- ⚠️ **Two concurrent integration runs corrupt each other** — they share one test database. A run
+  started while another finished produced 4 spurious journal-trigger failures.
+- ⚠️ **`| tail` hides an exit code.** `npm run typecheck --silent | tail -5` exits 0 whatever tsc did.
+- ⚠️ **A new route directory needs a dev-server restart** before Tailwind emits its classes.
+- ⚠️ **Stop the dev server before `npm run build`** — the build clobbers the `.next` it is serving.
 
 ## The paste-ready prompt
 
 ```
 Continue Shareat System at C:\Users\ianla\webapps\shareat-system.
 
-Read docs/RULES.md, then docs/HANDOFF-TODAY.md. PROJECT_BIBLE.md is the authority —
-read its section 13 decision log (139 rows) for anything you are about to decide.
+Read docs/HANDOFF-TODAY.md first, then docs/RULES.md, then the PROJECT_BIBLE.md
+sections it cites for your area. Bible rows 152-161 are this week's decisions.
 
-Next task: T-124 fixed assets, the service layer + screens.
-Spec: docs/tasks/124-fixed-assets-and-depreciation.md, sections 5-7.
-Already done and green: schema, migration 0019, and the pure engine at
-packages/domain/src/fixed-assets/schedule.ts. Do not rebuild those.
+Next task: T-130 accounts payable — supplier invoices, payments, and open-item
+allocation against the 2110 subledger. Write docs/tasks/130-*.md as a spec BEFORE
+any code (bible §1.2a), grounded in reading ERP-rebuild as requirements, never as
+design. ERP-rebuild is the OLD live ERP and is read-only — the name lies.
 
-Before you write anything: read how v1 does it in C:\Users\ianla\webapps\ERP-rebuild
-(read-only, no permission needed — it is the OLD live ERP despite the name).
-Ian's standing rule: correct if wrong, improve if it can be improved, research it —
-align rather than reinvent. Under-scoping happens when you skip this.
+Gates at 7e4927c: typecheck · 592 unit · 969 integration · build, all green.
+There is NO lint script in this repo (DEF-027) — do not report one.
 
-Rules that bite here: derive from the ledger, never store accumulated depreciation or
-book value. Post only via postEntry/reverseEntry. Make each period idempotent on
-(asset, period) so catch-up is just re-running it — that is the DEF-044 answer.
+Before writing a migration, read DEF-073: db:generate is unusable here. Hand-write
+it and journal with previous.when + 86400000.
 
-Gates before any commit: npm run typecheck, npm test, npm run test:integration.
-Never judge a run by piping it to tail — that always exits 0.
-Baseline at c66f835: 522 unit, 730 integration, all green.
-
-When I say "wrap up today's work", run the wrap-up skill.
+Verify UI in a browser before claiming a screen works — that is where four real
+bugs were caught this session that the tests missed.
 ```
