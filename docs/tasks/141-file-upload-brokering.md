@@ -41,6 +41,9 @@ can read Malvar's receipts today.
 ⭐ **Brokering must therefore cover READS, not only writes.** Scoping this task to uploads would
 close the smaller hole and leave the larger one open.
 
+⚠️ **v2 does not inherit this bucket** — see §8. It writes to a new private one, so DEF-070 stays
+confined to v1's, and the lesson is what carries over, not the exposure.
+
 ## 3. ⭐ The shape: the bucket becomes unreachable from a browser
 
 | | Now | After |
@@ -48,7 +51,7 @@ close the smaller hole and leave the larger one open.
 | Client → Storage | Direct, `uploadBytes` | ⛔ **Nothing** |
 | Path chosen by | The client | **The server, from the actor's own scope** |
 | Read via | `getDownloadURL` — a long-lived token URL | A route that `authorize()`s, then a short-lived signed URL |
-| `storage.rules` | 85 lines that isolate nothing | **Deny all** |
+| Bucket rules | 85 lines that isolate nothing | **Deny all** on a new private bucket (§8) |
 
 ⭐ **The rules file becoming `deny all` is the point, not a side effect.** The Admin SDK bypasses
 rules, so once no client touches the bucket, isolation lives in the same `authorize()` every other
@@ -107,21 +110,54 @@ difference between evidence and a string.
       `rls/registry.ts`, with RLS policies in the migration.
 - [ ] Broker: upload + read, both gated, path derived server-side, EXIF stripped.
 - [ ] `expenses.receipt_file_id`, with T-122's gate checking the row and its org/store.
-- [ ] `storage.rules` reduced to deny-all, deployed **after** the last client writer is gone.
+- [ ] The **private bucket** created in `shareat-hub-v2` with deny-all set **by hand, once** (§8).
+      ⛔ v2 gains no `firebase.json` — it must never be able to deploy rules into that project.
 - [ ] Integration tests: a denial per capability; a cross-org read refused; a client-supplied path
       rejected; an oversized and a wrong-type upload refused; **and a test that the photo gate
       fails on a `receipt_file_id` belonging to another store**.
 - [ ] Driven end to end in a browser: attach a photo, post the expense, view it back.
 - [ ] Gates: typecheck · unit · integration.
 
-## 8. ⚠️ Sequencing — this is a cutover-order problem, not just code
+## 8. ⭐ Which bucket — settled, and it is not the one you would guess
 
-`storage.rules` cannot go deny-all until **POS, CUSTOMER and v1 have stopped writing directly**.
-Those are live and out of scope here. So:
+> **Ian, 2026-08-27:** *"yes same firebase identity as POS — that's the whole point… so 1 auth yes"*
+> and *"storage can be separated yes, since POS and CUSTOMER app are public facing the menu photo
+> must not be strictly accessed."*
 
-1. Build the broker; ERP uses it exclusively.
-2. Tighten `stores/{storeId}` writes to the ERP's service account only.
-3. Deny-all **last**, once the other three are migrated or retired.
+**Bible row 155.** Auth is one tenant, `shareat-hub-v2`. Storage splits **by what the file is, not
+by which app wrote it**:
 
-⛔ **Do not deploy step 3 early.** These repos share one bucket, and this project has already
-recorded a case of one repo's deploy overwriting another's rules.
+| Bucket | Holds | Read rule | Who reaches it |
+|---|---|---|---|
+| `shareat-hub-v2` default | Menu photos, logos, loyalty images | **`allow read;`** — world-readable | Anyone. **Correct** — it is CDN content |
+| **New private bucket, same project** | Receipts, proofs, exports | **Deny all** | ⭐ Only this app's Admin SDK |
+
+⛔ **Accounting documents must never go in the public bucket.** POS's own rules record why it could
+not be narrowed for customer payment proofs — *"Storage rules OR across matching blocks, so a
+stricter `allow read` accomplishes nothing"* — leaving an unguessable UUID plus a 15-day lifecycle
+delete as the only mitigation. **Receipt photos are not payment proofs:** they carry suppliers,
+prices and volumes, and they are kept for years. Security-by-unguessable-URL is not an accounting
+control.
+
+⭐ **Same project as Auth, different bucket.** One service account, no cross-project credential —
+ADR-003 lists the Website's cross-project `HUB_SA_KEY` as evidence of the sprawl this rebuild
+exists to end.
+
+### ⛔ v2 never deploys Storage or Firestore rules
+
+POS's `firebase.json` declares `"storage": { "rules": "storage.rules" }` with **no bucket target**,
+so any repo deploying storage in that project overwrites POS's production ruleset — **CUSTOMER has
+already done exactly this.** v2 has **no `firebase.json` at all** today. Keep it that way: the
+private bucket's deny-all is set **once, by hand**, and the Admin SDK bypasses rules, so v2 needs
+none.
+
+### Sequencing — much simpler than first written
+
+⚠️ **My earlier draft said deny-all had to wait for POS and CUSTOMER to stop writing. That was
+wrong** — it assumed a shared bucket. A **new** private bucket has exactly one writer from the
+moment it exists, so there is nothing to wait for.
+
+1. Create the private bucket in `shareat-hub-v2`; set deny-all by hand.
+2. Build the broker; v2 writes only there.
+3. v1's existing receipts stay in `studio-7300228488-a394e`, readable from v1. Nothing is migrated
+   — v2 assumes a zero starting point, and DEF-070 stays confined to a bucket v2 never writes to.
