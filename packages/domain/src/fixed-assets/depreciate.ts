@@ -189,6 +189,45 @@ export async function runDepreciation(
   actor: Actor,
   input: RunDepreciationInput,
 ): Promise<RunDepreciationResult> {
+  // ⭐ THE GATE IS HERE, AT THE BOUNDARY — and it is the only difference between this and the
+  // scheduled run (T-140 §2). `runDepreciationAsSystem` calls the same body below without it,
+  // because a scheduler is not a person and `authorize()` answers "may this PERSON do this?".
+  //
+  // ⛔ One body, two entry points. Copying the loop so the scheduler could have its own is how
+  // v1's two amortisation runners drifted apart until one of them grew a per-month void and the
+  // other never did.
+  if (tx) {
+    await authorize(tx, actor, 'run_depreciation', {});
+  } else {
+    await transaction((trx) => authorize(trx, actor, 'run_depreciation', {}));
+  }
+  return runDepreciationCore(tx, actor.orgId, actor.personId, input);
+}
+
+/**
+ * ⭐ The scheduled run (T-140). Same body, no capability check, and **no invented person**.
+ *
+ * ⛔ Never reachable from a request handler — the only caller is the month-end CLI. The control
+ * that matters is not a role grant (which would let a compromised scheduler do everything an
+ * admin can) but that this entry point can do exactly one thing.
+ *
+ * `postedBy` is `null`: `journal_entries.posted_by` is nullable, so the ledger records *"posted by
+ * no person"* honestly rather than attributing a machine's work to a human who was asleep.
+ */
+export async function runDepreciationAsSystem(
+  orgId: string,
+  input: RunDepreciationInput,
+): Promise<RunDepreciationResult> {
+  return runDepreciationCore(null, orgId, null, input);
+}
+
+async function runDepreciationCore(
+  tx: Tx | null,
+  orgId: string,
+  postedBy: string | null,
+  input: RunDepreciationInput,
+): Promise<RunDepreciationResult> {
+  const actor = { orgId, personId: postedBy } as Actor;
   const assets = tx
     ? await loadDepreciable(tx, actor, input)
     : await transaction((trx) => loadDepreciable(trx, actor, input));
@@ -222,7 +261,8 @@ async function loadDepreciable(
   actor: Actor,
   input: RunDepreciationInput,
 ): Promise<fixedAssetsRepo.FixedAssetRow[]> {
-  await authorize(tx, actor, 'run_depreciation', {});
+  // ⚠️ No authorize() here any more — it moved to `runDepreciation`, the human boundary, so the
+  // system path can share this body without a capability check it has no person to satisfy.
   const all = await fixedAssetsRepo.listDepreciable(tx, actor.orgId);
   return input.storeId ? all.filter((a) => a.storeId === input.storeId) : all;
 }

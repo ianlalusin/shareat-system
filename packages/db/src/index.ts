@@ -25,6 +25,9 @@ export type { MoneyTransferRow, MoneyTransferListRow } from './repo/money-transf
 export { PREPAID_CATEGORIES, PREPAID_STATUSES } from '../schema/prepaid';
 export type { PrepaidCategory, PrepaidStatus } from '../schema/prepaid';
 export type { PrepaidItemRow } from './repo/prepaid';
+export { SCHEDULER_JOBS, SCHEDULER_OUTCOMES } from '../schema/scheduler';
+export type { SchedulerJob, SchedulerOutcome, SchedulerFailure } from '../schema/scheduler';
+export type { SchedulerRunRow } from './repo/scheduler';
 export * as journalRepo from './repo/journal';
 export * as etlRepo from './repo/etl';
 export * as reportsRepo from './repo/reports';
@@ -35,6 +38,7 @@ export * as fixedAssetsRepo from './repo/fixed-assets';
 export * as moneyAccountsRepo from './repo/money-accounts';
 export * as moneyTransfersRepo from './repo/money-transfers';
 export * as prepaidRepo from './repo/prepaid';
+export * as schedulerRepo from './repo/scheduler';
 export * as sessionsRepo from './repo/sessions';
 // Re-exported so a caller establishing a principal around an authorize() call (T-121) does
 // not need to reach into packages/db/src/rls/registry.ts directly.

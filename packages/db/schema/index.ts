@@ -30,4 +30,5 @@ export * from './sessions';
 export * from './fixed-assets';
 export * from './money-accounts';
 export * from './money-transfers';
+export * from './scheduler';
 export * from './prepaid';

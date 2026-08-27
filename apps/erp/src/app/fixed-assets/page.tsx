@@ -2,6 +2,7 @@ import { formatMoney, money } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { ASSET_CATEGORIES } from '@shareat/db';
 import { requireSession } from '../../lib/session';
+import { SchedulerStatus } from '../../components/scheduler-status';
 import { runDepreciationAction } from './actions';
 import {
   CATEGORY_LABEL,
@@ -94,6 +95,11 @@ export default async function FixedAssetsPage({
             Depreciation run: {sp.ran}
           </div>
         ))}
+
+      {/* ⭐ Is anybody keeping these books? Reads scheduler_runs, not the ledger — a run that
+          posts nothing looks exactly like a run that never happened. This is the surface that
+          would have caught DEF-044 on day one (T-140). */}
+      <SchedulerStatus orgId={actor.orgId} job="depreciation" label="Depreciation" />
 
       {reviewCount > 0 && !needsReviewOnly && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">

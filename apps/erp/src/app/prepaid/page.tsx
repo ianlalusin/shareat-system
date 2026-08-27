@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { PREPAID_CATEGORIES } from '@shareat/db';
+import { SchedulerStatus } from '../../components/scheduler-status';
 import { requireSession } from '../../lib/session';
 import { createPrepaidItemAction } from './actions';
 import {
@@ -58,6 +59,10 @@ export default async function PrepaidPage({
           {sp.error}
         </div>
       )}
+
+      {/* ⭐ Is anybody keeping these books? Reads scheduler_runs, not the ledger — a run that
+          posts nothing looks exactly like a run that never happened (T-140, DEF-044). */}
+      <SchedulerStatus orgId={actor.orgId} job="amortisation" label="Amortisation" />
 
       {/*
         ⭐ THE REVIEW COUNTER IS THE WHOLE DESIGN (§11.2).

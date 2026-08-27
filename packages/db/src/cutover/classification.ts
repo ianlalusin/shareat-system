@@ -201,6 +201,14 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'same treatment fixed_assets gets, so the item stays and its money is cleared.',
     clearColumns: ['total_cost', 'coverage_start_date', 'coverage_months', 'source_expense_id'],
   },
+  scheduler_runs: {
+    class: 'purge',
+    reason:
+      'The operational record of what the month-end run did, not a business record. v2 opens on ' +
+      'a zero starting point, and a run against the old books says nothing about the new ones. ' +
+      '⚠️ Purged, NOT kept: an inherited "last run: November" would make the first cutover ' +
+      'month look healthy when nothing had run against it at all — the precise illusion DEF-044 was.',
+  },
   money_transfers: {
     class: 'purge',
     reason:

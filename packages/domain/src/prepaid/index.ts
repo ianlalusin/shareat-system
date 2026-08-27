@@ -200,8 +200,18 @@ async function runAmortise(
   actor: Actor,
   input: { prepaidItemId: string; asOfPeriod: string },
 ): Promise<AmortiseResult> {
+  // ⭐ The gate is at the boundary; `amortiseItemCore` below is shared with the scheduled run.
   await authorize(tx, actor, 'run_amortisation', {});
+  return amortiseItemCore(tx, actor.orgId, actor.personId, input);
+}
 
+async function amortiseItemCore(
+  tx: Tx,
+  orgId: string,
+  postedBy: string | null,
+  input: { prepaidItemId: string; asOfPeriod: string },
+): Promise<AmortiseResult> {
+  const actor = { orgId, personId: postedBy } as Actor;
   const item = await prepaidRepo.getById(tx, actor.orgId, input.prepaidItemId);
   if (!item) {
     throw new Error(`amortisePrepaidItem: prepaid item ${input.prepaidItemId} does not exist.`);
@@ -428,4 +438,57 @@ async function runWriteOff(
   });
 
   return { entryId: result.entryId, expensed: String(expensed), refunded: String(refunded) };
+}
+
+// -------------------------------------------------------------------------------------
+// ⭐ The scheduled run (T-140)
+// -------------------------------------------------------------------------------------
+
+export interface AmortiseAllResult {
+  posted: { itemId: string; itemName: string; periods: string[] }[];
+  failed: { itemId: string; itemName: string; error: string }[];
+  skipped: number;
+}
+
+/**
+ * Every active prepaid item in one org, caught up through `asOfPeriod`.
+ *
+ * ⛔ Never reachable from a request handler — the only caller is the month-end CLI. There is no
+ * capability check and no invented person: the control that matters is that this entry point can
+ * do exactly one thing, not that a fabricated service account holds a role letting it do
+ * everything an admin can (T-140 §2).
+ *
+ * ⚠️ **Each item gets its OWN transaction**, so one failure — most likely *"no fiscal period
+ * covers 2026-06-30"* — cannot roll back the items that succeeded. The register is derived, so a
+ * partial run is incomplete, never inconsistent.
+ */
+export async function runAmortisationAsSystem(
+  orgId: string,
+  asOfPeriod: string,
+): Promise<AmortiseAllResult> {
+  const items = await transaction((trx) =>
+    prepaidRepo.listPrepaidItems(trx, orgId, { status: 'active' }),
+  );
+
+  const posted: AmortiseAllResult['posted'] = [];
+  const failed: AmortiseAllResult['failed'] = [];
+  let skipped = 0;
+
+  for (const item of items) {
+    try {
+      const result = await transaction((trx) =>
+        amortiseItemCore(trx, orgId, null, { prepaidItemId: item.id, asOfPeriod }),
+      );
+      if (result.posted.length === 0) skipped += 1;
+      else posted.push({ itemId: item.id, itemName: item.name, periods: result.posted });
+    } catch (err) {
+      failed.push({
+        itemId: item.id,
+        itemName: item.name,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  return { posted, failed, skipped };
 }
