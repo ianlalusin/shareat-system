@@ -218,6 +218,13 @@
       "when": 1788665507084,
       "tag": "0030_t143_pooled_remittance",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1788751907084,
+      "tag": "0031_t143_end_day_report_allocation",
+      "breakpoints": true
     }
   ]
 }

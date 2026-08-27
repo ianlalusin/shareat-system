@@ -135,16 +135,19 @@ export const remittanceAllocations = pgTable(
     remittanceId: uuid('remittance_id')
       .notNull()
       .references(() => remittances.id, { onDelete: 'restrict' }),
-    salesDayId: uuid('sales_day_id')
-      .notNull()
-      .references(() => salesDays.id, { onDelete: 'restrict' }),
+    /** ⭐ The END-DAY REPORT this settles, keyed by DATE (bible row 157). Not a sales-day id: a
+     *  collection banked on a day the store did not trade is still money the cashier holds. */
+    businessDate: date('business_date').notNull(),
+    /** The day's sales component, when there is one. ⚠️ A link, never the identity. */
+    salesDayId: uuid('sales_day_id').references(() => salesDays.id, { onDelete: 'restrict' }),
     amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
   },
   (t) => [
     index('remittance_allocations_sales_day_idx').on(t.salesDayId),
-    /** ⚠️ One batch settles a given day once. Two rows for the same pair would double-count the
+    index('remittance_allocations_date_idx').on(t.businessDate),
+    /** ⚠️ One batch settles a given DATE once. Two rows for the same pair would double-count the
      *  day's settlement and quietly mark it fully remitted. */
-    uniqueIndex('remittance_allocations_unique').on(t.remittanceId, t.salesDayId),
+    uniqueIndex('remittance_allocations_unique').on(t.remittanceId, t.businessDate),
     check('remittance_allocations_amount_positive_check', sql`${t.amount} > 0`),
   ],
 );
@@ -176,10 +179,9 @@ export const remittanceVariances = pgTable(
     remittanceId: uuid('remittance_id')
       .notNull()
       .references(() => remittances.id, { onDelete: 'restrict' }),
-    /** Where FIFO left the residual — the last date the batch touched. */
-    salesDayId: uuid('sales_day_id')
-      .notNull()
-      .references(() => salesDays.id, { onDelete: 'restrict' }),
+    /** Where FIFO left the residual — the last DATE the batch touched. */
+    businessDate: date('business_date').notNull(),
+    salesDayId: uuid('sales_day_id').references(() => salesDays.id, { onDelete: 'restrict' }),
 
     /** ⚠️ SIGNED: negative is short, positive is over. One column, because they are one event seen
      *  from two directions, and splitting them invites a report that shows only the shorts. */

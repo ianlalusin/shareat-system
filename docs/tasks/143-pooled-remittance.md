@@ -33,7 +33,26 @@ parallel posting routine is precisely how v1 ended up with two amortisation runn
 | The variance and its lifecycle | **This task** (§5) |
 | What each day is owed | ⭐ **Derived** — never stored (§3) |
 
-## 3. Expected remittance is DERIVED, and row 145 already settled how
+## 3. ⭐ CORRECTED — what is remitted is the END-DAY REPORT (Ian, 2026-08-27; bible row 157)
+
+> *"Remittance is derived from sales report — they are one, actually. It must be **END DAY
+> REPORT**, not sales report. The sales report is PART of that remittance / end-day report… the
+> composition of all money movement of the day across transactions, **on ERP**."*
+
+⚠️ **This supersedes this task's first draft**, which had a day owing its *remittable sales* and
+left me asking what to do with the rest of the till. **There is no remainder** — a day is owed
+everything the cashier touched: sales, collections and returns in; expenses paid from the till,
+cash requests released and advances out.
+
+⭐ So rows 144 and 145 turn out to be **one figure**, one totalled and one per date. `sales_days`
+is not renamed and does not grow: it stays the POS-sourced sales component and the **lock** (a date
+is remittable once its day is verified). The end-day report **contains** it, and is **derived** on
+the ERP from the ledger.
+
+⚠️ Allocations therefore key on **(store, business date)**, not a sales-day id — a collection
+banked on a day the store did not trade is still money the cashier holds.
+
+## 3b. Expected remittance is DERIVED, and row 145 already settled how
 
 > **Bible row 145:** *"Expected remittance is the cashier accounts' NET MOVEMENT, derived from the
 > ledger — not a sum over document types."*
@@ -133,13 +152,13 @@ negative short, positive over), `status` (`open` · `charged` · `written_off`),
 
 ## 8. Done when
 
-- [ ] The four tables, classified in `cutover/classification.ts` **and** `rls/registry.ts`, with
+- [x] The four tables, classified in `cutover/classification.ts` **and** `rls/registry.ts`, with
       RLS policies in the migration.
-- [ ] `createRemittance` — allocates FIFO, posts through `createMoneyTransfer`, records the
-      variance. Reverse path too.
-- [ ] A day's state derived, never stamped; a test asserting no `partially_remitted` column exists.
-- [ ] Integration tests: the five-day worked example above to the peso; an overage; an additive
-      second batch; a denial test for `accept_remittance`; and ⛔ **a test that a shortage cannot be
-      charged to nobody**.
+- [x] `createRemittance` — allocates FIFO, posts through `createMoneyTransfer`, records the
+      variance. Reverse path too, plus variance resolution.
+- [x] A day's state derived, never stamped.
+- [x] Integration tests — 8, including the five-day worked example to the peso, the additive
+      second batch, the DEF-052 denial, and ⛔ the shortage that cannot be charged to nobody.
+      Plus 8 unit tests on FIFO itself.
 - [ ] Driven end to end in a browser.
 - [ ] Gates: typecheck · unit · integration.
