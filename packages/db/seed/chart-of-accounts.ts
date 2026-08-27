@@ -217,6 +217,11 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
   leaf('2230', 'Pag-IBIG payable', 'liability', 'credit', '2000'), // 🆕
   leaf('2240', 'Withholding tax payable', 'liability', 'credit', '2000'), // 🆕
   leaf('2250', 'VAT payable', 'liability', 'credit', '2000', { status: 'reserved' }), // bible §13 row 75
+  // ⭐ T-128. The RESIDUAL liability control account — what the business owes that no other module
+  // already owns. ⛔ Statutory payables (2210-2240) stay party-FREE and are not used here: payroll
+  // accrues into them and statutory_remittance settles them, both without a party, and recording the
+  // same debt in both places would count it twice with nothing reconciling them.
+  leaf('2500', 'Accrued and other liabilities', 'liability', 'credit', '2000', { requiresParty: true }), // 🆕 — T-118 party_type=liability
   leaf('2300', 'Salaries and wages payable', 'liability', 'credit', '2000', {
     legacyCode: 'liability__salaries_payable',
   }),

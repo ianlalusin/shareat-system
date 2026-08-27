@@ -281,6 +281,13 @@
       "when": 1789443107084,
       "tag": "0039_t127_expense_owner",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1789529507084,
+      "tag": "0040_t128_liabilities",
+      "breakpoints": true
     }
   ]
 }

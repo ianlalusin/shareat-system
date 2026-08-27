@@ -1,0 +1,280 @@
+/**
+ * Generic liabilities — what the business owes that nothing else already tracks. T-128.
+ *
+ * ```
+ * charge    DR the expense (or asset)   CR 2500   (party = the liability)
+ * payment   DR 2500 (party = it)        CR the money account
+ *                                           → 2500 nets to zero when it is settled
+ * ```
+ *
+ * ⛔ **No stored totals.** v1 keeps `outstandingBalance`, `totalCharged` and `totalPaid` on the
+ * account, plus a `LiabilityLedgerEntry` with its own running balance (DEF-074) — the fourth time
+ * this exact shape has turned up. Every figure here is summed from `2500` by party.
+ */
+import { liabilitiesRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
+import type { LiabilityCategory } from '@shareat/db/schema';
+import { authorize, type Actor } from '@shareat/auth';
+import { postEntry } from '../ledger/post-entry';
+import { reverseEntry } from '../ledger/reverse-entry';
+import { checkDraw } from '../money-accounts/overdraft';
+
+export const LIABILITY_CONTROL_CODE = '2500';
+
+export interface CreateLiabilityInput {
+  storeId: string;
+  name: string;
+  category?: LiabilityCategory;
+  description?: string | null;
+  dueOn?: string | null;
+  notes?: string | null;
+}
+
+export async function createLiability(
+  tx: Tx | null,
+  actor: Actor,
+  input: CreateLiabilityInput,
+): Promise<{ id: string }> {
+  const run = async (trx: Tx) => {
+    await authorize(trx, actor, 'approve_expense', { storeId: input.storeId });
+    const name = input.name.trim();
+    if (!name) throw new Error('createLiability: say what this obligation is.');
+    return liabilitiesRepo.insertLiability(trx, {
+      orgId: actor.orgId,
+      storeId: input.storeId,
+      name,
+      category: input.category ?? 'other',
+      description: input.description?.trim() || null,
+      dueOn: input.dueOn?.trim() || null,
+      notes: input.notes?.trim() || null,
+      createdBy: actor.personId,
+    });
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/**
+ * ⭐ **The obligation is incurred.** `DR the expense · CR 2500`.
+ *
+ * ⚠️ The charge names what the money was FOR — usually an expense account, sometimes an asset (a
+ * deposit, a prepayment). It is validated rather than assumed, because a charge that lands on the
+ * wrong side of the balance sheet is invisible until something else fails to reconcile.
+ */
+export async function chargeLiability(
+  tx: Tx | null,
+  actor: Actor,
+  input: {
+    liabilityId: string;
+    amount: string;
+    /** The account the obligation was incurred FOR — an expense, or an asset. */
+    againstAccountCode: string;
+    on: string;
+    memo?: string;
+  },
+): Promise<{ entryId: string; outstanding: string }> {
+  const run = async (trx: Tx) => {
+    const liability = await liabilitiesRepo.getById(trx, actor.orgId, input.liabilityId);
+    if (!liability) throw new Error(`chargeLiability: liability ${input.liabilityId} does not exist.`);
+    await authorize(trx, actor, 'approve_expense', { storeId: liability.storeId });
+
+    const amount = Number(input.amount);
+    if (amount <= 0) throw new Error('chargeLiability: a charge has to be greater than zero.');
+
+    await assertChargeableAccount(trx, actor.orgId, input.againstAccountCode);
+
+    const result = await postEntry(trx, {
+      orgId: actor.orgId,
+      entryDate: input.on,
+      sourceType: 'liability_charge',
+      sourceId: liability.id,
+      idempotencyKey: `liability:${liability.id}:charge:${input.on}:${amount.toFixed(2)}:${input.againstAccountCode}`,
+      memo: input.memo?.trim() || `Charge — ${liability.name}`,
+      postedBy: actor.personId,
+      lines: [
+        {
+          accountCode: input.againstAccountCode,
+          storeId: liability.storeId,
+          debit: input.amount,
+        },
+        {
+          accountCode: LIABILITY_CONTROL_CODE,
+          storeId: liability.storeId,
+          credit: input.amount,
+          partyType: 'liability' as const,
+          partyId: liability.id,
+        },
+      ],
+    });
+    return {
+      entryId: result.entryId,
+      outstanding: (await liabilitiesRepo.positionOf(trx, actor.orgId, liability.id)).outstanding,
+    };
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/**
+ * ⛔ **The charge target is validated, and the refusals are the interesting part.**
+ *
+ * A liability must not be charged to another liability account: each of those is already owned by a
+ * module that accrues and settles it, and recording the same debt in both places counts it twice
+ * with nothing reconciling them. ⚠️ Blocking beats silently double-counting — T-122 invariant 7's
+ * rule, unchanged.
+ */
+async function assertChargeableAccount(trx: Tx, orgId: string, code: string): Promise<void> {
+  const reserved = liabilitiesRepo.RESERVED_LIABILITY_CODES[code];
+  if (reserved) {
+    throw new Error(
+      `chargeLiability: ${code} is ${reserved}. Charging it here would record the same debt twice, ` +
+        `in two accounts, with nothing reconciling them.`,
+    );
+  }
+  const account = await liabilitiesRepo.accountKind(trx, orgId, code);
+  if (!account) throw new Error(`chargeLiability: account ${code} does not exist.`);
+  if (!account.isPostable) {
+    throw new Error(`chargeLiability: ${code} is a header, not something you can post to.`);
+  }
+  if (account.type === 'liability' || account.type === 'equity') {
+    throw new Error(
+      `chargeLiability: ${code} is ${account.type}, and a charge records what the obligation was ` +
+        `FOR — an expense, or an asset. Crediting one liability to debit another moves a debt ` +
+        `without settling it.`,
+    );
+  }
+}
+
+/** ⭐ **The obligation is paid.** `DR 2500 (party = it) · CR the money account`. */
+export async function payLiability(
+  tx: Tx | null,
+  actor: Actor,
+  input: { liabilityId: string; amount: string; fromMoneyAccountId: string; on: string; memo?: string },
+): Promise<{ entryId: string; outstanding: string; settled: boolean; warning?: string }> {
+  const run = async (trx: Tx) => {
+    const liability = await liabilitiesRepo.getById(trx, actor.orgId, input.liabilityId);
+    if (!liability) throw new Error(`payLiability: liability ${input.liabilityId} does not exist.`);
+    await authorize(trx, actor, 'approve_expense', { storeId: liability.storeId });
+
+    const amount = Number(input.amount);
+    if (amount <= 0) throw new Error('payLiability: a payment has to be greater than zero.');
+
+    const before = Number(
+      (await liabilitiesRepo.positionOf(trx, actor.orgId, liability.id)).outstanding,
+    );
+    // ⛔ Overpaying would turn a liability into a receivable with nobody deciding to — the same
+    // ceiling `assertWithinReceivable` puts on an owner settlement.
+    if (amount > before + 0.005) {
+      throw new Error(
+        `payLiability: that is more than the ₱${before.toFixed(2)} still owed on this obligation.`,
+      );
+    }
+
+    const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.fromMoneyAccountId);
+    if (!account) throw new Error('payLiability: that money account does not exist.');
+    if (account.storeId !== liability.storeId) {
+      throw new Error('payLiability: that account belongs to another store.');
+    }
+    const warning = await checkDraw(trx, actor.orgId, account, amount, 'payLiability');
+
+    const result = await postEntry(trx, {
+      orgId: actor.orgId,
+      entryDate: input.on,
+      sourceType: 'liability_payment',
+      sourceId: liability.id,
+      idempotencyKey: `liability:${liability.id}:payment:${input.on}:${amount.toFixed(2)}`,
+      memo: input.memo?.trim() || `Payment — ${liability.name}`,
+      postedBy: actor.personId,
+      lines: [
+        {
+          accountCode: LIABILITY_CONTROL_CODE,
+          storeId: liability.storeId,
+          debit: input.amount,
+          partyType: 'liability' as const,
+          partyId: liability.id,
+        },
+        {
+          accountCode: account.glAccountCode,
+          storeId: liability.storeId,
+          credit: input.amount,
+          ...(account.glAccountCode === '1140'
+            ? { partyType: 'money_account' as const, partyId: account.id }
+            : {}),
+        },
+      ],
+    });
+
+    const after = await liabilitiesRepo.positionOf(trx, actor.orgId, liability.id);
+    return {
+      entryId: result.entryId,
+      outstanding: after.outstanding,
+      // ⭐ Settled is the LEDGER's answer, not a column and not the form's arithmetic.
+      settled: Number(after.outstanding) <= 0.005,
+      ...(warning ? { warning } : {}),
+    };
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/** ⚠️ Reversal, not deletion — the original and its mirror both stay on the ledger. */
+export async function reverseLiabilityEntry(
+  tx: Tx | null,
+  actor: Actor,
+  input: { liabilityId: string; entryId: string; reason: string },
+): Promise<{ entryId: string }> {
+  const run = async (trx: Tx) => {
+    const liability = await liabilitiesRepo.getById(trx, actor.orgId, input.liabilityId);
+    if (!liability) {
+      throw new Error(`reverseLiabilityEntry: liability ${input.liabilityId} does not exist.`);
+    }
+    await authorize(trx, actor, 'approve_expense', { storeId: liability.storeId });
+    const reason = input.reason.trim();
+    if (!reason) throw new Error('reverseLiabilityEntry: say why this is being reversed.');
+    const result = await reverseEntry(trx, {
+      entryId: input.entryId,
+      reason,
+      reversedBy: actor.personId,
+    });
+    return { entryId: result.reversalEntryId };
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/**
+ * ⚠️ **Retiring is not settling.** Settled is derived from the ledger; this records that somebody
+ * decided to stop using the row. ⛔ Refused while money is still owed — retiring an obligation with
+ * an outstanding balance would hide a real debt from the register that exists to show it.
+ */
+export async function retireLiability(
+  tx: Tx | null,
+  actor: Actor,
+  input: { liabilityId: string },
+): Promise<void> {
+  const run = async (trx: Tx) => {
+    const liability = await liabilitiesRepo.getById(trx, actor.orgId, input.liabilityId);
+    if (!liability) throw new Error(`retireLiability: liability ${input.liabilityId} does not exist.`);
+    await authorize(trx, actor, 'approve_expense', { storeId: liability.storeId });
+
+    const position = await liabilitiesRepo.positionOf(trx, actor.orgId, liability.id);
+    if (Math.abs(Number(position.outstanding)) > 0.005) {
+      throw new Error(
+        `retireLiability: ₱${position.outstanding} is still owed on this obligation. Settle it or ` +
+          `reverse the charge — retiring it would hide a real debt.`,
+      );
+    }
+    await liabilitiesRepo.updateLiability(trx, actor.orgId, liability.id, { retiredAt: new Date() });
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/** ⚠️ Overdue is computed, never stored — `due_on` in the past with money still owed. */
+export function isOverdue(
+  dueOn: string | null,
+  outstanding: string,
+  asOf: string = new Date().toISOString().slice(0, 10),
+): boolean {
+  if (!dueOn) return false;
+  return dueOn < asOf && Number(outstanding) > 0.005;
+}

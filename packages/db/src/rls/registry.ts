@@ -187,6 +187,13 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'What each owner withdrew in a month, and who signed it off. ⛔ Reveals both an owner’s ' +
       'personal cash flow and the store’s internal controls — neither is another org’s business.',
   },
+  liabilities: {
+    scope: 'org_column',
+    reason:
+      'What an org owes, to whom, and when it falls due. ⛔ A franchise reading another’s ' +
+      'obligations learns its commitments and its cash-flow pressure — the same commercial ' +
+      'sensitivity as its borrowing.',
+  },
   owners: {
     scope: 'org_column',
     reason:

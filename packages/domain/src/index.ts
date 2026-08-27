@@ -18,3 +18,4 @@ export * from './files';
 export * from './loans';
 export * from './cash-requests';
 export * from './owners';
+export * from './liabilities';

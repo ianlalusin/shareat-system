@@ -217,6 +217,15 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'statement pointing at nothing, which is worse than no statement: it reads as evidence. ' +
       '⚠️ v2 opens on a zero starting point, so the first month closes against a fresh ledger.',
   },
+  liabilities: {
+    class: 'keep',
+    reason:
+      'A debt does not stop existing because the books restarted — the landlord still expects the ' +
+      'accrued rent. ⭐ The obligation is KEPT; the ledger behind it purges, so it opens at zero and ' +
+      'its real balance is re-entered as an opening figure. Same treatment as loans. ⚠️ An ' +
+      'obligation already settled before cutover should be RETIRED rather than carried — a kept row ' +
+      'reading zero is indistinguishable from one nobody has charged yet.',
+  },
   owners: {
     class: 'keep',
     reason:

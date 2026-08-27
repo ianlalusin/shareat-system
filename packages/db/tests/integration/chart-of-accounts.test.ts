@@ -291,6 +291,8 @@ describe('invariant 9 — codes are unique per org, and the same code seeds inde
 });
 
 describe('invariant 10 — account count matches the (amended) COA-ALIGNMENT list exactly', () => {
+  // ⭐ 96 -> 97 on 2026-08-27 (T-128): 2500 Accrued and other liabilities — the RESIDUAL control
+  // account, for what the business owes that no other module already owns.
   // ⭐ 95 -> 96 on 2026-08-27 (T-127): 1260 Due from owners. A personal expense the business
   // EXPECTS BACK is a receivable, not a reduction of equity — and that distinction is the one the
   // tax treatment turns on.
@@ -300,7 +302,7 @@ describe('invariant 10 — account count matches the (amended) COA-ALIGNMENT lis
   //   4500 Other charges — leftover, packaging and similar. INCOME; the business keeps these.
   // Two things that look identical on a bill and are opposite in the books. This count is a PIN,
   // so changing it is a deliberate act — which is exactly why it caught the addition.
-  it('the seed data has exactly 96 accounts — 7 headers + 89 leaves', () => {
+  it('the seed data has exactly 97 accounts — 7 headers + 90 leaves', () => {
     // Originally 75 (7 headers + 68 leaves) under T-102. See task report for the
     // reasoning behind 75 rather than a literal reading of the §2 summary tables (77):
     // 1520/1530 (Property and equipment sub-range) are deliberately not seeded as rows —
@@ -313,17 +315,17 @@ describe('invariant 10 — account count matches the (amended) COA-ALIGNMENT lis
     // is forward-corrected rather than left silently wrong (bible §2 rule 8 precedent:
     // an applied migration is never edited, but a test asserting a now-superseded fact
     // is updated forward, the same way migration 0002 corrected 3200 forward).
-    expect(CHART_OF_ACCOUNTS.length).toBe(96);
+    expect(CHART_OF_ACCOUNTS.length).toBe(97);
     const headers = CHART_OF_ACCOUNTS.filter((a) => a.parentCode === null);
     expect(headers.length).toBe(7);
-    expect(CHART_OF_ACCOUNTS.length - headers.length).toBe(89);
+    expect(CHART_OF_ACCOUNTS.length - headers.length).toBe(90);
   });
 
   it('every account actually lands in the database for a freshly seeded org', async () => {
     const orgId = await insertOrg('inv10');
     await seedChartOfAccounts(sql, orgId);
     const rows = await fetchAccounts(orgId);
-    expect(rows.length).toBe(96); // T-102b, T-123 (2160, 4500), T-127 (1260) — see comments
+    expect(rows.length).toBe(97); // T-102b, T-123 (2160, 4500), T-127 (1260), T-128 (2500)
   });
 
   it('4200 is not seeded — REVENUE AMENDMENT, take-out folded into 4150', async () => {
@@ -552,18 +554,18 @@ describe('T-102b invariant 5 — re-running the seed inserts nothing and changes
 });
 
 describe('T-102b invariant 6 — total account count is 92 (T-102\'s 75 + these 17)', () => {
-  it('the seed data has exactly 96 accounts', () => {
-    expect(CHART_OF_ACCOUNTS.length).toBe(96);
+  it('the seed data has exactly 97 accounts', () => {
+    expect(CHART_OF_ACCOUNTS.length).toBe(97);
     const headers = CHART_OF_ACCOUNTS.filter((a) => a.parentCode === null);
     expect(headers.length).toBe(7);
-    expect(CHART_OF_ACCOUNTS.length - headers.length).toBe(89);
+    expect(CHART_OF_ACCOUNTS.length - headers.length).toBe(90);
   });
 
   it('every account lands in the database for a freshly seeded org', async () => {
     const orgId = await insertOrg('102b-inv6');
     await seedChartOfAccounts(sql, orgId);
     const rows = await fetchAccounts(orgId);
-    expect(rows.length).toBe(96);
+    expect(rows.length).toBe(97);
   });
 });
 
@@ -732,9 +734,13 @@ const REQUIRES_PARTY_EXPECTED_CODES = [
   // makes "contributed ₱500k, drew ₱300k" indistinguishable from "contributed ₱200k".
   '3100', // Owner's capital  -> owner
   '3200', // Owner's drawings -> owner
+  // ⭐ T-128, and the FIFTH application of the same rule. ⛔ The statutory payables (2210-2240)
+  // deliberately stay party-FREE: payroll accrues into them and statutory_remittance settles them,
+  // both without a party, and recording the same debt here too would count it twice.
+  '2500', // Accrued and other liabilities -> liability
 ];
 
-describe('T-118 invariant 7 (+ ADR-010) — exactly the twelve control accounts are requires_party = true; every other account is false', () => {
+describe('T-118 invariant 7 (+ ADR-010) — exactly the thirteen control accounts are requires_party = true; every other account is false', () => {
   it('REQUIRES_PARTY_CODES matches the Contract §2 table exactly', () => {
     expect(new Set(REQUIRES_PARTY_CODES)).toEqual(new Set(REQUIRES_PARTY_EXPECTED_CODES));
   });
