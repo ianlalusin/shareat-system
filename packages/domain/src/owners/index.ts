@@ -213,9 +213,10 @@ export async function judgeDrawingLimit(
     message:
       `this would take ₱${(already + amount).toFixed(2)} ${scope}, over the ₱${limit.toFixed(2)} ` +
       `${owner.drawingLimitPeriod} limit (₱${already.toFixed(2)} already). ` +
-      // ⚠️ Say WHY the figure may look higher than the drawings alone — an unrepaid personal
-      // expense consumes the limit, and a reader who does not know that will think it is wrong.
-      `Unrepaid personal expenses count towards this; repaying one makes room again.`,
+      // ⚠️ Say WHY the figure may look higher than the drawings alone. Without this the number
+      // reads as wrong, and a limit a reader thinks is broken is a limit they route around.
+      `Unrepaid personal expenses count towards this — including any moved to a salary advance, ` +
+      `since no cash has come back yet. Repaying one in cash makes room again.`,
   };
 }
 
@@ -430,6 +431,89 @@ export async function recoverFromPay(
           debit: input.amount,
           partyType: 'employee' as const,
           partyId: owner.personId,
+        },
+        {
+          accountCode: DUE_FROM_OWNER_CODE,
+          storeId: owner.storeId,
+          credit: input.amount,
+          partyType: 'owner' as const,
+          partyId: owner.id,
+        },
+      ],
+    });
+    return {
+      entryId: result.entryId,
+      outstanding: await ownersRepo.receivableOf(trx, actor.orgId, owner.id),
+    };
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/**
+ * ⭐ **Settlement 3 — give up on it.** `DR 3200 · CR 1260`.
+ *
+ * The moment a receivable stops being one and becomes a drawing. ⚠️ **And the moment it becomes a
+ * distribution for tax purposes**, which is why it needs a person and a date rather than a rule: a
+ * payment the business no longer expects back is a constructive dividend however it was labelled
+ * when it happened.
+ *
+ * ⛔ **Nothing triggers this automatically, and nothing should.** *"If not paid"* has no date — that
+ * was the flaw in the three-route cascade this design replaced. Someone decides, on a day, with a
+ * reason, and their name is on it.
+ *
+ * ⭐ **The drawing limit needs no check here, and that falls out rather than being waived.** The
+ * money already consumed the limit while it sat in `1260`; this moves it to `3200`, which is also
+ * counted. Net effect: zero. So a write-off can always be recorded — the books can be cleaned up
+ * even at a cap — without opening a way to exceed one.
+ *
+ * ⚠️ It IS a drawing, so it respects the monthly close: writing off into an agreed month is refused
+ * the same way a back-dated drawing is.
+ */
+export async function writeOffReceivable(
+  tx: Tx | null,
+  actor: Actor,
+  input: { ownerId: string; amount: string; reason: string; on: string },
+): Promise<{ entryId: string; outstanding: string }> {
+  const run = async (trx: Tx) => {
+    const owner = await ownersRepo.getById(trx, actor.orgId, input.ownerId);
+    if (!owner) throw new Error(`writeOffReceivable: owner ${input.ownerId} does not exist.`);
+    // ⚠️ `approve_expense`, not `transfer_funds`. Deciding the business will never see money again
+    // is an approval, and the person who took it should not be the one who forgives it.
+    await authorize(trx, actor, 'approve_expense', { storeId: owner.storeId });
+
+    const reason = input.reason.trim();
+    if (!reason) {
+      throw new Error(
+        'writeOffReceivable: say why. A receivable that becomes a drawing with no reason is ' +
+          'indistinguishable from one that was never collected because nobody looked.',
+      );
+    }
+    await assertWithinReceivable(
+      trx,
+      actor.orgId,
+      owner.id,
+      Number(input.amount),
+      'writeOffReceivable',
+    );
+    await assertMonthOpen(trx, actor.orgId, owner.id, input.on, 'writeOffReceivable');
+
+    const result = await postEntry(trx, {
+      orgId: actor.orgId,
+      entryDate: input.on,
+      sourceType: 'owner_writeoff',
+      sourceId: owner.id,
+      idempotencyKey: `owner:${owner.id}:writeoff:${input.on}:${Number(input.amount).toFixed(2)}`,
+      memo: `Owner receivable written off — ${reason}`,
+      postedBy: actor.personId,
+      lines: [
+        {
+          accountCode: DRAWINGS_CODE,
+          storeId: owner.storeId,
+          debit: input.amount,
+          partyType: 'owner' as const,
+          partyId: owner.id,
+          lineMemo: reason,
         },
         {
           accountCode: DUE_FROM_OWNER_CODE,

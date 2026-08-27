@@ -213,8 +213,18 @@ export async function drawnInWindow(
         -- ⭐ ...AND the same money after a recovery reclassified it. Otherwise "recover from pay"
         -- would free the cap the instant it was clicked, long before payroll actually nets it — the
         -- same bypass as marking everything repayable, one step further along.
+        --
+        -- SCOPED TO THIS OWNER'S OWN RECOVERIES (je.source_id = owner.id), and the scope is the
+        -- whole point. 1230 also holds ordinary staff advances — a float shortage, a salary advance
+        -- — and counting those would charge an operational debt against an OWNERSHIP cap. A browser
+        -- check caught exactly that: a ₱600 cash-request shortage, belonging to the same human in a
+        -- completely different role, silently consuming their drawing limit.
+        --
+        -- When payroll lands, the entry that nets one of these off must carry the same
+        -- source_id, or the recovered amount will keep consuming the cap forever.
         or (jl.party_type = 'employee' and jl.party_id = ${owner.personId}
-            and a.code = ${EMPLOYEE_ADVANCE_CODE})
+            and a.code = ${EMPLOYEE_ADVANCE_CODE}
+            and je.source_id = ${owner.id})
       )
       ${window.since ? sql`and je.entry_date >= ${window.since}` : sql``}
       ${window.until ? sql`and je.entry_date < ${window.until}` : sql``}
@@ -236,6 +246,53 @@ export async function receivableOf(tx: Tx, orgId: string, ownerId: string): Prom
       and je.status <> 'draft'
   `)) as unknown as Record<string, string>[];
   return Number(row?.total ?? 0).toFixed(2);
+}
+
+export interface AgedReceivable {
+  ownerId: string;
+  outstanding: string;
+  /** The date of the OLDEST unsettled charge — what the age is measured from. */
+  oldestOn: string;
+  daysOutstanding: number;
+}
+
+/**
+ * ⭐ **Owner receivables, with their age.** An aged `1260` balance is a FINDING, not a balance.
+ *
+ * ⚠️ A personal expense the business is owed becomes a constructive dividend if it is never really
+ * collected — that is the line the tax treatment turns on — so a balance quietly sitting for months
+ * is the thing somebody has to see. It surfaces the way remittance surfaces open variances: on the
+ * register, first, without anyone remembering to ask.
+ *
+ * ⚠️ Age is measured from the OLDEST charge still outstanding, FIFO-style, not from the newest and
+ * not from an average — the oldest is the one that has been sitting longest and is the one an
+ * examiner would ask about.
+ */
+export async function agedReceivables(tx: Tx, orgId: string): Promise<AgedReceivable[]> {
+  const rows = (await tx.execute(sql`
+    select
+      jl.party_id as owner_id,
+      coalesce(sum(jl.debit - jl.credit), 0)::text as outstanding,
+      min(case when jl.debit > 0 then je.entry_date end)::text as oldest_on,
+      (current_date - min(case when jl.debit > 0 then je.entry_date end))::int as days_outstanding
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId}
+      and jl.party_type = ${PARTY_TYPE}
+      and a.code = ${DUE_FROM_OWNER_CODE}
+      and je.status <> 'draft'
+    group by jl.party_id
+    having coalesce(sum(jl.debit - jl.credit), 0) > 0
+    order by min(case when jl.debit > 0 then je.entry_date end) asc
+  `)) as unknown as Record<string, string>[];
+
+  return rows.map((r) => ({
+    ownerId: String(r.owner_id ?? r.ownerId),
+    outstanding: Number(r.outstanding ?? 0).toFixed(2),
+    oldestOn: String(r.oldest_on ?? r.oldestOn ?? ''),
+    daysOutstanding: Number(r.days_outstanding ?? r.daysOutstanding ?? 0),
+  }));
 }
 
 /**

@@ -41,7 +41,7 @@ export type { LoanRow, LoanPosition, LoanPaymentRow } from './repo/loans';
 export { CASH_REQUEST_STATUSES } from '../schema/cash-requests';
 export type { CashRequestStatus } from '../schema/cash-requests';
 export type { CashRequestRow, FloatPosition } from './repo/cash-requests';
-export type { OwnerRow, OwnerPosition, DrawingCloseRow } from './repo/owners';
+export type { OwnerRow, OwnerPosition, DrawingCloseRow, AgedReceivable } from './repo/owners';
 export * as journalRepo from './repo/journal';
 export * as etlRepo from './repo/etl';
 export * as reportsRepo from './repo/reports';

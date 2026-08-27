@@ -20,7 +20,8 @@
  * Admin SDK bypasses rules; a single `makePublic()` would quietly undo that for one object with no
  * error and no trace.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, isAbsolute, join } from 'node:path';
 import { getApps, initializeApp, cert, type App } from 'firebase-admin/app';
 import { getStorage } from 'firebase-admin/storage';
 import type { StorageDriver, PutInput } from '@shareat/domain';
@@ -76,7 +77,34 @@ export interface FirebaseDriverConfig {
  * — so the loud failure lives there, once, instead of in every entry point that calls this.
  */
 export type FileReader = (path: string) => string;
-const defaultFileReader: FileReader = (path) => readFileSync(path, 'utf8');
+
+/**
+ * ⚠️ **Relative paths resolve from the REPO ROOT, never from `process.cwd()`.**
+ *
+ * `.env.local` says `./secrets/storage.sa.json`, and that is only correct from the repo root. Next.js
+ * runs with `cwd` = `apps/erp`, so a cwd-relative read fails there while working perfectly in
+ * `npm run storage-smoke` — the same configuration, two answers, depending on which process loaded
+ * it. ⛔ The one variable a credential path must not have is "it depends who is asking".
+ *
+ * ⚠️ Found by walking UP from `cwd` to the workspace root, not from `import.meta.url` — that was the
+ * first attempt and it does not survive Turbopack, which rewrites the module's own location. Walking
+ * up is bundler-independent: `package-lock.json` sits only at the root of this repo.
+ */
+function repoRoot(): string {
+  let dir = process.cwd();
+  for (let i = 0; i < 10; i += 1) {
+    if (existsSync(join(dir, 'package-lock.json'))) return dir;
+    const up = dirname(dir);
+    if (up === dir) break;
+    dir = up;
+  }
+  // ⚠️ Falling back to cwd rather than throwing: the caller's next step is a file read that fails
+  // with a message naming the actual problem, which beats a confusing error about the repo layout.
+  return process.cwd();
+}
+
+const defaultFileReader: FileReader = (path) =>
+  readFileSync(isAbsolute(path) ? path : join(repoRoot(), path), 'utf8');
 
 export function firebaseConfigFromEnv(
   env: Readonly<Record<string, string | undefined>> = process.env,
@@ -106,8 +134,9 @@ export function firebaseConfigFromEnv(
       // ⚠️ The underlying error is not echoed: a read failure can include the resolved path, and a
       // path is the one part of a credential worth keeping out of a log.
       throw new Error(
-        `storage: FIREBASE_SERVICE_ACCOUNT_KEY_FILE points at a file that cannot be read. Check ` +
-          `the path is relative to the repo root and the file exists.`,
+        `storage: FIREBASE_SERVICE_ACCOUNT_KEY_FILE points at a file that cannot be read. A ` +
+          `relative path is resolved from the REPO ROOT (not the working directory), so ` +
+          `./secrets/<name>.json is right from anywhere. Check the file exists.`,
       );
     }
     return { bucket, serviceAccountKey: contents.trim() };

@@ -134,15 +134,15 @@ that is the honest reason.
 
 ## 8. Done when
 
-- [ ] `owners` in the schema, classified in `cutover/classification.ts` **and** registered in
+- [x] `owners` in the schema, classified in `cutover/classification.ts` **and** registered in
       `rls/registry.ts`.
-- [ ] `party_type` widened to `'owner'`; `3100` and `3200` party-requiring.
-- [ ] Services: upsert owner · contribution · drawing · reverse, with the position derived.
-- [ ] Integration tests: ⭐ **the position matches the ledger after a reversal**; ⭐ **a monthly
+- [x] `party_type` widened to `'owner'`; `3100` and `3200` party-requiring.
+- [x] Services: upsert owner · contribution · drawing · reverse, with the position derived.
+- [x] Integration tests: ⭐ **the position matches the ledger after a reversal**; ⭐ **a monthly
       limit blocks** (DEF-071's whole point); a total limit blocks; a back-dated drawing is measured
       against its own month; ⛔ contribution and drawing are refused across stores.
-- [ ] Screens, driven end to end in a browser.
-- [ ] Gates: typecheck · unit · integration · build.
+- [x] Screens, driven end to end in a browser.
+- [x] Gates: typecheck · unit · integration · build.
 
 ---
 
@@ -183,4 +183,62 @@ The obvious posting for *"reduce what we owe them in wages"* is `DR 2300 Salarie
 check that this owner is owed anything, and over-recovering would push the store's wage liability
 negative with nothing to catch it. `1230` is party-requiring by design, and is already where payroll
 nets salary advances.
+
+---
+
+## 10. The write-off, and two bugs the browser found — 2026-08-27
+
+### Settlement 3: write-off — `DR 3200 · CR 1260`
+
+The moment a receivable stops being one. ⚠️ **And the moment it becomes a distribution for tax
+purposes**, which is why it takes a person, a date and a reason rather than a rule. ⛔ Nothing
+triggers it automatically and nothing should — *"if not paid"* has no date, which was the flaw in the
+three-route cascade this design replaced.
+
+⭐ **The drawing limit needs no check here, and that falls out rather than being waived.** The money
+already consumed the limit while it sat in `1260`; this moves it to `3200`, which is also counted.
+Net effect zero — so the books can always be cleaned up, even at a cap, without opening a way to
+exceed one. It respects the monthly close, because it IS a drawing.
+
+### ⭐ Aged receivables surface first
+
+`agedReceivables` measures from the **oldest** unsettled charge, FIFO-style — the one that has been
+sitting longest and the one an examiner would ask about. It renders above the register, the way
+remittance surfaces open variances: nobody should have to remember to look.
+
+⚠️ The 90-day threshold is a **prompt, not a rule**. Nothing refuses an old receivable; what matters
+is that somebody sees it.
+
+### ⛔ Bug 1 — the drawing limit was counting UNRELATED staff advances
+
+Found by driving the screens: an owner's cap reported *"₱600.00 already"* against an empty account.
+The ₱600 was a **cash-request float shortage** — the same human in a completely different role,
+sitting on `1230`.
+
+Counting all of `1230` charged an operational debt against an ownership cap. Now scoped to
+`je.source_id = owner.id`, so only this owner's own pay-recoveries count. ⚠️ **When payroll lands, the
+entry that nets one off must carry the same `source_id`**, or the recovered amount consumes the cap
+forever. Pinned by a test.
+
+### ⛔ Bug 2 — the credential path resolved from the wrong directory
+
+`FIREBASE_SERVICE_ACCOUNT_KEY_FILE=./secrets/storage.sa.json` worked in `npm run storage-smoke` and
+**killed `next dev` at boot**: Next runs with `cwd` = `apps/erp`. Same configuration, two answers,
+depending on which process loaded it — and the one thing a credential path must not have is *"it
+depends who is asking"*.
+
+⚠️ First fix used `import.meta.url` and did not survive Turbopack, which rewrites a module's own
+location. Now walks up from `cwd` to the `package-lock.json` at the repo root, which is
+bundler-independent.
+
+⭐ **The boot-time failure was the instrumentation hook working exactly as designed** — a
+misconfigured bucket kills startup instead of surfacing at the first upload.
+
+## 11. Still not done
+
+- ⛔ **Profit distribution**, and everything in §6's out-list.
+- ⚠️ **`recoverFromPay` cannot prove the owner is actually PAID** — it checks they hold an active
+  role, which is the best proxy until payroll exists. Replace with a real payroll lookup then.
+- ⚠️ **Confirm the entity structure with the accountant** before go-live: sole proprietorship,
+  partnership or corporation changes how an unpaid owner receivable is treated on examination.
 

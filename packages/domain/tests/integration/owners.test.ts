@@ -31,6 +31,7 @@ import {
   recordDrawing,
   recoverFromPay,
   repayFromOwner,
+  writeOffReceivable,
   reverseOwnerEntry,
 } from '@shareat/domain';
 
@@ -123,6 +124,33 @@ async function owner(f: Fixture, over: Record<string, unknown> = {}) {
     }),
   );
   return created.id;
+}
+
+/** A repayable personal expense, posted straight to the ledger so the expense module is not
+ *  what is under test here. */
+async function owesUs(f: Fixture, ownerId: string, amount: string, on = '2026-01-12') {
+  const [period] = await sql<{ id: string }[]>`
+    select id from fiscal_periods where org_id = ${f.orgId} and starts_on <= ${on} and ends_on >= ${on}
+  `;
+  await sql.begin(async (tx) => {
+    const [e] = await tx<{ id: string }[]>`
+      insert into journal_entries (org_id, entry_date, period_id, source_type, source_id, status)
+      values (${f.orgId}, ${on}, ${period!.id}, 'expense', ${uid('pe')}, 'draft') returning id
+    `;
+    const codes = await tx<{ id: string; code: string }[]>`
+      select id, code from accounts where org_id = ${f.orgId} and code in ('1260', '1110')
+    `;
+    const by = new Map(codes.map((c) => [c.code, c.id]));
+    await tx`
+      insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit, party_type, party_id)
+      values (${e!.id}, 1, ${by.get('1260')!}, ${f.storeId}, ${amount}, '0', 'owner', ${ownerId})
+    `;
+    await tx`
+      insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit)
+      values (${e!.id}, 2, ${by.get('1110')!}, ${f.storeId}, '0', ${amount})
+    `;
+    await tx`update journal_entries set status = 'posted' where id = ${e!.id}`;
+  });
 }
 
 const positionOf = (f: Fixture, id: string) =>
@@ -246,6 +274,46 @@ describe('⭐ the drawing limit — DEF-071', () => {
         recordDrawing(tx, f.admin, { ownerId: id, amount: '1000.00', fromMoneyAccountId: f.till, on: '2026-01-31' }),
       ),
     ).rejects.toThrow(/over the ₱50000.00 monthly limit/);
+  });
+
+  it('⛔ an UNRELATED staff advance does not consume the owner’s drawing limit', async () => {
+    const f = await fixture('unrelated');
+    const id = await owner(f, { drawingLimit: '50000.00', drawingLimitPeriod: 'monthly' });
+
+    // ⚠️ A float shortage from a cash request: same human, different role, its own source document.
+    // 1230 holds ordinary staff advances too, and charging one against an OWNERSHIP cap conflates
+    // an operational debt with a distribution. A browser check caught exactly this.
+    const [period] = await sql<{ id: string }[]>`
+      select id from fiscal_periods where org_id = ${f.orgId} order by starts_on limit 1
+    `;
+    await sql.begin(async (tx) => {
+      const [e] = await tx<{ id: string }[]>`
+        insert into journal_entries (org_id, entry_date, period_id, source_type, source_id, status)
+        values (${f.orgId}, '2026-01-06', ${period!.id}, 'cash_request_shortage', ${uid('cr')}, 'draft')
+        returning id
+      `;
+      const codes = await tx<{ id: string; code: string }[]>`
+        select id, code from accounts where org_id = ${f.orgId} and code in ('1230', '1110')
+      `;
+      const by = new Map(codes.map((c) => [c.code, c.id]));
+      await tx`
+        insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit, party_type, party_id)
+        values (${e!.id}, 1, ${by.get('1230')!}, ${f.storeId}, '600.00', '0', 'employee', ${f.anaId})
+      `;
+      await tx`
+        insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit)
+        values (${e!.id}, 2, ${by.get('1110')!}, ${f.storeId}, '0', '600.00')
+      `;
+      await tx`update journal_entries set status = 'posted' where id = ${e!.id}`;
+    });
+
+    // The whole ₱50,000 must still be available — the shortage is not a drawing.
+    await asOrg(f.orgId, (tx) =>
+      recordDrawing(tx, f.admin, {
+        ownerId: id, amount: '50000.00', fromMoneyAccountId: f.till, on: '2026-01-10',
+      }),
+    );
+    expect((await positionOf(f, id)).drawn).toBe('50000.00');
   });
 
   it('a TOTAL limit blocks across months', async () => {
@@ -395,33 +463,6 @@ describe('⭐ the monthly drawings close', () => {
 });
 
 describe('⭐ clearing a 1260 receivable', () => {
-  /** A repayable personal expense, posted straight to the ledger so the expense module is not
-   *  what is under test here. */
-  async function owesUs(f: Fixture, ownerId: string, amount: string, on = '2026-01-12') {
-    const [period] = await sql<{ id: string }[]>`
-      select id from fiscal_periods where org_id = ${f.orgId} and starts_on <= ${on} and ends_on >= ${on}
-    `;
-    await sql.begin(async (tx) => {
-      const [e] = await tx<{ id: string }[]>`
-        insert into journal_entries (org_id, entry_date, period_id, source_type, source_id, status)
-        values (${f.orgId}, ${on}, ${period!.id}, 'expense', ${uid('pe')}, 'draft') returning id
-      `;
-      const codes = await tx<{ id: string; code: string }[]>`
-        select id, code from accounts where org_id = ${f.orgId} and code in ('1260', '1110')
-      `;
-      const by = new Map(codes.map((c) => [c.code, c.id]));
-      await tx`
-        insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit, party_type, party_id)
-        values (${e!.id}, 1, ${by.get('1260')!}, ${f.storeId}, ${amount}, '0', 'owner', ${ownerId})
-      `;
-      await tx`
-        insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit)
-        values (${e!.id}, 2, ${by.get('1110')!}, ${f.storeId}, '0', ${amount})
-      `;
-      await tx`update journal_entries set status = 'posted' where id = ${e!.id}`;
-    });
-  }
-
   it('⭐ cash repayment clears it, and equity never moved', async () => {
     const f = await fixture('repay');
     const id = await owner(f);
@@ -538,6 +579,106 @@ describe('⭐ clearing a 1260 receivable', () => {
         recoverFromPay(tx, f.admin, { ownerId: id, amount: '2000.00', on: '2026-01-20' }),
       ),
     ).rejects.toThrow(/no active role, so there is no pay to recover from/);
+  });
+});
+
+describe('⭐ writing a receivable off — when it stops being one', () => {
+  it('⭐ moves it to 3200, so it finally reduces equity', async () => {
+    const f = await fixture('writeoff');
+    const id = await owner(f);
+    await owesUs(f, id, '2000.00');
+
+    const result = await asOrg(f.orgId, (tx) =>
+      writeOffReceivable(tx, f.admin, {
+        ownerId: id, amount: '2000.00', reason: 'not collectible, agreed with the partners',
+        on: '2026-02-05',
+      }),
+    );
+    expect(result.outstanding).toBe('0.00');
+
+    const after = await positionOf(f, id);
+    expect(after.receivable).toBe('0.00');
+    // ⭐ Equity moves now, and only now — this is the moment it became a distribution.
+    expect(after.drawn).toBe('2000.00');
+    expect(after.net).toBe('-2000.00');
+  });
+
+  it('⛔ needs a reason — otherwise it is indistinguishable from nobody bothering to collect', async () => {
+    const f = await fixture('woreason');
+    const id = await owner(f);
+    await owesUs(f, id, '2000.00');
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        writeOffReceivable(tx, f.admin, { ownerId: id, amount: '2000.00', reason: '  ', on: '2026-02-05' }),
+      ),
+    ).rejects.toThrow(/say why/);
+  });
+
+  it('⭐ is allowed even AT the drawing limit, because the money already counted', async () => {
+    const f = await fixture('woatcap');
+    const id = await owner(f, { drawingLimit: '2000.00', drawingLimitPeriod: 'total' });
+    await owesUs(f, id, '2000.00');
+
+    // The receivable already consumes the whole cap. A drawing is refused...
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        recordDrawing(tx, f.admin, {
+          ownerId: id, amount: '500.00', fromMoneyAccountId: f.till, on: '2026-02-05',
+        }),
+      ),
+    ).rejects.toThrow(/over the ₱2000.00 total limit/);
+
+    // ...but the write-off is not a NEW draw, it is the same money changing account. Blocking it
+    // would leave a receivable nobody can ever clear off the books.
+    await asOrg(f.orgId, (tx) =>
+      writeOffReceivable(tx, f.admin, {
+        ownerId: id, amount: '2000.00', reason: 'forgiven', on: '2026-02-05',
+      }),
+    );
+    expect((await positionOf(f, id)).drawn).toBe('2000.00');
+  });
+
+  it('⛔ respects the monthly close — it IS a drawing', async () => {
+    const f = await fixture('wolock');
+    const id = await owner(f);
+    await owesUs(f, id, '2000.00');
+    await asOrg(f.orgId, (tx) =>
+      closeDrawingMonth(tx, f.admin, { ownerId: id, month: '2026-01-01', on: '2026-02-01' }),
+    );
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        writeOffReceivable(tx, f.admin, {
+          ownerId: id, amount: '2000.00', reason: 'forgiven', on: '2026-01-20',
+        }),
+      ),
+    ).rejects.toThrow(/2026-01 is closed for this owner/);
+  });
+
+  it('⭐ an aged receivable surfaces with its age, measured from the OLDEST charge', async () => {
+    const f = await fixture('aged');
+    const id = await owner(f);
+    await owesUs(f, id, '1000.00', '2026-01-05');
+    await owesUs(f, id, '500.00', '2026-01-28');
+
+    const aged = await asOrg(f.orgId, (tx) => ownersRepo.agedReceivables(tx, f.orgId));
+    const mine = aged.find((a) => a.ownerId === id)!;
+    expect(mine.outstanding).toBe('1500.00');
+    // ⚠️ The oldest, not the newest and not an average — it is the one an examiner asks about.
+    expect(mine.oldestOn).toBe('2026-01-05');
+    expect(mine.daysOutstanding).toBeGreaterThan(0);
+  });
+
+  it('a fully settled owner drops off the aged list entirely', async () => {
+    const f = await fixture('agedclear');
+    const id = await owner(f);
+    await owesUs(f, id, '1000.00');
+    await asOrg(f.orgId, (tx) =>
+      repayFromOwner(tx, f.admin, {
+        ownerId: id, amount: '1000.00', intoMoneyAccountId: f.till, on: '2026-01-20',
+      }),
+    );
+    const aged = await asOrg(f.orgId, (tx) => ownersRepo.agedReceivables(tx, f.orgId));
+    expect(aged.find((a) => a.ownerId === id)).toBeUndefined();
   });
 });
 
