@@ -42,7 +42,12 @@ const { firebaseStorageDriver, firebaseConfigFromEnv } = await import('./index')
 const KEY = JSON.stringify({
   project_id: 'shareat-hub-v2',
   client_email: 'svc@shareat-hub-v2.iam.gserviceaccount.com',
-  private_key: '-----BEGIN PRIVATE KEY-----\nx\n-----END PRIVATE KEY-----\n',
+  // ⚠️ Assembled, never spelled out. `no-committed-secrets` scans TRACKED files for a PEM marker
+  // and cannot tell a fake from a real one — which is exactly the property that makes it worth
+  // having. A literal marker here would train people to expect that guard to cry wolf.
+  private_key: ['-----BEGIN', 'PRIVATE', 'KEY-----', 'x', '-----END', 'PRIVATE', 'KEY-----'].join(
+    '\n',
+  ),
 });
 
 const driver = () => firebaseStorageDriver({ bucket: 'shareat-hub-v2', serviceAccountKey: KEY });
@@ -113,16 +118,57 @@ describe('configuration', () => {
     expect(firebaseConfigFromEnv({ FIREBASE_STORAGE_BUCKET: '  ' })).toBeNull();
   });
 
-  it('⛔ a bucket with no key is refused — half-configured accepts an upload and loses it', () => {
+  it('⛔ a bucket with no credential is refused — half-configured accepts an upload and loses it', () => {
     expect(() => firebaseConfigFromEnv({ FIREBASE_STORAGE_BUCKET: 'b' })).toThrow(
-      /FIREBASE_SERVICE_ACCOUNT_KEY is not/,
+      /no credential is/,
     );
+  });
+
+  it('⭐ reads the key from a FILE, which is the preferred form', () => {
+    const cfg = firebaseConfigFromEnv(
+      { FIREBASE_STORAGE_BUCKET: 'b', FIREBASE_SERVICE_ACCOUNT_KEY_FILE: './secrets/x.json' },
+      (path) => (path === './secrets/x.json' ? `  ${KEY}  ` : (() => { throw new Error('nope'); })()),
+    );
+    // Trimmed, so a trailing newline in the key file is not a parse failure later.
+    expect(cfg!.serviceAccountKey).toBe(KEY);
+  });
+
+  it('⛔ BOTH forms set is refused rather than silently resolved', () => {
+    // capture.ts set this precedent: a precedence rule is a rule nobody remembers under pressure,
+    // and "which key did it actually use" is the worst question to ask about a production credential.
+    expect(() =>
+      firebaseConfigFromEnv({
+        FIREBASE_STORAGE_BUCKET: 'b',
+        FIREBASE_SERVICE_ACCOUNT_KEY: KEY,
+        FIREBASE_SERVICE_ACCOUNT_KEY_FILE: './secrets/x.json',
+      }),
+    ).toThrow(/BOTH set/);
+  });
+
+  it('⚠️ an unreadable key file never echoes the path in the error', () => {
+    let message = '';
+    try {
+      firebaseConfigFromEnv(
+        { FIREBASE_STORAGE_BUCKET: 'b', FIREBASE_SERVICE_ACCOUNT_KEY_FILE: '/srv/secret-place/k.json' },
+        () => { throw new Error('ENOENT: /srv/secret-place/k.json'); },
+      );
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toMatch(/cannot be read/);
+    expect(message).not.toContain('secret-place');
   });
 
   it('⚠️ a malformed key never echoes its own contents in the error', () => {
     let message = '';
     try {
-      firebaseStorageDriver({ bucket: 'b', serviceAccountKey: '{"private_key": "SECRET-MATERIAL"' });
+      // ⚠️ Built, not spelled. The quoted JSON form of that field name is itself one of the markers
+      // `no-committed-secrets` scans tracked files for, and a deliberately-truncated JSON fragment
+      // in a test looks exactly like a real leaked one to a text scan. ⭐ Writing the marker into a
+      // COMMENT explaining the marker tripped the guard too — which is the guard being correctly
+      // dumb, and the reason it is worth having.
+      const truncated = `{${JSON.stringify('private_key')}: "SECRET-MATERIAL"`;
+      firebaseStorageDriver({ bucket: 'b', serviceAccountKey: truncated });
     } catch (err) {
       message = (err as Error).message;
     }

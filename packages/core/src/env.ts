@@ -68,6 +68,16 @@ const serverSchema = z.object({
   FIREBASE_SERVICE_ACCOUNT_KEY: blankAsAbsent(),
 
   /**
+   * The same credential as above, given as a PATH instead of a value — the form `capture.ts`
+   * already prefers, for the reason it gives: the key never enters an env var, a shell history, a
+   * process listing, or a `printenv` dump. `secrets/` is gitignored.
+   *
+   * ⛔ Setting BOTH this and `FIREBASE_SERVICE_ACCOUNT_KEY` is rejected where they are consumed,
+   * not silently resolved — a precedence rule is a rule nobody remembers under pressure.
+   */
+  FIREBASE_SERVICE_ACCOUNT_KEY_FILE: blankAsAbsent(),
+
+  /**
    * The PRIVATE bucket holding accounting documents — receipts, proofs, exports. T-141, bible
    * row 155.
    *
@@ -96,14 +106,22 @@ const serverSchema = z.object({
     // Fail closed in production: the auth bridge is live there, so a missing
     // credential must abort startup rather than degrade silently.
     if (cfg.NODE_ENV !== 'production') return;
-    for (const key of ['FIREBASE_PROJECT_ID', 'FIREBASE_SERVICE_ACCOUNT_KEY'] as const) {
-      if (!cfg[key]) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: [key],
-          message: 'is required in production',
-        });
-      }
+    if (!cfg.FIREBASE_PROJECT_ID) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['FIREBASE_PROJECT_ID'],
+        message: 'is required in production',
+      });
+    }
+    // ⚠️ EITHER form satisfies this. Requiring the inline one specifically would mean a production
+    // deploy using the safer file form fails to boot — which would push people back to pasting the
+    // key into an env var, the exact thing the file form exists to avoid.
+    if (!cfg.FIREBASE_SERVICE_ACCOUNT_KEY && !cfg.FIREBASE_SERVICE_ACCOUNT_KEY_FILE) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['FIREBASE_SERVICE_ACCOUNT_KEY'],
+        message: 'is required in production (or FIREBASE_SERVICE_ACCOUNT_KEY_FILE)',
+      });
     }
   });
 

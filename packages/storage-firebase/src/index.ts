@@ -20,6 +20,7 @@
  * Admin SDK bypasses rules; a single `makePublic()` would quietly undo that for one object with no
  * error and no trace.
  */
+import { readFileSync } from 'node:fs';
 import { getApps, initializeApp, cert, type App } from 'firebase-admin/app';
 import { getStorage } from 'firebase-admin/storage';
 import type { StorageDriver, PutInput } from '@shareat/domain';
@@ -62,7 +63,8 @@ export interface FirebaseDriverConfig {
   /** The PRIVATE bucket. ⛔ Never the project's default bucket — that one is world-readable
    *  (`allow read;`) and correct only for menu photos. Bible row 155. */
   bucket: string;
-  /** The service-account key file's contents, as JSON text. */
+  /** The service-account key file's CONTENTS, as JSON text — not a path. `firebaseConfigFromEnv`
+   *  resolves the file form before it gets here. */
   serviceAccountKey: string;
 }
 
@@ -73,20 +75,54 @@ export interface FirebaseDriverConfig {
  * bucket, and `resolveStorageDriver()` already refuses to fall back to memory when a bucket IS set
  * — so the loud failure lives there, once, instead of in every entry point that calls this.
  */
+export type FileReader = (path: string) => string;
+const defaultFileReader: FileReader = (path) => readFileSync(path, 'utf8');
+
 export function firebaseConfigFromEnv(
   env: Readonly<Record<string, string | undefined>> = process.env,
+  readFile: FileReader = defaultFileReader,
 ): FirebaseDriverConfig | null {
   const bucket = env.FIREBASE_STORAGE_BUCKET?.trim();
-  const serviceAccountKey = env.FIREBASE_SERVICE_ACCOUNT_KEY?.trim();
   if (!bucket) return null;
-  if (!serviceAccountKey) {
+
+  const inline = env.FIREBASE_SERVICE_ACCOUNT_KEY?.trim();
+  const path = env.FIREBASE_SERVICE_ACCOUNT_KEY_FILE?.trim();
+
+  // ⛔ BOTH forms set is rejected, not silently resolved — `capture.ts` set this precedent and gave
+  // the reason: a precedence rule is a rule nobody remembers under pressure, and *"which key did it
+  // actually use"* is the worst question to have to ask about a production credential.
+  if (inline && path) {
     throw new Error(
-      'storage: FIREBASE_STORAGE_BUCKET is set but FIREBASE_SERVICE_ACCOUNT_KEY is not. The ' +
-        'bucket is deny-all and only the Admin SDK reaches it, so without the key nothing can ' +
-        'read or write it — and a half-configured bucket accepts an upload and then loses it.',
+      'storage: FIREBASE_SERVICE_ACCOUNT_KEY and FIREBASE_SERVICE_ACCOUNT_KEY_FILE are BOTH set. ' +
+        'Pick one — this refuses to guess which credential you meant.',
     );
   }
-  return { bucket, serviceAccountKey };
+
+  if (path) {
+    let contents: string;
+    try {
+      contents = readFile(path);
+    } catch {
+      // ⚠️ The underlying error is not echoed: a read failure can include the resolved path, and a
+      // path is the one part of a credential worth keeping out of a log.
+      throw new Error(
+        `storage: FIREBASE_SERVICE_ACCOUNT_KEY_FILE points at a file that cannot be read. Check ` +
+          `the path is relative to the repo root and the file exists.`,
+      );
+    }
+    return { bucket, serviceAccountKey: contents.trim() };
+  }
+
+  if (!inline) {
+    throw new Error(
+      'storage: FIREBASE_STORAGE_BUCKET is set but no credential is. Set ' +
+        'FIREBASE_SERVICE_ACCOUNT_KEY_FILE=./secrets/<name>.json (preferred — the key never enters ' +
+        'an env var, a shell history, or a process listing) or FIREBASE_SERVICE_ACCOUNT_KEY as one ' +
+        'line. The bucket is deny-all and only the Admin SDK reaches it, so without a credential ' +
+        'nothing can read or write it — and a half-configured bucket accepts an upload and loses it.',
+    );
+  }
+  return { bucket, serviceAccountKey: inline };
 }
 
 function appFor(serviceAccountKey: string): App {

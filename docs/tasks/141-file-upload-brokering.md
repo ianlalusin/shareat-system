@@ -207,9 +207,26 @@ FAIL**, checks a signed URL works and expires, then deletes it.
 accounting document may go in it. The fix is a different bucket, never a narrowed rule — POS already
 proved Storage rules OR across matching blocks (bible row 155).
 
-⚠️ **Not yet run against `gs://shareat-hub-v2`:** it needs `FIREBASE_SERVICE_ACCOUNT_KEY`, which is
-still blank. The bucket name is set; the script currently stops with exactly that message, which is
-the guard working.
+### ✅ RUN AND GREEN against `gs://shareat-hub-v2`, 2026-08-27
+
+```
+bucket: shareat-hub-v2
+  ✓ wrote orgs/_smoke/…txt
+  ✓ read it back through the Admin SDK
+  ✓ unauthenticated read refused (HTTP 403) — the bucket is private
+  ✓ a signed URL reads it, and expires in 120s
+  ✓ deleted
+```
+
+⭐ **The 403 is the finding.** The bucket Ian created is a genuinely private one, NOT the project's
+world-readable default — which was the open question this script existed to answer, and which no
+amount of reading the code could have settled. Accounting documents can go here.
+
+⚠️ Credentials: `firebase-adminsdk-fbsvc@shareat-hub-v2`, loaded from
+`secrets/storage.sa.json` via the **FILE form** — the key never enters an env var or a shell history.
+⛔ The pre-existing `secrets/hub.sa.json` is `read-only-sa@` and deliberately NOT reused: it cannot
+write, and granting it write access would leave a service account whose NAME lies about what it can
+do.
 
 ## 10. What is still NOT done
 
