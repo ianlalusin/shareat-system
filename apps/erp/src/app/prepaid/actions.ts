@@ -1,0 +1,146 @@
+'use server';
+
+/**
+ * Server actions for the prepaid screens. T-125.
+ *
+ * Thin adapters: parse `FormData`, call the domain, redirect. ⛔ **The admin-only rule is NOT
+ * enforced here** — every service calls `authorize()` itself. A gate in a server action protects
+ * one caller; a gate in the domain protects every caller there will ever be.
+ */
+import { redirect } from 'next/navigation';
+import {
+  amortisePrepaidItem,
+  confirmPrepaidTerm,
+  createPrepaidItem,
+  reverseAmortisation,
+  writeOffPrepaidItem,
+} from '@shareat/domain';
+import type { PrepaidCategory } from '@shareat/db';
+import { withOrgPrincipal } from './lib';
+import { requireActor } from '../../lib/session';
+
+function str(fd: FormData, key: string): string {
+  const v = fd.get(key);
+  return typeof v === 'string' ? v.trim() : '';
+}
+
+/** Strips the throwing function's name — right for a log, useless on screen. */
+function errorMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  return raw.replace(/^[a-z][A-Za-z0-9_]*:\s*/, '');
+}
+
+function back(path: string, params: Record<string, string>): never {
+  const q = new URLSearchParams(params).toString();
+  redirect(`${path}?${q}`);
+}
+
+export async function createPrepaidItemAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  let id = '';
+  try {
+    const storeId = str(formData, 'storeId');
+    if (!storeId) throw new Error('Choose a store.');
+    const created = await withOrgPrincipal(actor.orgId, (tx) =>
+      createPrepaidItem(tx, actor, {
+        storeId,
+        name: str(formData, 'name'),
+        category: str(formData, 'category') as PrepaidCategory,
+        coverageStartDate: str(formData, 'coverageStartDate'),
+        coverageMonths: Number(str(formData, 'coverageMonths')),
+        totalCost: str(formData, 'totalCost'),
+        notes: str(formData, 'notes') || null,
+      }),
+    );
+    id = created.id;
+  } catch (err) {
+    back('/prepaid', { error: errorMessage(err) });
+  }
+  back(`/prepaid/${id}`, {
+    ok: 'Recorded. Release the months it covers when you are ready — running it is safe to repeat.',
+  });
+}
+
+export async function amortiseAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const id = str(formData, 'prepaidItemId');
+  let summary = '';
+  try {
+    const result = await withOrgPrincipal(actor.orgId, (tx) =>
+      amortisePrepaidItem(tx, actor, {
+        prepaidItemId: id,
+        asOfPeriod: str(formData, 'asOfPeriod'),
+      }),
+    );
+    // ⭐ Says what it DID, including nothing. "Run" with no feedback is how a stopped scheduler
+    // goes unnoticed for two months — which is literally DEF-044.
+    summary =
+      result.posted.length === 0
+        ? 'Nothing to release — every month up to that period is already posted.'
+        : `Released ${result.posted.length} month${result.posted.length === 1 ? '' : 's'}: ${result.posted.join(', ')}.` +
+          (result.skipped.length > 0 ? ` ${result.skipped.length} already posted.` : '');
+  } catch (err) {
+    back(`/prepaid/${id}`, { error: errorMessage(err) });
+  }
+  back(`/prepaid/${id}`, { ok: summary });
+}
+
+export async function confirmTermAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const id = str(formData, 'prepaidItemId');
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      confirmPrepaidTerm(tx, actor, {
+        prepaidItemId: id,
+        coverageMonths: Number(str(formData, 'coverageMonths')),
+        coverageStartDate: str(formData, 'coverageStartDate'),
+      }),
+    );
+  } catch (err) {
+    back(`/prepaid/${id}`, { error: errorMessage(err) });
+  }
+  back(`/prepaid/${id}`, { ok: 'Term confirmed — this item no longer needs review.' });
+}
+
+export async function reverseMonthAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const id = str(formData, 'prepaidItemId');
+  const period = str(formData, 'period');
+  try {
+    const reason = str(formData, 'reason');
+    if (!reason) throw new Error('Say why this month is being reversed.');
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      reverseAmortisation(tx, actor, { prepaidItemId: id, period, reason }),
+    );
+  } catch (err) {
+    back(`/prepaid/${id}`, { error: errorMessage(err) });
+  }
+  back(`/prepaid/${id}`, {
+    ok: `${period} reversed. Run the release again to post a corrected month.`,
+  });
+}
+
+export async function writeOffAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const id = str(formData, 'prepaidItemId');
+  let summary = '';
+  try {
+    const refund = str(formData, 'refundAmount');
+    const result = await withOrgPrincipal(actor.orgId, (tx) =>
+      writeOffPrepaidItem(tx, actor, {
+        prepaidItemId: id,
+        writtenOffOn: str(formData, 'writtenOffOn'),
+        reason: str(formData, 'reason'),
+        ...(refund && Number(refund) > 0
+          ? { refundAmount: refund, refundAccountCode: str(formData, 'refundAccountCode') }
+          : {}),
+      }),
+    );
+    summary =
+      `Written off. ₱${result.expensed} recognised as expense` +
+      (Number(result.refunded) > 0 ? `, ₱${result.refunded} refunded to the books.` : '.');
+  } catch (err) {
+    back(`/prepaid/${id}`, { error: errorMessage(err) });
+  }
+  back(`/prepaid/${id}`, { ok: summary });
+}

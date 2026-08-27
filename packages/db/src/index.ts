@@ -22,6 +22,7 @@ export type { Custodian, MoneyInstrument } from '../schema/money-accounts';
 export type { MoneyTransferStatus } from '../schema/money-transfers';
 export type { MoneyAccountRow } from './repo/money-accounts';
 export type { MoneyTransferRow, MoneyTransferListRow } from './repo/money-transfers';
+export { PREPAID_CATEGORIES, PREPAID_STATUSES } from '../schema/prepaid';
 export type { PrepaidCategory, PrepaidStatus } from '../schema/prepaid';
 export type { PrepaidItemRow } from './repo/prepaid';
 export * as journalRepo from './repo/journal';

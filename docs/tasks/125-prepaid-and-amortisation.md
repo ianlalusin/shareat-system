@@ -319,13 +319,14 @@ built here.
 
 ## 12. Done when
 
-- [ ] `prepaid_items` in the schema, classified in `cutover/classification.ts` **and**
+- [x] `prepaid_items` in the schema, classified in `cutover/classification.ts` **and**
       `rls/registry.ts`, with RLS policies in the migration.
-- [ ] Straight-line arithmetic extracted to a shared module, with T-124 switched onto it and its
+- [x] Straight-line arithmetic extracted to a shared module, with T-124 switched onto it and its
       22 existing tests still green.
-- [ ] Repo, services (create · amortise · write-off/refund · reverse-a-month), and screens.
-- [ ] Integration tests for all nine invariants, including a denial test per capability and a test
+- [x] Repo, services (create · amortise · write-off/refund · reverse-a-month), and screens.
+- [x] Integration tests for all nine invariants, including a denial test per capability and a test
       that no `amortised_to_date` or `remaining` column exists.
-- [ ] Driven end to end in a browser (bible §2 — a green build and green tests have already shipped
-      an app that could not start).
-- [ ] Gates: typecheck · unit · integration · build with the dev server stopped.
+- [x] Driven end to end in a browser: a ₱24,000 / 12-month policy created, 8 months released in
+      one catch-up run, **2026-02 reversed on its own** and then re-posted as `#2` — the other
+      seven no-opping — and the ledger checked directly (1400 −₱16,000, 6750 +₱16,000, balanced).
+- [x] Gates: typecheck · unit 545 · integration 844 · build, dev server stopped.
