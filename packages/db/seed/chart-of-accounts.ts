@@ -117,9 +117,13 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
   // ---------------------------------------------------------------------------------
   leaf('1110', 'Cash on hand — cashier', 'asset', 'debit', '1000', { legacyCode: 'cash__cashier' }),
   // ⭐ PARTY-REQUIRING SINCE T-144, and v1 is NOT: POSTING-PATTERNS records it there as "a plain
-  // asset, not a control account with a subledger". One store has ONE staff-float account but
-  // TWO PEOPLE CAN HOLD FLOATS AT ONCE — without a party that is one indistinguishable balance,
-  // and "who still owes a liquidation?" needs a second register. party_type='cash_request'.
+  // asset, not a control account with a subledger".
+  //
+  // ⚠️ Not because v1 loses the holder — `requesterName`/`requesterUid` are on the request document.
+  // Because the LEDGER cannot decompose 1120 without joining to that document: one staff-float
+  // account per store, two people able to hold floats at once. ⛔ Which is why v1 stores
+  // `remainingAmount` on the request — the figure lives there because the ledger could not produce
+  // it. The party moves that knowledge INTO the ledger. party_type='cash_request'.
   leaf('1120', 'Cash on hand — staff custodian', 'asset', 'debit', '1000', { legacyCode: 'cash__staff', requiresParty: true }),
   leaf('1130', 'Cash on hand — office', 'asset', 'debit', '1000', { legacyCode: 'cash__office' }),
   /** ⭐ requiresParty since ADR-010 (migration 0024): ONE control account covers every wallet,

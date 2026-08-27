@@ -218,8 +218,9 @@ export async function releaseCashRequest(
       memo: `Cash request released — ${req.purpose}`,
       postedBy: actor.personId,
       lines: [
-        // ⭐ The party is the REQUEST: two people can hold floats at once, and one store has one
-        // staff-float account, so nothing else makes the balance attributable.
+        // ⭐ The party is the REQUEST. One staff-float account per store and two people able to
+        // hold floats at once means the ACCOUNT cannot decompose itself — v1 knows the holder from
+        // the request document, and pays for it by storing `remainingAmount` there.
         {
           accountCode: STAFF_FLOAT_CODE,
           storeId: req.storeId,

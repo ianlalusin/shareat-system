@@ -36,11 +36,14 @@ anyone handed it over.
 `POSTING-PATTERNS.md` records that in v1 *"1120 is **not** a `requires_party` account — it is a
 plain asset, not a control account with a subledger."*
 
-⛔ **That is the shape v2 should improve, and for the third time the same reason applies.** One
-store has one Staff-float account (T-142), but **two people can hold floats at once**, and one
-person can hold two. With no party, ₱2,000 with Ana and ₱3,000 with Ben is ₱5,000 at 1120 and the
-ledger cannot say whose is whose — so "who still owes a liquidation?" would have to come from a
-second register, which is how v1's loans ended up with three.
+⛔ **That is the shape v2 should improve — but state the reason precisely, because the loose version
+is false.** v1 DOES name the holder: `requesterName` and `requesterUid` are on the request document.
+What v1 cannot do is answer from the LEDGER. One store has one Staff-float account (T-142), two
+people can hold floats at once, and one person can hold two — so ₱2,000 with Ana and ₱3,000 with Ben
+is one ₱5,000 balance at 1120, and "how much is still out, against whom?" means joining back to the
+requests. ⛔ **Which is why v1 stores `remainingAmount` on the document**: the figure lives there
+because the ledger could not produce it — a stored number beside a ledger, the shape that drifted
+into three registers in v1's loans.
 
 ⭐ Same reasoning as row 142 (the wallet) and row 158 (the loan): **`party_type = 'cash_request'`,
 `party_id = the request**. And the column to carry it on the spend leg already exists.

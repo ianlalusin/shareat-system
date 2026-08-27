@@ -37,38 +37,38 @@
 - ` 429–433  ` AP payment (appayment) — 93 legs
   - ` 434–442  ` appayment.simple — Clears exactly what is owed
   - ` 443–459  ` appayment.overpayment — Never floats to nowhere
-- ` 460–470  ` Cash request release and return (cashrequestrelease 82 legs / cashrequestreturn 52 legs)
-  - ` 471–480  ` cashrequest.release — A float handed to a staff custodian
-  - ` 481–491  ` cashrequest.return — The unused float comes back
-- ` 492–509  ` Commissary dispatch (commissarydispatch) — 70 legs, the inter-store elimination case
-  - ` 510–528  ` commissarydispatch.transfer — One entry, two stores, must eliminate
-- ` 529–533  ` Amortization (amortization) — 38 legs
-  - ` 534–544  ` amortization.monthly — Monthly amortisation of a prepaid item
-- ` 545–550  ` Wastage (wastageexpense) — 16 legs
-  - ` 551–567  ` wastageexpense.spoilage — A real cost of sales, straight against inventory
-- ` 568–574  ` Remittance (remittance) — 10 legs
-  - ` 575–583  ` remittance.exact — The conditional leg genuinely absent
-  - ` 584–593  ` remittance.overage — 7350 swings positive
-  - ` 594–608  ` remittance.shortage — Charged to the responsible cashier, not P&L
-- ` 609–613  ` Balance adjustment (balanceadjustment) — 10 legs — THE ANTI-PATTERN
-  - ` 614–631  ` balanceadjustment.plug — Included so nobody ports it forward
-- ` 632–636  ` Prepaid purchase (prepaidpurchase 4 legs) / asset purchase (assetpurchase 2 legs)
-  - ` 637–646  ` prepaidpurchase.cash — An asset, not an immediate expense
-  - ` 647–655  ` assetpurchase.cash — Fixed asset purchase, cash
-  - ` 656–666  ` assetpurchase.credit — Fixed asset purchase, on account
-- ` 667–671  ` Slicer/payroll payout (slicerpayment) — 4 legs
-  - ` 672–682  ` slicerpayment.park — Settling an already-parked liability
-- ` 683–688  ` Statutory remittance (liabilitypayment)
-  - ` 689–707  ` liabilitypayment.statutory-remittance — Settling what was withheld, not new expense
-- ` 708–716  ` Owner equity movements (capitalcontribution / drawing)
-  - ` 717–725  ` equity.capitalcontribution — Cash in, equity grows
-  - ` 726–742  ` equity.drawing — Reduces equity, on the books at last
-- ` 743–749  ` Year close (yearclose) — v2-only, ADR-006
-  - ` 750–769  ` yearclose.annual — One entry, into 3300, dated the following January 1st
-- ` 770–777  ` Opening balance (openingbalance) — v2-only, ADR-005 (amended 2026-08-24) + bible row 106
-  - ` 778–800  ` openingbalance.load — The 2027-01-01 load, balance-sheet only, per-party lump sums
-  - ` 801–820  ` openingbalance.reconcile — Reconciling 3900 to exactly zero
-- ` 821–842  ` Reversal — the correction path (T-106)
+- ` 460–472  ` Cash request release and return (cashrequestrelease 82 legs / cashrequestreturn 52 legs)
+  - ` 473–482  ` cashrequest.release — A float handed to a staff custodian
+  - ` 483–493  ` cashrequest.return — The unused float comes back
+- ` 494–511  ` Commissary dispatch (commissarydispatch) — 70 legs, the inter-store elimination case
+  - ` 512–530  ` commissarydispatch.transfer — One entry, two stores, must eliminate
+- ` 531–535  ` Amortization (amortization) — 38 legs
+  - ` 536–546  ` amortization.monthly — Monthly amortisation of a prepaid item
+- ` 547–552  ` Wastage (wastageexpense) — 16 legs
+  - ` 553–569  ` wastageexpense.spoilage — A real cost of sales, straight against inventory
+- ` 570–576  ` Remittance (remittance) — 10 legs
+  - ` 577–585  ` remittance.exact — The conditional leg genuinely absent
+  - ` 586–595  ` remittance.overage — 7350 swings positive
+  - ` 596–610  ` remittance.shortage — Charged to the responsible cashier, not P&L
+- ` 611–615  ` Balance adjustment (balanceadjustment) — 10 legs — THE ANTI-PATTERN
+  - ` 616–633  ` balanceadjustment.plug — Included so nobody ports it forward
+- ` 634–638  ` Prepaid purchase (prepaidpurchase 4 legs) / asset purchase (assetpurchase 2 legs)
+  - ` 639–648  ` prepaidpurchase.cash — An asset, not an immediate expense
+  - ` 649–657  ` assetpurchase.cash — Fixed asset purchase, cash
+  - ` 658–668  ` assetpurchase.credit — Fixed asset purchase, on account
+- ` 669–673  ` Slicer/payroll payout (slicerpayment) — 4 legs
+  - ` 674–684  ` slicerpayment.park — Settling an already-parked liability
+- ` 685–690  ` Statutory remittance (liabilitypayment)
+  - ` 691–709  ` liabilitypayment.statutory-remittance — Settling what was withheld, not new expense
+- ` 710–718  ` Owner equity movements (capitalcontribution / drawing)
+  - ` 719–727  ` equity.capitalcontribution — Cash in, equity grows
+  - ` 728–744  ` equity.drawing — Reduces equity, on the books at last
+- ` 745–751  ` Year close (yearclose) — v2-only, ADR-006
+  - ` 752–771  ` yearclose.annual — One entry, into 3300, dated the following January 1st
+- ` 772–779  ` Opening balance (openingbalance) — v2-only, ADR-005 (amended 2026-08-24) + bible row 106
+  - ` 780–802  ` openingbalance.load — The 2027-01-01 load, balance-sheet only, per-party lump sums
+  - ` 803–822  ` openingbalance.reconcile — Reconciling 3900 to exactly zero
+- ` 823–844  ` Reversal — the correction path (T-106)
 
 <!-- TOC:END -->
 
@@ -462,9 +462,11 @@ contradiction.
 The pair, together. In v1, 1120 (staff-custodian cash) is **not** a `requires_party` account — a
 plain asset, not a control account with a subledger.
 
-> ⭐ **v2 DIFFERS HERE, deliberately (T-144, bible row 159).** One store has one staff-float account
-> and **two people can hold floats at once**, so a party-free 1120 is a single indistinguishable
-> balance — and *"who still owes a liquidation?"* would need a second register. In v2 the leg carries
+> ⭐ **v2 DIFFERS HERE, deliberately (T-144, bible row 159).** ⚠️ Not because v1 loses the holder — it
+> names them on the request document. Because the LEDGER cannot decompose `1120` without that
+> document: one staff-float account per store, two people able to hold floats at once, so the
+> account alone is a single balance. ⛔ v1 answers *"how much is still out?"* with a stored
+> `remainingAmount` for exactly this reason. In v2 the leg carries
 > `party_type = 'cash_request'`, `party_id = the request`. The **legs below are otherwise unchanged**;
 > only the party is added.
 

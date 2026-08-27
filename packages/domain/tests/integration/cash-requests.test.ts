@@ -204,7 +204,8 @@ describe('the postings — POSTING-PATTERNS.md §Cash request', () => {
       }),
     );
 
-    // ⛔ Without a party this is ₱5,000 at 1120 and nobody can say whose is whose.
+    // ⛔ Without a party this is one ₱5,000 balance at 1120, and splitting it means going back to
+    // the request documents — which is the join v1 avoids by storing `remainingAmount` on each one.
     expect((await floatOf(f, anaReq)).outstanding).toBe('2000.00');
     expect((await floatOf(f, benReq.id)).outstanding).toBe('3000.00');
   });
