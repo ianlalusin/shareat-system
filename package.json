@@ -27,7 +27,8 @@
     "cutover:purge": "tsx scripts/cutover-purge.ts",
     "toc": "tsx scripts/gen-toc.ts",
     "month-end": "tsx scripts/month-end.ts",
-    "dev:seed": "tsx scripts/dev-seed.ts"
+    "dev:seed": "tsx scripts/dev-seed.ts",
+    "storage-smoke": "tsx scripts/storage-smoke.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",

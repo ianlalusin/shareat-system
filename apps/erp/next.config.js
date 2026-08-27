@@ -18,7 +18,15 @@ const nextConfig = {
   // without this, `next build` cannot compile @shareat/domain's own `import ... from
   // '@shareat/auth'` statements. Found because it was never needed until now: the
   // existing reports screens read the database directly and never call authorize().
-  transpilePackages: ['@shareat/core', '@shareat/db', '@shareat/domain', '@shareat/auth'],
+  transpilePackages: [
+    '@shareat/core',
+    '@shareat/db',
+    '@shareat/domain',
+    '@shareat/auth',
+    // ⚠️ Ships TypeScript source like the others. `firebase-admin` itself stays in
+    // serverExternalPackages below — transpiling the wrapper is not the same as bundling the SDK.
+    '@shareat/storage-firebase',
+  ],
   // Native/Node-only packages must not be bundled into the server build.
   // See PROJECT_BIBLE.md §12 landmine: Next.js server bundling of native deps.
   serverExternalPackages: ['postgres', 'firebase-admin', 'pino'],

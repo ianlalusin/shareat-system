@@ -22,6 +22,7 @@ const alias = {
   '@shareat/etl/source-reader': `${root}packages/etl/src/source-reader.ts`,
   '@shareat/etl': `${root}packages/etl/src/index.ts`,
   '@shareat/etl-firestore': `${root}packages/etl-firestore/src/index.ts`,
+  '@shareat/storage-firebase': `${root}packages/storage-firebase/src/index.ts`,
 };
 
 export default defineConfig({

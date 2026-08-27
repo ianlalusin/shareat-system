@@ -169,16 +169,50 @@ moment it exists, so there is nothing to wait for.
 
 > **Ian, 2026-08-27:** *“if we needed to test something that will require us to connect to a storage, just temporarily create a new one on Google Firebase, then we just repoint it soon when we're going live.”*
 
-⭐ **The bucket name is configuration, not architecture** — `FIREBASE_STORAGE_BUCKET` already exists in `.env.example`. A throwaway bucket for development costs nothing and keeps test uploads out of anything real. ⚠️ The one thing that must NOT differ between the scratch bucket and the live one is **deny-all plus Admin-SDK-only access**: testing against a permissive bucket would prove the broker works while proving nothing about whether it is
+⭐ **The bucket name is configuration, not architecture** — `FIREBASE_STORAGE_BUCKET` is a server-only variable, added to the schema and `.env.example` when the adapter landed. ⚠️ *(An earlier draft of this line said it already existed. It did not — only the client-visible `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` did, which names the world-readable default bucket and must never hold this value.)* A throwaway bucket for development costs nothing and keeps test uploads out of anything real. ⚠️ The one thing that must NOT differ between the scratch bucket and the live one is **deny-all plus Admin-SDK-only access**: testing against a permissive bucket would prove the broker works while proving nothing about whether it is
 the only way in.
 
-## 9. What is NOT done
+## 9. ✅ The Firebase adapter — BUILT 2026-08-27
 
-- ⛔ **The Firebase adapter.** The broker talks to a `StorageDriver` interface; the in-memory driver
-  is the default and is what the tests use. ⚠️ `resolveStorageDriver()` **refuses to fall back to
-  memory when `FIREBASE_STORAGE_BUCKET` is set** — accepting a receipt and then losing it with the
-  process is worse than failing loudly.
+> **Ian, 2026-08-27:** *"new bucket gs://shareat-hub-v2"*
+
+`packages/storage-firebase` — **its own package, because `packages/domain` must not own a cloud
+SDK.** Domain owns the `StorageDriver` interface; exactly one package depends on `firebase-admin`,
+the same isolation `@shareat/etl-firestore` exists for. Installed at server startup by
+`apps/erp/src/instrumentation.ts`, so a misconfigured bucket fails at BOOT rather than at the first
+upload — the difference between a deploy that never goes live and one that silently cannot store
+evidence.
+
+⭐ **What the adapter deliberately cannot do.** There is **no public-URL method and no permanent
+URL at all**, and a test pins that `makePublic` / `publicUrl` / `getDownloadURL` are absent. v1 calls
+`getDownloadURL()` and stores the result — a link that never expires, readable by anyone it is
+forwarded to. Here reads are brokered: a v4 signature good for minutes, minted per request, after
+`authorize()`. Writes are `resumable: false` (a resumable session URL is a week-long write
+credential) and `private, no-store` (a shared cache holding an invoice is a copy outside the
+deny-all).
+
+⚠️ **`FIREBASE_STORAGE_BUCKET` is SERVER-ONLY and must never equal
+`NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`.** That one is client-visible by construction and names the
+project's default bucket — `allow read;`, world-readable. Both the env schema and `.env.example` now
+say so in place.
+
+### ⭐ `npm run storage-smoke` — the check the unit tests cannot make
+
+The adapter's unit tests mock `firebase-admin` and prove the SHAPE of every call. They cannot prove
+§8's one non-negotiable: *deny-all plus Admin-SDK-only access*. The smoke script writes a scratch
+object, reads it back through the Admin SDK, **fetches it unauthenticated and requires that to
+FAIL**, checks a signed URL works and expires, then deletes it.
+
+⛔ **If the unauthenticated GET succeeds, the bucket is the world-readable default one** and no
+accounting document may go in it. The fix is a different bucket, never a narrowed rule — POS already
+proved Storage rules OR across matching blocks (bible row 155).
+
+⚠️ **Not yet run against `gs://shareat-hub-v2`:** it needs `FIREBASE_SERVICE_ACCOUNT_KEY`, which is
+still blank. The bucket name is set; the script currently stops with exactly that message, which is
+the guard working.
+
+## 10. What is still NOT done
+
 - **The UI upload control.** `receipt_photo_url` is still what the expense form writes; the gate
   accepts either during the expand phase.
-- **The private bucket itself**, and its deny-all — Ian's action (§8), not something this repo can
-  or should do for him.
+- **The private bucket's deny-all** — Ian's action (§8). `storage-smoke` is how it gets verified.

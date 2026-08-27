@@ -67,6 +67,24 @@ const serverSchema = z.object({
   FIREBASE_PROJECT_ID: blankAsAbsent(),
   FIREBASE_SERVICE_ACCOUNT_KEY: blankAsAbsent(),
 
+  /**
+   * The PRIVATE bucket holding accounting documents — receipts, proofs, exports. T-141, bible
+   * row 155.
+   *
+   * ⛔ **This is NOT `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`, and the two must never hold the same
+   * value.** That one is client-visible by construction and names the project's DEFAULT bucket,
+   * whose rule is `allow read;` — world-readable, unauthenticated. That is correct for menu photos
+   * and catastrophic for supplier invoices, which carry suppliers, prices and volumes and are kept
+   * for years. Storage splits by what the FILE is, not by which app wrote it.
+   *
+   * ⚠️ Server-only on purpose: the bucket is deny-all and reachable only through the Admin SDK,
+   * so a browser has no use for its name — and shipping it to one advertises the target.
+   *
+   * Blank means storage is not configured; `resolveStorageDriver()` then serves the in-memory
+   * driver and refuses to do so the moment this IS set.
+   */
+  FIREBASE_STORAGE_BUCKET: blankAsAbsent(),
+
   /** Signs shared-terminal session tokens (bible §7.1). Never defaulted. */
   SESSION_SECRET: requiredSecret(32),
 

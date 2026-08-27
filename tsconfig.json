@@ -64,6 +64,9 @@
       "@shareat/etl-firestore/*": [
         "./packages/etl-firestore/src/*"
       ],
+      "@shareat/storage-firebase": [
+        "./packages/storage-firebase/src/index.ts"
+      ],
       "@/*": [
         "./apps/erp/src/*"
       ]
