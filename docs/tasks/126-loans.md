@@ -1,6 +1,6 @@
 # T-126 — Loans: disbursement, payment, interest
 
-> **Status:** ⚠️ **BUILT (service layer), 2026-08-27.** Screens remain. Written before implementation (bible §1.2a).
+> **Status:** ✅ **BUILT, 2026-08-27.** Written before implementation (bible §1.2a).
 > **Plan:** phase-2 §Financial, after T-125.
 > **Accounts already seeded:** `2400` Loans payable (**control, party-requiring — the lender**) and
 > `7200` Interest expense.
@@ -94,5 +94,8 @@ inter-store payable — it needs T-133 and rows 152–153's due-from/due-to pair
 - [x] Repo + services (disburse · pay · void), with outstanding derived.
 - [x] Integration tests — 10, incl. the postings, the computed split, the overpayment refused,
       the denial, and that neither v1's four totals nor a `loan_payments` table exists.
-- [ ] Screens, driven end to end in a browser.
-- [x] Gates: typecheck · unit 575 · integration 885. ⚠️ Screens still to do.
+- [x] Screens, driven end to end in a browser: a ₱200,000 Grab-shaped loan recorded (agreed
+      ₱200,000 / drawn ₱0 — the commitment-vs-debt distinction visible), drawn in full, then
+      **₱2,000 paid against ₱3,466.67 of accrued interest → ₱2,000 interest, ₱0 principal,
+      outstanding unchanged at ₱200,000.**
+- [x] Gates: typecheck · unit 575 · integration 885.
