@@ -187,6 +187,20 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'What each owner withdrew in a month, and who signed it off. ⛔ Reveals both an owner’s ' +
       'personal cash flow and the store’s internal controls — neither is another org’s business.',
   },
+  customers: {
+    scope: 'org_column',
+    reason:
+      'Who an org sells to, on what terms, and at what price. ⛔ A franchise reading another’s ' +
+      'customer list would learn its buyers — the most directly commercial data the system holds.',
+  },
+  price_lists: {
+    scope: 'org_column',
+    reason: 'What an org charges. ⛔ Reading a competitor’s price list is reading its margin.',
+  },
+  price_list_items: {
+    scope: 'org_column',
+    reason: 'The rates themselves. Same sensitivity as the list that holds them.',
+  },
   liabilities: {
     scope: 'org_column',
     reason:

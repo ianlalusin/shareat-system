@@ -19,3 +19,4 @@ export * from './loans';
 export * from './cash-requests';
 export * from './owners';
 export * from './liabilities';
+export * from './customers';

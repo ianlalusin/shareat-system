@@ -217,6 +217,27 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'statement pointing at nothing, which is worse than no statement: it reads as evidence. ' +
       '⚠️ v2 opens on a zero starting point, so the first month closes against a fresh ledger.',
   },
+  customers: {
+    // ⭐ keep_shell, not keep: the ROW survives and named columns clear — which is exactly what the
+    // reconciliation anchor needs, and what `keep` cannot express.
+    class: 'keep_shell',
+    reason:
+      'WHO the business sells to on terms, and which of them are its own stores or franchises. ' +
+      'Identity and relationship, not activity. ⭐ There is no balance on the row to clear — it is ' +
+      'summed from 1210, and that ledger purges, so a kept customer correctly opens at zero. ' +
+      '⚠️ The reconciliation anchor is CLEARED on cutover: it attests a verification against a ' +
+      'ledger that no longer exists, and a stale anchor would tell an aging report that everything ' +
+      'before an old date was settled.',
+    clearColumns: ['reconciled_as_of', 'reconciled_at', 'reconciled_by'],
+  },
+  price_lists: {
+    class: 'keep',
+    reason: 'What the business charges. A price does not stop being the price because the books restarted.',
+  },
+  price_list_items: {
+    class: 'keep',
+    reason: 'The rates that make up a price list — kept with it, and carrying no money movement.',
+  },
   liabilities: {
     class: 'keep',
     reason:

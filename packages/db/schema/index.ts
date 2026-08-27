@@ -36,6 +36,7 @@ export * from './stored-files';
 export * from './loans';
 export * from './owners';
 export * from './liabilities';
+export * from './customers';
 export * from './owner-drawing-closes';
 export * from './cash-requests';
 export * from './prepaid';
