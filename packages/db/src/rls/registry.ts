@@ -175,6 +175,28 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'What an org has paid for in advance — its insurers, its landlords, its licence renewals. ' +
       'A franchise must never see another org’s contracts.',
   },
+  remittances: {
+    scope: 'org_column',
+    reason: "What an org handed over, when, and who accepted it \u2014 its cash custody trail.",
+  },
+  remittance_lines: {
+    scope: 'derived',
+    via: 'exists (select 1 from remittances r where r.id = remittance_lines.remittance_id and r.org_id = app_current_org())',
+    reason:
+      'No org_id of its own — a line is reachable only through its handover. Scoped via the ' +
+      'parent so the two can never disagree about which org they belong to.',
+  },
+  remittance_allocations: {
+    scope: 'derived',
+    via: 'exists (select 1 from remittances r where r.id = remittance_allocations.remittance_id and r.org_id = app_current_org())',
+    reason: 'As remittance_lines — reachable only through its handover.',
+  },
+  remittance_variances: {
+    scope: 'org_column',
+    reason:
+      "Money that did not arrive, and who is being asked for it. A franchise seeing another " +
+      "org\u2019s open variances would learn who it suspects of a shortage.",
+  },
   scheduler_runs: {
     scope: 'org_column',
     reason:

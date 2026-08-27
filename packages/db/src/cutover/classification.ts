@@ -201,6 +201,31 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'same treatment fixed_assets gets, so the item stays and its money is cleared.',
     clearColumns: ['total_cost', 'coverage_start_date', 'coverage_months', 'source_expense_id'],
   },
+  remittances: {
+    class: 'purge',
+    reason:
+      'A handover of money that happened on a date, against days that are themselves purged. ' +
+      'v2 opens on a zero starting point, so a remittance settling 2026 sales days has nothing ' +
+      'left to settle once those days are gone.',
+  },
+  remittance_lines: {
+    class: 'purge',
+    reason: 'As remittances — the per-account split of a handover that no longer exists.',
+  },
+  remittance_allocations: {
+    class: 'purge',
+    reason:
+      'As remittances. ⚠️ These MUST go with them: an allocation surviving its sales day would ' +
+      'make a purged day look settled, which is the one thing this table exists to say.',
+  },
+  remittance_variances: {
+    class: 'purge',
+    reason:
+      'As remittances. ⚠️ An OPEN variance is a real unresolved claim, so purging it discards a ' +
+      'debt someone may still owe — but it is a claim against pre-cutover books, and T-134 owns ' +
+      'what carries across as an opening balance. It must be settled or written off before ' +
+      'cutover, not silently inherited.',
+  },
   scheduler_runs: {
     class: 'purge',
     reason:

@@ -211,6 +211,13 @@
       "when": 1788579107084,
       "tag": "0029_t142_foundation_money_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1788665507084,
+      "tag": "0030_t143_pooled_remittance",
+      "breakpoints": true
     }
   ]
 }
