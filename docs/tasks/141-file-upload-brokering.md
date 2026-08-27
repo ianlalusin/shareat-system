@@ -146,6 +146,28 @@ control.
 ADR-003 lists the Website's cross-project `HUB_SA_KEY` as evidence of the sprawl this rebuild
 exists to end.
 
+### ⭐ Costed 2026-08-27: Firebase Storage is CHEAPER than DO Spaces here, and that surprised me
+
+Ian asked whether to move file storage to DigitalOcean Spaces alongside the droplet, *"since all
+other parts are there"*. The answer went the other way:
+
+| | |
+|---|---|
+| **DO Spaces** | **$5/month floor**, whatever the usage — 250 GB and 1 TB transfer included |
+| **Firebase Storage** | Pay-per-use: ~$0.026/GB-month plus egress |
+
+⭐ **At this volume the floor is the whole story.** Receipt photos are small and few; the crossover
+where Spaces becomes cheaper is roughly **630,000 photos**. Until then the flat $5 costs more than
+metered usage does.
+
+⚠️ **And one correction worth keeping:** I described Firebase as *"free"* in passing. It is not —
+these projects are on **Blaze**, which is pay-as-you-go with a free tier, not a free plan.
+
+⛔ So storage stays on Firebase. This is not the same question as the DATABASE, which ADR-002
+already settled on DO Managed Postgres — and Supabase remains *"considered and rejected for now"*
+(bible §4.1) for the reason it always was: it duplicates Auth and Storage that already run on
+Firebase. ⚠️ Recorded here so the comparison is not run a third time.
+
 ### ⛔ v2 never deploys Storage or Firestore rules
 
 POS's `firebase.json` declares `"storage": { "rules": "storage.rules" }` with **no bucket target**,
