@@ -29,6 +29,8 @@ import {
   previewDrawingClose,
   recordContribution,
   recordDrawing,
+  recoverFromPay,
+  repayFromOwner,
   reverseOwnerEntry,
 } from '@shareat/domain';
 
@@ -389,6 +391,153 @@ describe('⭐ the monthly drawings close', () => {
       recordDrawing(tx, f.admin, { ownerId: ben, amount: '1000.00', fromMoneyAccountId: f.till, on: '2026-01-15' }),
     );
     expect((await positionOf(f, ben)).drawn).toBe('1000.00');
+  });
+});
+
+describe('⭐ clearing a 1260 receivable', () => {
+  /** A repayable personal expense, posted straight to the ledger so the expense module is not
+   *  what is under test here. */
+  async function owesUs(f: Fixture, ownerId: string, amount: string, on = '2026-01-12') {
+    const [period] = await sql<{ id: string }[]>`
+      select id from fiscal_periods where org_id = ${f.orgId} and starts_on <= ${on} and ends_on >= ${on}
+    `;
+    await sql.begin(async (tx) => {
+      const [e] = await tx<{ id: string }[]>`
+        insert into journal_entries (org_id, entry_date, period_id, source_type, source_id, status)
+        values (${f.orgId}, ${on}, ${period!.id}, 'expense', ${uid('pe')}, 'draft') returning id
+      `;
+      const codes = await tx<{ id: string; code: string }[]>`
+        select id, code from accounts where org_id = ${f.orgId} and code in ('1260', '1110')
+      `;
+      const by = new Map(codes.map((c) => [c.code, c.id]));
+      await tx`
+        insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit, party_type, party_id)
+        values (${e!.id}, 1, ${by.get('1260')!}, ${f.storeId}, ${amount}, '0', 'owner', ${ownerId})
+      `;
+      await tx`
+        insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit)
+        values (${e!.id}, 2, ${by.get('1110')!}, ${f.storeId}, '0', ${amount})
+      `;
+      await tx`update journal_entries set status = 'posted' where id = ${e!.id}`;
+    });
+  }
+
+  it('⭐ cash repayment clears it, and equity never moved', async () => {
+    const f = await fixture('repay');
+    const id = await owner(f);
+    await owesUs(f, id, '2000.00');
+    expect((await positionOf(f, id)).receivable).toBe('2000.00');
+
+    const result = await asOrg(f.orgId, (tx) =>
+      repayFromOwner(tx, f.admin, {
+        ownerId: id, amount: '2000.00', intoMoneyAccountId: f.till, on: '2026-01-20',
+      }),
+    );
+    expect(result.outstanding).toBe('0.00');
+
+    // ⭐ The whole point of routing it to 1260 rather than 3200: this was never a drawing.
+    const after = await positionOf(f, id);
+    expect(after.receivable).toBe('0.00');
+    expect(after.drawn).toBe('0.00');
+    expect(after.net).toBe('0.00');
+  });
+
+  it('a partial repayment leaves the rest outstanding', async () => {
+    const f = await fixture('partial');
+    const id = await owner(f);
+    await owesUs(f, id, '2000.00');
+    const result = await asOrg(f.orgId, (tx) =>
+      repayFromOwner(tx, f.admin, {
+        ownerId: id, amount: '750.00', intoMoneyAccountId: f.till, on: '2026-01-20',
+      }),
+    );
+    expect(result.outstanding).toBe('1250.00');
+  });
+
+  it('⛔ settling more than is owed is refused', async () => {
+    const f = await fixture('over');
+    const id = await owner(f);
+    await owesUs(f, id, '2000.00');
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        repayFromOwner(tx, f.admin, {
+          ownerId: id, amount: '2500.00', intoMoneyAccountId: f.till, on: '2026-01-20',
+        }),
+      ),
+    ).rejects.toThrow(/more than the ₱2000.00 this owner still owes/);
+  });
+
+  it('⭐ pay recovery moves it to 1230 against the PERSON, not the owner', async () => {
+    const f = await fixture('recover');
+    const id = await owner(f);
+    await owesUs(f, id, '2000.00');
+
+    const result = await asOrg(f.orgId, (tx) =>
+      recoverFromPay(tx, f.admin, { ownerId: id, amount: '2000.00', on: '2026-01-20' }),
+    );
+    expect(result.outstanding).toBe('0.00');
+
+    // ⚠️ 1230's party_type is `employee`, so the party changes with the account.
+    const [row] = await sql<{ n: string }[]>`
+      select coalesce(sum(jl.debit - jl.credit), 0)::text as n
+      from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id
+      join accounts a on a.id = jl.account_id
+      where je.org_id = ${f.orgId} and a.code = '1230'
+        and jl.party_type = 'employee' and jl.party_id = ${f.anaId}
+        and je.status <> 'draft'
+    `;
+    expect(row!.n).toBe('2000.00');
+  });
+
+  it('⛔ pay recovery does NOT free the drawing limit — no cash has come back', async () => {
+    const f = await fixture('nobypass');
+    const id = await owner(f, { drawingLimit: '3000.00', drawingLimitPeriod: 'monthly' });
+    await owesUs(f, id, '2000.00');
+
+    // Reclassifying is not repaying. If 1230 were not counted, this would wrongly succeed.
+    await asOrg(f.orgId, (tx) =>
+      recoverFromPay(tx, f.admin, { ownerId: id, amount: '2000.00', on: '2026-01-20' }),
+    );
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        recordDrawing(tx, f.admin, {
+          ownerId: id, amount: '1500.00', fromMoneyAccountId: f.till, on: '2026-01-25',
+        }),
+      ),
+    ).rejects.toThrow(/over the ₱3000.00 monthly limit/);
+  });
+
+  it('⭐ but CASH repayment DOES free it — the money is really back', async () => {
+    const f = await fixture('freed');
+    const id = await owner(f, { drawingLimit: '3000.00', drawingLimitPeriod: 'monthly' });
+    await owesUs(f, id, '2000.00');
+    await asOrg(f.orgId, (tx) =>
+      repayFromOwner(tx, f.admin, {
+        ownerId: id, amount: '2000.00', intoMoneyAccountId: f.till, on: '2026-01-20',
+      }),
+    );
+    // Room again, because the till has the money.
+    await asOrg(f.orgId, (tx) =>
+      recordDrawing(tx, f.admin, {
+        ownerId: id, amount: '2500.00', fromMoneyAccountId: f.till, on: '2026-01-25',
+      }),
+    );
+    expect((await positionOf(f, id)).drawn).toBe('2500.00');
+  });
+
+  it('⛔ pay recovery is refused for an owner who holds no role — no pay to recover from', async () => {
+    const f = await fixture('norole');
+    const [outsider] = await sql<{ id: string }[]>`
+      insert into persons (org_id, display_name) values (${f.orgId}, 'Silent Partner') returning id
+    `;
+    const id = await owner(f, { personId: outsider!.id });
+    await owesUs(f, id, '2000.00');
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        recoverFromPay(tx, f.admin, { ownerId: id, amount: '2000.00', on: '2026-01-20' }),
+      ),
+    ).rejects.toThrow(/no active role, so there is no pay to recover from/);
   });
 });
 

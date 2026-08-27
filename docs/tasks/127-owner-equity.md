@@ -143,3 +143,44 @@ that is the honest reason.
       against its own month; ⛔ contribution and drawing are refused across stores.
 - [ ] Screens, driven end to end in a browser.
 - [ ] Gates: typecheck · unit · integration · build.
+
+---
+
+## 9. Settling a `1260` receivable — BUILT 2026-08-27
+
+> **Ian:** *"lets build the first 2 now, cash repayment and payroll recovery."*
+
+| Settlement | Posting | Frees the drawing limit? |
+|---|---|---|
+| **Cash repayment** | `DR the money account · CR 1260` | ⭐ **Yes** — the money is really back in the till |
+| **Pay recovery** | `DR 1230 · CR 1260` | ⛔ **No** — see below |
+| Write-off | `DR 3200 · CR 1260` | n/a — it becomes a drawing. **Still to build** |
+
+⭐ **The party changes with the account.** `1260` carries the OWNER; `1230` carries the PERSON,
+because `1230`'s `party_type` is `employee`. The same human, named twice, because the two accounts
+answer different questions.
+
+### ⛔ Why pay recovery does not free the limit
+
+**It is a reclassification, not a recovery.** No cash has come back — payroll nets it when payroll
+runs, and v2 has no payroll module yet. If `1230` were not counted, *"recover from pay"* would clear
+the cap the instant it was clicked: mark every personal expense repayable, immediately "recover" it,
+and the limit never moves. That is the same bypass as the repayable route itself, one step further
+along.
+
+⭐ So `drawnInWindow` counts **`3200` + `1260` (owner) + `1230` (their person)**. The limit tracks
+money that reached the owner and has not come back, whichever receivable is currently holding it.
+
+⚠️ **`recoverFromPay` refuses an owner who holds no active role.** It is the best proxy available
+until payroll exists — it proves they work here, not that they are paid — and it rules out the
+failure that matters: parking a receivable against wages that do not exist. ⛔ Replace the check with
+a real payroll lookup when payroll lands.
+
+### ⚠️ `2300` could not be used, and that decided the design
+
+The obvious posting for *"reduce what we owe them in wages"* is `DR 2300 Salaries and wages payable`.
+⛔ **`2300` is not party-requiring** — it is a single lump for the whole store — so there is no way to
+check that this owner is owed anything, and over-recovering would push the store's wage liability
+negative with nothing to catch it. `1230` is party-requiring by design, and is already where payroll
+nets salary advances.
+

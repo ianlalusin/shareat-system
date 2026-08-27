@@ -16,6 +16,8 @@ import { owner_drawing_closes } from '../../schema/owner-drawing-closes';
 export const CAPITAL_CODE = '3100';
 export const DRAWINGS_CODE = '3200';
 export const DUE_FROM_OWNER_CODE = '1260';
+/** Where a receivable goes when it is being recovered from pay — party_type `employee`. */
+export const EMPLOYEE_ADVANCE_CODE = '1230';
 export const PARTY_TYPE = 'owner';
 
 export interface OwnerRow {
@@ -184,33 +186,77 @@ export async function positionsByOwner(
  * fund whose top-up is not gated by receipts — the control has to see every way cash reaches the
  * owner, not just the one with the honest name.
  *
- * ⚠️ `1260` is counted at its OUTSTANDING balance, so a receivable the owner has actually repaid
- * stops consuming their limit. Repaying is what makes room again, which is the behaviour you want.
+ * ⚠️ Counted at OUTSTANDING balance, so a receivable the owner has actually repaid stops consuming
+ * their limit — repaying is what makes room again. ⛔ But a RECLASSIFICATION is not a repayment:
+ * "recover from pay" moves the balance to `1230` and nothing has come back yet, so that account is
+ * counted too. The limit tracks money that reached the owner and has not returned, whichever
+ * receivable is currently holding it.
  *
  * `until` is exclusive; omit `since` for the `total` period.
  */
 export async function drawnInWindow(
   tx: Tx,
   orgId: string,
-  ownerId: string,
+  owner: { id: string; personId: string },
   window: { since?: string; until?: string } = {},
 ): Promise<string> {
   const [row] = (await tx.execute(sql`
-    select coalesce(sum(
-      case when a.code in (${DRAWINGS_CODE}, ${DUE_FROM_OWNER_CODE})
-           then jl.debit - jl.credit else 0 end
-    ), 0)::text as total
+    select coalesce(sum(jl.debit - jl.credit), 0)::text as total
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId}
+      and je.status <> 'draft'
+      and (
+        (jl.party_type = ${PARTY_TYPE} and jl.party_id = ${owner.id}
+         and a.code in (${DRAWINGS_CODE}, ${DUE_FROM_OWNER_CODE}))
+        -- ⭐ ...AND the same money after a recovery reclassified it. Otherwise "recover from pay"
+        -- would free the cap the instant it was clicked, long before payroll actually nets it — the
+        -- same bypass as marking everything repayable, one step further along.
+        or (jl.party_type = 'employee' and jl.party_id = ${owner.personId}
+            and a.code = ${EMPLOYEE_ADVANCE_CODE})
+      )
+      ${window.since ? sql`and je.entry_date >= ${window.since}` : sql``}
+      ${window.until ? sql`and je.entry_date < ${window.until}` : sql``}
+  `)) as unknown as Record<string, string>[];
+  return Number(row?.total ?? 0).toFixed(2);
+}
+
+/** What the owner still owes on `1260` — the ceiling on any settlement. */
+export async function receivableOf(tx: Tx, orgId: string, ownerId: string): Promise<string> {
+  const [row] = (await tx.execute(sql`
+    select coalesce(sum(jl.debit - jl.credit), 0)::text as total
     from journal_lines jl
     join journal_entries je on je.id = jl.entry_id
     join accounts a on a.id = jl.account_id
     where je.org_id = ${orgId}
       and jl.party_type = ${PARTY_TYPE}
       and jl.party_id = ${ownerId}
+      and a.code = ${DUE_FROM_OWNER_CODE}
       and je.status <> 'draft'
-      ${window.since ? sql`and je.entry_date >= ${window.since}` : sql``}
-      ${window.until ? sql`and je.entry_date < ${window.until}` : sql``}
   `)) as unknown as Record<string, string>[];
   return Number(row?.total ?? 0).toFixed(2);
+}
+
+/**
+ * Does this person hold an active role in the org?
+ *
+ * ⚠️ **The best proxy available for "is on the payroll", and not the same thing.** v2 has no payroll
+ * module, so nothing can prove somebody is PAID. This proves they work here, which is enough to rule
+ * out the failure that matters: parking a receivable against the wages of someone who has none.
+ * ⛔ Replace this with a real payroll lookup when payroll lands.
+ */
+export async function personHoldsActiveRole(
+  tx: Tx,
+  orgId: string,
+  personId: string,
+): Promise<boolean> {
+  const [row] = (await tx.execute(sql`
+    select 1 as ok from person_roles
+    where person_id = ${personId} and org_id = ${orgId} and revoked_at is null
+    limit 1
+  `)) as unknown as Record<string, unknown>[];
+  return Boolean(row);
 }
 
 // -------------------------------------------------------------------------------------

@@ -22,6 +22,8 @@ import { checkDraw } from '../money-accounts/overdraft';
 
 export const CAPITAL_CODE = '3100';
 export const DRAWINGS_CODE = '3200';
+/** Where a receivable goes when it is being recovered from pay — party_type `employee`. */
+export const EMPLOYEE_ADVANCE_CODE = '1230';
 // ⚠️ ONE definition, in routing.ts. Declaring a second here compiled fine and then collided at the
 // package barrel — two constants named for the same account is how they drift apart.
 import { DUE_FROM_OWNER_CODE } from '../expenses/routing';
@@ -184,7 +186,12 @@ export interface DrawingLimitVerdict {
 export async function judgeDrawingLimit(
   tx: Tx,
   orgId: string,
-  owner: { id: string; drawingLimit: string | null; drawingLimitPeriod: DrawingLimitPeriod | null },
+  owner: {
+    id: string;
+    personId: string;
+    drawingLimit: string | null;
+    drawingLimitPeriod: DrawingLimitPeriod | null;
+  },
   amount: number,
   on: string,
 ): Promise<DrawingLimitVerdict> {
@@ -195,7 +202,7 @@ export async function judgeDrawingLimit(
     owner.drawingLimitPeriod === 'monthly'
       ? { since: monthOf(on), until: nextMonthOf(on) }
       : {};
-  const already = Number(await ownersRepo.drawnInWindow(tx, orgId, owner.id, window));
+  const already = Number(await ownersRepo.drawnInWindow(tx, orgId, owner, window));
 
   if (already + amount <= limit) return { allowed: true };
 
@@ -292,6 +299,157 @@ export async function recordDrawing(
 }
 
 // -------------------------------------------------------------------------------------
+// ⭐ Clearing a `1260` receivable — the two settlements that actually recover money
+// -------------------------------------------------------------------------------------
+
+/** Shared ceiling: you cannot settle more than is owed. */
+async function assertWithinReceivable(
+  trx: Tx,
+  orgId: string,
+  ownerId: string,
+  amount: number,
+  context: string,
+): Promise<void> {
+  if (amount <= 0) throw new Error(`${context}: the amount has to be greater than zero.`);
+  const outstanding = Number(await ownersRepo.receivableOf(trx, orgId, ownerId));
+  if (amount > outstanding + 0.005) {
+    throw new Error(
+      `${context}: that is more than the ₱${outstanding.toFixed(2)} this owner still owes. ` +
+        `Settling more would turn a receivable into a payable without anyone deciding to.`,
+    );
+  }
+}
+
+/**
+ * ⭐ **Settlement 1 — the owner hands cash back.** `DR the money account · CR 1260`.
+ *
+ * The receivable clears and the money is really in the till, so this is the only settlement that
+ * frees the owner's drawing limit — see `drawnInWindow`.
+ */
+export async function repayFromOwner(
+  tx: Tx | null,
+  actor: Actor,
+  input: { ownerId: string; amount: string; intoMoneyAccountId: string; on: string; memo?: string },
+): Promise<{ entryId: string; outstanding: string }> {
+  const run = async (trx: Tx) => {
+    const owner = await ownersRepo.getById(trx, actor.orgId, input.ownerId);
+    if (!owner) throw new Error(`repayFromOwner: owner ${input.ownerId} does not exist.`);
+    await authorize(trx, actor, 'transfer_funds', { storeId: owner.storeId });
+    await assertWithinReceivable(trx, actor.orgId, owner.id, Number(input.amount), 'repayFromOwner');
+
+    const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.intoMoneyAccountId);
+    if (!account) throw new Error('repayFromOwner: that money account does not exist.');
+    if (account.storeId !== owner.storeId) {
+      throw new Error('repayFromOwner: that account belongs to another store.');
+    }
+
+    const result = await postEntry(trx, {
+      orgId: actor.orgId,
+      entryDate: input.on,
+      sourceType: 'owner_repayment',
+      sourceId: owner.id,
+      idempotencyKey: `owner:${owner.id}:repayment:${input.on}:${Number(input.amount).toFixed(2)}`,
+      memo: input.memo?.trim() || 'Owner repayment',
+      postedBy: actor.personId,
+      lines: [
+        {
+          accountCode: account.glAccountCode,
+          storeId: owner.storeId,
+          debit: input.amount,
+          ...(account.glAccountCode === '1140'
+            ? { partyType: 'money_account' as const, partyId: account.id }
+            : {}),
+        },
+        {
+          accountCode: DUE_FROM_OWNER_CODE,
+          storeId: owner.storeId,
+          credit: input.amount,
+          partyType: 'owner' as const,
+          partyId: owner.id,
+        },
+      ],
+    });
+    return {
+      entryId: result.entryId,
+      outstanding: await ownersRepo.receivableOf(trx, actor.orgId, owner.id),
+    };
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/**
+ * ⭐ **Settlement 2 — recover it from their pay.** `DR 1230 · CR 1260`.
+ *
+ * The balance moves from *"the owner owes us"* to *"this is an advance against their wages"*, where
+ * `1230` is the account payroll already nets salary advances out of. The party changes with it: the
+ * owner on `1260`, the PERSON on `1230`, because `1230`'s party_type is `employee`.
+ *
+ * ⚠️ **This is a reclassification, not a recovery, and the distinction is deliberate.** No cash has
+ * come back — payroll nets it when payroll runs, and v2 has no payroll module yet. So it does NOT
+ * free the drawing limit: `drawnInWindow` counts `1230` for this person for exactly that reason.
+ * Otherwise "recover from pay" would clear the cap the instant it was clicked, which is the same
+ * bypass as marking every personal expense repayable, one step further along.
+ *
+ * ⛔ Refused for an owner with no employment: recovering from a salary nobody is paid is a
+ * receivable quietly parked where nothing will ever collect it.
+ */
+export async function recoverFromPay(
+  tx: Tx | null,
+  actor: Actor,
+  input: { ownerId: string; amount: string; on: string; memo?: string },
+): Promise<{ entryId: string; outstanding: string }> {
+  const run = async (trx: Tx) => {
+    const owner = await ownersRepo.getById(trx, actor.orgId, input.ownerId);
+    if (!owner) throw new Error(`recoverFromPay: owner ${input.ownerId} does not exist.`);
+    await authorize(trx, actor, 'approve_expense', { storeId: owner.storeId });
+    await assertWithinReceivable(trx, actor.orgId, owner.id, Number(input.amount), 'recoverFromPay');
+
+    // ⚠️ The best check available until payroll exists: this person must actually work here. It does
+    // not prove they are PAID — nothing can, yet — and the screens say so rather than implying it.
+    const employed = await ownersRepo.personHoldsActiveRole(trx, actor.orgId, owner.personId);
+    if (!employed) {
+      throw new Error(
+        'recoverFromPay: this owner holds no active role, so there is no pay to recover from. ' +
+          'Take it back in cash, or write it off deliberately at the monthly close.',
+      );
+    }
+
+    const result = await postEntry(trx, {
+      orgId: actor.orgId,
+      entryDate: input.on,
+      sourceType: 'owner_pay_recovery',
+      sourceId: owner.id,
+      idempotencyKey: `owner:${owner.id}:pay-recovery:${input.on}:${Number(input.amount).toFixed(2)}`,
+      memo: input.memo?.trim() || 'Owner receivable moved to salary advance',
+      postedBy: actor.personId,
+      lines: [
+        {
+          accountCode: EMPLOYEE_ADVANCE_CODE,
+          storeId: owner.storeId,
+          debit: input.amount,
+          partyType: 'employee' as const,
+          partyId: owner.personId,
+        },
+        {
+          accountCode: DUE_FROM_OWNER_CODE,
+          storeId: owner.storeId,
+          credit: input.amount,
+          partyType: 'owner' as const,
+          partyId: owner.id,
+        },
+      ],
+    });
+    return {
+      entryId: result.entryId,
+      outstanding: await ownersRepo.receivableOf(trx, actor.orgId, owner.id),
+    };
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+// -------------------------------------------------------------------------------------
 // ⭐ The monthly drawings close
 // -------------------------------------------------------------------------------------
 
@@ -314,7 +472,7 @@ export async function previewDrawingClose(
     await authorize(trx, actor, 'transfer_funds', { storeId: owner.storeId });
 
     const periodMonth = monthOf(input.month);
-    const ledgerAmount = await ownersRepo.drawnInWindow(trx, actor.orgId, owner.id, {
+    const ledgerAmount = await ownersRepo.drawnInWindow(trx, actor.orgId, owner, {
       since: periodMonth,
       until: nextMonthOf(periodMonth),
     });
@@ -375,7 +533,7 @@ export async function closeDrawingMonth(
     }
 
     const ledger = Number(
-      await ownersRepo.drawnInWindow(trx, actor.orgId, owner.id, {
+      await ownersRepo.drawnInWindow(trx, actor.orgId, owner, {
         since: periodMonth,
         until: nextMonthOf(periodMonth),
       }),
