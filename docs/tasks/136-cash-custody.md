@@ -231,7 +231,73 @@ setting and must not be collapsed into one**: remittance is bounded by how much 
 willing to hold, and this is bounded by *statute*. A store that remits weekly may still have to
 distribute twice a month.
 
-## 5. ⚠️ Research required before designing this (bible §3.6)
+## 5. ✅ RESEARCH DONE, 2026-08-27 — and the source was better than the one asked for
+
+§5 (below, kept for the record) asked for ERPNext and Odoo petty-cash implementations. **A better
+source existed:** `webapps/MIGRATION` is a prior attempt to move *this business* onto ERPNext, with
+its own design docs and a decision log. That is not a generic reference — it is this company's own
+money modelled by someone reading the same Firebase data.
+
+### 5a. Question 1 — cash-in-transit / undeposited funds ✅ **already answered**
+
+ADR-010 and bible row 143 settled it: undeposited funds is **derived**, not an account, because
+nobody reconciles it against an external document — they reconcile the till. No further research
+needed.
+
+### 5b. Question 2 — the imprest / petty-cash model ⭐ **answered, and it splits in two**
+
+`06_financial_bridge_schema.md` §2.6 records the decision (2026-07-07) and the postings:
+
+```
+Release   Dr Petty Cash Float   Cr Cash on Hand
+Spend     Dr Expense            Cr Petty Cash Float     (per expense)
+Return    Dr Cash on Hand       Cr Petty Cash Float
+Shortage  Dr Staff Advance      Cr Petty Cash Float
+                     → the float nets to ZERO when the request closes
+```
+
+⭐ **The finding that matters: what this business runs today is NOT an imprest fund.** It is a
+**per-request advance to a person** that nets to zero on liquidation. An imprest fund holds a
+*fixed standing balance* and is replenished; this holds **zero** between requests. They are
+different instruments and §2 above was describing the one the business does not yet have.
+
+⭐ **And v2 already owns the account.** `cash__staff` is v2's **`1120` Cash on hand — staff
+custodian**, which T-142 made one of the five every store is born with. The float has a home; what
+is missing is the document that moves through it.
+
+⚠️ **So §2's "genuine ADD" verdict stands, and is now sharper:**
+
+| | Exists in v1 | Exists in v2 | What it is |
+|---|---|---|---|
+| **Cash request / staff float** | ✅ workflow + postings | ⛔ **nothing** | An advance to a PERSON, nets to zero |
+| **Daily till float** (`openingBudget`) | ✅ in the sales day's `plus` | partly (T-123) | The drawer's starting cash |
+| **Store revolving fund** | ⛔ | ⛔ | A standing imprest at the STORE |
+
+⛔ **Therefore §2 has a prerequisite it did not know about: cash requests.** Building a store
+revolving fund before the per-request float would mean designing replenishment against a document
+that does not exist — and rows 152–153 already lean on cash requests for the cross-store case
+(*"office cash of Malvar can be used to cash request for Lipa"*). **Cash requests come first.**
+
+### 5c. Question 3 — is a remittance document the norm ✅ **answered by building it**
+
+`06` §2.8 maps v1's remittance onto an ERPNext **Internal-Transfer Payment Entry plus a Journal
+Entry for the variance** — i.e. the movement and the variance are separate documents, and the
+variance needs a **Cash Over/Short** account, which that doc lists as a gap. T-143 arrived at the
+same split independently: a transfer for the money, a `remittance_variances` row for the case.
+
+### 5d. ⭐ A bonus finding, for T-126
+
+`06` §2.12 maps loans onto ERPNext's Loan Management: *"Loan (disbursement → cash/bank + loan
+liability), Loan Repayment (principal + `expense__interest`), auto-deduct schedule."* And
+`00_PROGRESS.md` carries **live loan data with a warning**: two Grab loans on Lipa, and *"NEITHER
+figure is usable"* — one because every settlement routes its deduction through a single
+`channelCfg.loanId` so the second loan has **zero references** (*"a wiring artifact, not a fact"*),
+the other because Lipa's settlements stop 14 days short. ⚠️ **T-126 must not import either
+balance.** Read that section before designing it.
+
+---
+
+## 5 (original). ⚠️ Research required before designing this (bible §3.6)
 
 1. **How reference systems model a cash-in-transit / undeposited-funds account** — and whether
    they treat it as one account or per-custodian. This also settles row 127's online-owner
