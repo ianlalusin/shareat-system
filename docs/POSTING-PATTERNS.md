@@ -37,38 +37,38 @@
 - ` 429–433  ` AP payment (appayment) — 93 legs
   - ` 434–442  ` appayment.simple — Clears exactly what is owed
   - ` 443–459  ` appayment.overpayment — Never floats to nowhere
-- ` 460–464  ` Cash request release and return (cashrequestrelease 82 legs / cashrequestreturn 52 legs)
-  - ` 465–474  ` cashrequest.release — A float handed to a staff custodian
-  - ` 475–485  ` cashrequest.return — The unused float comes back
-- ` 486–503  ` Commissary dispatch (commissarydispatch) — 70 legs, the inter-store elimination case
-  - ` 504–522  ` commissarydispatch.transfer — One entry, two stores, must eliminate
-- ` 523–527  ` Amortization (amortization) — 38 legs
-  - ` 528–538  ` amortization.monthly — Monthly amortisation of a prepaid item
-- ` 539–544  ` Wastage (wastageexpense) — 16 legs
-  - ` 545–561  ` wastageexpense.spoilage — A real cost of sales, straight against inventory
-- ` 562–568  ` Remittance (remittance) — 10 legs
-  - ` 569–577  ` remittance.exact — The conditional leg genuinely absent
-  - ` 578–587  ` remittance.overage — 7350 swings positive
-  - ` 588–602  ` remittance.shortage — Charged to the responsible cashier, not P&L
-- ` 603–607  ` Balance adjustment (balanceadjustment) — 10 legs — THE ANTI-PATTERN
-  - ` 608–625  ` balanceadjustment.plug — Included so nobody ports it forward
-- ` 626–630  ` Prepaid purchase (prepaidpurchase 4 legs) / asset purchase (assetpurchase 2 legs)
-  - ` 631–640  ` prepaidpurchase.cash — An asset, not an immediate expense
-  - ` 641–649  ` assetpurchase.cash — Fixed asset purchase, cash
-  - ` 650–660  ` assetpurchase.credit — Fixed asset purchase, on account
-- ` 661–665  ` Slicer/payroll payout (slicerpayment) — 4 legs
-  - ` 666–676  ` slicerpayment.park — Settling an already-parked liability
-- ` 677–682  ` Statutory remittance (liabilitypayment)
-  - ` 683–701  ` liabilitypayment.statutory-remittance — Settling what was withheld, not new expense
-- ` 702–710  ` Owner equity movements (capitalcontribution / drawing)
-  - ` 711–719  ` equity.capitalcontribution — Cash in, equity grows
-  - ` 720–736  ` equity.drawing — Reduces equity, on the books at last
-- ` 737–743  ` Year close (yearclose) — v2-only, ADR-006
-  - ` 744–763  ` yearclose.annual — One entry, into 3300, dated the following January 1st
-- ` 764–771  ` Opening balance (openingbalance) — v2-only, ADR-005 (amended 2026-08-24) + bible row 106
-  - ` 772–794  ` openingbalance.load — The 2027-01-01 load, balance-sheet only, per-party lump sums
-  - ` 795–814  ` openingbalance.reconcile — Reconciling 3900 to exactly zero
-- ` 815–836  ` Reversal — the correction path (T-106)
+- ` 460–470  ` Cash request release and return (cashrequestrelease 82 legs / cashrequestreturn 52 legs)
+  - ` 471–480  ` cashrequest.release — A float handed to a staff custodian
+  - ` 481–491  ` cashrequest.return — The unused float comes back
+- ` 492–509  ` Commissary dispatch (commissarydispatch) — 70 legs, the inter-store elimination case
+  - ` 510–528  ` commissarydispatch.transfer — One entry, two stores, must eliminate
+- ` 529–533  ` Amortization (amortization) — 38 legs
+  - ` 534–544  ` amortization.monthly — Monthly amortisation of a prepaid item
+- ` 545–550  ` Wastage (wastageexpense) — 16 legs
+  - ` 551–567  ` wastageexpense.spoilage — A real cost of sales, straight against inventory
+- ` 568–574  ` Remittance (remittance) — 10 legs
+  - ` 575–583  ` remittance.exact — The conditional leg genuinely absent
+  - ` 584–593  ` remittance.overage — 7350 swings positive
+  - ` 594–608  ` remittance.shortage — Charged to the responsible cashier, not P&L
+- ` 609–613  ` Balance adjustment (balanceadjustment) — 10 legs — THE ANTI-PATTERN
+  - ` 614–631  ` balanceadjustment.plug — Included so nobody ports it forward
+- ` 632–636  ` Prepaid purchase (prepaidpurchase 4 legs) / asset purchase (assetpurchase 2 legs)
+  - ` 637–646  ` prepaidpurchase.cash — An asset, not an immediate expense
+  - ` 647–655  ` assetpurchase.cash — Fixed asset purchase, cash
+  - ` 656–666  ` assetpurchase.credit — Fixed asset purchase, on account
+- ` 667–671  ` Slicer/payroll payout (slicerpayment) — 4 legs
+  - ` 672–682  ` slicerpayment.park — Settling an already-parked liability
+- ` 683–688  ` Statutory remittance (liabilitypayment)
+  - ` 689–707  ` liabilitypayment.statutory-remittance — Settling what was withheld, not new expense
+- ` 708–716  ` Owner equity movements (capitalcontribution / drawing)
+  - ` 717–725  ` equity.capitalcontribution — Cash in, equity grows
+  - ` 726–742  ` equity.drawing — Reduces equity, on the books at last
+- ` 743–749  ` Year close (yearclose) — v2-only, ADR-006
+  - ` 750–769  ` yearclose.annual — One entry, into 3300, dated the following January 1st
+- ` 770–777  ` Opening balance (openingbalance) — v2-only, ADR-005 (amended 2026-08-24) + bible row 106
+  - ` 778–800  ` openingbalance.load — The 2027-01-01 load, balance-sheet only, per-party lump sums
+  - ` 801–820  ` openingbalance.reconcile — Reconciling 3900 to exactly zero
+- ` 821–842  ` Reversal — the correction path (T-106)
 
 <!-- TOC:END -->
 
@@ -459,8 +459,14 @@ contradiction.
 
 ## Cash request release and return (`cash_request_release` 82 legs / `cash_request_return` 52 legs)
 
-The pair, together. 1120 (staff-custodian cash) is **not** a `requires_party` account — it is a
+The pair, together. In v1, 1120 (staff-custodian cash) is **not** a `requires_party` account — a
 plain asset, not a control account with a subledger.
+
+> ⭐ **v2 DIFFERS HERE, deliberately (T-144, bible row 159).** One store has one staff-float account
+> and **two people can hold floats at once**, so a party-free 1120 is a single indistinguishable
+> balance — and *"who still owes a liquidation?"* would need a second register. In v2 the leg carries
+> `party_type = 'cash_request'`, `party_id = the request`. The **legs below are otherwise unchanged**;
+> only the party is added.
 
 ### `cash_request.release` — A float handed to a staff custodian
 
@@ -469,7 +475,7 @@ A ₱2,000 cash float is released from the cashier drawer for a market run. The 
 
 | Account | Debit | Credit | Party |
 |---|---:|---:|---|
-| 1120 Cash on hand — staff custodian | 2,000.00 | | — |
+| 1120 Cash on hand — staff custodian | 2,000.00 | | cash_request |
 | 1110 Cash on hand — cashier | | 2,000.00 | — |
 
 ### `cash_request.return` — The unused float comes back
@@ -479,7 +485,7 @@ Of the ₱2,000 float, ₱350 is unspent and returned.
 | Account | Debit | Credit | Party |
 |---|---:|---:|---|
 | 1110 Cash on hand — cashier | 350.00 | | — |
-| 1120 Cash on hand — staff custodian | | 350.00 | — |
+| 1120 Cash on hand — staff custodian | | 350.00 | cash_request |
 
 ---
 

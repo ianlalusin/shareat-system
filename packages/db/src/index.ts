@@ -38,6 +38,9 @@ export type { StoredFileRow } from './repo/files';
 export { RATE_PERIODS, INTEREST_METHODS, PAYMENT_FREQUENCIES, LOAN_STATUSES } from '../schema/loans';
 export type { RatePeriod, InterestMethod, PaymentFrequency, LoanStatus } from '../schema/loans';
 export type { LoanRow, LoanPosition, LoanPaymentRow } from './repo/loans';
+export { CASH_REQUEST_STATUSES } from '../schema/cash-requests';
+export type { CashRequestStatus } from '../schema/cash-requests';
+export type { CashRequestRow, FloatPosition } from './repo/cash-requests';
 export * as journalRepo from './repo/journal';
 export * as etlRepo from './repo/etl';
 export * as reportsRepo from './repo/reports';
@@ -52,6 +55,7 @@ export * as schedulerRepo from './repo/scheduler';
 export * as remittanceRepo from './repo/remittance';
 export * as filesRepo from './repo/files';
 export * as loansRepo from './repo/loans';
+export * as cashRequestsRepo from './repo/cash-requests';
 export * as sessionsRepo from './repo/sessions';
 // Re-exported so a caller establishing a principal around an authorize() call (T-121) does
 // not need to reach into packages/db/src/rls/registry.ts directly.

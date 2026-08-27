@@ -9,6 +9,7 @@ import { prepaidRepo, type PrepaidItemRow } from '@shareat/db';
 import { prepaidSchedule } from '@shareat/domain';
 import { withOrgPrincipal } from '../expenses/lib';
 
+export { peso } from '../../lib/format';
 export { listStores, withOrgPrincipal } from '../expenses/lib';
 export type { StoreOption } from '../expenses/lib';
 
@@ -87,13 +88,6 @@ export const STATUS_LABEL: Record<string, string> = {
   fully_amortised: 'Fully released',
   written_off: 'Written off',
 };
-
-export function peso(amount: string | number): string {
-  return `₱${Number(amount).toLocaleString('en-PH', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
 
 /** The current period as `YYYY-MM` — what the run defaults to catching up through. */
 export function thisPeriod(): string {

@@ -63,35 +63,35 @@
 - `1034–1068 ` 10. Phase plan
 - `1069–1085 ` 11. Migration & ETL rules
 - `1086–1134` 12. Inherited landmines — do not repeat these
-- `1135–1299` 13. Decision log
-- `1300–1319` 14. Amendment protocol
-- `1320–1324` 15. Engineering standards — the industry practices this project follows
-  - `1325–1330` 15.1 Build order: walking skeleton first
-  - `1331–1342` 15.2 Golden-master testing — the most important practice here
-  - `1343–1351` 15.3 Strangler Fig, not big-bang cutover
-  - `1352–1356` 15.4 No dual-write
-  - `1357–1361` 15.5 Expand/contract migrations
-  - `1362–1370` 15.6 Observability from day zero, not later
-  - `1371–1375` 15.7 CI gates
-  - `1376–1380` 15.8 Backups and a tested restore
-  - `1381–1385` 15.9 Twelve-Factor config
-  - `1386–1393` 15.10 Append-only ledgers — but not event sourcing
-  - `1394–1398` 15.11 Defence in depth
-  - `1399–1427` 15.12 Skills are lenses, not assurance
-  - `1428–1434` 15.13 Reconciliation is a permanent feature
-- `1435–1439` 16. The accounting spine
-  - `1440–1471` 16.0 What we are actually fixing — the diagnosis
-  - `1472–1515` 16.1 The ten invariants — non-negotiable
-  - `1516–1530` 16.2 The oracle: how "correct" is tested
-  - `1531–1552` 16.3 The model — header + lines, not legs
-  - `1553–1572` 16.4 Deliberately simpler than ERPNext
-  - `1573–1639` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1640–1664` 16.6 What v1 already gets right — preserve the intent
-  - `1665–1686` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1687–1701` 16.8 What v1's accounting already gets right
-  - `1702–1745` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1746–1796` 16.10 Posting patterns — one canonical pattern per business event
-  - `1797–1814` 16.11 Inventory's accounting integration
+- `1135–1300` 13. Decision log
+- `1301–1320` 14. Amendment protocol
+- `1321–1325` 15. Engineering standards — the industry practices this project follows
+  - `1326–1331` 15.1 Build order: walking skeleton first
+  - `1332–1343` 15.2 Golden-master testing — the most important practice here
+  - `1344–1352` 15.3 Strangler Fig, not big-bang cutover
+  - `1353–1357` 15.4 No dual-write
+  - `1358–1362` 15.5 Expand/contract migrations
+  - `1363–1371` 15.6 Observability from day zero, not later
+  - `1372–1376` 15.7 CI gates
+  - `1377–1381` 15.8 Backups and a tested restore
+  - `1382–1386` 15.9 Twelve-Factor config
+  - `1387–1394` 15.10 Append-only ledgers — but not event sourcing
+  - `1395–1399` 15.11 Defence in depth
+  - `1400–1428` 15.12 Skills are lenses, not assurance
+  - `1429–1435` 15.13 Reconciliation is a permanent feature
+- `1436–1440` 16. The accounting spine
+  - `1441–1472` 16.0 What we are actually fixing — the diagnosis
+  - `1473–1516` 16.1 The ten invariants — non-negotiable
+  - `1517–1531` 16.2 The oracle: how "correct" is tested
+  - `1532–1553` 16.3 The model — header + lines, not legs
+  - `1554–1573` 16.4 Deliberately simpler than ERPNext
+  - `1574–1640` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1641–1665` 16.6 What v1 already gets right — preserve the intent
+  - `1666–1687` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1688–1702` 16.8 What v1's accounting already gets right
+  - `1703–1746` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1747–1797` 16.10 Posting patterns — one canonical pattern per business event
+  - `1798–1815` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1294,6 +1294,7 @@ just a patch.**
 | 156 | 2026-08-26 | ⭐ **EVERY STORE IS BORN WITH FIVE MONEY ACCOUNTS, AND CANNOT CLOSE THEM WHILE IT TRADES.** Cashier cash · cashier online · office cash · office online · staff float. **Names are editable; the shape is not.** | Ian: *“all stores must have these accounts, seeded and configurable but can never be terminated as long as store is active … these 5 accounts must always be present and available since they are the foundation of money movement”*, and *“cashier cash may be renamed to counter till, office cash may be office vault … unretirable but configurable in ui esp name.”* ⭐ **Enforced by a TRIGGER on `stores`, not by a service call**, because there is no `createStore` service: stores arrive from the seed, the ETL, the cutover and one day a screen — four paths, and an invariant should not be a step any of them has to remember. Same reasoning that already put ledger balance and period-open in triggers. ⚠️ **And it is load-bearing NOW:** since row 150's work a cash payment must NAME a money account, so a store created without these silently cannot record a cash expense at all. ⭐ **`is_foundation` is a FLAG, not an inference from instrument + custodian**, and that is the crux: a store may open a SECOND cashier wallet (another GCash, a bank account) and that one is ordinary — retirable like anything else. Nothing about its shape distinguishes it from the seeded one, so only a flag can. ⚠️ **Backfill ADOPTS before it seeds**, and only an account that is the store's ONLY active one of that shape: a hand-made “Cashier drawer” keeps its name, its notes and its **journal history**, where seeding first would have left two tills per store — one holding every peso ever counted and one holding nothing. A RETIRED account is never adopted, because resurrecting something deliberately closed as un-retirable is worse than seeding a fresh one. ⚠️ Renaming is admin (`manage_chart_of_accounts`, row 149): a money account's name is what every picker, report and reviewer reads, so renaming “Office vault” to “Petty cash” changes what people believe a balance means without moving a peso. ⛔ Custodian and instrument stay uneditable — they decide the GL code, so changing them would move money between accounts by editing a label. | No — a structural guarantee |
 | 157 | 2026-08-27 | ⭐ **WHAT IS REMITTED IS THE END-DAY REPORT, NOT THE SALES REPORT — and they are ONE thing, not two. A day is owed the CASHIER'S NET MOVEMENT for that date, not its remittable sales.** | Ian: *“remittance is derived from sales report — they are one, actually. It must be END DAY REPORT, not sales report. The sales report is PART OF that remittance / end-day report… the sales day is sum of sales, collection etc enclosed in same sales day. So for cleaner reporting, the sales-day report generates on POS; the one that is remitted is the remittance or end-day report — the composition of all money movement of the day across transactions.”* ⭐ **This dissolves a gap I had raised as an open question.** I had modelled a day as owing its remittable SALES, and asked what to do with the rest of the till — a ₱5,000 collection and a ₱2,000 expense that no sales day is owed. There is no remainder, because the day is not its sales: **it is everything the cashier touched.** Row 145 (“expected remittance is the cashier accounts’ net movement”) and the FIFO rule (row 144) turn out to be the SAME figure, one totalled and one per date. ⚠️ **`sales_days` is not renamed and does not grow.** It stays the POS-sourced SALES component and, critically, the LOCK — a date becomes remittable when its sales day is verified. The end-day report **contains** it. ⭐ **And the end-day report is DERIVED**: the cashier-custodian accounts’ net movement for one store on one date, read from the ledger. No table, no stored expected, and it picks up a new document type the day one appears — which a query enumerating document types would not. ⚠️ Allocations therefore key on **(store, business date)**, not on a sales-day id: a collection banked on a day the store did not trade is still money the cashier holds, and it must be remittable even though no sales day exists for it. | No |
 | 158 | 2026-08-27 | ⭐ **LOANS GET A STANDARD MODEL, NOT v1'S. ONE REGISTER — THE LEDGER — AND THE PRINCIPAL/INTEREST SPLIT IS COMPUTED, NEVER TYPED.** | Ian: *“that loan model in v1 is really flawed. I suggest build a standard one for loan and we will build on top of it later to cater our case.”* ⛔ **v1 recorded the same debt in THREE places:** four running totals on the loan (`totalPaid`, `principalPaid`, `interestPaid`, `outstandingBalance` — the last commented *“principalAmount - principalPaid”*, a stored copy of a subtraction), a `loanPayments` collection, and a `LoanLedgerEntry` carrying its own `balanceBefore`. ⚠️ **They drifted, and it was MEASURED rather than guessed:** the ERPNext migration read both live Grab loans and concluded *“NEITHER figure is usable”* — one stale by fourteen days of unrecorded settlements, the other reading zero payments because every settlement routed through a single `channelCfg.loanId`, *“a wiring artifact, not a fact.”* ⭐ **So there is no `loan_payments` table**: a payment is not a thing beside the ledger, it IS a ledger entry, and giving it a second home is how v1 got three. ⭐ **The party on a `2400` line is THE LOAN, not the lender** — which looks like the wrong noun until you ask what a party is for: it makes each balance on a shared control account attributable, and **a lender can hold two loans**, which v1's own data proves. ⭐ **The split is computed** — v1 takes it from the caller with a suggestion the caller may ignore, so the number deciding how fast a debt retires is hand-typed. Interest accrued since the last payment is taken first; principal takes the remainder. ⚠️ That handles the NORMAL case: *“the history shows Grab repeatedly deducting less than the instalment when the day's net is small.”* ⚠️ `rate_period` is **NOT NULL with no default**, because in v1 absent meant *different things on different rows* — annual on legacy loans, monthly on new ones. ⛔ Interest stays **cash-basis** as v1 has it; accruing monthly is more correct in principle and is named in T-126 §4 so the omission is a decision. ⛔ Out of scope and deliberately so: channel auto-deduct (T-140's runner owns scheduling now, not a second cron) and the cross-store paydown (needs T-133 and rows 152–153's due-from/due-to pair). | No |
+| 159 | 2026-08-27 | ⭐ **A CASH REQUEST IS A FLOAT THAT MUST NET TO ZERO, AND `1120` GAINS A PARTY — THE REQUEST. ASKING FOR MONEY POSTS NOTHING; ONLY THE RELEASE DOES.** | ⭐ **Four postings, and only the middle one already existed.** Release `DR 1120 / CR` the funding account; **spend `DR` the expense `/ CR 1120` — T-122 has done this all along**, and `expense_payments.cash_request_id` says why in its own comment: *“presence alone routes a cash payment to 1120 instead of 1110.”* This task supplied the document that column had been pointing at for six weeks. Return `DR` the funding account `/ CR 1120`; shortage `DR 1230 staff advance / CR 1120`. **⭐ The four net to ZERO when the request closes** — which is what distinguishes a float from an imprest fund (T-136 §2 holds a standing balance and is replenished; this holds nothing between requests), and it is why `liquidated` needs no column. ⚠️ **The request itself posts nothing** (§16.10): asking is not a financial event, and a system that posted on request would show a float in someone's hands before anyone handed it over. ⭐ **`1120` becomes party-requiring — v1's is not**, and `POSTING-PATTERNS.md` records v1's reasoning verbatim: *“1120 is **not** a `requires_party` account — it is a plain asset, not a control account with a subledger.”* ⚠️ **That holds only while one person holds one float.** A store has ONE staff-float account (row 156) and **two people can hold floats at once**, and one person can hold two — so without a party ₱2,000 with Ana and ₱3,000 with Ben is ₱5,000 at `1120` and the ledger cannot say whose is whose. *“Who still owes a liquidation?”* would then need a second register, **which is exactly how v1's loans ended up with three** (row 158). Third application of the same rule: the wallet (row 142), the loan (row 158), now the float. ⭐ **A shortage is a RECEIVABLE FROM A NAMED PERSON, not a write-off** — `1230` is party-requiring, so a float that comes back light can never be charged to nobody. ⚠️ **Return and shortage post as TWO entries, not one.** The first version combined them into a single credit to `1120` and its own test caught it: one leg cannot say how much came back and how much did not, so the position read the whole thing as returned. They are genuinely two events — money arriving, and money failing to arrive — they can fall on different days, and either can be reversed alone. ⭐ **Every figure is derived**: the float position is the balance of `1120` for this party, and `released − spent − returned − short` is arithmetic on it, not a second definition — which is why the two cannot disagree. ⛔ v1 stores `remainingAmount` and `varianceAmount`; both are subtractions of things the ledger already knows (DEF-044's shape). ⚠️ **The decision locks on release**, ported as behaviour rather than as v1's column: money has moved, and editing the approval behind it rewrites history. ⭐ **It already fed remittance correctly before it existed.** A release credits `1110`, so it reduces the cashier's net movement for that date — precisely what T-143's end-day report sums (rows 145, 157). Nothing needed adding, because the report asks the ledger what the cashier holds instead of enumerating document types. ⛔ **Cross-store release is OUT and named so the omission is a decision** — the pieces exist (rows 152–153's both-stores gate and the `1250`/`2150` pair, built in T-139), but a single-store request that works beats a cross-store one that half does. | No |
 
 ---
 

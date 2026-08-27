@@ -9,6 +9,7 @@ import { moneyAccountsRepo, remittanceRepo, type EndDayReport } from '@shareat/d
 import { remittanceStateOf } from '@shareat/domain';
 import { withOrgPrincipal } from '../expenses/lib';
 
+export { peso } from '../../lib/format';
 export { listStores, withOrgPrincipal } from '../expenses/lib';
 export type { StoreOption } from '../expenses/lib';
 
@@ -53,13 +54,6 @@ export async function recentRemittances(orgId: string, storeId?: string) {
 /** ⭐ The list that must not hide (Ian, bible row 147). */
 export async function openVariances(orgId: string) {
   return withOrgPrincipal(orgId, (tx) => remittanceRepo.listVariances(tx, orgId, 'open'));
-}
-
-export function peso(amount: string | number): string {
-  return `₱${Number(amount).toLocaleString('en-PH', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
 }
 
 export const STATE_LABEL: Record<string, string> = {

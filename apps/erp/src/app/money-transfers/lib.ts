@@ -7,6 +7,7 @@
 import { moneyAccountsRepo, moneyTransfersRepo, type MoneyTransferListRow } from '@shareat/db';
 import { withOrgPrincipal } from '../expenses/lib';
 
+export { peso } from '../../lib/format';
 export { listStores, withOrgPrincipal } from '../expenses/lib';
 export type { StoreOption } from '../expenses/lib';
 export { CUSTODIAN_LABEL, GL_LABEL, INSTRUMENT_LABEL } from '../money-accounts/lib';
@@ -51,9 +52,3 @@ export async function listRecentTransfers(orgId: string): Promise<MoneyTransferL
   );
 }
 
-export function peso(amount: string | number): string {
-  return `₱${Number(amount).toLocaleString('en-PH', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}

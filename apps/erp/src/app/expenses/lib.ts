@@ -96,6 +96,23 @@ export async function listActingPersons(orgId: string): Promise<PersonOption[]> 
   return rows;
 }
 
+/**
+ * Everyone active in the org, role or not.
+ *
+ * ⚠️ **Deliberately WIDER than `listActingPersons`.** That pool is who can act in the ERP; this is
+ * who money can be handed to. A kitchen hand sent on a market run never signs in here, and a float
+ * picker that could not name them would push the request onto someone who did — which is exactly
+ * the mis-attribution the party on `1120` exists to prevent.
+ */
+export async function listActivePersons(orgId: string): Promise<Omit<PersonOption, 'role'>[]> {
+  const db = getDb();
+  return db
+    .select({ id: schema.persons.id, displayName: schema.persons.displayName })
+    .from(schema.persons)
+    .where(and(eq(schema.persons.orgId, orgId), eq(schema.persons.isActive, true)))
+    .orderBy(asc(schema.persons.displayName));
+}
+
 export async function listCategoriesGrouped(orgId: string): Promise<CategoryOption[]> {
   return transaction((tx) => expensesRepo.listCategories(tx, orgId));
 }

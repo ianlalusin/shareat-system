@@ -201,6 +201,14 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'same treatment fixed_assets gets, so the item stays and its money is cleared.',
     clearColumns: ['total_cost', 'coverage_start_date', 'coverage_months', 'source_expense_id'],
   },
+  cash_requests: {
+    class: 'purge',
+    reason:
+      'A float handed out, spent and reconciled \u2014 activity, and the ledger behind it is ' +
+      'purged too. ⚠️ An OPEN one at cutover is a real unliquidated float somebody is holding, so ' +
+      'it must be closed BEFORE the cutover rather than inherited: v2 opens on a zero starting ' +
+      'point, and a float with no ledger behind it is money nobody can account for.',
+  },
   loans: {
     class: 'keep',
     reason:

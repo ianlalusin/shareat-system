@@ -175,6 +175,12 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'What an org has paid for in advance — its insurers, its landlords, its licence renewals. ' +
       'A franchise must never see another org’s contracts.',
   },
+  cash_requests: {
+    scope: 'org_column',
+    reason:
+      'Who is holding the business\u2019s cash, for what, and who approved it. Names staff and ' +
+      'amounts \u2014 another org has no business reading either.',
+  },
   loans: {
     scope: 'org_column',
     reason:

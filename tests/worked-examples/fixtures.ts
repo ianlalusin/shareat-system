@@ -25,7 +25,15 @@
  * literal).
  */
 
-export type PartyType = 'supplier' | 'customer' | 'employee' | 'store' | 'channel' | 'money_account';
+export type PartyType =
+  | 'supplier'
+  | 'customer'
+  | 'employee'
+  | 'store'
+  | 'channel'
+  | 'money_account'
+  | 'loan'
+  | 'cash_request';
 
 export interface PartyRef {
   type: PartyType;
@@ -565,9 +573,12 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
 
   // =========================================================================================
   // cash_request_release (82) / cash_request_return (52) — the pair, together. leg-mapping:
-  // "Source OUT + cash__staff IN" / "cash__staff OUT + return-target IN". 1120 (staff
-  // custodian cash) is NOT a requires_party account — it is a plain asset, not a control
-  // account with a subledger.
+  // "Source OUT + cash__staff IN" / "cash__staff OUT + return-target IN".
+  //
+  // ⭐ 1120 IS party-requiring in v2 and is NOT in v1 (T-144, bible row 159). One store has ONE
+  // staff-float account and TWO PEOPLE CAN HOLD FLOATS AT ONCE — without a party that is a single
+  // indistinguishable balance, and "who still owes a liquidation?" would need a second register,
+  // which is how v1's loans ended up with three. The legs are otherwise v1's exactly.
   // =========================================================================================
   {
     id: 'cash_request.release',
@@ -579,7 +590,7 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
     frequency: 82,
     input: { staffId: 'STAFF-0201', amount: '2000.00' },
     expect: [
-      D('1120', '2000.00', null, { lineMemo: 'cash float released' }),
+      D('1120', '2000.00', { type: 'cash_request', id: 'cash_request:CR-0201' }, { lineMemo: 'cash float released' }),
       C('1110', '2000.00', null, { lineMemo: 'cashier drawer out' }),
     ],
     entryDate: '2026-01-25',
@@ -593,7 +604,7 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
     input: { staffId: 'STAFF-0201', amount: '350.00' },
     expect: [
       D('1110', '350.00', null, { lineMemo: 'unused float returned' }),
-      C('1120', '350.00', null, { lineMemo: 'cash float reduced' }),
+      C('1120', '350.00', { type: 'cash_request', id: 'cash_request:CR-0201' }, { lineMemo: 'cash float reduced' }),
     ],
     entryDate: '2026-01-25',
   },

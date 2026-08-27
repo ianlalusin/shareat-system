@@ -683,7 +683,8 @@ describe('5170 carries the COA-ALIGNMENT §4.1 inter-store elimination warning (
 // accounts.
 // =====================================================================================
 
-/** The TEN control accounts: T-118's Contract §2 table, plus `1140` added by ADR-010. Written
+/** The TWELVE control accounts: T-118's Contract §2 table, plus `1140` (ADR-010), `2400`
+ * (T-126) and `1120` (T-144). Written
  * out literally here (not derived from REQUIRES_PARTY_CODES) so a mistake in the seed's OWN
  * flagging can't silently agree with itself — same defensive shape as RESERVED_CODES's own test
  * above.
@@ -702,11 +703,20 @@ const REQUIRES_PARTY_EXPECTED_CODES = [
   '2130', // Reimbursements payable -> employee
   '1250', // Due from related store -> store
   '2150', // Due to related store -> store
-  '2400', // Loans payable -> supplier (the lender)
+  // ⭐ T-126, bible row 158: the party is THE LOAN, not the lender. That looks like the wrong noun
+  // until you ask what a party is FOR — it makes each balance on a shared control account
+  // attributable, and A LENDER CAN HOLD TWO LOANS (v1's own data has two Grab loans on one store).
+  '2400', // Loans payable -> loan
   // ⭐ ADR-010: ONE control account covers every e-wallet and bank account the business holds,
   // so the line names WHICH one — the same shape 2110 uses for suppliers. v1 minted an
   // `online__{id}` GL account per wallet instead, and its chart grew with the business.
   '1140', // E-wallet / online channels -> money_account
+  // ⭐ T-144, bible row 159, and v1 does NOT do this — POSTING-PATTERNS records 1120 there as "a
+  // plain asset, not a control account with a subledger". But one store has ONE staff-float
+  // account and TWO PEOPLE CAN HOLD FLOATS AT ONCE: without a party, ₱2,000 with Ana and ₱3,000
+  // with Ben is one indistinguishable ₱5,000, and "who still owes a liquidation?" needs a second
+  // register — which is how v1's loans ended up with three.
+  '1120', // Cash on hand — staff custodian -> cash_request
 ];
 
 describe('T-118 invariant 7 (+ ADR-010) — exactly the ten control accounts are requires_party = true; every other account is false', () => {

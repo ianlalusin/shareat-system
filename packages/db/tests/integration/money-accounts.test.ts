@@ -236,8 +236,11 @@ describe('invariant 2 — custodian positions are read from journal_lines', () =
   it('a staff float is attributed to staff by its GL code (1120)', async () => {
     const f = await setup('float');
     // Office releases ₱2,000 to a staff member.
+    // ⚠️ 1120 is party-requiring in v2 (T-144) — a store has ONE staff-float account and two people
+    // can hold floats at once, so the leg names the REQUEST. Attribution here is by GL code, which
+    // is the point of the test; the party is what makes "whose ₱2,000?" answerable at all.
     await postLegs(f, '2026-01-09', [
-      { code: '1120', debit: '2000.00', credit: '0' },
+      { code: '1120', debit: '2000.00', credit: '0', partyType: 'cash_request', partyId: uid('cr') },
       { code: '1130', debit: '0', credit: '2000.00' },
     ]);
     const rows = await asOrg(f.orgId, (tx) =>
@@ -306,7 +309,7 @@ describe('invariant 3 — undeposited funds is a GROUP BY, not an account', () =
     ]);
     // A staff float is out with staff, which is also not the cashier's undeposited money.
     await postLegs(f, '2026-01-11', [
-      { code: '1120', debit: '2000.00', credit: '0' },
+      { code: '1120', debit: '2000.00', credit: '0', partyType: 'cash_request', partyId: uid('cr') },
       { code: '1130', debit: '0', credit: '2000.00' },
     ]);
 

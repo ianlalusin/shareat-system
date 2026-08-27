@@ -10,6 +10,7 @@ import { accruedInterest, scheduledInstalment } from '@shareat/domain';
 import { money } from '@shareat/core/money';
 import { withOrgPrincipal } from '../expenses/lib';
 
+export { peso } from '../../lib/format';
 export { listStores, withOrgPrincipal } from '../expenses/lib';
 export type { StoreOption } from '../expenses/lib';
 
@@ -104,13 +105,6 @@ export async function moneyAccounts(orgId: string, storeId: string) {
       accounts.map(async (a) => ({ ...a, balance: await moneyAccountsRepo.balanceOf(tx, orgId, a) })),
     );
   });
-}
-
-export function peso(amount: string | number): string {
-  return `₱${Number(amount).toLocaleString('en-PH', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
 }
 
 export const METHOD_LABEL: Record<string, string> = {

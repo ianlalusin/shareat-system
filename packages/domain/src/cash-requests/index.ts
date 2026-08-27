@@ -1,0 +1,401 @@
+/**
+ * Cash requests — a float handed to a person, and what comes back. T-144, bible row 159.
+ *
+ * ```
+ * release   DR 1120 staff float   CR the funding account
+ * spend     DR the expense        CR 1120                  ← T-122 ALREADY DOES THIS
+ * return    DR the funding acct   CR 1120
+ * shortage  DR 1230 advances to employees  CR 1120
+ *                                        → 1120 nets to ZERO
+ * ```
+ *
+ * Verified against real v1 data: `POSTING-PATTERNS.md` §Cash request, **82 release legs, 52 return
+ * legs**.
+ *
+ * ## ⚠️ The REQUEST posts nothing
+ *
+ * Asking for money is not a financial event (bible §16.10); only the release is. Posting on request
+ * would show a float in someone's hands before anyone handed it over.
+ */
+import { authorize, type Actor } from '@shareat/auth';
+import { cashRequestsRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
+import { checkDraw } from '../money-accounts/overdraft';
+import { postEntry } from '../ledger/post-entry';
+
+export const STAFF_FLOAT_CODE = '1120';
+/**
+ * Where an unaccounted-for float lands: a receivable from the person who held it.
+ * ⚠️ `1230 Advances to employees` — party-requiring, `party_type = 'employee'`, which is exactly
+ * why a shortage here can never be charged to nobody.
+ */
+export const STAFF_ADVANCE_CODE = '1230';
+
+export interface CreateCashRequestInput {
+  storeId: string;
+  requestedFor: string;
+  purpose: string;
+  amount: string;
+  on: string;
+  notes?: string | null;
+}
+
+/** ⚠️ Records the ask. **No money moves** — see the header. */
+export async function createCashRequest(
+  tx: Tx | null,
+  actor: Actor,
+  input: CreateCashRequestInput,
+): Promise<{ id: string }> {
+  const run = async (trx: Tx) => {
+    await authorize(trx, actor, 'create_expense', { storeId: input.storeId });
+    const purpose = input.purpose.trim();
+    if (!purpose) throw new Error('createCashRequest: say what the money is for.');
+    if (Number(input.amount) <= 0) {
+      throw new Error('createCashRequest: the amount has to be greater than zero.');
+    }
+    return cashRequestsRepo.insertRequest(trx, {
+      orgId: actor.orgId,
+      storeId: input.storeId,
+      requestedFor: input.requestedFor,
+      purpose,
+      requestedAmount: input.amount,
+      requestedOn: input.on,
+      notes: input.notes?.trim() || null,
+      createdBy: actor.personId,
+    });
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/**
+ * Approve or refuse.
+ *
+ * ⚠️ **`approve_expense`, not `create_expense`** — asking for money and agreeing to hand it over
+ * are two decisions, and letting one person do both unilaterally is the control this separates.
+ */
+export async function decideCashRequest(
+  tx: Tx | null,
+  actor: Actor,
+  input:
+    | { requestId: string; decision: 'approve'; amount: string; on?: string }
+    | { requestId: string; decision: 'reject'; reason: string; on?: string },
+): Promise<void> {
+  const run = async (trx: Tx) => {
+    const req = await cashRequestsRepo.getById(trx, actor.orgId, input.requestId);
+    if (!req) throw new Error(`decideCashRequest: request ${input.requestId} does not exist.`);
+    await authorize(trx, actor, 'approve_expense', { storeId: req.storeId });
+
+    // ⛔ v1's `decisionLocked`, as behaviour rather than a column: once money has moved, the
+    // approval behind it cannot be edited. Changing it would rewrite the reason a payment happened.
+    if (req.status !== 'requested') {
+      throw new Error(`decideCashRequest: this request is already ${req.status}.`);
+    }
+
+    const on = input.on ?? new Date().toISOString().slice(0, 10);
+    if (input.decision === 'reject') {
+      const reason = input.reason.trim();
+      if (!reason) throw new Error('decideCashRequest: a refusal needs a reason.');
+      await cashRequestsRepo.update(trx, actor.orgId, req.id, {
+        status: 'rejected',
+        rejectReason: reason,
+        approvedBy: actor.personId,
+        decidedOn: on,
+      });
+      return;
+    }
+
+    if (Number(input.amount) <= 0) {
+      throw new Error('decideCashRequest: an approved amount has to be greater than zero.');
+    }
+    // ⚠️ Approving MORE than was asked for is allowed and is not an error — a manager may know the
+    // errand costs more. Approving less is the common case.
+    await cashRequestsRepo.update(trx, actor.orgId, req.id, {
+      status: 'approved',
+      approvedAmount: input.amount,
+      approvedBy: actor.personId,
+      decidedOn: on,
+    });
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/**
+ * Withdraw a request before the money moves.
+ *
+ * ⭐ **`create_expense`, not `approve_expense`** — and that asymmetry is deliberate. Withdrawing
+ * your own ask is not an approval decision; requiring a manager to un-ask would leave dead requests
+ * sitting in the queue because the only person who could clear them had no reason to look.
+ *
+ * ⛔ **Only before release.** Once cash is in someone's hands there is nothing to cancel — that is a
+ * return, and it posts. A status that could erase a released float would erase the float with it.
+ */
+export async function cancelCashRequest(
+  tx: Tx | null,
+  actor: Actor,
+  input: { requestId: string; reason?: string },
+): Promise<void> {
+  const run = async (trx: Tx) => {
+    const req = await cashRequestsRepo.getById(trx, actor.orgId, input.requestId);
+    if (!req) throw new Error(`cancelCashRequest: request ${input.requestId} does not exist.`);
+    await authorize(trx, actor, 'create_expense', { storeId: req.storeId });
+
+    if (req.status !== 'requested' && req.status !== 'approved') {
+      throw new Error(
+        `cancelCashRequest: this request is ${req.status} — only one that has not been released can be withdrawn.`,
+      );
+    }
+    await cashRequestsRepo.update(trx, actor.orgId, req.id, {
+      status: 'cancelled',
+      // ⚠️ The approval is CLEARED, not kept: leaving `approved_amount` on a cancelled row would
+      // read as "approved for ₱2,000" in every list that shows the amount.
+      approvedAmount: null,
+      approvedBy: null,
+      decidedOn: null,
+      rejectReason: input.reason?.trim() || null,
+    });
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/**
+ * The money changes hands. **DR `1120` (party = this request) · CR the funding account.**
+ *
+ * ⭐ This is also where the release becomes visible to remittance, and nothing had to be added for
+ * that: crediting `1110` reduces the cashier's net movement for the date, which is exactly what
+ * T-143's end-day report sums. Ian's *"out = cash request released by cashier"* falls out.
+ */
+export async function releaseCashRequest(
+  tx: Tx | null,
+  actor: Actor,
+  input: { requestId: string; amount: string; fromMoneyAccountId: string; on: string },
+): Promise<{ entryId: string; warning?: string }> {
+  const run = async (trx: Tx) => {
+    const req = await cashRequestsRepo.getById(trx, actor.orgId, input.requestId);
+    if (!req) throw new Error(`releaseCashRequest: request ${input.requestId} does not exist.`);
+    await authorize(trx, actor, 'approve_expense', { storeId: req.storeId });
+
+    if (req.status !== 'approved') {
+      throw new Error(
+        `releaseCashRequest: this request is ${req.status} — only an approved one can be released.`,
+      );
+    }
+    // ⛔ The approval is the authority for the amount. Releasing more would make the approval
+    // decorative.
+    if (Number(input.amount) > Number(req.approvedAmount ?? 0)) {
+      throw new Error(
+        `releaseCashRequest: ${input.amount} is more than the ${req.approvedAmount} approved.`,
+      );
+    }
+
+    const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.fromMoneyAccountId);
+    if (!account) throw new Error('releaseCashRequest: that money account does not exist.');
+    // ⚠️ Cross-store funding is T-144 §6's named next slice — it needs the 1250/2150 pair, which
+    // exists and is tested, but is not wired here.
+    if (account.storeId !== req.storeId) {
+      throw new Error(
+        'releaseCashRequest: funding a float from another store is not built yet — it has to ' +
+          'record what one store owes the other, and that is its own slice.',
+      );
+    }
+
+    // T-139's rule: a cashier account warns, an office account refuses (row 154).
+    const warning = await checkDraw(
+      trx,
+      actor.orgId,
+      account,
+      Number(input.amount),
+      'releaseCashRequest',
+    );
+
+    const result = await postEntry(trx, {
+      orgId: actor.orgId,
+      entryDate: input.on,
+      sourceType: 'cash_request_release',
+      sourceId: req.id,
+      idempotencyKey: `cash-request:${req.id}:release`,
+      memo: `Cash request released — ${req.purpose}`,
+      postedBy: actor.personId,
+      lines: [
+        // ⭐ The party is the REQUEST: two people can hold floats at once, and one store has one
+        // staff-float account, so nothing else makes the balance attributable.
+        {
+          accountCode: STAFF_FLOAT_CODE,
+          storeId: req.storeId,
+          debit: input.amount,
+          partyType: 'cash_request' as const,
+          partyId: req.id,
+        },
+        {
+          accountCode: account.glAccountCode,
+          storeId: req.storeId,
+          credit: input.amount,
+          ...(account.glAccountCode === '1140'
+            ? { partyType: 'money_account' as const, partyId: account.id }
+            : {}),
+        },
+      ],
+    });
+
+    await cashRequestsRepo.update(trx, actor.orgId, req.id, {
+      status: 'released',
+      releasedFromMoneyAccountId: account.id,
+      releasedOn: input.on,
+      releasedBy: actor.personId,
+    });
+
+    return { entryId: result.entryId, ...(warning ? { warning } : {}) };
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+export interface SettleResult {
+  /** ⚠️ One entry per EVENT — a return and a shortage are separate postings (see below). */
+  entryIds: string[];
+  outstanding: string;
+  liquidated: boolean;
+}
+
+/**
+ * What comes back, and what does not.
+ *
+ * - **Return** → DR the funding account · CR `1120`
+ * - **Shortage** → DR `1230` advances to employees · CR `1120`
+ *
+ * ⛔ **A shortage needs a person, and here it is never in doubt** — the float was handed to
+ * `requested_for`. That is the difference from a remittance variance, where FIFO's date says
+ * nothing about who was holding the money (row 144): a float has a named holder by construction.
+ */
+export async function settleCashRequest(
+  tx: Tx | null,
+  actor: Actor,
+  input: {
+    requestId: string;
+    returnedAmount?: string;
+    shortAmount?: string;
+    shortReason?: string;
+    toMoneyAccountId?: string;
+    on: string;
+  },
+): Promise<SettleResult> {
+  const run = async (trx: Tx) => {
+    const req = await cashRequestsRepo.getById(trx, actor.orgId, input.requestId);
+    if (!req) throw new Error(`settleCashRequest: request ${input.requestId} does not exist.`);
+    await authorize(trx, actor, 'approve_expense', { storeId: req.storeId });
+    if (req.status !== 'released') {
+      throw new Error(`settleCashRequest: this request is ${req.status}, not released.`);
+    }
+
+    const before = await cashRequestsRepo.floatPositionOf(trx, actor.orgId, req.id);
+    const returned = Number(input.returnedAmount ?? 0);
+    const short = Number(input.shortAmount ?? 0);
+    if (returned <= 0 && short <= 0) {
+      throw new Error('settleCashRequest: nothing to settle — give a return, a shortage, or both.');
+    }
+    // ⛔ You cannot account for more than is still held. The rest was spent, and spending is an
+    // expense, not a settlement.
+    if (returned + short > Number(before.outstanding) + 0.005) {
+      throw new Error(
+        `settleCashRequest: ${(returned + short).toFixed(2)} is more than the ` +
+          `${before.outstanding} still held. Anything spent is recorded as an expense against ` +
+          'this request, not settled here.',
+      );
+    }
+    if (short > 0 && !input.shortReason?.trim()) {
+      throw new Error('settleCashRequest: a shortage needs a reason.');
+    }
+
+    // ⭐ TWO EVENTS, TWO ENTRIES — and the first version got this wrong.
+    //
+    // Posting a return and a shortage as ONE entry with ONE credit to 1120 destroys the breakdown:
+    // the combined leg cannot say how much came back and how much did not, and the position query
+    // reported the whole thing as "returned". Its own test caught it.
+    //
+    // ⚠️ They are genuinely two events anyway — money arriving, and money failing to arrive — and
+    // they can happen on different days. One entry each also means either can be reversed alone.
+    const entryIds: string[] = [];
+
+    if (returned > 0) {
+      if (!input.toMoneyAccountId) {
+        throw new Error('settleCashRequest: say which account the money came back into.');
+      }
+      const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.toMoneyAccountId);
+      if (!account) throw new Error('settleCashRequest: that money account does not exist.');
+
+      const r = await postEntry(trx, {
+        orgId: actor.orgId,
+        entryDate: input.on,
+        sourceType: 'cash_request_return',
+        sourceId: req.id,
+        idempotencyKey: `cash-request:${req.id}:return:${input.on}:${returned.toFixed(2)}`,
+        memo: `Cash request returned — ${req.purpose}`,
+        postedBy: actor.personId,
+        lines: [
+          {
+            accountCode: account.glAccountCode,
+            storeId: req.storeId,
+            debit: returned.toFixed(2),
+            ...(account.glAccountCode === '1140'
+              ? { partyType: 'money_account' as const, partyId: account.id }
+              : {}),
+          },
+          {
+            accountCode: STAFF_FLOAT_CODE,
+            storeId: req.storeId,
+            credit: returned.toFixed(2),
+            partyType: 'cash_request' as const,
+            partyId: req.id,
+          },
+        ],
+      });
+      entryIds.push(r.entryId);
+    }
+
+    if (short > 0) {
+      const r = await postEntry(trx, {
+        orgId: actor.orgId,
+        entryDate: input.on,
+        sourceType: 'cash_request_shortage',
+        sourceId: req.id,
+        idempotencyKey: `cash-request:${req.id}:shortage:${input.on}:${short.toFixed(2)}`,
+        memo: `Cash request shortage — ${req.purpose}`,
+        postedBy: actor.personId,
+        lines: [
+          // ⭐ A receivable from the HOLDER, named on the line — 1230 is party-requiring, which is
+          // why a float shortage can never be charged to nobody. ⚠️ Unlike a remittance variance,
+          // there is nothing to work out here: the float was handed to this person.
+          {
+            accountCode: STAFF_ADVANCE_CODE,
+            storeId: req.storeId,
+            debit: short.toFixed(2),
+            partyType: 'employee' as const,
+            partyId: req.requestedFor,
+            lineMemo: input.shortReason?.trim(),
+          },
+          {
+            accountCode: STAFF_FLOAT_CODE,
+            storeId: req.storeId,
+            credit: short.toFixed(2),
+            partyType: 'cash_request' as const,
+            partyId: req.id,
+          },
+        ],
+      });
+      entryIds.push(r.entryId);
+    }
+
+    const after = await cashRequestsRepo.floatPositionOf(trx, actor.orgId, req.id);
+    // ⭐ Zero closes it, and zero is the LEDGER's answer — the four postings net to nothing when the
+    // request is done, which is the whole shape of a float.
+    const liquidated = Number(after.outstanding) <= 0.005;
+    if (liquidated) {
+      await cashRequestsRepo.update(trx, actor.orgId, req.id, { status: 'liquidated' });
+    }
+
+    return { entryIds, outstanding: after.outstanding, liquidated };
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}

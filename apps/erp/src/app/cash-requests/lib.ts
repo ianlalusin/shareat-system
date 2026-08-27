@@ -1,0 +1,97 @@
+/**
+ * Server-only helpers for the cash-request screens. T-144, bible row 159.
+ *
+ * ⭐ **Every figure is read from the ledger.** The float position is the balance of `1120` for this
+ * request's party; `released − spent − returned − short` is arithmetic on that one number, not a
+ * second definition of it. ⛔ v1 stored `remainingAmount` and `varianceAmount` — both subtractions
+ * of things the ledger already knew, and both able to disagree with it.
+ *
+ * ⚠️ `floatsByRequest` is one grouped query for the whole register rather than a lookup per row.
+ * The N+1 is what makes a derived figure feel expensive and tempts the next person to store it.
+ */
+import {
+  cashRequestsRepo,
+  moneyAccountsRepo,
+  type CashRequestRow,
+  type FloatPosition,
+} from '@shareat/db';
+import { withOrgPrincipal } from '../expenses/lib';
+
+export { peso } from '../../lib/format';
+export { listStores, listActivePersons, withOrgPrincipal } from '../expenses/lib';
+export type { StoreOption } from '../expenses/lib';
+
+const ZERO: FloatPosition = {
+  released: '0.00',
+  spent: '0.00',
+  returned: '0.00',
+  short: '0.00',
+  outstanding: '0.00',
+};
+
+export interface CashRequestListRow extends CashRequestRow {
+  float: FloatPosition;
+}
+
+export async function listRegister(orgId: string): Promise<CashRequestListRow[]> {
+  return withOrgPrincipal(orgId, async (tx) => {
+    const [rows, floats] = await Promise.all([
+      cashRequestsRepo.listRequests(tx, orgId),
+      cashRequestsRepo.floatsByRequest(tx, orgId),
+    ]);
+    return rows.map((r) => ({ ...r, float: floats.get(r.id) ?? ZERO }));
+  });
+}
+
+export interface CashRequestDetail extends CashRequestListRow {
+  /** ⭐ Derived: the request closes when the float reaches zero, not when someone says it has. */
+  isSettled: boolean;
+}
+
+export async function getDetail(orgId: string, id: string): Promise<CashRequestDetail | null> {
+  return withOrgPrincipal(orgId, async (tx) => {
+    const row = await cashRequestsRepo.getById(tx, orgId, id);
+    if (!row) return null;
+    const float = await cashRequestsRepo.floatPositionOf(tx, orgId, id);
+    return { ...row, float, isSettled: Number(float.outstanding) <= 0.005 };
+  });
+}
+
+/** Where a float can come from, or land — with balances, so the picker is not blind. */
+export async function moneyAccounts(orgId: string, storeId: string) {
+  return withOrgPrincipal(orgId, async (tx) => {
+    const accounts = await moneyAccountsRepo.listMoneyAccounts(tx, orgId, { storeId });
+    return Promise.all(
+      accounts.map(async (a) => ({
+        ...a,
+        balance: await moneyAccountsRepo.balanceOf(tx, orgId, a),
+      })),
+    );
+  });
+}
+
+/**
+ * ⚠️ The labels say what each state MEANS for the money, not just what it is called. "Approved"
+ * and "released" are one word apart and a world apart: one is a promise, the other is cash gone.
+ */
+export const STATUS_LABEL: Record<string, string> = {
+  requested: 'Requested — nothing has moved',
+  approved: 'Approved — not yet handed over',
+  rejected: 'Refused',
+  released: 'Out with the holder',
+  liquidated: 'Settled',
+  cancelled: 'Withdrawn',
+};
+
+export const STATUS_TONE: Record<string, string> = {
+  requested: 'text-amber-700 dark:text-amber-400',
+  approved: 'text-sky-700 dark:text-sky-400',
+  rejected: 'text-neutral-500 dark:text-neutral-500',
+  released: 'text-red-700 dark:text-red-400',
+  liquidated: 'text-emerald-700 dark:text-emerald-400',
+  cancelled: 'text-neutral-500 dark:text-neutral-500',
+};
+
+export function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
