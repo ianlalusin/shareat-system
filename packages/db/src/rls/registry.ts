@@ -181,6 +181,19 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'Who is holding the business\u2019s cash, for what, and who approved it. Names staff and ' +
       'amounts \u2014 another org has no business reading either.',
   },
+  owner_drawing_closes: {
+    scope: 'org_column',
+    reason:
+      'What each owner withdrew in a month, and who signed it off. ⛔ Reveals both an owner’s ' +
+      'personal cash flow and the store’s internal controls — neither is another org’s business.',
+  },
+  owners: {
+    scope: 'org_column',
+    reason:
+      'Who owns a store, what percentage they hold, and what they are permitted to draw. ' +
+      '⛔ One franchise reading another’s ownership split learns its cap table — among the most ' +
+      'commercially sensitive facts the system holds, and the reason T-120 exists.',
+  },
   loans: {
     scope: 'org_column',
     reason:

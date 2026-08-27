@@ -205,8 +205,12 @@ async function fundAccount(
     const [target] = await tx<{ id: string }[]>`
       select id from accounts where org_id = ${orgId} and code = ${code}
     `;
+    // ⚠️ 3900, not 3200. Funding an account is an OPENING BALANCE, and its counterpart is
+    // "Opening balance equity" — 3200 is Owner's DRAWINGS, debit-normal contra-equity, so crediting
+    // it to put cash in a till is backwards even as a fixture. T-127 made 3200 party-requiring and
+    // that is what surfaced it: every one of these fixtures started failing at once.
     const [equity] = await tx<{ id: string }[]>`
-      select id from accounts where org_id = ${orgId} and code = '3200'
+      select id from accounts where org_id = ${orgId} and code = '3900'
     `;
     await tx`
       insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit, party_type, party_id)
@@ -566,30 +570,77 @@ describe('invariant 7 — an unmapped category BLOCKS, naming the category, neve
   });
 });
 
-describe('invariant 8 — PERSONAL routes to 3200 owner\'s drawings, an equity account, never a P&L expense', () => {
-  it('debits 3200, and 3200 is typed equity, not expense', async () => {
-    const f = await setup('inv8');
-    const catId = await categoryId(f.orgId, "Owner's Personal Expense");
+/**
+ * ⭐ T-127 CHANGED WHAT THIS INVARIANT MEANS. A personal expense has no single account: it is a
+ * DRAWING only when the business does not expect the money back, and a RECEIVABLE when it does —
+ * the line the tax treatment turns on, since a payment made with no expectation of repayment is a
+ * distribution however it is labelled. Both routes are proven here, and so is the refusal.
+ */
+async function ownerFor(f: Fixture, treatment: 'repayable' | 'drawing'): Promise<string> {
+  const [row] = await sql<{ id: string }[]>`
+    insert into owners (org_id, store_id, person_id, personal_expense_treatment, created_by)
+    values (${f.orgId}, ${f.storeId}, ${f.staffId}, ${treatment}, ${f.managerId})
+    returning id
+  `;
+  return row!.id;
+}
 
-    const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
-        storeId: f.storeId,
-        businessDate: BUSINESS_DATE,
-        categoryId: catId,
-        particulars: "Owner's personal withdrawal",
-        receiptPhotoUrl: 'https://example.com/r8.jpg',
-        payments: [{ method: 'cash', amount: '2000.00', moneyAccountId: f.cashDrawerId }],
-      }),
-    );
-    const posted = await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
-    const lines = await linesFor(posted.journalEntryId);
-    const debit = lines.find((l) => l.debit !== '0.00')!;
-    expect(debit.code).toBe('3200');
+async function postPersonal(
+  f: Fixture,
+  ownerId: string | null,
+): Promise<{ ok: boolean; code?: string; partyType?: string | null }> {
+  const catId = await categoryId(f.orgId, "Owner's Personal Expense");
+  const created = await asPerson(f.orgId, (tx) =>
+    createExpense(tx, actor(f.orgId, f.staffId), {
+      storeId: f.storeId,
+      businessDate: BUSINESS_DATE,
+      categoryId: catId,
+      particulars: "Owner's personal expense",
+      receiptPhotoUrl: 'https://example.com/r8.jpg',
+      ...(ownerId ? { ownerId } : {}),
+      payments: [{ method: 'cash', amount: '2000.00', moneyAccountId: f.cashDrawerId }],
+    }),
+  );
+  const posted = await asPerson(f.orgId, (tx) =>
+    approveExpense(tx, actor(f.orgId, f.managerId), created.id),
+  );
+  if (!posted.journalEntryId) return { ok: false };
+  const lines = await linesFor(posted.journalEntryId);
+  const debit = lines.find((l) => l.debit !== '0.00')!;
+  return { ok: true, code: debit.code, partyType: debit.party_type ?? null };
+}
+
+describe('invariant 8 — a personal expense routes by whether it is expected back, never to a P&L line', () => {
+  it('⭐ NOT repayable → debits 3200, which is typed equity, not expense', async () => {
+    const f = await setup('inv8');
+    const result = await postPersonal(f, await ownerFor(f, 'drawing'));
+    expect(result.code).toBe('3200');
+    // The party is what lets a drawing limit see it at all.
+    expect(result.partyType).toBe('owner');
 
     const [account] = await sql<{ type: string }[]>`select type from accounts where org_id = ${f.orgId} and code = '3200'`;
     expect(account!.type).toBe('equity');
   });
+
+  it('⭐ repayable → debits 1260, an ASSET — equity does not move for money coming back', async () => {
+    const f = await setup('inv8b');
+    const result = await postPersonal(f, await ownerFor(f, 'repayable'));
+    expect(result.code).toBe('1260');
+    expect(result.partyType).toBe('owner');
+
+    const [account] = await sql<{ type: string }[]>`select type from accounts where org_id = ${f.orgId} and code = '1260'`;
+    expect(account!.type).toBe('asset');
+  });
+
+  it('⛔ with NO owner it BLOCKS, naming the reason — an unattributed personal expense escapes the limit', async () => {
+    const f = await setup('inv8c');
+    // Invariant 7's rule unchanged: unresolvable BLOCKS at approve and never defaults to "some
+    // owner". ⚠️ It THROWS rather than returning `{ ok: false }` — approveExpense turns a routing
+    // refusal into an error, so the caller cannot ignore it by not reading a field.
+    await expect(postPersonal(f, null)).rejects.toThrow(/belongs to a specific owner/);
+  });
 });
+
 
 describe('invariant 9 — CAPEX routes to a 15xx asset, never a P&L line', () => {
   it('debits 1510, and 1510 is typed asset, not expense', async () => {
@@ -1062,8 +1113,10 @@ describe('overdrawing an expense account — warn for cashier, block for office 
       const [cash] = await tx<{ id: string }[]>`
         select id from accounts where org_id = ${orgId} and code = ${code}
       `;
+      // ⚠️ 3900 for the same reason as fundAccount above — draining a till is an opening-balance
+      // adjustment, not an owner's drawing.
       const [equity] = await tx<{ id: string }[]>`
-        select id from accounts where org_id = ${orgId} and code = '3200'
+        select id from accounts where org_id = ${orgId} and code = '3900'
       `;
       await tx`
         insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit)

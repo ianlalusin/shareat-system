@@ -83,6 +83,8 @@ export interface ExpenseRow {
   totalAmount: string;
   categoryId: string;
   supplierId: string | null;
+  /** T-127: which owner a PERSONAL expense is a drawing against. Null for every other category. */
+  ownerId: string | null;
   particulars: string;
   receiptPhotoUrl: string | null;
   /** ⭐ The brokered receipt (T-141). The gate checks THIS, not the URL string. */
@@ -106,6 +108,7 @@ const EXPENSE_COLUMNS = {
   totalAmount: expenses.totalAmount,
   categoryId: expenses.categoryId,
   supplierId: expenses.supplierId,
+  ownerId: expenses.ownerId,
   particulars: expenses.particulars,
   receiptPhotoUrl: expenses.receiptPhotoUrl,
   receiptFileId: expenses.receiptFileId,
@@ -127,6 +130,7 @@ export interface InsertExpenseInput {
   totalAmount: string;
   categoryId: string;
   supplierId: string | null;
+  ownerId?: string | null;
   particulars: string;
   receiptPhotoUrl: string | null;
   createdBy: string;
@@ -142,6 +146,7 @@ export async function insertExpense(tx: Tx, input: InsertExpenseInput): Promise<
       totalAmount: input.totalAmount,
       categoryId: input.categoryId,
       supplierId: input.supplierId,
+      ownerId: input.ownerId ?? null,
       particulars: input.particulars,
       receiptPhotoUrl: input.receiptPhotoUrl,
       createdBy: input.createdBy,
@@ -189,6 +194,7 @@ export interface UpdateExpenseDraftInput {
   totalAmount?: string;
   categoryId?: string;
   supplierId?: string | null;
+  ownerId?: string | null;
   particulars?: string;
   receiptPhotoUrl?: string | null;
 }

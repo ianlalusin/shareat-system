@@ -35,6 +35,12 @@ export interface CreateExpenseInput {
   businessDate: string;
   categoryId: string;
   supplierId?: string | null;
+  /**
+   * ⭐ T-127: which owner a PERSONAL expense is a drawing against. Null for every other category.
+   * ⚠️ Not validated here — a DRAFT may legitimately exist before the owner is chosen. `approve`
+   * blocks, naming the reason, the same way an unmapped category does (invariant 7).
+   */
+  ownerId?: string | null;
   particulars: string;
   receiptPhotoUrl?: string | null;
   payments: CreateExpensePaymentInput[];
@@ -81,6 +87,7 @@ async function runCreateExpense(tx: Tx, actor: Actor, input: CreateExpenseInput)
     totalAmount,
     categoryId: input.categoryId,
     supplierId: input.supplierId ?? null,
+    ownerId: input.ownerId ?? null,
     particulars,
     receiptPhotoUrl: input.receiptPhotoUrl ?? null,
     createdBy: actor.personId,

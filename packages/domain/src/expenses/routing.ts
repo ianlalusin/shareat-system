@@ -89,11 +89,28 @@ export interface RoutingPayment {
 
 export type RoutingLineSide = 'debit' | 'credit';
 
+/** Owner's drawings. ⚠️ Party-requiring since T-127 — see `RoutingInput.owner`. */
+export const OWNER_DRAWINGS_CODE = '3200';
+/** Due from owners — a personal expense the business EXPECTS BACK. Party-requiring, T-127. */
+export const DUE_FROM_OWNER_CODE = '1260';
+
+export interface PersonalExpenseOwner {
+  /** The `owners` row — the party on both possible lines. */
+  id: string;
+  /**
+   * ⭐ `repayable` → `1260` Due from owners. `drawing` → `3200` Owner's drawings.
+   *
+   * ⛔ It is the ONE decision made at the expense, and it is the line the tax treatment turns on:
+   * a payment made with no expectation of repayment is a distribution however it is labelled.
+   */
+  treatment: 'repayable' | 'drawing';
+}
+
 export interface RoutingLine {
   accountCode: string;
   side: RoutingLineSide;
   amount: Money;
-  partyType?: 'supplier' | 'employee' | 'money_account';
+  partyType?: 'supplier' | 'employee' | 'money_account' | 'owner';
   partyId?: string | null;
   lineMemo?: string | null;
 }
@@ -191,6 +208,22 @@ export interface RoutingInput {
   /** Null when the category has no seeded/decided account — invariant 7. */
   categoryAccountCode: string | null;
   payments: RoutingPayment[];
+  /**
+   * ⭐ **The owner a PERSONAL expense belongs to.** Null for every other category.
+   *
+   * > **Ian, 2026-08-27:** *"personal expense must be parked at owner's drawing, not automatically
+   * > posted against it. It might be posted against owner's salary if they are given; if owner's
+   * > salary does not exist then owner's drawing."*
+   *
+   * ⛔ **So `3200` is the FALLBACK, not the default.** A personal expense by a salaried owner is an
+   * advance against their pay — recoverable, netted off at payroll — and booking it as a drawing
+   * would permanently reduce equity for money the business is going to get back.
+   *
+   * ⚠️ Without an owner at all, a personal expense escapes that owner's drawing limit, which is
+   * summed from `3200` by owner. Same shape as `staffId` on a reimbursable payment (invariant 3):
+   * the account decides a party is needed, and the document has to supply it.
+   */
+  owner?: PersonalExpenseOwner | null;
 }
 
 /**
@@ -235,12 +268,39 @@ export function routeExpense(input: RoutingInput): RoutingResult {
     };
   }
 
-  lines.push({
-    accountCode: input.categoryAccountCode,
-    side: 'debit',
-    amount: input.totalAmount,
-    lineMemo: input.categoryName,
-  });
+  // ⭐ A PERSONAL expense does not have ONE account — it has two, and the owner decides which.
+  // Invariant 7's rule applies unchanged: an unresolvable posting BLOCKS and names its reason, and
+  // it never defaults to "some owner".
+  if (input.categoryAccountCode === OWNER_DRAWINGS_CODE) {
+    if (!input.owner) {
+      return {
+        ok: false,
+        reason:
+          `category "${input.categoryName}" is a personal expense, which belongs to a specific ` +
+          `owner — say which owner, or it escapes that owner's drawing limit`,
+      };
+    }
+    // ⛔ Repayable → a RECEIVABLE, not a drawing. Reducing equity for money the business intends to
+    // get back would be wrong twice over: equity down, and a receivable nothing records. How a 1260
+    // balance later CLEARS — cash, payroll recovery, or written off to 3200 — is a separate act with
+    // its own date and author, which is why it is not a routing choice here.
+    const repayable = input.owner.treatment === 'repayable';
+    lines.push({
+      accountCode: repayable ? DUE_FROM_OWNER_CODE : OWNER_DRAWINGS_CODE,
+      side: 'debit',
+      amount: input.totalAmount,
+      lineMemo: repayable ? `${input.categoryName} — owed back` : input.categoryName,
+      partyType: 'owner' as const,
+      partyId: input.owner.id,
+    });
+  } else {
+    lines.push({
+      accountCode: input.categoryAccountCode,
+      side: 'debit',
+      amount: input.totalAmount,
+      lineMemo: input.categoryName,
+    });
+  }
 
   if (lines.length < 2) {
     return { ok: false, reason: 'fewer than two non-zero lines — cannot form a balanced entry' };

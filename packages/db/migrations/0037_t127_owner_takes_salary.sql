@@ -1,0 +1,22 @@
+-- 0037 — T-127: where a PERSONAL expense actually lands.
+--
+-- HAND-WRITTEN, like 0020-0036. See DEF-073 for why `db:generate` cannot be used here.
+--
+-- ⭐ Ian, 2026-08-27: "personal expense must be parked at owner's drawing, not automatically posted
+-- against it. It might be posted against owner's salary if they are given; if owner's salary does
+-- not exist then owner's drawing."
+--
+-- A personal expense put through the business is NOT automatically a reduction of equity:
+--
+--   owner takes a salary  ->  DR 1230 Advances to employees, party = the owner's PERSON.
+--                             An advance against pay, netted off when payroll runs. RECOVERABLE.
+--   owner takes no salary ->  DR 3200 Owner's drawings, party = the owner. Equity goes down.
+--
+-- ⚠️ Separate from 0036 because 0036 is already applied, and this project does not edit an applied
+-- migration (bible §15.5) even when the edit is one column and the table is a day old.
+--
+-- ⚠️ A FLAG, not a derivation, and only until payroll exists. An owner "takes a salary" if they are
+-- on the payroll; v2 has no payroll yet. ⛔ When payroll lands, derive it and DROP this column — a
+-- flag that can disagree with the payroll it describes is exactly the shape DEF-044 punishes.
+
+ALTER TABLE "owners" ADD COLUMN "takes_salary" boolean DEFAULT false NOT NULL;

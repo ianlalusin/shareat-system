@@ -253,6 +253,34 @@
       "when": 1789097507084,
       "tag": "0035_t144_staff_float_party",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1789183907084,
+      "tag": "0036_t127_owner_equity",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1789270307084,
+      "tag": "0037_t127_owner_takes_salary",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1789356707084,
+      "tag": "0038_t127_two_route_and_drawing_close",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1789443107084,
+      "tag": "0039_t127_expense_owner",
+      "breakpoints": true
     }
   ]
 }

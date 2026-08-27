@@ -209,6 +209,24 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'it must be closed BEFORE the cutover rather than inherited: v2 opens on a zero starting ' +
       'point, and a float with no ledger behind it is money nobody can account for.',
   },
+  owner_drawing_closes: {
+    class: 'purge',
+    reason:
+      'An attestation ABOUT a month of drawings — and those drawings are purged with the rest of ' +
+      'the ledger. ⛔ Keeping the close without the postings it agreed to would leave a signed ' +
+      'statement pointing at nothing, which is worse than no statement: it reads as evidence. ' +
+      '⚠️ v2 opens on a zero starting point, so the first month closes against a fresh ledger.',
+  },
+  owners: {
+    class: 'keep',
+    reason:
+      'WHO the owners are, what share they claim, and what they may withdraw — identity and ' +
+      'policy, not activity. The partnership does not dissolve because the books restarted. ' +
+      '⭐ There are no balances on this table to clear: the position is summed from 3100 and 3200, ' +
+      'and the ledger behind it purges with everything else, so a kept owner correctly reads ZERO ' +
+      'contributed on day one. ⚠️ That is not a loss — v2 assumes a zero starting point, and prior ' +
+      'capital arrives as an opening balance if it arrives at all.',
+  },
   loans: {
     class: 'keep',
     reason:

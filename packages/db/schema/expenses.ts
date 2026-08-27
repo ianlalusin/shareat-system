@@ -39,6 +39,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { journalEntries } from './journal';
 import { organizations } from './organizations';
+import { owners } from './owners';
 import { persons } from './persons';
 import { stores } from './stores';
 import { moneyAccounts } from './money-accounts';
@@ -107,6 +108,18 @@ export const expenses = pgTable(
     // Opaque text, not a FK — no suppliers table exists until Wave 3 (spec §1). Read only
     // when a payment's method is 'credit' (the AP party).
     supplierId: text('supplier_id'),
+    /**
+     * ⭐ **Which owner a PERSONAL expense belongs to.** Null for every other category. T-127.
+     *
+     * ⚠️ A personal expense IS a drawing — that is why invariant 8 routes it to `3200` rather than
+     * to a P&L line. `3200` is party-requiring, and this column is the party.
+     *
+     * ⛔ **Without it a personal expense escapes that owner's drawing limit**, which is summed from
+     * `3200` by owner. Same shape as `expense_payments.staff_id` on a reimbursable leg: the account
+     * decides a party is needed, and the document supplies it. Enforced at approve, not here — a
+     * DRAFT may exist before the owner is chosen.
+     */
+    ownerId: uuid('owner_id').references(() => owners.id, { onDelete: 'restrict' }),
     particulars: text('particulars').notNull(),
     // The receipt-photo gate (§5, DEF-055): every expense recorded through this module is
     // external by construction, so "no photo, no posting" is simply "this must be set

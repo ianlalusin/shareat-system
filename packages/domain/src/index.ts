@@ -17,3 +17,4 @@ export * from './remittance';
 export * from './files';
 export * from './loans';
 export * from './cash-requests';
+export * from './owners';

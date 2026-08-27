@@ -689,7 +689,7 @@ async function capexExpense(f: Fixture, amount: string): Promise<string> {
       select id from accounts where org_id = ${f.orgId} and code = '1110'
     `;
     const [equity] = await tx<{ id: string }[]>`
-      select id from accounts where org_id = ${f.orgId} and code = '3200'
+      select id from accounts where org_id = ${f.orgId} and code = '3900'
     `;
     await tx`
       insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit)

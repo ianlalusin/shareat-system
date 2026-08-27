@@ -305,7 +305,9 @@ describe('invariant 3 — undeposited funds is a GROUP BY, not an account', () =
     // figure exists to make: undeposited means "has not reached the office yet", not "is cash".
     await postLegs(f, '2026-01-11', [
       { code: '1130', debit: '90000.00', credit: '0' },
-      { code: '3100', debit: '0', credit: '90000.00' },
+      // ⚠️ 3900, not 3100: putting cash in the office safe at setup is an opening balance, not a
+      // capital contribution by a named owner. T-127 made 3100 party-requiring and surfaced it.
+      { code: '3900', debit: '0', credit: '90000.00' },
     ]);
     // A staff float is out with staff, which is also not the cashier's undeposited money.
     await postLegs(f, '2026-01-11', [

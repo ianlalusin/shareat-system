@@ -12,7 +12,7 @@
  * checked first" philosophy.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { expensesRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
+import { expensesRepo, moneyAccountsRepo, ownersRepo, transaction, type Tx } from '@shareat/db';
 import { money } from '@shareat/core/money';
 import { filesRepo } from '@shareat/db';
 import { checkDraw } from '../money-accounts/overdraft';
@@ -166,11 +166,20 @@ async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promi
     if (warning) warnings.push(warning);
   }
 
+  // ⚠️ Looked up unconditionally rather than only for PERSONAL categories: a null here has to mean
+  // "no owner named", never "we did not check", or the block below would silently stop firing.
+  const owner = expense.ownerId
+    ? await ownersRepo.getById(tx, actor.orgId, expense.ownerId)
+    : null;
+
   const routed = routeExpense({
     totalAmount: money(expense.totalAmount),
     supplierId: expense.supplierId,
     categoryName: category.category,
     categoryAccountCode: category.accountCode,
+    // ⭐ T-127: a PERSONAL expense belongs to an owner, and that owner's policy decides whether it
+    // is a receivable (1260) or a drawing (3200). Resolved here because `routeExpense` is pure.
+    owner: owner && { id: owner.id, treatment: owner.personalExpenseTreatment },
     payments: payments.map((p) => ({
       method: p.method,
       amount: money(p.amount),

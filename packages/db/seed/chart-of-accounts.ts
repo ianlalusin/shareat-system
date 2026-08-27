@@ -140,6 +140,11 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
   leaf('1230', 'Advances to employees', 'asset', 'debit', '1000', { requiresParty: true }), // control; staff_advance__{staffId} — T-118 party_type=employee
   leaf('1240', 'Advances to suppliers', 'asset', 'debit', '1000', { requiresParty: true }), // control; supplier_advance__{supplierId} — T-118 party_type=supplier
   leaf('1250', 'Due from related store', 'asset', 'debit', '1000', { requiresParty: true }), // asset__due_from_{storeKey}, ar__{branchAsCustomer} — T-118 party_type=store
+  // ⭐ T-127. ⛔ A personal expense the business EXPECTS BACK is a receivable, not a drawing — and
+  // that distinction is the one the tax treatment turns on: a payment made with no expectation of
+  // repayment is a distribution however it is labelled. ⚠️ An AGED balance here is a finding, not a
+  // balance: an owner receivable sitting for months is what gets reclassified on examination.
+  leaf('1260', 'Due from owners', 'asset', 'debit', '1000', { requiresParty: true }), // 🆕 — T-118 party_type=owner
   leaf('1310', 'Inventory — raw materials', 'asset', 'debit', '1000'), // 🆕
   leaf('1320', 'Inventory — supplies and packaging', 'asset', 'debit', '1000'), // 🆕
   leaf('1330', 'Inventory — prepped / commissary goods', 'asset', 'debit', '1000'), // 🆕
@@ -223,7 +228,14 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
   // ---------------------------------------------------------------------------------
   // Equity 3xxx
   // ---------------------------------------------------------------------------------
-  leaf('3100', "Owner's capital", 'equity', 'credit', '3000', { legacyCode: 'equity__capital' }),
+  // ⭐ PARTY-REQUIRING SINCE T-127. ⚠️ v1 DOES attribute equity — it puts `employeeId: ownerId` on
+  // the journal entry (equity-movement.builder.ts:57), a field named for something an owner is not.
+  // Moving it to the LINE is what makes v1's three stored totals (totalCapital / totalDrawings /
+  // netEquity) unnecessary rather than merely redundant: every figure becomes a GROUP BY. DEF-072.
+  leaf('3100', "Owner's capital", 'equity', 'credit', '3000', {
+    legacyCode: 'equity__capital',
+    requiresParty: true,
+  }),
   // FLAGGED — see task report. Standard practice treats Owner's Drawings as CONTRA-equity
   // (debit-normal). Contract §3 names "two deliberate exceptions" totalling six accounts
   // but its own list only enumerates five (1590 + four contra-revenue), and 3200 is not
@@ -234,7 +246,11 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
   // alongside 1590 and the four contra-revenue accounts. Corrected 2026-08-23 (T-102 spec
   // named six exceptions but enumerated only five; the implementer flagged it rather than
   // guessing, which is why it is right).
-  leaf('3200', "Owner's drawings", 'equity', 'debit', '3000'), // 🆕 — never used in v1
+  // ⛔ v1 nets drawings straight into equity__capital — its builder says so: "A separate
+  // equity__drawings contra account is NOT used". That destroys both figures: a partner who put in
+  // ₱500,000 and drew ₱300,000 becomes indistinguishable from one who contributed ₱200,000 and never
+  // withdrew. A balance sheet shows "capital contributed" and "less: drawings" as separate lines.
+  leaf('3200', "Owner's drawings", 'equity', 'debit', '3000', { requiresParty: true }), // 🆕 — never used in v1
   leaf('3300', 'Retained earnings', 'equity', 'credit', '3000'), // 🆕
   leaf('3900', 'Opening balance equity', 'equity', 'credit', '3000', {
     legacyCode: 'equity__opening_balance',

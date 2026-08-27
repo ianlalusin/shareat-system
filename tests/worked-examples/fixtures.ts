@@ -33,7 +33,8 @@ export type PartyType =
   | 'channel'
   | 'money_account'
   | 'loan'
-  | 'cash_request';
+  | 'cash_request'
+  | 'owner';
 
 export interface PartyRef {
   type: PartyType;
@@ -874,7 +875,7 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
     input: { amount: '100000.00', method: 'cash' },
     expect: [
       D('1110', '100000.00', null, { lineMemo: "owner's capital contribution" }),
-      C('3100', '100000.00', null, { lineMemo: "owner's capital increased" }),
+      C('3100', '100000.00', { type: 'owner', id: 'owner:OWNER-01' }, { lineMemo: "owner's capital increased" }),
     ],
     entryDate: '2026-01-08',
   },
@@ -889,7 +890,7 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
       'actually used this category — v2 designs it right rather than migrating a broken pattern.',
     input: { amount: '25000.00', method: 'cash' },
     expect: [
-      D('3200', '25000.00', null, { lineMemo: "owner's drawing" }),
+      D('3200', '25000.00', { type: 'owner', id: 'owner:OWNER-01' }, { lineMemo: "owner's drawing" }),
       C('1110', '25000.00', null, { lineMemo: 'cash out' }),
     ],
     entryDate: '2026-01-09',
@@ -989,7 +990,11 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
     // double it — invariant 10's own db proof caught that mistake during development.
     expect: [
       D('3900', '333000.00', null, { lineMemo: 'clear opening balance equity' }),
-      C('3100', '333000.00', null, { lineMemo: "reclassified to owner's capital" }),
+      // ⭐ T-127 made 3100 party-requiring, and this fixture is where that bites hardest — in a
+      // GOOD way. "Reclassify the opening balance into the owner's capital" begs the question the
+      // narrative never asked: WHOSE? With three partners, an unattributed 3100 is precisely the
+      // blended number the party exists to prevent, and the cutover is the worst moment to blend it.
+      C('3100', '333000.00', { type: 'owner', id: 'owner:OWNER-01' }, { lineMemo: "reclassified to owner's capital" }),
     ],
     entryDate: '2027-01-01',
     trap: 'A LINGERING or FORCE-ZEROED residual on 3900 is never a formality to clear — it is a ' +

@@ -291,13 +291,16 @@ describe('invariant 9 — codes are unique per org, and the same code seeds inde
 });
 
 describe('invariant 10 — account count matches the (amended) COA-ALIGNMENT list exactly', () => {
+  // ⭐ 95 -> 96 on 2026-08-27 (T-127): 1260 Due from owners. A personal expense the business
+  // EXPECTS BACK is a receivable, not a reduction of equity — and that distinction is the one the
+  // tax treatment turns on.
   // ⭐ 93 -> 95 on 2026-08-25 (T-123, bible row 134). Two accounts, and the pair is the point:
   //   2160 Service charge payable to employees — a LIABILITY. RA 11360 sends 100% of service
   //        charge to rank-and-file staff, so the business collects as an agent and keeps none.
   //   4500 Other charges — leftover, packaging and similar. INCOME; the business keeps these.
   // Two things that look identical on a bill and are opposite in the books. This count is a PIN,
   // so changing it is a deliberate act — which is exactly why it caught the addition.
-  it('the seed data has exactly 95 accounts — 7 headers + 88 leaves', () => {
+  it('the seed data has exactly 96 accounts — 7 headers + 89 leaves', () => {
     // Originally 75 (7 headers + 68 leaves) under T-102. See task report for the
     // reasoning behind 75 rather than a literal reading of the §2 summary tables (77):
     // 1520/1530 (Property and equipment sub-range) are deliberately not seeded as rows —
@@ -310,17 +313,17 @@ describe('invariant 10 — account count matches the (amended) COA-ALIGNMENT lis
     // is forward-corrected rather than left silently wrong (bible §2 rule 8 precedent:
     // an applied migration is never edited, but a test asserting a now-superseded fact
     // is updated forward, the same way migration 0002 corrected 3200 forward).
-    expect(CHART_OF_ACCOUNTS.length).toBe(95);
+    expect(CHART_OF_ACCOUNTS.length).toBe(96);
     const headers = CHART_OF_ACCOUNTS.filter((a) => a.parentCode === null);
     expect(headers.length).toBe(7);
-    expect(CHART_OF_ACCOUNTS.length - headers.length).toBe(88);
+    expect(CHART_OF_ACCOUNTS.length - headers.length).toBe(89);
   });
 
   it('every account actually lands in the database for a freshly seeded org', async () => {
     const orgId = await insertOrg('inv10');
     await seedChartOfAccounts(sql, orgId);
     const rows = await fetchAccounts(orgId);
-    expect(rows.length).toBe(95); // amended by T-102b, then T-123 (2160, 4500) — see comments
+    expect(rows.length).toBe(96); // T-102b, T-123 (2160, 4500), T-127 (1260) — see comments
   });
 
   it('4200 is not seeded — REVENUE AMENDMENT, take-out folded into 4150', async () => {
@@ -549,18 +552,18 @@ describe('T-102b invariant 5 — re-running the seed inserts nothing and changes
 });
 
 describe('T-102b invariant 6 — total account count is 92 (T-102\'s 75 + these 17)', () => {
-  it('the seed data has exactly 95 accounts', () => {
-    expect(CHART_OF_ACCOUNTS.length).toBe(95);
+  it('the seed data has exactly 96 accounts', () => {
+    expect(CHART_OF_ACCOUNTS.length).toBe(96);
     const headers = CHART_OF_ACCOUNTS.filter((a) => a.parentCode === null);
     expect(headers.length).toBe(7);
-    expect(CHART_OF_ACCOUNTS.length - headers.length).toBe(88);
+    expect(CHART_OF_ACCOUNTS.length - headers.length).toBe(89);
   });
 
   it('every account lands in the database for a freshly seeded org', async () => {
     const orgId = await insertOrg('102b-inv6');
     await seedChartOfAccounts(sql, orgId);
     const rows = await fetchAccounts(orgId);
-    expect(rows.length).toBe(95);
+    expect(rows.length).toBe(96);
   });
 });
 
@@ -712,14 +715,26 @@ const REQUIRES_PARTY_EXPECTED_CODES = [
   // `online__{id}` GL account per wallet instead, and its chart grew with the business.
   '1140', // E-wallet / online channels -> money_account
   // ⭐ T-144, bible row 159, and v1 does NOT do this — POSTING-PATTERNS records 1120 there as "a
-  // plain asset, not a control account with a subledger". But one store has ONE staff-float
-  // account and TWO PEOPLE CAN HOLD FLOATS AT ONCE: without a party, ₱2,000 with Ana and ₱3,000
-  // with Ben is one indistinguishable ₱5,000, and "who still owes a liquidation?" needs a second
-  // register — which is how v1's loans ended up with three.
+  // plain asset, not a control account with a subledger". ⚠️ v1 still knows the holder, from the
+  // request document; what it cannot do is decompose 1120 WITHOUT that document, because one store
+  // has ONE staff-float account and two people can hold floats at once. Which is exactly why v1
+  // stores `remainingAmount` on the request — the figure lives there because the ledger could not
+  // produce it.
   '1120', // Cash on hand — staff custodian -> cash_request
+  // ⭐ T-127. ⛔ A personal expense the business expects back is a RECEIVABLE, and a drawing limit
+  // that only watched 3200 would be bypassed by marking every one of them repayable — the money
+  // leaves, this grows, and the cap never moves.
+  '1260', // Due from owners -> owner
+  // ⭐ T-127. ⚠️ Same correction applies: v1 DOES attribute equity, via `employeeId` on the entry.
+  // The defect is the THREE registers (DEF-072) — totalCapital, totalDrawings and netEquity on the
+  // owner doc, plus EquityLedgerEntry's own balanceBefore/After. A party on the line is what makes
+  // all of them unnecessary. ⛔ And 3200 exists at all because v1 nets drawings into capital, which
+  // makes "contributed ₱500k, drew ₱300k" indistinguishable from "contributed ₱200k".
+  '3100', // Owner's capital  -> owner
+  '3200', // Owner's drawings -> owner
 ];
 
-describe('T-118 invariant 7 (+ ADR-010) — exactly the ten control accounts are requires_party = true; every other account is false', () => {
+describe('T-118 invariant 7 (+ ADR-010) — exactly the twelve control accounts are requires_party = true; every other account is false', () => {
   it('REQUIRES_PARTY_CODES matches the Contract §2 table exactly', () => {
     expect(new Set(REQUIRES_PARTY_CODES)).toEqual(new Set(REQUIRES_PARTY_EXPECTED_CODES));
   });

@@ -126,18 +126,48 @@ describe('routeExpense', () => {
     // 6900 or anywhere else; "6900" appears in `reason` only as prose naming the rule.
   });
 
-  it('invariant 8 — PERSONAL routes to 3200, contra-equity, not an expense account', () => {
-    const result = routeExpense({
-      totalAmount: money('1000.00'),
-      supplierId: null,
-      categoryName: "Personal — owner's drawing",
-      categoryAccountCode: '3200',
-      payments: [cash('1000.00')],
-    });
+  // ⭐ T-127 SPLIT THIS IN TWO. A personal expense has no single account: it is a DRAWING only when
+  // the business does not expect the money back, and a RECEIVABLE when it does. That is the line the
+  // tax treatment turns on — a payment made with no expectation of repayment is a distribution
+  // however it is labelled — and it is decided per owner, not per category.
+  const personal = (treatment: 'repayable' | 'drawing') => ({
+    totalAmount: money('1000.00'),
+    supplierId: null,
+    categoryName: "Personal — owner's expense",
+    categoryAccountCode: '3200',
+    payments: [cash('1000.00')],
+    owner: { id: 'owner-1', treatment },
+  });
+
+  it("invariant 8 — a NON-repayable personal expense routes to 3200, contra-equity, not an expense account", () => {
+    const result = routeExpense(personal('drawing'));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const classification = result.lines.find((l) => l.side === 'debit')!;
     expect(classification.accountCode).toBe('3200');
+    // The party is what lets a drawing limit see it at all.
+    expect(classification.partyType).toBe('owner');
+    expect(classification.partyId).toBe('owner-1');
+  });
+
+  it('⭐ invariant 8b — a REPAYABLE personal expense routes to 1260, a receivable, not to equity', () => {
+    const result = routeExpense(personal('repayable'));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const classification = result.lines.find((l) => l.side === 'debit')!;
+    // ⛔ Booking this as a drawing would reduce equity for money the business intends to get back.
+    expect(classification.accountCode).toBe('1260');
+    expect(classification.partyType).toBe('owner');
+  });
+
+  it('⛔ invariant 8c — a personal expense with NO owner BLOCKS, naming the reason', () => {
+    const { owner: _omitted, ...noOwner } = personal('drawing');
+    const result = routeExpense(noOwner);
+    // Invariant 7's rule, unchanged: an unresolvable posting blocks. It never defaults to "some
+    // owner", because an unattributed personal expense escapes that owner's drawing limit entirely.
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toMatch(/belongs to a specific owner/);
   });
 
   it('invariant 9 — CAPEX routes to a 15xx asset, not a P&L line', () => {
