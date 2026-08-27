@@ -12,22 +12,59 @@ import { judgeDraw } from '../../src/money-accounts/overdraft';
  * expense or from a transfer.
  */
 describe('judgeDraw', () => {
-  const cashier = { name: 'Cashier drawer', custodian: 'cashier' as const };
-  const office = { name: 'Office safe', custodian: 'office' as const };
-  const staff = { name: 'Ana float', custodian: 'staff' as const };
+  // ⚠️ Every account carries an overdraft limit, but only a CASHIER one consults it — office and
+  // staff balances are complete, so they block at zero regardless of what this says.
+  const cashier = { name: 'Cashier drawer', custodian: 'cashier' as const, overdraftLimit: '20000.00' };
+  const office = { name: 'Office safe', custodian: 'office' as const, overdraftLimit: '20000.00' };
+  const staff = { name: 'Ana float', custodian: 'staff' as const, overdraftLimit: '20000.00' };
 
   it('says nothing at all when the money is there', () => {
     expect(judgeDraw(cashier, 1000, 400)).toEqual({ blocked: false });
     expect(judgeDraw(office, 1000, 1000)).toEqual({ blocked: false });
   });
 
-  it('⭐ WARNS but does not block a cashier drawer', () => {
+  it('⭐ WARNS but does not block a cashier drawer WITHIN its overdraft', () => {
     const v = judgeDraw(cashier, 1000, 1500);
     expect(v.blocked).toBe(false);
     // The message has to explain the timing, or it reads as an accusation. A cashier who can see
     // ₱40,000 in front of them will not trust a system that says the drawer is empty.
     expect(v.message).toMatch(/short 500\.00/);
     expect(v.message).toMatch(/unverified/);
+  });
+
+  it('⛔ BLOCKS a cashier drawer once it would pass its overdraft limit', () => {
+    // ⭐ Ian, 2026-08-27: "it can't be unlimited, so admin can set it. If the set is 20,000 that is
+    // the only allowable negative balance a cashier is allowed to."
+    //
+    // ⚠️ Row 154's unverified-day reasoning has no floor of its own — it justifies a drawer being
+    // ₱2,000 behind and equally ₱2,000,000 behind. This is where the two stop being the same thing.
+    const v = judgeDraw(cashier, 1000, 22000);
+    expect(v.blocked).toBe(true);
+    expect(v.message).toMatch(/would go to −21000\.00/);
+    expect(v.message).toMatch(/past the 20000\.00 overdraft/);
+  });
+
+  it('⭐ the boundary is where the balance LANDS, not how big the draw is', () => {
+    // Exactly at the limit is allowed — −0 to −20,000 inclusive.
+    expect(judgeDraw(cashier, 0, 20000).blocked).toBe(false);
+    // One peso past it is not.
+    expect(judgeDraw(cashier, 0, 20001).blocked).toBe(true);
+    // ⚠️ And a HUGE draw against a well-funded drawer is fine, because it lands inside the limit —
+    // judging the draw instead of the resulting balance would refuse this wrongly.
+    expect(judgeDraw(cashier, 100000, 105000).blocked).toBe(false);
+  });
+
+  it('⛔ a limit of ZERO means this drawer may never go below zero at all', () => {
+    const strict = { ...cashier, overdraftLimit: '0.00' };
+    expect(judgeDraw(strict, 1000, 1000).blocked).toBe(false);
+    expect(judgeDraw(strict, 1000, 1000.01).blocked).toBe(true);
+  });
+
+  it('⚠️ the limit is IGNORED for office and staff — their balances are complete', () => {
+    const generous = { ...office, overdraftLimit: '999999.00' };
+    // A limit column exists on every account, but consulting it here would invent an overdraft for
+    // an account whose balance has nothing outstanding to explain a shortfall.
+    expect(judgeDraw(generous, 1000, 1500).blocked).toBe(true);
   });
 
   it('⛔ BLOCKS an office safe and a staff float — their balances are complete', () => {

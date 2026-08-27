@@ -78,6 +78,8 @@ export async function renameMoneyAccountAction(formData: FormData): Promise<void
       renameMoneyAccount(tx, actor, {
         moneyAccountId: str(formData, 'moneyAccountId'),
         name: str(formData, 'name'),
+        // ⚠️ Blank means "leave it alone", not "set it to zero" — zero is a real, strict setting.
+        overdraftLimit: str(formData, 'overdraftLimit') || null,
       }),
     );
   } catch (err) {

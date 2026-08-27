@@ -36,6 +36,8 @@ export interface MoneyAccountRow {
   /** ⭐ One of the five every store must always have (bible row 156). Un-retirable while the
    *  store is active; the NAME is still editable, which is the point of the flag. */
   isFoundation: boolean;
+  /** ⭐ How far below zero a CASHIER drawer may go. Positive; office/staff ignore it. */
+  overdraftLimit: string;
   notes: string | null;
   createdAt: Date;
 }
@@ -50,6 +52,7 @@ const COLUMNS = {
   custodian: moneyAccounts.custodian,
   isActive: moneyAccounts.isActive,
   isFoundation: moneyAccounts.isFoundation,
+  overdraftLimit: moneyAccounts.overdraftLimit,
   notes: moneyAccounts.notes,
   createdAt: moneyAccounts.createdAt,
 } as const;
@@ -310,7 +313,7 @@ export async function renameMoneyAccount(
   tx: Tx,
   orgId: string,
   id: string,
-  input: { name: string; notes: string | null },
+  input: { name: string; notes: string | null; overdraftLimit?: string },
 ): Promise<void> {
   const updated = await tx
     .update(moneyAccounts)

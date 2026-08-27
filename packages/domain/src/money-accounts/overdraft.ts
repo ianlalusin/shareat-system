@@ -44,7 +44,7 @@ const OK: DrawVerdict = { blocked: false };
  * @param drawn     the total leaving this account, summed across every line of a split
  */
 export function judgeDraw(
-  account: Pick<MoneyAccountRow, 'name' | 'custodian'>,
+  account: Pick<MoneyAccountRow, 'name' | 'custodian' | 'overdraftLimit'>,
   available: number,
   drawn: number,
 ): DrawVerdict {
@@ -54,19 +54,45 @@ export function judgeDraw(
   const holds = available.toFixed(2);
 
   if (account.custodian === 'cashier') {
-    // ⚠️ A WARNING, NOT A REFUSAL. The till's true balance is unknowable until the day is
-    // verified, so this is a "look at this", not a "you are wrong".
+    const limit = Number(account.overdraftLimit);
+    // ⭐ Where the balance LANDS, not how big the draw is. A ₱50,000 draw against a ₱49,000 drawer
+    // leaves it ₱1,000 behind, which is ordinary; a ₱1,000 draw against a drawer already ₱19,500
+    // behind is what pushes it past the cap.
+    const after = available - drawn;
+
+    if (-after <= limit) {
+      // ⚠️ A WARNING, NOT A REFUSAL. The till's true balance is unknowable until the day is
+      // verified, so this is a "look at this", not a "you are wrong".
+      return {
+        blocked: false,
+        message:
+          `"${account.name}" is short ${short} against the books (holds ${holds}, this takes ` +
+          `${drawn.toFixed(2)}). That is expected while today's sales are unverified — the cash is ` +
+          'in the till before it is in the ledger. If the day IS verified, the drawer is genuinely ' +
+          `over-spent and needs counting. Allowed down to −${limit.toFixed(2)}.`,
+      };
+    }
+
+    // ⛔ PAST THE CAP — and this is where "legitimately behind" stops.
+    //
+    // > **Ian, 2026-08-27:** *"how deep can a cashier account be negative — it can't be unlimited,
+    // > so admin can set it."*
+    //
+    // ⚠️ Row 154's reasoning has no floor of its own: the unverified-day argument justifies a
+    // drawer being ₱2,000 behind and equally ₱2,000,000 behind. The first is a bookkeeping lag; the
+    // second is a missing drawer, and nothing in the ledger could tell them apart.
     return {
-      blocked: false,
+      blocked: true,
       message:
-        `"${account.name}" is short ${short} against the books (holds ${holds}, this takes ` +
-        `${drawn.toFixed(2)}). That is expected while today's sales are unverified — the cash is ` +
-        'in the till before it is in the ledger. If the day IS verified, the drawer is genuinely ' +
-        'over-spent and needs counting.',
+        `"${account.name}" would go to −${(-after).toFixed(2)}, past the ${limit.toFixed(2)} ` +
+        `overdraft this drawer is allowed (holds ${holds}, this takes ${drawn.toFixed(2)}). ` +
+        'A cashier drawer is expected to run behind while the day is unverified, but not this far. ' +
+        'Verify the day, remit what is in the till, or raise the limit deliberately.',
     };
   }
 
-  // ⛔ Office and staff balances are complete, so this is a real shortfall.
+  // ⛔ Office and staff balances are complete, so this is a real shortfall — no overdraft applies,
+  // and the limit column is not consulted for them at all.
   return {
     blocked: true,
     message:
@@ -76,10 +102,6 @@ export function judgeDraw(
   };
 }
 
-/**
- * Reads the account's ledger balance and judges the draw. Throws when blocked; otherwise returns
- * the warning to be surfaced, or `null` when there is nothing to say.
- */
 export async function checkDraw(
   tx: Tx,
   orgId: string,

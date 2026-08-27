@@ -702,6 +702,49 @@ describe('the refusals', () => {
     ).rejects.toThrow(/another store/);
   });
 
+  it('⛔ a cashier drawer is REFUSED past its overdraft cap, through a real posting', async () => {
+    const f = await fixture('cap');
+    const id = await owner(f);
+    const [drawer] = await sql<{ id: string }[]>`
+      select id from money_accounts where store_id = ${f.storeId}
+        and instrument = 'cash' and custodian = 'cashier' and is_foundation
+    `;
+    // ⭐ Ian, 2026-08-27: "it can't be unlimited, so admin can set it."
+    // ⚠️ The drawer holds ₱500,000 — fund() debits 1110, which IS this account's GL code. With a
+    // ₱5,000 cap, a ₱506,000 draw lands at −₱6,000 and is refused. (My first version of this test
+    // assumed an empty drawer and passed for the wrong reason.)
+    await sql`update money_accounts set overdraft_limit = '5000.00' where id = ${drawer!.id}`;
+
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        recordDrawing(tx, f.admin, {
+          ownerId: id, amount: '506000.00', fromMoneyAccountId: drawer!.id, on: '2026-01-10',
+        }),
+      ),
+    ).rejects.toThrow(/past the 5000.00 overdraft/);
+  });
+
+  it('⚠️ and still only WARNS inside the cap — the day is unverified, not overdrawn', async () => {
+    const f = await fixture('capwarn');
+    const id = await owner(f);
+    const [drawer] = await sql<{ id: string }[]>`
+      select id from money_accounts where store_id = ${f.storeId}
+        and instrument = 'cash' and custodian = 'cashier' and is_foundation
+    `;
+    await sql`update money_accounts set overdraft_limit = '5000.00' where id = ${drawer!.id}`;
+
+    const result = await asOrg(f.orgId, (tx) =>
+      recordDrawing(tx, f.admin, {
+        // Lands at −₱4,000 — inside the ₱5,000 cap.
+        ownerId: id, amount: '504000.00', fromMoneyAccountId: drawer!.id, on: '2026-01-10',
+      }),
+    );
+    // It posts, and it says so — a cashier drawer running behind is expected, and blocking it would
+    // stop real work on a technicality the cashier can see is wrong.
+    expect(result.warning).toMatch(/Allowed down to −5000.00/);
+    expect((await positionOf(f, id)).drawn).toBe('504000.00');
+  });
+
   it('⛔ a zero or negative movement is refused', async () => {
     const f = await fixture('zero');
     const id = await owner(f);

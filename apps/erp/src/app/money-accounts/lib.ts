@@ -19,6 +19,9 @@ export interface MoneyAccountRow {
   custodian: string;
   isActive: boolean;
   isFoundation: boolean;
+  /** ⭐ How far below zero a CASHIER drawer may go before a draw is refused. Positive; office and
+   *  staff balances are complete and block at zero regardless (bible row 154). */
+  overdraftLimit: string;
   notes: string | null;
 }
 

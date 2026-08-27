@@ -288,6 +288,13 @@
       "when": 1789529507084,
       "tag": "0040_t128_liabilities",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1789615907084,
+      "tag": "0041_overdraft_limit",
+      "breakpoints": true
     }
   ]
 }

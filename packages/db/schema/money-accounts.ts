@@ -31,7 +31,17 @@
  * business, and every one of them rolled up into a single line in the audit anyway.
  */
 import { sql } from 'drizzle-orm';
-import { boolean, check, index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  check,
+  index,
+  numeric,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
 import { stores } from './stores';
 
@@ -128,6 +138,26 @@ export const moneyAccounts = pgTable(
      */
     isFoundation: boolean('is_foundation').notNull().default(false),
 
+    /**
+     * ⭐ **How far below zero this account may go before a draw is REFUSED.** Stored positive; a
+     * limit of `20000.00` means the balance may reach −₱20,000 and no further.
+     *
+     * > **Ian, 2026-08-27:** *"how deep can a cashier account be negative — it can't be unlimited,
+     * > so admin can set it. If the set is 20,000 that is the only allowable negative balance a
+     * > cashier is allowed to."*
+     *
+     * ⚠️ **Only a CASHIER account ever uses it.** An office or staff balance is complete — nothing
+     * is waiting to be posted into it — so any shortfall there is real and blocks at zero regardless
+     * (bible row 154). This exists because a cashier drawer's balance legitimately runs behind the
+     * till while the day is unverified, and *"legitimately behind"* is not the same as *"unlimited"*.
+     *
+     * ⚠️ Per ACCOUNT, not per org: a busier store carries a bigger float, and one number for
+     * everywhere would be set to the largest store's need and be meaningless everywhere else.
+     */
+    overdraftLimit: numeric('overdraft_limit', { precision: 14, scale: 2 })
+      .notNull()
+      .default('20000.00'),
+
     notes: text('notes'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
@@ -151,5 +181,8 @@ export const moneyAccounts = pgTable(
      *  internal view silently include figures that are not money at all. */
     check('money_accounts_gl_code_is_money_check', sql`${t.glAccountCode} ~ '^11[0-9]{2}$'`),
     check('money_accounts_name_not_blank_check', sql`length(trim(${t.name})) > 0`),
+    // ⛔ Stored POSITIVE, and zero is meaningful: it means this drawer may never go below zero at
+    // all. A negative value here would invert the comparison silently.
+    check('money_accounts_overdraft_limit_not_negative_check', sql`${t.overdraftLimit} >= 0`),
   ],
 );

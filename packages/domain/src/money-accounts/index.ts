@@ -200,7 +200,20 @@ export { judgeDraw, checkDraw, type DrawVerdict } from './overdraft';
 export async function renameMoneyAccount(
   tx: Tx | null,
   actor: Actor,
-  input: { moneyAccountId: string; name: string; notes?: string | null },
+  input: {
+    moneyAccountId: string;
+    name: string;
+    notes?: string | null;
+    /**
+     * ⭐ How far below zero a CASHIER drawer may go. Admin-set, per account.
+     *
+     * > **Ian, 2026-08-27:** *"it can't be unlimited, so admin can set it."*
+     *
+     * ⚠️ Accepted on ANY account for one shape, but only a cashier one ever consults it — office
+     * and staff balances are complete and block at zero regardless (bible row 154).
+     */
+    overdraftLimit?: string | null;
+  },
 ): Promise<void> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'manage_chart_of_accounts', {});
@@ -212,9 +225,21 @@ export async function renameMoneyAccount(
     if (!account) {
       throw new Error(`renameMoneyAccount: money account ${input.moneyAccountId} does not exist.`);
     }
+    // ⛔ Stored positive, and zero is meaningful — it means this drawer may never go below zero at
+    // all. A negative value would invert the comparison silently, so it is refused here as well as
+    // by the CHECK.
+    const limit = input.overdraftLimit?.trim();
+    if (limit !== undefined && limit !== '' && Number(limit) < 0) {
+      throw new Error(
+        'renameMoneyAccount: an overdraft limit is how far BELOW zero the drawer may go, so it is ' +
+          'entered as a positive number. Zero means it may never go below zero at all.',
+      );
+    }
+
     await moneyAccountsRepo.renameMoneyAccount(trx, actor.orgId, account.id, {
       name,
       notes: input.notes?.trim() || null,
+      ...(limit !== undefined && limit !== '' ? { overdraftLimit: limit } : {}),
     });
   };
   if (tx) return run(tx);

@@ -63,7 +63,7 @@ export default async function MoneyAccountsPage({
           {sp.ok === 'created'
             ? 'Money account added.'
             : sp.ok === 'renamed'
-              ? 'Renamed.'
+              ? 'Saved.'
               : 'Money account retired.'}
         </div>
       )}
@@ -142,6 +142,28 @@ export default async function MoneyAccountsPage({
                           maxLength={120}
                           className="w-40 rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
                         />
+                        {/* ⭐ Only a cashier drawer consults this — office and staff balances are
+                            complete and block at zero regardless (row 154), so offering the field
+                            there would imply an overdraft they do not have. */}
+                        {a.custodian === 'cashier' && (
+                          <span
+                            className="self-center text-xs whitespace-nowrap text-neutral-500 dark:text-neutral-400"
+                            title="How far below zero this drawer may go before a draw is refused."
+                          >
+                            may go to −
+                          </span>
+                        )}
+                        {a.custodian === 'cashier' && (
+                          <input
+                            name="overdraftLimit"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            defaultValue={a.overdraftLimit}
+                            title="How far below zero this drawer may go before a draw is refused. Entered positive; 0 means never."
+                            className="w-24 rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
+                          />
+                        )}
                         <button
                           type="submit"
                           className="rounded border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
