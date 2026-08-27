@@ -101,10 +101,40 @@ balance · the reconciliation anchor · screens.
 
 ## 7. Done when
 
-- [ ] `customers`, `price_lists`, `price_list_items` in the schema, classified in
+- [x] `customers`, `price_lists`, `price_list_items` in the schema, classified in
       `cutover/classification.ts` **and** registered in `rls/registry.ts`.
-- [ ] Integration tests: ⭐ **the treatment is derived from the links, and both links at once is
+- [x] Integration tests: ⭐ **the treatment is derived from the links, and both links at once is
       refused**; ⭐ **the balance comes from `1210`, and no column stores it**; a price list rate is
       found for an item; the reconciliation anchor records who and when.
-- [ ] Screens, driven end to end in a browser.
-- [ ] Gates: typecheck · unit · integration · build.
+- [x] Screens, driven end to end in a browser.
+- [x] Gates: typecheck · unit · integration · build.
+
+---
+
+## 8. Verified in a browser, 2026-08-27
+
+Recorded a customer linked to one of our own stores. The register showed
+**"Internal — eliminates, not revenue"** with the store's name beneath it, a derived balance of
+₱0.00, and an anchor control. Created a price list, set PORK-BELLY at ₱380/kg, then re-quoted it at
+₱410 — **one row, replaced**, not two.
+
+⭐ **The form offers ONE counterparty picker, not two.** Two independent dropdowns would let someone
+fill both, and the entire design rests on a customer having at most one. The service and a CHECK
+both refuse it anyway; the UI simply never offers the mistake.
+
+### ⛔ A bug the browser found: a re-quote blanked the label
+
+Re-pricing an item the normal way — a code and a number — came back as a bare `PORK-BELLY` at
+₱410 with **"Pork belly" and "kg" gone**. The upsert overwrote `item_name` and `unit`
+unconditionally, so omitting them meant erasing them.
+
+⭐ Now the RATE always replaces — that is what a re-quote is — while the label and unit only replace
+when a new one is supplied. Pinned by a test.
+
+## 9. Still not done
+
+- ⛔ Everything in §6's out-list: orders (T-132), AR postings and aging (T-131), pricing rules,
+  and ADR-008 §4's both-sides inter-entity posting (needs T-133).
+- ⚠️ **`item_code` has no item master to validate against.** A typo creates a rate nothing will ever
+  match, silently. It becomes a foreign key the day an item master lands.
+

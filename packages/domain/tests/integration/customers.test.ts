@@ -342,6 +342,30 @@ describe('price lists', () => {
     expect(items[0]!.rate).toBe('410.00');
   });
 
+  it('⚠️ a re-quote keeps the label and unit — changing a price is not a rename', async () => {
+    const f = await fixture('requotelabel');
+    const list = await asOrg(f.orgId, (tx) =>
+      createPriceList(tx, f.admin, { name: uid('Wholesale') }),
+    );
+    await asOrg(f.orgId, (tx) =>
+      setPrice(tx, f.admin, {
+        priceListId: list.id, itemCode: 'PORK-BELLY', itemName: 'Pork belly', rate: '380.00', unit: 'kg',
+      }),
+    );
+    // ⛔ The normal way to change a price is a code and a number. Overwriting the label with null
+    // here blanked both — caught in the browser, where ₱380 "Pork belly / kg" came back as a bare
+    // code at ₱410.
+    await asOrg(f.orgId, (tx) =>
+      setPrice(tx, f.admin, { priceListId: list.id, itemCode: 'PORK-BELLY', rate: '410.00' }),
+    );
+    const [item] = await asOrg(f.orgId, (tx) =>
+      customersRepo.listPriceListItems(tx, f.orgId, list.id),
+    );
+    expect(item!.rate).toBe('410.00');
+    expect(item!.itemName).toBe('Pork belly');
+    expect(item!.unit).toBe('kg');
+  });
+
   it('⚠️ zero is allowed, negative is not', async () => {
     const f = await fixture('zerorate');
     const list = await asOrg(f.orgId, (tx) =>

@@ -247,9 +247,15 @@ export async function upsertPriceListItem(
     .onConflictDoUpdate({
       target: [priceListItems.priceListId, priceListItems.itemCode],
       set: {
-        itemName: input.itemName,
+        // ⚠️ The RATE always replaces — that is the point of a re-quote. The label and unit only
+        // replace when a new one is supplied.
+        //
+        // ⛔ Overwriting them unconditionally blanked both when someone re-priced an item with just
+        // a code and a number, which is the normal way to change a price. Caught in the browser: a
+        // ₱380 "Pork belly / kg" came back as a bare code at ₱410.
+        itemName: sql`coalesce(${input.itemName}, ${priceListItems.itemName})`,
         rate: input.rate,
-        unit: input.unit,
+        unit: sql`coalesce(${input.unit}, ${priceListItems.unit})`,
         updatedAt: sql`now()`,
       },
     });
@@ -290,3 +296,21 @@ export async function rateFor(
   `)) as unknown as Record<string, string>[];
   return row?.rate ? Number(row.rate).toFixed(2) : null;
 }
+
+/**
+ * Other organisations in the system — the franchise link's picker.
+ *
+ * ⚠️ **Never this org.** Linking a customer to our own organisation would derive as an
+ * inter-entity sale to ourselves: real revenue against no external party. The service refuses it
+ * too; excluding it here means the UI cannot offer the mistake in the first place.
+ */
+export async function otherOrgs(
+  tx: Tx,
+  orgId: string,
+): Promise<{ id: string; name: string; code: string }[]> {
+  const rows = (await tx.execute(sql`
+    select id, name, code from organizations where id <> ${orgId} and is_active order by name
+  `)) as unknown as Record<string, string>[];
+  return rows.map((r) => ({ id: String(r.id), name: String(r.name), code: String(r.code) }));
+}
+
