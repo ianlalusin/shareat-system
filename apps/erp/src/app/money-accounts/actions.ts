@@ -11,7 +11,7 @@
  * ⭐ The actor comes from `requireActor()`, never the form (T-138, bible §7.1).
  */
 import { redirect } from 'next/navigation';
-import { createMoneyAccount, retireMoneyAccount } from '@shareat/domain';
+import { createMoneyAccount, renameMoneyAccount, retireMoneyAccount } from '@shareat/domain';
 import type { Custodian, MoneyInstrument } from '@shareat/db';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
@@ -68,4 +68,21 @@ export async function retireMoneyAccountAction(formData: FormData): Promise<void
   }
 
   redirect('/money-accounts?ok=retired');
+}
+
+export async function renameMoneyAccountAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      renameMoneyAccount(tx, actor, {
+        moneyAccountId: str(formData, 'moneyAccountId'),
+        name: str(formData, 'name'),
+      }),
+    );
+  } catch (err) {
+    redirect(`/money-accounts?error=${encodeURIComponent(errorMessage(err))}`);
+  }
+
+  redirect('/money-accounts?ok=renamed');
 }

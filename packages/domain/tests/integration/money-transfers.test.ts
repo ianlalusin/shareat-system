@@ -79,18 +79,30 @@ async function legsOf(entryId: string) {
   `;
 }
 
-/** A store with a cashier drawer, an office safe, and a wallet — the three ADR-010 shapes. */
+/**
+ * A store's cashier till, office safe and cashier wallet.
+ *
+ * ⭐ **Looked up, not created** (bible row 156). Since T-142 every store is born with its five
+ * foundation accounts, so a fixture that made its own would be minting a SECOND till — which the
+ * service now refuses, and rightly: a store has one till.
+ */
+async function foundation(storeId: string, instrument: string, custodian: string) {
+  const [row] = await sql<{ id: string; name: string }[]>`
+    select id, name from money_accounts
+    where store_id = ${storeId} and instrument = ${instrument}
+      and custodian = ${custodian} and is_foundation
+  `;
+  if (!row) throw new Error(`fixture: no foundation ${custodian}/${instrument} for store ${storeId}`);
+  return row;
+}
+
 async function fixture(hint: string) {
   const o = await newOrg(hint);
   const adminId = await person(o.orgId, o.storeId, 'Admin', 'admin');
   const admin = actor(o.orgId, adminId);
-  const mk = (name: string, instrument: 'cash' | 'ewallet', custodian: 'cashier' | 'office') =>
-    asOrg(o.orgId, (tx) =>
-      createMoneyAccount(tx, admin, { storeId: o.storeId, name, instrument, custodian }),
-    );
-  const drawer = await mk('Cashier drawer', 'cash', 'cashier');
-  const safe = await mk('Office safe', 'cash', 'office');
-  const gcash = await mk('GCash — cashier', 'ewallet', 'cashier');
+  const drawer = await foundation(o.storeId, 'cash', 'cashier');
+  const safe = await foundation(o.storeId, 'cash', 'office');
+  const gcash = await foundation(o.storeId, 'ewallet', 'cashier');
   return { ...o, adminId, admin, drawer, safe, gcash };
 }
 
@@ -273,11 +285,21 @@ describe('the refusals — T-139 §5', () => {
 
   it('⛔ a retired account cannot be either end', async () => {
     const f = await fixture('retired');
-    await sql`update money_accounts set is_active = false where id = ${f.gcash.id}`;
+    // ⚠️ A SECOND wallet, not one of the five — those cannot be retired at all now (row 156), and
+    // retiring one by raw UPDATE would test a state the service refuses to produce.
+    const extra = await asOrg(f.orgId, (tx) =>
+      createMoneyAccount(tx, f.admin, {
+        storeId: f.storeId,
+        name: 'GCash — second wallet',
+        instrument: 'ewallet',
+        custodian: 'cashier',
+      }),
+    );
+    await sql`update money_accounts set is_active = false where id = ${extra.id}`;
     await expect(
       asOrg(f.orgId, (tx) =>
         createMoneyTransfer(tx, f.admin, {
-          fromMoneyAccountId: f.gcash.id,
+          fromMoneyAccountId: extra.id,
           toMoneyAccountId: f.safe.id,
           amountOut: '100.00',
           amountIn: '100.00',
@@ -519,15 +541,6 @@ describe('cross-store -- office to office only (Ian, 2026-08-26; bible row 152)'
       insert into stores (org_id, code, name) values (${f.orgId}, ${code}, ${'Store ' + code})
       returning id
     `;
-    const mk = (name: string, custodian: 'cashier' | 'office') =>
-      asOrg(f.orgId, (tx) =>
-        createMoneyAccount(tx, f.admin, {
-          storeId: store!.id,
-          name,
-          instrument: 'cash',
-          custodian,
-        }),
-      );
     // ⭐ The actor is scoped into the second store. Bible row 153: a cross-store move needs
     // store access at BOTH ends, so a fixture that performs one must grant both — and the
     // denial test below proves the grant is doing real work.
@@ -535,8 +548,9 @@ describe('cross-store -- office to office only (Ian, 2026-08-26; bible row 152)'
     return {
       id: store!.id,
       code,
-      safe: await mk('Lipa office safe', 'office'),
-      drawer: await mk('Lipa drawer', 'cashier'),
+      // The trigger seeded this store's five the moment it was inserted (row 156).
+      safe: await foundation(store!.id, 'cash', 'office'),
+      drawer: await foundation(store!.id, 'cash', 'cashier'),
     };
   }
 

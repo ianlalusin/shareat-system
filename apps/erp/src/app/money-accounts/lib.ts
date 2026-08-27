@@ -18,6 +18,7 @@ export interface MoneyAccountRow {
   glAccountCode: string;
   custodian: string;
   isActive: boolean;
+  isFoundation: boolean;
   notes: string | null;
 }
 

@@ -16,6 +16,7 @@
 import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { accounts } from '../../schema/accounts';
+import { stores } from '../../schema/stores';
 import { journalEntries, journalLines } from '../../schema/journal';
 import {
   moneyAccounts,
@@ -32,6 +33,9 @@ export interface MoneyAccountRow {
   glAccountCode: string;
   custodian: Custodian;
   isActive: boolean;
+  /** ⭐ One of the five every store must always have (bible row 156). Un-retirable while the
+   *  store is active; the NAME is still editable, which is the point of the flag. */
+  isFoundation: boolean;
   notes: string | null;
   createdAt: Date;
 }
@@ -45,6 +49,7 @@ const COLUMNS = {
   glAccountCode: moneyAccounts.glAccountCode,
   custodian: moneyAccounts.custodian,
   isActive: moneyAccounts.isActive,
+  isFoundation: moneyAccounts.isFoundation,
   notes: moneyAccounts.notes,
   createdAt: moneyAccounts.createdAt,
 } as const;
@@ -281,4 +286,38 @@ export async function undepositedFunds(
     .filter((p) => p.custodian === 'cashier')
     .reduce((sum, p) => sum + Number(p.balance), 0);
   return total.toFixed(2);
+}
+
+/** Is the account's store still trading? The foundation guard turns on this. */
+export async function storeIsActive(tx: Tx, storeId: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ isActive: stores.isActive })
+    .from(stores)
+    .where(eq(stores.id, storeId))
+    .limit(1);
+  return row?.isActive ?? false;
+}
+
+/**
+ * Renames a money account, and nothing else.
+ *
+ * ⭐ Deliberately narrower than `updateMoneyAccount`. Ian asked for the five to be *"configurable
+ * in UI, especially name"* — and the name is the ONLY thing safe to change on a foundation
+ * account. Its custodian and instrument decide its GL code, so editing those would move money
+ * between accounts by renaming a row.
+ */
+export async function renameMoneyAccount(
+  tx: Tx,
+  orgId: string,
+  id: string,
+  input: { name: string; notes: string | null },
+): Promise<void> {
+  const updated = await tx
+    .update(moneyAccounts)
+    .set({ ...input, updatedAt: sql`now()` })
+    .where(and(eq(moneyAccounts.id, id), eq(moneyAccounts.orgId, orgId)))
+    .returning({ id: moneyAccounts.id });
+  if (updated.length === 0) {
+    throw new Error(`renameMoneyAccount: money account ${id} does not exist in org ${orgId}`);
+  }
 }

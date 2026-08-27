@@ -63,35 +63,35 @@
 - `1034–1068 ` 10. Phase plan
 - `1069–1085 ` 11. Migration & ETL rules
 - `1086–1134` 12. Inherited landmines — do not repeat these
-- `1135–1296` 13. Decision log
-- `1297–1316` 14. Amendment protocol
-- `1317–1321` 15. Engineering standards — the industry practices this project follows
-  - `1322–1327` 15.1 Build order: walking skeleton first
-  - `1328–1339` 15.2 Golden-master testing — the most important practice here
-  - `1340–1348` 15.3 Strangler Fig, not big-bang cutover
-  - `1349–1353` 15.4 No dual-write
-  - `1354–1358` 15.5 Expand/contract migrations
-  - `1359–1367` 15.6 Observability from day zero, not later
-  - `1368–1372` 15.7 CI gates
-  - `1373–1377` 15.8 Backups and a tested restore
-  - `1378–1382` 15.9 Twelve-Factor config
-  - `1383–1390` 15.10 Append-only ledgers — but not event sourcing
-  - `1391–1395` 15.11 Defence in depth
-  - `1396–1424` 15.12 Skills are lenses, not assurance
-  - `1425–1431` 15.13 Reconciliation is a permanent feature
-- `1432–1436` 16. The accounting spine
-  - `1437–1468` 16.0 What we are actually fixing — the diagnosis
-  - `1469–1512` 16.1 The ten invariants — non-negotiable
-  - `1513–1527` 16.2 The oracle: how "correct" is tested
-  - `1528–1549` 16.3 The model — header + lines, not legs
-  - `1550–1569` 16.4 Deliberately simpler than ERPNext
-  - `1570–1636` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1637–1661` 16.6 What v1 already gets right — preserve the intent
-  - `1662–1683` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1684–1698` 16.8 What v1's accounting already gets right
-  - `1699–1742` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1743–1793` 16.10 Posting patterns — one canonical pattern per business event
-  - `1794–1811` 16.11 Inventory's accounting integration
+- `1135–1297` 13. Decision log
+- `1298–1317` 14. Amendment protocol
+- `1318–1322` 15. Engineering standards — the industry practices this project follows
+  - `1323–1328` 15.1 Build order: walking skeleton first
+  - `1329–1340` 15.2 Golden-master testing — the most important practice here
+  - `1341–1349` 15.3 Strangler Fig, not big-bang cutover
+  - `1350–1354` 15.4 No dual-write
+  - `1355–1359` 15.5 Expand/contract migrations
+  - `1360–1368` 15.6 Observability from day zero, not later
+  - `1369–1373` 15.7 CI gates
+  - `1374–1378` 15.8 Backups and a tested restore
+  - `1379–1383` 15.9 Twelve-Factor config
+  - `1384–1391` 15.10 Append-only ledgers — but not event sourcing
+  - `1392–1396` 15.11 Defence in depth
+  - `1397–1425` 15.12 Skills are lenses, not assurance
+  - `1426–1432` 15.13 Reconciliation is a permanent feature
+- `1433–1437` 16. The accounting spine
+  - `1438–1469` 16.0 What we are actually fixing — the diagnosis
+  - `1470–1513` 16.1 The ten invariants — non-negotiable
+  - `1514–1528` 16.2 The oracle: how "correct" is tested
+  - `1529–1550` 16.3 The model — header + lines, not legs
+  - `1551–1570` 16.4 Deliberately simpler than ERPNext
+  - `1571–1637` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1638–1662` 16.6 What v1 already gets right — preserve the intent
+  - `1663–1684` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1685–1699` 16.8 What v1's accounting already gets right
+  - `1700–1743` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1744–1794` 16.10 Posting patterns — one canonical pattern per business event
+  - `1795–1812` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1291,6 +1291,7 @@ just a patch.**
 | 153 | 2026-08-26 | ⭐ **CROSS-STORE MONEY MOVEMENT REQUIRES STORE ACCESS TO *BOTH* STORES — and this is a rule about the MOVEMENT, not about the screen it was reached through.** It applies to transfers today and to cash requests when they are built. **⛔ And no expense may overdraw the account that funds it**, checked at APPROVE. | Ian: *“cross store money movement will only be possible for manager initiated transactions, with manager having access like hasStoreAccess to both stores”*, and *“yes extend”* (the overdraw block, from transfers to expenses). ⚠️ **Authorising only the SOURCE store was a real hole** — the same abuse as row 152 seen from the other side: a manager scoped to Malvar alone could push Malvar's money into Lipa, a store they have no standing in, and Lipa would find money it never asked for and now owes for. ⭐ **`authorize()` already checks `personHasStoreScope` per call, so a second call IS the rule** — no new helper, and the denial names the missing store. ⭐ **The reason this is framed as being about the movement:** an expense at Lipa paid from Malvar's safe moves Malvar's money exactly as a transfer does. Gating transfers alone would have left the identical act reachable one menu across, so `approveExpense` applies the same check whenever a payment names an account belonging to another store. ⭐ **On overdraw, expenses were the surface that actually needed it:** expense payment is ~34% of ledger activity against a transfer's 7%, so a drawer is far likelier to go negative through spending than through moving money. ⚠️ Summed **per account across the split**, never per payment row — two ₱600 cash lines against a ₱1,000 drawer are individually affordable and together are not (the DEF-065 family: a split's rows are only ever right considered together). ⚠️ **Checked at APPROVE, never at create** — a draft is not a posting, so a draft naming money that has not arrived yet is legitimate; only the moment it posts has to be true, and a refusal leaves the draft intact and re-approvable. ⚠️ **KNOWN ORDERING HAZARD, Ian to rule on:** a sales day posts to the ledger only at **verify** (`sales-days/verify.ts`), so today's cash takings are invisible to this guard until end of day. A store spending beyond its float before verifying will be refused for a shortfall that is not real. ✅ **RESOLVED by row 154**, and better than proposed: the relaxation is scoped to CASHIER accounts only, because they are the only ones with the gap. | No — money-safety and access rules |
 | 154 | 2026-08-26 | ⭐ **OVERDRAFT IS A PROPERTY OF THE ACCOUNT, NOT OF THE FEATURE. A CASHIER account is WARNED and still posts; an OFFICE or STAFF account is REFUSED.** Supersedes row 153's blanket block. | Ian, on the ordering hazard row 153 raised: *“warning for now, don’t block … implement it only to cashier owned account, since only cashier owned account might experience this.”* ⭐ **This is a better rule than the blanket warning I offered**, and the reason is worth keeping: a **cashier** account holds money the ledger genuinely cannot see yet, because a sales day posts only at **verify** — a drawer reading ₱0 at 2pm may hold ₱40,000. Refusing there refuses a shortfall that **is not real**, and nothing drives people to work around a system faster than being told they have no money while they are looking at it. ⭐ **No other custodian has that gap:** an office safe or a staff float only ever receives money through a transfer, cash request or liquidation, all of which post the moment they happen — so its balance is COMPLETE, a negative is a real error, and it stays refused. ⚠️ **The rule therefore turns on `custodian`, never on which screen the money left through**, which is why it lives in ONE file (`money-accounts/overdraft.ts`) that both `approveExpense` and `createMoneyTransfer` call. Two copies of this decision would drift exactly as v1's two amortisation runners did. ⭐ **A warning nobody sees is v1's disease**, so it surfaces twice: returned from the service at the moment of posting, and shown standing on the money-transfers screen as a banner naming every account below zero — **derived on every load, never a stored flag**, so it cannot linger after the money arrives or go missing when it does not. ⚠️ The messages deliberately differ: the cashier one explains the timing, the office one says the balance is complete. *“Insufficient funds”* alone earns a shrug in both cases. | No — a money-safety rule |
 | 155 | 2026-08-27 | ⭐ **ONE AUTH TENANT (`shareat-hub-v2`), AND STORAGE SPLIT BY SENSITIVITY — NOT BY APP.** ERP staff sign in with the same Firebase identity they use in POS. Public CDN content stays in the world-readable default bucket; accounting documents go in a **separate private bucket, reached only through the Admin SDK**. ⛔ **v2 never deploys Storage or Firestore rules.** | Ian: *“yes same firebase identity as POS — that’s the whole point of the system we are building, we will combine the backend of these separate apps as much as possible, so 1 auth yes”*, and *“storage can be separated yes, since POS and CUSTOMER app are public facing the menu photo must not be strictly accessed.”* ⭐ **The split is by what the FILE is, not by which app wrote it**, and that is the whole insight. `shareat-hub-v2`’s bucket is `allow read;` — **no condition, world-readable, unauthenticated** — which is CORRECT for menu photos, logos and loyalty images served to diners, and would be catastrophic for supplier invoices. ⚠️ POS already hit this and could not fix it: its own rules note that for customer payment proofs *“Storage rules OR across matching blocks, so a stricter `allow read` accomplishes nothing”*, leaving them to rely on an unguessable UUID path and a 15-day lifecycle delete. **Receipt photos are not payment proofs** — they carry suppliers, prices and volumes, and they are kept for years, so security-by-unguessable-URL is not an accounting control. ⭐ Putting the private bucket in the SAME project as Auth avoids a cross-project service-account credential, which ADR-003 lists as evidence of the very sprawl this rebuild exists to end (the Website’s `HUB_SA_KEY`). ⛔ **And the rule against deploying rules is load-bearing:** POS’s `firebase.json` declares `"storage": { "rules": "storage.rules" }` with **no bucket target**, so any repo deploying storage from that project overwrites POS’s production ruleset — CUSTOMER has already done exactly this. v2 has **no `firebase.json` at all** today; keep it that way. The private bucket’s deny-all is set once, by hand, and never redeployed — the Admin SDK bypasses rules, so v2 needs none. | No — an infrastructure boundary |
+| 156 | 2026-08-26 | ⭐ **EVERY STORE IS BORN WITH FIVE MONEY ACCOUNTS, AND CANNOT CLOSE THEM WHILE IT TRADES.** Cashier cash · cashier online · office cash · office online · staff float. **Names are editable; the shape is not.** | Ian: *“all stores must have these accounts, seeded and configurable but can never be terminated as long as store is active … these 5 accounts must always be present and available since they are the foundation of money movement”*, and *“cashier cash may be renamed to counter till, office cash may be office vault … unretirable but configurable in ui esp name.”* ⭐ **Enforced by a TRIGGER on `stores`, not by a service call**, because there is no `createStore` service: stores arrive from the seed, the ETL, the cutover and one day a screen — four paths, and an invariant should not be a step any of them has to remember. Same reasoning that already put ledger balance and period-open in triggers. ⚠️ **And it is load-bearing NOW:** since row 150's work a cash payment must NAME a money account, so a store created without these silently cannot record a cash expense at all. ⭐ **`is_foundation` is a FLAG, not an inference from instrument + custodian**, and that is the crux: a store may open a SECOND cashier wallet (another GCash, a bank account) and that one is ordinary — retirable like anything else. Nothing about its shape distinguishes it from the seeded one, so only a flag can. ⚠️ **Backfill ADOPTS before it seeds**, and only an account that is the store's ONLY active one of that shape: a hand-made “Cashier drawer” keeps its name, its notes and its **journal history**, where seeding first would have left two tills per store — one holding every peso ever counted and one holding nothing. A RETIRED account is never adopted, because resurrecting something deliberately closed as un-retirable is worse than seeding a fresh one. ⚠️ Renaming is admin (`manage_chart_of_accounts`, row 149): a money account's name is what every picker, report and reviewer reads, so renaming “Office vault” to “Petty cash” changes what people believe a balance means without moving a peso. ⛔ Custodian and instrument stay uneditable — they decide the GL code, so changing them would move money between accounts by editing a label. | No — a structural guarantee |
 
 ---
 

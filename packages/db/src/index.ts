@@ -18,6 +18,7 @@ export type { Tx, Executor, Database } from './client';
 export { ASSET_CATEGORIES } from '../schema/fixed-assets';
 export { CUSTODIANS, MONEY_INSTRUMENTS } from '../schema/money-accounts';
 export type { AssetCategory } from '../schema/fixed-assets';
+export { FOUNDATION_ACCOUNTS } from '../schema/money-accounts';
 export type { Custodian, MoneyInstrument } from '../schema/money-accounts';
 export type { MoneyTransferStatus } from '../schema/money-transfers';
 export type { MoneyAccountRow } from './repo/money-accounts';

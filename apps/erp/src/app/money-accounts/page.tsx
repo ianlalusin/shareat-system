@@ -1,7 +1,11 @@
 import Link from 'next/link';
 import { CUSTODIANS, MONEY_INSTRUMENTS } from '@shareat/db';
 import { requireSession } from '../../lib/session';
-import { createMoneyAccountAction, retireMoneyAccountAction } from './actions';
+import {
+  createMoneyAccountAction,
+  renameMoneyAccountAction,
+  retireMoneyAccountAction,
+} from './actions';
 import {
   CUSTODIAN_LABEL,
   GL_LABEL,
@@ -38,7 +42,9 @@ export default async function MoneyAccountsPage({
         <h1 className="text-2xl font-semibold">Money accounts</h1>
         <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
           Every place money sits — a drawer, a safe, each e-wallet and bank account — and{' '}
-          <strong>who holds it</strong>. The books group these by account; you group them by
+          <strong>who holds it</strong>. Five are marked{' '}
+          <em>always present</em>: every store has them from the day it opens and cannot close
+          them while it trades — but you can call them whatever you call them here. The books group these by account; you group them by
           custodian. Same ledger, two views.{' '}
           <Link href="/money-transfers" className="underline underline-offset-2">
             Move money between them
@@ -54,7 +60,11 @@ export default async function MoneyAccountsPage({
       )}
       {sp.ok && (
         <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-          {sp.ok === 'created' ? 'Money account added.' : 'Money account retired.'}
+          {sp.ok === 'created'
+            ? 'Money account added.'
+            : sp.ok === 'renamed'
+              ? 'Renamed.'
+              : 'Money account retired.'}
         </div>
       )}
 
@@ -95,6 +105,11 @@ export default async function MoneyAccountsPage({
                         Retired
                       </span>
                     )}
+                    {a.isFoundation && (
+                      <span className="ml-2 rounded bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                        Always present
+                      </span>
+                    )}
                     {a.notes && (
                       <div className="text-xs text-neutral-400 dark:text-neutral-600">{a.notes}</div>
                     )}
@@ -109,7 +124,33 @@ export default async function MoneyAccountsPage({
                     {GL_LABEL[a.glAccountCode] ?? ''}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    {a.isActive && (
+                    {/*
+                      ⭐ THE FIVE GET A RENAME, NOT A RETIRE (bible row 156).
+
+                      Ian: "these 5 accounts must always be present and available since they are
+                      the foundation of money movement… unretirable but configurable in ui esp
+                      name." So the control that exists is the one that is allowed — offering a
+                      Retire button that always errors would teach people to distrust buttons.
+                    */}
+                    {a.isActive && a.isFoundation && (
+                      <form action={renameMoneyAccountAction} className="flex justify-end gap-1">
+                        <input type="hidden" name="moneyAccountId" value={a.id} />
+                        <input
+                          name="name"
+                          required
+                          defaultValue={a.name}
+                          maxLength={120}
+                          className="w-40 rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
+                        />
+                        <button
+                          type="submit"
+                          className="rounded border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+                        >
+                          Rename
+                        </button>
+                      </form>
+                    )}
+                    {a.isActive && !a.isFoundation && (
                       <form action={retireMoneyAccountAction}>
                         <input type="hidden" name="moneyAccountId" value={a.id} />
                         <button

@@ -139,6 +139,29 @@ async function runRetire(
   // Retiring is the same authority as creating: it changes what accounts the books have.
   await authorize(tx, actor, 'manage_chart_of_accounts', {});
 
+  // ⛔ ONE OF THE FIVE CANNOT BE RETIRED WHILE THE STORE IS TRADING (bible row 156).
+  //
+  // > **Ian, 2026-08-26:** *"these 5 accounts must always be present and available since they are
+  // > the foundation of money movement."*
+  //
+  // ⚠️ Checked BEFORE the balance guard below, because it is the stronger statement: an empty
+  // cashier till is still the store's till, and "it happens to hold ₱0 today" is not permission to
+  // remove the place the day's takings go. Since T-139 a cash payment must NAME an account, so a
+  // store without its till cannot record a cash expense at all.
+  //
+  // ⭐ "While the store is active" is Ian's own qualifier, and it is what makes this a rule rather
+  // than a wall: close the store and its accounts can be closed with it.
+  if (account.isFoundation) {
+    const storeOpen = await moneyAccountsRepo.storeIsActive(tx, account.storeId);
+    if (storeOpen) {
+      throw new Error(
+        `retireMoneyAccount: "${account.name}" is one of the five accounts every trading store ` +
+          'must have, so it cannot be retired. Rename it if it is called something else here — ' +
+          'that is what the name is for.',
+      );
+    }
+  }
+
   // ⛔ AN ACCOUNT HOLDING MONEY CANNOT BE RETIRED (Ian, 2026-08-26).
   //
   // Retiring hides it from every picker, so the money inside becomes unreachable: nothing can
@@ -161,3 +184,39 @@ async function runRetire(
 }
 
 export { judgeDraw, checkDraw, type DrawVerdict } from './overdraft';
+
+/**
+ * Renames a money account. ⭐ **The name is the configurable part of a foundation account.**
+ *
+ * > **Ian, 2026-08-26:** *"cashier cash may be renamed to counter till, office cash may be office
+ * > vault … unretirable but configurable in ui esp name."*
+ *
+ * ⚠️ Admin-only, like creating one. The gate is `manage_chart_of_accounts` because a money
+ * account's NAME is what every picker, every report and every reviewer reads — renaming "Office
+ * vault" to "Petty cash" changes what people believe a balance means without changing a peso.
+ * ⛔ Custodian and instrument are deliberately NOT editable here: they decide the GL code, so
+ * changing them would move money between accounts by editing a label.
+ */
+export async function renameMoneyAccount(
+  tx: Tx | null,
+  actor: Actor,
+  input: { moneyAccountId: string; name: string; notes?: string | null },
+): Promise<void> {
+  const run = async (trx: Tx) => {
+    await authorize(trx, actor, 'manage_chart_of_accounts', {});
+    const name = input.name.trim();
+    if (!name) {
+      throw new Error('renameMoneyAccount: a money account needs a name people will recognise.');
+    }
+    const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.moneyAccountId);
+    if (!account) {
+      throw new Error(`renameMoneyAccount: money account ${input.moneyAccountId} does not exist.`);
+    }
+    await moneyAccountsRepo.renameMoneyAccount(trx, actor.orgId, account.id, {
+      name,
+      notes: input.notes?.trim() || null,
+    });
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}

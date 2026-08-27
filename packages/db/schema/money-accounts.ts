@@ -55,6 +55,33 @@ export type Custodian = (typeof CUSTODIANS)[number];
 export const MONEY_INSTRUMENTS = ['cash', 'ewallet', 'bank'] as const;
 export type MoneyInstrument = (typeof MONEY_INSTRUMENTS)[number];
 
+/**
+ * ⭐ THE FIVE EVERY STORE HAS, FROM THE MOMENT IT EXISTS (bible row 156).
+ *
+ * > **Ian, 2026-08-26:** *"all stores must have these accounts, seeded and configurable but can
+ * > never be terminated as long as store is active … these 5 accounts must always be present and
+ * > available since they are the foundation of money movement."*
+ *
+ * ⚠️ The names here are DEFAULTS, not identities. Ian: *"cashier cash may be renamed to counter
+ * till, office cash may be office vault"*, and the two online ones *"may be edited to bear actual
+ * name like cashier gcash, office bpi"*. What is fixed is the SHAPE — who holds it and what kind
+ * of money it is — because that is what the ledger reasons about. The name is what people read.
+ *
+ * ⛔ There is no `staff online`, and the omission is deliberate: a staff float is cash in a
+ * person's pocket, handed over and accounted for. A wallet belongs to the business, not the errand.
+ */
+export const FOUNDATION_ACCOUNTS = [
+  { name: 'Cashier cash', instrument: 'cash', custodian: 'cashier' },
+  { name: 'Cashier online', instrument: 'ewallet', custodian: 'cashier' },
+  { name: 'Office cash', instrument: 'cash', custodian: 'office' },
+  { name: 'Office online', instrument: 'ewallet', custodian: 'office' },
+  { name: 'Staff float', instrument: 'cash', custodian: 'staff' },
+] as const satisfies readonly {
+  name: string;
+  instrument: MoneyInstrument;
+  custodian: Custodian;
+}[];
+
 export const moneyAccounts = pgTable(
   'money_accounts',
   {
@@ -88,6 +115,19 @@ export const moneyAccounts = pgTable(
      *  journal lines outlive it, and an orphaned line is the DEF-065 class of problem. */
     isActive: boolean('is_active').notNull().default(true),
 
+    /**
+     * ⭐ One of the FIVE every store must always have (bible row 156).
+     *
+     * > **Ian, 2026-08-26:** *"these 5 accounts must always be present and available since they
+     * > are the foundation of money movement."*
+     *
+     * ⚠️ **A flag, not an inference from `instrument` + `custodian`** — and that is the whole
+     * reason it exists. A store may open a SECOND cashier wallet (a second GCash, a BDO account),
+     * and that one is ordinary: retirable like anything else. Only the first, seeded one is
+     * foundational, and nothing about its shape distinguishes it from the second.
+     */
+    isFoundation: boolean('is_foundation').notNull().default(false),
+
     notes: text('notes'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
@@ -96,6 +136,12 @@ export const moneyAccounts = pgTable(
     /** One name per store. Two "GCash" rows at one branch is the ambiguity this table exists to
      *  remove — per ACCOUNT not per provider (bible row 142), so they must be named apart. */
     uniqueIndex('money_accounts_org_store_name_unique').on(t.orgId, t.storeId, t.name),
+    /** ⛔ One foundation account per shape per store. Without this, a re-run of the seeder or a
+     *  concurrent store insert could mint a second "Cashier cash" and the register would show two
+     *  tills that are the same till. */
+    uniqueIndex('money_accounts_foundation_unique')
+      .on(t.storeId, t.instrument, t.custodian)
+      .where(sql`${t.isFoundation}`),
     index('money_accounts_org_custodian_idx').on(t.orgId, t.custodian),
     index('money_accounts_org_store_idx').on(t.orgId, t.storeId),
     check('money_accounts_custodian_check', sql`${t.custodian} in ('cashier', 'office', 'staff')`),

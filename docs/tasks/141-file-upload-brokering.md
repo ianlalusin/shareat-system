@@ -161,3 +161,10 @@ moment it exists, so there is nothing to wait for.
 2. Build the broker; v2 writes only there.
 3. v1's existing receipts stay in `studio-7300228488-a394e`, readable from v1. Nothing is migrated
    — v2 assumes a zero starting point, and DEF-070 stays confined to a bucket v2 never writes to.
+
+### Testing before go-live
+
+> **Ian, 2026-08-27:** *“if we needed to test something that will require us to connect to a storage, just temporarily create a new one on Google Firebase, then we just repoint it soon when we're going live.”*
+
+⭐ **The bucket name is configuration, not architecture** — `FIREBASE_STORAGE_BUCKET` already exists in `.env.example`. A throwaway bucket for development costs nothing and keeps test uploads out of anything real. ⚠️ The one thing that must NOT differ between the scratch bucket and the live one is **deny-all plus Admin-SDK-only access**: testing against a permissive bucket would prove the broker works while proving nothing about whether it is
+the only way in.

@@ -397,10 +397,14 @@ describe('invariant 4 — a money account must be a money location', () => {
     await asOrg(f.orgId, (tx) => moneyAccountsRepo.retireMoneyAccount(tx, f.orgId, id));
 
     // Gone from the default listing, still there for an audit.
-    expect(await asOrg(f.orgId, (tx) => moneyAccountsRepo.listMoneyAccounts(tx, f.orgId, {}))).toHaveLength(0);
+    // ⚠️ The store's five foundation accounts remain — they are not retirable while it trades
+    // (row 156). What must be gone is the one just retired.
+    const left = await asOrg(f.orgId, (tx) => moneyAccountsRepo.listMoneyAccounts(tx, f.orgId, {}));
+    expect(left.map((a) => a.id)).not.toContain(id);
+    expect(left.every((a) => a.isFoundation)).toBe(true);
     expect(
       await asOrg(f.orgId, (tx) => moneyAccountsRepo.listMoneyAccounts(tx, f.orgId, { activeOnly: false })),
-    ).toHaveLength(1);
+    ).toHaveLength(left.length + 1); // the five still standing, plus the one just retired
 
     await expect(
       asOrg(f.orgId, (tx) => moneyAccountsRepo.retireMoneyAccount(tx, f.orgId, id)),
@@ -449,6 +453,17 @@ describe('Wave 0 holds for money_accounts', () => {
       const rows = await tx<{ n: number }[]>`select count(*)::int as n from money_accounts`;
       return rows[0]!.n;
     });
-    expect(seen).toBe(1);
+    // ⭐ The claim is not "how many" — it is that NONE of them belong to org B. Counting org A's
+    // own rows and comparing is what proves isolation; a fixed number would only track the
+    // fixture, and would have to be edited every time a store gains an account.
+    const [mine] = await sql<{ n: number }[]>`
+      select count(*)::int as n from money_accounts where org_id = ${a.orgId}
+    `;
+    const [theirs] = await sql<{ n: number }[]>`
+      select count(*)::int as n from money_accounts where org_id = ${b.orgId}
+    `;
+    expect(theirs!.n).toBeGreaterThan(0); // org B really does have rows to leak
+    expect(seen).toBe(mine!.n);           // and org A sees exactly its own, with no WHERE clause
+
   });
 });

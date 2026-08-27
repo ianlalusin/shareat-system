@@ -34,7 +34,7 @@ import {
   assignRole,
   type Actor,
 } from '@shareat/auth';
-import { createMoneyAccount, retireMoneyAccount } from '@shareat/domain';
+import { createMoneyAccount, renameMoneyAccount, retireMoneyAccount } from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
 
@@ -81,7 +81,7 @@ const wallet = (storeId: string, name = 'GCash — cashier') =>
 beforeAll(async () => {
   await sql`
     truncate table
-      money_accounts, sales_day_tenders, sales_day_channels, sales_days, sales_channels,
+      money_transfers, money_accounts, sales_day_tenders, sales_day_channels, sales_days, sales_channels,
       expense_payments, expenses, expense_categories,
       person_grants, person_store_scope, person_roles,
       journal_lines, journal_entries, audit_log, fiscal_periods, accounts,
@@ -223,5 +223,125 @@ describe('⛔ an account holding money cannot be retired (Ian, 2026-08-26)', () 
     await expect(
       asOrg(o.orgId, (tx) => retireMoneyAccount(tx, a, { moneyAccountId: id })),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe('⭐ the five every store must always have (bible row 156)', () => {
+  /** The store's foundation account of one shape. */
+  async function foundation(storeId: string, instrument: string, custodian: string) {
+    const [row] = await sql<{ id: string; name: string }[]>`
+      select id, name from money_accounts
+      where store_id = ${storeId} and instrument = ${instrument}
+        and custodian = ${custodian} and is_foundation
+    `;
+    return row;
+  }
+
+  it('⭐ a brand-new store is born with all five — nobody has to remember', async () => {
+    const o = await newOrg('born');
+    const rows = await sql<{ name: string; instrument: string; custodian: string; gl: string }[]>`
+      select name, instrument, custodian, gl_account_code as gl from money_accounts
+      where store_id = ${o.storeId} and is_foundation
+      order by custodian, instrument
+    `;
+    // ⚠️ The store was inserted with a plain INSERT — no service, no seeder call. There is no
+    // createStore path in this codebase, so the guarantee has to live in the database or it does
+    // not exist. Since T-139 a cash payment must NAME an account, so a store without these
+    // silently cannot record a cash expense at all.
+    expect(rows).toEqual([
+      { name: 'Cashier cash', instrument: 'cash', custodian: 'cashier', gl: '1110' },
+      { name: 'Cashier online', instrument: 'ewallet', custodian: 'cashier', gl: '1140' },
+      { name: 'Office cash', instrument: 'cash', custodian: 'office', gl: '1130' },
+      { name: 'Office online', instrument: 'ewallet', custodian: 'office', gl: '1140' },
+      { name: 'Staff float', instrument: 'cash', custodian: 'staff', gl: '1120' },
+    ]);
+  });
+
+  it('⛔ none of the five can be retired while the store is trading', async () => {
+    const o = await newOrg('unretirable');
+    const adminId = await person(o.orgId, o.storeId, 'Admin', 'admin');
+    const till = await foundation(o.storeId, 'cash', 'cashier');
+
+    // ⚠️ It holds ₱0, and that is exactly the case worth pinning: "it happens to be empty today"
+    // is not permission to remove the place the day's takings go.
+    await expect(
+      asOrg(o.orgId, (tx) =>
+        retireMoneyAccount(tx, actor(o.orgId, adminId), { moneyAccountId: till!.id }),
+      ),
+    ).rejects.toThrow(/every trading store must have/);
+  });
+
+  it('⭐ but the NAME is editable — that is what the flag is for', async () => {
+    const o = await newOrg('rename');
+    const adminId = await person(o.orgId, o.storeId, 'Admin', 'admin');
+    const till = await foundation(o.storeId, 'cash', 'cashier');
+
+    // Ian: "cashier cash may be renamed to counter till, office cash may be office vault."
+    await asOrg(o.orgId, (tx) =>
+      renameMoneyAccount(tx, actor(o.orgId, adminId), {
+        moneyAccountId: till!.id,
+        name: 'Counter till',
+      }),
+    );
+    const after = await foundation(o.storeId, 'cash', 'cashier');
+    expect(after!.name).toBe('Counter till');
+    // ⭐ Still foundational, still un-retirable. The name changed; what it IS did not.
+    await expect(
+      asOrg(o.orgId, (tx) =>
+        retireMoneyAccount(tx, actor(o.orgId, adminId), { moneyAccountId: till!.id }),
+      ),
+    ).rejects.toThrow(/every trading store must have/);
+  });
+
+  it('⛔ a manager cannot rename one — it is the chart of accounts (row 149)', async () => {
+    const o = await newOrg('renamedeny');
+    await person(o.orgId, o.storeId, 'Admin', 'admin');
+    const mgrId = await person(o.orgId, o.storeId, 'Manager', 'manager');
+    const till = await foundation(o.storeId, 'cash', 'cashier');
+    await expect(
+      asOrg(o.orgId, (tx) =>
+        renameMoneyAccount(tx, actor(o.orgId, mgrId), {
+          moneyAccountId: till!.id,
+          name: 'Whatever',
+        }),
+      ),
+    ).rejects.toThrow(AuthorizationError);
+  });
+
+  it('⚠️ a SECOND wallet of the same shape is ordinary — and retirable', async () => {
+    const o = await newOrg('second');
+    const adminId = await person(o.orgId, o.storeId, 'Admin', 'admin');
+    const a = actor(o.orgId, adminId);
+
+    // ⭐ This is why `is_foundation` is a FLAG and not an inference from instrument + custodian:
+    // nothing about this account's shape distinguishes it from the seeded one.
+    const extra = await asOrg(o.orgId, (tx) =>
+      createMoneyAccount(tx, a, {
+        storeId: o.storeId,
+        name: 'GCash — second wallet',
+        instrument: 'ewallet',
+        custodian: 'cashier',
+      }),
+    );
+    await expect(
+      asOrg(o.orgId, (tx) => retireMoneyAccount(tx, a, { moneyAccountId: extra.id })),
+    ).resolves.toBeUndefined();
+  });
+
+  it('⚠️ a second CASH location is still refused — the GL code IS the location', async () => {
+    const o = await newOrg('secondcash');
+    const adminId = await person(o.orgId, o.storeId, 'Admin', 'admin');
+    // 1110 carries no party, so two cashier-cash accounts at one store could never be told apart
+    // in the ledger. The foundation one is the store's till, and there is only one till.
+    await expect(
+      asOrg(o.orgId, (tx) =>
+        createMoneyAccount(tx, actor(o.orgId, adminId), {
+          storeId: o.storeId,
+          name: 'Second drawer',
+          instrument: 'cash',
+          custodian: 'cashier',
+        }),
+      ),
+    ).rejects.toThrow(/already has a cashier cash location/);
   });
 });

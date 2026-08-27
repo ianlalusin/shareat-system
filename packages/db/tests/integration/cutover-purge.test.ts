@@ -73,7 +73,14 @@ async function runPurge(opts: { asOf: string; sabotage?: boolean }): Promise<{ o
       }
 
       // Invariant 14's lever: delete from a KEEP table so its post-condition must fail.
-      if (opts.sabotage) await tx`delete from stores`;
+      // ⚠️ money_accounts first. Since T-142 every store is born with five foundation accounts,
+      // and they FK to stores — so deleting stores alone now raises a FOREIGN KEY error before
+      // the post-condition below can run, which would test the wrong failure. Both are KEEP
+      // tables, so the lever still means what it meant: a KEEP table lost rows.
+      if (opts.sabotage) {
+        await tx`delete from money_accounts`;
+        await tx`delete from stores`;
+      }
 
       const problems: string[] = [];
       for (const t of order) {
