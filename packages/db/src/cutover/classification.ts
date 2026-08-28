@@ -435,7 +435,7 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
   },
 
   // ---- T-131: accounts receivable -----------------------------------------------------
-  wholesale_orders: {
+  trade_orders: {
     // Purge, like every other posting document. An order is ACTIVITY — it raised a receivable
     // that the opening balance replaces. Keeping it would leave an order pointing at an
     // ar_charge that no longer exists.
@@ -444,8 +444,8 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'A posting document. The receivable it raised is replaced by the cutover opening balance, ' +
       'so the order that raised it must go with it.',
   },
-  wholesale_order_lines: {
-    // ⚠️ Purged BY CASCADE from wholesale_orders, not independently — same shape as
+  trade_order_lines: {
+    // ⚠️ Purged BY CASCADE from trade_orders, not independently — same shape as
     // supplier_invoice_lines. Listed so the classification test sees every table.
     class: 'purge',
     reason:
@@ -516,8 +516,8 @@ export const PURGE_ORDER_HINT: readonly string[] = [
   'ar_collection_allocations',
   'ar_write_offs',
   'ar_collections',
-  'wholesale_order_lines',
-  'wholesale_orders',
+  'trade_order_lines',
+  'trade_orders',
   'ar_charges',
   'ap_payment_allocations',
   'supplier_invoice_lines',

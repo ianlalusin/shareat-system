@@ -1,5 +1,5 @@
 /**
- * The only place SQL is written for wholesale orders. T-132.
+ * The only place SQL is written for trade orders — sales AND internal transfers. T-132, T-133.
  *
  * ⛔ **No balance lives here.** The receivable an order raises belongs to `ar_charges`, and what
  * the customer still owes is a query over the ledger (`arRepo.positionOf`). An order carries a
@@ -10,12 +10,12 @@
 import { and, eq, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import {
-  wholesaleOrders,
-  wholesaleOrderLines,
-  type WholesaleOrderStatus,
-} from '../../schema/wholesale';
+  tradeOrders,
+  tradeOrderLines,
+  type TradeOrderStatus,
+} from '../../schema/trade';
 
-export interface WholesaleOrderRow {
+export interface TradeOrderRow {
   id: string;
   orgId: string;
   storeId: string;
@@ -23,15 +23,17 @@ export interface WholesaleOrderRow {
   orderDate: string;
   referenceNo: string | null;
   notes: string | null;
-  status: WholesaleOrderStatus;
+  status: TradeOrderStatus;
   totalAmount: string;
   arChargeId: string | null;
   journalEntryId: string | null;
   dispatchedAt: Date | null;
+  receivedAt: Date | null;
+  receivedBy: string | null;
   creditOverrideReason: string | null;
 }
 
-export interface WholesaleOrderLineRow {
+export interface TradeOrderLineRow {
   id: string;
   orderId: string;
   itemId: string;
@@ -54,7 +56,7 @@ export async function insertOrder(
     createdBy: string;
   },
 ): Promise<{ id: string }> {
-  const [row] = await tx.insert(wholesaleOrders).values(input).returning({ id: wholesaleOrders.id });
+  const [row] = await tx.insert(tradeOrders).values(input).returning({ id: tradeOrders.id });
   return { id: row!.id };
 }
 
@@ -71,43 +73,43 @@ export async function insertLines(
   }[],
 ): Promise<void> {
   if (lines.length === 0) return;
-  await tx.insert(wholesaleOrderLines).values(lines.map((l) => ({ ...l, orgId, orderId })));
+  await tx.insert(tradeOrderLines).values(lines.map((l) => ({ ...l, orgId, orderId })));
 }
 
 export async function getOrderById(
   tx: Tx,
   orgId: string,
   id: string,
-): Promise<WholesaleOrderRow | undefined> {
+): Promise<TradeOrderRow | undefined> {
   const [row] = await tx
     .select()
-    .from(wholesaleOrders)
-    .where(and(eq(wholesaleOrders.orgId, orgId), eq(wholesaleOrders.id, id)))
+    .from(tradeOrders)
+    .where(and(eq(tradeOrders.orgId, orgId), eq(tradeOrders.id, id)))
     .limit(1);
-  return row as WholesaleOrderRow | undefined;
+  return row as TradeOrderRow | undefined;
 }
 
 export async function linesFor(
   tx: Tx,
   orgId: string,
   orderId: string,
-): Promise<WholesaleOrderLineRow[]> {
+): Promise<TradeOrderLineRow[]> {
   return (await tx
     .select()
-    .from(wholesaleOrderLines)
-    .where(and(eq(wholesaleOrderLines.orgId, orgId), eq(wholesaleOrderLines.orderId, orderId)))) as WholesaleOrderLineRow[];
+    .from(tradeOrderLines)
+    .where(and(eq(tradeOrderLines.orgId, orgId), eq(tradeOrderLines.orderId, orderId)))) as TradeOrderLineRow[];
 }
 
 export async function setStatus(
   tx: Tx,
   orgId: string,
   id: string,
-  status: WholesaleOrderStatus,
+  status: TradeOrderStatus,
 ): Promise<void> {
   await tx
-    .update(wholesaleOrders)
+    .update(tradeOrders)
     .set({ status, updatedAt: sql`now()` })
-    .where(and(eq(wholesaleOrders.orgId, orgId), eq(wholesaleOrders.id, id)));
+    .where(and(eq(tradeOrders.orgId, orgId), eq(tradeOrders.id, id)));
 }
 
 export async function markDispatched(
@@ -115,7 +117,8 @@ export async function markDispatched(
   orgId: string,
   id: string,
   values: {
-    arChargeId: string;
+    /** ⛔ Null for an internal transfer — a branch is not extended credit. */
+    arChargeId: string | null;
     journalEntryId: string;
     dispatchedBy: string;
     creditOverrideBy: string | null;
@@ -123,7 +126,7 @@ export async function markDispatched(
   },
 ): Promise<void> {
   await tx
-    .update(wholesaleOrders)
+    .update(tradeOrders)
     .set({
       status: 'dispatched',
       arChargeId: values.arChargeId,
@@ -134,7 +137,7 @@ export async function markDispatched(
       creditOverrideReason: values.creditOverrideReason,
       updatedAt: sql`now()`,
     })
-    .where(and(eq(wholesaleOrders.orgId, orgId), eq(wholesaleOrders.id, id)));
+    .where(and(eq(tradeOrders.orgId, orgId), eq(tradeOrders.id, id)));
 }
 
 export async function markVoided(
@@ -144,7 +147,7 @@ export async function markVoided(
   values: { voidedBy: string; voidReason: string },
 ): Promise<void> {
   await tx
-    .update(wholesaleOrders)
+    .update(tradeOrders)
     .set({
       status: 'void',
       voidedBy: values.voidedBy,
@@ -152,14 +155,14 @@ export async function markVoided(
       voidReason: values.voidReason,
       updatedAt: sql`now()`,
     })
-    .where(and(eq(wholesaleOrders.orgId, orgId), eq(wholesaleOrders.id, id)));
+    .where(and(eq(tradeOrders.orgId, orgId), eq(tradeOrders.id, id)));
 }
 
 /**
  * The rate this customer's price list quotes for an item, or undefined when it quotes none.
  *
  * ⚠️ Read ONCE, at line creation, and then captured onto the line. Nothing downstream re-reads
- * this — that is the whole point of `wholesale_order_lines.rate` existing as a column.
+ * this — that is the whole point of `trade_order_lines.rate` existing as a column.
  */
 export async function quotedRate(
   tx: Tx,
@@ -176,4 +179,22 @@ export async function quotedRate(
   `)) as unknown as Record<string, string | null>[];
   if (!row) return undefined;
   return { rate: String(row.rate), unit: row.unit ?? null };
+}
+
+/**
+ * Record who signed for the goods. ⚠️ Posts nothing for a same-org transfer — the value already
+ * moved at dispatch. See `domain/src/trade`'s `receiveTradeOrder` for why that is a decision.
+ */
+export async function markReceived(
+  tx: Tx,
+  orgId: string,
+  id: string,
+  receivedBy: string,
+): Promise<Date> {
+  const [row] = await tx
+    .update(tradeOrders)
+    .set({ status: 'received', receivedBy, receivedAt: sql`now()`, updatedAt: sql`now()` })
+    .where(and(eq(tradeOrders.orgId, orgId), eq(tradeOrders.id, id)))
+    .returning({ receivedAt: tradeOrders.receivedAt });
+  return row!.receivedAt!;
 }

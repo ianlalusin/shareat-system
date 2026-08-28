@@ -33,11 +33,11 @@ import { organizations } from './organizations';
 import { persons } from './persons';
 import { stores } from './stores';
 
-export const WHOLESALE_ORDER_STATUSES = ['draft', 'confirmed', 'dispatched', 'void'] as const;
-export type WholesaleOrderStatus = (typeof WHOLESALE_ORDER_STATUSES)[number];
+export const TRADE_ORDER_STATUSES = ['draft', 'confirmed', 'dispatched', 'received', 'void'] as const;
+export type TradeOrderStatus = (typeof TRADE_ORDER_STATUSES)[number];
 
-export const wholesaleOrders = pgTable(
-  'wholesale_orders',
+export const tradeOrders = pgTable(
+  'trade_orders',
   {
     id: uuid('id').primaryKey().default(sql`uuidv7()`),
     orgId: uuid('org_id')
@@ -56,7 +56,7 @@ export const wholesaleOrders = pgTable(
     orderDate: date('order_date').notNull(),
     referenceNo: text('reference_no'),
     notes: text('notes'),
-    status: text('status', { enum: WHOLESALE_ORDER_STATUSES }).notNull().default('draft'),
+    status: text('status', { enum: TRADE_ORDER_STATUSES }).notNull().default('draft'),
     totalAmount: numeric('total_amount', { precision: 14, scale: 2 }).notNull(),
     /**
      * ⭐ The receivable raised at dispatch — **linked, never duplicated**. The money lives in
@@ -68,6 +68,10 @@ export const wholesaleOrders = pgTable(
     journalEntryId: uuid('journal_entry_id').references(() => journalEntries.id, { onDelete: 'restrict' }),
     dispatchedAt: timestamp('dispatched_at', { withTimezone: true }),
     dispatchedBy: uuid('dispatched_by').references(() => persons.id, { onDelete: 'restrict' }),
+    /** ⚠️ T-133. Who signed for the goods. Posts nothing for a same-org transfer — the value
+     *  already moved at dispatch, in one entry. It is a recorded fact, not a posting trigger. */
+    receivedAt: timestamp('received_at', { withTimezone: true }),
+    receivedBy: uuid('received_by').references(() => persons.id, { onDelete: 'restrict' }),
     /** Who let a dispatch through despite the credit limit, and why. Both or neither. */
     creditOverrideBy: uuid('credit_override_by').references(() => persons.id, { onDelete: 'restrict' }),
     creditOverrideReason: text('credit_override_reason'),
@@ -81,27 +85,31 @@ export const wholesaleOrders = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
   (t) => [
-    check('wholesale_orders_total_positive_check', sql`${t.totalAmount} > 0`),
+    check('trade_orders_total_positive_check', sql`${t.totalAmount} > 0`),
     check(
-      'wholesale_orders_dispatch_shape_check',
+      'trade_orders_dispatch_shape_check',
       sql`${t.status} <> 'dispatched' or (${t.dispatchedAt} is not null and ${t.dispatchedBy} is not null and ${t.arChargeId} is not null)`,
     ),
     check(
-      'wholesale_orders_void_shape_check',
+      'trade_orders_void_shape_check',
       sql`${t.status} <> 'void' or (${t.voidedBy} is not null and ${t.voidedAt} is not null and ${t.voidReason} is not null)`,
     ),
     check(
-      'wholesale_orders_credit_override_shape_check',
+      'trade_orders_received_shape_check',
+      sql`(${t.receivedAt} is null) = (${t.receivedBy} is null)`,
+    ),
+    check(
+      'trade_orders_credit_override_shape_check',
       sql`(${t.creditOverrideBy} is null) = (${t.creditOverrideReason} is null)`,
     ),
-    index('wholesale_orders_org_customer_idx').on(t.orgId, t.customerId),
-    index('wholesale_orders_org_store_date_idx').on(t.orgId, t.storeId, t.orderDate),
-    uniqueIndex('wholesale_orders_ar_charge_key').on(t.arChargeId).where(sql`${t.arChargeId} is not null`),
+    index('trade_orders_org_customer_idx').on(t.orgId, t.customerId),
+    index('trade_orders_org_store_date_idx').on(t.orgId, t.storeId, t.orderDate),
+    uniqueIndex('trade_orders_ar_charge_key').on(t.arChargeId).where(sql`${t.arChargeId} is not null`),
   ],
 );
 
-export const wholesaleOrderLines = pgTable(
-  'wholesale_order_lines',
+export const tradeOrderLines = pgTable(
+  'trade_order_lines',
   {
     id: uuid('id').primaryKey().default(sql`uuidv7()`),
     orgId: uuid('org_id')
@@ -109,7 +117,7 @@ export const wholesaleOrderLines = pgTable(
       .references(() => organizations.id, { onDelete: 'restrict' }),
     orderId: uuid('order_id')
       .notNull()
-      .references(() => wholesaleOrders.id, { onDelete: 'cascade' }),
+      .references(() => tradeOrders.id, { onDelete: 'cascade' }),
     itemId: uuid('item_id')
       .notNull()
       .references(() => items.id, { onDelete: 'restrict' }),
@@ -130,10 +138,10 @@ export const wholesaleOrderLines = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    check('wholesale_order_lines_quantity_positive_check', sql`${t.quantity} > 0`),
-    check('wholesale_order_lines_rate_non_negative_check', sql`${t.rate} >= 0`),
-    check('wholesale_order_lines_total_positive_check', sql`${t.lineTotal} > 0`),
-    index('wholesale_order_lines_order_idx').on(t.orderId),
-    index('wholesale_order_lines_org_item_idx').on(t.orgId, t.itemId),
+    check('trade_order_lines_quantity_positive_check', sql`${t.quantity} > 0`),
+    check('trade_order_lines_rate_non_negative_check', sql`${t.rate} >= 0`),
+    check('trade_order_lines_total_positive_check', sql`${t.lineTotal} > 0`),
+    index('trade_order_lines_order_idx').on(t.orderId),
+    index('trade_order_lines_org_item_idx').on(t.orgId, t.itemId),
   ],
 );

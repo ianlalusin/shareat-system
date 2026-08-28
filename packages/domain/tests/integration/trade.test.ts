@@ -8,7 +8,7 @@ import { sql as dsql } from 'drizzle-orm';
  *
  * ⭐ The test that carries the design is *"editing the price list afterwards leaves the order
  * untouched"*. Everything else here is arithmetic and gating; that one is the reason
- * `wholesale_order_lines.rate` is a captured column rather than a join, and it is the difference
+ * `trade_order_lines.rate` is a captured column rather than a join, and it is the difference
  * between an agreed price and a live quote.
  */
 config({ path: '.env.local' });
@@ -21,18 +21,19 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../db/seed/expense-categories';
-import { closeDb, transaction, wholesaleRepo, APP_ROLE, type Tx } from '@shareat/db';
+import { closeDb, transaction, tradeRepo, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import {
   createCustomer,
   createItem,
   createPriceList,
-  createWholesaleOrder,
-  confirmWholesaleOrder,
-  dispatchWholesaleOrder,
+  createTradeOrder,
+  confirmTradeOrder,
+  dispatchTradeOrder,
+  receiveTradeOrder,
   setPrice,
   setStoreSellability,
-  voidWholesaleOrder,
+  voidTradeOrder,
   WHOLESALE_REVENUE_CODE,
 } from '@shareat/domain';
 
@@ -153,7 +154,7 @@ describe('the rate is captured, not live-joined', () => {
     const customerId = await buyer(f, { priceListId: list.id });
 
     const order = await asOrg(f.orgId, (tx) =>
-      createWholesaleOrder(tx, f.manager, {
+      createTradeOrder(tx, f.manager, {
         storeId: f.storeId,
         customerId,
         orderDate: '2026-01-10',
@@ -167,10 +168,10 @@ describe('the rate is captured, not live-joined', () => {
       setPrice(tx, f.admin, { priceListId: list.id, itemId, rate: '999.00', unit: 'kg' }),
     );
 
-    const lines = await asOrg(f.orgId, (tx) => wholesaleRepo.linesFor(tx, f.orgId, order.orderId));
+    const lines = await asOrg(f.orgId, (tx) => tradeRepo.linesFor(tx, f.orgId, order.orderId));
     expect(lines).toHaveLength(1);
     expect(Number(lines[0]!.rate)).toBe(450);
-    const reread = await asOrg(f.orgId, (tx) => wholesaleRepo.getOrderById(tx, f.orgId, order.orderId));
+    const reread = await asOrg(f.orgId, (tx) => tradeRepo.getOrderById(tx, f.orgId, order.orderId));
     expect(reread!.totalAmount).toBe('4500.00');
   });
 
@@ -181,7 +182,7 @@ describe('the rate is captured, not live-joined', () => {
     const customerId = await buyer(f, { priceListId: list.id });
     await expect(
       asOrg(f.orgId, (tx) =>
-        createWholesaleOrder(tx, f.manager, {
+        createTradeOrder(tx, f.manager, {
           storeId: f.storeId, customerId, orderDate: '2026-01-10', lines: [{ itemId, quantity: '1' }],
         }),
       ),
@@ -195,7 +196,7 @@ describe('the rate is captured, not live-joined', () => {
     await asOrg(f.orgId, (tx) => setPrice(tx, f.admin, { priceListId: list.id, itemId, rate: '100.00' }));
     const customerId = await buyer(f, { priceListId: list.id });
     const order = await asOrg(f.orgId, (tx) =>
-      createWholesaleOrder(tx, f.manager, {
+      createTradeOrder(tx, f.manager, {
         storeId: f.storeId, customerId, orderDate: '2026-01-10',
         lines: [{ itemId, quantity: '2', rate: '80.00' }],
       }),
@@ -220,7 +221,7 @@ describe('what may be sold wholesale, and to whom', () => {
     const customerId = await buyer(f);
     await expect(
       asOrg(f.orgId, (tx) =>
-        createWholesaleOrder(tx, f.manager, {
+        createTradeOrder(tx, f.manager, {
           storeId: f.storeId, customerId, orderDate: '2026-01-10',
           lines: [{ itemId: bento.id, quantity: '1', rate: '250' }],
         }),
@@ -236,7 +237,7 @@ describe('what may be sold wholesale, and to whom', () => {
 
     // Accepted at the store that makes it.
     const ok = await asOrg(f.orgId, (tx) =>
-      createWholesaleOrder(tx, f.manager, {
+      createTradeOrder(tx, f.manager, {
         storeId: f.storeId, customerId, orderDate: '2026-01-10',
         lines: [{ itemId, quantity: '5', rate: '120' }],
       }),
@@ -246,7 +247,7 @@ describe('what may be sold wholesale, and to whom', () => {
     // Refused at the store that merely buys it in.
     await expect(
       asOrg(f.orgId, (tx) =>
-        createWholesaleOrder(tx, f.manager, {
+        createTradeOrder(tx, f.manager, {
           storeId: f.otherStoreId, customerId, orderDate: '2026-01-10',
           lines: [{ itemId, quantity: '5', rate: '120' }],
         }),
@@ -254,18 +255,25 @@ describe('what may be sold wholesale, and to whom', () => {
     ).rejects.toThrow(/does not sell wholesale/);
   });
 
-  it('⛔ an internal counterparty is refused, and the message names T-133', async () => {
+  // ⭐ T-132 REFUSED an internal counterparty here and named T-133 in the message. T-133 is what
+  // makes it work, so the refusal is gone and this test now pins the opposite. Kept rather than
+  // deleted: the sale path and the transfer path share ONE function, and the thing worth proving
+  // is that they diverge on the derived treatment and nowhere else.
+  it('⭐ an internal counterparty is ACCEPTED now, and takes the transfer treatment', async () => {
     const f = await fixture('internal');
     const itemId = await wholesaleItem(f, 'Transfer stock');
     const customerId = await buyer(f, { group: 'internal' });
-    await expect(
-      asOrg(f.orgId, (tx) =>
-        createWholesaleOrder(tx, f.manager, {
-          storeId: f.storeId, customerId, orderDate: '2026-01-10',
-          lines: [{ itemId, quantity: '1', rate: '10' }],
-        }),
-      ),
-    ).rejects.toThrow(/T-133/);
+    const order = await asOrg(f.orgId, (tx) =>
+      createTradeOrder(tx, f.manager, {
+        storeId: f.storeId, customerId, orderDate: '2026-01-10',
+        lines: [{ itemId, quantity: '1', rate: '10' }],
+      }),
+    );
+    const result = await asOrg(f.orgId, (tx) =>
+      dispatchTradeOrder(tx, f.manager, { orderId: order.orderId }),
+    );
+    expect(result.treatment).toBe('internal');
+    expect(result.chargeId).toBeNull();
   });
 
   it('an order whose stated total disagrees with its lines is refused', async () => {
@@ -274,7 +282,7 @@ describe('what may be sold wholesale, and to whom', () => {
     const customerId = await buyer(f);
     await expect(
       asOrg(f.orgId, (tx) =>
-        createWholesaleOrder(tx, f.manager, {
+        createTradeOrder(tx, f.manager, {
           storeId: f.storeId, customerId, orderDate: '2026-01-10',
           lines: [{ itemId, quantity: '2', rate: '50' }],
           totalAmount: '150.00',
@@ -288,7 +296,7 @@ describe('what may be sold wholesale, and to whom', () => {
     const customerId = await buyer(f);
     await expect(
       asOrg(f.orgId, (tx) =>
-        createWholesaleOrder(tx, f.manager, {
+        createTradeOrder(tx, f.manager, {
           storeId: f.storeId, customerId, orderDate: '2026-01-10', lines: [],
         }),
       ),
@@ -305,7 +313,7 @@ describe('dispatch is the billing event', () => {
     const itemId = await wholesaleItem(f, 'Beef');
     const customerId = await buyer(f, opts.creditLimit !== undefined ? { creditLimit: opts.creditLimit } : {});
     const order = await asOrg(f.orgId, (tx) =>
-      createWholesaleOrder(tx, f.manager, {
+      createTradeOrder(tx, f.manager, {
         storeId: f.storeId, customerId, orderDate: '2026-01-10',
         lines: [{ itemId, quantity: '4', rate: '250' }],
       }),
@@ -316,9 +324,9 @@ describe('dispatch is the billing event', () => {
   it('⭐ posts exactly one balanced entry to 1210 / 4300, with the customer as party', async () => {
     const f = await fixture('post');
     const o = await anOrder(f);
-    await asOrg(f.orgId, (tx) => confirmWholesaleOrder(tx, f.manager, { orderId: o.orderId }));
+    await asOrg(f.orgId, (tx) => confirmTradeOrder(tx, f.manager, { orderId: o.orderId }));
     const result = await asOrg(f.orgId, (tx) =>
-      dispatchWholesaleOrder(tx, f.manager, { orderId: o.orderId }),
+      dispatchTradeOrder(tx, f.manager, { orderId: o.orderId }),
     );
 
     const legs = await sql<{ code: string; debit: string; credit: string; party_id: string | null }[]>`
@@ -334,7 +342,7 @@ describe('dispatch is the billing event', () => {
     expect(legs[1]!.code).toBe(WHOLESALE_REVENUE_CODE);
     expect(Number(legs[1]!.credit)).toBe(1000);
 
-    const reread = await asOrg(f.orgId, (tx) => wholesaleRepo.getOrderById(tx, f.orgId, o.orderId));
+    const reread = await asOrg(f.orgId, (tx) => tradeRepo.getOrderById(tx, f.orgId, o.orderId));
     expect(reread!.status).toBe('dispatched');
     expect(reread!.arChargeId).toBe(result.chargeId);
   });
@@ -342,8 +350,8 @@ describe('dispatch is the billing event', () => {
   it('dispatching twice posts once', async () => {
     const f = await fixture('idem');
     const o = await anOrder(f);
-    const first = await asOrg(f.orgId, (tx) => dispatchWholesaleOrder(tx, f.manager, { orderId: o.orderId }));
-    const second = await asOrg(f.orgId, (tx) => dispatchWholesaleOrder(tx, f.manager, { orderId: o.orderId }));
+    const first = await asOrg(f.orgId, (tx) => dispatchTradeOrder(tx, f.manager, { orderId: o.orderId }));
+    const second = await asOrg(f.orgId, (tx) => dispatchTradeOrder(tx, f.manager, { orderId: o.orderId }));
     expect(second.chargeId).toBe(first.chargeId);
     expect(second.entryId).toBe(first.entryId);
 
@@ -355,9 +363,9 @@ describe('dispatch is the billing event', () => {
   it('void reverses the receivable rather than deleting it', async () => {
     const f = await fixture('void');
     const o = await anOrder(f);
-    await asOrg(f.orgId, (tx) => dispatchWholesaleOrder(tx, f.manager, { orderId: o.orderId }));
+    await asOrg(f.orgId, (tx) => dispatchTradeOrder(tx, f.manager, { orderId: o.orderId }));
     const { reversedEntryId } = await asOrg(f.orgId, (tx) =>
-      voidWholesaleOrder(tx, f.admin, { orderId: o.orderId, reason: 'Buyer cancelled before pickup.' }),
+      voidTradeOrder(tx, f.admin, { orderId: o.orderId, reason: 'Buyer cancelled before pickup.' }),
     );
     expect(reversedEntryId).not.toBeNull();
 
@@ -370,16 +378,16 @@ describe('dispatch is the billing event', () => {
         and je.status <> 'draft'`;
     expect(Number(position!.balance)).toBe(0);
 
-    const reread = await asOrg(f.orgId, (tx) => wholesaleRepo.getOrderById(tx, f.orgId, o.orderId));
+    const reread = await asOrg(f.orgId, (tx) => tradeRepo.getOrderById(tx, f.orgId, o.orderId));
     expect(reread!.status).toBe('void');
   });
 
   it('a void order cannot be voided again', async () => {
     const f = await fixture('revoid');
     const o = await anOrder(f);
-    await asOrg(f.orgId, (tx) => voidWholesaleOrder(tx, f.manager, { orderId: o.orderId, reason: 'Mistake.' }));
+    await asOrg(f.orgId, (tx) => voidTradeOrder(tx, f.manager, { orderId: o.orderId, reason: 'Mistake.' }));
     await expect(
-      asOrg(f.orgId, (tx) => voidWholesaleOrder(tx, f.manager, { orderId: o.orderId, reason: 'Again.' })),
+      asOrg(f.orgId, (tx) => voidTradeOrder(tx, f.manager, { orderId: o.orderId, reason: 'Again.' })),
     ).rejects.toThrow(/already void/);
   });
 });
@@ -392,7 +400,7 @@ describe('the credit limit', () => {
   async function orderWorth(f: Fixture, customerId: string, amount: string) {
     const itemId = await wholesaleItem(f, 'Credit stock');
     return asOrg(f.orgId, (tx) =>
-      createWholesaleOrder(tx, f.manager, {
+      createTradeOrder(tx, f.manager, {
         storeId: f.storeId, customerId, orderDate: '2026-01-10',
         lines: [{ itemId, quantity: '1', rate: amount }],
       }),
@@ -404,7 +412,7 @@ describe('the credit limit', () => {
     const customerId = await buyer(f, { creditLimit: '500.00' });
     const o = await orderWorth(f, customerId, '900.00');
     await expect(
-      asOrg(f.orgId, (tx) => dispatchWholesaleOrder(tx, f.manager, { orderId: o.orderId })),
+      asOrg(f.orgId, (tx) => dispatchTradeOrder(tx, f.manager, { orderId: o.orderId })),
     ).rejects.toThrow(/limit of ₱500.00/);
   });
 
@@ -416,7 +424,7 @@ describe('the credit limit', () => {
     const customerId = await buyer(f, { creditLimit: '500.00' });
     const o = await orderWorth(f, customerId, '900.00');
     await expect(
-      asOrg(f.orgId, (tx) => dispatchWholesaleOrder(tx, f.staff, { orderId: o.orderId })),
+      asOrg(f.orgId, (tx) => dispatchTradeOrder(tx, f.staff, { orderId: o.orderId })),
     ).rejects.toThrow(/may not 'approve_buyer'/);
   });
 
@@ -425,13 +433,13 @@ describe('the credit limit', () => {
     const customerId = await buyer(f, { creditLimit: '500.00' });
     const o = await orderWorth(f, customerId, '900.00');
     const result = await asOrg(f.orgId, (tx) =>
-      dispatchWholesaleOrder(tx, f.manager, {
+      dispatchTradeOrder(tx, f.manager, {
         orderId: o.orderId,
         creditOverrideReason: 'Paying on delivery, agreed with the owner.',
       }),
     );
     expect(result.creditOverridden).toBe(true);
-    const reread = await asOrg(f.orgId, (tx) => wholesaleRepo.getOrderById(tx, f.orgId, o.orderId));
+    const reread = await asOrg(f.orgId, (tx) => tradeRepo.getOrderById(tx, f.orgId, o.orderId));
     expect(reread!.creditOverrideReason).toMatch(/agreed with the owner/);
   });
 
@@ -441,7 +449,7 @@ describe('the credit limit', () => {
     const o = await orderWorth(f, customerId, '900.00');
     await expect(
       asOrg(f.orgId, (tx) =>
-        dispatchWholesaleOrder(tx, f.manager, { orderId: o.orderId, creditOverrideReason: '   ' }),
+        dispatchTradeOrder(tx, f.manager, { orderId: o.orderId, creditOverrideReason: '   ' }),
       ),
     ).rejects.toThrow(/limit of/);
   });
@@ -450,7 +458,7 @@ describe('the credit limit', () => {
     const f = await fixture('nolimit');
     const customerId = await buyer(f);
     const o = await orderWorth(f, customerId, '99999.00');
-    const result = await asOrg(f.orgId, (tx) => dispatchWholesaleOrder(tx, f.manager, { orderId: o.orderId }));
+    const result = await asOrg(f.orgId, (tx) => dispatchTradeOrder(tx, f.manager, { orderId: o.orderId }));
     expect(result.creditOverridden).toBe(false);
   });
 
@@ -458,12 +466,230 @@ describe('the credit limit', () => {
     const f = await fixture('cumulative');
     const customerId = await buyer(f, { creditLimit: '1000.00' });
     const first = await orderWorth(f, customerId, '700.00');
-    await asOrg(f.orgId, (tx) => dispatchWholesaleOrder(tx, f.manager, { orderId: first.orderId }));
+    await asOrg(f.orgId, (tx) => dispatchTradeOrder(tx, f.manager, { orderId: first.orderId }));
 
     // 700 already owed + 500 more = 1200, past the 1000 limit.
     const second = await orderWorth(f, customerId, '500.00');
     await expect(
-      asOrg(f.orgId, (tx) => dispatchWholesaleOrder(tx, f.manager, { orderId: second.orderId })),
+      asOrg(f.orgId, (tx) => dispatchTradeOrder(tx, f.manager, { orderId: second.orderId })),
     ).rejects.toThrow(/owes ₱700.00/);
+  });
+});
+
+// =========================================================================================
+// T-133 — the OTHER treatment: an internal transfer, which eliminates
+// =========================================================================================
+
+describe('an internal transfer is not a sale', () => {
+  /** A customer that IS one of our own stores. Treatment is derived from the link (ADR-008 §2). */
+  async function ownStore(f: Fixture, storeId: string, creditLimit?: string): Promise<string> {
+    const c = await asOrg(f.orgId, (tx) =>
+      createCustomer(tx, f.admin, {
+        name: `Branch ${uid('br')}`,
+        customerGroup: 'internal',
+        counterpartyStoreId: storeId,
+      }),
+    );
+    if (creditLimit) await sql`update customers set credit_limit = ${creditLimit} where id = ${c.id}`;
+    return c.id;
+  }
+
+  /** An item with NO wholesale flag at all — a transfer must not need one. */
+  async function plainItem(f: Fixture): Promise<string> {
+    const item = await asOrg(f.orgId, (tx) =>
+      createItem(tx, f.superAdmin, {
+        code: uid('TR'), name: `Prepped ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg',
+        sellableWholesale: false,
+      }),
+    );
+    return item.id;
+  }
+
+  async function transferOrder(f: Fixture, customerId: string, amount = '18000') {
+    const itemId = await plainItem(f);
+    return asOrg(f.orgId, (tx) =>
+      createTradeOrder(tx, f.manager, {
+        storeId: f.storeId, customerId, orderDate: '2026-01-10',
+        lines: [{ itemId, quantity: '1', rate: amount }],
+      }),
+    );
+  }
+
+  it('⭐ posts ONE entry with FOUR legs across two stores, each party the OTHER store code', async () => {
+    const f = await fixture('transfer');
+    const customerId = await ownStore(f, f.otherStoreId);
+    const o = await transferOrder(f, customerId);
+    const result = await asOrg(f.orgId, (tx) => dispatchTradeOrder(tx, f.manager, { orderId: o.orderId }));
+    expect(result.treatment).toBe('internal');
+    expect(result.chargeId).toBeNull();
+
+    const legs = await sql<
+      { code: string; store_id: string; debit: string; credit: string; party_type: string | null; party_id: string | null }[]
+    >`
+      select a.code, jl.store_id, jl.debit::text, jl.credit::text, jl.party_type, jl.party_id
+      from journal_lines jl
+      join accounts a on a.id = jl.account_id
+      where jl.entry_id = ${result.entryId}
+      order by a.code, jl.store_id`;
+    expect(legs).toHaveLength(4);
+
+    const codes = await sql<{ id: string; code: string }[]>`
+      select id, code from stores where id in (${f.storeId}, ${f.otherStoreId})`;
+    const codeOf = new Map(codes.map((r) => [r.id, r.code]));
+
+    const dueFrom = legs.find((l) => l.code === '1250')!;
+    expect(dueFrom.store_id).toBe(f.storeId);
+    expect(Number(dueFrom.debit)).toBe(18000);
+    expect(dueFrom.party_type).toBe('store');
+    expect(dueFrom.party_id).toBe(codeOf.get(f.otherStoreId));
+
+    const dueTo = legs.find((l) => l.code === '2150')!;
+    expect(dueTo.store_id).toBe(f.otherStoreId);
+    expect(Number(dueTo.credit)).toBe(18000);
+    expect(dueTo.party_id).toBe(codeOf.get(f.storeId));
+
+    // The goods leave one store's inventory and land in the other's. No revenue, no COGS.
+    const inv = legs.filter((l) => l.code === '1330');
+    expect(inv).toHaveLength(2);
+    expect(Number(inv.find((l) => l.store_id === f.storeId)!.credit)).toBe(18000);
+    expect(Number(inv.find((l) => l.store_id === f.otherStoreId)!.debit)).toBe(18000);
+  });
+
+  it('⛔ raises no receivable at all, and books no revenue', async () => {
+    const f = await fixture('noar');
+    const customerId = await ownStore(f, f.otherStoreId);
+    const o = await transferOrder(f, customerId);
+    const result = await asOrg(f.orgId, (tx) => dispatchTradeOrder(tx, f.manager, { orderId: o.orderId }));
+
+    const [charges] = await sql<{ count: string }[]>`
+      select count(*)::text from ar_charges where org_id = ${f.orgId}`;
+    expect(charges!.count).toBe('0');
+
+    const [revenue] = await sql<{ count: string }[]>`
+      select count(*)::text from journal_lines jl
+      join accounts a on a.id = jl.account_id
+      where jl.entry_id = ${result.entryId} and a.code = ${WHOLESALE_REVENUE_CODE}`;
+    expect(revenue!.count).toBe('0');
+  });
+
+  it('⚠️ a credit limit on our own branch is ignored — a branch is not extended credit', async () => {
+    const f = await fixture('nocredit');
+    const customerId = await ownStore(f, f.otherStoreId, '1.00');
+    const o = await transferOrder(f, customerId, '50000');
+    const result = await asOrg(f.orgId, (tx) => dispatchTradeOrder(tx, f.manager, { orderId: o.orderId }));
+    expect(result.creditOverridden).toBe(false);
+    expect(result.chargeId).toBeNull();
+  });
+
+  it('a transfer needs no wholesale flag — the item here has none', async () => {
+    const f = await fixture('noflag');
+    const customerId = await ownStore(f, f.otherStoreId);
+    const o = await transferOrder(f, customerId);
+    expect(Number(o.totalAmount)).toBe(18000);
+  });
+
+  it('⛔ a store cannot transfer to itself', async () => {
+    const f = await fixture('self');
+    const customerId = await ownStore(f, f.storeId);
+    const itemId = await plainItem(f);
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        createTradeOrder(tx, f.manager, {
+          storeId: f.storeId, customerId, orderDate: '2026-01-10',
+          lines: [{ itemId, quantity: '1', rate: '100' }],
+        }),
+      ),
+    ).rejects.toThrow(/cannot transfer to itself/);
+  });
+
+  it('void reverses the transfer, and the reciprocal pair nets back to zero', async () => {
+    const f = await fixture('voidtransfer');
+    const customerId = await ownStore(f, f.otherStoreId);
+    const o = await transferOrder(f, customerId);
+    await asOrg(f.orgId, (tx) => dispatchTradeOrder(tx, f.manager, { orderId: o.orderId }));
+    const { reversedEntryId } = await asOrg(f.orgId, (tx) =>
+      voidTradeOrder(tx, f.admin, { orderId: o.orderId, reason: 'Crate never left the dock.' }),
+    );
+    expect(reversedEntryId).not.toBeNull();
+
+    const [net] = await sql<{ due_from: string; due_to: string }[]>`
+      select
+        coalesce(sum(case when a.code = '1250' then jl.debit - jl.credit end), 0)::text as due_from,
+        coalesce(sum(case when a.code = '2150' then jl.credit - jl.debit end), 0)::text as due_to
+      from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id
+      join accounts a on a.id = jl.account_id
+      where je.org_id = ${f.orgId} and je.status <> 'draft'`;
+    expect(Number(net!.due_from)).toBe(0);
+    expect(Number(net!.due_to)).toBe(0);
+  });
+
+  it('receipt records who signed for it, and posts nothing further', async () => {
+    const f = await fixture('received');
+    const customerId = await ownStore(f, f.otherStoreId);
+    const o = await transferOrder(f, customerId);
+    await asOrg(f.orgId, (tx) => dispatchTradeOrder(tx, f.manager, { orderId: o.orderId }));
+
+    const [before] = await sql<{ count: string }[]>`
+      select count(*)::text from journal_entries where org_id = ${f.orgId}`;
+    await asOrg(f.orgId, (tx) => receiveTradeOrder(tx, f.manager, { orderId: o.orderId }));
+    const [after] = await sql<{ count: string }[]>`
+      select count(*)::text from journal_entries where org_id = ${f.orgId}`;
+    expect(after!.count).toBe(before!.count);
+
+    const reread = await asOrg(f.orgId, (tx) => tradeRepo.getOrderById(tx, f.orgId, o.orderId));
+    expect(reread!.status).toBe('received');
+    expect(reread!.receivedBy).toBe(f.manager.personId);
+    expect(reread!.receivedAt).not.toBeNull();
+  });
+
+  it('⭐ across the org, total 1250 equals total 2150 after a mix of transfers and a sale', async () => {
+    const f = await fixture('reciprocal');
+    const branch = await ownStore(f, f.otherStoreId);
+    for (const amount of ['1000', '2500', '750']) {
+      const o = await transferOrder(f, branch, amount);
+      await asOrg(f.orgId, (tx) => dispatchTradeOrder(tx, f.manager, { orderId: o.orderId }));
+    }
+    // A real sale alongside, to prove it does not disturb the pair.
+    const itemId = await wholesaleItem(f, 'Sold outside');
+    const outside = await buyer(f);
+    const sale = await asOrg(f.orgId, (tx) =>
+      createTradeOrder(tx, f.manager, {
+        storeId: f.storeId, customerId: outside, orderDate: '2026-01-10',
+        lines: [{ itemId, quantity: '2', rate: '500' }],
+      }),
+    );
+    await asOrg(f.orgId, (tx) => dispatchTradeOrder(tx, f.manager, { orderId: sale.orderId }));
+
+    const [net] = await sql<{ due_from: string; due_to: string }[]>`
+      select
+        coalesce(sum(case when a.code = '1250' then jl.debit - jl.credit end), 0)::text as due_from,
+        coalesce(sum(case when a.code = '2150' then jl.credit - jl.debit end), 0)::text as due_to
+      from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id
+      join accounts a on a.id = jl.account_id
+      where je.org_id = ${f.orgId} and je.status <> 'draft'`;
+    expect(Number(net!.due_from)).toBe(4250);
+    expect(Number(net!.due_from)).toBe(Number(net!.due_to));
+  });
+
+  it('⛔ another ORG is refused for now, and the message says why', async () => {
+    const f = await fixture('interorg');
+    const [otherOrg] = await sql<{ id: string }[]>`
+      insert into organizations (name, code) values (${`Other ${uid('o')}`}, ${uid('oc')}) returning id`;
+    const c = await asOrg(f.orgId, (tx) =>
+      createCustomer(tx, f.admin, {
+        name: `Franchise ${uid('fr')}`, customerGroup: 'franchise', counterpartyOrgId: otherOrg!.id,
+      }),
+    );
+    const itemId = await plainItem(f);
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        createTradeOrder(tx, f.manager, {
+          storeId: f.storeId, customerId: c.id, orderDate: '2026-01-10',
+          lines: [{ itemId, quantity: '1', rate: '100' }],
+        }),
+      ),
+    ).rejects.toThrow(/no second org exists/);
   });
 });

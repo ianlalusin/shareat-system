@@ -346,13 +346,13 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'purchasing volume and unit economics, so it is org-scoped like items and suppliers.',
   },
 
-  wholesale_orders: {
+  trade_orders: {
     scope: 'org_column',
     reason:
       'What an org sells wholesale, to whom, at what price. A franchise reading another’s would ' +
       'learn its entire wholesale book — buyers, volumes and the rates it negotiated.',
   },
-  wholesale_order_lines: {
+  trade_order_lines: {
     scope: 'org_column',
     reason:
       'The captured rate per item per order. ⛔ This IS the negotiated price history, so a leak ' +

@@ -379,6 +379,13 @@
       "when": 1790652707084,
       "tag": "0053_t132_wholesale_orders",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1790739107084,
+      "tag": "0054_t133_trade_orders_and_internal_transfer",
+      "breakpoints": true
     }
   ]
 }
