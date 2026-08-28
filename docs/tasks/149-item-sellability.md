@@ -89,15 +89,18 @@ trigger for this would be a second place to look for one rule.
 Bulgogi sauce is **one item** — one identity, one price history, org-wide. What differs by store is
 what that store *does* with it: Lipa makes it and sells it wholesale; another branch buys it in.
 
-⛔ **The trap avoided:** a row per store per item is exactly v1s mistake — 842 records for 385 real
+⛔ **The trap avoided:** a row per store per item is exactly v1's mistake — 842 records for 385 real
 products, and price history impossible. So identity stays org-level and only the EXCEPTION is
 stored:
 
+```
+items.is_purchasable / sellable_retail / sellable_wholesale   ← the org's default answer
+store_item_sellability                                        ← where one store differs
+```
 
-
-Every override column is NULLABLE, meaning *no opinion, follow the org*. A store overriding only
- must not restate the other two — restating freezes todays default into a copy
-that stops tracking it. Resolution is  per column.
+Every override column is NULLABLE, meaning *"no opinion — follow the org"*. A store overriding
+only `is_purchasable` must not restate the other two, because restating freezes today's default
+into a copy that stops tracking it. Resolution is `coalesce(override, default)`, per column.
 
 ⚠️ With 385 items and 6 stores, a mandatory per-store row would be 2,310 rows of configuration
 before anything worked. The override table is empty until somebody has a reason to fill it.
@@ -129,8 +132,12 @@ org-wide, so if Lipa sells the sauce wholesale, the rate is quotable.
 ⛔ **Recipes / bill of materials** — what a bento box is *made of*, and costing a sale against raw
 materials. Ian, 2026-08-28: *"later we can add the ingredient costing… but for future build, for
 now the basic first."* Named here so the omission is a decision · writing any flag into POS's own
-`products` · per-store sellability (a franchisee buys from the org, not a branch) · pricing rules
-of any kind.
+`products` · pricing rules of any kind.
+
+⚠️ **An earlier draft of this line listed "per-store sellability" as out of scope**, on the
+reasoning that a franchisee buys from the org rather than a branch. Ian corrected that mid-build —
+Lipa *makes* the bulgogi sauce a franchisee buys — and it is now the section above. Left visible
+rather than quietly deleted: the wrong reasoning is worth seeing next to the right one.
 
 ## Done when
 
