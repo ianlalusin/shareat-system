@@ -333,6 +333,12 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'Which of an org’s stores makes a thing versus buys it. Reveals where production happens, ' +
       'so it is org-scoped like the item master it qualifies.',
   },
+  item_pricing: {
+    scope: 'org_column',
+    reason:
+      'How an org marks up what it charges its own branches. Its markup IS its internal margin ' +
+      'policy, so it is org-scoped like the item master it prices.',
+  },
   item_requests: {
     scope: 'org_column',
     reason:

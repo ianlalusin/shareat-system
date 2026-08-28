@@ -100,6 +100,12 @@ export const items = pgTable(
     sellableRetail: boolean('sellable_retail').notNull().default(false),
     /** A franchisee or external buyer. Enforced at `setPrice`: no wholesale rate without it. */
     sellableWholesale: boolean('sellable_wholesale').notNull().default(false),
+    /**
+     * ⭐ T-151. Price this item off ANOTHER item's cost — v1's `costBasisProductId`. Sliced meat
+     * prices off its source slab, because the slab is what was actually bought and so is the only
+     * thing with a real received cost. Resolved first, before this item's own history.
+     */
+    costBasisItemId: uuid('cost_basis_item_id'),
     /** Set together with `status = 'merged'` — the DB refuses one without the other. */
     mergedIntoId: uuid('merged_into_id'),
     notes: text('notes'),
@@ -232,5 +238,55 @@ export const storeItemSellability = pgTable(
   (t) => [
     uniqueIndex('store_item_sellability_store_item_key').on(t.storeId, t.itemId),
     index('store_item_sellability_org_item_idx').on(t.orgId, t.itemId),
+  ],
+);
+
+export const PRICING_MODES = ['fixed', 'fixed_markup', 'percent_markup'] as const;
+export type PricingMode = (typeof PRICING_MODES)[number];
+
+/**
+ * ⭐ How an item's branch price is worked out. T-151, ported from v1's `computeBranchPrice`.
+ *
+ * | Mode | Price |
+ * |---|---|
+ * | `fixed` | a set peso amount |
+ * | `fixed_markup` | basis + peso amount |
+ * | `percent_markup` | basis × (1 + markup%) |
+ *
+ * ⛔ **There is no cost column here, deliberately.** v1 stores a rolling `lastReceivedCost`, and
+ * that is exactly what broke: a delivery line entered as qty 1 with the lot TOTAL in the unit-cost
+ * field poisoned it, and because the basis rule is `max(prior, new)` the poison was STICKY —
+ * every later, cheaper receive kept it, freezing a chopstick branch price at ₱1,458 instead of
+ * ₱1.46. Correcting the delivery did not fix it either: the refresh skips recompute when the
+ * stored value already equals the new max, so it could not self-heal.
+ *
+ * ⭐ v2 derives the basis from invoice history on every read. Fix the bad line, and the price is
+ * right the next time anyone asks for it.
+ */
+export const itemPricing = pgTable(
+  'item_pricing',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    itemId: uuid('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'restrict' }),
+    pricingMode: text('pricing_mode', { enum: PRICING_MODES }).notNull(),
+    fixedAmount: numeric('fixed_amount', { precision: 14, scale: 2 }),
+    markupPercent: numeric('markup_percent', { precision: 8, scale: 4 }),
+    fixedMarkupAmount: numeric('fixed_markup_amount', { precision: 14, scale: 2 }),
+    /** ⚠️ Advisory. It warns; it never blocks an order. */
+    marginAlertThresholdPct: numeric('margin_alert_threshold_pct', { precision: 8, scale: 4 }),
+    setBy: uuid('set_by')
+      .notNull()
+      .references(() => persons.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('item_pricing_item_key').on(t.itemId),
+    index('item_pricing_org_idx').on(t.orgId),
   ],
 );

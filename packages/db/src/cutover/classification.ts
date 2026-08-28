@@ -411,6 +411,17 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'Per-store exceptions to what an item may be bought and sold as. Configuration, no balance, ' +
       'nothing the cutover invalidates — and re-deciding it per store by hand would be pointless work.',
   },
+  item_pricing: {
+    // Keep, like the items it prices: a markup rule is configuration about how the business
+    // operates, not activity. Nothing about it becomes false when the ledger restarts, and
+    // re-entering a pricing rule per item by hand would be pointless work.
+    class: 'keep',
+    reason:
+      'The branch-price rule per item. Configuration, no balance, nothing the cutover ' +
+      'invalidates. The COST it is applied to is derived from invoice history, which purges ' +
+      'with the invoices - so the rule survives and simply re-derives against post-cutover ' +
+      'purchases.',
+  },
   item_requests: {
     // ⭐ keep, NOT purge — and this is the one place an approval record survives the cutover.
     // `cash_requests` purges because the money it moved is replaced by the opening balance; an

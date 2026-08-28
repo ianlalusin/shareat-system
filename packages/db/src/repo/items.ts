@@ -35,6 +35,8 @@ export interface ItemRow {
   kind: ItemKind;
   baseUnit: BaseUnit;
   status: ItemStatus;
+  /** T-151. Price off another item (a slab) instead of this one's own history. */
+  costBasisItemId: string | null;
   isPurchasable: boolean;
   sellableRetail: boolean;
   sellableWholesale: boolean;
@@ -96,6 +98,7 @@ export async function updateItem(
     isPurchasable: boolean;
     sellableRetail: boolean;
     sellableWholesale: boolean;
+    costBasisItemId: string | null;
   }>,
 ): Promise<void> {
   const updated = await tx
@@ -204,6 +207,12 @@ export interface PriceObservation {
   baseQuantity: string;
   /** ⭐ ₱ per the item's own base unit — the only figure that is comparable across suppliers. */
   basePrice: string;
+  /**
+   * ⭐ T-151. `basePrice` plus this line's share of the invoice's inbound delivery and other fees,
+   * allocated by value. What the goods actually cost to have — the basis a branch price is built
+   * on. Equals `basePrice` when the invoice carried no fees.
+   */
+  landedBasePrice: string;
 }
 
 /**
@@ -222,7 +231,20 @@ export async function priceHistory(
            s.name as supplier_name, si.store_id,
            l.quantity::text as quantity, l.purchase_unit, l.unit_price::text as unit_price,
            (l.quantity * l.conversion_factor)::text as base_quantity,
-           (l.line_total / nullif(l.quantity * l.conversion_factor, 0))::text as base_price
+           (l.line_total / nullif(l.quantity * l.conversion_factor, 0))::text as base_price,
+           -- ⭐ T-151 LANDED cost. Ian, 2026-08-28: "delivery fee from supplier to Lipa is added
+           -- to price." The invoice's inbound fees are allocated across its lines BY VALUE and
+           -- folded into the per-base-unit cost, so a price built on this is what the goods
+           -- actually cost to have, not merely what the line said.
+           -- ⚠️ Allocated on every read, never stored: a corrected fee re-allocates itself, which
+           -- is exactly why v1's stored basis could be poisoned and this cannot.
+           (
+             (
+               l.line_total
+               + (coalesce(si.delivery_fee, 0) + coalesce(si.other_fees, 0))
+                 * (l.line_total / nullif(sum(l.line_total) over (partition by l.supplier_invoice_id), 0))
+             ) / nullif(l.quantity * l.conversion_factor, 0)
+           )::text as landed_base_price
     from supplier_invoice_lines l
     join supplier_invoices si on si.id = l.supplier_invoice_id
     join suppliers s on s.id = si.supplier_id
@@ -244,6 +266,9 @@ export async function priceHistory(
     unitPrice: Number(r.unit_price ?? r.unitPrice).toFixed(4),
     baseQuantity: Number(r.base_quantity ?? r.baseQuantity).toFixed(3),
     basePrice: Number(r.base_price ?? r.basePrice).toFixed(4),
+    landedBasePrice: Number(
+      r.landed_base_price ?? r.landedBasePrice ?? r.base_price ?? r.basePrice,
+    ).toFixed(4),
   }));
 }
 
@@ -808,4 +833,123 @@ export async function clearStoreSellability(
     )
     .returning({ id: storeItemSellability.id });
   return gone.length > 0;
+}
+
+// -------------------------------------------------------------------------------------
+// T-151 - the branch price
+// -------------------------------------------------------------------------------------
+
+export interface ItemPricingRow {
+  itemId: string;
+  pricingMode: 'fixed' | 'fixed_markup' | 'percent_markup';
+  fixedAmount: string | null;
+  markupPercent: string | null;
+  fixedMarkupAmount: string | null;
+  marginAlertThresholdPct: string | null;
+}
+
+export async function getItemPricing(
+  tx: Tx,
+  orgId: string,
+  itemId: string,
+): Promise<ItemPricingRow | undefined> {
+  const [row] = (await tx.execute(sql`
+    select item_id, pricing_mode, fixed_amount::text as fixed_amount,
+           markup_percent::text as markup_percent,
+           fixed_markup_amount::text as fixed_markup_amount,
+           margin_alert_threshold_pct::text as margin_alert_threshold_pct
+    from item_pricing where org_id = ${orgId} and item_id = ${itemId}
+  `)) as unknown as Record<string, string | null>[];
+  if (!row) return undefined;
+  return {
+    itemId: String(row.item_id),
+    pricingMode: row.pricing_mode as ItemPricingRow['pricingMode'],
+    fixedAmount: row.fixed_amount ?? null,
+    markupPercent: row.markup_percent ?? null,
+    fixedMarkupAmount: row.fixed_markup_amount ?? null,
+    marginAlertThresholdPct: row.margin_alert_threshold_pct ?? null,
+  };
+}
+
+export async function upsertItemPricing(
+  tx: Tx,
+  input: {
+    orgId: string;
+    itemId: string;
+    pricingMode: 'fixed' | 'fixed_markup' | 'percent_markup';
+    fixedAmount: string | null;
+    markupPercent: string | null;
+    fixedMarkupAmount: string | null;
+    marginAlertThresholdPct: string | null;
+    setBy: string;
+  },
+): Promise<void> {
+  await tx.execute(sql`
+    insert into item_pricing
+      (org_id, item_id, pricing_mode, fixed_amount, markup_percent, fixed_markup_amount,
+       margin_alert_threshold_pct, set_by)
+    values (${input.orgId}, ${input.itemId}, ${input.pricingMode}, ${input.fixedAmount},
+            ${input.markupPercent}, ${input.fixedMarkupAmount}, ${input.marginAlertThresholdPct},
+            ${input.setBy})
+    on conflict (item_id) do update set
+      pricing_mode = excluded.pricing_mode,
+      fixed_amount = excluded.fixed_amount,
+      markup_percent = excluded.markup_percent,
+      fixed_markup_amount = excluded.fixed_markup_amount,
+      margin_alert_threshold_pct = excluded.margin_alert_threshold_pct,
+      updated_at = now()
+  `);
+}
+
+async function lastTwoLandedMax(tx: Tx, orgId: string, itemId: string): Promise<string | null> {
+  const rows = (await tx.execute(sql`
+    with landed as (
+      select si.invoice_date,
+             (
+               (
+                 l.line_total
+                 + (coalesce(si.delivery_fee, 0) + coalesce(si.other_fees, 0))
+                   * (l.line_total / nullif(sum(l.line_total) over (partition by l.supplier_invoice_id), 0))
+               ) / nullif(l.quantity * l.conversion_factor, 0)
+             ) as landed_base_price
+      from supplier_invoice_lines l
+      join supplier_invoices si on si.id = l.supplier_invoice_id
+      where si.org_id = ${orgId} and l.item_id = ${itemId} and si.status <> 'void'
+    )
+    select max(landed_base_price)::text as basis
+    from (select landed_base_price from landed order by invoice_date desc limit 2) t
+  `)) as unknown as Record<string, string | null>[];
+  const basis = rows[0]?.basis;
+  return basis == null ? null : String(basis);
+}
+
+/**
+ * The cost basis for a branch price: max of the LAST TWO landed receives - v1's rule, verbatim.
+ *
+ * v1: "so a single low-cost lot can't drop the branch price below what an earlier expensive lot
+ * still in inventory cost" (ERP-rebuild/src/lib/financial/commissary/pricing.ts).
+ *
+ * DERIVED on every read, never stored. That is the one place this improves on v1, and it is not
+ * cosmetic: v1's stored lastReceivedCost could be poisoned by one bad delivery line and, because
+ * the rule is max(prior, new), the poison was sticky and survived correcting the delivery.
+ */
+export async function costBasisFor(
+  tx: Tx,
+  orgId: string,
+  itemId: string,
+): Promise<{ basis: string; basisFrom: 'own' | 'linked' } | undefined> {
+  const [item] = (await tx.execute(sql`
+    select cost_basis_item_id from items where id = ${itemId} and org_id = ${orgId}
+  `)) as unknown as Record<string, string | null>[];
+  if (!item) return undefined;
+
+  const linkedId = item.cost_basis_item_id;
+  if (linkedId) {
+    const linked = await lastTwoLandedMax(tx, orgId, String(linkedId));
+    if (linked != null) return { basis: linked, basisFrom: 'linked' };
+    // Falls through when the slab has no history of its own - v1 does the same rather than
+    // pricing at zero.
+  }
+  const own = await lastTwoLandedMax(tx, orgId, itemId);
+  return own == null ? undefined : { basis: own, basisFrom: 'own' };
 }

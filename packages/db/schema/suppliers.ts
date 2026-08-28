@@ -142,6 +142,15 @@ export const supplierInvoices = pgTable(
     dueDate: date('due_date'),
 
     totalAmount: numeric('total_amount', { precision: 14, scale: 2 }).notNull(),
+    /**
+     * ⭐ T-151. Inbound freight — supplier to us. Ian, 2026-08-28: *"delivery fee from supplier to
+     * Lipa is added to price."* It is part of what the goods cost to have, so it is allocated
+     * across the lines by value and raises every landed cost on this invoice.
+     *
+     * ⚠️ The line-sum rule moves with it: `sum(lines) + delivery_fee + other_fees = total_amount`.
+     */
+    deliveryFee: numeric('delivery_fee', { precision: 14, scale: 2 }).notNull().default('0'),
+    otherFees: numeric('other_fees', { precision: 14, scale: 2 }).notNull().default('0'),
     notes: text('notes'),
 
     status: text('status', { enum: SUPPLIER_INVOICE_STATUSES }).notNull().default('pending'),

@@ -53,6 +53,8 @@ export async function insertOrder(
     referenceNo: string | null;
     notes: string | null;
     totalAmount: string;
+    deliveryFee: string;
+    otherFees: string;
     createdBy: string;
   },
 ): Promise<{ id: string }> {

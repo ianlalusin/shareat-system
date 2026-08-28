@@ -59,6 +59,17 @@ export const tradeOrders = pgTable(
     status: text('status', { enum: TRADE_ORDER_STATUSES }).notNull().default('draft'),
     totalAmount: numeric('total_amount', { precision: 14, scale: 2 }).notNull(),
     /**
+     * ⭐ T-151. Outbound freight — us to the receiving store. Ian, 2026-08-28: *"delivery fee on
+     * top of that is the fee from Lipa to Malvar."*
+     *
+     * ⛔ **ON TOP, never into the item's cost.** It is a haulage charge for one shipment, not a
+     * property of the item — loading it in would make the same item cost different depending on
+     * how it happened to travel. It rides the transfer posting, so it lands on the receiving
+     * store like the goods do, with no separate freight leg and no freight account.
+     */
+    deliveryFee: numeric('delivery_fee', { precision: 14, scale: 2 }).notNull().default('0'),
+    otherFees: numeric('other_fees', { precision: 14, scale: 2 }).notNull().default('0'),
+    /**
      * ⭐ The receivable raised at dispatch — **linked, never duplicated**. The money lives in
      * `ar_charges`, and T-131's own code collects, ages and writes it off. A second copy of the
      * balance here is exactly the stored-derivation mistake AR was built to avoid (13.3% drift in

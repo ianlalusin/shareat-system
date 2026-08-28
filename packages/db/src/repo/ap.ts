@@ -138,6 +138,9 @@ export interface SupplierInvoiceRow {
   invoiceDate: string;
   dueDate: string | null;
   totalAmount: string;
+  /** T-151. Inbound freight, part of totalAmount but not a line. */
+  deliveryFee: string;
+  otherFees: string;
   notes: string | null;
   status: SupplierInvoiceStatus;
   receiptFileId: string | null;
@@ -168,6 +171,9 @@ export async function insertSupplierInvoice(
     invoiceDate: string;
     dueDate: string | null;
     totalAmount: string;
+    /** T-151. Inbound freight, part of totalAmount but not a line. */
+    deliveryFee: string;
+    otherFees: string;
     notes: string | null;
     receiptFileId: string | null;
     vatType: SupplierInvoiceVatType | null;

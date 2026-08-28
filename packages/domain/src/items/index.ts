@@ -19,6 +19,7 @@ import {
   type Tx,
 } from '@shareat/db';
 import type { BaseUnit, ItemKind, PurchaseUnit } from '@shareat/db/schema';
+import { computeBranchPrice, type BranchPrice } from './branch-price';
 import { authorize, type Actor } from '@shareat/auth';
 
 export interface CreateItemInput {
@@ -499,4 +500,119 @@ export async function clearStoreSellability(
   };
   if (tx) return run(tx);
   return transaction(run);
+}
+
+// =====================================================================================
+// T-151 - the branch price
+// =====================================================================================
+
+export type { BranchPriceRule, BranchPrice } from './branch-price';
+export { computeBranchPrice };
+
+/** Say how an item's branch price is worked out. */
+export async function setItemPricing(
+  tx: Tx | null,
+  actor: Actor,
+  input: {
+    itemId: string;
+    pricingMode: 'fixed' | 'fixed_markup' | 'percent_markup';
+    fixedAmount?: string | null;
+    markupPercent?: string | null;
+    fixedMarkupAmount?: string | null;
+    marginAlertThresholdPct?: string | null;
+  },
+): Promise<void> {
+  const run = async (trx: Tx) => {
+    await authorize(trx, actor, 'manage_items', {});
+    const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
+    if (!item) throw new Error(`setItemPricing: item ${input.itemId} does not exist.`);
+
+    const need = {
+      fixed: input.fixedAmount,
+      fixed_markup: input.fixedMarkupAmount,
+      percent_markup: input.markupPercent,
+    }[input.pricingMode];
+    if (need == null) {
+      throw new Error(
+        `setItemPricing: ${input.pricingMode} needs its own number - a mode without one prices ` +
+          'at zero, silently.',
+      );
+    }
+    await itemsRepo.upsertItemPricing(trx, {
+      orgId: actor.orgId,
+      itemId: input.itemId,
+      pricingMode: input.pricingMode,
+      fixedAmount: input.fixedAmount ?? null,
+      markupPercent: input.markupPercent ?? null,
+      fixedMarkupAmount: input.fixedMarkupAmount ?? null,
+      marginAlertThresholdPct: input.marginAlertThresholdPct ?? null,
+      setBy: actor.personId,
+    });
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/**
+ * Price this item off ANOTHER item's cost - v1's `costBasisProductId`. Sliced meat prices off its
+ * source slab, which is the thing actually bought and so the only one with a real received cost.
+ */
+export async function setCostBasisItem(
+  tx: Tx | null,
+  actor: Actor,
+  input: { itemId: string; costBasisItemId: string | null },
+): Promise<void> {
+  const run = async (trx: Tx) => {
+    await authorize(trx, actor, 'manage_items', {});
+    const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
+    if (!item) throw new Error(`setCostBasisItem: item ${input.itemId} does not exist.`);
+
+    if (input.costBasisItemId) {
+      if (input.costBasisItemId === input.itemId) {
+        throw new Error('setCostBasisItem: an item cannot price off itself.');
+      }
+      const basis = await itemsRepo.getItemById(trx, actor.orgId, input.costBasisItemId);
+      if (!basis) throw new Error('setCostBasisItem: the cost-basis item does not exist.');
+      // A chain that loops would resolve forever, or resolve to whichever link happened to be
+      // read first. Refused outright rather than depth-limited.
+      const seen = new Set<string>([input.itemId]);
+      let cursor: string | null = input.costBasisItemId;
+      while (cursor) {
+        if (seen.has(cursor)) {
+          throw new Error(
+            'setCostBasisItem: that link would form a cycle, and a cycle prices off itself ' +
+              'eventually. Point it at something that has its own purchase history.',
+          );
+        }
+        seen.add(cursor);
+        const next = await itemsRepo.getItemById(trx, actor.orgId, cursor);
+        cursor = next?.costBasisItemId ?? null;
+      }
+    }
+    await itemsRepo.updateItem(trx, actor.orgId, input.itemId, {
+      costBasisItemId: input.costBasisItemId,
+    });
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/**
+ * What this item should be charged to a branch at, right now.
+ *
+ * Undefined when nothing can cost it - the caller surfaces that as "cost not set" rather than
+ * silently pricing at zero, exactly as v1 does.
+ */
+export async function branchPriceFor(
+  tx: Tx,
+  orgId: string,
+  itemId: string,
+): Promise<(BranchPrice & { basisFrom: 'own' | 'linked' }) | undefined> {
+  const rule = await itemsRepo.getItemPricing(tx, orgId, itemId);
+  if (!rule) return undefined;
+  const basis = await itemsRepo.costBasisFor(tx, orgId, itemId);
+  // A fixed price needs no basis at all - it is a number somebody chose.
+  if (!basis && rule.pricingMode !== 'fixed') return undefined;
+  const computed = computeBranchPrice(rule, basis?.basis ?? '0');
+  return { ...computed, basisFrom: basis?.basisFrom ?? 'own' };
 }

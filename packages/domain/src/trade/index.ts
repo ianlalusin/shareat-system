@@ -35,6 +35,7 @@ import {
 } from '@shareat/db';
 import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
 import { recordCharge, voidCharge } from '../ar';
+import { branchPriceFor } from '../items';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 
@@ -87,8 +88,18 @@ export interface CreateTradeOrderInput {
   lines: TradeLineDraft[];
   referenceNo?: string | null;
   notes?: string | null;
-  /** Optional. When given it must equal the sum of the lines, to the centavo. */
+  /** Optional. When given it must equal the sum of the lines PLUS the fees, to the centavo. */
   totalAmount?: string | null;
+  /**
+   * T-151. Outbound freight - us to the receiving store. Ian, 2026-08-28: *"delivery fee on top
+   * of that is the fee from Lipa to Malvar."*
+   *
+   * ON TOP of the priced goods, never into an item's cost: it is a haulage charge for one
+   * shipment, not a property of the item. It rides the posting, so it lands on the receiving
+   * store exactly like the goods do.
+   */
+  deliveryFee?: string | null;
+  otherFees?: string | null;
 }
 
 /**
@@ -169,12 +180,26 @@ export async function createTradeOrder(
         }
       }
 
-      const quoted = await tradeRepo.quotedRate(trx, actor.orgId, input.customerId, draft.itemId);
-      const rate = draft.rate ?? quoted?.rate;
+      // T-151. An INTERNAL transfer is charged cost-plus, not off a rate card: a branch is not
+      // quoted a price list, it is charged what the goods cost plus the agreed markup. A stated
+      // rate still wins - the branch price is a default, never a lock.
+      let derived: string | null = null;
+      if (treatment === 'internal' && draft.rate == null) {
+        const bp = await branchPriceFor(trx, actor.orgId, draft.itemId);
+        derived = bp?.price ?? null;
+      }
+      const quoted = treatment === 'internal'
+        ? undefined
+        : await tradeRepo.quotedRate(trx, actor.orgId, input.customerId, draft.itemId);
+      const rate = draft.rate ?? derived ?? quoted?.rate;
       if (rate === undefined || rate === null) {
         throw new Error(
-          `createTradeOrder: line ${i + 1} names ${item.name}, and ${customer.name}'s price ` +
-            'list does not quote it. Add a rate to the price list, or state one on the line.',
+          treatment === 'internal'
+            ? `createTradeOrder: line ${i + 1} names ${item.name}, and nothing can price it — it ` +
+              'has no branch price rule, or no purchase history to base one on. Set a pricing ' +
+              'rule, or state a rate on the line.'
+            : `createTradeOrder: line ${i + 1} names ${item.name}, and ${customer.name}'s price ` +
+              'list does not quote it. Add a rate to the price list, or state one on the line.',
         );
       }
       if (Number(rate) < 0) throw new Error(`createTradeOrder: line ${i + 1} has a negative rate.`);
@@ -196,11 +221,19 @@ export async function createTradeOrder(
       });
     }
 
+    const deliveryFee = Number(input.deliveryFee ?? 0);
+    const otherFees = Number(input.otherFees ?? 0);
+    if (deliveryFee < 0 || otherFees < 0) {
+      throw new Error('createTradeOrder: a fee cannot be negative.');
+    }
+    const goodsTotal = total;
+    total += deliveryFee + otherFees;
+
     const totalAmount = total.toFixed(2);
     if (input.totalAmount != null && Math.abs(Number(input.totalAmount) - total) > EPSILON) {
       throw new Error(
-        `createTradeOrder: the lines come to ₱${totalAmount}, but the order says ` +
-          `₱${input.totalAmount}. One of the two is wrong.`,
+        `createTradeOrder: the lines come to ₱${goodsTotal.toFixed(2)} plus ₱${(deliveryFee + otherFees).toFixed(2)} ` +
+          `of fees, so ₱${totalAmount} — but the order says ₱${input.totalAmount}. One of the two is wrong.`,
       );
     }
 
@@ -212,6 +245,8 @@ export async function createTradeOrder(
       referenceNo: input.referenceNo?.trim() || null,
       notes: input.notes?.trim() || null,
       totalAmount,
+      deliveryFee: deliveryFee.toFixed(2),
+      otherFees: otherFees.toFixed(2),
       createdBy: actor.personId,
     });
     await tradeRepo.insertLines(trx, actor.orgId, orderId, lines);

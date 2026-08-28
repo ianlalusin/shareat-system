@@ -21,16 +21,22 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../db/seed/expense-categories';
-import { closeDb, transaction, tradeRepo, APP_ROLE, type Tx } from '@shareat/db';
+import { closeDb, itemsRepo, transaction, tradeRepo, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import {
   createCustomer,
+  createSupplier,
   createItem,
   createPriceList,
   createTradeOrder,
   confirmTradeOrder,
   dispatchTradeOrder,
   receiveTradeOrder,
+  branchPriceFor,
+  setItemPricing,
+  setCostBasisItem,
+  recordInvoice,
+  verifyInvoice,
   setPrice,
   setStoreSellability,
   voidTradeOrder,
@@ -726,5 +732,208 @@ describe('an internal transfer is not a sale', () => {
         }),
       ),
     ).rejects.toThrow(/no second org exists/);
+  });
+});
+
+// =========================================================================================
+// T-151 — landed cost and the branch price. Ian, 2026-08-28:
+//   "delivery fee from supplier to Lipa is added to price.
+//    delivery fee on top of that is the fee from Lipa to Malvar."
+// =========================================================================================
+
+describe('two delivery fees, two different treatments', () => {
+  async function supplierFor(f: Fixture): Promise<string> {
+    const s = await asOrg(f.orgId, (tx) => createSupplier(tx, f.manager, { name: `Supplier ${uid('s')}` }));
+    return s.id;
+  }
+
+  async function evidenceFile(f: Fixture): Promise<string> {
+    const [row] = await sql<{ id: string }[]>`
+      insert into stored_files (org_id, store_id, purpose, storage_path, content_type, byte_size, checksum, uploaded_by)
+      values (${f.orgId}, ${f.storeId}, 'receipt_photo', ${`orgs/${f.orgId}/receipt_photo/${uid('f')}.jpg`},
+              'image/jpeg', 1024, ${uid('sum')}, ${f.manager.personId})
+      returning id`;
+    return row!.id;
+  }
+
+  /** A verified invoice: `goods` of line value, plus an inbound delivery fee. */
+  async function buy(
+    f: Fixture,
+    supplierId: string,
+    itemId: string,
+    opts: { qty: string; unitPrice: string; deliveryFee?: string; date?: string },
+  ) {
+    const lineTotal = (Number(opts.qty) * Number(opts.unitPrice)).toFixed(2);
+    const fee = opts.deliveryFee ?? '0';
+    const fileId = await evidenceFile(f);
+    const created = await asOrg(f.orgId, (tx) =>
+      recordInvoice(tx, f.staff, {
+        storeId: f.storeId,
+        supplierId,
+        invoiceDate: opts.date ?? '2026-01-10',
+        totalAmount: (Number(lineTotal) + Number(fee)).toFixed(2),
+        deliveryFee: fee,
+        receiptFileId: fileId,
+        lines: [{
+          itemId, quantity: opts.qty, purchaseUnit: 'kg', conversionFactor: '1',
+          unitPrice: opts.unitPrice, lineTotal,
+        }],
+      }),
+    );
+    await asOrg(f.orgId, (tx) =>
+      verifyInvoice(tx, f.manager, created.id, { supplier: true, invoice: true, items: true, price: true }),
+    );
+    return created.id;
+  }
+
+  it('⭐ inbound freight is added to the PRICE — a ₱500 fee on ₱10,000 of goods lifts cost 5%', async () => {
+    const f = await fixture('landed');
+    const supplierId = await supplierFor(f);
+    const itemId = await wholesaleItem(f, 'Slab');
+    // 100 kg at ₱100 = ₱10,000, plus a ₱500 delivery fee.
+    await buy(f, supplierId, itemId, { qty: '100', unitPrice: '100', deliveryFee: '500' });
+
+    const history = await asOrg(f.orgId, (tx) => itemsRepo.priceHistory(tx, f.orgId, itemId));
+    expect(history).toHaveLength(1);
+    // The raw line says ₱100/kg...
+    expect(Number(history[0]!.basePrice)).toBeCloseTo(100, 4);
+    // ...but what it cost to HAVE is ₱105/kg.
+    expect(Number(history[0]!.landedBasePrice)).toBeCloseTo(105, 4);
+  });
+
+  it('a branch price is built on the landed cost, not the raw line', async () => {
+    const f = await fixture('bprice');
+    const supplierId = await supplierFor(f);
+    const itemId = await wholesaleItem(f, 'Slab');
+    await buy(f, supplierId, itemId, { qty: '100', unitPrice: '100', deliveryFee: '500' });
+    await asOrg(f.orgId, (tx) =>
+      setItemPricing(tx, f.superAdmin, { itemId, pricingMode: 'percent_markup', markupPercent: '10' }),
+    );
+    const bp = await asOrg(f.orgId, (tx) => branchPriceFor(tx, f.orgId, itemId));
+    // ⭐ 105 landed × 1.10 = 115.50. On the raw ₱100 line it would have been ₱110 — the fee would
+    // have been quietly absorbed by the commissary.
+    expect(bp!.price).toBe('115.50');
+  });
+
+  it('⭐ the basis is max of the last TWO receives — a cheap lot cannot drop it', async () => {
+    const f = await fixture('maxtwo');
+    const supplierId = await supplierFor(f);
+    const itemId = await wholesaleItem(f, 'Slab');
+    await buy(f, supplierId, itemId, { qty: '10', unitPrice: '300', date: '2026-01-05' });
+    await buy(f, supplierId, itemId, { qty: '10', unitPrice: '200', date: '2026-01-20' });
+    await asOrg(f.orgId, (tx) =>
+      setItemPricing(tx, f.superAdmin, { itemId, pricingMode: 'percent_markup', markupPercent: '0' }),
+    );
+    const bp = await asOrg(f.orgId, (tx) => branchPriceFor(tx, f.orgId, itemId));
+    // The expensive lot is still in stock, so it still sets the floor.
+    expect(bp!.price).toBe('300.00');
+  });
+
+  it('⭐ a poisoned line stops poisoning once corrected — v1 needed a forced recompute', async () => {
+    const f = await fixture('poison');
+    const supplierId = await supplierFor(f);
+    const itemId = await wholesaleItem(f, 'Chopsticks');
+    await asOrg(f.orgId, (tx) =>
+      setItemPricing(tx, f.superAdmin, { itemId, pricingMode: 'percent_markup', markupPercent: '8' }),
+    );
+    // The classic bad entry: a 1,000-piece lot billed at ₱1,350 total, keyed as qty 1 @ ₱1,350.
+    const bad = await buy(f, supplierId, itemId, { qty: '1', unitPrice: '1350', date: '2026-01-05' });
+    const poisoned = await asOrg(f.orgId, (tx) => branchPriceFor(tx, f.orgId, itemId));
+    expect(Number(poisoned!.price)).toBeCloseTo(1458, 0); // v1's frozen ₱1,458
+
+    // Correct the line to what it really was: 1,000 pieces at ₱1.35.
+    await sql`
+      update supplier_invoice_lines
+      set quantity = 1000, unit_price = 1.35
+      where supplier_invoice_id = ${bad} and item_id = ${itemId}`;
+
+    const healed = await asOrg(f.orgId, (tx) => branchPriceFor(tx, f.orgId, itemId));
+    // ⭐ Right on the next read. v1 stayed at ₱1,458 until someone forced a recompute by hand.
+    expect(Number(healed!.price)).toBeCloseTo(1.46, 2);
+  });
+
+  it('sliced meat prices off its source slab, and falls back to its own history', async () => {
+    const f = await fixture('slab');
+    const supplierId = await supplierFor(f);
+    const slabId = await wholesaleItem(f, 'Beef slab');
+    const slicedId = await wholesaleItem(f, 'Beef sliced');
+    await buy(f, supplierId, slabId, { qty: '10', unitPrice: '400' });
+    await asOrg(f.orgId, (tx) => setCostBasisItem(tx, f.superAdmin, { itemId: slicedId, costBasisItemId: slabId }));
+    await asOrg(f.orgId, (tx) =>
+      setItemPricing(tx, f.superAdmin, { itemId: slicedId, pricingMode: 'percent_markup', markupPercent: '25' }),
+    );
+    const bp = await asOrg(f.orgId, (tx) => branchPriceFor(tx, f.orgId, slicedId));
+    expect(bp!.basisFrom).toBe('linked');
+    expect(bp!.price).toBe('500.00'); // 400 × 1.25 — the sliced item was never bought itself
+  });
+
+  it('⛔ a cost-basis link may not point at itself or form a cycle', async () => {
+    const f = await fixture('cycle');
+    const a = await wholesaleItem(f, 'A');
+    const b = await wholesaleItem(f, 'B');
+    await expect(
+      asOrg(f.orgId, (tx) => setCostBasisItem(tx, f.superAdmin, { itemId: a, costBasisItemId: a })),
+    ).rejects.toThrow(/cannot price off itself/);
+
+    await asOrg(f.orgId, (tx) => setCostBasisItem(tx, f.superAdmin, { itemId: a, costBasisItemId: b }));
+    await expect(
+      asOrg(f.orgId, (tx) => setCostBasisItem(tx, f.superAdmin, { itemId: b, costBasisItemId: a })),
+    ).rejects.toThrow(/cycle/);
+  });
+
+  it('⭐ outbound freight rides ON TOP and lands on the receiving store', async () => {
+    const f = await fixture('outbound');
+    const [branchCust] = await sql<{ id: string }[]>`select 1 as id limit 0`; // placeholder, unused
+    void branchCust;
+    const c = await asOrg(f.orgId, (tx) =>
+      createCustomer(tx, f.admin, {
+        name: `Branch ${uid('br')}`, customerGroup: 'internal', counterpartyStoreId: f.otherStoreId,
+      }),
+    );
+    const itemId = await wholesaleItem(f, 'Prepped');
+    const order = await asOrg(f.orgId, (tx) =>
+      createTradeOrder(tx, f.manager, {
+        storeId: f.storeId, customerId: c.id, orderDate: '2026-01-10',
+        lines: [{ itemId, quantity: '1', rate: '18000' }],
+        deliveryFee: '1000',
+      }),
+    );
+    expect(order.totalAmount).toBe('19000.00');
+
+    const result = await asOrg(f.orgId, (tx) => dispatchTradeOrder(tx, f.manager, { orderId: order.orderId }));
+    const legs = await sql<{ code: string; store_id: string; debit: string; credit: string }[]>`
+      select a.code, jl.store_id, jl.debit::text, jl.credit::text
+      from journal_lines jl join accounts a on a.id = jl.account_id
+      where jl.entry_id = ${result.entryId}`;
+    // ⭐ The whole ₱19,000 moves — the haulage lands on the branch exactly like the goods do.
+    expect(Number(legs.find((l) => l.code === '5170')!.debit)).toBe(19000);
+    expect(Number(legs.find((l) => l.code === '5175')!.credit)).toBe(19000);
+
+    // ⛔ And it did NOT touch the item's cost: the price history still says what the goods cost.
+    const lines = await asOrg(f.orgId, (tx) => tradeRepo.linesFor(tx, f.orgId, order.orderId));
+    expect(Number(lines[0]!.rate)).toBe(18000);
+  });
+
+  it('an internal order with no stated rate takes the branch price as its default', async () => {
+    const f = await fixture('default');
+    const supplierId = await supplierFor(f);
+    const itemId = await wholesaleItem(f, 'Prepped');
+    await buy(f, supplierId, itemId, { qty: '10', unitPrice: '100', deliveryFee: '100' });
+    await asOrg(f.orgId, (tx) =>
+      setItemPricing(tx, f.superAdmin, { itemId, pricingMode: 'fixed_markup', fixedMarkupAmount: '10' }),
+    );
+    const c = await asOrg(f.orgId, (tx) =>
+      createCustomer(tx, f.admin, {
+        name: `Branch ${uid('br')}`, customerGroup: 'internal', counterpartyStoreId: f.otherStoreId,
+      }),
+    );
+    const order = await asOrg(f.orgId, (tx) =>
+      createTradeOrder(tx, f.manager, {
+        storeId: f.storeId, customerId: c.id, orderDate: '2026-01-15',
+        lines: [{ itemId, quantity: '2' }],
+      }),
+    );
+    // landed 110 + 10 markup = 120, × 2.
+    expect(order.totalAmount).toBe('240.00');
   });
 });

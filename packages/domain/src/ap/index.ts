@@ -129,6 +129,13 @@ export interface RecordInvoiceInput {
   invoiceDate: string;
   dueDate?: string | null;
   totalAmount: string;
+  /**
+   * T-151. Inbound freight, supplier to us. Ian, 2026-08-28: *"delivery fee from supplier to Lipa
+   * is added to price."* Part of `totalAmount`, NOT a line, and allocated across the lines by
+   * value when a landed cost is read.
+   */
+  deliveryFee?: string | null;
+  otherFees?: string | null;
   notes?: string | null;
   /** ⭐ The brokered file id from T-141's upload — the ONLY accepted form of evidence.
    *  ⛔ There is deliberately no `receiptPhotoUrl`: it was plain text, so `x` satisfied it. */
@@ -200,6 +207,8 @@ export async function recordInvoice(
       invoiceDate: input.invoiceDate,
       dueDate: input.dueDate ?? null,
       totalAmount: input.totalAmount,
+      deliveryFee: input.deliveryFee ?? '0',
+      otherFees: input.otherFees ?? '0',
       notes: input.notes?.trim() || null,
       receiptFileId: input.receiptFileId ?? null,
       vatType: input.vatType ?? null,
@@ -211,7 +220,13 @@ export async function recordInvoice(
 
     // ⭐ Lines are validated against THIS invoice's own total, then written in the same
     // transaction — an invoice can never exist with lines that do not add up to it.
-    const lines = await validateInvoiceLines(trx, actor.orgId, input.lines ?? [], input.totalAmount, input.storeId);
+    // T-151: the fees are part of the invoice total but are NOT lines, so the lines are checked
+    // against the goods portion. Ian, 2026-08-28: inbound freight is added to the item's price,
+    // which happens in the landed-cost derivation, not by inventing a line for it here.
+    const goodsTotal = (
+      Number(input.totalAmount) - Number(input.deliveryFee ?? 0) - Number(input.otherFees ?? 0)
+    ).toFixed(2);
+    const lines = await validateInvoiceLines(trx, actor.orgId, input.lines ?? [], goodsTotal, input.storeId);
     if (lines.length > 0) await itemsRepo.insertInvoiceLines(trx, created.id, lines);
 
     return { id: created.id, ...(duplicateWarning ? { duplicateWarning } : {}) };
@@ -266,7 +281,10 @@ export async function setInvoiceLines(
           'while it is still pending — after verification they are what somebody attested to.',
       );
     }
-    const validated = await validateInvoiceLines(trx, actor.orgId, lines, invoice.totalAmount, invoice.storeId);
+    const goodsTotal = (
+      Number(invoice.totalAmount) - Number(invoice.deliveryFee ?? 0) - Number(invoice.otherFees ?? 0)
+    ).toFixed(2);
+    const validated = await validateInvoiceLines(trx, actor.orgId, lines, goodsTotal, invoice.storeId);
     await itemsRepo.deleteInvoiceLines(trx, invoiceId);
     if (validated.length > 0) await itemsRepo.insertInvoiceLines(trx, invoiceId, validated);
     return { count: validated.length };

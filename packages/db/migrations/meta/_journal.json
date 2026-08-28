@@ -393,6 +393,13 @@
       "when": 1790825507084,
       "tag": "0055_t133_transfer_moves_cost_not_inventory",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1790911907084,
+      "tag": "0056_t151_landed_cost_and_branch_price",
+      "breakpoints": true
     }
   ]
 }
