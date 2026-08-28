@@ -1,5 +1,5 @@
-import { toBusinessDate } from '@shareat/core/datetime';
 import { listStores, listCategoriesGrouped, listMoneyAccountsForPicker, PAYMENT_ROWS } from '../lib';
+import { listVerifiedInvoicesForPicker, peso } from '../../ap/lib';
 import { requireSession } from '../../../lib/session';
 import { createExpenseAction } from '../actions';
 
@@ -18,10 +18,11 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
   const { actor } = await requireSession('/expenses/new');
   const orgId = actor.orgId;
 
-  const [storeRows, categories, wallets] = await Promise.all([
+  const [storeRows, categories, wallets, invoices] = await Promise.all([
     listStores(orgId),
     listCategoriesGrouped(orgId),
     listMoneyAccountsForPicker(orgId),
+    listVerifiedInvoicesForPicker(orgId),
   ]);
   const storeId = sp.store && storeRows.some((s) => s.id === sp.store) ? sp.store : (storeRows[0]?.id ?? '');
 
@@ -32,8 +33,9 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
       <div>
         <h1 className="text-2xl font-semibold">New expense</h1>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
-          Saved as a draft first. Nothing posts to the ledger until it is approved (and it
-          needs a receipt photo to be approvable — invariant 11, DEF-055).
+          Posts immediately against a <strong>verified</strong> supplier invoice — cash or
+          credit, no draft step (T-130). No invoice to pick from?{' '}
+          <a href="/ap" className="underline">Log and verify one first</a>.
         </p>
       </div>
 
@@ -69,14 +71,24 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
 
 
             <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Business date</span>
-              <input
-                type="date"
-                name="businessDate"
-                defaultValue={toBusinessDate()}
+              <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                Verified supplier invoice <span className="italic">(sets the date and the supplier)</span>
+              </span>
+              <select
+                name="supplierInvoiceId"
                 required
+                defaultValue=""
                 className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
-              />
+              >
+                <option value="" disabled>
+                  {invoices.length === 0 ? 'No verified invoices yet' : 'Select…'}
+                </option>
+                {invoices.map((inv) => (
+                  <option key={inv.id} value={inv.id}>
+                    {inv.supplierName} — {inv.invoiceNo ?? inv.id.slice(0, 8)} ({inv.invoiceDate}) — {peso(inv.remaining)} left
+                  </option>
+                ))}
+              </select>
             </label>
 
             <label className="flex flex-col gap-1 text-sm">
@@ -117,32 +129,6 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
               className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
             />
           </label>
-
-          <div className="grid grid-cols-2 gap-4">
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
-                Receipt photo URL <span className="italic">(required before it can post)</span>
-              </span>
-              <input
-                type="text"
-                name="receiptPhotoUrl"
-                placeholder="https://…"
-                className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
-              />
-            </label>
-
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
-                Supplier <span className="italic">(only for a "credit" payment row below)</span>
-              </span>
-              <input
-                type="text"
-                name="supplierId"
-                placeholder="Supplier reference"
-                className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
-              />
-            </label>
-          </div>
 
           <div>
             <h2 className="mb-2 text-sm font-medium">

@@ -14,13 +14,14 @@
  */
 import { redirect } from 'next/navigation';
 import {
-  createExpense,
   approveExpense,
   editExpense,
   voidExpense,
   deleteExpenseDraft,
+  recordExpenseForInvoice,
   type ExpensePaymentMethod,
 } from '@shareat/domain';
+import { apRepo } from '@shareat/db';
 import { withOrgPrincipal, PAYMENT_ROW_COUNT } from './lib';
 import { requireActor } from '../../lib/session';
 
@@ -46,16 +47,28 @@ function carryQs(fd: FormData): string {
   return params.toString();
 }
 
+/**
+ * ⭐ T-130: no more draft-then-approve here. `recordExpenseForInvoice` requires a VERIFIED
+ * supplier invoice (the gate — docs/tasks/130-accounts-payable.md §2) and posts in the same
+ * call — "expense may already be posted, no need for draft" (Ian, 2026-08-27). `businessDate`
+ * and the old free-text `receiptPhotoUrl` field are gone: the date is forced from the invoice's
+ * own date (receipt-date authority) and the evidence lives on the invoice, verified once.
+ */
 export async function createExpenseAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const storeId = str(formData, 'storeId');
   const qs = carryQs(formData);
+  // ⭐ This action is now shared by two callers — the standalone /expenses/new page and the
+  // "record an expense" form embedded on /ap/invoices/[id]. A hardcoded error redirect back to
+  // /expenses/new silently drops the invoice-page caller onto the wrong screen with every field
+  // wiped (caught in the browser, not by a test: an overdraft rejection while smoketesting the
+  // embedded form). Each form names where it actually lives; this only supplies a fallback.
+  const returnTo = str(formData, 'returnTo') || '/expenses/new';
 
-  const businessDate = str(formData, 'businessDate');
   const categoryId = str(formData, 'categoryId');
-  const supplierId = str(formData, 'supplierId');
+  let supplierId = str(formData, 'supplierId');
+  const supplierInvoiceId = str(formData, 'supplierInvoiceId');
   const particulars = str(formData, 'particulars');
-  const receiptPhotoUrl = str(formData, 'receiptPhotoUrl');
 
   const payments: { method: ExpensePaymentMethod; amount: string; staffId?: string; cashRequestId?: string; moneyAccountId?: string }[] = [];
   for (let i = 1; i <= PAYMENT_ROW_COUNT; i++) {
@@ -78,23 +91,31 @@ export async function createExpenseAction(formData: FormData): Promise<void> {
   let newId: string;
   try {
     if (!storeId) throw new Error('Choose a store.');
+    if (!supplierInvoiceId) throw new Error('Choose a verified supplier invoice.');
     if (payments.length === 0) {
       throw new Error('At least one payment row (method + amount) is required.');
     }
+    // The invoice already names its supplier — the form only has to pick ONE thing.
+    if (!supplierId) {
+      const invoice = await withOrgPrincipal(actor.orgId, (tx) =>
+        apRepo.getSupplierInvoiceById(tx, actor.orgId, supplierInvoiceId),
+      );
+      if (!invoice) throw new Error(`Supplier invoice ${supplierInvoiceId} does not exist.`);
+      supplierId = invoice.supplierId;
+    }
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
-      createExpense(tx, actor, {
+      recordExpenseForInvoice(tx, actor, {
         storeId,
-        businessDate,
+        supplierId,
+        supplierInvoiceId,
         categoryId,
-        supplierId: supplierId || undefined,
         particulars,
-        receiptPhotoUrl: receiptPhotoUrl || undefined,
         payments,
       }),
     );
-    newId = result.id;
+    newId = result.expenseId;
   } catch (err) {
-    redirect(`/expenses/new?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+    redirect(`${returnTo}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
   }
   redirect(`/expenses/${newId}?${qs}`);
 }
@@ -139,14 +160,12 @@ export async function updateDraftAction(formData: FormData): Promise<void> {
 
   const categoryId = str(formData, 'categoryId');
   const particulars = str(formData, 'particulars');
-  const receiptPhotoUrl = str(formData, 'receiptPhotoUrl');
 
   try {
     await withOrgPrincipal(actor.orgId, (tx) =>
       editExpense(tx, actor, expenseId, {
         categoryId: categoryId || undefined,
         particulars: particulars || undefined,
-        receiptPhotoUrl: receiptPhotoUrl || undefined,
       }),
     );
   } catch (err) {

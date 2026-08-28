@@ -136,15 +136,11 @@ export default async function ExpenseDetailPage({
               </>
             )}
             <Row
-              label="Receipt photo"
+              label="Supplier invoice"
               value={
-                expense.receiptPhotoUrl ? (
-                  <a href={expense.receiptPhotoUrl} className="underline hover:no-underline">
-                    attached
-                  </a>
-                ) : (
-                  <span className="text-amber-700 dark:text-amber-400">none</span>
-                )
+                <a href={`/ap/invoices/${expense.supplierInvoiceId}`} className="underline hover:no-underline">
+                  view — the evidence lives there now (T-130)
+                </a>
               }
             />
           </dl>
@@ -221,14 +217,6 @@ export default async function ExpenseDetailPage({
               <input
                 name="particulars"
                 defaultValue={expense.particulars}
-                className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Receipt photo URL</span>
-              <input
-                name="receiptPhotoUrl"
-                defaultValue={expense.receiptPhotoUrl ?? ''}
                 className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
               />
             </label>
