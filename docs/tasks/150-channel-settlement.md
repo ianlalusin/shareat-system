@@ -1,6 +1,10 @@
 # T-150 — Channel settlement: clearing the platform receivable Foodpanda and Grab raise
 
-> **Status:** Spec written 2026-08-28 by the Opus planner. Not started.
+> **Status:** Spec written 2026-08-28 by the Opus planner (session `ianla-72`); **built the same
+> day by a peer session — commit `f9d1efb`.** Both open decisions in §4 and §5 were taken on this
+> spec's own recommendations: `6420` is seeded, and `1220` keeps a job separate from `1221`/`1222`.
+> The unticked boxes below are not stale by neglect — they are unticked because *this* session did
+> not verify them; the implementing session's report is the record.
 > **Depends on:** T-123 (`sales_channels`, `sales_day_channels` — the receivable this clears),
 > T-131 (AR, and the `6400` fee leg it already books once), T-126 (loans), T-139 (money transfers /
 > destination accounts).

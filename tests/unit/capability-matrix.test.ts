@@ -146,7 +146,10 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     expect(rows.length).toBeGreaterThan(5);
   });
 
-  it('finds exactly 41 capability rows — NOT the "36" the task documents say in prose', () => {
+  // ⭐ 41 -> 42 on 2026-08-28 (T-134): `run_cutover`. ORG-scoped, held by manager and up. This
+  // count is a PIN, so adding a capability is a deliberate act - which is exactly why it caught
+  // this one before the matrix doc had a row for it.
+  it('finds exactly 42 capability rows — NOT the "36" the task documents say in prose', () => {
     // docs/tasks/121-roles-and-access.md and CAPABILITY-MATRIX.md's own Contract section
     // both say "36 rows" / "36 capabilities". The table itself had 38: the two
     // ⚠️-flagged open cells (set_credit_limit, close_period) plus the two platform-only
@@ -162,7 +165,7 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // into the enforcement without also being written into the document people actually
     // read, and vice versa.
     const { rows } = parseCapabilityMatrixDoc();
-    expect(rows.length).toBe(47);
+    expect(rows.length).toBe(48);
   });
 
   it('has no duplicate capability names', () => {
@@ -233,10 +236,10 @@ describe('invariant 1 — every capability has an explicit decision for all four
     expect(problems).toEqual([]);
   });
 
-  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 47 capabilities', () => {
-    expect(CAPABILITIES.length).toBe(47);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(47);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(47);
+  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 48 capabilities', () => {
+    expect(CAPABILITIES.length).toBe(48);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(48);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(48);
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));
   });

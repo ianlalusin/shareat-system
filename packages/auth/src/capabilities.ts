@@ -90,6 +90,7 @@ export type Capability =
   | 'record_ap_payment'
   | 'record_ar_collection'
   | 'write_off_receivable'
+  | 'run_cutover'
   // Supplier invoices — T-130
   | 'manage_items'
   | 'approve_item'
@@ -145,6 +146,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'record_ap_payment',
   'record_ar_collection',
   'write_off_receivable',
+  'run_cutover',
   'manage_items',
   'approve_item',
   'record_supplier_invoice',
@@ -214,6 +216,10 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   // ⭐ T-131. Admin-only, as v1 has it — stricter than voiding, because a write-off makes a
   // debt disappear rather than correcting a mistake.
   write_off_receivable: 'store',
+  // ORG, not store: the conversion is one org-level event, and most of its steps belong to no
+  // store at all. ⚠️ The per-store discipline is NOT lost — a per-store step demands a storeId
+  // and writes one row per store, so a single tick still cannot hide a store nobody visited.
+  run_cutover: 'org',
   // Logging a pending invoice moves no money — same bar as create_expense.
   // Org-wide master data — an item is one thing for the whole org, which is the entire
   // point of T-145 (v1's per-store items are why 187 names exist as separate records).
@@ -299,6 +305,9 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   // the two controls and it is the one that made a receivable uncollectable-but-unclearable in a
   // store with no admin.
   write_off_receivable: { super_admin: true, admin: true, manager: true, staff: false },
+  // T-134. Attestations are a manager's, for their own store. The purge and the opening entry
+  // are admin-only in the domain layer on top of this - C2 and C5 are irreversible in practice.
+  run_cutover: { super_admin: true, admin: true, manager: true, staff: false },
   // T-130. Logging a pending invoice is document capture, not money movement — same bar as
   // create_expense (staff too). Recording the actual EXPENSE against a verified invoice still
   // requires approve_expense (manager+) via createExpense+approveExpense together — no separate

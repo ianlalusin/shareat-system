@@ -219,6 +219,37 @@ test proving the denial fires.
   are editable. **Seeing the progress is part of what stops a store being forgotten**, and at four
   stores this needs none of Odoo's per-tenant machinery. *Closes open Q1.*
 
+## ⚠️ Built 2026-08-28 — and two of the six ✅ checks cannot be checked here
+
+Invariant 1 says *"the six ✅ checks are queries over real state."* Building it found that **two of
+them are not queries this database can run**, and the honest thing is to say so rather than ship a
+green tick that was never earned.
+
+| Step | Spec says | Reality |
+|---|---|---|
+| **A1** delivery backlog | ✅ *no delivery in the period lacks a linked expense* | ⛔ The check is over **v1 deliveries**, and v2 holds no v1 data — it opens from a zero starting point by design |
+| **A2** final depreciation run | ✅ *depreciation legs exist for the last period* | ⛔ Same: **v1** legs. ⚠️ v2's own equivalent IS machine-checked (T-135's `depreciationNotBooked`), but that watches v2 |
+| **B3** counted quantities | ✅ *every active item has a quantity, or an explicit zero* | ✅ **Now real** — `opening_counts` was built for it, and it feeds C3's inventory figures too |
+| **C2** purge complete | ✅ | ✅ Enumerated from `CUTOVER_CLASSIFICATION` at runtime, so a table classified `purge` later is covered without anybody remembering |
+| **C4** 3900 nets to zero | ✅ | ✅ |
+| **C5** trial balance ties | ✅ | ✅ |
+
+A1 and A2 carry `cannotVerifyHere` with the reason, render as **not machine-verifiable**, and accept
+an attestation. ⭐ **They are not silently downgraded** — the string is in the step definition and a
+test asserts it.
+
+### ⭐ And a real gap the build exposed: a verified check can pass VACUOUSLY
+
+C4 asks whether `3900` nets to zero. **On an empty ledger it trivially does** — nothing has been
+entered, so nothing is unbalanced. A step could therefore show green before its prerequisite had
+run, which is precisely the false confidence the gates exist to prevent, and the same shape as
+ADR-009's inversion where counting early produced a confident wrong number rather than an error.
+
+⚠️ **So a blocked step is never `done`, even when its own check passes.** The check result and the
+gate are both reported — `detail: null` with `blockedBy: "C4 waits on C3"` — because *"this would
+pass, but it has not been asked yet"* is a different and more useful statement than either half
+alone.
+
 ## Invariants
 
 1. The six ✅ checks are queries over real state. **None can be satisfied by a click.**

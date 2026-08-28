@@ -83,6 +83,7 @@ export * as arRepo from './repo/ar';
 export * as tradeRepo from './repo/trade';
 export * as channelSettlementsRepo from './repo/channel-settlements';
 export * as findingsRepo from './repo/findings';
+export * as cutoverRepo from './repo/cutover';
 export type { ArChargeRow, ArCollectionRow, ArOpenItem, ArPosition, ArAgingBucket } from './repo/ar';
 export type { TradeOrderRow, TradeOrderLineRow } from './repo/trade';
 export { AR_DOC_STATUSES } from '../schema/ar';

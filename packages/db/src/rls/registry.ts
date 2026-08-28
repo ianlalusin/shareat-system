@@ -365,6 +365,18 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'here hands a competitor the margin structure, not merely a total.',
   },
 
+  cutover_steps: {
+    scope: 'org_column',
+    reason:
+      'Who attested what during the conversion, and when. The accountability record for the one ' +
+      'irreversible event in this system.',
+  },
+  opening_counts: {
+    scope: 'org_column',
+    reason:
+      'Every item an org holds and what it is worth, per store. A complete inventory valuation ' +
+      'is about as commercially sensitive as a single table gets.',
+  },
   finding_acknowledgements: {
     scope: 'org_column',
     reason:

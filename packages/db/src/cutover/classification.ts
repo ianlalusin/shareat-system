@@ -464,6 +464,23 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'wholesale rates with them, which is correct: the price list survives and is the standing ' +
       'quote a new order re-captures from.',
   },
+  cutover_steps: {
+    // Keep. These rows ARE the record of the conversion - who attested the count, who ran the
+    // purge, who posted the opening entry. Purging them would erase the audit trail of the very
+    // event the purge is part of.
+    class: 'keep',
+    reason:
+      'The accountability record of the conversion itself. Purging it would erase the audit trail ' +
+      'of the event doing the purging.',
+  },
+  opening_counts: {
+    // Keep. The counted stock is what the opening balance is BUILT from - it is the evidence
+    // behind a figure the cutover posts, not activity the cutover replaces.
+    class: 'keep',
+    reason:
+      'The evidence behind the opening inventory figure. It is an input to the cutover, not ' +
+      'activity the cutover supersedes.',
+  },
   finding_acknowledgements: {
     // Purge. Every acknowledgement is about a condition in the PRE-cutover ledger, and that ledger
     // is replaced wholesale by the opening entry. Keeping them would suppress findings about books
