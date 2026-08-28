@@ -11,19 +11,30 @@ merging the branch is the first order of business (it's a docs-only commit,
 low risk).
 
 ## Findings to address, severity order
-No ⛔ or ⚠️ findings from today's diff review. Three 🔸 items, all environment/process rather than code:
 
-1. 🔸 Unit tests (`npm test`) cannot run at all: vitest fails at startup with
-   `Cannot find native binding … @rolldown/binding-wasm32-wasi` — the documented
-   npm optional-dependencies bug (npm/cli#4828). Fix: `rm -rf node_modules
-   package-lock.json && npm i`, then confirm `npm test` passes clean. Do this
-   deliberately, not mid-task.
-2. 🔸 `npm run build` did not produce a definitive result in the last review's
-   shell (3.8GB RAM, killed/inconclusive across 3 attempts). Re-run on a normal
-   machine to get a real pass/fail — nothing in the diff suggests it's actually
-   broken, there's just no proof yet.
-3. 🔸 Postgres on port 5435 was unreachable, so `npm run test:integration`
-   never ran. Needs the DB up before that gate means anything.
+> ⚠️ **CORRECTED 2026-08-28, after this file was committed.** All three findings below were
+> environment claims, and **the first and third were false** — they were written by an
+> interrupted `/daily-review` run whose own gate attempts failed for reasons that were not the
+> repo's. They are struck through rather than deleted, because a next-session prompt that
+> silently changes its mind teaches nobody anything.
+
+1. ~~🔸 Unit tests (`npm test`) cannot run at all: vitest fails at startup with
+   `Cannot find native binding … @rolldown/binding-wasm32-wasi`. Fix:
+   `rm -rf node_modules package-lock.json && npm i`.~~
+   ⛔ **FALSE — do NOT do this.** `npm test` was run repeatedly on 2026-08-28 and passes:
+   **600/600 in under 6 seconds.** Deleting `node_modules` would cost twenty minutes chasing a
+   break that is not there.
+2. 🔸 `npm run build` had no definitive result in that review's shell. **Since confirmed fine** —
+   `npm run build` exits 0, repeatedly, on 2026-08-28. Nothing to do.
+3. ~~🔸 Postgres on port 5435 was unreachable, so `npm run test:integration` never ran.~~
+   ⛔ **FALSE.** Both `shareat_dev` and `shareat_test` were queried directly many times on
+   2026-08-28, and the full integration suite passes **1027/1027**. The likeliest cause of the
+   original failure is this repo's own recorded trap: two concurrent integration runs share one
+   test database, and another session's gates were running at the time.
+
+⭐ **The lesson worth carrying, more than the corrections:** this file is the one that gets pasted
+into the next session, so a wrong claim in it becomes the next session's first action. Verify an
+environment claim before writing it here — `npm test` takes six seconds.
 
 ## Already fixed — do not redo
 Branch `daily-review/2026-08-28` holds one commit: `docs/FILE-MAP.md` gained
