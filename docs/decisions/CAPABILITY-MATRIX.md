@@ -58,12 +58,15 @@ they need weekly, the boundary is wrong.
 
 | Capability | Scope | super | admin | manager | staff | Notes |
 |---|---|:--:|:--:|:--:|:--:|---|
-| `approve_supplier` | store | ✅ | ✅ | ✅ | ✗ | Ian's list |
+| `approve_supplier` | org | ✅ | ✅ | ✅ | ✗ | Ian's list. **Scope corrected to `org` by T-130**: `suppliers` has no `store_id` — org-wide master data, same shape as `customers` (ADR-008). Nothing depended on the old `store` declaration (unimplemented until T-130) |
 | `approve_buyer` | store | ✅ | ✅ | ✅ | ✗ | Ian's list — **operational** judgement |
 | `set_credit_limit` | org | ✅ | ✅ | ✅ | ✗ | ✅ **Ian 2026-08-25 — manager too.** Coherent: managers already approve the buyer, and a **franchise** manager setting their own buyers' limits is risking their own money. Still split from `approve_buyer` — two decisions, not one |
 | `override_credit_limit` | store | ✅ | ✅ | ✅ | ✗ | Discovery 19 §2 — one gate, with an override. Every use logged |
 | `record_ap_payment` | store | ✅ | ✅ | ✅ | ✗ | |
 | `record_ar_collection` | store | ✅ | ✅ | ✅ | ✗ | |
+| `record_supplier_invoice` | store | ✅ | ✅ | ✅ | ✅ | T-130. Logging a pending invoice moves no money — same bar as `create_expense` |
+| `verify_supplier_invoice` | store | ✅ | ✅ | ✅ | ✗ | T-130. Ian, 2026-08-27: *"yes manager verifies receipts."* The verification IS the approval — recording the expense against a verified invoice still needs `approve_expense` too, so only a manager can complete the whole flow |
+| `void_supplier_invoice` | store | ✅ | ✅ | ✅ | ✗ | T-130. Cascades through the existing expense-void primitive for every linked expense — never a reimplemented reversal |
 
 ## Wholesale (ADR-008 §11)
 

@@ -53,13 +53,14 @@ export const ROLES = ['super_admin', 'admin', 'manager', 'staff'] as const;
 export type Role = (typeof ROLES)[number];
 
 // -----------------------------------------------------------------------------------------
-// The 41 capabilities, exactly as CAPABILITY-MATRIX.md lists them (grep-counted against
+// The 44 capabilities, exactly as CAPABILITY-MATRIX.md lists them (grep-counted against
 // the document, not hand-counted — see the task report: the document's own prose says
 // "36 rows" in two places, but the table itself had 38 entries including the two
 // ⚠️-flagged open cells and the two platform-only rows, and transfer_funds (row 150) is
-// the 39th; T-125's manage_prepaid_items and run_amortisation make 41. Invariant 3's parser
-// is the proof: it fails loudly if this list and the document ever disagree, in EITHER
-// direction).
+// the 39th; T-125's manage_prepaid_items and run_amortisation make 41. T-130 adds
+// record_supplier_invoice, verify_supplier_invoice and void_supplier_invoice, making 44.
+// Invariant 3's parser is the proof: it fails loudly if this list and the document ever
+// disagree, in EITHER direction).
 // -----------------------------------------------------------------------------------------
 
 export type Capability =
@@ -88,6 +89,10 @@ export type Capability =
   | 'override_credit_limit'
   | 'record_ap_payment'
   | 'record_ar_collection'
+  // Supplier invoices — T-130
+  | 'record_supplier_invoice'
+  | 'verify_supplier_invoice'
+  | 'void_supplier_invoice'
   // Wholesale
   | 'create_wholesale_order'
   | 'dispatch_wholesale_order'
@@ -136,6 +141,9 @@ export const CAPABILITIES: readonly Capability[] = [
   'override_credit_limit',
   'record_ap_payment',
   'record_ar_collection',
+  'record_supplier_invoice',
+  'verify_supplier_invoice',
+  'void_supplier_invoice',
   'create_wholesale_order',
   'dispatch_wholesale_order',
   'view_financial_reports',
@@ -186,12 +194,21 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   record_wastage: 'store',
   charge_staff_for_discrepancy: 'store',
 
-  approve_supplier: 'store',
+  // T-130 correction: `suppliers` has no store_id — it is org-wide master data, same shape
+  // as `customers` (ADR-008), which uses the org-scoped `manage_chart_of_accounts` for its
+  // own creation. Declared 'store' before this table existed; nothing depended on that yet
+  // (grep-verified: no caller anywhere). `approve_buyer` is untouched — that is T-131's own
+  // schema decision to make, not assumed here.
+  approve_supplier: 'org',
   approve_buyer: 'store',
   set_credit_limit: 'org', // OPEN — Ian to confirm (CAPABILITY-MATRIX.md §Open 1)
   override_credit_limit: 'store',
   record_ap_payment: 'store',
   record_ar_collection: 'store',
+  // Logging a pending invoice moves no money — same bar as create_expense.
+  record_supplier_invoice: 'store',
+  verify_supplier_invoice: 'store',
+  void_supplier_invoice: 'store',
 
   create_wholesale_order: 'store',
   dispatch_wholesale_order: 'store',
@@ -261,6 +278,14 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   override_credit_limit: { super_admin: true, admin: true, manager: true, staff: false },
   record_ap_payment: { super_admin: true, admin: true, manager: true, staff: false },
   record_ar_collection: { super_admin: true, admin: true, manager: true, staff: false },
+  // T-130. Logging a pending invoice is document capture, not money movement — same bar as
+  // create_expense (staff too). Recording the actual EXPENSE against a verified invoice still
+  // requires approve_expense (manager+) via createExpense+approveExpense together — no separate
+  // capability needed there, since posting has always been the gate that matters.
+  record_supplier_invoice: { super_admin: true, admin: true, manager: true, staff: true },
+  // DECIDED — Ian 2026-08-27: "yes manager verifies receipts."
+  verify_supplier_invoice: { super_admin: true, admin: true, manager: true, staff: false },
+  void_supplier_invoice: { super_admin: true, admin: true, manager: true, staff: false },
 
   create_wholesale_order: { super_admin: true, admin: true, manager: true, staff: true },
   dispatch_wholesale_order: { super_admin: true, admin: true, manager: true, staff: false },

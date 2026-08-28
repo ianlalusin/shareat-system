@@ -156,11 +156,13 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // is caught rather than re-drifting unnoticed.
     //
     // ⭐ 39 since bible row 150 added `transfer_funds`, 41 since T-125 added
-    // `manage_prepaid_items` and `run_amortisation`. Having to edit this number is the
-    // guard WORKING: a capability cannot be slipped into the enforcement without also
-    // being written into the document people actually read, and vice versa.
+    // `manage_prepaid_items` and `run_amortisation`, 44 since T-130 added
+    // `record_supplier_invoice`, `verify_supplier_invoice` and `void_supplier_invoice`.
+    // Having to edit this number is the guard WORKING: a capability cannot be slipped
+    // into the enforcement without also being written into the document people actually
+    // read, and vice versa.
     const { rows } = parseCapabilityMatrixDoc();
-    expect(rows.length).toBe(41);
+    expect(rows.length).toBe(44);
   });
 
   it('has no duplicate capability names', () => {
@@ -231,10 +233,10 @@ describe('invariant 1 — every capability has an explicit decision for all four
     expect(problems).toEqual([]);
   });
 
-  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 41 capabilities', () => {
-    expect(CAPABILITIES.length).toBe(41);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(41);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(41);
+  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 44 capabilities', () => {
+    expect(CAPABILITIES.length).toBe(44);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(44);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(44);
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));
   });
