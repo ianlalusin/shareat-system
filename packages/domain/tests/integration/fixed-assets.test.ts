@@ -667,6 +667,23 @@ async function capexExpense(f: Fixture, amount: string): Promise<string> {
   const [cat] = await sql<{ id: string }[]>`
     select id from expense_categories where org_id = ${f.orgId} and category = 'Capital Expenditure'
   `;
+  // ⭐ T-130: every expense now names a real, verified supplier invoice. One per org, sized well
+  // above anything this file spends, created on demand.
+  const [supplier] = await sql<{ id: string }[]>`
+    insert into suppliers (org_id, name, created_by) values (${f.orgId}, 'CAPEX Supplier', ${f.staffId})
+    on conflict (org_id, name) do update set updated_at = now()
+    returning id
+  `;
+  const [invoice] = await sql<{ id: string }[]>`
+    insert into supplier_invoices (
+      org_id, store_id, supplier_id, invoice_date, total_amount, status,
+      receipt_photo_url, verified_by, verified_at, created_by
+    ) values (
+      ${f.orgId}, ${f.storeId}, ${supplier!.id}, '2026-01-20', '99999999.00', 'verified',
+      'https://example.com/fixed-assets-fixture.jpg', ${f.managerId}, now(), ${f.staffId}
+    )
+    returning id
+  `;
   // ⭐ DEF-058: cash names the place it left. One drawer per store, created on demand here.
   const [drawer] = await sql<{ id: string }[]>`
     insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian)
@@ -705,10 +722,11 @@ async function capexExpense(f: Fixture, amount: string): Promise<string> {
   const created = await asPerson(f.orgId, (tx) =>
     createExpense(tx, actor(f.orgId, f.staffId), {
       storeId: f.storeId,
+      supplierId: supplier!.id,
+      supplierInvoiceId: invoice!.id,
       businessDate: '2026-01-20',
       categoryId: cat!.id,
       particulars: 'Commercial deep fryer',
-      receiptPhotoUrl: 'https://example.com/receipt.jpg',
       payments: [{ method: 'cash', amount, moneyAccountId: drawer!.id }],
     }),
   );

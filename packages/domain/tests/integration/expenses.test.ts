@@ -52,7 +52,7 @@ import { CUTOVER_CLASSIFICATION } from '../../../db/src/cutover/classification';
 import { RLS_REGISTRY } from '../../../db/src/rls/registry';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
-import { approveExpense, createExpense, deleteExpenseDraft, editExpense, voidExpense, routeExpense } from '@shareat/domain';
+import { approveExpense, createExpense, deleteExpenseDraft, editExpense, voidExpense, routeExpense, recordInvoice, verifyInvoice } from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
 
@@ -124,6 +124,11 @@ interface Fixture {
    *  from their own till. */
   cashDrawerId: string;
   officeSafeId: string;
+  /** ⭐ T-130: every expense now names a real, verified supplier invoice. A single
+   *  fixture-wide invoice with a huge ceiling (₱99,999,999) so no individual test has to
+   *  think about capacity — this file's own invariants are about expenses, not AP. */
+  supplierId: string;
+  supplierInvoiceId: string;
 }
 
 /** One org, one open 2026-01 period, a full chart of accounts, the seeded expense
@@ -176,7 +181,29 @@ async function setup(hint: string): Promise<Fixture> {
   await fundAccount(orgId, storeId, '1140', '500000.00', wallet!.id);
   await fundAccount(orgId, storeId, '1130', '500000.00', null);
 
-  return { orgId, storeId, storeId2, staffId, managerId, adminId , walletId: wallet!.id, cashDrawerId: drawer!.id, officeSafeId: safe!.id };
+  // ⭐ T-130 — the gate. One supplier, one already-verified invoice with a huge ceiling, so
+  // every createExpense() call in this file (which tests EXPENSE invariants, not AP ones) has
+  // somewhere valid to point.
+  const [supplier] = await sql<{ id: string }[]>`
+    insert into suppliers (org_id, name, created_by) values (${orgId}, ${`${hint} Supplier`}, ${staffId})
+    returning id
+  `;
+  const [invoice] = await sql<{ id: string }[]>`
+    insert into supplier_invoices (
+      org_id, store_id, supplier_id, invoice_date, total_amount, status,
+      receipt_photo_url, verified_by, verified_at, created_by
+    ) values (
+      ${orgId}, ${storeId}, ${supplier!.id}, '2026-01-01', '99999999.00', 'verified',
+      'https://example.com/fixture-invoice.jpg', ${managerId}, now(), ${staffId}
+    )
+    returning id
+  `;
+
+  return {
+    orgId, storeId, storeId2, staffId, managerId, adminId, walletId: wallet!.id,
+    cashDrawerId: drawer!.id, officeSafeId: safe!.id,
+    supplierId: supplier!.id, supplierInvoiceId: invoice!.id,
+  };
 }
 
 /**
@@ -288,8 +315,8 @@ async function linesFor(entryId: string): Promise<Line[]> {
 
 async function expenseRow(orgId: string, id: string) {
   const [row] = await sql<
-    { status: string; journal_entry_id: string | null; total_amount: string; receipt_photo_url: string | null }[]
-  >`select status, journal_entry_id, total_amount, receipt_photo_url from expenses where id = ${id} and org_id = ${orgId}`;
+    { status: string; journal_entry_id: string | null; total_amount: string }[]
+  >`select status, journal_entry_id, total_amount from expenses where id = ${id} and org_id = ${orgId}`;
   return row;
 }
 
@@ -301,6 +328,7 @@ beforeAll(async () => {
   await sql`
     truncate table
       money_accounts,
+      ap_payment_allocations, ap_payments, supplier_invoices, suppliers,
       expense_payments, expenses, expense_categories,
       person_grants, person_store_scope, person_roles,
       journal_lines, journal_entries, audit_log, fiscal_periods, accounts,
@@ -328,10 +356,11 @@ describe('invariant 1 — a single cash expense posts exactly POSTING-PATTERNS.m
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.staffId), {
         storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: 'Pork delivery, cash',
-        receiptPhotoUrl: 'https://example.com/r1.jpg',
         payments: [{ method: 'cash', amount: '1200.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
@@ -358,10 +387,11 @@ describe('invariant 2 — a three-way split posts ONE entry with three credit li
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.staffId), {
         storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: 'Supplies, three-way split',
-        receiptPhotoUrl: 'https://example.com/r2.jpg',
         payments: [
           { method: 'cash', amount: '1500.00', moneyAccountId: f.cashDrawerId },
           { method: 'online', amount: '1000.00', moneyAccountId: f.walletId },
@@ -412,10 +442,11 @@ describe('invariant 3 — reimbursable credits 2130 with the staff party; withou
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.staffId), {
         storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: 'Emergency repair, no staffId supplied',
-        receiptPhotoUrl: 'https://example.com/r3.jpg',
         payments: [{ method: 'reimbursable', amount: '650.00' }],
       }),
     );
@@ -439,10 +470,11 @@ describe('invariant 4 — re-posting is idempotent: one entry, created:false the
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.staffId), {
         storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: 'Electric bill',
-        receiptPhotoUrl: 'https://example.com/r4.jpg',
         payments: [{ method: 'cash', amount: '3000.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
@@ -469,10 +501,11 @@ describe('invariant 5 — a void reverses through reverseEntry and every account
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.staffId), {
         storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: 'Wrong delivery, to be voided',
-        receiptPhotoUrl: 'https://example.com/r5.jpg',
         payments: [{ method: 'cash', amount: '800.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
@@ -508,10 +541,11 @@ describe('invariant 6 — a mapped category routes to its declared account', () 
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.staffId), {
         storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: 'Monthly rent',
-        receiptPhotoUrl: 'https://example.com/r6.jpg',
         payments: [{ method: 'cash', amount: '25000.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
@@ -530,10 +564,11 @@ describe('invariant 7 — an unmapped category BLOCKS, naming the category, neve
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.staffId), {
         storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: 'Nobody knows what this was for',
-        receiptPhotoUrl: 'https://example.com/r7.jpg',
         payments: [{ method: 'cash', amount: '500.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
@@ -593,10 +628,11 @@ async function postPersonal(
   const created = await asPerson(f.orgId, (tx) =>
     createExpense(tx, actor(f.orgId, f.staffId), {
       storeId: f.storeId,
+      supplierId: f.supplierId,
+      supplierInvoiceId: f.supplierInvoiceId,
       businessDate: BUSINESS_DATE,
       categoryId: catId,
       particulars: "Owner's personal expense",
-      receiptPhotoUrl: 'https://example.com/r8.jpg',
       ...(ownerId ? { ownerId } : {}),
       payments: [{ method: 'cash', amount: '2000.00', moneyAccountId: f.cashDrawerId }],
     }),
@@ -650,10 +686,11 @@ describe('invariant 9 — CAPEX routes to a 15xx asset, never a P&L line', () =>
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.staffId), {
         storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: 'New grill purchase',
-        receiptPhotoUrl: 'https://example.com/r9.jpg',
         payments: [{ method: 'cash', amount: '45000.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
@@ -675,10 +712,11 @@ describe('invariant 10 — "other" and "ar_collection" BLOCK posting with a name
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.staffId), {
         storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: `Paid via ${method}`,
-        receiptPhotoUrl: 'https://example.com/r10.jpg',
         payments: [{ method, amount: '100.00' }],
       }),
     );
@@ -693,28 +731,47 @@ describe('invariant 10 — "other" and "ar_collection" BLOCK posting with a name
 // Controls — invariants 11-14
 // =========================================================================================
 
-describe('invariant 11 — no photo, no posting, enforced server-side at approve (DEF-055)', () => {
-  it('approveExpense rejects a draft with no receiptPhotoUrl, called directly (never through a form)', async () => {
+describe('invariant 11 — no VERIFIED invoice, no recording (DEF-055 relocated here by T-130)', () => {
+  it('createExpense rejects a pending (unverified) invoice; verifying it and retrying succeeds', async () => {
     const f = await setup('inv11');
     const catId = await categoryId(f.orgId, 'Marketing and Advertising');
 
-    const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
+    const pending = await asPerson(f.orgId, (tx) =>
+      recordInvoice(tx, actor(f.orgId, f.staffId), {
         storeId: f.storeId,
-        businessDate: BUSINESS_DATE,
-        categoryId: catId,
-        particulars: 'No photo attached',
-        payments: [{ method: 'cash', amount: '300.00', moneyAccountId: f.cashDrawerId }],
+        supplierId: f.supplierId,
+        invoiceDate: BUSINESS_DATE,
+        totalAmount: '300.00',
+        receiptPhotoUrl: 'https://example.com/inv11.jpg',
       }),
     );
 
     await expect(
-      asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id)),
-    ).rejects.toThrow(/receipt photo/);
+      asPerson(f.orgId, (tx) =>
+        createExpense(tx, actor(f.orgId, f.staffId), {
+          storeId: f.storeId,
+          supplierId: f.supplierId,
+          supplierInvoiceId: pending.id,
+          businessDate: BUSINESS_DATE,
+          categoryId: catId,
+          particulars: 'No verified invoice yet',
+          payments: [{ method: 'cash', amount: '300.00', moneyAccountId: f.cashDrawerId }],
+        }),
+      ),
+    ).rejects.toThrow(/is pending/);
 
-    // Attaching the photo and retrying succeeds — proves the gate is the photo, nothing else.
-    await asPerson(f.orgId, (tx) =>
-      editExpense(tx, actor(f.orgId, f.staffId), created.id, { receiptPhotoUrl: 'https://example.com/r11.jpg' }),
+    // Verifying it and retrying succeeds — proves the gate is the invoice's status, nothing else.
+    await asPerson(f.orgId, (tx) => verifyInvoice(tx, actor(f.orgId, f.managerId), pending.id));
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: pending.id,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: 'Now verified',
+        payments: [{ method: 'cash', amount: '300.00', moneyAccountId: f.cashDrawerId }],
+      }),
     );
     const posted = await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
     expect(posted.created).toBe(true);
@@ -729,10 +786,11 @@ describe('invariant 12 — the creator edits their own draft inside 48h; outside
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.staffId), {
         storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: 'Original particulars',
-        receiptPhotoUrl: 'https://example.com/r12a.jpg',
         payments: [{ method: 'cash', amount: '150.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
@@ -751,10 +809,11 @@ describe('invariant 12 — the creator edits their own draft inside 48h; outside
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.staffId), {
         storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: 'Aging draft',
-        receiptPhotoUrl: 'https://example.com/r12b.jpg',
         payments: [{ method: 'cash', amount: '150.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
@@ -786,10 +845,11 @@ describe('invariant 13 — a posted expense cannot be edited by anyone, includin
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.staffId), {
         storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: 'Annual premium',
-        receiptPhotoUrl: 'https://example.com/r13.jpg',
         payments: [{ method: 'cash', amount: '5000.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
@@ -820,6 +880,8 @@ describe('invariant 14 — each of the five capabilities denies an actor lacking
       asPerson(f.orgId, (tx) =>
         createExpense(tx, actor(f.orgId, nobody), {
           storeId: f.storeId,
+          supplierId: f.supplierId,
+          supplierInvoiceId: f.supplierInvoiceId,
           businessDate: BUSINESS_DATE,
           categoryId: catId,
           particulars: 'Should never be created',
@@ -836,6 +898,8 @@ describe('invariant 14 — each of the five capabilities denies an actor lacking
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.staffId), {
         storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: 'Creator about to lose store scope',
@@ -859,6 +923,8 @@ describe('invariant 14 — each of the five capabilities denies an actor lacking
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.managerId), {
         storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: 'Created by manager',
@@ -879,10 +945,11 @@ describe('invariant 14 — each of the five capabilities denies an actor lacking
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.staffId), {
         storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: 'Posted then staff tries to void',
-        receiptPhotoUrl: 'https://example.com/r14v.jpg',
         payments: [{ method: 'cash', amount: '10.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
@@ -899,10 +966,11 @@ describe('invariant 14 — each of the five capabilities denies an actor lacking
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.staffId), {
         storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: 'Staff tries to self-approve',
-        receiptPhotoUrl: 'https://example.com/r14a.jpg',
         payments: [{ method: 'cash', amount: '10.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
@@ -955,6 +1023,8 @@ describe('invariant 16 — an expense in org A is invisible to org B, with no WH
     await asPerson(fA.orgId, (tx) =>
       createExpense(tx, actor(fA.orgId, fA.staffId), {
         storeId: fA.storeId,
+        supplierId: fA.supplierId,
+        supplierInvoiceId: fA.supplierInvoiceId,
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: "Org A's own expense",
@@ -987,6 +1057,8 @@ describe('invariant 17 — a DRAFT is deletable; a posted or voided expense neve
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.staffId), {
         storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: 'Wrong store, start again',
@@ -1017,10 +1089,11 @@ describe('invariant 17 — a DRAFT is deletable; a posted or voided expense neve
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.managerId), {
         storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: 'Posted, therefore permanent',
-        receiptPhotoUrl: 'https://example.com/r17b.jpg',
         payments: [{ method: 'cash', amount: '500.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
@@ -1041,10 +1114,11 @@ describe('invariant 17 — a DRAFT is deletable; a posted or voided expense neve
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.managerId), {
         storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: 'Voided, and it stays',
-        receiptPhotoUrl: 'https://example.com/r17c.jpg',
         payments: [{ method: 'cash', amount: '500.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
@@ -1065,6 +1139,8 @@ describe('invariant 17 — a DRAFT is deletable; a posted or voided expense neve
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.staffId), {
         storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
         businessDate: BUSINESS_DATE,
         categoryId: catId,
         particulars: 'Aging draft nobody finished',
@@ -1135,10 +1211,11 @@ describe('overdrawing an expense account — warn for cashier, block for office 
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.staffId), {
         storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
         businessDate: '2026-01-15',
         categoryId: cat,
         particulars: 'Cleaning supplies',
-        receiptPhotoUrl: 'https://example.com/r.jpg',
         payments: [{ method: 'cash', amount, moneyAccountId }],
       }),
     );
@@ -1194,10 +1271,11 @@ describe('overdrawing an expense account — warn for cashier, block for office 
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.staffId), {
         storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
         businessDate: '2026-01-15',
         categoryId: cat,
         particulars: 'Two cash lines, one safe',
-        receiptPhotoUrl: 'https://example.com/r.jpg',
         payments: [
           { method: 'cash', amount: '600.00', moneyAccountId: f.officeSafeId },
           { method: 'cash', amount: '600.00', moneyAccountId: f.officeSafeId },
@@ -1222,10 +1300,11 @@ describe('overdrawing an expense account — warn for cashier, block for office 
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.staffId), {
         storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
         businessDate: '2026-01-15',
         categoryId: cat,
         particulars: 'Staff paid out of pocket',
-        receiptPhotoUrl: 'https://example.com/r.jpg',
         payments: [{ method: 'reimbursable', amount: '9000.00', staffId: f.staffId }],
       }),
     );
