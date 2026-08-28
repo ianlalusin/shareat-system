@@ -60,20 +60,6 @@ Build **only if port 9008 is free** (`netstat -ano | grep -E ":9008.*LISTEN"`).
 Occupied → the line is *"build: skipped — dev server live on 9008"*, a stated fact
 (bible §2.9).
 
-**Migration drift check** — if `packages/db/schema/` changed this session, confirm a
-hand-written migration exists to match. ⚠️ **Never run `npm run db:generate`** —
-DEF-073: the snapshot chain has been dead since `0019`, every migration from `0020`
-on is hand-written, and the command opens an interactive prompt that misreads
-already-applied schema history as pending renames. Instead:
-`git status --short packages/db/schema/` against
-`git status --short packages/db/migrations/` — a schema file changed with no new
-`NNNN_*.sql` alongside it is the drift signal. Confirm the new migration is in
-`packages/db/migrations/meta/_journal.json` (`previous.when + 86400000`, per
-DEF-073's own prescription) and was actually applied to `shareat_dev` (and
-`shareat_test`, if integration tests touch it) this session — not just written.
-This runs **before** committing, never after — an applied migration is never edited
-(rule #9), so drift caught after a push is a landmine for the next machine.
-
 **Report the real numbers.** Not "tests pass" — `522/522`.
 
 ### ⛔ If the gates are RED
@@ -106,6 +92,33 @@ confirm it is recorded in the right durable place:
 | Something learned about v1 or the field | `docs/discovery/NN-*.md` |
 | A trap in a name | `docs/GLOSSARY.md` — **and the banned-names test** |
 | A task finished or advanced this session | its own `> **Status:**` line in `docs/tasks/NNN-*.md` — edit it directly, don't just say so in the handoff |
+| **What is now done, and what is next** | **`docs/ROADMAP.html` — every wrap-up, no exceptions.** See below |
+
+### ⭐ The roadmap is updated EVERY wrap-up — Ian, 2026-08-28
+
+**Not "if it changed."** Every wrap-up opens `docs/ROADMAP.html` and makes it true
+again before committing. It is the one document that answers *"where is this project
+up to"* at a glance, and it is the first thing read by anyone who is not deep in the
+task docs — which includes Ian.
+
+What to change, concretely (it is hand-written HTML, so this is a real edit, not a
+regenerate):
+
+- A task that finished gains `t-done`: `<div class="task t-done">` — it is plain
+  `<div class="task">` until you do. Its dot and border go green off that one class.
+- A wave or phase whose state moved gets its chip changed: `c-queued` → `c-active` →
+  `c-done`, with `c-part` for genuinely half-finished. One chip per header.
+- A task whose *content* changed — scope cut, split in two, renamed — gets its
+  `task-what` text corrected, not just its status.
+- A task that was added or dropped this session is added or dropped here too.
+
+⛔ **A roadmap that says a shipped task is queued is worse than no roadmap**, because
+it is believed. On 2026-08-28 both T-129 and T-130 had shipped and both still read as
+not-started — the exact staleness this rule exists to stop.
+
+⚠️ **If nothing on the roadmap changed, say so explicitly** in the handoff
+(*"roadmap: checked, nothing moved"*). Silence is indistinguishable from forgetting,
+which is how it went stale in the first place.
 
 **Anything Ian decided that is not yet written down, write it down NOW**, before
 committing. That is the whole point of the ritual. ⚠️ If a decision is too big to
