@@ -9,6 +9,7 @@ import { redirect } from 'next/navigation';
 import {
   createSupplier,
   recordInvoice,
+  uploadFile,
   verifyInvoice,
   voidInvoice,
   recordPayment,
@@ -50,6 +51,16 @@ export async function createSupplierAction(formData: FormData): Promise<void> {
   back('/ap', { ok: `Supplier recorded.`, supplier: id });
 }
 
+/**
+ * ⭐ The photo is UPLOADED here, never typed. The old form took a `receiptPhotoUrl` text box, so
+ * `x` was a valid receipt — that is the hole this closes (Ian, 2026-08-28). The bytes go through
+ * T-141's `uploadFile`, which strips EXIF, derives the storage path from the session, and writes
+ * a `stored_files` row that `verifyInvoice` can actually verify exists.
+ *
+ * ⚠️ Upload and insert share ONE transaction, so an invoice can never reference a file that was
+ * not written, and a failed insert leaves the bytes as an orphan for T-141's sweep — the cheaper
+ * of the two failures, by that module's own reasoning.
+ */
 export async function recordInvoiceAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const storeId = str(formData, 'storeId');
@@ -57,8 +68,20 @@ export async function recordInvoiceAction(formData: FormData): Promise<void> {
   let warning = '';
   try {
     if (!storeId) throw new Error('Choose a store.');
-    const result = await withOrgPrincipal(actor.orgId, (tx) =>
-      recordInvoice(tx, actor, {
+    const photo = formData.get('receiptPhoto');
+    const hasPhoto = photo instanceof File && photo.size > 0;
+    const result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      let receiptFileId: string | null = null;
+      if (hasPhoto) {
+        const uploaded = await uploadFile(tx, actor, {
+          purpose: 'receipt_photo',
+          storeId,
+          contentType: (photo as File).type,
+          bytes: new Uint8Array(await (photo as File).arrayBuffer()),
+        });
+        receiptFileId = uploaded.fileId;
+      }
+      return recordInvoice(tx, actor, {
         storeId,
         supplierId: str(formData, 'supplierId'),
         invoiceNo: str(formData, 'invoiceNo') || null,
@@ -66,9 +89,9 @@ export async function recordInvoiceAction(formData: FormData): Promise<void> {
         dueDate: str(formData, 'dueDate') || null,
         totalAmount: str(formData, 'totalAmount'),
         notes: str(formData, 'notes') || null,
-        receiptPhotoUrl: str(formData, 'receiptPhotoUrl') || null,
-      }),
-    );
+        receiptFileId,
+      });
+    });
     id = result.id;
     warning = result.duplicateWarning ?? '';
   } catch (err) {
@@ -77,11 +100,23 @@ export async function recordInvoiceAction(formData: FormData): Promise<void> {
   back(`/ap/invoices/${id}`, warning ? { ok: 'Invoice logged.', warning } : { ok: 'Invoice logged.' });
 }
 
+/**
+ * ⭐ Verification is an ATTESTATION, not a button. Ian, 2026-08-28: *"verified means right
+ * supplier, right invoice data, right items, right price all verified plus an uploaded photo."*
+ * All four are ticked by a human against the photo, and all four are recorded separately.
+ */
 export async function verifyInvoiceAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const id = str(formData, 'invoiceId');
   try {
-    await withOrgPrincipal(actor.orgId, (tx) => verifyInvoice(tx, actor, id));
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      verifyInvoice(tx, actor, id, {
+        supplier: formData.get('attestSupplier') === 'on',
+        invoice: formData.get('attestInvoice') === 'on',
+        items: formData.get('attestItems') === 'on',
+        price: formData.get('attestPrice') === 'on',
+      }),
+    );
   } catch (err) {
     back(`/ap/invoices/${id}`, { error: errorMessage(err) });
   }

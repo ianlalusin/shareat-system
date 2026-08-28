@@ -128,7 +128,8 @@ export interface RecordInvoiceInput {
   dueDate?: string | null;
   totalAmount: string;
   notes?: string | null;
-  receiptPhotoUrl?: string | null;
+  /** ⭐ The brokered file id from T-141's upload — the ONLY accepted form of evidence.
+   *  ⛔ There is deliberately no `receiptPhotoUrl`: it was plain text, so `x` satisfied it. */
   receiptFileId?: string | null;
   vatType?: SupplierInvoiceVatType | null;
   vatRate?: string | null;
@@ -153,6 +154,17 @@ export async function recordInvoice(
 
     const supplier = await apRepo.getSupplierById(trx, actor.orgId, input.supplierId);
     if (!supplier) throw new Error(`recordInvoice: supplier ${input.supplierId} does not exist.`);
+    // ⭐ Ian, 2026-08-28, requirement 1: the supplier must be EXISTING **and ACTIVE**. A v2
+    // tightening — v1's `upsertReceiptAction` checks only that the supplier document exists
+    // (`receipt.actions.ts`), so an inactive supplier can still be billed against there. An
+    // inactive supplier is one the business has stopped buying from; a new bill from one is
+    // either a mistake or something worth a second look, and neither should post quietly.
+    if (supplier.status !== 'active') {
+      throw new Error(
+        `recordInvoice: ${supplier.name} is ${supplier.status}, not active — reactivate the ` +
+          'supplier first if you really are still buying from them.',
+      );
+    }
 
     const amount = Number(input.totalAmount);
     if (amount <= 0) throw new Error('recordInvoice: an invoice total has to be greater than zero.');
@@ -181,7 +193,6 @@ export async function recordInvoice(
       dueDate: input.dueDate ?? null,
       totalAmount: input.totalAmount,
       notes: input.notes?.trim() || null,
-      receiptPhotoUrl: input.receiptPhotoUrl ?? null,
       receiptFileId: input.receiptFileId ?? null,
       vatType: input.vatType ?? null,
       vatRate: input.vatRate ?? null,
@@ -202,10 +213,40 @@ export async function recordInvoice(
  * this is where v1's actual rule (`receipt.actions.ts:267-281`) lives: exempt only when the
  * supplier is a system-managed commissary mirror (`counterpartyStoreId` set).
  */
+export interface VerifyInvoiceAttestation {
+  /** The bill is from the supplier it names. */
+  supplier: boolean;
+  /** Invoice number, date and total match the paper. */
+  invoice: boolean;
+  /** The things listed are the things received. */
+  items: boolean;
+  /** The prices charged are the prices agreed. */
+  price: boolean;
+}
+
+/**
+ * ⭐ The approval, and what it now MEANS. Ian, 2026-08-28: *"verified means right supplier, right
+ * invoice data, right items, right price all verified plus an uploaded photo of the receipt."*
+ *
+ * Four separate confirmations, recorded separately, because one boolean cannot say which of the
+ * four a person actually looked at. `attestedItems`/`attestedPrice` are a human's judgement
+ * against the photo today; when the item master lands they become machine-checkable too.
+ *
+ * ⛔ **Evidence is a FILE row, full stop.** The old code fell through to a plain-text
+ * `receiptPhotoUrl` whenever no file was named — and the AP form only ever offered that text box,
+ * so every invoice in practice was verified on a typed string, `x` included. The column is gone
+ * (migration 0046). `filesRepo.getById` is what proves the evidence is real: the row exists, in
+ * this org, for this store. Exempt only for a system-managed commissary mirror, which is an
+ * interbranch transfer with no outside paperwork — v1's own exemption (`isCommissaryMirrorSupplier`).
+ *
+ * ⛔ **Two people.** `verified_by <> created_by` is enforced by the database (migration 0046) and
+ * checked here for a readable error. 44% of v1's verified receipts were self-verified.
+ */
 export async function verifyInvoice(
   tx: Tx | null,
   actor: Actor,
   invoiceId: string,
+  attestation: VerifyInvoiceAttestation,
 ): Promise<void> {
   const run = async (trx: Tx) => {
     const invoice = await apRepo.getSupplierInvoiceById(trx, actor.orgId, invoiceId);
@@ -216,31 +257,51 @@ export async function verifyInvoice(
       throw new Error(`verifyInvoice: supplier invoice ${invoiceId} is ${invoice.status}, not pending.`);
     }
 
+    // ⛔ Segregation of duties. The DB enforces it too; this is the sentence a human can act on.
+    if (invoice.createdBy === actor.personId) {
+      throw new Error(
+        'verifyInvoice: you logged this invoice, so you cannot also verify it. Verification is a ' +
+          'second pair of eyes — ask a manager who did not enter it, or an admin.',
+      );
+    }
+
+    const missing = (Object.keys(attestation) as (keyof VerifyInvoiceAttestation)[]).filter(
+      (k) => !attestation[k],
+    );
+    if (missing.length > 0) {
+      throw new Error(
+        `verifyInvoice: confirm every part of the bill before verifying it — still unconfirmed: ` +
+          `${missing.join(', ')}. Verifying means you checked the supplier, the invoice details, ` +
+          'the items and the prices against the photo.',
+      );
+    }
+
     const supplier = await apRepo.getSupplierById(trx, actor.orgId, invoice.supplierId);
-    const isCommissaryMirror = !!supplier?.counterpartyStoreId;
+    if (!supplier) throw new Error(`verifyInvoice: supplier ${invoice.supplierId} does not exist.`);
+    if (supplier.status !== 'active') {
+      throw new Error(`verifyInvoice: ${supplier.name} is ${supplier.status}, not active.`);
+    }
+
+    const isCommissaryMirror = !!supplier.counterpartyStoreId;
     if (!isCommissaryMirror) {
-      // ⭐ T-141's rule, ported not re-derived (DEF-055 relocated here from expense approval): a
-      // ROW is checked, never a string. `receipt_photo_url` is plain text — satisfied by typing
-      // `x` — so a bare truthiness check on it (or on a hand-typed `receiptFileId`) is not
-      // evidence, it is the pre-T-141 hole reopened. `filesRepo.getById` is the only thing that
-      // proves the file is real, in this org, and belongs to this invoice's store.
-      if (invoice.receiptFileId) {
-        const file = await filesRepo.getById(trx, actor.orgId, invoice.receiptFileId);
-        if (!file) {
-          throw new Error(
-            `verifyInvoice: supplier invoice ${invoiceId} names a receipt file that does not exist in this org`,
-          );
-        }
-        if (file.storeId && file.storeId !== invoice.storeId) {
-          throw new Error(
-            `verifyInvoice: supplier invoice ${invoiceId} names a receipt belonging to another store — ` +
-              'a photo from somewhere else is not evidence for this invoice',
-          );
-        }
-      } else if (!invoice.receiptPhotoUrl || !invoice.receiptPhotoUrl.trim()) {
+      if (!invoice.receiptFileId) {
         throw new Error(
-          `verifyInvoice: supplier invoice ${invoiceId} has no receipt photo — attach one before ` +
-            'verifying (DEF-055, relocated here from expense approval).',
+          `verifyInvoice: supplier invoice ${invoiceId} has no receipt photo — upload one before ` +
+            'verifying. A photo of the paper is the evidence the whole gate rests on (DEF-055).',
+        );
+      }
+      // ⭐ T-141's real check, not a truthiness test: the file must exist, in this org, and belong
+      // to this invoice's store. A receipt from somewhere else is not evidence for this bill.
+      const file = await filesRepo.getById(trx, actor.orgId, invoice.receiptFileId);
+      if (!file) {
+        throw new Error(
+          `verifyInvoice: supplier invoice ${invoiceId} names a receipt file that does not exist in this org.`,
+        );
+      }
+      if (file.storeId && file.storeId !== invoice.storeId) {
+        throw new Error(
+          `verifyInvoice: supplier invoice ${invoiceId} names a receipt belonging to another store — ` +
+            'a photo from somewhere else is not evidence for this invoice.',
         );
       }
     }

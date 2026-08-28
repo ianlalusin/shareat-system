@@ -23,6 +23,7 @@
  */
 import { sql } from 'drizzle-orm';
 import {
+  boolean,
   check,
   date,
   index,
@@ -35,6 +36,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
 import { persons } from './persons';
+import { storedFiles } from './stored-files';
 import { stores } from './stores';
 
 export const SUPPLIER_STATUSES = ['active', 'inactive'] as const;
@@ -144,14 +146,41 @@ export const supplierInvoices = pgTable(
 
     status: text('status', { enum: SUPPLIER_INVOICE_STATUSES }).notNull().default('pending'),
 
-    /** The evidence — required to reach `verified` (service-layer rule; a CHECK constraint
-     *  cannot safely join out to `suppliers` to test the commissary exemption). Relocated
-     *  from `expenses.receiptPhotoUrl`/`receiptFileId` (DEF-055). */
-    receiptPhotoUrl: text('receipt_photo_url'),
-    receiptFileId: uuid('receipt_file_id'),
+    /**
+     * ⭐ **The evidence, and the ONLY form of it** (DEF-055, relocated here from `expenses`).
+     *
+     * ⛔ `receiptPhotoUrl` was dropped at migration 0046. It was plain text, so a typed `x`
+     * satisfied it, and `verifyInvoice` fell through to it whenever no file was named — which the
+     * AP form guaranteed, since it only ever offered a text box. A brokered file row cannot be
+     * forged: its path is derived server-side from the session (T-141), and this column now
+     * carries a real FK proving the row exists. Still nullable, because the commissary-mirror
+     * exemption is a service-layer rule (a CHECK cannot join out to `suppliers` to test it).
+     */
+    receiptFileId: uuid('receipt_file_id').references(() => storedFiles.id, { onDelete: 'restrict' }),
 
+    /**
+     * ⛔ **Cannot be whoever created the invoice** — `supplier_invoices_two_person_verification_check`
+     * (migration 0046). Standard AP segregation of duties, and a v2 correction rather than a port:
+     * in v1's live data 577 of 1,324 verified receipts (44%) were verified by the person who
+     * submitted them, because v1's policy checks role and never identity.
+     */
     verifiedBy: uuid('verified_by').references(() => persons.id, { onDelete: 'restrict' }),
     verifiedAt: timestamp('verified_at', { withTimezone: true }),
+
+    /**
+     * ⭐ **What "verified" actually means** — Ian, 2026-08-28: *"right supplier, right invoice
+     * data, right items, right price all verified plus an uploaded photo."* Four confirmations,
+     * so four columns: one boolean cannot say WHICH of the four a person actually checked, and
+     * being specific is the entire point of an attestation.
+     *
+     * ⚠️ `attestedItems`/`attestedPrice` are a human's confirmation against the photo today —
+     * there are no invoice lines yet to check against. When the item master lands they become
+     * machine-checkable too; these columns do not change, the evidence behind them gets stronger.
+     */
+    attestedSupplier: boolean('attested_supplier').notNull().default(false),
+    attestedInvoice: boolean('attested_invoice').notNull().default(false),
+    attestedItems: boolean('attested_items').notNull().default(false),
+    attestedPrice: boolean('attested_price').notNull().default(false),
 
     /** Real, server-recomputed VAT (v1: `receipt.actions.ts:283-325`), captured as data. Not yet
      *  posted to a separate input-VAT account — no split exists in `POSTING-PATTERNS.md` today. */

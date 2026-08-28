@@ -97,19 +97,46 @@ export default async function InvoiceDetailPage({
         </div>
         <div className="rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
           <h2 className="mb-3 font-medium">Evidence</h2>
-          {invoice.receiptPhotoUrl ? (
-            <a href={invoice.receiptPhotoUrl} className="underline hover:no-underline">attached</a>
+          {invoice.receiptFileId ? (
+            <span className="text-green-700 dark:text-green-400">
+              photo attached &mdash; uploaded, not typed
+            </span>
           ) : (
-            <span className="text-amber-700 dark:text-amber-400">none — required to verify</span>
+            <span className="text-amber-700 dark:text-amber-400">none &mdash; required to verify</span>
           )}
         </div>
       </section>
 
       {invoice.status === 'pending' && (
-        <form action={verifyInvoiceAction}>
+        <form
+          action={verifyInvoiceAction}
+          className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
+        >
           <input type="hidden" name="invoiceId" value={invoice.id} />
-          <button type="submit" className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900">
-            Verify — manager only (Ian, 2026-08-27)
+          <h2 className="font-medium">Verify this invoice</h2>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            Check the paper against what was entered, and confirm each part. Verifying is the
+            approval &mdash; expenses can be recorded against it the moment you do.
+            <strong className="ml-1">You cannot verify an invoice you logged yourself.</strong>
+          </p>
+          <div className="space-y-2 text-sm">
+            {[
+              ['attestSupplier', 'The bill is from the supplier it names'],
+              ['attestInvoice', 'Invoice number, date and total match the paper'],
+              ['attestItems', 'The items listed are the items received'],
+              ['attestPrice', 'The prices charged are the prices agreed'],
+            ].map(([name, label]) => (
+              <label key={name} className="flex items-start gap-3">
+                <input type="checkbox" name={name} className="mt-0.5" />
+                <span>{label}</span>
+              </label>
+            ))}
+          </div>
+          <button
+            type="submit"
+            className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
+          >
+            Verify &mdash; all four must be checked
           </button>
         </form>
       )}

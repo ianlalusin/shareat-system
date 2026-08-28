@@ -129,6 +129,7 @@ interface Fixture {
    *  think about capacity — this file's own invariants are about expenses, not AP. */
   supplierId: string;
   supplierInvoiceId: string;
+  fixtureFileId: string;
 }
 
 /** One org, one open 2026-01 period, a full chart of accounts, the seeded expense
@@ -188,13 +189,22 @@ async function setup(hint: string): Promise<Fixture> {
     insert into suppliers (org_id, name, created_by) values (${orgId}, ${`${hint} Supplier`}, ${staffId})
     returning id
   `;
+  // Evidence is a real stored_files row now (migration 0046) — a typed string is not evidence.
+  const [fixtureFile] = await sql<{ id: string }[]>`
+    insert into stored_files (org_id, store_id, purpose, storage_path, content_type, byte_size, checksum, uploaded_by)
+    values (${orgId}, ${storeId}, 'receipt_photo', ${`orgs/${orgId}/stores/${storeId}/receipt_photo/${hint}.jpg`},
+            'image/jpeg', 1024, ${`sum-${hint}`}, ${staffId})
+    returning id
+  `;
+  const fixtureFileId = fixtureFile!.id;
   const [invoice] = await sql<{ id: string }[]>`
     insert into supplier_invoices (
       org_id, store_id, supplier_id, invoice_date, total_amount, status,
-      receipt_photo_url, verified_by, verified_at, created_by
+      receipt_file_id, verified_by, verified_at, created_by,
+      attested_supplier, attested_invoice, attested_items, attested_price
     ) values (
       ${orgId}, ${storeId}, ${supplier!.id}, '2026-01-01', '99999999.00', 'verified',
-      'https://example.com/fixture-invoice.jpg', ${managerId}, now(), ${staffId}
+      ${fixtureFileId}, ${managerId}, now(), ${staffId}, true, true, true, true
     )
     returning id
   `;
@@ -202,7 +212,7 @@ async function setup(hint: string): Promise<Fixture> {
   return {
     orgId, storeId, storeId2, staffId, managerId, adminId, walletId: wallet!.id,
     cashDrawerId: drawer!.id, officeSafeId: safe!.id,
-    supplierId: supplier!.id, supplierInvoiceId: invoice!.id,
+    supplierId: supplier!.id, supplierInvoiceId: invoice!.id, fixtureFileId,
   };
 }
 
@@ -742,7 +752,7 @@ describe('invariant 11 — no VERIFIED invoice, no recording (DEF-055 relocated 
         supplierId: f.supplierId,
         invoiceDate: BUSINESS_DATE,
         totalAmount: '300.00',
-        receiptPhotoUrl: 'https://example.com/inv11.jpg',
+        receiptFileId: f.fixtureFileId,
       }),
     );
 
@@ -761,7 +771,7 @@ describe('invariant 11 — no VERIFIED invoice, no recording (DEF-055 relocated 
     ).rejects.toThrow(/is pending/);
 
     // Verifying it and retrying succeeds — proves the gate is the invoice's status, nothing else.
-    await asPerson(f.orgId, (tx) => verifyInvoice(tx, actor(f.orgId, f.managerId), pending.id));
+    await asPerson(f.orgId, (tx) => verifyInvoice(tx, actor(f.orgId, f.managerId), pending.id, { supplier: true, invoice: true, items: true, price: true }));
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.staffId), {
         storeId: f.storeId,

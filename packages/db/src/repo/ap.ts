@@ -140,8 +140,11 @@ export interface SupplierInvoiceRow {
   totalAmount: string;
   notes: string | null;
   status: SupplierInvoiceStatus;
-  receiptPhotoUrl: string | null;
   receiptFileId: string | null;
+  attestedSupplier: boolean;
+  attestedInvoice: boolean;
+  attestedItems: boolean;
+  attestedPrice: boolean;
   verifiedBy: string | null;
   verifiedAt: Date | null;
   vatType: SupplierInvoiceVatType | null;
@@ -166,7 +169,6 @@ export async function insertSupplierInvoice(
     dueDate: string | null;
     totalAmount: string;
     notes: string | null;
-    receiptPhotoUrl: string | null;
     receiptFileId: string | null;
     vatType: SupplierInvoiceVatType | null;
     vatRate: string | null;
@@ -243,6 +245,13 @@ export async function markInvoiceVerified(
       status: 'verified',
       verifiedBy: input.verifiedBy,
       verifiedAt: sql`now()`,
+      // ⭐ Stamped together with the status, never separately: the DB CHECK requires all four to
+      // be true for a verified row, so a status flip that forgot them would be refused outright.
+      // The domain has already established the verifier confirmed each one.
+      attestedSupplier: true,
+      attestedInvoice: true,
+      attestedItems: true,
+      attestedPrice: true,
       updatedAt: sql`now()`,
     })
     .where(and(eq(supplierInvoices.id, id), eq(supplierInvoices.orgId, orgId), eq(supplierInvoices.status, 'pending')))

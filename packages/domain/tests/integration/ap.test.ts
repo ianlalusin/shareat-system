@@ -132,20 +132,38 @@ interface FixtureWithSupplier extends Fixture {
   supplierId: string;
 }
 
+
+/**
+ * ⭐ A real `stored_files` row. Evidence is a FILE now (migration 0046) — `receipt_photo_url` is
+ * gone, and `verifyInvoice` proves the row exists via `filesRepo.getById`. A fixture that faked
+ * it with a string would be testing the hole this task closed.
+ */
+async function receiptFile(orgId: string, storeId: string, uploadedBy: string): Promise<string> {
+  const [row] = await sql<{ id: string }[]>`
+    insert into stored_files (org_id, store_id, purpose, storage_path, content_type, byte_size, checksum, uploaded_by)
+    values (${orgId}, ${storeId}, 'receipt_photo', ${`orgs/${orgId}/stores/${storeId}/receipt_photo/${uid('f')}.jpg`},
+            'image/jpeg', 1024, ${uid('sum')}, ${uploadedBy})
+    returning id
+  `;
+  return row!.id;
+}
+
 /** Records + verifies one invoice, returns its id. Evidence attached so verify never blocks
  *  on the photo gate unless a test explicitly wants that. */
 async function verifiedInvoice(f: FixtureWithSupplier, totalAmount: string, over: Record<string, unknown> = {}): Promise<string> {
+  const fileId = await receiptFile(f.orgId, f.storeId, f.staffId);
   const created = await asOrg(f.orgId, (tx) =>
     recordInvoice(tx, f.staff, {
       storeId: f.storeId,
       supplierId: f.supplierId,
       invoiceDate: '2026-01-10',
       totalAmount,
-      receiptPhotoUrl: 'https://example.com/inv.jpg',
+      receiptFileId: fileId,
       ...over,
     }),
   );
-  await asOrg(f.orgId, (tx) => verifyInvoice(tx, f.manager, created.id));
+  // ⛔ staff logs it, MANAGER verifies it — two people, enforced by the DB (migration 0046).
+  await asOrg(f.orgId, (tx) => verifyInvoice(tx, f.manager, created.id, { supplier: true, invoice: true, items: true, price: true }));
   return created.id;
 }
 
@@ -319,10 +337,11 @@ describe('the refusals', () => {
 
   it('⛔ createExpense rejects a PENDING (unverified) invoice — the universal gate, cash included', async () => {
     const f = await fixtureWithSupplier('pending');
+    const pendingFile = await receiptFile(f.orgId, f.storeId, f.staffId);
     const pending = await asOrg(f.orgId, (tx) =>
       recordInvoice(tx, f.staff, {
         storeId: f.storeId, supplierId: f.supplierId, invoiceDate: '2026-01-10',
-        totalAmount: '500.00', receiptPhotoUrl: 'https://example.com/x.jpg',
+        totalAmount: '500.00', receiptFileId: pendingFile,
       }),
     );
     await expect(
@@ -344,21 +363,27 @@ describe('the refusals', () => {
       }),
     );
     await expect(
-      asOrg(f.orgId, (tx) => verifyInvoice(tx, f.manager, created.id)),
+      asOrg(f.orgId, (tx) => verifyInvoice(tx, f.manager, created.id, { supplier: true, invoice: true, items: true, price: true })),
     ).rejects.toThrow(/has no receipt photo/);
   });
 
-  it('⛔ verifyInvoice rejects a hand-typed receiptFileId that names no real file — a bare truthiness check would have let this through (DEF-077 audit)', async () => {
+  /**
+   * ⭐ This test used to assert that VERIFY refused a hand-typed `receiptFileId`. It now cannot
+   * get that far: migration 0046 gave the column a real FK, so a uuid naming no file is refused
+   * at INSERT. The rejection moved one step earlier, which is strictly better — the invoice never
+   * exists carrying fake evidence. `verifyInvoice`'s `filesRepo.getById` check stays as the
+   * backstop for a file deleted between logging and verifying.
+   */
+  it('⛔ a hand-typed receiptFileId naming no real file is refused when the invoice is logged', async () => {
     const f = await fixtureWithSupplier('forgedfile');
-    const created = await asOrg(f.orgId, (tx) =>
-      recordInvoice(tx, f.staff, {
-        storeId: f.storeId, supplierId: f.supplierId, invoiceDate: '2026-01-10', totalAmount: '500.00',
-        receiptFileId: '00000000-0000-0000-0000-000000000000',
-      }),
-    );
     await expect(
-      asOrg(f.orgId, (tx) => verifyInvoice(tx, f.manager, created.id)),
-    ).rejects.toThrow(/does not exist in this org/);
+      asOrg(f.orgId, (tx) =>
+        recordInvoice(tx, f.staff, {
+          storeId: f.storeId, supplierId: f.supplierId, invoiceDate: '2026-01-10', totalAmount: '500.00',
+          receiptFileId: '00000000-0000-0000-0000-000000000000',
+        }),
+      ),
+    ).rejects.toThrow();
   });
 });
 
@@ -457,13 +482,14 @@ describe('bible §16.10 — duplicate-invoice detection warns, never blocks', ()
 describe('aging — buckets by due date, falling back to invoice date when there is none', () => {
   it('places a 45-day-old item in the 31-60 bucket', async () => {
     const f = await fixtureWithSupplier('aging');
+    const agingFile = await receiptFile(f.orgId, f.storeId, f.staffId);
     const invoiceId = await asOrg(f.orgId, (tx) =>
       recordInvoice(tx, f.staff, {
         storeId: f.storeId, supplierId: f.supplierId, invoiceDate: '2026-01-01',
-        dueDate: '2026-01-01', totalAmount: '900.00', receiptPhotoUrl: 'https://example.com/a.jpg',
+        dueDate: '2026-01-01', totalAmount: '900.00', receiptFileId: agingFile,
       }),
     ).then((r) => r.id);
-    await asOrg(f.orgId, (tx) => verifyInvoice(tx, f.manager, invoiceId));
+    await asOrg(f.orgId, (tx) => verifyInvoice(tx, f.manager, invoiceId, { supplier: true, invoice: true, items: true, price: true }));
     await creditExpense(f, invoiceId, '900.00');
 
     const buckets = await asOrg(f.orgId, (tx) => apRepo.aging(tx, f.orgId, '2026-02-15'));
@@ -510,17 +536,17 @@ async function secondStore(f: FixtureWithSupplier, hint: string) {
 
 /** One verified invoice + one posted credit expense, at an arbitrary store. */
 async function creditExpenseAt(f: FixtureWithSupplier, storeId: string, amount: string, particulars: string) {
+  const fileId = await receiptFile(f.orgId, storeId, f.staffId);
   const created = await asOrg(f.orgId, (tx) =>
     recordInvoice(tx, f.staff, {
       storeId,
       supplierId: f.supplierId,
       invoiceDate: '2026-01-10',
       totalAmount: amount,
-      receiptPhotoUrl: 'https://example.com/inv.jpg',
-      ...({} as Record<string, unknown>),
+      receiptFileId: fileId,
     }),
   );
-  await asOrg(f.orgId, (tx) => verifyInvoice(tx, f.manager, created.id));
+  await asOrg(f.orgId, (tx) => verifyInvoice(tx, f.manager, created.id, { supplier: true, invoice: true, items: true, price: true }));
   const exp = await asOrg(f.orgId, (tx) =>
     recordExpenseForInvoice(tx, f.manager, {
       storeId,
@@ -656,5 +682,122 @@ describe('⭐ AP integrity gaps found by the 2026-08-28 audit', () => {
     // And the ledger agrees: the item is closed exactly once.
     const pos = await asOrg(f.orgId, (tx) => apRepo.positionOf(tx, f.orgId, f.supplierId));
     expect(pos.controlBalance).toBe('0.00');
+  });
+});
+
+// =========================================================================================
+// The gate, hardened — Ian, 2026-08-28: "for receipt nothing would accept that x"
+// =========================================================================================
+
+describe('⛔ evidence is a FILE, and nothing else counts', () => {
+  it('an invoice with no evidence at all cannot be verified', async () => {
+    const f = await fixtureWithSupplier('no-evidence');
+    const bare = await asOrg(f.orgId, (tx) =>
+      recordInvoice(tx, f.staff, {
+        storeId: f.storeId, supplierId: f.supplierId,
+        invoiceDate: '2026-01-10', totalAmount: '400.00',
+      }),
+    );
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        verifyInvoice(tx, f.manager, bare.id, { supplier: true, invoice: true, items: true, price: true }),
+      ),
+    ).rejects.toThrow(/no receipt photo/i);
+  });
+
+  it('⭐ a well-formed uuid that names nothing never becomes an invoice at all', async () => {
+    const f = await fixtureWithSupplier('forged');
+    // This is the `x` of the file era: the right SHAPE, pointing at nothing. The FK added in
+    // migration 0046 is what makes shape insufficient.
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        recordInvoice(tx, f.staff, {
+          storeId: f.storeId, supplierId: f.supplierId,
+          invoiceDate: '2026-01-10', totalAmount: '400.00',
+          receiptFileId: '01a04000-0000-7000-8000-000000000000',
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('⛔ a receipt belonging to ANOTHER store is not evidence for this invoice', async () => {
+    const f = await fixtureWithSupplier('wrong-store');
+    const b = await secondStore(f, 'wrong-store-b');
+    const elsewhere = await receiptFile(f.orgId, b.storeId, f.staffId); // uploaded at store B
+    const inv = await asOrg(f.orgId, (tx) =>
+      recordInvoice(tx, f.staff, {
+        storeId: f.storeId, supplierId: f.supplierId,
+        invoiceDate: '2026-01-10', totalAmount: '400.00', receiptFileId: elsewhere,
+      }),
+    );
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        verifyInvoice(tx, f.manager, inv.id, { supplier: true, invoice: true, items: true, price: true }),
+      ),
+    ).rejects.toThrow(/another store/i);
+  });
+});
+
+describe('⛔ verification means all four confirmations, by a second person', () => {
+  it('a half-ticked attestation is refused, naming what is still unconfirmed', async () => {
+    const f = await fixtureWithSupplier('half-attest');
+    const fileId = await receiptFile(f.orgId, f.storeId, f.staffId);
+    const inv = await asOrg(f.orgId, (tx) =>
+      recordInvoice(tx, f.staff, {
+        storeId: f.storeId, supplierId: f.supplierId,
+        invoiceDate: '2026-01-10', totalAmount: '400.00', receiptFileId: fileId,
+      }),
+    );
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        verifyInvoice(tx, f.manager, inv.id, { supplier: true, invoice: true, items: false, price: false }),
+      ),
+    ).rejects.toThrow(/items, price/);
+  });
+
+  it('⭐ the person who logged the invoice cannot verify it — v1 allowed this 44% of the time', async () => {
+    const f = await fixtureWithSupplier('sod');
+    const fileId = await receiptFile(f.orgId, f.storeId, f.managerId);
+    // The MANAGER logs it this time, then tries to verify their own entry.
+    const inv = await asOrg(f.orgId, (tx) =>
+      recordInvoice(tx, f.manager, {
+        storeId: f.storeId, supplierId: f.supplierId,
+        invoiceDate: '2026-01-10', totalAmount: '400.00', receiptFileId: fileId,
+      }),
+    );
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        verifyInvoice(tx, f.manager, inv.id, { supplier: true, invoice: true, items: true, price: true }),
+      ),
+    ).rejects.toThrow(/cannot also verify it/i);
+  });
+});
+
+describe('⛔ a supplier must be ACTIVE, not merely on file', () => {
+  it('an inactive supplier cannot be billed against, and cannot back a new expense', async () => {
+    const f = await fixtureWithSupplier('inactive');
+    const invoiceId = await verifiedInvoice(f, '1000.00'); // logged while still active
+    await sql`update suppliers set status = 'inactive' where id = ${f.supplierId}`;
+
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        recordInvoice(tx, f.staff, {
+          storeId: f.storeId, supplierId: f.supplierId,
+          invoiceDate: '2026-01-11', totalAmount: '100.00',
+        }),
+      ),
+    ).rejects.toThrow(/not active/i);
+
+    // And the spend itself is refused, even against an invoice verified while they were active —
+    // recording the expense is the step that moves money.
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        recordExpenseForInvoice(tx, f.manager, {
+          storeId: f.storeId, supplierId: f.supplierId, supplierInvoiceId: invoiceId,
+          categoryId: f.categoryId, particulars: 'Buying from a supplier we stopped using',
+          payments: [{ method: 'credit', amount: '1000.00' }],
+        }),
+      ),
+    ).rejects.toThrow(/not active/i);
   });
 });

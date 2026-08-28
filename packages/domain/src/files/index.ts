@@ -42,7 +42,10 @@ export const PURPOSE_LIMITS: Record<
 
 /** The capability that governs the THING, not a generic "may upload". */
 const PURPOSE_CAPABILITY: Record<FilePurpose, Parameters<typeof authorize>[2]> = {
-  receipt_photo: 'create_expense',
+  // ⭐ T-130 moved the receipt photo from the expense to the supplier INVOICE, so the capability
+  // that governs the thing moved with it. No access changes — both are granted to staff — but a
+  // photo is now attached while logging a bill, which is not the same act as recording a spend.
+  receipt_photo: 'record_supplier_invoice',
   ar_collection_proof: 'record_ar_collection',
   memo_document: 'manage_users',
   wastage_dispute: 'record_wastage',

@@ -117,6 +117,21 @@ async function runCreateExpense(tx: Tx, actor: Actor, input: CreateExpenseInput)
   // for aging. Refused outright rather than silently preferring one: a caller that disagrees with
   // the invoice is confused about which bill it is recording, and guessing which half it got
   // right is how the wrong supplier gets paid.
+  // ⭐ Ian, 2026-08-28, requirement 1: an expense may only be recorded against an EXISTING and
+  // ACTIVE supplier. Checked here and not only at `recordInvoice`, because a supplier can be
+  // deactivated between logging the bill and recording the spend against it — and the second is
+  // the step that moves money.
+  const supplier = await apRepo.getSupplierById(tx, actor.orgId, invoice.supplierId);
+  if (!supplier) {
+    throw new Error(`createExpense: supplier ${invoice.supplierId} does not exist in org ${actor.orgId}`);
+  }
+  if (supplier.status !== 'active') {
+    throw new Error(
+      `createExpense: ${supplier.name} is ${supplier.status}, not active — an expense cannot be ` +
+        'recorded against a supplier the business has stopped buying from.',
+    );
+  }
+
   if (input.supplierId !== invoice.supplierId) {
     throw new Error(
       `createExpense: supplier ${input.supplierId} does not own supplier invoice ` +

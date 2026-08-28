@@ -674,13 +674,21 @@ async function capexExpense(f: Fixture, amount: string): Promise<string> {
     on conflict (org_id, name) do update set updated_at = now()
     returning id
   `;
+  const [capexFile] = await sql<{ id: string }[]>`
+    insert into stored_files (org_id, store_id, purpose, storage_path, content_type, byte_size, checksum, uploaded_by)
+    values (${f.orgId}, ${f.storeId}, 'receipt_photo',
+            ${`orgs/${f.orgId}/stores/${f.storeId}/receipt_photo/capex-${Date.now()}.jpg`},
+            'image/jpeg', 1024, ${`sum-capex-${Date.now()}`}, ${f.staffId})
+    returning id
+  `;
   const [invoice] = await sql<{ id: string }[]>`
     insert into supplier_invoices (
       org_id, store_id, supplier_id, invoice_date, total_amount, status,
-      receipt_photo_url, verified_by, verified_at, created_by
+      receipt_file_id, verified_by, verified_at, created_by,
+      attested_supplier, attested_invoice, attested_items, attested_price
     ) values (
       ${f.orgId}, ${f.storeId}, ${supplier!.id}, '2026-01-20', '99999999.00', 'verified',
-      'https://example.com/fixed-assets-fixture.jpg', ${f.managerId}, now(), ${f.staffId}
+      ${capexFile!.id}, ${f.managerId}, now(), ${f.staffId}, true, true, true, true
     )
     returning id
   `;

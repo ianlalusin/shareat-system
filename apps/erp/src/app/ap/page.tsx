@@ -154,8 +154,16 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
                 <input type="date" name="dueDate" className={INPUT} />
               </Field>
             </div>
-            <Field label="Receipt photo URL" hint="Required before it can be verified (DEF-055, relocated here).">
-              <input name="receiptPhotoUrl" placeholder="https://…" className={INPUT} />
+            <Field
+              label="Photo of the receipt"
+              hint="Required before it can be verified. Upload the actual photo — a link or a typed reference is not evidence."
+            >
+              <input
+                type="file"
+                name="receiptPhoto"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                className={INPUT}
+              />
             </Field>
             <button type="submit" className={BTN}>Log invoice</button>
           </form>
