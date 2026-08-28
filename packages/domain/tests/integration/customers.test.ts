@@ -284,8 +284,10 @@ describe('price lists', () => {
 /** ⭐ T-145: a price list quotes an ITEM, not a text code. One helper mints one. */
 async function item(f: Fixture, code: string, name: string, baseUnit = 'kg'): Promise<string> {
   const [row] = await sql<{ id: string }[]>`
-    insert into items (org_id, code, name, kind, base_unit, created_by)
-    values (${f.orgId}, ${code}, ${name}, 'raw_material', ${baseUnit}, ${f.adminId})
+    insert into items (org_id, code, name, kind, base_unit, created_by, sellable_wholesale)
+    -- ⭐ T-149: a price list is a WHOLESALE instrument, so anything quoted on one must be sold
+    -- wholesale. These fixtures exist to test rates, so they are wholesale items by definition.
+    values (${f.orgId}, ${code}, ${name}, 'raw_material', ${baseUnit}, ${f.adminId}, true)
     on conflict (org_id, code) do update set updated_at = now()
     returning id
   `;

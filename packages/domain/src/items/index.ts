@@ -27,6 +27,10 @@ export interface CreateItemInput {
   kind: ItemKind;
   baseUnit: BaseUnit;
   notes?: string | null;
+  /** ⭐ T-149. Default: purchasable, sold to nobody — the commonest case by far. */
+  isPurchasable?: boolean;
+  sellableRetail?: boolean;
+  sellableWholesale?: boolean;
 }
 
 /**
@@ -52,6 +56,9 @@ export async function createItem(tx: Tx | null, actor: Actor, input: CreateItemI
       baseUnit: input.baseUnit,
       notes: input.notes?.trim() || null,
       createdBy: actor.personId,
+      isPurchasable: input.isPurchasable ?? true,
+      sellableRetail: input.sellableRetail ?? false,
+      sellableWholesale: input.sellableWholesale ?? false,
     });
   };
   if (tx) return run(tx);
@@ -123,6 +130,9 @@ export async function validateInvoiceLines(
   orgId: string,
   lines: InvoiceLineDraft[],
   invoiceTotal: string,
+  /** ⭐ T-149: purchasability is resolved AT THIS STORE. Lipa makes the bulgogi sauce it sells;
+   *  another branch buys it in, and the same item is legitimately both. */
+  storeId?: string,
 ): Promise<InvoiceLineInput[]> {
   if (lines.length === 0) return [];
 
@@ -134,6 +144,18 @@ export async function validateInvoiceLines(
     if (!item) throw new Error(`validateInvoiceLines: line ${i + 1} names item ${l.itemId}, which does not exist.`);
     if (item.status !== 'active') {
       throw new Error(`validateInvoiceLines: line ${i + 1} names ${item.name}, which is inactive.`);
+    }
+    // ⭐ T-149. A supplier billing us for something we MAKE means either the item is wrong or the
+    // flag is — both worth stopping before it becomes a price observation. Resolved at the
+    // invoice's own store when one is known, because the answer genuinely differs by branch.
+    const resolved = storeId ? await itemsRepo.sellabilityAt(trx, orgId, l.itemId, storeId) : undefined;
+    const purchasableHere = resolved ? resolved.isPurchasable : item.isPurchasable;
+    if (!purchasableHere) {
+      throw new Error(
+        `validateInvoiceLines: line ${i + 1} names ${item.name}, which this store does not buy — ` +
+          'it is made here, not purchased. Either the wrong item was picked, or this store should ' +
+          'be marked as buying it.',
+      );
     }
 
     const qty = Number(l.quantity);
@@ -411,6 +433,69 @@ export async function pendingItemRequests(tx: Tx | null, actor: Actor): Promise<
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'manage_items', {});
     return itemsRepo.listItemRequests(trx, actor.orgId, { status: 'requested' });
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/**
+ * ⭐ Say what ONE store does with an item, where it differs from the org's answer.
+ *
+ * ⚠️ Pass `null` for a flag to mean *"no opinion, follow the org"* — not `false`. The difference
+ * matters: `false` freezes today's default into a copy that stops tracking it.
+ */
+export async function setStoreSellability(
+  tx: Tx | null,
+  actor: Actor,
+  input: {
+    storeId: string;
+    itemId: string;
+    isPurchasable?: boolean | null;
+    sellableRetail?: boolean | null;
+    sellableWholesale?: boolean | null;
+    note?: string | null;
+  },
+): Promise<void> {
+  const run = async (trx: Tx) => {
+    await authorize(trx, actor, 'manage_items', {});
+    const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
+    if (!item) throw new Error(`setStoreSellability: item ${input.itemId} does not exist.`);
+
+    const p = input.isPurchasable ?? null;
+    const r = input.sellableRetail ?? null;
+    const w = input.sellableWholesale ?? null;
+    if (p === null && r === null && w === null) {
+      // The DB refuses this too; saying it here explains WHY rather than quoting a constraint.
+      throw new Error(
+        'setStoreSellability: an override that overrides nothing is noise that looks like a ' +
+          'decision. Clear it instead if this store should follow the organisation.',
+      );
+    }
+    await itemsRepo.upsertStoreSellability(trx, {
+      orgId: actor.orgId,
+      storeId: input.storeId,
+      itemId: input.itemId,
+      isPurchasable: p,
+      sellableRetail: r,
+      sellableWholesale: w,
+      note: input.note?.trim() || null,
+      setBy: actor.personId,
+    });
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/** Return a store to the organisation's answer. */
+export async function clearStoreSellability(
+  tx: Tx | null,
+  actor: Actor,
+  input: { storeId: string; itemId: string },
+): Promise<{ cleared: boolean }> {
+  const run = async (trx: Tx) => {
+    await authorize(trx, actor, 'manage_items', {});
+    const cleared = await itemsRepo.clearStoreSellability(trx, actor.orgId, input.storeId, input.itemId);
+    return { cleared };
   };
   if (tx) return run(tx);
   return transaction(run);

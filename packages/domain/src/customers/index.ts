@@ -176,6 +176,19 @@ export async function setPrice(
     if (item.status !== 'active') {
       throw new Error(`setPrice: ${item.name} is inactive — reactivate it before quoting a rate.`);
     }
+    // ⭐ T-149, and the reason this task exists: nothing previously stopped someone quoting cooked
+    // food to a franchisee. A price list is a wholesale instrument, so an item on one must be
+    // something we actually sell wholesale.
+    // ⚠️ ANYWHERE in the org, not at one store: a price list is an org-wide rate card, not a
+    // per-branch one. If Lipa sells bulgogi sauce wholesale, the rate is quotable.
+    const wholesaleSomewhere = await itemsRepo.sellableWholesaleAnywhere(trx, actor.orgId, item.id);
+    if (!wholesaleSomewhere) {
+      throw new Error(
+        `setPrice: ${item.name} is not sold wholesale, so it cannot go on a price list. A bento ` +
+          'box is sold à la carte and not to a franchisee. Mark it wholesale-sellable first if ' +
+          'that is genuinely what you mean.',
+      );
+    }
     // ⚠️ Zero is allowed — a genuinely free line exists (a sample, a promotional unit) and refusing
     // it would push people to enter 0.01. Negative is not: that is a discount, not a price.
     if (Number(input.rate) < 0) {

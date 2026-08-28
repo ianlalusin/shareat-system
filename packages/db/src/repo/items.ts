@@ -25,6 +25,7 @@ import {
   type ItemStatus,
 } from '../../schema/items';
 import { supplierItems, type CatalogueSource } from '../../schema/supplier-items';
+import { storeItemSellability } from '../../schema/items';
 
 export interface ItemRow {
   id: string;
@@ -34,6 +35,9 @@ export interface ItemRow {
   kind: ItemKind;
   baseUnit: BaseUnit;
   status: ItemStatus;
+  isPurchasable: boolean;
+  sellableRetail: boolean;
+  sellableWholesale: boolean;
   notes: string | null;
   createdBy: string;
   createdAt: Date;
@@ -49,6 +53,9 @@ export async function insertItem(
     baseUnit: BaseUnit;
     notes: string | null;
     createdBy: string;
+    isPurchasable?: boolean;
+    sellableRetail?: boolean;
+    sellableWholesale?: boolean;
   },
 ): Promise<{ id: string }> {
   const [row] = await tx.insert(items).values(input).returning({ id: items.id });
@@ -79,7 +86,17 @@ export async function updateItem(
   tx: Tx,
   orgId: string,
   id: string,
-  values: Partial<{ code: string; name: string; kind: ItemKind; baseUnit: BaseUnit; status: ItemStatus; notes: string | null }>,
+  values: Partial<{
+    code: string;
+    name: string;
+    kind: ItemKind;
+    baseUnit: BaseUnit;
+    status: ItemStatus;
+    notes: string | null;
+    isPurchasable: boolean;
+    sellableRetail: boolean;
+    sellableWholesale: boolean;
+  }>,
 ): Promise<void> {
   const updated = await tx
     .update(items)
@@ -687,4 +704,108 @@ export async function findDuplicateCandidates(
     similarity: Number(r.sim),
     unitsDiffer: String(r.a_unit) !== String(r.b_unit),
   }));
+}
+
+export interface ResolvedSellability {
+  isPurchasable: boolean;
+  sellableRetail: boolean;
+  sellableWholesale: boolean;
+  /** True when this store has an override row — so a screen can show "set here" vs "org default". */
+  overridden: boolean;
+}
+
+/**
+ * ⭐ What this item may be bought and sold as **at this store**.
+ *
+ * `coalesce(store override, org default)`, per column. A store that only disagrees about one of
+ * the three says so about one of the three.
+ */
+export async function sellabilityAt(
+  tx: Tx,
+  orgId: string,
+  itemId: string,
+  storeId: string,
+): Promise<ResolvedSellability | undefined> {
+  const [row] = (await tx.execute(sql`
+    select
+      coalesce(o.is_purchasable, i.is_purchasable)         as is_purchasable,
+      coalesce(o.sellable_retail, i.sellable_retail)       as sellable_retail,
+      coalesce(o.sellable_wholesale, i.sellable_wholesale) as sellable_wholesale,
+      (o.id is not null)                                   as overridden
+    from items i
+    left join store_item_sellability o
+      on o.item_id = i.id and o.store_id = ${storeId} and o.org_id = ${orgId}
+    where i.id = ${itemId} and i.org_id = ${orgId}
+  `)) as unknown as Record<string, boolean>[];
+  if (!row) return undefined;
+  return {
+    isPurchasable: Boolean(row.is_purchasable ?? row.isPurchasable),
+    sellableRetail: Boolean(row.sellable_retail ?? row.sellableRetail),
+    sellableWholesale: Boolean(row.sellable_wholesale ?? row.sellableWholesale),
+    overridden: Boolean(row.overridden),
+  };
+}
+
+/** Is this item sold wholesale ANYWHERE in the org? What a price list — an org-wide rate card —
+ *  needs to know, since a rate is not quoted per store. */
+export async function sellableWholesaleAnywhere(tx: Tx, orgId: string, itemId: string): Promise<boolean> {
+  const [row] = (await tx.execute(sql`
+    select (
+      i.sellable_wholesale
+      or exists (
+        select 1 from store_item_sellability o
+        where o.item_id = i.id and o.org_id = ${orgId} and o.sellable_wholesale is true
+      )
+    ) as ok
+    from items i where i.id = ${itemId} and i.org_id = ${orgId}
+  `)) as unknown as Record<string, boolean>[];
+  return Boolean(row?.ok);
+}
+
+export async function upsertStoreSellability(
+  tx: Tx,
+  input: {
+    orgId: string;
+    storeId: string;
+    itemId: string;
+    isPurchasable: boolean | null;
+    sellableRetail: boolean | null;
+    sellableWholesale: boolean | null;
+    note: string | null;
+    setBy: string;
+  },
+): Promise<void> {
+  await tx
+    .insert(storeItemSellability)
+    .values(input)
+    .onConflictDoUpdate({
+      target: [storeItemSellability.storeId, storeItemSellability.itemId],
+      set: {
+        isPurchasable: input.isPurchasable,
+        sellableRetail: input.sellableRetail,
+        sellableWholesale: input.sellableWholesale,
+        note: input.note,
+        updatedAt: sql`now()`,
+      },
+    });
+}
+
+/** Drop a store's override, returning it to the org default. */
+export async function clearStoreSellability(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+  itemId: string,
+): Promise<boolean> {
+  const gone = await tx
+    .delete(storeItemSellability)
+    .where(
+      and(
+        eq(storeItemSellability.orgId, orgId),
+        eq(storeItemSellability.storeId, storeId),
+        eq(storeItemSellability.itemId, itemId),
+      ),
+    )
+    .returning({ id: storeItemSellability.id });
+  return gone.length > 0;
 }

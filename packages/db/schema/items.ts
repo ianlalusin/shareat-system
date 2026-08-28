@@ -26,6 +26,7 @@
  */
 import { sql } from 'drizzle-orm';
 import {
+  boolean,
   check,
   index,
   integer,
@@ -38,6 +39,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
 import { persons } from './persons';
+import { stores } from './stores';
 import { supplierInvoices } from './suppliers';
 
 /** v1's own vocabulary, from live data: raw_material 340 · supply 207 · retail 234 ·
@@ -77,6 +79,27 @@ export const items = pgTable(
     /** ⭐ The canonical unit every price is normalised to before it is compared. */
     baseUnit: text('base_unit', { enum: BASE_UNITS }).notNull(),
     status: text('status', { enum: ITEM_STATUSES }).notNull().default('active'),
+    /**
+     * ⭐ **What this item may be bought and sold as — three INDEPENDENT facts** (T-149).
+     *
+     * Not an enum, because most items are sold to nobody and an enum has nowhere to put them:
+     *
+     * | | retail | wholesale | purchasable |
+     * |---|---|---|---|
+     * | Samgyup bento box | ✅ | ⛔ | ⛔ — we make it |
+     * | Beef Premium 5kg pack | ⛔ | ✅ | ✅ |
+     * | Milkis | ✅ | ✅ | ✅ |
+     * | Charcoal, gloves, tissue | ⛔ | ⛔ | ✅ |
+     *
+     * Same shape as Odoo's "Can be Sold" / "Can be Purchased", which keeps ONE product master
+     * across channels rather than a product per channel.
+     */
+    isPurchasable: boolean('is_purchasable').notNull().default(true),
+    /** À la carte: dine-in, take-out, online. ⚠️ POS owns the menu; this is the ERP's statement
+     *  of intent, which POS reads — never a second copy of POS's product list. */
+    sellableRetail: boolean('sellable_retail').notNull().default(false),
+    /** A franchisee or external buyer. Enforced at `setPrice`: no wholesale rate without it. */
+    sellableWholesale: boolean('sellable_wholesale').notNull().default(false),
     /** Set together with `status = 'merged'` — the DB refuses one without the other. */
     mergedIntoId: uuid('merged_into_id'),
     notes: text('notes'),
@@ -167,4 +190,47 @@ export const itemRequests = pgTable(
     createdItemId: uuid('created_item_id').references(() => items.id, { onDelete: 'restrict' }),
   },
   (t) => [index('item_requests_org_status_idx').on(t.orgId, t.status)],
+);
+
+/**
+ * ⭐ Where ONE store's answer differs from the org's. T-149, Ian 2026-08-28: *"it must be store
+ * scoped coz the main branch shareat lipa might be making the bulgogi sauce but the franchisee is
+ * purchasing it from shareat lipa."*
+ *
+ * ⛔ **This is not a per-store item master, and the difference is the whole point.** Bulgogi sauce
+ * is ONE `items` row — one identity, one price history, org-wide. What varies by store is what
+ * that store DOES with it. v1 stored the item itself per store and produced 842 records for 385
+ * real products; the moment this table grows a name or a unit, it has become that.
+ *
+ * ⚠️ Every column is NULLABLE, meaning *"no opinion — use the org default"*. A store overriding
+ * only `isPurchasable` must not be made to restate the other two, because restating them freezes
+ * today's default into a copy that stops tracking it.
+ */
+export const storeItemSellability = pgTable(
+  'store_item_sellability',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id, { onDelete: 'restrict' }),
+    itemId: uuid('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'restrict' }),
+    isPurchasable: boolean('is_purchasable'),
+    sellableRetail: boolean('sellable_retail'),
+    sellableWholesale: boolean('sellable_wholesale'),
+    note: text('note'),
+    setBy: uuid('set_by')
+      .notNull()
+      .references(() => persons.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('store_item_sellability_store_item_key').on(t.storeId, t.itemId),
+    index('store_item_sellability_org_item_idx').on(t.orgId, t.itemId),
+  ],
 );

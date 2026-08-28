@@ -402,6 +402,15 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'it rebuilds from the first post-cutover invoice.',
   },
 
+  store_item_sellability: {
+    // ⭐ keep, like the items it qualifies: which store makes the bulgogi sauce and which buys it
+    // is configuration about how the business operates, not activity. Nothing about it becomes
+    // false when the ledger restarts.
+    class: 'keep',
+    reason:
+      'Per-store exceptions to what an item may be bought and sold as. Configuration, no balance, ' +
+      'nothing the cutover invalidates — and re-deciding it per store by hand would be pointless work.',
+  },
   item_requests: {
     // ⭐ keep, NOT purge — and this is the one place an approval record survives the cutover.
     // `cash_requests` purges because the money it moved is replaced by the opening balance; an

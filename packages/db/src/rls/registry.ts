@@ -327,6 +327,12 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'a leak of another org’s purchasing economics.',
   },
 
+  store_item_sellability: {
+    scope: 'org_column',
+    reason:
+      'Which of an org’s stores makes a thing versus buys it. Reveals where production happens, ' +
+      'so it is org-scoped like the item master it qualifies.',
+  },
   item_requests: {
     scope: 'org_column',
     reason:

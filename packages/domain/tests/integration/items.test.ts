@@ -26,12 +26,14 @@ import { itemsRepo, closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db'
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import {
   approveItemRequest,
+  clearStoreSellability,
   createItem,
   createSupplier,
   declareSupplierItem,
   mergeItems,
   rejectItemRequest,
   requestItem,
+  setStoreSellability,
   recordInvoice,
   undeclareSupplierItem,
   verifyInvoice,
@@ -561,5 +563,127 @@ describe('merge — when two slipped through anyway', () => {
     await expect(
       asOrg(f.orgId, (tx) => mergeItems(tx, f.manager, { loserId: b.id, winnerId: a.id })),
     ).rejects.toThrow(AuthorizationError);
+  });
+});
+
+// =========================================================================================
+// T-149 — what an item may be bought and sold as, per store
+// =========================================================================================
+
+describe('sellability: the bento box, the wholesale pack, and Milkis', () => {
+  it('⛔ a bento box cannot appear on a supplier invoice — we make it, nobody bills us', async () => {
+    const f = await fixture('bento');
+    const bento = await asOrg(f.orgId, (tx) =>
+      createItem(tx, f.superAdmin, {
+        code: 'BENTO-SAMGYUP',
+        name: `Samgyup bento ${uid('b')}`,
+        kind: 'retail',
+        baseUnit: 'pcs',
+        isPurchasable: false,
+        sellableRetail: true,
+        sellableWholesale: false,
+      }),
+    );
+    await expect(
+      invoiceWithLines(f, '2026-01-10', '500.00', [
+        { itemId: bento.id, quantity: '5', purchaseUnit: 'pcs', conversionFactor: '1', unitPrice: '100', lineTotal: '500.00' },
+      ]),
+    ).rejects.toThrow(/does not buy/);
+  });
+
+  it('a wholesale pack IS accepted on an invoice, and Milkis is accepted as both', async () => {
+    const f = await fixture('both');
+    const pack = await asOrg(f.orgId, (tx) =>
+      createItem(tx, f.superAdmin, {
+        code: 'BEEF-5KG', name: `Beef Premium 5kg ${uid('p')}`, kind: 'meat_sliced', baseUnit: 'kg',
+        isPurchasable: true, sellableRetail: false, sellableWholesale: true,
+      }),
+    );
+    const milkis = await asOrg(f.orgId, (tx) =>
+      createItem(tx, f.superAdmin, {
+        code: 'MILKIS', name: `Milkis ${uid('m')}`, kind: 'retail', baseUnit: 'pcs',
+        isPurchasable: true, sellableRetail: true, sellableWholesale: true,
+      }),
+    );
+    await invoiceWithLines(f, '2026-01-10', '1250.00', [
+      { itemId: pack.id, quantity: '5', purchaseUnit: 'kg', conversionFactor: '1', unitPrice: '200', lineTotal: '1000.00' },
+      { itemId: milkis.id, quantity: '10', purchaseUnit: 'pcs', conversionFactor: '1', unitPrice: '25', lineTotal: '250.00' },
+    ]);
+    const hist = await asOrg(f.orgId, (tx) => itemsRepo.priceHistory(tx, f.orgId, pack.id));
+    expect(hist).toHaveLength(1);
+  });
+
+  it('⭐ the bulgogi sauce case — Lipa MAKES it, another store BUYS it, one item either way', async () => {
+    const f = await fixture('bulgogi');
+    // The org's default answer: it is something we buy.
+    const sauce = await asOrg(f.orgId, (tx) =>
+      createItem(tx, f.superAdmin, {
+        code: 'BULGOGI-SAUCE', name: `Bulgogi sauce ${uid('s')}`, kind: 'raw_material', baseUnit: 'ltr',
+        isPurchasable: true, sellableRetail: false, sellableWholesale: false,
+      }),
+    );
+
+    // At THIS store, we make it and sell it wholesale — so nobody bills us for it here.
+    await asOrg(f.orgId, (tx) =>
+      setStoreSellability(tx, f.superAdmin, {
+        storeId: f.storeId,
+        itemId: sauce.id,
+        isPurchasable: false,
+        sellableWholesale: true,
+        note: 'Made in-house here and sold to franchisees.',
+      }),
+    );
+
+    const here = await asOrg(f.orgId, (tx) => itemsRepo.sellabilityAt(tx, f.orgId, sauce.id, f.storeId));
+    expect(here!.isPurchasable).toBe(false);
+    expect(here!.sellableWholesale).toBe(true);
+    // ⭐ Untouched by the override, so it still tracks the org default rather than a frozen copy.
+    expect(here!.sellableRetail).toBe(false);
+    expect(here!.overridden).toBe(true);
+
+    // An invoice AT THIS STORE is refused, because this store makes it.
+    await expect(
+      invoiceWithLines(f, '2026-01-10', '600.00', [
+        { itemId: sauce.id, quantity: '6', purchaseUnit: 'ltr', conversionFactor: '1', unitPrice: '100', lineTotal: '600.00' },
+      ]),
+    ).rejects.toThrow(/this store does not buy/);
+
+    // Clearing the override returns this store to the org's answer, and buying works again.
+    await asOrg(f.orgId, (tx) =>
+      clearStoreSellability(tx, f.superAdmin, { storeId: f.storeId, itemId: sauce.id }),
+    );
+    await invoiceWithLines(f, '2026-01-11', '600.00', [
+      { itemId: sauce.id, quantity: '6', purchaseUnit: 'ltr', conversionFactor: '1', unitPrice: '100', lineTotal: '600.00' },
+    ]);
+    const back = await asOrg(f.orgId, (tx) => itemsRepo.sellabilityAt(tx, f.orgId, sauce.id, f.storeId));
+    expect(back!.isPurchasable).toBe(true);
+    expect(back!.overridden).toBe(false);
+  });
+
+  it('⛔ an override that overrides nothing is refused', async () => {
+    const f = await fixture('emptyoverride');
+    const item = await asOrg(f.orgId, (tx) =>
+      createItem(tx, f.superAdmin, { code: 'X-2', name: `Thing ${uid('x')}`, kind: 'supply', baseUnit: 'pcs' }),
+    );
+    await expect(
+      asOrg(f.orgId, (tx) => setStoreSellability(tx, f.superAdmin, { storeId: f.storeId, itemId: item.id })),
+    ).rejects.toThrow(/overrides nothing/);
+  });
+
+  it('a store override makes an item quotable on a price list even when the org default says no', async () => {
+    const f = await fixture('anywhere');
+    const sauce = await asOrg(f.orgId, (tx) =>
+      createItem(tx, f.superAdmin, {
+        code: 'SAUCE-2', name: `Sauce ${uid('s')}`, kind: 'raw_material', baseUnit: 'ltr',
+        sellableWholesale: false,
+      }),
+    );
+    expect(await asOrg(f.orgId, (tx) => itemsRepo.sellableWholesaleAnywhere(tx, f.orgId, sauce.id))).toBe(false);
+
+    await asOrg(f.orgId, (tx) =>
+      setStoreSellability(tx, f.superAdmin, { storeId: f.storeId, itemId: sauce.id, sellableWholesale: true }),
+    );
+    // ⚠️ A price list is an ORG-wide rate card, so one store selling it wholesale makes it quotable.
+    expect(await asOrg(f.orgId, (tx) => itemsRepo.sellableWholesaleAnywhere(tx, f.orgId, sauce.id))).toBe(true);
   });
 });

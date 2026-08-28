@@ -358,6 +358,20 @@
       "when": 1790393507084,
       "tag": "0050_t148_item_governance",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1790479907084,
+      "tag": "0051_t149_item_sellability",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1790566307084,
+      "tag": "0052_t149_store_sellability_overrides",
+      "breakpoints": true
     }
   ]
 }

@@ -211,7 +211,7 @@ export async function recordInvoice(
 
     // ⭐ Lines are validated against THIS invoice's own total, then written in the same
     // transaction — an invoice can never exist with lines that do not add up to it.
-    const lines = await validateInvoiceLines(trx, actor.orgId, input.lines ?? [], input.totalAmount);
+    const lines = await validateInvoiceLines(trx, actor.orgId, input.lines ?? [], input.totalAmount, input.storeId);
     if (lines.length > 0) await itemsRepo.insertInvoiceLines(trx, created.id, lines);
 
     return { id: created.id, ...(duplicateWarning ? { duplicateWarning } : {}) };
@@ -266,7 +266,7 @@ export async function setInvoiceLines(
           'while it is still pending — after verification they are what somebody attested to.',
       );
     }
-    const validated = await validateInvoiceLines(trx, actor.orgId, lines, invoice.totalAmount);
+    const validated = await validateInvoiceLines(trx, actor.orgId, lines, invoice.totalAmount, invoice.storeId);
     await itemsRepo.deleteInvoiceLines(trx, invoiceId);
     if (validated.length > 0) await itemsRepo.insertInvoiceLines(trx, invoiceId, validated);
     return { count: validated.length };
