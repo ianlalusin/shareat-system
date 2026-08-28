@@ -372,6 +372,13 @@
       "when": 1790566307084,
       "tag": "0052_t149_store_sellability_overrides",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1790652707084,
+      "tag": "0053_t132_wholesale_orders",
+      "breakpoints": true
     }
   ]
 }

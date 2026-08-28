@@ -45,3 +45,4 @@ export * from './ap-payments';
 export * from './items';
 export * from './supplier-items';
 export * from './ar';
+export * from './wholesale';

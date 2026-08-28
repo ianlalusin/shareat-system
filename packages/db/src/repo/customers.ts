@@ -28,6 +28,8 @@ export interface CustomerRow {
   counterpartyStoreId: string | null;
   counterpartyOrgId: string | null;
   priceListId: string | null;
+  /** T-132. NULL means no limit set — which is not the same as a limit of zero. */
+  creditLimit: string | null;
   customerGroup: CustomerGroup;
   status: CustomerStatus;
   notes: string | null;

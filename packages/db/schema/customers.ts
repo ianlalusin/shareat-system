@@ -136,6 +136,16 @@ export const customers = pgTable(
     }),
 
     priceListId: uuid('price_list_id').references(() => priceLists.id, { onDelete: 'restrict' }),
+    /**
+     * ⭐ T-132. How much this customer may owe us before a dispatch is refused.
+     *
+     * ⚠️ NULL means *"no limit set"* and is NOT the same as `0`, which would mean *"may not owe
+     * us anything"*. Checked at exactly ONE gate — dispatch — with a manager override. Three of
+     * the four systems studied answer the credit question differently; Dolibarr's limit field
+     * that enforces nothing is the cautionary tale, and ERPNext's three separate check points
+     * exist only because it has three documents to check.
+     */
+    creditLimit: numeric('credit_limit', { precision: 14, scale: 2 }),
 
     /** ⚠️ Reporting and defaults ONLY. ⛔ Never an input to an accounting decision. */
     customerGroup: text('customer_group', { enum: CUSTOMER_GROUPS }).notNull().default('wholesale'),

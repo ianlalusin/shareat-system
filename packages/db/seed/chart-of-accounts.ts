@@ -275,6 +275,13 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
   // ---------------------------------------------------------------------------------
   leaf('4100', 'Food sales — unlimited (unli)', 'income', 'credit', '4000'), // 🆕
   leaf('4150', 'Food sales — à la carte (dine-in, take-out and delivery)', 'income', 'credit', '4000'), // 🆕, active
+  // T-132. Every other 4xxx leaf is RETAIL - unli, a la carte, beverage. A sale to a
+  // franchisee or an external buyer had no account of its own, so it went to whatever the
+  // caller passed. An INTERNAL branch transfer does NOT belong here: it eliminates against
+  // 5170 on consolidation (see the warning there), which is T-133's problem, not this one.
+  // NOT 4200, deliberately: the amendment above REMOVED 4200 (the take-out split POS cannot
+  // populate), and reusing that number would read as that account coming back. 4300 is clean.
+  leaf('4300', 'Wholesale sales', 'income', 'credit', '4000'), // T-132
   leaf('4400', 'Beverage sales', 'income', 'credit', '4000'), // 🆕 — one lump account, amended 2026-08-23
   // 🆕 2026-08-25 (T-123, bible row 134). Ian: "we charge leftover charge, packaging charge and
   // other charges — I want them all in ONE account, separated from service charge."

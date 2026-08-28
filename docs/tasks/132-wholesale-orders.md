@@ -55,7 +55,7 @@ ordinary revenue would be the exact bug that comment exists to prevent.
 caller passed.
 
 ```
-4200  Wholesale sales   income / credit / parent 4000
+4300  Wholesale sales   income / credit / parent 4000
 ```
 
 ⚠️ Added by **migration**, not by editing the seed alone: the seed builds a fresh database, and
@@ -95,7 +95,7 @@ customers
 
 ```
 DR 1210  Accounts receivable   (party = the customer)
-CR 4200  Wholesale sales
+CR 4300  Wholesale sales
 ```
 
 ## 6. Invariants
@@ -109,8 +109,13 @@ CR 4200  Wholesale sales
 4. An `internal` customer is refused, naming T-133.
 5. Dispatch is **idempotent** — dispatching twice posts once.
 6. Void reverses through `reverseEntry`, never by deleting the entry.
-7. At dispatch, `outstanding + this order ≤ credit_limit`, unless the actor is a manager or admin
-   and records an override reason. NULL limit skips the check entirely.
+7. At dispatch, `outstanding + this order ≤ credit_limit`, unless an override reason is recorded.
+   NULL limit skips the check entirely.
+   ⚠️ **The gate demands a REASON, not a rank, and that is deliberate.** `approve_buyer` is
+   manager+, and every role that clears it also holds `override_credit_limit` — so the limit is
+   never a wall between ranks. It forces the person dispatching to state, on the record, why they
+   went past it. Same choice Ian made for write-off on 2026-08-28: identity and evidence beat
+   rank, which was the weaker guard and left an admin-less store stuck.
 
 ## 7. Tests
 
@@ -119,11 +124,12 @@ CR 4200  Wholesale sales
 2. A retail-only item (the bento box) is refused on a wholesale line.
 3. An item sellable wholesale **only at another store** is refused here, and accepted there.
 4. An `internal` customer is refused, and the message names T-133.
-5. Dispatch posts exactly one balanced entry to `1210` / `4200`, with the customer as party.
+5. Dispatch posts exactly one balanced entry to `1210` / `4300`, with the customer as party.
 6. Dispatching twice posts once.
 7. Void reverses the entry and leaves the AR charge with no outstanding balance.
-8. A dispatch that would breach the credit limit is refused; a manager override lets it through and
-   records the reason; a NULL limit never blocks.
+8. A dispatch that would breach the credit limit is refused when no reason is given; a stated
+   reason lets it through and is kept; a NULL limit never blocks; staff cannot dispatch at all, so
+   the gate never runs for them.
 9. Lines that do not sum to `total_amount` are refused.
 
 ## 8. Out of scope — each with its reason
@@ -149,6 +155,8 @@ trigger, not a guess.
 
 - [ ] Migration hand-written per DEF-073, journalled `previous.when + 86400000`; new tables in
       `cutover/classification.ts` **and** `rls/registry.ts`, RLS policies on `app_current_org()`.
-- [ ] `4200` inserted into both live databases, not only the seed.
+- [ ] `4300` inserted into both live databases, not only the seed.
+      NOT 4200 - the 2026-08-23 amendment removed that code, and reusing it would read as the
+      take-out account returning.
 - [ ] `typecheck` · `npm test` · `npm run test:integration` · `npm run build` green.
 - [ ] `docs/ROADMAP.html` updated — standing rule, Ian 2026-08-28.
