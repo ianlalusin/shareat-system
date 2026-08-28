@@ -2,7 +2,7 @@
  * Server-only helpers for the AP screens — suppliers, supplier invoices, and payments. T-130.
  */
 import { apRepo, moneyAccountsRepo, type SupplierInvoiceRow, type SupplierRow } from '@shareat/db';
-import { withOrgPrincipal } from '../expenses/lib';
+import { withOrgPrincipal, listStores } from '../expenses/lib';
 
 export { peso } from '../../lib/format';
 export { listStores, withOrgPrincipal, listCategoriesGrouped, listMoneyAccountsForPicker } from '../expenses/lib';
@@ -80,12 +80,35 @@ export async function listVerifiedInvoicesForPicker(orgId: string): Promise<Invo
   });
 }
 
-export async function listOpenItems(orgId: string, supplierId: string) {
-  return withOrgPrincipal(orgId, (tx) => apRepo.openItems(tx, orgId, supplierId));
+export async function listOpenItems(orgId: string, supplierId: string, storeId: string) {
+  return withOrgPrincipal(orgId, (tx) => apRepo.openItems(tx, orgId, supplierId, storeId));
 }
 
-export async function getPosition(orgId: string, supplierId: string): Promise<string> {
-  return withOrgPrincipal(orgId, async (tx) => (await apRepo.positionOf(tx, orgId, supplierId)).controlBalance);
+/** Omit `storeId` for the supplier's whole-org total; pass one for that store's liability alone. */
+export async function getPosition(orgId: string, supplierId: string, storeId?: string): Promise<string> {
+  return withOrgPrincipal(orgId, async (tx) => (await apRepo.positionOf(tx, orgId, supplierId, storeId)).controlBalance);
+}
+
+/** Which stores this supplier actually has open payables at — the store picker's options. */
+export async function storesWithOpenItems(
+  orgId: string,
+  supplierId: string,
+): Promise<{ storeId: string; storeName: string; outstanding: string; count: number }[]> {
+  return withOrgPrincipal(orgId, async (tx) => {
+    const stores = await listStores(orgId);
+    const out: { storeId: string; storeName: string; outstanding: string; count: number }[] = [];
+    for (const s of stores) {
+      const items = await apRepo.openItems(tx, orgId, supplierId, s.id);
+      if (items.length === 0) continue;
+      out.push({
+        storeId: s.id,
+        storeName: s.name,
+        outstanding: items.reduce((t, i) => t + Number(i.outstanding), 0).toFixed(2),
+        count: items.length,
+      });
+    }
+    return out;
+  });
 }
 
 export async function moneyAccountsFor(orgId: string, storeId: string) {

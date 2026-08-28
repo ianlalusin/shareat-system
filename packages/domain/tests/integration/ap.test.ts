@@ -182,7 +182,7 @@ describe('the open-item allocation this task exists for', () => {
     const invoiceId = await verifiedInvoice(f, '10000.00');
     await creditExpense(f, invoiceId, '10000.00');
 
-    let open = await asOrg(f.orgId, (tx) => apRepo.openItems(tx, f.orgId, f.supplierId));
+    let open = await asOrg(f.orgId, (tx) => apRepo.openItems(tx, f.orgId, f.supplierId, f.storeId));
     expect(open).toHaveLength(1);
     expect(open[0]!.outstanding).toBe('10000.00');
     expect((await asOrg(f.orgId, (tx) => apRepo.positionOf(tx, f.orgId, f.supplierId))).controlBalance).toBe('10000.00');
@@ -196,7 +196,7 @@ describe('the open-item allocation this task exists for', () => {
     expect(paid.allocated).toBe('10000.00');
     expect(paid.unallocated).toBe('0.00');
 
-    open = await asOrg(f.orgId, (tx) => apRepo.openItems(tx, f.orgId, f.supplierId));
+    open = await asOrg(f.orgId, (tx) => apRepo.openItems(tx, f.orgId, f.supplierId, f.storeId));
     expect(open).toHaveLength(0);
     expect((await asOrg(f.orgId, (tx) => apRepo.positionOf(tx, f.orgId, f.supplierId))).controlBalance).toBe('0.00');
   });
@@ -212,7 +212,7 @@ describe('the open-item allocation this task exists for', () => {
         amount: '4000.00', moneyAccountId: f.drawerId, allocations: [{ expenseId, amountApplied: '4000.00' }],
       }),
     );
-    let open = await asOrg(f.orgId, (tx) => apRepo.openItems(tx, f.orgId, f.supplierId));
+    let open = await asOrg(f.orgId, (tx) => apRepo.openItems(tx, f.orgId, f.supplierId, f.storeId));
     expect(open[0]!.outstanding).toBe('2000.00');
 
     await asOrg(f.orgId, (tx) =>
@@ -221,7 +221,7 @@ describe('the open-item allocation this task exists for', () => {
         amount: '2000.00', moneyAccountId: f.drawerId, allocations: [{ expenseId, amountApplied: '2000.00' }],
       }),
     );
-    open = await asOrg(f.orgId, (tx) => apRepo.openItems(tx, f.orgId, f.supplierId));
+    open = await asOrg(f.orgId, (tx) => apRepo.openItems(tx, f.orgId, f.supplierId, f.storeId));
     expect(open).toHaveLength(0);
   });
 
@@ -267,7 +267,7 @@ describe('the open-item allocation this task exists for', () => {
       }),
     );
 
-    const open = await asOrg(f.orgId, (tx) => apRepo.openItems(tx, f.orgId, f.supplierId));
+    const open = await asOrg(f.orgId, (tx) => apRepo.openItems(tx, f.orgId, f.supplierId, f.storeId));
     expect(open).toHaveLength(1);
     expect(open[0]!.outstanding).toBe('2000.00');
     // ⭐ Invariant 6, re-proven for the first control account with >1 open item per party.
@@ -378,7 +378,7 @@ describe('⭐ the gate is universal — cash expenses need a verified invoice to
 
     const [row] = await sql<{ status: string }[]>`select status from expenses where id = ${result.expenseId}`;
     expect(row!.status).toBe('posted');
-    const open = await asOrg(f.orgId, (tx) => apRepo.openItems(tx, f.orgId, f.supplierId));
+    const open = await asOrg(f.orgId, (tx) => apRepo.openItems(tx, f.orgId, f.supplierId, f.storeId));
     expect(open).toHaveLength(0);
     expect((await asOrg(f.orgId, (tx) => apRepo.positionOf(tx, f.orgId, f.supplierId))).controlBalance).toBe('0.00');
   });
@@ -425,11 +425,11 @@ describe('void a posted AP payment — reversal, not deletion; the item reopens'
         amount: '3000.00', moneyAccountId: f.drawerId, allocations: [{ expenseId, amountApplied: '3000.00' }],
       }),
     );
-    expect((await asOrg(f.orgId, (tx) => apRepo.openItems(tx, f.orgId, f.supplierId)))).toHaveLength(0);
+    expect((await asOrg(f.orgId, (tx) => apRepo.openItems(tx, f.orgId, f.supplierId, f.storeId)))).toHaveLength(0);
 
     await asOrg(f.orgId, (tx) => voidPayment(tx, f.manager, { paymentId: paid.paymentId, reason: 'Bounced check' }));
 
-    const open = await asOrg(f.orgId, (tx) => apRepo.openItems(tx, f.orgId, f.supplierId));
+    const open = await asOrg(f.orgId, (tx) => apRepo.openItems(tx, f.orgId, f.supplierId, f.storeId));
     expect(open).toHaveLength(1);
     expect(open[0]!.outstanding).toBe('3000.00');
   });
@@ -485,5 +485,176 @@ describe('T-126 — loans.lenderId, the FK T-130 promised', () => {
     `;
     const [row] = await sql<{ lender_id: string }[]>`select lender_id from loans where id = ${loan!.id}`;
     expect(row!.lender_id).toBe(f.supplierId);
+  });
+});
+
+// =========================================================================================
+// Store scoping — Ian, 2026-08-28: "make it store scoped not org but store"
+// =========================================================================================
+
+/** Adds a second store to an existing fixture, scoped to the same manager and funded. */
+async function secondStore(f: FixtureWithSupplier, hint: string) {
+  const [store] = await sql<{ id: string }[]>`
+    insert into stores (org_id, code, name) values (${f.orgId}, ${uid(hint)}, ${`Store ${hint}`}) returning id
+  `;
+  const storeId = store!.id;
+  await sql`insert into person_store_scope (person_id, store_id) values (${f.managerId}, ${storeId})`;
+  await sql`insert into person_store_scope (person_id, store_id) values (${f.staffId}, ${storeId})`;
+  const [drawer] = await sql<{ id: string }[]>`
+    select id from money_accounts where store_id = ${storeId}
+      and instrument = 'cash' and custodian = 'cashier' and is_foundation
+  `;
+  await fund(f.orgId, storeId, '1110', '500000.00', null);
+  return { storeId, drawerId: drawer!.id };
+}
+
+/** One verified invoice + one posted credit expense, at an arbitrary store. */
+async function creditExpenseAt(f: FixtureWithSupplier, storeId: string, amount: string, particulars: string) {
+  const created = await asOrg(f.orgId, (tx) =>
+    recordInvoice(tx, f.staff, {
+      storeId,
+      supplierId: f.supplierId,
+      invoiceDate: '2026-01-10',
+      totalAmount: amount,
+      receiptPhotoUrl: 'https://example.com/inv.jpg',
+      ...({} as Record<string, unknown>),
+    }),
+  );
+  await asOrg(f.orgId, (tx) => verifyInvoice(tx, f.manager, created.id));
+  const exp = await asOrg(f.orgId, (tx) =>
+    recordExpenseForInvoice(tx, f.manager, {
+      storeId,
+      supplierId: f.supplierId,
+      supplierInvoiceId: created.id,
+      categoryId: f.categoryId,
+      particulars,
+      payments: [{ method: 'credit', amount }],
+    }),
+  );
+  return { invoiceId: created.id, expenseId: exp.expenseId };
+}
+
+describe('⭐ AP is scoped to a STORE, never the whole org', () => {
+  it('openItems returns only the named store’s items, not every store’s', async () => {
+    const f = await fixtureWithSupplier('scope-open');
+    const b = await secondStore(f, 'scope-open-b');
+
+    const atA = await creditExpenseAt(f, f.storeId, '1000.00', 'Store A purchase');
+    const atB = await creditExpenseAt(f, b.storeId, '2000.00', 'Store B purchase');
+
+    const itemsA = await asOrg(f.orgId, (tx) => apRepo.openItems(tx, f.orgId, f.supplierId, f.storeId));
+    const itemsB = await asOrg(f.orgId, (tx) => apRepo.openItems(tx, f.orgId, f.supplierId, b.storeId));
+
+    expect(itemsA.map((i) => i.expenseId)).toEqual([atA.expenseId]);
+    expect(itemsB.map((i) => i.expenseId)).toEqual([atB.expenseId]);
+  });
+
+  it('⛔ a payment at store A cannot settle an open item booked at store B', async () => {
+    const f = await fixtureWithSupplier('scope-pay');
+    const b = await secondStore(f, 'scope-pay-b');
+
+    await creditExpenseAt(f, f.storeId, '1000.00', 'Store A purchase');
+    const atB = await creditExpenseAt(f, b.storeId, '2000.00', 'Store B purchase');
+
+    // Paying from store A's drawer while naming store B's expense: the 2110 debit would land on
+    // A and clear a liability that was never A's, so A's books go negative and B's never clear.
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        recordPayment(tx, f.manager, {
+          storeId: f.storeId,
+          supplierId: f.supplierId,
+          businessDate: '2026-01-20',
+          amount: '2000.00',
+          moneyAccountId: f.drawerId,
+          allocations: [{ expenseId: atB.expenseId, amountApplied: '2000.00' }],
+        }),
+      ),
+    ).rejects.toThrow(/not an open item|another store|different store/i);
+  });
+
+  it('each store’s 2110 balance stands alone, and the two sum to the supplier total', async () => {
+    const f = await fixtureWithSupplier('scope-pos');
+    const b = await secondStore(f, 'scope-pos-b');
+
+    await creditExpenseAt(f, f.storeId, '1000.00', 'Store A purchase');
+    await creditExpenseAt(f, b.storeId, '2000.00', 'Store B purchase');
+
+    const posA = await asOrg(f.orgId, (tx) => apRepo.positionOf(tx, f.orgId, f.supplierId, f.storeId));
+    const posB = await asOrg(f.orgId, (tx) => apRepo.positionOf(tx, f.orgId, f.supplierId, b.storeId));
+    const posOrg = await asOrg(f.orgId, (tx) => apRepo.positionOf(tx, f.orgId, f.supplierId));
+
+    expect(posA.controlBalance).toBe('1000.00');
+    expect(posB.controlBalance).toBe('2000.00');
+    expect(posOrg.controlBalance).toBe('3000.00');
+  });
+});
+
+describe('⭐ AP integrity gaps found by the 2026-08-28 audit', () => {
+  it('⛔ an expense cannot name a supplier its invoice does not belong to', async () => {
+    const f = await fixtureWithSupplier('mismatch');
+    const other = await asOrg(f.orgId, (tx) => createSupplier(tx, f.manager, { name: `Other ${uid('s')}` }));
+    const invoiceId = await verifiedInvoice(f, '5000.00'); // belongs to f.supplierId
+
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        recordExpenseForInvoice(tx, f.manager, {
+          storeId: f.storeId,
+          supplierId: other.id, // ⛔ a DIFFERENT supplier
+          supplierInvoiceId: invoiceId,
+          categoryId: f.categoryId,
+          particulars: 'Wrong supplier for this invoice',
+          payments: [{ method: 'credit', amount: '5000.00' }],
+        }),
+      ),
+    ).rejects.toThrow(/supplier/i);
+  });
+
+  /**
+   * ⚠️ **This test passed BEFORE the fix, for the wrong reason** — worth recording, because a
+   * green test that proves nothing is how the RLS defect survived three tasks.
+   *
+   * Both payments really do run concurrently (verified: two transactions on this pool overlap).
+   * But without a lock the winner simply committed before the loser got as far as reading
+   * `openItems`, so the loser saw a closed item and failed with the right message by luck. Under
+   * different scheduling — both reading before either commits — both would have posted, and the
+   * supplier would have been paid twice.
+   *
+   * `lockExpensesForAllocation` is what makes the outcome deterministic rather than lucky: the
+   * second transaction blocks on the expense row until the first commits, and only then reads
+   * balances. Exactly one payment can win, whichever order they arrive in.
+   */
+  it('⛔ two concurrent payments cannot both allocate the same open item', async () => {
+    const f = await fixtureWithSupplier('race');
+    const invoiceId = await verifiedInvoice(f, '1000.00');
+    const exp = await asOrg(f.orgId, (tx) =>
+      recordExpenseForInvoice(tx, f.manager, {
+        storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: invoiceId,
+        categoryId: f.categoryId,
+        particulars: 'Contended item',
+        payments: [{ method: 'credit', amount: '1000.00' }],
+      }),
+    );
+
+    const pay = () =>
+      asOrg(f.orgId, (tx) =>
+        recordPayment(tx, f.manager, {
+          storeId: f.storeId,
+          supplierId: f.supplierId,
+          businessDate: '2026-01-20',
+          amount: '1000.00',
+          moneyAccountId: f.drawerId,
+          allocations: [{ expenseId: exp.expenseId, amountApplied: '1000.00' }],
+        }),
+      );
+
+    const results = await Promise.allSettled([pay(), pay()]);
+    const ok = results.filter((r) => r.status === 'fulfilled').length;
+    expect(ok, 'both payments settled the same ₱1,000 — the supplier was paid twice').toBe(1);
+
+    // And the ledger agrees: the item is closed exactly once.
+    const pos = await asOrg(f.orgId, (tx) => apRepo.positionOf(tx, f.orgId, f.supplierId));
+    expect(pos.controlBalance).toBe('0.00');
   });
 });

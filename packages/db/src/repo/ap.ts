@@ -358,7 +358,14 @@ export interface ApPosition {
   controlBalance: string;
 }
 
-export async function positionOf(tx: Tx, orgId: string, supplierId: string): Promise<ApPosition> {
+export async function positionOf(
+  tx: Tx,
+  orgId: string,
+  supplierId: string,
+  /** ⭐ Omit for the supplier's whole-org total; pass a store for THAT store's liability alone.
+   *  Both are real questions: "what do we owe Alberto's" and "what does Lipa owe Alberto's". */
+  storeId?: string,
+): Promise<ApPosition> {
   const [row] = (await tx.execute(sql`
     select coalesce(sum(jl.credit - jl.debit), 0)::text as balance
     from journal_lines jl
@@ -369,6 +376,7 @@ export async function positionOf(tx: Tx, orgId: string, supplierId: string): Pro
       and jl.party_id = ${supplierId}
       and a.code = ${AP_CONTROL_CODE}
       and je.status <> 'draft'
+      ${storeId ? sql`and jl.store_id = ${storeId}` : sql``}
   `)) as unknown as Record<string, string>[];
   return { controlBalance: Number(row?.balance ?? 0).toFixed(2) };
 }
@@ -395,6 +403,7 @@ export interface OpenItem {
   expenseId: string;
   supplierId: string;
   supplierInvoiceId: string;
+  storeId: string;
   businessDate: string;
   particulars: string;
   creditAmount: string;
@@ -406,7 +415,17 @@ export interface OpenItem {
  * v1's `ap_open` projection — as a live query, not a stored table. Cannot go stale the way
  * DEF-076 did: there is nothing to upsert and forget.
  */
-export async function openItems(tx: Tx, orgId: string, supplierId: string): Promise<OpenItem[]> {
+export async function openItems(
+  tx: Tx,
+  orgId: string,
+  supplierId: string,
+  /** ⭐ REQUIRED, not optional (Ian, 2026-08-28: "make it store scoped not org but store"). An
+   *  optional store filter would default to org-wide, which is exactly the bug: a payment made
+   *  at one store could settle a liability another store incurred, putting the 2110 debit on
+   *  books that never carried the credit. Making it required forces every caller to say which
+   *  store's ledger it is talking about. */
+  storeId: string,
+): Promise<OpenItem[]> {
   const rows = (await tx.execute(sql`
     with credit as (
       select ep.expense_id, sum(ep.amount) as credit_amount
@@ -425,6 +444,7 @@ export async function openItems(tx: Tx, orgId: string, supplierId: string): Prom
       e.id as expense_id,
       e.supplier_id,
       e.supplier_invoice_id,
+      e.store_id,
       e.business_date::text as business_date,
       e.particulars,
       c.credit_amount::text as credit_amount,
@@ -433,7 +453,8 @@ export async function openItems(tx: Tx, orgId: string, supplierId: string): Prom
     from expenses e
     join credit c on c.expense_id = e.id
     left join allocated a on a.expense_id = e.id
-    where e.org_id = ${orgId} and e.supplier_id = ${supplierId} and e.status = 'posted'
+    where e.org_id = ${orgId} and e.supplier_id = ${supplierId} and e.store_id = ${storeId}
+      and e.status = 'posted'
       and (c.credit_amount - coalesce(a.allocated_amount, 0)) > 0.005
     order by e.business_date asc
   `)) as unknown as Record<string, string>[];
@@ -441,6 +462,7 @@ export async function openItems(tx: Tx, orgId: string, supplierId: string): Prom
     expenseId: String(r.expense_id ?? r.expenseId),
     supplierId: String(r.supplier_id ?? r.supplierId),
     supplierInvoiceId: String(r.supplier_invoice_id ?? r.supplierInvoiceId),
+    storeId: String(r.store_id ?? r.storeId),
     businessDate: String(r.business_date ?? r.businessDate),
     particulars: String(r.particulars),
     creditAmount: Number(r.credit_amount ?? r.creditAmount).toFixed(2),
@@ -451,6 +473,7 @@ export async function openItems(tx: Tx, orgId: string, supplierId: string): Prom
 
 export interface AgingBucket {
   supplierId: string;
+  storeId: string;
   current: string;
   d1to30: string;
   d31to60: string;
@@ -463,7 +486,13 @@ export interface AgingBucket {
  * bible row, see `docs/tasks/130-accounts-payable.md` Invariant 11), falling back to invoice
  * date when an invoice carries none (informal supplier terms — real, not hypothetical).
  */
-export async function aging(tx: Tx, orgId: string, asOfDate: string): Promise<AgingBucket[]> {
+export async function aging(
+  tx: Tx,
+  orgId: string,
+  asOfDate: string,
+  /** Omit for every store; pass one to age a single store's payables. */
+  storeId?: string,
+): Promise<AgingBucket[]> {
   const rows = (await tx.execute(sql`
     with credit as (
       select ep.expense_id, sum(ep.amount) as credit_amount
@@ -481,6 +510,7 @@ export async function aging(tx: Tx, orgId: string, asOfDate: string): Promise<Ag
     open as (
       select
         e.supplier_id,
+        e.store_id,
         coalesce(si.due_date, si.invoice_date) as aging_date,
         (c.credit_amount - coalesce(a.allocated_amount, 0)) as outstanding
       from expenses e
@@ -489,26 +519,61 @@ export async function aging(tx: Tx, orgId: string, asOfDate: string): Promise<Ag
       join supplier_invoices si on si.id = e.supplier_invoice_id
       where e.org_id = ${orgId} and e.status = 'posted'
         and (c.credit_amount - coalesce(a.allocated_amount, 0)) > 0.005
+        ${storeId ? sql`and e.store_id = ${storeId}` : sql``}
     )
     select
       supplier_id,
+      store_id,
       coalesce(sum(outstanding) filter (where aging_date >= ${asOfDate}), 0)::text as current,
       coalesce(sum(outstanding) filter (where aging_date < ${asOfDate} and aging_date >= (${asOfDate}::date - 30)), 0)::text as d1to30,
       coalesce(sum(outstanding) filter (where aging_date < (${asOfDate}::date - 30) and aging_date >= (${asOfDate}::date - 60)), 0)::text as d31to60,
       coalesce(sum(outstanding) filter (where aging_date < (${asOfDate}::date - 60) and aging_date >= (${asOfDate}::date - 90)), 0)::text as d61to90,
       coalesce(sum(outstanding) filter (where aging_date < (${asOfDate}::date - 90)), 0)::text as d90plus
     from open
-    group by supplier_id
-    order by supplier_id
+    group by supplier_id, store_id
+    order by supplier_id, store_id
   `)) as unknown as Record<string, string>[];
   return rows.map((r) => ({
     supplierId: String(r.supplier_id ?? r.supplierId),
+    storeId: String(r.store_id ?? r.storeId),
     current: Number(r.current).toFixed(2),
     d1to30: Number(r.d1to30).toFixed(2),
     d31to60: Number(r.d31to60).toFixed(2),
     d61to90: Number(r.d61to90).toFixed(2),
     d90plus: Number(r.d90plus).toFixed(2),
   }));
+}
+
+/**
+ * ⛔ Take a row lock on the expenses a payment is about to allocate against, BEFORE reading
+ * their outstanding balances.
+ *
+ * ⚠️ **Why this exists, precisely.** `recordPayment` reads `openItems`, decides an allocation
+ * fits, and then writes — a check-then-act across two statements. Under READ COMMITTED (the
+ * default here), two payments naming the same open item can both read it as open, both decide
+ * they fit, and both post: the supplier is paid twice and `2110` goes negative for that party.
+ * Locking the expense rows first serialises exactly those payments and nothing else — the second
+ * transaction blocks until the first commits, then re-reads and correctly finds the item closed.
+ *
+ * ⚠️ Ordered by id so two payments naming the same pair of expenses in different orders cannot
+ * deadlock against each other.
+ */
+export async function lockExpensesForAllocation(tx: Tx, orgId: string, expenseIds: string[]): Promise<void> {
+  if (expenseIds.length === 0) return;
+  // ⛔ Each id is its OWN bound parameter (`sql.join`), never interpolated and never a single
+  // array parameter. These ids arrive from a form, so `sql.raw` here would be an injection hole
+  // in the one function that also takes write locks; and binding the JS array as one value gives
+  // `malformed array literal`, because the driver sends it as a scalar.
+  const ids = sql.join(
+    expenseIds.map((id) => sql`${id}`),
+    sql`, `,
+  );
+  await tx.execute(sql`
+    select id from expenses
+    where org_id = ${orgId} and id in (${ids})
+    order by id
+    for update
+  `);
 }
 
 // -------------------------------------------------------------------------------------

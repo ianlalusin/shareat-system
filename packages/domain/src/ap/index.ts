@@ -383,18 +383,33 @@ export async function recordPayment(
       );
     }
 
-    // ⛔ Every allocation must be an OPEN item for THIS supplier — validated against
-    // apRepo.openItems, never trusted from the caller. No partial apply: the whole payment is
-    // rejected if any one allocation is wrong.
-    const open = await apRepo.openItems(trx, actor.orgId, input.supplierId);
+    // ⛔ Lock the named expenses BEFORE reading their balances. `openItems` then decide then
+    // write is check-then-act: without this, two payments naming the same open item both read it
+    // as open and both post, paying the supplier twice. The lock serialises exactly those two.
+    await apRepo.lockExpensesForAllocation(
+      trx,
+      actor.orgId,
+      input.allocations.map((a) => a.expenseId),
+    );
+
+    // ⛔ Every allocation must be an OPEN item for THIS supplier AT THIS STORE — validated
+    // against apRepo.openItems, never trusted from the caller. No partial apply: the whole
+    // payment is rejected if any one allocation is wrong.
+    //
+    // ⭐ Store-scoped (Ian, 2026-08-28). An org-wide read here is the bug: every leg of this
+    // payment posts at `input.storeId`, so settling another store's open item would put the 2110
+    // debit on books that never carried the matching credit — one store's payables go negative
+    // while the other's never clear, and neither store's trial balance shows why.
+    const open = await apRepo.openItems(trx, actor.orgId, input.supplierId, input.storeId);
     const byExpense = new Map(open.map((o) => [o.expenseId, o]));
     let allocatedTotal = 0;
     for (const a of input.allocations) {
       const item = byExpense.get(a.expenseId);
       if (!item) {
         throw new Error(
-          `recordPayment: expense ${a.expenseId} is not an open item for this supplier — it may ` +
-            'belong to another supplier, not be a credit expense, already be fully paid, or not be posted.',
+          `recordPayment: expense ${a.expenseId} is not an open item for this supplier at this ` +
+            'store — it may belong to another supplier or another store, not be a credit expense, ' +
+            'already be fully paid, or not be posted.',
         );
       }
       const applied = Number(a.amountApplied);

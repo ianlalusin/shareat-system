@@ -12,7 +12,7 @@
  * row; the status check runs first and throws.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { expensesRepo, transaction, type Tx } from '@shareat/db';
+import { apRepo, expensesRepo, transaction, type Tx } from '@shareat/db';
 import { add, money } from '@shareat/core/money';
 import type { CreateExpensePaymentInput } from './create';
 
@@ -22,7 +22,11 @@ import type { CreateExpensePaymentInput } from './create';
 export const EDIT_WINDOW_MS = 48 * 60 * 60 * 1000;
 
 export interface EditExpenseInput {
-  businessDate?: string;
+  /**
+   * ⛔ REMOVED at T-130 — an invoice-linked expense's business date is the invoice's own date
+   * (receipt-date authority), so accepting one here was accepting a value that must always lose.
+   * It is derived below from whichever invoice the row names.
+   */
   categoryId?: string;
   /** ⭐ T-130: `supplierId` and `supplierInvoiceId` travel together now — a draft naming one
    *  without the other would leave the row inconsistent with the create-time invariant. */
@@ -70,14 +74,39 @@ async function runEditExpense(tx: Tx, actor: Actor, expenseId: string, input: Ed
   }
 
   const patch: Parameters<typeof expensesRepo.updateExpenseDraft>[3] = {};
-  if (input.businessDate !== undefined) patch.businessDate = input.businessDate;
   if (input.categoryId !== undefined) {
     const category = await expensesRepo.getCategoryById(tx, actor.orgId, input.categoryId);
     if (!category) throw new Error(`editExpense: category ${input.categoryId} does not exist in org ${actor.orgId}`);
     patch.categoryId = input.categoryId;
   }
-  if (input.supplierId !== undefined) patch.supplierId = input.supplierId;
-  if (input.supplierInvoiceId !== undefined) patch.supplierInvoiceId = input.supplierInvoiceId;
+
+  /**
+   * ⭐ T-130 receipt-date authority, enforced on the EDIT path too.
+   *
+   * ⚠️ `create` forces `businessDate` from the invoice and refuses the caller's value, but this
+   * function accepted it raw — so the one field the invariant says can never be client-supplied
+   * was editable the moment the row existed. Re-pointing the invoice had the mirror bug: the
+   * expense kept the OLD invoice's date. Both are closed here by deriving the date from whichever
+   * invoice the row ends up naming, and never from `input`.
+   */
+  if (input.supplierInvoiceId !== undefined || input.supplierId !== undefined) {
+    const invoiceId = input.supplierInvoiceId ?? expense.supplierInvoiceId;
+    const invoice = await apRepo.getSupplierInvoiceById(tx, actor.orgId, invoiceId);
+    if (!invoice) {
+      throw new Error(`editExpense: supplier invoice ${invoiceId} does not exist in org ${actor.orgId}`);
+    }
+    // Same single-source-of-truth rule as create: the invoice owns the supplier.
+    const supplierId = input.supplierId ?? invoice.supplierId;
+    if (supplierId !== invoice.supplierId) {
+      throw new Error(
+        `editExpense: supplier ${supplierId} does not own supplier invoice ${invoiceId} — ` +
+          `that invoice belongs to supplier ${invoice.supplierId}.`,
+      );
+    }
+    patch.supplierInvoiceId = invoiceId;
+    patch.supplierId = invoice.supplierId;
+    patch.businessDate = invoice.invoiceDate;
+  }
   if (input.particulars !== undefined) {
     const trimmed = input.particulars.trim();
     if (!trimmed) throw new Error('editExpense: particulars cannot be blank');

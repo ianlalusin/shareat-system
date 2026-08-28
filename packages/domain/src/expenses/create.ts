@@ -110,6 +110,21 @@ async function runCreateExpense(tx: Tx, actor: Actor, input: CreateExpenseInput)
   }
   await apRepo.assertOpenForRecording(tx, actor.orgId, input.supplierInvoiceId, totalAmount);
 
+  // ⛔ The invoice names its supplier, so the caller's `supplierId` is a SECOND source of truth
+  // for the same fact — and two copies of one fact drift (bible §16.1's whole argument). Nothing
+  // validated them against each other before this, so an expense could carry supplier A's party
+  // on its 2110 credit while consuming supplier B's invoice capacity and inheriting B's due date
+  // for aging. Refused outright rather than silently preferring one: a caller that disagrees with
+  // the invoice is confused about which bill it is recording, and guessing which half it got
+  // right is how the wrong supplier gets paid.
+  if (input.supplierId !== invoice.supplierId) {
+    throw new Error(
+      `createExpense: supplier ${input.supplierId} does not own supplier invoice ` +
+        `${input.supplierInvoiceId} — that invoice belongs to supplier ${invoice.supplierId}. ` +
+        'An expense takes its supplier from the invoice it is recorded against.',
+    );
+  }
+
   const { id } = await expensesRepo.insertExpense(tx, {
     orgId: actor.orgId,
     storeId: input.storeId,

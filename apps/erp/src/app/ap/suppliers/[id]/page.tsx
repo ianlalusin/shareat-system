@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import { peso } from '../../../../lib/format';
 import { requireSession } from '../../../../lib/session';
 import { recordPaymentAction } from '../../actions';
-import { getSupplier, getPosition, listOpenItems, listInvoices, moneyAccountsFor, today } from '../../lib';
+import { getSupplier, getPosition, listOpenItems, listInvoices, moneyAccountsFor, storesWithOpenItems, today } from '../../lib';
 
 export const metadata = { title: 'Supplier — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -10,6 +10,8 @@ export const dynamic = 'force-dynamic';
 interface SearchParams {
   error?: string;
   ok?: string;
+  /** Which store's payables are being settled. AP is store-scoped (Ian, 2026-08-28). */
+  store?: string;
 }
 
 export default async function SupplierDetailPage({
@@ -27,15 +29,23 @@ export default async function SupplierDetailPage({
   const supplier = await getSupplier(orgId, id);
   if (!supplier) notFound();
 
-  const [balance, openItems, invoices] = await Promise.all([
+  const [balance, invoices, storeOptions] = await Promise.all([
     getPosition(orgId, id),
-    listOpenItems(orgId, id),
     listInvoices(orgId, { supplierId: id }),
+    storesWithOpenItems(orgId, id),
   ]);
   const invoiceById = new Map(invoices.map((inv) => [inv.id, inv]));
-  const wallets = openItems.length > 0
-    ? await moneyAccountsFor(orgId, invoiceById.get(openItems[0]!.supplierInvoiceId)?.storeId ?? '')
-    : [];
+
+  // ⭐ AP is store-scoped. The store is CHOSEN, never inferred from whichever open item happened
+  // to sort first — that older behaviour silently booked every leg of a payment at one store even
+  // when the supplier was owed money at two, so one store's 2110 went negative and the other's
+  // never cleared.
+  const storeId = sp.store && storeOptions.some((s) => s.storeId === sp.store)
+    ? sp.store
+    : (storeOptions[0]?.storeId ?? '');
+  const openItems = storeId ? await listOpenItems(orgId, id, storeId) : [];
+  const storeBalance = storeId ? await getPosition(orgId, id, storeId) : '0.00';
+  const wallets = storeId ? await moneyAccountsFor(orgId, storeId) : [];
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
@@ -63,8 +73,42 @@ export default async function SupplierDetailPage({
         </div>
       )}
 
+      {storeOptions.length > 1 && (
+        <section className="space-y-2 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <h2 className="font-medium">Which store&rsquo;s payables?</h2>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            This supplier is owed money by more than one store. A payment settles ONE store&rsquo;s
+            open items and is funded from that store&rsquo;s own account &mdash; paying across
+            stores would clear a liability the paying store never carried.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {storeOptions.map((s) => (
+              <a
+                key={s.storeId}
+                href={`/ap/suppliers/${id}?store=${s.storeId}`}
+                className={
+                  s.storeId === storeId
+                    ? 'rounded-lg border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900'
+                    : 'rounded-lg border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900'
+                }
+              >
+                {s.storeName} &mdash; {peso(s.outstanding)}{' '}
+                <span className="opacity-60">({s.count})</span>
+              </a>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="space-y-2">
-        <h2 className="font-medium">Open items</h2>
+        <h2 className="font-medium">
+          Open items
+          {storeId && (
+            <span className="ml-2 text-sm font-normal text-neutral-500 dark:text-neutral-400">
+              {storeOptions.find((s) => s.storeId === storeId)?.storeName} &middot; {peso(storeBalance)} owed by this store
+            </span>
+          )}
+        </h2>
         {openItems.length > 0 ? (
           <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
             <table className="w-full min-w-[640px] border-collapse text-sm">
@@ -102,7 +146,7 @@ export default async function SupplierDetailPage({
           </p>
           <form action={recordPaymentAction} className="space-y-3">
             <input type="hidden" name="supplierId" value={id} />
-            <input type="hidden" name="storeId" value={invoiceById.get(openItems[0]!.supplierInvoiceId)?.storeId ?? ''} />
+            <input type="hidden" name="storeId" value={storeId} />
             <div className="space-y-1">
               {openItems.map((i) => (
                 <label key={i.expenseId} className="flex items-center gap-3 text-sm">
