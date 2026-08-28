@@ -42,16 +42,27 @@ import { reverseEntry } from '../ledger/reverse-entry';
 export const WHOLESALE_REVENUE_CODE = '4300';
 
 /**
- * ⭐ T-133's internal-transfer legs, LOOKED UP not decided — `docs/POSTING-PATTERNS.md`
- * §`commissary_dispatch.transfer` is the authority, and the bible says look it up.
+ * ⭐ T-133's internal-transfer legs. A transfer moves **COST**, not inventory.
  *
- * ⚠️ `1340 Inventory in transit (branch orders)` exists in the chart and the authoritative pattern
- * never uses it: value moves straight from the seller's `1330` to the buyer's `1330` in ONE entry,
- * because both stores are rows in one database (bible landmine #27's fix). Flagged in the task
- * spec §4 rather than quietly resolved — it becomes live when dispatch and receipt genuinely
- * separate, which is the cross-org case nothing can test yet.
+ * ⛔ `POSTING-PATTERNS.md` §`commissary_dispatch.transfer` moves `1330` inventory between stores,
+ * and that pattern assumes **perpetual** inventory. This system is **periodic**: every expense
+ * category maps to a 5xxx COGS account, there is no capitalisation path, and nothing anywhere
+ * debits `1310`/`1330`/`1340`. Moving inventory that was never recognised drove the seller's
+ * `1330` negative and left the cost stranded in the seller's P&L — so the receiving branch could
+ * not expense what it received at all. Found by Ian, 2026-08-28.
+ *
+ * ⭐ The fix is what the chart already described: `5170`'s own comment has said since T-102b that
+ * it *"must ELIMINATE against the commissary's transfer-out"*. `5175` is that transfer-out.
+ *
+ *     seller   DR 1250 Due from related store   /  CR 5175 Cost transferred to branches
+ *     buyer    DR 5170 COGS — commissary transfers  /  CR 2150 Due to related store
+ *
+ * ⚠️ The transfer PRICE carries the seller's processing cost. Lipa buying a slab at ₱300/kg and
+ * processing it at ₱10/kg transfers at ₱310 — that is the mechanism by which Lipa's work reaches
+ * Malvar's books, and it is why the rate is on the line rather than derived.
  */
-export const TRANSFER_INVENTORY_CODE = '1330';
+export const TRANSFER_OUT_CODE = '5175';
+export const COMMISSARY_COGS_CODE = '5170';
 export const DUE_FROM_STORE_CODE = '1250';
 export const DUE_TO_STORE_CODE = '2150';
 
@@ -281,9 +292,9 @@ export async function dispatchTradeOrder(
     // -----------------------------------------------------------------------------------------
     // ⭐ T-133 — the INTERNAL transfer. One entry, four legs, two stores, and it ELIMINATES.
     //
-    // Looked up, not decided: POSTING-PATTERNS.md §commissary_dispatch.transfer. No revenue and no
-    // COGS — a branch is not a customer of its own company, and the value stays in inventory until
-    // the branch consumes it (Phase 3 owns that).
+    // ⛔ NO REVENUE: a branch is not a customer of its own company. What moves is COST — see the
+    // account constants above for why this is not the inventory movement POSTING-PATTERNS.md
+    // describes, and what has to change for that shape to become correct.
     // -----------------------------------------------------------------------------------------
     if (customersRepo.treatmentOf(customer) === 'internal') {
       const toStoreId = customer.counterpartyStoreId!;
@@ -303,16 +314,19 @@ export async function dispatchTradeOrder(
         memo,
         postedBy: actor.personId,
         lines: [
-          // The goods leave the seller...
-          { accountCode: TRANSFER_INVENTORY_CODE, storeId: order.storeId, credit: order.totalAmount, lineMemo: memo },
+          // ⭐ The seller's cost LEAVES its P&L. It bought the goods (5110) and processed them
+          // (payroll); crediting 5175 for the transfer price nets both back out, so the seller
+          // ends at zero cost for goods it no longer holds.
+          { accountCode: TRANSFER_OUT_CODE, storeId: order.storeId, credit: order.totalAmount, lineMemo: memo },
           // ...and the seller is owed for them. ⚠️ party_id is the OTHER store's CODE, not a uuid
           // — there is no party FK yet (DEF-040) and store codes are stable.
           {
             accountCode: DUE_FROM_STORE_CODE, storeId: order.storeId, debit: order.totalAmount,
             partyType: 'store' as const, partyId: toCode, lineMemo: `Due from ${toCode} — ${memo}`,
           },
-          // The goods arrive at the buyer...
-          { accountCode: TRANSFER_INVENTORY_CODE, storeId: toStoreId, debit: order.totalAmount, lineMemo: memo },
+          // ⭐ The buyer expenses what it received, into the account v1 already uses for exactly
+          // this — so a commissary transfer reads the same on Malvar's P&L either way.
+          { accountCode: COMMISSARY_COGS_CODE, storeId: toStoreId, debit: order.totalAmount, lineMemo: memo },
           // ...and the buyer owes for them. Equal and opposite, so invariant 6's reciprocal check
           // holds by construction rather than by anyone remembering.
           {

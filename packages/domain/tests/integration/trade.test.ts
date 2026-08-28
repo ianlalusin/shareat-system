@@ -548,11 +548,46 @@ describe('an internal transfer is not a sale', () => {
     expect(Number(dueTo.credit)).toBe(18000);
     expect(dueTo.party_id).toBe(codeOf.get(f.storeId));
 
-    // The goods leave one store's inventory and land in the other's. No revenue, no COGS.
-    const inv = legs.filter((l) => l.code === '1330');
-    expect(inv).toHaveLength(2);
-    expect(Number(inv.find((l) => l.store_id === f.storeId)!.credit)).toBe(18000);
-    expect(Number(inv.find((l) => l.store_id === f.otherStoreId)!.debit)).toBe(18000);
+    // ⭐ COST moves, not inventory — this system expenses on purchase and never capitalises, so
+    // there is no inventory balance to move. The seller's cost leaves via 5175; the buyer picks
+    // it up in 5170, which is the account a commissary purchase already lands in.
+    const out = legs.find((l) => l.code === '5175')!;
+    expect(out.store_id).toBe(f.storeId);
+    expect(Number(out.credit)).toBe(18000);
+    const inn = legs.find((l) => l.code === '5170')!;
+    expect(inn.store_id).toBe(f.otherStoreId);
+    expect(Number(inn.debit)).toBe(18000);
+    // ⛔ And nothing touches inventory, which nothing else in the system funds.
+    expect(legs.filter((l) => ['1310', '1330', '1340'].includes(l.code))).toHaveLength(0);
+  });
+
+  it("⭐ Ian's case: Lipa buys at 300, processes at 10, ships to Malvar — both P&Ls come out right", async () => {
+    const f = await fixture('processing');
+    const branch = await ownStore(f, f.otherStoreId);
+    // 100 kg transferred at ₱310 — the slab's ₱300 plus Lipa's ₱10/kg of processing.
+    const o = await transferOrder(f, branch, '31000');
+    const result = await asOrg(f.orgId, (tx) => dispatchTradeOrder(tx, f.manager, { orderId: o.orderId }));
+
+    const byStore = await sql<{ code: string; store_id: string; amount: string }[]>`
+      select a.code, jl.store_id, (jl.debit - jl.credit)::text as amount
+      from journal_lines jl
+      join accounts a on a.id = jl.account_id
+      where jl.entry_id = ${result.entryId}`;
+
+    // Lipa's P&L is relieved of the whole transfer price — the slab AND the processing.
+    const lipaPnl = byStore
+      .filter((l) => l.store_id === f.storeId && l.code.startsWith('5'))
+      .reduce((n, l) => n + Number(l.amount), 0);
+    expect(lipaPnl).toBe(-31000);
+
+    // Malvar carries it, in the account a commissary purchase already uses.
+    const malvarPnl = byStore
+      .filter((l) => l.store_id === f.otherStoreId && l.code.startsWith('5'))
+      .reduce((n, l) => n + Number(l.amount), 0);
+    expect(malvarPnl).toBe(31000);
+
+    // ⭐ And consolidated the pair is zero, so the group counts the original purchase ONCE.
+    expect(lipaPnl + malvarPnl).toBe(0);
   });
 
   it('⛔ raises no receivable at all, and books no revenue', async () => {

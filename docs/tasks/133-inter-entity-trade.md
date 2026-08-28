@@ -37,25 +37,52 @@ A table called `wholesale_orders` that holds internal branch transfers is precis
 is a residual, and both cost real time. ⭐ **The rename is nearly free exactly once: the table is
 one day old, holds no production data, and has no UI.** It gets more expensive every day.
 
-## 3. The posting — looked up, not decided
+## 3. The posting — looked up, then corrected against the codebase
 
-⭐ `docs/POSTING-PATTERNS.md` §`commissary_dispatch.transfer` is the authority (bible: *"Look it
-up; do not decide"*), and it is **one entry, four legs, two stores**:
+⭐ One entry, four legs, two stores — and it moves **COST**, not inventory.
+
+⛔ **The first implementation of this task got that wrong**, and Ian's question found it within the
+hour: *"if raw materials are from Lipa say meat slab then Lipa processed it incurring processing
+cost like 10 per kg and it moves to Malvar, how will the books of 2 stores look? How can Malvar
+expense it?"* `POSTING-PATTERNS.md` §`commissary_dispatch.transfer` moves `1330` inventory, which
+assumes **perpetual** inventory — and this system is **periodic**. Verified: every expense category
+maps to a 5xxx COGS account, there is no capitalisation path, and nothing anywhere debited
+`1310`/`1330`/`1340`. The answer to Ian's question under that shape was *"Malvar cannot expense it,
+and Lipa carries 100% of a cost for goods it no longer holds."*
 
 | Account | Store | Debit | Credit | Party |
 |---|---|---:|---:|---|
-| 1330 Inventory — prepped / commissary goods | seller | | 18,000.00 | — |
-| 1250 Due from related store | seller | 18,000.00 | | ⚠️ buyer's **store code** |
-| 1330 Inventory — prepped / commissary goods | buyer | 18,000.00 | | — |
-| 2150 Due to related store | buyer | | 18,000.00 | ⚠️ seller's **store code** |
+| 5175 Cost transferred to branches | seller | | 31,000.00 | — |
+| 1250 Due from related store | seller | 31,000.00 | | ⚠️ buyer's **store code** |
+| 5170 COGS — commissary transfers | buyer | 31,000.00 | | — |
+| 2150 Due to related store | buyer | | 31,000.00 | ⚠️ seller's **store code** |
 
-⛔ **No revenue and no COGS.** A branch is not a customer of its own company. v1 books branch
-sales as revenue, which is why it then needed `excludeBranchSales` to stop its own insights being
-wrong — the exclusion is the tell that the recognition was wrong upstream.
+**Ian's own numbers — 100 kg at ₱300, processed at ₱10/kg, all shipped:**
+
+| | Lipa (seller) | Malvar (buyer) |
+|---|---:|---:|
+| 5110 Meat, bought | 30,000 | — |
+| 6xxx processing labour | 1,000 | — |
+| 5175 transferred out | (31,000) | — |
+| 5170 commissary transfers | — | 31,000 |
+| **Net cost carried** | **0** | **31,000** |
+
+⭐ **`5175` is the account the chart has demanded since T-102b and never had.** `5170`'s own seed
+comment says it *"must ELIMINATE against the commissary's transfer-out"*. This is that transfer-out.
+
+⚠️ **The transfer PRICE carries the processing cost** — ₱310/kg, not ₱300. Ian sets it per order
+today; Phase 3 computes it from real cost. That is the only mechanism by which Lipa's ₱10/kg of
+work reaches Malvar's books, which is why the rate lives on the line and is captured there.
+
+⛔ **No revenue.** A branch is not a customer of its own company. v1 books branch sales as
+revenue, which is why it then needed `excludeBranchSales` to stop its own insights being wrong —
+the exclusion is the tell that the recognition was wrong upstream. ⚠️ COGS *does* move, and must:
+that is the difference between the seller and the buyer each carrying the right cost, and the
+seller carrying all of it.
 
 ⭐ **One entry, not two.** Bible landmine #27's fix: both stores are rows in one database, so this
 is one real ACID transaction, never v1's two best-effort writes. `money_transfers` already posts
-this exact four-leg shape with cash in place of inventory — same helper, same `storeCodes` lookup.
+this exact four-leg shape with cash in place of cost — same helper, same `storeCodes` lookup.
 
 ⚠️ **`party_id` for a `party_type='store'` line is the other store's `code`, not a uuid** — there
 is no party FK yet (DEF-040), and store codes are stable and human-chosen.
@@ -70,19 +97,21 @@ same-transaction guarantee this pattern has: once RLS isolates two orgs, **no si
 spans both**, so their agreement is a *scheduled reconciliation*, not a constraint. That weaker
 property must be designed for deliberately, with a real counterparty to test against.
 
-⛔ **`1340 Inventory in transit (branch orders)`.** ⚠️ **Worth flagging rather than quietly
-resolving:** the chart carries this account, and the authoritative posting pattern never uses it —
-it moves value straight from the seller's `1330` to the buyer's `1330` in one entry. So either the
-account is premature or the pattern is. I follow the pattern, per the bible, and record the
-discrepancy here. It becomes live when dispatch and receipt genuinely separate, which is the
-cross-org case above.
+⛔ **All three inventory accounts — `1310`, `1330`, `1340`.** ⭐ **Resolved, and the answer was
+that they are EARLY, not wrong.** They exist for a perpetual system this one is not yet; nothing
+funds them, so nothing may relieve them. `POSTING-PATTERNS.md` now carries both shapes, each
+labelled with the era it belongs to, so the next reader is not left choosing between a documented
+pattern and a working one.
 
 ⛔ **Valuation.** The transfer amount is the stated transfer price, not a computed cost. Phase 3
 owns weighted-average and real stock movement; this pattern owns the **shape** only. ⚠️ When
 valuation lands, the transfer value should come from cost, not from a price list.
 
-⛔ **Consuming what was transferred.** `5170 COGS — commissary transfers` stays unposted here: the
-value sits in the branch's `1330` until the branch consumes it, which is Phase 3.
+⚠️ **Timing, stated plainly.** The buyer expenses on RECEIPT, not on sale — so a branch that
+receives late in the month carries cost slightly ahead of the revenue it will earn. That is not a
+new distortion: it is exactly how this system already treats every purchase (buy = expense), so the
+transfer is consistent with the books around it rather than a special case. Matching cost to the
+month of sale needs perpetual inventory, which is Phase 3.
 
 ## 5. Contract
 
@@ -115,8 +144,11 @@ customers.counterparty_store_id   -- already exists; treatment is DERIVED (ADR-0
 
 ## 7. Tests
 
-1. An internal order dispatches to a four-leg entry: seller `1330` credited, buyer `1330` debited,
-   `1250`/`2150` equal and opposite, each party being the **other** store's code.
+1. An internal order dispatches to a four-leg entry: seller `5175` credited, buyer `5170` debited,
+   `1250`/`2150` equal and opposite, each party being the **other** store's code — and **no
+   inventory account is touched at all**.
+   ⭐ Plus Ian's worked case end to end: bought at ₱300, processed at ₱10, shipped at ₱310 — the
+   seller's P&L nets to zero and the buyer carries ₱31,000.
 2. That entry raises no `ar_charge` at all.
 3. A credit limit on an internal counterparty is ignored — a branch is not extended credit.
 4. A store transferring to itself is refused.

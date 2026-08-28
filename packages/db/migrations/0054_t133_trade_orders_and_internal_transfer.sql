@@ -6,8 +6,10 @@
 -- derived from the counterparty. … A mode is a fork; a derived treatment is a fact."* T-132 built
 -- the sale treatment and deliberately REFUSED an internal counterparty, naming this task. Adding
 -- the transfer treatment to the same table means a table called `wholesale_orders` would hold
--- internal branch transfers — exactly the defect docs/GLOSSARY.md exists to prevent (v1's
--- `dineInSales` is package-only; its `takeOutSales` is a residual; both cost real time).
+-- internal branch transfers — exactly the defect docs/GLOSSARY.md exists to prevent, where v1
+-- field names mean the OPPOSITE of what they look like and cost real time to unlearn.
+-- ⚠️ The glossary's own examples are deliberately NOT quoted here: a guard test refuses any v2
+-- source file that names one, and it is right to, even in a comment citing them as a warning.
 --
 -- ⚠️ The rename is nearly free exactly ONCE: the table is one day old, holds no production data,
 -- and has no UI. It gets more expensive every day after this one.

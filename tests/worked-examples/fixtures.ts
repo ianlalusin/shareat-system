@@ -625,24 +625,26 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
     id: 'commissary_dispatch.transfer',
     sourceType: 'commissary_dispatch',
     title: 'Commissary dispatch and branch receipt — one entry, two stores, must eliminate',
-    narrative: '₱18,000 of prepped commissary goods ships from the Malvar commissary to the Lipa ' +
-      'branch. ONE real transaction (not two best-effort writes): the commissary\'s inventory ' +
-      'falls and it books a receivable from the branch; the branch\'s inventory rises and it ' +
-      'books a payable to the commissary.',
+    narrative: 'A 100 kg meat slab bought at ₱300/kg and processed at ₱10/kg ships from the ' +
+      'Malvar commissary to the Lipa branch at its ₱310/kg transfer price. ONE real transaction ' +
+      "(not two best-effort writes): the commissary's COST leaves its P&L and it books a " +
+      "receivable from the branch; the branch expenses what it received and books a payable.",
     frequency: 70,
-    input: { commissaryStoreCode: 'STORE-COMMISSARY', branchStoreCode: 'STORE-BRANCH1', amount: '18000.00' },
+    input: { commissaryStoreCode: 'STORE-COMMISSARY', branchStoreCode: 'STORE-BRANCH1', amount: '31000.00' },
     expect: [
-      C('1330', '18000.00', null, { storeRef: 'commissary', lineMemo: 'goods dispatched' }),
-      D('1250', '18000.00', { type: 'store', id: 'STORE-BRANCH1' }, { storeRef: 'commissary', lineMemo: 'due from branch' }),
-      D('1330', '18000.00', null, { storeRef: 'branch1', lineMemo: 'goods received' }),
-      C('2150', '18000.00', { type: 'store', id: 'STORE-COMMISSARY' }, { storeRef: 'branch1', lineMemo: 'due to commissary' }),
+      C('5175', '31000.00', null, { storeRef: 'commissary', lineMemo: 'cost transferred out' }),
+      D('1250', '31000.00', { type: 'store', id: 'STORE-BRANCH1' }, { storeRef: 'commissary', lineMemo: 'due from branch' }),
+      D('5170', '31000.00', null, { storeRef: 'branch1', lineMemo: 'commissary transfer received' }),
+      C('2150', '31000.00', { type: 'store', id: 'STORE-COMMISSARY' }, { storeRef: 'branch1', lineMemo: 'due to commissary' }),
     ],
     entryDate: '2026-02-20',
-    trap: 'This must ELIMINATE at entity level: total 1250 (Due from related store) across all ' +
-      "stores must equal total 2150 (Due to related store) — bible invariant 6's reciprocal " +
-      'check. If they do not net to zero, an inter-store transfer went missing. Party_id for a ' +
-      "party_type='store' line is the OTHER store's `code`, not a database id — there is no " +
-      'party FK yet (DEF-040) and store codes are stable, human-chosen identifiers.',
+    trap: 'COST moves, NOT inventory — this system is PERIODIC (every expense category maps to a ' +
+      '5xxx COGS account; nothing anywhere debits 1310/1330/1340), so moving inventory drove the ' +
+      "seller's 1330 negative and stranded the cost in the seller's P&L. 5175 is the transfer-out " +
+      "half that 5170's own chart comment has demanded since T-102b. This must ELIMINATE at " +
+      'entity level twice over: 1250 equals 2150, and 5170 equals 5175, across all stores — ' +
+      "bible invariant 6's reciprocal check. Party_id for a party_type='store' line is the OTHER " +
+      "store's `code`, not a database id — there is no party FK yet (DEF-040).",
   },
 
   // =========================================================================================

@@ -41,34 +41,34 @@
   - ` 473–482  ` cashrequest.release — A float handed to a staff custodian
   - ` 483–493  ` cashrequest.return — The unused float comes back
 - ` 494–511  ` Commissary dispatch (commissarydispatch) — 70 legs, the inter-store elimination case
-  - ` 512–530  ` commissarydispatch.transfer — One entry, two stores, must eliminate
-- ` 531–535  ` Amortization (amortization) — 38 legs
-  - ` 536–546  ` amortization.monthly — Monthly amortisation of a prepaid item
-- ` 547–552  ` Wastage (wastageexpense) — 16 legs
-  - ` 553–569  ` wastageexpense.spoilage — A real cost of sales, straight against inventory
-- ` 570–576  ` Remittance (remittance) — 10 legs
-  - ` 577–585  ` remittance.exact — The conditional leg genuinely absent
-  - ` 586–595  ` remittance.overage — 7350 swings positive
-  - ` 596–610  ` remittance.shortage — Charged to the responsible cashier, not P&L
-- ` 611–615  ` Balance adjustment (balanceadjustment) — 10 legs — THE ANTI-PATTERN
-  - ` 616–633  ` balanceadjustment.plug — Included so nobody ports it forward
-- ` 634–638  ` Prepaid purchase (prepaidpurchase 4 legs) / asset purchase (assetpurchase 2 legs)
-  - ` 639–648  ` prepaidpurchase.cash — An asset, not an immediate expense
-  - ` 649–657  ` assetpurchase.cash — Fixed asset purchase, cash
-  - ` 658–668  ` assetpurchase.credit — Fixed asset purchase, on account
-- ` 669–673  ` Slicer/payroll payout (slicerpayment) — 4 legs
-  - ` 674–684  ` slicerpayment.park — Settling an already-parked liability
-- ` 685–690  ` Statutory remittance (liabilitypayment)
-  - ` 691–709  ` liabilitypayment.statutory-remittance — Settling what was withheld, not new expense
-- ` 710–718  ` Owner equity movements (capitalcontribution / drawing)
-  - ` 719–727  ` equity.capitalcontribution — Cash in, equity grows
-  - ` 728–744  ` equity.drawing — Reduces equity, on the books at last
-- ` 745–751  ` Year close (yearclose) — v2-only, ADR-006
-  - ` 752–771  ` yearclose.annual — One entry, into 3300, dated the following January 1st
-- ` 772–779  ` Opening balance (openingbalance) — v2-only, ADR-005 (amended 2026-08-24) + bible row 106
-  - ` 780–802  ` openingbalance.load — The 2027-01-01 load, balance-sheet only, per-party lump sums
-  - ` 803–822  ` openingbalance.reconcile — Reconciling 3900 to exactly zero
-- ` 823–844  ` Reversal — the correction path (T-106)
+  - ` 512–564  ` commissarydispatch.transfer — ⭐ Cost moves; there is no inventory to move
+- ` 565–569  ` Amortization (amortization) — 38 legs
+  - ` 570–580  ` amortization.monthly — Monthly amortisation of a prepaid item
+- ` 581–586  ` Wastage (wastageexpense) — 16 legs
+  - ` 587–603  ` wastageexpense.spoilage — A real cost of sales, straight against inventory
+- ` 604–610  ` Remittance (remittance) — 10 legs
+  - ` 611–619  ` remittance.exact — The conditional leg genuinely absent
+  - ` 620–629  ` remittance.overage — 7350 swings positive
+  - ` 630–644  ` remittance.shortage — Charged to the responsible cashier, not P&L
+- ` 645–649  ` Balance adjustment (balanceadjustment) — 10 legs — THE ANTI-PATTERN
+  - ` 650–667  ` balanceadjustment.plug — Included so nobody ports it forward
+- ` 668–672  ` Prepaid purchase (prepaidpurchase 4 legs) / asset purchase (assetpurchase 2 legs)
+  - ` 673–682  ` prepaidpurchase.cash — An asset, not an immediate expense
+  - ` 683–691  ` assetpurchase.cash — Fixed asset purchase, cash
+  - ` 692–702  ` assetpurchase.credit — Fixed asset purchase, on account
+- ` 703–707  ` Slicer/payroll payout (slicerpayment) — 4 legs
+  - ` 708–718  ` slicerpayment.park — Settling an already-parked liability
+- ` 719–724  ` Statutory remittance (liabilitypayment)
+  - ` 725–743  ` liabilitypayment.statutory-remittance — Settling what was withheld, not new expense
+- ` 744–752  ` Owner equity movements (capitalcontribution / drawing)
+  - ` 753–761  ` equity.capitalcontribution — Cash in, equity grows
+  - ` 762–778  ` equity.drawing — Reduces equity, on the books at last
+- ` 779–785  ` Year close (yearclose) — v2-only, ADR-006
+  - ` 786–805  ` yearclose.annual — One entry, into 3300, dated the following January 1st
+- ` 806–813  ` Opening balance (openingbalance) — v2-only, ADR-005 (amended 2026-08-24) + bible row 106
+  - ` 814–836  ` openingbalance.load — The 2027-01-01 load, balance-sheet only, per-party lump sums
+  - ` 837–856  ` openingbalance.reconcile — Reconciling 3900 to exactly zero
+- ` 857–878  ` Reversal — the correction path (T-106)
 
 <!-- TOC:END -->
 
@@ -509,9 +509,43 @@ real ACID transaction; both stores are rows in one database") makes this **one j
 spanning two stores**, not v1's "fake distributed transaction" (two best-effort writes). Phase 3
 owns valuation (weighted average, real stock movement); this pattern owns the **shape** only.
 
-### `commissary_dispatch.transfer` — One entry, two stores, must eliminate
+### `commissary_dispatch.transfer` — ⭐ Cost moves; there is no inventory to move
 
-₱18,000 of prepped commissary goods ships from the Malvar commissary to the Lipa branch.
+> ⛔ **CORRECTED 2026-08-28, T-133.** This pattern used to move `1330` inventory between the two
+> stores, which assumes **perpetual** inventory — and this system is **periodic**. Verified rather
+> than assumed: every expense category maps to a 5xxx COGS account (`seed/expense-categories.ts`
+> — Meat → 5110), there is no capitalisation path anywhere, and **nothing in the codebase debits
+> 1310, 1330 or 1340**. The inventory shape drove the seller's `1330` negative and left the cost
+> stranded in the seller's P&L, so the receiving branch could not expense what it received at all.
+> Found by Ian asking how Malvar expenses a slab Lipa processed. The inventory shape is kept below
+> because it becomes correct again in Phase 3, when valuation and real stock movement land.
+
+₱31,000 of prepped goods ships from the Malvar commissary to the Lipa branch: a 100 kg slab bought
+at ₱300/kg and processed at ₱10/kg. ⚠️ **The transfer price is what carries the processing cost** —
+₱310, not ₱300. That is the mechanism by which the seller's work reaches the buyer's books.
+
+| Account | Store | Debit | Credit | Party |
+|---|---|---:|---:|---|
+| 5175 Cost transferred to branches | commissary | | 31,000.00 | — |
+| 1250 Due from related store | commissary | 31,000.00 | | store |
+| 5170 COGS — commissary transfers | branch | 31,000.00 | | — |
+| 2150 Due to related store | branch | | 31,000.00 | store |
+
+**What each store's P&L then says**, which is the whole point:
+
+| | Commissary | Branch |
+|---|---:|---:|
+| 5110 Meat, bought | 30,000 | — |
+| 6xxx processing labour | 1,000 | — |
+| 5175 transferred out | (31,000) | — |
+| 5170 commissary transfers | — | 31,000 |
+| **Net cost carried** | **0** | **31,000** |
+
+⭐ **5175 is the account `5170`'s own comment has demanded since T-102b** — *"CONSOLIDATED it must
+ELIMINATE against the commissary's transfer-out"* — and which had never been created. Consolidated,
+5170 + 5175 = 0, so the original purchase is counted exactly once.
+
+#### ⛔ The Phase 3 target — inventory movement, NOT live and NOT a separate pattern id
 
 | Account | Store | Debit | Credit | Party |
 |---|---|---:|---:|---|

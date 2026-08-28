@@ -291,6 +291,11 @@ describe('invariant 9 — codes are unique per org, and the same code seeds inde
 });
 
 describe('invariant 10 — account count matches the (amended) COA-ALIGNMENT list exactly', () => {
+  // ⭐ 98 -> 99 on 2026-08-28 (T-133): 5175 Cost transferred to branches. THE OTHER HALF of
+  // 5170's elimination, which 5170's own comment has described since T-102b and which never
+  // existed. A contra-COGS (expense / credit): without it a branch transfer left the cost
+  // stranded in the sending store's P&L and the receiving store could not expense what it
+  // received. Found by Ian asking how Malvar expenses what Lipa processed.
   // ⭐ 97 -> 98 on 2026-08-28 (T-132): 4300 Wholesale sales. Every other 4xxx leaf is RETAIL
   // — unli, à la carte, beverage — so a sale to a franchisee had no account of its own and went
   // to whatever the caller passed. ⚠️ NOT 4200: the 2026-08-23 revenue amendment REMOVED that
@@ -307,7 +312,7 @@ describe('invariant 10 — account count matches the (amended) COA-ALIGNMENT lis
   //   4500 Other charges — leftover, packaging and similar. INCOME; the business keeps these.
   // Two things that look identical on a bill and are opposite in the books. This count is a PIN,
   // so changing it is a deliberate act — which is exactly why it caught the addition.
-  it('the seed data has exactly 98 accounts — 7 headers + 91 leaves', () => {
+  it('the seed data has exactly 99 accounts — 7 headers + 92 leaves', () => {
     // Originally 75 (7 headers + 68 leaves) under T-102. See task report for the
     // reasoning behind 75 rather than a literal reading of the §2 summary tables (77):
     // 1520/1530 (Property and equipment sub-range) are deliberately not seeded as rows —
@@ -320,17 +325,17 @@ describe('invariant 10 — account count matches the (amended) COA-ALIGNMENT lis
     // is forward-corrected rather than left silently wrong (bible §2 rule 8 precedent:
     // an applied migration is never edited, but a test asserting a now-superseded fact
     // is updated forward, the same way migration 0002 corrected 3200 forward).
-    expect(CHART_OF_ACCOUNTS.length).toBe(98);
+    expect(CHART_OF_ACCOUNTS.length).toBe(99);
     const headers = CHART_OF_ACCOUNTS.filter((a) => a.parentCode === null);
     expect(headers.length).toBe(7);
-    expect(CHART_OF_ACCOUNTS.length - headers.length).toBe(91);
+    expect(CHART_OF_ACCOUNTS.length - headers.length).toBe(92);
   });
 
   it('every account actually lands in the database for a freshly seeded org', async () => {
     const orgId = await insertOrg('inv10');
     await seedChartOfAccounts(sql, orgId);
     const rows = await fetchAccounts(orgId);
-    expect(rows.length).toBe(98); // T-102b, T-123 (2160, 4500), T-127 (1260), T-128 (2500), T-132 (4300)
+    expect(rows.length).toBe(99); // T-102b, T-123 (2160, 4500), T-127 (1260), T-128 (2500), T-132 (4300), T-133 (5175)
   });
 
   it('4200 is not seeded — REVENUE AMENDMENT, take-out folded into 4150', async () => {
@@ -559,18 +564,18 @@ describe('T-102b invariant 5 — re-running the seed inserts nothing and changes
 });
 
 describe('T-102b invariant 6 — total account count is 92 (T-102\'s 75 + these 17)', () => {
-  it('the seed data has exactly 98 accounts', () => {
-    expect(CHART_OF_ACCOUNTS.length).toBe(98);
+  it('the seed data has exactly 99 accounts', () => {
+    expect(CHART_OF_ACCOUNTS.length).toBe(99);
     const headers = CHART_OF_ACCOUNTS.filter((a) => a.parentCode === null);
     expect(headers.length).toBe(7);
-    expect(CHART_OF_ACCOUNTS.length - headers.length).toBe(91);
+    expect(CHART_OF_ACCOUNTS.length - headers.length).toBe(92);
   });
 
   it('every account lands in the database for a freshly seeded org', async () => {
     const orgId = await insertOrg('102b-inv6');
     await seedChartOfAccounts(sql, orgId);
     const rows = await fetchAccounts(orgId);
-    expect(rows.length).toBe(98);
+    expect(rows.length).toBe(99);
   });
 });
 

@@ -386,6 +386,13 @@
       "when": 1790739107084,
       "tag": "0054_t133_trade_orders_and_internal_transfer",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1790825507084,
+      "tag": "0055_t133_transfer_moves_cost_not_inventory",
+      "breakpoints": true
     }
   ]
 }

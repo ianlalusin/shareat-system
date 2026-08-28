@@ -325,6 +325,12 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
   // task), so the warning lives here, next to the account it describes, and in this
   // migration's own header comment.
   leaf('5170', 'COGS — commissary transfers', 'expense', 'debit', '5000'), // 🆕 — T-102b, §4.1
+  // ⭐ T-133, 2026-08-28. THE OTHER HALF of 5170's elimination, which the comment above has
+  // described since T-102b and which never existed until Ian asked how Malvar expenses what
+  // Lipa processed. A CONTRA-COGS (expense / credit): the seller's cost leaves its P&L here
+  // and lands in the buyer's 5170, so consolidated the two net to zero and the original
+  // purchase is counted exactly once. Same contra shape as 4900/4950 on the income side.
+  leaf('5175', 'Cost transferred to branches', 'expense', 'credit', '5000'), // 🆕 — T-133
   leaf('5200', 'COGS — beverage', 'expense', 'debit', '5000'), // 🆕
   leaf('5300', 'Wastage and spoilage', 'expense', 'debit', '5000', {
     legacyCode: 'expense__order_wastage',
