@@ -185,21 +185,28 @@ paste it in** before or alongside T-131, which depends on this basis matching.
   back once confirmed safe (0 commits ahead of `main` on that branch — only uncommitted
   working-tree files). **Check `git branch --show-current` again right before committing**, not
   just at session start.
-- ⚠️ **When you find uncommitted files you don't recognize, don't guess who wrote them — and don't
-  trust your first guess either.** `docs/FILE-MAP.md`, `docs/reviews/NEXT-PROMPT.md`, and
-  `docs/reviews/2026-08-28.md` are `/daily-review`-shaped output (a diff review, findings, a
-  next-session prompt), left uncommitted (mtimes 12:09–12:11) while this session was checked out on
-  `daily-review/2026-08-28`. This session first attributed them to a peer session by name in both
-  chat and this file — **that peer then disputed it with real counter-evidence** (its own last repo
-  write was ~40 minutes earlier; the review content describes toolchain failures — a broken vitest
-  binding, an unreachable Postgres — never seen in either session's own gate runs, and references
-  T-130 as still-uncommitted WIP, meaning it ran before this session's own T-130 commits). **Actual
-  authorship is unresolved as of this handoff** — possibly a subagent, possibly a session that has
-  since exited, possibly something else. The 3 files are still uncommitted. **Do not commit them
-  under your own authorship without first working out who actually produced them** — ask Ian if
-  it's unclear; the content itself looks safe to merge (docs-only, `git diff -w` confirms no code
-  changes per its own claim) but attribution matters for a project this disciplined about who
-  decided what.
+- ⚠️ **Solved, and it's a cautionary tale about trusting a review doc's own self-description.**
+  `docs/FILE-MAP.md`, `docs/reviews/NEXT-PROMPT.md`, and `docs/reviews/2026-08-28.md` are the
+  `/daily-review` skill's own declared outputs (SKILL.md §6–§8) — not authorship-unknown at all,
+  once someone actually checked the skill file instead of guessing from mtimes. **The run was
+  interrupted, and two of its three "needs a human" findings are false:**
+  `.claude/daily-review-state.json` still reads `lastReviewedSha: d404a70`/`2026-08-26` — §10
+  (write the new state) never ran. `daily-review/2026-08-28` has **zero commits** — confirmed via
+  `git rev-list --count 4b06a0e..daily-review/2026-08-28` = `0` — even though the review doc itself
+  asserts *"one commit — docs/FILE-MAP.md updated."* That commit does not exist; §9 never ran
+  either. Almost certainly the stale `.git/index.lock` (created 11:57:16, discovered and removed
+  earlier this same session) blocked §9's `git commit` around 12:11, right when the files were
+  written; the branch checkout back to `main` at 12:32 then carried the orphaned files along.
+  **The doc's own claims of a broken toolchain are stale/wrong**, not current fact: `npm test`
+  passes 598/598 clean (run independently, twice, by two different sessions this same day) against
+  its claimed *"vitest fails … Cannot find native binding"*; Postgres on 5435 was reachable both
+  before and after its claimed *"unreachable"* — most likely it hit the recorded two-concurrent-
+  integration-runs-share-one-test-DB trap while this session's own gates happened to be running.
+  **Do not commit these 3 files as they stand** — `NEXT-PROMPT.md` is written to be pasted into the
+  next session, and pasting it would tell that session to blow away `node_modules` chasing a
+  problem that isn't there. Since the state file never advanced, a fresh `/daily-review` run today
+  would cover the identical range (`d404a70..4b06a0e`) and should produce accurate output — **that
+  is Ian's call to trigger, not either session's to run unprompted.**
 
 ## The paste-ready prompt
 
@@ -249,10 +256,12 @@ this way (a shared server action redirecting to the wrong page on error) that
 Check `git branch --show-current` before committing, not only at session start —
 another session sharing this machine can check out a different branch mid-session.
 If it has, commit ONLY your own files explicitly — never sweep unrecognized
-uncommitted output into your commit on a guess. docs/FILE-MAP.md, docs/reviews/
-NEXT-PROMPT.md, and docs/reviews/2026-08-28.md are /daily-review-shaped output
-sitting uncommitted as of this handoff — the previous session guessed whose it
-was, guessed wrong (or at least unconfirmed — the named peer disputed it with
-real counter-evidence), and never resolved actual authorship. Don't repeat the
-guess; ask Ian if it's still unresolved when you get here.
+uncommitted output into your commit. docs/FILE-MAP.md, docs/reviews/NEXT-PROMPT.md,
+and docs/reviews/2026-08-28.md are an INTERRUPTED /daily-review run's own declared
+outputs (its git commit step never ran — blocked by a since-removed stale
+.git/index.lock) sitting uncommitted as of this handoff. Two of its three findings
+are stale/false (a "broken toolchain" that both sessions' own gate runs disprove) —
+do NOT commit or paste NEXT-PROMPT.md as-is. Ask Ian whether to discard the 3
+files and re-run /daily-review fresh (its state file never advanced past
+d404a70, so a fresh run covers the same range) — do not decide this yourself.
 ```
