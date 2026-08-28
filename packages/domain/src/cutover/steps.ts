@@ -15,6 +15,11 @@ export interface StepDef {
   kind: StepKind;
   /** One row PER STORE. ⭐ A single tick across four stores hides the store nobody visited. */
   perStore: boolean;
+  /**
+   * ⚠️ **USER-FACING COPY, rendered on the wizard.** Plain prose only — no ⭐/⚠️/⛔ markers, which
+   * are a convention for readers of this source and read as noise to somebody doing a stock count.
+   * Found the hard way: they shipped to the screen and were spotted by looking at it.
+   */
   why: string;
   /**
    * ⚠️ Set when the step is declared ✅ in the spec but **this database cannot check it**, with
@@ -33,23 +38,25 @@ export const CUTOVER_STEPS: readonly StepDef[] = [
     kind: 'verified',
     perStore: false,
     why:
-      'ADR-009: the cost basis is weakest for exactly the stock being valued. Counting first ' +
-      'prices the newest — and only — stock at nothing. ⭐ That inversion took COUNTING to find; ' +
-      'nobody would have reasoned their way to it, which is why A1 → B1 is a hard gate.',
+      'What we paid for stock is least reliable for exactly the stock being counted. Counting ' +
+      'before the backlog is cleared values the newest — and only — stock at nothing. That is why ' +
+      'the count cannot start until this is done.',
     cannotVerifyHere:
-      'The check is over v1 deliveries, and v2 holds no v1 data — it opens from a zero starting ' +
-      'point by design. Recorded as an attestation here, and it renders as one.',
+      'the check is over deliveries in the old system, and this one deliberately holds none of its ' +
+      'history. Somebody has to vouch for it instead.',
   },
   {
     code: 'A2',
     phase: 'A',
-    title: 'Final v1 depreciation run',
+    title: 'Final depreciation run in the old system',
     kind: 'verified',
     perStore: false,
-    why: 'It lands directly in the opening balance. DEF-044 proved it stops silently.',
+    why:
+      'It lands directly in the opening balance. This is the run that quietly stopped for two ' +
+      'months once before, and only a data check found it.',
     cannotVerifyHere:
-      'The check is over v1 depreciation legs, which v2 never holds. ⚠️ v2’s own equivalent IS ' +
-      'machine-checked — T-135’s depreciationNotBooked — but that watches v2, not v1.',
+      'the check is over depreciation in the old system, which this one never holds. Depreciation ' +
+      'in THESE books is checked automatically — but that is a different question.',
   },
   {
     code: 'A3',
@@ -58,9 +65,9 @@ export const CUTOVER_STEPS: readonly StepDef[] = [
     kind: 'attested',
     perStore: false,
     why:
-      'Partial transfers are a named top-of-list migration failure, and an unreconciled bank ' +
-      'account is the classic one skipped. It was implicit inside the export step — and implicit ' +
-      'is how a step gets missed.',
+      'A transfer that left one account and never arrived in the other is the commonest way a ' +
+      'conversion goes wrong, and an unreconciled bank account is the step most often skipped. It ' +
+      'used to be assumed inside the export — and assumed is how a step gets missed.',
   },
   {
     code: 'A4',
@@ -69,8 +76,8 @@ export const CUTOVER_STEPS: readonly StepDef[] = [
     kind: 'attested',
     perStore: false,
     why:
-      'Feeds the 2026 spreadsheet (ADR-005). ⚠️ Legacy basis, unaudited — and it stays a ' +
-      'spreadsheet, never a comparatives screen.',
+      'Feeds the 2026 spreadsheet. These are old-system figures and unaudited, so they stay in a ' +
+      'spreadsheet rather than being shown here as if they were part of these books.',
   },
 
   // ---------------------------------------------------------------- Phase B — 31 December
@@ -80,7 +87,7 @@ export const CUTOVER_STEPS: readonly StepDef[] = [
     title: 'Valued stock count',
     kind: 'attested',
     perStore: true,
-    why: 'Four attestations, not one. ⭐ A single tick hides a store nobody visited.',
+    why: 'One confirmation per store, not one for all of them. A single tick hides the store nobody visited.',
   },
   {
     code: 'B2',
@@ -89,8 +96,8 @@ export const CUTOVER_STEPS: readonly StepDef[] = [
     kind: 'attested',
     perStore: true,
     why:
-      'Confirms existence AND remaining useful life — without which v2 cannot depreciate ' +
-      'anything at all.',
+      'Confirms the asset is really there, and how much life it has left. Without the remaining ' +
+      'life, nothing can be depreciated at all.',
   },
   {
     code: 'B3',
@@ -99,8 +106,9 @@ export const CUTOVER_STEPS: readonly StepDef[] = [
     kind: 'verified',
     perStore: true,
     why:
-      '⭐ An item silently absent is indistinguishable from an item counted as zero. The check ' +
-      'demands a row for every active item, so a zero has to be entered on purpose.',
+      'An item nobody counted looks exactly like an item counted as zero, which is how stock goes ' +
+      'missing from an opening balance. Every item needs a number, and an empty shelf is a typed ' +
+      'zero.',
   },
 
   // ---------------------------------------------------------------- Phase C — 1 January
@@ -110,7 +118,9 @@ export const CUTOVER_STEPS: readonly StepDef[] = [
     title: 'Backup taken and restore REHEARSED',
     kind: 'attested',
     perStore: false,
-    why: 'Bible §15.8. ⚠️ "A backup was taken" is not the claim that matters — a restore that ran is.',
+    why:
+      '"A backup was taken" is not the claim that matters. The one that matters is that a restore ' +
+      'was actually run and worked.',
   },
   {
     code: 'C2',
@@ -118,7 +128,7 @@ export const CUTOVER_STEPS: readonly StepDef[] = [
     title: 'Run the purge',
     kind: 'performed',
     perStore: false,
-    why: 'Dry-run first, always. Post-conditions assert inside the transaction (T-119).',
+    why: 'Dry-run first, always. The checks run inside the same transaction, so a bad purge undoes itself.',
   },
   {
     code: 'C3',
@@ -127,8 +137,8 @@ export const CUTOVER_STEPS: readonly StepDef[] = [
     kind: 'performed',
     perStore: false,
     why:
-      '⭐ A mutable DRAFT built up over days, not one sitting — fourteen suppliers were never ' +
-      'going to be entered at once. The running residual is visible throughout.',
+      'A draft built up over days, not one sitting — fourteen suppliers were never going to be ' +
+      'entered at once. The difference still to explain is shown the whole time.',
   },
   {
     code: 'C4',
@@ -137,10 +147,9 @@ export const CUTOVER_STEPS: readonly StepDef[] = [
     kind: 'verified',
     perStore: false,
     why:
-      '⛔ A residual HALTS. There is no plug account and no code path that creates one. ' +
-      'Auto-plugging is the majority behaviour in the field and it is scale-driven — those ' +
-      'vendors serve millions of self-serve tenants who cannot get a human’s attention. One ' +
-      'company, one cutover, Ian personally available: none of that applies.',
+      'If anything is left over, this stops. Most accounting software would park the difference in ' +
+      'a holding account and open the books anyway; that exists for people who cannot ask anyone. ' +
+      'A difference here has to be found.',
   },
   {
     code: 'C5',
@@ -148,7 +157,7 @@ export const CUTOVER_STEPS: readonly StepDef[] = [
     title: 'Trial balance ties, then POST',
     kind: 'performed',
     perStore: false,
-    why: 'Posting is what makes C3 immutable. The books are open.',
+    why: 'Posting is what makes the opening entry final. After this, the books are open.',
   },
 ] as const;
 
@@ -166,18 +175,18 @@ export const CUTOVER_GATES: readonly { after: string; before: string; because: s
     after: 'A1',
     before: 'B1',
     because:
-      'ADR-009. Counting before the delivery-expensing backlog is cleared prices the newest stock ' +
-      'at nothing, and the inversion took counting to find.',
+      'Counting before the backlog is cleared values the newest stock at nothing, and that only ' +
+      'came to light by counting.',
   },
   {
     after: 'C2',
     before: 'C3',
     because:
-      'Opening balances entered into a database still holding pilot data are meaningless, not ' +
-      'merely risky.',
+      'Opening balances entered while the old pilot data is still here are meaningless, not merely ' +
+      'risky.',
   },
-  { after: 'C3', before: 'C4', because: 'The check has nothing to check against otherwise.' },
-  { after: 'C4', before: 'C5', because: "ADR-005's own stated order." },
+  { after: 'C3', before: 'C4', because: 'There is nothing to check against until the figures are in.' },
+  { after: 'C4', before: 'C5', because: 'The books cannot open on an entry that does not balance.' },
 ] as const;
 
 export function stepDef(code: string): StepDef | undefined {

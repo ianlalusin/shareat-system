@@ -102,7 +102,7 @@ describe('the wizard is a guide, not a checklist', () => {
     const f = await fixture('blocked');
     const b1 = await stepOf(f, 'B1');
     expect(b1.blockedBy).toMatch(/B1 waits on A1/);
-    expect(b1.blockedBy).toMatch(/prices the newest/);
+    expect(b1.blockedBy).toMatch(/values the newest stock at nothing/);
   });
 
   it('the gate opens once its prerequisite is recorded', async () => {
@@ -145,7 +145,9 @@ describe('a verified step cannot be ticked by hand', () => {
     expect(a1.def.kind).toBe('verified');
     // Honest: the query is over v1 data this database never holds.
     expect(a1.machineVerifiable).toBe(false);
-    expect(a1.def.cannotVerifyHere).toMatch(/v2 holds no v1 data/);
+    // ⚠️ Asserts the SUBSTANCE, not the wording — this string is user-facing copy and will be
+    // reworded again. What must not change is that it says why nobody can check it here.
+    expect(a1.def.cannotVerifyHere).toMatch(/old system/);
     // So it accepts an attestation, unlike C4.
     await asOrg(f.orgId, (tx) => attestStep(tx, f.admin, { stepCode: 'A1' }));
     expect((await stepOf(f, 'A1')).done).toBe(true);
