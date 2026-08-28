@@ -60,16 +60,24 @@ behaviour before fixing — not taken on faith — and all three are now fixed, 
 
 1. **RLS policies since migration 0036 (including 3 of T-130's own new tables) use a raw
    `current_setting('app.org_id', true)::uuid`** instead of the project's `app_current_org()`
-   function, which wraps the same call in `NULLIF(..., '')`. Verified live against `shareat_dev`
-   under the actual `shareat_app` role (not the connecting superuser — that role has
-   `rolbypassrls=true` and proves nothing): with `app.org_id` set to `''`, the raw form throws
-   `22P02 invalid input syntax for type uuid: ""` instead of denying cleanly. **Not a live
-   access-control bypass** — a policy error still returns zero rows — and no code path in this repo
-   was found that could ever set `app.org_id` to `''` (`principal.ts` always passes a real,
-   authenticated `orgId` as a bound parameter). Fixed for T-130's own 4 tables — source migration
-   and the already-applied live policies on both `shareat_dev` and `shareat_test`. The ~10
-   pre-existing tables on the old idiom are **not** touched — logged as **DEF-077** for a separate
-   follow-up, not folded in silently.
+   function, which wraps the same call in `NULLIF(..., '')`. ⚠️ **This is reachable in production,
+   not theoretical — a first pass got that part wrong, and the same peer session's second pass
+   caught it.** `set_config('app.org_id', $1, true)` is `SET LOCAL` on a custom GUC; when that
+   transaction commits, PostgreSQL resets the GUC to `''`, not to unset/NULL — a documented quirk
+   of custom GUCs that were only ever assigned with `LOCAL`, and exactly why `app_current_org()`'s
+   `NULLIF` guard exists. `principal.ts`'s customer branch (*"NO org is set... evaluates against
+   NULL"*) is true on a fresh connection and false on a pooled, reused one that previously served a
+   staff request — `app.org_id` reads back `''`. Reproduced live with a `max: 1` pool forcing
+   connection reuse: a staff transaction sets a real org and commits, the next (customer) one on
+   the same connection sees `''`, and every table still on the raw idiom throws `22P02` instead of
+   denying. **Still not a data leak** (a policy error still returns zero rows), but it is a live,
+   reachable, customer-facing **500** on any affected table, depending on connection-pool reuse
+   history — my own first verification used a superuser connection (bypasses RLS,
+   `rolbypassrls=true`) and a never-reused connection, both of which hid this. Fixed for T-130's
+   own 4 tables — source migration and the already-applied live policies on both `shareat_dev` and
+   `shareat_test`. The ~10 pre-existing tables on the old idiom are **not** touched — logged as
+   **DEF-077** (severity raised 🔸→⚠️ after the correction) — but this is no longer background
+   cleanup; see "Pick up here" below.
 2. **`verifyInvoice`'s evidence check was truthiness-only** (`!!(invoice.receiptFileId || ...)`) —
    a hand-typed, nonexistent `receiptFileId` would have passed. This regressed T-141's own
    hardening (DEF-070's closure), which validates the file against `filesRepo.getById` — exists in
@@ -115,12 +123,16 @@ paste it in** before or alongside T-131, which depends on this basis matching.
 
 **3. T-132 — wholesale orders**, the document that consumes a price list.
 
-**4. DEF-077's remaining scope** (optional, separate from T-131) — the ~10 tables from migrations
-   0036–0042 still use the raw `current_setting` idiom instead of `app_current_org()`. Not a live
-   bypass (see above), but worth normalizing in its own pass: `DROP POLICY`/`CREATE POLICY` against
-   the already-applied live policies (a migration file edit alone won't re-apply), verified with
-   `SET LOCAL ROLE shareat_app` first — a superuser connection bypasses RLS entirely and will
-   falsely show any fix as unnecessary.
+**4. DEF-077's remaining scope — worth raising with Ian directly, not left as background cleanup.**
+   The ~10 tables from migrations 0036–0042 still use the raw `current_setting` idiom, and this is
+   now confirmed **live and reachable** (see above) — a customer-kind request on a connection
+   previously used for staff can 500 against any of them, not merely a theoretical inconsistency.
+   Not a data leak (fails to an error, not a leaked row), so not an emergency, but it should be
+   fixed sooner than "whenever someone gets to it." Mechanical fix: `DROP POLICY`/`CREATE POLICY`
+   against the already-applied live policies (a migration file edit alone won't re-apply).
+   **Verify with a `max: 1` pool forcing a staff-then-customer sequence on the same connection** —
+   a fresh/never-reused connection, or a superuser connection (`rolbypassrls=true`), both falsely
+   show the bug as absent.
 
 ## Do not decide these alone — they are Ian's
 
@@ -129,7 +141,7 @@ paste it in** before or alongside T-131, which depends on this basis matching.
 | **Entity structure** — sole proprietorship, partnership or corporation? | Carried over, unanswered, from the last several handoffs. Worth one conversation with the accountant before go-live |
 | Should input-VAT actually post to a GL account, now that supplier invoices capture the data? | Recommendation: not yet — nothing in `POSTING-PATTERNS.md` splits it today, and inventing the split without a discovery pass is exactly the unconfirmed-scope T-130 refused for withholding tax |
 | Expanded withholding tax on purchases — do any real suppliers need it? | Out of scope for T-130, named as a decision, not an oversight — needs a real answer on which suppliers are subject to it before it's designed |
-| Fold DEF-077's remaining ~10 tables into a dedicated task now, or leave it as a background item? | Not urgent (no live bypass) — recommend a short, dedicated task rather than riding along with T-131, since it touches unrelated RLS policies on live tables |
+| Fold DEF-077's remaining ~10 tables into a dedicated task now, or leave it as a background item? | **Upgraded after a correction — confirmed live and reachable, not theoretical** (see above). Not a data leak, so not an emergency, but recommend a short, dedicated task soon rather than open-ended background cleanup, since it touches RLS policies on live tables and causes real customer-facing 500s today |
 
 ## Traps that have actually bitten, live in this area right now
 
@@ -153,23 +165,41 @@ paste it in** before or alongside T-131, which depends on this basis matching.
   `previous.when + 86400000`.
 - ⚠️ **A raw `current_setting('app.org_id', true)::uuid` in an RLS policy throws instead of denying
   on an empty-string `app.org_id`** — `app_current_org()` exists specifically to guard this with
-  `NULLIF`. Not a live bypass today (nothing sets an empty string), but new RLS policies should use
-  the function, not the raw idiom (DEF-077).
-- ⚠️ **Verifying an RLS claim from a superuser connection proves nothing** — the `postgres` role
-  used for local dev has `rolbypassrls=true`, so it ignores every policy regardless of `FORCE ROW
-  LEVEL SECURITY`. Any RLS probe must `SET LOCAL ROLE shareat_app` (or begin a transaction through
-  `withOrgPrincipal`/`applyPrincipal`) first, or the result is meaningless.
+  `NULLIF`. ⛔ **And it IS live**, on a pooled connection: `SET LOCAL` on a custom GUC resets to
+  `''`, not NULL, when its transaction commits — a documented Postgres quirk, not a theoretical
+  edge case — so a connection previously used for a staff request leaves `app.org_id` as `''` for
+  the next request that sets no org of its own (`principal.ts`'s customer branch). A first pass on
+  this got "reachable?" wrong by testing only a never-reused connection; caught by a second,
+  independent pass. New RLS policies should use `app_current_org()`, never the raw idiom (DEF-077).
+- ⚠️ **Verifying an RLS claim from a superuser connection, or from a connection that's never been
+  reused, both prove nothing.** The `postgres` role used for local dev has `rolbypassrls=true`, so
+  it ignores every policy regardless of `FORCE ROW LEVEL SECURITY` — any probe must `SET LOCAL ROLE
+  shareat_app` first. Separately, a custom-GUC reset bug (above) only shows up on a **reused**
+  connection — a fresh one always looks fine. Both traps bit this exact session, on this exact
+  finding, in that order: first the wrong role, then the wrong connection lifecycle. A real RLS
+  probe needs the app role AND a `max: 1` pool exercising the actual sequence (e.g. staff, then
+  customer) that production connection pooling produces.
 - ⚠️ **A concurrent session sharing this working directory can check out a different branch out
-  from under you mid-session** — happened TWICE this session. First, `git branch --show-current`
-  silently changed from `main` to `daily-review/2026-08-28` while another Claude session ran
-  `/daily-review`. Fixed by switching back once confirmed safe (0 commits ahead of `main` on that
-  branch — only uncommitted working-tree files). **Check `git branch --show-current` again right
-  before committing**, not just at session start. **And when it happens: commit only your own
-  files, explicitly, never the concurrent session's own uncommitted output** — this session found
-  `docs/FILE-MAP.md`, `docs/reviews/NEXT-PROMPT.md`, and `docs/reviews/2026-08-28.md` sitting
-  uncommitted, clearly belonging to that other session's `/daily-review` run, and left them alone
-  rather than sweeping them into a commit under this session's authorship. **Those 3 files are
-  still sitting uncommitted right now** — that session's own business to commit when it finishes.
+  from under you mid-session** — `git branch --show-current` silently changed from `main` to
+  `daily-review/2026-08-28` at some point this session, discovered mid-wrap-up. Fixed by switching
+  back once confirmed safe (0 commits ahead of `main` on that branch — only uncommitted
+  working-tree files). **Check `git branch --show-current` again right before committing**, not
+  just at session start.
+- ⚠️ **When you find uncommitted files you don't recognize, don't guess who wrote them — and don't
+  trust your first guess either.** `docs/FILE-MAP.md`, `docs/reviews/NEXT-PROMPT.md`, and
+  `docs/reviews/2026-08-28.md` are `/daily-review`-shaped output (a diff review, findings, a
+  next-session prompt), left uncommitted (mtimes 12:09–12:11) while this session was checked out on
+  `daily-review/2026-08-28`. This session first attributed them to a peer session by name in both
+  chat and this file — **that peer then disputed it with real counter-evidence** (its own last repo
+  write was ~40 minutes earlier; the review content describes toolchain failures — a broken vitest
+  binding, an unreachable Postgres — never seen in either session's own gate runs, and references
+  T-130 as still-uncommitted WIP, meaning it ran before this session's own T-130 commits). **Actual
+  authorship is unresolved as of this handoff** — possibly a subagent, possibly a session that has
+  since exited, possibly something else. The 3 files are still uncommitted. **Do not commit them
+  under your own authorship without first working out who actually produced them** — ask Ian if
+  it's unclear; the content itself looks safe to merge (docs-only, `git diff -w` confirms no code
+  changes per its own claim) but attribution matters for a project this disciplined about who
+  decided what.
 
 ## The paste-ready prompt
 
@@ -199,9 +229,18 @@ it and journal with previous.when + 86400000.
 
 Before writing any RLS policy, use app_current_org() — not a raw
 current_setting('app.org_id', true)::uuid cast, which throws instead of denying on
-an empty org_id (DEF-077). If you ever need to PROVE an RLS policy denies
-something, SET LOCAL ROLE shareat_app first — the local dev superuser connection
-bypasses RLS entirely and a probe from it proves nothing.
+an empty org_id. This is LIVE, not theoretical (DEF-077, corrected mid-session
+after an initial "unreachable" call was wrong): SET LOCAL on a custom GUC resets
+to '' on commit, not NULL, so a pooled connection previously used for a staff
+request leaves app.org_id as '' for the next request that sets no org (the
+customer principal). ~10 pre-existing tables still carry the bug — ask Ian
+whether to fold a fix into your own task or do it as its own.
+
+If you ever need to PROVE an RLS policy denies something: SET LOCAL ROLE
+shareat_app first (the local dev superuser connection bypasses RLS entirely), AND
+use a max: 1 pool that actually exercises connection reuse (a fresh connection
+hides the GUC-reset bug above). Both traps bit the previous session on this exact
+finding, in that order.
 
 Verify UI in a browser before claiming a screen works — T-130 found a real bug
 this way (a shared server action redirecting to the wrong page on error) that
@@ -209,9 +248,11 @@ this way (a shared server action redirecting to the wrong page on error) that
 
 Check `git branch --show-current` before committing, not only at session start —
 another session sharing this machine can check out a different branch mid-session.
-If it has, commit ONLY your own files explicitly — never sweep another session's
-own uncommitted output into your commit. docs/FILE-MAP.md, docs/reviews/NEXT-
-PROMPT.md, and docs/reviews/2026-08-28.md are a concurrent /daily-review session's
-own uncommitted work as of this handoff — leave them alone unless you are that
-session.
+If it has, commit ONLY your own files explicitly — never sweep unrecognized
+uncommitted output into your commit on a guess. docs/FILE-MAP.md, docs/reviews/
+NEXT-PROMPT.md, and docs/reviews/2026-08-28.md are /daily-review-shaped output
+sitting uncommitted as of this handoff — the previous session guessed whose it
+was, guessed wrong (or at least unconfirmed — the named peer disputed it with
+real counter-evidence), and never resolved actual authorship. Don't repeat the
+guess; ask Ian if it's still unresolved when you get here.
 ```
