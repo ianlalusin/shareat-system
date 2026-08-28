@@ -1,6 +1,7 @@
 # T-128 — Generic liabilities: what the business owes that nothing else tracks
 
-> **Status:** SPEC, 2026-08-27. Written before implementation (bible §1.2a).
+> **Status:** ✅ **BUILT, 2026-08-27.** Written before implementation (bible §1.2a).
+> 11 integration tests.
 > **Defect it fixes:** DEF-074 — a liability recorded in three places, for the fourth time.
 
 ## 1. What it is

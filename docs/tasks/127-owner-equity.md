@@ -1,6 +1,7 @@
 # T-127 — Owner equity: capital in, drawings out, and one register
 
-> **Status:** SPEC, 2026-08-27. Written before implementation (bible §1.2a).
+> **Status:** ✅ **BUILT, 2026-08-27.** Written before implementation (bible §1.2a).
+> 33 integration tests.
 > **Postings already pinned:** `POSTING-PATTERNS.md` §Owner equity movements — `3100` for a
 > contribution, `3200` for a drawing.
 > **Defects it fixes:** DEF-071 (a monthly drawing limit that is displayed and never enforced),

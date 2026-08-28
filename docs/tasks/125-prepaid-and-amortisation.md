@@ -1,6 +1,7 @@
 # T-125 — Prepaid items and amortisation
 
-> **Status:** spec 2026-08-26, **v1 read first**. Wave 2's second item.
+> **Status:** ✅ **BUILT, 2026-08-27** — spec 2026-08-26, **v1 read first**. Wave 2's
+> second item. 21 integration tests; `runAmortisationAsSystem` is driven monthly by T-140.
 > **Depends on:** T-105 (`postEntry`), T-106 (`reverseEntry`), T-121, T-138, and T-124 — whose
 > `asset_policy` row now carries the threshold this task also reads (bible row 141).
 > **Feeds:** T-134 (cutover opening balances), T-135 (the missed-period finding).
