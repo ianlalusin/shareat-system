@@ -365,6 +365,12 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'here hands a competitor the margin structure, not merely a total.',
   },
 
+  channel_settlements: {
+    scope: 'org_column',
+    reason:
+      'What Foodpanda and Grab actually paid an org, and every fee they deducted. Its commission ' +
+      'rate is commercially sensitive and its variance column is an internal control signal.',
+  },
   ar_charges: {
     scope: 'org_column',
     reason: 'What a customer owes this org. A franchise reading another’s would learn its wholesale book.',

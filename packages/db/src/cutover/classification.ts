@@ -464,6 +464,14 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'wholesale rates with them, which is correct: the price list survives and is the standing ' +
       'quote a new order re-captures from.',
   },
+  channel_settlements: {
+    // Purge, like every other posting document. A settlement clears a receivable the opening
+    // balance replaces, so keeping it would leave it pointing at a sales day that no longer
+    // exists and a receivable already superseded.
+    class: 'purge',
+    reason:
+      'A posting document. The receivable it cleared is replaced by the cutover opening balance.',
+  },
   ar_charges: {
     class: 'purge',
     reason:
@@ -522,6 +530,7 @@ export function tablesInClass(cls: CutoverClass): string[] {
  */
 export const PURGE_ORDER_HINT: readonly string[] = [
   'sessions',
+  'channel_settlements',
   'sales_day_channels',
   'sales_days',
   'ar_collection_allocations',

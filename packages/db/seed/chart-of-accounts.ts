@@ -359,6 +359,11 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
   leaf('6410', 'Online order expenses', 'expense', 'debit', '6000', {
     legacyCode: 'expense__online_order_expenses',
   }),
+  // T-150. Settlement variance - a below-tolerance shortfall between what a channel-day
+  // reported and what the platform actually settled. Its OWN account, deliberately: folded
+  // into 6400 a channel that systematically under-remits by P40 a day reads as a slightly
+  // worse fee rate and is never seen.
+  leaf('6420', 'Channel settlement variance', 'expense', 'debit', '6000'), // T-150
   leaf('6500', 'Supplies', 'expense', 'debit', '6000'), // 🆕
   leaf('6510', 'Smallwares', 'expense', 'debit', '6000'), // 🆕 — T-102b, §4.2; below-threshold half of the CAPEX/OPEX split, §4.5
   leaf('6600', 'Repairs and maintenance', 'expense', 'debit', '6000'), // 🆕

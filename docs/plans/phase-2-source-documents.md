@@ -129,6 +129,18 @@ postings are never silent.
 | **T-132** | Wholesale orders module in the ERP, staff-entered (ADR-008 §11) |
 | **T-133** | Inter-entity trade: seller posts at dispatch, buyer at receipt, and the two reconcile (§3.3 above) |
 
+### Wave 5 — the settlement that closes AR
+
+⭐ **Its own wave because Wave 3 shipped without it, deliberately.** T-131 carved channel
+settlement out — *"building both in one task would either rebuild that conflation or leave
+three-quarters of the volume unhandled"* — and closed by raising it as unowned. Ian owned it on
+2026-08-28. **Wave 3 raises the receivable and nothing has ever cleared it**, so this is 74% of
+collection volume with no home, and Phase 2's exit gate cannot pass while `1220` only grows.
+
+| # | Task |
+|---|---|
+| **T-150** ✅ | Channel settlement: clears the `1220` receivable T-123 already raises on every verified Foodpanda / Grab day, through the `1221`/`1222` clearing accounts — signed deductions to real accounts, variance and gain with a tolerance, loan deduction incl. cross-store |
+
 ---
 
 ## 5. What Phase 2 does NOT include

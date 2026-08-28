@@ -648,6 +648,67 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
   },
 
   // =========================================================================================
+  // channel_settlement — T-150. The document that finally clears 1220, which nothing ever did.
+  // =========================================================================================
+  {
+    id: 'channel_settlement.plain',
+    sourceType: 'channel_settlement',
+    title: 'Channel settlement — fees to real accounts, receivable to exactly zero',
+    narrative:
+      'A \u20b1100,000 Foodpanda day settles: \u20b120,000 commission, \u20b1500 withheld at source, ' +
+      '\u20b179,500 banked. Every fee lands in the account that names it, and the receivable clears ' +
+      'to EXACTLY zero rather than near zero.',
+    input: {
+      channel: 'Foodpanda',
+      businessDate: '2026-01-10',
+      grossAmount: '100000.00',
+      commission: '20000.00',
+      withholdingTax: '500.00',
+      netDeposited: '79500.00',
+    },
+    expect: [
+      D('1140', '79500.00', { type: 'money_account', id: 'MA-PAYOUT' }, { lineMemo: 'Foodpanda settlement' }),
+      D('6400', '20000.00', null, { lineMemo: 'Commission' }),
+      D('6800', '500.00', null, { lineMemo: 'Withholding tax' }),
+      C('1220', '100000.00', { type: 'channel', id: 'CH-FOODPANDA' }, { lineMemo: 'Foodpanda settlement' }),
+    ],
+    entryDate: '2026-01-15',
+    trap:
+      'The withheld tax is an EXPENSE, not an asset. RR 2-98 \u00a72.58.3(B) allows a creditable ' +
+      'withholding tax to be claimed only when the income payment has been declared as part of ' +
+      'gross income with the 2307 attached, and bible \u00a713 row 75 records that reported sales are ' +
+      'not all sales and this ledger is never a filing basis. The credit cannot be realised, so ' +
+      'there is no future benefit and therefore no asset. Do NOT seed a 1270 creditable- ' +
+      'withholding asset: an account that exists invites someone to use it.',
+  },
+  {
+    id: 'channel_settlement.promo_credit',
+    sourceType: 'channel_settlement',
+    title: 'Channel settlement — a NEGATIVE deduction, which is a real credit',
+    narrative:
+      'A \u20b150,000 day where the platform charged \u20b18,000 commission and handed back \u20b11,000 of ' +
+      'promo funding. The credit leg is the point.',
+    input: {
+      channel: 'Foodpanda',
+      businessDate: '2026-01-10',
+      grossAmount: '50000.00',
+      commission: '8000.00',
+      platformFee: '-1000.00',
+      netDeposited: '43000.00',
+    },
+    expect: [
+      D('1140', '43000.00', { type: 'money_account', id: 'MA-PAYOUT' }, { lineMemo: 'Foodpanda settlement' }),
+      D('6400', '8000.00', null, { lineMemo: 'Commission' }),
+      C('6400', '1000.00', null, { lineMemo: 'Platform fee (credit)' }),
+      C('1220', '50000.00', { type: 'channel', id: 'CH-FOODPANDA' }, { lineMemo: 'Foodpanda settlement' }),
+    ],
+    entryDate: '2026-01-15',
+    trap:
+      'A deduction is SIGNED and nothing may clamp it to zero. A promo-heavy day genuinely returns ' +
+      'money, and v1 shipped a bug by assuming a deduction is always positive.',
+  },
+
+  // =========================================================================================
   // amortization — 38 legs. Always both legs (leg-mapping.ts: "always both", same shape as
   // depreciation). One of ADR-005's five January-required capabilities.
   // =========================================================================================

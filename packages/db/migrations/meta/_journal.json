@@ -400,6 +400,13 @@
       "when": 1790911907084,
       "tag": "0056_t151_landed_cost_and_branch_price",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1790998307084,
+      "tag": "0057_t150_channel_settlement",
+      "breakpoints": true
     }
   ]
 }

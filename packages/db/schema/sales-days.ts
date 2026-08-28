@@ -81,6 +81,25 @@ export const salesChannels = pgTable(
      * false (a platform owes us money until it settles), meaningless when true.
      */
     receivableAccountCode: text('receivable_account_code'),
+    /**
+     * ⭐ T-150. Where this channel's payout lands. Per-channel CONFIG, not a constant: Grab and
+     * Foodpanda do not have to bank into the same account, and hard-coding one would be wrong the
+     * first time they differ.
+     */
+    destinationMoneyAccountId: uuid('destination_money_account_id'),
+    /**
+     * ⭐ T-150 §7. Withholding tax is booked to `6800 Taxes and licences` — an EXPENSE, not an
+     * asset. RR 2-98 §2.58.3(B): a creditable withholding tax may be claimed only when the income
+     * payment has been declared as part of gross income with the 2307 attached. Bible §13 row 75
+     * records that reported sales are not all sales and this ledger is never a filing basis, so
+     * the credit cannot be realised — and an asset is a resource from which future benefit is
+     * expected. There is none.
+     *
+     * ⛔ No `1270` creditable-withholding asset is seeded: an account that exists invites someone
+     * to use it, and an unrealisable asset is worse than no account. This flag decides which
+     * account the leg hits if that posture ever changes.
+     */
+    taxTreatment: text('tax_treatment', { enum: ['expense', 'creditable'] as const }).notNull().default('expense'),
     isActive: boolean('is_active').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
