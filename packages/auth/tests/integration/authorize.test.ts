@@ -15,7 +15,7 @@ import { sql as dsql } from 'drizzle-orm';
  * CAPABILITY-MATRIX.md and the task spec's prose both say "36" — the table itself had 38
  * rows at T-121 (tests/unit/capability-matrix.test.ts pins this and the task report explains
  * it as a found spec defect); T-130 added `record_supplier_invoice`, `verify_supplier_invoice`
- * and `void_supplier_invoice`, making 46. This file tests against the ACTUAL 46, generated from
+ * and `void_supplier_invoice`, making 47. This file tests against the ACTUAL 47, generated from
  * `CAPABILITY_MATRIX` itself via `it.each` rather than hand-written per capability — the
  * same "parsed/derived, not hand-compared" discipline invariant 3 applies to the matrix's
  * CONTENT applied here to the TEST COVERAGE: a hand-written list of 45 `it()` blocks could
@@ -185,7 +185,7 @@ function happyCtx(capability: Capability): { storeId?: string } {
 // Invariant 5 — ⭐ every capability DENIES a role that lacks it. All 38, not a sample.
 // ---------------------------------------------------------------------------------------
 
-describe('invariant 5 — every capability denies a role that lacks it (all 46)', () => {
+describe('invariant 5 — every capability denies a role that lacks it (all 47)', () => {
   const denialCases: { capability: Capability; role: Role }[] = CAPABILITIES.flatMap((capability) =>
     ROLES.filter((role) => !CAPABILITY_MATRIX[capability][role]).map((role) => ({ capability, role })),
   );
@@ -221,7 +221,7 @@ describe('invariant 5 — every capability denies a role that lacks it (all 46)'
     }
   });
 
-  it('every OTHER capability (38 of 46) has a denial case for EVERY role that lacks it, not just one', () => {
+  it('every OTHER capability (39 of 47) has a denial case for EVERY role that lacks it, not just one', () => {
     // Stronger than the letter of invariant 5 ("a role", singular) — proves the sweep
     // below is exhaustive over false cells, not merely non-empty.
     for (const capability of CAPABILITIES) {
@@ -246,7 +246,7 @@ describe('invariant 5 — every capability denies a role that lacks it (all 46)'
 // every "true" matrix cell is actually reachable, not just typed).
 // ---------------------------------------------------------------------------------------
 
-describe('invariant 4 — a role holding the capability, in scope, passes (all 46)', () => {
+describe('invariant 4 — a role holding the capability, in scope, passes (all 47)', () => {
   const positiveCases: { capability: Capability; role: Role }[] = CAPABILITIES.flatMap((capability) =>
     ROLES.filter((role) => CAPABILITY_MATRIX[capability][role]).map((role) => ({ capability, role })),
   );

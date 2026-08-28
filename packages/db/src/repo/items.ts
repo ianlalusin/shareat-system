@@ -18,6 +18,8 @@ import { and, asc, eq, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import {
   items,
+  itemRequests,
+  type ItemRequestStatus,
   type BaseUnit,
   type ItemKind,
   type ItemStatus,
@@ -433,4 +435,256 @@ export async function deleteSupplierItem(
     )
     .returning({ id: supplierItems.id });
   return gone.length > 0;
+}
+
+// -------------------------------------------------------------------------------------
+// ⭐ T-148 — near-duplicate detection, requests, and merge
+// -------------------------------------------------------------------------------------
+
+/**
+ * The similarity floor. Measured against this project's real names before being chosen:
+ *
+ *   3D W/LID    vs 3D W/LID.     1.00   ← my own import created both
+ *   Bean sprout vs Beans Sprout  0.79   ← in v1's live data, kg vs pcs
+ *   Coke 1.5    vs Coke 15       0.55   ← genuinely different, correctly still flagged
+ *   Pork Belly  vs Beef Belly    0.43   ← unrelated, correctly silent
+ *
+ * ⚠️ 0.5 deliberately catches `Coke 1.5`/`Coke 15`. A machine cannot tell a typo from a real
+ * variant, so it hands both to a person — the cost of a false warning is one glance, and the cost
+ * of a missed duplicate is a price history that silently splits in two.
+ */
+export const SIMILARITY_FLOOR = 0.5;
+
+export interface SimilarItem {
+  id: string;
+  name: string;
+  code: string;
+  baseUnit: string;
+  status: string;
+  similarity: number;
+}
+
+/**
+ * Names close enough to `name` to be worth a human's attention.
+ *
+ * ⛔ Advisory only. Nothing in this module blocks on the result or merges on it — `pg_trgm`
+ * cannot distinguish `Coke 1.5` from `Coke 15`, and a system that auto-merged on 0.55 would
+ * destroy real items.
+ */
+export async function findSimilarItems(
+  tx: Tx,
+  orgId: string,
+  name: string,
+  floor = SIMILARITY_FLOOR,
+): Promise<SimilarItem[]> {
+  const rows = (await tx.execute(sql`
+    select id, name, code, base_unit, status, similarity(lower(name), lower(${name})) as sim
+    from items
+    where org_id = ${orgId}
+      and status <> 'merged'
+      and similarity(lower(name), lower(${name})) >= ${floor}
+    order by sim desc
+    limit 10
+  `)) as unknown as Record<string, string>[];
+  return rows.map((r) => ({
+    id: String(r.id),
+    name: String(r.name),
+    code: String(r.code),
+    baseUnit: String(r.base_unit ?? r.baseUnit),
+    status: String(r.status),
+    similarity: Number(r.sim),
+  }));
+}
+
+export interface ItemRequestRow {
+  id: string;
+  orgId: string;
+  name: string;
+  code: string;
+  kind: ItemKind;
+  baseUnit: BaseUnit;
+  reason: string | null;
+  status: ItemRequestStatus;
+  similarWarning: string | null;
+  requestedBy: string;
+  requestedAt: Date;
+  decidedBy: string | null;
+  decidedAt: Date | null;
+  decisionNote: string | null;
+  createdItemId: string | null;
+}
+
+export async function insertItemRequest(
+  tx: Tx,
+  input: {
+    orgId: string;
+    name: string;
+    code: string;
+    kind: ItemKind;
+    baseUnit: BaseUnit;
+    reason: string | null;
+    similarWarning: string | null;
+    requestedBy: string;
+  },
+): Promise<{ id: string }> {
+  const [row] = await tx.insert(itemRequests).values(input).returning({ id: itemRequests.id });
+  return row!;
+}
+
+export async function getItemRequestById(tx: Tx, orgId: string, id: string): Promise<ItemRequestRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(itemRequests)
+    .where(and(eq(itemRequests.id, id), eq(itemRequests.orgId, orgId)))
+    .limit(1);
+  return row as ItemRequestRow | undefined;
+}
+
+export async function listItemRequests(
+  tx: Tx,
+  orgId: string,
+  filter: { status?: ItemRequestStatus } = {},
+): Promise<ItemRequestRow[]> {
+  const conditions = [eq(itemRequests.orgId, orgId)];
+  if (filter.status) conditions.push(eq(itemRequests.status, filter.status));
+  const rows = await tx
+    .select()
+    .from(itemRequests)
+    .where(and(...conditions))
+    .orderBy(asc(itemRequests.requestedAt));
+  return rows as ItemRequestRow[];
+}
+
+export async function decideItemRequest(
+  tx: Tx,
+  orgId: string,
+  id: string,
+  input: { status: 'approved' | 'rejected'; decidedBy: string; decisionNote: string | null; createdItemId: string | null },
+): Promise<void> {
+  const updated = await tx
+    .update(itemRequests)
+    .set({
+      status: input.status,
+      decidedBy: input.decidedBy,
+      decidedAt: sql`now()`,
+      decisionNote: input.decisionNote,
+      createdItemId: input.createdItemId,
+    })
+    .where(and(eq(itemRequests.id, id), eq(itemRequests.orgId, orgId), eq(itemRequests.status, 'requested')))
+    .returning({ id: itemRequests.id });
+  if (updated.length === 0) {
+    throw new Error(`decideItemRequest: request ${id} does not exist or has already been decided`);
+  }
+}
+
+export interface MergeReport {
+  invoiceLines: number;
+  priceListRates: number;
+  supplierLinks: number;
+}
+
+/**
+ * ⭐ Repoint everything that references `loserId` at `winnerId`, then mark the loser merged.
+ *
+ * ⚠️ **Every referencing table must be listed here.** A table added later that references `items`
+ * and is not repointed leaves rows pointing at a merged item — which still resolves, because the
+ * row survives, but silently stops appearing in the winner's history. The FKs are the checklist:
+ * `supplier_invoice_lines`, `price_list_items`, `supplier_items`.
+ *
+ * ⚠️ `supplier_items` needs ON CONFLICT: both items may be linked to the same supplier, and the
+ * unique index would otherwise abort the whole merge. The loser's link is dropped rather than
+ * duplicated.
+ */
+export async function mergeItemInto(
+  tx: Tx,
+  orgId: string,
+  loserId: string,
+  winnerId: string,
+): Promise<MergeReport> {
+  const lines = (await tx.execute(sql`
+    update supplier_invoice_lines set item_id = ${winnerId} where item_id = ${loserId} returning id
+  `)) as unknown as unknown[];
+
+  const rates = (await tx.execute(sql`
+    update price_list_items set item_id = ${winnerId}
+    where org_id = ${orgId} and item_id = ${loserId}
+      and not exists (
+        select 1 from price_list_items w
+        where w.price_list_id = price_list_items.price_list_id and w.item_id = ${winnerId}
+      )
+    returning id
+  `)) as unknown as unknown[];
+  // A rate that would have collided with one the winner already has is dropped, not overwritten:
+  // the winner's own price is the surviving statement of what that item costs.
+  await tx.execute(sql`delete from price_list_items where org_id = ${orgId} and item_id = ${loserId}`);
+
+  const links = (await tx.execute(sql`
+    update supplier_items set item_id = ${winnerId}
+    where org_id = ${orgId} and item_id = ${loserId}
+      and not exists (
+        select 1 from supplier_items w
+        where w.supplier_id = supplier_items.supplier_id and w.item_id = ${winnerId}
+      )
+    returning id
+  `)) as unknown as unknown[];
+  await tx.execute(sql`delete from supplier_items where org_id = ${orgId} and item_id = ${loserId}`);
+
+  await tx.execute(sql`
+    update items set status = 'merged', merged_into_id = ${winnerId}, updated_at = now()
+    where id = ${loserId} and org_id = ${orgId}
+  `);
+
+  return { invoiceLines: lines.length, priceListRates: rates.length, supplierLinks: links.length };
+}
+
+export interface DuplicateCandidate {
+  aId: string;
+  aName: string;
+  aUnit: string;
+  bId: string;
+  bName: string;
+  bUnit: string;
+  similarity: number;
+  /** True when the two are measured differently — merging them is refused until that is fixed. */
+  unitsDiffer: boolean;
+}
+
+/**
+ * ⭐ The standing alert: pairs of LIVE items close enough to be the same thing.
+ *
+ * Ian, 2026-08-28: *"add a small wildcard checker that will check minimal spelling discrepancy and
+ * alert superadmin."* This is that alert as a query — nothing is stored, so it cannot go stale,
+ * and it re-answers itself every time the page loads.
+ *
+ * ⚠️ `a.id < b.id` keeps each pair once. Without it every pair appears twice, mirrored, which
+ * makes a list of six look like twelve problems.
+ */
+export async function findDuplicateCandidates(
+  tx: Tx,
+  orgId: string,
+  floor = SIMILARITY_FLOOR,
+): Promise<DuplicateCandidate[]> {
+  const rows = (await tx.execute(sql`
+    select a.id a_id, a.name a_name, a.base_unit a_unit,
+           b.id b_id, b.name b_name, b.base_unit b_unit,
+           similarity(lower(a.name), lower(b.name)) sim
+    from items a
+    join items b
+      on a.org_id = b.org_id
+     and a.id < b.id
+     and similarity(lower(a.name), lower(b.name)) >= ${floor}
+    where a.org_id = ${orgId} and a.status <> 'merged' and b.status <> 'merged'
+    order by sim desc, a.name asc
+    limit 50
+  `)) as unknown as Record<string, string>[];
+  return rows.map((r) => ({
+    aId: String(r.a_id),
+    aName: String(r.a_name),
+    aUnit: String(r.a_unit),
+    bId: String(r.b_id),
+    bName: String(r.b_name),
+    bUnit: String(r.b_unit),
+    similarity: Number(r.sim),
+    unitsDiffer: String(r.a_unit) !== String(r.b_unit),
+  }));
 }

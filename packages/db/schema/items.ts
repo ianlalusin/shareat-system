@@ -57,7 +57,10 @@ export type BaseUnit = (typeof BASE_UNITS)[number];
 export const PURCHASE_UNITS = [...BASE_UNITS, 'box', 'pack', 'case', 'sack', 'tray', 'dozen'] as const;
 export type PurchaseUnit = (typeof PURCHASE_UNITS)[number];
 
-export const ITEM_STATUSES = ['active', 'inactive'] as const;
+/** ⭐ `merged` is a third state, not a deletion — a merged item keeps pointing at its winner so
+ *  every invoice line that referenced it still resolves, and so the duplicate's existence stays
+ *  visible to whoever investigates a price anomaly later. */
+export const ITEM_STATUSES = ['active', 'inactive', 'merged'] as const;
 export type ItemStatus = (typeof ITEM_STATUSES)[number];
 
 export const items = pgTable(
@@ -74,6 +77,8 @@ export const items = pgTable(
     /** ⭐ The canonical unit every price is normalised to before it is compared. */
     baseUnit: text('base_unit', { enum: BASE_UNITS }).notNull(),
     status: text('status', { enum: ITEM_STATUSES }).notNull().default('active'),
+    /** Set together with `status = 'merged'` — the DB refuses one without the other. */
+    mergedIntoId: uuid('merged_into_id'),
     notes: text('notes'),
     createdBy: uuid('created_by')
       .notNull()
@@ -123,4 +128,43 @@ export const supplierInvoiceLines = pgTable(
     uniqueIndex('supplier_invoice_lines_invoice_line_key').on(t.supplierInvoiceId, t.lineNo),
     index('supplier_invoice_lines_item_idx').on(t.itemId),
   ],
+);
+
+export const ITEM_REQUEST_STATUSES = ['requested', 'approved', 'rejected'] as const;
+export type ItemRequestStatus = (typeof ITEM_REQUEST_STATUSES)[number];
+
+/**
+ * ⭐ Everyone below super-admin ASKS for an item; a super-admin decides. Ian, 2026-08-28.
+ *
+ * Fuzzy matching degrades as a catalogue grows — a 0.5 similarity floor that separates 385 names
+ * cleanly will produce noise at 3,000. A human reviewing every addition does not degrade, which is
+ * why the approval is the strong control and the trigram check is only the assistant that makes
+ * the human's job possible.
+ */
+export const itemRequests = pgTable(
+  'item_requests',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    name: text('name').notNull(),
+    code: text('code').notNull(),
+    kind: text('kind', { enum: ITEM_KINDS }).notNull(),
+    baseUnit: text('base_unit', { enum: BASE_UNITS }).notNull(),
+    reason: text('reason'),
+    status: text('status', { enum: ITEM_REQUEST_STATUSES }).notNull().default('requested'),
+    /** ⚠️ Frozen at request time. Recomputing at approval would answer a different question — the
+     *  catalogue moves — and the approver needs to see what the requester was shown. */
+    similarWarning: text('similar_warning'),
+    requestedBy: uuid('requested_by')
+      .notNull()
+      .references(() => persons.id, { onDelete: 'restrict' }),
+    requestedAt: timestamp('requested_at', { withTimezone: true }).notNull().defaultNow(),
+    decidedBy: uuid('decided_by').references(() => persons.id, { onDelete: 'restrict' }),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    decisionNote: text('decision_note'),
+    createdItemId: uuid('created_item_id').references(() => items.id, { onDelete: 'restrict' }),
+  },
+  (t) => [index('item_requests_org_status_idx').on(t.orgId, t.status)],
 );

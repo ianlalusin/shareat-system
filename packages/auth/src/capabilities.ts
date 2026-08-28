@@ -53,7 +53,7 @@ export const ROLES = ['super_admin', 'admin', 'manager', 'staff'] as const;
 export type Role = (typeof ROLES)[number];
 
 // -----------------------------------------------------------------------------------------
-// The 46 capabilities, exactly as CAPABILITY-MATRIX.md lists them (grep-counted against
+// The 47 capabilities, exactly as CAPABILITY-MATRIX.md lists them (grep-counted against
 // the document, not hand-counted — see the task report: the document's own prose says
 // "36 rows" in two places, but the table itself had 38 entries including the two
 // ⚠️-flagged open cells and the two platform-only rows, and transfer_funds (row 150) is
@@ -92,6 +92,7 @@ export type Capability =
   | 'write_off_receivable'
   // Supplier invoices — T-130
   | 'manage_items'
+  | 'approve_item'
   | 'record_supplier_invoice'
   | 'verify_supplier_invoice'
   | 'void_supplier_invoice'
@@ -145,6 +146,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'record_ar_collection',
   'write_off_receivable',
   'manage_items',
+  'approve_item',
   'record_supplier_invoice',
   'verify_supplier_invoice',
   'void_supplier_invoice',
@@ -216,6 +218,8 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   // Org-wide master data — an item is one thing for the whole org, which is the entire
   // point of T-145 (v1's per-store items are why 187 names exist as separate records).
   manage_items: 'org',
+  // ⭐ T-148. Org-scoped like the item master it governs.
+  approve_item: 'org',
   record_supplier_invoice: 'store',
   verify_supplier_invoice: 'store',
   void_supplier_invoice: 'store',
@@ -301,6 +305,11 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   // capability needed there, since posting has always been the gate that matters.
   // T-145. Master data, same bar as approve_supplier: managers curate what the org buys.
   manage_items: { super_admin: true, admin: true, manager: true, staff: false },
+  // ⭐ T-148, Ian 2026-08-28: "superadmin only can add" an item; everyone else requests it.
+  // ⛔ The ONLY capability in this matrix granted to super_admin alone, and deliberately: an item
+  // is the identity every price, every supplier link and every future OCR match keys on, and a
+  // duplicate identity is not a row to delete afterwards — it is a price history split in two.
+  approve_item: { super_admin: true, admin: false, manager: false, staff: false },
   record_supplier_invoice: { super_admin: true, admin: true, manager: true, staff: true },
   // DECIDED — Ian 2026-08-27: "yes manager verifies receipts."
   verify_supplier_invoice: { super_admin: true, admin: true, manager: true, staff: false },

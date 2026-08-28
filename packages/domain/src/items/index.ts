@@ -9,7 +9,15 @@
  * `costPerUnit` is zero on 71% of its items, which is what a snapshot nobody maintains looks
  * like after a year.
  */
-import { itemsRepo, transaction, type InvoiceLineInput, type Tx } from '@shareat/db';
+import {
+  itemsRepo,
+  transaction,
+  type InvoiceLineInput,
+  type ItemRequestRow,
+  type MergeReport,
+  type SimilarItem,
+  type Tx,
+} from '@shareat/db';
 import type { BaseUnit, ItemKind, PurchaseUnit } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 
@@ -21,9 +29,17 @@ export interface CreateItemInput {
   notes?: string | null;
 }
 
+/**
+ * ⛔ **Super-admin only** (Ian, 2026-08-28). Everyone else calls `requestItem` and waits.
+ *
+ * An item is the identity every price, every supplier link and every future OCR match keys on.
+ * A duplicate is not a row you delete afterwards — it is a price history split in two, invisibly,
+ * until somebody notices the chart is wrong. One person deciding is the strongest control
+ * available, and unlike a similarity threshold it does not degrade as the catalogue grows.
+ */
 export async function createItem(tx: Tx | null, actor: Actor, input: CreateItemInput): Promise<{ id: string }> {
   const run = async (trx: Tx) => {
-    await authorize(trx, actor, 'manage_items', {});
+    await authorize(trx, actor, 'approve_item', {});
     const code = input.code.trim();
     const name = input.name.trim();
     if (!code) throw new Error('createItem: an item needs a code.');
@@ -215,6 +231,186 @@ export async function undeclareSupplierItem(
     await authorize(trx, actor, 'manage_items', {});
     const removed = await itemsRepo.deleteSupplierItem(trx, actor.orgId, input.supplierId, input.itemId);
     return { removed };
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+// -------------------------------------------------------------------------------------
+// ⭐ T-148 — governance: request, approve, merge
+// -------------------------------------------------------------------------------------
+
+/** Renders the similarity hits as one sentence a human can act on. */
+function warningFrom(similar: SimilarItem[]): string | null {
+  if (similar.length === 0) return null;
+  return (
+    'Possible duplicate of ' +
+    similar
+      .map((s) => `"${s.name}" (${s.code}, per ${s.baseUnit}, ${Math.round(s.similarity * 100)}% alike)`)
+      .join('; ')
+  );
+}
+
+export interface RequestItemInput {
+  name: string;
+  code: string;
+  kind: ItemKind;
+  baseUnit: BaseUnit;
+  reason?: string | null;
+}
+
+export interface RequestItemResult {
+  requestId: string;
+  /** Shown to the requester now AND frozen on the request for the approver later. */
+  similarWarning: string | null;
+  similar: SimilarItem[];
+}
+
+/**
+ * Ask for an item. Manager and admin may ask; only a super-admin decides.
+ *
+ * ⚠️ The similarity check WARNS and never blocks — `Coke 1.5` and `Coke 15` are 55% alike and
+ * are genuinely different products. Blocking on that would make the catalogue unusable; showing it
+ * to two people, the requester and then the approver, is what actually prevents the duplicate.
+ */
+export async function requestItem(
+  tx: Tx | null,
+  actor: Actor,
+  input: RequestItemInput,
+): Promise<RequestItemResult> {
+  const run = async (trx: Tx) => {
+    await authorize(trx, actor, 'manage_items', {});
+    const name = input.name.trim();
+    const code = input.code.trim();
+    if (!name) throw new Error('requestItem: an item needs a name people will recognise.');
+    if (!code) throw new Error('requestItem: an item needs a code.');
+
+    const similar = await itemsRepo.findSimilarItems(trx, actor.orgId, name);
+    const similarWarning = warningFrom(similar);
+
+    const { id } = await itemsRepo.insertItemRequest(trx, {
+      orgId: actor.orgId,
+      name,
+      code,
+      kind: input.kind,
+      baseUnit: input.baseUnit,
+      reason: input.reason?.trim() || null,
+      similarWarning,
+      requestedBy: actor.personId,
+    });
+    return { requestId: id, similarWarning, similar };
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/**
+ * ⛔ Super-admin only. Approving MINTS the item in the same transaction, so an approved request
+ * that produced nothing cannot exist — the database refuses that shape outright.
+ */
+export async function approveItemRequest(
+  tx: Tx | null,
+  actor: Actor,
+  input: { requestId: string; note?: string | null },
+): Promise<{ itemId: string }> {
+  const run = async (trx: Tx) => {
+    await authorize(trx, actor, 'approve_item', {});
+    const req = await itemsRepo.getItemRequestById(trx, actor.orgId, input.requestId);
+    if (!req) throw new Error(`approveItemRequest: request ${input.requestId} does not exist.`);
+    if (req.status !== 'requested') {
+      throw new Error(`approveItemRequest: request is already ${req.status}.`);
+    }
+    const { id: itemId } = await itemsRepo.insertItem(trx, {
+      orgId: actor.orgId,
+      code: req.code,
+      name: req.name,
+      kind: req.kind,
+      baseUnit: req.baseUnit,
+      notes: `Approved from item request ${req.id}.`,
+      createdBy: actor.personId,
+    });
+    await itemsRepo.decideItemRequest(trx, actor.orgId, req.id, {
+      status: 'approved',
+      decidedBy: actor.personId,
+      decisionNote: input.note?.trim() || null,
+      createdItemId: itemId,
+    });
+    return { itemId };
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+export async function rejectItemRequest(
+  tx: Tx | null,
+  actor: Actor,
+  input: { requestId: string; note: string },
+): Promise<void> {
+  const run = async (trx: Tx) => {
+    await authorize(trx, actor, 'approve_item', {});
+    const note = input.note.trim();
+    // A rejection with no reason teaches the requester nothing, and they will simply ask again.
+    if (!note) throw new Error('rejectItemRequest: say why, so the requester knows what to do instead.');
+    await itemsRepo.decideItemRequest(trx, actor.orgId, input.requestId, {
+      status: 'rejected',
+      decidedBy: actor.personId,
+      decisionNote: note,
+      createdItemId: null,
+    });
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/**
+ * ⭐ Merge a duplicate into the item it should have been.
+ *
+ * ⛔ Super-admin only, and irreversible in practice: every invoice line, price-list rate and
+ * supplier link that named the loser now names the winner, and the two histories become one.
+ *
+ * ⚠️ The loser's row SURVIVES, marked `merged` and pointing at the winner. Deleting it would
+ * break the FKs that make the repoint safe, and would erase the fact that the duplicate ever
+ * existed — the first thing someone investigating a price anomaly needs to see.
+ */
+export async function mergeItems(
+  tx: Tx | null,
+  actor: Actor,
+  input: { loserId: string; winnerId: string },
+): Promise<MergeReport> {
+  const run = async (trx: Tx) => {
+    await authorize(trx, actor, 'approve_item', {});
+    if (input.loserId === input.winnerId) throw new Error('mergeItems: an item cannot merge into itself.');
+
+    const loser = await itemsRepo.getItemById(trx, actor.orgId, input.loserId);
+    const winner = await itemsRepo.getItemById(trx, actor.orgId, input.winnerId);
+    if (!loser) throw new Error(`mergeItems: item ${input.loserId} does not exist.`);
+    if (!winner) throw new Error(`mergeItems: item ${input.winnerId} does not exist.`);
+    if (loser.status === 'merged') throw new Error(`mergeItems: ${loser.name} is already merged.`);
+    if (winner.status === 'merged') {
+      throw new Error(`mergeItems: ${winner.name} is itself merged — merge into the surviving item.`);
+    }
+    // ⛔ Different base units means these are not the same thing, or one of them is wrong. Either
+    // way, merging would silently reinterpret every past price: in v1's real data `Bean sprout` is
+    // kg and `Beans Sprout` is pcs, and combining those turns the ratio into a number with no
+    // meaning. Refuse, and make someone fix the unit first.
+    if (loser.baseUnit !== winner.baseUnit) {
+      throw new Error(
+        `mergeItems: ${loser.name} is measured in ${loser.baseUnit} and ${winner.name} in ` +
+          `${winner.baseUnit}. Fix the unit on one of them first — merging now would make every ` +
+          'past price incomparable.',
+      );
+    }
+    return itemsRepo.mergeItemInto(trx, actor.orgId, input.loserId, input.winnerId);
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/** What the super-admin review queue reads. Any manager may LOOK; only a super-admin decides. */
+export async function pendingItemRequests(tx: Tx | null, actor: Actor): Promise<ItemRequestRow[]> {
+  const run = async (trx: Tx) => {
+    await authorize(trx, actor, 'manage_items', {});
+    return itemsRepo.listItemRequests(trx, actor.orgId, { status: 'requested' });
   };
   if (tx) return run(tx);
   return transaction(run);

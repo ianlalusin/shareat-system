@@ -23,11 +23,15 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../db/seed/expense-categories';
 import { itemsRepo, closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
-import type { Actor } from '@shareat/auth';
+import { AuthorizationError, type Actor } from '@shareat/auth';
 import {
+  approveItemRequest,
   createItem,
   createSupplier,
   declareSupplierItem,
+  mergeItems,
+  rejectItemRequest,
+  requestItem,
   recordInvoice,
   undeclareSupplierItem,
   verifyInvoice,
@@ -60,6 +64,14 @@ async function fixture(hint: string) {
     insert into stores (org_id, code, name) values (${orgId}, ${uid(hint)}, ${`Store ${hint}`}) returning id`;
   const [manager] = await sql<{ id: string }[]>`
     insert into persons (org_id, display_name) values (${orgId}, 'Manager') returning id`;
+  const [superAdmin] = await sql<{ id: string }[]>`
+    insert into persons (org_id, display_name) values (${orgId}, 'Super') returning id`;
+  const [admin] = await sql<{ id: string }[]>`
+    insert into persons (org_id, display_name) values (${orgId}, 'Admin') returning id`;
+  await sql`insert into person_roles (person_id, org_id, role) values (${superAdmin!.id}, ${orgId}, 'super_admin')`;
+  await sql`insert into person_roles (person_id, org_id, role) values (${admin!.id}, ${orgId}, 'admin')`;
+  await sql`insert into person_store_scope (person_id, store_id) values (${superAdmin!.id}, ${store!.id})`;
+  await sql`insert into person_store_scope (person_id, store_id) values (${admin!.id}, ${store!.id})`;
   const [staff] = await sql<{ id: string }[]>`
     insert into persons (org_id, display_name) values (${orgId}, 'Staff') returning id`;
   await sql`insert into person_roles (person_id, org_id, role) values (${manager!.id}, ${orgId}, 'manager')`;
@@ -72,6 +84,7 @@ async function fixture(hint: string) {
   return {
     orgId, storeId: store!.id, managerId: manager!.id, staffId: staff!.id,
     manager: actor(orgId, manager!.id), staff: actor(orgId, staff!.id),
+    superAdmin: actor(orgId, superAdmin!.id), admin: actor(orgId, admin!.id),
     supplierId: supplier.id,
   };
 }
@@ -108,7 +121,7 @@ async function invoiceWithLines(
 
 async function porkBelly(f: Fixture): Promise<string> {
   const { id } = await asOrg(f.orgId, (tx) =>
-    createItem(tx, f.manager, { code: uid('PORK'), name: `Pork belly ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg' }),
+    createItem(tx, f.superAdmin, { code: uid('PORK'), name: `Pork belly ${uid('n')}`, kind: 'raw_material', baseUnit: 'kg' }),
   );
   return id;
 }
@@ -261,11 +274,11 @@ describe('item identity', () => {
   it('⛔ two items cannot share a name differing only by case', async () => {
     const f = await fixture('dupe');
     await asOrg(f.orgId, (tx) =>
-      createItem(tx, f.manager, { code: 'PB-1', name: 'Pork Belly', kind: 'raw_material', baseUnit: 'kg' }),
+      createItem(tx, f.superAdmin, { code: 'PB-1', name: 'Pork Belly', kind: 'raw_material', baseUnit: 'kg' }),
     );
     await expect(
       asOrg(f.orgId, (tx) =>
-        createItem(tx, f.manager, { code: 'PB-2', name: 'pork belly', kind: 'raw_material', baseUnit: 'kg' }),
+        createItem(tx, f.superAdmin, { code: 'PB-2', name: 'pork belly', kind: 'raw_material', baseUnit: 'kg' }),
       ),
       '187 duplicate names across v1 stores is exactly how a price chart stops summing',
     ).rejects.toThrow();
@@ -276,7 +289,7 @@ describe('item identity', () => {
     await expect(
       asOrg(f.orgId, (tx) =>
         // @ts-expect-error — 'box' is deliberately absent from BaseUnit; the DB refuses it too.
-        createItem(tx, f.manager, { code: 'BX-1', name: 'Boxed thing', kind: 'supply', baseUnit: 'box' }),
+        createItem(tx, f.superAdmin, { code: 'BX-1', name: 'Boxed thing', kind: 'supply', baseUnit: 'box' }),
       ),
     ).rejects.toThrow();
   });
@@ -285,7 +298,7 @@ describe('item identity', () => {
     const a = await fixture('orgA');
     const b = await fixture('orgB');
     await asOrg(a.orgId, (tx) =>
-      createItem(tx, a.manager, { code: 'SECRET', name: 'Org A secret item', kind: 'retail', baseUnit: 'pcs' }),
+      createItem(tx, a.superAdmin, { code: 'SECRET', name: 'Org A secret item', kind: 'retail', baseUnit: 'pcs' }),
     );
     const seenByB = await asOrg(b.orgId, (tx) => itemsRepo.listItems(tx, b.orgId, { includeInactive: true }));
     expect(seenByB.map((i) => i.name)).not.toContain('Org A secret item');
@@ -311,7 +324,9 @@ describe('the catalogue: who sells what', () => {
     expect(cat[0]!.timesBilled).toBe(1);
 
     // ⛔ The whole point: nothing was stored. The link is a query over the lines.
-    const [row] = await sql<{ n: number }[]>`select count(*)::int n from supplier_items`;
+    // ⚠️ Scoped to THIS org: sibling tests in this file create declarations, and a global count
+    // would fail for their reasons rather than this test's.
+    const [row] = await sql<{ n: number }[]>`select count(*)::int n from supplier_items where org_id = ${f.orgId}`;
     expect(row!.n, 'an observed link must not be stored — that is DEF-075 again').toBe(0);
   });
 
@@ -401,5 +416,150 @@ describe('the catalogue: who sells what', () => {
     await asOrg(a.orgId, (tx) => declareSupplierItem(tx, a.manager, { supplierId: a.supplierId, itemId: itemA }));
     const seenByB = await asOrg(b.orgId, (tx) => itemsRepo.itemsForSupplier(tx, b.orgId, a.supplierId));
     expect(seenByB).toHaveLength(0);
+  });
+});
+
+// =========================================================================================
+// T-148 — governance: nearly impossible to duplicate an item
+// =========================================================================================
+
+describe('it is hard to duplicate an item on purpose, and harder by accident', () => {
+  it('a MANAGER cannot create an item at all — they must ask', async () => {
+    const f = await fixture('nocreate');
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        createItem(tx, f.manager, { code: 'X-1', name: 'Sneaky item', kind: 'supply', baseUnit: 'pcs' }),
+      ),
+    ).rejects.toThrow(AuthorizationError);
+  });
+
+  it('the trigram check flags v1 real duplicates, and stays quiet on unrelated names', async () => {
+    const f = await fixture('trigram');
+    await asOrg(f.orgId, (tx) =>
+      createItem(tx, f.superAdmin, { code: 'BEAN-SPROUT', name: 'Bean sprout', kind: 'raw_material', baseUnit: 'kg' }),
+    );
+
+    // The pair that genuinely exists in v1 live data, at two different units.
+    const dupe = await asOrg(f.orgId, (tx) =>
+      requestItem(tx, f.manager, { name: 'Beans Sprout', code: 'BEANS-SPROUT', kind: 'raw_material', baseUnit: 'pcs' }),
+    );
+    expect(dupe.similar).toHaveLength(1);
+    expect(dupe.similarWarning).toMatch(/Bean sprout/);
+
+    // An unrelated name must NOT be flagged, or the warning becomes noise people click past.
+    const fine = await asOrg(f.orgId, (tx) =>
+      requestItem(tx, f.manager, { name: 'Charcoal', code: 'CHARCOAL', kind: 'supply', baseUnit: 'kg' }),
+    );
+    expect(fine.similar).toHaveLength(0);
+    expect(fine.similarWarning).toBeNull();
+  });
+
+  it('a request approved by a super-admin mints the item and links the two', async () => {
+    const f = await fixture('approve');
+    const req = await asOrg(f.orgId, (tx) =>
+      requestItem(tx, f.manager, { name: 'Charcoal', code: 'CHARCOAL', kind: 'supply', baseUnit: 'kg' }),
+    );
+    const { itemId } = await asOrg(f.orgId, (tx) =>
+      approveItemRequest(tx, f.superAdmin, { requestId: req.requestId }),
+    );
+    const item = await asOrg(f.orgId, (tx) => itemsRepo.getItemById(tx, f.orgId, itemId));
+    expect(item!.name).toBe('Charcoal');
+    const [row] = await sql`select status, created_item_id from item_requests where id = ${req.requestId}`;
+    expect(row!.status).toBe('approved');
+    expect(row!.created_item_id).toBe(itemId);
+  });
+
+  it('an ADMIN cannot approve — only a super-admin', async () => {
+    const f = await fixture('adminapprove');
+    const req = await asOrg(f.orgId, (tx) =>
+      requestItem(tx, f.manager, { name: 'Charcoal', code: 'CHARCOAL', kind: 'supply', baseUnit: 'kg' }),
+    );
+    await expect(
+      asOrg(f.orgId, (tx) => approveItemRequest(tx, f.admin, { requestId: req.requestId })),
+    ).rejects.toThrow(AuthorizationError);
+  });
+
+  it('a rejection needs a reason, and one request cannot be decided twice', async () => {
+    const f = await fixture('reject');
+    const req = await asOrg(f.orgId, (tx) =>
+      requestItem(tx, f.manager, { name: 'Charcoal', code: 'CHARCOAL', kind: 'supply', baseUnit: 'kg' }),
+    );
+    await expect(
+      asOrg(f.orgId, (tx) => rejectItemRequest(tx, f.superAdmin, { requestId: req.requestId, note: '  ' })),
+    ).rejects.toThrow(/say why/);
+
+    await asOrg(f.orgId, (tx) =>
+      rejectItemRequest(tx, f.superAdmin, { requestId: req.requestId, note: 'We already have Uling.' }),
+    );
+    await expect(
+      asOrg(f.orgId, (tx) => approveItemRequest(tx, f.superAdmin, { requestId: req.requestId })),
+    ).rejects.toThrow(/already rejected/);
+  });
+});
+
+describe('merge — when two slipped through anyway', () => {
+  it('repoints invoice lines, combines both histories, and leaves a trail', async () => {
+    const f = await fixture('merge');
+    const winner = await asOrg(f.orgId, (tx) =>
+      createItem(tx, f.superAdmin, { code: 'PORK-W', name: `Pork belly W ${uid('w')}`, kind: 'raw_material', baseUnit: 'kg' }),
+    );
+    const loser = await asOrg(f.orgId, (tx) =>
+      createItem(tx, f.superAdmin, { code: 'PORK-L', name: `Pork Belly L ${uid('l')}`, kind: 'raw_material', baseUnit: 'kg' }),
+    );
+
+    await invoiceWithLines(f, '2026-01-10', '2900.00', [
+      { itemId: winner.id, quantity: '10', purchaseUnit: 'kg', conversionFactor: '1', unitPrice: '290', lineTotal: '2900.00' },
+    ]);
+    await invoiceWithLines(f, '2026-02-10', '3100.00', [
+      { itemId: loser.id, quantity: '10', purchaseUnit: 'kg', conversionFactor: '1', unitPrice: '310', lineTotal: '3100.00' },
+    ]);
+
+    const report = await asOrg(f.orgId, (tx) =>
+      mergeItems(tx, f.superAdmin, { loserId: loser.id, winnerId: winner.id }),
+    );
+    expect(report.invoiceLines).toBe(1);
+
+    // One history now, with both prices in it.
+    const history = await asOrg(f.orgId, (tx) => itemsRepo.priceHistory(tx, f.orgId, winner.id));
+    expect(history.map((h) => h.basePrice)).toEqual(['290.0000', '310.0000']);
+
+    // The loser survives, marked and pointing at the winner — not deleted.
+    const [row] = await sql`select status, merged_into_id from items where id = ${loser.id}`;
+    expect(row!.status).toBe('merged');
+    expect(row!.merged_into_id).toBe(winner.id);
+
+    // And it disappears from the live catalogue.
+    const live = await asOrg(f.orgId, (tx) => itemsRepo.listItems(tx, f.orgId, {}));
+    expect(live.map((i) => i.id)).not.toContain(loser.id);
+  });
+
+  it('refuses to merge items measured differently — the v1 case that breaks every price', async () => {
+    const f = await fixture('mergeunit');
+    const kg = await asOrg(f.orgId, (tx) =>
+      createItem(tx, f.superAdmin, { code: 'BS-KG', name: 'Bean sprout', kind: 'raw_material', baseUnit: 'kg' }),
+    );
+    const pcs = await asOrg(f.orgId, (tx) =>
+      createItem(tx, f.superAdmin, { code: 'BS-PCS', name: 'Beans Sprout', kind: 'raw_material', baseUnit: 'pcs' }),
+    );
+    await expect(
+      asOrg(f.orgId, (tx) => mergeItems(tx, f.superAdmin, { loserId: pcs.id, winnerId: kg.id })),
+      'kg and pcs cannot be one series — fix the unit first',
+    ).rejects.toThrow(/Fix the unit on one of them first/);
+  });
+
+  it('an item cannot merge into itself, and a manager cannot merge at all', async () => {
+    const f = await fixture('mergeguards');
+    const a = await asOrg(f.orgId, (tx) =>
+      createItem(tx, f.superAdmin, { code: 'A-1', name: `Thing A ${uid('t')}`, kind: 'supply', baseUnit: 'pcs' }),
+    );
+    await expect(
+      asOrg(f.orgId, (tx) => mergeItems(tx, f.superAdmin, { loserId: a.id, winnerId: a.id })),
+    ).rejects.toThrow(/cannot merge into itself/);
+    const b = await asOrg(f.orgId, (tx) =>
+      createItem(tx, f.superAdmin, { code: 'B-1', name: `Thing B ${uid('t')}`, kind: 'supply', baseUnit: 'pcs' }),
+    );
+    await expect(
+      asOrg(f.orgId, (tx) => mergeItems(tx, f.manager, { loserId: b.id, winnerId: a.id })),
+    ).rejects.toThrow(AuthorizationError);
   });
 });

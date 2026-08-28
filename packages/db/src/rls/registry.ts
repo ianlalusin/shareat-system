@@ -327,6 +327,12 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'a leak of another org’s purchasing economics.',
   },
 
+  item_requests: {
+    scope: 'org_column',
+    reason:
+      'Pending and decided item requests, including the near-duplicate warnings shown to the ' +
+      'approver. Org-scoped like the item master it governs.',
+  },
   supplier_items: {
     scope: 'org_column',
     reason:

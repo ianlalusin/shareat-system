@@ -84,7 +84,10 @@ export type { ArChargeRow, ArCollectionRow, ArOpenItem, ArPosition, ArAgingBucke
 export { AR_DOC_STATUSES } from '../schema/ar';
 export type { ArDocStatus } from '../schema/ar';
 export * as itemsRepo from './repo/items';
-export type { CatalogueEntry } from './repo/items';
+export type { CatalogueEntry, SimilarItem, ItemRequestRow, MergeReport, DuplicateCandidate } from './repo/items';
+export { SIMILARITY_FLOOR } from './repo/items';
+export { ITEM_REQUEST_STATUSES } from '../schema/items';
+export type { ItemRequestStatus } from '../schema/items';
 export { CATALOGUE_SOURCES } from '../schema/supplier-items';
 export type { CatalogueSource } from '../schema/supplier-items';
 export type {

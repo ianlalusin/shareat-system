@@ -351,6 +351,13 @@
       "when": 1790307107084,
       "tag": "0049_t131_accounts_receivable",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1790393507084,
+      "tag": "0050_t148_item_governance",
+      "breakpoints": true
     }
   ]
 }

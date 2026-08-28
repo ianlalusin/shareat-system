@@ -402,6 +402,18 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'it rebuilds from the first post-cutover invoice.',
   },
 
+  item_requests: {
+    // ⭐ keep, NOT purge — and this is the one place an approval record survives the cutover.
+    // `cash_requests` purges because the money it moved is replaced by the opening balance; an
+    // ITEM is not replaced, it carries forward. Purging the request would leave a kept item with
+    // no record of who authorised that identity, which is the whole point of making a super-admin
+    // approve it.
+    class: 'keep',
+    reason:
+      'The provenance of a kept item: who asked for it, who approved it, and what near-duplicate ' +
+      'warning they were shown at the time. The item survives the cutover, so its authorisation ' +
+      'must too — otherwise the control leaves no trace.',
+  },
   supplier_items: {
     // ⭐ keep, like `items`: a declaration that a supplier CAN sell us something carries no
     // balance and is not invalidated by the ledger restarting. ⚠️ The observed half of the
