@@ -334,6 +334,24 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'purchasing volume and unit economics, so it is org-scoped like items and suppliers.',
   },
 
+  ar_charges: {
+    scope: 'org_column',
+    reason: 'What a customer owes this org. A franchise reading another’s would learn its wholesale book.',
+  },
+  ar_collections: {
+    scope: 'org_column',
+    reason: 'What was collected, when, into which account — org-scoped like every posting document.',
+  },
+  ar_write_offs: {
+    scope: 'org_column',
+    reason: 'Which debts an org gave up on. Commercially sensitive, and a fraud signal if readable across orgs.',
+  },
+  ar_collection_allocations: {
+    scope: 'derived',
+    via: 'exists (select 1 from ar_collections c where c.id = ar_collection_allocations.ar_collection_id and c.org_id = app_current_org())',
+    reason: 'No org_id of its own — reachable through the collection it belongs to, same pattern as ap_payment_allocations.',
+  },
+
   etl_runs: { scope: 'system_only', reason: 'ETL machinery. Never reachable by a tenant or a customer — only the migrator, crons and the audit.' },
   etl_source_documents: {
     scope: 'system_only',

@@ -344,6 +344,13 @@
       "when": 1790220707084,
       "tag": "0048_t147_supplier_item_catalogue",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1790307107084,
+      "tag": "0049_t131_accounts_receivable",
+      "breakpoints": true
     }
   ]
 }

@@ -64,6 +64,7 @@ they need weekly, the boundary is wrong.
 | `override_credit_limit` | store | ✅ | ✅ | ✅ | ✗ | Discovery 19 §2 — one gate, with an override. Every use logged |
 | `record_ap_payment` | store | ✅ | ✅ | ✅ | ✗ | |
 | `record_ar_collection` | store | ✅ | ✅ | ✅ | ✗ | |
+| `write_off_receivable` | store | ✅ | ✅ | ✗ | ✗ | T-131. **Admin only, not manager** — v1 gates write-off on `isAdmin` while voiding is manager-level, and that gap is deliberate. Also refused for whoever created the charge: writing off your own receivable is how a shortfall is buried |
 | `manage_items` | org | ✅ | ✅ | ✅ | ✗ | T-145. The item master is org-wide master data — v1's per-store items are why the same product exists as 187 duplicate records. Same bar as `approve_supplier` |
 | `record_supplier_invoice` | store | ✅ | ✅ | ✅ | ✅ | T-130. Logging a pending invoice moves no money — same bar as `create_expense` |
 | `verify_supplier_invoice` | store | ✅ | ✅ | ✅ | ✗ | T-130. Ian, 2026-08-27: *"yes manager verifies receipts."* The verification IS the approval — recording the expense against a verified invoice still needs `approve_expense` too, so only a manager can complete the whole flow |

@@ -413,6 +413,29 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'cutover falsifies. Re-declaring them by hand would be pointless work.',
   },
 
+  // ---- T-131: accounts receivable -----------------------------------------------------
+  ar_charges: {
+    class: 'purge',
+    reason:
+      'A source document that posts into the ledger — same class as expenses and ' +
+      'supplier_invoices. Replaced wholesale by the 2027-01-01 opening entry (row 106), which ' +
+      'carries AR as ONE balance per customer rather than a replay of individual charges.',
+  },
+  ar_collections: {
+    class: 'purge',
+    reason: 'Activity, not configuration. The customer survives the cutover; the payment does not.',
+  },
+  ar_collection_allocations: {
+    class: 'purge',
+    reason: 'Child rows of ar_collections, naming which charge a collection settled. Children before parents (PURGE_ORDER_HINT).',
+  },
+  ar_write_offs: {
+    class: 'purge',
+    reason:
+      'A posting document like any other. ⚠️ The bad-debt EXPENSE it recognised is history that ' +
+      'belongs to the closed year; nothing about it should survive into the opening balance.',
+  },
+
   // ---- ETL: purged, but LATER ---------------------------------------------------------
   etl_source_documents: {
     class: 'purge',
@@ -451,6 +474,10 @@ export const PURGE_ORDER_HINT: readonly string[] = [
   'sessions',
   'sales_day_channels',
   'sales_days',
+  'ar_collection_allocations',
+  'ar_write_offs',
+  'ar_collections',
+  'ar_charges',
   'ap_payment_allocations',
   'supplier_invoice_lines',
   'expense_payments',

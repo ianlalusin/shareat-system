@@ -53,7 +53,7 @@ export const ROLES = ['super_admin', 'admin', 'manager', 'staff'] as const;
 export type Role = (typeof ROLES)[number];
 
 // -----------------------------------------------------------------------------------------
-// The 45 capabilities, exactly as CAPABILITY-MATRIX.md lists them (grep-counted against
+// The 46 capabilities, exactly as CAPABILITY-MATRIX.md lists them (grep-counted against
 // the document, not hand-counted — see the task report: the document's own prose says
 // "36 rows" in two places, but the table itself had 38 entries including the two
 // ⚠️-flagged open cells and the two platform-only rows, and transfer_funds (row 150) is
@@ -89,6 +89,7 @@ export type Capability =
   | 'override_credit_limit'
   | 'record_ap_payment'
   | 'record_ar_collection'
+  | 'write_off_receivable'
   // Supplier invoices — T-130
   | 'manage_items'
   | 'record_supplier_invoice'
@@ -142,6 +143,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'override_credit_limit',
   'record_ap_payment',
   'record_ar_collection',
+  'write_off_receivable',
   'manage_items',
   'record_supplier_invoice',
   'verify_supplier_invoice',
@@ -207,6 +209,9 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   override_credit_limit: 'store',
   record_ap_payment: 'store',
   record_ar_collection: 'store',
+  // ⭐ T-131. Admin-only, as v1 has it — stricter than voiding, because a write-off makes a
+  // debt disappear rather than correcting a mistake.
+  write_off_receivable: 'store',
   // Logging a pending invoice moves no money — same bar as create_expense.
   // Org-wide master data — an item is one thing for the whole org, which is the entire
   // point of T-145 (v1's per-store items are why 187 names exist as separate records).
@@ -283,6 +288,9 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   override_credit_limit: { super_admin: true, admin: true, manager: true, staff: false },
   record_ap_payment: { super_admin: true, admin: true, manager: true, staff: false },
   record_ar_collection: { super_admin: true, admin: true, manager: true, staff: false },
+  // ⛔ NOT manager. v1 gates write-off on isAdmin while voiding is manager-level, and that gap is
+  // deliberate: declaring money uncollectible is how a shortfall is buried.
+  write_off_receivable: { super_admin: true, admin: true, manager: false, staff: false },
   // T-130. Logging a pending invoice is document capture, not money movement — same bar as
   // create_expense (staff too). Recording the actual EXPENSE against a verified invoice still
   // requires approve_expense (manager+) via createExpense+approveExpense together — no separate

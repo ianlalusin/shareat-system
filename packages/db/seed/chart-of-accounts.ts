@@ -184,8 +184,11 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
   leaf('2130', 'Reimbursements payable to employees', 'liability', 'credit', '2000', {
     requiresParty: true,
   }), // staff_reimbursable__{staffId} — T-118 party_type=employee
+  // ⭐ T-131: party-required. A store credit that does not say WHOSE credit it is cannot be
+  // paid back to anyone — v1 had a boolean flag and no balance at all behind it.
   leaf('2140', 'Customer store credits payable', 'liability', 'credit', '2000', {
     legacyCode: 'others__store_credits',
+    requiresParty: true,
   }),
   leaf('2145', 'Unredeemed vouchers', 'liability', 'credit', '2000', { status: 'reserved' }),
   // 🆕 2026-08-25 (T-123, bible row 135). ⭐ A FLOAT, and the word matters.

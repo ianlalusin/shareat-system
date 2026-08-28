@@ -162,7 +162,7 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // into the enforcement without also being written into the document people actually
     // read, and vice versa.
     const { rows } = parseCapabilityMatrixDoc();
-    expect(rows.length).toBe(45);
+    expect(rows.length).toBe(46);
   });
 
   it('has no duplicate capability names', () => {
@@ -233,10 +233,10 @@ describe('invariant 1 — every capability has an explicit decision for all four
     expect(problems).toEqual([]);
   });
 
-  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 45 capabilities', () => {
-    expect(CAPABILITIES.length).toBe(45);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(45);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(45);
+  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 46 capabilities', () => {
+    expect(CAPABILITIES.length).toBe(46);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(46);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(46);
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));
   });
@@ -290,6 +290,13 @@ describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', (
         'manage_prepaid_items',
         'run_amortisation',
         'manage_chart_of_accounts',
+        // ⭐ T-131's `write_off_receivable` joined the same way, and enrolling it IS the decision
+        // this pinned list exists to force. ⚠️ It is the highest-risk action in AR — it makes a
+        // debt disappear — so lending it to a manager deserves the pause. Enrolled because an org
+        // with no admin still has uncollectible debts, and the alternative is a receivable nobody
+        // can ever clear. ⛔ The second control still holds regardless of role: `writeOffCharge`
+        // refuses whoever created the charge, so a lone manager can never write off their own.
+        'write_off_receivable',
       ].sort(),
     );
   });

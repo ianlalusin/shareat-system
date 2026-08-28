@@ -738,9 +738,15 @@ const REQUIRES_PARTY_EXPECTED_CODES = [
   // deliberately stay party-FREE: payroll accrues into them and statutory_remittance settles them,
   // both without a party, and recording the same debt here too would count it twice.
   '2500', // Accrued and other liabilities -> liability
+  // ⭐ T-131. ⛔ A customer store credit that does not say WHOSE credit it is cannot be paid back
+  // to anyone. v1 had a boolean called `overageAsStoreCredit` and NO balance behind it anywhere
+  // (`grep storeCredit` -> zero hits; used 0 times in 512 collections), so an overpayment simply
+  // vanished into a flag. Making this party-required means the T-118 trigger refuses a surplus
+  // with no customer, instead of trusting the service layer to remember.
+  '2140', // Customer store credits payable -> customer
 ];
 
-describe('T-118 invariant 7 (+ ADR-010) — exactly the thirteen control accounts are requires_party = true; every other account is false', () => {
+describe('T-118 invariant 7 (+ ADR-010) — exactly the fourteen control accounts are requires_party = true; every other account is false', () => {
   it('REQUIRES_PARTY_CODES matches the Contract §2 table exactly', () => {
     expect(new Set(REQUIRES_PARTY_CODES)).toEqual(new Set(REQUIRES_PARTY_EXPECTED_CODES));
   });
