@@ -24,7 +24,15 @@ export async function register(): Promise<void> {
   // Null means no bucket is configured — development and tests, where the in-memory driver is
   // correct and `resolveStorageDriver()` supplies it on its own.
   const config = firebaseConfigFromEnv();
-  if (!config) return;
+  if (!config) {
+    console.log('[storage] no FIREBASE_STORAGE_BUCKET — using the in-memory driver (dev/test).');
+    return;
+  }
 
   setStorageDriver(firebaseStorageDriver(config));
+  // ⭐ Say so. A driver that fails to install is otherwise invisible until someone tries to upload
+  // a receipt and gets a 500 — which is exactly how this was found (browser smoketest, 2026-08-28).
+  // T-140's scheduler follows the same rule: a step that reports nothing cannot be distinguished
+  // from one that never ran.
+  console.log(`[storage] Firebase driver installed for bucket ${config.bucket}.`);
 }

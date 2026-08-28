@@ -63,11 +63,35 @@ export function inMemoryDriver(): StorageDriver & { readonly files: Map<string, 
   };
 }
 
-let configured: StorageDriver | null = null;
+/**
+ * ⛔ **Held on `globalThis`, not in a module variable, and that is not paranoia.**
+ *
+ * A plain `let` here was installed correctly at boot and still invisible at upload time. Next
+ * compiles `instrumentation.ts` and a server action into SEPARATE module graphs, so a
+ * transpiled workspace package like this one is instantiated twice in one process: `register()`
+ * set the driver on its copy, `uploadFile()` read `null` from the other, and the upload failed
+ * with "no driver is installed" while the boot log said it had been.
+ *
+ * ⚠️ Found by uploading a receipt in a browser (2026-08-28). Every gate was green — typecheck,
+ * 602 unit, 1055 integration, build — because the integration tests install the in-memory driver
+ * directly and therefore only ever touch ONE instance. This class of bug is invisible to a test
+ * suite that does not cross a bundler boundary.
+ *
+ * `Symbol.for` uses the process-wide symbol registry, so every instance resolves the same slot.
+ */
+const DRIVER_SLOT = Symbol.for('shareat.storage.driver');
 
-/** Test seam — lets an integration test install the in-memory driver. */
+interface DriverHolder {
+  [DRIVER_SLOT]?: StorageDriver | null;
+}
+
+function holder(): DriverHolder {
+  return globalThis as unknown as DriverHolder;
+}
+
+/** Installs the driver process-wide. Called at server startup, and by tests. */
 export function setStorageDriver(driver: StorageDriver | null): void {
-  configured = driver;
+  holder()[DRIVER_SLOT] = driver;
 }
 
 /**
@@ -75,6 +99,7 @@ export function setStorageDriver(driver: StorageDriver | null): void {
  * to memory would mean a receipt "uploaded" successfully and then vanishing with the process.
  */
 export function resolveStorageDriver(): StorageDriver {
+  const configured = holder()[DRIVER_SLOT];
   if (configured) return configured;
   if (process.env.FIREBASE_STORAGE_BUCKET) {
     throw new Error(
@@ -83,6 +108,7 @@ export function resolveStorageDriver(): StorageDriver {
         'would accept a receipt and then lose it.',
     );
   }
-  configured = inMemoryDriver();
-  return configured;
+  const memory = inMemoryDriver();
+  holder()[DRIVER_SLOT] = memory;
+  return memory;
 }

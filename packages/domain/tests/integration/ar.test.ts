@@ -26,7 +26,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../db/seed/expense-categories';
 import { arRepo, closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
-import { AuthorizationError, type Actor } from '@shareat/auth';
+import type { Actor } from '@shareat/auth';
 import { createCustomer, recordCharge, recordCollection, voidCollection, writeOffCharge } from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
@@ -303,14 +303,24 @@ describe('voiding, and write-off', () => {
     );
   });
 
-  it('⛔ a manager cannot write off at all — admin only, stricter than voiding', async () => {
+  it('⭐ a MANAGER may write off (Ian, 2026-08-28) — but still not one they recorded', async () => {
     const f = await fixture('mgrwo');
+    // Recorded by an admin, so the manager is a genuine second pair of eyes.
     const { chargeId } = await charge(f, '1000.00', { by: f.admin });
+    await asOrg(f.orgId, (tx) =>
+      writeOffCharge(tx, f.manager, { chargeId, amount: '500.00', reason: 'Partly uncollectible' }),
+    );
+    const open = await asOrg(f.orgId, (tx) => arRepo.openItems(tx, f.orgId, f.customerId, f.storeId));
+    expect(open[0]!.outstanding).toBe('500.00');
+
+    // ⛔ And the control that actually matters still bites: the manager cannot write off a charge
+    // they recorded themselves, whatever their rank.
+    const own = await charge(f, '800.00', { by: f.manager });
     await expect(
       asOrg(f.orgId, (tx) =>
-        writeOffCharge(tx, f.manager, { chargeId, amount: '500.00', reason: 'Give up' }),
+        writeOffCharge(tx, f.manager, { chargeId: own.chargeId, amount: '800.00', reason: 'Mine' }),
       ),
-    ).rejects.toThrow(AuthorizationError);
+    ).rejects.toThrow(/cannot also write it off/);
   });
 
   it('two partial write-offs leave the right residue, each with its own entry', async () => {

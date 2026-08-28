@@ -272,6 +272,11 @@ describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', (
     // manage_users is called out by name in §B.1 as one of the capabilities the fallback
     // must cover — pinned here so a matrix edit that accidentally drops it is caught.
     expect(ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER).toContain('manage_users' satisfies Capability);
+    // ⭐ `write_off_receivable` LEFT this set on 2026-08-28, hours after joining it, when Ian made
+    // write-off manager-level. Same reasoning as set_credit_limit below: the fallback lends a
+    // manager what only an admin holds, and a manager now holds this in the baseline. Nothing to
+    // lend. ⚠️ The control did not weaken — it moved from RANK to IDENTITY, which is the stronger
+    // of the two: `writeOffCharge` refuses the charge's own author regardless of role.
     // `set_credit_limit` LEFT this set on 2026-08-25 (bible row 121) and that is correct,
     // not a regression: the fallback exists to lend a manager what only an admin holds, and
     // a manager now holds credit limits in the baseline. Nothing to lend.
@@ -290,13 +295,6 @@ describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', (
         'manage_prepaid_items',
         'run_amortisation',
         'manage_chart_of_accounts',
-        // ⭐ T-131's `write_off_receivable` joined the same way, and enrolling it IS the decision
-        // this pinned list exists to force. ⚠️ It is the highest-risk action in AR — it makes a
-        // debt disappear — so lending it to a manager deserves the pause. Enrolled because an org
-        // with no admin still has uncollectible debts, and the alternative is a receivable nobody
-        // can ever clear. ⛔ The second control still holds regardless of role: `writeOffCharge`
-        // refuses whoever created the charge, so a lone manager can never write off their own.
-        'write_off_receivable',
       ].sort(),
     );
   });

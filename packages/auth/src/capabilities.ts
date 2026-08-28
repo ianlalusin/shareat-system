@@ -288,9 +288,13 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   override_credit_limit: { super_admin: true, admin: true, manager: true, staff: false },
   record_ap_payment: { super_admin: true, admin: true, manager: true, staff: false },
   record_ar_collection: { super_admin: true, admin: true, manager: true, staff: false },
-  // ⛔ NOT manager. v1 gates write-off on isAdmin while voiding is manager-level, and that gap is
-  // deliberate: declaring money uncollectible is how a shortfall is buried.
-  write_off_receivable: { super_admin: true, admin: true, manager: false, staff: false },
+  // ⭐ Manager too — Ian, 2026-08-28, overriding v1's admin-only gate. v1 restricts write-off to
+  // admins while voiding is manager-level; that asymmetry made sense when NOTHING else guarded the
+  // action. Here the real control is identity, not rank: `writeOffCharge` refuses whoever recorded
+  // the charge, so a write-off always takes two people whatever their role. Rank was the weaker of
+  // the two controls and it is the one that made a receivable uncollectable-but-unclearable in a
+  // store with no admin.
+  write_off_receivable: { super_admin: true, admin: true, manager: true, staff: false },
   // T-130. Logging a pending invoice is document capture, not money movement — same bar as
   // create_expense (staff too). Recording the actual EXPENSE against a verified invoice still
   // requires approve_expense (manager+) via createExpense+approveExpense together — no separate
