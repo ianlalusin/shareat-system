@@ -60,6 +60,20 @@ Build **only if port 9008 is free** (`netstat -ano | grep -E ":9008.*LISTEN"`).
 Occupied → the line is *"build: skipped — dev server live on 9008"*, a stated fact
 (bible §2.9).
 
+**Migration drift check** — if `packages/db/schema/` changed this session, confirm a
+hand-written migration exists to match. ⚠️ **Never run `npm run db:generate`** —
+DEF-073: the snapshot chain has been dead since `0019`, every migration from `0020`
+on is hand-written, and the command opens an interactive prompt that misreads
+already-applied schema history as pending renames. Instead:
+`git status --short packages/db/schema/` against
+`git status --short packages/db/migrations/` — a schema file changed with no new
+`NNNN_*.sql` alongside it is the drift signal. Confirm the new migration is in
+`packages/db/migrations/meta/_journal.json` (`previous.when + 86400000`, per
+DEF-073's own prescription) and was actually applied to `shareat_dev` (and
+`shareat_test`, if integration tests touch it) this session — not just written.
+This runs **before** committing, never after — an applied migration is never edited
+(rule #9), so drift caught after a push is a landmine for the next machine.
+
 **Report the real numbers.** Not "tests pass" — `522/522`.
 
 ### ⛔ If the gates are RED
@@ -91,14 +105,24 @@ confirm it is recorded in the right durable place:
 | A design or a requirement | `docs/tasks/NNN-*.md` |
 | Something learned about v1 or the field | `docs/discovery/NN-*.md` |
 | A trap in a name | `docs/GLOSSARY.md` — **and the banned-names test** |
+| A task finished or advanced this session | its own `> **Status:**` line in `docs/tasks/NNN-*.md` — edit it directly, don't just say so in the handoff |
 
 **Anything Ian decided that is not yet written down, write it down NOW**, before
 committing. That is the whole point of the ritual. ⚠️ If a decision is too big to
 record safely (it needs a bible amendment you are not the planner for), **say so in
 the handoff as an explicit unrecorded item** — never let it pass silently.
 
+**If this session changed how a fresh machine gets set up** — a new env var, a new
+local dependency, a new install or seed step — **update `HANDOFF.md` too**, not only
+today's handoff. `HANDOFF-TODAY.md` is disposable; `HANDOFF.md` is the one a cold
+start actually reads first, and it goes stale silently otherwise.
+
 ## 3. Commit and push everything
 
+- **Before staging anything, scan for secrets.** This repo has a live `secrets/`
+  directory at its root. `git status --short` must not show it, and nothing staged
+  may touch `secrets/` or `.env*`. A file that matches gets unstaged and is called
+  out in the handoff explicitly — never committed silently, never assumed fine.
 - **Group by theme**, one commit per coherent change. Never one giant commit.
 - **Explicit `git add <path>`.** Never `git add -A` blindly — look at
   `git status --short` first and account for every file. A file you cannot explain
@@ -107,7 +131,11 @@ the handoff as an explicit unrecorded item** — never let it pass silently.
   existing style — read the last few `git log` entries.
 - ⚠️ **Never commit to `main` if the repo convention says otherwise**; today it does
   not, so `main` is correct.
-- Then `git push`. **Report the real result**, including a rejection.
+- Then `git push`. **Report the real result**, including a rejection. **If the push
+  is rejected** (remote has diverged), stop: `git fetch` and look at what changed
+  there, then tell Ian and ask how to reconcile. **Never `--force`.** A wrap-up that
+  force-pushes over someone else's work is the exact failure this ritual exists to
+  prevent.
 
 ## 4. Write `docs/HANDOFF-TODAY.md`
 
