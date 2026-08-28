@@ -21,3 +21,4 @@ export * from './owners';
 export * from './liabilities';
 export * from './customers';
 export * from './ap';
+export * from './items';

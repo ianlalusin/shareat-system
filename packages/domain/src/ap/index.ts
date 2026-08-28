@@ -27,6 +27,7 @@
  */
 import {
   apRepo,
+  itemsRepo,
   expensesRepo,
   filesRepo,
   moneyAccountsRepo,
@@ -41,6 +42,7 @@ import { checkDraw } from '../money-accounts/overdraft';
 import { createExpense, type CreateExpensePaymentInput } from '../expenses/create';
 import { approveExpense, type ApproveExpenseResult } from '../expenses/approve';
 import { voidExpense } from '../expenses/void';
+import { validateInvoiceLines, type InvoiceLineDraft } from '../items';
 
 export const AP_CONTROL_CODE = apRepo.AP_CONTROL_CODE;
 export const ADVANCES_CODE = apRepo.ADVANCES_CODE;
@@ -135,6 +137,12 @@ export interface RecordInvoiceInput {
   vatRate?: string | null;
   vatAmount?: string | null;
   vatExclusiveAmount?: string | null;
+  /**
+   * ⭐ T-145 — what the bill was actually FOR. Optional: a utility bill or a service invoice has
+   * no lines, and requiring them would make those unenterable. When present they must sum to
+   * `totalAmount` and each must be arithmetically sound (`validateInvoiceLines`).
+   */
+  lines?: InvoiceLineDraft[];
 }
 
 export interface RecordInvoiceResult {
@@ -200,6 +208,11 @@ export async function recordInvoice(
       vatExclusiveAmount: input.vatExclusiveAmount ?? null,
       createdBy: actor.personId,
     });
+
+    // ⭐ Lines are validated against THIS invoice's own total, then written in the same
+    // transaction — an invoice can never exist with lines that do not add up to it.
+    const lines = await validateInvoiceLines(trx, actor.orgId, input.lines ?? [], input.totalAmount);
+    if (lines.length > 0) await itemsRepo.insertInvoiceLines(trx, created.id, lines);
 
     return { id: created.id, ...(duplicateWarning ? { duplicateWarning } : {}) };
   };

@@ -13,7 +13,7 @@
  * `counterparty_store_id` → internal, eliminates. `counterparty_org_id` → inter-entity, real
  * revenue. Neither → external, real revenue. ⛔ `customer_group` never decides any of it.
  */
-import { customersRepo, transaction, type Tx } from '@shareat/db';
+import { customersRepo, itemsRepo, transaction, type Tx } from '@shareat/db';
 import type { CustomerGroup, CustomerTreatment } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 
@@ -160,8 +160,8 @@ export async function setPrice(
   actor: Actor,
   input: {
     priceListId: string;
-    itemCode: string;
-    itemName?: string | null;
+    /** ⭐ T-145: a real item, not an opaque code. The name comes from the item. */
+    itemId: string;
     rate: string;
     unit?: string | null;
   },
@@ -171,8 +171,11 @@ export async function setPrice(
     const list = await customersRepo.getPriceList(trx, actor.orgId, input.priceListId);
     if (!list) throw new Error(`setPrice: price list ${input.priceListId} does not exist.`);
 
-    const itemCode = input.itemCode.trim();
-    if (!itemCode) throw new Error('setPrice: say which item this rate is for.');
+    const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
+    if (!item) throw new Error(`setPrice: item ${input.itemId} does not exist.`);
+    if (item.status !== 'active') {
+      throw new Error(`setPrice: ${item.name} is inactive — reactivate it before quoting a rate.`);
+    }
     // ⚠️ Zero is allowed — a genuinely free line exists (a sample, a promotional unit) and refusing
     // it would push people to enter 0.01. Negative is not: that is a discount, not a price.
     if (Number(input.rate) < 0) {
@@ -182,8 +185,7 @@ export async function setPrice(
     await customersRepo.upsertPriceListItem(trx, {
       orgId: actor.orgId,
       priceListId: list.id,
-      itemCode,
-      itemName: input.itemName?.trim() || null,
+      itemId: item.id,
       rate: input.rate,
       unit: input.unit?.trim() || null,
     });

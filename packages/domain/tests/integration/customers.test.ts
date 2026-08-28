@@ -280,12 +280,25 @@ describe('the reconciliation anchor', () => {
 });
 
 describe('price lists', () => {
+
+/** ⭐ T-145: a price list quotes an ITEM, not a text code. One helper mints one. */
+async function item(f: Fixture, code: string, name: string, baseUnit = 'kg'): Promise<string> {
+  const [row] = await sql<{ id: string }[]>`
+    insert into items (org_id, code, name, kind, base_unit, created_by)
+    values (${f.orgId}, ${code}, ${name}, 'raw_material', ${baseUnit}, ${f.adminId})
+    on conflict (org_id, code) do update set updated_at = now()
+    returning id
+  `;
+  return row!.id;
+}
+
   async function listWith(f: Fixture, itemCode: string, rate: string) {
     const list = await asOrg(f.orgId, (tx) =>
       createPriceList(tx, f.admin, { name: uid('Wholesale') }),
     );
+    const itemId = await item(f, itemCode, 'Pork belly');
     await asOrg(f.orgId, (tx) =>
-      setPrice(tx, f.admin, { priceListId: list.id, itemCode, itemName: 'Pork belly', rate, unit: 'kg' }),
+      setPrice(tx, f.admin, { priceListId: list.id, itemId, rate, unit: 'kg' }),
     );
     return list.id;
   }
@@ -296,8 +309,9 @@ describe('price lists', () => {
     const created = await asOrg(f.orgId, (tx) =>
       createCustomer(tx, f.admin, { name: 'Resto Tagaytay', priceListId }),
     );
+    const probeId = await item(f, 'PORK-BELLY', 'Pork-Belly');
     expect(
-      await asOrg(f.orgId, (tx) => customersRepo.rateFor(tx, f.orgId, created.id, 'PORK-BELLY')),
+      await asOrg(f.orgId, (tx) => customersRepo.rateFor(tx, f.orgId, created.id, probeId)),
     ).toBe('380.00');
   });
 
@@ -308,8 +322,9 @@ describe('price lists', () => {
       createCustomer(tx, f.admin, { name: 'Resto Silang', priceListId }),
     );
     // Inventing a number where nobody has priced an item is how something ships free.
+    const probeId = await item(f, 'BEEF-RIB', 'Beef-Rib');
     expect(
-      await asOrg(f.orgId, (tx) => customersRepo.rateFor(tx, f.orgId, created.id, 'BEEF-RIB')),
+      await asOrg(f.orgId, (tx) => customersRepo.rateFor(tx, f.orgId, created.id, probeId)),
     ).toBeNull();
   });
 
@@ -318,8 +333,9 @@ describe('price lists', () => {
     const created = await asOrg(f.orgId, (tx) =>
       createCustomer(tx, f.admin, { name: 'Resto Naic' }),
     );
+    const probeId = await item(f, 'PORK-BELLY', 'Pork-Belly');
     expect(
-      await asOrg(f.orgId, (tx) => customersRepo.rateFor(tx, f.orgId, created.id, 'PORK-BELLY')),
+      await asOrg(f.orgId, (tx) => customersRepo.rateFor(tx, f.orgId, created.id, probeId)),
     ).toBeNull();
   });
 
@@ -328,11 +344,12 @@ describe('price lists', () => {
     const list = await asOrg(f.orgId, (tx) =>
       createPriceList(tx, f.admin, { name: uid('Wholesale') }),
     );
+    const pb = await item(f, 'PORK-BELLY', 'Pork-Belly');
     await asOrg(f.orgId, (tx) =>
-      setPrice(tx, f.admin, { priceListId: list.id, itemCode: 'PORK-BELLY', rate: '380.00' }),
+      setPrice(tx, f.admin, { priceListId: list.id, itemId: pb, rate: '380.00' }),
     );
     await asOrg(f.orgId, (tx) =>
-      setPrice(tx, f.admin, { priceListId: list.id, itemCode: 'PORK-BELLY', rate: '410.00' }),
+      setPrice(tx, f.admin, { priceListId: list.id, itemId: pb, rate: '410.00' }),
     );
     const items = await asOrg(f.orgId, (tx) =>
       customersRepo.listPriceListItems(tx, f.orgId, list.id),
@@ -342,28 +359,31 @@ describe('price lists', () => {
     expect(items[0]!.rate).toBe('410.00');
   });
 
-  it('⚠️ a re-quote keeps the label and unit — changing a price is not a rename', async () => {
+  it('⭐ a re-quote keeps the unit, and the label can no longer be blanked at all (T-145)', async () => {
     const f = await fixture('requotelabel');
     const list = await asOrg(f.orgId, (tx) =>
       createPriceList(tx, f.admin, { name: uid('Wholesale') }),
     );
+    const pbId = await item(f, 'PORK-BELLY', 'Pork belly');
     await asOrg(f.orgId, (tx) =>
       setPrice(tx, f.admin, {
-        priceListId: list.id, itemCode: 'PORK-BELLY', itemName: 'Pork belly', rate: '380.00', unit: 'kg',
+        priceListId: list.id, itemId: pbId, rate: '380.00', unit: 'kg',
       }),
     );
-    // ⛔ The normal way to change a price is a code and a number. Overwriting the label with null
-    // here blanked both — caught in the browser, where ₱380 "Pork belly / kg" came back as a bare
-    // code at ₱410.
+    // ⭐ This test used to guard a real browser-found bug: re-pricing the normal way (a code and a
+    // number) overwrote the label with null, so ₱380 "Pork belly / kg" came back as a bare code at
+    // ₱410. T-145 made that bug UNREACHABLE rather than guarded — the name lives on the `items`
+    // row and a price list holds only a rate, so there is no label here to blank. What still needs
+    // guarding is the unit, which the list does own.
     await asOrg(f.orgId, (tx) =>
-      setPrice(tx, f.admin, { priceListId: list.id, itemCode: 'PORK-BELLY', rate: '410.00' }),
+      setPrice(tx, f.admin, { priceListId: list.id, itemId: pbId, rate: '410.00' }),
     );
-    const [item] = await asOrg(f.orgId, (tx) =>
+    const [row] = await asOrg(f.orgId, (tx) =>
       customersRepo.listPriceListItems(tx, f.orgId, list.id),
     );
-    expect(item!.rate).toBe('410.00');
-    expect(item!.itemName).toBe('Pork belly');
-    expect(item!.unit).toBe('kg');
+    expect(row!.rate).toBe('410.00');
+    expect(row!.itemName, 'the name comes from the item, and cannot be lost by re-pricing').toBe('Pork belly');
+    expect(row!.unit).toBe('kg');
   });
 
   it('⚠️ zero is allowed, negative is not', async () => {
@@ -373,12 +393,14 @@ describe('price lists', () => {
     );
     // A genuinely free line exists — a sample, a promotional unit — and refusing it pushes people
     // to type 0.01.
+    const sampleId = await item(f, 'SAMPLE', 'Sample');
     await asOrg(f.orgId, (tx) =>
-      setPrice(tx, f.admin, { priceListId: list.id, itemCode: 'SAMPLE', rate: '0.00' }),
+      setPrice(tx, f.admin, { priceListId: list.id, itemId: sampleId, rate: '0.00' }),
     );
+    const oddId = await item(f, 'ODD', 'Odd');
     await expect(
       asOrg(f.orgId, (tx) =>
-        setPrice(tx, f.admin, { priceListId: list.id, itemCode: 'ODD', rate: '-5.00' }),
+        setPrice(tx, f.admin, { priceListId: list.id, itemId: oddId, rate: '-5.00' }),
       ),
     ).rejects.toThrow(/cannot be negative/);
   });

@@ -187,10 +187,14 @@ export interface PriceListItemRow {
   id: string;
   orgId: string;
   priceListId: string;
-  itemCode: string;
-  itemName: string | null;
+  /** ⭐ T-145: the FK that replaced an opaque `item_code`. */
+  itemId: string;
   rate: string;
   unit: string | null;
+  /** Joined from `items` — the name and code belong to the item, never copied onto the rate. */
+  itemName?: string;
+  itemCode?: string;
+  baseUnit?: string;
 }
 
 export async function insertPriceList(
@@ -229,15 +233,23 @@ export async function getPriceList(
   return row as PriceListRow | undefined;
 }
 
-/** ⭐ Upsert on `(price_list_id, item_code)` — re-quoting an item is a NEW RATE, not a second row. */
+/**
+ * ⭐ Upsert on `(price_list_id, item_id)` — re-quoting an item is a NEW RATE, not a second row.
+ *
+ * ⭐ **T-145 simplified this.** It used to `coalesce` `itemName` so that re-pricing with just a
+ * code and a number did not blank the label — a real bug caught in the browser, where a ₱380
+ * "Pork belly / kg" came back as a bare code at ₱410. That whole class of bug is gone: the name
+ * now lives on the `items` row and a price list holds only the rate. There is nothing left here
+ * to blank.
+ */
 export async function upsertPriceListItem(
   tx: Tx,
   input: {
     orgId: string;
     priceListId: string;
-    itemCode: string;
-    itemName: string | null;
+    itemId: string;
     rate: string;
+    /** The unit this LIST quotes in, when it differs from the item's base unit. */
     unit: string | null;
   },
 ): Promise<void> {
@@ -245,16 +257,11 @@ export async function upsertPriceListItem(
     .insert(priceListItems)
     .values(input)
     .onConflictDoUpdate({
-      target: [priceListItems.priceListId, priceListItems.itemCode],
+      target: [priceListItems.priceListId, priceListItems.itemId],
       set: {
-        // ⚠️ The RATE always replaces — that is the point of a re-quote. The label and unit only
-        // replace when a new one is supplied.
-        //
-        // ⛔ Overwriting them unconditionally blanked both when someone re-priced an item with just
-        // a code and a number, which is the normal way to change a price. Caught in the browser: a
-        // ₱380 "Pork belly / kg" came back as a bare code at ₱410.
-        itemName: sql`coalesce(${input.itemName}, ${priceListItems.itemName})`,
         rate: input.rate,
+        // The rate always replaces — that is the point of a re-quote. The unit only replaces
+        // when a new one is supplied.
         unit: sql`coalesce(${input.unit}, ${priceListItems.unit})`,
         updatedAt: sql`now()`,
       },
@@ -266,12 +273,28 @@ export async function listPriceListItems(
   orgId: string,
   priceListId: string,
 ): Promise<PriceListItemRow[]> {
-  const rows = await tx
-    .select()
-    .from(priceListItems)
-    .where(and(eq(priceListItems.orgId, orgId), eq(priceListItems.priceListId, priceListId)))
-    .orderBy(asc(priceListItems.itemCode));
-  return rows as PriceListItemRow[];
+  // ⚠️ A raw `execute` returns the driver's own snake_case keys — unlike `.select()`, which maps
+  // to the schema's camelCase. Mapping explicitly rather than casting: a cast here compiles and
+  // then hands every caller `undefined` under a correct-looking type.
+  const rows = (await tx.execute(sql`
+    select pli.id, pli.org_id, pli.price_list_id, pli.item_id, pli.rate::text as rate, pli.unit,
+           i.name as item_name, i.code as item_code, i.base_unit
+    from price_list_items pli
+    join items i on i.id = pli.item_id
+    where pli.org_id = ${orgId} and pli.price_list_id = ${priceListId}
+    order by i.name asc
+  `)) as unknown as Record<string, string | null>[];
+  return rows.map((r) => ({
+    id: String(r.id),
+    orgId: String(r.org_id),
+    priceListId: String(r.price_list_id),
+    itemId: String(r.item_id),
+    rate: Number(r.rate).toFixed(2),
+    unit: r.unit ?? null,
+    itemName: String(r.item_name),
+    itemCode: String(r.item_code),
+    baseUnit: String(r.base_unit),
+  }));
 }
 
 /**
@@ -285,13 +308,14 @@ export async function rateFor(
   tx: Tx,
   orgId: string,
   customerId: string,
-  itemCode: string,
+  /** ⭐ T-145: an item id, not a text code. Same lookup, one identity. */
+  itemId: string,
 ): Promise<string | null> {
   const [row] = (await tx.execute(sql`
     select pli.rate::text as rate
     from customers c
     join price_list_items pli on pli.price_list_id = c.price_list_id
-    where c.org_id = ${orgId} and c.id = ${customerId} and pli.item_code = ${itemCode}
+    where c.org_id = ${orgId} and c.id = ${customerId} and pli.item_id = ${itemId}
     limit 1
   `)) as unknown as Record<string, string>[];
   return row?.rate ? Number(row.rate).toFixed(2) : null;

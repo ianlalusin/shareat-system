@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { requireSession } from '../../../../lib/session';
 import { setPriceAction } from '../../actions';
 import { getListDetail, peso } from '../../lib';
+import { listItems } from '../../../items/lib';
 
 export const metadata = { title: 'Price list — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -23,7 +24,10 @@ export default async function PriceListPage({
   const sp = await searchParams;
   const { actor } = await requireSession(`/customers/price-lists/${id}`);
 
-  const list = await getListDetail(actor.orgId, id);
+  const [list, allItems] = await Promise.all([
+    getListDetail(actor.orgId, id),
+    listItems(actor.orgId, false),
+  ]);
   if (!list) notFound();
 
   return (
@@ -92,17 +96,24 @@ export default async function PriceListPage({
           <h2 className="font-medium">Set a rate</h2>
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
             ⚠️ Re-quoting an item <strong>replaces</strong> its rate — a list holds one price per
-            item, not a history. The item code is free text for now; there is no item master yet.
+            item, not a history. ⭐ Items come from the item master now (T-145) — pick one rather
+            than typing a code, so the same product cannot exist under three spellings.
           </p>
         </div>
         <form action={setPriceAction} className="space-y-3">
           <input type="hidden" name="priceListId" value={list.id} />
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Item code">
-              <input name="itemCode" required placeholder="PORK-BELLY" className={INPUT} />
-            </Field>
-            <Field label="Item name" hint="Optional — what people call it.">
-              <input name="itemName" placeholder="Pork belly" className={INPUT} />
+            <Field label="Item" hint="From the item master. No item? Add it under /items first.">
+              <select name="itemId" required defaultValue="" className={INPUT}>
+                <option value="" disabled>
+                  {allItems.length === 0 ? 'No items yet' : 'Select…'}
+                </option>
+                {allItems.map((it) => (
+                  <option key={it.id} value={it.id}>
+                    {it.name} ({it.code}) — priced per {it.baseUnit}
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field label="Rate" hint="Zero is allowed — a sample is genuinely free.">
               <input name="rate" required type="number" step="0.01" min="0" className={INPUT} />

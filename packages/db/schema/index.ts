@@ -42,3 +42,4 @@ export * from './cash-requests';
 export * from './prepaid';
 export * from './suppliers';
 export * from './ap-payments';
+export * from './items';

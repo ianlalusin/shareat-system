@@ -27,6 +27,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+import { items } from './items';
 import { organizations } from './organizations';
 import { persons } from './persons';
 import { stores } from './stores';
@@ -78,13 +79,14 @@ export const priceListItems = pgTable(
       .references(() => priceLists.id, { onDelete: 'cascade' }),
 
     /**
-     * ⚠️ **Opaque text, not a FK — there is no item master in v2 yet.** Same precedent as
-     * `expenses.supplier_id`, whose own comment reads *"no suppliers table exists until Wave 3"*.
-     * ⛔ This becomes a foreign key the day an item master lands.
+     * ⭐ **The FK this column was promised.** It read *"opaque text, not a FK — there is no item
+     * master in v2 yet… ⛔ This becomes a foreign key the day an item master lands"* from T-129
+     * until T-145 landed `items` on 2026-08-28. `itemName` went with it: the item's own name is
+     * the name, and a second copy is a second thing to keep true.
      */
-    itemCode: text('item_code').notNull(),
-    /** What people call it, so a list is readable before an item master exists to name it. */
-    itemName: text('item_name'),
+    itemId: uuid('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'restrict' }),
 
     rate: numeric('rate', { precision: 14, scale: 2 }).notNull(),
     unit: text('unit'),
@@ -94,10 +96,9 @@ export const priceListItems = pgTable(
   (t) => [
     /** ⛔ One rate per item per list. Two rows would make "what does this cost?" ambiguous, and the
      *  lookup would answer whichever the planner reached first. */
-    uniqueIndex('price_list_items_list_item_key').on(t.priceListId, t.itemCode),
+    uniqueIndex('price_list_items_list_item_key').on(t.priceListId, t.itemId),
     index('price_list_items_org_idx').on(t.orgId),
     check('price_list_items_rate_not_negative_check', sql`${t.rate} >= 0`),
-    check('price_list_items_item_code_not_blank_check', sql`length(trim(${t.itemCode})) > 0`),
   ],
 );
 

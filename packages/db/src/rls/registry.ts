@@ -311,6 +311,22 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'expense_payments through expenses.',
   },
 
+  // T-145 — the item master and invoice lines.
+  items: {
+    scope: 'org_column',
+    reason:
+      'What an org buys, by name and unit. A franchise reading another org’s item list would ' +
+      'learn its product range, and joined to invoice lines, what it pays for each.',
+  },
+  supplier_invoice_lines: {
+    scope: 'derived',
+    via: 'exists (select 1 from supplier_invoices si where si.id = supplier_invoice_lines.supplier_invoice_id and si.org_id = app_current_org())',
+    reason:
+      'No org_id of its own — reachable only through the invoice it belongs to, same pattern as ' +
+      'expense_payments through expenses. ⛔ These rows ARE the price history, so a leak here is ' +
+      'a leak of another org’s purchasing economics.',
+  },
+
   etl_runs: { scope: 'system_only', reason: 'ETL machinery. Never reachable by a tenant or a customer — only the migrator, crons and the audit.' },
   etl_source_documents: {
     scope: 'system_only',

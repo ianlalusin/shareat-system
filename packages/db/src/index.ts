@@ -79,6 +79,17 @@ export * as liabilitiesRepo from './repo/liabilities';
 export * as customersRepo from './repo/customers';
 export * as sessionsRepo from './repo/sessions';
 export * as apRepo from './repo/ap';
+export * as itemsRepo from './repo/items';
+export type {
+  ItemRow,
+  InvoiceLineInput,
+  InvoiceLineRow,
+  PriceObservation,
+  PriceMonth,
+  SupplierPrice,
+} from './repo/items';
+export { ITEM_KINDS, BASE_UNITS, PURCHASE_UNITS, ITEM_STATUSES } from '../schema/items';
+export type { ItemKind, BaseUnit, PurchaseUnit, ItemStatus } from '../schema/items';
 // Re-exported so a caller establishing a principal around an authorize() call (T-121) does
 // not need to reach into packages/db/src/rls/registry.ts directly.
 export { APP_ROLE } from './rls/registry';

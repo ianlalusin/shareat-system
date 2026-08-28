@@ -101,8 +101,9 @@ export async function setPriceAction(formData: FormData): Promise<void> {
     await withOrgPrincipal(actor.orgId, (tx) =>
       setPrice(tx, actor, {
         priceListId,
-        itemCode: str(formData, 'itemCode'),
-        itemName: str(formData, 'itemName') || null,
+        // ⭐ T-145: the form picks a real item now. The old free-text code is what allowed the
+        // same product to exist under three spellings on three lists.
+        itemId: str(formData, 'itemId'),
         rate: str(formData, 'rate'),
         unit: str(formData, 'unit') || null,
       }),

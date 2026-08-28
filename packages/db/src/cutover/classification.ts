@@ -382,6 +382,26 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     reason: 'As ap_payments — its child rows, naming which expense a payment settled. Purged first: children before parents (PURGE_ORDER_HINT).',
   },
 
+  // ---- T-145: item master and invoice lines ------------------------------------------
+  items: {
+    // ⭐ keep, not keep_shell: an item carries no balance and no reconciliation anchor, so
+    // nothing about it becomes false when the books restart. WHAT the business buys does not
+    // change on 1 January.
+    class: 'keep',
+    reason:
+      'WHAT the business buys. Identity and unit of measure, with no balance and no anchor — ' +
+      'nothing on this row is invalidated by the ledger purge, and re-keying 385 items by hand ' +
+      'at cutover would be pointless work with a fresh chance to introduce duplicates.',
+  },
+  supplier_invoice_lines: {
+    class: 'purge',
+    reason:
+      'The detail of a purchase document — same class as supplier_invoices, which it hangs off ' +
+      'by CASCADE. ⚠️ Purging these purges the PRICE HISTORY with them, which is correct but ' +
+      'worth stating: price history is derived from lines, so a cutover resets it to empty and ' +
+      'it rebuilds from the first post-cutover invoice.',
+  },
+
   // ---- ETL: purged, but LATER ---------------------------------------------------------
   etl_source_documents: {
     class: 'purge',
@@ -421,6 +441,7 @@ export const PURGE_ORDER_HINT: readonly string[] = [
   'sales_day_channels',
   'sales_days',
   'ap_payment_allocations',
+  'supplier_invoice_lines',
   'expense_payments',
   'expenses',
   'ap_payments',
