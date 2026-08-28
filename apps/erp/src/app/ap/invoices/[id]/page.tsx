@@ -2,14 +2,9 @@ import { notFound } from 'next/navigation';
 import { transaction, expensesRepo, apRepo } from '@shareat/db';
 import { peso } from '../../../../lib/format';
 import { requireSession } from '../../../../lib/session';
-import { verifyInvoiceAction, voidInvoiceAction } from '../../actions';
+import { verifyInvoiceAction, voidInvoiceAction, setInvoiceLinesAction } from '../../actions';
 import { createExpenseAction } from '../../../expenses/actions';
-import {
-  getInvoice,
-  getSupplier,
-  listCategoriesGrouped,
-  listMoneyAccountsForPicker,
-} from '../../lib';
+import { getInvoice, getSupplier, listCategoriesGrouped, listMoneyAccountsForPicker, itemPickerFor, invoiceLines, INVOICE_LINE_ROWS } from '../../lib';
 
 export const metadata = { title: 'Supplier invoice — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -49,7 +44,12 @@ export default async function InvoiceDetailPage({
   const canRecord = invoice.status === 'verified' && Number(capacity?.remaining ?? 0) >= 1;
   const groups: Array<'COGS' | 'OPEX' | 'PERSONAL' | 'CAPEX'> = ['COGS', 'OPEX', 'PERSONAL', 'CAPEX'];
 
-  return (
+  
+  // ⭐ T-147: what this supplier has billed before comes first in the picker.
+  const picker = await itemPickerFor(orgId, invoice.supplierId);
+  const existingLines = await invoiceLines(orgId, invoice.id);
+
+return (
     <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -106,6 +106,127 @@ export default async function InvoiceDetailPage({
           )}
         </div>
       </section>
+
+
+      {invoice.status === 'pending' && (
+        <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <h2 className="font-medium">What was on this bill</h2>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            Itemise it before verifying &mdash; ticking &ldquo;right items, right price&rdquo; only
+            means something if the items are on the record. Lines must add up to{' '}
+            <strong>{peso(invoice.totalAmount)}</strong>. Leave them blank for a bill with no
+            itemised detail (a utility bill), and the invoice still works.
+          </p>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            ⚠️ <strong>Quantity and unit price are in the unit the supplier billed.</strong> If they
+            sell by the case, enter cases &mdash; then set &ldquo;per unit&rdquo; to how many of the
+            item&rsquo;s own unit are in one, so ₱/kg stays comparable across suppliers.
+          </p>
+          <form action={setInvoiceLinesAction} className="space-y-2">
+            <input type="hidden" name="invoiceId" value={invoice.id} />
+            {Array.from({ length: INVOICE_LINE_ROWS }, (_, n) => n + 1).map((i) => {
+              const prior = existingLines[i - 1];
+              return (
+                <div key={i} className="grid grid-cols-2 gap-2 sm:grid-cols-6">
+                  <select
+                    name={`line${i}_itemId`}
+                    defaultValue={prior?.itemId ?? ''}
+                    className={`${INPUT} col-span-2`}
+                  >
+                    <option value="">&mdash;</option>
+                    {picker.known.length > 0 && (
+                      <optgroup label="Billed by this supplier before">
+                        {picker.known.map((k) => (
+                          <option key={k.itemId} value={k.itemId}>
+                            {k.itemName} ({k.baseUnit})
+                            {k.source === 'observed' ? ` · ${k.timesBilled}×` : ' · declared'}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    <optgroup label="Everything else">
+                      {picker.others.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.name} ({o.baseUnit})
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+                  <input
+                    name={`line${i}_quantity`}
+                    type="number"
+                    step="0.001"
+                    min="0"
+                    placeholder="qty"
+                    defaultValue={prior?.quantity ?? ''}
+                    className={INPUT}
+                  />
+                  <select name={`line${i}_purchaseUnit`} defaultValue={prior?.purchaseUnit ?? 'pcs'} className={INPUT}>
+                    {['pcs', 'kg', 'g', 'ltr', 'ml', 'roll', 'box', 'pack', 'case', 'sack', 'tray', 'dozen'].map((u) => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </select>
+                  <input
+                    name={`line${i}_conversionFactor`}
+                    type="number"
+                    step="0.000001"
+                    min="0"
+                    placeholder="per unit"
+                    defaultValue={prior?.conversionFactor ?? '1'}
+                    className={INPUT}
+                  />
+                  <input
+                    name={`line${i}_unitPrice`}
+                    type="number"
+                    step="0.0001"
+                    min="0"
+                    placeholder="₱ each"
+                    defaultValue={prior?.unitPrice ?? ''}
+                    className={INPUT}
+                  />
+                </div>
+              );
+            })}
+            <button type="submit" className="rounded border border-neutral-300 px-4 py-1.5 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900">
+              Save lines
+            </button>
+          </form>
+        </section>
+      )}
+
+      {existingLines.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="font-medium">Lines</h2>
+          <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
+            <table className="w-full min-w-[560px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
+                  <th className="px-3 py-2 font-medium">Item</th>
+                  <th className="px-3 py-2 font-medium">Billed</th>
+                  <th className="px-3 py-2 text-right font-medium">Per base unit</th>
+                  <th className="px-3 py-2 text-right font-medium">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {existingLines.map((l) => (
+                  <tr key={l.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                    <td className="px-3 py-2">
+                      <a href={`/items/${l.itemId}`} className="underline hover:no-underline">{l.itemName}</a>
+                    </td>
+                    <td className="px-3 py-2 text-neutral-500 dark:text-neutral-400">
+                      {l.quantity} {l.purchaseUnit} @ {peso(l.unitPrice)}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums">
+                      {peso(Number(l.basePrice).toFixed(2))}/{l.baseUnit}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(l.lineTotal)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       {invoice.status === 'pending' && (
         <form

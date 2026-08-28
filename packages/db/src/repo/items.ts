@@ -22,6 +22,7 @@ import {
   type ItemKind,
   type ItemStatus,
 } from '../../schema/items';
+import { supplierItems, type CatalogueSource } from '../../schema/supplier-items';
 
 export interface ItemRow {
   id: string;
@@ -118,6 +119,11 @@ export async function insertInvoiceLines(
       sql`, `,
     )}
   `);
+}
+
+/** Clears an invoice's lines so `setInvoiceLines` can replace the whole set. */
+export async function deleteInvoiceLines(tx: Tx, supplierInvoiceId: string): Promise<void> {
+  await tx.execute(sql`delete from supplier_invoice_lines where supplier_invoice_id = ${supplierInvoiceId}`);
 }
 
 export interface InvoiceLineRow extends InvoiceLineInput {
@@ -307,4 +313,124 @@ export async function priceBySupplier(tx: Tx, orgId: string, itemId: string): Pr
     lastPrice: Number(r.last_price ?? r.lastPrice).toFixed(4),
     avgPrice: Number(r.avg_price ?? r.avgPrice).toFixed(4),
   }));
+}
+
+// -------------------------------------------------------------------------------------
+// ⭐ The supplier-item catalogue — T-147. Two sources, one query, nothing cached.
+// -------------------------------------------------------------------------------------
+
+export interface CatalogueEntry {
+  supplierId: string;
+  supplierName: string;
+  itemId: string;
+  itemName: string;
+  itemCode: string;
+  baseUnit: string;
+  /** How we know. Computed here, never stored — see `schema/supplier-items.ts`. */
+  source: CatalogueSource;
+  /** The earliest invoice date that proves it. Null for a declaration nobody has billed yet. */
+  firstSeenOn: string | null;
+  /** How many invoice lines carry it. 0 for a declaration. */
+  timesBilled: number;
+}
+
+/**
+ * ⛔ **`observed` beats `declared` on collision, with no promotion step anywhere.**
+ *
+ * A declaration that later gets an invoice simply starts reporting as observed, with its real
+ * date — the `supplier_items` row stops mattering rather than needing to be updated. That is the
+ * whole payoff of deriving instead of storing: the two sources cannot disagree, because one of
+ * them is not a copy.
+ *
+ * ⚠️ A VOIDED invoice still counts. The supplier did bill us that item; voiding corrects the
+ * money, not the fact that the relationship exists. Filtering voided invoices out here would make
+ * the catalogue flicker as bills are corrected.
+ */
+const catalogueQuery = (where: ReturnType<typeof sql>) => sql`
+  with observed as (
+    select si.supplier_id, l.item_id,
+           min(si.invoice_date)::text as first_seen_on,
+           count(*)::int as times_billed
+    from supplier_invoice_lines l
+    join supplier_invoices si on si.id = l.supplier_invoice_id
+    group by si.supplier_id, l.item_id
+  ),
+  declared as (
+    select supplier_id, item_id from supplier_items
+  ),
+  merged as (
+    select supplier_id, item_id, 'observed' as source, first_seen_on, times_billed
+    from observed
+    union all
+    select d.supplier_id, d.item_id, 'declared' as source, null::text, 0
+    from declared d
+    -- ⛔ Anti-join, so a declaration an invoice has since proven appears ONCE, as observed.
+    where not exists (
+      select 1 from observed o where o.supplier_id = d.supplier_id and o.item_id = d.item_id
+    )
+  )
+  select m.*, s.name as supplier_name, i.name as item_name, i.code as item_code, i.base_unit
+  from merged m
+  join suppliers s on s.id = m.supplier_id
+  join items i on i.id = m.item_id
+  where s.org_id = i.org_id and ${where}
+  order by i.name asc
+`;
+
+function mapCatalogue(r: Record<string, unknown>): CatalogueEntry {
+  return {
+    supplierId: String(r.supplier_id ?? r.supplierId),
+    supplierName: String(r.supplier_name ?? r.supplierName),
+    itemId: String(r.item_id ?? r.itemId),
+    itemName: String(r.item_name ?? r.itemName),
+    itemCode: String(r.item_code ?? r.itemCode),
+    baseUnit: String(r.base_unit ?? r.baseUnit),
+    source: String(r.source) as CatalogueSource,
+    firstSeenOn: r.first_seen_on ? String(r.first_seen_on) : null,
+    timesBilled: Number(r.times_billed ?? 0),
+  };
+}
+
+/** What this supplier sells us — billed in the past, or declared for the future. */
+export async function itemsForSupplier(tx: Tx, orgId: string, supplierId: string): Promise<CatalogueEntry[]> {
+  const rows = (await tx.execute(
+    catalogueQuery(sql`i.org_id = ${orgId} and m.supplier_id = ${supplierId}`),
+  )) as unknown as Record<string, unknown>[];
+  return rows.map(mapCatalogue);
+}
+
+/** Who sells us this item. The sourcing-risk view: one row here is a single point of supply. */
+export async function suppliersForItem(tx: Tx, orgId: string, itemId: string): Promise<CatalogueEntry[]> {
+  const rows = (await tx.execute(
+    catalogueQuery(sql`i.org_id = ${orgId} and m.item_id = ${itemId}`),
+  )) as unknown as Record<string, unknown>[];
+  return rows.map(mapCatalogue);
+}
+
+export async function insertSupplierItem(
+  tx: Tx,
+  input: { orgId: string; supplierId: string; itemId: string; notes: string | null; createdBy: string },
+): Promise<{ id: string }> {
+  const [row] = await tx.insert(supplierItems).values(input).returning({ id: supplierItems.id });
+  return row!;
+}
+
+/** ⛔ Removes a DECLARATION. An observed link is not a row, so this cannot reach one. */
+export async function deleteSupplierItem(
+  tx: Tx,
+  orgId: string,
+  supplierId: string,
+  itemId: string,
+): Promise<boolean> {
+  const gone = await tx
+    .delete(supplierItems)
+    .where(
+      and(
+        eq(supplierItems.orgId, orgId),
+        eq(supplierItems.supplierId, supplierId),
+        eq(supplierItems.itemId, itemId),
+      ),
+    )
+    .returning({ id: supplierItems.id });
+  return gone.length > 0;
 }

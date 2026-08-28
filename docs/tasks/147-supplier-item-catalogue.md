@@ -71,64 +71,101 @@ what it *could* sell us, when somebody wants to say so.
 
 ## Contract
 
+⚠️ **CORRECTED 2026-08-28, before any code, by running `/research-evaluate-propose` on this very
+spec.** The first draft stored TWO kinds of link — `observed` (written by the system from an
+invoice line) and `declared` (typed by a human). The observed half is
+`SELECT DISTINCT supplier_id, item_id` over `supplier_invoice_lines`. **Storing it caches a query
+the ledger already answers — DEF-075's pattern for the eighth time, inside the very spec whose
+own invariant 1 refuses it for price.** Only the declared half is a fact with nowhere else to live.
+
+### 0. ⛔ PREREQUISITE — the AP invoice form has no line entry
+
+`recordInvoice` has accepted `lines` since T-145 and **the ERP form has never sent any**. There
+are 0 rows in `supplier_invoice_lines`, and not because nobody bothered: there is no field to type
+one into. Every downstream feature — price history, supplier comparison, this catalogue, T-146's
+OCR — reads that table.
+
+⚠️ **This is the same failure bible row 163 was written about, committed by the author of row
+163.** T-141 built an upload broker nothing called; T-130 then invented a text field because it
+found no wired upload. T-145 built line storage nothing calls. **Wiring the form is therefore part
+of this task**, and is the half that actually unblocks anything.
+
+### 1. `supplier_items` — declarations only
+
 ```
 supplier_items
-  id            uuid PK default uuidv7()
-  org_id        uuid NOT NULL FK organizations, restrict
-  supplier_id   uuid NOT NULL FK suppliers, restrict
-  item_id       uuid NOT NULL FK items, restrict
-  source        text NOT NULL check in ('observed','declared')
-  first_seen_on date                      -- the invoice date that first proved it. NULL when declared
-  notes         text
-  created_by    uuid FK persons, restrict -- NULL when the row wrote itself
-  created_at    timestamptz NOT NULL default now()
+  id           uuid PK default uuidv7()
+  org_id       uuid NOT NULL FK organizations, restrict
+  supplier_id  uuid NOT NULL FK suppliers, restrict
+  item_id      uuid NOT NULL FK items, restrict
+  notes        text
+  created_by   uuid NOT NULL FK persons, restrict   -- always a human; that IS the point
+  created_at   timestamptz NOT NULL default now()
 
   unique (supplier_id, item_id)
 ```
 
-⭐ **`source` is the whole design.** `observed` means *"this supplier has actually billed us this,
-and here is the invoice date that proves it"* — written automatically, by the system, from a real
-line. `declared` means *"a human says we could buy this here"* — a claim, with an author.
-Collapsing the two into one boolean would make an aspiration indistinguishable from a fact, and
-the fact is the one OCR should trust.
+⭐ **There is no `source` column, because every row means the same thing:** *"a person says we
+could buy this here."* A link the invoices already prove is not stored at all.
 
-⚠️ **`observed` wins.** If a link is `declared` and an invoice then proves it, it is promoted to
-`observed` and stamped with the date. Never the reverse: evidence does not decay into opinion.
+⭐ **`created_by` is NOT NULL** — the previous draft made it nullable so the system could write
+rows. Nothing but a human writes here now, so the author is always known.
 
-**`linkSupplierItem` runs inside `recordInvoice`'s transaction**, as a side effect of writing
-lines. It takes no capability of its own — recording the invoice was already authorised, and a
-link that failed while its line succeeded would be a silent inconsistency.
+### 2. The catalogue is a QUERY over two sources
 
-**`declareSupplierItem` / `undeclareSupplierItem`** require `manage_items` (org-scoped, manager+,
-T-145). ⛔ Undeclare refuses an `observed` row: you cannot un-buy something. It may only remove a
-`declared` one.
+`itemsForSupplier(orgId, supplierId)` and `suppliersForItem(orgId, itemId)` each return rows
+carrying a `source` discriminator computed at read time:
+
+- **`observed`** — a `DISTINCT` join through `supplier_invoice_lines` → `supplier_invoices`, with
+  `firstSeenOn = MIN(invoice_date)` and `timesBilled = COUNT(*)`. Cannot go stale; there is
+  nothing to keep in step.
+- **`declared`** — a row in `supplier_items` with no invoice behind it yet.
+
+⚠️ **Observed wins on collision, and needs no promotion logic.** If a declared link later gets an
+invoice, the query reports it as `observed` with its real date — the `supplier_items` row simply
+stops mattering. The previous draft needed a promotion step and an invariant forbidding demotion;
+both disappear when the fact is derived.
+
+⚠️ **A voided invoice still counts as observed.** The supplier did bill us that item; voiding is a
+correction to the money, not evidence the relationship never existed. Stated because the opposite
+reading is defensible and would make the catalogue flicker.
+
+### 3. Verbs
+
+`declareSupplierItem` / `undeclareSupplierItem` require `manage_items` (org, manager+, T-145).
+⛔ **Undeclare can only remove a declaration**, which is now structural rather than a rule: an
+observed link is not a row, so there is nothing to delete. *"You cannot un-buy something"* is
+enforced by the design instead of by a check.
 
 ## Invariants
 
-1. **No price, no lead time, no minimum order.** DEF-075's pattern, refused an eighth time.
-   `priceBySupplier` already answers price from evidence.
-2. **One row per (supplier, item).** Enforced by unique index.
-3. **`observed` is written only by the system, from a real invoice line**, never by a form.
-4. **`observed` never downgrades to `declared`**, and an `observed` link cannot be deleted.
-5. **`declared` requires an author**; `observed` may have none, because nobody typed it.
-6. **A voided invoice does not retract the link.** The supplier did bill us that item; voiding the
-   bill is a correction to the money, not evidence that the relationship never existed. ⚠️ Stated
-   because the opposite is a defensible reading and would produce a link that flickers.
-7. **Org-scoped by RLS**, like `items`.
+1. **Nothing derivable is stored.** No price, no lead time, no minimum order — and no observed
+   link. DEF-075's pattern, refused an eighth time, including against my own first draft.
+2. **One declaration per (supplier, item).** Unique index.
+3. **Every declaration has a human author.** `created_by NOT NULL`.
+4. **A voided invoice does not retract an observed link.**
+5. **Org-scoped by RLS**, like `items`.
+6. ⭐ **The AP invoice form can enter lines**, and what it writes is what `priceHistory` reads.
+   An unwired feature is an unbuilt one.
 
 ## Tests
 
 Written before implementation (bible §3.2), against real Postgres (§9.3).
 
-1. Recording an invoice with a line auto-creates an `observed` link stamped with the invoice date.
-2. A second invoice for the same supplier + item does not create a second row, and keeps the
-   FIRST date seen.
-3. A `declared` link promoted to `observed` when an invoice proves it; the author survives.
-4. An `observed` link is never demoted by a later declare.
-5. `undeclareSupplierItem` refuses an `observed` link, and succeeds on a `declared` one.
-6. `itemsForSupplier` returns only that supplier's items; `suppliersForItem` the reverse.
-7. Voiding the invoice leaves the link standing (invariant 6).
-8. Org isolation: org A's links are invisible to org B.
+1. An invoice line makes the item appear in `itemsForSupplier` as `observed`, with
+   `firstSeenOn` = the invoice date and `timesBilled` = 1. **No row is written to
+   `supplier_items`.**
+2. A second invoice for the same supplier + item keeps the FIRST date and raises `timesBilled`
+   to 2.
+3. A declared link reports as `declared`; once an invoice proves it, the SAME pair reports as
+   `observed` with the real date — and appears exactly once, not twice.
+4. `undeclareSupplierItem` removes a declaration; the observed link survives it, because the
+   observation was never a row.
+5. `itemsForSupplier` returns only that supplier's items; `suppliersForItem` the reverse.
+6. Voiding the invoice leaves the observed link standing (invariant 4).
+7. Org isolation: org A's declarations are invisible to org B.
+8. ⭐ End to end: the AP form's line fields produce rows in `supplier_invoice_lines`, which
+   produce a price in `priceHistory` and an entry in `itemsForSupplier`. Proves invariant 6.
 
 ## Out of scope
 

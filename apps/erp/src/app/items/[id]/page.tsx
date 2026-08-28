@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { requireSession } from '../../../lib/session';
 import { getItem, itemPrices, peso } from '../lib';
+import { whoSells } from '../../ap/lib';
 
 export const metadata = { title: 'Item — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -17,6 +18,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
   if (!item) notFound();
 
   const { history, movement, bySupplier } = await itemPrices(actor.orgId, id);
+  const sellers = await whoSells(actor.orgId, id);
   const peak = movement.reduce((m, r) => Math.max(m, Number(r.maxPrice)), 0);
 
   return (
@@ -31,6 +33,34 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
           priced per {item.baseUnit}
         </p>
       </div>
+
+      {sellers.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="font-medium">Who sells this</h2>
+          {sellers.length === 1 && (
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              ⚠️ Only one supplier &mdash; a single point of supply for this item.
+            </p>
+          )}
+          <ul className="flex flex-wrap gap-2 text-sm">
+            {sellers.map((s) => (
+              <li
+                key={s.supplierId}
+                className="rounded-lg border border-neutral-200 px-3 py-1.5 dark:border-neutral-800"
+              >
+                <a href={`/ap/suppliers/${s.supplierId}`} className="underline hover:no-underline">
+                  {s.supplierName}
+                </a>
+                <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">
+                  {s.source === 'observed'
+                    ? `billed ${s.timesBilled}× since ${s.firstSeenOn}`
+                    : 'declared — never billed'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {history.length === 0 ? (
         <p className="rounded-lg border border-neutral-200 p-4 text-sm text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">

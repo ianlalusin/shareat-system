@@ -337,6 +337,13 @@
       "when": 1790134307084,
       "tag": "0047_t145_item_master_and_invoice_lines",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1790220707084,
+      "tag": "0048_t147_supplier_item_catalogue",
+      "breakpoints": true
     }
   ]
 }

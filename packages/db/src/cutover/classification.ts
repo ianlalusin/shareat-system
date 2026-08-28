@@ -402,6 +402,17 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'it rebuilds from the first post-cutover invoice.',
   },
 
+  supplier_items: {
+    // ⭐ keep, like `items`: a declaration that a supplier CAN sell us something carries no
+    // balance and is not invalidated by the ledger restarting. ⚠️ The observed half of the
+    // catalogue is not here to classify — it is a query over supplier_invoice_lines, which
+    // purge, so observed links correctly reset to empty and rebuild from the first new invoice.
+    class: 'keep',
+    reason:
+      'A human-declared "this supplier can sell us this". No balance, no anchor, nothing the ' +
+      'cutover falsifies. Re-declaring them by hand would be pointless work.',
+  },
+
   // ---- ETL: purged, but LATER ---------------------------------------------------------
   etl_source_documents: {
     class: 'purge',

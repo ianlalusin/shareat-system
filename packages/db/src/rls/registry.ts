@@ -327,6 +327,13 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'a leak of another org’s purchasing economics.',
   },
 
+  supplier_items: {
+    scope: 'org_column',
+    reason:
+      'Which suppliers an org buys which items from. Joined to invoice lines it reveals ' +
+      'purchasing volume and unit economics, so it is org-scoped like items and suppliers.',
+  },
+
   etl_runs: { scope: 'system_only', reason: 'ETL machinery. Never reachable by a tenant or a customer — only the migrator, crons and the audit.' },
   etl_source_documents: {
     scope: 'system_only',

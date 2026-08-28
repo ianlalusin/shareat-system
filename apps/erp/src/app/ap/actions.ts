@@ -9,13 +9,15 @@ import { redirect } from 'next/navigation';
 import {
   createSupplier,
   recordInvoice,
+  setInvoiceLines,
   uploadFile,
+  type InvoiceLineDraft,
   verifyInvoice,
   voidInvoice,
   recordPayment,
   voidPayment,
 } from '@shareat/domain';
-import { withOrgPrincipal } from './lib';
+import { withOrgPrincipal, INVOICE_LINE_ROWS } from './lib';
 import { requireActor } from '../../lib/session';
 
 function str(fd: FormData, key: string): string {
@@ -105,6 +107,45 @@ export async function recordInvoiceAction(formData: FormData): Promise<void> {
  * supplier, right invoice data, right items, right price all verified plus an uploaded photo."*
  * All four are ticked by a human against the photo, and all four are recorded separately.
  */
+/**
+ * ⭐ Itemise a PENDING invoice — T-147, and the wiring T-145 was missing.
+ *
+ * `recordInvoice` has accepted lines since T-145 and no form ever sent any, so
+ * `supplier_invoice_lines` was empty and every feature reading it (price history, the supplier
+ * catalogue, T-146's OCR) had nothing to work with. Lines live HERE rather than on the create
+ * form for two reasons: the supplier is known by now, so the item picker can be ordered by what
+ * they have actually billed before; and verifying attests *"right items, right price"*, which is
+ * only meaningful if the items are on the record before the tick.
+ */
+export async function setInvoiceLinesAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const invoiceId = str(formData, 'invoiceId');
+  try {
+    const lines: InvoiceLineDraft[] = [];
+    for (let i = 1; i <= INVOICE_LINE_ROWS; i++) {
+      const itemId = str(formData, `line${i}_itemId`);
+      const quantity = str(formData, `line${i}_quantity`);
+      const unitPrice = str(formData, `line${i}_unitPrice`);
+      if (!itemId || !quantity || !unitPrice) continue;
+      lines.push({
+        itemId,
+        description: str(formData, `line${i}_description`) || null,
+        quantity,
+        purchaseUnit: (str(formData, `line${i}_purchaseUnit`) || 'pcs') as never,
+        conversionFactor: str(formData, `line${i}_conversionFactor`) || '1',
+        unitPrice,
+        // ⚠️ Computed, never typed. quantity x unit price IS the line total by definition, and a
+        // third typed number is a third thing that can disagree with the other two.
+        lineTotal: (Number(quantity) * Number(unitPrice)).toFixed(2),
+      });
+    }
+    await withOrgPrincipal(actor.orgId, (tx) => setInvoiceLines(tx, actor, invoiceId, lines));
+  } catch (err) {
+    back(`/ap/invoices/${invoiceId}`, { error: errorMessage(err) });
+  }
+  back(`/ap/invoices/${invoiceId}`, { ok: 'Lines saved. Prices now feed the item history.' });
+}
+
 export async function verifyInvoiceAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const id = str(formData, 'invoiceId');

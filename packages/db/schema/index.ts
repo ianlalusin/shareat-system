@@ -43,3 +43,4 @@ export * from './prepaid';
 export * from './suppliers';
 export * from './ap-payments';
 export * from './items';
+export * from './supplier-items';

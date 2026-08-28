@@ -1,7 +1,14 @@
 /**
  * Server-only helpers for the AP screens — suppliers, supplier invoices, and payments. T-130.
  */
-import { apRepo, moneyAccountsRepo, type SupplierInvoiceRow, type SupplierRow } from '@shareat/db';
+import {
+  apRepo,
+  itemsRepo,
+  moneyAccountsRepo,
+  type CatalogueEntry,
+  type SupplierInvoiceRow,
+  type SupplierRow,
+} from '@shareat/db';
 import { withOrgPrincipal, listStores } from '../expenses/lib';
 
 export { peso } from '../../lib/format';
@@ -122,4 +129,44 @@ export async function moneyAccountsFor(orgId: string, storeId: string) {
 
 export function today(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/** How many line rows the invoice form offers. Blank rows are dropped server-side. */
+export const INVOICE_LINE_ROWS = 5;
+
+/**
+ * ⭐ T-147: what to offer in a line's item picker.
+ *
+ * Ordered so what this supplier has actually billed before comes FIRST — that is the entry-quality
+ * win the catalogue was built for. Everything else in the org follows, because a supplier's first
+ * invoice for a new item has to be enterable too.
+ */
+export async function itemPickerFor(
+  orgId: string,
+  supplierId: string | null,
+): Promise<{ known: CatalogueEntry[]; others: { id: string; name: string; code: string; baseUnit: string }[] }> {
+  return withOrgPrincipal(orgId, async (tx) => {
+    const all = await itemsRepo.listItems(tx, orgId, {});
+    if (!supplierId) {
+      return { known: [], others: all.map((i) => ({ id: i.id, name: i.name, code: i.code, baseUnit: i.baseUnit })) };
+    }
+    const known = await itemsRepo.itemsForSupplier(tx, orgId, supplierId);
+    const knownIds = new Set(known.map((k) => k.itemId));
+    return {
+      known,
+      others: all
+        .filter((i) => !knownIds.has(i.id))
+        .map((i) => ({ id: i.id, name: i.name, code: i.code, baseUnit: i.baseUnit })),
+    };
+  });
+}
+
+/** Who sells this item — the item page's sourcing view. */
+export async function whoSells(orgId: string, itemId: string): Promise<CatalogueEntry[]> {
+  return withOrgPrincipal(orgId, (tx) => itemsRepo.suppliersForItem(tx, orgId, itemId));
+}
+
+/** The lines already on an invoice — the form pre-fills from these, the table renders them. */
+export async function invoiceLines(orgId: string, invoiceId: string) {
+  return withOrgPrincipal(orgId, (tx) => itemsRepo.linesForInvoice(tx, orgId, invoiceId));
 }

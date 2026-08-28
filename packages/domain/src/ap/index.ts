@@ -238,6 +238,44 @@ export interface VerifyInvoiceAttestation {
 }
 
 /**
+ * ⭐ Replace a PENDING invoice's lines — the wiring T-145 was missing.
+ *
+ * ⛔ **Pending only.** A verified invoice's lines are what somebody attested to when they ticked
+ * "right items, right price"; editing them afterwards would make that attestation a claim about
+ * something that no longer exists. Void and re-record instead, like every other posted document
+ * in this system.
+ *
+ * ⚠️ Replaces the whole set rather than patching rows. The lines must sum to the invoice total
+ * (`validateInvoiceLines`), and a partial edit cannot be checked against that without knowing
+ * which rows the caller meant to leave alone — the same "supply the full set" rule
+ * `editExpense`'s payments already follow.
+ */
+export async function setInvoiceLines(
+  tx: Tx | null,
+  actor: Actor,
+  invoiceId: string,
+  lines: InvoiceLineDraft[],
+): Promise<{ count: number }> {
+  const run = async (trx: Tx) => {
+    const invoice = await apRepo.getSupplierInvoiceById(trx, actor.orgId, invoiceId);
+    if (!invoice) throw new Error(`setInvoiceLines: supplier invoice ${invoiceId} does not exist.`);
+    await authorize(trx, actor, 'record_supplier_invoice', { storeId: invoice.storeId });
+    if (invoice.status !== 'pending') {
+      throw new Error(
+        `setInvoiceLines: invoice ${invoiceId} is ${invoice.status}. Lines can only be changed ` +
+          'while it is still pending — after verification they are what somebody attested to.',
+      );
+    }
+    const validated = await validateInvoiceLines(trx, actor.orgId, lines, invoice.totalAmount);
+    await itemsRepo.deleteInvoiceLines(trx, invoiceId);
+    if (validated.length > 0) await itemsRepo.insertInvoiceLines(trx, invoiceId, validated);
+    return { count: validated.length };
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/**
  * ⭐ The approval, and what it now MEANS. Ian, 2026-08-28: *"verified means right supplier, right
  * invoice data, right items, right price all verified plus an uploaded photo of the receipt."*
  *

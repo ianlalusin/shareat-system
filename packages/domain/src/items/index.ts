@@ -163,3 +163,59 @@ export async function validateInvoiceLines(
 
   return out;
 }
+
+// -------------------------------------------------------------------------------------
+// The supplier-item catalogue — T-147
+// -------------------------------------------------------------------------------------
+
+/**
+ * ⭐ Declare that a supplier *could* sell us an item, before any invoice proves it.
+ *
+ * ⛔ There is no matching "record that they DID sell it" verb, and that is the design: an
+ * observed link is derived from `supplier_invoice_lines` at read time, so recording an invoice
+ * already creates it. Nothing to call, nothing to forget to call, nothing to drift.
+ */
+export async function declareSupplierItem(
+  tx: Tx | null,
+  actor: Actor,
+  input: { supplierId: string; itemId: string; notes?: string | null },
+): Promise<{ id: string }> {
+  const run = async (trx: Tx) => {
+    await authorize(trx, actor, 'manage_items', {});
+    const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
+    if (!item) throw new Error(`declareSupplierItem: item ${input.itemId} does not exist.`);
+    if (item.status !== 'active') {
+      throw new Error(`declareSupplierItem: ${item.name} is inactive.`);
+    }
+    return itemsRepo.insertSupplierItem(trx, {
+      orgId: actor.orgId,
+      supplierId: input.supplierId,
+      itemId: input.itemId,
+      notes: input.notes?.trim() || null,
+      createdBy: actor.personId,
+    });
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/**
+ * Withdraw a declaration.
+ *
+ * ⛔ **It cannot reach an observed link, structurally rather than by a check** — an observation is
+ * not a row, so there is nothing for DELETE to find. "You cannot un-buy something" needed a guard
+ * in the first draft of this design; deriving the observed half removed the need for one.
+ */
+export async function undeclareSupplierItem(
+  tx: Tx | null,
+  actor: Actor,
+  input: { supplierId: string; itemId: string },
+): Promise<{ removed: boolean }> {
+  const run = async (trx: Tx) => {
+    await authorize(trx, actor, 'manage_items', {});
+    const removed = await itemsRepo.deleteSupplierItem(trx, actor.orgId, input.supplierId, input.itemId);
+    return { removed };
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}

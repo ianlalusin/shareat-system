@@ -24,7 +24,15 @@ import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../db/seed/expense-categories';
 import { itemsRepo, closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
-import { createItem, createSupplier, recordInvoice, verifyInvoice, voidInvoice } from '@shareat/domain';
+import {
+  createItem,
+  createSupplier,
+  declareSupplierItem,
+  recordInvoice,
+  undeclareSupplierItem,
+  verifyInvoice,
+  voidInvoice,
+} from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -281,5 +289,117 @@ describe('item identity', () => {
     );
     const seenByB = await asOrg(b.orgId, (tx) => itemsRepo.listItems(tx, b.orgId, { includeInactive: true }));
     expect(seenByB.map((i) => i.name)).not.toContain('Org A secret item');
+  });
+});
+
+// =========================================================================================
+// T-147 — the supplier-item catalogue. Observed is DERIVED; only declarations are stored.
+// =========================================================================================
+
+describe('the catalogue: who sells what', () => {
+  it('⭐ an invoice line makes the item observed — and writes NO catalogue row', async () => {
+    const f = await fixture('observed');
+    const item = await porkBelly(f);
+    await invoiceWithLines(f, '2026-01-10', '2900.00', [
+      { itemId: item, quantity: '10', purchaseUnit: 'kg', conversionFactor: '1', unitPrice: '290', lineTotal: '2900.00' },
+    ]);
+
+    const cat = await asOrg(f.orgId, (tx) => itemsRepo.itemsForSupplier(tx, f.orgId, f.supplierId));
+    expect(cat).toHaveLength(1);
+    expect(cat[0]!.source).toBe('observed');
+    expect(cat[0]!.firstSeenOn).toBe('2026-01-10');
+    expect(cat[0]!.timesBilled).toBe(1);
+
+    // ⛔ The whole point: nothing was stored. The link is a query over the lines.
+    const [row] = await sql<{ n: number }[]>`select count(*)::int n from supplier_items`;
+    expect(row!.n, 'an observed link must not be stored — that is DEF-075 again').toBe(0);
+  });
+
+  it('a second invoice keeps the FIRST date and counts twice', async () => {
+    const f = await fixture('twice');
+    const item = await porkBelly(f);
+    await invoiceWithLines(f, '2026-01-10', '2900.00', [
+      { itemId: item, quantity: '10', purchaseUnit: 'kg', conversionFactor: '1', unitPrice: '290', lineTotal: '2900.00' },
+    ]);
+    await invoiceWithLines(f, '2026-02-10', '3100.00', [
+      { itemId: item, quantity: '10', purchaseUnit: 'kg', conversionFactor: '1', unitPrice: '310', lineTotal: '3100.00' },
+    ]);
+    const [entry] = await asOrg(f.orgId, (tx) => itemsRepo.itemsForSupplier(tx, f.orgId, f.supplierId));
+    expect(entry!.firstSeenOn).toBe('2026-01-10');
+    expect(entry!.timesBilled).toBe(2);
+  });
+
+  it('⭐ a declaration reports as declared, then as observed once billed — exactly once either way', async () => {
+    const f = await fixture('promote');
+    const item = await porkBelly(f);
+    await asOrg(f.orgId, (tx) => declareSupplierItem(tx, f.manager, { supplierId: f.supplierId, itemId: item }));
+
+    const before = await asOrg(f.orgId, (tx) => itemsRepo.itemsForSupplier(tx, f.orgId, f.supplierId));
+    expect(before).toHaveLength(1);
+    expect(before[0]!.source).toBe('declared');
+    expect(before[0]!.firstSeenOn).toBeNull();
+
+    await invoiceWithLines(f, '2026-03-01', '500.00', [
+      { itemId: item, quantity: '2', purchaseUnit: 'kg', conversionFactor: '1', unitPrice: '250', lineTotal: '500.00' },
+    ]);
+
+    const after = await asOrg(f.orgId, (tx) => itemsRepo.itemsForSupplier(tx, f.orgId, f.supplierId));
+    expect(after, 'the declaration must not double up with the observation').toHaveLength(1);
+    expect(after[0]!.source).toBe('observed');
+    expect(after[0]!.firstSeenOn).toBe('2026-03-01');
+  });
+
+  it('⛔ undeclaring removes a declaration but cannot touch an observation', async () => {
+    const f = await fixture('undeclare');
+    const item = await porkBelly(f);
+    await asOrg(f.orgId, (tx) => declareSupplierItem(tx, f.manager, { supplierId: f.supplierId, itemId: item }));
+    await invoiceWithLines(f, '2026-03-01', '500.00', [
+      { itemId: item, quantity: '2', purchaseUnit: 'kg', conversionFactor: '1', unitPrice: '250', lineTotal: '500.00' },
+    ]);
+
+    const { removed } = await asOrg(f.orgId, (tx) =>
+      undeclareSupplierItem(tx, f.manager, { supplierId: f.supplierId, itemId: item }),
+    );
+    expect(removed).toBe(true);
+
+    // The observation survives, because it was never a row to delete.
+    const after = await asOrg(f.orgId, (tx) => itemsRepo.itemsForSupplier(tx, f.orgId, f.supplierId));
+    expect(after).toHaveLength(1);
+    expect(after[0]!.source).toBe('observed');
+  });
+
+  it('a voided invoice still counts as observed — voiding corrects money, not the relationship', async () => {
+    const f = await fixture('voidcat');
+    const item = await porkBelly(f);
+    const invoiceId = await invoiceWithLines(f, '2026-01-10', '2900.00', [
+      { itemId: item, quantity: '10', purchaseUnit: 'kg', conversionFactor: '1', unitPrice: '290', lineTotal: '2900.00' },
+    ]);
+    await asOrg(f.orgId, (tx) => voidInvoice(tx, f.manager, { invoiceId, reason: 'Wrong bill' }));
+
+    const cat = await asOrg(f.orgId, (tx) => itemsRepo.itemsForSupplier(tx, f.orgId, f.supplierId));
+    expect(cat).toHaveLength(1);
+    expect(cat[0]!.source).toBe('observed');
+    // ...but the PRICE is gone, because a cancelled bill is not evidence of a price.
+    expect(await asOrg(f.orgId, (tx) => itemsRepo.priceHistory(tx, f.orgId, item))).toHaveLength(0);
+  });
+
+  it('suppliersForItem is the reverse view — the sourcing-risk one', async () => {
+    const f = await fixture('reverse');
+    const item = await porkBelly(f);
+    await invoiceWithLines(f, '2026-01-10', '2900.00', [
+      { itemId: item, quantity: '10', purchaseUnit: 'kg', conversionFactor: '1', unitPrice: '290', lineTotal: '2900.00' },
+    ]);
+    const sellers = await asOrg(f.orgId, (tx) => itemsRepo.suppliersForItem(tx, f.orgId, item));
+    expect(sellers).toHaveLength(1);
+    expect(sellers[0]!.supplierId).toBe(f.supplierId);
+  });
+
+  it('org A cannot see org B’s declarations', async () => {
+    const a = await fixture('catA');
+    const b = await fixture('catB');
+    const itemA = await porkBelly(a);
+    await asOrg(a.orgId, (tx) => declareSupplierItem(tx, a.manager, { supplierId: a.supplierId, itemId: itemA }));
+    const seenByB = await asOrg(b.orgId, (tx) => itemsRepo.itemsForSupplier(tx, b.orgId, a.supplierId));
+    expect(seenByB).toHaveLength(0);
   });
 });

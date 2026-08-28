@@ -80,6 +80,9 @@ export * as customersRepo from './repo/customers';
 export * as sessionsRepo from './repo/sessions';
 export * as apRepo from './repo/ap';
 export * as itemsRepo from './repo/items';
+export type { CatalogueEntry } from './repo/items';
+export { CATALOGUE_SOURCES } from '../schema/supplier-items';
+export type { CatalogueSource } from '../schema/supplier-items';
 export type {
   ItemRow,
   InvoiceLineInput,
