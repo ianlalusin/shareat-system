@@ -45,6 +45,20 @@ export type { OwnerRow, OwnerPosition, DrawingCloseRow, AgedReceivable } from '.
 export type { LiabilityRow, LiabilityPosition, LiabilityMovement } from './repo/liabilities';
 export type { CustomerRow, PriceListRow, PriceListItemRow } from './repo/customers';
 export { treatmentOf } from './repo/customers';
+export { SUPPLIER_STATUSES, SUPPLIER_VAT_STATUSES, SUPPLIER_INVOICE_STATUSES, SUPPLIER_INVOICE_VAT_TYPES } from '../schema/suppliers';
+export type { SupplierStatus, SupplierVatStatus, SupplierInvoiceStatus, SupplierInvoiceVatType } from '../schema/suppliers';
+export { AP_PAYMENT_STATUSES } from '../schema/ap-payments';
+export type { ApPaymentStatus } from '../schema/ap-payments';
+export type {
+  SupplierRow,
+  SupplierInvoiceRow,
+  InvoiceCapacity,
+  ApPosition,
+  OpenItem,
+  AgingBucket,
+  ApPaymentRow,
+  ApPaymentAllocationRow,
+} from './repo/ap';
 export * as journalRepo from './repo/journal';
 export * as etlRepo from './repo/etl';
 export * as reportsRepo from './repo/reports';
@@ -64,6 +78,7 @@ export * as ownersRepo from './repo/owners';
 export * as liabilitiesRepo from './repo/liabilities';
 export * as customersRepo from './repo/customers';
 export * as sessionsRepo from './repo/sessions';
+export * as apRepo from './repo/ap';
 // Re-exported so a caller establishing a principal around an authorize() call (T-121) does
 // not need to reach into packages/db/src/rls/registry.ts directly.
 export { APP_ROLE } from './rls/registry';

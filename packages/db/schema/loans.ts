@@ -40,6 +40,7 @@ import {
 import { organizations } from './organizations';
 import { persons } from './persons';
 import { stores } from './stores';
+import { suppliers } from './suppliers';
 
 /**
  * ⚠️ **NOT NULL, with no default, and v1 explains exactly why.**
@@ -102,10 +103,14 @@ export const loans = pgTable(
      * data has exactly that, two Grab loans on Lipa — so keying on the lender would merge two
      * debts that must be tracked apart. Same reasoning as ADR-010's wallets (row 142).
      *
-     * ⚠️ `lenderName` is TEXT because there is no `suppliers` table yet — T-130 owns it. When it
-     * lands this gains an FK beside the name; the party on the LINE does not change.
+     * ⚠️ `lenderName` stays TEXT — not every lender is a supplier-shaped counterparty (a bank, a
+     * personal loan). `lenderId` below is the FK T-130 promised, nullable, informational/lookup
+     * only. The party on the LINE does not change.
      */
     lenderName: text('lender_name').notNull(),
+    /** ⭐ T-130. Nullable — set when the lender IS a real `suppliers` row; still just a lookup,
+     *  never posted (the party stays `party_type='loan'`, row 158). */
+    lenderId: uuid('lender_id').references(() => suppliers.id, { onDelete: 'restrict' }),
 
     name: text('name').notNull(),
     principalAmount: numeric('principal_amount', { precision: 14, scale: 2 }).notNull(),

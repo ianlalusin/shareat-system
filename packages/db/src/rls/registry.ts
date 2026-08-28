@@ -288,6 +288,29 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'franchisee an inventory of another franchisee’s equipment and what it cost them.',
   },
 
+  // T-130 — suppliers, supplier invoices, AP payments (docs/tasks/130-accounts-payable.md).
+  suppliers: {
+    scope: 'org_column',
+    reason:
+      'Who an org buys from, on what terms. A franchise reading another org’s supplier list ' +
+      'would learn its vendors and, from the AP balances behind each one, its purchasing volume.',
+  },
+  supplier_invoices: {
+    scope: 'org_column',
+    reason: 'A source document that posts into the ledger — org-scoped exactly like expenses and journal_entries.',
+  },
+  ap_payments: {
+    scope: 'org_column',
+    reason: 'What an org paid a supplier, when, and from which account — org-scoped like every other posting document.',
+  },
+  ap_payment_allocations: {
+    scope: 'derived',
+    via: 'exists (select 1 from ap_payments p where p.id = ap_payment_allocations.ap_payment_id and p.org_id = app_current_org())',
+    reason:
+      'No org_id of its own — reachable only through the payment it belongs to, same pattern as ' +
+      'expense_payments through expenses.',
+  },
+
   etl_runs: { scope: 'system_only', reason: 'ETL machinery. Never reachable by a tenant or a customer — only the migrator, crons and the audit.' },
   etl_source_documents: {
     scope: 'system_only',

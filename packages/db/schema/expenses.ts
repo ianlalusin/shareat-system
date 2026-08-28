@@ -22,6 +22,11 @@
  * account_code 3200 (owner's drawings) and 1510 (property and equipment) respectively
  * (invariants 8, 9) — so the posting logic never special-cases them by group; whatever
  * account_code the chosen category resolves to is what gets debited.
+ *
+ * ⭐ T-130: `supplierId` and `supplierInvoiceId` are now NOT NULL — every expense recorded
+ * through this module names a supplier and a verified invoice, cash included, not only credit
+ * ones (`docs/tasks/130-accounts-payable.md`). The photo gate (DEF-055) moved to
+ * `supplier_invoices`; this table no longer carries `receiptPhotoUrl`/`receiptFileId`.
  */
 import { sql } from 'drizzle-orm';
 import {
@@ -43,6 +48,7 @@ import { owners } from './owners';
 import { persons } from './persons';
 import { stores } from './stores';
 import { moneyAccounts } from './money-accounts';
+import { supplierInvoices, suppliers } from './suppliers';
 
 // -------------------------------------------------------------------------------------
 // expense_categories — reference data, seeded from the already-decided crosswalk.
@@ -105,9 +111,29 @@ export const expenses = pgTable(
     categoryId: uuid('category_id')
       .notNull()
       .references(() => expenseCategories.id, { onDelete: 'restrict' }),
-    // Opaque text, not a FK — no suppliers table exists until Wave 3 (spec §1). Read only
-    // when a payment's method is 'credit' (the AP party).
-    supplierId: text('supplier_id'),
+    /**
+     * ⭐ T-130: was opaque text ("no suppliers table exists until Wave 3"); now a real FK,
+     * NOT NULL. Every expense recorded through this module names a supplier now — Ian,
+     * 2026-08-27, confirmed universal (cash included, not only credit/AP) against this spec's
+     * own credit-only proposal. Read for the AP party only when a payment's method is 'credit'.
+     */
+    supplierId: uuid('supplier_id')
+      .notNull()
+      .references(() => suppliers.id, { onDelete: 'restrict' }),
+    /**
+     * ⭐ T-130 — the gate. NOT NULL: an expense cannot exist without naming the (verified)
+     * invoice it was recorded against. Enforced twice: here for a clean error at the moment of
+     * insert, and by the hand-written `expenses_require_verified_invoice` trigger (migration,
+     * DEF-073) that is the actual backstop regardless of which code path writes the row — same
+     * reasoning as T-118's `journal_lines_check_party_requirement`.
+     *
+     * Also carries receipt-date authority (`docs/tasks/130-accounts-payable.md` Invariant 3,
+     * ported from v1's `expense.actions.ts:179-197`): `businessDate` above is always resolved
+     * from `supplierInvoices.invoiceDate` server-side, never trusted from the client.
+     */
+    supplierInvoiceId: uuid('supplier_invoice_id')
+      .notNull()
+      .references(() => supplierInvoices.id, { onDelete: 'restrict' }),
     /**
      * ⭐ **Which owner a PERSONAL expense belongs to.** Null for every other category. T-127.
      *
@@ -121,15 +147,11 @@ export const expenses = pgTable(
      */
     ownerId: uuid('owner_id').references(() => owners.id, { onDelete: 'restrict' }),
     particulars: text('particulars').notNull(),
-    // The receipt-photo gate (§5, DEF-055): every expense recorded through this module is
-    // external by construction, so "no photo, no posting" is simply "this must be set
-    // before status can become 'posted'" — enforced in the service layer (approve.ts),
-    // never merely in the form. Nullable here because a DRAFT may exist before the photo
-    // is attached.
-    receiptPhotoUrl: text('receipt_photo_url'),
-    /** ⭐ The brokered file behind the photo gate (T-141). ⚠️ `receipt_photo_url` above stays
-     *  during the expand phase; contracting it is a separate migration once nothing reads it. */
-    receiptFileId: uuid('receipt_file_id'),
+    // ⭐ T-130: the receipt-photo gate (DEF-055) RELOCATES to `supplier_invoices.receiptPhotoUrl`
+    // / `.receiptFileId` — the evidence is attached and checked once, at invoice verification,
+    // not re-attached on every expense recorded against it. `receiptPhotoUrl`/`receiptFileId`
+    // columns removed from this table; approve.ts's photo-gate check is removed with them (see
+    // that file's own comment and DEFECTS-REGISTER.md's DEF-055 entry for the relocation note).
     status: text('status', { enum: ['draft', 'posted', 'voided'] })
       .notNull()
       .default('draft'),

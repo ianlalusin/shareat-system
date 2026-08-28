@@ -353,6 +353,35 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'makes T-134s "what is still missing" list a plain query rather than a reconciliation.',
   },
 
+  // ---- T-130: suppliers, supplier invoices, AP payments --------------------------------
+  suppliers: {
+    // ⭐ keep_shell, not keep — same reasoning as `customers`: the ROW survives (who we buy
+    // from does not stop existing because the books restarted) but the reconciliation anchor
+    // is cleared, because it attests a verification against a ledger that no longer exists.
+    class: 'keep_shell',
+    reason:
+      'WHO the business buys from. Identity, not activity. No balance to clear — it is summed ' +
+      'from 2110, and that ledger purges, so a kept supplier correctly opens at zero. The ' +
+      'reconciliation anchor is CLEARED: a stale one would tell an aging report that a live ' +
+      'obligation was settled.',
+    clearColumns: ['reconciled_as_of', 'reconciled_at', 'reconciled_by'],
+  },
+  supplier_invoices: {
+    class: 'purge',
+    reason:
+      'Operational financial activity — a source document behind a credit expense posting, ' +
+      'same class as expenses and journal_entries. Replaced wholesale by the 2027-01-01 opening ' +
+      'entry (row 106); no pilot invoice survives the cutover.',
+  },
+  ap_payments: {
+    class: 'purge',
+    reason: 'As supplier_invoices — activity, not configuration. The supplier who was paid survives; the payment does not.',
+  },
+  ap_payment_allocations: {
+    class: 'purge',
+    reason: 'As ap_payments — its child rows, naming which expense a payment settled. Purged first: children before parents (PURGE_ORDER_HINT).',
+  },
+
   // ---- ETL: purged, but LATER ---------------------------------------------------------
   etl_source_documents: {
     class: 'purge',
@@ -391,8 +420,11 @@ export const PURGE_ORDER_HINT: readonly string[] = [
   'sessions',
   'sales_day_channels',
   'sales_days',
+  'ap_payment_allocations',
   'expense_payments',
   'expenses',
+  'ap_payments',
+  'supplier_invoices',
   'journal_lines',
   'journal_entries',
   'audit_log',

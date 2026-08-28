@@ -82,13 +82,13 @@ export interface ExpenseRow {
   businessDate: string;
   totalAmount: string;
   categoryId: string;
-  supplierId: string | null;
+  /** ⭐ T-130: NOT NULL now — every expense names a real supplier. */
+  supplierId: string;
+  /** ⭐ T-130: NOT NULL — the verified invoice this expense was recorded against. */
+  supplierInvoiceId: string;
   /** T-127: which owner a PERSONAL expense is a drawing against. Null for every other category. */
   ownerId: string | null;
   particulars: string;
-  receiptPhotoUrl: string | null;
-  /** ⭐ The brokered receipt (T-141). The gate checks THIS, not the URL string. */
-  receiptFileId: string | null;
   status: ExpenseStatus;
   journalEntryId: string | null;
   createdBy: string;
@@ -108,10 +108,9 @@ const EXPENSE_COLUMNS = {
   totalAmount: expenses.totalAmount,
   categoryId: expenses.categoryId,
   supplierId: expenses.supplierId,
+  supplierInvoiceId: expenses.supplierInvoiceId,
   ownerId: expenses.ownerId,
   particulars: expenses.particulars,
-  receiptPhotoUrl: expenses.receiptPhotoUrl,
-  receiptFileId: expenses.receiptFileId,
   status: expenses.status,
   journalEntryId: expenses.journalEntryId,
   createdBy: expenses.createdBy,
@@ -129,10 +128,10 @@ export interface InsertExpenseInput {
   businessDate: string;
   totalAmount: string;
   categoryId: string;
-  supplierId: string | null;
+  supplierId: string;
+  supplierInvoiceId: string;
   ownerId?: string | null;
   particulars: string;
-  receiptPhotoUrl: string | null;
   createdBy: string;
 }
 
@@ -146,9 +145,9 @@ export async function insertExpense(tx: Tx, input: InsertExpenseInput): Promise<
       totalAmount: input.totalAmount,
       categoryId: input.categoryId,
       supplierId: input.supplierId,
+      supplierInvoiceId: input.supplierInvoiceId,
       ownerId: input.ownerId ?? null,
       particulars: input.particulars,
-      receiptPhotoUrl: input.receiptPhotoUrl,
       createdBy: input.createdBy,
     })
     .returning({ id: expenses.id });
@@ -193,10 +192,10 @@ export interface UpdateExpenseDraftInput {
   businessDate?: string;
   totalAmount?: string;
   categoryId?: string;
-  supplierId?: string | null;
+  supplierId?: string;
+  supplierInvoiceId?: string;
   ownerId?: string | null;
   particulars?: string;
-  receiptPhotoUrl?: string | null;
 }
 
 /** Updates header fields on a DRAFT expense only — the caller (edit.ts) has already
