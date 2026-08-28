@@ -124,6 +124,7 @@ DEF-002.
 | **trial balance** | The one-query check that total debits equal total credits. Must pass at any moment |
 | **legacy_code** | The old system's account identifier, kept on the new account so migrated data can be traced back |
 | **management ledger** 🔸 | What this system is. **Not a statutory filing basis.** VAT here is a label; reported sales are not all sales. Never label or export output as BIR-ready — bible §13 row 75 |
+| **receipt** ⚠️ | **Two unrelated meanings across the reference repos.** In POS/CUSTOMER/a sale, a receipt is the customer-facing proof of a **sale** (`receiptSeq`, `receiptId` on a sale/kitchen ticket — see the entry above). In ERP-rebuild's AP module, `ReceiptPlain` (`types/index.ts:441`) is a **supplier invoice** — what a supplier bills you, broken into one or more `expenses` postings over time. **v2 never uses "receipt" for the supplier-invoice sense** — that table is `supplier_invoices` (T-130) precisely to avoid this collision. If you mean the sale-side document, say *sales receipt*; if you mean a supplier's bill, say *supplier invoice*. Never bare "receipt" in this codebase |
 
 ## Identity
 
