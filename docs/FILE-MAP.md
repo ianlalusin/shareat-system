@@ -11,7 +11,7 @@
 > renames files, or opens a new domain, the reviewer updates the affected rows
 > and bumps the line below in the same run.
 >
-> **Verified against:** `main @ 0948e8e` (2026-08-26)
+> **Verified against:** `main @ 4b06a0e` (2026-08-27, daily review 2026-08-28)
 
 How to use this: find your topic, open the code paths it names, and read the
 governing docs **before** changing anything. `docs/RULES.md` §5 routes
@@ -45,6 +45,21 @@ field name.
 | **Sales day** — a day's selling, per store; verification is what POSTS | schema `packages/db/schema/sales-days.ts` · repo `packages/db/src/repo/sales-days.ts` · routing `packages/domain/src/sales-days/routing.ts` · services `create.ts`, `verify.ts` · screens `apps/erp/src/app/sales-days/` | T-123 · bible rows 126, 133, 134, 135 · POSTING-PATTERNS `sale.*` |
 | **Fixed assets & depreciation** — accumulated and book value are DERIVED, never stored | schema `packages/db/schema/fixed-assets.ts` · repo `packages/db/src/repo/fixed-assets.ts` (`accumulatedFromLedger` is the whole point) · pure engine `packages/domain/src/fixed-assets/schedule.ts` · services `policy.ts` (the fail-closed read), `capitalize.ts`, `depreciate.ts`, `dispose.ts` · screens `apps/erp/src/app/fixed-assets/` | T-124 · bible rows 139, **140** · discovery 25 · DEF-044 |
 | **Capitalisation seam** — an approved CAPEX expense becomes a register row | `packages/domain/src/expenses/approve.ts` calls `capitalizeApprovedExpense` — ⚠️ the NON-authorizing entry point, because `manage_fixed_assets` is admin-only and `approve_expense` is a manager's | T-124 §6 · T-122 |
+
+## Cash custody, transfers, loans, liabilities, owners, receivables (T-125–T-144, T-136, ADR-010)
+
+| Topic | Code lives in | Governed by |
+|---|---|---|
+| **Money accounts** — the 5 foundation accounts per store, custodian + instrument, overdraft limit | schema `packages/db/schema/money-accounts.ts` · repo `packages/db/src/repo/money-accounts.ts` · overdraft check `packages/domain/src/money-accounts/overdraft.ts` · screens `apps/erp/src/app/money-accounts/` | ADR-010 · bible rows 142, 149, 150, 154, 156, 161 |
+| **Money transfers** — same-store and office-to-office cross-store; overdraft-gated | schema `packages/db/schema/money-transfers.ts` · repo `packages/db/src/repo/money-transfers.ts` · service `packages/domain/src/money-transfers/index.ts` · screens `apps/erp/src/app/money-transfers/` | T-139 · bible rows 151, 152, 153, 154 |
+| **Prepaid items** — same shape as fixed assets, amortisation instead of depreciation, shares the ₱5,000 threshold | schema `packages/db/schema/prepaid.ts` · repo `packages/db/src/repo/prepaid.ts` · service `packages/domain/src/prepaid/index.ts` · screens `apps/erp/src/app/prepaid/` | T-125 · bible row 141 |
+| **Pooled remittance** — FIFO settlement of verified sales days, cash/online on separate tracks, custody variance on the last date | schema `packages/db/schema/remittance.ts` · repo `packages/db/src/repo/remittance.ts` · allocation engine `packages/domain/src/remittance/allocate.ts` · service `packages/domain/src/remittance/index.ts` · screens `apps/erp/src/app/remittance/` | T-136 · T-143 · bible rows 144, 145, 146, 147, 157 |
+| **Loans** — standard model, one register (the ledger), principal/interest split computed not typed | schema `packages/db/schema/loans.ts` · repo `packages/db/src/repo/loans.ts` · interest engine `packages/domain/src/loans/interest.ts` · service `packages/domain/src/loans/index.ts` · screens `apps/erp/src/app/loans/` | T-126 · bible row 158 |
+| **Liabilities** — control account per party, `outstanding = charged − paid`, due-date/overdue surfaced | schema `packages/db/schema/liabilities.ts` · repo `packages/db/src/repo/liabilities.ts` · service `packages/domain/src/liabilities/index.ts` · screens `apps/erp/src/app/liabilities/` | T-128 · DEF-074 |
+| **Owner equity & drawings** — one register (the ledger), repayable-vs-drawing routing, monthly drawing close with enforced limit | schema `packages/db/schema/owners.ts`, `owner-drawing-closes.ts` · repo `packages/db/src/repo/owners.ts` · service `packages/domain/src/owners/index.ts` · screens `apps/erp/src/app/owners/` | T-127 · bible rows 160, 161 · DEF-071, DEF-072 |
+| **Cash requests** — a float that must net to zero; release/spend/return/shortage all post to `1120` party-required | schema `packages/db/schema/cash-requests.ts` · repo `packages/db/src/repo/cash-requests.ts` · service `packages/domain/src/cash-requests/index.ts` · screens `apps/erp/src/app/cash-requests/` | T-144 · bible row 159 |
+| **Customers & price lists** — AR balance derived from `1210` by party, never stored | schema `packages/db/schema/customers.ts` · repo `packages/db/src/repo/customers.ts` · service `packages/domain/src/customers/index.ts` · screens `apps/erp/src/app/customers/` | T-129 · DEF-075 |
+| **Month-end scheduler** — the runner behind depreciation/amortisation/interest cadence | schema `packages/db/schema/scheduler.ts` · repo `packages/db/src/repo/scheduler.ts` · service `packages/domain/src/scheduler/index.ts` | T-140 |
 
 ## Schema, migrations, and data rules
 
