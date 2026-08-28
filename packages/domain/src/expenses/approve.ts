@@ -2,9 +2,10 @@
  * approveExpense — the posting step. docs/tasks/122-expenses.md §2, §5, §6.
  *
  * "create · approve · void, posting via postEntry" (Scope) — approve IS the post: there
- * is no separate fourth verb. It is also where every routing invariant (6-10) and the
- * receipt-photo gate (invariant 11, DEF-055) actually run — a draft may sit with an
- * unmapped category or an unmapped payment method; only approving it is blocked.
+ * is no separate fourth verb. It is also where every routing invariant (6-10) runs — a draft
+ * may sit with an unmapped category or an unmapped payment method; only approving it is
+ * blocked. (The former receipt-photo gate, invariant 11/DEF-055, relocated to
+ * `supplier_invoices` at T-130 — see this file's comment at the old gate's site.)
  *
  * `idempotencyKey = expense:{id}:post`, exactly as the spec names it. Re-approving an
  * already-posted expense is a safe no-op (invariant 4) — this function short-circuits
@@ -14,7 +15,6 @@
 import { authorize, type Actor } from '@shareat/auth';
 import { expensesRepo, moneyAccountsRepo, ownersRepo, transaction, type Tx } from '@shareat/db';
 import { money } from '@shareat/core/money';
-import { filesRepo } from '@shareat/db';
 import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry } from '../ledger/post-entry';
 import { routeExpense } from './routing';
@@ -63,38 +63,13 @@ async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promi
     throw new Error(`approveExpense: expense ${expenseId} is voided — cannot post`);
   }
 
-  // Invariant 11 — no photo, no posting. Enforced HERE, server-side, at post — never
-  // merely in the form (DEF-055: every expense recorded through this module is external
-  // by construction, so the gate is simply "no photo, no posting", with no further
-  // condition to evaluate).
-  //
-  // ⭐ T-141: the gate now checks a ROW, not a string. `receipt_photo_url` is a plain text field,
-  // so the old check was satisfied by typing `x` — the rule was real, the evidence behind it was
-  // not. A brokered file cannot be forged: its path is derived from the session.
-  //
-  // ⚠️ EXPAND PHASE (bible §15.5): a legacy URL still satisfies the gate while old drafts exist.
-  // Contracting to file-only is a later, deliberate step — not a silent one.
-  if (expense.receiptFileId) {
-    const file = await filesRepo.getById(tx, actor.orgId, expense.receiptFileId);
-    // ⛔ The org check is implicit (RLS + the orgId argument), but the STORE check is not, and it
-    // is the one that matters: a receipt belonging to another store is not evidence for this
-    // expense, however real the file is.
-    if (!file) {
-      throw new Error(
-        `approveExpense: expense ${expenseId} names a receipt file that does not exist in this org`,
-      );
-    }
-    if (file.storeId && file.storeId !== expense.storeId) {
-      throw new Error(
-        `approveExpense: expense ${expenseId} names a receipt belonging to another store — ` +
-          'a photo from somewhere else is not evidence for this expense',
-      );
-    }
-  } else if (!expense.receiptPhotoUrl || !expense.receiptPhotoUrl.trim()) {
-    throw new Error(
-      `approveExpense: expense ${expenseId} has no receipt photo — cannot post (invariant 11, DEF-055)`,
-    );
-  }
+  // ⭐ T-130: the DEF-055 photo gate RELOCATED. It used to live here ("invariant 11 — no photo,
+  // no posting"), checking `expense.receiptFileId`/`receiptPhotoUrl`. Those columns are gone —
+  // the evidence now lives on `supplier_invoices`, checked once at `verifyInvoice`, and this
+  // expense could not exist at all unless its invoice was already verified (the
+  // `expenses_check_invoice_open_for_recording` trigger, DEF-073, is the backstop). No
+  // replacement check belongs here: by the time an expense reaches `approve`, its invoice's
+  // evidence has already been proven, in a different transaction, by a different actor.
 
   const category = await expensesRepo.getCategoryById(tx, actor.orgId, expense.categoryId);
   if (!category) {

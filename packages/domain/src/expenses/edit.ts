@@ -24,9 +24,11 @@ export const EDIT_WINDOW_MS = 48 * 60 * 60 * 1000;
 export interface EditExpenseInput {
   businessDate?: string;
   categoryId?: string;
-  supplierId?: string | null;
+  /** ⭐ T-130: `supplierId` and `supplierInvoiceId` travel together now — a draft naming one
+   *  without the other would leave the row inconsistent with the create-time invariant. */
+  supplierId?: string;
+  supplierInvoiceId?: string;
   particulars?: string;
-  receiptPhotoUrl?: string | null;
   /** Omit to leave payments unchanged; supply to REPLACE the full set (totalAmount is
    *  recomputed from this set, same "never accepted from the caller" rule as create). */
   payments?: CreateExpensePaymentInput[];
@@ -75,12 +77,12 @@ async function runEditExpense(tx: Tx, actor: Actor, expenseId: string, input: Ed
     patch.categoryId = input.categoryId;
   }
   if (input.supplierId !== undefined) patch.supplierId = input.supplierId;
+  if (input.supplierInvoiceId !== undefined) patch.supplierInvoiceId = input.supplierInvoiceId;
   if (input.particulars !== undefined) {
     const trimmed = input.particulars.trim();
     if (!trimmed) throw new Error('editExpense: particulars cannot be blank');
     patch.particulars = trimmed;
   }
-  if (input.receiptPhotoUrl !== undefined) patch.receiptPhotoUrl = input.receiptPhotoUrl;
 
   if (input.payments !== undefined) {
     if (input.payments.length === 0) {

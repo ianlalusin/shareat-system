@@ -11,9 +11,23 @@
  * (the alternative, accepting both and checking they match, is exactly the class of
  * inconsistency `convert.ts`'s `unbalanced_source_group` exists to catch in ALREADY-
  * WRITTEN v1 documents; a freshly-created v2 one need never produce that state at all).
+ *
+ * ⭐ T-130 — `supplierInvoiceId` is now required and gates creation itself.
+ * `docs/tasks/130-accounts-payable.md` Invariant 2: no expense — cash or credit — may be
+ * created until its `supplier_invoices` row is `verified` and has capacity for this amount.
+ * Checked HERE for a clean, named error; the hand-written `expenses_check_invoice_open_for_recording`
+ * trigger (migration, DEF-073) is the actual backstop regardless of which code path writes the
+ * row. `businessDate` is never taken from the caller when an invoice is named — receipt-date
+ * authority (Invariant 3, ported from v1's `expense.actions.ts:179-197`) forces it from the
+ * invoice's own `invoiceDate`, server-side, always.
+ *
+ * In the ordinary flow this is called immediately followed by `approveExpense` in the SAME
+ * transaction — `packages/domain/src/ap`'s `recordExpenseForInvoice` does exactly that, which is
+ * what makes Ian's *"expense may already be posted, no need for draft"* true from the caller's
+ * side without this file or `approve.ts` needing a second, parallel posting path.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { expensesRepo, transaction, type Tx } from '@shareat/db';
+import { apRepo, expensesRepo, transaction, type Tx } from '@shareat/db';
 import { add, money } from '@shareat/core/money';
 import type { ExpensePaymentMethod } from './routing';
 
@@ -31,10 +45,17 @@ export interface CreateExpensePaymentInput {
 
 export interface CreateExpenseInput {
   storeId: string;
-  /** YYYY-MM-DD. */
+  /**
+   * YYYY-MM-DD. ⚠️ IGNORED — always overridden server-side from
+   * `supplierInvoices.invoiceDate` (receipt-date authority). Accepted only so a caller has one
+   * shape to fill in before the invoice is loaded; never trusted.
+   */
   businessDate: string;
   categoryId: string;
-  supplierId?: string | null;
+  /** ⭐ T-130: required. Every expense names a real supplier now. */
+  supplierId: string;
+  /** ⭐ T-130: required — the verified invoice this expense is recorded against. */
+  supplierInvoiceId: string;
   /**
    * ⭐ T-127: which owner a PERSONAL expense is a drawing against. Null for every other category.
    * ⚠️ Not validated here — a DRAFT may legitimately exist before the owner is chosen. `approve`
@@ -42,7 +63,6 @@ export interface CreateExpenseInput {
    */
   ownerId?: string | null;
   particulars: string;
-  receiptPhotoUrl?: string | null;
   payments: CreateExpensePaymentInput[];
 }
 
@@ -80,16 +100,26 @@ async function runCreateExpense(tx: Tx, actor: Actor, input: CreateExpenseInput)
   const amounts = input.payments.map((p) => money(p.amount));
   const totalAmount = add(...amounts);
 
+  // ⭐ T-130 Invariant 2 — the gate, checked here for a clean error; the DB trigger is the
+  // backstop. Also resolves receipt-date authority: the invoice's own date wins, always.
+  const invoice = await apRepo.getSupplierInvoiceById(tx, actor.orgId, input.supplierInvoiceId);
+  if (!invoice) {
+    throw new Error(
+      `createExpense: supplier invoice ${input.supplierInvoiceId} does not exist in org ${actor.orgId}`,
+    );
+  }
+  await apRepo.assertOpenForRecording(tx, actor.orgId, input.supplierInvoiceId, totalAmount);
+
   const { id } = await expensesRepo.insertExpense(tx, {
     orgId: actor.orgId,
     storeId: input.storeId,
-    businessDate: input.businessDate,
+    businessDate: invoice.invoiceDate,
     totalAmount,
     categoryId: input.categoryId,
-    supplierId: input.supplierId ?? null,
+    supplierId: input.supplierId,
+    supplierInvoiceId: input.supplierInvoiceId,
     ownerId: input.ownerId ?? null,
     particulars,
-    receiptPhotoUrl: input.receiptPhotoUrl ?? null,
     createdBy: actor.personId,
   });
 
