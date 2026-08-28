@@ -464,6 +464,15 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'wholesale rates with them, which is correct: the price list survives and is the standing ' +
       'quote a new order re-captures from.',
   },
+  finding_acknowledgements: {
+    // Purge. Every acknowledgement is about a condition in the PRE-cutover ledger, and that ledger
+    // is replaced wholesale by the opening entry. Keeping them would suppress findings about books
+    // that no longer exist - the precise failure this feature was designed to prevent.
+    class: 'purge',
+    reason:
+      'Acceptances of conditions in a ledger the cutover replaces. Keeping them would suppress ' +
+      'findings about books that no longer exist.',
+  },
   channel_settlements: {
     // Purge, like every other posting document. A settlement clears a receivable the opening
     // balance replaces, so keeping it would leave it pointing at a sales day that no longer
@@ -530,6 +539,7 @@ export function tablesInClass(cls: CutoverClass): string[] {
  */
 export const PURGE_ORDER_HINT: readonly string[] = [
   'sessions',
+  'finding_acknowledgements',
   'channel_settlements',
   'sales_day_channels',
   'sales_days',

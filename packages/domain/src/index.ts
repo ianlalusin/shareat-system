@@ -25,3 +25,4 @@ export * from './items';
 export * from './ar';
 export * from './trade';
 export * from './channel-settlements';
+export * from './findings';

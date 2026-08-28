@@ -365,6 +365,12 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'here hands a competitor the margin structure, not merely a total.',
   },
 
+  finding_acknowledgements: {
+    scope: 'org_column',
+    reason:
+      'Which integrity problems an org has seen and accepted, and who accepted them. A record of ' +
+      'known-bad books, which is exactly what a competitor or a franchisee should not read.',
+  },
   channel_settlements: {
     scope: 'org_column',
     reason:

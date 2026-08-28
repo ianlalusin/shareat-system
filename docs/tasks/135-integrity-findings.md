@@ -111,11 +111,35 @@ nobody is accountable for is a finding nobody clears.**
 The AI narrative briefing (a different feature) · attendance findings (Phase 4) · the PDF wrap-up ·
 notification delivery.
 
-## Open
+## Open — ⭐ ANSWERED and BUILT, 2026-08-28
 
-1. **Which of the 17 kinds are Wave 1?** Suggested: the ones whose data exists — expense and
-   delivery kinds now, attendance in Phase 4.
-2. **Who may acknowledge?** Suggested manager for their store, admin for the org — mirroring the
-   close.
-3. **Does an acknowledgement expire?** Suggested yes, 30 days, then it reopens. *An accepted risk
-   should be re-accepted, not forgotten.*
+All three took the suggestion.
+
+1. **Which kinds are Wave 1?** The **ledger-integrity** ones, because their data exists and every
+   one of them now guards something that shipped this week:
+
+   | Kind | Severity | Guards |
+   |---|---|---|
+   | `trialBalanceDoesNotTie` | hard | The aggregate a per-entry CHECK cannot see |
+   | `dueFromDueToNotReciprocal` | hard | ⭐ T-133's transfers AND T-150's cross-store loan deductions |
+   | `subledgerDoesNotMatchControl` | hard | A `requires_party` line with no party — money owed by nobody |
+   | `openingBalanceEquityNonZero` | hard | ADR-005: a residual means the conversion does not add up |
+   | `clearingAccountNotAtRest` | soft | T-150's `1221`/`1222` — *"something did not finish"* |
+   | `depreciationNotBooked` | hard | ⭐ **DEF-044**, two silent months at ₱35,483.98 |
+   | `amortisationNotBooked` | hard | ⭐ **DEF-078**, the runner nothing fires |
+
+   ⚠️ Expense, delivery and attendance kinds wait for their data, exactly as suggested.
+
+2. **Who may acknowledge?** `close_period` — manager for their store, admin for the org, mirroring
+   the close, which is the same judgement.
+
+3. **Does an acknowledgement expire?** Yes, **30 days**, then the finding reopens on its own.
+
+⭐ **The periodic-posting detectors compare against OPEN BALANCES, never against last month's
+activity** — DEF-044's actual lesson. A schedule that FINISHED and a schedule that DIED look
+identical if you ask *"was there activity last month"*; only Ian could tell those apart. So the
+check asks whether anything is left to post instead.
+
+⚠️ **A no-op run still counts as having run.** That is why `scheduler_runs` records a row even when
+it posts nothing — *"it ran and there was nothing to do"* and *"it never ran"* must be
+distinguishable, and this detector is the thing that consumes that distinction.
