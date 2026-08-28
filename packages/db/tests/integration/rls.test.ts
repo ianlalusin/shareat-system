@@ -231,3 +231,70 @@ describe('T-120 — RLS org isolation', () => {
     });
   });
 });
+
+/**
+ * DEF-077 — every org-scoped policy must read the org through `app_current_org()`, never a raw
+ * `current_setting('app.org_id', true)::uuid`.
+ *
+ * ⭐ **Why this is a whole describe block and not one more line in the invariant-11 test above.**
+ * That test already exercises the exact failing scenario — two sequential transactions on a
+ * pooled connection, then a third with no principal — and it passed the entire time six tables
+ * were broken, because it asserts against `stores` alone. The invariant was proven for ONE
+ * hand-picked table instead of every table that has a policy. Both tests below are enumerated
+ * from the live catalogue, so a table added later is covered without anyone remembering to add
+ * it — the same "derived, never hand-compared" discipline `capability-matrix.test.ts` applies to
+ * the matrix.
+ *
+ * ⚠️ The mechanism, because it is not obvious: `set_config('app.org_id', $1, true)` is `SET
+ * LOCAL` on a CUSTOM GUC. When that transaction ends, PostgreSQL resets the GUC to the empty
+ * string — **not** to unset/NULL. `app_current_org()` exists to guard exactly that
+ * (`NULLIF(current_setting('app.org_id', true), '')::uuid`). A raw cast instead sees `''` and
+ * raises `22P02`, so the policy ERRORS where it should quietly deny. It fails closed, so it was
+ * never a data leak — but it is a live 500 on any request that sets no org of its own
+ * (`principal.ts`'s customer branch) landing on a connection a staff request used first.
+ */
+describe('DEF-077 — org policies read the org through app_current_org(), never a raw cast', () => {
+  it('⭐ no policy anywhere uses the raw current_setting cast — enumerated, so it cannot come back', async () => {
+    const policies = await sql<{ tablename: string; policyname: string; expr: string }[]>`
+      select tablename, policyname, coalesce(qual::text, '') || ' ' || coalesce(with_check::text, '') as expr
+      from pg_policies where schemaname = 'public'
+    `;
+    expect(policies.length, 'no policies found — wrong database?').toBeGreaterThan(0);
+
+    const raw = policies
+      .filter((p) => /current_setting\('app\.org_id'/.test(p.expr))
+      .map((p) => `${p.tablename}.${p.policyname}`)
+      .sort();
+
+    expect(raw, 'these policies throw 22P02 instead of denying — use app_current_org()').toEqual([]);
+  });
+
+  it('⭐ a no-principal write is REFUSED (42501), never a cast error (22P02), on a reused connection', async () => {
+    // A dedicated max:1 pool is the point: the bug is invisible on a fresh connection, because
+    // an untouched custom GUC reads as NULL and the raw cast is happy. It only appears once a
+    // real principal has been set and reset on that same connection. A fresh-connection probe,
+    // or a superuser one (`postgres` has rolbypassrls), both falsely show this as absent.
+    const pooled = postgres(url!, { max: 1 });
+    try {
+      const org = '00000000-0000-0000-0000-000000000009';
+      await pooled.begin(async (tx) => {
+        await tx`select set_config('app.org_id', ${org}, true)`;
+      });
+
+      let code = 'NO ERROR — the write was allowed with no principal, which is worse';
+      try {
+        await pooled.begin(async (tx) => {
+          await tx.unsafe(`set local role ${APP_ROLE}`);
+          await tx`insert into price_lists (org_id, name) values (${org}, 'DEF-077 probe')`;
+        });
+      } catch (e) {
+        code = (e as { code?: string }).code ?? String(e);
+      }
+
+      expect(code, 'a policy that throws is a 500 where a denial belongs').not.toBe('22P02');
+      expect(code).toBe('42501');
+    } finally {
+      await pooled.end({ timeout: 5 });
+    }
+  });
+});
