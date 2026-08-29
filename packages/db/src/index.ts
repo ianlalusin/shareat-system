@@ -43,6 +43,7 @@ export type { CashRequestStatus } from '../schema/cash-requests';
 export type { CashRequestRow, FloatPosition } from './repo/cash-requests';
 export type { OwnerRow, OwnerPosition, DrawingCloseRow, AgedReceivable } from './repo/owners';
 export type { PositionRow, EmploymentRow, RosterRow } from './repo/employment';
+export type { AttendanceConfigRow } from './repo/attendance-config';
 export type { LiabilityRow, LiabilityPosition, LiabilityMovement } from './repo/liabilities';
 export type { CustomerRow, PriceListRow, PriceListItemRow } from './repo/customers';
 export { treatmentOf } from './repo/customers';
@@ -78,6 +79,8 @@ export * as cashRequestsRepo from './repo/cash-requests';
 export * as ownersRepo from './repo/owners';
 // T-154 — the staff master record (Phase 4, lane B).
 export * as employmentRepo from './repo/employment';
+// T-155 — per-store attendance policy, effective-dated (Phase 4, lane B).
+export * as attendanceConfigRepo from './repo/attendance-config';
 export * as liabilitiesRepo from './repo/liabilities';
 export * as customersRepo from './repo/customers';
 export * as sessionsRepo from './repo/sessions';
