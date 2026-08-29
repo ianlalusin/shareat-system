@@ -1,6 +1,5 @@
 # T-163 — The receipt posts value: `2120` GRNI, and the end of the expensing lag
 
-> **Status:** SPEC, 2026-08-29. Written before implementation (bible §1.2a).
 > ⏳ **Assumes ADR-011's recommendation** (retro-fit, boundary 2027-01-01). If Ian chooses the dated
 > split, this task is unchanged — only T-165 changes.
 > **Depends on:** T-162 (layers), T-130 (`supplier_invoices`), T-145 (`supplier_invoice_lines`),
@@ -156,7 +155,71 @@ with a real balance, visible on the balance sheet, and impossible to forget to m
 11. **The whole `2120` account nets to zero** once every receipt in a fixture set is invoiced —
     the account-level version of the tie, run over the worked examples.
 
-## 8. Out of scope
+## 8. ⛔ Built 2026-08-29 — and this spec had the variance backwards
+
+**Landed:** migration `0065` (activates `2120`, seeds `5450`) · `receipt-posting.ts` ·
+`invoice-link.ts` · 12 unit + 14 integration tests · the chart's pinned count 101 → 102.
+
+### 8.1 ⛔ The correction: the two shares were swapped
+
+§7's test 4 read:
+
+> *"100 kg received at ₱300, 40 kg consumed, then the invoice says ₱310. The 60 open re-value; the
+> 40 consumed keep ₱300; **`5450` takes ₱600**."*
+
+⚠️ **₱600 is `60 × ₱10` — the OPEN share, which belongs to inventory.** The consumed share is
+`40 × ₱10 = ₱400`, and that is the part with nowhere else to go, because its COGS is already
+posted in a period that may be closed.
+
+⭐ **The correct rule, which is T-162 invariant 10 seen from the other side:**
+
+```
+Dr 2120                      the provisional total this receipt parked there
+Dr/Cr inventory              the OPEN share — stock still on the shelf, re-costed
+Dr/Cr 5450                   the CONSUMED share — its COGS must not be rewritten
+Cr 2110 (party = supplier)   what the supplier actually billed
+```
+
+### 8.2 ⛔ And "no `5450` line within tolerance" was unimplementable
+
+§6 invariant 5 said a variance inside ₱0.99 posts no `5450` line and is *"trued up silently"*.
+⚠️ **When the whole receipt has been consumed there is no open remainder to absorb it**, so the
+entry has nowhere to put the difference and **cannot balance**.
+
+⭐ **So the ₱0.99 tolerance governs the FINDING, not the posting.** The money always lands where it
+belongs; the tolerance decides only whether a human is asked to look. That keeps v1's real
+judgement — *never block a real invoice over a rounding gap* — and removes a case where the books
+could not be written at all. **One code path, no branch that can fail to balance.**
+
+### 8.3 What the tests pin
+
+⭐ Ian's case end to end: `1310` +600, `5450` +400, `2110` −31,000, **`2120` exactly 0.00**. Plus
+both edges the spec could not express — nothing consumed (all to inventory, `5450` absent) and
+everything consumed (all to `5450`) — and a cheaper invoice moving both shares the other way.
+
+⚠️ `splitVariance` is pure and separately unit-tested, including the property that **the two shares
+always sum to the total exactly**. Rounding both independently is how a one-centavo hole appears in
+an entry that looks right on both sides.
+
+### 8.4 ⚠️ A tension worth knowing about
+
+`postEntry` **refuses** a date no fiscal period covers; T-161's movement trigger **tolerates** one.
+
+⭐ Not a contradiction: a value-moving receipt writes the movement and the entry in the same
+transaction, so the stricter of the two governs and the receipt is refused. Only a **transfer** —
+which posts nothing — can happen outside a period at all. Recorded because the two guards look
+inconsistent until you see why.
+
+### 8.5 Not built
+
+| Piece | Why |
+|---|---|
+| Layer creation and the true-up of `unit_cost` | The postings are proved; wiring them to `createLayer` and the layer re-cost belongs with T-166's delivery document, which is what supplies a receipt id and its lines |
+| `grniNotAtRest` finding | Wants an ageing threshold, and there is no receipt document yet to age |
+| `cost-confirmation.ts` | ⭐ It is a query over the `2120` balance, and its only consumer is a screen — port 9008 is still held |
+| `POSTING-PATTERNS.md` + worked examples | The guard is bidirectional (doc ↔ `fixtures.ts`); adding fixtures without the delivery document would pin a shape T-166 may refine. **Deferred deliberately, not forgotten** |
+
+## 9. Out of scope
 
 ⛔ **The delivery document and its UI.** T-166. This task is the posting engine, driven by fixtures.
 ⛔ **A second document (Purchase Receipt + Purchase Invoice).** ADR-009 and discovery 20's
@@ -166,7 +229,7 @@ with a real balance, visible on the balance sheet, and impossible to forget to m
 ⛔ **Auto-matching an invoice to a receipt.** v1 **built and removed** it — *"the auto-link's
 amount-match heuristic produced false positives at scale."* Do not re-introduce fuzzy matching.
 
-## 9. Done when
+## 10. Done when
 
 - [ ] Migration hand-written (DEF-073), next free number, journalled `previous.when + 86400000`;
       `2120` `reserved` → `active`; `5450` seeded active.

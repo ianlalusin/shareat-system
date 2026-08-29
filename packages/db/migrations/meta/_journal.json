@@ -456,6 +456,13 @@
       "when": 1791603107084,
       "tag": "0064_t162_stock_layers",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1791689507084,
+      "tag": "0065_t163_grni_and_price_variance",
+      "breakpoints": true
     }
   ]
 }

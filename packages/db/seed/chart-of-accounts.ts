@@ -186,7 +186,12 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
   // amount owed to that specific supplier is not yet established — forcing a party here would
   // assert a subledger balance the business has not yet agreed. It clears INTO 2110, which does
   // carry the party.
-  leaf('2120', 'Goods received not invoiced', 'liability', 'credit', '2000', { status: 'reserved' }),
+  /** ⭐ ACTIVE since T-163 (migration 0065). The clearing liability a receipt credits before any
+   *  invoice exists — ERPNext's `stock_received_but_not_billed`. ⚠️ NOT accounts payable: nobody
+   *  is owed a stated amount until a supplier says so, and an ageing balance here is the
+   *  "items whose cost basis is incomplete" report ADR-009 asked for, expressed as a real
+   *  account balance instead of a hand-maintained flag. */
+  leaf('2120', 'Goods received not invoiced', 'liability', 'credit', '2000'),
   leaf('2130', 'Reimbursements payable to employees', 'liability', 'credit', '2000', {
     requiresParty: true,
   }), // staff_reimbursable__{staffId} — T-118 party_type=employee
@@ -342,6 +347,11 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
     legacyCode: 'expense__order_wastage',
   }), // moved from OPEX to COGS
   leaf('5400', 'Inventory adjustment', 'expense', 'debit', '5000'), // 🆕
+  /** ⭐ T-163. The receipt-time estimate and the invoice-time actual are ALLOWED to differ, and
+   *  the difference is a flagged fact rather than a blocked transaction — v1's own judgement
+   *  ("bookkeepers must be able to link a centavo-rounded supplier invoice"), and Odoo's
+   *  `price_diff_value`. Within the ₱0.99 tolerance nothing posts here at all. */
+  leaf('5450', 'Purchase price variance', 'expense', 'debit', '5000'), // 🆕 — T-163
 
   // ---------------------------------------------------------------------------------
   // Operating expenses 6xxx — the §2 list, PLUS (T-102b) 10 accounts from COA-ALIGNMENT
