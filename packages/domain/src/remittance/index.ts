@@ -20,7 +20,15 @@
  * drifted apart.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { moneyAccountsRepo, remittanceRepo, transaction, type Tx } from '@shareat/db';
+import {
+  REMITTANCE_CADENCES,
+  moneyAccountsRepo,
+  remittanceRepo,
+  storesRepo,
+  transaction,
+  type RemittanceCadence,
+  type Tx,
+} from '@shareat/db';
 import { add, money, type Money } from '@shareat/core/money';
 import { createMoneyTransfer, voidMoneyTransfer } from '../money-transfers';
 import { allocateFifo, type DayOwed } from './allocate';
@@ -290,4 +298,43 @@ export function remittanceStateOf(report: {
   if (done <= 0) return 'unremitted';
   if (done >= owed) return 'remitted';
   return 'partially_remitted';
+}
+
+// -------------------------------------------------------------------------------------
+// T-152 — the cash-custody policy
+// -------------------------------------------------------------------------------------
+
+/**
+ * Set a store's remittance cadence and un-remitted ceiling. Bible row 129.
+ *
+ * ⭐ **`manage_store_settings`, not `accept_remittance`.** Accepting a handover is an operational
+ * act a cashier's supervisor does daily; deciding how much cash may sit in a drawer is a policy
+ * that governs it. Row 129: *"a peso ceiling and an imprest amount are business policy, and they
+ * belong to whoever carries the risk."* Gating both on one capability would let whoever accepts
+ * remittances also raise the ceiling they are measured against.
+ *
+ * ⛔ **The safe-combination rule is NOT re-checked here.** `stores_pooling_requires_ceiling_check`
+ * refuses a non-daily cadence with no ceiling in the database, and bible §6.3 is explicit that a
+ * second copy in TypeScript is a second source of truth. A violation arrives as the constraint's
+ * own error, which is the one that cannot drift.
+ */
+export async function setStoreCashPolicy(
+  tx: Tx,
+  actor: Actor,
+  input: {
+    storeId: string;
+    remittanceCadence: RemittanceCadence;
+    unremittedCeiling: string | null;
+  },
+): Promise<void> {
+  await authorize(tx, actor, 'manage_store_settings', { storeId: input.storeId });
+
+  if (!REMITTANCE_CADENCES.includes(input.remittanceCadence)) {
+    throw new Error(
+      `setStoreCashPolicy: ${input.remittanceCadence} is not a cadence. ` +
+        `Expected one of ${REMITTANCE_CADENCES.join(', ')}.`,
+    );
+  }
+
+  await storesRepo.setCashPolicy(tx, actor.orgId, input);
 }

@@ -777,6 +777,42 @@ system where *"Service Charge"* is only a placeholder example
 last month?** It lives in POS's store charges config and receipts. **If yes, §6 outranks T-152 and
 probably everything else on the list. If no, §6 is theoretical and can wait.**
 
+### ✅ ANSWERED — Ian, 2026-08-29: *"for now no we dont charge but im planning"*
+
+⭐ **This is the most dangerous of the three possible answers, and it changes the shape of the
+work rather than removing it.**
+
+| If the answer had been | Then |
+|---|---|
+| *"yes, we charge it today"* | §6 is urgent — a live statutory breach from go-live |
+| *"no, and we never will"* | §6 is dead. Delete `2160`, because an account that exists invites use (T-150's `1270` reasoning) |
+| ⭐ **"not yet, but I'm planning to"** | **The books are correct today and become wrong the moment a switch is flipped — with nothing to announce it** |
+
+⛔ **The trap is that nothing marks the transition.** `2160` reads zero, so it looks healthy;
+the day a store first configures a service charge in POS it begins accruing, the sixteen-day clock
+starts, and **the only symptom is a liability balance growing — which looks like a normal balance
+sheet.** §6 warned about exactly this: *"an ageing float is a FINDING, not a balance… invisible if
+you only read the balance sheet."* Nobody would connect a POS settings change to an unclearable
+obligation in the ERP weeks later.
+
+### ⭐ The resolution: build the ALARM now, not the distribution
+
+**The distribution document stays unbuilt** — there is no demand for it, and building a document
+for a thing nobody does yet is the failure this whole assessment exists to prevent.
+
+**The detector is built now**, folded into T-152 because T-152 is already adding detectors to the
+same file. It fires when `2160` is non-zero and its oldest un-cleared accrual is older than
+sixteen days, and — since nothing can currently discharge it — **it will fire permanently once
+service charge is switched on and stay firing until the distribution document exists.**
+
+⭐ **That permanence is the feature, not a defect.** T-135's rule is that a finding cannot be
+resolved while it is still true, and *"we are accruing an obligation we have no way to pay"* is
+true until §6 is built. The alarm converts a silent trap into a demand.
+
+⚠️ **So the ordering is now decided:** ⛔ **do not enable service charge in POS before the §6
+distribution document exists.** The detector will say so loudly, but it is cheaper to read it here
+first.
+
 ## 9.5 §4 — decided, unblocked, small. **Specced as T-152.**
 
 T-143 §7 rule 5 shipped pooling and explicitly did not enforce the ceiling, so the risk shipped

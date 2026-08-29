@@ -421,6 +421,13 @@
       "when": 1791171107084,
       "tag": "0059_t134_cutover",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1791257507084,
+      "tag": "0060_t152_remittance_cadence_and_ceiling",
+      "breakpoints": true
     }
   ]
 }

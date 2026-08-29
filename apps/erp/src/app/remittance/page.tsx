@@ -4,9 +4,12 @@ import {
   createRemittanceAction,
   resolveVarianceAction,
   reverseRemittanceAction,
+  setCashPolicyAction,
 } from './actions';
 import {
+  CADENCE_LABEL,
   STATE_LABEL,
+  cashCustodyFindings,
   cashierAccounts,
   endDays,
   listStores,
@@ -14,6 +17,7 @@ import {
   openVariances,
   peso,
   recentRemittances,
+  storeCashPolicy,
   today,
 } from './lib';
 
@@ -46,13 +50,15 @@ export default async function RemittancePage({
     );
   }
 
-  const [days, cashier, office, recent, variances, people] = await Promise.all([
+  const [days, cashier, office, recent, variances, people, findings, policy] = await Promise.all([
     endDays(actor.orgId, storeId, today()),
     cashierAccounts(actor.orgId, storeId),
     officeAccounts(actor.orgId, storeId),
     recentRemittances(actor.orgId, storeId),
     openVariances(actor.orgId),
     listActingPersons(actor.orgId),
+    cashCustodyFindings(actor.orgId, storeId),
+    storeCashPolicy(actor.orgId, storeId),
   ]);
 
   const owing = days.filter((d) => Number(d.owed) > 0);
@@ -81,6 +87,38 @@ export default async function RemittancePage({
         <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
           {sp.ok}
         </div>
+      )}
+
+      {/*
+        ⭐ T-152 — the ceiling, the cadence, and DEF-082's float.
+
+        These sit ABOVE the variances deliberately. A variance is money already found missing; these
+        are money still sitting somewhere it should not be, which is the condition a variance grows
+        out of. Row 129: "the pile becomes visible and unignorable to the person who can clear it,
+        never a blocked till" — so nothing here stops a handover, a sale, or a verification.
+      */}
+      {findings.length > 0 && (
+        <section className="space-y-2 rounded-lg border border-orange-300 bg-orange-50 p-4 dark:border-orange-800 dark:bg-orange-950">
+          <div className="text-sm font-medium text-orange-900 dark:text-orange-300">
+            {findings.length} cash-custody {findings.length === 1 ? 'finding' : 'findings'}
+          </div>
+          <ul className="space-y-2">
+            {findings.map((f) => (
+              <li
+                key={f.key}
+                className="border-t border-orange-200 pt-2 text-sm text-orange-900 dark:border-orange-900 dark:text-orange-300"
+              >
+                {f.detail}
+                {f.status === 'acknowledged' && (
+                  // ⚠️ Acknowledged is not resolved: it is still counted, and it visibly ages.
+                  <span className="ml-2 rounded bg-orange-200 px-1.5 py-0.5 text-xs dark:bg-orange-900">
+                    accepted for now
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {/*
@@ -387,6 +425,68 @@ export default async function RemittancePage({
           <p className="text-xs text-neutral-400 dark:text-neutral-600">
             Reversing writes opposite entries and un-settles the days — nothing is deleted, and the
             days simply become owed again.
+          </p>
+        </section>
+      )}
+
+      {/*
+        ⭐ T-152 — the policy that governs everything above it, edited beside what it governs.
+
+        ⚠️ This lives here rather than on a store-settings screen because v2 has no store-admin
+        screen at all — named as a capability gap (docs/CAPABILITY-GAPS.md, 2026-08-29) rather than
+        absorbed silently. Two fields beside the position they bound is right for two fields; it is
+        not a pattern to repeat for the third.
+      */}
+      {policy && (
+        <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <div>
+            <h2 className="text-sm font-medium">Cash policy for {policy.name}</h2>
+            <p className="max-w-2xl text-xs text-neutral-500 dark:text-neutral-500">
+              How often the money is carried to the office, and how much may pile up before that
+              becomes urgent. ⚠️ The till is still <strong>counted and handed over daily</strong>{' '}
+              whatever this says — that is the control, and it is not what this changes.
+            </p>
+          </div>
+          <form action={setCashPolicyAction} className="flex flex-wrap items-end gap-3">
+            <input type="hidden" name="storeId" value={storeId} />
+            {/* ⚠️ Both fields carry a hint so the control row lines up. With only one hinted, the
+                select and the text input sat at different heights under `items-end`. */}
+            <Field label="Remittance cadence" hint="How often the money is carried in.">
+              <select
+                name="remittanceCadence"
+                defaultValue={policy.remittanceCadence}
+                className={`${INPUT} w-44`}
+              >
+                {Object.entries(CADENCE_LABEL).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field
+              label="Un-remitted ceiling"
+              hint="Required for any cadence but daily. Leave blank only when remitting daily."
+            >
+              <input
+                name="unremittedCeiling"
+                inputMode="decimal"
+                defaultValue={policy.unremittedCeiling ?? ''}
+                placeholder="e.g. 20000.00"
+                className={`${INPUT} w-44`}
+              />
+            </Field>
+            <button
+              type="submit"
+              className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+            >
+              Save policy
+            </button>
+          </form>
+          <p className="text-xs text-neutral-400 dark:text-neutral-600">
+            Crossing the ceiling never blocks a sale or a handover — it raises a finding at the top
+            of this page. The peso figure is business policy and belongs to whoever carries the
+            risk.
           </p>
         </section>
       )}

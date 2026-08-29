@@ -22,9 +22,14 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 }
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
-import { closeDb, remittanceRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
+import { closeDb, remittanceRepo, storesRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
-import { createRemittance, resolveRemittanceVariance, reverseRemittance } from '@shareat/domain';
+import {
+  createRemittance,
+  resolveRemittanceVariance,
+  reverseRemittance,
+  setStoreCashPolicy,
+} from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
 
@@ -345,5 +350,74 @@ describe('reversal', () => {
     // ⭐ Nothing was repaired: the allocations simply stop counting, because the remittance is no
     // longer `posted`. The day is owed its full amount again.
     expect((await reports(f))[0]!.owed).toBe('10000.00');
+  });
+});
+
+// =====================================================================================
+// T-152 — the cash policy: cadence and ceiling. Bible row 129.
+// =====================================================================================
+
+describe('T-152 — the cash-custody policy', () => {
+  it('a manager may set a pooled cadence with a ceiling', async () => {
+    const f = await fixture('policy-ok');
+    const mgrId = await person(f.orgId, f.storeId, 'Manager', 'manager');
+    await asOrg(f.orgId, (tx) =>
+      setStoreCashPolicy(tx, actor(f.orgId, mgrId), {
+        storeId: f.storeId,
+        remittanceCadence: 'weekly',
+        unremittedCeiling: '20000.00',
+      }),
+    );
+    const policy = await asOrg(f.orgId, (tx) => storesRepo.cashPolicy(tx, f.orgId, f.storeId));
+    expect(policy!.remittanceCadence).toBe('weekly');
+    expect(Number(policy!.unremittedCeiling)).toBe(20000);
+  });
+
+  it('⛔ STAFF may not — setting the ceiling is policy, not an operational act', async () => {
+    const f = await fixture('policy-deny');
+    const staffId = await person(f.orgId, f.storeId, 'Staff', 'staff');
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        setStoreCashPolicy(tx, actor(f.orgId, staffId), {
+          storeId: f.storeId,
+          remittanceCadence: 'weekly',
+          unremittedCeiling: '20000.00',
+        }),
+      ),
+    ).rejects.toThrow(AuthorizationError);
+  });
+
+  it('⛔ the DATABASE refuses pooling with no ceiling — the rule has no TypeScript copy', async () => {
+    const f = await fixture('policy-noceil');
+    const mgrId = await person(f.orgId, f.storeId, 'Manager', 'manager');
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        setStoreCashPolicy(tx, actor(f.orgId, mgrId), {
+          storeId: f.storeId,
+          remittanceCadence: 'weekly',
+          unremittedCeiling: null,
+        }),
+      ),
+      // ⭐ The constraint's own name, not a message this layer invented. Bible §6.3: a rule
+      // re-implemented in the service layer is a second source of truth, and the two drift.
+    ).rejects.toThrow(/stores_pooling_requires_ceiling_check/);
+  });
+
+  it('⭐ going back to daily may clear the ceiling — daily is its own bound', async () => {
+    const f = await fixture('policy-back');
+    const mgrId = await person(f.orgId, f.storeId, 'Manager', 'manager');
+    const set = (cadence: 'daily' | 'weekly', ceiling: string | null) =>
+      asOrg(f.orgId, (tx) =>
+        setStoreCashPolicy(tx, actor(f.orgId, mgrId), {
+          storeId: f.storeId,
+          remittanceCadence: cadence,
+          unremittedCeiling: ceiling,
+        }),
+      );
+    await set('weekly', '5000.00');
+    await set('daily', null);
+    const policy = await asOrg(f.orgId, (tx) => storesRepo.cashPolicy(tx, f.orgId, f.storeId));
+    expect(policy!.remittanceCadence).toBe('daily');
+    expect(policy!.unremittedCeiling).toBeNull();
   });
 });
