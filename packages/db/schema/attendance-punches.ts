@@ -51,7 +51,7 @@ import { stores } from './stores';
  *
  * ⛔ **No `pin`.** D1, decided 2026-08-29 — Ian: *"in v2 only fingerprint face and card will be mode
  * of attendance no pin"*. Removed from the CHECK rather than switched off, so a PIN punch is
- * unrepresentable (migration 0075). `person_credentials.kind = 'pin'` still exists for signing in
+ * unrepresentable (migration 0085). `person_credentials.kind = 'pin'` still exists for signing in
  * to the app; clocking in is a different act.
  */
 export const PUNCH_METHODS = ['nfc', 'qr', 'fingerprint', 'face', 'manual'] as const;

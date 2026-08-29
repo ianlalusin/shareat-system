@@ -423,73 +423,73 @@
       "breakpoints": true
     },
     {
-      "idx": 70,
+      "idx": 80,
       "version": "7",
-      "when": 1792121507084,
-      "tag": "0070_t154_positions_and_employments",
+      "when": 1792985507084,
+      "tag": "0080_t154_positions_and_employments",
       "breakpoints": true
     },
     {
-      "idx": 71,
+      "idx": 81,
       "version": "7",
-      "when": 1792207907084,
-      "tag": "0071_t155_store_attendance_config",
+      "when": 1793071907084,
+      "tag": "0081_t155_store_attendance_config",
       "breakpoints": true
     },
     {
-      "idx": 72,
+      "idx": 82,
       "version": "7",
-      "when": 1792294307084,
-      "tag": "0072_t156_attendance_punches",
+      "when": 1793158307084,
+      "tag": "0082_t156_attendance_punches",
       "breakpoints": true
     },
     {
-      "idx": 73,
+      "idx": 83,
       "version": "7",
-      "when": 1792380707084,
-      "tag": "0073_t157_attendance_days",
+      "when": 1793244707084,
+      "tag": "0083_t157_attendance_days",
       "breakpoints": true
     },
     {
-      "idx": 74,
+      "idx": 84,
       "version": "7",
-      "when": 1792467107084,
-      "tag": "0074_t158_attendance_adjustments",
+      "when": 1793331107084,
+      "tag": "0084_t158_attendance_adjustments",
       "breakpoints": true
     },
     {
-      "idx": 75,
+      "idx": 85,
       "version": "7",
-      "when": 1792553507084,
-      "tag": "0075_t158b_no_pin_attendance",
+      "when": 1793417507084,
+      "tag": "0085_t158b_no_pin_attendance",
       "breakpoints": true
     },
     {
-      "idx": 76,
+      "idx": 86,
       "version": "7",
-      "when": 1792639907084,
-      "tag": "0076_t157b_open_hour_anchor_and_overtime",
+      "when": 1793503907084,
+      "tag": "0086_t157b_open_hour_anchor_and_overtime",
       "breakpoints": true
     },
     {
-      "idx": 77,
+      "idx": 87,
       "version": "7",
-      "when": 1792726307084,
-      "tag": "0077_t159_clock_terminals",
+      "when": 1793590307084,
+      "tag": "0087_t159_clock_terminals",
       "breakpoints": true
     },
     {
-      "idx": 78,
+      "idx": 88,
       "version": "7",
-      "when": 1792812707084,
-      "tag": "0078_t160_mirror_outbox",
+      "when": 1793676707084,
+      "tag": "0088_t160_mirror_outbox",
       "breakpoints": true
     },
     {
-      "idx": 79,
+      "idx": 89,
       "version": "7",
-      "when": 1792899107084,
-      "tag": "0079_t161_inbox_quarantine",
+      "when": 1793763107084,
+      "tag": "0089_t161_inbox_quarantine",
       "breakpoints": true
     }
   ]

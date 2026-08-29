@@ -6,7 +6,7 @@
 -- position is precisely the class of defect this project exists to close (landmine 12: two
 -- switches governed one behaviour; only one was enforced). There is no switch here to get wrong.
 --
--- ⚠️ A FORWARD migration rather than an edit to 0071/0072, which are committed. Bible rule 9 is
+-- ⚠️ A FORWARD migration rather than an edit to 0081/0082, which are committed. Bible rule 9 is
 -- absolute -- "an applied migration is never edited, write a new one" -- and this is a genuine
 -- change of requirement arriving after the tables shipped, which is exactly what a forward
 -- migration is for.

@@ -154,7 +154,7 @@ export const storeAttendanceConfig = pgTable(
      *
      * ⛔ **There is no `credentialPasscode`.** D1, 2026-08-29: the PIN is not a mode of attendance in
      * v2, so it has no switch — a column that can only ever hold one value is a question nobody
-     * should be asked (migration 0075).
+     * should be asked (migration 0085).
      */
     credentialNfc: boolean('credential_nfc').notNull().default(true),
     credentialFingerprint: boolean('credential_fingerprint').notNull().default(true),

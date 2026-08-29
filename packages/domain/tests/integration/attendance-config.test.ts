@@ -97,7 +97,7 @@ describe('T-155 invariant 7 — every column is NOT NULL, so a store cannot be h
       where table_name = 'store_attendance_config'`;
     const nullable = cols.filter((c) => c.is_nullable === 'YES').map((c) => c.column_name).sort();
     expect(nullable).toEqual(['created_by', 'superseded_at']);
-    // And the PIN switch is gone entirely, not merely defaulted to false (migration 0075).
+    // And the PIN switch is gone entirely, not merely defaulted to false (migration 0085).
     expect(cols.map((c) => c.column_name)).not.toContain('credential_passcode');
   });
 

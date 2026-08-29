@@ -49,7 +49,7 @@ describe('migration journal', () => {
    *
    * Parallel lanes RESERVE migration number blocks so two sessions never collide on one number or
    * on `meta/_journal.json` (bible §3.4: *"Disjoint files are not enough — check shared STATE
-   * too"*). Phase 4's lane owns 0070-0089 while the accounting lane holds 0060-0069, so a gap in
+   * too"*). Phase 4's lane owns 0080-0089 while the accounting lane holds 0060-0079, so a gap in
    * `idx` is produced BY the scheme, on purpose, and contiguity cannot hold while both lanes are
    * in flight. It closes again when they merge.
    *
@@ -61,9 +61,12 @@ describe('migration journal', () => {
    * What is KEPT is the ordering property, because it is the one Drizzle cares about: `idx` must
    * still march strictly forward, so a duplicated or out-of-order row still fails here.
    *
-   * Verified rather than assumed: migration 0070 applied cleanly to a freshly created empty
-   * database with `idx` jumping 59 -> 70. Drizzle's migrator reads `entries` in array order and
+   * Verified rather than assumed: migration 0080 applied cleanly to a freshly created empty
+   * database with `idx` jumping 59 -> 80. Drizzle's migrator reads `entries` in array order and
    * gates on `when`, not on `idx` being dense.
+   *
+   * ⚠️ **The block moved from 0070-0089 to 0080-0089 on 2026-08-29** — see DEF-091 and the next
+   * test. `main` had taken 0070 for `0070_t172_branch_orders`, inside this lane's reservation.
    */
   it('`idx` is strictly increasing and unique — a reserved-block gap is legitimate', () => {
     const offenders: string[] = [];
@@ -76,6 +79,42 @@ describe('migration journal', () => {
     }
     expect(offenders, offenders.join('\n')).toEqual([]);
     expect(journal.entries[0]!.idx).toBe(0);
+  });
+
+  /**
+   * ⭐ **`when` must advance at least as fast as `idx`.** DEF-091, 2026-08-29.
+   *
+   * The two tests above are both *within-journal* checks, and neither could have caught what
+   * actually happened: this lane reserved indices 0070-0089 and stepped `when` by one day per
+   * MIGRATION, while the accounting lane on `main` stepped by one day per migration from the same
+   * base. Both were internally consistent and both passed every test here — but the accounting lane
+   * reached idx 70 at exactly the millisecond this lane had given ITS 0070. ⛔ Applying to the
+   * shared `shareat_dev`, Drizzle skipped this lane's 0070 (`when` was not greater than the last
+   * applied) and then failed on 0071 with *"relation employments does not exist"*.
+   *
+   * ⚠️ **A reserved INDEX block only works if it also reserves a `when` block**, and it does that
+   * exactly when `when` advances in step with `idx`. Skip ten numbers, skip ten days. Then two lanes
+   * that honour their index reservations cannot collide on `when` either, in any merge order.
+   *
+   * Applied from idx 60 — the point where migrations became hand-written (DEF-073) and lanes began.
+   * Earlier entries carry real `drizzle-kit` timestamps and are not on any grid.
+   */
+  it('⭐ `when` advances at least as fast as `idx` — so a reserved block reserves BOTH', () => {
+    const DAY = 86_400_000;
+    const offenders: string[] = [];
+    for (let i = 1; i < journal.entries.length; i++) {
+      const prev = journal.entries[i - 1]!;
+      const cur = journal.entries[i]!;
+      if (cur.idx < 60) continue;
+      const needed = (cur.idx - prev.idx) * DAY;
+      if (cur.when - prev.when < needed) {
+        offenders.push(
+          `${cur.tag} jumps ${cur.idx - prev.idx} indices from ${prev.tag} but only ` +
+            `${(cur.when - prev.when) / DAY} days — another lane's block can land inside that gap`,
+        );
+      }
+    }
+    expect(offenders, offenders.join('\n')).toEqual([]);
   });
 
   it('every journalled tag has a matching .sql file, and vice versa', () => {
