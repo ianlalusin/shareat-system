@@ -29,6 +29,13 @@ import { organizations } from './organizations';
 export const REMITTANCE_CADENCES = ['daily', 'every_3_days', 'weekly', 'monthly'] as const;
 export type RemittanceCadence = (typeof REMITTANCE_CADENCES)[number];
 
+/**
+ * T-160. `single_room` — a branch or kiosk: one room, which is both the default and the usage
+ * source. `multi_room` — a commissary, with a Receiving/room split worth managing.
+ */
+export const STOCK_MODELS = ['single_room', 'multi_room'] as const;
+export type StockModel = (typeof STOCK_MODELS)[number];
+
 /** How many days of accumulation each cadence is allowed before it is overdue. */
 export const CADENCE_DAYS: Record<RemittanceCadence, number> = {
   daily: 1,
@@ -50,6 +57,21 @@ export const stores = pgTable(
     // (src/lib/datetime.ts) — never a global constant.
     timezone: text('timezone').notNull().default('Asia/Manila'),
     isActive: boolean('is_active').notNull().default(true),
+
+    /**
+     * ⭐ **How this store organises stock — T-160, and it is an INVARIANT rather than a
+     * preference.** A `single_room` store (a branch, a kiosk) may hold exactly ONE non-Receiving
+     * active room, enforced by a trigger; a `multi_room` store (a commissary) is unconstrained.
+     *
+     * ⚠️ v1 has no such column and pays for it: `branch-stock-reconcile.actions.ts` exists purely
+     * to REPAIR branches that drifted into several rooms — floor the negative balances, move
+     * everything into a canonical room, delete the strays. **Made structural here, that tool has
+     * nothing left to repair.**
+     *
+     * NOT NULL with a default, so "unset" cannot exist — and the default is the STRICTER of the
+     * two, because a store that quietly became multi-room is exactly the drift being prevented.
+     */
+    stockModel: text('stock_model', { enum: STOCK_MODELS }).notNull().default('single_room'),
 
     /**
      * ⚠️ **NOT NULL with a default, so "unset" cannot exist.** Row 129: *"a store with none

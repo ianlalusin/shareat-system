@@ -12,10 +12,10 @@
  * "why not?" in a sentence, and so the decision is written down once instead of re-derived at
  * each call site. Where a rule can be a constraint, it is ALSO a constraint.
  */
-import type { LocationPurpose, LocationRole, LocationStatus } from '@shareat/db/schema';
+import type { LocationPurpose, LocationRole, LocationStatus, StockModel } from '@shareat/db/schema';
 
-/** How a store organises stock. ⚠️ The column lives on `stores` and lands with the migration. */
-export type StockModel = 'single_room' | 'multi_room';
+/** How a store organises stock — re-exported from the schema so a caller has one name for it. */
+export type { StockModel };
 
 /** The fields every rule below reads, and nothing else — so a caller may pass a full row or a
  *  projection without either drifting from this contract. */

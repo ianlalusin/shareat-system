@@ -435,6 +435,13 @@
       "when": 1791343907084,
       "tag": "0061_t153_till_float",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1791430307084,
+      "tag": "0062_t160_stock_locations",
+      "breakpoints": true
     }
   ]
 }
