@@ -2,7 +2,7 @@
 
 > **Status:** ✅ **BUILT, 2026-08-30.** Spec written by the Opus planner (session `ianla-f9`, lane B); implemented on the `attendance` lane and verified by `ianla-e7` before merge — typecheck 0, unit 696, integration 1360/1360 against a database created empty for the run, build clean.
 > ⚠️ **RENUMBERED 2026-08-30: was T-153.** Both this lane and the inventory lane had taken T-153; attendance moved because it is finished while inventory is still being written. ⛔ **Commit messages predating the rename still say T-153** — git history is not rewritten.
-> **This task exists because Phase 0's did not.** See **DEF-085**: the roadmap marks Phase 0
+> **This task exists because Phase 0's did not.** See **DEF-092**: the roadmap marks Phase 0
 > `complete` against a gate reading *"the spike proves an offline write survives and reconciles,"*
 > and no spike, ruleset, emulator config or Firestore client dependency exists anywhere in the repo.
 > **Blocks:** T-159, T-181, T-182, T-183, T-184, T-185 — every Wave 3 and Wave 4 task, which are

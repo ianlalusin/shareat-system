@@ -31,7 +31,7 @@ Searched, and absent in every direction:
 | A spike task under `docs/tasks/` | **None.** The list runs 101 → 152 with no Phase-0 spike |
 | A commit mentioning the spike | **None** in 281 commits. `9a03ad4` is T-114a, the ETL *reader* — a different thing |
 
-**Logged as DEF-085** (section E — Shareat System itself). It is a planning defect, not a code one:
+**Logged as DEF-092** (section E — Shareat System itself). It is a planning defect, not a code one:
 a phase was marked complete against a gate that nothing satisfied, and the phase that depends on it
 is this one.
 

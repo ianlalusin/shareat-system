@@ -22,7 +22,7 @@ Bible §5.2 makes a **binding** claim and rests all of Phase 4 on it:
 > *"the Firestore SDK provides offline persistence, automatic replay, and conflict-free append-only
 > writes **as platform behaviour**, which v1 reimplemented by hand and got partly wrong."*
 
-Per **DEF-085**, that had never been executed once in this codebase — Phase 0 was marked complete
+Per **DEF-092**, that had never been executed once in this codebase — Phase 0 was marked complete
 against a spike that was never built. This is it, restored to the front of Phase 4.
 
 ## Verdict — all four gate assertions hold

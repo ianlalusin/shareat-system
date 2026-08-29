@@ -11,6 +11,7 @@ import {
   createRemittance,
   resolveRemittanceVariance,
   reverseRemittance,
+  setStoreCashPolicy,
 } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
@@ -20,9 +21,30 @@ function str(fd: FormData, key: string): string {
   return typeof v === 'string' ? v.trim() : '';
 }
 
+/**
+ * ⭐ **Plain language for the constraints a person can actually hit** — a lookup keyed on what the
+ * database reported, never a second copy of the rule.
+ *
+ * ⚠️ The distinction matters and is easy to get wrong: re-checking these conditions in TypeScript
+ * would be a second source of truth that drifts (bible §6.3). **Deciding stays in the database;
+ * only the wording is ours.** If a constraint is renamed the message stops matching and the raw
+ * text shows through — visibly wrong rather than silently stale.
+ */
+const CONSTRAINT_MESSAGES: Record<string, string> = {
+  stores_pooling_requires_ceiling_check:
+    'Pooling cash needs a ceiling. Set the most that may sit un-remitted, or choose Daily.',
+  stores_unremitted_ceiling_positive_check:
+    'A ceiling of zero would mean remitting before selling anything. Leave it blank for Daily, ' +
+    'or enter an amount above zero.',
+  stores_remittance_cadence_check: 'That is not one of the cadences.',
+};
+
 /** Strips the throwing function's name — right for a log, useless on screen. */
 function errorMessage(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
+  for (const [constraint, message] of Object.entries(CONSTRAINT_MESSAGES)) {
+    if (raw.includes(constraint)) return message;
+  }
   return raw.replace(/^[a-z][A-Za-z0-9_]*:\s*/, '');
 }
 
@@ -132,4 +154,32 @@ export async function resolveVarianceAction(formData: FormData): Promise<void> {
     back({ error: errorMessage(err), store: storeId });
   }
   back({ ok: 'Variance closed.', store: storeId });
+}
+
+/**
+ * T-152 — set the cadence and the ceiling. Bible row 129.
+ *
+ * ⚠️ **A blank ceiling is `null`, not `0`.** They mean opposite things: `null` is *"daily, so no
+ * ceiling is needed"*, while `0` would mean *"remit before selling anything"*. The database
+ * refuses `0` outright, and refuses `null` alongside a pooled cadence — so a half-filled form
+ * comes back as that constraint's error rather than as a policy nobody meant to set.
+ */
+export async function setCashPolicyAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const storeId = str(formData, 'storeId');
+  const cadence = str(formData, 'remittanceCadence');
+  const rawCeiling = str(formData, 'unremittedCeiling');
+
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      setStoreCashPolicy(tx, actor, {
+        storeId,
+        remittanceCadence: cadence as Parameters<typeof setStoreCashPolicy>[2]['remittanceCadence'],
+        unremittedCeiling: rawCeiling === '' ? null : rawCeiling,
+      }),
+    );
+  } catch (err) {
+    back({ error: errorMessage(err), store: storeId });
+  }
+  back({ ok: 'Cash policy updated.', store: storeId });
 }

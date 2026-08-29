@@ -20,7 +20,15 @@
  * drifted apart.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { moneyAccountsRepo, remittanceRepo, transaction, type Tx } from '@shareat/db';
+import {
+  REMITTANCE_CADENCES,
+  moneyAccountsRepo,
+  remittanceRepo,
+  storesRepo,
+  transaction,
+  type RemittanceCadence,
+  type Tx,
+} from '@shareat/db';
 import { add, money, type Money } from '@shareat/core/money';
 import { createMoneyTransfer, voidMoneyTransfer } from '../money-transfers';
 import { allocateFifo, type DayOwed } from './allocate';
@@ -85,6 +93,22 @@ async function runCreate(
       throw new Error(
         `createRemittance: a remittance moves money from the cashier to the office, and ` +
           `"${from.name}" (${from.custodian}) → "${to.name}" (${to.custodian}) does not.`,
+      );
+    }
+    // ⛔ T-153 — A TILL FLOAT IS NEVER REMITTED, and the custodian check above cannot catch it:
+    // a float pot IS custodian 'cashier', so without this it would sit in the remittance picker
+    // one click from being handed to the office.
+    //
+    // > **Ian, 2026-08-29:** *"extra cash float that is NOT remitted to the manager or admin — it
+    // > sits on till forever… separated from the money being remitted."*
+    //
+    // ⚠️ A service-layer rule rather than a database one on purpose: the money may legitimately
+    // leave this account (an expense paid from the float, a transfer resizing it). What is refused
+    // is this DOCUMENT moving it — which is a question about the document, not about the value.
+    if (from.floatTarget !== null) {
+      throw new Error(
+        `createRemittance: "${from.name}" is a till float, and a float is never remitted — it ` +
+          'sits in the till and is counted against its target. Remit the takings drawer instead.',
       );
     }
   }
@@ -290,4 +314,50 @@ export function remittanceStateOf(report: {
   if (done <= 0) return 'unremitted';
   if (done >= owed) return 'remitted';
   return 'partially_remitted';
+}
+
+// -------------------------------------------------------------------------------------
+// T-152 — the cash-custody policy
+// -------------------------------------------------------------------------------------
+
+/**
+ * Set a store's remittance cadence and un-remitted ceiling. Bible row 129.
+ *
+ * ⭐ **`set_cash_policy` — admin and above, NOT manager.** Ian, 2026-08-29:
+ * *"configure the peso ceiling for unremitted by store configurable by admin."*
+ *
+ * ⛔ **The ceiling is the number a store's cash custody is measured against, so whoever is
+ * measured must not be able to move it.** A manager running late on remittance could otherwise
+ * raise the ceiling and watch the finding disappear — a control quietly deleting its own
+ * evidence. Row 129 says the peso figures *"belong to whoever carries the risk"*, and that is not
+ * the person holding the cash.
+ *
+ * ⚠️ Deliberately NOT `manage_store_settings`, which managers hold because *"store settings [are]
+ * tied to operation"*. A risk limit is not an operating setting. And deliberately not
+ * `accept_remittance` either, or whoever accepts the handover could raise their own bar.
+ *
+ * ⛔ **The safe-combination rule is NOT re-checked here.** `stores_pooling_requires_ceiling_check`
+ * refuses a non-daily cadence with no ceiling in the database, and bible §6.3 is explicit that a
+ * second copy in TypeScript is a second source of truth. A violation arrives as the constraint's
+ * own error, which is the one that cannot drift.
+ */
+export async function setStoreCashPolicy(
+  tx: Tx,
+  actor: Actor,
+  input: {
+    storeId: string;
+    remittanceCadence: RemittanceCadence;
+    unremittedCeiling: string | null;
+  },
+): Promise<void> {
+  await authorize(tx, actor, 'set_cash_policy', { storeId: input.storeId });
+
+  if (!REMITTANCE_CADENCES.includes(input.remittanceCadence)) {
+    throw new Error(
+      `setStoreCashPolicy: ${input.remittanceCadence} is not a cadence. ` +
+        `Expected one of ${REMITTANCE_CADENCES.join(', ')}.`,
+    );
+  }
+
+  await storesRepo.setCashPolicy(tx, actor.orgId, input);
 }

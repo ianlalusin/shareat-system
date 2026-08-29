@@ -50,9 +50,9 @@ import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../db/seed/expense-categories';
 import { CUTOVER_CLASSIFICATION } from '../../../db/src/cutover/classification';
 import { RLS_REGISTRY } from '../../../db/src/rls/registry';
-import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
+import { closeDb, findingsRepo, moneyAccountsRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
-import { approveExpense, createExpense, deleteExpenseDraft, editExpense, voidExpense, routeExpense, recordInvoice, verifyInvoice } from '@shareat/domain';
+import { approveExpense, createExpense, deleteExpenseDraft, editExpense, voidExpense, routeExpense, recordInvoice, verifyInvoice, setTillFloat } from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
 
@@ -1326,5 +1326,95 @@ describe('overdrawing an expense account — warn for cashier, block for office 
       approveExpense(tx, actor(f.orgId, f.managerId), created.id),
     );
     expect(posted.warnings).toBeUndefined();
+  });
+});
+
+// =====================================================================================
+// T-153 — the till float as a payment source. Ian's worked example, 2026-08-29.
+// =====================================================================================
+
+describe("T-153 — Ian's worked example: the drawer runs out and the float covers the rest", () => {
+  it('⭐ a split expense draws the takings drawer down and then the float, on its own line', async () => {
+    // > **Ian, 2026-08-29:** *"sales comes say cashier cash +1000, online +500. Then a delivery
+    // > came worth 3000 so cashier cash −1000 = 0, online not touched cause delivery is cash…
+    // > 2000 from float then 18k balance to total 3k. So it has its own line on split payment."*
+    //
+    // ⭐ His example, to the peso. The drawer covers what it has and the side pocket covers the
+    // rest; the online wallet is untouched because a cash delivery is a cash delivery.
+    const f = await setup('t153-split');
+    const catId = await categoryId(f.orgId, 'Cost of Goods Sold — General');
+
+    const { moneyAccountId: potId } = await asPerson(f.orgId, (tx) =>
+      setTillFloat(tx, actor(f.orgId, f.adminId), { storeId: f.storeId, target: '20000.00' }),
+    );
+    await fundAccount(f.orgId, f.storeId, '1115', '20000.00', null);
+    await fundAccount(f.orgId, f.storeId, '1110', '1000.00', null);
+
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: 'Delivery, part drawer part float',
+        payments: [
+          { method: 'cash', amount: '1000.00', moneyAccountId: f.cashDrawerId },
+          // ⭐ THE POINT: the float is an ordinary payment line, picked like any other account.
+          { method: 'cash', amount: '2000.00', moneyAccountId: potId },
+        ],
+      }),
+    );
+    const posted = await asPerson(f.orgId, (tx) =>
+      approveExpense(tx, actor(f.orgId, f.managerId), created.id),
+    );
+    expect(posted.created).toBe(true);
+
+    // ⭐ Two separate credit legs — 1110 for the takings, 1115 for the side pocket. The float's
+    // spending is visible as its own movement rather than buried in one cash figure.
+    const lines = await linesFor(posted.journalEntryId);
+    const byCode = Object.fromEntries(lines.map((l) => [l.code, l]));
+    expect(Number(byCode['1110']!.credit)).toBeCloseTo(1000, 2);
+    expect(Number(byCode['1115']!.credit)).toBeCloseTo(2000, 2);
+
+    // ⭐ The pot now stands at ₱18,000 — Ian's "18k balance" — and says so as a finding, which is
+    // exactly the state that asks to be topped back up to target.
+    const pot = await asPerson(f.orgId, async (tx) => {
+      const acct = await moneyAccountsRepo.getById(tx, f.orgId, potId);
+      return moneyAccountsRepo.balanceOf(tx, f.orgId, acct!);
+    });
+    expect(Number(pot)).toBeCloseTo(18000, 2);
+
+    const found = await asPerson(f.orgId, (tx) => findingsRepo.tillFloatOffTarget(tx, f.orgId));
+    expect(found).toHaveLength(1);
+    expect(found[0]!.detail).toMatch(/₱2,000\.00 short in the LEDGER/);
+    // ⛔ And it must say so: this is posted spending, not a counted shortage. Charging a
+    // cashier for it would bill them for a delivery they paid for correctly.
+    expect(found[0]!.detail).toMatch(/must not be charged to a cashier/);
+  });
+
+  it('⛔ and the float cannot be overdrawn — it stops at zero, unlike the takings drawer', async () => {
+    // Ian, 2026-08-29: "we guard all accounts to never go negative, all stops at 0 never below."
+    const f = await setup('t153-guard');
+    const catId = await categoryId(f.orgId, 'Cost of Goods Sold — General');
+    const { moneyAccountId: potId } = await asPerson(f.orgId, (tx) =>
+      setTillFloat(tx, actor(f.orgId, f.adminId), { storeId: f.storeId, target: '20000.00' }),
+    );
+    await fundAccount(f.orgId, f.storeId, '1115', '2000.00', null);
+
+    await expect(
+      asPerson(f.orgId, async (tx) => {
+        const created = await createExpense(tx, actor(f.orgId, f.staffId), {
+          storeId: f.storeId,
+          supplierId: f.supplierId,
+          supplierInvoiceId: f.supplierInvoiceId,
+          businessDate: BUSINESS_DATE,
+          categoryId: catId,
+          particulars: 'More than the pocket holds',
+          payments: [{ method: 'cash', amount: '5000.00', moneyAccountId: potId }],
+        });
+        return approveExpense(tx, actor(f.orgId, f.managerId), created.id);
+      }),
+    ).rejects.toThrow(/side pocket/);
   });
 });

@@ -149,7 +149,16 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
   // ⭐ 41 -> 42 on 2026-08-28 (T-134): `run_cutover`. ORG-scoped, held by manager and up. This
   // count is a PIN, so adding a capability is a deliberate act - which is exactly why it caught
   // this one before the matrix doc had a row for it.
-  it('finds exactly 42 capability rows — NOT the "36" the task documents say in prose', () => {
+  //
+  // ⭐ 48 -> 49 on 2026-08-29 (T-152): `set_cash_policy`. STORE-scoped, admin and up, and
+  // deliberately NOT manager — Ian: "configurable by admin". It is separate from
+  // `manage_store_settings` because a manager must not be able to raise the ceiling their own
+  // cash custody is measured against.
+  // ⭐ 49 -> 50 on 2026-08-30, at the attendance merge: `set_cash_policy` (T-152, main) and
+  // `provision_clock_terminal` (T-185, attendance lane) were added independently on two branches.
+  // ⚠️ The merged total is the sum, not either side's number — resolving this conflict by taking
+  // one side would leave a GREEN test asserting a count the code does not have.
+  it('finds exactly 50 capability rows — NOT the "36" the task documents say in prose', () => {
     // docs/tasks/121-roles-and-access.md and CAPABILITY-MATRIX.md's own Contract section
     // both say "36 rows" / "36 capabilities". The table itself had 38: the two
     // ⚠️-flagged open cells (set_credit_limit, close_period) plus the two platform-only
@@ -165,7 +174,7 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // into the enforcement without also being written into the document people actually
     // read, and vice versa.
     const { rows } = parseCapabilityMatrixDoc();
-    expect(rows.length).toBe(49);
+    expect(rows.length).toBe(50);
   });
 
   it('has no duplicate capability names', () => {
@@ -236,10 +245,10 @@ describe('invariant 1 — every capability has an explicit decision for all four
     expect(problems).toEqual([]);
   });
 
-  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 49 capabilities', () => {
-    expect(CAPABILITIES.length).toBe(49);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(49);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(49);
+  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 50 capabilities', () => {
+    expect(CAPABILITIES.length).toBe(50);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(50);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(50);
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));
   });
@@ -286,6 +295,14 @@ describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', (
     expect([...ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER].sort()).toEqual(
       [
         'view_trial_balance',
+        // ⭐ T-152's `set_cash_policy` JOINED this set on 2026-08-29 with no edit to any list —
+        // admin-yes / manager-no, and the set is derived from exactly that. ⚠️ Worth a moment's
+        // thought rather than a reflexive re-pin: it means that in an org with NO admin, a manager
+        // DOES get the ceiling as a real granted row. That is correct — the conflict this
+        // capability guards against is a manager raising a bar an admin set, and where there is no
+        // admin the manager is the top of the tree and somebody must hold it. The grant is
+        // materialised as an auditable row rather than inferred at check time.
+        'set_cash_policy',
         'manage_users',
         'grant_capability',
         'manage_price_lists',
