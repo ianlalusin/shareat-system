@@ -441,6 +441,16 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'to, or settable by, anyone else’s org.',
   },
 
+  // ---- T-156: the punch (Phase 4, lane B) -----------------------------------------------
+  attendance_punches: {
+    scope: 'org_column',
+    reason:
+      'Who was physically at which terminal, when. Per-org like the employment it points at — and ' +
+      'sensitive beyond the org boundary in its own right: a punch stream is a record of a named ' +
+      'person’s movements, which is exactly the field-level concern bible §7 rule 10 raises about ' +
+      'store membership implying too much.',
+  },
+
   etl_runs: { scope: 'system_only', reason: 'ETL machinery. Never reachable by a tenant or a customer — only the migrator, crons and the audit.' },
   etl_source_documents: {
     scope: 'system_only',

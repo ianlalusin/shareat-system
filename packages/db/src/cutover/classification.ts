@@ -223,6 +223,17 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'surviving day unable to explain the hours it credited. Nothing here posts to the ledger.',
   },
 
+  // ---- T-156: the punch (Phase 4, lane B) -----------------------------------------------
+  attendance_punches: {
+    class: 'purge',
+    reason:
+      'Operational, and the clearest case of it in this phase — a punch is an event the pilot ' +
+      'produced, not configuration. ⭐ It is safe to purge precisely BECAUSE attendance posts ' +
+      'nothing to the ledger (bible §10: attendance touches money only through payroll): the ' +
+      'opening books carry no balance derived from a 2026 punch. Pilot attendance is settled and ' +
+      'paid within the pilot; January opens on counted present-day facts, and a punch is neither.',
+  },
+
   // ---- T-124: fixed assets ---------------------------------------------------------------
   prepaid_items: {
     class: 'keep_shell',

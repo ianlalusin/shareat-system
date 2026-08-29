@@ -435,6 +435,13 @@
       "when": 1792207907084,
       "tag": "0071_t155_store_attendance_config",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1792294307084,
+      "tag": "0072_t156_attendance_punches",
+      "breakpoints": true
     }
   ]
 }

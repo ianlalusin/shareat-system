@@ -56,3 +56,6 @@ export * from './employment';
 
 // T-155 — per-store attendance policy, effective-dated (Phase 4, lane B).
 export * from './attendance-config';
+
+// T-156 — the append-only punch, the Lane B landing table (Phase 4, lane B).
+export * from './attendance-punches';
