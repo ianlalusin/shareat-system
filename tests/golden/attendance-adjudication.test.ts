@@ -168,6 +168,10 @@ describe('T-157 golden master — v2 against real v1 attendance sessions', () =>
 
       const v1Hours = s.expected.computedHours;
       const v2Hours = got.computedMinutes / 60;
+      // ⚠️ Ian's minimum-day rule routes a sub-half-day stint entirely into PENDING overtime, so
+      // comparing paid hours alone would report "5 hours less" for time that is not lost at all —
+      // it is waiting for a manager. The honest comparison is everything v2 claims.
+      const v2Total = (got.computedMinutes + got.pendingOtMinutes) / 60;
       const presentMinutes = (s.rawClockOutMs - s.rawClockInMs) / 60_000;
       const hoursDiffer = Math.abs(v1Hours - v2Hours) > 1e-9;
       const modeDiffers = got.anchorMode !== s.expected.startAnchorMode;
@@ -184,8 +188,8 @@ describe('T-157 golden master — v2 against real v1 attendance sessions', () =>
         bump('B: D5 sub-hour precision');
         // ⚠️ Surfaced separately: v2 paying LESS than v1 is the one direction that moves real
         // money against a real person, and it needs Ian rather than a passing test.
-        if (v2Hours < v1Hours) {
-          paysLess.push(`${s.id}: v1 ${v1Hours}h -> v2 ${v2Hours.toFixed(2)}h (${Math.round((v1Hours - v2Hours) * 60)}m less)`);
+        if (v2Total < v1Hours) {
+          paysLess.push(`${s.id}: v1 ${v1Hours}h -> v2 ${v2Total.toFixed(2)}h claimed (${Math.round((v1Hours - v2Total) * 60)}m less)`);
         }
         continue;
       }
@@ -219,8 +223,8 @@ describe('T-157 golden master — v2 against real v1 attendance sessions', () =>
       // itself as pay** — the staff were not off-schedule, the config is stale.
       if (got.anchorMode === 'unallowed' && s.expected.startAnchorMode !== 'unallowed') {
         bump('D: beyond the window on a STALE grid (DEF-087)');
-        if (v2Hours < v1Hours) {
-          paysLess.push(`${s.id}: v1 ${v1Hours}h -> v2 ${v2Hours.toFixed(2)}h (${Math.round((v1Hours - v2Hours) * 60)}m less) [stale grid]`);
+        if (v2Total < v1Hours) {
+          paysLess.push(`${s.id}: v1 ${v1Hours}h -> v2 ${v2Total.toFixed(2)}h claimed (${Math.round((v1Hours - v2Total) * 60)}m less) [stale grid]`);
         }
         continue;
       }
@@ -229,6 +233,24 @@ describe('T-157 golden master — v2 against real v1 attendance sessions', () =>
       // start, so v2 calls it `exact` where v1 called it `next`. Same anchor, same hours, same
       // lateness: cosmetic.
       if (modeDiffers && !hoursDiffer && !halfDayDiffers && !nightDiffers) { bump('C: mode relabel, pay identical'); continue; }
+
+      // ── Class G — ⭐ Ian's MINIMUM-DAY rule (2026-08-29). v1 credited a sub-half-day stint as
+      // pay; v2 credits no day at all and routes the whole thing into PENDING overtime a manager
+      // must accept. *"that must be not counted at all min half day 5 hours, 1><5 hour record as
+      // unverified OT to be accepted by manager."*
+      //
+      // ⚠️ Nothing is lost to the staffer here — the time moves from automatic pay to approved
+      // overtime. It is a separate class from B precisely so that is legible rather than looking
+      // like a pay cut.
+      if (got.computedMinutes === 0 && got.pendingOtMinutes > 0 && v1Hours > 0) {
+        bump('G: under the half day — no day, raised as unverified OT');
+        if (v2Total < v1Hours) {
+          paysLess.push(
+            `${s.id}: v1 ${v1Hours}h -> v2 ${v2Total.toFixed(2)}h claimed (${Math.round((v1Hours - v2Total) * 60)}m less) [minimum-day]`,
+          );
+        }
+        continue;
+      }
 
       // ── Class F — ⭐ nearest-hour chose a LATER anchor than v1's floor-to-previous, and the pay
       // moved with it. This is the intended consequence of Ian's "nearest hour" (T-157b §1): a
@@ -239,9 +261,9 @@ describe('T-157 golden master — v2 against real v1 attendance sessions', () =>
       // and any member that pays LESS is surfaced by name below rather than absorbed into a count.
       if (modeDiffers && got.anchorMode === 'next' && s.expected.startAnchorMode === 'previous') {
         bump('F: nearest-hour anchored later than v1 (pay moved)');
-        if (v2Hours < v1Hours) {
+        if (v2Total < v1Hours) {
           paysLess.push(
-            `${s.id}: v1 ${v1Hours}h -> v2 ${v2Hours.toFixed(2)}h (${Math.round((v1Hours - v2Hours) * 60)}m less) [nearest-hour]`,
+            `${s.id}: v1 ${v1Hours}h -> v2 ${v2Total.toFixed(2)}h claimed (${Math.round((v1Hours - v2Total) * 60)}m less) [nearest-hour]`,
           );
         }
         continue;

@@ -144,6 +144,30 @@ const LATE_ARRIVAL_MS = 72 * 60 * 60 * 1000;
  */
 export const MAX_CREDIT_TO_PRESENCE_RATIO = 2;
 
+/**
+ * ⭐ **The minimum stint that is worth anything at all.** Ian, 2026-08-29, answering DEF-088:
+ * *"that must be not counted at all min half day 5 hours, 1><5 hour record as unverified OT to be
+ * accepted by manager."*
+ *
+ * Three bands, and they replace the old "pro-rate whatever was worked" tail:
+ *
+ * | Worked | Credited |
+ * |---|---|
+ * | under 1 hour | **nothing at all** |
+ * | 1 hour to `halfDayMinutes` | **nothing as a day** — the whole stint becomes PENDING overtime a manager must accept |
+ * | `halfDayMinutes` or more | the half day, then the existing rule |
+ *
+ * ⛔ **This is the structural fix for DEF-088**, and a better one than the ratio guard alone. The
+ * 8.9-second session that v1 credited two hours now credits **zero** and raises two hours a manager
+ * has to look at and accept — rather than being paid silently. The day is no longer the unit that
+ * can be manufactured by a double-tap; the smallest unit is a half day, and everything under it has
+ * to be approved by a human before it becomes money.
+ *
+ * ⚠️ The one hour is Ian's number and is a plain constant rather than config, because nothing yet
+ * suggests it varies by store. `halfDayMinutes` above it IS per-store config.
+ */
+export const MINIMUM_CREDITABLE_MINUTES = 60;
+
 // -------------------------------------------------------------------------------------
 
 /**
@@ -529,19 +553,36 @@ export function computeDay(params: {
   // replacing it: the two are normally mutually exclusive, but a long unpaid break can make a day
   // short even though it ran past the shift end, and both are then real.
   let pendingOtMinutes = lateOutOtMinutes;
-  if (policy.shortShiftHalfDayOt && computedMinutes < required) {
-    if (computedMinutes >= policy.halfDayMinutes) {
-      pendingOtMinutes += computedMinutes - policy.halfDayMinutes;
-      computedMinutes = policy.halfDayMinutes;
-      isHalfDay = true;
+
+  if (computedMinutes < policy.halfDayMinutes) {
+    // ⛔ Below the half-day bar there is NO DAY. Ian, 2026-08-29 — see MINIMUM_CREDITABLE_MINUTES.
+    // This is what makes a double-tap unable to manufacture pay: the smallest unit anyone can be
+    // credited is a half day, and anything under it needs a human before it becomes money.
+    const worked = computedMinutes;
+    computedMinutes = 0;
+
+    if (worked < MINIMUM_CREDITABLE_MINUTES) {
       explain.push(
-        `Short shift credited as a half day (${policy.halfDayMinutes}m); the remaining ` +
-          `${computedMinutes - policy.halfDayMinutes}m is raised as PENDING overtime and pays only once approved.`,
+        `Only ${worked}m — under the ${MINIMUM_CREDITABLE_MINUTES}-minute minimum, so it is not ` +
+          'counted at all.',
       );
     } else {
-      // Below the half-day bar there is no half day and no OT — it pro-rates to actual hours.
-      explain.push('Below the half-day threshold — pro-rated to the hours actually worked.');
+      const credited = roundOvertimeMinutes(worked);
+      pendingOtMinutes += credited;
+      explain.push(
+        `${worked}m is under the ${policy.halfDayMinutes}m half day, so no day is credited — ` +
+          `${credited}m is raised as UNVERIFIED overtime for a manager to accept.`,
+      );
     }
+  } else if (policy.shortShiftHalfDayOt && computedMinutes < required) {
+    const remainder = computedMinutes - policy.halfDayMinutes;
+    pendingOtMinutes += remainder;
+    computedMinutes = policy.halfDayMinutes;
+    isHalfDay = true;
+    explain.push(
+      `Short shift credited as a half day (${policy.halfDayMinutes}m); the remaining ${remainder}m ` +
+        'is raised as PENDING overtime and pays only once approved.',
+    );
   }
 
   if (adjustments.halfDayOverride !== undefined && adjustments.halfDayOverride !== isHalfDay) {
@@ -563,11 +604,17 @@ export function computeDay(params: {
   // Compared against the RAW span — how long they were actually on the premises — not against the
   // paid window, which is the thing under suspicion.
   const presentMinutes = Math.max(0, rawEnd - rawStart);
-  if (computedMinutes > 0 && computedMinutes > presentMinutes * MAX_CREDIT_TO_PRESENCE_RATIO) {
+  // ⚠️ Weighed against credited pay PLUS pending overtime, not pay alone. Ian's minimum-day bands
+  // route a sub-half-day stint entirely into pending OT, so a check that looked only at
+  // `computedMinutes` would see zero and stay quiet on exactly the DEF-088 shape it exists for —
+  // the 8.9-second session now credits 0 and raises 2 hours, and the two hours are the problem.
+  const claimedMinutes = computedMinutes + pendingOtMinutes;
+  if (claimedMinutes > 0 && claimedMinutes > presentMinutes * MAX_CREDIT_TO_PRESENCE_RATIO) {
     anomalies.push('implausible_span');
     explain.push(
-      `Present for ${presentMinutes}m but credited ${computedMinutes}m — more than ` +
-        `${MAX_CREDIT_TO_PRESENCE_RATIO}x. A manager must confirm this day before it can pay.`,
+      `Present for ${presentMinutes}m but claiming ${claimedMinutes}m (${computedMinutes}m paid, ` +
+        `${pendingOtMinutes}m pending) — more than ${MAX_CREDIT_TO_PRESENCE_RATIO}x. A manager must ` +
+        'confirm this day before any of it can pay.',
     );
   }
 

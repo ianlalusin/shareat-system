@@ -4,6 +4,7 @@ import {
   paidEndMinute,
   nightDiffMinutesInWindow,
   resolveStartAnchor,
+  MINIMUM_CREDITABLE_MINUTES,
   roundOvertimeMinutes,
   type DayPolicy,
   type DayPunch,
@@ -288,6 +289,101 @@ describe('T-157 invariant 2 — undertime grace runs BEFORE the short-shift rule
     );
     expect(r.undertimeForgivenMinutes).toBe(0);
     expect(r.isHalfDay).toBe(true);
+  });
+});
+
+describe('T-157b §5 — ⭐ the minimum day: under 5 hours is not a day at all', () => {
+  // Ian, 2026-08-29, answering DEF-088: "that must be not counted at all min half day 5 hours,
+  // 1><5 hour record as unverified OT to be accepted by manager."
+  //
+  // ⛔ This is the structural fix for DEF-088. The day stops being a unit a double-tap can
+  // manufacture: the smallest thing anyone can be credited is a half day, and everything below it
+  // has to pass a human before it becomes money.
+
+  it('the minimum is one hour, and it is a named constant', () => {
+    expect(MINIMUM_CREDITABLE_MINUTES).toBe(60);
+  });
+
+  it('⛔ under an hour is NOT COUNTED AT ALL — no pay, and no overtime either', () => {
+    // 14:00 in, 14:45 out. Floors to 14:00, so 0 minutes; nothing is owed and nothing is claimed.
+    const r = day([punch(fromHour(14), 'in'), punch(fromHour(14, 45), 'out')], {
+      allowedShiftStartHours: [14],
+    });
+    expect(r.computedMinutes).toBe(0);
+    expect(r.pendingOtMinutes).toBe(0);
+    expect(r.isHalfDay).toBe(false);
+  });
+
+  it('⭐ between one hour and the half day: NO day is credited, the whole stint becomes pending OT', () => {
+    // 14:00 to 17:00 is three hours — real work, but not a day. It pays nothing by itself and
+    // waits for a manager to accept it.
+    const r = day([punch(fromHour(14), 'in'), punch(fromHour(17), 'out')], {
+      allowedShiftStartHours: [14],
+    });
+    expect(r.computedMinutes).toBe(0);
+    expect(r.pendingOtMinutes).toBe(3 * 60);
+    expect(r.isHalfDay).toBe(false);
+  });
+
+  it('the one-hour boundary is exact: 60 minutes earns pending OT, 59 earns nothing', () => {
+    const p = { allowedShiftStartHours: [14], earlyOutGraceMinutes: 0 };
+    const sixty = day([punch(fromHour(14), 'in'), punch(fromHour(15), 'out')], p);
+    expect(sixty.pendingOtMinutes).toBe(60);
+    expect(sixty.computedMinutes).toBe(0);
+
+    // 14:59 floors to 14:00 — 0 minutes, which is under the minimum.
+    const under = day([punch(fromHour(14), 'in'), punch(fromHour(14, 59), 'out')], p);
+    expect(under.pendingOtMinutes).toBe(0);
+  });
+
+  it('the OT rounding applies to the band — 3h35m credits 3h30m', () => {
+    const r = day([punch(fromHour(14), 'in'), punch(fromHour(17, 35), 'out')], {
+      allowedShiftStartHours: [14],
+      earlyOutGraceMinutes: 30,
+    });
+    // 17:35 with a 30-minute grace rounds up to 18:00 = 4h. Still under the 5h half day.
+    expect(r.computedMinutes).toBe(0);
+    expect(r.pendingOtMinutes).toBe(4 * 60);
+  });
+
+  it('at exactly the half day it IS a day again, and is credited', () => {
+    const r = day([punch(fromHour(14), 'in'), punch(fromHour(19), 'out')], {
+      allowedShiftStartHours: [14],
+      shortShiftHalfDayOt: true,
+    });
+    expect(r.computedMinutes).toBe(5 * 60);
+    expect(r.isHalfDay).toBe(true);
+    expect(r.pendingOtMinutes).toBe(0);
+  });
+
+  it('⭐ DEF-088, end to end: five minutes present cannot become an hour of pay', () => {
+    // The real shape from Lipa, generalised: a punch pair minutes apart, far from any allowed
+    // start, where v1's floor-back-to-the-previous-hour plus its end rounding manufactured hours.
+    //
+    // v2: 17:50 is 170 minutes from the nearest allowed start, so it anchors to its own hour and
+    // is flagged. The end rounds to 18:00, giving one hour — which is UNDER the half day, so it
+    // credits NOTHING and raises an hour a manager has to look at. And because the claim is more
+    // than twice the time present, the day is flagged implausible on top.
+    const r = day([punch(fromHour(17, 50), 'in'), punch(fromHour(17, 55), 'out')], {
+      allowedShiftStartHours: [15],
+      earlyOutGraceMinutes: 30,
+    });
+    expect(r.computedMinutes).toBe(0);
+    expect(r.pendingOtMinutes).toBe(60);
+    expect(r.anomalies).toContain('implausible_span');
+    expect(r.anomalies).toContain('start_not_allowed');
+  });
+
+  it('⚠️ the implausibility guard weighs PENDING overtime too, not just pay', () => {
+    // Without this the guard would look at `computedMinutes`, see zero, and stay silent on exactly
+    // the shape it exists to catch — because the bands route the whole stint into pending OT.
+    const r = day([punch(fromHour(17, 50), 'in'), punch(fromHour(17, 55), 'out')], {
+      allowedShiftStartHours: [15],
+      earlyOutGraceMinutes: 30,
+    });
+    expect(r.computedMinutes).toBe(0);
+    expect(r.pendingOtMinutes).toBeGreaterThan(0);
+    expect(r.anomalies).toContain('implausible_span');
   });
 });
 
