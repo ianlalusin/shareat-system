@@ -6,3 +6,4 @@
  * `CLAUDE.md`'s one-line "packages/domain/sync/" is read as the logic rather than the adapter.
  */
 export * from './publisher';
+export * from './ingestor';
