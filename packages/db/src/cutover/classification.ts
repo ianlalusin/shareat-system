@@ -157,6 +157,24 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       're-seeding at cutover would change ids that pilot sales days reference, and the ' +
       'remittable flag is a business decision about each channel, not pilot data.',
   },
+  /** ⚠️ **This one is not obviously `purge`, and the reasoning is worth reading before changing
+   *  it.** Every other operational table is purged because the 2027-01-01 opening entry replaces
+   *  it. **This table is not replaced by anything** — the opening entry is a balance-sheet
+   *  position, and a statutory register is a list of transactions that already happened. Purging
+   *  it destroys evidence for sales the business really made, in periods BIR can still assess.
+   *  ⛔ But it is still `purge`, for the same reason as `etl_*`: the Oct–Dec rows are **pilot**
+   *  data, and a pilot register is not the store's statutory record — the paper logbook is
+   *  (T-137 §6). Keeping half-real rows past cutover would produce a register that looks
+   *  authoritative and is not. **If the pilot is ever declared the real record, this becomes
+   *  `date_scoped` on `business_date` — a decision for Ian, not a default.** */
+  statutory_discount_records: {
+    class: 'purge',
+    reason:
+      'Pilot-period statutory records, not the storeâs register of record — the paper logbook is ' +
+      '(T-137 §6). Purged like every other operational table so no half-real row survives to look ' +
+      'authoritative in a BIR audit. Revisit as date_scoped only if Ian declares the pilot register ' +
+      'the real one.',
+  },
   sales_days: {
     class: 'purge',
     reason:

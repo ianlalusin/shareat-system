@@ -1,0 +1,94 @@
+'use server';
+
+/**
+ * Server actions for the SC/PWD statutory register — docs/tasks/137-statutory-discount-logbook.md.
+ *
+ * Thin adapters: parse `FormData`, call the domain, redirect. **No rule is re-implemented here.**
+ * `recordStatutoryDiscount` / `voidStatutoryDiscount` own the authorisation, and migration 0065's
+ * constraints own the rest.
+ *
+ * ⭐ **The actor comes from `requireActor()`, never from the form** (T-138, bible §7.1) — which is
+ * what makes `void_statutory_discount` being a different capability from `record_statutory_discount`
+ * mean anything at all.
+ */
+import { redirect } from 'next/navigation';
+import { recordStatutoryDiscount, voidStatutoryDiscount } from '@shareat/domain';
+import { withOrgPrincipal } from '../expenses/lib';
+import { requireActor } from '../../lib/session';
+
+function str(fd: FormData, key: string): string {
+  const v = fd.get(key);
+  return typeof v === 'string' ? v.trim() : '';
+}
+
+function errorMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  // ⭐ Constraint names are the truth but they are not English. Translate the three a person can
+  // actually hit; everything else surfaces verbatim rather than being swallowed.
+  if (raw.includes('statutory_discount_records_live_invoice_key')) {
+    return 'That invoice already has a live record for this store and date. One discount only — a PWD who is also a senior claims one 20%, not both. Void the existing record if it is wrong.';
+  }
+  if (raw.includes('statutory_discount_records_discount_within_gross_check')) {
+    return 'The discount cannot be more than the gross amount.';
+  }
+  if (raw.includes('statutory_discount_records_amounts_positive_check')) {
+    return 'Both the gross amount and the discount must be greater than zero.';
+  }
+  if (raw.includes('statutory_discount_records_identity_present_check')) {
+    return 'Name, ID number and invoice number are all required — the record satisfies nothing without them.';
+  }
+  return raw;
+}
+
+function backTo(fd: FormData, error?: string): string {
+  const params = new URLSearchParams();
+  const store = str(fd, 'storeId');
+  const from = str(fd, 'from');
+  const to = str(fd, 'to');
+  if (store) params.set('store', store);
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  if (error) params.set('error', error);
+  return `/statutory-discounts?${params.toString()}`;
+}
+
+export async function recordStatutoryDiscountAction(formData: FormData): Promise<void> {
+  const actor = await requireActor('/statutory-discounts');
+  const storeId = str(formData, 'storeId');
+  const kind = str(formData, 'kind');
+
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      recordStatutoryDiscount(tx, actor, {
+        storeId,
+        businessDate: str(formData, 'businessDate'),
+        invoiceNumber: str(formData, 'invoiceNumber'),
+        kind: kind === 'pwd' ? 'pwd' : 'senior',
+        idNumber: str(formData, 'idNumber'),
+        holderName: str(formData, 'holderName'),
+        grossAmount: str(formData, 'grossAmount') || '0',
+        discountAmount: str(formData, 'discountAmount') || '0',
+        signatory: str(formData, 'signatory') || null,
+        notes: str(formData, 'notes') || null,
+      }),
+    );
+  } catch (err) {
+    redirect(backTo(formData, errorMessage(err)));
+  }
+  redirect(backTo(formData));
+}
+
+export async function voidStatutoryDiscountAction(formData: FormData): Promise<void> {
+  const actor = await requireActor('/statutory-discounts');
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      voidStatutoryDiscount(tx, actor, {
+        id: str(formData, 'id'),
+        reason: str(formData, 'voidReason'),
+      }),
+    );
+  } catch (err) {
+    redirect(backTo(formData, errorMessage(err)));
+  }
+  redirect(backTo(formData));
+}

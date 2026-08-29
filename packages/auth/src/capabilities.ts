@@ -71,6 +71,8 @@ export type Capability =
   | 'submit_sales_day'
   | 'verify_sales_day'
   | 'void_sales_day'
+  | 'record_statutory_discount'
+  | 'void_statutory_discount'
   | 'accept_remittance'
   | 'transfer_funds'
   // Expenses
@@ -133,6 +135,8 @@ export const CAPABILITIES: readonly Capability[] = [
   'submit_sales_day',
   'verify_sales_day',
   'void_sales_day',
+  'record_statutory_discount',
+  'void_statutory_discount',
   'accept_remittance',
   'transfer_funds',
   'create_expense',
@@ -194,6 +198,9 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   submit_sales_day: 'store',
   verify_sales_day: 'store',
   void_sales_day: 'store',
+  // The SC/PWD register is kept per store, like the sales day it sits beside (T-137).
+  record_statutory_discount: 'store',
+  void_statutory_discount: 'store',
   accept_remittance: 'store',
   // A transfer names two money accounts, and a money account belongs to a store.
   transfer_funds: 'store',
@@ -277,6 +284,16 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   submit_sales_day: { super_admin: true, admin: true, manager: true, staff: true },
   verify_sales_day: { super_admin: true, admin: true, manager: true, staff: false },
   void_sales_day: { super_admin: true, admin: true, manager: true, staff: false },
+  // ⭐ Recording is STAFF-open on purpose, and it is the only way this table gets filled. There is
+  // no paper logbook and the till captures no identity (bible row 164), so a record can only be
+  // created while the customer is still at the counter — and the person standing there is a
+  // cashier, not a manager. ⛔ Gating this to managers would not make the register stricter; it
+  // would make it EMPTY, because nothing downstream can reconstruct a name or an ID number later.
+  record_statutory_discount: { super_admin: true, admin: true, manager: true, staff: true },
+  // ⛔ Voiding is NOT, and the asymmetry is the control. The burden of proof in a BIR audit is on
+  // the seller, so withdrawing a statutory record is a supervisory act - same shape as
+  // void_sales_day directly above.
+  void_statutory_discount: { super_admin: true, admin: true, manager: true, staff: false },
   accept_remittance: { super_admin: true, admin: true, manager: true, staff: false },
   // DECIDED — Ian 2026-08-26 (bible row 150): manager, deliberately NOT admin-only.
   // ⭐ Row 149 made OPENING an account admin-only, and the distinction between the two is

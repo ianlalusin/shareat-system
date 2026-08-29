@@ -209,6 +209,32 @@ the position they govern, which is right for those two and wrong as a pattern. *
 
 ---
 
+## Added 2026-08-29 — found while assessing T-137
+
+| Capability | v1 has it | v2 state | Why it is a gap, not a defect |
+|---|---|---|---|
+| **Capturing the SC/PWD holder's NAME and ID NUMBER at the till** | ⛔ **No — and this is the correction.** T-137 and bible rows 131/132 said the ID is captured today. Verified at source: `POS/src/lib/types.ts:813`'s `Discount` has `vatExempt?: boolean` and no identity fields at all; nothing in `ERP-rebuild`, `CUSTOMER` or `Shareat Website` captures one either (DEF-101) | ⚠️ **T-137 builds the RECORD, and no phase owns the CAPTURE.** `statutory_discount_records` holds all six statutory fields, but until POS v2 exists every row is typed by hand from the paper book (`source = 'transcribed'`) | **The two missing fields cannot be derived from anything.** POS already writes four of the six per transaction — `DiscountEvent` (`types.ts:1570`) carries receipt number, amount, date and the acting staffer — but a name and an ID number come off a physical card a cashier is looking at. ⛔ **v1 cannot be changed to capture them** (read-only reference repo; Ian, 2026-08-25: *"don't touch v1, let it be"*), so this is not deferred work — it is **impossible until POS v2**, a phase after January. ⚠️ **The obligation is live now.** RR 5-2017 §5.9 and RR 7-2010 both require the record per transaction, and the burden of proof in a BIR audit is on the seller |
+
+⚠️ **This one is unusual: the gap is in a system this project is not allowed to touch**, and the
+ERP half being built cannot close it alone. **What T-137 ships is the destination**, so that when
+POS v2 lands it writes `source = 'pos'` rows into the same table with no migration — and so that a
+store transcribing a paper book today is already recording it durably.
+
+### ⛔ ANSWERED 2026-08-29, and the answer is the worse one
+
+Ian, closing discovery 24 Open 1: *"no they are not kept to avail the discount they just present id
+and the pos picks the discount from the list of configured discount."*
+
+**There is no paper logbook.** The customer shows a card, the cashier taps a configured discount,
+and nothing records the name, the ID number or the invoice. So the record required by RR 5-2017
+§5.9 and RR 7-2010 is **not being kept in any form today** — and the burden of proof in a BIR audit
+is on the seller (bible row 164).
+
+⚠️ **This is no longer only a capability gap; it is a live exposure with a running clock.** T-137
+ships the register, but a register nobody writes to closes nothing, and **nothing can reconstruct a
+sale that was not recorded at the counter.** The remaining decision is a *process* one and it is
+Ian's: cashier enters it in the ERP at the till · a paper book is started and typed up later · or
+the exposure is formally accepted until POS v2, the way DEF-070's was. **Gap count: 35.**
 ## Added 2026-08-29 — found while planning Phase 3, and it inverts this document's method
 
 | Capability | v1 has it | v2 state | Why it is a gap, not a defect |

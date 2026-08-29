@@ -512,6 +512,20 @@
       "when": 1794713507084,
       "tag": "0100_t185_attendance_credentials",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1794799907084,
+      "tag": "0101_t137_statutory_discount_records",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1794886307084,
+      "tag": "0102_t137_source_manual",
+      "breakpoints": true
     }
   ]
 }

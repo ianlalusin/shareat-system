@@ -32,6 +32,8 @@ they need weekly, the boundary is wrong.
 | `submit_sales_day` | store | ✅ | ✅ | ✅ | ✅ | Cashier closes their own day |
 | `verify_sales_day` | store | ✅ | ✅ | ✅ | ✗ | **Segregation:** the person who submits should not be the one who verifies |
 | `void_sales_day` | store | ✅ | ✅ | ✅ | ✗ | v1's `canVoidRecords`, promoted to a role-level capability |
+| `record_statutory_discount` | store | ✅ | ✅ | ✅ | ✅ | T-137. **Staff-open deliberately** — until POS v2 every row is transcribed from the store's paper SC/PWD logbook, and the person holding that book is a cashier. Manager-gating it is how the register stays empty |
+| `void_statutory_discount` | store | ✅ | ✅ | ✅ | ✗ | T-137. **The asymmetry with the row above IS the control.** The burden of proof in a BIR audit is on the seller, so withdrawing a statutory record is supervisory — same shape as `void_sales_day` |
 | `accept_remittance` | store | ✅ | ✅ | ✅ | ✗ | **DEF-052** — in v1 this grant enforced nothing. Here it must have a denial test |
 | `transfer_funds` | store | ✅ | ✅ | ✅ | ✗ | Row 150. Moving money between accounts that already exist is RECORDING, not changing what the books can record against — that is `manage_chart_of_accounts` |
 

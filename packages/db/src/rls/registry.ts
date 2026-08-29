@@ -123,6 +123,15 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'Per-store channel configuration. Org-scoped for the same reason as accounts: a franchise ' +
       'owner configures their own channels and must never see, let alone edit, those of another org.',
   },
+  statutory_discount_records: {
+    scope: 'org_column',
+    reason:
+      'The statutory SC/PWD register names CUSTOMERS — holder name and government ID number — ' +
+      'which makes it the most personally identifying table in the schema, not merely a ' +
+      'commercially sensitive one. A franchise owner reading another orgâs register would be ' +
+      'reading named individualsâ disability and age status, so org_column scoping is a privacy ' +
+      'boundary here, not only a tenancy one.',
+  },
   sales_days: {
     scope: 'org_column',
     reason:

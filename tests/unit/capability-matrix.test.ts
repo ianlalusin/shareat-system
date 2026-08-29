@@ -158,7 +158,10 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
   // `provision_clock_terminal` (T-185, attendance lane) were added independently on two branches.
   // ⚠️ The merged total is the sum, not either side's number — resolving this conflict by taking
   // one side would leave a GREEN test asserting a count the code does not have.
-  it('finds exactly 50 capability rows — NOT the "36" the task documents say in prose', () => {
+  // ⭐ 50 -> 52 on 2026-08-30, at the T-137 merge: `record_statutory_discount` and
+  // `void_statutory_discount`. Third independent addition in two days, on a third branch — the
+  // count is the SUM of every lane's, never the last one to merge.
+  it('finds exactly 52 capability rows — NOT the "36" the task documents say in prose', () => {
     // docs/tasks/121-roles-and-access.md and CAPABILITY-MATRIX.md's own Contract section
     // both say "36 rows" / "36 capabilities". The table itself had 38: the two
     // ⚠️-flagged open cells (set_credit_limit, close_period) plus the two platform-only
@@ -169,12 +172,13 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     //
     // ⭐ 39 since bible row 150 added `transfer_funds`, 41 since T-125 added
     // `manage_prepaid_items` and `run_amortisation`, 44 since T-130 added
-    // `record_supplier_invoice`, `verify_supplier_invoice` and `void_supplier_invoice`.
+    // `record_supplier_invoice`, `verify_supplier_invoice` and `void_supplier_invoice`,
+    // 50 since T-137 added `record_statutory_discount` and `void_statutory_discount`.
     // Having to edit this number is the guard WORKING: a capability cannot be slipped
     // into the enforcement without also being written into the document people actually
     // read, and vice versa.
     const { rows } = parseCapabilityMatrixDoc();
-    expect(rows.length).toBe(50);
+    expect(rows.length).toBe(52);
   });
 
   it('has no duplicate capability names', () => {
@@ -245,10 +249,10 @@ describe('invariant 1 — every capability has an explicit decision for all four
     expect(problems).toEqual([]);
   });
 
-  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 50 capabilities', () => {
-    expect(CAPABILITIES.length).toBe(50);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(50);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(50);
+  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 52 capabilities', () => {
+    expect(CAPABILITIES.length).toBe(52);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(52);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(52);
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));
   });
