@@ -194,6 +194,22 @@ probably its own phase.
 **Recommendation: not in Phase 4.** Ship the browser terminal, prove the lane, add the APK when a
 store actually needs a reader.
 
+### ⭐ D4. May the golden master capture real v1 attendance data? — **blocks T-157's exit**
+
+Bible §15.2 calls golden-master testing *"the most important practice here"*, and T-157 is where it
+matters most: a hand-written suite for the adjudication engine encodes **my reading** of the rules,
+and my reading is the thing most likely to be wrong. Only real v1 inputs replayed against real v1
+outputs catch that.
+
+Capturing them means `npm run capture -- --collection attendanceSessions` against the **live ERP
+Firebase project** with a read-only service-account key — production data. **This session did not
+run it.** The harness is written and ready (`tests/golden/attendance-adjudication.test.ts`); until
+the corpus exists it reports a named BLOCKED case in the test output rather than passing vacuously.
+
+**Recommendation: yes, and it is low risk** — the ETL is read-only by construction (`SourceReader`
+declares no write method), the key is `roles/datastore.viewer`, and specimens are pseudonymised
+through the existing corpus machinery. But it reaches production, so it is Ian's to say.
+
 ### D3. Is the 72-hour queue ceiling still right?
 
 `MAX_QUEUE_AGE_MS = 72h` (`offline-replay.ts:7`). Past it, a punch is rejected and **dead-lettered
@@ -244,16 +260,39 @@ manager to confirm, rather than a data-loss cliff. Recorded here so nobody ports
 
 | # | Task |
 |---|---|
-| **T-154** | `positions` (canonical + store-defined) and `employments` (person × store × position × employment status, effective-dated). The staff master record `docs/CAPABILITY-GAPS.md:152` assigns here |
-| **T-155** | The **shift-day calendar** in `packages/domain/src/attendance/` (§4.3), the glossary entries (§4.2), and `store_attendance_config` as **effective-dated** rows (§3, row 4) carrying v1's constants verbatim |
+| **T-154** ✅ | `positions` (canonical + store-defined) and `employments` (person × store × position × employment status, effective-dated). The staff master record `docs/CAPABILITY-GAPS.md:152` assigns here |
+| **T-155** ✅ | The **shift-day calendar** in `packages/domain/src/attendance/` (§4.3), the glossary entries (§4.2), and `store_attendance_config` as **effective-dated** rows (§3, row 4) carrying v1's constants verbatim |
 
 ### Wave 2 — the punch model and the adjudication
 
 | # | Task |
 |---|---|
-| **T-156** | `attendance_punches` — append-only, `UNIQUE (client_punch_id)`, immutability by trigger. The Lane B landing table, and the ingestor's target |
-| **T-157** | ⭐ **The adjudication engine** — span-based start anchor, hours, breaks, night differential, holidays. The densest task in the phase; discovery 15 §3 and the three v1 source files it names are required reading |
-| **T-158** | `attendance_adjustments` — the manager's Late/Next-in, early-out and half-day decisions as attributed inputs, plus verify/void, plus the *"is this decision even worth asking"* materiality gate |
+| **T-156** ✅ | `attendance_punches` — append-only, `UNIQUE (client_punch_id)`, immutability by trigger. The Lane B landing table, and the ingestor's target |
+| **T-157** ✅* | ⭐ **The adjudication engine** — span-based start anchor, hours, breaks, night differential, holidays. The densest task in the phase; discovery 15 §3 and the three v1 source files it names are required reading |
+| **T-158** ✅ | `attendance_adjustments` — the manager's Late/Next-in, early-out and half-day decisions as attributed inputs, plus verify/void, plus the *"is this decision even worth asking"* materiality gate |
+
+> ### ✅ **Waves 0–2 built 2026-08-29.** 110 new tests, all green
+>
+> | | |
+> |---|---|
+> | T-153 | The spike. Contract holds, 14/14 |
+> | T-154 | Positions, employments, roster. 21 tests |
+> | T-155 | Shift day + effective-dated config. 16 unit (4 timezones) + 22 integration |
+> | T-156 | The append-only punch. 19 tests |
+> | T-157 | The adjudication engine. 36 unit incl. a property test + 14 integration |
+> | T-158 | Manager decisions, C1, the deputy. 20 tests |
+>
+> Lane gates: `typecheck` clean · integration **45 files / 1269 tests green** on `shareat_test_b` ·
+> unit 660 passed with **4 failures inherited** at base commit `e0c14f0` and untouched by this lane
+> (three TOC-freshness checks on files this lane may not amend, one ETL capture test that reads the
+> real `.env.local` and depends on gitignored `secrets/`).
+>
+> ⚠️ **T-157 is `✅*`, not `✅`** — its engine, table and service are done and tested, but its
+> **golden master is BLOCKED**. See §5 D4.
+>
+> ⭐ **Two findings came out of building, not auditing:** **DEF-086** (v1's
+> `undertimeGraceMinutes` under 60 minutes can never fire, silently) and half of **DEF-081**
+> (`tests/golden/` matched no vitest glob, so a test placed there would never have run).
 
 ### Wave 3 — the hot lane *(T-153 has reported; specced when Wave 2 lands)*
 
