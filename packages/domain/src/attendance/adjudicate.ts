@@ -45,6 +45,8 @@ const BLOCKING_ANOMALIES = new Set([
   'break_not_closed',
   'inverted_window',
   'late_event_arrival',
+  // DEF-088 — credited far more than the time present. Never auto-payable.
+  'implausible_span',
 ]);
 
 /** Translate a stored config row into the pure function's policy. */

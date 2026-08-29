@@ -51,7 +51,9 @@ export type Anomaly =
   | 'start_not_allowed'
   | 'break_not_closed'
   | 'late_event_arrival'
-  | 'inverted_window';
+  | 'inverted_window'
+  /** ⛔ Credited far more time than the person was actually present. See DEF-088. */
+  | 'implausible_span';
 
 /** Everything the computation reads. Values, never a database — which is what makes it testable. */
 export interface DayPolicy {
@@ -110,27 +112,83 @@ export interface DayComputation {
 /** 72h — see `punches.ts`. Here it only raises a flag; it never rejects. */
 const LATE_ARRIVAL_MS = 72 * 60 * 60 * 1000;
 
+/**
+ * ⛔ **DEF-088 — a day may not be credited more than this multiple of the time actually present.**
+ *
+ * Found in the real v1 corpus (D4), not theorised: **12 of 550 August sessions were credited more
+ * than twice the time between the first and last tap — 40.4 excess hours across two stores in one
+ * month — and every one was `auto_paired`.** Nothing flagged them, so they flowed straight to
+ * payroll. The worst was **1.6 minutes present, 5 hours paid.**
+ *
+ * The mechanism is not a bug in any single rule. It is the *combination* of two deliberate ones: a
+ * late arrival is credited from the previous allowed start (v1 pays the full shift and recovers
+ * lateness through the CHARGE, not through hours), and the end used to floor to the hour. Apply
+ * both to a double-tap seconds apart and the day pays hours nobody worked.
+ *
+ * ⚠️ **v2 is not automatically safe.** Paying real minutes removes the end-flooring half, but the
+ * anchor half is a policy we deliberately keep — so a 30-second double tap at 20:09 against an
+ * 18:00 allowed start would still credit two hours. This is the guard for that, and it flags
+ * rather than refuses: the day may be genuine and only a manager can tell.
+ *
+ * ⚠️ **The number needs Ian.** `2` says "credited at most twice what was present". It is a
+ * deliberately loose first cut — every one of the twelve is far past it — chosen so a genuine
+ * late arrival paid from a scheduled start is not swept up. It is a named constant precisely so
+ * it can be argued with.
+ */
+export const MAX_CREDIT_TO_PRESENCE_RATIO = 2;
+
 // -------------------------------------------------------------------------------------
 
 /**
- * The clock-out minute, with the store's early-out leeway applied.
+ * The paid end minute.
  *
- * ⭐ The end is FLOORED to the hour, which turns a small kindness into a large deduction: a closer
- * sent home at 23:45 floors to 23:00 and loses a **full hour**, not the fifteen minutes they
- * actually left early. Within the grace window the hour is credited as reached.
+ * ## ⭐ v2 PAYS REAL MINUTES. The hour-floor is gone — D5, decided 2026-08-29
  *
- * ⚠️ Deliberately NOT a round-half-up: 23:30 with a 15-minute grace still floors to 23:00. The store
- * decides how much leeway it grants; anything past it is a genuinely short shift and the short-shift
- * rule must see it as one. (v1 `shift-boundaries.ts:104-134`.)
+ * v1 floors the clock-out **down to the hour**, so a closer sent home at 23:45 is paid to 23:00 and
+ * loses 45 minutes rather than the 15 they actually left early. `earlyOutGraceMinutes` exists
+ * entirely to patch that artifact.
+ *
+ * ⛔ **And the artifact had a second victim, which is DEF-086.** Because the anchor is an hour
+ * boundary and the end was floored to one, the shortfall against a whole-hour requirement was
+ * ALWAYS a whole number of hours — so `undertimeGraceMinutes` set to anything from 1 to 59 forgave
+ * nothing, silently, while reading as a working setting. A manager asking for "forgive 15 minutes"
+ * got no effect and no error.
+ *
+ * Ian, on that finding: *"about payroll its not yet implemented in v1 lots of work to do so we do it
+ * right and implement in full in v2."* So v2 does not port the hole:
+ *
+ *   - the paid end is the **actual** clock-out minute;
+ *   - `earlyOutGraceMinutes` keeps a real, distinct meaning — it forgives up to N minutes of EARLY
+ *     DEPARTURE, extending the paid end, and never past a full shift;
+ *   - `undertimeGraceMinutes` then works at any value, against a shortfall from ANY cause — which is
+ *     what v1's own comment always said it was for: *"it fires however the shortfall arose: a late
+ *     start, an early finish, or a long unpaid break."*
+ *
+ * ⚠️ **This is a deliberate divergence from v1's numbers**, sanctioned by D5 and bible §1.3, and it
+ * is the reason the golden master (§6) exists as an improvement tool rather than a parity gate.
+ * Nothing is restated by it: v2 has no attendance history and payroll is not built.
  */
-export function graceAdjustedEndMinute(endMinute: number, graceMinutes: number): number {
-  const floored = Math.floor(endMinute / 60) * 60;
-  const grace = Math.max(0, Math.min(59, graceMinutes));
-  if (grace === 0) return floored;
-  const into = endMinute - floored;
-  // Integers: `>=` is exact. v1 needs an EPS here because `into` arrives as a float and an out at
-  // exactly :45 can land on 44.99999999999999.
-  return into >= 60 - grace ? floored + 60 : floored;
+export function paidEndMinute(params: {
+  actualEndMinute: number;
+  anchorMinute: number;
+  requiredMinutes: number;
+  earlyOutGraceMinutes: number;
+}): number {
+  const { actualEndMinute, anchorMinute, requiredMinutes, earlyOutGraceMinutes } = params;
+  const grace = Math.max(0, earlyOutGraceMinutes);
+  if (grace === 0) return actualEndMinute;
+
+  // ⛔ The grace applies ONLY to a day that was otherwise a FULL SHIFT — "sent home a few minutes
+  // early", which is the case v1's comment describes. It is not a blanket bonus on any short day.
+  //
+  // ⚠️ The first version of this added `grace` to every end, and the golden master caught it
+  // immediately: a Lipa session of 16:40→16:42 (two minutes) was credited 1h12m, because a
+  // 30-minute grace was applied to a shift nobody would call "early". A rule that pays 72 minutes
+  // for two is not a kindness, it is a defect. Within the window, credit the full shift; outside
+  // it, pay exactly what was worked.
+  const fullShiftEnd = anchorMinute + requiredMinutes;
+  if (actualEndMinute >= fullShiftEnd) return actualEndMinute;
+  return fullShiftEnd - actualEndMinute <= grace ? fullShiftEnd : actualEndMinute;
 }
 
 export interface StartAnchor {
@@ -170,6 +228,28 @@ export function resolveStartAnchor(params: {
 }): StartAnchor {
   const { startMinute, effectiveEndMinute, policy } = params;
 
+  /**
+   * ⭐ **Each candidate anchor gets its OWN grace-adjusted end**, because "was this a full shift"
+   * cannot be answered without knowing which shift is being asked about — the early-out grace
+   * measures against *that* anchor's full-shift end.
+   *
+   * ⚠️ **The golden master caught this, and nothing else did.** An earlier version resolved the
+   * anchor against the raw clock-out and applied the grace afterwards. On a real Lipa session
+   * (14:50 → 23:47, 30-minute grace) that flipped Tier 1 off: v1 anchored at 15:00 with no
+   * lateness, v2 anchored at 11:00 with **230 minutes late** — and Lipa charges ₱1 per late minute,
+   * so the reordering invented a ₱230 deduction. 46 sessions diverged on the anchor and 32 more on
+   * night differential downstream of it. Unit tests were green throughout.
+   */
+  const endFrom = (anchorMinute: number): number | null =>
+    effectiveEndMinute === null
+      ? null
+      : paidEndMinute({
+          actualEndMinute: effectiveEndMinute,
+          anchorMinute,
+          requiredMinutes: policy.requiredMinutes,
+          earlyOutGraceMinutes: policy.earlyOutGraceMinutes,
+        });
+
   const offsets = policy.allowedShiftStartHours
     .map((h) => shiftDayOffsetMsForHour(h) / MIN_MS)
     .sort((a, b) => a - b);
@@ -203,8 +283,8 @@ export function resolveStartAnchor(params: {
   const required = policy.requiredMinutes;
   if (required <= 0) return fallback;
 
-  const spanNext = effectiveEndMinute - next;
-  const spanPrev = effectiveEndMinute - fallback.anchorMinute;
+  const spanNext = (endFrom(next) ?? effectiveEndMinute) - next;
+  const spanPrev = (endFrom(fallback.anchorMinute) ?? effectiveEndMinute) - fallback.anchorMinute;
   const snapToNext: StartAnchor = { anchorMinute: next, mode: 'next', lateMinutes: 0 };
 
   // Tier 1 — the next start still delivers a full shift.
@@ -377,21 +457,29 @@ export function computeDay(params: {
     return empty();
   }
 
-  // ---- Step 2: grace-adjust the end -------------------------------------------------
-  const endMinute = graceAdjustedEndMinute(paidEndRaw, policy.earlyOutGraceMinutes);
-  if (endMinute > paidEndRaw) {
-    explain.push(
-      `Clock-out ${paidEndRaw}m rounded up to ${endMinute}m by the ${policy.earlyOutGraceMinutes}-minute ` +
-        'early-out grace — without it the floor to the hour would have cost the whole remainder.',
-    );
-  }
-
-  // ---- Step 3: the start anchor ------------------------------------------------------
+  // ---- Step 2: the start anchor ------------------------------------------------------
+  //
+  // The resolver is handed the RAW clock-out and applies the early-out grace itself, once per
+  // candidate anchor — see `resolveStartAnchor`, and the regression its comment records.
   const anchor =
     adjustments.startAnchorMinute !== undefined
       ? // A manager's explicit decision is authoritative and is not re-derived from the span.
         { anchorMinute: adjustments.startAnchorMinute, mode: 'exact' as AnchorMode, lateMinutes: Math.max(0, rawStart - adjustments.startAnchorMinute) }
-      : resolveStartAnchor({ startMinute: paidStart, effectiveEndMinute: endMinute, policy });
+      : resolveStartAnchor({ startMinute: paidStart, effectiveEndMinute: paidEndRaw, policy });
+
+  // ---- Step 3: the paid end, with the early-out grace ---------------------------------
+  const endMinute = paidEndMinute({
+    actualEndMinute: paidEndRaw,
+    anchorMinute: anchor.anchorMinute,
+    requiredMinutes: policy.requiredMinutes,
+    earlyOutGraceMinutes: policy.earlyOutGraceMinutes,
+  });
+  if (endMinute > paidEndRaw) {
+    explain.push(
+      `Clock-out ${paidEndRaw}m credited to ${endMinute}m by the ${policy.earlyOutGraceMinutes}-minute ` +
+        'early-out grace — they were sent home, not short.',
+    );
+  }
 
   if (anchor.mode === 'unallowed') anomalies.push('start_not_allowed');
   explain.push(
@@ -457,6 +545,18 @@ export function computeDay(params: {
         policy.nightDiffEndHour,
       )
     : 0;
+
+  // ---- Step 7b: is this day even plausible? (DEF-088) ---------------------------------
+  // Compared against the RAW span — how long they were actually on the premises — not against the
+  // paid window, which is the thing under suspicion.
+  const presentMinutes = Math.max(0, rawEnd - rawStart);
+  if (computedMinutes > 0 && computedMinutes > presentMinutes * MAX_CREDIT_TO_PRESENCE_RATIO) {
+    anomalies.push('implausible_span');
+    explain.push(
+      `Present for ${presentMinutes}m but credited ${computedMinutes}m — more than ` +
+        `${MAX_CREDIT_TO_PRESENCE_RATIO}x. A manager must confirm this day before it can pay.`,
+    );
+  }
 
   // ---- Step 8: breaks — only the EXCESS over the allowance costs pay -------------------
   // Discovery 15 §1: *"Staff get a paid break allowance; only the EXCESS over that allowance costs
