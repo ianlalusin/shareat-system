@@ -3,7 +3,10 @@
 > **Status:** SPEC, 2026-08-29. Written before implementation (bible §1.2a).
 > **Depends on:** T-161, T-162, T-164, T-168. ⚠️ **Phase 5 for slicer pay** — this task builds the
 > lock, not the payroll (§7).
-> **v1 read at source** — `production.actions.ts` (1,101 lines), `production-validate.ts`,
+> ⭐ **v1 RE-READ AT SOURCE 2026-08-29, at Ian's instruction** — the first draft cited
+> `docs/discovery/14` §M rather than the code. §10 records what the source added that the
+> discovery summary did not, including a live v1 defect now logged as **DEF-093**.
+> **v1 read at source** — `production.actions.ts` (1,100 lines), `production-validate.ts` (247),
 > `production-recipe.actions.ts`, `meat-convert.ts`, `recipe-units.ts`, `slicer-payment.ts`.
 > `docs/discovery/14` §M.
 
@@ -152,6 +155,19 @@ than discovered — which is exactly what the discovery note asked for.
 11. **Balance reads are inside the transaction** — the −20 kg drift (T-161 §3).
 12. **Period lock applies to post, edit and void.**
 13. **A frozen location refuses a post** (T-169).
+14. ⭐ **At least one output.** A run with no outputs writes the whole input off as loss, which is
+    a wastage record, not a production run (§10.3).
+15. ⭐ **The input product may not also be an output.** A run cannot consume and produce the same
+    product (§10.3).
+16. **An unresolvable product id is a HARD reject** — source or output. *Cutting from a slab that
+    does not exist* (§10.3).
+17. ⚠️ **`PRODUCTION_QTY_EPS` = 0.01 base units, and it is a SCALE tolerance, not a float
+    defence.** It survives where T-161's `1e-6` did not, and the spec says which kind it is so the
+    next reader does not delete it by analogy (§10.2).
+18. ⭐ **The yield gap produces NO second stock movement.** The OUT movement is the whole input;
+    the gap is a cost (`5300`), never a second quantity leg (§10.1).
+19. **The yield gap is clamped at zero** — within tolerance the outputs can round a hair above the
+    input, and a negative loss would post a stock-IN leg (§10.1).
 
 ## 9. Tests
 
@@ -177,8 +193,100 @@ than discovered — which is exactly what the discovery note asked for.
     voided, all three succeed.
 13. Post into a closed period, and into a frozen location: both refused.
 14. Live route on 9008: cook a recipe and slice a slab, and read the resulting layers.
+15. ⭐ A run with **zero outputs** is refused, and the error says to record a wastage instead.
+16. ⭐ An output naming the **same product as the input** is refused.
+17. An output whose product id does not resolve is refused; so is a source that does not.
+18. ⭐ **The scale tolerance holds both ways:** cutting 10.005 from 10.000 on hand is ALLOWED;
+    cutting 10.02 is refused. And outputs totalling 0.005 above the input are allowed, with the
+    yield gap clamped to zero rather than going negative.
+19. ⭐ **A lineage mismatch WARNS and posts** — trimmings pooling across primals is real practice,
+    verified in v1 against live data with zero blocking violations. A test that made this an error
+    would be a test of the wrong rule.
 
-## 10. Out of scope
+## 10. ⭐ Read at source 2026-08-29 — what the discovery summary did not carry
+
+`docs/discovery/14` §M is accurate but summarised. Reading `production-validate.ts`,
+`meat-convert.ts` and `recipe-units.ts` line by line produced **six rules this spec did not have**
+and one defect in v1.
+
+### 10.1 The identity, and where the loss actually goes
+
+```
+sourceQuantity  =  Σ outputs[].totalWeight  +  variance
+```
+
+⭐ **`variance` (reseco / thaw loss) is booked as a LEDGER-ONLY memo leg**, and v1 states exactly
+why: *"the balance already lost the full `sourceQuantity` via the OUT leg, so the memo must never
+touch a balance again."* ⚠️ In v2 that leg is a **cost** — `Dr 5300` for the value of the gap (§3) —
+but the quantity half of the rule stands: **the OUT movement is the whole input, and the yield gap
+must not produce a second stock movement.**
+
+⭐ **`variance` is clamped at zero**, and the reason is a real edge: *"within EPS the outputs can
+round a hair above the input, and a negative 'loss' would post a stock-IN memo leg."*
+
+### 10.2 ⚠️ `PRODUCTION_QTY_EPS = 0.01` kg — and it is NOT the tolerance T-161 deleted
+
+Used in exactly two places: stock sufficiency (`sourceQty > available + EPS`) and
+output-exceeds-input (`total > sourceQty + EPS`).
+
+⛔ **Do not delete this one.** T-161 §8 removed v1's `1e-6` quantity tolerance because it was a
+FLOAT defence and cannot fire at `numeric(14,3)`. **This is a different animal: a 10-gram SCALE
+tolerance.** Two weighings of the same meat legitimately differ by grams, and refusing a cut
+because the scale read 10.005 against 10.000 would stop the kitchen for physics.
+
+⭐ **Carry it as a named constant with its reason** (§16.6), and state which kind of tolerance it
+is — the distinction between "float noise" and "measurement noise" is exactly what makes one
+deletable and the other not.
+
+### 10.3 Four HARD rules the first draft missed
+
+| Rule | v1's own reason |
+|---|---|
+| **At least one output** | *"A run with no outputs would write off the whole slab as loss"* |
+| **Input ≠ output product** | *"A run cannot consume and produce the same product"* |
+| **Unresolvable product id** | *"Cutting from a slab that does not exist"* — for the source AND any output |
+| **Non-numeric quantity** | Distinct from non-positive, and rejected separately |
+
+### 10.4 And three SOFT ones — warn, stamp, never block
+
+An **inactive** source or output product · a source whose category is not `slab` (or not `sliced`
+for a convert) · an output with **no source slab set**, or one whose slab differs from the input's.
+
+⭐ **The last is the important one and it is deliberately soft**: *"trimmings legitimately pool
+across cuts."* Trimmings from several beef primals land in ONE "Beef Trimmings" product, so a
+lineage mismatch is normal business, verified against live data on 2026-08-05 with zero blocking
+violations. **Blocking it would stop the kitchen; naming it lets the operator confirm and lets us
+report on it.**
+
+### 10.5 `validateConvertLineage` in full — five checks, not one
+
+Both ids present · **not the same product** · source has a slab · target has a slab · **the two
+slabs are the same**. ⚠️ The two "has a slab" checks are separate from the "same slab" check
+because a null slab on either side would otherwise compare equal to a null on the other and pass.
+
+### 10.6 ⛔ DEF-093 — v1's cook path never converts units at all
+
+`recipe-units.ts` exists to stop a 1000× error and says so: *"if a recipe says '500 g' and the item
+is tracked in kg, an unconverted post deducts 500 KILOS… silently passing the number through is the
+one outcome that must be impossible."*
+
+⛔ **Its own caller does exactly that.** `production-recipe.actions.ts` calls its private copy as
+`resolveUnitConversion(line.unit, line.unit)` — **an identity call**, which can never convert and
+never fails. `recipe-units.ts:11-16` names the shape, says *"do not replicate that call shape"*,
+and flags repointing production at it as a follow-up that was never done.
+
+⭐ **This spec already closes it structurally** (§4, §8 invariant 4): ONE conversion module, a test
+asserting no second copy exists, and a hard block rather than a pass-through when a pairing is not
+convertible. **Logged as DEF-093 anyway** — v1 is live, and the register is where a finding
+survives (§13 row 164).
+
+⚠️ Also note what `recipe-units.ts` refuses and why: `pcs↔pack`, `pcs↔box`, `kg↔ltr` all return
+null, *"those need a per-item factor (unitsPerPack, density) that lives on the product, not a
+global table — guessing one here would deduct the wrong quantity forever."* And a **blank unit on
+either side is not an implicit match** — *"treating blank as 'same' would let a unitless recipe
+line deduct against any item at all."*
+
+## 11. Out of scope
 
 ⛔ **Slicer per-piece payroll itself** — generation, gross-drift refusal, overlap/duplicate guards.
 **Phase 5**, and `CAPABILITY-GAPS.md` already assigns it there. ⚠️ Its guards are real and must not
@@ -187,7 +295,7 @@ be an afterthought bolted onto hourly payroll; this task builds only the lock's 
 ⛔ **Multi-level BOM / nested recipes.** v1 has one level. Deliberately skipped.
 ⛔ **Yield-variance analytics.** The data is captured; reporting is Phase 6.
 
-## 11. Done when
+## 12. Done when
 
 - [ ] Migration hand-written (DEF-073), next free number, journalled `previous.when + 86400000`.
 - [ ] `classification.ts`: recipes **KEEP** (configuration), records **PURGE** (operational).
