@@ -487,6 +487,14 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'system principal, so org scoping costs it nothing.',
   },
 
+  // ---- T-161: the Lane B quarantine (Phase 4, lane B) -----------------------------------
+  inbox_quarantine: {
+    scope: 'org_column',
+    reason:
+      'Events that failed to become punches, held with their raw bodies. Per-org: the raw event ' +
+      'names a person, a device and a time, and a stuck punch is still attendance data.',
+  },
+
   etl_runs: { scope: 'system_only', reason: 'ETL machinery. Never reachable by a tenant or a customer — only the migrator, crons and the audit.' },
   etl_source_documents: {
     scope: 'system_only',

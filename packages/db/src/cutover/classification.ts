@@ -272,6 +272,16 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'table — which is also why it carries no payload column.',
   },
 
+  // ---- T-161: the Lane B quarantine (Phase 4, lane B) -----------------------------------
+  inbox_quarantine: {
+    class: 'purge',
+    reason:
+      'Failed pilot punches. Purged with attendance_punches, which it is the failed half of. ' +
+      '⚠️ An UNRESOLVED row at cutover is a punch nobody ever settled — the purge rehearsal ' +
+      '(ADR-007) should report the count rather than discard it silently, because a store with a ' +
+      'backlog here is a store whose attendance was never really working.',
+  },
+
   // ---- T-124: fixed assets ---------------------------------------------------------------
   prepaid_items: {
     class: 'keep_shell',

@@ -71,3 +71,6 @@ export * from './clock-terminals';
 
 // T-160 — the Lane A transactional outbox (Phase 4, lane B).
 export * from './mirror-outbox';
+
+// T-161 — the Lane B quarantine (Phase 4, lane B).
+export * from './inbox-quarantine';
