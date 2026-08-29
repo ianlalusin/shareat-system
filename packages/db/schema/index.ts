@@ -53,3 +53,6 @@ export * from './cutover';
 // T-154 — the staff master record: positions, employments, employment_positions.
 // docs/tasks/154-positions-and-employments.md (Phase 4, lane B).
 export * from './employment';
+
+// T-155 — per-store attendance policy, effective-dated (Phase 4, lane B).
+export * from './attendance-config';

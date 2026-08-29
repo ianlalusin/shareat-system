@@ -213,6 +213,16 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     reason: 'As employments — its child rows, and meaningless without them.',
   },
 
+  // ---- T-155: attendance policy (Phase 4, lane B) ---------------------------------------
+  store_attendance_config: {
+    class: 'keep',
+    reason:
+      'Configuration, and the SUPERSEDED rows are configuration history rather than pilot ' +
+      'transactions. ⭐ Purging them would be worse than losing settings: an attendance_days row ' +
+      'names the config row it was computed under, so dropping the history would leave every ' +
+      'surviving day unable to explain the hours it credited. Nothing here posts to the ledger.',
+  },
+
   // ---- T-124: fixed assets ---------------------------------------------------------------
   prepaid_items: {
     class: 'keep_shell',

@@ -428,6 +428,13 @@
       "when": 1792121507084,
       "tag": "0070_t154_positions_and_employments",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1792207907084,
+      "tag": "0071_t155_store_attendance_config",
+      "breakpoints": true
     }
   ]
 }

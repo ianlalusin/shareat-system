@@ -432,6 +432,15 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'the wrong tenant.',
   },
 
+  // ---- T-155: attendance policy (Phase 4, lane B) ---------------------------------------
+  store_attendance_config: {
+    scope: 'org_column',
+    reason:
+      'A store’s attendance and late policy, and from Phase 5 an input to what it pays. Per-org ' +
+      'like the store it governs — a franchise setting its own grace minutes must not be visible ' +
+      'to, or settable by, anyone else’s org.',
+  },
+
   etl_runs: { scope: 'system_only', reason: 'ETL machinery. Never reachable by a tenant or a customer — only the migrator, crons and the audit.' },
   etl_source_documents: {
     scope: 'system_only',
