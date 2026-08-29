@@ -132,12 +132,17 @@ enforcement too).
 
 ## ⚠️ Two things about other sessions' work, stated rather than buried
 
-**`AGENTS.md` is modified and NOT committed, deliberately.** The tree was clean when this wrap-up
-started, so something wrote it mid-ritual. It is not this session's edit, its claimed *"81 entries"*
-does not match the register's **80**, and another session may still be editing it. The ritual's rule
-is that a file you cannot explain is mentioned rather than committed — so it is mentioned. Its
-content looks sound (count refresh plus the bible row 164 "log what you see" rule); somebody who
-knows its provenance should commit it.
+**Five doc files are modified and NOT committed, deliberately** — `AGENTS.md`, `CLAUDE.md`,
+`PROJECT_BIBLE.md`, `docs/RULES.md`, `docs/DEFECTS-REGISTER.md`.
+
+The tree was **clean** when this wrap-up started; every one of them was written at 10:06–10:07,
+during it. They are not this session's edits, and `AGENTS.md`'s claimed *"81 entries"* does not match
+the register's actual **80** — so at least one is mid-flight rather than finished.
+
+⛔ **Committing a half-written bible amendment on somebody else's behalf is worse than leaving it**,
+and the ritual's rule covers exactly this: a file you cannot explain is mentioned, not committed.
+The content looks sound (count refreshes, the bible row 164 *"log what you see"* rule, a new
+register row). **Whoever wrote them should commit them** — they are not lost, just unowned.
 
 **`DEF-080` was swept into commit `e44d411` (T-132) by a `git add -A`.** It is a peer session's
 finding — T-111's property-based test suite was specified and never written, and no generator
