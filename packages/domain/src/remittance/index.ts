@@ -307,11 +307,18 @@ export function remittanceStateOf(report: {
 /**
  * Set a store's remittance cadence and un-remitted ceiling. Bible row 129.
  *
- * ⭐ **`manage_store_settings`, not `accept_remittance`.** Accepting a handover is an operational
- * act a cashier's supervisor does daily; deciding how much cash may sit in a drawer is a policy
- * that governs it. Row 129: *"a peso ceiling and an imprest amount are business policy, and they
- * belong to whoever carries the risk."* Gating both on one capability would let whoever accepts
- * remittances also raise the ceiling they are measured against.
+ * ⭐ **`set_cash_policy` — admin and above, NOT manager.** Ian, 2026-08-29:
+ * *"configure the peso ceiling for unremitted by store configurable by admin."*
+ *
+ * ⛔ **The ceiling is the number a store's cash custody is measured against, so whoever is
+ * measured must not be able to move it.** A manager running late on remittance could otherwise
+ * raise the ceiling and watch the finding disappear — a control quietly deleting its own
+ * evidence. Row 129 says the peso figures *"belong to whoever carries the risk"*, and that is not
+ * the person holding the cash.
+ *
+ * ⚠️ Deliberately NOT `manage_store_settings`, which managers hold because *"store settings [are]
+ * tied to operation"*. A risk limit is not an operating setting. And deliberately not
+ * `accept_remittance` either, or whoever accepts the handover could raise their own bar.
  *
  * ⛔ **The safe-combination rule is NOT re-checked here.** `stores_pooling_requires_ceiling_check`
  * refuses a non-daily cadence with no ceiling in the database, and bible §6.3 is explicit that a
@@ -327,7 +334,7 @@ export async function setStoreCashPolicy(
     unremittedCeiling: string | null;
   },
 ): Promise<void> {
-  await authorize(tx, actor, 'manage_store_settings', { storeId: input.storeId });
+  await authorize(tx, actor, 'set_cash_policy', { storeId: input.storeId });
 
   if (!REMITTANCE_CADENCES.includes(input.remittanceCadence)) {
     throw new Error(

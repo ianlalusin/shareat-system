@@ -113,6 +113,8 @@ export type Capability =
   | 'manage_attendance'
   // Configuration
   | 'manage_store_settings'
+  /** ⭐ Separate from `manage_store_settings` ON PURPOSE — see the role grid below. */
+  | 'set_cash_policy'
   | 'manage_price_lists'
   | 'manage_fixed_assets'
   | 'run_depreciation'
@@ -164,6 +166,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'grant_capability',
   'manage_attendance',
   'manage_store_settings',
+  'set_cash_policy',
   'manage_price_lists',
   'manage_fixed_assets',
   'run_depreciation',
@@ -245,6 +248,7 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   manage_attendance: 'store',
 
   manage_store_settings: 'store',
+  set_cash_policy: 'store',
   manage_price_lists: 'org',
   manage_fixed_assets: 'org',
   run_depreciation: 'org',
@@ -345,6 +349,18 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   manage_attendance: { super_admin: true, admin: true, manager: true, staff: false },
 
   manage_store_settings: { super_admin: true, admin: true, manager: true, staff: false },
+  /**
+   * ⛔ **Manager is FALSE, and that is the whole reason this is not `manage_store_settings`.**
+   *
+   * Ian, 2026-08-29: *"configure the peso ceiling for unremitted by store configurable by admin."*
+   * The ceiling is the number a store's cash custody is MEASURED against, so whoever is measured
+   * must not be able to move it. A manager who is late remitting could otherwise raise the ceiling
+   * and the finding would vanish — the control silently deleting its own evidence.
+   *
+   * ⚠️ Ordinary store settings stay manager-editable (*"store settings tied to operation"* — Ian,
+   * CAPABILITY-MATRIX row). This one is not an operating setting; it is a risk limit.
+   */
+  set_cash_policy: { super_admin: true, admin: true, manager: false, staff: false },
   manage_price_lists: { super_admin: true, admin: true, manager: false, staff: false },
   manage_fixed_assets: { super_admin: true, admin: true, manager: false, staff: false },
   run_depreciation: { super_admin: true, admin: true, manager: false, staff: false },

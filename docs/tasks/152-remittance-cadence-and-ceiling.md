@@ -293,13 +293,31 @@ is a ledger that does not tie. This one's ledger is **correct**: the liability i
 as it should be, and what is overdue is the *payment* — a business fact the books are reporting
 faithfully.
 
-### 11.4 `manage_store_settings`, not `accept_remittance`
+### 11.4 ⭐ `set_cash_policy` — a NEW capability, admin and above, and manager deliberately ✗
 
-Accepting a handover is an operational act a supervisor does daily; deciding how much cash may sit
-in a drawer is the policy that governs it. One capability for both would let whoever accepts
-remittances raise the ceiling they are measured against. The capability already existed
-(manager and above, staff denied) so no matrix change was needed — and there is a test proving the
-staff denial fires.
+> **Ian, 2026-08-29:** *"configure the peso ceiling for unremitted by store configurable by admin."*
+
+A first pass gated this on `manage_store_settings`, which **managers hold** (*"store settings tied
+to operation"* — Ian's own words in the matrix). Ian's *"by admin"* settles it, and the reason is
+sharper than the instruction:
+
+⛔ **The ceiling is the number a store's cash custody is measured against, so whoever is measured
+must not be able to move it.** A manager running late on remittance could otherwise raise the
+ceiling and watch the finding disappear — the control quietly deleting its own evidence. A risk
+limit is not an operating setting.
+
+So `set_cash_policy` is a new store-scoped capability: super_admin ✅, admin ✅, **manager ✗**,
+staff ✗. Both denials have tests.
+
+⭐ **And the pinned capability guard earned its keep twice.** It caught the count (48 → 49) *and*
+surfaced something nobody would have thought to check: `set_cash_policy` enrolled itself into
+`ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER`, which is **derived** as admin-yes-minus-manager-yes. That
+means in an org with **no admin at all**, a manager does get the ceiling as a real granted row.
+
+⚠️ **That is correct, and it was worth being made to look at.** The conflict this capability guards
+against is a manager overriding a limit an admin set; where there is no admin, the manager is the
+top of the tree and somebody must hold it — and the fallback materialises it as an auditable row
+rather than inferring it at check time.
 
 ### 11.5 ⭐ The constraint's message is translated, and that is not a second rule
 

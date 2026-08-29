@@ -103,6 +103,7 @@ they need weekly, the boundary is wrong.
 | Capability | Scope | super | admin | manager | staff | Notes |
 |---|---|:--:|:--:|:--:|:--:|---|
 | `manage_store_settings` | store | ✅ | ✅ | ✅ | ✗ | *"Store settings tied to operation"* — Ian's words |
+| `set_cash_policy` | store | ✅ | ✅ | **✗** | ✗ | The remittance cadence and un-remitted ceiling (T-152). Ian, 2026-08-29: *"configurable by admin."* ⛔ **Manager is deliberately ✗ while `manage_store_settings` is ✅** — the ceiling is the number a store's cash custody is *measured against*, so whoever is measured must not move it. A manager running late could otherwise raise it and watch the finding vanish. A risk limit is not an operating setting |
 | `manage_price_lists` | org | ✅ | ✅ | ✗ | ✗ | Pricing is a commercial decision, not an operational one |
 | `manage_fixed_assets` | org | ✅ | ✅ | ✗ | ✗ | |
 | `run_depreciation` | org | ✅ | ✅ | ✗ | ✗ | **Scheduled, not clicked** — v1's stopped scheduler is DEF-044 |

@@ -22,11 +22,20 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 }
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
-import { closeDb, remittanceRepo, storesRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
+import {
+  closeDb,
+  moneyAccountsRepo,
+  remittanceRepo,
+  storesRepo,
+  transaction,
+  APP_ROLE,
+  type Tx,
+} from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import {
   createRemittance,
   resolveRemittanceVariance,
+  createMoneyTransfer,
   reverseRemittance,
   setStoreCashPolicy,
 } from '@shareat/domain';
@@ -89,6 +98,41 @@ async function fixture(hint: string) {
 }
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
+
+/**
+ * Puts opening cash in the OFFICE safe, so a transfer out of it has something to draw on.
+ *
+ * ⚠️ Needed because the overdraft guard (bible row 154) genuinely blocks an office account going
+ * negative — *"unlike a cashier drawer, this balance is complete"*. A first draft of the float
+ * tests skipped this and was refused, which is the guard working, not a bug.
+ */
+async function officeOpening(f: Fixture, date: string, amount: string) {
+  const [period] = await sql<{ id: string }[]>`
+    select id from fiscal_periods where org_id = ${f.orgId} limit 1
+  `;
+  await sql.begin(async (tx) => {
+    const [e] = await tx<{ id: string }[]>`
+      insert into journal_entries (org_id, entry_date, period_id, source_type, source_id, status)
+      values (${f.orgId}, ${date}, ${period!.id}, 'opening_balance', ${uid('src')}, 'draft')
+      returning id
+    `;
+    const [office] = await tx<{ id: string }[]>`
+      select id from accounts where org_id = ${f.orgId} and code = '1130'
+    `;
+    const [equity] = await tx<{ id: string }[]>`
+      select id from accounts where org_id = ${f.orgId} and code = '3900'
+    `;
+    await tx`
+      insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit)
+      values (${e!.id}, 1, ${office!.id}, ${f.storeId}, ${amount}, '0')
+    `;
+    await tx`
+      insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit)
+      values (${e!.id}, 2, ${equity!.id}, ${f.storeId}, '0', ${amount})
+    `;
+    await tx`update journal_entries set status = 'posted' where id = ${e!.id}`;
+  });
+}
 
 /** Puts money into (or out of) the till on a given date, as some non-transfer document. */
 async function tillMovement(f: Fixture, date: string, amount: string, sourceType = 'sale') {
@@ -358,11 +402,10 @@ describe('reversal', () => {
 // =====================================================================================
 
 describe('T-152 — the cash-custody policy', () => {
-  it('a manager may set a pooled cadence with a ceiling', async () => {
+  it('an admin may set a pooled cadence with a ceiling', async () => {
     const f = await fixture('policy-ok');
-    const mgrId = await person(f.orgId, f.storeId, 'Manager', 'manager');
     await asOrg(f.orgId, (tx) =>
-      setStoreCashPolicy(tx, actor(f.orgId, mgrId), {
+      setStoreCashPolicy(tx, f.admin, {
         storeId: f.storeId,
         remittanceCadence: 'weekly',
         unremittedCeiling: '20000.00',
@@ -387,12 +430,41 @@ describe('T-152 — the cash-custody policy', () => {
     ).rejects.toThrow(AuthorizationError);
   });
 
-  it('⛔ the DATABASE refuses pooling with no ceiling — the rule has no TypeScript copy', async () => {
-    const f = await fixture('policy-noceil');
+  it('⛔ nor may a MANAGER — you cannot raise the bar you are measured against', async () => {
+    const f = await fixture('policy-mgr-deny');
     const mgrId = await person(f.orgId, f.storeId, 'Manager', 'manager');
     await expect(
       asOrg(f.orgId, (tx) =>
         setStoreCashPolicy(tx, actor(f.orgId, mgrId), {
+          storeId: f.storeId,
+          remittanceCadence: 'weekly',
+          unremittedCeiling: '20000.00',
+        }),
+      ),
+      // ⭐ Ian, 2026-08-29: "configurable by admin". A manager holds `manage_store_settings` and
+      // still cannot do this — a manager running late on remittance could otherwise raise the
+      // ceiling and watch the finding disappear, the control deleting its own evidence.
+    ).rejects.toThrow(AuthorizationError);
+  });
+
+  it('⭐ but an ADMIN may — the risk limit belongs to whoever carries the risk', async () => {
+    const f = await fixture('policy-admin');
+    await asOrg(f.orgId, (tx) =>
+      setStoreCashPolicy(tx, f.admin, {
+        storeId: f.storeId,
+        remittanceCadence: 'every_3_days',
+        unremittedCeiling: '12000.00',
+      }),
+    );
+    const policy = await asOrg(f.orgId, (tx) => storesRepo.cashPolicy(tx, f.orgId, f.storeId));
+    expect(policy!.remittanceCadence).toBe('every_3_days');
+  });
+
+  it('⛔ the DATABASE refuses pooling with no ceiling — the rule has no TypeScript copy', async () => {
+    const f = await fixture('policy-noceil');
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        setStoreCashPolicy(tx, f.admin, {
           storeId: f.storeId,
           remittanceCadence: 'weekly',
           unremittedCeiling: null,
@@ -405,10 +477,9 @@ describe('T-152 — the cash-custody policy', () => {
 
   it('⭐ going back to daily may clear the ceiling — daily is its own bound', async () => {
     const f = await fixture('policy-back');
-    const mgrId = await person(f.orgId, f.storeId, 'Manager', 'manager');
     const set = (cadence: 'daily' | 'weekly', ceiling: string | null) =>
       asOrg(f.orgId, (tx) =>
-        setStoreCashPolicy(tx, actor(f.orgId, mgrId), {
+        setStoreCashPolicy(tx, f.admin, {
           storeId: f.storeId,
           remittanceCadence: cadence,
           unremittedCeiling: ceiling,
@@ -419,5 +490,104 @@ describe('T-152 — the cash-custody policy', () => {
     const policy = await asOrg(f.orgId, (tx) => storesRepo.cashPolicy(tx, f.orgId, f.storeId));
     expect(policy!.remittanceCadence).toBe('daily');
     expect(policy!.unremittedCeiling).toBeNull();
+  });
+});
+
+// =====================================================================================
+// T-153 — the standing till float. Ian, 2026-08-29.
+// =====================================================================================
+
+/**
+ * > **Ian:** *"the revolving fund admin or manager give to cashier at the start of the day for
+ * > change for expenses… in practice that budget is agreed upon and **never recorded** — the
+ * > admin, manager and cashier just know there is an extra 20k in till, and it has to be counted
+ * > daily and maintained."*
+ *
+ * ⭐ **These tests exist to establish that the float needs NO new machinery** — the primitives
+ * already built carry it exactly right. If that is true, the only real gap is that today the
+ * money is not recorded anywhere, which makes the books understate the till by the float.
+ */
+describe('T-153 — a standing till float rides on the primitives that already exist', () => {
+  it('⭐ a float transfer RAISES the till balance but leaves every day owing exactly what it did', async () => {
+    const f = await fixture('float');
+    await officeOpening(f, '2026-01-01', '50000.00');
+    await verifiedDay(f, '2026-01-02');
+    await tillMovement(f, '2026-01-02', '8000.00');
+
+    const before = await asOrg(f.orgId, (tx) =>
+      remittanceRepo.endDayReports(tx, f.orgId, { storeId: f.storeId, upTo: '2026-01-31' }),
+    );
+    const owedBefore = before.find((r) => r.businessDate === '2026-01-02')!.owed;
+
+    // The float: office safe -> till, an ordinary money transfer. This is the whole feature.
+    await asOrg(f.orgId, (tx) =>
+      createMoneyTransfer(tx, f.admin, {
+        fromMoneyAccountId: f.safe,
+        toMoneyAccountId: f.till,
+        amountOut: '20000.00',
+        amountIn: '20000.00',
+        transferDate: '2026-01-02',
+        notes: 'Standing till float',
+      }),
+    );
+
+    const after = await asOrg(f.orgId, (tx) =>
+      remittanceRepo.endDayReports(tx, f.orgId, { storeId: f.storeId, upTo: '2026-01-31' }),
+    );
+    const owedAfter = after.find((r) => r.businessDate === '2026-01-02')!.owed;
+
+    // ⛔ THE POINT. The float is custody, not takings: `endDayReports` excludes
+    // `source_type = 'transfer'` in both directions, so ₱20,000 landing in the till does not
+    // become ₱20,000 the cashier must hand over. v1 proves the same rule from the other side —
+    // its `netCashFlows` omits the float, so `computedRemittanceCash` never includes it.
+    expect(Number(owedAfter)).toBeCloseTo(Number(owedBefore), 2);
+    expect(Number(owedAfter)).toBeCloseTo(8000, 2);
+
+    // ⭐ And the till's BALANCE does include it — which is what makes a daily count checkable
+    // against the books instead of against everyone's memory of "there's an extra 20k".
+    const balance = await asOrg(f.orgId, async (tx) => {
+      const acct = await moneyAccountsRepo.getById(tx, f.orgId, f.till);
+      return moneyAccountsRepo.balanceOf(tx, f.orgId, acct!);
+    });
+    expect(Number(balance)).toBeCloseTo(28000, 2);
+  });
+
+  it('⭐ and the float is NOT swept away by a remittance that settles the day in full', async () => {
+    const f = await fixture('float-remit');
+    await officeOpening(f, '2026-01-01', '50000.00');
+    await verifiedDay(f, '2026-01-02');
+    await tillMovement(f, '2026-01-02', '8000.00');
+    await asOrg(f.orgId, (tx) =>
+      createMoneyTransfer(tx, f.admin, {
+        fromMoneyAccountId: f.safe,
+        toMoneyAccountId: f.till,
+        amountOut: '20000.00',
+        amountIn: '20000.00',
+        transferDate: '2026-01-02',
+        notes: 'Standing till float',
+      }),
+    );
+
+    // Remit the day's takings — and only the takings.
+    await asOrg(f.orgId, (tx) =>
+      createRemittance(tx, f.admin, {
+        storeId: f.storeId,
+        remittedOn: '2026-01-03',
+        lines: [{ fromMoneyAccountId: f.till, toMoneyAccountId: f.safe, amount: '8000.00' }],
+      }),
+    );
+
+    const balance = await asOrg(f.orgId, async (tx) => {
+      const acct = await moneyAccountsRepo.getById(tx, f.orgId, f.till);
+      return moneyAccountsRepo.balanceOf(tx, f.orgId, acct!);
+    });
+    // ⭐ The float survives, because "maintained" is what Ian asked for: the till goes back to
+    // holding exactly the float once the day's takings have gone to the office.
+    expect(Number(balance)).toBeCloseTo(20000, 2);
+
+    const reports = await asOrg(f.orgId, (tx) =>
+      remittanceRepo.endDayReports(tx, f.orgId, { storeId: f.storeId, upTo: '2026-01-31' }),
+    );
+    expect(Number(reports.find((r) => r.businessDate === '2026-01-02')!.owed)).toBeCloseTo(0, 2);
   });
 });
