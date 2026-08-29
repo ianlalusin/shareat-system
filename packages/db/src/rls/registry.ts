@@ -460,6 +460,15 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'accordingly.',
   },
 
+  // ---- T-158: manager adjustments (Phase 4, lane B) -------------------------------------
+  attendance_adjustments: {
+    scope: 'org_column',
+    reason:
+      'Who decided what about whose day. Per-org, and it is the audit trail every self-dealing ' +
+      'control in this phase rests on — a decision readable or writable across an org boundary ' +
+      'would make attribution meaningless.',
+  },
+
   etl_runs: { scope: 'system_only', reason: 'ETL machinery. Never reachable by a tenant or a customer — only the migrator, crons and the audit.' },
   etl_source_documents: {
     scope: 'system_only',

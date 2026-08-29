@@ -244,6 +244,15 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'references the config it was computed under, and children go before parents.',
   },
 
+  // ---- T-158: manager adjustments (Phase 4, lane B) -------------------------------------
+  attendance_adjustments: {
+    class: 'purge',
+    reason:
+      'Decisions about pilot days, which are themselves purged. A decision about a day that no ' +
+      'longer exists is not history worth keeping — it is a dangling judgement. Purged with its ' +
+      'days, and before them (children first).',
+  },
+
   // ---- T-124: fixed assets ---------------------------------------------------------------
   prepaid_items: {
     class: 'keep_shell',

@@ -62,3 +62,6 @@ export * from './attendance-punches';
 
 // T-157 — the adjudicated day (Phase 4, lane B).
 export * from './attendance-days';
+
+// T-158 — the manager's decisions, as attributed inputs (Phase 4, lane B).
+export * from './attendance-adjustments';

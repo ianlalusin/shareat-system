@@ -449,6 +449,13 @@
       "when": 1792380707084,
       "tag": "0073_t157_attendance_days",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1792467107084,
+      "tag": "0074_t158_attendance_adjustments",
+      "breakpoints": true
     }
   ]
 }
