@@ -1387,7 +1387,10 @@ describe("T-153 — Ian's worked example: the drawer runs out and the float cove
 
     const found = await asPerson(f.orgId, (tx) => findingsRepo.tillFloatOffTarget(tx, f.orgId));
     expect(found).toHaveLength(1);
-    expect(found[0]!.detail).toMatch(/₱2,000\.00 short/);
+    expect(found[0]!.detail).toMatch(/₱2,000\.00 short in the LEDGER/);
+    // ⛔ And it must say so: this is posted spending, not a counted shortage. Charging a
+    // cashier for it would bill them for a delivery they paid for correctly.
+    expect(found[0]!.detail).toMatch(/must not be charged to a cashier/);
   });
 
   it('⛔ and the float cannot be overdrawn — it stops at zero, unlike the takings drawer', async () => {
