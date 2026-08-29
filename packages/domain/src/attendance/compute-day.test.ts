@@ -52,7 +52,7 @@ const day = (punches: DayPunch[], p: Partial<DayPolicy> = {}, adjustments = {}) 
 
 // -------------------------------------------------------------------------------------
 
-describe('T-157 D5 — v2 pays REAL MINUTES; the hour-floor is gone', () => {
+describe('T-157b — the paid end floors to the hour, mirroring v1', () => {
   const paid = (endHour: number, endMin: number, grace: number, anchorHour = 14, requiredH = 9) =>
     paidEndMinute({
       actualEndMinute: fromHour(endHour, endMin),
@@ -61,29 +61,33 @@ describe('T-157 D5 — v2 pays REAL MINUTES; the hour-floor is gone', () => {
       earlyOutGraceMinutes: grace,
     });
 
-  it('⭐ with no grace, 23:45 pays to 23:45 — v1 would floor it to 23:00 and cost 45 minutes', () => {
-    expect(paid(23, 45, 0)).toBe(fromHour(23, 45));
+  // ⚠️ This block REVERSES D5 on Ian's instruction, 2026-08-29: "mirror v1. we will improve later
+  // for now use what is on v1." An earlier version of these tests asserted real-minute pay; they
+  // are rewritten rather than deleted so the reversal is legible instead of looking like drift.
+
+  it('with no grace, 23:45 floors to 23:00 — v1s rule, and it costs the 45 minutes', () => {
+    expect(paid(23, 45, 0)).toBe(fromHour(23));
   });
 
-  it('the early-out grace forgives an early departure, up to a full shift and no further', () => {
-    // Anchor 14:00, required 9h ⇒ a full shift ends at 23:00. Out at 22:50 with a 15-minute grace
-    // is credited to 23:00, not 23:05 — forgiveness must not manufacture hours nobody worked.
-    expect(paid(22, 50, 15)).toBe(fromHour(23));
+  it('within the grace of the NEXT hour, it is credited as having reached it', () => {
+    expect(paid(23, 45, 30)).toBe(fromHour(23) + 60);
+    expect(paid(23, 30, 30)).toBe(fromHour(23) + 60);
   });
 
-  it('⛔ a departure FURTHER early than the grace is not forgiven at all', () => {
-    // Anchor 14:00, required 9h ⇒ full shift ends 23:00. Out at 22:00 is an hour early, well past a
-    // 15-minute grace — so it pays exactly what was worked. ⚠️ The first version added the grace to
-    // every end, and the golden master caught it: a two-minute Lipa session was credited 1h12m.
-    expect(paid(22, 0, 15)).toBe(fromHour(22));
+  it('outside the grace it still floors — this is not a round-half-up', () => {
+    expect(paid(23, 20, 30)).toBe(fromHour(23));
+    expect(paid(23, 30, 15)).toBe(fromHour(23));
   });
 
-  it('someone who stayed PAST a full shift is untouched by the grace', () => {
-    expect(paid(23, 40, 15)).toBe(fromHour(23, 40));
+  it('the boundary is exact, with no epsilon', () => {
+    // v1 needs EPS = 1e-6 here because the hour arrives as a float and :45 can land on
+    // 44.99999999999999. In integer minutes `>=` is exact.
+    expect(paid(20, 45, 15)).toBe(fromHour(21));
+    expect(paid(20, 44, 15)).toBe(fromHour(20));
   });
 
-  it('grace 0 is the identity', () => {
-    expect(paid(21, 17, 0)).toBe(fromHour(21, 17));
+  it('grace 0 floors, always', () => {
+    expect(paid(21, 17, 0)).toBe(fromHour(21));
   });
 });
 
@@ -252,7 +256,7 @@ describe('T-157b §5 — the facts are recorded, not destroyed', () => {
 });
 
 describe('T-157 invariant 2 — undertime grace runs BEFORE the short-shift rule', () => {
-  it('⭐ an 8h50m day against 9h with 60 minutes forgiven is a FULL day, not a half day', () => {
+  it('⭐ an 8h day against 9h with 60 minutes forgiven is a FULL day, not a half day', () => {
     const r = day(
       [punch(fromHour(14), 'in'), punch(fromHour(22, 50), 'out')],
       {
@@ -261,31 +265,25 @@ describe('T-157 invariant 2 — undertime grace runs BEFORE the short-shift rule
         shortShiftHalfDayOt: true,
       },
     );
-    // 14:00 -> 22:50 is 8h50m against 9h — 10 minutes short, well inside the grace. It runs BEFORE
-    // the short-shift rule, so the day is never demoted to a half day the grace would have to undo.
+    // 22:50 floors to 22:00 (no early-out grace here), so the day is 8h against a 9h requirement.
+    // The 60-minute grace forgives it, and runs BEFORE the short-shift rule so the day is never
+    // demoted to a half day the grace would then have to undo.
     expect(r.computedMinutes).toBe(9 * 60);
     expect(r.isHalfDay).toBe(false);
-    expect(r.undertimeForgivenMinutes).toBe(10);
+    expect(r.undertimeForgivenMinutes).toBe(60);
     expect(r.pendingOtMinutes).toBe(0);
   });
 
-  it('⭐ DEF-086 FIXED — a grace under 60 minutes now fires, because pay is in real minutes', () => {
-    // v1 could not do this: its anchor and its floored end were both hour boundaries, so the
-    // shortfall was always a whole hour and a 30-minute grace forgave nothing, silently. Paying
-    // real minutes makes the setting mean what its name says. D5 — Ian: "we do it right".
+  it('⛔ DEF-086 RE-OPENED, knowingly — a grace under 60 cannot fire while hours are whole', () => {
+    // Ian, 2026-08-29: "mirror v1. we will improve later for now use what is on v1." So v1's
+    // hour-flooring is back, and with it this hole: the anchor is an hour boundary and the paid end
+    // is one again, so the shortfall against a whole-hour requirement is ALWAYS a whole hour and a
+    // 30-minute grace forgives nothing.
+    //
+    // ⚠️ LIPA HAS undertimeGraceMinutes SET TO 15. This is not hypothetical — it is a live setting
+    // at a real store that cannot do anything. Pinned here so "improve later" stays visible.
     const r = day(
-      [punch(fromHour(14), 'in'), punch(fromHour(22, 40), 'out')],
-      { allowedShiftStartHours: [14], undertimeGraceMinutes: 30, shortShiftHalfDayOt: true },
-    );
-    // 14:00 -> 22:40 is 8h40m against 9h: 20 minutes short, inside the 30-minute grace.
-    expect(r.undertimeForgivenMinutes).toBe(20);
-    expect(r.computedMinutes).toBe(9 * 60);
-    expect(r.isHalfDay).toBe(false);
-  });
-
-  it('a shortfall beyond the grace is still short, and still becomes a half day', () => {
-    const r = day(
-      [punch(fromHour(14), 'in'), punch(fromHour(21), 'out')],
+      [punch(fromHour(14), 'in'), punch(fromHour(22, 50), 'out')],
       { allowedShiftStartHours: [14], undertimeGraceMinutes: 30, shortShiftHalfDayOt: true },
     );
     expect(r.undertimeForgivenMinutes).toBe(0);

@@ -147,33 +147,27 @@ export const MAX_CREDIT_TO_PRESENCE_RATIO = 2;
 // -------------------------------------------------------------------------------------
 
 /**
- * The paid end minute.
+ * The paid end minute — **v1's rule, restored deliberately**.
  *
- * ## ⭐ v2 PAYS REAL MINUTES. The hour-floor is gone — D5, decided 2026-08-29
+ * ## ⚠️ This REVERSES part of D5, on Ian's instruction
  *
- * v1 floors the clock-out **down to the hour**, so a closer sent home at 23:45 is paid to 23:00 and
- * loses 45 minutes rather than the 15 they actually left early. `earlyOutGraceMinutes` exists
- * entirely to patch that artifact.
+ * D5 removed v1's hour-flooring so that pay was computed in real minutes. Ian, 2026-08-29, on the
+ * eight sessions where that made v2 pay less than v1: *"mirror v1. we will improve later for now
+ * use what is on v1."*
  *
- * ⛔ **And the artifact had a second victim, which is DEF-086.** Because the anchor is an hour
- * boundary and the end was floored to one, the shortfall against a whole-hour requirement was
- * ALWAYS a whole number of hours — so `undertimeGraceMinutes` set to anything from 1 to 59 forgave
- * nothing, silently, while reading as a working setting. A manager asking for "forgive 15 minutes"
- * got no effect and no error.
+ * So the flooring is back, exactly as `graceAdjustedEndHour` (`shift-boundaries.ts:104-141`) does
+ * it: the clock-out floors to the hour, and within `earlyOutGraceMinutes` of the NEXT hour it is
+ * credited as having reached it. 23:45 with a 30-minute grace pays as 00:00; 23:20 with the same
+ * grace still floors to 23:00.
  *
- * Ian, on that finding: *"about payroll its not yet implemented in v1 lots of work to do so we do it
- * right and implement in full in v2."* So v2 does not port the hole:
+ * ⛔ **What this re-opens, knowingly: DEF-086.** Because the anchor is an hour boundary and the
+ * paid end is now one again, the shortfall against a whole-hour requirement is always a whole
+ * hour — so `undertimeGraceMinutes` below 60 forgives nothing, silently. **Lipa has it set to 15.**
+ * That is the "improve later" Ian named, and it is pinned by a test rather than left to memory.
  *
- *   - the paid end is the **actual** clock-out minute;
- *   - `earlyOutGraceMinutes` keeps a real, distinct meaning — it forgives up to N minutes of EARLY
- *     DEPARTURE, extending the paid end, and never past a full shift;
- *   - `undertimeGraceMinutes` then works at any value, against a shortfall from ANY cause — which is
- *     what v1's own comment always said it was for: *"it fires however the shortfall arose: a late
- *     start, an early finish, or a long unpaid break."*
- *
- * ⚠️ **This is a deliberate divergence from v1's numbers**, sanctioned by D5 and bible §1.3, and it
- * is the reason the golden master (§6) exists as an improvement tool rather than a parity gate.
- * Nothing is restated by it: v2 has no attendance history and payroll is not built.
+ * ⭐ **Note what is NOT reverted.** Overtime is still measured from the RAW clock-out, not this
+ * rounded one — which is what makes Ian's own example come out at 30 minutes rather than 60. And
+ * every duration is still an integer minute. The reversal is this function alone.
  */
 export function paidEndMinute(params: {
   actualEndMinute: number;
@@ -181,21 +175,14 @@ export function paidEndMinute(params: {
   requiredMinutes: number;
   earlyOutGraceMinutes: number;
 }): number {
-  const { actualEndMinute, anchorMinute, requiredMinutes, earlyOutGraceMinutes } = params;
-  const grace = Math.max(0, earlyOutGraceMinutes);
-  if (grace === 0) return actualEndMinute;
-
-  // ⛔ The grace applies ONLY to a day that was otherwise a FULL SHIFT — "sent home a few minutes
-  // early", which is the case v1's comment describes. It is not a blanket bonus on any short day.
-  //
-  // ⚠️ The first version of this added `grace` to every end, and the golden master caught it
-  // immediately: a Lipa session of 16:40→16:42 (two minutes) was credited 1h12m, because a
-  // 30-minute grace was applied to a shift nobody would call "early". A rule that pays 72 minutes
-  // for two is not a kindness, it is a defect. Within the window, credit the full shift; outside
-  // it, pay exactly what was worked.
-  const fullShiftEnd = anchorMinute + requiredMinutes;
-  if (actualEndMinute >= fullShiftEnd) return actualEndMinute;
-  return fullShiftEnd - actualEndMinute <= grace ? fullShiftEnd : actualEndMinute;
+  const { actualEndMinute, earlyOutGraceMinutes } = params;
+  const floored = Math.floor(actualEndMinute / 60) * 60;
+  const grace = Math.max(0, Math.min(59, earlyOutGraceMinutes));
+  if (grace === 0) return floored;
+  const into = actualEndMinute - floored;
+  // Integers, so `>=` is exact. v1 needs an EPS here because the hour arrives as a float and an out
+  // at exactly :45 can land on 44.99999999999999 — a staffer must not lose an hour to that.
+  return into >= 60 - grace ? floored + 60 : floored;
 }
 
 export interface StartAnchor {

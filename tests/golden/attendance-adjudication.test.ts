@@ -190,6 +190,28 @@ describe('T-157 golden master — v2 against real v1 attendance sessions', () =>
         continue;
       }
 
+      // ── Class E — ⭐ THE CONFIG CHANGED AFTER THESE SESSIONS WERE COMPUTED.
+      //
+      // Ian corrected every store's `allowedShiftStartHours` on 2026-08-29 ("whatever is set on v1
+      // today is correct. i updated it just now"). The captured `config` is therefore TODAY's,
+      // while every captured `expected` output was produced under the PREVIOUS one — so a session
+      // v1 anchored at 18:00 is being replayed against a grid that no longer contains 18:00.
+      //
+      // ⚠️ **This is the same two-era problem as the 2026-08-20 anchor rule, and it is detected
+      // exactly rather than assumed:** v1's own `shiftStartHour` is checked against the CURRENT
+      // allowed hours, and a session whose anchor is no longer an allowed start cannot be a fair
+      // comparison — v2 agreeing with it would mean v2 was ignoring the corrected config.
+      const currentHours = Array.isArray(s.config.allowedShiftStartHours)
+        ? (s.config.allowedShiftStartHours as number[])
+        : [...V1_DEFAULTS.allowedShiftStartHours];
+      if (
+        s.expected.shiftStartHour !== null &&
+        !currentHours.includes(s.expected.shiftStartHour % 24)
+      ) {
+        bump('E: v1 anchor is no longer an allowed start (config corrected)');
+        continue;
+      }
+
       // ── Class D — T-157b. v2 anchored to the punch's OWN hour because it is beyond
       // `anchorWindowMinutes` from any allowed start. ⭐ Against a full hourly grid this class is
       // EMPTY by construction (30 minutes is the maximum possible distance); every member of it
@@ -208,8 +230,25 @@ describe('T-157 golden master — v2 against real v1 attendance sessions', () =>
       // lateness: cosmetic.
       if (modeDiffers && !hoursDiffer && !halfDayDiffers && !nightDiffers) { bump('C: mode relabel, pay identical'); continue; }
 
+      // ── Class F — ⭐ nearest-hour chose a LATER anchor than v1's floor-to-previous, and the pay
+      // moved with it. This is the intended consequence of Ian's "nearest hour" (T-157b §1): a
+      // 13:45 punch was aiming for 14:00, not 13:00, so it is credited from 14:00 — which is more
+      // accurate and, on a short day, can drop it under the half-day bar.
+      //
+      // ⚠️ It is separated from class C (relabel, pay identical) precisely BECAUSE the pay moves,
+      // and any member that pays LESS is surfaced by name below rather than absorbed into a count.
+      if (modeDiffers && got.anchorMode === 'next' && s.expected.startAnchorMode === 'previous') {
+        bump('F: nearest-hour anchored later than v1 (pay moved)');
+        if (v2Hours < v1Hours) {
+          paysLess.push(
+            `${s.id}: v1 ${v1Hours}h -> v2 ${v2Hours.toFixed(2)}h (${Math.round((v1Hours - v2Hours) * 60)}m less) [nearest-hour]`,
+          );
+        }
+        continue;
+      }
+
       unexplained.push(
-        `${s.id}: hours v1=${v1Hours} v2=${v2Hours.toFixed(3)} | mode v1=${s.expected.startAnchorMode} v2=${got.anchorMode} | halfDay v1=${s.expected.isHalfDay} v2=${got.isHalfDay} | present=${presentMinutes.toFixed(1)}m`,
+        `${s.id}: hours v1=${v1Hours} v2=${v2Hours.toFixed(3)} | mode v1=${s.expected.startAnchorMode} v2=${got.anchorMode} | halfDay v1=${s.expected.isHalfDay} v2=${got.isHalfDay} | night v1=${s.expected.nightDiffHours} v2=${(got.nightDiffMinutes / 60).toFixed(2)} | present=${presentMinutes.toFixed(1)}m`,
       );
     }
 
