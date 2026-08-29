@@ -71,13 +71,14 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
         only figures that reach account 4900.
       </div>
 
-      {/* ⚠️ The honest caveat. Until POS v2 captures the name and ID at the till, every row here
-          was typed by a person from the store's paper logbook — and a reader who cannot tell that
-          will trust it more than they should. */}
+      {/* ⛔ The honest caveat, and it is the important one on this screen. There is no paper
+          logbook to copy from (bible row 164) — so a missing record cannot be recovered later, and
+          a reader who assumes this register is complete will assume wrong. */}
       <div className="rounded border border-neutral-300 bg-neutral-50 p-3 text-sm text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300">
-        Every record below is <strong>transcribed by hand</strong> from the store&apos;s paper
-        logbook. The till does not yet capture the holder&apos;s name or ID number — that arrives
-        with POS v2, after January.
+        <strong>A record must be entered while the customer is still at the counter.</strong> The
+        till does not capture the holder&apos;s name or ID number and no paper logbook is kept, so
+        nothing can reconstruct a sale that was not written down here. POS captures this itself from
+        v2, after January.
       </div>
 
       {sp.error && (
@@ -135,7 +136,8 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
         <h2 className="text-lg font-semibold">Records</h2>
         {rows.length === 0 ? (
           <p className="rounded border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500 dark:border-neutral-700">
-            No records for this range. Add each discounted sale from the store&apos;s paper logbook below.
+            No records for this range. Every senior or PWD discount given in this period should have
+            one row here.
           </p>
         ) : (
           <div className="overflow-x-auto">

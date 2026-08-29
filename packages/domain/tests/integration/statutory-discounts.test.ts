@@ -113,8 +113,9 @@ describe('T-137 statutory discount records', () => {
       holder_name: 'Maria Santos',
       gross_amount: '1120.00',
       discount_amount: '224.00',
-      // ⭐ Provenance defaults to transcribed: nothing but a human can produce a row today.
-      source: 'transcribed',
+      // ⭐ Provenance defaults to `manual`: nothing but a human can produce a row today, and
+      // there is no paper logbook being transcribed FROM either (bible row 164).
+      source: 'manual',
     });
 
     // ⛔ No `net_amount` column. A stored net is a third number that can disagree with the two

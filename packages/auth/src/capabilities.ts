@@ -275,11 +275,11 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   submit_sales_day: { super_admin: true, admin: true, manager: true, staff: true },
   verify_sales_day: { super_admin: true, admin: true, manager: true, staff: false },
   void_sales_day: { super_admin: true, admin: true, manager: true, staff: false },
-  // ⭐ Recording is STAFF-open on purpose, and it is the only way this table gets filled: until
-  // POS v2 exists every row is transcribed from the store's paper logbook (T-137 §5), and the
-  // person holding that book is a cashier, not a manager. Gating it to managers would make the
-  // compliance record depend on a manager sitting down with a notebook, which is how a register
-  // stays empty.
+  // ⭐ Recording is STAFF-open on purpose, and it is the only way this table gets filled. There is
+  // no paper logbook and the till captures no identity (bible row 164), so a record can only be
+  // created while the customer is still at the counter — and the person standing there is a
+  // cashier, not a manager. ⛔ Gating this to managers would not make the register stricter; it
+  // would make it EMPTY, because nothing downstream can reconstruct a name or an ID number later.
   record_statutory_discount: { super_admin: true, admin: true, manager: true, staff: true },
   // ⛔ Voiding is NOT, and the asymmetry is the control. The burden of proof in a BIR audit is on
   // the seller, so withdrawing a statutory record is a supervisory act - same shape as

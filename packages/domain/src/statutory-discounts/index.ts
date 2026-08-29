@@ -15,9 +15,15 @@
  * `holderName` and `idNumber` are read off a physical card by a person. **Nothing captures them
  * today** — not POS, not v1's ERP (DEF-084; the original spec claimed otherwise). POS already
  * writes the other four per transaction in its `DiscountEvent`, so the gap is two fields, not
- * five, and closing it needs POS v2 after January. Until then every row is `transcribed` from the
- * store's paper logbook, which is why `record_statutory_discount` is staff-open: the person
- * holding that book is a cashier.
+ * five, and closing it needs POS v2 after January.
+ *
+ * ⛔ **And there is no paper logbook to fall back on.** Ian, 2026-08-29: *“they are not kept to
+ * avail the discount they just present id and the pos picks the discount from the list of
+ * configured discount.”* So the obligation is **unmet today, in every form** (bible row 164), and
+ * this register is the first place it is met rather than the digitisation of an existing book.
+ * ⚠️ **It therefore cannot be back-filled** — nothing downstream holds a name or an ID number, so
+ * a row must be entered while the customer is still at the counter. That is why
+ * `record_statutory_discount` is staff-open: the only person who can create one is the cashier.
  *
  * ## What is deliberately NOT validated here
  *
@@ -91,7 +97,7 @@ async function runRecord(tx: Tx, actor: Actor, input: RecordStatutoryDiscountInp
     // ⭐ Never accepted from the caller. Provenance is a fact about how the row was produced, and
     // this path is by definition the human one — a parameter would let a future caller claim
     // machine capture for a typed row, which is exactly the trust the column exists to carry.
-    source: 'transcribed',
+    source: 'manual',
     notes: input.notes?.trim() || null,
     recordedBy: actor.personId,
   });

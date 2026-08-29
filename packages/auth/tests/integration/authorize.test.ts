@@ -207,7 +207,7 @@ describe('invariant 5 — every capability denies a role that lacks it (all 50)'
     'create_wholesale_order',
     // T-130: logging a pending supplier invoice moves no money — same bar as create_expense.
     'record_supplier_invoice',
-    // ⭐ T-137: transcribing the store's paper SC/PWD logbook. Staff-open for the same reason
+    // ⭐ T-137: recording an SC/PWD discount at the counter. Staff-open for the same reason
     // create_expense is — the person holding the book is a cashier, and gating it to managers is
     // how a statutory register stays empty. ⚠️ Its VOID counterpart is deliberately NOT here:
     // `void_statutory_discount` denies staff, and that asymmetry is the control.

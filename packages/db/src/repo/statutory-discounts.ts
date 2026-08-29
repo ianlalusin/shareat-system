@@ -16,7 +16,7 @@ import type { Tx } from '../client';
 import { statutoryDiscountRecords } from '../../schema/statutory-discounts';
 
 export type StatutoryDiscountKind = 'senior' | 'pwd';
-export type StatutoryDiscountSource = 'transcribed' | 'pos';
+export type StatutoryDiscountSource = 'manual' | 'pos';
 
 export interface CreateStatutoryDiscountRow {
   orgId: string;
@@ -82,7 +82,7 @@ export async function create(tx: Tx, row: CreateStatutoryDiscountRow): Promise<{
       grossAmount: row.grossAmount,
       discountAmount: row.discountAmount,
       signatory: row.signatory ?? null,
-      source: row.source ?? 'transcribed',
+      source: row.source ?? 'manual',
       notes: row.notes ?? null,
       recordedBy: row.recordedBy,
     })

@@ -25,13 +25,23 @@
  * transaction — `DiscountEvent` carries receipt number, amount, date and the acting staffer — so
  * the gap is two fields, not five. Closing it needs POS v2, after January.
  *
+ * ## ⛔ And there is no paper logbook either — the obligation is unmet today
+ *
+ * Ian, 2026-08-29: *"they are not kept to avail the discount they just present id and the pos
+ * picks the discount from the list of configured discount."* So nothing records the holder's
+ * name, ID number or invoice — **not in software and not on paper** (bible row 164).
+ *
+ * ⚠️ **This table therefore cannot be back-filled.** A row must be created while the customer is
+ * still at the counter, because nothing downstream holds the two fields that matter. That is the
+ * whole reason `record_statutory_discount` is staff-open.
+ *
  * ## ⭐ `source` is the honesty column
  *
- * Every row is `transcribed` until POS v2 exists. Same lesson as `sales_days.pos_sourced`
- * (T-123): *a day pulled from POS and a day typed in by hand are not equally trustworthy, and a
- * reader that cannot tell them apart will treat them as if they were.* When POS v2 lands it
- * writes `pos` rows into this same table — no migration, and the report can then show which
- * period is machine-captured and which came off the paper book.
+ * Every row is `manual` until POS v2 exists. Same lesson as `sales_days.pos_sourced` (T-123):
+ * *a day pulled from POS and a day typed in by hand are not equally trustworthy, and a reader
+ * that cannot tell them apart will treat them as if they were.* When POS v2 lands it writes `pos`
+ * rows into this same table — no migration, and the report can then show which period is
+ * machine-captured and which was typed at the till.
  *
  * ## One discount only, by construction
  *
@@ -58,7 +68,7 @@ export const statutoryDiscountRecords = pgTable(
 
     // ── The six fields the regulations name. All six, or the record does not satisfy them ──
     /** Reg field 5, *"date of transactions"*. The date of the SALE, never of the data entry —
-     *  a January transcription of a December sale is a December record. */
+     *  a January entry of a December sale is a December record. */
     businessDate: date('business_date').notNull(),
     /** ⭐ Reg field 6, *"invoice number"* — **omitted by the original T-137 spec**, and present in
      *  the text of both RR 5-2017 §5.9 and RR 7-2010. It is also the join back to POS's receipt
@@ -85,12 +95,14 @@ export const statutoryDiscountRecords = pgTable(
      *  not compel one, so it cannot be `notNull` without inventing an obligation. */
     signatory: text('signatory'),
 
-    /** ⭐ Provenance. `transcribed` = typed from the store's paper logbook; `pos` = written by POS
-     *  v2 at the till. Defaults to `transcribed` because that is the only thing that can produce a
-     *  row today. */
-    source: text('source', { enum: ['transcribed', 'pos'] })
+    /** ⭐ Provenance. `manual` = a person typed it; `pos` = POS v2 wrote it at the till. Defaults
+     *  to `manual` because that is the only thing that can produce a row today.
+     *  ⚠️ **It is NOT called `transcribed`** (migration 0066). That word asserts a source document
+     *  was copied, and there is none — Ian confirmed 2026-08-29 that no paper logbook is kept
+     *  (bible row 164). A row entered at the till is original capture by a human, not a copy. */
+    source: text('source', { enum: ['manual', 'pos'] })
       .notNull()
-      .default('transcribed'),
+      .default('manual'),
 
     notes: text('notes'),
 
@@ -121,7 +133,7 @@ export const statutoryDiscountRecords = pgTable(
     index('statutory_discount_records_org_id_business_date_idx').on(t.orgId, t.businessDate),
 
     check('statutory_discount_records_kind_check', sql`${t.kind} in ('senior', 'pwd')`),
-    check('statutory_discount_records_source_check', sql`${t.source} in ('transcribed', 'pos')`),
+    check('statutory_discount_records_source_check', sql`${t.source} in ('manual', 'pos')`),
     /** ⚠️ Both amounts must be POSITIVE, not merely non-negative. A zero-peso discount is not a
      *  discount, and a zero gross is not a sale — either one means the row was entered wrong, and
      *  a statutory register full of zero rows is worse than a short one. */

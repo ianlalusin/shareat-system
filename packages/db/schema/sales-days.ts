@@ -155,10 +155,16 @@ export const salesDays = pgTable(
     alaCarteSales: numeric('ala_carte_sales', { precision: 14, scale: 2 }).notNull(),
 
     // ── Contra-revenue. Two accounts, NOT interchangeable ─────────────────────────────
-    /** ⚠️ Senior and PWD are broken out because RR 5-2017 requires it, not for reporting taste
+    /** ⚠️ Senior and PWD are broken out because the statutes require it, not for reporting taste
      *  (discovery 24 §4). Sales to SC/PWD are VAT-exempt and the burden of proof is on the seller.
-     *  ⛔ A per-transaction PWD LOGBOOK is also mandatory and is NOT satisfied by these daily
-     *  totals — only POS holds transaction detail. Open, and flagged to Ian. */
+     *  ⚠️ **TWO regulations, not one** (bible row 164): RR 5-2017 is PWD-only; the senior half is
+     *  RR 7-2010, with an OSCA ID rather than a PWD ID.
+     *  ⛔ **A per-transaction record is also mandatory and these daily totals cannot satisfy it.**
+     *  It lives in `statutory_discount_records` (T-137), which is a PARALLEL record and posts
+     *  nothing — these columns remain the only route to 4900 (bible rows 75, 132).
+     *  ⛔ **And it is not being kept today, in software or on paper** — Ian, 2026-08-29: the
+     *  customer presents an ID and the cashier picks a configured discount, so nothing records the
+     *  holder's name, ID number or invoice. That is a live exposure, not a backlog item. */
     seniorDiscount: numeric('senior_discount', { precision: 14, scale: 2 }).notNull().default('0'),
     pwdDiscount: numeric('pwd_discount', { precision: 14, scale: 2 }).notNull().default('0'),
     otherDiscount: numeric('other_discount', { precision: 14, scale: 2 }).notNull().default('0'),

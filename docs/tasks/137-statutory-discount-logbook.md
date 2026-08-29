@@ -116,17 +116,23 @@ T-137 already wanted — *"a parallel record, not a replacement"*:
 
 ## 5. Provenance — the column that keeps this honest
 
-`source` is `'transcribed' | 'pos'`.
+`source` is `'manual' | 'pos'`.
 
-Every row is `transcribed` until POS v2 exists. **This is the same lesson as `sales_days.posSourced`**
+Every row is `manual` until POS v2 exists. **This is the same lesson as `sales_days.posSourced`**
 (T-123): *"a day pulled from POS and a day typed in by hand are not equally trustworthy, and a
 reader that cannot tell them apart will treat them as if they were."* When POS v2 lands it writes
 `pos` rows into this same table, and the report can then show which period is machine-captured and
-which was typed from the paper book — without a migration.
+which was typed at the till — without a migration.
+
+⚠️ **It was called `transcribed` for one commit, and that was wrong** (migration 0066). The word
+asserts that a source document was copied. §6 establishes there is none, so a row entered at the
+counter is *original capture by a human*, not a copy of anything. **This project's glossary is
+already a list of columns whose names assert something false about their data** — minting another
+inside the table whose entire purpose is provenance would be the worst possible place for it.
 
 ---
 
-## 6. ⚠️ The honest risk: this table may stay empty
+## 6. ⛔ ANSWERED 2026-08-29 — nothing is kept, so the obligation is unmet today
 
 **Utilisation is unknown and I could not reach the number.** I would want the count of receipts
 carrying a `vatExempt` bill discount per month; it lives in POS Firestore (`receipts`,
@@ -135,25 +141,39 @@ carrying a `vatExempt` bill discount per month; it lives in POS Firestore (`rece
 (`ERP-rebuild/src/app/financial/sales-report/new/page.tsx:342`; bible §16.7 defect 3 — already
 known, independently re-verified 2026-08-29).
 
-So the value of this table rests on a question only Ian can answer, and **discovery 24's Open 1 is
-still open**:
+### Ian, 2026-08-29, answering discovery 24 Open 1
 
-> **Is a paper SC/PWD logbook kept at the store today?**
+> *"no they are not kept to avail the discount they just present id and the pos picks the discount
+> from the list of configured discount."*
 
-- **If yes** — this is digitisation. A manager transcribes the book; the obligation is already
-  being met and this makes the record durable, searchable and reconcilable against the daily totals.
-- **If no** — the obligation is being missed today, and this table is the first place it is met.
-  That is a **process** change before it is a software one, and shipping the table alone will not
-  achieve it.
+**So there is no paper logbook, and there never was.** The customer shows a card, the cashier taps
+a configured discount, and **nothing anywhere records the holder's name, ID number or the invoice
+it applied to.** Bible row 164.
 
-**Either way the table is the same**, which is why it is being built before the question is
-answered. What the answer changes is whether anyone fills it.
+⛔ **That makes this a live compliance exposure, not a modernisation.** RR 5-2017 §5.9 and RR 7-2010
+both require the per-transaction record, and **the burden of proof in a BIR audit is on the
+seller** — without it the discount can be disallowed as a deduction from gross income.
+
+### Three consequences that change how this ships
+
+1. ⛔ **The table cannot be back-filled.** Not from POS, not from the ERP, not from paper. The two
+   missing fields are the two nothing downstream holds. **Every day that passes without a capture
+   habit is a day that can never be reconstructed.**
+2. ⚠️ **The gap is a PROCESS gap before it is a software one.** A register nobody writes to changes
+   nothing. Shipping this table does not, by itself, close the exposure — a till-side habit does,
+   and that is Ian's call, not this task's.
+3. ⭐ **Which is why `record_statutory_discount` is staff-open.** The only person who can create a
+   row is the one facing the customer. Gating it to managers guarantees an empty register.
 
 ---
 
 ## 7. Open
 
-1. ⛔ **The paper-logbook question above** (discovery 24 Open 1) — unanswered since 2026-08-25.
+1. ✅ **ANSWERED 2026-08-29** — no logbook is kept, in any form. See §6. **What remains open is
+   the process question it exposes:** who writes the record, and when, between now and POS v2?
+   Three shapes, none of them this task's to choose — the cashier enters it in the ERP at the
+   counter · a paper book is started at the store and typed up later · the exposure is accepted
+   until POS v2 and recorded as accepted, the way DEF-070 was.
 2. **Does POS enforce one-discount-only today**, or is it left to the cashier? Not answerable from
    the reference repos: the `Discount` type has a `stackable` flag but no senior/PWD-specific
    exclusivity rule. v2 enforces it on this record by construction regardless.

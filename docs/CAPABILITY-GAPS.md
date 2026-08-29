@@ -219,6 +219,18 @@ ERP half being built cannot close it alone. **What T-137 ships is the destinatio
 POS v2 lands it writes `source = 'pos'` rows into the same table with no migration — and so that a
 store transcribing a paper book today is already recording it durably.
 
-⛔ **Still unanswered since 2026-08-25** (discovery 24 Open 1): *is a paper logbook kept at the
-store today?* If yes, T-137 is digitisation. If no, the obligation is being missed and a table will
-not fix that by itself. **Gap count: 35.**
+### ⛔ ANSWERED 2026-08-29, and the answer is the worse one
+
+Ian, closing discovery 24 Open 1: *"no they are not kept to avail the discount they just present id
+and the pos picks the discount from the list of configured discount."*
+
+**There is no paper logbook.** The customer shows a card, the cashier taps a configured discount,
+and nothing records the name, the ID number or the invoice. So the record required by RR 5-2017
+§5.9 and RR 7-2010 is **not being kept in any form today** — and the burden of proof in a BIR audit
+is on the seller (bible row 164).
+
+⚠️ **This is no longer only a capability gap; it is a live exposure with a running clock.** T-137
+ships the register, but a register nobody writes to closes nothing, and **nothing can reconstruct a
+sale that was not recorded at the counter.** The remaining decision is a *process* one and it is
+Ian's: cashier enters it in the ERP at the till · a paper book is started and typed up later · or
+the exposure is formally accepted until POS v2, the way DEF-070's was. **Gap count: 35.**
