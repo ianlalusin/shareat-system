@@ -230,6 +230,15 @@ export default async function CutoverPage({
                     </p>
                   )}
 
+                  {(s.def.code === 'C3' || s.def.code === 'C5') && !s.blockedBy && (
+                    <Link
+                      href="/cutover/opening"
+                      className="mt-3 inline-block rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
+                    >
+                      {s.def.code === 'C3' ? 'Enter opening balances' : 'Review and post'}
+                    </Link>
+                  )}
+
                   {s.def.code === 'B3' && s.storeId && !s.done && (
                     <Link
                       href={`/cutover/count?store=${s.storeId}`}

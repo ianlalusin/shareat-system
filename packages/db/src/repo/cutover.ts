@@ -228,3 +228,71 @@ export async function partiesWithOpeningAndPreCutoverDocs(
   `)) as unknown as Record<string, string>[];
   return rows.map((r) => ({ partyType: String(r.party_type), partyId: String(r.party_id) }));
 }
+
+// -------------------------------------------------------------------------------------
+// The opening drafts — C3's working set
+// -------------------------------------------------------------------------------------
+
+export interface OpeningDraft {
+  id: string;
+  entryDate: string;
+  memo: string | null;
+  accountCode: string;
+  storeId: string | null;
+  debit: string;
+  credit: string;
+  partyType: string | null;
+  partyId: string | null;
+}
+
+/**
+ * Every opening figure entered so far, still in draft.
+ *
+ * ⚠️ Returns the REAL account's line, not 3900's — 3900 is the other half of every one of them and
+ * listing it would double the screen for no information.
+ */
+export async function openingDrafts(tx: Tx, orgId: string): Promise<OpeningDraft[]> {
+  const rows = (await tx.execute(sql`
+    select je.id, je.entry_date::text as entry_date, je.memo,
+           a.code as account_code, jl.store_id,
+           jl.debit::text as debit, jl.credit::text as credit,
+           jl.party_type, jl.party_id
+    from journal_entries je
+    join journal_lines jl on jl.entry_id = je.id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId} and je.source_type = 'opening_balance'
+      and je.status = 'draft' and a.code <> '3900'
+    order by a.code
+  `)) as unknown as Record<string, string | null>[];
+  return rows.map((r) => ({
+    id: String(r.id),
+    entryDate: String(r.entry_date),
+    memo: r.memo ?? null,
+    accountCode: String(r.account_code),
+    storeId: r.store_id ?? null,
+    debit: String(r.debit),
+    credit: String(r.credit),
+    partyType: r.party_type ?? null,
+    partyId: r.party_id ?? null,
+  }));
+}
+
+/**
+ * Delete a draft entry and its lines.
+ *
+ * ⛔ Guarded on `status = 'draft'` in the WHERE clause as well as by the caller: the posted-
+ * immutability trigger would refuse a posted row anyway, and belt-and-braces here means the
+ * failure is a clean no-op rather than an exception from a trigger.
+ */
+export async function deleteDraftEntry(tx: Tx, orgId: string, entryId: string): Promise<void> {
+  await tx.execute(sql`
+    delete from journal_lines
+    where entry_id in (
+      select id from journal_entries
+      where id = ${entryId} and org_id = ${orgId} and status = 'draft'
+    )
+  `);
+  await tx.execute(sql`
+    delete from journal_entries where id = ${entryId} and org_id = ${orgId} and status = 'draft'
+  `);
+}

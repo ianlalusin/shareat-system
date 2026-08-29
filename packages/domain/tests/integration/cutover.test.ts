@@ -29,6 +29,9 @@ import {
   cutoverProgress,
   openingGaps,
   recordOpeningCount,
+  addOpeningFigure,
+  removeOpeningFigure,
+  postOpeningBalances,
 } from '@shareat/domain';
 import { postEntry } from '../../src/ledger/post-entry';
 
@@ -325,5 +328,144 @@ describe('the residual halts, and is visible the whole time', () => {
     // ⭐ The same money, counted twice. Guarded by NAMING it, not by hoping.
     expect(gaps.doubleCounted).toHaveLength(1);
     expect(gaps.doubleCounted[0]!.partyId).toBe(supplier!.id);
+  });
+});
+
+// =========================================================================================
+// C3 and C5 — entering the opening balances, and the act that opens the books
+// =========================================================================================
+
+describe('the opening balances', () => {
+  const DATE = '2027-01-01';
+
+  it('⭐ a figure is a BALANCED draft against 3900, and the residual moves', async () => {
+    const f = await fixture('openfig');
+    await asOrg(f.orgId, (tx) =>
+      addOpeningFigure(tx, f.admin, {
+        accountCode: '1110', storeId: f.storeId, direction: 'debit',
+        amount: '5000.00', entryDate: DATE,
+      }),
+    );
+    const p = await progress(f);
+    // Cash in one side, equity the other — so 3900 carries the whole thing until its match arrives.
+    expect(Number(p.openingResidual)).toBe(5000);
+
+    // ⚠️ And the trial balance NEVER drifts, even mid-entry: each figure balances on its own.
+    expect(Number(p.trialBalanceDrift)).toBe(0);
+  });
+
+  it('the matching side nets 3900 to zero, and C4 then holds', async () => {
+    const f = await fixture('opennets');
+    await asOrg(f.orgId, (tx) =>
+      addOpeningFigure(tx, f.admin, {
+        accountCode: '1110', storeId: f.storeId, direction: 'debit', amount: '5000.00', entryDate: DATE,
+      }),
+    );
+    await asOrg(f.orgId, (tx) =>
+      addOpeningFigure(tx, f.admin, {
+        // ⚠️ An account with NO requires_party — the point here is the residual, not the subledger.
+        accountCode: '1130', storeId: f.storeId, direction: 'credit', amount: '5000.00', entryDate: DATE,
+      }),
+    );
+    const p = await progress(f);
+    expect(Number(p.openingResidual)).toBe(0);
+  });
+
+  it('⛔ 3900 itself cannot be entered as a figure — that would be plugging the difference', async () => {
+    const f = await fixture('noplug');
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        addOpeningFigure(tx, f.admin, {
+          accountCode: '3900', storeId: f.storeId, direction: 'credit', amount: '100.00', entryDate: DATE,
+        }),
+      ),
+    ).rejects.toThrow(/not a figure of its own/);
+  });
+
+  it('re-entering the same figure updates rather than doubling it', async () => {
+    const f = await fixture('openidem');
+    const args = {
+      accountCode: '1110', storeId: f.storeId, direction: 'debit' as const,
+      amount: '5000.00', entryDate: DATE,
+    };
+    const a = await asOrg(f.orgId, (tx) => addOpeningFigure(tx, f.admin, args));
+    const b = await asOrg(f.orgId, (tx) => addOpeningFigure(tx, f.admin, args));
+    expect(b.entryId).toBe(a.entryId);
+    const p = await progress(f);
+    // ⭐ Still 5,000 — not 10,000. Entering the list over several days has to be safe to retry.
+    expect(Number(p.openingResidual)).toBe(5000);
+  });
+
+  it('a draft figure can simply be deleted — it was never final', async () => {
+    const f = await fixture('openremove');
+    const { entryId } = await asOrg(f.orgId, (tx) =>
+      addOpeningFigure(tx, f.admin, {
+        accountCode: '1110', storeId: f.storeId, direction: 'debit', amount: '900.00', entryDate: DATE,
+      }),
+    );
+    expect(Number((await progress(f)).openingResidual)).toBe(900);
+    await asOrg(f.orgId, (tx) => removeOpeningFigure(tx, f.admin, { entryId }));
+    expect(Number((await progress(f)).openingResidual)).toBe(0);
+  });
+
+  it('⛔ posting refuses while 3900 still carries a residual — and there is no override', async () => {
+    const f = await fixture('openhalt');
+    await asOrg(f.orgId, (tx) =>
+      addOpeningFigure(tx, f.admin, {
+        accountCode: '1110', storeId: f.storeId, direction: 'debit', amount: '5000.00', entryDate: DATE,
+      }),
+    );
+    await expect(
+      asOrg(f.orgId, (tx) => postOpeningBalances(tx, f.admin)),
+    ).rejects.toThrow(/no plug account/);
+  });
+
+  it('⭐ posting a balanced set opens the books, and records C5', async () => {
+    const f = await fixture('openpost');
+    await asOrg(f.orgId, (tx) =>
+      addOpeningFigure(tx, f.admin, {
+        accountCode: '1110', storeId: f.storeId, direction: 'debit', amount: '5000.00', entryDate: DATE,
+      }),
+    );
+    await asOrg(f.orgId, (tx) =>
+      addOpeningFigure(tx, f.admin, {
+        accountCode: '1130', storeId: f.storeId, direction: 'credit', amount: '5000.00', entryDate: DATE,
+      }),
+    );
+    const result = await asOrg(f.orgId, (tx) => postOpeningBalances(tx, f.admin));
+    expect(result.posted).toBe(2);
+
+    const [row] = await sql<{ n: string }[]>`
+      select count(*)::text as n from journal_entries
+      where org_id = ${f.orgId} and source_type = 'opening_balance' and status = 'posted'`;
+    expect(row!.n).toBe('2');
+
+    const c5 = await stepOf(f, 'C5');
+    expect(c5.completion).toBe('performed');
+  });
+
+  it('⛔ a POSTED figure can no longer be deleted — invariant 5 starts at the post', async () => {
+    const f = await fixture('openposted');
+    const { entryId } = await asOrg(f.orgId, (tx) =>
+      addOpeningFigure(tx, f.admin, {
+        accountCode: '1110', storeId: f.storeId, direction: 'debit', amount: '400.00', entryDate: DATE,
+      }),
+    );
+    await asOrg(f.orgId, (tx) =>
+      addOpeningFigure(tx, f.admin, {
+        accountCode: '1130', storeId: f.storeId, direction: 'credit', amount: '400.00', entryDate: DATE,
+      }),
+    );
+    await asOrg(f.orgId, (tx) => postOpeningBalances(tx, f.admin));
+    await expect(
+      asOrg(f.orgId, (tx) => removeOpeningFigure(tx, f.admin, { entryId })),
+    ).rejects.toThrow(/already been posted/);
+  });
+
+  it('⛔ posting nothing is refused, rather than quietly succeeding', async () => {
+    const f = await fixture('opennone');
+    await expect(
+      asOrg(f.orgId, (tx) => postOpeningBalances(tx, f.admin)),
+    ).rejects.toThrow(/no opening figures to post/);
   });
 });

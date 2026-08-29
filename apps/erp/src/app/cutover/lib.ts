@@ -7,6 +7,7 @@
 import { sql as dsql } from 'drizzle-orm';
 import { cutoverRepo, itemsRepo } from '@shareat/db';
 import { cutoverProgress, openingGaps, type CutoverProgress, type OpeningGaps } from '@shareat/domain';
+import type { OpeningDraft } from '@shareat/db';
 import { withOrgPrincipal } from '../expenses/lib';
 
 export { peso } from '../../lib/format';
@@ -92,4 +93,36 @@ const KIND_LABEL: Record<string, string> = {
 export function kindLabel(kind: string, cannotVerifyHere?: string): string {
   if (kind === 'verified' && cannotVerifyHere) return 'Stated by a person';
   return KIND_LABEL[kind] ?? kind;
+}
+
+export async function loadOpeningDrafts(orgId: string): Promise<OpeningDraft[]> {
+  return withOrgPrincipal(orgId, (tx) => cutoverRepo.openingDrafts(tx, orgId));
+}
+
+export interface PostableAccount {
+  code: string;
+  name: string;
+  requiresParty: boolean;
+}
+
+/**
+ * The accounts an opening figure can be entered against.
+ *
+ * ⛔ `3900` is excluded at the source, not just hidden: it is the other half of every figure, and
+ * offering it in a dropdown is offering somebody a way to plug the difference to zero.
+ */
+export async function loadPostableAccounts(orgId: string): Promise<PostableAccount[]> {
+  return withOrgPrincipal(orgId, async (tx) => {
+    const rows = await tx.execute(dsql`
+      select code, name, requires_party
+      from accounts
+      where org_id = ${orgId} and is_postable = true and status = 'active' and code <> '3900'
+      order by code
+    `);
+    return (rows as unknown as Record<string, unknown>[]).map((r) => ({
+      code: String(r.code),
+      name: String(r.name),
+      requiresParty: Boolean(r.requires_party),
+    }));
+  });
 }

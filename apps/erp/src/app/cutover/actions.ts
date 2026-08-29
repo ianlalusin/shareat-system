@@ -9,7 +9,13 @@
  * will ever be.
  */
 import { redirect } from 'next/navigation';
-import { attestStep, recordOpeningCount } from '@shareat/domain';
+import {
+  addOpeningFigure,
+  attestStep,
+  postOpeningBalances,
+  recordOpeningCount,
+  removeOpeningFigure,
+} from '@shareat/domain';
 import { requireActor } from '../../lib/session';
 
 function str(fd: FormData, key: string): string {
@@ -62,4 +68,47 @@ export async function recordCountAction(formData: FormData): Promise<void> {
     back('/cutover/count', { store: storeId, error: errorMessage(err) });
   }
   back('/cutover/count', { store: storeId });
+}
+
+export async function addOpeningFigureAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  try {
+    await addOpeningFigure(null, actor, {
+      accountCode: str(formData, 'accountCode'),
+      storeId: str(formData, 'storeId'),
+      direction: str(formData, 'direction') === 'credit' ? 'credit' : 'debit',
+      amount: str(formData, 'amount'),
+      entryDate: str(formData, 'entryDate'),
+      memo: str(formData, 'memo') || null,
+    });
+  } catch (err) {
+    back('/cutover/opening', { error: errorMessage(err) });
+  }
+  back('/cutover/opening', {});
+}
+
+export async function removeOpeningFigureAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  try {
+    await removeOpeningFigure(null, actor, { entryId: str(formData, 'entryId') });
+  } catch (err) {
+    back('/cutover/opening', { error: errorMessage(err) });
+  }
+  back('/cutover/opening', {});
+}
+
+/**
+ * ⛔ The one irreversible button in the application.
+ *
+ * It refuses on a residual, and the residual has been on screen the whole time the figures were
+ * being entered — so this is never the moment anybody first learns the books do not balance.
+ */
+export async function postOpeningBalancesAction(): Promise<void> {
+  const actor = await requireActor();
+  try {
+    await postOpeningBalances(null, actor);
+  } catch (err) {
+    back('/cutover/opening', { error: errorMessage(err) });
+  }
+  back('/cutover/opening', { posted: '1' });
 }

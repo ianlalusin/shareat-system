@@ -25,6 +25,7 @@ import { authorize, type Actor } from '@shareat/auth';
 import { CUTOVER_STEPS, gatesBefore, stepDef, type StepDef } from './steps';
 
 export * from './steps';
+export * from './opening';
 
 export interface StepState {
   def: StepDef;

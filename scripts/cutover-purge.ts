@@ -199,7 +199,27 @@ async function main(): Promise<void> {
 
     // ---- apply, in ONE transaction with post-conditions inside it -----------------------
     await sql.begin(async (tx) => {
-      for (const t of order) await tx`delete from ${tx(t)}`;
+      // ⛔ TRUNCATE, not DELETE — DEF-079. `journal_entries` carries a BEFORE DELETE trigger that
+      // raises on any POSTED row ("posted journal entry % cannot be deleted", bible invariant 5),
+      // so a DELETE here fails on the first real ledger row and rolls the whole purge back. This
+      // script could never have run against real data, and nothing caught it because no test ever
+      // ran the purge against a POSTED ledger.
+      //
+      // ⭐ TRUNCATE does not fire row-level DELETE triggers. That is DEFINED behaviour, not a
+      // loophole: the invariant stays fully armed for every ordinary write path, and the one
+      // operation allowed to empty the ledger can do so. Chosen over a GUC exemption inside the
+      // trigger (a flag a code path can forget to unset) and over session_replication_role =
+      // 'replica' (which disables FK enforcement too — far more than this needs).
+      //
+      // ⚠️ Safe because EVERY table referencing the ledger is itself purge-class, verified against
+      // pg_constraint: ap_payments, ar_charges, ar_collections, ar_write_offs, channel_settlements,
+      // expenses, money_transfers, sales_days, trade_orders. No kept row can be orphaned.
+      //
+      // One statement, so the FK graph is satisfied simultaneously rather than in an order that
+      // has to be right. TRUNCATE is transactional, so the post-conditions below still guard it.
+      if (order.length > 0) {
+        await tx.unsafe(`truncate table ${order.map((t) => `"${t}"`).join(', ')}`);
+      }
 
       for (const t of dateTables) {
         const e = CUTOVER_CLASSIFICATION[t] as Extract<CutoverEntry, { class: 'date_scoped' }>;
