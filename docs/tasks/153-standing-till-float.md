@@ -198,9 +198,9 @@ also cannot write to POS: the reference repos are READ-ONLY.
 ## 10. Open for Ian
 
 1. **The configured amount per store** — needed to create each pot, not to build this.
-2. ⚠️ **When the float is short, what then?** The ledger will show `1115` below target and raise a
-   finding. Whether the shortfall is charged to a cashier, topped up from office, or written off is
-   the same three-way decision T-143 made for remittance variances — and it is Ian's.
+2. ✅ **When the float is short or over** — answered 2026-08-29, see §13. Short: charge the cashier
+   (`1230`), then the office replenishes, in that order. Over: it goes to the tip box and **posts
+   nothing at all**, because money the ledger never held is not a ledger event.
 
 
 ---
@@ -283,3 +283,79 @@ here catches a float spent, never funded, or overfunded — not one quietly shor
 
 typecheck **0** · unit **616** · `expenses` **38/38** · `remittance` **23/23** ·
 `chart-of-accounts` **77/77** (pinned account count 100 → **101**)
+
+---
+
+## 13. ✅ Short and over — Ian's rules, 2026-08-29
+
+> *"Yes, charge to cashier, then office will replenish on the day it is counted as short. If it
+> overs then it will be remitted, but **it must not hit the book** because we put it on the
+> tipbox."*
+
+### 13.1 Counted SHORT — charge the cashier, then replenish
+
+Two postings, in that order, both on the day it is counted:
+
+```
+The shortage, charged                             ⭐ 1230, never P&L
+Dr  1230  Advances to employees      500.00   party = the cashier
+    Cr  1115  Cash on hand — till float     500.00
+
+The office puts it back
+Dr  1115  Cash on hand — till float   500.00
+    Cr  1130  Cash on hand — office            500.00
+```
+
+⭐ **`1230 Advances to employees` is the existing pattern, not a new one.**
+`POSTING-PATTERNS.md` §`remittance.shortage` already charges a cashier shortage there and states
+the trap in the same breath: *"a shortage does not touch 7350 at all; it goes to 1230, not P&L."*
+A float short is the same event in a different pocket, so it takes the same treatment.
+
+⚠️ **The order matters and is not cosmetic.** Charging first and replenishing second leaves the pot
+at target with the cashier owing the money. Replenishing first would restore the pot and leave
+nothing to charge — the shortage would vanish into an office transfer and nobody would answer
+for it.
+
+### 13.2 Counted OVER — the tip box, and ⛔ NO posting at all
+
+> *"If it overs then it will be remitted, but it must not hit the book because we put it on the
+> tipbox."*
+
+⭐ **And the correct implementation of "must not hit the book" is to do nothing**, which is a
+genuinely satisfying result rather than a dodge:
+
+A physical overage is money that **was never in the books in the first place**. The ledger says the
+pot holds its target; the pocket happens to hold more; the extra goes to the tip box. **Removing
+money the ledger never knew about is not a ledger event.** The books were right before and are
+right after.
+
+⛔ **What must NOT happen**, and both are easy mistakes:
+
+| Wrong treatment | Why it is wrong |
+|---|---|
+| Book it to **`7350` cash over/short** | That account is for a **remittance** variance, where the money genuinely was the business's. Tip money never was |
+| Book it to any income account | It is not the business's revenue. This is the same instinct as `2160`: money collected as an agent, kept by nobody but the staff |
+
+### 13.3 ⛔ Both rules need the shift count, and both are about a COUNT
+
+**Neither rule is implementable yet, and it is important to be exact about why.** Both turn on a
+**physical count** — cash in the pocket versus what should be there — and:
+
+- v2 has **no shift record** (CAPABILITY-GAPS, 2026-08-29), so there is nowhere to enter a count.
+- ⚠️ **The `tillFloatOffTarget` detector is NOT this check.** It compares the **ledger** to the
+  target, which is a different event with the same shape.
+
+### 13.4 ⛔ The trap this created, and the guard put on it
+
+**A ledger shortfall and a counted shortage look identical as a number and mean opposite things.**
+
+| | What happened | Who is answerable |
+|---|---|---|
+| **Ledger short** | The float paid for a delivery, posted correctly, not yet topped up | ⛔ **Nobody.** The office replenishes |
+| **Counted short** | Cash that should be in the pocket is not | ⭐ The cashier, per §13.1 |
+
+⚠️ **Reading the detector's finding as *"the cashier owes this"* would charge somebody for a
+delivery they paid for correctly.** So the message now says which kind it is in as many words —
+*"short in the LEDGER… ⛔ this is NOT a counted shortage and must not be charged to a cashier"* —
+and a test asserts that sentence is present. It is the cheapest possible guard against the
+expensive misreading.

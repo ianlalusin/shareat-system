@@ -414,6 +414,19 @@ export async function remittanceOverdue(tx: Tx, orgId: string): Promise<Detected
  * some morning. That is a physical count against the ledger, and v2 has no shift record to hold
  * one (CAPABILITY-GAPS, 2026-08-29). This compares the LEDGER to the target, which catches a float
  * spent, never funded, or overfunded — not one quietly short in the drawer.
+ *
+ * ## ⛔ And the distinction is not academic — it decides whether somebody gets charged
+ *
+ * > **Ian, 2026-08-29:** *"charge to cashier, then office will replenish on the day it is counted
+ * > as short."*
+ *
+ * That rule is about a **counted** shortage: cash that should be in the pocket and is not.
+ * **A ledger shortfall is a different event with the same shape** — the float was spent on a
+ * delivery, posted correctly, and simply not topped back up. Nobody is answerable for that.
+ *
+ * ⚠️ **Reading this finding as "the cashier owes this" would charge somebody for a legitimate
+ * expense**, which is why the message says which kind it is in as many words. The chargeable
+ * version needs the shift count, and the shift count does not exist yet.
  */
 export async function tillFloatOffTarget(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
   const rows = (await tx.execute(sql`
@@ -451,9 +464,13 @@ export async function tillFloatOffTarget(tx: Tx, orgId: string): Promise<Detecte
       detail:
         `${r.name} holds ${peso(balance)} against a float of ${peso(target)} — ` +
         (drift < 0
-          ? `${peso(-drift)} short. The float was drawn on and not topped back up.`
-          : `${peso(drift)} over. Something was paid into the float that belongs in the takings ` +
-            'drawer, which takes it out of what has to be remitted.'),
+          ? `${peso(-drift)} short in the LEDGER. The float was spent and not topped back up; ` +
+            'the office replenishes it. ⛔ This is NOT a counted shortage and must not be charged ' +
+            'to a cashier — it is money that was legitimately paid out and posted.'
+          : `${peso(drift)} over in the LEDGER. Something was posted INTO the float that belongs ` +
+            'in the takings drawer, which quietly removes it from what has to be remitted. ' +
+            '⚠️ Not a counted overage: a physical over goes to the tip box and never reaches the ' +
+            'books at all.'),
     });
   }
   return out;
