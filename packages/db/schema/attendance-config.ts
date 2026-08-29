@@ -145,8 +145,11 @@ export const storeAttendanceConfig = pgTable(
      * addition, not a port"*. Landmine #15: v1 does not cache these offline, so a terminal keeps
      * accepting a method an admin has just disabled and the rejection surfaces only at sync time,
      * as a silent dead letter. Caching them is a bug fix.
+     *
+     * ⛔ **There is no `credentialPasscode`.** D1, 2026-08-29: the PIN is not a mode of attendance in
+     * v2, so it has no switch — a column that can only ever hold one value is a question nobody
+     * should be asked (migration 0075).
      */
-    credentialPasscode: boolean('credential_passcode').notNull().default(true),
     credentialNfc: boolean('credential_nfc').notNull().default(true),
     credentialFingerprint: boolean('credential_fingerprint').notNull().default(true),
     credentialFace: boolean('credential_face').notNull().default(true),

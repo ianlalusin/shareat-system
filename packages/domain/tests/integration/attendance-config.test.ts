@@ -85,7 +85,10 @@ describe('T-155 invariant 7 — every column is NOT NULL, so a store cannot be h
     expect(c.undertimeGraceMinutes).toBe(0);
     expect(c.latePolicy).toBe('record_only');
     expect(c.breakEnabled).toBe(true);
-    expect(c.credentialPasscode && c.credentialNfc && c.credentialFingerprint && c.credentialFace).toBe(true);
+    // ⭐ D1, 2026-08-29: fingerprint, face and card are the modes of attendance. There is no
+    // `credentialPasscode` — the PIN is not one of them, and has no switch to leave on.
+    expect(c.credentialNfc && c.credentialFingerprint && c.credentialFace).toBe(true);
+    expect('credentialPasscode' in c).toBe(false);
   });
 
   it('no column in the table is nullable except the two lifecycle ones', async () => {
@@ -94,6 +97,8 @@ describe('T-155 invariant 7 — every column is NOT NULL, so a store cannot be h
       where table_name = 'store_attendance_config'`;
     const nullable = cols.filter((c) => c.is_nullable === 'YES').map((c) => c.column_name).sort();
     expect(nullable).toEqual(['created_by', 'superseded_at']);
+    // And the PIN switch is gone entirely, not merely defaulted to false (migration 0075).
+    expect(cols.map((c) => c.column_name)).not.toContain('credential_passcode');
   });
 
   it('re-seeding a store that already has a config changes nothing', async () => {

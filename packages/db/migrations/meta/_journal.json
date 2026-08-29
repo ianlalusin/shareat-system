@@ -456,6 +456,13 @@
       "when": 1792467107084,
       "tag": "0074_t158_attendance_adjustments",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1792553507084,
+      "tag": "0075_t158b_no_pin_attendance",
+      "breakpoints": true
     }
   ]
 }

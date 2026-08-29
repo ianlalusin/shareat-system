@@ -39,7 +39,6 @@ export interface AttendanceConfigRow {
   lateInfractionPoints: number;
 
   breakEnabled: boolean;
-  credentialPasscode: boolean;
   credentialNfc: boolean;
   credentialFingerprint: boolean;
   credentialFace: boolean;

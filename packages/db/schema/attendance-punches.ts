@@ -46,8 +46,15 @@ import { persons } from './persons';
 import { sessions } from './sessions';
 import { stores } from './stores';
 
-/** How the person identified themselves. `manual` is a back-office entry by a manager. */
-export const PUNCH_METHODS = ['pin', 'nfc', 'qr', 'fingerprint', 'face', 'manual'] as const;
+/**
+ * How the person identified themselves. `manual` is a back-office entry by a manager.
+ *
+ * ⛔ **No `pin`.** D1, decided 2026-08-29 — Ian: *"in v2 only fingerprint face and card will be mode
+ * of attendance no pin"*. Removed from the CHECK rather than switched off, so a PIN punch is
+ * unrepresentable (migration 0075). `person_credentials.kind = 'pin'` still exists for signing in
+ * to the app; clocking in is a different act.
+ */
+export const PUNCH_METHODS = ['nfc', 'qr', 'fingerprint', 'face', 'manual'] as const;
 export type PunchMethod = (typeof PUNCH_METHODS)[number];
 
 /**
@@ -162,7 +169,7 @@ export const attendancePunches = pgTable(
     /** The ingest-lag monitor: an event that arrived long after it happened is alertable. */
     index('attendance_punches_store_received_idx').on(t.storeId, t.receivedAt),
 
-    check('attendance_punches_method_check', sql`${t.method} in ('pin','nfc','qr','fingerprint','face','manual')`),
+    check('attendance_punches_method_check', sql`${t.method} in ('nfc','qr','fingerprint','face','manual')`),
     check('attendance_punches_intent_check', sql`${t.assertedIntent} in ('in','out','break_start','break_end')`),
     check('attendance_punches_source_check', sql`${t.source} in ('online','offline_replay','manual_entry','import')`),
 
