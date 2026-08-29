@@ -169,3 +169,40 @@ every task in the inventory wave, across every lane — are invisible there. Eac
 wave right now, and a single-file HTML roadmap rewritten by one of them is a conflict the other two
 discover at merge. It wants one pass, by whoever merges the lanes — or a generated file, which is
 the better answer given it is derived from `docs/tasks/` anyway.
+
+---
+
+# ✅ CLEARED 2026-08-30 — port 9008 came free and the wave got its screens
+
+⚠️ **The port was never actually taken.** The listener on 9008 was a ghost: a dead PID (51408)
+holding the socket, the same shape as the `9002 ghost listener` landmine. Everything below was
+blocked on a process that no longer existed.
+
+| Was pending | Now |
+|---|---|
+| T-171 catalogue read path | ⚠️ still unbuilt — it belongs with the order FORM, which is not built either |
+| T-172 order UI and state transitions | ⚠️ partly: `/commissary/orders` and the detail page READ an order. Creating, accepting, fulfilling and dispatching are not built |
+| T-173 receive screen | ⛔ not built. `confirmReceipt` still has no UI caller — the pipeline is driven by `npm run dev:seed:inventory` |
+| T-173/T-174/T-175 capability rows | ✅ **all four declared and covered** — `confirm_receipt`, `resolve_trade_discrepancy`, `set_item_threshold`, `post_order_message`. `authorize.test.ts` generates their denial and positive cases from the matrix itself |
+| T-174 discrepancy screen | ✅ built and used — decide, and defer once |
+| T-174 `TransitShortfallBlockedError`'s message read by a person | ⚠️ the BANNER is verified; the thrown message on `/sales-days/new` is not — nothing has tried to open a blocked day through the UI |
+| T-175 low-stock list and threshold editor | ✅ built and verified against real data |
+| T-175 auto-drafted line seen by a branch manager | ⛔ **still the open question.** `ensureAutoOrderLines` has no UI caller, so no line has ever been auto-drafted on a screen |
+| DEF-094 migrate check across lanes | ⚠️ still worth doing — this lane bumped past it twice by hand |
+
+## ⭐ What the screens found on their first run
+
+`/inventory` renders bible invariant 6's inventory arm — FIFO layers against `1310+1320+1330` —
+and immediately showed **Malvar ₱480 out of tie**. Traced: a pre-existing `demo_seed` fixture in
+`shareat_dev` posts `Dr 5300 / Cr 1310` for ₱480 with **no stock movement behind it**. Not this
+lane's data, and left in place on purpose: it is a truthful demonstration that the panel works.
+
+⚠️ **It also means `shareat_dev` has never tied**, and nobody knew, because until 2026-08-30 there
+was nowhere to look.
+
+## ⛔ Still no screen at all
+
+Receiving (T-166), usage and wastage (T-168), count sessions (T-169), and the whole ordering
+lifecycle (T-172). **The engine for all of them is green and unreachable.** They are the next
+UI slice, and the pattern is now established: a `lib.ts` of reads, a `page.tsx`, an `actions.ts`
+that authorises and calls the domain, and nothing re-implemented in between.
