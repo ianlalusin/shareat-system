@@ -130,6 +130,22 @@ enforcement too).
 | Purge uses TRUNCATE | **DEF-079**, `scripts/cutover-purge.ts` |
 | Month-end has no installed trigger | **DEF-078** |
 
+## ⚠️ Two things about other sessions' work, stated rather than buried
+
+**`AGENTS.md` is modified and NOT committed, deliberately.** The tree was clean when this wrap-up
+started, so something wrote it mid-ritual. It is not this session's edit, its claimed *"81 entries"*
+does not match the register's **80**, and another session may still be editing it. The ritual's rule
+is that a file you cannot explain is mentioned rather than committed — so it is mentioned. Its
+content looks sound (count refresh plus the bible row 164 "log what you see" rule); somebody who
+knows its provenance should commit it.
+
+**`DEF-080` was swept into commit `e44d411` (T-132) by a `git add -A`.** It is a peer session's
+finding — T-111's property-based test suite was specified and never written, and no generator
+library exists in the tree. The content is legitimate and is safely on `main`; the lapse is that it
+was committed under a T-132 message without being accounted for. ⭐ This is exactly why the ritual
+says *explicit `git add <path>`, never `git add -A` blindly* — and it is why every commit in this
+wrap-up named its files.
+
 ## Pick up here
 
 1. **T-136 cash custody**, or **T-137 statutory discount logbook** — the only two designed-and-unbuilt
