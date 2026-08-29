@@ -407,6 +407,31 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     reason: 'No org_id of its own — reachable through the collection it belongs to, same pattern as ap_payment_allocations.',
   },
 
+  // ---- T-154: the staff master record (Phase 4, lane B) --------------------------------
+  positions: {
+    scope: 'org_column',
+    reason:
+      'The position taxonomy is per-org: the canonical six are seeded per org, and a store’s own ' +
+      'extras belong to that org’s vocabulary. A franchise inventing a position must not widen ' +
+      'anyone else’s.',
+  },
+  employments: {
+    scope: 'org_column',
+    reason:
+      'Who works where, on what terms. Same stakes as persons and higher — an employment carries ' +
+      'employment status and, from Phase 5, hangs the pay rate. A franchise owner seeing another ' +
+      'org’s roster is the exact leak this registry exists to prevent.',
+  },
+  employment_positions: {
+    scope: 'derived',
+    via: 'exists (select 1 from employments e where e.id = employment_positions.employment_id and e.org_id = app_current_org())',
+    reason:
+      'Has no org_id of its own — reachable only through its employment, the same pattern as ' +
+      'journal_lines through journal_entries. Denormalising an org_id here could drift from the ' +
+      'parent, and a row whose org disagreed with its employment would be invisible or visible to ' +
+      'the wrong tenant.',
+  },
+
   etl_runs: { scope: 'system_only', reason: 'ETL machinery. Never reachable by a tenant or a customer — only the migrator, crons and the audit.' },
   etl_source_documents: {
     scope: 'system_only',

@@ -192,6 +192,27 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'the first day of a new ledger.',
   },
 
+  // ---- T-154: the staff master record (Phase 4, lane B) --------------------------------
+  positions: {
+    class: 'keep',
+    reason:
+      'Configuration — the vocabulary of jobs a store has. The canonical six are seeded and a ' +
+      'store’s own extras are deliberate setup, not pilot transactions. Purging them would strand ' +
+      'every surviving employment’s position reference.',
+  },
+  employments: {
+    class: 'keep',
+    reason:
+      'Who works here. Same class as persons and person_credentials, and for the same reason: the ' +
+      'pilot is run by the actual staff, and emptying the roster on 1 January would mean nobody ' +
+      'can clock in on the morning the books open. An employment is a fact about a job, not a ' +
+      'transaction the ledger produced — nothing here posts.',
+  },
+  employment_positions: {
+    class: 'keep',
+    reason: 'As employments — its child rows, and meaningless without them.',
+  },
+
   // ---- T-124: fixed assets ---------------------------------------------------------------
   prepaid_items: {
     class: 'keep_shell',
@@ -536,7 +557,13 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
 };
 
 /** Tables the purge must never touch even if classified — belt and braces around views. */
-export const NON_TABLE_RELATIONS: readonly string[] = ['v_account_balance', 'v_trial_balance', 'v_income_statement'];
+export const NON_TABLE_RELATIONS: readonly string[] = [
+  'v_account_balance',
+  'v_trial_balance',
+  'v_income_statement',
+  // T-154 — 'is this person on the roster' is DERIVED, never a stored boolean (bible §4.2 rule 7).
+  'v_active_employments',
+];
 
 export function classify(table: string): CutoverEntry | undefined {
   return CUTOVER_CLASSIFICATION[table];
