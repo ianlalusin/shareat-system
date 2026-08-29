@@ -1,6 +1,6 @@
 /**
- * The Lane A relay: drain the outbox, publish the mirror. T-160.
- * `docs/tasks/160-lane-a-publisher.md`, bible §5.1.
+ * The Lane A relay: drain the outbox, publish the mirror. T-181.
+ * `docs/tasks/181-lane-a-publisher.md`, bible §5.1.
  *
  * ⭐ **Transport-free.** This module knows nothing about Firestore. `packages/sync-firestore` is the
  * one place `firebase-admin` is imported for this lane, exactly as `packages/storage-firebase` is

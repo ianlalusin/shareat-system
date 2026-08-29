@@ -1,5 +1,5 @@
 /**
- * T-153 Contract §2 — the four assertions that ARE Phase 4's gate.
+ * T-180 Contract §2 — the four assertions that ARE Phase 4's gate.
  *
  * PROJECT_BIBLE.md §5.2 asserts three things as PLATFORM behaviour, and rests the whole of Phase 4
  * on them: "the Firestore SDK provides offline persistence, automatic replay, and conflict-free
@@ -105,7 +105,7 @@ function bootTerminal(appName: string = nextAppName()): Terminal {
 
 /** Sign in as the provisioned terminal. MUST happen before the network is disabled — a device
  *  that has never authenticated cannot start doing so offline, which is itself a constraint on
- *  T-163: the terminal signs in while online and the SDK keeps the session alive from there. */
+ *  T-184: the terminal signs in while online and the SDK keeps the session alive from there. */
 async function signInAsDevice(t: Terminal) {
   await signInWithCustomToken(t.auth, unsignedCustomToken(`device:${DEVICE}`, { deviceId: DEVICE }));
 }
@@ -212,7 +212,7 @@ describe('bible §5.2 — the client SDK is the offline queue', () => {
   });
 
   it('3b. FINDING — the device-principal claim survives into request.auth.token', async () => {
-    // T-153 Contract §4: "Does request.auth.token.deviceId work from a custom token, which is what
+    // T-180 Contract §4: "Does request.auth.token.deviceId work from a custom token, which is what
     // T-159's device-principal design assumes?" The read rule compares against exactly that claim,
     // so a successful constrained read IS the proof. A token without the claim fails this.
     const t = boot();

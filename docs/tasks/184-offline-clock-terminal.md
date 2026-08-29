@@ -1,8 +1,9 @@
-# T-163 — The offline clock terminal
+# T-184 — The offline clock terminal
 
-> **Status:** Spec written 2026-08-30 by the Opus planner (session `ianla-f9`, lane B).
-> **Depends on:** T-153 (the spike, and its five findings), T-159 (device identity + rules),
-> T-160 (mirror), T-161 (ingestor), T-164 (the credentials it resolves against).
+> **Status:** ✅ **BUILT, 2026-08-30.** Spec written by the Opus planner (session `ianla-f9`, lane B); implemented on the `attendance` lane and verified by `ianla-e7` before merge — typecheck 0, unit 696, integration 1360/1360 against a database created empty for the run, build clean.
+> ⚠️ **RENUMBERED 2026-08-30: was T-163.** Both this lane and the inventory lane had taken T-163; attendance moved because it is finished while inventory is still being written. ⛔ **Commit messages predating the rename still say T-163** — git history is not rewritten.
+> **Depends on:** T-180 (the spike, and its five findings), T-159 (device identity + rules),
+> T-181 (mirror), T-182 (ingestor), T-185 (the credentials it resolves against).
 > ⭐ **This is the task that meets Phase 4's exit gate:** *a terminal clocks in with the network
 > pulled and reconciles cleanly on reconnect.*
 
@@ -12,7 +13,7 @@ A page a tablet on the counter loads once and leaves open all day. It signs in *
 device principal, not a person — reads the store's roster, config and credential mirror out of
 Firestore's local cache, and writes a punch into `/inbox` when somebody scans a badge. With the
 network pulled, every one of those steps still works, and the punch replays on reconnect **with no
-application code that does the replaying.** That last clause is the whole bet, and T-153 confirmed
+application code that does the replaying.** That last clause is the whole bet, and T-180 confirmed
 the platform keeps it.
 
 ## ⛔ The one rule that governs every line of this task
@@ -34,14 +35,14 @@ never once been checked.
 `apps/erp/tests/clock-route-is-client-only.test.ts` · the browser assertions.
 **Modify:** `apps/erp/package.json` (the `firebase` client SDK) · `.env.example`.
 **Out of bounds:** the ZK9500 fingerprint plugin (D2 parked) · face (online-only, and not on this
-path at all) · enrolment screens (T-164 is the domain; its UI is not in Phase 4's gate) · the
+path at all) · enrolment screens (T-185 is the domain; its UI is not in Phase 4's gate) · the
 missed-clock-out sweep (T-166).
 
 ---
 
 ## Contract
 
-### 1. The five findings T-153 owes this task
+### 1. The five findings T-180 owes this task
 
 Each one is a line of code plus a comment, and each was paid for by the spike.
 
@@ -64,7 +65,7 @@ Three mirrors, all read through the **local cache first**, all working offline:
 | Credentials | `biometricMirror/{storeId}/credentials/{id}` | ⭐ Resolving a scanned badge to an employment |
 
 ⚠️ **The terminal resolves a badge only to decide what to SHOW.** It still sends
-`credentialKind` + `credentialRef` and never an employment id — T-164 made the server the authority,
+`credentialKind` + `credentialRef` and never an employment id — T-185 made the server the authority,
 and a terminal that "helpfully" sent its own conclusion would put the hole straight back.
 
 ### 3. The punch
@@ -89,13 +90,13 @@ the rule, the ingestor's `UNIQUE` constraint and the quarantine's healing all ke
 - An online/offline indicator that is honest: **offline is a normal state here, not an error.**
 
 ⚠️ **No dead-letter.** There is nowhere for a punch to go and die: it is in Firestore or it has not
-been written. That is landmine #14 closed at the source rather than at the screen (T-162).
+been written. That is landmine #14 closed at the source rather than at the screen (T-183).
 
 ### 5. ⭐⭐ Definition of done — the browser assertions
 
-T-153 §5, verbatim:
+T-180 §5, verbatim:
 
-> ⛔ *"The terminal is a browser, so this gap is real. Before T-163 is called done, run the same four
+> ⛔ *"The terminal is a browser, so this gap is real. Before T-184 is called done, run the same four
 > assertions **in a real browser**… What a browser adds that the shim cannot: real IndexedDB quota
 > and eviction, the multi-tab primary lease, and Safari/WebView storage policies… **The last of those
 > is the one that could actually lose a punch.**"*
@@ -136,14 +137,14 @@ writing junk into a live project.
 **Fingerprint capture** (D2) · **Face** (online-only; not on this path) · **NFC hardware** — the
 scan input is a text field that a USB badge reader or a QR scanner types into, which is how the
 hardware actually behaves · **A service worker / installable app shell** — a different offline
-problem (can the *page* load), named by T-153 as not covered and still not covered here ·
+problem (can the *page* load), named by T-180 as not covered and still not covered here ·
 **Break punches** — v1 drives them from a roster tap; the gate is in/out.
 
 ## Done when
 
 - [ ] All nine invariants pass.
 - [ ] The client-only guard test is present and **watched failing** (add a forbidden import, see it
-      go red) — the same discipline T-153 used on the ruleset.
+      go red) — the same discipline T-180 used on the ruleset.
 - [ ] The four browser assertions run in Chrome, with what was observed reported.
 - [ ] `typecheck` · `npm test` · `npm run test:integration` · `npm run build` green, dev server
       stopped before the build.

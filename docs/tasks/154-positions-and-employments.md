@@ -1,6 +1,6 @@
 # T-154 — Positions and employments: the staff master record nobody owned
 
-> **Status:** Spec written 2026-08-29 by the Opus planner (session `ianla-f9`, lane B).
+> **Status:** ✅ **BUILT, 2026-08-30.** Spec written by the Opus planner (session `ianla-f9`, lane B); implemented on the `attendance` lane and verified by `ianla-e7` before merge — typecheck 0, unit 696, integration 1360/1360 against a database created empty for the run, build clean.
 > **Depends on:** T-101 (`persons`, `person_identities`), T-121 (`person_roles`, `person_store_scope`),
 > T-138 (`sessions`, `resolveActor`) — all shipped.
 > **Blocks:** T-156 (a punch needs somebody to punch against), T-157, and every Phase 5 task.
@@ -149,7 +149,7 @@ create view v_active_employments as
 
 ⭐ **Nothing may store an `is_active` boolean on `employments`.** §4.2 rule 7, and discovery 15's
 finding that v1 treats the active count as a projection invariant while still carrying the field.
-The view is the answer to *"who is on the roster"*, and the mirror publisher (T-160) reads it.
+The view is the answer to *"who is on the roster"*, and the mirror publisher (T-181) reads it.
 
 ### 6. Service layer — `packages/domain/src/people/`
 
@@ -212,7 +212,7 @@ to a staffer's rate are versioned, never overwritten, so a past payslip can be r
 **Signature capture** — Phase 7, memos are its only consumer · **The POS `serverProfileId` mapping**
 — Phase 7 performance scoring, and it depends on the POS seam · **Infractions and performance** —
 Phase 7 · **Leave** — T-165, in this phase · **`person_credentials` for these people** — T-138 built
-the table; enrolling a clock credential is T-164 · **Any UI** — this task is schema and service.
+the table; enrolling a clock credential is T-185 · **Any UI** — this task is schema and service.
 The roster screen arrives with T-166, which has something to show.
 
 ## Done when

@@ -1,13 +1,14 @@
-# T-164 — Credential enrolment, and the mirror a terminal resolves a badge against
+# T-185 — Credential enrolment, and the mirror a terminal resolves a badge against
 
-> **Status:** Spec written 2026-08-29 by the Opus planner (session `ianla-f9`, lane B).
-> **Depends on:** T-159 (device identity + the `biometricMirror` rules), T-160 (outbox), T-161 (ingestor).
+> **Status:** ✅ **BUILT, 2026-08-30.** Spec written by the Opus planner (session `ianla-f9`, lane B); implemented on the `attendance` lane and verified by `ianla-e7` before merge — typecheck 0, unit 696, integration 1360/1360 against a database created empty for the run, build clean.
+> ⚠️ **RENUMBERED 2026-08-30: was T-164.** Both this lane and the inventory lane had taken T-164; attendance moved because it is finished while inventory is still being written. ⛔ **Commit messages predating the rename still say T-164** — git history is not rewritten.
+> **Depends on:** T-159 (device identity + the `biometricMirror` rules), T-181 (outbox), T-182 (ingestor).
 > **Unblocked by:** bible §13 row 164 — *"add cardid, update bible"* — which put the card id in
 > hot-set item 2. Until that amendment this task could not be built.
 
-## ⚠️ This task moved AHEAD of T-163, and the reason is a hard dependency
+## ⚠️ This task moved AHEAD of T-184, and the reason is a hard dependency
 
-The plan lists Wave 4 as T-163 (the terminal) then T-164 (enrolment). **That order cannot work.**
+The plan lists Wave 4 as T-184 (the terminal) then T-185 (enrolment). **That order cannot work.**
 
 Phase 4's exit gate is *"a terminal clocks in with the network pulled and reconciles cleanly on
 reconnect."* Bible §13 row 164 establishes why the card is the credential that meets it: face is
@@ -22,14 +23,14 @@ online-only permanently, and fingerprint needs the APK that D2 parked. So the of
 | Something publishing it to `biometricMirror` | ⛔ `MIRROR_ENTITIES` is `('roster','attendance_config','day_feed')` — no credential entity |
 | A rule guarding that path | ✅ **Exists and is empty.** T-159 wrote `biometricMirror/{storeId}/credentials/{docId}`, terminal-only |
 
-Building T-163 first would produce a terminal whose only offline identification method is *"pick
+Building T-184 first would produce a terminal whose only offline identification method is *"pick
 your name from the roster"* — which is a bearer credential with no bearer, clockable by anyone
 standing at the tablet. That is worse than v1 and would have to be torn out. **So enrolment lands
-first, and T-163 follows against a mirror that has something in it.**
+first, and T-184 follows against a mirror that has something in it.**
 
 ## ⚠️ Migration numbers: this lane needs a second block
 
-0080–0089 is fully consumed (0080–0089 = T-154 … T-161). This task takes **0100**, and the phase's
+0080–0089 is fully consumed (0080–0089 = T-154 … T-182). This task takes **0100**, and the phase's
 remainder is claimed as **0100–0119**. Chosen rather than 0090–0099 to leave clear air above
 `main`, which is at 0070 and advancing. ⚠️ Per DEF-091 the `when` must stay on the grid — derived
 from `idx`, never from `previous.when + 86400000`. **Ian should confirm the block**; it is recorded
@@ -49,7 +50,7 @@ to.**
 **Modify:** `mirror-outbox.ts` (a fourth entity) · `publisher.ts` (build the credential document) ·
 `ingestor.ts` (resolve the credential server-side) · `firebase/firestore.rules` + its test suite ·
 the RLS registry and cutover classification · the domain barrel.
-**Out of bounds:** the terminal itself (T-163) · face enrolment (below) · the ZK9500 plugin (D2).
+**Out of bounds:** the terminal itself (T-184) · face enrolment (below) · the ZK9500 plugin (D2).
 
 ---
 
@@ -129,7 +130,7 @@ Landmine #22, from discovery 05's "Known gaps":
 > nor `clockByFaceAction` re-runs a biometric match server-side; a leaked token (or, offline, a
 > leaked cached bundle) can punch indefinitely until the token is rotated."*
 
-T-161 shipped the *shape* of the fix and said so plainly in its own comment — it verifies that the
+T-182 shipped the *shape* of the fix and said so plainly in its own comment — it verifies that the
 employment the terminal named is real, open, and at this store, but it takes `employmentId` from the
 device. **That is v1's hole in new clothes:** the device still decides who punched.
 
@@ -150,7 +151,7 @@ to an employment at another store.
 A punch made at 14:00 on a card revoked at 15:00 and ingested at 16:00 **is valid**. It was a real
 person clocking in with a live badge; the revocation had not happened yet.
 
-This is the same rule the method kill switch already follows — T-161 reads the config *in force on
+This is the same rule the method kill switch already follows — T-182 reads the config *in force on
 the punch's own shift day*, precisely so a backdated replay cannot use a setting that was not in
 effect. Applying it to credentials keeps one principle instead of two.
 
@@ -194,12 +195,12 @@ read does not exist.
 
 Integration for every invariant. The rules suite gains a case proving a **person** — not a terminal —
 cannot read `biometricMirror`, and the emulator run must watch it fail against a permissive ruleset,
-as T-153 established.
+as T-180 established.
 
 ## Out of scope
 
 **Face enrolment** — §3, and it needs the online matcher · **The ZK9500 plugin** — D2 is parked ·
-**The terminal UI** — T-163 · **Card issuance/printing** — operational · **A photo captured at the
+**The terminal UI** — T-184 · **Card issuance/printing** — operational · **A photo captured at the
 punch**, the named-but-unbuilt anti-buddy-punch mitigation (bible §13 row 164) — still named, still
 unbuilt, and this task does not change that.
 

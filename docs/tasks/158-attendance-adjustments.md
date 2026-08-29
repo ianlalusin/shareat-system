@@ -1,6 +1,6 @@
 # T-158 — Manager adjustments: decisions as attributed inputs, not patches on an output
 
-> **Status:** Spec written 2026-08-29 by the Opus planner (session `ianla-f9`, lane B).
+> **Status:** ✅ **BUILT, 2026-08-30.** Spec written by the Opus planner (session `ianla-f9`, lane B); implemented on the `attendance` lane and verified by `ianla-e7` before merge — typecheck 0, unit 696, integration 1360/1360 against a database created empty for the run, build clean.
 > **Depends on:** T-157 (`adjudicateDay` takes adjustments as an input), T-138 (`resolveActor` —
 > without it every attribution below is theatre), T-121 (`manage_attendance`).
 > **Blocks:** T-166 (the review screen), Phase 5 (a payable day is one a manager has settled).

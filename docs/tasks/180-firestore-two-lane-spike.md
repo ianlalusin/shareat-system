@@ -1,10 +1,11 @@
-# T-153 — The Firestore two-lane spike: prove the contract before building on it
+# T-180 — The Firestore two-lane spike: prove the contract before building on it
 
-> **Status:** Spec written 2026-08-29 by the Opus planner (session `ianla-f9`, lane B).
+> **Status:** ✅ **BUILT, 2026-08-30.** Spec written by the Opus planner (session `ianla-f9`, lane B); implemented on the `attendance` lane and verified by `ianla-e7` before merge — typecheck 0, unit 696, integration 1360/1360 against a database created empty for the run, build clean.
+> ⚠️ **RENUMBERED 2026-08-30: was T-153.** Both this lane and the inventory lane had taken T-153; attendance moved because it is finished while inventory is still being written. ⛔ **Commit messages predating the rename still say T-153** — git history is not rewritten.
 > **This task exists because Phase 0's did not.** See **DEF-085**: the roadmap marks Phase 0
 > `complete` against a gate reading *"the spike proves an offline write survives and reconciles,"*
 > and no spike, ruleset, emulator config or Firestore client dependency exists anywhere in the repo.
-> **Blocks:** T-159, T-160, T-161, T-162, T-163, T-164 — every Wave 3 and Wave 4 task, which are
+> **Blocks:** T-159, T-181, T-182, T-183, T-184, T-185 — every Wave 3 and Wave 4 task, which are
 > deliberately unspecced until this reports.
 > **Blocked by:** nothing.
 > **Time-box: one working session.** Bible §10 specified a *time-boxed spike with a toy payload*;
@@ -56,7 +57,7 @@ two-lane contract forbids.
 > ⭐ **`spike/` is deliberately outside `packages/` and `apps/`.** It is not a workspace member, so
 > it cannot be imported by real code, cannot break the app-boundary test, and cannot quietly become
 > the implementation. Deleting the directory must leave the build green — that is the definition of
-> disposable, and T-160 asserts it.
+> disposable, and T-181 asserts it.
 
 ## Contract
 
@@ -106,7 +107,7 @@ documented way to test this, and closer to a pulled cable than mocking:
 | 1 | With the network disabled, `addDoc` into `inbox/` **resolves locally** and the doc is readable from the local cache | A punch can be captured offline at all |
 | 2 | With the network still disabled, a **fresh SDK instance** on the same persisted store still sees the queued write | ⭐ It survives the terminal being **reloaded or power-cycled**, which v1's IndexedDB queue handled by hand. If this fails, `persistentLocalCache` is not the queue and Phase 4 needs one |
 | 3 | On `enableNetwork()`, the write reaches the server **without any application-level replay code** | *"The Firestore SDK provides offline persistence, automatic replay… as platform behaviour"* (§5.2) — the sentence Phase 4 is built on |
-| 4 | Two writes made offline arrive in the order they were made | §5.4 rule 3 replays in event-time order; if the SDK does not preserve order, the ingestor must, and that changes T-161 |
+| 4 | Two writes made offline arrive in the order they were made | §5.4 rule 3 replays in event-time order; if the SDK does not preserve order, the ingestor must, and that changes T-182 |
 
 ### 3. `rules.test.ts` — the four refusals
 
@@ -155,12 +156,12 @@ only ever passed proves nothing (§3.2).
 
 ## Out of scope — each with its reason
 
-**The real publisher and ingestor** — T-160 and T-161, and they are unspecced on purpose until this
+**The real publisher and ingestor** — T-181 and T-182, and they are unspecced on purpose until this
 reports · **Any real entity** — the toy payload is the point; a spike that models `attendance_punches`
 has stopped being time-boxed · **Authentication beyond a stub** — the emulator's auth stub is enough
 to prove rules; real custom-token minting is T-159 · **The service worker and the app shell** — a
 different offline problem (can the *page* load offline) from this one (does the *write* survive),
-and it belongs to T-163 · **Production Firebase project setup** — no deploy, no real project, no
+and it belongs to T-184 · **Production Firebase project setup** — no deploy, no real project, no
 rules push. This runs on the emulator and stops there.
 
 ## Done when

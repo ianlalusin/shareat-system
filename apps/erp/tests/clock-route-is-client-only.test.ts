@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * ⛔⛔ **T-163 invariant 1 — the clock terminal may not touch the server.**
+ * ⛔⛔ **T-184 invariant 1 — the clock terminal may not touch the server.**
  *
  * Bible §5.2 is binding and has been true in prose since Phase 0:
  *
@@ -141,7 +141,7 @@ describe('⛔ the clock terminal is client-only (bible §5.2)', () => {
   });
 
   /**
-   * ⭐ The guard proving the guard. T-153 established the discipline: every refusal in the ruleset
+   * ⭐ The guard proving the guard. T-180 established the discipline: every refusal in the ruleset
    * was **watched failing** against a permissive version, because a test that has never failed is
    * a test nobody has proven detects anything.
    *

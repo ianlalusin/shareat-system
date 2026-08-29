@@ -1,4 +1,4 @@
-# T-153 — Firestore two-lane spike: findings
+# T-180 — Firestore two-lane spike: findings
 
 **Run 2026-08-29, lane B, session `ianla-f9`. Result: the contract HOLDS. 14/14 green.**
 
@@ -9,7 +9,7 @@ npm test          # firebase emulators:exec --only firestore,auth -- vitest run
 
 > ⚠️ **This directory is disposable.** It is not an npm workspace member; nothing in `packages/` or
 > `apps/` may import it. **The findings below are the deliverable** — the code exists to produce
-> them and T-160/T-161/T-163 should be written from this file, not from these tests.
+> them and T-181/T-182/T-184 should be written from this file, not from these tests.
 
 ---
 
@@ -63,7 +63,7 @@ getDocs(query(collection(db, 'inbox'), orderBy('occurredAt')))
 getDocs(query(collection(db, 'inbox'), where('deviceId', '==', myDeviceId), orderBy('occurredAt')))
 ```
 
-**Consequence for T-163:** every terminal query over `inbox` (*"3 punches waiting to sync"*) must
+**Consequence for T-184:** every terminal query over `inbox` (*"3 punches waiting to sync"*) must
 carry `where('deviceId','==',…)`. **For T-159:** this needs a composite index, and the rule and the
 query are a matched pair — changing one silently breaks the other. Worth a test that lists.
 
@@ -80,7 +80,7 @@ The first version of assertion 2 gave each instance a fresh app name to avoid th
 cached instance — so the "restarted" terminal opened a *different database*, found nothing, and the
 suite reported that offline persistence does not survive a restart. It does. The test was wrong.
 
-**Consequence for T-163:** the terminal's Firebase app name is **part of its durable identity**.
+**Consequence for T-184:** the terminal's Firebase app name is **part of its durable identity**.
 Changing it — a refactor, a rename, a second `initializeApp` with a different label — silently
 orphans every punch not yet synced, with no error anywhere. ⚠️ **Pin it as a named constant with a
 comment saying exactly this**, and never derive it from anything that can vary per build.
@@ -100,7 +100,7 @@ carrying a `deviceId` claim, so bible §5.3's ban on a plaintext device secret i
 `request.auth.token.deviceId` in the rules, and the read rule discriminates on it correctly — a
 signed-in human with no such claim is refused (`rules.test.ts` 4c).
 
-⚠️ **One constraint that falls out and belongs in T-163:** a device **must sign in while online**.
+⚠️ **One constraint that falls out and belongs in T-184:** a device **must sign in while online**.
 It cannot begin authenticating offline. The SDK keeps the session alive across restarts, but a
 terminal provisioned and then immediately taken offline before its first sign-in has no identity and
 cannot write. **Provisioning must therefore complete a round trip before the terminal is trusted to
@@ -117,7 +117,7 @@ Measured with `esbuild --bundle --minify`, importing exactly what a terminal nee
 `setDoc`, `getDoc`, `onSnapshot`, `collection`, `query`, `where`, `orderBy`).
 
 Acceptable for a device that loads the app once and then runs all day, and it is **replacing** v1's
-hand-rolled queue rather than adding to it. Worth noting for T-163's first-load budget on a slow
+hand-rolled queue rather than adding to it. Worth noting for T-184's first-load budget on a slow
 connection — it is not a reason to reconsider the approach.
 
 ### 5. ⚠️ What this spike did NOT prove — the honest limit
@@ -126,7 +126,7 @@ The suite runs in **Node** with `fake-indexeddb` plus a `localStorage`/`sessionS
 neither exists in Node and `persistentLocalCache` needs both. That makes assertion 2 a real test of
 the persistence layer, **against a shimmed store rather than a browser's own.**
 
-⛔ **The terminal is a browser, so this gap is real.** Before T-163 is called done, run the same four
+⛔ **The terminal is a browser, so this gap is real.** Before T-184 is called done, run the same four
 assertions **in a real browser** — Chrome, and whatever the APK's WebView is if D2 resolves toward an
 APK. What a browser adds that the shim cannot: real IndexedDB quota and eviction, the multi-tab
 primary lease, and Safari/WebView storage policies that evict IndexedDB under pressure. **The last of
@@ -147,7 +147,7 @@ mirror → inbox → ingestor shape stands as planned. The four findings above a
 
 | Finding | Lands in |
 |---|---|
-| Constrained queries + composite index | T-159 (rules), T-160 (index), T-163 (every inbox query) |
-| App name is persistence identity | T-163 — a pinned constant with the warning attached |
+| Constrained queries + composite index | T-159 (rules), T-181 (index), T-184 (every inbox query) |
+| App name is persistence identity | T-184 — a pinned constant with the warning attached |
 | Device must sign in while online | T-159 (provisioning is not complete until a round trip succeeds) |
-| Browser confirmation still owed | T-163's definition of done |
+| Browser confirmation still owed | T-184's definition of done |

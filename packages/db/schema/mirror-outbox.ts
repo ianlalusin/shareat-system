@@ -1,6 +1,6 @@
 /**
- * mirror_outbox — the transactional outbox behind Lane A. T-160.
- * `docs/tasks/160-lane-a-publisher.md`, bible §5.1.
+ * mirror_outbox — the transactional outbox behind Lane A. T-181.
+ * `docs/tasks/181-lane-a-publisher.md`, bible §5.1.
  *
  * ## The pattern, named before the design (bible §0.2)
  *

@@ -1,6 +1,6 @@
 # T-157 — The adjudication engine: what a day actually pays
 
-> **Status:** Spec written 2026-08-29 by the Opus planner (session `ianla-f9`, lane B).
+> **Status:** ✅ **BUILT, 2026-08-30.** Spec written by the Opus planner (session `ianla-f9`, lane B); implemented on the `attendance` lane and verified by `ianla-e7` before merge — typecheck 0, unit 696, integration 1360/1360 against a database created empty for the run, build clean.
 > **Depends on:** T-155 (`ShiftDay`, config), T-156 (`attendance_punches`).
 > **Blocks:** T-158, T-166, and **all of Phase 5** — payroll multiplies this task's output by a rate.
 > ⚠️ **This is the highest-risk task in the phase.** It is a re-derivation of the densest business

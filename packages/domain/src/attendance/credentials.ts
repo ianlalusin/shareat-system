@@ -1,6 +1,6 @@
 /**
- * Enrolling and revoking what a terminal scans. T-164.
- * `docs/tasks/164-credential-enrolment-and-mirror.md`, bible §5.3 and §13 row 164.
+ * Enrolling and revoking what a terminal scans. T-185.
+ * `docs/tasks/185-credential-enrolment-and-mirror.md`, bible §5.3 and §13 row 164.
  *
  * ## What this module is for
  *

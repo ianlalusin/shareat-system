@@ -1,9 +1,9 @@
 /**
- * The only place SQL is written for the inbox quarantine. T-161 (writes), T-162 (reads).
+ * The only place SQL is written for the inbox quarantine. T-182 (writes), T-183 (reads).
  *
- * ⚠️ T-161 wrote these statements inline in `packages/domain/src/sync/ingestor.ts`. The bible is
+ * ⚠️ T-182 wrote these statements inline in `packages/domain/src/sync/ingestor.ts`. The bible is
  * unambiguous — *"Repositories (lib/db/repo/) <- the ONLY place SQL is written"* — so they moved
- * here when T-162 needed to read the same table. The ingestor's own tests did not change, which is
+ * here when T-183 needed to read the same table. The ingestor's own tests did not change, which is
  * the evidence the move was behaviour-free.
  */
 import { and, asc, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
@@ -85,7 +85,7 @@ export async function getQuarantine(tx: Tx, id: string): Promise<InboxQuarantine
 }
 
 /**
- * ⛔ The guard behind T-162 invariant 4. A discarded event that the device re-delivers must not
+ * ⛔ The guard behind T-183 invariant 4. A discarded event that the device re-delivers must not
  * quietly resurrect as a punch — a manager already decided, with a reason, and the next ingest run
  * is not the place to overturn it.
  */

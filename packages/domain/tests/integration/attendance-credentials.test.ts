@@ -4,7 +4,7 @@ import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
 
 /**
- * T-164 — credential enrolment and the mirror. `docs/tasks/164-credential-enrolment-and-mirror.md`.
+ * T-185 — credential enrolment and the mirror. `docs/tasks/185-credential-enrolment-and-mirror.md`.
  *
  * ⭐ The one that matters most is invariant 7: **a punch made before a revocation still ingests;
  * one made after it does not.** That single pair is what closes landmine #22 — v1 authorises a
@@ -165,7 +165,7 @@ const ingest = (f: Fixture, events: unknown[]) => asOrg(f.orgId, (tx) => ingestE
 
 // ---------------------------------------------------------------------------------------
 
-describe('T-164 invariant 1 — one live card, one owner', () => {
+describe('T-185 invariant 1 — one live card, one owner', () => {
   it('the same card cannot be enrolled to two people at once', async () => {
     const f = await fixture('dup');
     const card = uid('c');
@@ -186,7 +186,7 @@ describe('T-164 invariant 1 — one live card, one owner', () => {
   });
 });
 
-describe('⛔ T-164 invariant 2 — a face credential cannot be expressed', () => {
+describe('⛔ T-185 invariant 2 — a face credential cannot be expressed', () => {
   it('the constraint refuses it, so no publisher can ever leak a face template', async () => {
     const f = await fixture('face');
     // Bible §5.3, after the 2026-07-04 exfiltration finding: face is "never mirrored, never cached,
@@ -198,7 +198,7 @@ describe('⛔ T-164 invariant 2 — a face credential cannot be expressed', () =
   });
 });
 
-describe('T-164 invariants 3 & 4 — the mirror, and what it deliberately omits', () => {
+describe('T-185 invariants 3 & 4 — the mirror, and what it deliberately omits', () => {
   it('enrolling publishes to biometricMirror; revoking publishes a TOMBSTONE', async () => {
     const f = await fixture('mirror');
     const published: MirrorDocument[] = [];
@@ -243,7 +243,7 @@ describe('T-164 invariants 3 & 4 — the mirror, and what it deliberately omits'
   });
 });
 
-describe('⭐⭐ T-164 invariants 5-8 — the SERVER resolves the credential', () => {
+describe('⭐⭐ T-185 invariants 5-8 — the SERVER resolves the credential', () => {
   it('an event naming a card becomes that card owner’s punch, with no employmentId sent', async () => {
     const f = await fixture('resolve');
     const card = uid('c');
@@ -322,7 +322,7 @@ describe('⭐⭐ T-164 invariants 5-8 — the SERVER resolves the credential', (
   });
 });
 
-describe('T-164 invariant 9 — re-enrolling a fingerprint ROTATES the token', () => {
+describe('T-185 invariant 9 — re-enrolling a fingerprint ROTATES the token', () => {
   it('the old token stops resolving the moment the finger is enrolled again', async () => {
     const f = await fixture('rotate');
     const first = await asOrg(f.orgId, (tx) =>
@@ -411,7 +411,7 @@ describe('T-164 invariant 9 — re-enrolling a fingerprint ROTATES the token', (
   });
 });
 
-describe('⛔ T-164 invariant 10 — no app surface returns a secret', () => {
+describe('⛔ T-185 invariant 10 — no app surface returns a secret', () => {
   it('listCredentials gives a manager metadata and a hint, never the card id', async () => {
     const f = await fixture('nosecret');
     const card = uid('cardvalue');

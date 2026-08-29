@@ -2,7 +2,7 @@
  * T-159 — the ruleset's suite. `docs/tasks/159-firestore-rules-and-device-identity.md`.
  *
  * ⚠️ **Every refusal here was watched failing against a permissive ruleset before it was written.**
- * That is the only evidence the rules are what refuse, and it is what T-153 established as the
+ * That is the only evidence the rules are what refuse, and it is what T-180 established as the
  * discipline: landmine #4 is rules that deploy green and silently deny; its mirror image is rules
  * that deploy green and silently ALLOW, which no amount of passing tests would reveal on its own.
  */
@@ -53,7 +53,7 @@ const event = (id: string, over: Record<string, unknown> = {}) => ({
   occurredAt: Date.now(),
   deviceId: DEVICE,
   storeId: LIPA,
-  // ⭐ T-164: the event carries what was SCANNED, never a person. The create rule requires both
+  // ⭐ T-185: the event carries what was SCANNED, never a person. The create rule requires both
   // keys, so a terminal that still sends an employmentId is refused by the rules before the
   // ingestor ever sees it.
   credentialKind: 'card',
@@ -152,7 +152,7 @@ describe('T-159 invariants 5 & 6 — the inbox is create-only, and speaks only f
 
 describe('T-159 invariant 7 — ⚠️ rules are not filters', () => {
   it('an UNCONSTRAINED list over the inbox is refused', async () => {
-    // T-153 finding 1. The rule cannot be proven to hold for every document the query might
+    // T-180 finding 1. The rule cannot be proven to hold for every document the query might
     // return, so Firestore refuses the query rather than filtering it.
     await assertSucceeds(setDoc(doc(terminal(), 'inbox/p-8'), event('p-8')));
     await assertFails(getDocs(query(collection(terminal(), 'inbox'), orderBy('occurredAt'))));

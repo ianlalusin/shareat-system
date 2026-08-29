@@ -6,12 +6,12 @@
  * Bible §4.2 rule 8: *"One writer per table. If two code paths write the same table, one of them is
  * wrong. (This is the single most expensive lesson from ERP-rebuild.)"*
  *
- * The Lane B ingestor (T-161), the online terminal path, and a manager's back-office entry all call
+ * The Lane B ingestor (T-182), the online terminal path, and a manager's back-office entry all call
  * `recordPunch`. None of them writes `attendance_punches` directly, and none of them re-derives the
  * shift day, the employment, or the idempotency behaviour for itself.
  *
  * ⭐ **`recordPunch` is deliberately transport-agnostic.** It knows nothing about Firestore, which
- * is what lets T-161 be a thin adapter and lets this be tested without one.
+ * is what lets T-182 be a thin adapter and lets this be tested without one.
  */
 import { attendancePunchesRepo, employmentRepo, type AttendancePunchRow, type Tx } from '@shareat/db';
 import type { PunchIntent, PunchMethod, PunchSource } from '@shareat/db/schema';

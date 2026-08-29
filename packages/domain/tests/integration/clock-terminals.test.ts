@@ -84,7 +84,7 @@ const provision = (f: Fixture, d: TerminalIdentityDriver, label = 'Counter table
 
 describe('T-159 invariants 9 & 10 — provisioning, and what "ready" means', () => {
   it('⭐ a provisioned terminal is NOT ready until it has signed in once', async () => {
-    // T-153 finding 3: a device cannot begin authenticating offline. Carrying a freshly provisioned
+    // T-180 finding 3: a device cannot begin authenticating offline. Carrying a freshly provisioned
     // tablet out of signal before its first sign-in leaves it unable to write a single punch, so
     // "provisioned" and "ready" have to be different states or the screen will lie.
     const f = await fixture('ready');

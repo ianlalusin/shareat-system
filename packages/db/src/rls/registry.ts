@@ -478,7 +478,7 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'tenant exactly which device identities to target.',
   },
 
-  // ---- T-160: the Lane A outbox (Phase 4, lane B) ---------------------------------------
+  // ---- T-181: the Lane A outbox (Phase 4, lane B) ---------------------------------------
   mirror_outbox: {
     scope: 'org_column',
     reason:
@@ -487,7 +487,7 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'system principal, so org scoping costs it nothing.',
   },
 
-  // ---- T-164: attendance credentials (Phase 4, lane B) ----------------------------------
+  // ---- T-185: attendance credentials (Phase 4, lane B) ----------------------------------
   attendance_credentials: {
     scope: 'org_column',
     reason:
@@ -496,7 +496,7 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'clocked in and paid, and a template is biometric data about a named person.',
   },
 
-  // ---- T-161: the Lane B quarantine (Phase 4, lane B) -----------------------------------
+  // ---- T-182: the Lane B quarantine (Phase 4, lane B) -----------------------------------
   inbox_quarantine: {
     scope: 'org_column',
     reason:

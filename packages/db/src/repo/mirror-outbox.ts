@@ -1,5 +1,5 @@
 /**
- * The only place SQL is written for the Lane A outbox. T-160 (drain), T-162 (health).
+ * The only place SQL is written for the Lane A outbox. T-181 (drain), T-183 (health).
  *
  * ⚠️ Like `inbox-quarantine.ts`, these statements began inline in
  * `packages/domain/src/sync/publisher.ts` and moved here when a second caller needed the table.

@@ -4,7 +4,7 @@ import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
 
 /**
- * T-161 — the Lane B ingestor. `docs/tasks/161-lane-b-ingestor.md`.
+ * T-182 — the Lane B ingestor. `docs/tasks/182-lane-b-ingestor.md`.
  *
  * ⭐ The one that matters most is invariant 5: a quarantined event **heals** when the world changes
  * under it, with no human action. That is the whole difference between this and v1's dead letter.
@@ -103,7 +103,7 @@ async function fixture(hint: string) {
   );
   await asOrg(orgId, (tx) => activateTerminal(tx, { terminalId: terminal.id }));
 
-  // ⭐ T-164: the device reports what it SCANNED, so the fixture needs a real badge to scan.
+  // ⭐ T-185: the device reports what it SCANNED, so the fixture needs a real badge to scan.
   const cardId = uid('card');
   const credential = await asOrg(orgId, (tx) =>
     enrolCard(tx, a, { employmentId: employment.id, cardId }),
@@ -132,7 +132,7 @@ const event = (f: Fixture, over: Record<string, unknown> = {}) => ({
   occurredAt: at(14),
   deviceId: f.terminal.id,
   storeId: f.storeId,
-  // ⭐ T-164 removed `employmentId` from the event. The server resolves the credential itself —
+  // ⭐ T-185 removed `employmentId` from the event. The server resolves the credential itself —
   // that is what closes landmine #22, where v1 let possession of a token be the authorisation.
   credentialKind: 'card',
   credentialRef: f.cardId,
@@ -150,7 +150,7 @@ const quarantined = (f: Fixture) =>
 
 // -------------------------------------------------------------------------------------
 
-describe('T-161 invariants 1 & 8 — idempotency is a constraint, not a timer', () => {
+describe('T-182 invariants 1 & 8 — idempotency is a constraint, not a timer', () => {
   it('the same event twice yields one punch and alreadyProcessed the second time', async () => {
     const f = await fixture('idem');
     const e = event(f);
@@ -175,7 +175,7 @@ describe('T-161 invariants 1 & 8 — idempotency is a constraint, not a timer', 
   });
 });
 
-describe('T-161 invariants 2 & 9 — nothing is dropped, and one bad event stops nothing', () => {
+describe('T-182 invariants 2 & 9 — nothing is dropped, and one bad event stops nothing', () => {
   it('⭐ 9. a DATABASE error in one event is quarantined, and the rest of the batch still lands', async () => {
     // ⚠️ The regression this exists for. A logic error — a bad method, an unknown terminal — is
     // decided in TypeScript before any statement runs, so the plain `try` always contained it. A
@@ -246,7 +246,7 @@ describe('T-161 invariants 2 & 9 — nothing is dropped, and one bad event stops
   });
 });
 
-describe('T-161 invariant 3 — a revoked terminal cannot punch', () => {
+describe('T-182 invariant 3 — a revoked terminal cannot punch', () => {
   it('its events are quarantined, not ingested', async () => {
     const f = await fixture('revoked');
     await asOrg(f.orgId, (tx) =>
@@ -270,7 +270,7 @@ describe('T-161 invariant 3 — a revoked terminal cannot punch', () => {
   });
 });
 
-describe('T-161 invariant 4 — ⭐ the kill switch is read from the day’s OWN config', () => {
+describe('T-182 invariant 4 — ⭐ the kill switch is read from the day’s OWN config', () => {
   it('a method disabled for that store is refused, replay included', async () => {
     // v1's scar: `assertMethodEnabled` "was previously skippable by supplying atMs", so a backdated
     // replay could use a method an admin had disabled. Here it is checked on every event.
@@ -296,7 +296,7 @@ describe('T-161 invariant 4 — ⭐ the kill switch is read from the day’s OWN
         changes: { credentialNfc: false },
       }),
     );
-    // ⭐ T-164: the method and the credential have to agree. A fingerprint punch carries the
+    // ⭐ T-185: the method and the credential have to agree. A fingerprint punch carries the
     // fingerprint credential — a device cannot claim one method while presenting another's badge.
     const report = await ingest(f, [
       event(f, { method: 'fingerprint', credentialKind: 'fingerprint', credentialRef: f.matchToken }),
@@ -305,7 +305,7 @@ describe('T-161 invariant 4 — ⭐ the kill switch is read from the day’s OWN
   });
 });
 
-describe('T-161 invariant 5 — ⭐ a quarantine HEALS, with no human action', () => {
+describe('T-182 invariant 5 — ⭐ a quarantine HEALS, with no human action', () => {
   it('an event stuck as unknown_credential ingests once the employment exists', async () => {
     const f = await fixture('heal');
     const unenrolled = uid('newcard');
@@ -361,7 +361,7 @@ describe('T-161 invariant 5 — ⭐ a quarantine HEALS, with no human action', (
   });
 });
 
-describe('T-161 invariants 7 & 10 — the 72-hour rule, and the report', () => {
+describe('T-182 invariants 7 & 10 — the 72-hour rule, and the report', () => {
   it('⭐ 7. a punch older than 72 hours INGESTS — it is flagged downstream, not refused here', async () => {
     // v1 rejects it and dead-letters it. Plan §5 D3: the event is reachable in Firestore, so
     // ingest always accepts and T-157 raises `late_event_arrival` for a manager to confirm.
@@ -387,7 +387,7 @@ describe('T-161 invariants 7 & 10 — the 72-hour rule, and the report', () => {
   });
 });
 
-describe('T-161 invariant 6 — the terminal is stamped, and the loop closes', () => {
+describe('T-182 invariant 6 — the terminal is stamped, and the loop closes', () => {
   it('ingesting stamps lastSeenAt on the terminal', async () => {
     const f = await fixture('seen');
     await ingest(f, [event(f)]);
@@ -399,7 +399,7 @@ describe('T-161 invariant 6 — the terminal is stamped, and the loop closes', (
   it('⭐ THE EXIT GATE, minus the browser: an offline punch pair ingests and adjudicates correctly', async () => {
     // Two punches captured while the terminal had no network, replayed in one batch on reconnect,
     // and the day comes out right. The browser half — that the writes survive the outage at all —
-    // is T-153's, proven against the emulator.
+    // is T-180's, proven against the emulator.
     const f = await fixture('gate');
     const report = await ingest(f, [
       event(f, { occurredAt: at(14), assertedIntent: 'in' }),

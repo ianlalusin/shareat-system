@@ -1,5 +1,5 @@
 /**
- * Reading the mirrors and writing a punch, from the device. T-163.
+ * Reading the mirrors and writing a punch, from the device. T-184.
  *
  * ⛔ CLIENT SDK ONLY — see `firebase.ts`. Every function here works with the network pulled.
  */
@@ -107,7 +107,7 @@ export function watchMirrors(
  * Resolve a scanned badge against the mirrored credentials.
  *
  * ⚠️ **This decides what to SHOW, and nothing else.** The punch still carries the credential, never
- * the employment — T-164 made the server the authority on whose badge it is, and a terminal that
+ * the employment — T-185 made the server the authority on whose badge it is, and a terminal that
  * "helpfully" sent its own conclusion would put landmine #22 straight back.
  */
 export function resolveScan(
@@ -187,7 +187,7 @@ function newClientPunchId(): string {
 /**
  * How many punches this terminal has written that the server has not acknowledged.
  *
- * ⛔⛔ **THE `where` CLAUSE IS NOT A FILTER — IT IS WHAT MAKES THE QUERY LEGAL.** T-153 finding 1:
+ * ⛔⛔ **THE `where` CLAUSE IS NOT A FILTER — IT IS WHAT MAKES THE QUERY LEGAL.** T-180 finding 1:
  * Firestore rules are not filters, so an unconstrained `list` over `/inbox` is **refused outright**
  * with *"Property deviceId is undefined on object"*, because the rule
  * (`resource.data.deviceId == request.auth.token.deviceId`) cannot be proven to hold for every

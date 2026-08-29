@@ -1,10 +1,10 @@
 # T-159 — The ruleset, and a terminal that authenticates as itself
 
-> **Status:** Spec written 2026-08-29 by the Opus planner (session `ianla-f9`, lane B).
-> **Depends on:** T-153 (the spike — its four findings are the design inputs), T-154, T-155.
-> **Blocks:** T-160, T-161, T-163, T-164. Nothing in the hot lane exists without an identity to
+> **Status:** ✅ **BUILT, 2026-08-30.** Spec written by the Opus planner (session `ianla-f9`, lane B); implemented on the `attendance` lane and verified by `ianla-e7` before merge — typecheck 0, unit 696, integration 1360/1360 against a database created empty for the run, build clean.
+> **Depends on:** T-180 (the spike — its four findings are the design inputs), T-154, T-155.
+> **Blocks:** T-181, T-182, T-184, T-185. Nothing in the hot lane exists without an identity to
 > authorise it.
-> **Grounded in a spike that ran.** T-153 proved `request.auth.token.deviceId` survives from a
+> **Grounded in a spike that ran.** T-180 proved `request.auth.token.deviceId` survives from a
 > custom token, so the mechanism below is confirmed rather than assumed.
 
 ## Why a device principal, and not v1's `{id, secret}`
@@ -47,7 +47,7 @@ events, proven by a rules suite; and revoking it takes effect without touching t
 first commit**, per the lane constraint) · `packages/db/src/rls/registry.ts` +
 `cutover/classification.ts` (**same first commit**) · the schema and db barrels · `.env.example`.
 
-**Out of bounds:** everything else. In particular the publisher (T-160) and the ingestor (T-161).
+**Out of bounds:** everything else. In particular the publisher (T-181) and the ingestor (T-182).
 
 ## Contract
 
@@ -112,7 +112,7 @@ is *"terminal only"* while the roster's is *"terminal or store member"*, and two
 one path is exactly the OR-semantics trap landmine #3 describes — where a nested "stricter" rule is
 a silent no-op. Different guarantees get different paths.
 
-### 4. ⛔ Every inbox query must carry the constraint the rule checks — T-153 finding 1
+### 4. ⛔ Every inbox query must carry the constraint the rule checks — T-180 finding 1
 
 The spike found this and it is not optional: **rules are not filters.** An unconstrained `list` over
 `/inbox` is refused outright, because the rule cannot be proven to hold for every document the query
@@ -125,7 +125,7 @@ query(collection(db, 'inbox'), where('deviceId', '==', myDeviceId), orderBy('occ
 `firestore.indexes.json` carries the matching composite index. ⚠️ **The rule and the query are a
 matched pair; changing one silently breaks the other**, so the rules suite includes a `list` case.
 
-### 5. ⚠️ Provisioning is not complete until a round trip succeeds — T-153 finding 3
+### 5. ⚠️ Provisioning is not complete until a round trip succeeds — T-180 finding 3
 
 A device **cannot begin authenticating offline.** The spike proved the SDK keeps a session alive
 across restarts, but a terminal provisioned and taken offline before its first sign-in has no
@@ -195,9 +195,9 @@ Integration on **`shareat_test_b`** for provisioning, activation, revocation, an
 
 ## Out of scope
 
-**The publisher** — T-160 · **The ingestor** — T-161 · **The terminal UI** — T-163 · **Biometric
-enrolment** — T-164; this task creates the *path* and its rule, and nothing writes to it yet ·
-**A real Firebase project or any deploy** — emulator only, as T-153 · **Rotating an active
+**The publisher** — T-181 · **The ingestor** — T-182 · **The terminal UI** — T-184 · **Biometric
+enrolment** — T-185; this task creates the *path* and its rule, and nothing writes to it yet ·
+**A real Firebase project or any deploy** — emulator only, as T-180 · **Rotating an active
 terminal's identity on a schedule** — no evidence of the need; revoke-and-reprovision covers it.
 
 ## Done when

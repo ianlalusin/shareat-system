@@ -1,9 +1,9 @@
--- T-164 — attendance_credentials: what a terminal scans, and who it belongs to.
--- docs/tasks/164-credential-enrolment-and-mirror.md, bible §5.3 and §13 row 164.
+-- T-185 — attendance_credentials: what a terminal scans, and who it belongs to.
+-- docs/tasks/185-credential-enrolment-and-mirror.md, bible §5.3 and §13 row 164.
 --
 -- Hand-written per DEF-073.
 --
--- ⚠️ THE FIRST MIGRATION IN LANE B'S SECOND BLOCK. 0080-0089 is fully consumed (T-154 … T-161), so
+-- ⚠️ THE FIRST MIGRATION IN LANE B'S SECOND BLOCK. 0080-0089 is fully consumed (T-154 … T-182), so
 -- the phase's remainder claims 0100-0119 — chosen over 0090-0099 to leave clear air above `main`,
 -- which is at 0070 and advancing. Per DEF-091 the journal `when` is DERIVED FROM `idx`
 -- (base + (idx - 59) days), never from `previous.when + 86400000`: a reserved number block only

@@ -22,7 +22,7 @@ create table "clock_terminals" (
   "provisioned_by" uuid references "persons"("id") on delete restrict,
   "provisioned_at" timestamptz not null default now(),
 
-  -- ⚠️ NULL until the device completes its FIRST sign-in. T-153 finding 3: a device cannot begin
+  -- ⚠️ NULL until the device completes its FIRST sign-in. T-180 finding 3: a device cannot begin
   -- authenticating offline, so "provisioned" and "ready" are different states and the UI must not
   -- conflate them -- a terminal carried out of signal before its first sign-in cannot write a
   -- single punch.

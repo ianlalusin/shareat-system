@@ -4,7 +4,7 @@
  *
  * ## ⛔ One resolver, and every caller goes through it
  *
- * The ingestor (T-161), the manager screen (T-158), the payroll preview (Phase 5) and the roster
+ * The ingestor (T-182), the manager screen (T-158), the payroll preview (Phase 5) and the roster
  * (T-166) all call this. **Nothing else recomputes.** v1 learned this the expensive way: three
  * hand-maintained copies of the arithmetic drifted, and *"a review edit silently dropped short-shift
  * OT, so correcting a short shift cut the staffer's pay by the remainder the clock terminal would

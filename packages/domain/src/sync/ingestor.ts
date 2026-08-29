@@ -1,6 +1,6 @@
 /**
- * The Lane B ingestor: inbox events become punches, or become visible. T-161.
- * `docs/tasks/161-lane-b-ingestor.md`, bible §5.1 and §5.4.
+ * The Lane B ingestor: inbox events become punches, or become visible. T-182.
+ * `docs/tasks/182-lane-b-ingestor.md`, bible §5.1 and §5.4.
  *
  * ⭐ **Transport-free.** It is handed events and never reads Firestore itself, which is what lets
  * the whole loop be tested without an emulator — and why `packages/sync-firestore` is the only
@@ -52,12 +52,12 @@ import { toShiftDay } from '../attendance/shift-day';
 /**
  * One document from `/inbox`, exactly as it arrived.
  *
- * ⭐⭐ **T-164 removed `employmentId` from this shape, and that removal is the point of T-164.**
+ * ⭐⭐ **T-185 removed `employmentId` from this shape, and that removal is the point of T-185.**
  *
  * Landmine #22, from discovery 05's known gaps about v1: *"punches are authorized by possession of
  * `matchToken` alone — neither `clockByFingerprintAction` nor `clockByFaceAction` re-runs a
  * biometric match server-side; a leaked token … can punch indefinitely until the token is
- * rotated."* T-161 shipped the shape of the fix and said so in its own comment, but it still took
+ * rotated."* T-182 shipped the shape of the fix and said so in its own comment, but it still took
  * the CONCLUSION from the device: the terminal said who punched, and the server only checked that
  * the person named was real, open and at this store.
  *
@@ -124,7 +124,7 @@ export async function ingestEvents(
     // ⭐ ONE SAVEPOINT PER EVENT — `tx.transaction()` is a nested transaction, which on Postgres is
     // a savepoint. It is what makes the promise above true.
     //
-    // ⚠️ Found by T-162, in code T-161 shipped. The catch below contained a LOGIC error fine — a
+    // ⚠️ Found by T-183, in code T-182 shipped. The catch below contained a LOGIC error fine — a
     // bad method, an unknown terminal — because those are decided in TypeScript before any statement
     // runs. A DATABASE error is different: Postgres aborts the whole transaction on the first
     // failing statement, so the quarantine INSERT in the catch could not run either, and
@@ -190,7 +190,7 @@ async function ingestOne(tx: Tx, raw: unknown): Promise<Outcome> {
     return { kind: 'quarantined', reason: 'malformed' };
   }
 
-  // ⛔ T-162 invariant 4. A manager already looked at this event, discarded it, and gave a reason.
+  // ⛔ T-183 invariant 4. A manager already looked at this event, discarded it, and gave a reason.
   // Another delivery of the same key must not quietly resurrect it as a punch — the decision to
   // lose a shift is a human one, and re-running the checks after it would overturn that decision
   // on nobody's authority.

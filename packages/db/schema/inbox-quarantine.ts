@@ -1,6 +1,6 @@
 /**
- * inbox_quarantine — an event that could not be ingested, and can still be recovered. T-161.
- * `docs/tasks/161-lane-b-ingestor.md`, bible §5.4 rule 5.
+ * inbox_quarantine — an event that could not be ingested, and can still be recovered. T-182.
+ * `docs/tasks/182-lane-b-ingestor.md`, bible §5.4 rule 5.
  *
  * ## The failure this table exists to end
  *
@@ -40,7 +40,7 @@ import { persons } from './persons';
 import { stores } from './stores';
 
 /**
- * A closed set, because a screen has to render each one as a sentence a manager can act on (T-162).
+ * A closed set, because a screen has to render each one as a sentence a manager can act on (T-183).
  *
  * ⚠️ **`too_old` is deliberately absent.** v1 rejects a punch past 72 hours and dead-letters it;
  * plan §5 D3 dissolved that — the event is reachable in Firestore, so ingest always accepts and

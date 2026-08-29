@@ -1,5 +1,5 @@
 /**
- * The only place SQL is written for attendance credentials. T-164.
+ * The only place SQL is written for attendance credentials. T-185.
  *
  * ⛔ **There is no `listTemplates`, and there never should be.** Discovery 05 flags v1's
  * `listFingerprintTemplatesAction` as its widest credential hole — gated to *any* authenticated
@@ -72,7 +72,7 @@ export async function getCredential(
 }
 
 /**
- * ⭐⭐ The server-side resolution that closes landmine #22, and the whole point of T-164.
+ * ⭐⭐ The server-side resolution that closes landmine #22, and the whole point of T-185.
  *
  * v1 authorises a punch by **possession of a match token alone** — no server-side re-check — so a
  * leaked token punches indefinitely. Here the device reports what it *scanned*, and this query says

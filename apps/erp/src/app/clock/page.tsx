@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * The clock terminal. T-163. `docs/tasks/163-offline-clock-terminal.md`.
+ * The clock terminal. T-184. `docs/tasks/184-offline-clock-terminal.md`.
  *
  * ⛔⛔ **NOTHING ON THIS PATH MAY TOUCH THE SERVER.** Bible §5.2, binding: *"the clock terminal
  * reads and writes Firestore via the client SDK, never via Server Actions. A Server Action cannot
@@ -115,7 +115,7 @@ export default function ClockTerminalPage() {
       const { auth } = terminalFirebase();
       await signInWithCustomToken(auth, token);
     } catch (err) {
-      // ⚠️ T-153 finding 3: a device CANNOT begin authenticating offline. Saying so plainly is the
+      // ⚠️ T-180 finding 3: a device CANNOT begin authenticating offline. Saying so plainly is the
       // difference between "this terminal is broken" and "plug it in for ten seconds".
       setPairError(
         `Pairing failed. A terminal must sign in ONCE while online before it can work offline — ` +
@@ -323,7 +323,7 @@ export default function ClockTerminalPage() {
         ⚠️ DEVELOPMENT ONLY, and it earns its place: `disableNetwork()` is what the SDK's own
         documentation prescribes for testing offline behaviour, and it is closer to a pulled cable
         than DevTools' throttling — which does not stop Firestore's already-open streams.
-        This is how T-163's four browser assertions are actually run.
+        This is how T-184's four browser assertions are actually run.
       */}
       {process.env.NODE_ENV !== 'production' && (
         <div className="flex gap-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">

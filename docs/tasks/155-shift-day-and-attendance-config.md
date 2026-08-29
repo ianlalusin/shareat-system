@@ -1,9 +1,9 @@
 # T-155 — The shift day, and attendance config that cannot retroactively move somebody's pay
 
-> **Status:** Spec written 2026-08-29 by the Opus planner (session `ianla-f9`, lane B).
+> **Status:** ✅ **BUILT, 2026-08-30.** Spec written by the Opus planner (session `ianla-f9`, lane B); implemented on the `attendance` lane and verified by `ianla-e7` before merge — typecheck 0, unit 696, integration 1360/1360 against a database created empty for the run, build clean.
 > **Depends on:** T-101 (`stores`), T-121 (capabilities) — shipped.
 > **Blocks:** T-156 (a punch needs a shift day to land on), T-157 (adjudication reads the config),
-> T-160 (config is hot-set item 3, priority refresh).
+> T-181 (config is hot-set item 3, priority refresh).
 > **Two deliverables in one task on purpose:** the shift day and the config are both *inputs* to the
 > adjudication and neither is independently testable in a useful way — a config with no calendar to
 > apply it against has nothing to assert. Splitting them would produce two half-tasks that only mean
@@ -256,7 +256,7 @@ foreclosed; the templates get their own task if a store ever wants one · **`Pay
 (period type, cutoffs, statutory toggles)** — Phase 5, and it changes on a different cadence ·
 **Holiday calendar** — T-157 needs it, and it is a per-org dated *list*, not per-store policy; it
 lands there · **Any settings UI** — schema and service only · **The mirror publisher's priority
-refresh of this table** — T-160, and it is why config is hot-set item 3.
+refresh of this table** — T-181, and it is why config is hot-set item 3.
 
 ## Done when
 

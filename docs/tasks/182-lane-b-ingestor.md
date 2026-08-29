@@ -1,8 +1,9 @@
-# T-161 — Lane B: the inbox ingestor, and a quarantine that is never a dead end
+# T-182 — Lane B: the inbox ingestor, and a quarantine that is never a dead end
 
-> **Status:** Spec written 2026-08-29 by the Opus planner (session `ianla-f9`, lane B).
+> **Status:** ✅ **BUILT, 2026-08-30.** Spec written by the Opus planner (session `ianla-f9`, lane B); implemented on the `attendance` lane and verified by `ianla-e7` before merge — typecheck 0, unit 696, integration 1360/1360 against a database created empty for the run, build clean.
+> ⚠️ **RENUMBERED 2026-08-30: was T-161.** Both this lane and the inventory lane had taken T-161; attendance moved because it is finished while inventory is still being written. ⛔ **Commit messages predating the rename still say T-161** — git history is not rewritten.
 > **Depends on:** T-156 (`recordPunch` — the one writer), T-159 (the inbox path and its rule).
-> **Blocks:** T-162 (the screen that reads the quarantine), and the phase's exit gate.
+> **Blocks:** T-183 (the screen that reads the quarantine), and the phase's exit gate.
 
 ## The pattern: idempotent consumer
 
@@ -125,13 +126,13 @@ its terminal.
 
 ⭐ **And the phase's exit gate, as a test**: an event written to the emulator while the client is
 offline, replayed on reconnect, ingested, adjudicated, and the day correct. It belongs here rather
-than only in T-163 — this is the half that can be tested without a browser.
+than only in T-184 — this is the half that can be tested without a browser.
 
 ## Out of scope
 
-**The quarantine screen** — T-162 · **Retention/purge of processed inbox docs** — needs a number
+**The quarantine screen** — T-183 · **Retention/purge of processed inbox docs** — needs a number
 from Ian; the table is append-only until it has one · **Alerting on un-stamped events** — the
-condition is named in §5.1 and the query is trivial once T-162 exists · **The terminal** — T-163.
+condition is named in §5.1 and the query is trivial once T-183 exists · **The terminal** — T-184.
 
 ## Done when
 

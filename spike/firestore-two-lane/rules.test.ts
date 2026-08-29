@@ -1,5 +1,5 @@
 /**
- * T-153 Contract §3 — the four refusals the two-lane contract depends on.
+ * T-180 Contract §3 — the four refusals the two-lane contract depends on.
  *
  * Landmine #4 is "rules deploy green then silently deny at runtime". The inverse is just as
  * dangerous and is what these assert: rules that deploy green and silently ALLOW. Every one of

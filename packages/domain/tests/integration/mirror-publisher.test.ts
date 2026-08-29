@@ -4,8 +4,8 @@ import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
 
 /**
- * T-160 — the transactional outbox and the mirror publisher.
- * `docs/tasks/160-lane-a-publisher.md`, bible §5.1.
+ * T-181 — the transactional outbox and the mirror publisher.
+ * `docs/tasks/181-lane-a-publisher.md`, bible §5.1.
  */
 config({ path: '.env.local' });
 
@@ -102,7 +102,7 @@ const drain = (f: Fixture, driver: MirrorDriver) => asOrg(f.orgId, (tx) => drain
 
 // -------------------------------------------------------------------------------------
 
-describe('T-160 invariant 1 — the change and its intent commit together', () => {
+describe('T-181 invariant 1 — the change and its intent commit together', () => {
   it('⭐ hiring enqueues a roster row, in the SAME transaction, via a trigger', async () => {
     const f = await fixture('enqueue');
     await hire(f);
@@ -149,7 +149,7 @@ describe('T-160 invariant 1 — the change and its intent commit together', () =
   });
 });
 
-describe('T-160 invariants 2 & 5 — the document id, and config first', () => {
+describe('T-181 invariants 2 & 5 — the document id, and config first', () => {
   it('2. the roster document id is the employment PK', async () => {
     const f = await fixture('docid');
     const e = await hire(f);
@@ -196,7 +196,7 @@ describe('T-160 invariants 2 & 5 — the document id, and config first', () => {
   });
 });
 
-describe('T-160 invariants 3 & 4 — idempotent, and never stale', () => {
+describe('T-181 invariants 3 & 4 — idempotent, and never stale', () => {
   it('3. re-draining publishes nothing new', async () => {
     const f = await fixture('idem');
     await hire(f);
@@ -222,7 +222,7 @@ describe('T-160 invariants 3 & 4 — idempotent, and never stale', () => {
   });
 });
 
-describe('T-160 invariant 6 — a delete is a TOMBSTONE', () => {
+describe('T-181 invariant 6 — a delete is a TOMBSTONE', () => {
   it('⭐ ending an employment publishes deleted, and the document survives', async () => {
     // §5.1: "an offline device must be able to learn that a record went away". A hard delete is
     // invisible to a device that was offline when it happened — it keeps the stale row forever.
@@ -250,7 +250,7 @@ describe('T-160 invariant 6 — a delete is a TOMBSTONE', () => {
   });
 });
 
-describe('T-160 invariants 7 & 10 — failure, and emptiness', () => {
+describe('T-181 invariants 7 & 10 — failure, and emptiness', () => {
   it('⛔ 7. a publish failure leaves the row UNPUBLISHED, with attempts and lastError', async () => {
     const f = await fixture('fail');
     await hire(f);
@@ -286,7 +286,7 @@ describe('T-160 invariants 7 & 10 — failure, and emptiness', () => {
   });
 });
 
-describe('T-160 invariant 8 — ⛔ only the three named entities, ever', () => {
+describe('T-181 invariant 8 — ⛔ only the three named entities, ever', () => {
   it('the hot set is closed, and a fourth entity is refused by the database', async () => {
     const f = await fixture('closed');
     await expect(sql`

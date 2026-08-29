@@ -1,8 +1,9 @@
-# T-160 — Lane A: the transactional outbox and the mirror publisher
+# T-181 — Lane A: the transactional outbox and the mirror publisher
 
-> **Status:** Spec written 2026-08-29 by the Opus planner (session `ianla-f9`, lane B).
+> **Status:** ✅ **BUILT, 2026-08-30.** Spec written by the Opus planner (session `ianla-f9`, lane B); implemented on the `attendance` lane and verified by `ianla-e7` before merge — typecheck 0, unit 696, integration 1360/1360 against a database created empty for the run, build clean.
+> ⚠️ **RENUMBERED 2026-08-30: was T-160.** Both this lane and the inventory lane had taken T-160; attendance moved because it is finished while inventory is still being written. ⛔ **Commit messages predating the rename still say T-160** — git history is not rewritten.
 > **Depends on:** T-159 (the paths and their rules), T-154, T-155.
-> **Blocks:** T-163 — a terminal with nothing mirrored has nothing to match a credential against.
+> **Blocks:** T-184 — a terminal with nothing mirrored has nothing to match a credential against.
 
 ## The pattern, named before the design (bible §0.2)
 
@@ -43,11 +44,11 @@ Bible §5.3's list is **closed**. This task publishes three of the six:
 | # | Entity | Status here |
 |---|---|---|
 | 1 | Active roster (name, position, staffId) | ✅ from `v_active_employments` |
-| 2 | Fingerprint templates + matchToken | ⛔ **Not here** — enrolment is T-164 |
+| 2 | Fingerprint templates + matchToken | ⛔ **Not here** — enrolment is T-185 |
 | 3 | Store attendance config | ✅ ⭐ **priority** — see §4 |
 | 4 | On-shift roster + current-day punch feed | ✅ |
 | 5 | Clock-terminal identity | — T-159, and it is not mirrored; it *is* the auth |
-| 6 | Punch events | — Lane B, T-161 |
+| 6 | Punch events | — Lane B, T-182 |
 
 ⛔ **Nothing else. Ever.** Adding a seventh needs a bible amendment (§5.3), and there is already one
 pending: a **card id** is not in item 1, and D1 makes card the only browser-viable offline mode.
@@ -109,10 +110,10 @@ unlisted entity (**refused**).
 
 ## Out of scope
 
-**Biometric templates** — T-164 · **Card ids** — blocked on the §5.3 amendment · **The ingestor** —
-T-161 · **Real-time listeners** — the terminal reads the mirror through the SDK's own cache; a
+**Biometric templates** — T-185 · **Card ids** — blocked on the §5.3 amendment · **The ingestor** —
+T-182 · **Real-time listeners** — the terminal reads the mirror through the SDK's own cache; a
 push channel is not needed and would be a second delivery path · **Backfilling an initial mirror** —
-a one-off enqueue-everything script, and it is T-163's problem when a terminal is first provisioned.
+a one-off enqueue-everything script, and it is T-184's problem when a terminal is first provisioned.
 
 ## Done when
 

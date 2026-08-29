@@ -38,7 +38,7 @@ is this one.
 **Consequence for this plan, and it is the whole shape of Wave 0.** Every downstream task —
 publisher, ingestor, rules, terminal — rests on a contract (bible §5.2: *"the clock terminal reads
 and writes Firestore via the **client SDK**, never via Server Actions"*) that has never been run
-once in this codebase. **T-153 is that spike, restored to the front of Phase 4 where it now has to
+once in this codebase. **T-180 is that spike, restored to the front of Phase 4 where it now has to
 live.** It is time-boxed and disposable exactly as the bible specified, and Wave 3 is not specced
 until it reports.
 
@@ -183,7 +183,7 @@ two readings put the biometric mirror on opposite sides of the scope line.
 1. ⭐ **The biometric mirror is IN scope** — hot-set item 2 (fingerprint templates + matchToken)
    stays, with bible §5.3's non-negotiable access control: *readable only by a provisioned device
    identity, never by an ordinary staff or manager account*, and the credential **not** plaintext in
-   `localStorage`. T-153 proved the device-principal design works (§6, finding 3).
+   `localStorage`. T-180 proved the device-principal design works (§6, finding 3).
 2. ⭐ **Card is the exit gate's credential.** Fingerprint cannot meet it until the APK lands, and
    face never will. A QR badge decoded client-side against the mirrored roster clears it with no
    native code — which is why D1's recommendation mattered.
@@ -260,9 +260,9 @@ Detail and the closing tests in DEF-086's disposition.
 
 | # | Task |
 |---|---|
-| **T-153** ✅ | **The Firestore two-lane spike** — emulator, client SDK, a 50-line deny-by-default ruleset, a toy mirror doc and a toy inbox event. **Time-boxed and disposable.** Proves: an offline write survives a reload, replays on reconnect, and a client cannot write a mirror doc or update an inbox event |
+| **T-180** ✅ | **The Firestore two-lane spike** — emulator, client SDK, a 50-line deny-by-default ruleset, a toy mirror doc and a toy inbox event. **Time-boxed and disposable.** Proves: an offline write survives a reload, replays on reconnect, and a client cannot write a mirror doc or update an inbox event |
 
-> ### ✅ **T-153 ran 2026-08-29. The contract HOLDS — 14/14 green.** Findings in `spike/firestore-two-lane/README.md`
+> ### ✅ **T-180 ran 2026-08-29. The contract HOLDS — 14/14 green.** Findings in `spike/firestore-two-lane/README.md`
 >
 > All four gate assertions passed, and all four refusals were **watched failing** against a
 > permissive ruleset first. **Bible §5.2 is correct as written:** the client SDK's offline
@@ -273,15 +273,15 @@ Detail and the closing tests in DEF-086's disposition.
 >
 > | Finding | Lands in |
 > |---|---|
-> | ⛔ **Rules are not filters.** An unconstrained `list` over `/inbox` is refused outright — every terminal query must carry `where('deviceId','==',…)`, matching the rule exactly | T-159 (rules + composite index), T-163 (every query) |
-> | ⭐ **The persistent store is keyed `firestore/{firebaseAppName}/{projectId}/main`.** Renaming the app **orphans every unsynced punch**, silently. *This cost the spike two false negatives before it was found* | T-163 — a pinned constant with the warning attached |
+> | ⛔ **Rules are not filters.** An unconstrained `list` over `/inbox` is refused outright — every terminal query must carry `where('deviceId','==',…)`, matching the rule exactly | T-159 (rules + composite index), T-184 (every query) |
+> | ⭐ **The persistent store is keyed `firestore/{firebaseAppName}/{projectId}/main`.** Renaming the app **orphans every unsynced punch**, silently. *This cost the spike two false negatives before it was found* | T-184 — a pinned constant with the warning attached |
 > | ✅ **`request.auth.token.deviceId` works from a custom token** — the device-principal design (§3 row 5) is sound. But a device **must sign in while online**; it cannot start authenticating offline | T-159 — provisioning is not complete until a round trip succeeds |
-> | 📏 **127 KB gzipped** (470 KB minified) for `app` + `auth` + the Firestore surface a terminal needs. Acceptable, and it *replaces* v1's queue rather than adding to it | T-163's first-load budget |
+> | 📏 **127 KB gzipped** (470 KB minified) for `app` + `auth` + the Firestore surface a terminal needs. Acceptable, and it *replaces* v1's queue rather than adding to it | T-184's first-load budget |
 >
 > ⚠️ **The honest limit:** the suite runs in Node with `fake-indexeddb` and a `localStorage` shim.
 > **The terminal is a browser**, so the same four assertions must be re-run in a real one — for
 > quota, eviction, the multi-tab lease, and WebView storage policy. **That is the one that could
-> actually lose a punch**, and it is in T-163's definition of done, not deferred to goodwill.
+> actually lose a punch**, and it is in T-184's definition of done, not deferred to goodwill.
 
 ### Wave 1 — the people spine (load-bearing for Phase 5, and unowned until now)
 
@@ -302,7 +302,7 @@ Detail and the closing tests in DEF-086's disposition.
 >
 > | | |
 > |---|---|
-> | T-153 | The spike. Contract holds, 14/14 |
+> | T-180 | The spike. Contract holds, 14/14 |
 > | T-154 | Positions, employments, roster. 21 tests |
 > | T-155 | Shift day + effective-dated config. 16 unit (4 timezones) + 22 integration |
 > | T-156 | The append-only punch. 19 tests |
@@ -324,7 +324,7 @@ Detail and the closing tests in DEF-086's disposition.
 > `undertimeGraceMinutes` under 60 minutes can never fire, silently) and half of **DEF-081**
 > (`tests/golden/` matched no vitest glob, so a test placed there would never have run).
 
-### Wave 3 — the hot lane *(✅ unblocked — T-153 reported, Wave 2 has landed)*
+### Wave 3 — the hot lane *(✅ unblocked — T-180 reported, Wave 2 has landed)*
 
 > ⛔ **One clause of it is blocked, and it is on the critical path to the exit gate.** D1 makes
 > **card** the only offline mode that works in a browser (face is online-only forever; fingerprint
@@ -336,16 +336,16 @@ Detail and the closing tests in DEF-086's disposition.
 | # | Task |
 |---|---|
 | T-159 | Firestore rules + device-principal provisioning (custom tokens, §3 row 5) — **now unblocked** |
-| T-160 | Lane A publisher — transactional outbox → mirror, the six hot-set entities and nothing else |
-| T-161 | Lane B ingestor — inbox → `attendance_punches`, with quarantine |
-| T-162 | **The quarantine screen** — landmine #14 says it is first-class and alertable, not a banner saying *"tell a manager"* |
+| T-181 | Lane A publisher — transactional outbox → mirror, the six hot-set entities and nothing else |
+| T-182 | Lane B ingestor — inbox → `attendance_punches`, with quarantine |
+| T-183 | **The quarantine screen** — landmine #14 says it is first-class and alertable, not a banner saying *"tell a manager"* |
 
 ### Wave 4 — the terminal *(specced when Wave 3 lands)*
 
 | # | Task |
 |---|---|
-| T-163 | The offline clock terminal — a client-SDK-only route, with a test that **fails the build** if a Server Action is imported on that path (bible §5.2 calls that a defect; a rule nothing enforces is a comment) |
-| T-164 | Credential enrolment + the biometric mirror — device-identity read only, face permanently excluded |
+| T-184 | The offline clock terminal — a client-SDK-only route, with a test that **fails the build** if a Server Action is imported on that path (bible §5.2 calls that a defect; a rule nothing enforces is a comment) |
+| T-185 | Credential enrolment + the biometric mirror — device-identity read only, face permanently excluded |
 
 ### Wave 5 — the rest of what Phase 4 owns
 
@@ -388,7 +388,7 @@ has not preserved them.
 
 | | |
 |---|---|
-| ~~The spike fails, or reveals the client SDK cannot do what §5.2 assumes~~ | ✅ **Retired 2026-08-29.** It held. The residual is that the proof is a Node shim, not a browser — carried into T-163's gate |
+| ~~The spike fails, or reveals the client SDK cannot do what §5.2 assumes~~ | ✅ **Retired 2026-08-29.** It held. The residual is that the proof is a Node shim, not a browser — carried into T-184's gate |
 | **T-157 is a rewrite of the hardest logic in v1** | Three files, thousands of lines of hard-won judgment, and its comments carry more decisions than any other module. Mitigation: golden-master it — replay real v1 sessions and diff the hours (bible §15.2) |
 | **Two calendars, one repo** | The 05:00 shift day beside the midnight financial day. Mitigation: §4.3's naming and a test that pins the 01:30 case |
 | **Phase 5 pulling forward** | Payroll is the back half of this lane and it depends on T-157's output. **It does not start until the gate is met** — Ian's constraint, and the right one: paying against hours that cannot survive a network outage is the wrong order |

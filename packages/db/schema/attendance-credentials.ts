@@ -1,6 +1,6 @@
 /**
- * attendance_credentials — what a terminal scans, and who it belongs to. T-164.
- * `docs/tasks/164-credential-enrolment-and-mirror.md`, bible §5.3 and §13 row 164.
+ * attendance_credentials — what a terminal scans, and who it belongs to. T-185.
+ * `docs/tasks/185-credential-enrolment-and-mirror.md`, bible §5.3 and §13 row 164.
  *
  * ## ⛔ Why this is a NEW table rather than a `person_credentials.kind`
  *

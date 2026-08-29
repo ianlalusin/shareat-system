@@ -4,7 +4,7 @@ import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
 
 /**
- * T-162 — the quarantine screen and lane health. `docs/tasks/162-quarantine-and-lane-health.md`.
+ * T-183 — the quarantine screen and lane health. `docs/tasks/183-quarantine-and-lane-health.md`.
  *
  * ⭐ The one that matters most is invariant 2: **Retry re-runs the real ingest path.** Everything
  * else on this screen is presentation; that is the bit that decides whether a shift is recoverable.
@@ -71,7 +71,7 @@ const at = (hour: number, minute = 0) =>
  * Two stores, an admin over both, and a MANAGER over the first only.
  *
  * ⚠️ The manager is not decoration. `provision_clock_terminal` is the one capability on this screen
- * a manager does not hold, and the discard gate is the whole reason T-162 names it separately —
+ * a manager does not hold, and the discard gate is the whole reason T-183 names it separately —
  * a fixture with only an admin could never have caught that.
  */
 async function fixture(hint: string) {
@@ -182,7 +182,7 @@ async function stick(f: Fixture, over: Record<string, unknown> = {}) {
 }
 
 /**
- * ⭐ The world changing, since T-164: somebody ENROLS the badge the stuck event names.
+ * ⭐ The world changing, since T-185: somebody ENROLS the badge the stuck event names.
  *
  * This replaces the old helper, which rewrote the stored raw event to name a real employment. That
  * was always a stand-in; now it is the actual operation a manager performs, and the event itself is
@@ -200,7 +200,7 @@ async function enrol(f: Fixture, cardId: string) {
 
 // ---------------------------------------------------------------------------------------
 
-describe('T-162 invariant 1 — a quarantined event is visible to its own store, and nobody else', () => {
+describe('T-183 invariant 1 — a quarantined event is visible to its own store, and nobody else', () => {
   it("a manager of the store sees it; a manager of another store does not", async () => {
     const f = await fixture('vis');
     await stick(f);
@@ -219,7 +219,7 @@ describe('T-162 invariant 1 — a quarantined event is visible to its own store,
     expect(open[0]!.reasonCode).toBe('unknown_credential');
     expect(open[0]!.sentence).toContain('Enrol them');
     // The ingestor's own specifics survive into the sentence rather than being replaced by it.
-    // ⭐ Since T-164 the detail names the CREDENTIAL and the moment, not a person — because at this
+    // ⭐ Since T-185 the detail names the CREDENTIAL and the moment, not a person — because at this
     // point the server genuinely does not know who it was, which is the honest thing to render.
     expect(open[0]!.sentence).toContain('card credential');
     expect(open[0]!.sentence).toContain('revoked before the punch');
@@ -236,7 +236,7 @@ describe('T-162 invariant 1 — a quarantined event is visible to its own store,
   });
 });
 
-describe('⭐ T-162 invariant 2 — Retry re-runs the REAL ingest path', () => {
+describe('⭐ T-183 invariant 2 — Retry re-runs the REAL ingest path', () => {
   it('a stuck event becomes a punch once the world is fixed, and leaves the open list', async () => {
     const f = await fixture('retry');
     // Stick it on a badge nobody has enrolled...
@@ -303,7 +303,7 @@ describe('⭐ T-162 invariant 2 — Retry re-runs the REAL ingest path', () => {
   });
 });
 
-describe('⛔ T-162 invariant 3 — Discard needs a reason, a human, and never deletes', () => {
+describe('⛔ T-183 invariant 3 — Discard needs a reason, a human, and never deletes', () => {
   it('a blank reason is refused', async () => {
     const f = await fixture('noreason');
     const { id } = await stick(f);
@@ -368,7 +368,7 @@ describe('⛔ T-162 invariant 3 — Discard needs a reason, a human, and never d
   });
 });
 
-describe('⛔ T-162 invariant 4 — a discarded event is not resurrected by the next ingest run', () => {
+describe('⛔ T-183 invariant 4 — a discarded event is not resurrected by the next ingest run', () => {
   it('the device re-delivers the same event and it is refused, not re-ingested', async () => {
     const f = await fixture('nores');
     const { id: rowId, event: e, ghostCard } = await stick(f);
@@ -398,7 +398,7 @@ describe('⛔ T-162 invariant 4 — a discarded event is not resurrected by the 
   });
 });
 
-describe('T-162 invariant 5 — health warns on outbox lag', () => {
+describe('T-183 invariant 5 — health warns on outbox lag', () => {
   it('a queue drained a second ago is ok; ONE row from breakfast is not', async () => {
     const f = await fixture('lag');
     // The fixture's own employment insert left an unpublished roster row behind it.
@@ -439,7 +439,7 @@ describe('T-162 invariant 5 — health warns on outbox lag', () => {
   });
 });
 
-describe('T-162 invariant 6 — a silent terminal is listed; a store that closed early is not', () => {
+describe('T-183 invariant 6 — a silent terminal is listed; a store that closed early is not', () => {
   it('25 hours quiet is a closed store; 30 hours quiet is an outage', async () => {
     const f = await fixture('silent');
     await sql`update clock_terminals set last_seen_at = now() - interval '25 hours' where id = ${f.terminal.id}`;
@@ -476,7 +476,7 @@ describe('T-162 invariant 6 — a silent terminal is listed; a store that closed
   });
 });
 
-describe('T-162 invariant 7 — the raw event is kept exactly as received', () => {
+describe('T-183 invariant 7 — the raw event is kept exactly as received', () => {
   it('the stored body is the one the device sent, uninterpreted', async () => {
     const f = await fixture('raw');
     const e = event(f, { credentialRef: uid('ghostcard'), batteryPct: 4 });
@@ -490,7 +490,7 @@ describe('T-162 invariant 7 — the raw event is kept exactly as received', () =
   });
 });
 
-describe('T-162 invariant 8 — nothing here can edit an event', () => {
+describe('T-183 invariant 8 — nothing here can edit an event', () => {
   it('⛔ the module exposes exactly two operator actions, and neither writes the body', async () => {
     const mod = await import('@shareat/domain');
     const writers = Object.keys(mod).filter((k) => /Quarantin/i.test(k) && typeof (mod as Record<string, unknown>)[k] === 'function');
@@ -505,7 +505,7 @@ describe('T-162 invariant 8 — nothing here can edit an event', () => {
   });
 });
 
-describe('⭐ T-162 — the number that says the lane heals itself', () => {
+describe('⭐ T-183 — the number that says the lane heals itself', () => {
   it('counts the events that came back on their own, and not the ones a person discarded', async () => {
     const f = await fixture('healed');
     // One heals on its own...

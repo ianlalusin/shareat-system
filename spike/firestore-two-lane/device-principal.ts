@@ -1,5 +1,5 @@
 /**
- * T-153 Contract §4 — "Does `request.auth.token.deviceId` work from a custom token, which is what
+ * T-180 Contract §4 — "Does `request.auth.token.deviceId` work from a custom token, which is what
  * T-159's device-principal design assumes?"
  *
  * This is the spike's answer to that question, and it is the mechanism plan §3 row 5 proposes:

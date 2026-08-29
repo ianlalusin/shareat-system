@@ -55,13 +55,13 @@ export const clockTerminals = pgTable(
 
     /**
      * ⚠️ NULL until the device completes its FIRST sign-in, and the distinction is operational.
-     * T-153 finding 3: a device **cannot begin authenticating offline**. A terminal provisioned and
+     * T-180 finding 3: a device **cannot begin authenticating offline**. A terminal provisioned and
      * carried out of signal before it has ever signed in has no identity and cannot write a single
      * punch — so "provisioned" and "ready" are different states and the screen must say which.
      */
     activatedAt: timestamp('activated_at', { withTimezone: true }),
 
-    /** Stamped by the ingestor. A terminal silent for a day is an operational signal (T-162). */
+    /** Stamped by the ingestor. A terminal silent for a day is an operational signal (T-183). */
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
 
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
@@ -75,7 +75,7 @@ export const clockTerminals = pgTable(
     uniqueIndex('clock_terminals_firebase_uid_unique').on(t.firebaseUid),
     index('clock_terminals_store_id_idx').on(t.storeId),
     index('clock_terminals_org_id_idx').on(t.orgId),
-    /** The health query (T-162): live terminals, oldest-seen first. */
+    /** The health query (T-183): live terminals, oldest-seen first. */
     index('clock_terminals_last_seen_idx').on(t.storeId, t.lastSeenAt),
 
     /** Revocation is a triple or none of it — a revoked row nobody can explain is not an audit trail. */

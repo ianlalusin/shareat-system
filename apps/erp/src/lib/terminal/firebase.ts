@@ -1,6 +1,6 @@
 /**
- * The clock terminal's Firebase app. T-163.
- * `docs/tasks/163-offline-clock-terminal.md`, bible §5.2.
+ * The clock terminal's Firebase app. T-184.
+ * `docs/tasks/184-offline-clock-terminal.md`, bible §5.2.
  *
  * ⛔ **CLIENT SDK ONLY.** Bible §5.2 is binding: *"the clock terminal reads and writes Firestore via
  * the client SDK, never via Server Actions. A Server Action cannot function offline."* Nothing in
@@ -8,7 +8,7 @@
  * module — and `apps/erp/tests/clock-route-is-client-only.test.ts` fails the build if it does,
  * because a rule nothing enforces is a comment.
  *
- * 📏 The import surface is deliberate and measured: T-153 finding 4 put `app` + `auth` + exactly
+ * 📏 The import surface is deliberate and measured: T-180 finding 4 put `app` + `auth` + exactly
  * these Firestore functions at **127 KB gzipped**. No barrel imports, no `firebase/analytics`.
  */
 import { initializeApp, getApp, getApps, type FirebaseApp } from 'firebase/app';
@@ -23,7 +23,7 @@ import {
 /**
  * ⭐⭐ **THE APP NAME IS PART OF THE TERMINAL'S DURABLE IDENTITY. DO NOT CHANGE IT. EVER.**
  *
- * T-153 finding 2. Firestore's offline store is an IndexedDB database named literally:
+ * T-180 finding 2. Firestore's offline store is an IndexedDB database named literally:
  *
  * ```
  * firestore/{firebaseAppName}/{projectId}/main
@@ -80,7 +80,7 @@ export function terminalFirebase(): { app: FirebaseApp; db: Firestore; auth: Aut
   /**
    * ⭐ `persistentLocalCache` is the entire bet. Bible §5.2: the SDK provides *"offline
    * persistence, automatic replay, and conflict-free append-only writes **as platform behaviour**,
-   * which v1 reimplemented by hand and got partly wrong."* T-153 confirmed all three.
+   * which v1 reimplemented by hand and got partly wrong."* T-180 confirmed all three.
    *
    * ⛔ There is no queue module in this codebase, and there must never be one. v1's
    * `punch-queue.ts` + `sync-engine.ts` are what this line replaces.
@@ -118,7 +118,7 @@ function initializeFirestoreOnce(app: FirebaseApp): Firestore {
 /**
  * ⭐ Ask the browser not to evict our IndexedDB under storage pressure.
  *
- * T-153 finding 5 names eviction as *"the one that could actually lose a punch"*, and v1 already
+ * T-180 finding 5 names eviction as *"the one that could actually lose a punch"*, and v1 already
  * calls this (`credential-cache.ts:31`) — carried forward rather than rediscovered.
  *
  * ⚠️ Best-effort by design: browsers may refuse, and Safari/WebView policies vary. A refusal is

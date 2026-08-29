@@ -46,7 +46,7 @@ export interface ProvisionResult {
 /**
  * Create a terminal identity and mint its pairing token.
  *
- * ⚠️ **This does not make the terminal ready.** T-153 finding 3: a device cannot begin
+ * ⚠️ **This does not make the terminal ready.** T-180 finding 3: a device cannot begin
  * authenticating offline, so it must complete one sign-in *while it has a connection* before it can
  * write anything. `activatedAt` records that, and `isReady` is the question a screen should ask.
  */

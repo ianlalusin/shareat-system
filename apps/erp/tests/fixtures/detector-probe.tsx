@@ -4,7 +4,7 @@
  * ⭐ NOT REAL CODE. A deliberately non-compliant file, so the client-only detector in
  * `clock-route-is-client-only.test.ts` can be **watched catching something**.
  *
- * T-153 established the discipline: every refusal in the Firestore ruleset was watched failing
+ * T-180 established the discipline: every refusal in the Firestore ruleset was watched failing
  * against a permissive version, because *"a test that has never failed is a test nobody has proven
  * detects anything."* The same reasoning applies to a static import guard — a changed regex or a
  * resolution bug would leave the real check silently passing on everything.

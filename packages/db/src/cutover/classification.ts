@@ -262,7 +262,7 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'at each store with the device in hand. Configuration, not pilot activity.',
   },
 
-  // ---- T-160: the Lane A outbox (Phase 4, lane B) ---------------------------------------
+  // ---- T-181: the Lane A outbox (Phase 4, lane B) ---------------------------------------
   mirror_outbox: {
     class: 'purge',
     reason:
@@ -272,7 +272,7 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'table — which is also why it carries no payload column.',
   },
 
-  // ---- T-164: attendance credentials (Phase 4, lane B) ----------------------------------
+  // ---- T-185: attendance credentials (Phase 4, lane B) ----------------------------------
   attendance_credentials: {
     class: 'keep',
     reason:
@@ -283,7 +283,7 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'the credential that punches unnoticed.',
   },
 
-  // ---- T-161: the Lane B quarantine (Phase 4, lane B) -----------------------------------
+  // ---- T-182: the Lane B quarantine (Phase 4, lane B) -----------------------------------
   inbox_quarantine: {
     class: 'purge',
     reason:

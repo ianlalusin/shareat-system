@@ -1,5 +1,5 @@
--- T-160 — mirror_outbox: the transactional outbox behind Lane A.
--- docs/tasks/160-lane-a-publisher.md, bible 5.1
+-- T-181 — mirror_outbox: the transactional outbox behind Lane A.
+-- docs/tasks/181-lane-a-publisher.md, bible 5.1
 --
 -- The row change and its publish intent commit in ONE transaction; a relay drains the outbox
 -- afterwards. 15.4 forbids dual-write and this is the sanctioned way to keep that promise.

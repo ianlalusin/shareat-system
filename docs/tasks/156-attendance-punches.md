@@ -1,11 +1,11 @@
 # T-156 — `attendance_punches`: the append-only fact the whole phase rests on
 
-> **Status:** Spec written 2026-08-29 by the Opus planner (session `ianla-f9`, lane B).
+> **Status:** ✅ **BUILT, 2026-08-30.** Spec written by the Opus planner (session `ianla-f9`, lane B); implemented on the `attendance` lane and verified by `ianla-e7` before merge — typecheck 0, unit 696, integration 1360/1360 against a database created empty for the run, build clean.
 > **Depends on:** T-154 (`employments` — somebody to punch against), T-155 (`ShiftDay`), T-138
 > (`sessions` — attribution).
-> **Blocks:** T-157 (adjudication reads punches), T-161 (the ingestor's write target), T-166.
-> **Does NOT depend on T-153.** The Postgres side of the punch is driven by the domain, not by
-> Firestore; the ingestor adapts to whatever the spike finds. If T-153 fails, this table is still right.
+> **Blocks:** T-157 (adjudication reads punches), T-182 (the ingestor's write target), T-166.
+> **Does NOT depend on T-180.** The Postgres side of the punch is driven by the domain, not by
+> Firestore; the ingestor adapts to whatever the spike finds. If T-180 fails, this table is still right.
 
 ## The one rule this table exists to hold
 
@@ -49,7 +49,7 @@ arrival.
 | `orgId` / `storeId` | `uuid not null` | §4.2 rule 2 |
 | `personId` | `uuid not null` → `persons` `on delete restrict` | |
 | `employmentId` | `uuid not null` → `employments` `on delete restrict` | ⭐ Resolved **at ingest**, not at read. The employment a punch belongs to must not change if the person is later re-hired |
-| `clientPunchId` | `text not null` | ⛔ **`UNIQUE`. The idempotency key.** Client-generated `crypto.randomUUID()`, and the Firestore inbox document id (T-153 Contract §1) |
+| `clientPunchId` | `text not null` | ⛔ **`UNIQUE`. The idempotency key.** Client-generated `crypto.randomUUID()`, and the Firestore inbox document id (T-180 Contract §1) |
 | `occurredAt` | `timestamptz not null` | When the credential was presented. **Device clock** — see §3 |
 | `shiftDay` | `date not null` | Computed on write from `occurredAt` via `toShiftDay`. Bible §6: *"the row has an explicit `business_date` computed on write — never re-derived per query at read time"* |
 | `method` | `text not null` CHECK `('pin','nfc','qr','fingerprint','face','manual')` | How they identified |
@@ -181,7 +181,7 @@ is what stopped it.
 ## Out of scope
 
 **Adjudication** — T-157; this table stores facts and computes nothing · **The Firestore inbox and
-the ingestor** — T-161, and `recordPunch` is deliberately transport-agnostic so it does not need to
+the ingestor** — T-182, and `recordPunch` is deliberately transport-agnostic so it does not need to
 know · **Break allowance arithmetic** — T-157. ⭐ Note that breaks need **no new machinery** here:
 they are punches with a different `assertedIntent`, which is how v2 gets an offline break path that
 v1 does not have at all (discovery 15 §1: *"v1 has **no offline path for breaks at all**"*) ·

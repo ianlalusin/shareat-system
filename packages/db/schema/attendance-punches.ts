@@ -102,7 +102,7 @@ export const attendancePunches = pgTable(
      * stamp and opened a duplicate session. Landmine #21: *"every temporal guard is a server/DB
      * constraint; UI is a courtesy."*
      *
-     * Client-generated, and it is also the Firestore inbox document id (T-153), so the SDK's own
+     * Client-generated, and it is also the Firestore inbox document id (T-180), so the SDK's own
      * retry writes to the same path rather than creating a second event.
      */
     clientPunchId: text('client_punch_id').notNull(),

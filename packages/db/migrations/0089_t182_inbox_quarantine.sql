@@ -1,5 +1,5 @@
--- T-161 — inbox_quarantine: an event that could not be ingested, and can still be recovered.
--- docs/tasks/161-lane-b-ingestor.md, bible 5.4 rule 5
+-- T-182 — inbox_quarantine: an event that could not be ingested, and can still be recovered.
+-- docs/tasks/182-lane-b-ingestor.md, bible 5.4 rule 5
 --
 -- Landmine 14 is v1's dead letter: "no admin/manager UI was found anywhere in the app that reads
 -- dead-lettered punches out of a device's IndexedDB". In v2 the event lives in Firestore rather

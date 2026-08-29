@@ -1,7 +1,8 @@
-# T-162 — The quarantine screen, and whether the lane is actually working
+# T-183 — The quarantine screen, and whether the lane is actually working
 
-> **Status:** Spec written 2026-08-29 by the Opus planner (session `ianla-f9`, lane B).
-> **Depends on:** T-160 (outbox), T-161 (quarantine).
+> **Status:** ✅ **BUILT, 2026-08-30.** Spec written by the Opus planner (session `ianla-f9`, lane B); implemented on the `attendance` lane and verified by `ianla-e7` before merge — typecheck 0, unit 696, integration 1360/1360 against a database created empty for the run, build clean.
+> ⚠️ **RENUMBERED 2026-08-30: was T-162.** Both this lane and the inventory lane had taken T-162; attendance moved because it is finished while inventory is still being written. ⛔ **Commit messages predating the rename still say T-162** — git history is not rewritten.
+> **Depends on:** T-181 (outbox), T-182 (quarantine).
 > ⚠️ **This is the first task in Phase 4 with a user interface**, so it is also the first that needs
 > the dev server — **port 9008 is not this lane's, and Ian is asked before it starts.**
 
