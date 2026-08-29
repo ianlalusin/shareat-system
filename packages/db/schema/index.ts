@@ -59,3 +59,6 @@ export * from './attendance-config';
 
 // T-156 — the append-only punch, the Lane B landing table (Phase 4, lane B).
 export * from './attendance-punches';
+
+// T-157 — the adjudicated day (Phase 4, lane B).
+export * from './attendance-days';

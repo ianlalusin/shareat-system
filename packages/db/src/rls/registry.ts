@@ -451,6 +451,15 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'store membership implying too much.',
   },
 
+  // ---- T-157: the adjudicated day (Phase 4, lane B) -------------------------------------
+  attendance_days: {
+    scope: 'org_column',
+    reason:
+      'What a person’s day paid, before a rate is applied. Per-org, and the row Phase 5 multiplies ' +
+      'by a pay rate — so it is the closest thing in this phase to compensation data and is scoped ' +
+      'accordingly.',
+  },
+
   etl_runs: { scope: 'system_only', reason: 'ETL machinery. Never reachable by a tenant or a customer — only the migrator, crons and the audit.' },
   etl_source_documents: {
     scope: 'system_only',

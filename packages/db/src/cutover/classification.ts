@@ -234,6 +234,16 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'paid within the pilot; January opens on counted present-day facts, and a punch is neither.',
   },
 
+  // ---- T-157: the adjudicated day (Phase 4, lane B) -------------------------------------
+  attendance_days: {
+    class: 'purge',
+    reason:
+      'Derived from attendance_punches, which is purged, and derived data cannot outlive its ' +
+      'source. Same argument as the punch: attendance posts nothing to the ledger, so no opening ' +
+      'balance depends on a 2026 day. ⚠️ Purged BEFORE its config rows, which are kept — a day ' +
+      'references the config it was computed under, and children go before parents.',
+  },
+
   // ---- T-124: fixed assets ---------------------------------------------------------------
   prepaid_items: {
     class: 'keep_shell',
