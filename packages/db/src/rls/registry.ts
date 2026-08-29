@@ -46,6 +46,16 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'How an org names its kinds of space. A franchise defines its own and must never see ' +
       'another org’s.',
   },
+  stock_usage_records: {
+    scope: 'org_column',
+    reason: 'A usage record belongs to a store, and a store to one org.',
+  },
+  stock_usage_lines: {
+    scope: 'derived',
+    reason: 'No org_id of its own — reached only through its record, like delivery_lines.',
+    via: 'exists (select 1 from stock_usage_records r where r.id = record_id and r.org_id = app_current_org())',
+  },
+
   deliveries: {
     scope: 'org_column',
     reason: 'A delivery belongs to a store, and a store to one org.',

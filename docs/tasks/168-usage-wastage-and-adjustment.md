@@ -1,6 +1,9 @@
 # T-168 — Usage, wastage, adjustment: the busiest door in the domain
 
-> **Status:** SPEC, 2026-08-29. Written before implementation (bible §1.2a).
+> **Status:** ⚠️ **BUILT AND APPLIED 2026-08-29 — post and void.** `stock_usage_records` +
+> `stock_usage_lines`, migration `0067`, `consume.ts`, `usage.ts`, **19 integration tests**.
+> ⭐ **The loop closes here** — received, layered, consumed, costed. §9.
+> ⛔ The route is NOT built; port 9008 is held. §7's two questions were built as recommended.
 > **Depends on:** T-160, T-161, T-162, T-164 (which owns the postings this task triggers).
 > **v1 read at source** — `general-inventory.actions.ts` (the single busiest file, 8 transaction
 > sites), `meat-usage.actions.ts`, `reserved-usage-categories.ts`. `docs/discovery/14` §B, §I.
@@ -153,7 +156,90 @@ forward.
 12. Re-posting a voided record is refused.
 13. Live route on 9008: draft on one screen, post on another, and see on-hand and the P&L move.
 
-## 9. Out of scope
+## 9. ⚠️ Built 2026-08-29 — and the loop closes
+
+**Landed:** `packages/db/schema/stock-usage.ts` · migration `0067` · `packages/domain/src/stock/consume.ts`
+· `usage.ts` · both registries · `packages/domain/tests/integration/stock-usage.test.ts` (19 cases).
+
+### 9.1 ⭐ Phase 3's exit gate passes on a real loop
+
+The last test asserts, on stock that was **actually received and actually used**:
+
+```
+Σ (1310 + 1320 + 1330 + 1340)  ==  Σ (open layer remaining × unit cost)
+```
+
+⭐ That is bible §10's Phase 3 gate — *"inventory control account = sum of on-hand valuations"* —
+and it is the invariant that has been **unenforceable since the project began**, because no
+inventory subledger existed to reconcile against. It now holds across receive → consume.
+
+⚠️ It is not yet the *continuous* check §15.13 wants; that is the `inventoryControlDoesNotMatchValuation`
+detector, which belongs with T-165's switch. This proves the arithmetic; that will prove it never
+drifts.
+
+### 9.2 ⭐ `consume.ts` — and waiting for a caller was right
+
+T-162 deferred this wrapper because *"its real shape depends on its first caller."* It does. What
+the usage post needed — take a quantity, return **cost lines and a movement id**, inside a
+transaction the caller owns — is not the signature that would have been guessed, and the ordering
+matters more than the signature:
+
+```
+1. LOCK the open layers   FOR UPDATE   ⭐ before planning, not after
+2. plan                   pure
+3. write the OUT movement
+4. apply each layer line  subledger + decrement
+```
+
+⚠️ **The lock comes first.** Planning against unlocked layers and then writing is precisely v1's
+shape — two posters read the same remaining quantities and both commit. The lock is what makes the
+plan still true when it is applied.
+
+### 9.3 One module where v1 has two
+
+v1 runs `general-inventory.actions.ts` for items and `meat-usage.actions.ts` for meat — two
+lifecycles, two race guards, two copies of one rule set, **8 transaction sites** in the busiest
+file in the domain. That split existed only because `meatProducts` and `inventoryProducts` were
+separate collections, **a duality v1 was already retiring itself**. T-145 finished it, so the
+meat-specific rules are now rules about a `kind`.
+
+### 9.4 The three refusals worth reading
+
+| Refusal | Why it is not negotiable |
+|---|---|
+| ⭐ A reason of **`transfer`** | v1's named footgun. The usage flow writes only an OUT leg, so a movement labelled a transfer **destroys stock instead of moving it** — it leaves one room and arrives nowhere. Refused in the domain (synonym list) *and* by a CHECK, so no path reaches the table. ⚠️ The message says WHY, or the next person just picks another word for it |
+| ⭐ A **staff charge** while Phase 5 is unbuilt | ⛔ Refused, never silently dropped. **A charge that vanishes is worse than one that fails**: the stock still moved, and somebody believes they are being recovered from |
+| A **storage room** as a usage source | Consumption in a stockroom means the count was never taken. ⚠️ An `adjustment` is exempt — a miscount lives exactly where the stock is |
+
+### 9.5 §7's two open questions, built as recommended
+
+- **§7.1 the threshold forcing function — NOT ported.** It couples a *reporting* setting to an
+  *operational* action, and the failure mode is a kitchen unable to record what it used at 11pm
+  because a setting was never filled in. T-175's `itemHasNoThreshold` finding serves the real need
+  — it nags a manager instead of blocking a cook.
+- **§7.2 opening balances — narrowed.** `kind = 'opening'` exists for a store joining after
+  cutover. ⛔ v1's edit and reset do not survive: an opening balance that can be re-typed after
+  postings exist is a plug, and `balanceadjustment.plug` is in `POSTING-PATTERNS.md` precisely so
+  nobody ports one forward.
+
+### 9.6 Void ordering, kept from v1
+
+A linked staff charge is voided **FIRST**. v1's reason is a real failure: a crash between the two
+must never leave a reversed stock movement standing beside an **un-reversed pay deduction** —
+somebody still being charged for meat that is back on the shelf.
+
+⚠️ And a void gives stock back to **the exact layers it came from**, never to the oldest open one,
+which would be a silent re-costing (T-162 invariant 7). Asserted per layer.
+
+### 9.7 Not built
+
+| Piece | Why |
+|---|---|
+| The `/inventory/usage` route | ⛔ Port 9008 held all day — `docs/PENDING-VERIFICATION.md` |
+| The adjustment posting path | `kind='adjustment'` is storable and location-exempt; its signed posting is T-164's `postCountVariance`, and its document is T-169's count session |
+| The staff-charge leg | Phase 5, and §11.4 is what happens until then |
+
+## 10. Out of scope
 
 ⛔ **The posting rules themselves.** T-164 owns account choice, cost and the period lock.
 ⛔ **A second meat-specific module.** §2 — one path, `kind` is a column.
@@ -161,7 +247,7 @@ forward.
 ⛔ **Low-stock listing and auto-order.** T-175.
 ⛔ **Production conversion.** T-176 — an input *and* an output, which is a different shape.
 
-## 10. Done when
+## 11. Done when
 
 - [ ] Migration hand-written (DEF-073), next free number, journalled `previous.when + 86400000`.
 - [ ] `classification.ts` **PURGE**; `rls/registry.ts` NULLIF-guarded.

@@ -413,6 +413,18 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'Configuration describing the premises, carrying no balance and no anchor. Re-keying it ' +
       'at cutover would be pointless work with a fresh chance to mistype a room.',
   },
+  stock_usage_records: {
+    class: 'purge',
+    reason:
+      'Operational stock movement documents — the same class as deliveries and stock_movements. ' +
+      'On 2027-01-01 every location opens at the counted figure (T-134), so the history of how it ' +
+      'got there belongs to the old books.',
+  },
+  stock_usage_lines: {
+    class: 'purge',
+    reason: 'The detail of a usage record, by CASCADE. Same class as its parent.',
+  },
+
   deliveries: {
     class: 'purge',
     reason:

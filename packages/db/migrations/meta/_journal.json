@@ -470,6 +470,13 @@
       "when": 1791775907084,
       "tag": "0066_t166_deliveries",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1791862307084,
+      "tag": "0067_t168_stock_usage",
+      "breakpoints": true
     }
   ]
 }

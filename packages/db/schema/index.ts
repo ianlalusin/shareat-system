@@ -53,3 +53,4 @@ export * from './stock-locations';
 export * from './stock-ledger';
 export * from './stock-layers';
 export * from './deliveries';
+export * from './stock-usage';
