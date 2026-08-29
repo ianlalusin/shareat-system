@@ -295,7 +295,7 @@ Detail and the closing tests in DEF-086's disposition.
 | # | Task |
 |---|---|
 | **T-156** ✅ | `attendance_punches` — append-only, `UNIQUE (client_punch_id)`, immutability by trigger. The Lane B landing table, and the ingestor's target |
-| **T-157** ✅* | ⭐ **The adjudication engine** — span-based start anchor, hours, breaks, night differential, holidays. The densest task in the phase; discovery 15 §3 and the three v1 source files it names are required reading |
+| **T-157** ✅ | ⭐ **The adjudication engine** — span-based start anchor, hours, breaks, night differential, holidays. The densest task in the phase; discovery 15 §3 and the three v1 source files it names are required reading |
 | **T-158** ✅ | `attendance_adjustments` — the manager's Late/Next-in, early-out and half-day decisions as attributed inputs, plus verify/void, plus the *"is this decision even worth asking"* materiality gate |
 
 > ### ✅ **Waves 0–2 built 2026-08-29.** 110 new tests, all green
@@ -314,14 +314,24 @@ Detail and the closing tests in DEF-086's disposition.
 > (three TOC-freshness checks on files this lane may not amend, one ETL capture test that reads the
 > real `.env.local` and depends on gitignored `secrets/`).
 >
-> ⚠️ **T-157 is `✅*`, not `✅`** — its engine, table and service are done and tested, but its
-> **golden master is BLOCKED**. See §5 D4.
+> ✅ **T-157b closed the last of it (2026-08-29).** The golden master ran against 550 real v1
+> sessions — **0 untriaged**, 109 identical, and a new **class D of 41 sessions that exists only
+> because Lipa's stored grid is stale (DEF-087)**. The span-based Tier 1/Tier 2 anchor was deleted
+> and replaced with nearest-hour on Ian's decision, once the research pass established that v1
+> attendance **has never paid anybody** — `payrollRuns` and `payrollStaffPayouts` are zero, ever.
 >
 > ⭐ **Two findings came out of building, not auditing:** **DEF-086** (v1's
 > `undertimeGraceMinutes` under 60 minutes can never fire, silently) and half of **DEF-081**
 > (`tests/golden/` matched no vitest glob, so a test placed there would never have run).
 
-### Wave 3 — the hot lane *(T-153 has reported; specced when Wave 2 lands)*
+### Wave 3 — the hot lane *(✅ unblocked — T-153 reported, Wave 2 has landed)*
+
+> ⛔ **One clause of it is blocked, and it is on the critical path to the exit gate.** D1 makes
+> **card** the only offline mode that works in a browser (face is online-only forever; fingerprint
+> needs the APK, which D2 parks). Resolving a card offline means mirroring a **card id** — and
+> bible §5.3's hot set is a **closed list** whose item 1 is *"Active local-user roster (name,
+> position, staffId)"*. **A card id is not in it.** §5.3 says an addition requires an amendment and
+> §14 reserves that for Ian. Everything else in Wave 3 proceeds without it.
 
 | # | Task |
 |---|---|
@@ -330,7 +340,7 @@ Detail and the closing tests in DEF-086's disposition.
 | T-161 | Lane B ingestor — inbox → `attendance_punches`, with quarantine |
 | T-162 | **The quarantine screen** — landmine #14 says it is first-class and alertable, not a banner saying *"tell a manager"* |
 
-### Wave 4 — the terminal *(T-153 has reported; specced when Wave 3 lands)*
+### Wave 4 — the terminal *(specced when Wave 3 lands)*
 
 | # | Task |
 |---|---|
