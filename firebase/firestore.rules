@@ -1,0 +1,90 @@
+rules_version = '2';
+
+// The two-lane contract, as PROJECT_BIBLE.md §5.1 states it. T-159.
+//
+// §7 rule 5: "Firestore security rules in v2 are trivially small and deny-by-default: mirror =
+// read-only to authenticated members of that store; inbox = create-only with shape validation;
+// everything else denied. If the ruleset grows past ~100 lines, something has leaked into
+// Firestore that belongs in Postgres."
+//
+// ⛔ Landmine #3: in v1, "a nested 'stricter' rule is a silent no-op under OR-semantics". So the
+// biometric mirror is its OWN top-level path rather than a sub-collection of /mirror with a
+// tighter rule layered on. Two different guarantees get two different paths, never one path with
+// two rules.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Who is asking ─────────────────────────────────────────────────────────────────
+    // A provisioned terminal carries `deviceId` and `storeId` claims, minted server-side by
+    // T-159's provisioning and refreshed by the Firebase SDK. There is no long-lived secret of
+    // ours on the device -- see clock-terminals.ts.
+    function isTerminal() {
+      return request.auth != null && 'deviceId' in request.auth.token;
+    }
+    function isTerminalOf(storeId) {
+      return isTerminal() && request.auth.token.storeId == storeId;
+    }
+    // An ordinary signed-in person. Store membership itself is authorised in Postgres; what this
+    // gates is only the read-mostly roster mirror, never anything biometric or financial.
+    function isPerson() {
+      return request.auth != null && !('deviceId' in request.auth.token);
+    }
+
+    // ── Lane A — MIRROR. Postgres -> Firestore, read-only to every client. ─────────────
+    // §5.1: "Written ONLY by the publisher, a server-side process. Clients have no write access at
+    // all in the security rules." The publisher uses the Admin SDK, which bypasses rules entirely,
+    // so `write: if false` costs it nothing and closes the forbidden shape by construction.
+    match /mirror/{storeId}/{collection}/{docId} {
+      allow read: if isTerminalOf(storeId) || isPerson();
+      allow write: if false;
+    }
+
+    // ── Lane A — the BIOMETRIC mirror. Terminal only, forever. ────────────────────────
+    // Bible §5.3, non-negotiable: "readable only by a provisioned device identity, scoped to its
+    // own store -- never by an ordinary staff or manager account". A separate path, so no OR can
+    // widen it.
+    //
+    // ⛔ Face templates are NEVER here. Bible §5.3: "Never mirrored, never cached, never bundled",
+    // after the 2026-07-04 exfiltration finding. Do not re-propose.
+    // ⚠️ FOUR segments, not three. `biometricMirror/{storeId}/{docId}` is collection/document/
+    // collection -- a COLLECTION path -- and no document can ever live at it. Caught by the suite
+    // on its first real run, which is the sort of thing a rules file will otherwise carry for
+    // months looking perfectly reasonable.
+    match /biometricMirror/{storeId}/credentials/{docId} {
+      allow read: if isTerminalOf(storeId);
+      allow write: if false;
+    }
+
+    // ── Lane B — INBOX. Device -> Firestore, append-only. ─────────────────────────────
+    // §5.1: "Offline devices CREATE event documents. They may not update or delete them --
+    // enforced in the security rules, not just in code."
+    match /inbox/{eventId} {
+      allow create: if isTerminal()
+                    && request.resource.data.keys().hasAll(
+                         ['clientPunchId', 'occurredAt', 'deviceId', 'storeId', 'method', 'assertedIntent'])
+                    && request.resource.data.clientPunchId is string
+                    // The idempotency key IS the document id, so the SDK's own retry writes to the
+                    // same path instead of creating a second event. Defence in depth, ahead of the
+                    // ingestor's UNIQUE constraint.
+                    && request.resource.data.clientPunchId == eventId
+                    // A terminal may only speak for itself and for its own store.
+                    && request.resource.data.deviceId == request.auth.token.deviceId
+                    && request.resource.data.storeId == request.auth.token.storeId;
+
+      allow update, delete: if false;
+
+      // ⚠️ RULES ARE NOT FILTERS -- T-153 finding 1. An unconstrained `list` over /inbox is refused
+      // outright, because this rule cannot be proven to hold for every document the query might
+      // return. Every terminal query MUST carry where('deviceId','==',<own id>), and the composite
+      // index in firestore.indexes.json exists for exactly that query. The rule and the query are a
+      // matched pair; changing one silently breaks the other.
+      allow read: if isTerminal() && resource.data.deviceId == request.auth.token.deviceId;
+    }
+
+    // Everything else: denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

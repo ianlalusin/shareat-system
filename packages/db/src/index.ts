@@ -47,6 +47,7 @@ export type { AttendanceConfigRow } from './repo/attendance-config';
 export type { AttendancePunchRow } from './repo/attendance-punches';
 export type { AttendanceDayRow } from './repo/attendance-days';
 export type { AttendanceAdjustmentRow } from './repo/attendance-adjustments';
+export type { ClockTerminalRow } from './repo/clock-terminals';
 export type { LiabilityRow, LiabilityPosition, LiabilityMovement } from './repo/liabilities';
 export type { CustomerRow, PriceListRow, PriceListItemRow } from './repo/customers';
 export { treatmentOf } from './repo/customers';
@@ -90,6 +91,8 @@ export * as attendancePunchesRepo from './repo/attendance-punches';
 export * as attendanceDaysRepo from './repo/attendance-days';
 // T-158 — the manager's decisions (Phase 4, lane B).
 export * as attendanceAdjustmentsRepo from './repo/attendance-adjustments';
+// T-159 — the provisioned device identity (Phase 4, lane B).
+export * as clockTerminalsRepo from './repo/clock-terminals';
 export * as liabilitiesRepo from './repo/liabilities';
 export * as customersRepo from './repo/customers';
 export * as sessionsRepo from './repo/sessions';

@@ -60,3 +60,8 @@ spike/**/node_modules/
 spike/**/firebase-debug.log
 spike/**/firestore-debug.log
 spike/**/ui-debug.log
+
+# T-159 firestore rules harness — the rules and their suite are committed; the runtime debris is not.
+firebase/node_modules/
+firebase/*-debug.log
+firebase/firestore.rules.real
