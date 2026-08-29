@@ -45,6 +45,7 @@ export type { OwnerRow, OwnerPosition, DrawingCloseRow, AgedReceivable } from '.
 export type { PositionRow, EmploymentRow, RosterRow } from './repo/employment';
 export type { AttendanceConfigRow } from './repo/attendance-config';
 export type { AttendancePunchRow } from './repo/attendance-punches';
+export type { AttendanceDayRow } from './repo/attendance-days';
 export type { LiabilityRow, LiabilityPosition, LiabilityMovement } from './repo/liabilities';
 export type { CustomerRow, PriceListRow, PriceListItemRow } from './repo/customers';
 export { treatmentOf } from './repo/customers';
@@ -84,6 +85,8 @@ export * as employmentRepo from './repo/employment';
 export * as attendanceConfigRepo from './repo/attendance-config';
 // T-156 — the append-only punch (Phase 4, lane B).
 export * as attendancePunchesRepo from './repo/attendance-punches';
+// T-157 — the adjudicated day (Phase 4, lane B).
+export * as attendanceDaysRepo from './repo/attendance-days';
 export * as liabilitiesRepo from './repo/liabilities';
 export * as customersRepo from './repo/customers';
 export * as sessionsRepo from './repo/sessions';

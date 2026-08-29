@@ -33,7 +33,18 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'unit',
-          include: ['tests/unit/**/*.test.ts', 'packages/**/*.test.ts', 'apps/**/*.test.ts'],
+          // ⭐ DEF-081: `tests/invariants/` and `tests/golden/` existed as empty directories and
+          // matched NO include glob, so a test placed in either would never have run — while both
+          // are named in the definition of done. A guard that does not execute is worse than no
+          // guard, because it is credited. T-157 adds the first golden test and needs the glob to
+          // be real; proven by watching a deliberately failing golden test actually fail.
+          include: [
+            'tests/unit/**/*.test.ts',
+            'tests/invariants/**/*.test.ts',
+            'tests/golden/**/*.test.ts',
+            'packages/**/*.test.ts',
+            'apps/**/*.test.ts',
+          ],
           // A test that needs a database is not a unit test. CI runs the unit project
           // BEFORE migrations are applied, so a DB-touching test here fails on a fresh
           // database with "relation does not exist". Convention: anything under a

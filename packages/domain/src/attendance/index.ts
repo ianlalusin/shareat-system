@@ -9,3 +9,5 @@
 export * from './shift-day';
 export * from './config';
 export * from './punches';
+export * from './compute-day';
+export * from './adjudicate';
