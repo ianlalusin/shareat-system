@@ -185,12 +185,12 @@ function happyCtx(capability: Capability): { storeId?: string } {
 // Invariant 5 — ⭐ every capability DENIES a role that lacks it. All 38, not a sample.
 // ---------------------------------------------------------------------------------------
 
-describe('invariant 5 — every capability denies a role that lacks it (all 47)', () => {
+describe('invariant 5 — every capability denies a role that lacks it (all 53)', () => {
   const denialCases: { capability: Capability; role: Role }[] = CAPABILITIES.flatMap((capability) =>
     ROLES.filter((role) => !CAPABILITY_MATRIX[capability][role]).map((role) => ({ capability, role })),
   );
 
-  // Seven capabilities are held by ALL FOUR roles (record_sale, submit_sales_day,
+  // Eleven capabilities are held by ALL FOUR roles (record_sale, submit_sales_day,
   // create_expense, edit_own_expense, record_stock_movement, record_wastage,
   // create_wholesale_order — the "everyone on shift" set) and so have NO role to deny;
   // invariant 5 is vacuously satisfied for these, not violated. This is a floor: it pins
@@ -207,21 +207,41 @@ describe('invariant 5 — every capability denies a role that lacks it (all 47)'
     'create_wholesale_order',
     // T-130: logging a pending supplier invoice moves no money — same bar as create_expense.
     'record_supplier_invoice',
+    // ---- T-173/T-175, 2026-08-30 — and each one is a deliberate "everyone on shift" call ----
+    //
+    // ⚠️ A universally-granted capability can never deny anyone by ROLE, which is exactly why
+    // this list is pinned: it is the set where the role column proves nothing and some OTHER
+    // control has to be the real one. For all three below, that control is STORE SCOPE — and
+    // for the first, a second check the matrix cannot express at all.
+    //
+    // ⭐ `confirm_receipt`: a branch cook signs for the crates that arrive. Requiring a manager
+    // on site to accept a delivery is the rule people work around by sharing a login. The real
+    // control is `confirmReceipt`'s two-sided check that the actor's store is one of the TWO on
+    // the order (T-173 invariant 8) — neither a role nor a scope can say that.
+    'confirm_receipt',
+    // ⭐ `set_item_threshold`: per v1, and the reasoning is asymmetric. An unset threshold is
+    // INVISIBLE — the item simply never appears on the low-stock list — so friction here has no
+    // counter-pressure at all, while a wrong threshold is loud and instantly correctable.
+    'set_item_threshold',
+    // `post_order_message`: the thread is append-only, so the worst a wrong message can do is
+    // be answered. Locking the conversation to managers is how it goes back to being a phone
+    // call, which is the thing T-175 set out to replace.
+    'post_order_message',
   ];
 
-  it('every capability EXCEPT the universally-granted 8 has at least one denial case', () => {
+  it('every capability EXCEPT the universally-granted 11 has at least one denial case', () => {
     const covered = new Set(denialCases.map((c) => c.capability));
     const missing = CAPABILITIES.filter((c) => !covered.has(c));
     expect(missing.sort()).toEqual([...UNIVERSALLY_GRANTED].sort());
   });
 
-  it('the universally-granted 8 really are true for all four roles (why they are exempt)', () => {
+  it('the universally-granted 11 really are true for all four roles (why they are exempt)', () => {
     for (const c of UNIVERSALLY_GRANTED) {
       expect(ROLES.every((r) => CAPABILITY_MATRIX[c][r]), `${c} is not actually universal`).toBe(true);
     }
   });
 
-  it('every OTHER capability (39 of 47) has a denial case for EVERY role that lacks it, not just one', () => {
+  it('every OTHER capability (42 of 53) has a denial case for EVERY role that lacks it, not just one', () => {
     // Stronger than the letter of invariant 5 ("a role", singular) — proves the sweep
     // below is exhaustive over false cells, not merely non-empty.
     for (const capability of CAPABILITIES) {
@@ -246,7 +266,7 @@ describe('invariant 5 — every capability denies a role that lacks it (all 47)'
 // every "true" matrix cell is actually reachable, not just typed).
 // ---------------------------------------------------------------------------------------
 
-describe('invariant 4 — a role holding the capability, in scope, passes (all 47)', () => {
+describe('invariant 4 — a role holding the capability, in scope, passes (all 53)', () => {
   const positiveCases: { capability: Capability; role: Role }[] = CAPABILITIES.flatMap((capability) =>
     ROLES.filter((role) => CAPABILITY_MATRIX[capability][role]).map((role) => ({ capability, role })),
   );

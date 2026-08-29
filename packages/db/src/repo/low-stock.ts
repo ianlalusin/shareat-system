@@ -300,3 +300,140 @@ export async function offeringCost(
     );
   return row?.cost ?? null;
 }
+
+// ---- the branch-order list ---------------------------------------------------------------------
+
+export interface BranchOrderRow {
+  readonly id: string;
+  readonly orderDate: string;
+  readonly status: string;
+  readonly totalAmount: string;
+  readonly commissaryName: string;
+  readonly branchName: string | null;
+  readonly lineCount: number;
+  readonly messageCount: number;
+}
+
+/**
+ * Every INTERNAL order either side of this store is on.
+ *
+ * ⭐ Both directions in one list, deliberately: a commissary sees what it owes its branches, and a
+ * branch sees what is coming. ⚠️ Two screens showing "my orders" from opposite ends is how the two
+ * sides end up disagreeing about what was sent.
+ */
+export async function branchOrders(tx: Tx, orgId: string, storeId: string): Promise<BranchOrderRow[]> {
+  const rows = (await tx.execute(sql`
+    select o.id,
+           o.order_date::text                                as "orderDate",
+           o.status,
+           o.total_amount::text                              as "totalAmount",
+           cs.name                                           as "commissaryName",
+           bs.name                                           as "branchName",
+           (select count(*)::int from trade_order_lines l where l.order_id = o.id)      as "lineCount",
+           (select count(*)::int from trade_order_messages m where m.order_id = o.id)   as "messageCount"
+    from trade_orders o
+    join stores cs on cs.id = o.store_id
+    left join stores bs on bs.id = o.requested_by_store_id
+    where o.org_id = ${orgId}
+      and o.requested_by_store_id is not null
+      and (o.store_id = ${storeId} or o.requested_by_store_id = ${storeId})
+    order by o.order_date desc, o.created_at desc
+    limit 100
+  `)) as unknown as BranchOrderRow[];
+  return rows;
+}
+
+export interface BranchOrderDetail {
+  readonly id: string;
+  readonly orderDate: string;
+  readonly status: string;
+  readonly totalAmount: string;
+  readonly commissaryStoreId: string;
+  readonly commissaryName: string;
+  readonly branchStoreId: string | null;
+  readonly branchName: string | null;
+  readonly lines: readonly {
+    id: string;
+    itemName: string;
+    unit: string;
+    requested: string | null;
+    fulfilled: string | null;
+    received: string | null;
+    rate: string;
+    lineTotal: string;
+    origin: string;
+    approval: string;
+    suggested: string | null;
+  }[];
+}
+
+export async function branchOrderDetail(tx: Tx, orderId: string): Promise<BranchOrderDetail | null> {
+  const [head] = (await tx.execute(sql`
+    select o.id, o.order_date::text as "orderDate", o.status, o.total_amount::text as "totalAmount",
+           o.store_id as "commissaryStoreId", cs.name as "commissaryName",
+           o.requested_by_store_id as "branchStoreId", bs.name as "branchName"
+    from trade_orders o
+    join stores cs on cs.id = o.store_id
+    left join stores bs on bs.id = o.requested_by_store_id
+    where o.id = ${orderId}
+  `)) as unknown as Omit<BranchOrderDetail, 'lines'>[];
+  if (!head) return null;
+
+  const lines = (await tx.execute(sql`
+    select l.id, i.name as "itemName", l.unit,
+           l.requested_quantity::text as requested,
+           l.fulfilled_quantity::text as fulfilled,
+           l.received_quantity::text  as received,
+           l.rate::text, l.line_total::text as "lineTotal",
+           l.origin, l.approval,
+           l.suggested_quantity::text as suggested
+    from trade_order_lines l
+    join items i on i.id = l.item_id
+    where l.order_id = ${orderId}
+    order by i.name
+  `)) as unknown as BranchOrderDetail['lines'];
+
+  return { ...head, lines };
+}
+
+// ---- the discrepancy list, joined to what a person needs to read it -----------------------------
+
+export interface DiscrepancyListRow {
+  readonly id: string;
+  readonly status: string;
+  readonly disposition: string | null;
+  readonly quantity: string;
+  readonly value: string;
+  readonly deferredTo: string | null;
+  readonly itemName: string;
+  readonly unit: string;
+  readonly orderId: string;
+  readonly orderDate: string;
+  readonly branchName: string | null;
+  readonly note: string | null;
+}
+
+export async function discrepancyList(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+  includeResolved: boolean,
+): Promise<DiscrepancyListRow[]> {
+  const rows = (await tx.execute(sql`
+    select d.id, d.status, d.disposition, d.quantity::text, d.value::text,
+           d.deferred_to::text as "deferredTo", d.note,
+           i.name as "itemName", l.unit,
+           d.order_id as "orderId", o.order_date::text as "orderDate",
+           bs.name as "branchName"
+    from trade_discrepancies d
+    join trade_order_lines l on l.id = d.order_line_id
+    join items i on i.id = l.item_id
+    join trade_orders o on o.id = d.order_id
+    left join stores bs on bs.id = o.requested_by_store_id
+    where d.org_id = ${orgId} and d.store_id = ${storeId}
+      ${includeResolved ? sql`` : sql`and d.status <> 'resolved'`}
+    order by d.created_at desc
+    limit 200
+  `)) as unknown as DiscrepancyListRow[];
+  return rows;
+}

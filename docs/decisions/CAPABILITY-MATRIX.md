@@ -53,6 +53,10 @@ they need weekly, the boundary is wrong.
 | `adjust_inventory` | store | ✅ | ✅ | ✅ | ✗ | v1's `canAdjustInventory`. An adjustment is a write-off in disguise |
 | `record_wastage` | store | ✅ | ✅ | ✅ | ✅ | Recording waste must be frictionless, or it goes unrecorded |
 | `charge_staff_for_discrepancy` | store | ✅ | ✅ | ✅ | ✗ | v1's `canChargeStaff`. Takes money off a person — never staff-level |
+| `confirm_receipt` | store | ✅ | ✅ | ✅ | ✅ | T-173. ⭐ **Both stores are legitimate callers** — a commissary-side and a branch-side actor, from opposite grants. A branch cook signs for the crates; requiring a manager on site is the rule people work around by sharing a login. The real control is the two-sided STORE check in `confirmReceipt`, not the role |
+| `resolve_trade_discrepancy` | store | ✅ | ✅ | ✅ | ✗ | T-174. ⛔ Deciding goods were lost, or charging a named person, is a judgement with a posting behind it — same class as `adjust_inventory`. ⚠️ The goods are the COMMISSARY's asset, so `resolveDiscrepancy` also refuses the branch outright, whatever the role |
+| `set_item_threshold` | store | ✅ | ✅ | ✅ | ✅ | T-175, per v1. ⭐ The person who notices the shelf is empty is the person on the floor. An unset threshold is **invisible** — the item simply never appears on the low-stock list — so friction here has no counter-pressure and thresholds silently stay unset |
+| `post_order_message` | store | ✅ | ✅ | ✅ | ✅ | T-175. Either store on the order may talk about it; the thread is append-only, so the worst a wrong message can do is be answered |
 
 ## Suppliers, buyers and credit
 
