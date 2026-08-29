@@ -494,21 +494,26 @@ describe('T-152 — the cash-custody policy', () => {
 });
 
 // =====================================================================================
-// T-153 — the standing till float. Ian, 2026-08-29.
+// Cash arriving by TRANSFER is custody, not takings. T-143 / T-152 / T-153.
 // =====================================================================================
 
 /**
- * > **Ian:** *"the revolving fund admin or manager give to cashier at the start of the day for
- * > change for expenses… in practice that budget is agreed upon and **never recorded** — the
- * > admin, manager and cashier just know there is an extra 20k in till, and it has to be counted
- * > daily and maintained."*
+ * ⚠️ **These tests were written for a model Ian then corrected**, and they are kept because the
+ * property they prove is real and load-bearing — only the story around it changed.
  *
- * ⭐ **These tests exist to establish that the float needs NO new machinery** — the primitives
- * already built carry it exactly right. If that is true, the only real gap is that today the
- * money is not recorded anywhere, which makes the books understate the till by the float.
+ * They originally argued that the till float needs no machinery: money transferred into a cashier
+ * account is not takings, so remitting the day's movement leaves it sitting there. **The
+ * arithmetic is right; the model was wrong.** Ian, 2026-08-29: *"you read it wrong… it's on a side
+ * pocket of the cashier"* — a segregated pot with a configured target, not a residue of the
+ * takings account. T-153 has the corrected design, and the float will live in its own `1115`.
+ *
+ * ⭐ **What these still prove, and it is worth guarding:** a transfer into a cashier account
+ * NEVER becomes something the cashier must hand over. That is what stops a float top-up, an
+ * office change delivery, or any other custody movement from silently inflating a day's expected
+ * remittance — and it is the reason the float cannot be swept by accident.
  */
-describe('T-153 — a standing till float rides on the primitives that already exist', () => {
-  it('⭐ a float transfer RAISES the till balance but leaves every day owing exactly what it did', async () => {
+describe('cash arriving by transfer is custody, and never becomes a day’s takings', () => {
+  it('⭐ a transfer IN raises the balance but leaves every day owing exactly what it did', async () => {
     const f = await fixture('float');
     await officeOpening(f, '2026-01-01', '50000.00');
     await verifiedDay(f, '2026-01-02');
@@ -552,7 +557,7 @@ describe('T-153 — a standing till float rides on the primitives that already e
     expect(Number(balance)).toBeCloseTo(28000, 2);
   });
 
-  it('⭐ and the float is NOT swept away by a remittance that settles the day in full', async () => {
+  it('⭐ and transferred-in cash is NOT swept by a remittance that settles the day in full', async () => {
     const f = await fixture('float-remit');
     await officeOpening(f, '2026-01-01', '50000.00');
     await verifiedDay(f, '2026-01-02');
@@ -581,8 +586,9 @@ describe('T-153 — a standing till float rides on the primitives that already e
       const acct = await moneyAccountsRepo.getById(tx, f.orgId, f.till);
       return moneyAccountsRepo.balanceOf(tx, f.orgId, acct!);
     });
-    // ⭐ The float survives, because "maintained" is what Ian asked for: the till goes back to
-    // holding exactly the float once the day's takings have gone to the office.
+    // ⭐ The transferred-in cash survives a full remittance: only the day's movement goes to the
+    // office. ⚠️ Under T-153's corrected design the float is not held here at all — it sits in its
+    // own `1115` pot — but this guards the property that makes that safe either way.
     expect(Number(balance)).toBeCloseTo(20000, 2);
 
     const reports = await asOrg(f.orgId, (tx) =>
@@ -591,11 +597,11 @@ describe('T-153 — a standing till float rides on the primitives that already e
     expect(Number(reports.find((r) => r.businessDate === '2026-01-02')!.owed)).toBeCloseTo(0, 2);
   });
 
-  it('⭐ VARYING per store — a different float settles to its own number, with nothing configured', async () => {
-    // Ian, 2026-08-29, asked whether ₱20,000 is every store's float: "varying."
-    // ⛔ The point of this test is what it does NOT contain: no float amount is declared anywhere,
-    // no setting is read, and the store is never told what it is supposed to hold. The till
-    // settles at its own float because expected remittance is MOVEMENT, not BALANCE (row 145).
+  it('⭐ the amount is irrelevant to the arithmetic — a different sum behaves identically', async () => {
+    // ⭐ Expected remittance is the period's MOVEMENT, not the account's BALANCE (row 145), so the
+    // size of a custody transfer never changes what a day owes. ⚠️ This is NOT the argument that
+    // the float needs no configuration — Ian corrected that (T-153 §2); the float's target is
+    // configured and checked against its own account. This only pins the remittance arithmetic.
     const f = await fixture('float-varies');
     await officeOpening(f, '2026-01-01', '50000.00');
     await verifiedDay(f, '2026-01-02');

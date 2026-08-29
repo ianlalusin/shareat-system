@@ -1,285 +1,202 @@
-# T-153 — The standing till float
+# T-153 — The till float: a side pocket, not a balance
 
-> **Status:** ✅ **NO BUILD REQUIRED, 2026-08-29 — and that is the finding.** The float rides on
-> primitives that already exist; two integration tests in `remittance.test.ts` prove it.
-> **Requirements:** Ian, 2026-08-29. Closes T-136 §8.4's open *"is there a retained float?"*
-> question and supersedes T-136 §2's imprest design. **Evidence:** DEF-085.
+> **Status:** ⚠️ **SPEC, 2026-08-29 — REWRITTEN after Ian corrected the model.** An earlier version
+> of this document concluded *"no build required"*. **That was wrong**, and §2 keeps the error and
+> its cause rather than quietly deleting them. Recover it at `97919a0` if the reasoning is ever
+> needed.
+> **Requirements:** Ian, 2026-08-29. **Related:** T-136 §2 (imprest), T-136 §8.4, DEF-085.
 
-## 1. What Ian asked for
+## 1. What it actually is
 
-> *"The revolving fund admin or manager give to cashier at the start of the day for change for
-> expenses. So we design the cashier till that way that it has fund per cashier."*
+> **Ian, 2026-08-29:** *"The money is from office/admin. **It's not part of the sales that is not
+> remitted.** This is extra cash float that is not remitted to the manager or admin — it sits on
+> till forever. The staff just makes sure if the configured budget is 20k, every day opening and
+> closing it is 20k. It is **separated** from the money being remitted. **It's on a side pocket of
+> the cashier.**"*
 
-and, decisively, how it works today:
-
-> *"Actually in practice that budget is agreed upon and **never recorded** — the admin, manager and
-> cashier just know that there is an extra 20k in till, and it **has to be counted daily and
-> maintained**."*
-
-⭐ **The second quote changes the shape of the answer.** This is not a fund released each morning
-and returned each night. It is a **standing balance** that lives in the drawer, is counted daily,
-and is topped back up to its agreed amount. That is the imprest pattern T-136 §2 described — with
-the entire record missing.
-
-## 2. ⛔ What is actually wrong today: the books do not know the money exists
-
-If ₱20,000 sits in a till and nothing recorded it moving there, then `1110 Cash on hand — cashier`
-is **understated by the float, permanently, for every store that has one** — and office cash is
-overstated by the same amount. The company total is right; the split is wrong, in the two accounts
-a cash count is checked against.
-
-⚠️ **This is why the daily count currently needs a human to remember a number.** *"Counted daily
-and maintained"* against **what**? Today the expected figure lives in three people's heads. The
-count cannot be checked against the books, because the books are missing the float.
-
-⭐ **So the gap is not a feature. It is one unrecorded transfer.**
-
-## 3. ✅ The float needs NO new code — proved, not argued
-
-The primitives already treat it correctly, and two tests in
-`packages/domain/tests/integration/remittance.test.ts` demonstrate it end to end:
-
-| Proved | Result |
-|---|---|
-| A ₱20,000 office→till transfer, then read what the day owes | Till balance **₱28,000**; the day still owes exactly **₱8,000** |
-| Remit that ₱8,000, then read the till | Till holds exactly **₱20,000** — the float survives |
-
-**Why it works without being designed for:** `endDayReports` (and T-152's `storePositions`) exclude
-`source_type = 'transfer'` in both directions, because a transfer is *custody, not a transaction of
-the day*. So a float delivered by transfer is:
-
-- **excluded** from what the cashier must hand over — it is not takings, and
-- **included** in the account balance — so a count has something true to check against.
-
-⭐ **v1 proves the same rule from the other side.** Its shift-mode arithmetic is
-`expectedEndingCash = openingFloat + cashPayments + netCashFlows`, while
-`computedRemittanceCash = cashPayments + netCashFlows`. **The float is in the COUNT and absent from
-the REMITTANCE** (`derive-totals.ts:176-201`). That is exactly the separation T-136 §1 argued for —
-*count the till daily, transfer on whatever cadence suits* — and v2 inherited it by building the
-transfer exclusion for an unrelated reason.
-
-## 4. ✅ This answers T-136 §8.4, which was left open
-
-§8.4 asked whether a **retained float** exists, because *"in minus out"* assumes the drawer keeps
-what it started with:
-
-```
-retained float   →  expected = net movement over the period      ← ✅ THIS ONE
-remit to zero    →  expected = closing balance
-```
-
-**Ian's answer is retained**, and the code already implements it. No per-store setting is needed
-for this after all — the question §8.4 wanted configurable turns out to have one answer.
-
-## 5. ⛔ Why it belongs in the ERP, not only in POS
-
-> **Ian:** *"So I guess we can just put it in POS rather than in ERP since it's not remitted daily,
-> it is just kept in till."*
-
-**The instinct is right about the workflow and wrong about the record**, and the two can be split:
-
-| | Where it belongs |
-|---|---|
-| **The counting, at the till, every day** | ⭐ **POS.** It already does this — `cashHandovers` records `startingCash`, `countedCash`, `variance` (discovery 09 §1) |
-| **The fact that the business's cash is ₱20,000 in a drawer rather than in the safe** | ⛔ **The ledger. There is nowhere else it can live** |
-
-Three reasons the record cannot be POS-only:
-
-1. **It is real company cash.** A balance sheet that cannot say where its own money is has a hole
-   the size of the float times the number of stores.
-2. **Bible §2.3: Postgres is the sole system of record**, and POS is Firestore. A float held only
-   in POS is an authoritative balance outside the system of record.
-3. ⚠️ **It would defeat its own purpose.** Ian's requirement is that the float be *maintained* —
-   which needs an expected figure to maintain it against. If the amount lives in POS and the cash
-   lives in the ERP's ledger, the two can disagree and **nothing would ever notice**.
-
-⛔ **And a hard constraint worth stating plainly: this project cannot write to POS at all.** All
-four reference repos are READ-ONLY (`docs/RULES.md` rule 1). POS v2 does not exist yet.
-
-⭐ **The cost of doing it in the ERP is one transfer, once, per store.** Not a module, not a daily
-workflow, not a screen — the money-transfer screen already built does it today. When POS v2 arrives
-it reads the till balance from the ledger rather than keeping a second copy.
-
-## 6. What is deliberately NOT built
-
-| Out | Why |
-|---|---|
-| A `float_amount` column, a float entity, a release/return document | ⭐ The float is a **balance**, not a document. Recording an intended amount beside the real one creates the second source of truth rows 143/145/147 each refuse — and the imprest self-check needs only the balance |
-| A per-cashier split of the till | v2 has one cashier-cash account per store, matching one drawer. **If a store runs two tills, that is two money accounts**, which the model already allows — `(store, instrument, custodian)` is unique, so a second cashier drawer needs a decision from Ian before it is invented |
-| An automatic "float is short" finding | ⭐ Deferred on purpose: the check is `counted = float + movement since last remittance`, and **nothing captures `counted` in the ERP yet** — the count lives in POS's `cashHandovers`. Building the alarm before the input exists would be a detector that can never fire |
-| Porting `plus.openingBudget` | **DEF-085** — dead in v1's arithmetic and null in all production data (Ian, 2026-08-29) |
-
-## 7. Answered by Ian, and the one thing still open
+Five things, each load-bearing:
 
 | | |
 |---|---|
-| **Which stores carry a float** | ✅ *"All stores, even franchisee."* — see §10 for what that means for a franchise |
-| **How many tills per store** | ✅ *"1 store 1 till."* So one `1110` money account per store is the right model and §6's "if a store runs two tills" does not arise |
-| **Shifts** | ✅ *"Most is 2 shifts, 1 morning 1 evening, same till."* — §9 |
-| **The float AMOUNT per store** | ✅ *"Varying."* — each store carries its own figure. ⭐ **This changes nothing structurally**, and §11 explains why that is not a dodge |
+| **Where it comes from** | Office / admin — an injection, not retained takings |
+| **Where it lives** | ⭐ A **side pocket**. Physically segregated from the day's cash |
+| **How long** | Forever. It is never remitted |
+| **What is checked** | Opening **and** closing, every day, it equals the **configured** amount |
+| **Per store** | The configured amount **varies** (Ian, 2026-08-29) |
 
-### ⚠️ Correcting this doc's own earlier claim about where it gets recorded
+## 2. ⛔ What this document said before, and why it was wrong
 
-An earlier draft of §7 said the float *"should be entered on T-134's count sheet."* **That is
-wrong, and checking took one look:** `opening_counts` is keyed on `item_id` with a `quantity` and a
-`unit_cost` — it is the **inventory** count sheet, and cash has no row in it.
+The previous version modelled the float as *"the amount of the drawer that is not remitted"* and
+concluded it needed **no code at all**: remit the day's movement, and whatever the drawer started
+with is still sitting there.
 
-⭐ Cash opening balances go through the **opening-balance entry** instead (`/cutover/opening`),
-which posts each figure as a balanced pair against `3900` and halts on a residual. §8 states the
-entry correctly.
+**The arithmetic was right and the model was wrong.** Ian: *"no, you read it wrong."*
 
----
+⭐ **The error was treating a physical fact as an accounting residue.** *"Not remitted"* describes
+what **happens** to the float; it is not what the float **is**. Under the old reading the float was
+an emergent property of the takings account — whatever happened to be left over. Under the real one
+it is a **separate pot with its own invariant**, and the takings never touch it.
 
-## 8. ✅ The account structure — Ian's question, 2026-08-29
+⚠️ **Three conclusions died with it**, each recorded because each was argued at length:
 
-> *"OK well record it on ERP but what account will it belong? I just need to understand the
-> structure."*
+1. *"No separate account — a peso in a drawer carries no label."* **It does carry a label: the side
+   pocket.** The argument was sound for commingled cash, and the cash is not commingled.
+2. *"No `float_amount` column — it would be a second source of truth."* **That conflated a
+   duplicate with a target** (§5).
+3. *"Varying amounts change nothing."* True only if the float is a residue. For a configured pot,
+   the per-store amounts **are** the configuration.
 
-### It belongs to `1110 Cash on hand — cashier`. The same account as the day's takings.
+⭐ **What survives, and is still why this matters:** the books do not know the money exists.
+₱20,000 sits in a till and nothing recorded it going there, so cash is understated at the store and
+overstated at the office, permanently, for every store with a float.
 
-⭐ **There is no separate float account, and that is the design rather than a shortcut.** An
-account answers *"where is the money"*, and the answer is *"in the cashier's drawer"*. A dedicated
-float account would answer a different question — *"why is it there"* — which a cash account is
-not for. Worse, it would force every count to decide which account a given peso belongs to, and
-**a peso in a drawer carries no label**. That is the mental arithmetic this exercise exists to
-remove, reintroduced in the ledger.
+## 3. ⭐ The structure
 
-### Establishing a float mid-life: a transfer between two asset accounts
-
-```
-Dr  1110  Cash on hand — cashier    20,000.00      the drawer gains
-    Cr  1130  Cash on hand — office            20,000.00      the safe loses
-```
-
-⚠️ **Nothing touches profit.** Both legs are assets: the business is neither richer nor poorer, the
-money changed rooms. This is exactly what `createMoneyTransfer` already posts — office → cashier,
-the same path a float top-up or a change delivery uses.
-
-### ⭐ At cutover it is simpler still — not a transfer at all
-
-The money is **already in the drawer** on 31 December, so it needs no movement, only recording:
+### 3.1 A new GL account — `1115 Cash on hand — till float`
 
 ```
-Dr  1110  Cash on hand — cashier    20,000.00
-    Cr  3900  Opening balance equity          20,000.00
+1110  Cash on hand — cashier         the day's takings
+1115  Cash on hand — till float      ⭐ NEW — the side pocket
+1120  Cash on hand — staff custodian
+1130  Cash on hand — office
 ```
 
-It is simply part of the counted opening cash for that till. ⛔ **Which is why the floats should be
-recorded at cutover rather than as a correction now** — the opening count physically finds the cash,
-and `3900` is the account that exists precisely to absorb *"this is what was there when we
-started."*
+**Why its own account rather than a corner of `1110`:** a cash account answers *"where is the
+money"*, and Ian's answer is that this money is somewhere else — a different pocket, counted
+separately, on a different rule. Three things follow that a shared account cannot give:
 
-### After that, the balance tells the whole story
+1. ⭐ **Its balance is an INVARIANT.** `1115` for a store should *always* equal that store's
+   configured float. Any other number is a finding, found by comparing two figures rather than by
+   reading history. **The control becomes arithmetic, not diligence** — the exact property
+   T-136 §2 admired in the imprest pattern.
+2. ⭐ **`1110` stays purely takings**, so remittance cannot sweep the float even by accident and
+   the remittance arithmetic needs no special case.
+3. **The float becomes a figure the business can total.** *"How much of our cash is tied up in
+   tills?"* is one balance rather than a reconstruction.
 
-```
-till balance  =  float  +  takings since the last remittance  −  what has been paid out of it
-```
+### 3.2 One money account per store — and the model already allows it
 
-A remittance sweeps the takings and leaves the float — proved by the second test in §3. **The
-imprest self-check needs no extra machinery:** counted cash should equal the till balance, and any
-other number is the discrepancy, visible without a reconciliation exercise.
-
-## 9. ✅ Two shifts, one till — and the handover posts NOTHING
-
-> **Ian:** *"1 store 1 till. Most is 2 shifts, 1 morning 1 evening, same till. They just count the
-> 20k and hand it over after the 1st cashier reconciles his sales and hands over the remittance to
-> the second cashier — see shift report."*
-
-**v1 already models exactly this**, and its shape is worth porting (`types/index.ts:1443`,
-`CashRemitShiftPlain`):
+⭐ **No schema change is needed to hold a second cashier-cash account.** The rule that would have
+blocked it is **partial**:
 
 ```ts
-opening: {
-  source: 'float' | 'manual' | 'handover',   // ⭐ three sources, and Ian named two of them
-  floatAmount: number,
-  prevShiftId?: string | null,               // ⭐ the chain between cashiers
-  startedAt, startedByUid,
-}
+uniqueIndex('money_accounts_foundation_unique')
+  .on(t.storeId, t.instrument, t.custodian)
+  .where(sql`${t.isFoundation}`)          // ⭐ foundation accounts only
 ```
 
-⭐ `'float'` is the standing ₱20,000 at the start of the day; `'handover'` is what the previous
-shift passed on, linked by `prevShiftId`. Each shift carries its own `expectedCash` / `actualCash`
-— the count, per cashier, attributable to one person.
+So the float pot is an ordinary **non-foundation** money account: `instrument: 'cash'`,
+`custodian: 'cashier'`, `glAccountCode: '1115'`. The custodian genuinely is the cashier — they hold
+it — so neither the enum nor the index is touched.
 
-### ⛔ The structural point: a shift handover is a DOCUMENT, not a journal entry
+### 3.3 The configured amount lives on that money account
 
-**No money moves.** Same drawer, same store, same `1110`, same custodian. What moves is
-**responsibility**, and responsibility is not a ledger fact — the ledger records where cash *is*,
-not whose turn it is to answer for it.
+A nullable `float_target numeric(14,2)` on `money_accounts`. **Non-null marks the account as a float
+pot**; every other money account leaves it null.
 
-⚠️ **So the journal is involved exactly twice** in the whole cycle: when the float goes in, and
-when the remittance comes out. Everything between is the shift report's job.
+⚠️ It belongs on the money account rather than on `stores` because the **pot** is the thing with a
+target, and a store with two tills would have two. That is the opposite of T-152's ceiling, which is
+a store-wide risk limit and correctly lives on `stores`.
 
-⭐ **This is T-136 §1's separation for the third time, and it keeps arriving from new directions:**
+### 3.4 The postings, and there are only two
 
-| | Unit | Purpose |
-|---|---|---|
-| **Count** | **the shift** | The custody control — a variance belongs to one cashier and one shift |
-| **Transfer** | **the day** (or the pooled batch) | Logistics — the money physically going to the office |
+**Establishing or resizing the float** — office to side pocket:
 
-Ian's description is precisely this: cashier 1 counts and reconciles, hands the drawer to cashier 2,
-and the *remittance* happens once for the day.
+```
+Dr  1115  Cash on hand — till float   20,000.00
+    Cr  1130  Cash on hand — office             20,000.00
+```
 
-⛔ **v2 does not have the shift report yet** — the count lives in POS's `cashHandovers` (discovery
-09 §1), and T-123 models the sales day, not the shift. **That is the real gap this conversation
-uncovered**, and it is bigger than the float: without a shift record, a count variance cannot be
-attributed to one of two cashiers who shared a till. Not scoped here.
+Two asset legs; nothing touches profit. An ordinary `createMoneyTransfer`.
 
-## 10. Franchise stores
+**At cutover** the cash is already in the pocket, so it is counted rather than moved:
+
+```
+Dr  1115  Cash on hand — till float   20,000.00
+    Cr  3900  Opening balance equity            20,000.00
+```
+
+⛔ **That is the complete list.** The float is never remitted, never swept, never part of a sales
+day, and a shift handover posts nothing (§6).
+
+## 4. ⛔ The rule that must be enforced: a float account is not remittable
+
+`createRemittance` requires `from.custodian === 'cashier'`, and the float pot **is** custodian
+`cashier`. Without a further rule it would appear in the remittance picker and could be handed to
+the office — the one thing Ian says never happens.
+
+**So a money account with a non-null `float_target` may not be a remittance source**, refused in
+`createRemittance` with a denial test. ⚠️ A service-layer rule rather than a database one, because
+it governs *which document may move the money*, not whether a value is valid.
+
+## 5. ⭐ A target is not a duplicate — correcting my own objection
+
+The previous version refused a configured amount because *"recording an intended amount beside the
+real one creates the second source of truth rows 143/145/147 refuse."*
+
+**That misapplied the rule.** Those rows forbid storing a **copy of a figure the ledger already
+computes** — a cached balance, a maintained total — because the copy drifts and the two then
+disagree about the same pesos.
+
+⭐ **A target is not a copy of the actual. It is the other operand of the comparison.**
+`balance ≠ target` is not drift to be prevented; **it is the finding.** T-152's un-remitted ceiling
+is the same shape — a configured number a derived position is measured against — and nobody would
+call that a second source of truth.
+
+## 6. Shifts, unchanged by the correction
+
+> **Ian:** *"1 store 1 till. Most is 2 shifts, 1 morning 1 evening, same till."*
+
+v1 models this as `CashRemitShiftPlain` (`types/index.ts:1443`), whose `opening.source` is
+`'float' | 'manual' | 'handover'`, with `prevShiftId` chaining one cashier to the next.
+
+⛔ **A shift handover posts nothing.** Same pocket, same store, same account. What moves is
+**responsibility**, and responsibility is not a ledger fact.
+
+⚠️ **v2 has no shift record at all** (capability gap, 2026-08-29), and it matters here: Ian's
+*"opening and closing it is 20k"* is a **per-shift** check, and the ERP has nowhere to record
+either count.
+
+## 7. Franchise stores
 
 > **Ian:** *"All stores, even franchisee."*
 
-⭐ **v2 models a franchise as its OWN ORG**, not a branch — ADR-008 §7, correcting **DEF-050**
-(*"v1 treats them as a branch but they are not actually"* — Ian, 2026-08-24). So a franchisee's
-float is **its own money, out of its own safe**: the same entry, in that org's own books, with no
-cross-entity due-from/due-to.
+v2 models a franchise as its **own org** (ADR-008 §7, correcting DEF-050), so a franchisee's float
+is its own money from its own office — the same two postings in that org's books, no cross-entity
+due-from. ⚠️ Padre Garcia is not an org in v2 yet, so its float cannot be recorded until it is.
 
-⚠️ **But Padre Garcia does not exist as an org in v2 yet** — DEF-050 records it as dormant because
-it has posted nothing. Its float cannot be recorded until the org is.
+## 8. Where it belongs: the ERP, with POS reading it
 
+Unaffected by the correction. The **counting** belongs at the till and POS already does it
+(`cashHandovers`); the **record** cannot live there — it is real company cash, Postgres is the sole
+system of record (bible §2.3), and *"maintained"* needs an expected figure the count is checked
+against, which fails silently if the amount and the cash live in different systems. ⛔ This project
+also cannot write to POS: the reference repos are READ-ONLY.
 
-## 11. ⭐ "Varying" per store changes nothing — and the reason is the good part
+## 9. Scope
 
-> **Ian, 2026-08-29**, asked whether ₱20,000 is every store's float: ***"varying."***
+**In:**
 
-The instinct is that per-store amounts now need a per-store **setting** — a `float_amount` column,
-an admin screen, a number to keep in step with reality. **They do not, and the reason is worth
-stating because it is the whole shape of this feature.**
+1. `1115` seeded in the chart. ⚠️ Trips the pinned account count (**100 → 101**) — the guard
+   working.
+2. `money_accounts.float_target`, nullable, positive when set.
+3. A float money account per store, created **on demand** rather than seeded (§below).
+4. `createRemittance` refuses a float account as a source, with a denial test.
+5. A `tillFloatOffTarget` detector in T-135's layer: `balance ≠ float_target`.
+6. Setting or resizing the target gated on **`set_cash_policy`** — T-152's admin-only capability.
+   Same class of decision, and Ian named admin for that one.
 
-### The float is not money ADDED to the drawer. It is the amount NOT REMITTED.
+**Out, with reasons:**
 
-That reframing is the key. *"Maintained at ₱20,000"* does not mean topping the drawer up each
-morning; it means **leaving ₱20,000 behind when the takings go to the office**.
+| Out | Why |
+|---|---|
+| The per-shift opening/closing count | ⛔ **There is no shift record in v2** (§6). The detector compares the ledger balance to the target, which catches a float spent or never funded. Catching *"the cashier counted 19,500 this morning"* needs the count, and the count needs the shift |
+| A float release/return document | It sits forever. A transfer resizes it; nothing else moves it |
+| Auto-creating a float for every store | The amounts vary and some stores may have none. A phantom ₱0 pot would be a finding waiting to fire |
 
-And that is already exactly what the system does, because **expected remittance is the period's
-MOVEMENT, not the account's BALANCE** (bible row 145, T-152 §3):
+## 10. Open for Ian
 
-```
-till balance after remitting  =  float + movement − movement  =  float
-```
-
-⭐ **So the float maintains itself, at whatever number each store happens to hold**, with no
-setting to configure and none to drift. The second test in §3 is this arithmetic: a till holding
-₱28,000 remits the day's ₱8,000 and settles at ₱20,000, and nothing anywhere was told that
-₱20,000 was the target.
-
-⚠️ **This is why row 145's "movement, not balance" mattered more than it looked.** Had expected
-remittance been the closing balance — the *remit to zero* branch of §4 — every float would be
-swept to the office every night, and a per-store float amount would then be **compulsory** to know
-how much to hand back each morning. The decision that looked like an accounting nicety is what
-makes this feature free.
-
-### ⛔ The one case a declared amount would buy something
-
-**Telling an underfunded float apart from a shortage.** If Lipa's till settles at ₱15,000, is that
-a ₱15,000 float or a ₱20,000 float missing ₱5,000?
-
-The ledger can answer today — the float was funded by a recorded entry, and any later drop is a
-posted outflow or a count variance — but answering takes reading history rather than reading one
-number.
-
-**Recommendation: still no column.** A declared amount would be a second place the float lives, and
-rows 143/145/147 each refuse exactly that; it would also need its own screen, its own capability and
-its own drift. ⭐ **If the question "what should this till hold?" ever needs a one-line answer, the
-honest place for it is the shift record (CAPABILITY-GAPS, 2026-08-29) — beside the count that asks
-it — not as a standing setting on the store.**
+1. **The configured amount per store** — needed to create each pot, not to build this.
+2. ⚠️ **When the float is short, what then?** The ledger will show `1115` below target and raise a
+   finding. Whether the shortfall is charged to a cashier, topped up from office, or written off is
+   the same three-way decision T-143 made for remittance variances — and it is Ian's.
