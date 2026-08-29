@@ -47,6 +47,25 @@ against **zero** production rows.
 | **T-132** trade orders | Sale: `4xxx` revenue + `1210` | **Plus** `Dr 5xxx COGS · Cr 1310/1330` at dispatch — the goods leave, and until now nothing said so |
 | **T-133** internal transfer | `5175` seller-credit / `5170` buyer-debit + `1250`/`2150` | **`1330` seller-credit / `1330` buyer-debit** + `1250`/`2150`. ⭐ Already written in `POSTING-PATTERNS.md` as *"⛔ The Phase 3 target — inventory movement, NOT live"* |
 
+### ⭐ UPDATE 2026-08-29 — the perpetual side is already BUILT, so this task is a rewiring
+
+T-172/T-173 shipped `dispatchOrder` and `confirmReceipt` (`packages/domain/src/commissary/
+transfer.ts`) with 20 green integration tests. They post the target shape below **and nothing
+calls them**. So this task's commissary row is no longer *"write the perpetual transfer"* — it is:
+
+1. point `dispatchTradeOrder`'s `treatment === 'internal'` branch at `dispatchOrder`;
+2. give the receipt path a caller for `confirmReceipt` (today `receiveTradeOrder` records who
+   signed and posts nothing — under perpetual that is where **both stores** move);
+3. delete the `5170`/`5175` legs from `trade/index.ts`, keeping the accounts (§4).
+
+⛔ **Until then both shapes exist in the tree and must not both run for one order** — the transfer
+would be counted twice, once through the P&L and once through the balance sheet, and **the trial
+balance would still tie**, so nothing would announce it. The warning is carried in both modules'
+headers and in `POSTING-PATTERNS.md` §`commissary_dispatch.transfer`.
+
+⚠️ **`1340` is the piece the periodic shape had no room for.** The old pattern posts once, at
+dispatch, because there was no asset to track in between. Perpetual has one — goods on a truck are
+still the commissary's inventory — so the switch also turns one event into two.
 ### ⚠️ T-133's `5175` does not get deleted
 
 `5175 Cost transferred to branches` is the contra-COGS the chart demanded since T-102b, and under

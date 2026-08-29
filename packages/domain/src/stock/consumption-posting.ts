@@ -68,7 +68,13 @@ export interface ConsumptionPostingInput {
   readonly postedBy?: string | null;
 }
 
-export type PostingResult =
+/**
+ * ⚠️ Named apart from `receipt-posting`'s `PostingResult` on purpose — they are DIFFERENT
+ * shapes (this one carries the cost that was relieved), and one package-level export can only be
+ * one of them. Two same-named types meaning different things is how a caller silently gets back
+ * something it cannot use.
+ */
+export type ConsumptionPostingResult =
   | { readonly ok: true; readonly entryId: string; readonly created: boolean; readonly cost: Money }
   | { readonly ok: false; readonly reason: string };
 
@@ -84,7 +90,7 @@ const sumCost = (lines: readonly ConsumedLine[]): Money => add(...lines.map((l) 
 export async function postConsumption(
   tx: Tx,
   input: ConsumptionPostingInput & { readonly cogsCategory: string },
-): Promise<PostingResult> {
+): Promise<ConsumptionPostingResult> {
   const cogsAccount = COGS_ACCOUNT_BY_CATEGORY[input.cogsCategory];
   if (!cogsAccount) {
     // ⛔ Blocks rather than falling back to 5100. COA-ALIGNMENT says drive the catch-all to zero;
@@ -107,7 +113,7 @@ export async function postConsumption(
 export async function postWastage(
   tx: Tx,
   input: ConsumptionPostingInput & { readonly reason: WastageReason },
-): Promise<PostingResult> {
+): Promise<ConsumptionPostingResult> {
   return postRelief(tx, input, WASTAGE_ACCOUNT, `Wastage: ${input.reason}`, 'wastage');
 }
 
@@ -125,7 +131,7 @@ export async function postCountVariance(
     readonly direction: 'short' | 'long';
     readonly isOpeningCount?: boolean;
   },
-): Promise<PostingResult> {
+): Promise<ConsumptionPostingResult> {
   if (input.isOpeningCount) {
     return {
       ok: false,
@@ -156,7 +162,7 @@ async function postRelief(
   memo: string,
   keySuffix: string,
   reversed = false,
-): Promise<PostingResult> {
+): Promise<ConsumptionPostingResult> {
   if (input.costLines.length === 0) {
     return { ok: false, reason: 'nothing to post: no cost lines' };
   }

@@ -43,6 +43,13 @@ import { reverseEntry } from '../ledger/reverse-entry';
 export const WHOLESALE_REVENUE_CODE = '4300';
 
 /**
+ * ⚠️ **SUPERSEDED SHAPE, STILL LIVE.** ADR-011 made this system perpetual, and T-172/T-173 built
+ * the replacement — `dispatchOrder`/`confirmReceipt` in `../commissary/transfer.ts`, where the cost
+ * stays an ASSET the whole way (`1310`/`1320`/`1330` → `1340` → the branch's inventory) and never
+ * enters the P&L. Those functions are built and tested and **called by nothing**; this one is what
+ * a real order still posts. **T-165 rewires the internal branch below onto them.** ⛔ Do not call
+ * both for one order — the transfer would be counted twice and the trial balance would still tie.
+ *
  * ⭐ T-133's internal-transfer legs. A transfer moves **COST**, not inventory.
  *
  * ⛔ `POSTING-PATTERNS.md` §`commissary_dispatch.transfer` moves `1330` inventory between stores,

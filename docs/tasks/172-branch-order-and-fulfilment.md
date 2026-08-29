@@ -1,6 +1,6 @@
 # T-172 — The branch order: draft → submit → accept → fulfil → dispatch
 
-> **Status:** SPEC, 2026-08-29. Written before implementation (bible §1.2a).
+> **Status:** ⭐ **LEDGER SIDE BUILT, 2026-08-29** — migration `0070` (the order columns, the one-open-order index, the submit-hardening trigger), `packages/domain/src/commissary/transfer.ts` `dispatchOrder`, and `packages/domain/tests/integration/commissary-transfer.test.ts` (20 tests, green). ⛔ **Found while building: `schema/trade.ts` stated a constraint T-133 had already replaced, and acting on the stale text reverted its fix — DEF-095.** ⚠️ **The order UI and its state transitions are NOT built** — blocked on port 9008.
 > **Depends on:** T-171 (catalogue and map), T-160/T-161 (both stores' locations and ledger),
 > T-132/T-133 (`trade_orders` — ⭐ see §2), T-151 (price and outbound fee).
 > ⭐ **v1 RE-READ AT SOURCE 2026-08-29**, at Ian's instruction — the first draft cited

@@ -56,6 +56,22 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     via: 'exists (select 1 from stock_usage_records r where r.id = record_id and r.org_id = app_current_org())',
   },
 
+  // ---- T-171: the commissary catalogue --------------------------------------------------
+  commissary_links: {
+    scope: 'org_column',
+    reason:
+      'Both stores in a link belong to one org — that is what makes the transfer internal. A ' +
+      'franchise’s supply arrangements are its own.',
+  },
+  commissary_item_offerings: {
+    scope: 'org_column',
+    reason: 'A commissary’s catalogue belongs to its store, and a store to one org.',
+  },
+  commissary_item_map: {
+    scope: 'org_column',
+    reason: 'A correspondence between two stores of the SAME org. It never spans one.',
+  },
+
   count_sessions: {
     scope: 'org_column',
     reason: 'A count belongs to a store, and a store to one org.',

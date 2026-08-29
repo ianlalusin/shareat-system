@@ -1,6 +1,6 @@
 # T-171 — What a branch may order, at what price, called what
 
-> **Status:** SPEC, 2026-08-29. Written before implementation (bible §1.2a).
+> **Status:** ⭐ **DATA LAYER BUILT, 2026-08-29** — migration `0069`, `packages/db/schema/commissary.ts`, cutover and RLS registry entries. ⚠️ **The catalogue READ path and the price resolution (§5) are NOT built** — they belong with the order screen, which is blocked on port 9008.
 > **Depends on:** T-145 (`items`, org-level), T-149 (`store_item_sellability`), T-151
 > (`item_pricing`, landed cost), T-129 (`customers` and `counterparty_store_id`).
 > **v1 read at source** — `branch-order.actions.ts:68-248`, `commissary-item-config.actions.ts`,

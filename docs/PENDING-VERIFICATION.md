@@ -120,3 +120,19 @@ timeout. **A clean re-run passes 1298/1298.**
 ⚠️ Recorded because a green retry after a red run is only trustworthy when the reason for the red
 one is named. If you see a lone timeout-shaped failure at an implausible duration, check whether
 the machine slept before hunting for a defect.
+
+## T-171 / T-172 / T-173 — the commissary pipeline (2026-08-29)
+
+The ledger side is built and green; **nothing with a URL exists yet**, and neither does the
+`confirm_receipt` capability row that goes with it (T-173 §12).
+
+| Needs a browser | Why it cannot be checked here |
+|---|---|
+| `apps/erp/src/app/commissary/orders/**` — the branch order form, the commissary's fulfil screen, the branch's receive screen | Not written. Port 9008 is held by another lane |
+| The catalogue read path and price resolution (T-171 §5) | Not written — it is the order form's data source |
+| ⚠️ **`trade_orders_submit_hardening_trg`'s three refusals, seen by a human** | The trigger is tested at the SQL level, but its messages are what a branch manager actually reads at 6am with a truck waiting. They should be read once by a person before they are the only explanation someone gets |
+
+⭐ **One thing to check that is NOT a screen:** run `npm run db:migrate` in each of the three
+worktrees and confirm the last journal tag matches what the database applied. **DEF-094** — the
+three lanes share one `shareat_dev`, and a lane whose migration `when` is below the shared maximum
+is skipped with no error and exit 0.

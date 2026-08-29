@@ -425,6 +425,34 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     reason: 'The detail of a usage record, by CASCADE. Same class as its parent.',
   },
 
+  // ---- T-171: the commissary catalogue --------------------------------------------------
+  commissary_links: {
+    // ⭐ keep: WHICH branch may order from WHICH commissary is a standing arrangement about the
+    // shape of the business, not a transaction. Nothing about "Malvar orders from Lipa" becomes
+    // false when the ledger restarts.
+    class: 'keep',
+    reason:
+      'The supply arrangement between two stores — configuration, carrying no balance and no ' +
+      'anchor. Re-keying it at cutover would be pointless work, and a missed pair silently stops ' +
+      'a branch ordering on 2 January.',
+  },
+  commissary_item_offerings: {
+    class: 'keep',
+    reason:
+      'What a commissary will dispatch, plus a manager-set cost of last resort. A catalogue, in ' +
+      'the same class as items and price lists. ⚠️ `manual_cost` is a CONFIGURED number, not a ' +
+      'derived one — it survives because nothing recomputes it.',
+  },
+  commissary_item_map: {
+    // ⭐ The single most expensive row here to re-key, and the most dangerous to get wrong: a
+    // missing map line is what makes a receipt land with nothing to credit.
+    class: 'keep',
+    reason:
+      'The cross-store item correspondence and the branch’s expense category for receiving it. ' +
+      'Configuration that took real effort to build and answers "which of MY products is this ' +
+      'commissary’s line" — a question the ledger restarting does not change.',
+  },
+
   count_sessions: {
     class: 'purge',
     reason:

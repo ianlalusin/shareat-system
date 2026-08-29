@@ -96,6 +96,7 @@ export type { ArDocStatus } from '../schema/ar';
 export * as itemsRepo from './repo/items';
 export * as stockLedgerRepo from './repo/stock-ledger';
 export * as stockLayersRepo from './repo/stock-layers';
+export * as deliveriesRepo from './repo/deliveries';
 export type { CatalogueEntry, SimilarItem, ItemRequestRow, MergeReport, DuplicateCandidate } from './repo/items';
 export { SIMILARITY_FLOOR } from './repo/items';
 export { ITEM_REQUEST_STATUSES } from '../schema/items';
