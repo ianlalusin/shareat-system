@@ -116,7 +116,7 @@ it reads the till balance from the ledger rather than keeping a second copy.
 | **Which stores carry a float** | ✅ *"All stores, even franchisee."* — see §10 for what that means for a franchise |
 | **How many tills per store** | ✅ *"1 store 1 till."* So one `1110` money account per store is the right model and §6's "if a store runs two tills" does not arise |
 | **Shifts** | ✅ *"Most is 2 shifts, 1 morning 1 evening, same till."* — §9 |
-| ⚠️ **The float AMOUNT per store** | ⛔ **Still Ian's.** Business policy, same as T-152's ceiling. ₱20,000 is the figure he quoted; whether every store carries that number is not stated |
+| **The float AMOUNT per store** | ✅ *"Varying."* — each store carries its own figure. ⭐ **This changes nothing structurally**, and §11 explains why that is not a dodge |
 
 ### ⚠️ Correcting this doc's own earlier claim about where it gets recorded
 
@@ -236,3 +236,50 @@ cross-entity due-from/due-to.
 
 ⚠️ **But Padre Garcia does not exist as an org in v2 yet** — DEF-050 records it as dormant because
 it has posted nothing. Its float cannot be recorded until the org is.
+
+
+## 11. ⭐ "Varying" per store changes nothing — and the reason is the good part
+
+> **Ian, 2026-08-29**, asked whether ₱20,000 is every store's float: ***"varying."***
+
+The instinct is that per-store amounts now need a per-store **setting** — a `float_amount` column,
+an admin screen, a number to keep in step with reality. **They do not, and the reason is worth
+stating because it is the whole shape of this feature.**
+
+### The float is not money ADDED to the drawer. It is the amount NOT REMITTED.
+
+That reframing is the key. *"Maintained at ₱20,000"* does not mean topping the drawer up each
+morning; it means **leaving ₱20,000 behind when the takings go to the office**.
+
+And that is already exactly what the system does, because **expected remittance is the period's
+MOVEMENT, not the account's BALANCE** (bible row 145, T-152 §3):
+
+```
+till balance after remitting  =  float + movement − movement  =  float
+```
+
+⭐ **So the float maintains itself, at whatever number each store happens to hold**, with no
+setting to configure and none to drift. The second test in §3 is this arithmetic: a till holding
+₱28,000 remits the day's ₱8,000 and settles at ₱20,000, and nothing anywhere was told that
+₱20,000 was the target.
+
+⚠️ **This is why row 145's "movement, not balance" mattered more than it looked.** Had expected
+remittance been the closing balance — the *remit to zero* branch of §4 — every float would be
+swept to the office every night, and a per-store float amount would then be **compulsory** to know
+how much to hand back each morning. The decision that looked like an accounting nicety is what
+makes this feature free.
+
+### ⛔ The one case a declared amount would buy something
+
+**Telling an underfunded float apart from a shortage.** If Lipa's till settles at ₱15,000, is that
+a ₱15,000 float or a ₱20,000 float missing ₱5,000?
+
+The ledger can answer today — the float was funded by a recorded entry, and any later drop is a
+posted outflow or a count variance — but answering takes reading history rather than reading one
+number.
+
+**Recommendation: still no column.** A declared amount would be a second place the float lives, and
+rows 143/145/147 each refuse exactly that; it would also need its own screen, its own capability and
+its own drift. ⭐ **If the question "what should this till hold?" ever needs a one-line answer, the
+honest place for it is the shift record (CAPABILITY-GAPS, 2026-08-29) — beside the count that asks
+it — not as a standing setting on the store.**

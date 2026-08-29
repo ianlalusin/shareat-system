@@ -590,4 +590,37 @@ describe('T-153 — a standing till float rides on the primitives that already e
     );
     expect(Number(reports.find((r) => r.businessDate === '2026-01-02')!.owed)).toBeCloseTo(0, 2);
   });
+
+  it('⭐ VARYING per store — a different float settles to its own number, with nothing configured', async () => {
+    // Ian, 2026-08-29, asked whether ₱20,000 is every store's float: "varying."
+    // ⛔ The point of this test is what it does NOT contain: no float amount is declared anywhere,
+    // no setting is read, and the store is never told what it is supposed to hold. The till
+    // settles at its own float because expected remittance is MOVEMENT, not BALANCE (row 145).
+    const f = await fixture('float-varies');
+    await officeOpening(f, '2026-01-01', '50000.00');
+    await verifiedDay(f, '2026-01-02');
+    await tillMovement(f, '2026-01-02', '6500.00');
+    await asOrg(f.orgId, (tx) =>
+      createMoneyTransfer(tx, f.admin, {
+        fromMoneyAccountId: f.safe,
+        toMoneyAccountId: f.till,
+        amountOut: '15000.00', // ⭐ not 20,000 — a different store, a different number
+        amountIn: '15000.00',
+        transferDate: '2026-01-02',
+        notes: 'Standing till float',
+      }),
+    );
+    await asOrg(f.orgId, (tx) =>
+      createRemittance(tx, f.admin, {
+        storeId: f.storeId,
+        remittedOn: '2026-01-03',
+        lines: [{ fromMoneyAccountId: f.till, toMoneyAccountId: f.safe, amount: '6500.00' }],
+      }),
+    );
+    const balance = await asOrg(f.orgId, async (tx) => {
+      const acct = await moneyAccountsRepo.getById(tx, f.orgId, f.till);
+      return moneyAccountsRepo.balanceOf(tx, f.orgId, acct!);
+    });
+    expect(Number(balance)).toBeCloseTo(15000, 2);
+  });
 });
