@@ -7,3 +7,4 @@
  */
 export * from './publisher';
 export * from './ingestor';
+export * from './health';
