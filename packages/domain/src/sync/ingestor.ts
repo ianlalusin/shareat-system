@@ -19,6 +19,7 @@ import {
   attendanceConfigRepo,
   clockTerminalsRepo,
   employmentRepo,
+  inboxQuarantineRepo,
   type Tx,
 } from '@shareat/db';
 import type { PunchIntent, PunchMethod, QuarantineReason } from '@shareat/db/schema';
@@ -45,6 +46,11 @@ export interface IngestReport {
   quarantined: number;
   /** ⭐ Events that were stuck and are now through, with no human action. */
   healed: number;
+  /**
+   * ⛔ Re-deliveries of an event a manager already DISCARDED. Counted rather than silently skipped,
+   * because a device stuck in a redelivery loop on a discarded event is itself worth seeing.
+   */
+  refusedDiscarded: number;
   byReason: Partial<Record<QuarantineReason, number>>;
   /** `clientPunchId` -> the punch it became, for the transport to stamp back. */
   processed: Record<string, string>;
@@ -56,6 +62,9 @@ const FUTURE_TOLERANCE_MS = 5 * 60_000;
 /**
  * Ingest a batch. Every event is attempted; **one bad event never stops the batch**, because a
  * single malformed document from one tablet must not hold up a whole store's day.
+ *
+ * ⭐ That promise is kept by a **savepoint per event**, not by the `try` alone — see the comment in
+ * the loop for the failure that proved the difference.
  */
 export async function ingestEvents(
   tx: Tx,
@@ -67,13 +76,24 @@ export async function ingestEvents(
     alreadyProcessed: 0,
     quarantined: 0,
     healed: 0,
+    refusedDiscarded: 0,
     byReason: {},
     processed: {},
   };
 
   for (const raw of events) {
+    // ⭐ ONE SAVEPOINT PER EVENT — `tx.transaction()` is a nested transaction, which on Postgres is
+    // a savepoint. It is what makes the promise above true.
+    //
+    // ⚠️ Found by T-162, in code T-161 shipped. The catch below contained a LOGIC error fine — a
+    // bad method, an unknown terminal — because those are decided in TypeScript before any statement
+    // runs. A DATABASE error is different: Postgres aborts the whole transaction on the first
+    // failing statement, so the quarantine INSERT in the catch could not run either, and
+    // `ingestEvents` THREW instead of quarantining. One tablet sending `employmentId: "y"` would
+    // have taken a whole store's day of punches down with it — exactly the failure this ingestor
+    // exists to prevent, hiding inside the code meant to prevent it.
     try {
-      const outcome = await ingestOne(tx, raw);
+      const outcome = await tx.transaction((inner) => ingestOne(inner as Tx, raw));
       if (outcome.kind === 'ingested') {
         report.ingested++;
         report.processed[outcome.clientPunchId] = outcome.punchId;
@@ -81,12 +101,18 @@ export async function ingestEvents(
       } else if (outcome.kind === 'already') {
         report.alreadyProcessed++;
         report.processed[outcome.clientPunchId] = outcome.punchId;
+      } else if (outcome.kind === 'discarded') {
+        report.refusedDiscarded++;
       } else {
         report.quarantined++;
         report.byReason[outcome.reason] = (report.byReason[outcome.reason] ?? 0) + 1;
       }
     } catch (error) {
       // ⛔ Even an unexpected failure is quarantined rather than lost. §5.4 rule 5.
+      // The savepoint has already rolled back by the time we get here, so the OUTER transaction is
+      // usable again and the write below actually happens — which is the whole point. Without it
+      // this insert is itself refused with "current transaction is aborted", and the evidence is
+      // lost along with the rest of the batch.
       const event = raw as Partial<InboxEvent>;
       await quarantine(tx, {
         raw,
@@ -105,6 +131,7 @@ export async function ingestEvents(
 type Outcome =
   | { kind: 'ingested'; clientPunchId: string; punchId: string; healed: boolean }
   | { kind: 'already'; clientPunchId: string; punchId: string }
+  | { kind: 'discarded'; clientPunchId: string }
   | { kind: 'quarantined'; reason: QuarantineReason };
 
 async function ingestOne(tx: Tx, raw: unknown): Promise<Outcome> {
@@ -123,6 +150,13 @@ async function ingestOne(tx: Tx, raw: unknown): Promise<Outcome> {
     });
     return { kind: 'quarantined', reason: 'malformed' };
   }
+
+  // ⛔ T-162 invariant 4. A manager already looked at this event, discarded it, and gave a reason.
+  // Another delivery of the same key must not quietly resurrect it as a punch — the decision to
+  // lose a shift is a human one, and re-running the checks after it would overturn that decision
+  // on nobody's authority.
+  const discarded = await inboxQuarantineRepo.findDiscarded(tx, clientPunchId);
+  if (discarded) return { kind: 'discarded', clientPunchId };
 
   const missing = shapeErrors(event);
   if (missing) {
@@ -208,7 +242,7 @@ async function ingestOne(tx: Tx, raw: unknown): Promise<Outcome> {
 
   // ⭐ If this event was previously stuck, it just healed — with no human action. That is the
   // difference between a quarantine and a dead letter.
-  const healed = await resolveQuarantineIfPresent(tx, clientPunchId);
+  const healed = await inboxQuarantineRepo.resolveIngested(tx, clientPunchId);
 
   return alreadyProcessed
     ? { kind: 'already', clientPunchId, punchId: punch.id }
@@ -272,28 +306,15 @@ async function quarantine(
     deviceId?: string;
   },
 ): Promise<void> {
-  const orgId = await currentOrg(tx);
-  await tx.execute(sql`
-    insert into inbox_quarantine (org_id, store_id, client_punch_id, device_id, raw_event, reason_code, reason_detail)
-    values (${orgId}::uuid, ${input.storeId ?? null}::uuid, ${input.clientPunchId},
-            ${input.deviceId ?? null}::uuid, ${JSON.stringify(input.raw)}::jsonb,
-            ${input.reason}, ${input.detail})
-    on conflict (client_punch_id) do update
-      set attempts = inbox_quarantine.attempts + 1,
-          last_seen_at = now(),
-          reason_code = excluded.reason_code,
-          reason_detail = excluded.reason_detail
-      where inbox_quarantine.resolved_at is null`);
-}
-
-/** Returns true when a previously stuck event just came through. */
-async function resolveQuarantineIfPresent(tx: Tx, clientPunchId: string): Promise<boolean> {
-  const result = (await tx.execute(sql`
-    update inbox_quarantine
-    set resolved_at = now(), resolution = 'ingested', resolved_by = null
-    where client_punch_id = ${clientPunchId} and resolved_at is null
-    returning id`)) as unknown as { id: string }[];
-  return result.length > 0;
+  await inboxQuarantineRepo.upsertQuarantine(tx, {
+    orgId: await currentOrg(tx),
+    storeId: input.storeId ?? null,
+    clientPunchId: input.clientPunchId,
+    deviceId: input.deviceId ?? null,
+    rawEvent: input.raw,
+    reasonCode: input.reason,
+    reasonDetail: input.detail,
+  });
 }
 
 async function currentOrg(tx: Tx): Promise<string> {

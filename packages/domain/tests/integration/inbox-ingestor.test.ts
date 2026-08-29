@@ -151,6 +151,37 @@ describe('T-161 invariants 1 & 8 — idempotency is a constraint, not a timer', 
 });
 
 describe('T-161 invariants 2 & 9 — nothing is dropped, and one bad event stops nothing', () => {
+  it('⭐ 9. a DATABASE error in one event is quarantined, and the rest of the batch still lands', async () => {
+    // ⚠️ The regression this exists for. A logic error — a bad method, an unknown terminal — is
+    // decided in TypeScript before any statement runs, so the plain `try` always contained it. A
+    // value that is the right TYPE but not a uuid gets all the way to Postgres, which then aborts
+    // the whole transaction: the catch-all's own quarantine INSERT was refused too, and
+    // `ingestEvents` THREW instead of quarantining. One tablet sending `employmentId: "y"` would
+    // have taken a whole store's day down with it.
+    //
+    // The fix is a savepoint per event. This test is the proof, and it fails without it.
+    const f = await fixture('dberror');
+    const poison = event(f, { employmentId: 'not-a-uuid' });
+    const good = event(f, { occurredAt: at(15) });
+
+    const report = await ingest(f, [poison, good, event(f, { occurredAt: at(16) })]);
+
+    expect(report.seen).toBe(3);
+    expect(report.quarantined).toBe(1);
+    expect(report.byReason.internal_error).toBe(1);
+    // ⭐ The two healthy punches after the poison one still landed.
+    expect(report.ingested).toBe(2);
+
+    const rows = await sql`select id from attendance_punches where client_punch_id = ${good.clientPunchId}`;
+    expect(rows).toHaveLength(1);
+
+    // And the evidence survived: the raw body is readable, which is what a manager needs.
+    const q = await quarantined(f);
+    expect(q).toHaveLength(1);
+    expect(q[0]!.reason_code).toBe('internal_error');
+    expect((q[0]!.raw_event as Record<string, unknown>).employmentId).toBe('not-a-uuid');
+  });
+
   it('2. a malformed event is quarantined with its RAW body intact', async () => {
     const f = await fixture('malformed');
     const bad = event(f, { method: 'telepathy', assertedIntent: 'vibes' });

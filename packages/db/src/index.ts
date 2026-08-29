@@ -93,6 +93,12 @@ export * as attendanceDaysRepo from './repo/attendance-days';
 export * as attendanceAdjustmentsRepo from './repo/attendance-adjustments';
 // T-159 — the provisioned device identity (Phase 4, lane B).
 export * as clockTerminalsRepo from './repo/clock-terminals';
+// T-160/T-162 — Lane A's outbox, and the lag that says whether it is moving.
+export * as mirrorOutboxRepo from './repo/mirror-outbox';
+export type { OutboxRow, OutboxLag } from './repo/mirror-outbox';
+// T-161/T-162 — Lane B's quarantine: the events that did not make it, and can still be recovered.
+export * as inboxQuarantineRepo from './repo/inbox-quarantine';
+export type { InboxQuarantineRow, ReasonCount } from './repo/inbox-quarantine';
 export * as liabilitiesRepo from './repo/liabilities';
 export * as customersRepo from './repo/customers';
 export * as sessionsRepo from './repo/sessions';

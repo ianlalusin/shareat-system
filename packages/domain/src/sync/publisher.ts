@@ -11,8 +11,8 @@
  * exists to remove (bible §15.4).
  */
 import { sql } from 'drizzle-orm';
-import type { Tx } from '@shareat/db';
-import type { MirrorEntity, MirrorOp } from '@shareat/db/schema';
+import { mirrorOutboxRepo, type OutboxRow, type Tx } from '@shareat/db';
+import type { MirrorEntity } from '@shareat/db/schema';
 
 /** One document to write, or tombstone, in the mirror. */
 export interface MirrorDocument {
@@ -42,16 +42,6 @@ export interface DrainReport {
   byEntity: Record<string, number>;
 }
 
-interface OutboxRow {
-  id: string;
-  orgId: string;
-  storeId: string;
-  entity: MirrorEntity;
-  entityId: string;
-  op: MirrorOp;
-  srcVersion: string;
-}
-
 /**
  * ⭐ **Config first, always.** Bible §5.3 marks hot-set item 3 *priority*, and landmine #15 is what
  * happens without it: *"a terminal keeps accepting a credential method an admin has just disabled
@@ -76,15 +66,7 @@ export async function drainOutbox(
 ): Promise<DrainReport> {
   const limit = options.limit ?? 500;
 
-  const rows = (await tx.execute(sql`
-    select id::text as id, org_id as "orgId", store_id as "storeId",
-           entity, entity_id as "entityId", op, src_version::text as "srcVersion"
-    from mirror_outbox
-    where published_at is null
-    order by id
-    limit ${limit}
-    for update skip locked
-  `)) as unknown as OutboxRow[];
+  const rows = await mirrorOutboxRepo.claimUnpublished(tx, limit);
 
   const report: DrainReport = { seen: rows.length, published: 0, skipped: 0, failed: 0, byEntity: {} };
   if (rows.length === 0) return report;
@@ -104,30 +86,23 @@ export async function drainOutbox(
 
       if (!document) {
         // The source row is gone and this was not a delete — nothing to publish and nothing wrong.
-        await markPublished(tx, row.id);
+        await mirrorOutboxRepo.markPublished(tx, row.id);
         report.skipped++;
         continue;
       }
 
       await driver.publish([document]);
-      await markPublished(tx, row.id);
+      await mirrorOutboxRepo.markPublished(tx, row.id);
       report.published++;
       report.byEntity[row.entity] = (report.byEntity[row.entity] ?? 0) + 1;
     } catch (error) {
       // ⛔ The row stays unpublished and is retried. §5.4 rule 5 — never silently dropped.
-      await tx.execute(sql`
-        update mirror_outbox
-        set attempts = attempts + 1, last_error = ${String(error).slice(0, 500)}
-        where id = ${row.id}::bigint`);
+      await mirrorOutboxRepo.recordFailure(tx, row.id, String(error));
       report.failed++;
     }
   }
 
   return report;
-}
-
-async function markPublished(tx: Tx, id: string): Promise<void> {
-  await tx.execute(sql`update mirror_outbox set published_at = now() where id = ${id}::bigint`);
 }
 
 /** Re-read the source and shape the document. Returns null when there is nothing to say. */
