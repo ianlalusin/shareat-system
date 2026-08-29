@@ -54,3 +54,9 @@ _scratch/
 .claude/daily-review-last-run.log
 .claude/daily-review-state.json
 .claude/wrap-up-state.json
+
+# T-153 spike — emulator artifacts. The spike itself is committed; its runtime debris is not.
+spike/**/node_modules/
+spike/**/firebase-debug.log
+spike/**/firestore-debug.log
+spike/**/ui-debug.log

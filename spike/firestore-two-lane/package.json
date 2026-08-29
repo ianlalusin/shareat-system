@@ -1,0 +1,18 @@
+{
+  "name": "spike-firestore-two-lane",
+  "private": true,
+  "version": "0.0.0",
+  "description": "DISPOSABLE. T-153 — proves the bible §5.2 two-lane contract before Phase 4 builds on it. Deliberately NOT a workspace member: nothing in packages/ or apps/ may ever import this.",
+  "type": "module",
+  "scripts": {
+    "test": "firebase emulators:exec --only firestore --project shareat-spike \"vitest run\""
+  },
+  "dependencies": {
+    "firebase": "^11.1.0"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
+    "fake-indexeddb": "^6.2.5",
+    "vitest": "^4.1.8"
+  }
+}

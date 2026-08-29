@@ -217,7 +217,28 @@ manager to confirm, rather than a data-loss cliff. Recorded here so nobody ports
 
 | # | Task |
 |---|---|
-| **T-153** | **The Firestore two-lane spike** — emulator, client SDK, a ~30-line deny-by-default ruleset, a toy mirror doc and a toy inbox event. **Time-boxed and disposable.** Proves: an offline write survives a reload, replays on reconnect, and a client cannot write a mirror doc or update an inbox event |
+| **T-153** ✅ | **The Firestore two-lane spike** — emulator, client SDK, a 50-line deny-by-default ruleset, a toy mirror doc and a toy inbox event. **Time-boxed and disposable.** Proves: an offline write survives a reload, replays on reconnect, and a client cannot write a mirror doc or update an inbox event |
+
+> ### ✅ **T-153 ran 2026-08-29. The contract HOLDS — 14/14 green.** Findings in `spike/firestore-two-lane/README.md`
+>
+> All four gate assertions passed, and all four refusals were **watched failing** against a
+> permissive ruleset first. **Bible §5.2 is correct as written:** the client SDK's offline
+> persistence and automatic replay do make v1's hand-rolled `punch-queue.ts` + `sync-engine.ts`
+> genuinely replaceable. **Waves 3 and 4 may now be specced.**
+>
+> Nothing structural changed. Four constraints on *how*, which their tasks must carry:
+>
+> | Finding | Lands in |
+> |---|---|
+> | ⛔ **Rules are not filters.** An unconstrained `list` over `/inbox` is refused outright — every terminal query must carry `where('deviceId','==',…)`, matching the rule exactly | T-159 (rules + composite index), T-163 (every query) |
+> | ⭐ **The persistent store is keyed `firestore/{firebaseAppName}/{projectId}/main`.** Renaming the app **orphans every unsynced punch**, silently. *This cost the spike two false negatives before it was found* | T-163 — a pinned constant with the warning attached |
+> | ✅ **`request.auth.token.deviceId` works from a custom token** — the device-principal design (§3 row 5) is sound. But a device **must sign in while online**; it cannot start authenticating offline | T-159 — provisioning is not complete until a round trip succeeds |
+> | 📏 **127 KB gzipped** (470 KB minified) for `app` + `auth` + the Firestore surface a terminal needs. Acceptable, and it *replaces* v1's queue rather than adding to it | T-163's first-load budget |
+>
+> ⚠️ **The honest limit:** the suite runs in Node with `fake-indexeddb` and a `localStorage` shim.
+> **The terminal is a browser**, so the same four assertions must be re-run in a real one — for
+> quota, eviction, the multi-tab lease, and WebView storage policy. **That is the one that could
+> actually lose a punch**, and it is in T-163's definition of done, not deferred to goodwill.
 
 ### Wave 1 — the people spine (load-bearing for Phase 5, and unowned until now)
 
@@ -234,16 +255,16 @@ manager to confirm, rather than a data-loss cliff. Recorded here so nobody ports
 | **T-157** | ⭐ **The adjudication engine** — span-based start anchor, hours, breaks, night differential, holidays. The densest task in the phase; discovery 15 §3 and the three v1 source files it names are required reading |
 | **T-158** | `attendance_adjustments` — the manager's Late/Next-in, early-out and half-day decisions as attributed inputs, plus verify/void, plus the *"is this decision even worth asking"* materiality gate |
 
-### Wave 3 — the hot lane *(specced after T-153 reports)*
+### Wave 3 — the hot lane *(T-153 has reported; specced when Wave 2 lands)*
 
 | # | Task |
 |---|---|
-| T-159 | Firestore rules + device-principal provisioning (custom tokens, §3 row 5) |
+| T-159 | Firestore rules + device-principal provisioning (custom tokens, §3 row 5) — **now unblocked** |
 | T-160 | Lane A publisher — transactional outbox → mirror, the six hot-set entities and nothing else |
 | T-161 | Lane B ingestor — inbox → `attendance_punches`, with quarantine |
 | T-162 | **The quarantine screen** — landmine #14 says it is first-class and alertable, not a banner saying *"tell a manager"* |
 
-### Wave 4 — the terminal *(specced after T-153 reports)*
+### Wave 4 — the terminal *(T-153 has reported; specced when Wave 3 lands)*
 
 | # | Task |
 |---|---|
@@ -291,7 +312,7 @@ has not preserved them.
 
 | | |
 |---|---|
-| ⛔ **The spike fails, or reveals the client SDK cannot do what §5.2 assumes** | Then the bible's binding constraint is wrong and Phase 4's shape changes completely. **This is precisely why it is Wave 0 and time-boxed** — finding out in Wave 4 costs the phase |
+| ~~The spike fails, or reveals the client SDK cannot do what §5.2 assumes~~ | ✅ **Retired 2026-08-29.** It held. The residual is that the proof is a Node shim, not a browser — carried into T-163's gate |
 | **T-157 is a rewrite of the hardest logic in v1** | Three files, thousands of lines of hard-won judgment, and its comments carry more decisions than any other module. Mitigation: golden-master it — replay real v1 sessions and diff the hours (bible §15.2) |
 | **Two calendars, one repo** | The 05:00 shift day beside the midnight financial day. Mitigation: §4.3's naming and a test that pins the 01:30 case |
 | **Phase 5 pulling forward** | Payroll is the back half of this lane and it depends on T-157's output. **It does not start until the gate is met** — Ian's constraint, and the right one: paying against hours that cannot survive a network outage is the wrong order |
