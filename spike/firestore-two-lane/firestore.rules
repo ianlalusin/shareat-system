@@ -1,0 +1,50 @@
+rules_version = '2';
+
+// T-153 — the two-lane contract as PROJECT_BIBLE.md §5.1 states it, and nothing else.
+//
+// Bible §7 rule 5: "Firestore security rules in v2 are trivially small and deny-by-default:
+// mirror = read-only to authenticated members of that store; inbox = create-only with shape
+// validation; everything else denied. If the ruleset grows past ~100 lines, something has leaked
+// into Firestore that belongs in Postgres."
+//
+// This is the toy version over two collections. It is here to be REFUTED, not shipped.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Lane A — MIRROR. Postgres -> Firestore. ────────────────────────────────────────
+    // §5.1: "Written ONLY by the publisher, a server-side process. Clients have no write
+    // access at all in the security rules." The publisher uses the Admin SDK, which bypasses
+    // rules entirely — so `write: if false` costs the publisher nothing and closes the
+    // forbidden shape (a doc both read as truth and written by a client) by construction.
+    match /mirror/{docId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // ── Lane B — INBOX. Device -> Firestore, append-only. ──────────────────────────────
+    // §5.1: "Offline devices CREATE event documents. They may not update or delete them —
+    // enforced in the security rules, not just in code."
+    match /inbox/{eventId} {
+      allow create: if request.auth != null
+                    && request.resource.data.keys().hasAll(['clientPunchId', 'occurredAt', 'deviceId'])
+                    && request.resource.data.clientPunchId is string
+                    // The idempotency key IS the document id, so the SDK's own retry writes to
+                    // the same path rather than creating a second document. Defence in depth,
+                    // ahead of the ingestor's UNIQUE constraint. One clause.
+                    && request.resource.data.clientPunchId == eventId;
+
+      allow update, delete: if false;
+
+      // A device reads back only its own events. Nothing here is authoritative anyway —
+      // Postgres adjudicates — but a terminal showing "3 punches waiting to sync" needs it.
+      allow read: if request.auth != null
+                  && resource.data.deviceId == request.auth.token.deviceId;
+    }
+
+    // Everything else: denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

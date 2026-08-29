@@ -1,5 +1,8 @@
-import { formatMoney, money } from '@shareat/core/money';
 import { listStatutoryDiscounts, summariseStatutoryDiscounts } from '@shareat/domain';
+// ⛔ `peso()` and NOT `₱${formatMoney(...)}` — formatMoney already emits the symbol, and
+// prefixing another rendered every figure on this page as ₱₱0.00. See lib/format.ts's header:
+// five screens each grew their own broken copy, which is why there is one helper.
+import { peso } from '../../lib/format';
 import { listStores, withOrgPrincipal } from '../expenses/lib';
 import { requireSession } from '../../lib/session';
 import { recordStatutoryDiscountAction, voidStatutoryDiscountAction } from './actions';
@@ -119,9 +122,9 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
           { k: 'Records', v: String(summary.count), sub: `${summary.seniorCount} senior · ${summary.pwdCount} PWD` },
-          { k: 'Gross', v: `₱${formatMoney(money(summary.grossAmount))}` },
-          { k: 'Discount granted', v: `₱${formatMoney(money(summary.discountAmount))}` },
-          { k: 'Net', v: `₱${formatMoney(money(summary.netAmount))}` },
+          { k: 'Gross', v: peso(summary.grossAmount) },
+          { k: 'Discount granted', v: peso(summary.discountAmount) },
+          { k: 'Net', v: peso(summary.netAmount) },
         ].map((c) => (
           <div key={c.k} className="rounded border border-neutral-200 p-3 dark:border-neutral-800">
             <dt className="text-xs uppercase tracking-wide text-neutral-500">{c.k}</dt>
@@ -167,9 +170,9 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
                     <td className="p-2">{r.kind === 'pwd' ? 'PWD' : 'Senior'}</td>
                     <td className="p-2">{r.holderName}</td>
                     <td className="p-2 tabular-nums">{r.idNumber}</td>
-                    <td className="p-2 text-right tabular-nums">{formatMoney(money(r.grossAmount))}</td>
-                    <td className="p-2 text-right tabular-nums">{formatMoney(money(r.discountAmount))}</td>
-                    <td className="p-2 text-right tabular-nums">{formatMoney(money(r.netAmount))}</td>
+                    <td className="p-2 text-right tabular-nums">{peso(r.grossAmount)}</td>
+                    <td className="p-2 text-right tabular-nums">{peso(r.discountAmount)}</td>
+                    <td className="p-2 text-right tabular-nums">{peso(r.netAmount)}</td>
                     <td className="p-2">{storeName(r.storeId)}</td>
                     <td className="p-2 text-right">
                       {r.voidedAt ? (

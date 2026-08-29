@@ -124,6 +124,12 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
   // account per store, two people able to hold floats at once. ⛔ Which is why v1 stores
   // `remainingAmount` on the request — the figure lives there because the ledger could not produce
   // it. The party moves that knowledge INTO the ledger. party_type='cash_request'.
+  /** ⭐ T-153 — the SIDE POCKET. Ian, 2026-08-29: *"extra cash float that is not remitted… it sits
+   *  on till forever… separated from the money being remitted."* Its own account, not a corner of
+   *  1110, because its balance is an INVARIANT: it should always equal the till's configured
+   *  float_target, so a discrepancy is two figures compared rather than history read. Keeping it
+   *  out of 1110 also means remittance can never sweep it by accident. */
+  leaf('1115', 'Cash on hand — till float', 'asset', 'debit', '1000'),
   leaf('1120', 'Cash on hand — staff custodian', 'asset', 'debit', '1000', { legacyCode: 'cash__staff', requiresParty: true }),
   leaf('1130', 'Cash on hand — office', 'asset', 'debit', '1000', { legacyCode: 'cash__office' }),
   /** ⭐ requiresParty since ADR-010 (migration 0024): ONE control account covers every wallet,

@@ -158,6 +158,23 @@ export const moneyAccounts = pgTable(
       .notNull()
       .default('20000.00'),
 
+    /**
+     * ⭐ **T-153 — the till float's configured amount, and the flag that this account IS one.**
+     *
+     * > **Ian, 2026-08-29:** *"extra cash float that is not remitted to the manager or admin — it
+     * > sits on till forever… the staff just makes sure if the configured budget is 20k, every day
+     * > opening and closing it is 20k… it's on a side pocket of the cashier."*
+     *
+     * Non-null marks a **float pot**; every other money account leaves it null, so the column is
+     * its own flag and there is nothing separate to keep in step with it.
+     *
+     * ⛔ **A target is not a duplicate.** Bible rows 143/145/147 forbid storing a COPY of a figure
+     * the ledger computes — a cached balance drifts, and then two places disagree about the same
+     * pesos. This is the *other operand*: `balance <> float_target` is not drift to prevent, it is
+     * the finding. T-152's un-remitted ceiling is the same shape.
+     */
+    floatTarget: numeric('float_target', { precision: 14, scale: 2 }),
+
     notes: text('notes'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
@@ -184,5 +201,20 @@ export const moneyAccounts = pgTable(
     // ⛔ Stored POSITIVE, and zero is meaningful: it means this drawer may never go below zero at
     // all. A negative value here would invert the comparison silently.
     check('money_accounts_overdraft_limit_not_negative_check', sql`${t.overdraftLimit} >= 0`),
+    // A float pot of zero says what NULL already says, and is far likelier to be an unfilled form.
+    check('money_accounts_float_target_positive_check', sql`${t.floatTarget} is null or ${t.floatTarget} > 0`),
+    /** ⭐ A float pot is CASH, held by the CASHIER, rolling into `1115`. Any other shape would put
+     *  a target on a wallet or an office safe and make the off-target detector nonsense. */
+    /** ⭐ ONE float pot per store — and this is what makes its BALANCE knowable, not tidiness.
+     *  `balanceOf` scopes a non-`1140` account by (gl code, store) because these are not
+     *  `requires_party`; two pots in one store would share one figure and the off-target detector
+     *  would compare it against two targets. Ian, 2026-08-29: *"1 store 1 till."* */
+    uniqueIndex('money_accounts_one_float_per_store')
+      .on(t.storeId)
+      .where(sql`${t.floatTarget} is not null`),
+    check(
+      'money_accounts_float_target_shape_check',
+      sql`${t.floatTarget} is null or (${t.instrument} = 'cash' and ${t.custodian} = 'cashier' and ${t.glAccountCode} = '1115')`,
+    ),
   ],
 );

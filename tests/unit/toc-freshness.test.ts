@@ -23,8 +23,11 @@ describe('TOC freshness', () => {
     const current = readFileSync(p, 'utf8');
     const fresh = withFreshToc(current);
 
+    // ⚠️ Both sides normalised. `withFreshToc` returns LF and a Windows checkout is CRLF
+    // (`core.autocrlf=true`, no `.gitattributes`), so comparing raw made this guard fail on a
+    // document nobody had edited — a platform bug reported as a stale TOC.
     expect(
-      current === fresh,
+      current.replace(/\r\n/g, '\n') === fresh,
       `${rel}'s table of contents is STALE — its line numbers no longer match its headings.\n\n` +
         'Run:  npm run toc\n\n' +
         'The TOC exists so a reader can jump to a section with offset/limit rather than reading ' +
@@ -37,7 +40,10 @@ describe('TOC freshness', () => {
     // Belt and braces: the generator could agree with itself and still be wrong. This checks the
     // claim the TOC actually makes — that line N is the heading it names.
     for (const rel of TOC_TARGETS) {
-      const lines = readFileSync(join(repoRoot, rel), 'utf8').split('\n');
+      // ⚠️ `/\r?\n/`, not `'\n'`: on a CRLF checkout the plain split leaves a carriage return on
+      // every line, and the entry regexes below then match NOTHING — which is how a perfectly
+      // good TOC came to be reported as having "no TOC entries".
+      const lines = readFileSync(join(repoRoot, rel), 'utf8').split(/\r?\n/);
       const entries = lines
         .map((l) => /^\s*- `\s*(\d+)–(\d+)\s*` (.+)$/.exec(l))
         .filter((m): m is RegExpExecArray => m !== null);
@@ -57,7 +63,10 @@ describe('TOC freshness', () => {
 
   it('a range never starts after it ends', () => {
     for (const rel of TOC_TARGETS) {
-      const lines = readFileSync(join(repoRoot, rel), 'utf8').split('\n');
+      // ⚠️ `/\r?\n/`, not `'\n'`: on a CRLF checkout the plain split leaves a carriage return on
+      // every line, and the entry regexes below then match NOTHING — which is how a perfectly
+      // good TOC came to be reported as having "no TOC entries".
+      const lines = readFileSync(join(repoRoot, rel), 'utf8').split(/\r?\n/);
       for (const l of lines) {
         const m = /^\s*- `\s*(\d+)–(\d+)\s*`/.exec(l);
         if (m) expect(Number(m[1]), `${rel}: inverted range in "${l.trim()}"`).toBeLessThanOrEqual(Number(m[2]));

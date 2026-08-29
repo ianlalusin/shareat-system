@@ -280,3 +280,223 @@ describe('close readiness is a FILTER over the same feed, not a second engine', 
     expect(readiness.ready).toBe(true);
   });
 });
+
+// =====================================================================================
+// T-152 — the ceiling, the cadence, and DEF-082's float
+// =====================================================================================
+
+/**
+ * Post a pair of legs ON A GIVEN DATE.
+ *
+ * ⛔ **The date must be set at post time, never afterwards.** Invariant 5's trigger refuses any
+ * UPDATE to a posted entry — *"posted journal entry … is immutable except for the reversed status
+ * transition"* — which a first draft of these tests discovered by trying exactly that. Ageing a
+ * fixture by rewriting `entry_date` is not available, and should not be.
+ */
+async function postOn(
+  f: Fixture,
+  on: string,
+  legs: { code: string; debit?: string; credit?: string }[],
+  key: string,
+) {
+  await asOrg(f.orgId, (tx) =>
+    postEntry(tx, {
+      orgId: f.orgId,
+      entryDate: on,
+      sourceType: 'manual_journal',
+      sourceId: key,
+      idempotencyKey: key,
+      memo: 'fixture',
+      postedBy: f.personId,
+      lines: legs.map((l) => ({
+        accountCode: l.code,
+        storeId: f.storeId,
+        ...(l.debit ? { debit: l.debit } : {}),
+        ...(l.credit ? { credit: l.credit } : {}),
+      })),
+    }),
+  );
+}
+
+/** Cashier takings on a given date — the shape that creates an un-remitted position. */
+const takings = (f: Fixture, on: string, amount: string, key: string) =>
+  postOn(f, on, [{ code: '1110', debit: amount }, { code: '4100', credit: amount }], key);
+
+/** A service-charge accrual on a given date: cash in, `2160` float up. */
+const serviceCharge = (f: Fixture, on: string, amount: string, key: string) =>
+  postOn(f, on, [{ code: '1110', debit: amount }, { code: '2160', credit: amount }], key);
+
+const today = () => new Date().toISOString().slice(0, 10);
+const daysAgo = (n: number) =>
+  new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
+const daysAhead = (n: number) =>
+  new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+
+/**
+ * T-152's detectors measure age against `current_date`, so their fixtures must post at REAL
+ * recent dates rather than the shared January period the other tests use.
+ *
+ * ⚠️ `postEntry` refuses a date no open fiscal period covers, so the window has to exist. It is
+ * deliberately disjoint from the January period the fixture already creates.
+ */
+async function openRecentPeriod(f: Fixture) {
+  await sql`
+    insert into fiscal_periods (org_id, starts_on, ends_on, status)
+    values (${f.orgId}, ${daysAgo(200)}, ${daysAhead(5)}, 'open')`;
+}
+
+async function setPolicy(f: Fixture, cadence: string, ceiling: string | null) {
+  await sql`update stores set remittance_cadence = ${cadence},
+              unremitted_ceiling = ${ceiling} where id = ${f.storeId}`;
+}
+
+describe('T-152 — the un-remitted ceiling (bible row 129)', () => {
+  it('⭐ fires when the pooled position exceeds the ceiling', async () => {
+    const f = await fixture('ceil-over');
+    await openRecentPeriod(f);
+    await setPolicy(f, 'weekly', '5000.00');
+    await takings(f, today(), '9000.00', uid('k'));
+    const finding = (await feed(f)).findings.find((x) => x.kind === 'unremittedCeilingBreached');
+    expect(finding).toBeDefined();
+    expect(finding!.storeId).toBe(f.storeId);
+    // ⛔ Soft: row 129 — visible and unignorable, never a blocked till.
+    expect(finding!.severity).toBe('soft');
+    // ⭐ Grouped and symbol-first via @shareat/core's formatter — never a hand-rolled
+    // `₱${n.toFixed(2)}`, which prints a negative as ₱-9,000.00 with the sign in the wrong place.
+    expect(finding!.detail).toMatch(/₱9,000\.00 un-remitted against a ceiling of ₱5,000\.00/);
+  });
+
+  it('stays quiet while the position is under the ceiling', async () => {
+    const f = await fixture('ceil-under');
+    await openRecentPeriod(f);
+    await setPolicy(f, 'weekly', '5000.00');
+    await takings(f, today(), '1200.00', uid('k'));
+    expect(await kinds(f)).not.toContain('unremittedCeilingBreached');
+  });
+
+  it('⚠️ a `daily` store with no ceiling can never breach one', async () => {
+    const f = await fixture('ceil-daily');
+    await openRecentPeriod(f);
+    // The default: cadence 'daily', ceiling null. Lawful — daily remittance is its own bound.
+    await takings(f, today(), '999999.00', uid('k'));
+    expect(await kinds(f)).not.toContain('unremittedCeilingBreached');
+  });
+
+  it('⭐ separates what CAN be remitted from what is merely held', async () => {
+    const f = await fixture('ceil-unverified');
+    await openRecentPeriod(f);
+    await setPolicy(f, 'weekly', '1000.00');
+    await takings(f, today(), '4000.00', uid('k'));
+    const finding = (await feed(f)).findings.find((x) => x.kind === 'unremittedCeilingBreached');
+    // No sales day exists, so none of it is verified — and the message must say so rather than
+    // implying somebody is sitting on remittable cash they have refused to hand over.
+    expect(finding!.detail).toMatch(/not verified yet, so it cannot/);
+  });
+});
+
+describe('T-152 — the cadence clock', () => {
+  it('⭐ fires when the oldest unsettled day is older than the cadence allows', async () => {
+    const f = await fixture('cad-late');
+    await openRecentPeriod(f);
+    await setPolicy(f, 'weekly', '50000.00');
+    await takings(f, daysAgo(20), '800.00', uid('k'));
+    const finding = (await feed(f)).findings.find((x) => x.kind === 'remittanceOverdue');
+    expect(finding).toBeDefined();
+    expect(finding!.detail).toMatch(/on a weekly cadence that allows 7/);
+  });
+
+  it('stays quiet inside the cadence window', async () => {
+    const f = await fixture('cad-ok');
+    await openRecentPeriod(f);
+    await setPolicy(f, 'weekly', '50000.00');
+    await takings(f, daysAgo(2), '800.00', uid('k'));
+    expect(await kinds(f)).not.toContain('remittanceOverdue');
+  });
+
+  it('⚠️ a NET OUTFLOW day is not "outstanding" — the drawer is down, not behind', async () => {
+    const f = await fixture('cad-outflow');
+    await openRecentPeriod(f);
+    await setPolicy(f, 'weekly', '5000.00');
+    // An old expense paid from the till: 1110 is credited, so the position is negative.
+    await postOn(
+      f,
+      daysAgo(30),
+      [{ code: '6300', debit: '400.00' }, { code: '1110', credit: '400.00' }],
+      uid('k'),
+    );
+    const ks = await kinds(f);
+    expect(ks).not.toContain('remittanceOverdue');
+    expect(ks).not.toContain('unremittedCeilingBreached');
+  });
+
+  it('⭐ a day fully settled by a remittance stops counting — settled means NOTHING OUTSTANDING', async () => {
+    const f = await fixture('cad-settled');
+    await openRecentPeriod(f);
+    await setPolicy(f, 'weekly', '100.00');
+    const on = daysAgo(30);
+    await takings(f, on, '2000.00', uid('k'));
+    expect(await kinds(f)).toContain('unremittedCeilingBreached');
+
+    // Settle it the way T-143 does — a posted remittance with an allocation against that date.
+    const [r] = await sql<{ id: string }[]>`
+      insert into remittances (org_id, store_id, remitted_on, status, created_by)
+      values (${f.orgId}, ${f.storeId}, ${on}, 'posted', ${f.personId}) returning id`;
+    await sql`insert into remittance_allocations (remittance_id, business_date, amount)
+              values (${r!.id}, ${on}, '2000.00')`;
+
+    const ks = await kinds(f);
+    expect(ks).not.toContain('unremittedCeilingBreached');
+    expect(ks).not.toContain('remittanceOverdue');
+  });
+});
+
+describe('T-152 — DEF-082, the service-charge float nothing can discharge', () => {
+  it('⭐ is SILENT on a zero float — which is the live state today', async () => {
+    const f = await fixture('sc-zero');
+    await openRecentPeriod(f);
+    await takings(f, today(), '500.00', uid('k'));
+    expect(await kinds(f)).not.toContain('serviceChargeFloatAgeing');
+  });
+
+  it('stays quiet inside the sixteen-day window', async () => {
+    const f = await fixture('sc-recent');
+    await openRecentPeriod(f);
+    await serviceCharge(f, daysAgo(3), '300.00', uid('k'));
+    expect(await kinds(f)).not.toContain('serviceChargeFloatAgeing');
+  });
+
+  it('⛔ fires once an accrual passes sixteen days, and says nothing can pay it', async () => {
+    const f = await fixture('sc-aged');
+    await openRecentPeriod(f);
+    await serviceCharge(f, daysAgo(40), '300.00', uid('k'));
+    const finding = (await feed(f)).findings.find((x) => x.kind === 'serviceChargeFloatAgeing');
+    expect(finding).toBeDefined();
+    expect(finding!.detail).toMatch(/RA 11360/);
+    expect(finding!.detail).toMatch(/DEF-082/);
+    // ⚠️ Soft on purpose: `hard` would block EVERY close forever, since nothing can discharge it.
+    expect(finding!.severity).toBe('soft');
+    const readiness = await asOrg(f.orgId, (tx) => closeReadiness(tx, f.orgId, PERIOD));
+    expect(readiness.blocking.map((b) => b.kind)).not.toContain('serviceChargeFloatAgeing');
+  });
+
+  it('⭐ ages FIFO — clearing the OLDEST accrual silences it even though the float is not empty', async () => {
+    const f = await fixture('sc-fifo');
+    await openRecentPeriod(f);
+
+    await serviceCharge(f, daysAgo(40), '300.00', uid('sc-old'));
+    await serviceCharge(f, daysAgo(1), '100.00', uid('sc-new'));
+    expect(await kinds(f)).toContain('serviceChargeFloatAgeing');
+
+    // Pay out exactly the OLD accrual. ₱100 of float remains, but it is one day old.
+    await postOn(
+      f,
+      daysAgo(1),
+      [{ code: '2160', debit: '300.00' }, { code: '1110', credit: '300.00' }],
+      uid('sc-pay'),
+    );
+
+    // ⭐ The alarm is about the AGE of what is un-cleared, not the balance. A non-empty float that
+    // is all recent is exactly the healthy state a working distribution produces.
+    expect(await kinds(f)).not.toContain('serviceChargeFloatAgeing');
+  });
+});

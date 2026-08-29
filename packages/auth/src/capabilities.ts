@@ -53,12 +53,14 @@ export const ROLES = ['super_admin', 'admin', 'manager', 'staff'] as const;
 export type Role = (typeof ROLES)[number];
 
 // -----------------------------------------------------------------------------------------
-// The 47 capabilities, exactly as CAPABILITY-MATRIX.md lists them (grep-counted against
+// The 49 capabilities, exactly as CAPABILITY-MATRIX.md lists them (grep-counted against
 // the document, not hand-counted — see the task report: the document's own prose says
 // "36 rows" in two places, but the table itself had 38 entries including the two
 // ⚠️-flagged open cells and the two platform-only rows, and transfer_funds (row 150) is
 // the 39th; T-125's manage_prepaid_items and run_amortisation make 41. T-130 adds
 // record_supplier_invoice, verify_supplier_invoice and void_supplier_invoice, making 44.
+// T-159 adds provision_clock_terminal (Phase 4), making 49. Do NOT hand-count this number:
+// the matrix test parses the document and compares, and it caught 48-vs-49 here.
 // Invariant 3's parser is the proof: it fails loudly if this list and the document ever
 // disagree, in EITHER direction).
 // -----------------------------------------------------------------------------------------
@@ -113,8 +115,11 @@ export type Capability =
   | 'manage_users'
   | 'grant_capability'
   | 'manage_attendance'
+  | 'provision_clock_terminal'
   // Configuration
   | 'manage_store_settings'
+  /** ⭐ Separate from `manage_store_settings` ON PURPOSE — see the role grid below. */
+  | 'set_cash_policy'
   | 'manage_price_lists'
   | 'manage_fixed_assets'
   | 'run_depreciation'
@@ -167,7 +172,9 @@ export const CAPABILITIES: readonly Capability[] = [
   'manage_users',
   'grant_capability',
   'manage_attendance',
+  'provision_clock_terminal',
   'manage_store_settings',
+  'set_cash_policy',
   'manage_price_lists',
   'manage_fixed_assets',
   'run_depreciation',
@@ -250,8 +257,10 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   manage_users: 'org',
   grant_capability: 'org',
   manage_attendance: 'store',
+  provision_clock_terminal: 'store',
 
   manage_store_settings: 'store',
+  set_cash_policy: 'store',
   manage_price_lists: 'org',
   manage_fixed_assets: 'org',
   run_depreciation: 'org',
@@ -360,8 +369,24 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   manage_users: { super_admin: true, admin: true, manager: false, staff: false },
   grant_capability: { super_admin: true, admin: true, manager: false, staff: false },
   manage_attendance: { super_admin: true, admin: true, manager: true, staff: false },
+  // ⭐ ADMIN-ONLY (Ian, 2026-08-29, bible row 165). A provisioned terminal is the ONLY principal
+  // allowed to read the credential mirror, so whoever may create one may read every enrolled
+  // fingerprint template and card id at that store. Manager was v1's level; this is tighter.
+  provision_clock_terminal: { super_admin: true, admin: true, manager: false, staff: false },
 
   manage_store_settings: { super_admin: true, admin: true, manager: true, staff: false },
+  /**
+   * ⛔ **Manager is FALSE, and that is the whole reason this is not `manage_store_settings`.**
+   *
+   * Ian, 2026-08-29: *"configure the peso ceiling for unremitted by store configurable by admin."*
+   * The ceiling is the number a store's cash custody is MEASURED against, so whoever is measured
+   * must not be able to move it. A manager who is late remitting could otherwise raise the ceiling
+   * and the finding would vanish — the control silently deleting its own evidence.
+   *
+   * ⚠️ Ordinary store settings stay manager-editable (*"store settings tied to operation"* — Ian,
+   * CAPABILITY-MATRIX row). This one is not an operating setting; it is a risk limit.
+   */
+  set_cash_policy: { super_admin: true, admin: true, manager: false, staff: false },
   manage_price_lists: { super_admin: true, admin: true, manager: false, staff: false },
   manage_fixed_assets: { super_admin: true, admin: true, manager: false, staff: false },
   run_depreciation: { super_admin: true, admin: true, manager: false, staff: false },

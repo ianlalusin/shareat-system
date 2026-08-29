@@ -9,8 +9,9 @@
 -- So there is nothing to transcribe FROM, and a row entered live at the till is original capture
 -- by a human rather than a copy of anything.
 --
--- ⚠️ This project's own glossary is a list of columns whose names assert something false about
--- their data (`dineInSales` is package-only, `takeOutSales` is a residual). Minting another one
+-- ⚠️ This project's own glossary (`docs/GLOSSARY.md`) is a list of columns whose names assert
+-- something false about their data — a "dine-in" total that is package-only, a "take-out" total
+-- that is really a residual, a "sequence" that is not monotonic. Minting another one
 -- inside the table whose entire purpose is PROVENANCE would be the worst possible place for it.
 -- 'manual' says only what is true: a person typed it. 'pos' stays as it is.
 --

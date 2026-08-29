@@ -60,6 +60,13 @@ export async function listFindings(
     ...(await findingsRepo.openingBalanceResidual(tx, orgId)),
     ...(await findingsRepo.clearingNotAtRest(tx, orgId)),
     ...(await findingsRepo.periodicPostingsMissed(tx, orgId, options.period)),
+    // T-152 — cash sitting somewhere it should not be. Row 129's ceiling and cadence, plus
+    // DEF-082's service-charge float, which nothing can currently discharge.
+    ...(await findingsRepo.unremittedCeilingBreached(tx, orgId)),
+    ...(await findingsRepo.remittanceOverdue(tx, orgId)),
+    ...(await findingsRepo.serviceChargeFloatAgeing(tx, orgId)),
+    // T-153 — a till float not holding its configured amount.
+    ...(await findingsRepo.tillFloatOffTarget(tx, orgId)),
   ];
 
   const acks = await findingsRepo.liveAcknowledgements(tx, orgId);

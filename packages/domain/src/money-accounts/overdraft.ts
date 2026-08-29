@@ -44,7 +44,7 @@ const OK: DrawVerdict = { blocked: false };
  * @param drawn     the total leaving this account, summed across every line of a split
  */
 export function judgeDraw(
-  account: Pick<MoneyAccountRow, 'name' | 'custodian' | 'overdraftLimit'>,
+  account: Pick<MoneyAccountRow, 'name' | 'custodian' | 'overdraftLimit' | 'floatTarget'>,
   available: number,
   drawn: number,
 ): DrawVerdict {
@@ -52,6 +52,30 @@ export function judgeDraw(
 
   const short = (drawn - available).toFixed(2);
   const holds = available.toFixed(2);
+
+  // ⭐ T-153 — A FLOAT POT BLOCKS, even though its custodian is the cashier.
+  //
+  // > **Ian, 2026-08-29:** *"if this is implemented we guard all accounts to never go negative,
+  // > all stops at 0 never below."*
+  //
+  // ⚠️ The warn-vs-block split above is NOT really about the custodian — it is about **whether the
+  // ledger can see the whole balance**. A takings drawer holds today's sales hours before they
+  // post at verify, so its ledger balance is provisional. **A float pot's is complete**: it only
+  // ever moves by transfer, exactly like the office safe two branches down, and every one of those
+  // transfers posts the moment it happens.
+  //
+  // ⛔ So a float going negative is never a timing artefact. It means the side pocket has been
+  // spent past what is in it, which is the one thing the daily count exists to catch.
+  if (account.floatTarget !== null && account.floatTarget !== undefined) {
+    return {
+      blocked: true,
+      message:
+        `"${account.name}" is a till float holding ${holds} and this takes ${drawn.toFixed(2)}. ` +
+        'A float is a side pocket, not a drawer that runs behind — its balance is complete, so it ' +
+        'cannot go below zero. Pay the rest from the takings drawer, or top the float up from the ' +
+        'office first.',
+    };
+  }
 
   if (account.custodian === 'cashier') {
     const limit = Number(account.overdraftLimit);
