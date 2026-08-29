@@ -27,3 +27,9 @@ export * from './trade';
 export * from './channel-settlements';
 export * from './findings';
 export * from './cutover';
+// T-154 — the staff master record: positions, employments, the roster (Phase 4, lane B).
+export * from './people';
+// T-155 — the shift-day calendar and attendance policy (Phase 4, lane B).
+export * from './attendance';
+// T-181 — the Lane A publisher, transport-free (Phase 4, lane B).
+export * from './sync';

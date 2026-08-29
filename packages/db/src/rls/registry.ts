@@ -407,6 +407,103 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     reason: 'No org_id of its own — reachable through the collection it belongs to, same pattern as ap_payment_allocations.',
   },
 
+  // ---- T-154: the staff master record (Phase 4, lane B) --------------------------------
+  positions: {
+    scope: 'org_column',
+    reason:
+      'The position taxonomy is per-org: the canonical six are seeded per org, and a store’s own ' +
+      'extras belong to that org’s vocabulary. A franchise inventing a position must not widen ' +
+      'anyone else’s.',
+  },
+  employments: {
+    scope: 'org_column',
+    reason:
+      'Who works where, on what terms. Same stakes as persons and higher — an employment carries ' +
+      'employment status and, from Phase 5, hangs the pay rate. A franchise owner seeing another ' +
+      'org’s roster is the exact leak this registry exists to prevent.',
+  },
+  employment_positions: {
+    scope: 'derived',
+    via: 'exists (select 1 from employments e where e.id = employment_positions.employment_id and e.org_id = app_current_org())',
+    reason:
+      'Has no org_id of its own — reachable only through its employment, the same pattern as ' +
+      'journal_lines through journal_entries. Denormalising an org_id here could drift from the ' +
+      'parent, and a row whose org disagreed with its employment would be invisible or visible to ' +
+      'the wrong tenant.',
+  },
+
+  // ---- T-155: attendance policy (Phase 4, lane B) ---------------------------------------
+  store_attendance_config: {
+    scope: 'org_column',
+    reason:
+      'A store’s attendance and late policy, and from Phase 5 an input to what it pays. Per-org ' +
+      'like the store it governs — a franchise setting its own grace minutes must not be visible ' +
+      'to, or settable by, anyone else’s org.',
+  },
+
+  // ---- T-156: the punch (Phase 4, lane B) -----------------------------------------------
+  attendance_punches: {
+    scope: 'org_column',
+    reason:
+      'Who was physically at which terminal, when. Per-org like the employment it points at — and ' +
+      'sensitive beyond the org boundary in its own right: a punch stream is a record of a named ' +
+      'person’s movements, which is exactly the field-level concern bible §7 rule 10 raises about ' +
+      'store membership implying too much.',
+  },
+
+  // ---- T-157: the adjudicated day (Phase 4, lane B) -------------------------------------
+  attendance_days: {
+    scope: 'org_column',
+    reason:
+      'What a person’s day paid, before a rate is applied. Per-org, and the row Phase 5 multiplies ' +
+      'by a pay rate — so it is the closest thing in this phase to compensation data and is scoped ' +
+      'accordingly.',
+  },
+
+  // ---- T-158: manager adjustments (Phase 4, lane B) -------------------------------------
+  attendance_adjustments: {
+    scope: 'org_column',
+    reason:
+      'Who decided what about whose day. Per-org, and it is the audit trail every self-dealing ' +
+      'control in this phase rests on — a decision readable or writable across an org boundary ' +
+      'would make attribution meaningless.',
+  },
+
+  // ---- T-159: device identity (Phase 4, lane B) -----------------------------------------
+  clock_terminals: {
+    scope: 'org_column',
+    reason:
+      'A provisioned terminal is the ONLY principal allowed to read that store’s biometric mirror ' +
+      '(bible §5.3). Leaking the roster of terminals across an org boundary would tell another ' +
+      'tenant exactly which device identities to target.',
+  },
+
+  // ---- T-181: the Lane A outbox (Phase 4, lane B) ---------------------------------------
+  mirror_outbox: {
+    scope: 'org_column',
+    reason:
+      'Publish intents for one org’s roster, config and day feed. It names which entities changed ' +
+      'and when, which is a shape of activity data in its own right — and the relay runs as the ' +
+      'system principal, so org scoping costs it nothing.',
+  },
+
+  // ---- T-185: attendance credentials (Phase 4, lane B) ----------------------------------
+  attendance_credentials: {
+    scope: 'org_column',
+    reason:
+      'A card id or a fingerprint template against one employment. Per-org and emphatically so: ' +
+      'this is the most sensitive table in the phase — a row here is what lets somebody be ' +
+      'clocked in and paid, and a template is biometric data about a named person.',
+  },
+
+  // ---- T-182: the Lane B quarantine (Phase 4, lane B) -----------------------------------
+  inbox_quarantine: {
+    scope: 'org_column',
+    reason:
+      'Events that failed to become punches, held with their raw bodies. Per-org: the raw event ' +
+      'names a person, a device and a time, and a stuck punch is still attendance data.',
+  },
+
   etl_runs: { scope: 'system_only', reason: 'ETL machinery. Never reachable by a tenant or a customer — only the migrator, crons and the audit.' },
   etl_source_documents: {
     scope: 'system_only',

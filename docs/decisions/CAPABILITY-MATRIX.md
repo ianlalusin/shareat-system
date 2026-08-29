@@ -97,6 +97,7 @@ they need weekly, the boundary is wrong.
 | `manage_users` | org | ✅ | ✅ | ✗ | ✗ | Creating/assigning roles at manager level and above. **See §Open 3 — this is the friction point** |
 | `grant_capability` | org | ✅ | ✅ | ✗ | ✗ | Only an admin grants |
 | `manage_attendance` | store | ✅ | ✅ | ✅ | ✗ | v1's `attendanceManager` grant, now a manager capability |
+| `provision_clock_terminal` | store | ✅ | ✅ | ✗ | ✗ | T-159. ⭐ **ADMIN-ONLY** — Ian, 2026-08-29 (bible row 165), tightened from v1's manager-level `registerClockTerminalAction`. A provisioned terminal is the only principal permitted to read the credential mirror, so whoever may create one may read every enrolled template at that store. Deliberately NOT folded into `manage_attendance` (§7 rule 2). ⚠️ The cost is real and accepted: a manager cannot pair a replacement tablet without an admin |
 
 ## Configuration
 

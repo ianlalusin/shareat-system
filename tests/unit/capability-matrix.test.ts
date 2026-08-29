@@ -154,7 +154,11 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
   // deliberately NOT manager — Ian: "configurable by admin". It is separate from
   // `manage_store_settings` because a manager must not be able to raise the ceiling their own
   // cash custody is measured against.
-  it('finds exactly 49 capability rows — NOT the "36" the task documents say in prose', () => {
+  // ⭐ 49 -> 50 on 2026-08-30, at the attendance merge: `set_cash_policy` (T-152, main) and
+  // `provision_clock_terminal` (T-185, attendance lane) were added independently on two branches.
+  // ⚠️ The merged total is the sum, not either side's number — resolving this conflict by taking
+  // one side would leave a GREEN test asserting a count the code does not have.
+  it('finds exactly 50 capability rows — NOT the "36" the task documents say in prose', () => {
     // docs/tasks/121-roles-and-access.md and CAPABILITY-MATRIX.md's own Contract section
     // both say "36 rows" / "36 capabilities". The table itself had 38: the two
     // ⚠️-flagged open cells (set_credit_limit, close_period) plus the two platform-only
@@ -170,7 +174,7 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // into the enforcement without also being written into the document people actually
     // read, and vice versa.
     const { rows } = parseCapabilityMatrixDoc();
-    expect(rows.length).toBe(49);
+    expect(rows.length).toBe(50);
   });
 
   it('has no duplicate capability names', () => {
@@ -241,10 +245,10 @@ describe('invariant 1 — every capability has an explicit decision for all four
     expect(problems).toEqual([]);
   });
 
-  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 49 capabilities', () => {
-    expect(CAPABILITIES.length).toBe(49);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(49);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(49);
+  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 50 capabilities', () => {
+    expect(CAPABILITIES.length).toBe(50);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(50);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(50);
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));
   });
@@ -311,6 +315,15 @@ describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', (
         'manage_prepaid_items',
         'run_amortisation',
         'manage_chart_of_accounts',
+        // ⭐ `provision_clock_terminal` JOINED this set on 2026-08-29, the moment Ian made it
+        // admin-only (bible row 165) — it is admin-yes / manager-no, and the set is derived from
+        // exactly that. ⚠️ **This is the ONE documented exception to "admin only", and it is
+        // recorded rather than special-cased.** An org with no admin would otherwise be unable to
+        // pair a single clock terminal, so attendance could never start there at all; the fallback
+        // exists to bootstrap exactly that, is evaluated ONCE at appointment, and leaves a
+        // `person_grants` row behind. Excluding it would need a hand-maintained carve-out in a set
+        // whose whole point is being derived — and a carve-out is what drifts.
+        'provision_clock_terminal',
       ].sort(),
     );
   });

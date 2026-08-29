@@ -82,6 +82,35 @@ synthesised receipt. See DEF-004, DEF-005.
 **A group of diners at a table**, from seating to payment. **Not** an auth session, not an HTTP
 session. When you mean authentication, say *auth session* explicitly.
 
+### `shift day` ✅
+
+**05:00 → 05:00 Manila.** The attendance calendar, and **not** the financial business day, which is
+midnight-based. A closing staffer who punches out at 01:30 belongs to the shift day they *started* —
+so that one punch sits on the **previous shift day** and the **current business day** at the same
+time.
+
+⛔ Two calendars, one repo. `toShiftDay` lives in `packages/domain/src/attendance/shift-day.ts`,
+`toBusinessDate` in `packages/core/src/datetime.ts`, and `ShiftDay` / `BusinessDate` are **separate
+branded types** so passing one where the other belongs does not compile. v1 made the same
+distinction and wrote down why it named the field `sessionDate` rather than `dayKey`
+(`ERP-rebuild/src/lib/attendance/shift-day.ts:3-6`).
+
+### `punch` ✅
+
+**One raw credential presentation at a terminal** — "this person presented this credential at this
+device at this time". A **fact**, never an outcome: a punch carries no hours, no lateness and no
+pay. Postgres adjudicates (bible §5.1). The direction the staffer pressed is stored as
+`assertedIntent`, and the name is the specification: the device asserts, the server decides.
+
+### `attendance day` ✅ ⚠️
+
+The **adjudicated** result for one person on one shift day — hours, breaks, night differential,
+anomalies.
+
+⛔ **Never called a "session".** `session` above already means *a group of diners at a table*, and
+`packages/db/schema/sessions.ts` already took the second meaning for auth. v1's `attendanceSessions`
+would be the **third** meaning of one word in one system.
+
 ### `receiptSeq` ⚠️ ✅
 
 An integer written by **two different allocators from non-comparable sequence spaces** — a
