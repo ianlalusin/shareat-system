@@ -143,7 +143,8 @@ Nothing here is unassigned; "deferred" is a placement, not an omission.*
 | Meat production / slicing conversion | 3 | Stock conversion half |
 | Order / channel wastage disposition | 3 | Includes the 15-day auto-charge backstop |
 | Branch low-stock auto-order | 3 | Turns the low-stock signal into an action |
-| Supplier returns — scope decision | 3 | **Needs Ian**: v1 deliberately does *not* touch AP/journal. ERPv2's stricter stock↔GL coupling (§16.11) may change that. Porting the compromise silently would port a known gap |
+| Supplier returns — scope decision | 3 | ✅ **RESOLVED 2026-08-29 — bible row 166.** Ian: *"supplier returns must be recognized as store credit for us that we can use for next purchase."* Not v1's stock-only compromise, and **not the debit-note-against-`2110` I recommended either** — a spendable per-supplier balance in **`1240 Advances to suppliers`** when the receipt was invoiced, or **`2120`** when it was not, because an uninvoiced return just means they bill us less. **T-170** respecified |
+| ⭐ **Customer returns and store credit** 🆕 | 3 | ✅ **A gap no inventory pass could have found, because v1 cannot do it.** Arrived with row 166's other half: *"us being the supplier to other customers, return to us must be treated the same I guess — store credit customer may use, or we refund."* Revenue reverses to `4950`, goods re-enter inventory **at the cost the sale actually relieved**, and the customer holds **`2140 Customer store credits payable`** or takes cash. ⚠️ An **internal** branch→commissary return is not a credit at all — it is T-173's transfer run backwards. **T-179**, and it is this phase's first genuine **ADD** |
 
 ### Need-to-have → **Phases 4–6**
 
@@ -205,3 +206,30 @@ right now 33 have none.
 
 ⭐ **Named rather than absorbed.** T-152 puts its two fields on the `/remittance` screen beside
 the position they govern, which is right for those two and wrong as a pattern. **Gap count: 34.**
+
+---
+
+## Added 2026-08-29 — found while planning Phase 3, and it inverts this document's method
+
+| Capability | v1 has it | v2 state | Why it is a gap, not a defect |
+|---|---|---|---|
+| ⭐ **Customer returns and store credit** | ⛔ **No.** v1 has no customer-return document at all — a wholesale return is handled by voiding the order or by a manual adjustment | Owned by **T-179** as of today (bible row 166) | ⚠️ **Every other row in this file was found by reading v1 and asking *"what does the business do that the plan misses?"* This one could never have been found that way, because the business cannot currently do it** — the capability is absent from the source as well as the target. It surfaced only because Ian answered a question about *supplier* returns and then extended it: *"us being the supplier to other customers, return to us must be treated the same I guess."* |
+
+⭐ **The method has a blind spot, and it is worth writing down.** A capability inventory compares the
+plan against **what v1 does**. It is structurally incapable of finding what **neither** system does
+and the business needs — the fourth verb, **ADD**, which §1.2 lists and which this document has only
+ever populated from Ian directly (13th-month pay, the separation workflow, and now this).
+
+> **So a gap pass is necessary and not sufficient.** The three ADDs in this file all came from a
+> conversation, never from a read. **Gap count: 35.**
+
+## Added 2026-08-29 — the shift, found while answering a question about the till float
+
+| Capability | v1 has it | v2 state | Why it is a gap, not a defect |
+|---|---|---|---|
+| **The cashier SHIFT as a countable, attributable unit** | ✅ `CashRemitShiftPlain` (`types/index.ts:1443`) — `opening.source: 'float' \| 'manual' \| 'handover'`, `prevShiftId` chaining one cashier to the next, and `expectedCash`/`actualCash` per shift | ⛔ **Nothing.** T-123 models the sales **day**; the count lives in POS's `cashHandovers` (discovery 09 §1) and never reaches the ERP | Ian, 2026-08-29: *"most is 2 shifts, 1 morning 1 evening, same till… they count the 20k and hand it over after the 1st cashier reconciles his sales."* ⛔ **Without a shift record, a count variance on a shared till cannot be attributed to one of two cashiers** — which is the entire purpose of counting daily. Bible row 128 fought to keep that control; row 144 then insisted a variance names a person and is never inferred. **A shared till with no shift boundary makes both unenforceable** |
+
+⭐ **Named rather than absorbed.** T-153 needed none of this — the float itself works today — but
+answering *"what account does it belong to"* surfaced that the layer above it is missing. Discovery
+23 §4 already folded the cash handover to the ERP *"(Ian, 2026-08-25)"*, so this gap has a decided
+home and no builder. **Gap count: 35.**
