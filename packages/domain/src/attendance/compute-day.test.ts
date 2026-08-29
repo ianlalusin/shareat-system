@@ -4,6 +4,7 @@ import {
   paidEndMinute,
   nightDiffMinutesInWindow,
   resolveStartAnchor,
+  roundOvertimeMinutes,
   type DayPolicy,
   type DayPunch,
 } from './compute-day';
@@ -36,6 +37,7 @@ const policy = (over: Partial<DayPolicy> = {}): DayPolicy => ({
   nightDiffStartHour: 22,
   nightDiffEndHour: 6,
   allowableBreakMinutes: 60,
+  anchorWindowMinutes: 30,
   ...over,
 });
 
@@ -85,178 +87,167 @@ describe('T-157 D5 — v2 pays REAL MINUTES; the hour-floor is gone', () => {
   });
 });
 
-describe('T-157 §2 — the start anchor, Ian’s 2026-08-20 rule', () => {
-  it('⭐ Tier 1: a 14:15 in that ran to 23:45 anchors at 15:00, NOT late', () => {
-    // The case v1's own comment uses: the old rule floored every tap DOWN, making this "14:00,
-    // 15 minutes late" — which only reads as a 15:00 shift they arrived early for.
-    //
-    // ⚠️ Two things this test had wrong the first time, both worth keeping written down:
-    //   1. The end passed here is ALREADY grace-adjusted — `computeDay` floors 23:45 to 23:00
-    //      before calling. Passing 23:45 raw tests a call that never happens.
-    //   2. The comment's example only holds where the NEXT anchor still delivers a full shift.
-    //      At the 9h default, 15:00 -> 23:00 is 8h and Tier 1 correctly does NOT fire; the day
-    //      really is a full 9h from 14:00. An 8h store is the one the comment describes.
-    const a = resolveStartAnchor({
-      startMinute: fromHour(14, 15),
-      effectiveEndMinute: fromHour(23),
-      policy: policy({ allowedShiftStartHours: [14, 15], requiredMinutes: 8 * 60 }),
-    });
-    expect(a.anchorMinute).toBe(fromHour(15));
+describe('T-157b §1 — the anchor is the NEAREST allowed hour', () => {
+  const anchor = (h: number, m: number, p = policy()) =>
+    resolveStartAnchor({ startMinute: fromHour(h, m), policy: p });
+
+  it('⭐ EX1 — 14:05 anchors at 14:00, five minutes late', () => {
+    const a = anchor(14, 5, policy({ allowedShiftStartHours: [13, 14, 15] }));
+    expect(a.anchorMinute).toBe(fromHour(14));
+    expect(a.mode).toBe('previous');
+    expect(a.lateMinutes).toBe(5);
+  });
+
+  it('⭐ EX2 — 13:45 anchors at 14:00, NOT late — the span no longer decides', () => {
+    // The span-based rule this replaces asked whether the day covered the required hours from
+    // 14:00. It does not ask any more: 13:45 is 15 minutes from 14:00 and 45 from 13:00, so 14:00
+    // is the shift they were aiming for, whatever they went on to work.
+    const a = anchor(13, 45, policy({ allowedShiftStartHours: [13, 14, 15] }));
+    expect(a.anchorMinute).toBe(fromHour(14));
     expect(a.mode).toBe('next');
     expect(a.lateMinutes).toBe(0);
   });
 
-  it('a punch exactly on an allowed start is `exact` and is never reinterpreted', () => {
-    const a = resolveStartAnchor({
-      startMinute: fromHour(14),
-      effectiveEndMinute: fromHour(23),
-      policy: policy(),
-    });
+  it('a punch exactly on an allowed hour is `exact` with zero late', () => {
+    const a = anchor(14, 0, policy({ allowedShiftStartHours: [13, 14, 15] }));
     expect(a.mode).toBe('exact');
     expect(a.lateMinutes).toBe(0);
   });
 
-  it('falls back to the preceding start, and records the lateness, when the span does not cover', () => {
-    const a = resolveStartAnchor({
-      startMinute: fromHour(14, 15),
-      effectiveEndMinute: fromHour(20),
-      policy: policy({ allowedShiftStartHours: [14, 15] }),
-    });
-    expect(a.anchorMinute).toBe(fromHour(14));
-    expect(a.mode).toBe('previous');
-    expect(a.lateMinutes).toBe(15);
+  it('⭐ a tie goes to the EARLIER hour, so the tie-break never costs the staffer', () => {
+    // 13:30 is 30 minutes from both 13:00 and 14:00. The earlier anchor credits the time they
+    // were actually present; the later one would silently discard half an hour of it.
+    const a = anchor(13, 30, policy({ allowedShiftStartHours: [13, 14] }));
+    expect(a.anchorMinute).toBe(fromHour(13));
+    expect(a.lateMinutes).toBe(30);
   });
 
-  it('a punch before every allowed start is `unallowed`, anchored to its own hour', () => {
-    const a = resolveStartAnchor({
-      startMinute: fromHour(6, 20),
-      effectiveEndMinute: fromHour(15),
-      policy: policy(),
-    });
+  it('⛔ beyond the window it anchors to its own hour and is flagged, not snapped', () => {
+    // Lipa's real stored grid has a four-hour hole between 11:00 and 15:00.
+    const p = policy({ allowedShiftStartHours: [9, 10, 11, 15, 16, 17, 18] });
+    const a = anchor(13, 0, p);
     expect(a.mode).toBe('unallowed');
-    expect(a.anchorMinute).toBe(fromHour(6));
+    expect(a.anchorMinute).toBe(fromHour(13));
+    expect(a.lateMinutes).toBe(0);
   });
 
-  it('a store with NO allowed starts anchors to the punch’s own hour', () => {
-    const a = resolveStartAnchor({
-      startMinute: fromHour(14, 40),
-      effectiveEndMinute: fromHour(23),
-      policy: policy({ allowedShiftStartHours: [] }),
-    });
+  it('...and the day carries `start_not_allowed`, which does NOT block pay', () => {
+    const r = day(
+      [punch(fromHour(13), 'in'), punch(fromHour(22), 'out')],
+      { allowedShiftStartHours: [9, 10, 11, 15, 16, 17, 18] },
+    );
+    expect(r.anomalies).toContain('start_not_allowed');
+    expect(r.computedMinutes).toBe(9 * 60);
+  });
+
+  it('a wider window snaps what a narrow one flags', () => {
+    const p = (w: number) => policy({ allowedShiftStartHours: [11, 15], anchorWindowMinutes: w });
+    expect(anchor(14, 40, p(30)).mode).toBe('next');
+    expect(anchor(14, 20, p(30)).mode).toBe('unallowed');
+    expect(anchor(14, 20, p(60)).mode).toBe('next');
+  });
+
+  it('a store with NO allowed starts anchors to the punch own hour', () => {
+    const a = anchor(14, 40, policy({ allowedShiftStartHours: [] }));
     expect(a.mode).toBe('unallowed');
     expect(a.anchorMinute).toBe(fromHour(14));
-  });
-
-  it('⛔ Gate A: a day FULL from the preceding start is never demoted to shed a late mark', () => {
-    // 14:15 → 22:50 pays 9h from 14:00. Without Gate A the lower half-day bar from 15:00 (7h50 >= 5h)
-    // would demote a full day to a half day purely to lose the lateness.
-    const a = resolveStartAnchor({
-      startMinute: fromHour(14, 15),
-      effectiveEndMinute: fromHour(23),
-      policy: policy({ allowedShiftStartHours: [14, 15], shortShiftHalfDayOt: true }),
-    });
-    // 23:00 - 15:00 = 8h < 9h, so Tier 1 does not fire and Tier 2 is reached. Gate A then sees
-    // spanPrev = 23:00 - 14:00 = 9h, which IS the full requirement — so the day is genuinely full
-    // from the preceding start and must stay there, late mark and all. Demoting it to a half day
-    // purely to shed the late mark is exactly what Gate A exists to prevent.
-    expect(a.mode).toBe('previous');
-    expect(a.lateMinutes).toBe(15);
-  });
-
-  it('⛔ Gate A, precisely: spanPrev covering `required` keeps the previous anchor', () => {
-    const p = policy({ allowedShiftStartHours: [14, 15], shortShiftHalfDayOt: true, requiredMinutes: 8 * 60 });
-    const a = resolveStartAnchor({
-      startMinute: fromHour(14, 15),
-      effectiveEndMinute: fromHour(22, 30),
-      policy: p,
-    });
-    // spanPrev = 22:30 - 14:00 = 8h30 >= required 8h ⇒ genuinely full ⇒ fallback, late.
-    expect(a.mode).toBe('previous');
-    expect(a.lateMinutes).toBe(15);
-  });
-
-  it('⭐ Gate B: a tie resolves to the LATE reading, so the tie-break never costs the staffer', () => {
-    // required 9h, halfDay 5h, spanPrev exactly 7h ⇒ (9-7) = 2 and (7-5) = 2 ⇒ tie ⇒ fallback.
-    const p = policy({ allowedShiftStartHours: [14, 15], shortShiftHalfDayOt: true });
-    const a = resolveStartAnchor({
-      startMinute: fromHour(14, 30),
-      effectiveEndMinute: fromHour(21),
-      policy: p,
-    });
-    expect(a.mode).toBe('previous');
-  });
-
-  it('Tier 2 fires when the span sits closer to the half day', () => {
-    const p = policy({ allowedShiftStartHours: [14, 15], shortShiftHalfDayOt: true });
-    const a = resolveStartAnchor({
-      startMinute: fromHour(14, 30),
-      effectiveEndMinute: fromHour(20),
-      policy: p,
-    });
-    // spanPrev = 6h; (9-6)=3 > (6-5)=1 ⇒ closer to the half day ⇒ snap to 15:00 (spanNext 5h >= 5h).
-    expect(a.mode).toBe('next');
-    expect(a.anchorMinute).toBe(fromHour(15));
-  });
-
-  it('⚠️ Tier 2 CANNOT fire with the short-shift rule off — moving forward would then cut pay', () => {
-    const p = policy({ allowedShiftStartHours: [14, 15], shortShiftHalfDayOt: false });
-    const a = resolveStartAnchor({
-      startMinute: fromHour(14, 30),
-      effectiveEndMinute: fromHour(20),
-      policy: p,
-    });
-    expect(a.mode).toBe('previous');
   });
 });
 
-describe('T-157 invariant 1 — ⛔ moving the anchor forward NEVER reduces paid minutes', () => {
-  /**
-   * ⭐ Property-based, per bible §15.2 and the shape T-111 was supposed to have (DEF-080 records
-   * that its property tests were never written — not repeating that here).
-   *
-   * The invariant is a claim about the RULE, not about a handful of cases: for any config and any
-   * span, the anchor the resolver picks must never pay less than the preceding-anchor reading.
-   */
-  it('holds across generated configs and spans', () => {
-    let checked = 0;
-    for (let required = 6 * 60; required <= 11 * 60; required += 60) {
-      for (let halfDay = 3 * 60; halfDay < required; halfDay += 60) {
-        for (const shortShift of [false, true]) {
-          for (let startOffset = 0; startOffset <= 55; startOffset += 5) {
-            for (let spanMinutes = 60; spanMinutes <= 13 * 60; spanMinutes += 30) {
-              const p = policy({
-                requiredMinutes: required,
-                halfDayMinutes: halfDay,
-                shortShiftHalfDayOt: shortShift,
-                allowedShiftStartHours: [14, 15],
-              });
-              const startMinute = fromHour(14) + startOffset;
-              const effectiveEndMinute = startMinute + spanMinutes;
+describe('T-157b §4 — ⭐ overtime rounds at 25 for the half, 50 for the whole', () => {
+  // Ian: "counted by .5 so .5, 1, 1.5, 2 ... 35 = 30 mins, 45 = 30 mins, 55 = 60 mins",
+  // then "25, for half 50 for whole".
+  //
+  // ⚠️ NOT v1's rule. `ot-rounding.ts` rounds up at 25 minutes into each HALF-hour block, which
+  // gives 30 at fifty minutes. Ian's three examples fit both; they diverge only at 46-54.
+  it.each([
+    [0, 0], [24, 0], [25, 30], [35, 30], [45, 30], [49, 30],
+    [50, 60], [55, 60], [60, 60], [85, 90], [110, 120], [130, 120],
+  ])('%i minutes of overtime credits %i', (raw, credited) => {
+    expect(roundOvertimeMinutes(raw)).toBe(credited);
+  });
 
-              const chosen = resolveStartAnchor({ startMinute, effectiveEndMinute, policy: p });
-              const previousAnchor = fromHour(14);
-
-              const paidFrom = (anchorMinute: number) => {
-                const raw = Math.max(0, effectiveEndMinute - anchorMinute);
-                const capped = Math.min(raw, required);
-                if (p.shortShiftHalfDayOt && capped < required && capped >= halfDay) return halfDay;
-                return capped;
-              };
-
-              expect(
-                paidFrom(chosen.anchorMinute),
-                `anchor ${chosen.anchorMinute} (${chosen.mode}) paid less than the previous anchor ` +
-                  `for required=${required} halfDay=${halfDay} shortShift=${shortShift} ` +
-                  `start=+${startOffset} span=${spanMinutes}`,
-              ).toBeGreaterThanOrEqual(paidFrom(previousAnchor));
-              checked++;
-            }
-          }
-        }
-      }
+  it('always lands on a half-hour and never invents more than one', () => {
+    for (let m = 0; m <= 600; m++) {
+      expect(roundOvertimeMinutes(m) % 30).toBe(0);
+      expect(roundOvertimeMinutes(m)).toBeLessThanOrEqual(m + 30);
     }
-    // The floor that stops a broken generator making this pass vacuously.
-    expect(checked).toBeGreaterThan(5000);
+  });
+});
+
+describe('T-157b §3 — late-out overtime, which used to be discarded', () => {
+  it('⭐ EX2 end to end: 13:45 to 23:35 is a 14:00 shift, 9h, no late, 30 minutes pending OT', () => {
+    const r = day(
+      [punch(fromHour(13, 45), 'in'), punch(fromHour(23, 35), 'out')],
+      { allowedShiftStartHours: [13, 14, 15] },
+    );
+    expect(r.anchorMinute).toBe(fromHour(14));
+    expect(r.computedMinutes).toBe(9 * 60);
+    expect(r.lateMinutes).toBe(0);
+    expect(r.earlyOutMinutes).toBe(0);
+    expect(r.pendingOtMinutes).toBe(30);
+  });
+
+  it('⭐ EX1 end to end: 14:05 to 22:56 is a whole day, 5 late, 4 early out, no OT', () => {
+    const r = day(
+      [punch(fromHour(14, 5), 'in'), punch(fromHour(22, 56), 'out')],
+      {
+        allowedShiftStartHours: [13, 14, 15],
+        lateGraceMinutes: 5,
+        earlyOutGraceMinutes: 30,
+        undertimeGraceMinutes: 15,
+      },
+    );
+    expect(r.anchorMinute).toBe(fromHour(14));
+    expect(r.computedMinutes).toBe(9 * 60);
+    expect(r.lateMinutes).toBe(5);
+    expect(r.earlyOutMinutes).toBe(4);
+    expect(r.pendingOtMinutes).toBe(0);
+  });
+
+  it('twenty-four minutes past the end earns nothing', () => {
+    const r = day(
+      [punch(fromHour(14), 'in'), punch(fromHour(23, 24), 'out')],
+      { allowedShiftStartHours: [14] },
+    );
+    expect(r.pendingOtMinutes).toBe(0);
+  });
+
+  it('overtime past an hour rounds within its own hour', () => {
+    const r = day(
+      [punch(fromHour(14), 'in'), punch(fromHour(24, 25), 'out')],
+      { allowedShiftStartHours: [14] },
+    );
+    expect(r.pendingOtMinutes).toBe(90);
+  });
+});
+
+describe('T-157b §5 — the facts are recorded, not destroyed', () => {
+  it('⛔ lateMinutes is RAW; the grace only reduces what may be CHARGED', () => {
+    const r = day(
+      [punch(fromHour(14, 12), 'in'), punch(fromHour(23), 'out')],
+      { allowedShiftStartHours: [14], lateGraceMinutes: 5 },
+    );
+    expect(r.lateMinutes).toBe(12);
+    expect(r.lateChargeableMinutes).toBe(7);
+  });
+
+  it('a lateness entirely inside the grace is still RECORDED', () => {
+    const r = day(
+      [punch(fromHour(14, 3), 'in'), punch(fromHour(23), 'out')],
+      { allowedShiftStartHours: [14], lateGraceMinutes: 5 },
+    );
+    expect(r.lateMinutes).toBe(3);
+    expect(r.lateChargeableMinutes).toBe(0);
+  });
+
+  it('earlyOutMinutes is recorded even when the day is credited in full', () => {
+    const r = day(
+      [punch(fromHour(14), 'in'), punch(fromHour(22, 50), 'out')],
+      { allowedShiftStartHours: [14], earlyOutGraceMinutes: 30 },
+    );
+    expect(r.earlyOutMinutes).toBe(10);
+    expect(r.computedMinutes).toBe(9 * 60);
   });
 });
 
@@ -303,12 +294,15 @@ describe('T-157 invariant 2 — undertime grace runs BEFORE the short-shift rule
 });
 
 describe('T-157 invariants 6 & 7 — the caps and the premiums', () => {
-  it('computedMinutes never exceeds required; the excess becomes nothing automatically', () => {
+  it('computedMinutes never exceeds required; the excess becomes PENDING overtime', () => {
+    // ⭐ CHANGED by T-157b §3, and the change is the point. Until then the excess was capped away
+    // and DISCARDED — this test asserted `pendingOtMinutes` was 0, which is why Ian's own example
+    // produced no overtime. ⛔ The comment below still holds: staying longer does not AUTO-PAY.
+    // It is pending, and the approval gate is Phase 5.
     const r = day([punch(fromHour(14), 'in'), punch(fromHour(2), 'out')], { allowedShiftStartHours: [14] });
     expect(r.computedMinutes).toBe(9 * 60);
     expect(r.cappedAtRequired).toBe(true);
-    // ⛔ Staying longer does not auto-pay. An approved overtime record is Phase 5's job.
-    expect(r.pendingOtMinutes).toBe(0);
+    expect(r.pendingOtMinutes).toBe(3 * 60);
   });
 
   it('night differential is measured over the PAID window and honours the configured hours', () => {

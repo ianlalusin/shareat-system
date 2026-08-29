@@ -110,6 +110,10 @@ function toPolicy(raw: Specimen['config']): DayPolicy {
     nightDiffStartHour: num(c.nightDiffStartHour, 22),
     nightDiffEndHour: num(c.nightDiffEndHour, 6),
     allowableBreakMinutes: Math.round(num(c.defaultBreakHours, 1) * 60),
+    // ⚠️ v1 has no such setting, so the replay uses v2's default. It is unreachable on a full
+    // hourly grid anyway (30 is the maximum possible distance); on a sparse grid it is exactly the
+    // divergence class this comparison is meant to expose.
+    anchorWindowMinutes: 30,
   };
 }
 
@@ -182,6 +186,19 @@ describe('T-157 golden master — v2 against real v1 attendance sessions', () =>
         // money against a real person, and it needs Ian rather than a passing test.
         if (v2Hours < v1Hours) {
           paysLess.push(`${s.id}: v1 ${v1Hours}h -> v2 ${v2Hours.toFixed(2)}h (${Math.round((v1Hours - v2Hours) * 60)}m less)`);
+        }
+        continue;
+      }
+
+      // ── Class D — T-157b. v2 anchored to the punch's OWN hour because it is beyond
+      // `anchorWindowMinutes` from any allowed start. ⭐ Against a full hourly grid this class is
+      // EMPTY by construction (30 minutes is the maximum possible distance); every member of it
+      // exists because Lipa's stored grid has no 12, 13 or 14. **This class is DEF-087 showing
+      // itself as pay** — the staff were not off-schedule, the config is stale.
+      if (got.anchorMode === 'unallowed' && s.expected.startAnchorMode !== 'unallowed') {
+        bump('D: beyond the window on a STALE grid (DEF-087)');
+        if (v2Hours < v1Hours) {
+          paysLess.push(`${s.id}: v1 ${v1Hours}h -> v2 ${v2Hours.toFixed(2)}h (${Math.round((v1Hours - v2Hours) * 60)}m less) [stale grid]`);
         }
         continue;
       }

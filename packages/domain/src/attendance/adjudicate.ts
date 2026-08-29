@@ -64,6 +64,7 @@ export function policyFromConfig(config: AttendanceConfigRow): DayPolicy {
     nightDiffStartHour: config.nightDiffStartHour,
     nightDiffEndHour: config.nightDiffEndHour,
     allowableBreakMinutes: toMinutes(config.defaultBreakHours),
+    anchorWindowMinutes: config.anchorWindowMinutes,
   };
 }
 
@@ -137,6 +138,8 @@ export async function adjudicateDay(tx: Tx, input: AdjudicateInput): Promise<Att
     isHalfDay: result.isHalfDay,
     cappedAtRequired: result.cappedAtRequired,
     lateMinutes: result.lateMinutes,
+    lateChargeableMinutes: result.lateChargeableMinutes,
+    earlyOutMinutes: result.earlyOutMinutes,
     undertimeForgivenMinutes: result.undertimeForgivenMinutes,
     breakMinutes: result.breakMinutes,
     allowableBreakMinutes: result.allowableBreakMinutes,

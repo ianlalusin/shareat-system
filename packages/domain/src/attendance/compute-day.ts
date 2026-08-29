@@ -69,6 +69,8 @@ export interface DayPolicy {
   nightDiffStartHour: number;
   nightDiffEndHour: number;
   allowableBreakMinutes: number;
+  /** T-157b: how far a clock-in may be from an allowed hour and still count as aiming for it. */
+  anchorWindowMinutes: number;
 }
 
 /** A punch, reduced to what the arithmetic needs. */
@@ -96,7 +98,12 @@ export interface DayComputation {
   computedMinutes: number;
   isHalfDay: boolean;
   cappedAtRequired: boolean;
+  /** RAW. Never grace-adjusted — T-157b §5. */
   lateMinutes: number;
+  /** What a late policy may charge: raw minus the grace. */
+  lateChargeableMinutes: number;
+  /** `max(0, targetEnd − actualOut)`. Recorded even on a full day. */
+  earlyOutMinutes: number;
   undertimeForgivenMinutes: number;
   breakMinutes: number;
   allowableBreakMinutes: number;
@@ -198,118 +205,109 @@ export interface StartAnchor {
 }
 
 /**
- * Which allowed start the day is credited from, read from its SPAN rather than from the punch alone.
+ * ⭐ **The anchor is the allowed hour the staffer was AIMING FOR — the nearest one.**
  *
- * Ian's rule, 2026-08-20 (`shift-boundaries.ts:191-198`), verbatim:
+ * Ian, 2026-08-29, T-157b: *"staff are allowed to start at any hour exact hour like 9:00, 10:00,
+ * 12:00 13:00 14:00 … now the dilema is staff do not clock in exacctly at :00 so the app needs to
+ * know which is the target time the staff is clocking in for"* — and, asked directly, *"nearest
+ * hour"*.
  *
- * > *"**always try the next start first**, judge whether the hours are covered from there, and only
- * > fall back to the prior start — and record the lateness — when they are not."*
- * >
- * > - **Tier 1 (full day)** — the next start still delivers `requiredHours` ⇒ anchor there, not late.
- * > - **Tier 2 (half day)** — the day is short from the preceding anchor too, and its span sits
- * >   closer to `halfDayHours` than to the required hours ⇒ anchor at the next start as a clean
- * >   half day.
- * > - **otherwise** — the preceding allowed start, and record the lateness.
+ * ## ⛔ This REPLACES the span-based Tier 1 / Tier 2 rule, and that is a deliberate reversal
  *
- * ⛔ **The safety property any future change must keep** (`:192-198`):
+ * The rule it replaces asked whether the day *delivered* the required hours from each candidate
+ * start, with two tiers and two gates. It was Ian's 2026-08-20 decision and I ported it faithfully
+ * in T-157 — but the research pass found that **v1's attendance has never paid anybody**: 624
+ * sessions a month, 136 overtime records, and `payrollRuns`/`payrollStaffPayouts` at **zero**,
+ * ever. Bible §1.2b says read v1 as requirements *because staff use it daily*; for the punch
+ * capture that holds, for the adjudication rule it does not. The tiers are a failed attempt, not
+ * proven practice, and Ian names them as why the module was never adopted.
  *
- * > *"Moving the anchor forward NEVER reduces a day's guaranteed paid hours."* Tier 1 — both anchors
- * > cap at `required`, so pay is identical and only the lateness disappears. Tier 2 — both credit
- * > `halfDayMinutes`, so pay is again identical; only the *pending, approval-gated* OT remainder
- * > shrinks.
+ * ⭐ **The simplification is larger than it looks: the anchor no longer depends on the span at
+ * all.** No end time, no tiers, no gates — which also dissolves the circular dependency between
+ * the anchor and the early-out grace that produced a real regression earlier today.
  *
- * ⚠️ Re-derive that property; do not merely match today's outputs. A reimplementation that agrees on
- * the corpus but does not hold it will diverge the first time a store changes `requiredHours`.
+ * ## Ties go to the EARLIER hour
+ *
+ * The one principle worth keeping from the deleted Gate B: *"ties go to the late reading … so the
+ * tie-break can never cost the staffer."* A 13:30 punch against `[13, 14]` is 30 minutes from
+ * either; anchoring earlier credits the time they were actually present, anchoring later discards
+ * half an hour of it.
+ *
+ * ## Beyond the window, it does not snap
+ *
+ * A punch further than `anchorWindowMinutes` from any allowed hour was not aiming for one. It
+ * anchors to its own hour and raises `start_not_allowed` — **advisory, never blocking.**
+ *
+ * ⚠️ Measured, not assumed: against a full hourly grid **0 of 550 real sessions** are more than 30
+ * minutes out (30 is the maximum possible when every hour is allowed), so on Ian's stated model
+ * this branch is unreachable. Against Lipa's *stored* grid `[9,10,11,15,16,17,18]` — no 12, 13 or
+ * 14 — **42% are**. That is a stale config, not off-schedule staff (DEF-087), and the anomaly has
+ * to be advisory or it would block nearly half a store's pay for a data-entry problem.
  */
 export function resolveStartAnchor(params: {
   startMinute: number;
-  effectiveEndMinute: number | null;
   policy: DayPolicy;
 }): StartAnchor {
-  const { startMinute, effectiveEndMinute, policy } = params;
-
-  /**
-   * ⭐ **Each candidate anchor gets its OWN grace-adjusted end**, because "was this a full shift"
-   * cannot be answered without knowing which shift is being asked about — the early-out grace
-   * measures against *that* anchor's full-shift end.
-   *
-   * ⚠️ **The golden master caught this, and nothing else did.** An earlier version resolved the
-   * anchor against the raw clock-out and applied the grace afterwards. On a real Lipa session
-   * (14:50 → 23:47, 30-minute grace) that flipped Tier 1 off: v1 anchored at 15:00 with no
-   * lateness, v2 anchored at 11:00 with **230 minutes late** — and Lipa charges ₱1 per late minute,
-   * so the reordering invented a ₱230 deduction. 46 sessions diverged on the anchor and 32 more on
-   * night differential downstream of it. Unit tests were green throughout.
-   */
-  const endFrom = (anchorMinute: number): number | null =>
-    effectiveEndMinute === null
-      ? null
-      : paidEndMinute({
-          actualEndMinute: effectiveEndMinute,
-          anchorMinute,
-          requiredMinutes: policy.requiredMinutes,
-          earlyOutGraceMinutes: policy.earlyOutGraceMinutes,
-        });
+  const { startMinute, policy } = params;
+  const ownHour = Math.floor(startMinute / 60) * 60;
 
   const offsets = policy.allowedShiftStartHours
     .map((h) => shiftDayOffsetMsForHour(h) / MIN_MS)
     .sort((a, b) => a - b);
 
-  // No schedule configured: anchor to the punch's own hour, exactly as the pairer always did.
   if (offsets.length === 0) {
-    return { anchorMinute: Math.floor(startMinute / 60) * 60, mode: 'unallowed', lateMinutes: 0 };
+    return { anchorMinute: ownHour, mode: 'unallowed', lateMinutes: 0 };
   }
 
-  let prev: number | null = null;
-  let next: number | null = null;
-  for (const o of offsets) {
-    if (o <= startMinute) prev = o;
-    else if (next === null) next = o;
+  // Distance to each allowed hour, measured the short way round the clock so a 04:30 punch is 30
+  // minutes from an 05:00 start rather than 23.5 hours from it. Strict `<` with the list sorted
+  // ascending means a tie keeps the EARLIER hour.
+  let best = offsets[0]!;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const offset of offsets) {
+    const direct = Math.abs(startMinute - offset);
+    const distance = Math.min(direct, DAY_MIN - direct);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = offset;
+    }
   }
 
-  const fallback: StartAnchor = {
-    anchorMinute: prev ?? Math.floor(startMinute / 60) * 60,
-    mode: prev !== null ? 'previous' : 'unallowed',
-    lateMinutes: prev !== null ? Math.max(0, startMinute - prev) : 0,
+  if (bestDistance > Math.max(0, policy.anchorWindowMinutes)) {
+    return { anchorMinute: ownHour, mode: 'unallowed', lateMinutes: 0 };
+  }
+
+  // Signed, wrapped: positive means the punch came AFTER the hour (late for it).
+  let delta = startMinute - best;
+  if (delta > DAY_MIN / 2) delta -= DAY_MIN;
+  if (delta < -DAY_MIN / 2) delta += DAY_MIN;
+
+  return {
+    anchorMinute: best,
+    mode: delta === 0 ? 'exact' : delta > 0 ? 'previous' : 'next',
+    lateMinutes: Math.max(0, delta),
   };
+}
 
-  // ⭐ Landing exactly on an allowed start leaves nothing to reinterpret — and this is also what
-  // keeps a manager's explicit Late/Next-in decision authoritative, because its chosen anchor is
-  // always exactly an allowed start and therefore lands here rather than being second-guessed by
-  // the span.
-  if (prev !== null && fallback.lateMinutes === 0) return { ...fallback, mode: 'exact' };
-
-  if (effectiveEndMinute === null || next === null) return fallback;
-
-  const required = policy.requiredMinutes;
-  if (required <= 0) return fallback;
-
-  const spanNext = (endFrom(next) ?? effectiveEndMinute) - next;
-  const spanPrev = (endFrom(fallback.anchorMinute) ?? effectiveEndMinute) - fallback.anchorMinute;
-  const snapToNext: StartAnchor = { anchorMinute: next, mode: 'next', lateMinutes: 0 };
-
-  // Tier 1 — the next start still delivers a full shift.
-  if (spanNext >= required) return snapToNext;
-
-  // ⚠️ Tier 2 exists ONLY because the short-shift rule does. Without it a short day pays its raw
-  // hours and moving the anchor forward WOULD cut pay — violating the invariant above.
-  const halfDay = policy.halfDayMinutes;
-  if (!policy.shortShiftHalfDayOt || halfDay <= 0 || halfDay >= required) return fallback;
-
-  // ⛔ Gate A — the preceding anchor must be GENUINELY short. Without this *"a day that is FULL from
-  // the preceding start (14:15→22:50 pays 9h from 14:00) would still clear the lower half-day bar
-  // from the next start (8h ≥ 5h) and get demoted to a half day purely to shed a late mark."*
-  // Undertime the store already forgives does not count as shortness either.
-  const forgiven = Math.max(0, policy.undertimeGraceMinutes);
-  if (spanPrev >= required - forgiven) return fallback;
-
-  // Gate B — the delivered span decides which shift was being worked. Ian: *"if the hour covered is
-  // 6, 7, 8, decide by which it is closer to."*
-  // ⭐ Ties go to the LATE reading, deliberately: it keeps today's behaviour and preserves the
-  // larger OT remainder, *"so the tie-break can never cost the staffer."*
-  const closerToHalfDay = required - spanPrev > spanPrev - halfDay;
-  if (!closerToHalfDay) return fallback;
-
-  return spanNext >= halfDay ? snapToNext : fallback;
+/**
+ * ⭐ **Overtime in half-hour steps: 25 minutes earns the half, 50 earns the whole.**
+ *
+ * Ian: *"OT is pending paid when verified and counted by .5 so .5 , 1 , 1.5 , 2 hour 35 =30 mins
+ * 45 = 30 mins 55 = 60 mins or 1 hour"*, then the thresholds: *"25, for half 50 for whole"*.
+ *
+ * ⚠️ **This is NOT v1's rule**, and the difference was invisible until Ian gave the second
+ * threshold. `ot-rounding.ts` rounds up at 25 minutes into each *half-hour* block, so it yields 30
+ * at fifty minutes where this yields 60. All three of Ian's examples (35, 45, 55) fit **both**
+ * rules — they diverge only between 46 and 54 minutes. v1's is also explicitly display-only and
+ * never changed what was filed; this is the filed figure.
+ */
+export function roundOvertimeMinutes(minutes: number): number {
+  if (minutes <= 0) return 0;
+  const wholeHours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  if (remainder >= 50) return (wholeHours + 1) * 60;
+  if (remainder >= 25) return wholeHours * 60 + 30;
+  return wholeHours * 60;
 }
 
 /**
@@ -374,6 +372,8 @@ export function computeDay(params: {
     isHalfDay: false,
     cappedAtRequired: false,
     lateMinutes: 0,
+    lateChargeableMinutes: 0,
+    earlyOutMinutes: 0,
     undertimeForgivenMinutes: 0,
     breakMinutes: 0,
     allowableBreakMinutes: policy.allowableBreakMinutes,
@@ -465,7 +465,7 @@ export function computeDay(params: {
     adjustments.startAnchorMinute !== undefined
       ? // A manager's explicit decision is authoritative and is not re-derived from the span.
         { anchorMinute: adjustments.startAnchorMinute, mode: 'exact' as AnchorMode, lateMinutes: Math.max(0, rawStart - adjustments.startAnchorMinute) }
-      : resolveStartAnchor({ startMinute: paidStart, effectiveEndMinute: paidEndRaw, policy });
+      : resolveStartAnchor({ startMinute: paidStart, policy });
 
   // ---- Step 3: the paid end, with the early-out grace ---------------------------------
   const endMinute = paidEndMinute({
@@ -478,6 +478,29 @@ export function computeDay(params: {
     explain.push(
       `Clock-out ${paidEndRaw}m credited to ${endMinute}m by the ${policy.earlyOutGraceMinutes}-minute ` +
         'early-out grace — they were sent home, not short.',
+    );
+  }
+
+  // ---- Step 3b: the target shift end, and the two facts measured against it ------------
+  //
+  // ⭐ Both are measured against the ACTUAL clock-out, not the graced one. The grace decides what
+  // is PAID; these record what HAPPENED, and a manager asking "did they leave early" must not be
+  // told no because the store forgave it (T-157b §5).
+  const targetEndMinute = anchor.anchorMinute + policy.requiredMinutes;
+  const earlyOutMinutes = Math.max(0, targetEndMinute - paidEndRaw);
+  if (earlyOutMinutes > 0) {
+    explain.push(`Left ${earlyOutMinutes}m before the ${policy.requiredMinutes / 60}h shift end.`);
+  }
+
+  // ⛔ Late-out overtime. Until T-157b this time was capped away and DISCARDED — Ian's own example
+  // (13:45 → 23:35) produced zero overtime where he expects thirty minutes. It is PENDING: the
+  // approval gate is Phase 5, and nothing here pays it.
+  const rawOvertimeMinutes = Math.max(0, paidEndRaw - targetEndMinute);
+  const lateOutOtMinutes = roundOvertimeMinutes(rawOvertimeMinutes);
+  if (lateOutOtMinutes > 0) {
+    explain.push(
+      `Worked ${rawOvertimeMinutes}m past the shift end — ${lateOutOtMinutes}m raised as PENDING ` +
+        'overtime, which pays only once approved.',
     );
   }
 
@@ -515,15 +538,18 @@ export function computeDay(params: {
 
   // ---- Step 6: short-shift half day + pending OT --------------------------------------
   let isHalfDay = false;
-  let pendingOtMinutes = 0;
+  // ⚠️ Seeded with the late-out figure. The short-shift rule below ADDS to it rather than
+  // replacing it: the two are normally mutually exclusive, but a long unpaid break can make a day
+  // short even though it ran past the shift end, and both are then real.
+  let pendingOtMinutes = lateOutOtMinutes;
   if (policy.shortShiftHalfDayOt && computedMinutes < required) {
     if (computedMinutes >= policy.halfDayMinutes) {
-      pendingOtMinutes = computedMinutes - policy.halfDayMinutes;
+      pendingOtMinutes += computedMinutes - policy.halfDayMinutes;
       computedMinutes = policy.halfDayMinutes;
       isHalfDay = true;
       explain.push(
         `Short shift credited as a half day (${policy.halfDayMinutes}m); the remaining ` +
-          `${pendingOtMinutes}m is raised as PENDING overtime and pays only once approved.`,
+          `${computedMinutes - policy.halfDayMinutes}m is raised as PENDING overtime and pays only once approved.`,
       );
     } else {
       // Below the half-day bar there is no half day and no OT — it pro-rates to actual hours.
@@ -577,7 +603,9 @@ export function computeDay(params: {
     computedMinutes,
     isHalfDay,
     cappedAtRequired,
-    lateMinutes: Math.max(0, anchor.lateMinutes - policy.lateGraceMinutes),
+    lateMinutes: anchor.lateMinutes,
+    lateChargeableMinutes: Math.max(0, anchor.lateMinutes - policy.lateGraceMinutes),
+    earlyOutMinutes,
     undertimeForgivenMinutes,
     breakMinutes,
     allowableBreakMinutes: policy.allowableBreakMinutes,

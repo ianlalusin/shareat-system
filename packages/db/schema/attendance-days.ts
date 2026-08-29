@@ -113,8 +113,16 @@ export const attendanceDays = pgTable(
     computedMinutes: integer('computed_minutes').notNull().default(0),
     isHalfDay: boolean('is_half_day').notNull().default(false),
     cappedAtRequired: boolean('capped_at_required').notNull().default(false),
-    /** Recorded always. Whether it costs money is the late policy's business, in Phase 5. */
+    /**
+     * ⛔ **RAW.** `max(0, clockIn − anchor)`, never grace-adjusted — T-157b. It was previously
+     * stored with `lateGraceMinutes` already subtracted, so a 5-minute lateness at a store whose
+     * grace is 5 recorded as 0 and the fact was gone. Grace belongs to CHARGING, not to RECORDING.
+     */
     lateMinutes: integer('late_minutes').notNull().default(0),
+    /** What a late policy may actually charge: `max(0, lateMinutes − lateGraceMinutes)`. */
+    lateChargeableMinutes: integer('late_chargeable_minutes').notNull().default(0),
+    /** ⭐ `max(0, targetEnd − actualOut)`. Recorded even when the day is credited in full. */
+    earlyOutMinutes: integer('early_out_minutes').notNull().default(0),
     undertimeForgivenMinutes: integer('undertime_forgiven_minutes').notNull().default(0),
 
     breakMinutes: integer('break_minutes').notNull().default(0),
@@ -166,7 +174,8 @@ export const attendanceDays = pgTable(
       'attendance_days_non_negative_check',
       sql`${t.computedMinutes} >= 0 and ${t.lateMinutes} >= 0 and ${t.breakMinutes} >= 0
           and ${t.breakOverMinutes} >= 0 and ${t.nightDiffMinutes} >= 0 and ${t.pendingOtMinutes} >= 0
-          and ${t.undertimeForgivenMinutes} >= 0 and ${t.holidayMinutes} >= 0`,
+          and ${t.undertimeForgivenMinutes} >= 0 and ${t.holidayMinutes} >= 0
+          and ${t.lateChargeableMinutes} >= 0 and ${t.earlyOutMinutes} >= 0`,
     ),
     /** Frozen is a pair or neither, like every other two-column fact in this schema. */
     check(

@@ -463,6 +463,13 @@
       "when": 1792553507084,
       "tag": "0075_t158b_no_pin_attendance",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1792639907084,
+      "tag": "0076_t157b_open_hour_anchor_and_overtime",
+      "breakpoints": true
     }
   ]
 }

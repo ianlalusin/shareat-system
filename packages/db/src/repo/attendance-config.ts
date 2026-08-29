@@ -19,6 +19,7 @@ export interface AttendanceConfigRow {
   halfDayHours: string;
   shortShiftHalfDayOt: boolean;
   allowedShiftStartHours: number[];
+  anchorWindowMinutes: number;
   timeMode: TimeMode;
   halfDayOnMissingTap: boolean;
   defaultWorkHours: string;

@@ -357,6 +357,7 @@ describe('T-158 §4 — ⭐ the materiality gate: do not ask what cannot change 
     nightDiffStartHour: 22,
     nightDiffEndHour: 6,
     allowableBreakMinutes: 60,
+    anchorWindowMinutes: 30,
     ...over,
   });
 

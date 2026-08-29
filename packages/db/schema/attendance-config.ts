@@ -105,6 +105,12 @@ export const storeAttendanceConfig = pgTable(
       .array()
       .notNull()
       .default(sql`'{9,10,11,14,15,16,17,18}'::integer[]`),
+    /**
+     * ⭐ T-157b. How far a clock-in may be from an allowed hour and still count as aiming for it.
+     * On a full hourly grid this can never fire — 30 is the maximum possible distance when every
+     * hour is allowed, confirmed across 550 real sessions. It catches a SPARSE or STALE grid.
+     */
+    anchorWindowMinutes: integer('anchor_window_minutes').notNull().default(30),
     timeMode: text('time_mode', { enum: TIME_MODES }).notNull().default('open'),
     halfDayOnMissingTap: boolean('half_day_on_missing_tap').notNull().default(false),
     defaultWorkHours: numeric('default_work_hours', { precision: 4, scale: 2 }).notNull().default('8'),
@@ -184,6 +190,7 @@ export const storeAttendanceConfig = pgTable(
     ),
     check('store_attendance_config_half_day_below_required_check', sql`${t.halfDayHours} < ${t.requiredHoursPerShift}`),
     check('store_attendance_config_positive_hours_check', sql`${t.requiredHoursPerShift} > 0 and ${t.halfDayHours} > 0`),
+    check('store_attendance_config_anchor_window_check', sql`${t.anchorWindowMinutes} >= 0 and ${t.anchorWindowMinutes} <= 60`),
     check(
       'store_attendance_config_grace_non_negative_check',
       sql`${t.lateGraceMinutes} >= 0 and ${t.earlyOutGraceMinutes} >= 0 and ${t.undertimeGraceMinutes} >= 0`,

@@ -29,6 +29,8 @@ export interface AttendanceDayRow {
   isHalfDay: boolean;
   cappedAtRequired: boolean;
   lateMinutes: number;
+  lateChargeableMinutes: number;
+  earlyOutMinutes: number;
   undertimeForgivenMinutes: number;
   breakMinutes: number;
   allowableBreakMinutes: number;
@@ -87,6 +89,8 @@ export async function upsertDay(tx: Tx, input: UpsertDayInput): Promise<Attendan
         isHalfDay: input.isHalfDay,
         cappedAtRequired: input.cappedAtRequired,
         lateMinutes: input.lateMinutes,
+        lateChargeableMinutes: input.lateChargeableMinutes,
+        earlyOutMinutes: input.earlyOutMinutes,
         undertimeForgivenMinutes: input.undertimeForgivenMinutes,
         breakMinutes: input.breakMinutes,
         allowableBreakMinutes: input.allowableBreakMinutes,
