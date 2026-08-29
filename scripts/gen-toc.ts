@@ -73,8 +73,22 @@ export function buildToc(body: string, totalLines: number): string {
   ].join('\n');
 }
 
-/** Returns the file content with a fresh TOC, without writing it. */
-export function withFreshToc(content: string): string {
+/** Returns the file content with a fresh TOC, without writing it. Always returns LF. */
+export function withFreshToc(input: string): string {
+  // ⚠️ CRLF -> LF FIRST. Everything below this line is LF-only, and that is now guaranteed.
+  //
+  // This repo runs `core.autocrlf=true` with no `.gitattributes`, so git stores LF and checks out
+  // CRLF on Windows. Every `split('\n')` below then yields lines ending in a carriage return, the
+  // TOC-entry regex stops matching, and the freshness guard reports a STALE TOC on a document
+  // nobody has edited: red right after a checkout, green right after `npm run toc`, red again
+  // after the next branch switch. **A tooling bug wearing a content bug's clothes** — it cost a
+  // wrong diagnosis and a pointless 89-line rewrite of the bible's TOC before it was found.
+  //
+  // ⛔ Fixed here rather than with a `.gitattributes` `eol=lf` rule, deliberately: renormalising
+  // every file in the repo while other sessions hold uncommitted work is a far larger blast
+  // radius than making one generator platform-independent.
+  const content = input.replace(/\r\n/g, '\n');
+
   const hasBlock = content.includes(START) && content.includes(END);
 
   // On a REGENERATION the title sits ABOVE the existing TOC block, so the head must be taken
@@ -130,7 +144,10 @@ function main(): void {
     const p = join(root, rel);
     const current = readFileSync(p, 'utf8');
     const fresh = withFreshToc(current);
-    if (current === fresh) {
+    // Compare like for like: `withFreshToc` returns LF, so a CRLF working copy has to be
+    // normalised on this side too — otherwise every run on Windows reports stale and rewrites
+    // a file whose content is already correct.
+    if (current.replace(/\r\n/g, '\n') === fresh) {
       console.log(`  ok     ${rel}`);
       continue;
     }
