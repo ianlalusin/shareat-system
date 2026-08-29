@@ -46,6 +46,7 @@ export type { PositionRow, EmploymentRow, RosterRow } from './repo/employment';
 export type { AttendanceConfigRow } from './repo/attendance-config';
 export type { AttendancePunchRow } from './repo/attendance-punches';
 export type { AttendanceDayRow } from './repo/attendance-days';
+export type { AttendanceAdjustmentRow } from './repo/attendance-adjustments';
 export type { LiabilityRow, LiabilityPosition, LiabilityMovement } from './repo/liabilities';
 export type { CustomerRow, PriceListRow, PriceListItemRow } from './repo/customers';
 export { treatmentOf } from './repo/customers';
@@ -87,6 +88,8 @@ export * as attendanceConfigRepo from './repo/attendance-config';
 export * as attendancePunchesRepo from './repo/attendance-punches';
 // T-157 — the adjudicated day (Phase 4, lane B).
 export * as attendanceDaysRepo from './repo/attendance-days';
+// T-158 — the manager's decisions (Phase 4, lane B).
+export * as attendanceAdjustmentsRepo from './repo/attendance-adjustments';
 export * as liabilitiesRepo from './repo/liabilities';
 export * as customersRepo from './repo/customers';
 export * as sessionsRepo from './repo/sessions';
