@@ -136,3 +136,15 @@ The ledger side is built and green; **nothing with a URL exists yet**, and neith
 worktrees and confirm the last journal tag matches what the database applied. **DEF-094** — the
 three lanes share one `shareat_dev`, and a lane whose migration `when` is below the shared maximum
 is skipped with no error and exit 0.
+
+## T-174 — discrepancy disposal and the day-open block (2026-08-30)
+
+| Needs a browser | Why it cannot be checked here |
+|---|---|
+| `apps/erp/src/app/commissary/discrepancies/**` — the list and the resolve dialog | Not written. Port 9008 is held by another lane |
+| ⭐ **`TransitShortfallBlockedError`'s message, read by a real manager** | A commissary manager meets this at 6am when the day will not open. The message names the quantity, the value and how many others there are — but whether that is enough to act on is a question only a person looking at the screen can answer |
+| The `resolve_trade_discrepancy` / `charge_staff_for_discrepancy` capability rows | Deliberately unbuilt — no caller yet, so their ✗ cannot be tested (T-174 §10.4) |
+
+⚠️ **One thing worth watching for in the data, not the browser:** `1230 Advances to employees`
+only ever grows (DEF-099). If anyone charges a shortfall to a staffer, that receivable has no
+drawdown path until Phase 5.

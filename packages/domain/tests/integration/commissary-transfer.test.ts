@@ -76,6 +76,9 @@ const receiptLine = (over: Record<string, unknown> = {}) => ({
   lineId: '1', itemId: itemA, branchItemId: brItemA, branchLocationId: brKitchen,
   dispatchedQuantity: quantity('100'), receivedQuantity: quantity('100'),
   branchBaseUnit: 'kg', commissaryBaseUnit: 'kg', rate: '310.0000',
+  // ⛔ What the 100 kg COST the commissary — 100 × ₱300. `1340` is relieved from THIS, never
+  // from `rate`; the ₱10/kg difference is the margin and goes to `5175`.
+  dispatchCost: money('30000.00'),
   branchItemKind: 'raw_material', ...over,
 });
 
@@ -196,7 +199,12 @@ describe('T-173 — ⭐ the one event where both stores move', () => {
 
     const com = await balances(commissary);
     const br = await balances(branch);
-    // ⭐ 1340 relieved at the transfer value; the receivable raised against the branch.
+    // ⭐ **1340 CLEARS TO ZERO.** It was debited ₱30,000 at cost and is credited ₱30,000 at cost —
+    // never at the ₱310 transfer rate, which would leave it at −₱1,000 forever.
+    expect(com['1340']).toBe('0.00');
+    // ⭐ The ₱1,000 of processing work goes to 5175, which nets the commissary's payroll for this
+    // job back to zero. An internal transfer earns nothing.
+    expect(com['5175']).toBe('-1000.00');
     expect(com['1250']).toBe('31000.00');
     expect(br['2150']).toBe('-31000.00');
     expect(br['1310']).toBe('31000.00');
@@ -207,10 +215,10 @@ describe('T-173 — ⭐ the one event where both stores move', () => {
     expect(all['1210']).toBeUndefined();
     for (const code of Object.keys(all)) expect(code.startsWith('4')).toBe(false);
 
-    // ⭐ One entry, four legs.
+    // ⭐ One entry: 1340, 1250, the branch's 1310, 2150 — and 5175 for the margin.
     const [n] = await sql<{ c: string }[]>`
       select count(*)::text as c from journal_lines where entry_id = ${res.entryId}`;
-    expect(n!.c).toBe('4');
+    expect(n!.c).toBe('5');
 
     // The branch's layer carries ₱310 — the mechanism by which the commissary's work travels.
     const [layer] = await sql<{ unit_cost: string }[]>`
@@ -242,13 +250,18 @@ describe('T-173 — ⭐ the one event where both stores move', () => {
     // 90 × ₱310 = ₱27,900 — NOT 100 × ₱310.
     expect(res.value).toBe(money('27900.00'));
     expect(res.discrepancies).toHaveLength(1);
-    expect(res.inTransitRemaining).toBe(money('3100.00'));
+    // ⭐ AT COST: 10 kg that cost ₱300 each. ⚠️ NOT ₱3,100 — the margin is only earned on goods
+    // that actually arrive, so valuing the gap at the transfer rate would relieve `1340` by more
+    // than the dispatch ever put into it.
+    expect(res.inTransitRemaining).toBe(money('3000.00'));
 
     const com = await balances(commissary);
-    // ⭐ ₱30,000 in at dispatch, ₱27,900 out at receipt — the rest is goods in a truck that never
-    // arrived, and it is a real asset until T-174 says otherwise.
-    expect(com['1340']).toBe('2100.00');
+    // ⭐ ₱30,000 in at dispatch, ₱27,000 of cost out at receipt — the rest is goods in a truck that
+    // never arrived, and it is a real asset until T-174 says otherwise.
+    expect(com['1340']).toBe('3000.00');
     expect(com['1250']).toBe('27900.00');
+    // 90 kg × ₱10 of processing — the margin follows the goods, not the dispatch.
+    expect(com['5175']).toBe('-900.00');
   });
 
   it('⚠️ a difference inside 0.005 is NOT a discrepancy — two scales, not a problem', async () => {
@@ -305,10 +318,13 @@ describe('T-173 — ⭐ the one event where both stores move', () => {
     // received. Under perpetual inventory that gap is permanent and no later count explains it.
     expect(res.entryId).toBeNull();
     expect(res.value).toBe(money('0.00'));
-    expect(res.inTransitRemaining).toBe(money('31000.00'));
+    // The whole shipment stays in transit, at what it cost.
+    expect(res.inTransitRemaining).toBe(money('30000.00'));
     const br = await balances(branch);
     expect(br['1310']).toBeUndefined();
     expect((await balances(commissary))['1340']).toBe('30000.00');
+    // ⛔ And no margin was recognised — nothing arrived, so nothing was earned.
+    expect((await balances(commissary))['5175']).toBeUndefined();
   });
 
   it('⚠️ an UNKNOWN branch unit posts normally — the guard refuses to act on what it cannot check', async () => {
@@ -402,7 +418,7 @@ describe('⭐ a MIXED transfer — two item kinds, two asset accounts, one order
             lineId: '2', itemId: sup!.id, branchItemId: brSup!.id, branchLocationId: brKitchen,
             dispatchedQuantity: quantity('50'), receivedQuantity: quantity('50'),
             branchBaseUnit: 'pcs', commissaryBaseUnit: 'pcs', rate: '22.0000',
-            branchItemKind: 'supply',
+            dispatchCost: money('1000.00'), branchItemKind: 'supply',
           },
         ],
       }),
@@ -416,6 +432,12 @@ describe('⭐ a MIXED transfer — two item kinds, two asset accounts, one order
     expect(br['1320']).toBe('1100.00');
     expect(br['2150']).toBe('-32100.00');
     expect(res.value).toBe(money('32100.00'));
+
+    // ⭐ And the commissary's 1340 clears in full across BOTH kinds: ₱31,000 of cost in, ₱31,000
+    // out, with ₱1,100 of margin (₱1,000 on the pork, ₱100 on the gloves) to 5175.
+    const comAfter = await balances(commissary);
+    expect(comAfter['1340']).toBe('0.00');
+    expect(comAfter['5175']).toBe('-1100.00');
 
     // ⛔ Still no revenue and no payable — a bigger, mixed order does not change the treatment.
     const all = await balances();

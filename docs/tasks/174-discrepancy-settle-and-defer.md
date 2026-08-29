@@ -1,6 +1,6 @@
 # T-174 — What happens to the goods that never arrived
 
-> **Status:** SPEC, 2026-08-29. Written before implementation (bible §1.2a).
+> **Status:** ⭐ **BUILT, 2026-08-30** — migration `0071`, `packages/db/schema/trade-discrepancies.ts`, `packages/db/src/repo/trade-discrepancies.ts`, `packages/domain/src/commissary/discrepancy.ts`, the day-open block in `sales-days/create.ts`, and 21 + 6 green integration tests. ⛔ **Building it found DEF-098** — `1340` could never clear, because T-173 debited it at cost and credited it at the transfer rate. ⚠️ **Two of this spec's own rules changed at build time — §10.** The screen is not built (port 9008).
 > **Depends on:** T-173 (which leaves the gap in `1340`), T-164 (wastage/variance postings),
 > T-123 (sales day — for the day-open block).
 > **v1 read at source** — `branch-order-fulfilment.actions.ts:347-590`,
@@ -155,3 +155,50 @@ taxonomy.
 - [ ] `CAPABILITY-MATRIX.md`: `resolve_trade_discrepancy` (commissary manager/admin),
       `charge_staff_for_discrepancy` — each with its ✗ test.
 - [ ] `docs/ROADMAP.html` updated.
+
+## 10. ⚠️ What this spec got wrong, found by building it
+
+### ⛔ 1. §3's "at the transfer value" was wrong, and it hid a bigger bug
+
+The disposition table valued a charge *"at the transfer value"*, and §5 defined `value` as
+*"quantity × line rate"*. Both are wrong for the same reason: **what is stranded in `1340` is
+COST**, not transfer value. Relieving it at ₱310/kg when ₱300/kg went in leaves the account short
+by the margin on every disposal.
+
+⭐ Following that thread found **DEF-098**, which was the larger fault and one task upstream:
+T-173 credited `1340` at the transfer rate too, so `1340` could **never clear** — a fully received
+₱30,000 shipment transferred at ₱31,000 left it at −₱1,000, permanently, once per shipment.
+⚠️ **The trial balance still tied**, so nothing announced it.
+
+**Everything here is now valued at cost**, and the transfer margin goes to `5175` only for goods
+that actually arrive.
+
+### ⚠️ 2. Invariant 6 — `charge` is NOT refused while Phase 5 is unbuilt
+
+The spec said a `charge` should be refused with a named error until the salary-advance module
+exists. Built out, that is the wrong call:
+
+- ⛔ It would leave `audit` and `loss` as the only options, so a genuinely **recoverable**
+  shortfall gets written off as a loss — worse, and irreversible in the books.
+- ⚠️ The same `1230` receivable is **already raisable through two shipped doors** (`owners`,
+  `cash-requests`), so a gate here would be inconsistent rather than protective.
+
+⭐ The real gap is that **nothing ever credits `1230`** — logged as **DEF-099**, and the right
+control is the same one DEF-082 reached for `2160`: **an ageing alarm, not a block.** It is not
+built.
+
+### ⭐ 3. Test 11's gate needed splitting into two ties
+
+§7.11 asks that `Σ 1310+1320+1330+1340 = Σ` open-layer value. That is false by exactly the
+in-transit amount, and correctly so: **goods on a truck are in no layer**, because a FIFO layer is
+a thing on a shelf. The gate is now two statements — `1310+1320+1330 = open layer value`, and
+`1340 = unresolved discrepancy value`. ⚠️ The second is the sharper one: a `1340` balance with no
+unresolved row to explain it is a ghost.
+
+### ⚠️ 4. Still not built
+
+`apps/erp/src/app/commissary/discrepancies/**` (port 9008), the `resolve_trade_discrepancy` and
+`charge_staff_for_discrepancy` capability rows (no caller yet, so their ✗ cannot be tested — same
+reasoning as T-173 §12), and the `commissaryDiscrepancyOpen` finding. ⭐ **The day-open block does
+not depend on the finding**: it queries `tradeDiscrepanciesRepo.blocking` directly, which is the
+same query the screen will list from — one source, two consumers, per invariant 8.

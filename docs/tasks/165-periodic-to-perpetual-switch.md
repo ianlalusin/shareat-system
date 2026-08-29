@@ -66,6 +66,20 @@ headers and in `POSTING-PATTERNS.md` §`commissary_dispatch.transfer`.
 ⚠️ **`1340` is the piece the periodic shape had no room for.** The old pattern posts once, at
 dispatch, because there was no asset to track in between. Perpetual has one — goods on a truck are
 still the commissary's inventory — so the switch also turns one event into two.
+### ⭐ UPDATE 2026-08-30 — `5175` is not merely KEPT, it is LOAD-BEARING
+
+§4 below argues `5175` survives for the franchise case. There is a second and closer reason,
+found by DEF-098: **under perpetual it carries the transfer margin.**
+
+`1340` is debited at what the goods COST (₱300/kg) and must be relieved at that; the transfer
+happens at ₱310/kg because the price carries the commissary's processing work. The ₱10/kg
+difference has to land somewhere, and `5175` is exactly where — it nets the commissary's payroll
+for that job back to zero, because **an internal transfer earns nothing**. Consolidated,
+`5170 + 5175 = 0` still holds; only the accounts either side of it changed.
+
+⛔ So the switch does **not** remove `5175` from the transfer entry. It removes `5170` from the
+branch side (the branch now debits inventory, not COGS) and it keeps `5175` on the commissary side
+for the margin alone rather than the whole transfer value.
 ### ⚠️ T-133's `5175` does not get deleted
 
 `5175 Cost transferred to branches` is the contra-COGS the chart demanded since T-102b, and under

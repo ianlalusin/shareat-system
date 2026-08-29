@@ -28,10 +28,28 @@
  * ## The two postings
  *
  * ```
- * DISPATCH   Dr 1340 Inventory in transit   Cr 1310/1330   (commissary only — nothing crosses)
- * RECEIPT    Cr 1340                        Dr 1250 Due from related store   (commissary)
+ * DISPATCH   Dr 1340 Inventory in transit   Cr 1310/1320/1330   (commissary — at COST)
+ * RECEIPT    Cr 1340 at COST                Dr 1250 Due from related store   (commissary)
+ *            Cr 5175 the transfer MARGIN
  *            Dr 1310/1320/1330              Cr 2150 Due to related store     (branch)
  * ```
+ *
+ * ⛔ **`1340` IS A COST ACCOUNT AND IS RELIEVED AT COST — the single rule that keeps it clean.**
+ * The dispatch debits what the goods cost the commissary (FIFO, ₱300/kg); the transfer happens at
+ * an agreed price that carries the processing work (₱310/kg). Those are different numbers *on
+ * purpose* — T-133: *"the transfer PRICE carries the processing cost."* Crediting `1340` at the
+ * transfer rate therefore leaves it **permanently negative by exactly the margin**, once per
+ * shipment, ⚠️ **with a trial balance that still ties** — the ₱1,000 is merely in the wrong
+ * account, so nothing announces it. The first cut of this module did precisely that; T-174's
+ * fixture found it by asking what was actually stranded after a short receipt.
+ *
+ * ⭐ **The margin goes to `5175 Cost transferred to branches`, and only for goods that ARRIVE.**
+ * That account's own comment has said since T-102b that it *"must ELIMINATE against the
+ * commissary's transfer-out"*, and this is that job: the commissary expensed ₱1,000 of processing
+ * labour through payroll, and crediting `5175` for ₱1,000 nets its P&L back to zero — which is
+ * correct, because **an internal transfer earns nothing**. Consolidated, `5170 + 5175 = 0`.
+ *
+ * ⚠️ So `5175` is **load-bearing under perpetual**, not a periodic leftover kept for franchises.
  *
  * ⛔ **NOTHING CALLS THESE TWO FUNCTIONS YET, AND THAT IS DELIBERATE.** `dispatchTradeOrder`
  * (`../trade/index.ts`) still posts the PERIODIC internal transfer — `1250`/`5175` and
@@ -44,10 +62,11 @@
  * are invisible between the two stores — the same gap T-167's in-transit reservation closes inside
  * one store.
  */
-import { add, compare, subtract, ZERO, type Money } from '@shareat/core/money';
-import { deliveriesRepo, stockLayersRepo, stockLedgerRepo, type Tx } from '@shareat/db';
+import { add, compare, fromCentavos, subtract, toCentavos, ZERO, type Money } from '@shareat/core/money';
+import { deliveriesRepo, stockLayersRepo, stockLedgerRepo, tradeDiscrepanciesRepo, type Tx } from '@shareat/db';
 import type { ShortageReason } from '@shareat/db/schema';
 import { consume } from '../stock/consume';
+import type { Outcome } from './outcome';
 import { INVENTORY_ACCOUNT_BY_ITEM_KIND } from '../stock/receipt-posting';
 import { lineCost } from '../stock/layers';
 import { postEntry, type PostEntryLine } from '../ledger/post-entry';
@@ -56,6 +75,8 @@ import { quantity, subtractQuantity, toThousandths, type Quantity } from '../sto
 export const IN_TRANSIT_ACCOUNT = '1340';
 export const DUE_FROM_ACCOUNT = '1250';
 export const DUE_TO_ACCOUNT = '2150';
+/** ⭐ Where the transfer margin lands. Contra-COGS at the commissary; nets its processing to zero. */
+export const TRANSFER_OUT_ACCOUNT = '5175';
 
 /**
  * ⚠️ A **measurement** tolerance, and it is v1's: `hasDiscrepancy` fires above 0.005 base units.
@@ -66,6 +87,25 @@ export const DUE_TO_ACCOUNT = '2150';
  * This one fires all the time and should.
  */
 export const RECEIPT_DISCREPANCY_TOLERANCE: Quantity = quantity('0.005');
+
+/**
+ * The share of a line's dispatch cost that belongs to the quantity actually received.
+ *
+ * ⭐ Exact integer arithmetic on centavos and thousandths, rounded half-up — never floats, and
+ * never a per-unit rate multiplied back out, which would drift the last centavo and leave `1340`
+ * holding it forever. ⚠️ A full receipt returns the dispatch cost UNCHANGED rather than a
+ * recomputation, so the account provably clears.
+ */
+export function proportionOfCost(dispatchCost: Money, received: Quantity, dispatched: Quantity): Money {
+  const d = toThousandths(dispatched);
+  if (d === 0n) return ZERO;
+  const r = toThousandths(received);
+  if (r >= d) return dispatchCost;
+  const total = toCentavos(dispatchCost);
+  const scaled = total * r * 2n;
+  const rounded = (scaled + d) / (d * 2n);
+  return fromCentavos(rounded);
+}
 
 export interface DispatchLineInput {
   readonly lineId: string;
@@ -91,8 +131,6 @@ export interface DispatchInput {
   readonly onHandByItem: Readonly<Record<string, Quantity>>;
 }
 
-export type Outcome<T> = ({ readonly ok: true } & T) | { readonly ok: false; readonly reason: string };
-
 /**
  * Dispatch: the goods leave the commissary's shelf for the truck.
  *
@@ -103,7 +141,16 @@ export type Outcome<T> = ({ readonly ok: true } & T) | { readonly ok: false; rea
 export async function dispatchOrder(
   tx: Tx,
   input: DispatchInput,
-): Promise<Outcome<{ entryId: string; movementIds: string[]; value: Money }>> {
+): Promise<Outcome<{
+  entryId: string;
+  movementIds: string[];
+  value: Money;
+  /**
+   * ⭐ Per line, what the goods COST — the figure the receipt must relieve `1340` at. Persist it
+   * on `trade_order_lines.dispatch_cost`; the receipt reads it back rather than being told.
+   */
+  costByLineId: Readonly<Record<string, Money>>;
+}>> {
   if (input.lines.length === 0) return { ok: false, reason: 'a dispatch with no lines moves nothing' };
 
   // ⭐ EVERY refusal is decided before the first write — the T-166 lesson. Validating inside the
@@ -133,6 +180,7 @@ export async function dispatchOrder(
 
   const movementIds: string[] = [];
   const credits: PostEntryLine[] = [];
+  const costByLineId: Record<string, Money> = {};
   let value: Money = ZERO;
 
   for (const line of input.lines) {
@@ -146,6 +194,7 @@ export async function dispatchOrder(
     });
     if (!consumed.ok) return consumed;
     movementIds.push(consumed.movementId);
+    costByLineId[line.lineId] = consumed.totalCost;
     value = add(value, consumed.totalCost);
     // ⚠️ One credit PER LINE, at the account its own kind maps to — the shape `postReceiptValue`
     // already uses. ⛔ A `journal_lines_exactly_one_side_check` rejects a zero-value leg, so a
@@ -177,7 +226,7 @@ export async function dispatchOrder(
     ],
   });
 
-  return { ok: true, entryId: posted.entryId, movementIds, value };
+  return { ok: true, entryId: posted.entryId, movementIds, value, costByLineId };
 }
 
 export interface ReceiptLineInput {
@@ -192,6 +241,12 @@ export interface ReceiptLineInput {
   readonly commissaryBaseUnit: string;
   /** The transfer rate captured on the line — what carries the commissary's processing cost. */
   readonly rate: string;
+  /**
+   * ⛔ **What the DISPATCHED quantity cost the commissary** — `dispatchOrder`'s `costByLineId`,
+   * persisted on the order line. `1340` is relieved from this and never from `rate`; the
+   * difference is the margin, and it goes to `5175`.
+   */
+  readonly dispatchCost: Money;
   /**
    * ⚠️ The **BRANCH** item's kind, not the commissary's. They differ routinely and that is the
    * point of the map: a commissary ships `prepped` marinated pork out of `1330`, and the branch
@@ -217,6 +272,13 @@ export interface ConfirmReceiptInput {
   readonly receivedOn: string;
   readonly lines: readonly ReceiptLineInput[];
   readonly receivedBy: string;
+  /**
+   * ⭐ T-174. Supplied when the order's lines are real rows, which is every path except a test
+   * that posts a bare transfer. ⚠️ When a line's id is present here, a short receipt RAISES A
+   * DISCREPANCY in this same transaction — so a shortfall cannot sit in `1340` without a row
+   * naming it, and the day-open block can never disagree with the ledger.
+   */
+  readonly orderLineIdByLineId?: Readonly<Record<string, string>>;
 }
 
 export interface ConfirmReceiptResult {
@@ -234,7 +296,7 @@ export interface ConfirmReceiptResult {
    */
   readonly entryId: string | null;
   readonly branchMovements: readonly { lineId: string; movementId: string }[];
-  readonly discrepancies: readonly { lineId: string; shortfall: Quantity }[];
+  readonly discrepancies: readonly { lineId: string; shortfall: Quantity; id: string | null }[];
   readonly unitMismatches: readonly string[];
   readonly value: Money;
   readonly inTransitRemaining: Money;
@@ -254,14 +316,16 @@ export async function confirmReceipt(
   if (input.lines.length === 0) return { ok: false, reason: 'a receipt with no lines posts nothing' };
 
   const branchMovements: { lineId: string; movementId: string }[] = [];
-  const discrepancies: { lineId: string; shortfall: Quantity }[] = [];
+  const discrepancies: { lineId: string; shortfall: Quantity; id: string | null }[] = [];
   const unitMismatches: string[] = [];
   let receivedValue: Money = ZERO;
-  let dispatchedValue: Money = ZERO;
+  let receivedCost: Money = ZERO;
+  let dispatchedCost: Money = ZERO;
 
   // ---- Pass 1: decide everything, write nothing. ---------------------------------------------
   // ⭐ The T-166 lesson again: a refusal discovered on line 2 must not leave line 1's stock moved.
-  const accepted: { line: ReceiptLineInput; account: string; value: Money }[] = [];
+  const accepted: { line: ReceiptLineInput; account: string; value: Money; cost: Money }[] = [];
+  const shortfalls: { line: ReceiptLineInput; shortfall: Quantity }[] = [];
 
   for (const line of input.lines) {
     const account = INVENTORY_ACCOUNT_BY_ITEM_KIND[line.branchItemKind];
@@ -272,11 +336,11 @@ export async function confirmReceipt(
       };
     }
 
-    dispatchedValue = add(dispatchedValue, lineCost(line.dispatchedQuantity, line.rate));
+    dispatchedCost = add(dispatchedCost, line.dispatchCost);
 
     const shortfall = subtractQuantity(line.dispatchedQuantity, line.receivedQuantity);
     if (toThousandths(shortfall) > toThousandths(RECEIPT_DISCREPANCY_TOLERANCE)) {
-      discrepancies.push({ lineId: line.lineId, shortfall });
+      shortfalls.push({ line, shortfall });
     }
 
     if (toThousandths(line.receivedQuantity) === 0n) continue;
@@ -302,8 +366,10 @@ export async function confirmReceipt(
 
     const value = lineCost(line.receivedQuantity, line.rate);
     if (compare(value, ZERO) <= 0) continue;
-    accepted.push({ line, account, value });
+    const cost = proportionOfCost(line.dispatchCost, line.receivedQuantity, line.dispatchedQuantity);
+    accepted.push({ line, account, value, cost });
     receivedValue = add(receivedValue, value);
+    receivedCost = add(receivedCost, cost);
   }
 
   // ---- Pass 2: write. ------------------------------------------------------------------------
@@ -325,6 +391,34 @@ export async function confirmReceipt(
       quantity: line.receivedQuantity, unitCost: line.rate,
       source: 'transfer_in', sourceId: input.orderId, movementId: movement.id,
     });
+  }
+
+  // ⭐ T-174: one row per short line, in THIS transaction. ⛔ There is no "raise a discrepancy"
+  // action anywhere — if the shortfall and the row could be created separately, the day-open block
+  // would be guarding a list that a failed second step can leave empty.
+  for (const { line, shortfall } of shortfalls) {
+    const orderLineId = input.orderLineIdByLineId?.[line.lineId];
+    if (!orderLineId) {
+      discrepancies.push({ lineId: line.lineId, shortfall, id: null });
+      continue;
+    }
+    const created = await tradeDiscrepanciesRepo.create(tx, {
+      orgId: input.orgId,
+      // ⚠️ The COMMISSARY's store. The stranded value is on ITS books, and it is its manager
+      // who decides what happened — invariant 11.
+      storeId: input.commissaryStoreId,
+      orderId: input.orderId,
+      orderLineId,
+      quantity: shortfall,
+      // ⭐ AT COST, because that is what is actually stranded in `1340`. ⚠️ Valuing the dispute at
+      // the transfer rate would make every disposal relieve `1340` by more than the goods put
+      // into it — the same ₱-per-shipment hole in a second place.
+      value: subtract(
+        line.dispatchCost,
+        proportionOfCost(line.dispatchCost, line.receivedQuantity, line.dispatchedQuantity),
+      ),
+    });
+    discrepancies.push({ lineId: line.lineId, shortfall, id: created.id });
   }
 
   // ⚠️ Written from EVERY line, not just the accepted ones — a shipment whose units were wrong
@@ -355,7 +449,7 @@ export async function confirmReceipt(
   if (compare(receivedValue, ZERO) <= 0) {
     return {
       ok: true, entryId: null, deliveryId: delivery.id, branchMovements, discrepancies,
-      unitMismatches, value: ZERO, inTransitRemaining: dispatchedValue,
+      unitMismatches, value: ZERO, inTransitRemaining: dispatchedCost,
     };
   }
 
@@ -365,8 +459,11 @@ export async function confirmReceipt(
   // ⚠️ The branch's debit is ONE LEG PER LINE, at the account that line's own kind maps to — the
   // shape `postReceiptValue` already uses. A single leg at `lines[0]`'s account would post a
   // mixed receipt's `prepped` goods into `1310` and silently misstate both accounts.
+  // ⭐ `1340` at COST; the margin to `5175`. Together they equal the transfer value, so the entry
+  // balances against the two `receivedValue` legs below.
+  const margin = subtract(receivedValue, receivedCost);
   const lines: PostEntryLine[] = [
-    { accountCode: IN_TRANSIT_ACCOUNT, storeId: input.commissaryStoreId, credit: receivedValue },
+    { accountCode: IN_TRANSIT_ACCOUNT, storeId: input.commissaryStoreId, credit: receivedCost },
     {
       accountCode: DUE_FROM_ACCOUNT, storeId: input.commissaryStoreId, debit: receivedValue,
       partyType: 'store', partyId: input.branchStoreCode,
@@ -379,6 +476,19 @@ export async function confirmReceipt(
       partyType: 'store', partyId: input.commissaryStoreCode,
     },
   ];
+
+  // ⚠️ Only when there IS one. A transfer at cost has no margin, and
+  // `journal_lines_exactly_one_side_check` rejects a zero-value leg. ⛔ A NEGATIVE margin — a
+  // transfer priced below cost — is a debit, not an absent leg: it is a real subsidy of the branch
+  // by the commissary and it belongs on the face of the books, not rounded away.
+  if (compare(margin, ZERO) > 0) {
+    lines.push({ accountCode: TRANSFER_OUT_ACCOUNT, storeId: input.commissaryStoreId, credit: margin });
+  } else if (compare(margin, ZERO) < 0) {
+    lines.push({
+      accountCode: TRANSFER_OUT_ACCOUNT, storeId: input.commissaryStoreId,
+      debit: subtract(ZERO, margin),
+    });
+  }
 
   const posted = await postEntry(tx, {
     orgId: input.orgId, entryDate: input.receivedOn,
@@ -397,8 +507,8 @@ export async function confirmReceipt(
     discrepancies,
     unitMismatches,
     value: receivedValue,
-    // ⚠️ What stayed in transit. NOT written off here — goods in a truck that never arrived are a
-    // real asset until a manager says otherwise (T-174).
-    inTransitRemaining: subtract(dispatchedValue, receivedValue),
+    // ⚠️ What stayed in transit, AT COST — which is what `1340` still holds. NOT written off here:
+    // goods in a truck that never arrived are a real asset until a manager says otherwise (T-174).
+    inTransitRemaining: subtract(dispatchedCost, receivedCost),
   };
 }

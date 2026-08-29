@@ -425,6 +425,18 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     reason: 'The detail of a usage record, by CASCADE. Same class as its parent.',
   },
 
+  // ---- T-174: the transit shortfall ------------------------------------------------------
+  trade_discrepancies: {
+    // ⛔ purge: a dispute about a shipment that moved in the OLD books belongs to the old books.
+    // ⚠️ An unresolved one at cutover is not a data problem to migrate — it is a decision
+    // somebody still owes, and it must be made before the year closes, not carried across it.
+    class: 'purge',
+    reason:
+      'An operational dispute about one dispatch, and the `1340` balance it disposes of purges ' +
+      'with the rest of the ledger. On 2027-01-01 every location opens at the counted figure ' +
+      '(T-134), which is the answer to every transit question the old books had left open.',
+  },
+
   // ---- T-171: the commissary catalogue --------------------------------------------------
   commissary_links: {
     // ⭐ keep: WHICH branch may order from WHICH commissary is a standing arrangement about the

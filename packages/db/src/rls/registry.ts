@@ -56,6 +56,12 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     via: 'exists (select 1 from stock_usage_records r where r.id = record_id and r.org_id = app_current_org())',
   },
 
+  // ---- T-174: the transit shortfall ------------------------------------------------------
+  trade_discrepancies: {
+    scope: 'org_column',
+    reason: 'A dispute between two stores of ONE org. It never spans one.',
+  },
+
   // ---- T-171: the commissary catalogue --------------------------------------------------
   commissary_links: {
     scope: 'org_column',

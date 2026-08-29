@@ -97,6 +97,8 @@ export * as itemsRepo from './repo/items';
 export * as stockLedgerRepo from './repo/stock-ledger';
 export * as stockLayersRepo from './repo/stock-layers';
 export * as deliveriesRepo from './repo/deliveries';
+export * as tradeDiscrepanciesRepo from './repo/trade-discrepancies';
+export type { TradeDiscrepancyRow } from './repo/trade-discrepancies';
 export type { CatalogueEntry, SimilarItem, ItemRequestRow, MergeReport, DuplicateCandidate } from './repo/items';
 export { SIMILARITY_FLOOR } from './repo/items';
 export { ITEM_REQUEST_STATUSES } from '../schema/items';

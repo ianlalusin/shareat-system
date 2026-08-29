@@ -210,6 +210,18 @@ export const tradeOrderLines = pgTable(
      * cannot silently reclassify an order already in a truck.
      */
     expenseCategoryId: uuid('expense_category_id').references(() => expenseCategories.id, { onDelete: 'restrict' }),
+    /**
+     * ⭐ **What the goods COST the commissary when they left the shelf** — written by the
+     * dispatch, read back by the receipt.
+     *
+     * ⛔ It is not the transfer value and must never be confused with `rate`. `1340 Inventory in
+     * transit` is debited at this figure and must be relieved at it; the difference between it and
+     * the transfer value is the commissary's processing work, which goes to `5175` and only for
+     * the goods that actually arrive. Debiting `1340` at cost and crediting it at the transfer
+     * rate leaves the account permanently negative by exactly that margin — once per shipment,
+     * with a trial balance that still ties. See `0071`'s header.
+     */
+    dispatchCost: numeric('dispatch_cost', { precision: 14, scale: 2 }),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -217,6 +229,7 @@ export const tradeOrderLines = pgTable(
     check('trade_order_lines_quantity_positive_check', sql`${t.quantity} > 0`),
     check('trade_order_lines_rate_non_negative_check', sql`${t.rate} >= 0`),
     check('trade_order_lines_total_positive_check', sql`${t.lineTotal} > 0`),
+    check('trade_order_lines_dispatch_cost_check', sql`${t.dispatchCost} is null or ${t.dispatchCost} >= 0`),
     check('trade_order_lines_origin_check', sql`${t.origin} in ('requested','commissary_added')`),
     check(
       'trade_order_lines_approval_check',

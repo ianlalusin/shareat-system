@@ -44,4 +44,6 @@ export * from './stock/count-sessions';
 export * from './stock-locations/rules';
 export * from './deliveries/receive';
 export * from './deliveries/duplicate-risk';
+export * from './commissary/outcome';
 export * from './commissary/transfer';
+export * from './commissary/discrepancy';

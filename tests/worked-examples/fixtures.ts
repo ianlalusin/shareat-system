@@ -648,6 +648,51 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
   },
 
   // =========================================================================================
+  // T-174 — what happens to the goods that never arrived. The two dispositions that POST.
+  // =========================================================================================
+  {
+    id: 'commissary.discrepancy-loss',
+    sourceType: 'trade_discrepancy',
+    title: 'Transit shortfall written off as a loss — 1340 emptied, at cost',
+    narrative:
+      'The Lipa branch signed for 90 of the 100 kg Malvar dispatched. T-173 posted what arrived ' +
+      'and left \u20b13,000 \u2014 ten kilos AT COST \u2014 sitting in 1340, because goods that visibly left ' +
+      'one building and did not reach another are a real asset until somebody says otherwise. ' +
+      'The commissary manager says they spoiled on the road.',
+    input: { discrepancyId: 'DISC-0001', disposition: 'loss', quantity: '10.000', value: '3000.00' },
+    expect: [
+      D('5300', '3000.00', null, { storeRef: 'commissary', lineMemo: 'lost in transit to branch' }),
+      C('1340', '3000.00', null, { storeRef: 'commissary', lineMemo: 'transit cleared' }),
+    ],
+    entryDate: '2026-02-22',
+    trap: 'AT COST (\u20b1300/kg), never at the \u20b1310 transfer rate \u2014 cost is what 1340 is holding, and ' +
+      'relieving it at the transfer value would empty the account by \u20b1100 more than the dispatch ' +
+      'put into it. That is DEF-098 in a second place. And 5300, not 5400: a count variance is a ' +
+      'CORRECTION to the books, while goods that left one building and did not reach another are ' +
+      'a LOSS \u2014 different facts, different accounts (T-164 \u00a72).',
+  },
+  {
+    id: 'commissary.discrepancy-charge',
+    sourceType: 'trade_discrepancy',
+    title: 'Transit shortfall charged to the driver — an ASSET, not an expense',
+    narrative:
+      'The same \u20b13,000 gap, decided differently: the commissary manager recovers it from the ' +
+      'driver who signed for the crates. It becomes a receivable from that person, to be drawn ' +
+      'down by a payroll deduction \u2014 not a cost of doing business.',
+    input: { discrepancyId: 'DISC-0002', disposition: 'charge', chargePerson: 'PERSON-DRIVER', value: '3000.00' },
+    expect: [
+      D('1230', '3000.00', { type: 'employee', id: 'PERSON-DRIVER' }, { storeRef: 'commissary', lineMemo: 'charged to driver' }),
+      C('1340', '3000.00', null, { storeRef: 'commissary', lineMemo: 'transit cleared' }),
+    ],
+    entryDate: '2026-02-22',
+    trap: '1230 is an ASSET and requires a party \u2014 the PERSON, party_type employee. \u26d4 Nothing in ' +
+      'the codebase ever CREDITS 1230 (DEF-099): the payroll deduction that draws it down is ' +
+      'Phase 5 and does not exist, so this receivable currently only grows \u2014 the same shape as ' +
+      "DEF-082's service-charge float. The charge is still offered rather than blocked, because " +
+      'refusing it would force a recoverable shortfall to be written off as a loss instead.',
+  },
+
+  // =========================================================================================
   // channel_settlement — T-150. The document that finally clears 1220, which nothing ever did.
   // =========================================================================================
   {
