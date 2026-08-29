@@ -24,6 +24,8 @@ import {
   adjudicateDay,
   createEmployment,
   endEmployment,
+  enrolCard,
+  enrolFingerprint,
   ingestEvents,
   parseShiftDay,
   provisionTerminal,
@@ -101,7 +103,27 @@ async function fixture(hint: string) {
   );
   await asOrg(orgId, (tx) => activateTerminal(tx, { terminalId: terminal.id }));
 
-  return { orgId, storeId: store!.id, otherStoreId: other!.id, admin: a, workerId: worker!.id, employment, terminal };
+  // ⭐ T-164: the device reports what it SCANNED, so the fixture needs a real badge to scan.
+  const cardId = uid('card');
+  const credential = await asOrg(orgId, (tx) =>
+    enrolCard(tx, a, { employmentId: employment.id, cardId }),
+  );
+
+  // ⚠️ Backdated on purpose. `resolveCredentialAt` requires `enrolled_at <= occurredAt` — a badge
+  // cannot authorise a punch made before it existed, which is a real fraud guard (enrol a card
+  // today, back-date a month of punches to it). These fixtures punch on YESTERDAY's shift day, so
+  // an enrolment stamped `now()` would correctly refuse every one of them.
+  await sql`update attendance_credentials set enrolled_at = now() - interval '30 days'
+            where id = ${credential.id}`;
+
+  const finger = await asOrg(orgId, (tx) =>
+    enrolFingerprint(tx, a, { employmentId: employment.id, templates: ['dGVtcGxhdGU='] }),
+  );
+  await sql`update attendance_credentials set enrolled_at = now() - interval '30 days'
+            where id = ${finger.id}`;
+
+  return { orgId, storeId: store!.id, otherStoreId: other!.id, admin: a, workerId: worker!.id,
+    employment, terminal, cardId, credential, matchToken: finger.matchToken! };
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 
@@ -110,7 +132,10 @@ const event = (f: Fixture, over: Record<string, unknown> = {}) => ({
   occurredAt: at(14),
   deviceId: f.terminal.id,
   storeId: f.storeId,
-  employmentId: f.employment.id,
+  // ⭐ T-164 removed `employmentId` from the event. The server resolves the credential itself —
+  // that is what closes landmine #22, where v1 let possession of a token be the authorisation.
+  credentialKind: 'card',
+  credentialRef: f.cardId,
   method: 'qr',
   assertedIntent: 'in',
   ...over,
@@ -156,12 +181,12 @@ describe('T-161 invariants 2 & 9 — nothing is dropped, and one bad event stops
     // decided in TypeScript before any statement runs, so the plain `try` always contained it. A
     // value that is the right TYPE but not a uuid gets all the way to Postgres, which then aborts
     // the whole transaction: the catch-all's own quarantine INSERT was refused too, and
-    // `ingestEvents` THREW instead of quarantining. One tablet sending `employmentId: "y"` would
+    // `ingestEvents` THREW instead of quarantining. One tablet sending `deviceId: "y"` would
     // have taken a whole store's day down with it.
     //
     // The fix is a savepoint per event. This test is the proof, and it fails without it.
     const f = await fixture('dberror');
-    const poison = event(f, { employmentId: 'not-a-uuid' });
+    const poison = event(f, { deviceId: 'not-a-uuid' });
     const good = event(f, { occurredAt: at(15) });
 
     const report = await ingest(f, [poison, good, event(f, { occurredAt: at(16) })]);
@@ -179,7 +204,7 @@ describe('T-161 invariants 2 & 9 — nothing is dropped, and one bad event stops
     const q = await quarantined(f);
     expect(q).toHaveLength(1);
     expect(q[0]!.reason_code).toBe('internal_error');
-    expect((q[0]!.raw_event as Record<string, unknown>).employmentId).toBe('not-a-uuid');
+    expect((q[0]!.raw_event as Record<string, unknown>).deviceId).toBe('not-a-uuid');
   });
 
   it('2. a malformed event is quarantined with its RAW body intact', async () => {
@@ -271,7 +296,11 @@ describe('T-161 invariant 4 — ⭐ the kill switch is read from the day’s OWN
         changes: { credentialNfc: false },
       }),
     );
-    const report = await ingest(f, [event(f, { method: 'fingerprint' })]);
+    // ⭐ T-164: the method and the credential have to agree. A fingerprint punch carries the
+    // fingerprint credential — a device cannot claim one method while presenting another's badge.
+    const report = await ingest(f, [
+      event(f, { method: 'fingerprint', credentialKind: 'fingerprint', credentialRef: f.matchToken }),
+    ]);
     expect(report.ingested).toBe(1);
   });
 });
@@ -279,15 +308,20 @@ describe('T-161 invariant 4 — ⭐ the kill switch is read from the day’s OWN
 describe('T-161 invariant 5 — ⭐ a quarantine HEALS, with no human action', () => {
   it('an event stuck as unknown_credential ingests once the employment exists', async () => {
     const f = await fixture('heal');
-    const ghost = '00000000-0000-0000-0000-0000000000aa';
-    const e = event(f, { employmentId: ghost });
+    const unenrolled = uid('newcard');
+    const e = event(f, { credentialRef: unenrolled });
 
     const stuck = await ingest(f, [e]);
     expect(stuck.byReason.unknown_credential).toBe(1);
 
-    // The world changes: the event is re-delivered naming a real, open employment.
-    const fixed = { ...e, employmentId: f.employment.id };
-    const healed = await ingest(f, [fixed]);
+    // ⭐ The world changes: somebody enrols the badge. The SAME event is re-delivered unchanged —
+    // nothing about it was edited, which is the whole difference from a dead letter.
+    const late = await asOrg(f.orgId, (tx) =>
+      enrolCard(tx, f.admin, { employmentId: f.employment.id, cardId: unenrolled }),
+    );
+    await sql`update attendance_credentials set enrolled_at = now() - interval '30 days'
+              where id = ${late.id}`;
+    const healed = await ingest(f, [e]);
 
     expect(healed.ingested).toBe(1);
     expect(healed.healed).toBe(1);
@@ -299,9 +333,15 @@ describe('T-161 invariant 5 — ⭐ a quarantine HEALS, with no human action', (
 
   it('⭐ a healed row records NO person — nobody decided it', async () => {
     const f = await fixture('heal-attr');
-    const e = event(f, { employmentId: '00000000-0000-0000-0000-0000000000bb' });
+    const unenrolled = uid('newcard');
+    const e = event(f, { credentialRef: unenrolled });
     await ingest(f, [e]);
-    await ingest(f, [{ ...e, employmentId: f.employment.id }]);
+    const late2 = await asOrg(f.orgId, (tx) =>
+      enrolCard(tx, f.admin, { employmentId: f.employment.id, cardId: unenrolled }),
+    );
+    await sql`update attendance_credentials set enrolled_at = now() - interval '30 days'
+              where id = ${late2.id}`;
+    await ingest(f, [e]);
     const [row] = await sql<{ resolved_by: string | null }[]>`
       select resolved_by from inbox_quarantine where org_id = ${f.orgId}`;
     expect(row!.resolved_by).toBeNull();

@@ -17,23 +17,62 @@
 import { sql } from 'drizzle-orm';
 import {
   attendanceConfigRepo,
+  attendanceCredentialsRepo,
   clockTerminalsRepo,
   employmentRepo,
   inboxQuarantineRepo,
   type Tx,
 } from '@shareat/db';
-import type { PunchIntent, PunchMethod, QuarantineReason } from '@shareat/db/schema';
-import { PUNCH_INTENTS, PUNCH_METHODS } from '@shareat/db/schema';
+import type {
+  CredentialKind,
+  PunchIntent,
+  PunchMethod,
+  QuarantineReason,
+} from '@shareat/db/schema';
+import { CREDENTIAL_KINDS, PUNCH_INTENTS, PUNCH_METHODS } from '@shareat/db/schema';
+
+/**
+ * Which credential each method implies.
+ *
+ * ⛔ `face` and `manual` map to **nothing**, on purpose. A face template is never mirrored
+ * (bible §5.3), so no device can have matched one locally; and a manual entry is a back-office act
+ * with a named human behind it (T-156), not something a terminal files. Neither belongs in the
+ * inbox, and the shape check refuses both.
+ */
+const METHOD_CREDENTIAL: Record<PunchMethod, CredentialKind | null> = {
+  nfc: 'card',
+  qr: 'card',
+  fingerprint: 'fingerprint',
+  face: null,
+  manual: null,
+};
 import { recordPunch } from '../attendance/punches';
 import { toShiftDay } from '../attendance/shift-day';
 
-/** One document from `/inbox`, exactly as it arrived. */
+/**
+ * One document from `/inbox`, exactly as it arrived.
+ *
+ * ⭐⭐ **T-164 removed `employmentId` from this shape, and that removal is the point of T-164.**
+ *
+ * Landmine #22, from discovery 05's known gaps about v1: *"punches are authorized by possession of
+ * `matchToken` alone — neither `clockByFingerprintAction` nor `clockByFaceAction` re-runs a
+ * biometric match server-side; a leaked token … can punch indefinitely until the token is
+ * rotated."* T-161 shipped the shape of the fix and said so in its own comment, but it still took
+ * the CONCLUSION from the device: the terminal said who punched, and the server only checked that
+ * the person named was real, open and at this store.
+ *
+ * Now the device reports what it **scanned**, and the server decides whose it is. A tablet can no
+ * longer name a colleague.
+ */
 export interface InboxEvent {
   clientPunchId: string;
   occurredAt: number;
   deviceId: string;
   storeId: string;
-  employmentId: string;
+  /** `card` or `fingerprint` — the two a device can match locally. */
+  credentialKind: string;
+  /** The card id scanned, or the match token the reader resolved. Never a person. */
+  credentialRef: string;
   method: string;
   assertedIntent: string;
   [key: string]: unknown;
@@ -189,22 +228,40 @@ async function ingestOne(tx: Tx, raw: unknown): Promise<Outcome> {
       terminal.storeId, terminal.id);
   }
 
-  // ---- 3. The employment ------------------------------------------------------------
+  // ---- 3. The credential, resolved SERVER-SIDE ----------------------------------------
   //
-  // ⚠️ This is the server-side re-verification landmine #22 asks for — v1 authorises a punch by
-  // possession of a `matchToken` alone and never re-checks. It is not yet the FULL check: matching
-  // a credential (card id, fingerprint token) to a person server-side needs credentials to exist,
-  // and enrolment is T-164. What is verified here is that the employment the terminal resolved is
-  // real, open, and at this store.
-  const employment = await employmentRepo.getEmployment(tx, String(event.employmentId));
+  // ⭐⭐ This is what closes landmine #22. The device says what it scanned; the server says whose
+  // it is.
+  //
+  // ⚠️ Resolved as of the punch's OWN timestamp, not as of now. A punch made at 14:00 on a card
+  // revoked at 15:00 is valid — a real person with a live badge, before the revocation existed. It
+  // is the same rule the kill switch below already follows (the config in force on the punch's own
+  // shift day), so this module keeps one principle instead of two.
+  //
+  // ⛔ The converse is the half that matters: a badge revoked at 15:00 cannot punch at 15:01, even
+  // from a terminal that has been offline for a week and still holds it in its mirror.
+  const credential = await attendanceCredentialsRepo.resolveCredentialAt(tx, {
+    storeId: terminal.storeId,
+    kind: event.credentialKind as CredentialKind,
+    ref: String(event.credentialRef),
+    at: occurredAt,
+  });
+  if (!credential) {
+    return quarantineAnd(tx, raw, clientPunchId, 'unknown_credential',
+      `No ${event.credentialKind} credential at this store was live at ${occurredAt.toISOString()}. ` +
+        'It may not be enrolled yet, or it may have been revoked before the punch was made.',
+      terminal.storeId, terminal.id);
+  }
+
+  const employment = await employmentRepo.getEmployment(tx, credential.employmentId);
   if (!employment || employment.endedOn !== null) {
     return quarantineAnd(tx, raw, clientPunchId, 'unknown_credential',
-      `No open employment ${event.employmentId} at this store. The staffer may not be enrolled yet, ` +
-        'or may have left.', terminal.storeId, terminal.id);
+      'That credential resolves to an employment that has ended. The badge outlived the job — ' +
+        'revoke it.', terminal.storeId, terminal.id);
   }
   if (employment.storeId !== terminal.storeId) {
     return quarantineAnd(tx, raw, clientPunchId, 'store_mismatch',
-      'The employment this event names belongs to a different store than the terminal.',
+      'The credential this event names belongs to an employment at a different store.',
       terminal.storeId, terminal.id);
   }
 
@@ -256,11 +313,24 @@ function shapeErrors(event: Partial<InboxEvent>): string | null {
   }
   if (typeof event.deviceId !== 'string' || !event.deviceId) problems.push('deviceId is missing');
   if (typeof event.storeId !== 'string' || !event.storeId) problems.push('storeId is missing');
-  if (typeof event.employmentId !== 'string' || !event.employmentId) {
-    problems.push('employmentId is missing');
+  if (!CREDENTIAL_KINDS.includes(event.credentialKind as CredentialKind)) {
+    problems.push(
+      `credentialKind "${String(event.credentialKind)}" is not one of ${CREDENTIAL_KINDS.join(', ')}`,
+    );
+  }
+  if (typeof event.credentialRef !== 'string' || !event.credentialRef) {
+    problems.push('credentialRef is missing — the event says nothing was scanned');
   }
   if (!PUNCH_METHODS.includes(event.method as PunchMethod)) {
     problems.push(`method "${String(event.method)}" is not one of ${PUNCH_METHODS.join(', ')}`);
+  } else if (METHOD_CREDENTIAL[event.method as PunchMethod] !== event.credentialKind) {
+    // ⛔ A device cannot file a `manual` entry — that is a back-office act with a named human
+    // behind it (T-156) — and it cannot file a `face` punch either, because face templates are
+    // never mirrored (bible §5.3), so no device can have matched one locally. Both map to null
+    // above and are refused here rather than silently accepted with a credential they cannot have.
+    problems.push(
+      `method "${String(event.method)}" cannot carry a ${String(event.credentialKind)} credential`,
+    );
   }
   if (!PUNCH_INTENTS.includes(event.assertedIntent as PunchIntent)) {
     problems.push(`assertedIntent "${String(event.assertedIntent)}" is not recognised`);

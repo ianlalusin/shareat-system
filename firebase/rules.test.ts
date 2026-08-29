@@ -53,6 +53,11 @@ const event = (id: string, over: Record<string, unknown> = {}) => ({
   occurredAt: Date.now(),
   deviceId: DEVICE,
   storeId: LIPA,
+  // ⭐ T-164: the event carries what was SCANNED, never a person. The create rule requires both
+  // keys, so a terminal that still sends an employmentId is refused by the rules before the
+  // ingestor ever sees it.
+  credentialKind: 'card',
+  credentialRef: 'badge-0001',
   method: 'qr',
   assertedIntent: 'in',
   ...over,

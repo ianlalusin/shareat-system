@@ -62,7 +62,8 @@ service cloud.firestore {
     match /inbox/{eventId} {
       allow create: if isTerminal()
                     && request.resource.data.keys().hasAll(
-                         ['clientPunchId', 'occurredAt', 'deviceId', 'storeId', 'method', 'assertedIntent'])
+                         ['clientPunchId', 'occurredAt', 'deviceId', 'storeId', 'method', 'assertedIntent',
+                          'credentialKind', 'credentialRef'])
                     && request.resource.data.clientPunchId is string
                     // The idempotency key IS the document id, so the SDK's own retry writes to the
                     // same path instead of creating a second event. Defence in depth, ahead of the

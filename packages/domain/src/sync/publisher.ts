@@ -11,7 +11,7 @@
  * exists to remove (bible §15.4).
  */
 import { sql } from 'drizzle-orm';
-import { mirrorOutboxRepo, type OutboxRow, type Tx } from '@shareat/db';
+import { attendanceCredentialsRepo, mirrorOutboxRepo, type OutboxRow, type Tx } from '@shareat/db';
 import type { MirrorEntity } from '@shareat/db/schema';
 
 /** One document to write, or tombstone, in the mirror. */
@@ -147,6 +147,44 @@ async function buildDocument(tx: Tx, row: OutboxRow): Promise<MirrorDocument | n
         displayName: employment.displayName,
         position: employment.position,
         employmentStatus: employment.employmentStatus,
+      },
+    };
+  }
+
+  if (row.entity === 'credential') {
+    /**
+     * ⭐ **The only entity that publishes outside `mirror/`.** It goes to
+     * `biometricMirror/{storeId}/credentials/{id}`, the terminal-only path T-159's ruleset guards
+     * with its own match block — so no OR can ever widen it to an ordinary staff or manager
+     * account (bible §5.3, non-negotiable).
+     */
+    const path = `biometricMirror/${row.storeId}/credentials/${row.entityId}`;
+    const credential = await attendanceCredentialsRepo.getCredential(tx, row.entityId);
+
+    // ⛔ TOMBSTONE on revocation, never a hard delete. A device that was offline when a badge was
+    // revoked has to be able to LEARN the badge died — a disappeared document is invisible to it,
+    // so it would keep the stale credential forever. §5.1.
+    if (row.op === 'delete' || !credential || credential.revokedAt !== null) {
+      return { path, ...base, deleted: true };
+    }
+
+    return {
+      path,
+      ...base,
+      deleted: false,
+      /**
+       * ⛔ **No display name, no staff code, no position.** Those live on the roster (hot-set
+       * item 1), which the terminal already holds and which every store member may read.
+       * Duplicating them here would put identity behind the terminal-only wall for no gain, and
+       * give two documents the chance to disagree about who somebody is.
+       */
+      data: {
+        credentialId: credential.id,
+        employmentId: credential.employmentId,
+        kind: credential.kind,
+        ...(credential.cardId ? { cardId: credential.cardId } : {}),
+        ...(credential.matchToken ? { matchToken: credential.matchToken } : {}),
+        ...(credential.templates ? { templates: credential.templates } : {}),
       },
     };
   }

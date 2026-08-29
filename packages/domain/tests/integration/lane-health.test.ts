@@ -27,6 +27,7 @@ import {
   activateTerminal,
   createEmployment,
   discardQuarantined,
+  enrolCard,
   ingestEvents,
   laneHealth,
   listQuarantine,
@@ -125,6 +126,18 @@ async function fixture(hint: string) {
   );
   await asOrg(orgId, (tx) => activateTerminal(tx, { terminalId: terminal.id }));
 
+  const cardId = uid('card');
+  const credential = await asOrg(orgId, (tx) =>
+    enrolCard(tx, admin, { employmentId: employment.id, cardId }),
+  );
+
+  // ⚠️ Backdated on purpose. `resolveCredentialAt` requires `enrolled_at <= occurredAt` — a badge
+  // cannot authorise a punch made before it existed, which is a real fraud guard (enrol a card
+  // today, back-date a month of punches to it). These fixtures punch on YESTERDAY's shift day, so
+  // an enrolment stamped `now()` would correctly refuse every one of them.
+  await sql`update attendance_credentials set enrolled_at = now() - interval '30 days'
+            where id = ${credential.id}`;
+
   return {
     orgId,
     storeId: store!.id,
@@ -135,6 +148,7 @@ async function fixture(hint: string) {
     workerId: worker!.id,
     employment,
     terminal,
+    cardId,
   };
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
@@ -144,7 +158,8 @@ const event = (f: Fixture, over: Record<string, unknown> = {}) => ({
   occurredAt: at(14),
   deviceId: f.terminal.id,
   storeId: f.storeId,
-  employmentId: f.employment.id,
+  credentialKind: 'card',
+  credentialRef: f.cardId,
   method: 'qr',
   assertedIntent: 'in',
   ...over,
@@ -158,11 +173,29 @@ const list = (f: Fixture, a: Actor) =>
 
 /** Quarantine one event by naming an employment that does not exist. Heals once it does. */
 async function stick(f: Fixture, over: Record<string, unknown> = {}) {
-  const e = event(f, { employmentId: '00000000-0000-4000-8000-000000000001', ...over });
+  const ghostCard = uid('ghostcard');
+  const e = event(f, { credentialRef: ghostCard, ...over });
   await ingest(f, [e]);
   const rows = await sql<{ id: string }[]>`
     select id from inbox_quarantine where client_punch_id = ${e.clientPunchId}`;
-  return { event: e, id: rows[0]!.id };
+  return { event: e, id: rows[0]!.id, ghostCard };
+}
+
+/**
+ * ⭐ The world changing, since T-164: somebody ENROLS the badge the stuck event names.
+ *
+ * This replaces the old helper, which rewrote the stored raw event to name a real employment. That
+ * was always a stand-in; now it is the actual operation a manager performs, and the event itself is
+ * never touched — which is invariant 8, demonstrated rather than asserted.
+ */
+async function enrol(f: Fixture, cardId: string) {
+  const row = await asOrg(f.orgId, (tx) =>
+    enrolCard(tx, f.admin, { employmentId: f.employment.id, cardId }),
+  );
+  // Backdated for the same reason as the fixture's own card — see the note there.
+  await sql`update attendance_credentials set enrolled_at = now() - interval '30 days'
+            where id = ${row.id}`;
+  return row;
 }
 
 // ---------------------------------------------------------------------------------------
@@ -186,7 +219,10 @@ describe('T-162 invariant 1 — a quarantined event is visible to its own store,
     expect(open[0]!.reasonCode).toBe('unknown_credential');
     expect(open[0]!.sentence).toContain('Enrol them');
     // The ingestor's own specifics survive into the sentence rather than being replaced by it.
-    expect(open[0]!.sentence).toContain('00000000-0000-4000-8000-000000000001');
+    // ⭐ Since T-164 the detail names the CREDENTIAL and the moment, not a person — because at this
+    // point the server genuinely does not know who it was, which is the honest thing to render.
+    expect(open[0]!.sentence).toContain('card credential');
+    expect(open[0]!.sentence).toContain('revoked before the punch');
   });
 
   it('⛔ a malformed event is marked NOT retryable, because retrying it can never help', async () => {
@@ -203,22 +239,16 @@ describe('T-162 invariant 1 — a quarantined event is visible to its own store,
 describe('⭐ T-162 invariant 2 — Retry re-runs the REAL ingest path', () => {
   it('a stuck event becomes a punch once the world is fixed, and leaves the open list', async () => {
     const f = await fixture('retry');
-    // Stick it against an employment id that does not exist yet...
-    const e = event(f, { employmentId: '00000000-0000-4000-8000-000000000002' });
-    await ingest(f, [e]);
-    const [row] = await sql<{ id: string }[]>`
-      select id from inbox_quarantine where client_punch_id = ${e.clientPunchId}`;
+    // Stick it on a badge nobody has enrolled...
+    const { id, event: e, ghostCard } = await stick(f);
     expect((await list(f, f.manager)).open).toHaveLength(1);
 
-    // ...then rewrite the stored body to name the real one, exactly as enrolling the staffer would
-    // make the original body resolvable. ⚠️ The RAW event is never edited by the screen (invariant
-    // 8); this is the test standing in for the world changing underneath it.
-    await sql`update inbox_quarantine
-              set raw_event = jsonb_set(raw_event, '{employmentId}', to_jsonb(${f.employment.id}::text))
-              where id = ${row!.id}`;
+    // ...then enrol that badge. ⭐ The stored event is NOT touched — invariant 8 — the world around
+    // it changed, which is exactly the situation Retry exists for.
+    await enrol(f, ghostCard);
 
     const result = await asOrg(f.orgId, (tx) =>
-      retryQuarantined(tx, f.manager, { quarantineId: row!.id, storeId: f.storeId }),
+      retryQuarantined(tx, f.manager, { quarantineId: id, storeId: f.storeId }),
     );
     expect(result.ingested).toBe(true);
     expect(result.punchId).not.toBeNull();
@@ -231,10 +261,8 @@ describe('⭐ T-162 invariant 2 — Retry re-runs the REAL ingest path', () => {
 
   it('⭐ a retry that heals records NO person — nobody decided it, the world changed', async () => {
     const f = await fixture('healnobody');
-    const { id, event: e } = await stick(f);
-    await sql`update inbox_quarantine
-              set raw_event = jsonb_set(raw_event, '{employmentId}', to_jsonb(${f.employment.id}::text))
-              where id = ${id}`;
+    const { id, event: e, ghostCard } = await stick(f);
+    await enrol(f, ghostCard);
     await asOrg(f.orgId, (tx) =>
       retryQuarantined(tx, f.manager, { quarantineId: id, storeId: f.storeId }),
     );
@@ -343,21 +371,20 @@ describe('⛔ T-162 invariant 3 — Discard needs a reason, a human, and never d
 describe('⛔ T-162 invariant 4 — a discarded event is not resurrected by the next ingest run', () => {
   it('the device re-delivers the same event and it is refused, not re-ingested', async () => {
     const f = await fixture('nores');
-    const e = event(f, { employmentId: '00000000-0000-4000-8000-000000000003' });
-    await ingest(f, [e]);
-    const [row] = await sql<{ id: string }[]>`
-      select id from inbox_quarantine where client_punch_id = ${e.clientPunchId}`;
+    const { id: rowId, event: e, ghostCard } = await stick(f);
     await asOrg(f.orgId, (tx) =>
       discardQuarantined(tx, f.admin, {
-        quarantineId: row!.id,
+        quarantineId: rowId,
         storeId: f.storeId,
         reason: 'Staffer never worked this shift.',
       }),
     );
 
-    // ⚠️ Now make the event PERFECTLY VALID and deliver it again. Without the guard it would sail
-    // through and become a punch — silently overturning a manager's decision on nobody's authority.
-    const report = await ingest(f, [{ ...e, employmentId: f.employment.id }]);
+    // ⚠️ Now enrol the badge, so the very same event becomes PERFECTLY VALID, and deliver it again.
+    // Without the guard it would sail through and become a punch — silently overturning a
+    // manager's decision on nobody's authority.
+    await enrol(f, ghostCard);
+    const report = await ingest(f, [e]);
     expect(report.refusedDiscarded).toBe(1);
     expect(report.ingested).toBe(0);
     const punches = await sql`select id from attendance_punches where client_punch_id = ${e.clientPunchId}`;
@@ -365,7 +392,7 @@ describe('⛔ T-162 invariant 4 — a discarded event is not resurrected by the 
 
     // And the resolution is untouched — the reason the manager gave still stands.
     const [after] = await sql<{ resolution: string; resolution_reason: string }[]>`
-      select resolution, resolution_reason from inbox_quarantine where id = ${row!.id}`;
+      select resolution, resolution_reason from inbox_quarantine where id = ${rowId}`;
     expect(after!.resolution).toBe('discarded');
     expect(after!.resolution_reason).toContain('never worked');
   });
@@ -452,7 +479,7 @@ describe('T-162 invariant 6 — a silent terminal is listed; a store that closed
 describe('T-162 invariant 7 — the raw event is kept exactly as received', () => {
   it('the stored body is the one the device sent, uninterpreted', async () => {
     const f = await fixture('raw');
-    const e = event(f, { employmentId: '00000000-0000-4000-8000-000000000004', batteryPct: 4 });
+    const e = event(f, { credentialRef: uid('ghostcard'), batteryPct: 4 });
     await ingest(f, [e]);
     const { open } = await list(f, f.manager);
     const raw = open[0]!.rawEvent as Record<string, unknown>;
@@ -482,10 +509,8 @@ describe('⭐ T-162 — the number that says the lane heals itself', () => {
   it('counts the events that came back on their own, and not the ones a person discarded', async () => {
     const f = await fixture('healed');
     // One heals on its own...
-    const { id } = await stick(f);
-    await sql`update inbox_quarantine
-              set raw_event = jsonb_set(raw_event, '{employmentId}', to_jsonb(${f.employment.id}::text))
-              where id = ${id}`;
+    const { id, ghostCard } = await stick(f);
+    await enrol(f, ghostCard);
     await asOrg(f.orgId, (tx) =>
       retryQuarantined(tx, f.manager, { quarantineId: id, storeId: f.storeId }),
     );

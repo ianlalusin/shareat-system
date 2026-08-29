@@ -93,6 +93,9 @@ export * as attendanceDaysRepo from './repo/attendance-days';
 export * as attendanceAdjustmentsRepo from './repo/attendance-adjustments';
 // T-159 — the provisioned device identity (Phase 4, lane B).
 export * as clockTerminalsRepo from './repo/clock-terminals';
+// T-164 — clock-in credentials. ⛔ No listTemplates: see the repo's header.
+export * as attendanceCredentialsRepo from './repo/attendance-credentials';
+export type { AttendanceCredentialRow } from './repo/attendance-credentials';
 // T-160/T-162 — Lane A's outbox, and the lag that says whether it is moving.
 export * as mirrorOutboxRepo from './repo/mirror-outbox';
 export type { OutboxRow, OutboxLag } from './repo/mirror-outbox';
