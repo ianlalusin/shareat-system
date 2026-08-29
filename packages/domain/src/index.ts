@@ -31,3 +31,5 @@ export * from './cutover';
 export * from './people';
 // T-155 — the shift-day calendar and attendance policy (Phase 4, lane B).
 export * from './attendance';
+// T-160 — the Lane A publisher, transport-free (Phase 4, lane B).
+export * from './sync';
