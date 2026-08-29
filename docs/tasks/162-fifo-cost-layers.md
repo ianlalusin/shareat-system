@@ -1,10 +1,10 @@
 # T-162 — FIFO cost layers: what the stock on the shelf actually cost
 
-> **Status:** ⚠️ **PARTLY BUILT 2026-08-29 — the PURE half only.** `packages/domain/src/stock/layers.ts`
-> (`planConsumption`, `planReversal`) and `packages/domain/src/stock/quantity.ts` are done, with
-> 21 unit tests green, typecheck clean and the full 634-test unit suite passing. ⛔ **The
-> transactional half is NOT built** — no schema, no migration, no repo, no integration tests — and
-> the reason is contention, not design: see §8. **Two findings came out of building it, §9.**
+> **Status:** ⚠️ **BUILT AND APPLIED 2026-08-29 — storage and rules.** `stock_layers` +
+> `stock_layer_consumptions`, migration `0064` (applied to dev and test), the repo, both
+> registries, `planConsumption`/`planReversal`, **21 unit + 14 integration tests**.
+> `typecheck` clean · **656 unit** · **1268 integration, 43 files**.
+> ⛔ `consume.ts` — the transactional wrapper — is NOT built; §10.4.
 > **Depends on:** T-161 (movements), T-145 (`supplier_invoice_lines`), T-151 (landed cost).
 > **Decided, not open:** FIFO is bible row 110. **ADR-009 §1** established that *a delivery already
 > IS a cost layer* — quantity, unit cost, one receipt. This task builds the storage and the
@@ -208,7 +208,58 @@ consumption, so **`consume.ts` must derive outstanding rows from `stock_layer_co
 prior reversals.** Now documented on the function itself, so it reaches the transactional half
 rather than being re-derived from a bug in production.
 
-## 10. Done when
+## 10. ⚠️ Storage built 2026-08-29 — and where the test had to live
+
+**Landed on top of §8's pure half:**
+
+| | |
+|---|---|
+| `packages/db/schema/stock-layers.ts` | `stock_layers`, `stock_layer_consumptions` |
+| `packages/db/migrations/0064_t162_stock_layers.sql` | ✅ Journalled, applied to `shareat_dev` and `shareat_test` |
+| `packages/db/src/repo/stock-layers.ts` | `createLayer`, `openLayersForUpdate`, `applyConsumption`, `outstandingConsumptions`, `reverseConsumption`, `valuation` |
+| `classification.ts` / `rls/registry.ts` | Both **PURGE** · `org_column`, ENABLE **and FORCE** |
+| `packages/domain/tests/integration/stock-layers.test.ts` | 14 cases |
+
+### 10.1 ⭐ The subledger TIES to the layer, as a constraint
+
+Σ a layer's unreversed consumptions must equal `quantity − remaining_quantity`. Without it the two
+are free to disagree **invisibly**: `remaining_quantity` looks authoritative and the subledger looks
+complete, and only one of them is right.
+
+⚠️ Deferred to COMMIT, because the consumption row and the layer decrement happen in one
+transaction and neither order should be forced on the caller. ⛔ A **reversed** consumption is
+excluded from the sum — that exclusion is what lets a void give quantity back and still tie.
+
+### 10.2 Three more things the database now refuses
+
+- `remaining_quantity` outside `[0, quantity]` — ⭐ so a planner bug is a **failed transaction
+  rather than a wrong number**.
+- Two layers for one stock-in movement — a retried receipt cannot double the cost basis.
+- `is_provisional` disagreeing with `invoice_line_id`. ⭐ They are two views of one fact, so the
+  flag cannot drift from it — which is the whole reason there is no `isExpensed` boolean anywhere
+  in this design (§3.3, DEF-075).
+
+### 10.3 ⛔ It lives in `packages/domain/tests`, and that is a layering rule
+
+The test needs the **pure planner and the tables**. `packages/db` does not depend on
+`@shareat/domain` — the arrow runs the other way (ADR-004) — so the same file under `db/tests`
+could only reach the planner by a relative path climbing out of its own package. **That is a
+dependency cycle wearing a disguise**, and it was written that way first before being moved.
+
+⭐ T-160's and T-161's suites correctly stay in `packages/db`: they use raw SQL only.
+
+### 10.4 Not built
+
+**`consume.ts`, the transactional wrapper.** The repo carries every primitive and the tests drive
+them through the planner exactly as a service would. ⚠️ The wrapper's real shape depends on its
+first caller — T-163's receipt posting, which must create the layer and post `Dr 1310 / Cr 2120`
+in one transaction — and inventing it ahead of that caller is how a signature ends up fitting
+nothing. **The pieces are all here; the seam is T-163's to draw.**
+
+⭐ `openLayersForUpdate` already takes the `FOR UPDATE` lock, so the concurrency guarantee does not
+wait for the wrapper.
+
+## 11. Done when
 
 - [ ] Migration hand-written (DEF-073), next free number, journalled `previous.when + 86400000`.
 - [ ] `classification.ts`: **PURGE** for both tables. `rls/registry.ts` NULLIF-guarded (DEF-077).

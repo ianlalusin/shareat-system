@@ -46,6 +46,17 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'How an org names its kinds of space. A franchise defines its own and must never see ' +
       'another org’s.',
   },
+  stock_layers: {
+    scope: 'org_column',
+    reason: 'A layer belongs to a store, and a store to one org. Cost is as tenant-private as money.',
+  },
+  stock_layer_consumptions: {
+    scope: 'org_column',
+    reason:
+      'The subledger carries its own org rather than deriving it through the layer: it is joined ' +
+      'from movements as often as from layers, so the policy belongs on the row being read.',
+  },
+
   stock_movements: {
     scope: 'org_column',
     reason:

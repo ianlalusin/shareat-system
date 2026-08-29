@@ -413,6 +413,23 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'Configuration describing the premises, carrying no balance and no anchor. Re-keying it ' +
       'at cutover would be pointless work with a fresh chance to mistype a room.',
   },
+  stock_layers: {
+    // ⭐ purge, with stock_movements. A layer IS a valued receipt, so keeping layers while purging
+    // the movements that created them would leave cost with no quantity behind it — the two halves
+    // of one fact, separated.
+    class: 'purge',
+    reason:
+      'FIFO cost layers — the valued half of a stock receipt, and operational for exactly the ' +
+      'reason stock_movements is. ⚠️ The 2027-01-01 opening layer is written FRESH by the cutover ' +
+      'at counted value (T-134), so purging is what makes room for it rather than losing anything.',
+  },
+  stock_layer_consumptions: {
+    class: 'purge',
+    reason:
+      'The inventory subledger — which layer paid for which movement. Purged with both parents; ' +
+      'it is the detail behind journal entries that are themselves purged.',
+  },
+
   stock_movements: {
     // ⭐ PURGE, and it is the counterweight to `stock_locations` being KEEP. The rooms are
     // configuration and survive; what was IN them is operational history and does not. On

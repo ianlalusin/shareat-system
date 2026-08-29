@@ -51,3 +51,4 @@ export * from './findings';
 export * from './cutover';
 export * from './stock-locations';
 export * from './stock-ledger';
+export * from './stock-layers';
