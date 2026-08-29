@@ -37,15 +37,29 @@ the least confidence. **Those are exactly the modules where wrong numbers hurt p
 |---|---|
 | **1** | The accounting spine — chart of accounts, journal, posting engine, reversal, fiscal periods, the ten invariants |
 | **2** | Money-moving source documents — expenses, AP, AR, payments, cash requests, sales day, settlements |
+| **3 (valuation core)** | ⭐ **Amended 2026-08-29, bible row 165 / ADR-011.** Locations, stock ledger, FIFO cost layers, the receipt posting its value through `2120`, consumption / wastage / count-variance postings, and the switch that retro-fits the six modules already shipped on the periodic shape |
 | **6 (subset)** | Trial balance · P&L · balance sheet · AR and AP aging. Enough to *run* the books, not the full dashboard suite |
+
+> ⭐ **Why the valuation core moved IN, when this ADR originally put all of Phase 3 out.** It is not
+> a feature — it is the **posting shape**, and a posting shape cannot arrive mid-year without a
+> second physical count and a quarter reported on two bases. Ian's framing settles it:
+> *"when we test the app we are testing its final deliverable shape and won't need to adjust
+> later."* ⚠️ **The scope grows by six task specs on a date that cannot move**, and the 15 November
+> go/no-go is where that is judged. ⛔ **If it competes with Phase 2's remainder, Phase 2 wins** —
+> a January with correct inventory and incomplete AP is worse than the reverse.
 
 ### Explicitly NOT in scope for 1 January
 
-**Inventory (Phase 3) · Attendance (Phase 4) · Payroll (Phase 5) · full reporting (Phase 6) ·
-peripheral modules (Phase 7) · POSv2 · CUSTOMERv2 · Website.**
+**Inventory's OPERATIONAL SURFACE (Phase 3 Waves 1–3 — receiving, transfers, usage, counts,
+returns, the commissary ↔ branch pipeline, production, POS usage pull, channel wastage) ·
+Attendance (Phase 4) · Payroll (Phase 5) · full reporting (Phase 6) · peripheral modules
+(Phase 7) · POSv2 · CUSTOMERv2 · Website.**
 
 These stay in the existing systems and cross over during Q1, one at a time, behind feature
 flags. This is the strangler fig already decided in bible §13 row 20 — not a change of plan.
+
+⭐ **And they need no adjustment when they land**, because each posts into the perpetual spine the
+valuation core already established. That is the whole reason the split falls where it does.
 
 ## The opening balance
 

@@ -64,35 +64,35 @@
 - `1037–1071 ` 10. Phase plan
 - `1072–1088 ` 11. Migration & ETL rules
 - `1089–1137` 12. Inherited landmines — do not repeat these
-- `1138–1307` 13. Decision log
-- `1308–1327` 14. Amendment protocol
-- `1328–1332` 15. Engineering standards — the industry practices this project follows
-  - `1333–1338` 15.1 Build order: walking skeleton first
-  - `1339–1350` 15.2 Golden-master testing — the most important practice here
-  - `1351–1359` 15.3 Strangler Fig, not big-bang cutover
-  - `1360–1364` 15.4 No dual-write
-  - `1365–1369` 15.5 Expand/contract migrations
-  - `1370–1378` 15.6 Observability from day zero, not later
-  - `1379–1383` 15.7 CI gates
-  - `1384–1388` 15.8 Backups and a tested restore
-  - `1389–1393` 15.9 Twelve-Factor config
-  - `1394–1401` 15.10 Append-only ledgers — but not event sourcing
-  - `1402–1406` 15.11 Defence in depth
-  - `1407–1435` 15.12 Skills are lenses, not assurance
-  - `1436–1442` 15.13 Reconciliation is a permanent feature
-- `1443–1447` 16. The accounting spine
-  - `1448–1479` 16.0 What we are actually fixing — the diagnosis
-  - `1480–1523` 16.1 The ten invariants — non-negotiable
-  - `1524–1538` 16.2 The oracle: how "correct" is tested
-  - `1539–1560` 16.3 The model — header + lines, not legs
-  - `1561–1580` 16.4 Deliberately simpler than ERPNext
-  - `1581–1647` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1648–1672` 16.6 What v1 already gets right — preserve the intent
-  - `1673–1694` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1695–1709` 16.8 What v1's accounting already gets right
-  - `1710–1753` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1754–1804` 16.10 Posting patterns — one canonical pattern per business event
-  - `1805–1822` 16.11 Inventory's accounting integration
+- `1138–1310` 13. Decision log
+- `1311–1330` 14. Amendment protocol
+- `1331–1335` 15. Engineering standards — the industry practices this project follows
+  - `1336–1341` 15.1 Build order: walking skeleton first
+  - `1342–1353` 15.2 Golden-master testing — the most important practice here
+  - `1354–1362` 15.3 Strangler Fig, not big-bang cutover
+  - `1363–1367` 15.4 No dual-write
+  - `1368–1372` 15.5 Expand/contract migrations
+  - `1373–1381` 15.6 Observability from day zero, not later
+  - `1382–1386` 15.7 CI gates
+  - `1387–1391` 15.8 Backups and a tested restore
+  - `1392–1396` 15.9 Twelve-Factor config
+  - `1397–1404` 15.10 Append-only ledgers — but not event sourcing
+  - `1405–1409` 15.11 Defence in depth
+  - `1410–1438` 15.12 Skills are lenses, not assurance
+  - `1439–1445` 15.13 Reconciliation is a permanent feature
+- `1446–1450` 16. The accounting spine
+  - `1451–1482` 16.0 What we are actually fixing — the diagnosis
+  - `1483–1526` 16.1 The ten invariants — non-negotiable
+  - `1527–1541` 16.2 The oracle: how "correct" is tested
+  - `1542–1563` 16.3 The model — header + lines, not legs
+  - `1564–1583` 16.4 Deliberately simpler than ERPNext
+  - `1584–1650` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1651–1675` 16.6 What v1 already gets right — preserve the intent
+  - `1676–1697` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1698–1712` 16.8 What v1's accounting already gets right
+  - `1713–1756` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1757–1807` 16.10 Posting patterns — one canonical pattern per business event
+  - `1808–1839` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -105,9 +105,9 @@
 
 | | |
 |---|---|
-| **Version** | 2.9 — a requested feature is assessed, and may be argued against, before it is planned (§13 row 163) |
+| **Version** | 3.0 — **inventory is PERPETUAL from v2's first posting; a return is a credit in both directions** (§13 rows 165–166, §16.11, ADR-011) |
 | **Created** | 2026-08-22 |
-| **Last amended** | 2026-08-28 |
+| **Last amended** | 2026-08-29 |
 | **Status** | Accounting-correctness project (§1.1). All discovery complete. Root cause identified (§16.0). **Chart of accounts aligned and signed off.** Ready to write Phase 0/1 task specs. |
 | **Scale being replatformed** | 149 page routes (~53,700 LOC of pages), 20 API routes, 9 cron jobs, ~90 Firestore collection paths, 144 server-action modules / 578 exported functions |
 | **Source project** | `C:\Users\ianla\webapps\ERP-rebuild` (branch `upgrade-next16`) — **READ-ONLY, NEVER MODIFY** |
@@ -1049,7 +1049,7 @@ their postings later.
 | **0** | **Foundation + walking skeleton + offline spike** | Repo scaffold, Postgres, Drizzle, migrations, auth bridge, CI, observability, backups, port 9008. One thin end-to-end slice (§15.1). A **time-boxed spike** proving the Firestore two-lane contract with a toy payload | Skeleton runs end to end; spike proves an offline write survives and reconciles |
 | **1** | **The accounting spine** | Chart of accounts, `journal_entries` + `journal_lines`, posting engine, reversal, fiscal periods, trial balance, the ten invariants as CI tests (§16) | Invariant suite green; worked examples post correctly; trial balance ties |
 | **2** | **Money-moving source documents** | Expenses, AP, AR, payments, cash requests, sales day, settlements — **plus fixed assets + depreciation, prepaid + amortisation, loans, owner equity movements, generic liability accounts, and reimbursement payout** (added 2026-08-23, §13 row 91: all five post to the ledger in v1 and were omitted) — each posting into the spine | Subledgers tie to control accounts; a real closed period reconciles; divergences from v1 logged |
-| **3** | **Inventory + inventory accounting** | Items, locations, stock ledger, receiving, transfers, usage, wastage, counts, weighted-average valuation, COGS postings (§16.6). **Plus the commissary ↔ branch order pipeline (~24 capabilities) as an explicit, named deliverable** — it straddles Phase 2 and Phase 3 and was owned by neither, which is how a branch store's entire replenishment path went unplanned. Also POS item-mapping + usage pull, meat production/slicing conversion, order/channel wastage disposition, branch low-stock auto-order | Inventory control account = sum of on-hand valuations; stock ledger reconciles |
+| **3** | **Inventory + inventory accounting** — ⭐ **plan: `docs/plans/phase-3-inventory.md`; basis: ADR-011** | ⭐ **Valuation core — in the January scope (ADR-005), because it is the POSTING SHAPE and cannot arrive mid-year:** locations, stock ledger, **FIFO cost layers** (row 110), the receipt posting its value through `2120` GRNI, consumption / wastage / count-variance postings, and **the switch that retro-fits the six modules already shipped on the periodic shape** (row 165). **Operational surface — Q1, behind flags, posting into the already-perpetual spine:** items, receiving, transfers, usage, wastage, counts, supplier **and customer returns** (row 166), **the commissary ↔ branch order pipeline (~24 capabilities) as an explicit, named deliverable** — it straddles Phase 2 and Phase 3 and was owned by neither, which is how a branch store's entire replenishment path went unplanned. Also POS item-mapping + usage pull, meat production/slicing conversion, order/channel wastage disposition, branch low-stock auto-order | Inventory control account = sum of on-hand valuations; stock ledger reconciles |
 | **4** | **Attendance + biometrics + the hot lane** | Punch model, server-side adjudication, Lane A publisher, Lane B ingestor, offline clock terminal | A terminal clocks in with the network pulled and reconciles cleanly on reconnect |
 | **5** | **Payroll** | Periods, effective-dated compensation, late/OT policy, salary advances, immutable pay runs, GL postings | Parity on a historical payroll run, peso for peso; postings balance |
 | **6** | **Reporting & dashboards** | Sales report, dashboards, insights — as views / materialised views over the ledger | Statements tie; report figures reconcile for the same date range |
@@ -1302,6 +1302,9 @@ just a patch.**
 | 161 | 2026-08-27 | ⭐ **A CASHIER DRAWER'S OVERDRAFT IS CAPPED, PER ACCOUNT, AND ADMIN SETS IT. ROW 154's WARNING NOW HAS A FLOOR.** | Ian: *“how deep can a cashier account be negative — it can't be unlimited, so admin can set it. If the set is 20,000 that is the only allowable negative balance a cashier is allowed to.”* ⚠️ **Row 154's reasoning was right and had no floor of its own.** A till's true balance is unknowable until the day is verified — the cash is in the drawer before it is in the ledger — so a shortfall is a *“look at this”*, not a *“you are wrong”*. ⛔ But that argument justifies a drawer being ₱2,000 behind and equally ₱2,000,000 behind. The first is a bookkeeping lag; the second is a missing drawer, **and nothing in the ledger could tell them apart**. The cap is where *“legitimately behind”* stops. ⭐ **`money_accounts.overdraft_limit`, stored POSITIVE, default ₱20,000** — Ian's own example, and a starting value rather than a policy. ⚠️ **Zero is meaningful**: it means that drawer may never go below zero at all, which is why a blank field on the form means *“leave it alone”* and not *“set it to zero”*. ⭐ **The test is where the balance LANDS, not how big the draw is.** A ₱105,000 draw against a ₱100,000 drawer leaves it ₱5,000 behind and passes; a ₱1,000 draw against a drawer already ₱19,500 behind is what breaches a ₱20,000 cap. Judging the draw would refuse the first wrongly and allow the second. ⚠️ **PER ACCOUNT, not per org**, and that is deliberate: a busier store carries a bigger float, so a single org-wide number would be set to the largest store's need and mean nothing anywhere else. ⛔ **Office and staff accounts ignore it entirely** and still block at zero. Their balances are complete — nothing is waiting to be posted into them — so a shortfall there is real, and consulting a limit would invent an overdraft they do not have. The field is therefore only rendered on cashier rows: offering it elsewhere would imply a tolerance that does not exist. | No |
 | 162 | 2026-08-27 | ⭐ **AGING IS BY DUE DATE, NOT INVOICE DATE, FOR BOTH AP AND AR.** | Ian: *“due date.”* An invoice or charge with no stated due date (informal supplier or customer terms — real, not hypothetical) falls back to its own document date **for aging only**; the fallback does not change which basis governs when a due date exists. ⭐ §16.10 requires ONE basis held across AP and AR, so this is decided once here rather than re-litigated per module — T-131 (AR) must use it. ⚠️ **Drafted in `docs/tasks/130-accounts-payable.md` Invariant 11 on 2026-08-27 and left unlanded**, because the implementer was Sonnet and §14 reserves amendments to the planner; it sat as an explicit unrecorded item across two handoffs before an Opus pass landed it on 2026-08-28. That delay is the rule working, not failing — but a decision waiting two days to become durable is the cost, and worth noticing. | No |
 | 163 | 2026-08-28 | ⭐ **A REQUESTED FEATURE IS ASSESSED BEFORE IT IS PLANNED — AND MAY BE ARGUED AGAINST. RESEARCH EXISTING OPEN SOURCE FIRST; DO NOT BUILD WHAT CAN BE ADOPTED.** | Ian: *“make standing rule when new feature like this is reqquested assess it you may even vouch against it depending on the expected utilization advantage it will give and the effort to make it happen the complexity. research about it always consider open source repo on github there are tons to be used then plan on executing it.”* ⭐ **Three obligations, in order, and the order matters.** (1) **ASSESS** — weigh expected utilisation against effort and complexity, and say the number where one exists rather than the adjective. (2) **RESEARCH** — the industry pattern *and* what already exists on GitHub, because the default assumption should be that a well-solved problem has been solved. (3) **PLAN**, only then. ⛔ **Recommending AGAINST is explicitly sanctioned, and therefore expected.** §0.3 already says to side with the project over the literal request; this extends it to the existence of the feature itself, not merely its shape. A feature that will be used twice a year and costs a fortnight should be said to be that, once, plainly — and then built anyway if Ian still wants it (§0.4: raise it once, properly, then keep working). ⚠️ **The failure this prevents is real and recent:** T-141 built a complete upload broker that nothing called for a month, and T-130 then invented a text field because it found no wired upload — effort spent twice, on both sides of the same gap. An assessment pass asks *“does this already exist here, or out there?”* before either mistake. ⚠️ **Adopting is not free either** — licence (copyleft is Ian's decision, not an implementation detail), self-hosted vs API for data that must not leave, and vendoring vs depending are all part of the assessment, not afterthoughts once the choice is made. ⭐ First applied to `docs/tasks/146-invoice-ocr-and-the-learning-layer.md` the same day. ⭐ **Operationalised as the `/research-evaluate-propose` skill** (installed at `~/.claude/skills/`, so it is available in every repo, not only this one) — invoke it when a feature is requested rather than re-deriving the three steps from this row. | No |
+| 164 | 2026-08-29 | ⭐ **A FLAW SEEN IN PASSING IS LOGGED IN PASSING. THE OBLIGATION DOES NOT WAIT FOR THE TASK THAT OWNS IT.** | Ian: *“does other agent documents bugs, gaps and flaws they see on v1? if not add that rule.”* ⚠️ **The rule already existed and was still not enough — that is the finding.** RULES.md row 1, §1.2b, §2.1 and row 80 all say a defect found in a reference repo is logged here and never patched at the source, and `DEFECTS-REGISTER.md`'s own header says *“add a row the moment a defect is found; an unlogged finding is a lost one.”* **Every one of those is phrased for an agent already working on that code.** Nothing addressed the agent reading v1 for an unrelated reason — tracing a field, checking how a screen behaves — who trips over a flaw on the way to something else. **That is where most findings actually come from.** Same day, this session found `taxTreatment: 'expense' | 'creditable'` set to `expense` on every live channel while researching an unrelated settlement question; nothing in the rules obliged that to be written down. ⭐ **So the obligation is now unconditional and has three doors, and choosing the wrong door buries the finding:** (1) **v1 does it WRONG** → `docs/DEFECTS-REGISTER.md`, sections A–D, cite `file:line`. (2) **v1 does it and NO phase of v2 owns it** → `docs/CAPABILITY-GAPS.md` — a different document because a gap is not a defect and the register's dispositions cannot express *“nobody has this”*. **This distinction is not pedantry: the capability-gap pass is what caught the five ledger-posting modules January needed** (fixed assets, prepaid, loans, equity, generic liabilities), and every one of them would have been invisible filed as a defect. (3) **Shareat System itself is wrong** → `DEFECTS-REGISTER.md` **section E**, which exists precisely for this and which no rule pointed at until now. ⚠️ **Section E's absence from the rules has already cost something:** Phase 1's two carried gaps lived as prose in `docs/ROADMAP.html` for days, invisible to the register, until they were filed as DEF-079 and DEF-080 on 2026-08-28. ⛔ **“I was not tasked with that area” is not a reason to skip it** — logging costs one row and the finder is the only person who will ever have that context. **Verification is NOT required to log.** State it as `reported` and move on; the register already distinguishes `reported` from `verified`, and an unverified row that a later session confirms is worth more than a confirmed observation nobody wrote down. | No — sharpens §1.2b and row 80 |
+| 165 | 2026-08-29 | ⭐ **INVENTORY IS PERPETUAL, FROM v2'S FIRST POSTING. THE SIX SHIPPED MODULES ARE RETRO-FITTED; THERE IS NO DATED SPLIT AND NO SECOND POSTING SHAPE.** | Ian: *“for inventory lets build it right for v2 — everything in v1 plus the inventory being asset and used. That's the model of v1, it just was not realized, so we are building v2 a more robust way. Everything is anchored in inventory: the expense, delivery, usage, wastage etc. So when we test the app we are testing its final deliverable shape and won't need to adjust later.”* ⭐ **The framing is the decision, and it is better than the question I asked.** ADR-011 offered retro-fit *or* a dated cutover; Ian's answer is retro-fit **and** the reason is not accounting neatness but **testability** — a pilot that exercises an interim shape has not rehearsed anything. ⚠️ **The collision this settles:** T-133 established on 2026-08-28, by reading the code rather than assuming, that this system is **periodic** — every expense category maps to a 5xxx COGS account, there is no capitalisation path, and nothing anywhere debited `1310`/`1330`/`1340`. §10's Phase 3 gate has always required the opposite. Six modules shipped on the periodic shape (T-122 expenses, T-130 AP, T-145 item receipts, T-151 landed cost, T-132 trade orders, T-133 transfers), each correctly following the one before it. ⭐ **The retro-fit costs no data migration and that is not luck — it is ADR-007 and row 106 already working:** `journal_entries`, `journal_lines`, `expenses`, `sales_days` and `trade_orders` are all class **PURGE**, so every peso posted under the periodic shape is deleted on 1 January and this is a code change against **zero** production rows. ⛔ **That will not be true again** — after 1 January the same change is a restatement. ⚠️ **Wave 0 is ATOMIC and this is the one thing that must not be optimised:** retro-fitting expenses alone would debit `1310` with no stock ledger to relieve it, producing a P&L with **no food cost at all** — worse than the shape it replaces. T-165 carries a negative test asserting exactly that, so the reason lives in the suite and not only in a document. ⭐ **Consequences:** `2120 Goods received not invoiced` moves `reserved` → active and the receipt posts its value there immediately, closing ADR-009's measured expensing lag (91% → 76%, worst in the most recent month) **structurally rather than by asking people to be more diligent**; `isExpensed`/`partiallyExpensed` are never built, because a receipt whose invoice has not arrived is a **balance in `2120`**, not a flag three call sites must remember to recompute (DEF-075's eighth appearance, refused); `5450 Purchase price variance` is seeded; and `1310`–`1340`, seeded and idle since T-102, stop being *"early, not wrong"* and start being funded. | Yes — §16.11 rewritten, §10 Phase 3 split into valuation core + operational surface, ADR-005's January scope amended, ADR-011 accepted |
+| 166 | 2026-08-29 | ⭐ **A RETURN IS A CREDIT, IN BOTH DIRECTIONS — AND THE GOODS COME BACK INTO INVENTORY AT THE COST THEY LEFT AT.** | Ian: *“supplier returns must be recognized as store credit for us that we can use for next purchase — that's for external suppliers. Us being the supplier to other customers, return to us must be treated the same I guess: store credit customer may use, or we refund.”* ⭐ **This closes `CAPABILITY-GAPS.md`'s standing “Needs Ian” on supplier returns, and it answers a question nobody had asked — the customer side, which no phase owned at all.** ⛔ **v1's supplier return is deliberately stock-and-audit-trail only**, with an operator-checked `apAlreadyHandled` box as a UI nudge; v1 called it *“a documentation gap, not data corruption.”* Under perpetual inventory that compromise stops being available: stock moves and the books do not, which breaks invariant 6 the moment the control account is real. **Two directions, and the account each lands in already exists:** goods **we** return to an external supplier credit `1240 Advances to suppliers` (party = supplier) when the receipt was invoiced, or `2120` when it was not — because an uninvoiced return simply means they will bill us less, and no credit arises; goods **a customer** returns to us credit `2140 Customer store credits payable` (party = customer), drawn down against their next order, **or refunded in cash** — their choice, recorded. ⭐ **The inventory half is the part v1 has no concept of at all:** returned goods re-enter stock as a **new FIFO layer at the cost the original consumption actually relieved**, reconstructed from `stock_layer_consumptions`' snapshotted unit cost — not at today's cost, which would silently re-value the return. ⚠️ **Two branches that must be explicit decisions, never assumptions:** goods returned **unsaleable** bring back no inventory and land in `5300`; and **an INTERNAL branch-to-commissary return is not a credit at all** — it is T-173's transfer run backwards (`1250`/`2150`), because a branch has no credit relationship with its own commissary. That falls straight out of ADR-008 §8's *“a mode is a fork; a derived treatment is a fact”* — the same `counterparty` fact that already decides how a dispatch posts decides how a return posts. | Yes — §16.11 gains the return rule; T-170 respecified, T-179 added |
 
 ---
 
@@ -1809,11 +1812,25 @@ most likely to compound.
 
 - Stock movements are the operational truth; **their financial effect posts to the GL in
   the same transaction**. No overnight job, no drift window.
-- Valuation is **weighted average**, recomputed on receipt, held per item per location.
+- ⭐ **Inventory is PERPETUAL. A purchase buys an ASSET; COGS is recognised when the goods
+  are CONSUMED, never when they are bought** (row 165). Every module that touches goods —
+  expense, delivery, usage, wastage, count, transfer, production, trade order — anchors on
+  inventory, and there is exactly ONE posting shape in the system.
+- ⭐ **Valuation is FIFO** (row 110) — cost **layers**, a remaining quantity and unit cost
+  per receipt, consumed oldest-first. Layers are held **per item per store**; a movement is
+  per location, so a room-to-room transfer moves quantity and not cost.
+  ⚠️ **The one exception, by design:** the 2027-01-01 opening layer is **weighted average**,
+  because that is what the counted data supports and a single opening layer at an average
+  cost is the standard way to open FIFO books (ADR-009). **The basis changes exactly once,
+  at the boundary** — a year-on-year comparison spanning the cutover compares two bases.
+- ⭐ **A return is a credit, not a reversal of the sale that caused it** (row 166). Goods we
+  return to a supplier become a credit we hold against that supplier; goods a customer
+  returns to us become a credit they hold against us, or a refund. Both bring the goods
+  back into inventory at the cost they left at.
 - Wastage, usage, transfers, and count adjustments each have **one defined posting
   pattern**, written down before implementation and applied uniformly.
 - The inventory control account balance must equal the sum of on-hand valuations —
-  invariant 5, checked continuously.
+  **invariant 6's inventory arm**, checked continuously. This is Phase 3's exit gate.
 
 ---
 
