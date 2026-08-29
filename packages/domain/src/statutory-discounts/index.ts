@@ -13,7 +13,7 @@
  * ## ⚠️ Two of the six fields cannot be derived, and that is the whole shape of this feature
  *
  * `holderName` and `idNumber` are read off a physical card by a person. **Nothing captures them
- * today** — not POS, not v1's ERP (DEF-084; the original spec claimed otherwise). POS already
+ * today** — not POS, not v1's ERP (DEF-101; the original spec claimed otherwise). POS already
  * writes the other four per transaction in its `DiscountEvent`, so the gap is two fields, not
  * five, and closing it needs POS v2 after January.
  *

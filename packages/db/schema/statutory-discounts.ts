@@ -20,7 +20,7 @@
  * ## ⚠️ The two columns nothing can derive
  *
  * `holder_name` and `id_number` are read off a physical card by a person. **Nothing captures them
- * today** — not POS, not v1's ERP, not CUSTOMER, not the Website (DEF-084; T-137 §1 corrects the
+ * today** — not POS, not v1's ERP, not CUSTOMER, not the Website (DEF-101; T-137 §1 corrects the
  * spec that said otherwise). POS *does* already write four of the six statutory fields per
  * transaction — `DiscountEvent` carries receipt number, amount, date and the acting staffer — so
  * the gap is two fields, not five. Closing it needs POS v2, after January.
