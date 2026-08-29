@@ -28,6 +28,10 @@ const alias = {
 export default defineConfig({
   resolve: { alias },
   test: {
+    // ⭐ Let a test's own console output through. The golden master REPORTS its triage summary —
+    // which classes of v1-vs-v2 divergence exist and how many — and a summary nobody can see is
+    // not a report.
+    disableConsoleIntercept: true,
     projects: [
       {
         extends: true,

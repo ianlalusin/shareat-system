@@ -161,65 +161,92 @@ them: a 01:30 punch lands on the **previous** shift day and the **current** fina
 
 ## 5. Open decisions — Ian's, with a recommendation each
 
-### ⭐ D1. Which credential works offline? (the one that decides whether the exit gate is reachable)
+### ✅ D1 — DECIDED 2026-08-29. **Fingerprint, face and card. No PIN.**
 
-In v1 the answer is **fingerprint only**, and only because the ZK9500 match runs in a native Java
-plugin inside a Capacitor APK (`FingerprintPlugin.java:169-185`). Passcode, NFC and face all need a
-live Server Action; discovery 05 §1.3 records that the UI does not even gate them, so a staffer
-keying a passcode offline gets a generic *"Read failed."*
+Ian: *"in v2 only fingerprint face and card will be mode of attendance no pin"*, and the offline
+recommendation below is accepted.
 
-| Option | Offline? | Cost | Risk |
-|---|---|---|---|
-| **QR badge**, decoded client-side against the mirrored roster | **Yes, no native code** | Low — camera + a decode library | Bearer credential; a photo of a badge punches. Same exposure v1 already accepts for NFC/assign-id |
-| Fingerprint | Yes | **Needs the APK and the native plugin** — a whole workstream, and it is not in Phase 4 | Template mirror widens the biometric surface (§5.3 handles it) |
-| NFC tap | Yes, on Android Chrome only (Web NFC) | Medium | Same bearer exposure as QR, on less-portable API |
-| PIN | **No — recommend explicitly not** | — | Mirroring a verifier for a **6-digit** space is an offline brute-force gift. The lookup hash is HMAC'd with a server secret the device must never hold (DEF-062) |
+⚠️ **Recorded because I first read this backwards.** My initial reading of *"turn off biometrics by
+pin"* was "turn off biometrics, use PIN"; it means **turn off the PIN that stands in for
+biometrics**. The correction matters and it is written down rather than quietly fixed, because the
+two readings put the biometric mirror on opposite sides of the scope line.
 
-⭐ **Recommendation: QR badge is the offline credential for the exit gate. PIN and face are
-online-only, and the terminal says so** — *"PIN needs a connection"*, not v1's silent generic
-failure. Fingerprint stays in the model and in the mirror, and lights up when the APK lands.
+| Mode | In v2 | Offline? |
+|---|---|---|
+| **Fingerprint** | ✅ | Yes — but the on-device match is a native plugin, so it needs the APK (D2) |
+| **Face** | ✅ | ⛔ **Never.** Online-only, permanently — bible §5.3, the 2026-07-04 exfiltration fix. *Do not re-propose* |
+| **Card** (NFC tap / QR badge) | ✅ | **Yes, in a plain browser.** ⭐ Therefore **the offline path that meets the exit gate today** |
+| **PIN** | ⛔ **Removed** | — |
 
-**This makes the gate reachable without any native work**, which is the single largest de-risking
-move available in this phase. Ian's call, because it changes what hardware a store needs on day one.
+**What follows, and it is most of Wave 3–4's shape:**
 
-> Anti-buddy-punch, if the bearer risk bites: a photo captured at the punch, stored against the
-> event. Cheap (the terminal has a camera), and it is the standard mitigation. **Not built here** —
+1. ⭐ **The biometric mirror is IN scope** — hot-set item 2 (fingerprint templates + matchToken)
+   stays, with bible §5.3's non-negotiable access control: *readable only by a provisioned device
+   identity, never by an ordinary staff or manager account*, and the credential **not** plaintext in
+   `localStorage`. T-153 proved the device-principal design works (§6, finding 3).
+2. ⭐ **Card is the exit gate's credential.** Fingerprint cannot meet it until the APK lands, and
+   face never will. A QR badge decoded client-side against the mirrored roster clears it with no
+   native code — which is why D1's recommendation mattered.
+3. ⛔ **PIN is made UNREPRESENTABLE, not merely disabled.** `attendance_punches.method` drops `pin`
+   from its CHECK, and `store_attendance_config` drops `credential_passcode` — there is no switch to
+   leave in the wrong position (bible §12: *"must make each one structurally impossible, not merely
+   avoided by care"*). A `pin` credential still exists in `person_credentials` for **signing in to
+   the app**; that is a different act from clocking in, and only the latter is closed.
+4. ⚠️ **NEEDS A BIBLE AMENDMENT, and I may not make it.** §5.3's hot set is **closed** and its item 1
+   is *"Active local-user roster (name, position, staffId)"* — **a card id is not in it.** Resolving
+   a card offline requires mirroring one. That is an addition to a closed list, which §5.3 says
+   requires an amendment, and §14 plus this lane's constraints reserve that for Ian. **Reported, not
+   done.** Until it is made, the offline card path cannot be built.
+
+> Anti-buddy-punch, if the bearer risk bites: a card is a bearer credential, and a photo of a badge
+> punches. A photo captured at the punch is the standard mitigation and is cheap. **Not built** —
 > named so it is a decision rather than an oversight.
 
-### D2. Does the Capacitor APK carry forward into v2 at all?
+### 🅿️ D2 — PARKED 2026-08-29, leaning YES
 
-Fingerprint, NFC-write and thermal printing are all native plugins in v1's APK. Phase 4 as specced
-assumes a **browser** terminal. If Ian wants fingerprint on day one, the APK is its own task and
-probably its own phase.
-**Recommendation: not in Phase 4.** Ship the browser terminal, prove the lane, add the APK when a
-store actually needs a reader.
+Ian: *"park the decision for now but im leaning forward to yes"*.
 
-### ⭐ D4. May the golden master capture real v1 attendance data? — **blocks T-157's exit**
+The Capacitor APK and its native ZK9500 plugin are **not** built in Phase 4. Nothing here forecloses
+it: the fingerprint mode, its config kill switch and hot-set item 2 all exist, so the APK lights up
+an already-modelled path rather than adding one.
 
-Bible §15.2 calls golden-master testing *"the most important practice here"*, and T-157 is where it
-matters most: a hand-written suite for the adjudication engine encodes **my reading** of the rules,
-and my reading is the thing most likely to be wrong. Only real v1 inputs replayed against real v1
-outputs catch that.
+⚠️ **The consequence while it is parked:** a store with no card issued and no APK has **no offline
+attendance at all.** That is not a regression — it is v1's position too — but it means the card
+rollout is a prerequisite for the exit gate, not an alternative to it.
 
-Capturing them means `npm run capture -- --collection attendanceSessions` against the **live ERP
-Firebase project** with a read-only service-account key — production data. **This session did not
-run it.** The harness is written and ready (`tests/golden/attendance-adjudication.test.ts`); until
-the corpus exists it reports a named BLOCKED case in the test output rather than passing vacuously.
+### ✅ D3 — the 72-hour ceiling: dissolved, no decision needed
 
-**Recommendation: yes, and it is low risk** — the ETL is read-only by construction (`SourceReader`
-declares no write method), the key is `roles/datastore.viewer`, and specimens are pseudonymised
-through the existing corpus machinery. But it reaches production, so it is Ian's to say.
+`MAX_QUEUE_AGE_MS = 72h` (`offline-replay.ts:7`). Past it, v1 rejects a punch and **dead-letters it
+into an IndexedDB store with no reader** — landmine #14, and discovery 05 §6: *"no admin/manager UI
+was found anywhere in the app that reads dead-lettered punches."*
 
-### D3. Is the 72-hour queue ceiling still right?
+⭐ **The two-lane model dissolves it.** In v2 the event lives in Firestore, never in a private device
+store, so it is never unreachable and refusing it gains nothing. **Built as specced:** the ingest
+always accepts, and 72 hours became a `late_event_arrival` anomaly for a manager to confirm. Same
+constant, opposite consequence — a flag instead of a cliff.
 
-`MAX_QUEUE_AGE_MS = 72h` (`offline-replay.ts:7`). Past it, a punch is rejected and **dead-lettered
-into IndexedDB with no recovery UI** — discovery 05 §6: *"no admin/manager UI was found anywhere in
-the app that reads dead-lettered punches."* That is landmine #14.
+### ✅ D4 — DECIDED 2026-08-29. Capture, and **improve rather than merely match**
 
-⭐ **This one does not need Ian, because the two-lane model dissolves it.** In v2 the event lives in
-**Firestore**, not in a private IndexedDB store, so it is never unreachable. The ingestor therefore
-**always ingests**, and 72 hours becomes an *adjudication* flag (`late_arrival_of_event`) that asks a
-manager to confirm, rather than a data-loss cliff. Recorded here so nobody ports the cliff.
+Ian: *"yes use available data to model v2 improve what can be improved"*.
+
+⭐ **This re-frames the golden master.** It is not a parity straitjacket — it is a way to understand
+what v1 actually produced, and every divergence is a candidate improvement rather than a defect in
+v2. Bible §1.3 already allows this (*"a v1-vs-v2 difference is a **finding**, not a failure"*); Ian's
+answer makes it the default posture.
+
+Counted 2026-08-29 (count-only, zero document reads): **624 attendance sessions** — Lipa 483,
+Malvar 115, Banay-Banay 26, Davao 0. ⚠️ Smaller than it might be because May–July attendance was
+purged in v1 (2,660 documents).
+
+### ✅ D5 — DEF-086: **fix it, do not port the hole**
+
+Ian, on the undertime-grace defect: *"about payroll its not yet implemented in v1 lots of work to do
+so we do it right and implement in full in v2"*.
+
+So v2 does **not** pin v1's behaviour. The hour-flooring of the paid end is the artifact — it is what
+makes `undertimeGraceMinutes` under 60 unable to fire, and it is why `earlyOutGraceMinutes` had to be
+invented to patch it. **v2 pays real minutes**, and both graces then mean what their names say.
+Detail and the closing tests in DEF-086's disposition.
 
 ---
 
