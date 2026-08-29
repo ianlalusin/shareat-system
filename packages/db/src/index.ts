@@ -94,6 +94,7 @@ export type { TradeOrderRow, TradeOrderLineRow } from './repo/trade';
 export { AR_DOC_STATUSES } from '../schema/ar';
 export type { ArDocStatus } from '../schema/ar';
 export * as itemsRepo from './repo/items';
+export * as stockLedgerRepo from './repo/stock-ledger';
 export type { CatalogueEntry, SimilarItem, ItemRequestRow, MergeReport, DuplicateCandidate } from './repo/items';
 export { SIMILARITY_FLOOR } from './repo/items';
 export { ITEM_REQUEST_STATUSES } from '../schema/items';

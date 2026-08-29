@@ -46,6 +46,14 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'How an org names its kinds of space. A franchise defines its own and must never see ' +
       'another org’s.',
   },
+  stock_movements: {
+    scope: 'org_column',
+    reason:
+      'Every movement carries its org directly. ⚠️ org_column rather than derived through the ' +
+      'location: this is the highest-volume table in the domain and every on-hand query filters ' +
+      'it, so the policy belongs on the row being read, not behind a join.',
+  },
+
   stock_locations: {
     scope: 'org_column',
     reason:

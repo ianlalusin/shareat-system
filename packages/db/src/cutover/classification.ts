@@ -413,6 +413,19 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'Configuration describing the premises, carrying no balance and no anchor. Re-keying it ' +
       'at cutover would be pointless work with a fresh chance to mistype a room.',
   },
+  stock_movements: {
+    // ⭐ PURGE, and it is the counterweight to `stock_locations` being KEEP. The rooms are
+    // configuration and survive; what was IN them is operational history and does not. On
+    // 2027-01-01 every store opens at zero on-hand and the opening count (T-134) is what puts
+    // stock back — which is row 106's "zero starting point" applied to quantity rather than money.
+    class: 'purge',
+    reason:
+      'The stock ledger — operational movements, the same class as journal_entries and expenses. ' +
+      'On-hand is derived from these rows, so purging them opens every location at zero, which is ' +
+      'exactly what the 31 December counted opening balance then replaces. ⚠️ Keeping them would ' +
+      'carry pilot stock into the real books while the ledger behind it was deleted.',
+  },
+
   stock_locations: {
     // ⭐ keep, and this is the one worth reading twice. The ROOMS survive; the STOCK IN THEM does
     // not — stock lives in stock_movements (T-161), which purges. A room with no movements behind

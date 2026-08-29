@@ -1,6 +1,10 @@
 # T-161 — The stock ledger: movements are the truth, on-hand is a query
 
-> **Status:** SPEC, 2026-08-29. Written before implementation (bible §1.2a).
+> **Status:** ⚠️ **BUILT AND APPLIED 2026-08-29, except the domain wrapper.** `stock_movements`,
+> migration `0063` (applied to dev and test), the repo, both registries, and **28 integration
+> tests against real Postgres** — including the concurrency case that reproduces v1's −20 kg
+> drift. `typecheck` clean · **656 unit** · **1254 integration, 42 files**.
+> ⛔ `packages/domain/src/stock/ledger.ts` is NOT built — §9.4.
 > **Depends on:** T-160 (locations), T-145 (`items`).
 > **v1 read at source** — `stock-ledger.ts`, `general-inventory.actions.ts`,
 > `meat-usage.actions.ts:310-323`, `production.actions.ts:231-247`. `docs/discovery/14` §I, §K.
@@ -138,7 +142,75 @@ never fire.** Carrying it would leave unreachable code that reads as a business 
 
 ⭐ **Quantity comparisons are EXACT.** ⚠️ Money tolerances are unaffected (§16.6).
 
-## 9. Out of scope
+## 9. ⚠️ Built 2026-08-29 — four rules moved into the database, and one bug found
+
+**Landed, applied, green:**
+
+| | |
+|---|---|
+| `packages/db/schema/stock-ledger.ts` | `stock_movements`, plus `VALUE_MOVING_KINDS` — the list T-165 turns into a CHECK |
+| `packages/db/migrations/0063_t161_stock_ledger.sql` | ✅ Journalled and applied to `shareat_dev` and `shareat_test` |
+| `packages/db/src/repo/stock-ledger.ts` | `insertMovement`, `onHand`, `onHandForUpdate`, `onHandByStore`, `findMovement` |
+| `classification.ts` / `rls/registry.ts` | **PURGE** · `org_column`, ENABLE **and FORCE** |
+| `packages/db/tests/integration/stock-ledger.test.ts` | 28 cases |
+
+### 9.1 The four rules the database now refuses, not the service
+
+⭐ Bible row 104, applied four times. Each was attempted in **raw SQL** in the tests, because a
+guard proved only through our own code is a convention — DEF-041 is what that costs.
+
+| Rule | Mechanism |
+|---|---|
+| **Append only** | `BEFORE UPDATE OR DELETE` raises. A correction is a new opposite row |
+| **Never negative** | ⭐ A **DEFERRED constraint trigger**, checked at COMMIT |
+| **Period lock** | `BEFORE INSERT`, resolving `moved_at` to the org's fiscal period — §16.7 defect 6 closed **once, for every caller** |
+| **Reversal sanity** | Same item, same location, exact opposite quantity, and a reversal cannot itself be reversed |
+
+⭐ **Why the negative guard is deferred and not per-row.** A multi-line document writes several
+rows; a `BEFORE ROW` trigger sees each alone, so **two usage lines that individually pass and
+collectively overdraw would slip straight through one.** That case is a test. Deferring also lets a
+transfer write its OUT and IN legs in either order, which is a second test.
+
+⚠️ **There is deliberately no admin override on the negative guard.** v1 has one, and used it to
+paper over the very concurrency bug this table's shape removes. A genuinely wrong balance is
+corrected by a `manual_adjustment` movement with a typed reason — visible in the ledger, unlike a
+silent override.
+
+### 9.2 ⭐ The bug: a malformed reversal reported as an overdraw
+
+The reversal-sanity check first shipped **deferred**, like the balance guard. Both then fired at
+COMMIT and Postgres runs them **in trigger-name order** — `no_negative` before `reversal_matches` —
+so a reversal naming the **wrong location** was refused with *"stock would go negative"*. True,
+useless, and it points the reader at the wrong problem entirely.
+
+**Fixed by making it `BEFORE INSERT`:** it needs no other row of the statement, because the
+movement being reversed already exists. ⭐ **A structural check belongs before the balance
+consequence it causes.**
+
+⚠️ **The test caught it only because it asserted the specific reason.** A test checking merely that
+*something* threw would have passed on the wrong error and shipped the bad diagnostic.
+
+### 9.3 Two operational notes
+
+⚠️ **`onHandForUpdate` locks the rows that exist**, so two writers inserting the *first ever*
+movement for a pair do not block each other. Deliberate and safe: the deferred trigger still fires
+at commit and refuses whichever one overdraws. The lock is an optimisation on the common path, not
+the correctness mechanism — the constraint is.
+
+⚠️ **A movement whose date no fiscal period covers is ALLOWED.** Periods are created as the
+business closes them, and refusing a movement because next month's period does not exist yet would
+stop the warehouse to satisfy the bookkeeper. What is refused is a period that **exists and is
+shut**.
+
+### 9.4 Not built
+
+| Piece | Why |
+|---|---|
+| `packages/domain/src/stock/ledger.ts` | The repo carries the SQL and the tests prove the invariants. The domain wrapper is thin and belongs with its first real caller — T-163's receipt posting — rather than being invented ahead of one |
+| `stockLedgerDoesNotMatchBalance` finding | ⭐ **Vacuous today, by construction.** It compares the ledger against a cache, and there is no cache — §2 refuses to build one before a measured need. Registering a detector that cannot fail is T-134's own vacuous-pass lesson |
+| §7 test 6's *"reversed at most once"* via the domain | Proved at the database instead: `stock_movements_one_reversal_key` |
+
+## 10. Out of scope
 
 ⛔ **Any cost or valuation.** A movement carries **quantity only**. Cost is a FIFO layer (T-162),
 and keeping the two tables separate is what lets a cost correction re-value history without
@@ -148,7 +220,7 @@ rewriting a single quantity.
 This task is exercised by fixtures.
 ⛔ **Batch / lot / expiry columns.** Phase-plan §8: v1 built them and never wired them.
 
-## 10. Done when
+## 11. Done when
 
 - [ ] Migration hand-written (DEF-073), next free number, journalled `previous.when + 86400000`,
       including the append-only trigger.
