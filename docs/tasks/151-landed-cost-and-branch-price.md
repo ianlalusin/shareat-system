@@ -1,6 +1,9 @@
 # T-151 — Landed cost and the branch price: two delivery fees that behave differently
 
-> **Status:** Spec 2026-08-28 by the Opus planner.
+> **Status:** ✅ **BUILT 2026-08-28.** Spec by the Opus planner the same day.
+> ⭐ The basis is DERIVED from invoice history rather than stored, which is the one place this
+> improves on v1 — a poisoned line self-heals on the next read instead of needing a forced
+> recompute.
 > **Depends on:** T-130 (`supplier_invoices`), T-145 (`supplier_invoice_lines`, price history),
 > T-132/T-133 (`trade_orders`).
 > **v1 read first**, per the standing rule — `computeBranchPrice` and `CommissaryItemConfigPlain`

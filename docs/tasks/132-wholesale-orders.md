@@ -1,6 +1,7 @@
 # T-132 — Wholesale orders: the document a franchisee sale has never had
 
-> **Status:** Spec 2026-08-28 by the Opus planner. Wave 4's first item.
+> **Status:** ✅ **BUILT 2026-08-28.** Spec by the Opus planner the same day; Wave 4's first
+> item. `4300 Wholesale sales` added to the chart by migration — every other 4xxx leaf is retail.
 > **Depends on:** T-129 (`customers`, `price_lists`), T-145 (`items`), T-149 (`sellable_wholesale`),
 > T-131 (`ar_charges`), T-105 (`postEntry`).
 > **Research: already done and NOT repeated.** `docs/discovery/19-b2b-order-to-cash.md`

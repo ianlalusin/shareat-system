@@ -1,6 +1,8 @@
 # T-135 — Integrity findings (OIL): port what v1 got right, close the one gap
 
-> **Status:** design 2026-08-25. **Research-first this time** — read `ERP-rebuild/src/types/integrity.ts`
+> **Status:** ✅ **BUILT 2026-08-28** — seven ledger-integrity detectors, derived on every read,
+> with only the acknowledgement stored. Half-closes DEF-078. Design 2026-08-25.
+> **Research-first this time** — read `ERP-rebuild/src/types/integrity.ts`
 > before designing, and it changed the design.
 > **Unifies with:** ADR-006 §8's close-readiness checker — they are the same machine.
 

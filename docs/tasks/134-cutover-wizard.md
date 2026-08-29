@@ -1,6 +1,9 @@
 # T-134 — The 31 December **conversion**: a guided, verified switch to v2
 
-> **Status:** design 2026-08-25, **corrected against `docs/discovery/21-migration-wizards.md`.**
+> **Status:** ✅ **BUILT 2026-08-28–29** — domain, screens, and the opening-balance post.
+> Design 2026-08-25, **corrected against `docs/discovery/21-migration-wizards.md`.**
+> ⛔ **Building it found DEF-079: the purge could never have run.** See §"Built 2026-08-28" below
+> for the two checks that cannot be checked here, and the vacuous-pass gap the gates now close.
 > The first draft was written before that research, which was backwards — bible §3.6 requires
 > research first, and Ian had to point it out. **Everything below has been checked against what
 > Xero, Odoo and ERPNext actually do**, and three of the draft's decisions changed as a result.

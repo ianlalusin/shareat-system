@@ -1,6 +1,9 @@
 # T-133 — Inter-entity trade: the internal half of the one order flow
 
-> **Status:** Spec 2026-08-28 by the Opus planner. Wave 4's second item.
+> **Status:** ✅ **BUILT 2026-08-28, then CORRECTED the same day.** ⚠️ The first cut moved `1330`
+> inventory between stores, which assumes perpetual inventory this system does not have — Ian's
+> question about a processed meat slab exposed it within the hour. It moves COST now (§3), and
+> `5175 Cost transferred to branches` is the account the chart had demanded since T-102b.
 > **Depends on:** T-132 (the order document), T-129 (`customers` and their derived treatment),
 > T-139 (`money_transfers`, which already posts the four-leg cross-store shape).
 > **Research: already done and NOT repeated.** `docs/discovery/19-b2b-order-to-cash.md` §7 read
