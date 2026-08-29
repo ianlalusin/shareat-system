@@ -44,8 +44,38 @@ describe('migration journal', () => {
     expect(offenders, offenders.join('\n')).toEqual([]);
   });
 
-  it('`idx` is contiguous from 0', () => {
-    journal.entries.forEach((e, i) => expect(e.idx).toBe(i));
+  /**
+   * ⭐ Relaxed from "contiguous from 0" to "strictly increasing and unique" — T-154, 2026-08-29.
+   *
+   * Parallel lanes RESERVE migration number blocks so two sessions never collide on one number or
+   * on `meta/_journal.json` (bible §3.4: *"Disjoint files are not enough — check shared STATE
+   * too"*). Phase 4's lane owns 0070-0089 while the accounting lane holds 0060-0069, so a gap in
+   * `idx` is produced BY the scheme, on purpose, and contiguity cannot hold while both lanes are
+   * in flight. It closes again when they merge.
+   *
+   * ⚠️ **Nothing is lost by dropping the no-gaps clause.** What contiguity actually protected was
+   * "a migration went missing", and that is covered completely — and better — by the next test,
+   * which compares journalled tags against the `.sql` files on disk in BOTH directions. A gap with
+   * no missing file is a reservation; a missing file is caught either way.
+   *
+   * What is KEPT is the ordering property, because it is the one Drizzle cares about: `idx` must
+   * still march strictly forward, so a duplicated or out-of-order row still fails here.
+   *
+   * Verified rather than assumed: migration 0070 applied cleanly to a freshly created empty
+   * database with `idx` jumping 59 -> 70. Drizzle's migrator reads `entries` in array order and
+   * gates on `when`, not on `idx` being dense.
+   */
+  it('`idx` is strictly increasing and unique — a reserved-block gap is legitimate', () => {
+    const offenders: string[] = [];
+    for (let i = 1; i < journal.entries.length; i++) {
+      const prev = journal.entries[i - 1]!;
+      const cur = journal.entries[i]!;
+      if (cur.idx <= prev.idx) {
+        offenders.push(`${cur.tag} (idx=${cur.idx}) does not come after ${prev.tag} (idx=${prev.idx})`);
+      }
+    }
+    expect(offenders, offenders.join('\n')).toEqual([]);
+    expect(journal.entries[0]!.idx).toBe(0);
   });
 
   it('every journalled tag has a matching .sql file, and vice versa', () => {
