@@ -1,6 +1,8 @@
 # T-169 — Physical counts: the freeze, the count, and the variance that finally posts
 
-> **Status:** SPEC, 2026-08-29. Written before implementation (bible §1.2a).
+> **Status:** ⚠️ **BUILT AND APPLIED 2026-08-29.** `count_sessions` + locations + lines,
+> migration `0068`, `commitCountSession`, **20 integration tests**. ⭐ **The freeze lives on
+> `stock_movements`, so every writer inherits it** — §9.1. ⛔ No route; port 9008 held.
 > **Depends on:** T-160, T-161, T-162, T-164 (`postCountVariance`).
 > **v1 read at source** — `count-session.actions.ts`, `count-freeze.ts`, `stock-count.actions.ts`,
 > pure variance math `stock-count.ts`. `docs/discovery/14` §K.
@@ -144,7 +146,72 @@ isFrozen(locationId): Promise<boolean>              // pure predicate over sessi
 14. ⭐ **Live route on 9008: open a session, count, review, commit, close — all five from the
     browser.** §2 is the reason this is a listed test and not an afterthought.
 
-## 9. Out of scope
+## 9. ⚠️ Built 2026-08-29 — one freeze, and the variance v1 never posted
+
+**Landed:** `packages/db/schema/count-sessions.ts` · migration `0068` ·
+`packages/domain/src/stock/count-sessions.ts` · both registries ·
+`packages/domain/tests/integration/count-sessions.test.ts` (20 cases).
+
+### 9.1 ⭐ The freeze is ONE trigger, on `stock_movements`
+
+v1 wires this check into five separate paths — usage, wastage, transfer, production, POS pull —
+and **§16.7 defect 6 is the record of what happens when one is missed**. Here it lives on the table
+every one of them already writes through.
+
+⭐ **A writer that does not exist yet inherits the freeze without knowing it exists.** The test
+proves it the only way that means anything: it freezes a room and then attempts a **receipt**, a
+path T-166 wrote with no knowledge of counts at all.
+
+⚠️ **It fails CLOSED to "not frozen"**, and that direction is a decision. A malformed session row
+that *froze* a location would lock a store out of its own stock with no way to clear it — which is
+precisely the landmine v1 nearly shipped when its freeze had no way to open a session for seven
+weeks.
+
+### 9.2 The admin bypass is a session GUC
+
+`app.bypass_count_freeze`, set by the service only after `authorize()` — the same shape RLS uses
+for `app.org_id`. **A trigger cannot know who the caller is; the connection can.**
+
+⚠️ Set transaction-locally, and there is a test for that specifically: if it were session-local,
+one admin action would silently unfreeze every later write on that pooled connection. **That is
+DEF-077's exact failure shape** — a GUC outliving the request that set it.
+
+### 9.3 ⭐ The variance that v1 never posted
+
+Counted short relieves the oldest layers into `5400` at FIFO cost; counted long runs the other
+way. v1 posts **nothing** — `stock-count.actions.ts` says *"NO GL, v1"* — so a fleet-wide
+shrinkage moved stock and never reached the books.
+
+⛔ **Counted long with no cost basis REFUSES the commit** and names the item. A free layer makes
+every later margin on that item fictional for as long as the stock lasts, so refusing is the only
+honest option. ⚠️ Pre-flighted across *all* lines before any write, per T-166's lesson.
+
+⭐ **Short and long post as two entries, never netted.** Netting would hide a store that lost 40 kg
+of beef and found 40 kg of rice.
+
+### 9.4 ⛔ No tolerance band, and a test that pins it
+
+A variance of **0.001** — the smallest representable at `numeric(14,3)` — **posts**. T-161 §8
+removed v1's `1e-6` tolerance because it was a float defence that cannot fire against exact
+decimals, and this is where that removal is visible in behaviour rather than only in a comment.
+
+### 9.5 ⚠️ A partial unique index that could not be one
+
+*"A location may be in at most one active session"* wanted to be a partial unique index and cannot:
+Postgres refuses a subquery in an index predicate, and whether a session is active lives on the
+**session**, not on the location row. ⛔ Copying the status onto every location row would be a
+second copy of a fact to keep in step. **So it is a trigger, and the migration records why** — the
+next reader will otherwise try the index and get the same error.
+
+### 9.6 Not built
+
+| Piece | Why |
+|---|---|
+| The `/inventory/counts` route | ⛔ Port 9008 held all day |
+| ⭐ **The browser exercise of open → count → review → commit → close** | **Required by `Done when`, and it is the point.** v1's freeze shipped with no way to open a session for seven weeks; a test proves the guard, only a browser proves the feature |
+| Tier 2 of the long-cost fallback | T-151's landed price history is unreachable until the item has a delivery; until then `resolveLongCost` returns null and the commit refuses, which is the safe direction |
+
+## 10. Out of scope
 
 ⛔ **Cycle counting / scheduled recurring counts.** v1 has none; nobody has asked.
 ⛔ **The mobile count endpoint.** `/api/inventory/count` — the Flutter app is **dropped** (row 88).
@@ -152,7 +219,7 @@ isFrozen(locationId): Promise<boolean>              // pure predicate over sessi
 ⛔ **Blind vs informed counting modes.** v1 shows expected quantity; changing that is a real
 control question and a separate, small decision — raise it, do not decide it here.
 
-## 10. Done when
+## 11. Done when
 
 - [ ] Migration hand-written (DEF-073), next free number, journalled `previous.when + 86400000`.
 - [ ] `classification.ts` **PURGE**; `rls/registry.ts` NULLIF-guarded.

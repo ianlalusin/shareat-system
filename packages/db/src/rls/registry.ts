@@ -56,6 +56,21 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     via: 'exists (select 1 from stock_usage_records r where r.id = record_id and r.org_id = app_current_org())',
   },
 
+  count_sessions: {
+    scope: 'org_column',
+    reason: 'A count belongs to a store, and a store to one org.',
+  },
+  count_session_locations: {
+    scope: 'derived',
+    reason: 'Reached only through its session.',
+    via: 'exists (select 1 from count_sessions s where s.id = session_id and s.org_id = app_current_org())',
+  },
+  count_lines: {
+    scope: 'derived',
+    reason: 'Reached only through its session.',
+    via: 'exists (select 1 from count_sessions s where s.id = session_id and s.org_id = app_current_org())',
+  },
+
   deliveries: {
     scope: 'org_column',
     reason: 'A delivery belongs to a store, and a store to one org.',

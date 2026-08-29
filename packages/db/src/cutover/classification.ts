@@ -425,6 +425,22 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     reason: 'The detail of a usage record, by CASCADE. Same class as its parent.',
   },
 
+  count_sessions: {
+    class: 'purge',
+    reason:
+      'A physical count is an operational event about a period that is ending. ⚠️ The 31 December ' +
+      'opening count is NOT this table — T-134 owns `opening_counts`, which is KEEP-classified ' +
+      'because it is the evidence behind the opening balance.',
+  },
+  count_session_locations: {
+    class: 'purge',
+    reason: 'Which rooms a count covered, by CASCADE. Same class as its session.',
+  },
+  count_lines: {
+    class: 'purge',
+    reason: 'The counted quantities and their variances. Same class as the session they belong to.',
+  },
+
   deliveries: {
     class: 'purge',
     reason:
