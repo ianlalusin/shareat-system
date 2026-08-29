@@ -245,3 +245,62 @@ export async function renameMoneyAccount(
   if (tx) return run(tx);
   return transaction(run);
 }
+
+// -------------------------------------------------------------------------------------
+// T-153 — the till float pot
+// -------------------------------------------------------------------------------------
+
+export const TILL_FLOAT_GL_CODE = '1115';
+
+/**
+ * Create a store's till float pot, or resize an existing one. Bible row 129's sibling.
+ *
+ * > **Ian, 2026-08-29:** *"extra cash float that is not remitted to the manager or admin — it sits
+ * > on till forever… if the configured budget is 20k, every day opening and closing it is 20k…
+ * > it's on a side pocket of the cashier."*
+ *
+ * ⭐ **`set_cash_policy`, the same admin-only capability as the un-remitted ceiling.** Both are
+ * risk figures a cash count is judged against, and the reasoning T-152 recorded applies unchanged:
+ * whoever is measured must not be able to move the bar. A manager whose float is short could
+ * otherwise lower the target and the finding would vanish.
+ *
+ * ⛔ **Setting a target does NOT put money in the pot.** The pot starts empty and the finding will
+ * say so immediately — which is correct and deliberate: the money has to arrive by a transfer from
+ * the office (or, at cutover, as an opening balance), and until it does the books should not
+ * pretend a side pocket has cash in it.
+ */
+export async function setTillFloat(
+  tx: Tx,
+  actor: Actor,
+  input: { storeId: string; name?: string; target: string | null },
+): Promise<{ moneyAccountId: string }> {
+  await authorize(tx, actor, 'set_cash_policy', { storeId: input.storeId });
+
+  const existing = (await moneyAccountsRepo.listFloatPots(tx, actor.orgId)).find(
+    (a) => a.storeId === input.storeId,
+  );
+
+  if (existing) {
+    // ⚠️ Clearing the target (null) retires the pot's float STATUS, not the account or its money.
+    // Cash sitting in it stays exactly where it is — which is why this never posts anything.
+    await moneyAccountsRepo.setFloatTarget(tx, actor.orgId, existing.id, input.target);
+    return { moneyAccountId: existing.id };
+  }
+
+  if (input.target === null) {
+    throw new Error('setTillFloat: this store has no till float to clear.');
+  }
+
+  const { id } = await moneyAccountsRepo.insertMoneyAccount(tx, {
+    orgId: actor.orgId,
+    storeId: input.storeId,
+    name: input.name?.trim() || 'Till float',
+    instrument: 'cash',
+    // ⭐ The cashier genuinely holds it — the side pocket is in their drawer. What separates it
+    // from the takings is the GL account and the target, not the custodian.
+    custodian: 'cashier',
+    glAccountCode: TILL_FLOAT_GL_CODE,
+    floatTarget: input.target,
+  });
+  return { moneyAccountId: id };
+}

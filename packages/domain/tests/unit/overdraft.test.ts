@@ -14,9 +14,11 @@ import { judgeDraw } from '../../src/money-accounts/overdraft';
 describe('judgeDraw', () => {
   // ⚠️ Every account carries an overdraft limit, but only a CASHIER one consults it — office and
   // staff balances are complete, so they block at zero regardless of what this says.
-  const cashier = { name: 'Cashier drawer', custodian: 'cashier' as const, overdraftLimit: '20000.00' };
-  const office = { name: 'Office safe', custodian: 'office' as const, overdraftLimit: '20000.00' };
-  const staff = { name: 'Ana float', custodian: 'staff' as const, overdraftLimit: '20000.00' };
+  const cashier = { name: 'Cashier drawer', custodian: 'cashier' as const, overdraftLimit: '20000.00', floatTarget: null };
+  const office = { name: 'Office safe', custodian: 'office' as const, overdraftLimit: '20000.00', floatTarget: null };
+  const staff = { name: 'Ana float', custodian: 'staff' as const, overdraftLimit: '20000.00', floatTarget: null };
+  // ⭐ T-153 — custodian 'cashier', but a SIDE POCKET rather than a drawer that runs behind.
+  const pot = { name: 'Lipa till float', custodian: 'cashier' as const, overdraftLimit: '20000.00', floatTarget: '20000.00' };
 
   it('says nothing at all when the money is there', () => {
     expect(judgeDraw(cashier, 1000, 400)).toEqual({ blocked: false });
@@ -86,5 +88,31 @@ describe('judgeDraw', () => {
   it('a cent over IS, on both paths', () => {
     expect(judgeDraw(office, 1000, 1000.01).blocked).toBe(true);
     expect(judgeDraw(cashier, 1000, 1000.01).message).toBeTruthy();
+  });
+
+  // -----------------------------------------------------------------------------------
+  // T-153 — the float pot
+  // -----------------------------------------------------------------------------------
+
+  it('⭐ a FLOAT POT blocks at zero, even though its custodian is the cashier', () => {
+    // Ian, 2026-08-29: "we guard all accounts to never go negative, all stops at 0 never below."
+    const v = judgeDraw(pot, 1500, 2000);
+    expect(v.blocked).toBe(true);
+    expect(v.message).toMatch(/side pocket/);
+  });
+
+  it('⛔ and it does NOT consult the overdraft limit, which a drawer of the same custodian does', () => {
+    // Same custodian, same limit, same numbers — opposite verdicts. ⭐ The warn-vs-block split is
+    // about whether the ledger can see the WHOLE balance, not about who holds it: a takings drawer
+    // is provisional until the day is verified, a float pot only ever moves by transfer.
+    expect(judgeDraw(cashier, 1000, 1500).blocked).toBe(false);
+    expect(judgeDraw(pot, 1000, 1500).blocked).toBe(true);
+  });
+
+  it('says nothing when the float covers the draw — spending it IS allowed', () => {
+    // ⚠️ Drawing on the float is ordinary: Ian's worked example pays a delivery from the takings
+    // drawer and then from the float when the drawer is exhausted. What is refused is going BELOW
+    // zero; the pot then reads under target and the finding asks for it to be topped back up.
+    expect(judgeDraw(pot, 20000, 1500)).toEqual({ blocked: false });
   });
 });

@@ -65,6 +65,8 @@ export async function listFindings(
     ...(await findingsRepo.unremittedCeilingBreached(tx, orgId)),
     ...(await findingsRepo.remittanceOverdue(tx, orgId)),
     ...(await findingsRepo.serviceChargeFloatAgeing(tx, orgId)),
+    // T-153 — a till float not holding its configured amount.
+    ...(await findingsRepo.tillFloatOffTarget(tx, orgId)),
   ];
 
   const acks = await findingsRepo.liveAcknowledgements(tx, orgId);
