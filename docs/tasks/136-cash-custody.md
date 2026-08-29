@@ -1,8 +1,10 @@
 # T-136 — Cash custody: pooled remittance and the store revolving fund
 
-> **Status:** ⚠️ **REQUIREMENTS ONLY, 2026-08-25.** Ian's brief, captured with the structural
-> findings that constrain it. **Not a design** — §5 names what must be researched first (bible
-> §3.6). Recorded now so it is not lost, and because it changes T-123's shape.
+> **Status:** ⚠️ **REQUIREMENTS, PARTLY BUILT — see §9 (2026-08-29).** This is a requirements
+> umbrella, not a task. **Two thirds of it has shipped** under other numbers: §1 · §7 · §8 as
+> **T-143** (built 2026-08-27) and §5b's prerequisite as **T-144** (built — its own doc still says
+> *SPEC*, which is wrong). What remains is §2, §4 and §6, and they are three different sizes of
+> problem. ⛔ **Do not read this doc as "T-136 is unstarted."**
 > **Related:** bible rows 122 (period close), 126 (sales day), 127 (the owner split)
 
 ## Ian's brief
@@ -644,3 +646,151 @@ it, and it must eliminate on consolidation (bible invariant 6).
 movement between stores, whatever screen it is reached through. Gating the transfer screen alone
 would leave the identical act reachable one menu across — which is exactly the mistake T-139
 made first and row 153 corrects.
+
+---
+
+# 9. ✅ ASSESSMENT, 2026-08-29 — what is actually left, and what to build
+
+> Run under `/research-evaluate-propose` (bible row 163) because §2 had never been weighed —
+> only designed. **The verdict changed what to build next.**
+
+## 9.1 ⛔ First: this task is two-thirds built, and the handoff said it was unstarted
+
+`docs/HANDOFF-TODAY.md` names *"T-136 cash custody"* as one of three *"designed and unstarted"*
+tasks. **Verified at source, that is wrong**, and it matters because it would have sent this
+session to design something that already exists:
+
+| T-136 section | Real state | Evidence |
+|---|---|---|
+| §1 · §7 · §8 — pooled remittance | ✅ **BUILT** as **T-143**, 2026-08-27 | `0030`, `0031`, `packages/domain/src/remittance/`, 8 integration + 8 unit tests |
+| §5b — cash requests, named as §2's **prerequisite** | ✅ **BUILT** as **T-144** | `0034`, `0035`, `packages/domain/src/cash-requests/`, `/cash-requests` route |
+| **§2 — the store revolving fund** | ⛔ **Not built** — and see 9.3 | Only comments *saying* it is owed |
+| **§4 — cadence + un-remitted ceiling** | ⛔ **Not built** | No config column exists on `stores` |
+| **§6 — service-charge distribution** | ⛔ **Not built, and see 9.4** | — |
+
+⭐ **T-144's own doc still says `Status: SPEC` although it shipped** — the same stale-status defect
+the 2026-08-28 session fixed for five other task docs. One more slipped through.
+
+## 9.2 ⭐ The verdict
+
+**Build §4 (T-152). Argue against §2 as designed. Escalate §6, which may outrank both.**
+
+## 9.3 §2, the store revolving fund — recommended AGAINST as designed, and the reason is the till
+
+### The stated reason does not hold in the way §2 assumed
+
+Ian: *"it is common for us to allot a store budget, a petty cash the store can use as a revolving
+fund for operations."* §2 read that as a missing **instrument** and designed an imprest fund.
+
+⭐ **But the function is already there, and the numbers say so loudly.** From the real v1 capture
+(`POSTING-PATTERNS.md`): expense payment is **4,396 legs — 34% of all activity, #1 by volume** —
+and the single most common shape in the entire dataset is an expense paid **straight out of the
+cashier drawer**, `1110`, often split with an online wallet.
+
+> **The till already IS the store's revolving fund.** It refills from sales, operations are paid
+> out of it, and the net is remitted. That is not an accident — it is exactly what §8's
+> *"in minus out"* expected-remittance formula encodes, and bible row 145 built on it.
+
+**So an imprest fund would add control, not capability** — a ring-fenced pot with receipt-gated
+replenishment. That is a real thing to want. It is not the thing the brief said was missing.
+
+### ⚠️ And a second fund would compete with the till
+
+Leave both paths open and the same ₱500 purchase has two possible sources, chosen by a cashier,
+daily. That is a **new** reconciliation question, not a removed one. An imprest fund only repays
+its cost if spending from it is *mandatory* for some category — which is a policy decision nobody
+has made, and which §2 does not mention.
+
+### ⛔ The finding that should decide this: *"allot a store budget"* may mean something v1 HAS
+
+Bible row 128 states *"On the revolving fund: v1 has **NOTHING** — zero matches for
+pettyCash/revolving."* §2 later corrected itself once, on finding the daily till float
+`openingBudget`. **Both passes still missed a third thing**, and it is the closest match in any
+system this business runs to the words *"allot a store budget… revolving"*:
+
+```
+ERP-rebuild/src/types/index.ts:2194  ExpenseBudgetPlain
+  storeId · monthKey · category · budgetAmount · consumedAmount · remainingAmount
+  autoReissue?: boolean
+  reissueInterval?: 'daily'|'weekly'|'bi_weekly'|'monthly'|'quarterly'|'annually'
+```
+
+**A per-store, per-month spending allowance that literally revolves on an interval** — with a
+manager screen (`/manager/budgets`), a cron (`/api/cron/budget-reissue`) and tests. Cash never
+moves; it is a **cap**, not a pot.
+
+⚠️ **A cap and a cash pot are different instruments, and only Ian can say which he meant** — or
+whether he meant both. Building the wrong one is a wasted fortnight, and the two do not substitute
+for each other. **v2 has neither:** `CAPABILITY-GAPS.md` logs expense budgets as *"Financial, but
+non-posting — safely after January."*
+
+⭐ **The general lesson, now costing a third time:** T-136 §2 already recorded *"a grep proves a
+NAME is absent, never that a CONCEPT is."* It then re-committed the same error by grepping
+`pettyCash`/`revolving` and `openingBudget` but never reading the expense module.
+
+### What it would cost, honestly
+
+A store fund needs a **fourth custodian**. `CUSTODIANS = ['cashier','office','staff']`
+(`money-accounts.ts:60`) is switched on in **72 places across 20 files**, sits under a unique index
+on `(store, instrument, custodian)`, and drives row 145's `WHERE custodian = 'cashier'`
+remittance arithmetic. Plus a replenishment document, an expense-routing branch, and a pinned
+foundation-account guard that will trip. **Call it T-144's size.**
+
+Against that: ⭐ **zero legs of evidence in the v1 dataset**, because the instrument does not exist
+there. The nearest comparable — cash requests — runs **82 releases / 52 returns**. An imprest
+fund's volume is not knowable from data; it would be Ian's policy, not a demand signal.
+
+### Open source: nothing adoptable, and this was checked twice
+
+`docs/discovery/24` §5 (2026-08-27) concluded *"no ERPNext-specific imprest module surfaced — it is
+bookkeeping practice over ordinary accounts rather than a feature."* **Re-run 2026-08-29 and it
+holds.** Odoo has several third-party petty-cash addons (`dev_petty_cash`,
+`petty_cash_management_app`, `ovnicraft/petty-cash`) — all Odoo/Python addons on an ORM we do not
+use, several under Apps Store licensing. **Nothing to adopt; the mechanism is textbook
+bookkeeping over ordinary accounts.**
+
+## 9.4 ⛔ §6 — the finding that may outrank everything: NOTHING EVER DEBITS 2160
+
+Every sales day with a service charge **credits** `2160 Service charge float — held for staff`.
+Searching the whole tree for a debit returns **nothing** — not a document, not a script, not the
+month-end runner:
+
+```
+packages/domain/src/sales-days/routing.ts:109   SERVICE_CHARGE_FLOAT: '2160'   ← credit only
+```
+
+**RA 11360 requires distribution at least twice a month, at intervals not exceeding sixteen days.**
+So from the first month of go-live this is a statutory liability that can only ever grow, with no
+path to clear it — and the real distribution, which surely happens, would be off-book.
+
+⚠️ **The same shape as T-143 and the ceiling:** the accrual shipped, the clearing did not.
+
+### ⛔ But it turns on one number I could not reach from here
+
+Whether **any store actually configures a service charge**. POS has a generic per-store charges
+system where *"Service Charge"* is only a placeholder example
+(`POS/src/components/manager/collections/ChargesSettings.tsx`); v1's ERP sales day has **no
+`serviceCharge` field at all**; v2's column defaults to `0`. Ian's own words to T-123 —
+*"separated from service charge"* — imply it exists, but that is an inference, not a count.
+
+**The number I need: do any live stores have a service charge configured, and what did it total
+last month?** It lives in POS's store charges config and receipts. **If yes, §6 outranks T-152 and
+probably everything else on the list. If no, §6 is theoretical and can wait.**
+
+## 9.5 §4 — decided, unblocked, small. **Specced as T-152.**
+
+T-143 §7 rule 5 shipped pooling and explicitly did not enforce the ceiling, so the risk shipped
+without its guard. Row 129 settled the mechanism on 2026-08-25 and left only the peso numbers to
+Ian. And since **T-135 shipped on 2026-08-28**, the flag T-136 §7.6 said *"must not wait for
+T-135"* is now just **two detectors in an existing layer** — much cheaper than when it was written.
+
+→ **`docs/tasks/152-remittance-cadence-and-ceiling.md`**
+
+## 9.6 Amendments owed (reported, not made — RULES rule 14)
+
+1. **Bible row 128** — *"On the revolving fund: v1 has NOTHING"* is wrong. v1 has `ExpenseBudget`
+   with `autoReissue`/`reissueInterval`, a revolving per-store allowance (9.3).
+2. **Row 128's imprest verdict** should record that the till already performs the function, so the
+   fund's case is **control**, not capability.
+3. **T-144's status** — says `SPEC`, shipped.
+

@@ -1,6 +1,8 @@
 # T-144 — Cash requests: a float handed to a person, and what comes back
 
-> **Status:** SPEC, 2026-08-27. Written before implementation (bible §1.2a).
+> **Status:** ✅ **BUILT** — migrations `0034`, `0035`, `packages/domain/src/cash-requests/`,
+> `/cash-requests`, integration tests. Spec written 2026-08-27 before implementation (bible §1.2a);
+> the status line was never updated on shipping and said `SPEC` until 2026-08-29 (T-136 §9.1).
 > **Unblocks:** T-136 §2 (the imprest fund's replenishment needs this document to gate against) and
 > the cross-store half of bible rows 152–153.
 > **Postings already verified:** `POSTING-PATTERNS.md` §Cash request — **82 release legs, 52 return

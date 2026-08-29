@@ -194,3 +194,14 @@ scope, not the original.
 even if the owner is "explicitly deferred past cutover." An unowned capability is not a
 decision; it is a thing nobody has looked at. The four verbs require a verdict on each, and
 right now 33 have none.
+
+---
+
+## Added 2026-08-29 — found while assessing T-136 §2
+
+| Capability | v1 has it | v2 state | Why it is a gap, not a defect |
+|---|---|---|---|
+| **A store-administration screen** | ✅ ERP *and* POS both configure stores (`docs/discovery/23`) | ⛔ **No `stores` route exists** in `apps/erp/src/app/`. Stores arrive only through the seed and the cutover, and nothing in the app can edit one | Discovery 23 §6 decided *"one `stores` row, one editable copy"* — the **model** question. **Nobody owns the screen**, so every per-store setting added from here (T-152's remittance cadence and ceiling, T-136 §2's imprest amount, §6's distribution cadence) has no home and will each invent one. ⚠️ **The cost compounds silently**: the second such setting is where this becomes expensive, and T-152 is the first |
+
+⭐ **Named rather than absorbed.** T-152 puts its two fields on the `/remittance` screen beside
+the position they govern, which is right for those two and wrong as a pattern. **Gap count: 34.**

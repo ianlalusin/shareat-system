@@ -498,13 +498,14 @@
         <div class="wave-head">
           <h3>Cross-cutting &mdash; specced outside the waves</h3>
           <span class="chip c-part">mixed</span>
-          <span class="why">Three have shipped; two are designed on paper only.</span>
+          <span class="why">Three have shipped; T-136 is a requirements umbrella that is two-thirds built.</span>
         </div>
         <div class="tasks">
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-138</div><div class="task-what">Identity and sessions &mdash; PIN sign-in, server-side sessions</div><div class="task-note">Shipped. Removed the &ldquo;acting as&rdquo; dropdown</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-134</div><div class="task-what">The 31 December conversion &mdash; a guided, verified switch</div><div class="task-note">Shipped 28&ndash;29 Aug &middot; 12 steps, 4 gates, screens, and the opening-balance post &middot; found DEF-079: the purge could never have run</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-135</div><div class="task-what">Integrity findings (OIL) &mdash; the standing books watchdog</div><div class="task-note">Shipped 28 Aug &middot; the finding is DERIVED, only the acknowledgement is stored &middot; watches DEF-044 and DEF-078</div></div>
-          <div class="task"><div class="task-id"><span class="dot"></span>T-136</div><div class="task-what">Cash custody</div><div class="task-note">Designed only</div></div>
+          <div class="task t-active"><div class="task-id"><span class="dot"></span>T-136</div><div class="task-what">Cash custody &mdash; a requirements umbrella, not a task</div><div class="task-note"><b>Two-thirds shipped under other numbers</b> &mdash; &sect;1/&sect;7/&sect;8 as T-143, &sect;5b as T-144. Assessed 29 Aug (&sect;9): &sect;4 specced as <b>T-152</b>, &sect;2 recommended against as designed, &sect;6 escalated &mdash; <b>DEF-082, nothing ever debits 2160</b></div></div>
+          <div class="task"><div class="task-id"><span class="dot"></span>T-152</div><div class="task-what">Remittance cadence and the un-remitted ceiling</div><div class="task-note">Spec 29 Aug &middot; completes T-143, which shipped pooling and left the ceiling unenforced &middot; two detectors in T-135&rsquo;s existing layer</div></div>
           <div class="task"><div class="task-id"><span class="dot"></span>T-137</div><div class="task-what">Statutory discount logbook</div><div class="task-note">Designed only</div></div>
         </div>
       </div>
@@ -560,7 +561,7 @@
         <div class="ph-num">1</div>
         <div class="ph-top"><span class="ph-name">The accounting spine</span><span class="chip c-done">complete</span><span class="chip c-part">2 gaps</span></div>
         <div class="ph-body">Chart of accounts (95 accounts), journal entries and lines, the posting engine, reversal, fiscal periods, trial balance. Every invariant enforced by the database rather than the service layer.</div>
-        <div class="ph-gate"><b>Exit gate</b>Invariant suite green; worked examples post correctly; trial balance ties. &mdash; Two carried gaps: <code>tests/invariants/</code> and <code>tests/golden/</code> are still empty directories &mdash; and sit outside every vitest include glob, so a test placed in them would never run &mdash; DEF-079; and T-111&rsquo;s property-based tests were never written &mdash; DEF-080.</div>
+        <div class="ph-gate"><b>Exit gate</b>Invariant suite green; worked examples post correctly; trial balance ties. &mdash; Two carried gaps: <code>tests/invariants/</code> and <code>tests/golden/</code> are still empty directories &mdash; and sit outside every vitest include glob, so a test placed in them would never run &mdash; DEF-081; and T-111&rsquo;s property-based tests were never written &mdash; DEF-080.</div>
       </div>
 
       <div class="phase s-active">
