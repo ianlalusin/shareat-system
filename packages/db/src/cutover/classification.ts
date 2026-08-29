@@ -262,6 +262,16 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'at each store with the device in hand. Configuration, not pilot activity.',
   },
 
+  // ---- T-160: the Lane A outbox (Phase 4, lane B) ---------------------------------------
+  mirror_outbox: {
+    class: 'purge',
+    reason:
+      'A queue, not a record. Every row is an intent to publish something that has already been ' +
+      'published, and the source rows it points at are the truth. ⚠️ Purging it on 1 January is ' +
+      'safe ONLY because the mirror is rebuilt by re-enqueuing from source, never by replaying this ' +
+      'table — which is also why it carries no payload column.',
+  },
+
   // ---- T-124: fixed assets ---------------------------------------------------------------
   prepaid_items: {
     class: 'keep_shell',

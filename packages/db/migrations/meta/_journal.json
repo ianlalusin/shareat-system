@@ -477,6 +477,13 @@
       "when": 1792726307084,
       "tag": "0077_t159_clock_terminals",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1792812707084,
+      "tag": "0078_t160_mirror_outbox",
+      "breakpoints": true
     }
   ]
 }

@@ -478,6 +478,15 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'tenant exactly which device identities to target.',
   },
 
+  // ---- T-160: the Lane A outbox (Phase 4, lane B) ---------------------------------------
+  mirror_outbox: {
+    scope: 'org_column',
+    reason:
+      'Publish intents for one org’s roster, config and day feed. It names which entities changed ' +
+      'and when, which is a shape of activity data in its own right — and the relay runs as the ' +
+      'system principal, so org scoping costs it nothing.',
+  },
+
   etl_runs: { scope: 'system_only', reason: 'ETL machinery. Never reachable by a tenant or a customer — only the migrator, crons and the audit.' },
   etl_source_documents: {
     scope: 'system_only',

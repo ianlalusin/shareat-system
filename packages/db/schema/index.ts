@@ -68,3 +68,6 @@ export * from './attendance-adjustments';
 
 // T-159 — the provisioned device identity (Phase 4, lane B).
 export * from './clock-terminals';
+
+// T-160 — the Lane A transactional outbox (Phase 4, lane B).
+export * from './mirror-outbox';
