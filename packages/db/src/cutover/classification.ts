@@ -413,6 +413,18 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'Configuration describing the premises, carrying no balance and no anchor. Re-keying it ' +
       'at cutover would be pointless work with a fresh chance to mistype a room.',
   },
+  deliveries: {
+    class: 'purge',
+    reason:
+      'The receiving document — operational, and the source of the stock_movements, stock_layers ' +
+      'and journal entries it created, all of which purge. ⚠️ Keeping deliveries while purging ' +
+      'what they caused would leave documents claiming stock that no longer exists.',
+  },
+  delivery_lines: {
+    class: 'purge',
+    reason: 'The detail of a delivery, hanging off it by CASCADE. Same class as its parent.',
+  },
+
   stock_layers: {
     // ⭐ purge, with stock_movements. A layer IS a valued receipt, so keeping layers while purging
     // the movements that created them would leave cost with no quantity behind it — the two halves

@@ -1,0 +1,214 @@
+/**
+ * Receiving a delivery — T-166, and the seam five earlier tasks were waiting for.
+ *
+ * ⭐ **One transaction, three consequences.** Until this function existed, T-161's movements,
+ * T-162's layers and T-163's postings each had tests but no caller. Receiving is what makes them
+ * one act:
+ *
+ * ```
+ * 1. a stock movement per line          quantity  (T-161)
+ * 2. a FIFO layer per line              cost      (T-162)
+ * 3. one journal entry for the whole    value     (T-163)  Dr 1310/1320/1330 · Cr 2120
+ * ```
+ *
+ * ⚠️ **All three or none.** §16.11: *"their financial effect posts to the GL in the same
+ * transaction. No overnight job, no drift window."* v1's equivalent cascade is explicitly
+ * non-atomic and documents its own accepted risk (OC-14); the constraint that forced that is gone,
+ * so the shape goes with it.
+ *
+ * ## ⭐ Where an undecided line parks, and why it is never guessed
+ *
+ * A line with no `locationId` goes to the store's **Receiving** room; if there is none, the
+ * default room; if there is no default, any active room. It is **never dropped and never guessed**
+ * — v1 names this as a deliberate fix over its own earlier behaviour of silently defaulting, *"so
+ * stock is never lost."*
+ */
+import { add, toCentavos, ZERO, type Money } from '@shareat/core/money';
+import { stockLayersRepo, stockLedgerRepo, type Tx } from '@shareat/db';
+import { resolveReceivingLocation, type LocationLike } from '../stock-locations/rules';
+import { lineCost as costOf } from '../stock/layers';
+import {
+  INVENTORY_ACCOUNT_BY_ITEM_KIND,
+  postReceiptValue,
+  type ReceiptLine,
+} from '../stock/receipt-posting';
+import { quantity, toThousandths, type Quantity } from '../stock/quantity';
+
+export interface ReceiveLineInput {
+  readonly lineId: string;
+  readonly itemId: string;
+  readonly itemKind: string;
+  /** In PURCHASE units, as counted at the dock. */
+  readonly receivedQuantity: Quantity;
+  /** `1 purchase unit = conversionFactor × base units`, snapshotted on the line. */
+  readonly conversionFactor: string;
+  /** Per PURCHASE unit, as typed. */
+  readonly unitCost: string;
+  /** NULL parks the line in Receiving — see this file's header. */
+  readonly locationId: string | null;
+}
+
+export interface ReceiveDeliveryInput {
+  readonly orgId: string;
+  readonly storeId: string;
+  readonly deliveryId: string;
+  /** YYYY-MM-DD. */
+  readonly deliveredOn: string;
+  readonly lines: readonly ReceiveLineInput[];
+  /** The store's rooms, for the parking decision. */
+  readonly locations: readonly LocationLike[];
+  readonly receivedBy: string;
+}
+
+export interface ReceiveResult {
+  readonly ok: true;
+  readonly entryId: string;
+  readonly movements: readonly { lineId: string; movementId: string; locationId: string }[];
+  readonly layers: readonly { lineId: string; layerId: string }[];
+  readonly totalValue: Money;
+}
+
+export type ReceiveOutcome = ReceiveResult | { readonly ok: false; readonly reason: string };
+
+/**
+ * Receive a delivery: stock in, cost layered, value posted — atomically.
+ *
+ * ⚠️ `tx` is required. This is the one place in the domain where three subsystems must commit
+ * together, so it always joins a transaction the caller owns.
+ */
+export async function receiveDelivery(tx: Tx, input: ReceiveDeliveryInput): Promise<ReceiveOutcome> {
+  if (input.lines.length === 0) {
+    return { ok: false, reason: 'a delivery with no lines receives nothing' };
+  }
+
+  const parkingLocation = resolveReceivingLocation(input.locations);
+  if (!parkingLocation && input.lines.some((l) => l.locationId === null)) {
+    // ⛔ Refuse rather than invent a room. A store with no active location cannot hold stock, and
+    // writing the movement anyway is exactly how v1 lost it.
+    return {
+      ok: false,
+      reason: 'a line has no location and the store has no Receiving, default, or active room to park it in',
+    };
+  }
+
+  // ⭐ **Every precondition is checked BEFORE the first write**, and that ordering is the whole
+  // "all three or none" promise. `postReceiptValue` returns `ok:false` rather than throwing, so a
+  // refusal discovered AFTER the movements and layers were written would leave the transaction to
+  // COMMIT them — v1's non-atomic cascade, faithfully reproduced by accident.
+  //
+  // ⚠️ Caught by `receive-delivery.test.ts`'s rollback case, which asserted zero movements and
+  // found one. The test was written expecting this to be right; it was not.
+  for (const line of input.lines) {
+    if (!INVENTORY_ACCOUNT_BY_ITEM_KIND[line.itemKind]) {
+      return {
+        ok: false,
+        reason: `item kind "${line.itemKind}" has no inventory account in COA-ALIGNMENT §4.1`,
+      };
+    }
+  }
+
+  const movements: { lineId: string; movementId: string; locationId: string }[] = [];
+  const layers: { lineId: string; layerId: string }[] = [];
+  const receiptLines: ReceiptLine[] = [];
+
+  for (const line of input.lines) {
+    // ⭐ Base units are what the ledger is keyed to. The purchase unit is what the supplier
+    // billed in, and the two are reconciled HERE, once — never left for a later reader to guess.
+    const baseQuantity = toBaseUnits(line.receivedQuantity, line.conversionFactor);
+    if (toThousandths(baseQuantity) === 0n) {
+      // A line received as zero is a legitimate "nothing arrived" — it carries its shortage
+      // reason on the document and simply moves no stock.
+      continue;
+    }
+
+    const locationId = line.locationId ?? parkingLocation!;
+    // ⭐ ONE implementation of "quantity x rate -> money", shared with the FIFO planner.
+    const lineCost = costOf(line.receivedQuantity, line.unitCost);
+    const baseUnitCost = perBaseUnit(lineCost, baseQuantity);
+
+    const movement = await stockLedgerRepo.insertMovement(tx, {
+      orgId: input.orgId,
+      storeId: input.storeId,
+      locationId,
+      itemId: line.itemId,
+      movedAt: new Date(`${input.deliveredOn}T00:00:00Z`),
+      quantity: baseQuantity,
+      kind: 'receipt',
+      sourceType: 'delivery',
+      sourceId: input.deliveryId,
+      createdBy: input.receivedBy,
+    });
+    movements.push({ lineId: line.lineId, movementId: movement.id, locationId });
+
+    // ⚠️ The layer is per STORE while the movement is per LOCATION — T-162's two grains. Parking a
+    // line in Receiving and moving it to the kitchen later changes no cost at all.
+    const layer = await stockLayersRepo.createLayer(tx, {
+      orgId: input.orgId,
+      storeId: input.storeId,
+      itemId: line.itemId,
+      receivedAt: new Date(`${input.deliveredOn}T00:00:00Z`),
+      quantity: baseQuantity,
+      unitCost: baseUnitCost,
+      source: 'delivery',
+      sourceId: input.deliveryId,
+      movementId: movement.id,
+    });
+    layers.push({ lineId: line.lineId, layerId: layer.id });
+
+    receiptLines.push({ itemId: line.itemId, itemKind: line.itemKind, lineCost });
+  }
+
+  if (receiptLines.length === 0) {
+    return { ok: false, reason: 'every line was received as zero — nothing to post' };
+  }
+
+  const posted = await postReceiptValue(tx, {
+    orgId: input.orgId,
+    storeId: input.storeId,
+    receiptId: input.deliveryId,
+    receivedOn: input.deliveredOn,
+    lines: receiptLines,
+    postedBy: input.receivedBy,
+  });
+  if (!posted.ok) {
+    // ⛔ Unreachable given the pre-validation above — and if it is ever reached, the movements and
+    // layers are already written, so returning would commit a half-receipt. THROW, so the
+    // transaction unwinds and the caller sees the failure it actually is.
+    throw new Error(`receiveDelivery: posting refused after stock was written — ${posted.reason}`);
+  }
+
+  return {
+    ok: true,
+    entryId: posted.entryId,
+    movements,
+    layers,
+    totalValue: add(...receiptLines.map((l) => l.lineCost), ZERO),
+  };
+}
+
+/** `purchase quantity × conversionFactor`, exact, in thousandths. */
+function toBaseUnits(purchaseQuantity: Quantity, conversionFactor: string): Quantity {
+  const factorThousandths = BigInt(Math.round(Number(conversionFactor) * 1000));
+  const product = (toThousandths(purchaseQuantity) * factorThousandths) / 1000n;
+  return quantity(product);
+}
+
+/**
+ * Cost per BASE unit, to 4dp — what a FIFO layer is keyed on.
+ *
+ * ⚠️ Rounded half-up at the fourth place, once. The layer's total value is then
+ * `remaining × unitCost`, so a rounding here is a fraction of a centavo across a whole layer —
+ * and T-163's invoice true-up corrects the real number anyway.
+ */
+function perBaseUnit(lineCost: Money, baseQuantity: Quantity): string {
+  const raw = toCentavos(lineCost);
+  const centavos = raw < 0n ? -raw : raw;
+  const units = toThousandths(baseQuantity);
+  if (units === 0n) return '0.0000';
+  // centavos (10^2) × 10^5 / thousandths (10^3) → 10^4 scale.
+  const scaled = (centavos * 100_000n * 2n + units) / (units * 2n);
+  const negative = raw < 0n;
+  const whole = scaled / 10_000n;
+  const frac = (scaled % 10_000n).toString().padStart(4, '0');
+  return `${negative ? '-' : ''}${whole}.${frac}`;
+}

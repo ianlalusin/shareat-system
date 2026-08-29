@@ -189,11 +189,16 @@ function consumedLine(layerId: string, qty: Quantity, unitCost: string): Consume
 /**
  * quantity(3dp) x unitCost(4dp) -> Money(2dp), rounded half-up at the centavo.
  *
+ * ⭐ **Exported because T-166's receiving needs exactly this**, and a second implementation of
+ * "quantity times a rate" is how two parts of one system come to disagree about what a delivery
+ * cost. ⚠️ `unitCost` is a RATE at `numeric(14,4)`, so it cannot go through `money()` — that
+ * rejects anything past 2dp, which is the bug this export replaced.
+ *
  * Computed in integers throughout: thousandths x ten-thousandths gives a 10^7 scale, divided down
  * to centavos in one step. ⚠️ **One rounding, at the end of the line** — never an intermediate one,
  * which is the compounding error bible §12 landmine 25 names.
  */
-function lineCost(qty: Quantity, unitCost: string): Money {
+export function lineCost(qty: Quantity, unitCost: string): Money {
   const trimmed = unitCost.trim();
   if (!UNIT_COST_PATTERN.test(trimmed)) {
     throw new TypeError(`Invalid unit cost: ${JSON.stringify(unitCost)} (expected numeric(14,4))`);
