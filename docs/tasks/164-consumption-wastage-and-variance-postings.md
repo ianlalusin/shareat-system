@@ -1,6 +1,9 @@
 # T-164 — Consumption, wastage and count variance post — and every path is period-locked
 
-> **Status:** SPEC, 2026-08-29. Written before implementation (bible §1.2a).
+> **Status:** ⚠️ **BUILT 2026-08-29 — the postings.** `consumption-posting.ts` +
+> `wastage-reasons.ts`, **16 integration tests**. `typecheck` clean.
+> ⛔ The documents that trigger these (usage records, count sessions) are T-168/T-169; the
+> staff-charge leg needs Phase 5. §8.
 > **Depends on:** T-162 (layers), T-163 (receipt posting), T-105/T-106 (`postEntry`/`reverseEntry`).
 > **Closes:** §16.7 defect #5's second half (*"count adjustments have no GL effect"*) and defect #6
 > (*"11 of 17 inventory/production paths have no period-lock guard"*).
@@ -126,7 +129,53 @@ a shortage is a supplier-relationship signal, wastage is a stock-loss classifica
 12. `5300`, `5400` and every `5xxx` used here appear in the income statement **without a
     hand-added scan block** — invariant 2, asserted over the P&L query.
 
-## 8. Out of scope
+## 8. ⚠️ Built 2026-08-29 — three exits, three accounts, and the guard written three times
+
+**Landed:** `packages/domain/src/stock/consumption-posting.ts` ·
+`packages/domain/src/stock/wastage-reasons.ts` ·
+`packages/domain/tests/integration/consumption-posting.test.ts` (16 cases).
+
+### 8.1 ⭐ The assertions that matter are by ABSENCE
+
+Wastage posts `5300` **and the test asserts `5110` is absent**. A count variance posts `5400`
+**and asserts no COGS account was touched at all**. Those negatives are the whole point:
+
+- Folding wastage into COGS makes food cost look worse **and** hides the shrinkage — and seeing
+  the shrinkage is the entire purpose of the reason taxonomy.
+- Folding a count variance into COGS **makes a counting error look like appetite.**
+
+⚠️ v1 posts **no GL entry at all** for a count adjustment — `stock-count.actions.ts`, in its own
+words, *"NO GL, v1"*. A fleet-wide shrinkage moved stock and touched the books nowhere. That is a
+gap closed here, not a shape ported.
+
+### 8.2 ⛔ An unknown category BLOCKS rather than falling back
+
+COA-ALIGNMENT marks `5100` the catch-all and says *drive it to zero*. Routing an unmapped COGS
+category into it would do the exact opposite, quietly and forever — so an unknown category is
+refused and names the crosswalk. ⭐ Same reasoning as T-163's unmapped item kind: **a default is a
+decision made by whoever wrote the default, for data they have never seen.**
+
+### 8.3 The period lock is tested three times, deliberately
+
+§16.7 defect 6 is that v1 has **no period guard on 11 of 17** inventory and production paths.
+Written as three separate cases — consumption, wastage, variance — because *a guard wired at two
+of three is the same defect, smaller.*
+
+### 8.4 ⚠️ One case that returns `ok: false` and is not an error
+
+A movement whose FIFO cost is **zero** — a layer received free, or a variance inside nothing.
+Invariant 1 forbids zero-amount lines, so there is no entry to write. ⭐ **The movement still
+happened; only its value is nil**, and the caller must not treat the refusal as a failed post.
+
+### 8.5 Not built
+
+| Piece | Why |
+|---|---|
+| The documents that trigger these | Usage records are T-168, counts T-169, production T-176, POS pull T-177. All four call these three functions |
+| The staff-charge leg on wastage | ⛔ Phase 5 owns salary advances. Invariant 9 stands: it posts in the SAME transaction or the whole post fails — never silently dropped |
+| `POSTING-PATTERNS.md` + worked examples | As T-163: the guard is bidirectional, and pinning a shape before the documents exist would make the document wrong rather than late |
+
+## 9. Out of scope
 
 ⛔ **The documents that trigger these postings.** Usage records (T-168), counts (T-169), production
 (T-176), POS pull (T-177) are all later and all call these three functions.
@@ -136,7 +185,7 @@ and the phase plan §6.1 says why.
 ⛔ **Departmental cost allocation reporting.** The `department_id` dimension is captured here;
 reporting on it is Phase 6.
 
-## 9. Done when
+## 10. Done when
 
 - [ ] Migration hand-written (DEF-073), next free number, journalled `previous.when + 86400000`.
 - [ ] `docs/POSTING-PATTERNS.md` gains `stock.consumption`, `stock.wastage`,
