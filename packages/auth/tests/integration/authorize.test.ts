@@ -185,7 +185,7 @@ function happyCtx(capability: Capability): { storeId?: string } {
 // Invariant 5 — ⭐ every capability DENIES a role that lacks it. All 38, not a sample.
 // ---------------------------------------------------------------------------------------
 
-describe('invariant 5 — every capability denies a role that lacks it (all 47)', () => {
+describe('invariant 5 — every capability denies a role that lacks it (all 50)', () => {
   const denialCases: { capability: Capability; role: Role }[] = CAPABILITIES.flatMap((capability) =>
     ROLES.filter((role) => !CAPABILITY_MATRIX[capability][role]).map((role) => ({ capability, role })),
   );
@@ -207,21 +207,26 @@ describe('invariant 5 — every capability denies a role that lacks it (all 47)'
     'create_wholesale_order',
     // T-130: logging a pending supplier invoice moves no money — same bar as create_expense.
     'record_supplier_invoice',
+    // ⭐ T-137: transcribing the store's paper SC/PWD logbook. Staff-open for the same reason
+    // create_expense is — the person holding the book is a cashier, and gating it to managers is
+    // how a statutory register stays empty. ⚠️ Its VOID counterpart is deliberately NOT here:
+    // `void_statutory_discount` denies staff, and that asymmetry is the control.
+    'record_statutory_discount',
   ];
 
-  it('every capability EXCEPT the universally-granted 8 has at least one denial case', () => {
+  it('every capability EXCEPT the universally-granted 9 has at least one denial case', () => {
     const covered = new Set(denialCases.map((c) => c.capability));
     const missing = CAPABILITIES.filter((c) => !covered.has(c));
     expect(missing.sort()).toEqual([...UNIVERSALLY_GRANTED].sort());
   });
 
-  it('the universally-granted 8 really are true for all four roles (why they are exempt)', () => {
+  it('the universally-granted 9 really are true for all four roles (why they are exempt)', () => {
     for (const c of UNIVERSALLY_GRANTED) {
       expect(ROLES.every((r) => CAPABILITY_MATRIX[c][r]), `${c} is not actually universal`).toBe(true);
     }
   });
 
-  it('every OTHER capability (39 of 47) has a denial case for EVERY role that lacks it, not just one', () => {
+  it('every OTHER capability (41 of 50) has a denial case for EVERY role that lacks it, not just one', () => {
     // Stronger than the letter of invariant 5 ("a role", singular) — proves the sweep
     // below is exhaustive over false cells, not merely non-empty.
     for (const capability of CAPABILITIES) {
