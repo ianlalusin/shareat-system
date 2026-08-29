@@ -38,6 +38,26 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     reason: 'The tenancy boundary itself. A principal sees its own organization row and no other.',
   },
   stores: { scope: 'org_column', reason: 'Branches belong to one org. A franchise never sees another org’s stores.' },
+
+  // ---- T-160: the room model ------------------------------------------------------------
+  location_types: {
+    scope: 'org_column',
+    reason:
+      'How an org names its kinds of space. A franchise defines its own and must never see ' +
+      'another org’s.',
+  },
+  stock_locations: {
+    scope: 'org_column',
+    reason:
+      'A room belongs to a store, and a store to one org. ⚠️ org_column rather than derived ' +
+      'THROUGH the store: every stock query filters by location, so carrying org_id here means ' +
+      'the policy is checked on the table actually being read rather than through a join the ' +
+      'planner might reorder.',
+  },
+  departments: {
+    scope: 'org_column',
+    reason: 'An org’s own attribution vocabulary. Never shared across a tenancy boundary.',
+  },
   persons: { scope: 'org_column', reason: 'The staff roster is per-org. A franchise owner must not see Ian’s staff.' },
   accounts: {
     scope: 'org_column',

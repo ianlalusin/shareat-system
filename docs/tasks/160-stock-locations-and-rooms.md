@@ -1,6 +1,9 @@
 # T-160 — Stock locations: the room model every movement is keyed to
 
-> **Status:** SPEC, 2026-08-29. Written before implementation (bible §1.2a).
+> **Status:** ⚠️ **PARTLY BUILT 2026-08-29 — schema, pure rules and both registries. §10.**
+> Migration written but **NOT journalled**; repo, service, UI and integration tests not built.
+> `typecheck` clean, `npm test` **656 passed (41 files)**. ⛔ Blocked, not deferred by choice: a
+> peer session held `_journal.json`, the shared test database and port 9008. §9 names each.
 > ⏳ **Wave 0 of Phase 3, and blocked on ADR-011** only in the sense that Wave 0 ships as one
 > switch — this table's shape does not change whichever way ADR-011 goes, so it may be built first.
 > **Depends on:** T-101 (`stores`, `persons`), T-121 (roles — DEF-053's lesson: check it is BUILT),
@@ -141,7 +144,224 @@ and belong with the low-stock work in T-175.
 ⛔ **Multi-store location hierarchies / zones / bins.** v1 has one flat level per store and the
 business has never asked for more. Deliberately skipped, per bible §1.1's midpoint test.
 
-## 9. Done when
+## 9. ⚠️ Built 2026-08-29 — what landed, what did not, and why
+
+**Landed and green:**
+
+| | |
+|---|---|
+| `packages/db/schema/stock-locations.ts` | `location_types`, `stock_locations`, `departments` |
+| `packages/db/src/cutover/classification.ts` | All three **KEEP** — ⭐ the rooms survive a purge; the stock in them does not, because stock lives in `stock_movements` (T-161), which purges independently. Purging the rooms would delete the default-room and Receiving configuration a store needs before it can receive anything |
+| `packages/db/src/rls/registry.ts` | All three `org_column`, NULLIF-guarded (DEF-077) |
+| `packages/domain/src/stock-locations/rules.ts` | `resolveReceivingLocation`, `assertUsageSource`, `normaliseRole`, `defaultsToClear`, `singleRoomViolation` — pure |
+| `packages/domain/tests/unit/stock-location-rules.test.ts` | 19 cases, written first and confirmed failing for the right reason |
+| The migration | Written, reviewed, complete — and **parked in §9.1 below rather than committed as a file**. ⛔ See why |
+
+⭐ **Both build guards fired before they were satisfied**, which is the point of them: adding the
+tables to the schema barrel turned `cutover-classification.test.ts` and `rls-registry.test.ts` red
+until each table was classified and scoped. Recorded because *the measure of those modules is the
+build failure, not their own green tests* — and this is that failure working.
+
+**Not landed, and each for a named reason — not a judgement call:**
+
+| Piece | Blocked by |
+|---|---|
+| The migration, as a file | ⛔ `packages/db/tests/migration-journal.test.ts` requires **every `.sql` to have a journal entry and vice versa** — so an unjournalled migration file is not a valid state in this repo, it is a red build. And `migrations/meta/_journal.json` was **uncommitted and modified** by a peer building T-153: editing it would have swept their in-flight entry 61 into this commit, the exact mistake that put decision row 164 on the wrong branch earlier the same day. ⭐ Leaving the `.sql` untracked instead would have been worse — the next peer to `git add -A` commits a migration with no journal entry and breaks their own build. **So the SQL lives in §9.1, where it is committed, reviewable, and inert** |
+| `stores.stock_model` in the drizzle schema | ⛔ A column on an **existing** table. Declaring it before the migration runs makes every `SELECT` against `stores` name a column the database lacks — which breaks the **other sessions sharing this checkout**, not just this branch. It is in the migration; it enters the schema when the migration applies |
+| Repo, service, UI route | ⛔ Need the tables to exist |
+| Integration tests | ⛔ Shared `shareat_test`; a peer had integration tests in flight (§3.4 — two runs truncate each other) |
+| Smoketest on 9008 | ⛔ A peer's dev server held the port, so ⛔ `npm run build` too (§2.9) |
+
+⭐ **The three new tables are additive and therefore safe to land alone**: nothing existing queries
+them, the purge script only touches `purge`-class tables, and the test harness truncates by
+explicit list rather than by enumerating the schema. That was checked before adding them, not
+assumed.
+
+### 9.1 The migration, parked
+
+⭐ **Recreate it as `packages/db/migrations/00NN_t160_stock_locations.sql` when `_journal.json` is
+free**, append the matching journal entry — `{ "idx": NN, "version": "7", "when": <previous
+entry's `when` + 86400000>, "tag": "00NN_t160_stock_locations", "breakpoints": true }` — and
+re-add a `--> statement-breakpoint` marker after each statement, matching 0059–0061.
+
+⚠️ Then add `stores.stock_model` to `packages/db/schema/stores.ts` **in the same change**, never
+before: it is a column on an existing table, and declaring it early makes every `SELECT` against
+`stores` name a column the database does not have.
+
+```sql
+-- 0062 — T-160: the room model every stock movement is keyed to.
+--
+-- HAND-WRITTEN, like 0020-0061. See DEF-073 for why `db:generate` cannot be used here.
+--
+-- ⛔⛔ NOT YET JOURNALLED, AND THEREFORE NOT YET APPLIED. READ THIS BEFORE RUNNING ANYTHING. ⛔⛔
+--
+-- `migrations/meta/_journal.json` was held UNCOMMITTED by a peer session building T-153 when this
+-- file landed, and editing it would have swept their in-flight entry into this commit — the exact
+-- mistake that put decision row 164 on the wrong branch earlier the same day. So this file exists,
+-- reviewed and complete, with no journal entry.
+--
+-- ⭐ TO FINISH IT, once 0061 is committed: append ONE entry to `_journal.json` —
+--     { "idx": 62, "version": "7", "when": <0061's `when` + 86400000>,
+--       "tag": "0062_t160_stock_locations", "breakpoints": true }
+--   then `npm run db:migrate`, then run the T-160 integration tests.
+--
+-- ⚠️ If a peer has already taken 0062, renumber the file and the tag together. Nothing else in the
+-- repo references this number.
+--
+-- ⚠️ ALSO DEFERRED WITH IT: `stores.stock_model`, at the bottom of this file. It is a column on an
+-- EXISTING table, so declaring it in the drizzle schema before this migration runs would make
+-- every `SELECT` against `stores` name a column the database does not have — breaking the other
+-- sessions sharing this checkout, not merely this branch. The schema file says so too.
+
+-- ---------------------------------------------------------------------------------------------
+-- 1. What KINDS of space a store can have.
+--
+-- Per org, not global: a commissary and a kiosk describe themselves differently, and neither
+-- should have to invent private vocabulary inside a shared list.
+CREATE TABLE "location_types" (
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
+	"org_id" uuid NOT NULL,
+	"code" text NOT NULL,
+	"name" text NOT NULL,
+	"sort_order" integer DEFAULT 0 NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "location_types_code_not_blank_check" CHECK (length(trim("code")) > 0),
+	CONSTRAINT "location_types_name_not_blank_check" CHECK (length(trim("name")) > 0)
+);
+
+ALTER TABLE "location_types" ADD CONSTRAINT "location_types_org_id_organizations_id_fk"
+	FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE RESTRICT;
+
+CREATE UNIQUE INDEX "location_types_org_code_key" ON "location_types" ("org_id", "code");
+
+-- ---------------------------------------------------------------------------------------------
+-- 2. The rooms themselves.
+--
+-- ⭐ `role` is a CONTROL, not a label: a storage room may hold and receive stock but nothing may be
+-- CONSUMED from it. Only an `operating` room (kitchen, display) can be a usage source. Defaulting
+-- to 'storage' is the FAIL-SAFE direction — v1's own words, worth keeping because the safe way
+-- round is not obvious until you have picked the wrong one: "a mis-migrated location can't
+-- silently drain stock."
+CREATE TABLE "stock_locations" (
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
+	"org_id" uuid NOT NULL,
+	"store_id" uuid NOT NULL,
+	"code" text NOT NULL,
+	"name" text NOT NULL,
+	"type_id" uuid NOT NULL,
+	"role" text DEFAULT 'storage' NOT NULL,
+	"purpose" text DEFAULT 'normal' NOT NULL,
+	"is_default" boolean DEFAULT false NOT NULL,
+	"status" text DEFAULT 'active' NOT NULL,
+	"created_by" uuid NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone,
+	CONSTRAINT "stock_locations_role_check" CHECK ("role" IN ('storage', 'operating')),
+	CONSTRAINT "stock_locations_purpose_check" CHECK ("purpose" IN ('normal', 'receiving')),
+	CONSTRAINT "stock_locations_status_check" CHECK ("status" IN ('active', 'inactive')),
+	CONSTRAINT "stock_locations_code_not_blank_check" CHECK (length(trim("code")) > 0),
+	CONSTRAINT "stock_locations_name_not_blank_check" CHECK (length(trim("name")) > 0),
+	-- The Receiving room is a parking spot, never a kitchen.
+	CONSTRAINT "stock_locations_receiving_is_storage_check"
+		CHECK ("purpose" <> 'receiving' OR "role" = 'storage')
+);
+
+ALTER TABLE "stock_locations" ADD CONSTRAINT "stock_locations_org_id_organizations_id_fk"
+	FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE RESTRICT;
+ALTER TABLE "stock_locations" ADD CONSTRAINT "stock_locations_store_id_stores_id_fk"
+	FOREIGN KEY ("store_id") REFERENCES "stores"("id") ON DELETE RESTRICT;
+ALTER TABLE "stock_locations" ADD CONSTRAINT "stock_locations_type_id_location_types_id_fk"
+	FOREIGN KEY ("type_id") REFERENCES "location_types"("id") ON DELETE RESTRICT;
+ALTER TABLE "stock_locations" ADD CONSTRAINT "stock_locations_created_by_persons_id_fk"
+	FOREIGN KEY ("created_by") REFERENCES "persons"("id") ON DELETE RESTRICT;
+
+CREATE UNIQUE INDEX "stock_locations_store_code_key" ON "stock_locations" ("store_id", "code");
+CREATE INDEX "stock_locations_store_status_idx" ON "stock_locations" ("store_id", "status");
+CREATE INDEX "stock_locations_org_idx" ON "stock_locations" ("org_id");
+
+-- ⭐ INVARIANTS 1 AND 2, AS THE DATABASE REFUSES THEM — not as something the service remembers.
+-- Bible row 104: name the statement the database rejects, never the call our code declines to
+-- make. Partial, so an inactive room neither holds the slot nor blocks a new one.
+CREATE UNIQUE INDEX "stock_locations_one_receiving_per_store"
+	ON "stock_locations" ("store_id") WHERE "purpose" = 'receiving' AND "status" = 'active';
+
+CREATE UNIQUE INDEX "stock_locations_one_default_per_store"
+	ON "stock_locations" ("store_id") WHERE "is_default" AND "status" = 'active';
+
+-- ---------------------------------------------------------------------------------------------
+-- 3. Departments — what usage is attributed to.
+CREATE TABLE "departments" (
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
+	"org_id" uuid NOT NULL,
+	"code" text NOT NULL,
+	"name" text NOT NULL,
+	"status" text DEFAULT 'active' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "departments_status_check" CHECK ("status" IN ('active', 'inactive')),
+	CONSTRAINT "departments_code_not_blank_check" CHECK (length(trim("code")) > 0),
+	CONSTRAINT "departments_name_not_blank_check" CHECK (length(trim("name")) > 0)
+);
+
+ALTER TABLE "departments" ADD CONSTRAINT "departments_org_id_organizations_id_fk"
+	FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE RESTRICT;
+
+CREATE UNIQUE INDEX "departments_org_code_key" ON "departments" ("org_id", "code");
+
+-- ---------------------------------------------------------------------------------------------
+-- 4. How a store organises stock — INVARIANT 6, made structural.
+--
+-- ⭐ v1 ships `branch-stock-reconcile.actions.ts` purely to REPAIR branches that drifted into
+-- several rooms: floor the negative balances, move everything into a canonical room, delete the
+-- strays. This constraint is that tool's reason for existing, removed.
+ALTER TABLE "stores" ADD COLUMN "stock_model" text DEFAULT 'single_room' NOT NULL;
+ALTER TABLE "stores" ADD CONSTRAINT "stores_stock_model_check"
+	CHECK ("stock_model" IN ('single_room', 'multi_room'));
+
+-- One non-Receiving active room per single_room store. ⚠️ Expressed as a partial unique index on
+-- (store_id) over the rows that count, which needs the store's model on the row — so it is
+-- enforced by trigger instead, because a unique index cannot reach into `stores`.
+CREATE OR REPLACE FUNCTION "stock_locations_single_room_guard"() RETURNS trigger AS $$
+DECLARE
+	model text;
+	room_count integer;
+BEGIN
+	SELECT "stock_model" INTO model FROM "stores" WHERE "id" = NEW."store_id";
+	IF model <> 'single_room' THEN RETURN NEW; END IF;
+
+	SELECT count(*) INTO room_count FROM "stock_locations"
+		WHERE "store_id" = NEW."store_id" AND "purpose" <> 'receiving' AND "status" = 'active'
+		  AND "id" <> NEW."id";
+
+	IF room_count >= 1 THEN
+		RAISE EXCEPTION 'store % is single_room and already has an active non-Receiving room',
+			NEW."store_id";
+	END IF;
+	RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER "stock_locations_single_room_guard_trg"
+	BEFORE INSERT OR UPDATE ON "stock_locations"
+	FOR EACH ROW EXECUTE FUNCTION "stock_locations_single_room_guard"();
+
+-- ---------------------------------------------------------------------------------------------
+-- 5. RLS — added AS THE TABLE IS CREATED, never retrofitted (bible row 112).
+--
+-- ⚠️ `app_current_org()`'s NULLIF-guarded form, not a raw `current_setting` cast — DEF-077: a
+-- pooled connection leaves `app.org_id` as '' rather than NULL, and the raw cast then 500s.
+ALTER TABLE "location_types" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "stock_locations" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "departments" ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "location_types_org_isolation" ON "location_types"
+	USING ("org_id" = app_current_org()) WITH CHECK ("org_id" = app_current_org());
+CREATE POLICY "stock_locations_org_isolation" ON "stock_locations"
+	USING ("org_id" = app_current_org()) WITH CHECK ("org_id" = app_current_org());
+CREATE POLICY "departments_org_isolation" ON "departments"
+	USING ("org_id" = app_current_org()) WITH CHECK ("org_id" = app_current_org());
+```
+
+## 10. Done when
 
 - [ ] Migration hand-written (DEF-073 — **do not run `db:generate`**), next free number, journalled
       `previous.when + 86400000`.

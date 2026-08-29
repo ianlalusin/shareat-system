@@ -402,6 +402,36 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'it rebuilds from the first post-cutover invoice.',
   },
 
+  // ---- T-160: the room model ------------------------------------------------------------
+  location_types: {
+    // ⭐ keep: WHAT KINDS of space a store has is configuration, and it describes the building
+    // rather than anything the books did. Nothing about "we have a stockroom and a kitchen"
+    // becomes false when the ledger restarts.
+    class: 'keep',
+    reason:
+      'The catalogue of physical space kinds — Stockroom, Display, Kitchen, Receiving. ' +
+      'Configuration describing the premises, carrying no balance and no anchor. Re-keying it ' +
+      'at cutover would be pointless work with a fresh chance to mistype a room.',
+  },
+  stock_locations: {
+    // ⭐ keep, and this is the one worth reading twice. The ROOMS survive; the STOCK IN THEM does
+    // not — stock lives in stock_movements (T-161), which purges. A room with no movements behind
+    // it is just a labelled shelf, and the shelf is still there on 2 January.
+    class: 'keep',
+    reason:
+      'The rooms themselves, not their contents. Stock is held in stock_movements, which purges ' +
+      'independently, so a kept room opens at zero on-hand exactly like a kept item opens with ' +
+      'no history. ⚠️ Purging these instead would delete the default-room and Receiving ' +
+      'configuration every store needs before it can receive anything at all.',
+  },
+  departments: {
+    class: 'keep',
+    reason:
+      'The attribution taxonomy usage is reported by — kitchen, bar. Org-level configuration, ' +
+      'the same class as expense_categories: a fixed vocabulary the reports group on, which ' +
+      'means nothing if it is re-invented per period.',
+  },
+
   store_item_sellability: {
     // ⭐ keep, like the items it qualifies: which store makes the bulgogi sauce and which buys it
     // is configuration about how the business operates, not activity. Nothing about it becomes
