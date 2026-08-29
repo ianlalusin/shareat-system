@@ -348,7 +348,10 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   manage_users: { super_admin: true, admin: true, manager: false, staff: false },
   grant_capability: { super_admin: true, admin: true, manager: false, staff: false },
   manage_attendance: { super_admin: true, admin: true, manager: true, staff: false },
-  provision_clock_terminal: { super_admin: true, admin: true, manager: true, staff: false },
+  // ⭐ ADMIN-ONLY (Ian, 2026-08-29, bible row 165). A provisioned terminal is the ONLY principal
+  // allowed to read the credential mirror, so whoever may create one may read every enrolled
+  // fingerprint template and card id at that store. Manager was v1's level; this is tighter.
+  provision_clock_terminal: { super_admin: true, admin: true, manager: false, staff: false },
 
   manage_store_settings: { super_admin: true, admin: true, manager: true, staff: false },
   manage_price_lists: { super_admin: true, admin: true, manager: false, staff: false },

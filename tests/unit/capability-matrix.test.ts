@@ -298,6 +298,15 @@ describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', (
         'manage_prepaid_items',
         'run_amortisation',
         'manage_chart_of_accounts',
+        // ⭐ `provision_clock_terminal` JOINED this set on 2026-08-29, the moment Ian made it
+        // admin-only (bible row 165) — it is admin-yes / manager-no, and the set is derived from
+        // exactly that. ⚠️ **This is the ONE documented exception to "admin only", and it is
+        // recorded rather than special-cased.** An org with no admin would otherwise be unable to
+        // pair a single clock terminal, so attendance could never start there at all; the fallback
+        // exists to bootstrap exactly that, is evaluated ONCE at appointment, and leaves a
+        // `person_grants` row behind. Excluding it would need a hand-maintained carve-out in a set
+        // whose whole point is being derived — and a carve-out is what drifts.
+        'provision_clock_terminal',
       ].sort(),
     );
   });

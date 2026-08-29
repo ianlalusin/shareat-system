@@ -42,56 +42,56 @@
 - ` 689–693  ` 5. Architecture — the Firebase hot lane
   - ` 694–726  ` 5.1 The two-lane contract
   - ` 727–755  ` 5.2 What v1 actually does offline — and why v2 changes it
-  - ` 756–794  ` 5.3 The hot set — closed list
-  - ` 795–796  ` 5.4 Offline write-back rules
-  - ` 797–807  ` 5.3 Offline write-back rules
-- ` 808–809  ` 6. Data conventions
-  - ` 810–817  ` Money
-  - ` 818–828  ` Dates & time
-  - ` 829–834  ` Identifiers
-  - ` 835–839  ` Naming
-  - ` 840–845  ` Nulls
-- ` 846–888  ` 7. Security model
-  - ` 889–919  ` 7.1 Identity — the v1 mess, and the v2 rule
-- ` 920–921  ` 8. Repo & environment
-  - ` 922–956  ` Layout
-  - ` 957–966  ` Ports — reserved, never shared
-  - ` 967–997  ` Build discipline — two rules, both absolute
-  - ` 998–1008 ` Git
-- `1009–1025 ` 9. Definition of done
-  - `1026–1033 ` Parity gate
-- `1034–1068 ` 10. Phase plan
-- `1069–1085 ` 11. Migration & ETL rules
-- `1086–1134` 12. Inherited landmines — do not repeat these
-- `1135–1304` 13. Decision log
-- `1305–1324` 14. Amendment protocol
-- `1325–1329` 15. Engineering standards — the industry practices this project follows
-  - `1330–1335` 15.1 Build order: walking skeleton first
-  - `1336–1347` 15.2 Golden-master testing — the most important practice here
-  - `1348–1356` 15.3 Strangler Fig, not big-bang cutover
-  - `1357–1361` 15.4 No dual-write
-  - `1362–1366` 15.5 Expand/contract migrations
-  - `1367–1375` 15.6 Observability from day zero, not later
-  - `1376–1380` 15.7 CI gates
-  - `1381–1385` 15.8 Backups and a tested restore
-  - `1386–1390` 15.9 Twelve-Factor config
-  - `1391–1398` 15.10 Append-only ledgers — but not event sourcing
-  - `1399–1403` 15.11 Defence in depth
-  - `1404–1432` 15.12 Skills are lenses, not assurance
-  - `1433–1439` 15.13 Reconciliation is a permanent feature
-- `1440–1444` 16. The accounting spine
-  - `1445–1476` 16.0 What we are actually fixing — the diagnosis
-  - `1477–1520` 16.1 The ten invariants — non-negotiable
-  - `1521–1535` 16.2 The oracle: how "correct" is tested
-  - `1536–1557` 16.3 The model — header + lines, not legs
-  - `1558–1577` 16.4 Deliberately simpler than ERPNext
-  - `1578–1644` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1645–1669` 16.6 What v1 already gets right — preserve the intent
-  - `1670–1691` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1692–1706` 16.8 What v1's accounting already gets right
-  - `1707–1750` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1751–1801` 16.10 Posting patterns — one canonical pattern per business event
-  - `1802–1819` 16.11 Inventory's accounting integration
+  - ` 756–806  ` 5.3 The hot set — closed list
+  - ` 807–808  ` 5.4 Offline write-back rules
+  - ` 809–819  ` 5.3 Offline write-back rules
+- ` 820–821  ` 6. Data conventions
+  - ` 822–829  ` Money
+  - ` 830–840  ` Dates & time
+  - ` 841–846  ` Identifiers
+  - ` 847–851  ` Naming
+  - ` 852–857  ` Nulls
+- ` 858–900  ` 7. Security model
+  - ` 901–931  ` 7.1 Identity — the v1 mess, and the v2 rule
+- ` 932–933  ` 8. Repo & environment
+  - ` 934–968  ` Layout
+  - ` 969–978  ` Ports — reserved, never shared
+  - ` 979–1009 ` Build discipline — two rules, both absolute
+  - `1010–1020 ` Git
+- `1021–1037 ` 9. Definition of done
+  - `1038–1045 ` Parity gate
+- `1046–1080 ` 10. Phase plan
+- `1081–1097` 11. Migration & ETL rules
+- `1098–1146` 12. Inherited landmines — do not repeat these
+- `1147–1319` 13. Decision log
+- `1320–1339` 14. Amendment protocol
+- `1340–1344` 15. Engineering standards — the industry practices this project follows
+  - `1345–1350` 15.1 Build order: walking skeleton first
+  - `1351–1362` 15.2 Golden-master testing — the most important practice here
+  - `1363–1371` 15.3 Strangler Fig, not big-bang cutover
+  - `1372–1376` 15.4 No dual-write
+  - `1377–1381` 15.5 Expand/contract migrations
+  - `1382–1390` 15.6 Observability from day zero, not later
+  - `1391–1395` 15.7 CI gates
+  - `1396–1400` 15.8 Backups and a tested restore
+  - `1401–1405` 15.9 Twelve-Factor config
+  - `1406–1413` 15.10 Append-only ledgers — but not event sourcing
+  - `1414–1418` 15.11 Defence in depth
+  - `1419–1447` 15.12 Skills are lenses, not assurance
+  - `1448–1454` 15.13 Reconciliation is a permanent feature
+- `1455–1459` 16. The accounting spine
+  - `1460–1491` 16.0 What we are actually fixing — the diagnosis
+  - `1492–1535` 16.1 The ten invariants — non-negotiable
+  - `1536–1550` 16.2 The oracle: how "correct" is tested
+  - `1551–1572` 16.3 The model — header + lines, not legs
+  - `1573–1592` 16.4 Deliberately simpler than ERPNext
+  - `1593–1659` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1660–1684` 16.6 What v1 already gets right — preserve the intent
+  - `1685–1706` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1707–1721` 16.8 What v1's accounting already gets right
+  - `1722–1765` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1766–1816` 16.10 Posting patterns — one canonical pattern per business event
+  - `1817–1834` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -102,9 +102,9 @@
 
 | | |
 |---|---|
-| **Version** | 2.9 — a requested feature is assessed, and may be argued against, before it is planned (§13 row 163) |
+| **Version** | 3.0 — the card id joins the hot set; v2 clocks in by fingerprint, face or card, never a PIN (§13 rows 164–166) |
 | **Created** | 2026-08-22 |
-| **Last amended** | 2026-08-28 |
+| **Last amended** | 2026-08-29 |
 | **Status** | Accounting-correctness project (§1.1). All discovery complete. Root cause identified (§16.0). **Chart of accounts aligned and signed off.** Ready to write Phase 0/1 task specs. |
 | **Scale being replatformed** | 149 page routes (~53,700 LOC of pages), 20 API routes, 9 cron jobs, ~90 Firestore collection paths, 144 server-action modules / 578 exported functions |
 | **Source project** | `C:\Users\ianla\webapps\ERP-rebuild` (branch `upgrade-next16`) — **READ-ONLY, NEVER MODIFY** |
@@ -761,11 +761,23 @@ addition widens the offline attack surface and the staleness blast radius.
 | # | Entity | Lane | Size | Refresh | Staleness tolerance |
 |---|---|---|---|---|---|
 | 1 | Active local-user roster for the store (name, position, staffId) | A mirror | ~200 B/staffer | On change + daily | Hours |
-| 2 | **Fingerprint templates + matchToken** | A mirror | ~5.5 KB/staffer | On enrolment change | Hours |
+| 2 | **Credential mirror — fingerprint templates + matchToken, and the CARD ID** | A mirror | ~5.5 KB/staffer | On enrolment change | Hours |
 | 3 | **Store attendance config** — credential kill-switches, shift windows | A mirror | <2 KB | On change, **priority** | Minutes |
 | 4 | On-shift roster + current business day punch feed | A mirror | Small | Every few min | Minutes |
 | 5 | Clock-terminal device identity | — | Tiny | On provision | n/a |
 | 6 | Punch events captured offline | **B inbox** | Small | Written offline | n/a — write path |
+
+**The card id was added to item 2 on 2026-08-29** (§13 row 164), on Ian's instruction, because
+D1 made the card the only credential that works offline in a browser — face is online-only
+permanently and fingerprint needs the APK. A terminal that cannot resolve a scanned badge to a
+person offline cannot clock anybody in offline, and the phase's exit gate is exactly that.
+
+⛔ **It went into item 2, NOT item 1, and the difference is a real hole avoided.** Item 1's roster
+is readable by any authenticated member of that store; item 2 is readable **only by a provisioned
+device identity**. A card id is a **bearer credential** — anyone holding it can be clocked in as its
+owner — so putting it on the roster would let every store member read every badge id in the store
+and impersonate any colleague. It belongs with the fingerprint templates, under the same
+terminal-only rule, and T-159's `biometricMirror` path already enforces exactly that.
 
 **Item 3 is a new addition, not a port.** v1 does not cache attendance config offline,
 so a terminal keeps accepting punches for a credential method an admin has just
@@ -1300,7 +1312,10 @@ just a patch.**
 | 162 | 2026-08-27 | ⭐ **AGING IS BY DUE DATE, NOT INVOICE DATE, FOR BOTH AP AND AR.** | Ian: *“due date.”* An invoice or charge with no stated due date (informal supplier or customer terms — real, not hypothetical) falls back to its own document date **for aging only**; the fallback does not change which basis governs when a due date exists. ⭐ §16.10 requires ONE basis held across AP and AR, so this is decided once here rather than re-litigated per module — T-131 (AR) must use it. ⚠️ **Drafted in `docs/tasks/130-accounts-payable.md` Invariant 11 on 2026-08-27 and left unlanded**, because the implementer was Sonnet and §14 reserves amendments to the planner; it sat as an explicit unrecorded item across two handoffs before an Opus pass landed it on 2026-08-28. That delay is the rule working, not failing — but a decision waiting two days to become durable is the cost, and worth noticing. | No |
 | 163 | 2026-08-28 | ⭐ **A REQUESTED FEATURE IS ASSESSED BEFORE IT IS PLANNED — AND MAY BE ARGUED AGAINST. RESEARCH EXISTING OPEN SOURCE FIRST; DO NOT BUILD WHAT CAN BE ADOPTED.** | Ian: *“make standing rule when new feature like this is reqquested assess it you may even vouch against it depending on the expected utilization advantage it will give and the effort to make it happen the complexity. research about it always consider open source repo on github there are tons to be used then plan on executing it.”* ⭐ **Three obligations, in order, and the order matters.** (1) **ASSESS** — weigh expected utilisation against effort and complexity, and say the number where one exists rather than the adjective. (2) **RESEARCH** — the industry pattern *and* what already exists on GitHub, because the default assumption should be that a well-solved problem has been solved. (3) **PLAN**, only then. ⛔ **Recommending AGAINST is explicitly sanctioned, and therefore expected.** §0.3 already says to side with the project over the literal request; this extends it to the existence of the feature itself, not merely its shape. A feature that will be used twice a year and costs a fortnight should be said to be that, once, plainly — and then built anyway if Ian still wants it (§0.4: raise it once, properly, then keep working). ⚠️ **The failure this prevents is real and recent:** T-141 built a complete upload broker that nothing called for a month, and T-130 then invented a text field because it found no wired upload — effort spent twice, on both sides of the same gap. An assessment pass asks *“does this already exist here, or out there?”* before either mistake. ⚠️ **Adopting is not free either** — licence (copyleft is Ian's decision, not an implementation detail), self-hosted vs API for data that must not leave, and vendoring vs depending are all part of the assessment, not afterthoughts once the choice is made. ⭐ First applied to `docs/tasks/146-invoice-ocr-and-the-learning-layer.md` the same day. ⭐ **Operationalised as the `/research-evaluate-propose` skill** (installed at `~/.claude/skills/`, so it is available in every repo, not only this one) — invoke it when a feature is requested rather than re-deriving the three steps from this row. | No |
 
----
+---| 164 | 2026-08-29 | ⭐ **THE CARD ID JOINS THE HOT SET — AND GOES IN THE CREDENTIAL MIRROR, NOT THE ROSTER.** | Ian: *“add cardid, update bible”*, answering the blocker T-160 raised. ⛔ **Why it was needed at all:** decision row 165's credential set makes the **card the only mode that works offline in a browser** — face is online-only permanently (§5.3, the 2026-07-04 exfiltration fix) and fingerprint needs the native reader in the APK. A terminal that cannot resolve a scanned badge to a person offline cannot clock anybody in offline, and Phase 4's exit gate is *“a terminal clocks in with the network pulled”*. The hot set is closed by §5.3, so this was blocked until amended. ⭐ **It joins item 2 (the credential mirror), NOT item 1 (the roster), and that placement is the whole decision.** Item 1 is readable by any authenticated member of the store; item 2 is readable **only by a provisioned device identity**. A card id is a **bearer credential** — whoever holds it can be clocked in as its owner — so on the roster it would let every store member read every badge id and impersonate any colleague. T-159's `biometricMirror` path already carries the terminal-only rule, so the placement costs nothing and closes a hole that would have been invisible until someone tried it. ⚠️ The residual risk is unchanged and accepted: a card is a bearer credential in the physical world too, and a photograph of a badge punches. The mitigation named and not built is a photo captured at the punch. | No |
+| 165 | 2026-08-29 | ⭐ **ATTENDANCE CREDENTIALS IN v2: FINGERPRINT, FACE AND CARD. NO PIN. AND PROVISIONING A TERMINAL IS ADMIN-ONLY.** | Ian: *“in v2 only fingerprint face and card will be mode of attendance no pin”*, and separately *“yes admin only”*. ⚠️ **Recorded including the misreading, because it nearly went the other way:** his first phrasing — *“turn off biometrics by pin”* — was read as *turn off biometrics, use the PIN*; it means **turn off the PIN that stands in for biometrics**. The two readings put the biometric mirror on opposite sides of the scope line, and only asking settled it. ⭐ **The PIN is made UNREPRESENTABLE rather than switched off** — `attendance_punches.method` drops `pin` from its CHECK and `store_attendance_config` drops `credential_passcode` (migration 0075) — because a kill switch left in the wrong position is landmine #12 in another costume. `person_credentials.kind = 'pin'` survives: signing in to the app and clocking in are different acts, and only the second is closed. ⭐ **The live data agreed before it was asked:** Lipa's production config already reads `passcode: false`, and across 550 captured August sessions the sources are fingerprint 524, face 10, manual 16 — zero passcode. ⚠️ **Zero card, too**, so the card rollout is new operational ground rather than a port. ⭐ **`provision_clock_terminal` is admin-only**, tightened from v1's manager-level `registerClockTerminalAction`: a provisioned terminal is the only principal permitted to read the credential mirror, so whoever may create one may read every enrolled template at that store. Deliberately NOT folded into `manage_attendance` (§7 rule 2 — widening one capability must never grant an unrelated one). | No |
+| 166 | 2026-08-29 | ⛔ **v1'S ATTENDANCE HAS NEVER PAID ANYBODY — SO v1 IS EVIDENCE OF THE NEED, NOT OF THE RULE.** | Counted live across all four operating stores while opening Phase 4: **624 attendance sessions in one month, 136 overtime records, 11 absentee records — and `payrollRuns`, `payrollStaffPayouts` and `payroll` all at ZERO, ever.** Only 35 of 550 sessions were ever verified (6%). Staff clock in daily, sessions compute, overtime is filed, and not one peso has ever come out the other end. ⭐ **This bounds §1.2b.** *“Every feature exists because the business needed it and staff use it daily”* holds for the punch capture and **does not hold for the adjudication rule** — which Ian names as the reason the module was never adopted. The span-based Tier 1 / Tier 2 start anchor (row 157's rule, 2026-08-20) was therefore replaced rather than preserved: T-157b anchors to the **nearest allowed hour**, which is how a staffer actually thinks about which shift they are turning up for. ⚠️ **The general lesson, and it is the durable half:** before treating a v1 module as proven practice, check that anything downstream ever CONSUMED it. Reading the code cannot tell you that; counting the collection can, and it took one command. | No |
+
 
 ## 14. Amendment protocol
 
