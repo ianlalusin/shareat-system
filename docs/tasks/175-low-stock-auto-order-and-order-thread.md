@@ -1,6 +1,6 @@
 # T-175 — Low stock becomes an order, and the order has a conversation
 
-> **Status:** SPEC, 2026-08-29. Written before implementation (bible §1.2a).
+> **Status:** ⭐ **BUILT, 2026-08-30** — migration `0072`, `packages/db/schema/item-thresholds.ts`, `packages/db/src/repo/low-stock.ts`, `packages/domain/src/commissary/auto-order.ts` and `messages.ts`, the `itemHasNoThreshold` finding, and 20 green integration tests. ⚠️ **§3's question is answered the recommended way — a SUGGESTED quantity, not v1's zero. One line reverts it; see §10.** The low-stock screen is not built (port 9008).
 > ⚠️ **Carries one question for Ian** — §3. Built the recommended way and flagged.
 > **Depends on:** T-161 (on-hand), T-168 (usage posts trigger it), T-171 (the map), T-172 (the
 > order it drafts into).
@@ -160,3 +160,50 @@ deferred gap (`CAPABILITY-GAPS.md`).
 - [ ] `CAPABILITY-MATRIX.md`: `set_item_threshold` (manager, and cashier/inventory staff per v1),
       `post_order_message` — each with its ✗ test.
 - [ ] `docs/ROADMAP.html` updated.
+
+## 10. ⭐ FOR IAN — §3's question, and how to reverse the answer
+
+**Built the recommended way.** When a branch's stock reaches its threshold, the item is appended to
+that branch's open commissary draft **with a suggested quantity** — `threshold − onHand`, rounded
+up to a whole base unit — rather than v1's quantity 0.
+
+**Why:** a zero-quantity line is a to-do item wearing an order line's clothes, which is exactly what
+`docs/discovery/14` §D suspected was happening. The number is computable from data we already have,
+and a line that arrives filled in is one keystroke *fewer* than a blank one: the branch accepts by
+doing nothing and types over it when it disagrees.
+
+⚠️ **If you would rather have v1's behaviour**, it is one line in
+`packages/domain/src/commissary/auto-order.ts` — `suggestFor` returns `quantity('0')`. Nothing else
+changes; the `suggested_quantity` column simply records zero.
+
+⭐ **A second decision worth knowing about, because it changes what a cook experiences.** v1 blocks
+a usage post until somebody sets the item's threshold. That puts the demand on the person at the
+stove at 11pm, who cannot answer it. Here it is a **finding** instead — `itemHasNoThreshold`, per
+store — so it nags the manager who can act. **Nag the person who can act, never block the person
+who cannot.**
+
+## 11. ⚠️ What the spec assumed that the code did not need
+
+### ⭐ Invariant 3 — equipment exemption is already structural
+
+§6.3 exempts *"equipment-kind items"*. There is no such kind: `ITEM_KINDS` is `raw_material`,
+`supply`, `retail`, `meat_slab`, `meat_sliced`, and equipment lives in `fixed_assets`, a different
+table with a different lifecycle. ⛔ **The exemption needs no code** — an equipment item cannot be
+an `items` row, so it cannot have a threshold or reach the auto-order. Recorded rather than
+silently dropped, because the next reader will look for the check.
+
+### ⚠️ Where the price comes from, and what is still missing
+
+The appended line is priced from the commissary offering's `manual_cost` — **tier 3 of T-171's
+fallback only**. The richer basis (a slab link, then the item's own landed history from T-151) is
+the catalogue read path, which is unbuilt. ⛔ An item with no price is **not added**, and the report
+says so: a ₱0 line becomes a ₱0 order becomes a ₱0 receivable, and that matters more for a
+machine-made line than a hand-made one, because nobody looks at this one before it lands.
+
+### ⚠️ Still not built
+
+`apps/erp/src/app/inventory/low-stock/**` and the order-thread UI (port 9008), the
+`set_item_threshold` and `post_order_message` capability rows (no caller yet, so their ✗ cannot be
+tested — same reasoning as T-173 §12), and the `autoOrderFailed` finding. ⭐ **The failure it would
+report is already contained**: `replenishAfterUsage` opens its own transaction and never throws, so
+a broken ordering path costs a draft line and never a usage post — tested directly.

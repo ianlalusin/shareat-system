@@ -222,6 +222,19 @@ export const tradeOrderLines = pgTable(
      * with a trial balance that still ties. See `0071`'s header.
      */
     dispatchCost: numeric('dispatch_cost', { precision: 14, scale: 2 }),
+    /**
+     * ⭐ T-175. What the low-stock auto-order proposed, as opposed to what the branch settled on.
+     *
+     * ⚠️ **v1 queues the line at quantity ZERO**; `docs/discovery/14` §D asks whether that is used
+     * or whether it just clutters drafts with lines nobody fills in. A zero-quantity line is a
+     * to-do item wearing an order line's clothes, so v2 arrives with `threshold − onHand` rounded
+     * up — one keystroke fewer than typing into a blank.
+     *
+     * ⛔ **Written once at append and never refreshed.** It is a record of what was suggested, not
+     * a second stored balance: a number that silently changes under somebody filling in a form is
+     * worse than a stale one.
+     */
+    suggestedQuantity: numeric('suggested_quantity', { precision: 14, scale: 3 }),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -230,6 +243,11 @@ export const tradeOrderLines = pgTable(
     check('trade_order_lines_rate_non_negative_check', sql`${t.rate} >= 0`),
     check('trade_order_lines_total_positive_check', sql`${t.lineTotal} > 0`),
     check('trade_order_lines_dispatch_cost_check', sql`${t.dispatchCost} is null or ${t.dispatchCost} >= 0`),
+    check('trade_order_lines_suggested_quantity_check', sql`${t.suggestedQuantity} is null or ${t.suggestedQuantity} > 0`),
+    /** ⭐ One line per item per INTERNAL order — what makes the auto-append idempotent. */
+    uniqueIndex('trade_order_lines_internal_item_key')
+      .on(t.orderId, t.itemId)
+      .where(sql`${t.requestedQuantity} is not null`),
     check('trade_order_lines_origin_check', sql`${t.origin} in ('requested','commissary_added')`),
     check(
       'trade_order_lines_approval_check',

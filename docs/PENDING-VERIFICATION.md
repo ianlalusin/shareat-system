@@ -148,3 +148,24 @@ is skipped with no error and exit 0.
 ⚠️ **One thing worth watching for in the data, not the browser:** `1230 Advances to employees`
 only ever grows (DEF-099). If anyone charges a shortfall to a staffer, that receivable has no
 drawdown path until Phase 5.
+
+## T-175 — low stock, the auto-draft, and the order thread (2026-08-30)
+
+| Needs a browser | Why it cannot be checked here |
+|---|---|
+| `apps/erp/src/app/inventory/low-stock/**` — the list and the threshold editor | Not written. Port 9008 is held by another lane |
+| The order thread on the order page | Not written |
+| ⭐ **An auto-drafted line, seen by the branch manager it is for** | This is §3's question in the only form that settles it. The line arrives with a SUGGESTED quantity rather than v1's zero — whether that reads as helpful or as presumptuous is a judgement nobody can make from a test |
+
+---
+
+## ⚠️ `docs/ROADMAP.html` is stale for the WHOLE Phase 3 wave, not just one lane
+
+Its task ids stop at **T-152** and it has no Phase 3 section at all, so T-160 through T-175 —
+every task in the inventory wave, across every lane — are invisible there. Each of those specs'
+*Done when* lists "update `docs/ROADMAP.html`" and none of them has.
+
+⛔ **Deliberately not fixed from inside one lane.** Three worktrees are writing tasks into that
+wave right now, and a single-file HTML roadmap rewritten by one of them is a conflict the other two
+discover at merge. It wants one pass, by whoever merges the lanes — or a generated file, which is
+the better answer given it is derived from `docs/tasks/` anyway.

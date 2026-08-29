@@ -56,6 +56,18 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     via: 'exists (select 1 from stock_usage_records r where r.id = record_id and r.org_id = app_current_org())',
   },
 
+  // ---- T-175: thresholds and the order thread ---------------------------------------------
+  store_item_thresholds: {
+    scope: 'org_column',
+    reason: 'A threshold belongs to a store, and a store to one org.',
+  },
+  trade_order_messages: {
+    scope: 'org_column',
+    reason:
+      'A conversation between two stores of one org. ⚠️ It carries its own `org_id` rather than ' +
+      'reaching through the order, because it is read on its own far more often than with one.',
+  },
+
   // ---- T-174: the transit shortfall ------------------------------------------------------
   trade_discrepancies: {
     scope: 'org_column',

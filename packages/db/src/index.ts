@@ -98,6 +98,8 @@ export * as stockLedgerRepo from './repo/stock-ledger';
 export * as stockLayersRepo from './repo/stock-layers';
 export * as deliveriesRepo from './repo/deliveries';
 export * as tradeDiscrepanciesRepo from './repo/trade-discrepancies';
+export * as lowStockRepo from './repo/low-stock';
+export type { LowStockRow, OrderMessageRow } from './repo/low-stock';
 export type { TradeDiscrepancyRow } from './repo/trade-discrepancies';
 export type { CatalogueEntry, SimilarItem, ItemRequestRow, MergeReport, DuplicateCandidate } from './repo/items';
 export { SIMILARITY_FLOOR } from './repo/items';

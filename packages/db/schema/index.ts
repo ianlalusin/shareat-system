@@ -57,3 +57,4 @@ export * from './stock-usage';
 export * from './count-sessions';
 export * from './commissary';
 export * from './trade-discrepancies';
+export * from './item-thresholds';

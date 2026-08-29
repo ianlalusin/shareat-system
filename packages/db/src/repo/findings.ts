@@ -636,3 +636,40 @@ export async function acknowledgementHistory(
     );
   return rows as unknown as AcknowledgementRow[];
 }
+
+/**
+ * ⭐ T-175 — items being consumed in a store that has never had a reorder threshold set.
+ *
+ * ⚠️ **This is the replacement for v1's forcing function.** v1 blocked a usage post until somebody
+ * filled the setting in, which puts the demand on a cook at 11pm who cannot answer it and is not
+ * paid to. The same information as a finding reaches a manager, who can — *nag the person who can
+ * act, never block the person who cannot.*
+ *
+ * ⛔ `soft`. A missing threshold makes the books no less true; it makes a REPLENISHMENT blind. That
+ * is worth being loud about and is not worth blocking a period close over.
+ */
+export async function itemsMissingThreshold(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    select m.store_id::text as store_id, s.name as store_name, count(distinct m.item_id)::int as n,
+           min(i.name) as example
+    from stock_movements m
+    join items i on i.id = m.item_id
+    join stores s on s.id = m.store_id
+    left join store_item_thresholds t on t.store_id = m.store_id and t.item_id = m.item_id
+    where m.org_id = ${orgId} and i.status = 'active' and t.id is null
+      and exists (select 1 from commissary_links cl
+                  where cl.branch_store_id = m.store_id and cl.status = 'active')
+    group by m.store_id, s.name
+  `)) as unknown as { store_id: string; store_name: string; n: number; example: string }[];
+
+  return rows.map((r) => ({
+    kind: 'itemHasNoThreshold',
+    key: `itemHasNoThreshold:${r.store_id}`,
+    storeId: r.store_id,
+    severity: 'soft' as const,
+    detail:
+      `${r.store_name} moves ${r.n} item${r.n === 1 ? '' : 's'} with no reorder threshold ` +
+      `(e.g. ${r.example}). ⚠️ They can never appear on the low-stock list, and nothing else ` +
+      'will say so — the store simply runs out.',
+  }));
+}

@@ -425,6 +425,25 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     reason: 'The detail of a usage record, by CASCADE. Same class as its parent.',
   },
 
+  // ---- T-175: thresholds and the order thread ---------------------------------------------
+  store_item_thresholds: {
+    // ⭐ keep: WHEN to reorder is a standing judgement about how this branch runs — the same class
+    // as `item_pricing`. It took a manager real thought per item, it carries no balance and no
+    // anchor, and nothing about "we reorder pork at 20 kg" becomes false when the ledger restarts.
+    class: 'keep',
+    reason:
+      'The reorder threshold per store per item — configuration, and the single most tedious ' +
+      'thing in this wave to re-key. ⚠️ A threshold missed at cutover is invisible: the item ' +
+      'simply never appears on the low-stock list again, and nothing says why.',
+  },
+  trade_order_messages: {
+    class: 'purge',
+    reason:
+      'The conversation about one order, by CASCADE. ⚠️ It is an audit trail, and an audit trail ' +
+      'of documents that no longer exist is not evidence of anything — keeping it while purging ' +
+      'the orders would leave messages discussing quantities nobody can look up.',
+  },
+
   // ---- T-174: the transit shortfall ------------------------------------------------------
   trade_discrepancies: {
     // ⛔ purge: a dispute about a shipment that moved in the OLD books belongs to the old books.
