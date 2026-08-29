@@ -51,8 +51,13 @@ export interface DrainReport {
  */
 const ENTITY_PRIORITY: Record<MirrorEntity, number> = {
   attendance_config: 0,
-  roster: 1,
-  day_feed: 2,
+  // ⭐ Credentials rank ABOVE the roster, for the same reason the kill switch ranks above both: a
+  // REVOKED badge that arrives after the roster is a badge that still punched. The roster tells a
+  // terminal who exists; the credential tells it what may clock them in, and the second is the one
+  // that lets somebody be paid.
+  credential: 1,
+  roster: 2,
+  day_feed: 3,
 };
 
 /**

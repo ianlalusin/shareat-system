@@ -74,3 +74,6 @@ export * from './mirror-outbox';
 
 // T-161 — the Lane B quarantine (Phase 4, lane B).
 export * from './inbox-quarantine';
+
+// T-164 — clock-in credentials: card and fingerprint (Phase 4, lane B).
+export * from './attendance-credentials';

@@ -37,13 +37,19 @@ import { organizations } from './organizations';
 import { stores } from './stores';
 
 /**
- * The hot set is **closed** (bible §5.3). These are the three of six this task publishes.
+ * The hot set is **closed** (bible §5.3). These are four of the six.
  *
- * ⛔ Adding a fourth requires a bible amendment, and one is already pending: a **card id** is not in
- * hot-set item 1, and D1 makes card the only browser-viable offline mode. Until Ian amends §5.3 the
- * offline card path stays blocked — that is the phase's critical path, not a footnote.
+ * ⛔ Adding one requires a bible amendment, and `credential` is the amendment: §13 row 164, on
+ * Ian's *"add cardid, update bible"*, put the card id into hot-set item **2** (the credential
+ * mirror, terminal-only) rather than item 1 (the roster, readable by any store member). A card is a
+ * bearer credential, so on the roster every store member could read every badge and clock in as any
+ * colleague — the placement is the whole decision, not a filing detail.
+ *
+ * ⚠️ `credential` is the ONLY entity that publishes outside `mirror/` — it goes to
+ * `biometricMirror/{storeId}/credentials/{id}`, which T-159's ruleset guards with a separate match
+ * block so that no OR can ever widen it to a human.
  */
-export const MIRROR_ENTITIES = ['roster', 'attendance_config', 'day_feed'] as const;
+export const MIRROR_ENTITIES = ['roster', 'attendance_config', 'day_feed', 'credential'] as const;
 export type MirrorEntity = (typeof MIRROR_ENTITIES)[number];
 
 export const MIRROR_OPS = ['upsert', 'delete'] as const;
@@ -87,7 +93,7 @@ export const mirrorOutbox = pgTable(
     /** The drain query, and the only one that matters. Unpublished first, in insertion order. */
     index('mirror_outbox_drain_idx').on(t.publishedAt, t.id),
     index('mirror_outbox_entity_idx').on(t.entity, t.entityId),
-    check('mirror_outbox_entity_check', sql`${t.entity} in ('roster','attendance_config','day_feed')`),
+    check('mirror_outbox_entity_check', sql`${t.entity} in ('roster','attendance_config','day_feed','credential')`),
     check('mirror_outbox_op_check', sql`${t.op} in ('upsert','delete')`),
     check('mirror_outbox_attempts_check', sql`${t.attempts} >= 0`),
   ],

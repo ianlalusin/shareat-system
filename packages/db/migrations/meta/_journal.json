@@ -491,6 +491,13 @@
       "when": 1793763107084,
       "tag": "0089_t161_inbox_quarantine",
       "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1794713507084,
+      "tag": "0100_t164_attendance_credentials",
+      "breakpoints": true
     }
   ]
 }

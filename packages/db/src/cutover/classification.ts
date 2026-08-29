@@ -272,6 +272,17 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'table — which is also why it carries no payload column.',
   },
 
+  // ---- T-164: attendance credentials (Phase 4, lane B) ----------------------------------
+  attendance_credentials: {
+    class: 'keep',
+    reason:
+      'A badge does not stop being somebody’s badge because the books restarted, and re-enrolling ' +
+      'every staffer’s fingerprint on 1 January is a day of work that buys nothing. ⚠️ The rows are ' +
+      'kept, but every credential belonging to an employment that did NOT carry over must be ' +
+      'revoked in the same pass — a live badge for somebody who no longer works here is exactly ' +
+      'the credential that punches unnoticed.',
+  },
+
   // ---- T-161: the Lane B quarantine (Phase 4, lane B) -----------------------------------
   inbox_quarantine: {
     class: 'purge',

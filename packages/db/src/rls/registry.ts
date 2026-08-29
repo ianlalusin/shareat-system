@@ -487,6 +487,15 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'system principal, so org scoping costs it nothing.',
   },
 
+  // ---- T-164: attendance credentials (Phase 4, lane B) ----------------------------------
+  attendance_credentials: {
+    scope: 'org_column',
+    reason:
+      'A card id or a fingerprint template against one employment. Per-org and emphatically so: ' +
+      'this is the most sensitive table in the phase — a row here is what lets somebody be ' +
+      'clocked in and paid, and a template is biometric data about a named person.',
+  },
+
   // ---- T-161: the Lane B quarantine (Phase 4, lane B) -----------------------------------
   inbox_quarantine: {
     scope: 'org_column',
