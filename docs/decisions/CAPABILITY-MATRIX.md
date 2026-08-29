@@ -97,6 +97,7 @@ they need weekly, the boundary is wrong.
 | `manage_users` | org | ✅ | ✅ | ✗ | ✗ | Creating/assigning roles at manager level and above. **See §Open 3 — this is the friction point** |
 | `grant_capability` | org | ✅ | ✅ | ✗ | ✗ | Only an admin grants |
 | `manage_attendance` | store | ✅ | ✅ | ✅ | ✗ | v1's `attendanceManager` grant, now a manager capability |
+| `provision_clock_terminal` | store | ✅ | ✅ | ✅ | ✗ | T-159. Deliberately NOT folded into `manage_attendance`: it creates an identity that can read BIOMETRIC templates, and §7 rule 2 forbids one capability implying an unrelated one. ⚠️ Manager matches v1 practice and is an escalation — admin-only is the tighter option, raised with Ian |
 
 ## Configuration
 

@@ -65,3 +65,6 @@ export * from './attendance-days';
 
 // T-158 — the manager's decisions, as attributed inputs (Phase 4, lane B).
 export * from './attendance-adjustments';
+
+// T-159 — the provisioned device identity (Phase 4, lane B).
+export * from './clock-terminals';

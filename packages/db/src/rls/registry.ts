@@ -469,6 +469,15 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'would make attribution meaningless.',
   },
 
+  // ---- T-159: device identity (Phase 4, lane B) -----------------------------------------
+  clock_terminals: {
+    scope: 'org_column',
+    reason:
+      'A provisioned terminal is the ONLY principal allowed to read that store’s biometric mirror ' +
+      '(bible §5.3). Leaking the roster of terminals across an org boundary would tell another ' +
+      'tenant exactly which device identities to target.',
+  },
+
   etl_runs: { scope: 'system_only', reason: 'ETL machinery. Never reachable by a tenant or a customer — only the migrator, crons and the audit.' },
   etl_source_documents: {
     scope: 'system_only',

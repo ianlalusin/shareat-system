@@ -253,6 +253,15 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'days, and before them (children first).',
   },
 
+  // ---- T-159: device identity (Phase 4, lane B) -----------------------------------------
+  clock_terminals: {
+    class: 'keep',
+    reason:
+      'The physical tablets on the counters survive 1 January — purging them would un-pair every ' +
+      'clock terminal in the group on the morning the books open, and re-pairing needs a manager ' +
+      'at each store with the device in hand. Configuration, not pilot activity.',
+  },
+
   // ---- T-124: fixed assets ---------------------------------------------------------------
   prepaid_items: {
     class: 'keep_shell',
