@@ -396,6 +396,70 @@ export async function remittanceOverdue(tx: Tx, orgId: string): Promise<Detected
 }
 
 /**
+ * ⭐ **T-153 — a till float that is not holding its configured amount.**
+ *
+ * > **Ian, 2026-08-29:** *"the staff just makes sure if the configured budget is 20k, every day
+ * > opening and closing it is 20k."*
+ *
+ * ⭐ **This is the imprest self-check, and it is why the float got its own account.** The pot's
+ * balance should ALWAYS equal its target, so the discrepancy is two figures compared — not a
+ * history to reconstruct. The control is arithmetic rather than diligence.
+ *
+ * ⚠️ **Below target and above target are both findings, and they are different accidents.**
+ * Below means the float was spent and not topped back up. Above means something was paid INTO the
+ * pot that belongs in the takings drawer — which quietly removes money from what must be
+ * remitted, so it is the more expensive of the two to leave alone.
+ *
+ * ⛔ **What this CANNOT catch, stated so nobody assumes it does:** a cashier counting ₱19,500
+ * some morning. That is a physical count against the ledger, and v2 has no shift record to hold
+ * one (CAPABILITY-GAPS, 2026-08-29). This compares the LEDGER to the target, which catches a float
+ * spent, never funded, or overfunded — not one quietly short in the drawer.
+ */
+export async function tillFloatOffTarget(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    select ma.id::text                                   as account_id,
+           ma.name                                       as name,
+           ma.store_id::text                             as store_id,
+           ma.float_target::text                         as target,
+           coalesce(sum(jl.debit - jl.credit), 0)::text   as balance
+    from money_accounts ma
+    -- Scoped by (gl code, store), mirroring balanceOf exactly. A float pot is NOT
+    -- requires_party, so its lines carry no money-account party and a party join would read
+    -- zero for every pot. One pot per store (unique index) is what keeps this unambiguous.
+    left join accounts a
+      on a.org_id = ma.org_id and a.code = ma.gl_account_code
+    left join journal_lines jl
+      on jl.account_id = a.id and jl.store_id = ma.store_id
+    left join journal_entries je
+      on je.id = jl.entry_id and je.status <> 'draft'
+    where ma.org_id = ${orgId} and ma.float_target is not null and ma.is_active
+      and (jl.id is null or je.id is not null)
+    group by ma.id, ma.name, ma.store_id, ma.float_target
+  `)) as unknown as Record<string, string>[];
+
+  const out: DetectedFinding[] = [];
+  for (const r of rows) {
+    const target = Number(r.target);
+    const balance = Number(r.balance);
+    const drift = balance - target;
+    if (Math.abs(drift) < 0.005) continue;
+    out.push({
+      kind: 'tillFloatOffTarget',
+      key: `tillFloatOffTarget:${r.account_id}`,
+      storeId: String(r.store_id),
+      severity: 'soft',
+      detail:
+        `${r.name} holds ${peso(balance)} against a float of ${peso(target)} — ` +
+        (drift < 0
+          ? `${peso(-drift)} short. The float was drawn on and not topped back up.`
+          : `${peso(drift)} over. Something was paid into the float that belongs in the takings ` +
+            'drawer, which takes it out of what has to be remitted.'),
+    });
+  }
+  return out;
+}
+
+/**
  * ⛔ **DEF-082 — the service-charge float can only ever grow.**
  *
  * Every sales day carrying a service charge credits `2160`, and **nothing in this codebase debits

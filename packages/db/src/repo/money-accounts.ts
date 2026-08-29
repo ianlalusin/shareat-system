@@ -13,7 +13,7 @@
  * combinations disagreeing with a reconstruction from raw legs. **A number worth showing is worth
  * deriving.**
  */
-import { and, asc, eq, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { accounts } from '../../schema/accounts';
 import { stores } from '../../schema/stores';
@@ -38,6 +38,10 @@ export interface MoneyAccountRow {
   isFoundation: boolean;
   /** ⭐ How far below zero a CASHIER drawer may go. Positive; office/staff ignore it. */
   overdraftLimit: string;
+  /** ⭐ T-153 — non-null makes this a TILL FLOAT pot: a side pocket with a configured amount it
+   *  should always hold. ⛔ A pot blocks at zero regardless of custodian, because its balance is
+   *  complete (it only moves by transfer) rather than provisional like a takings drawer. */
+  floatTarget: string | null;
   notes: string | null;
   createdAt: Date;
 }
@@ -53,6 +57,7 @@ const COLUMNS = {
   isActive: moneyAccounts.isActive,
   isFoundation: moneyAccounts.isFoundation,
   overdraftLimit: moneyAccounts.overdraftLimit,
+  floatTarget: moneyAccounts.floatTarget,
   notes: moneyAccounts.notes,
   createdAt: moneyAccounts.createdAt,
 } as const;
@@ -69,6 +74,8 @@ export interface InsertMoneyAccountInput {
   glAccountCode: string;
   custodian: Custodian;
   notes?: string | null;
+  /** ⭐ T-153 — set to make this a till float pot. See {@link MoneyAccountRow.floatTarget}. */
+  floatTarget?: string | null;
 }
 
 export async function insertMoneyAccount(
@@ -161,6 +168,40 @@ export async function updateMoneyAccount(
   if (updated.length === 0) {
     throw new Error(`updateMoneyAccount: money account ${id} does not exist in org ${orgId}`);
   }
+}
+
+/**
+ * ⭐ T-153 — set or clear a till float's configured amount.
+ *
+ * ⚠️ Deliberately separate from {@link updateMoneyAccount}, which is the register's rename/retire
+ * path and is reachable by anyone holding `manage_money_accounts`. The target is a **risk figure**
+ * — the number a cash count is judged against — so it moves on its own capability, exactly as
+ * T-152's un-remitted ceiling does.
+ */
+export async function setFloatTarget(
+  tx: Tx,
+  orgId: string,
+  id: string,
+  floatTarget: string | null,
+): Promise<void> {
+  const updated = await tx
+    .update(moneyAccounts)
+    .set({ floatTarget, updatedAt: sql`now()` })
+    .where(and(eq(moneyAccounts.id, id), eq(moneyAccounts.orgId, orgId)))
+    .returning({ id: moneyAccounts.id });
+  if (updated.length === 0) {
+    throw new Error(`setFloatTarget: money account ${id} does not exist in org ${orgId}`);
+  }
+}
+
+/** Every till float pot in the org, with what it is supposed to hold. */
+export async function listFloatPots(tx: Tx, orgId: string): Promise<MoneyAccountRow[]> {
+  const rows = await tx
+    .select(COLUMNS)
+    .from(moneyAccounts)
+    .where(and(eq(moneyAccounts.orgId, orgId), isNotNull(moneyAccounts.floatTarget)))
+    .orderBy(asc(moneyAccounts.name));
+  return rows as MoneyAccountRow[];
 }
 
 // -------------------------------------------------------------------------------------

@@ -1,9 +1,10 @@
 # T-153 — The till float: a side pocket, not a balance
 
-> **Status:** ⚠️ **SPEC, 2026-08-29 — REWRITTEN after Ian corrected the model.** An earlier version
-> of this document concluded *"no build required"*. **That was wrong**, and §2 keeps the error and
-> its cause rather than quietly deleting them. Recover it at `97919a0` if the reasoning is ever
-> needed.
+> **Status:** ✅ **BUILT, 2026-08-29** — migration `0061`, `1115`, `money_accounts.float_target`,
+> `setTillFloat`, the remittance refusal, the overdraft block and the `tillFloatOffTarget`
+> detector. §11 records Ian's worked example. **Written as a spec first and REWRITTEN after Ian
+> corrected the model** — an earlier version concluded *"no build required"*, which was wrong; §2
+> keeps that error and its cause rather than quietly deleting them (recoverable at `97919a0`).
 > **Requirements:** Ian, 2026-08-29. **Related:** T-136 §2 (imprest), T-136 §8.4, DEF-085.
 
 ## 1. What it actually is
@@ -200,3 +201,85 @@ also cannot write to POS: the reference repos are READ-ONLY.
 2. ⚠️ **When the float is short, what then?** The ledger will show `1115` below target and raise a
    finding. Whether the shortfall is charged to a cashier, topped up from office, or written off is
    the same three-way decision T-143 made for remittance variances — and it is Ian's.
+
+
+---
+
+## 11. ✅ Built — Ian's worked example, and the two rules it forced
+
+> **Ian, 2026-08-29:** *"So it will exist together with other cashier account. Say 20k, so cashier
+> has cashier cash 0, float target 20k, cashier online 0 at the start of the day. Sales comes say
+> cashier cash +1000, online +500. Then a delivery came worth 3000 so cashier cash −1000 = 0,
+> online not touched cause delivery is cash… **2000 from float then 18k balance to total 3k.** So
+> it has its own line on split payment."*
+
+⭐ **This is now an integration test, to the peso** (`expenses.test.ts`). The drawer covers what it
+has, the side pocket covers the rest, the online wallet is untouched, and the pot lands at ₱18,000
+and says so as a finding.
+
+⚠️ *(Ian's first pass wrote ₱1,500 and ₱18,500, which nets to ₱2,500 against a ₱3,000 delivery. I
+flagged it rather than quietly adjusting the numbers, and he corrected it himself the same
+minute — the test carries his corrected figures.)*
+
+### 11.1 ⭐ The float is its own payment line — and that needed no code
+
+`listMoneyAccountsForPicker` filters nothing, so the pot appears in the expense split alongside the
+drawer and the wallet the moment it exists. The posting comes out as **two separate credit legs**,
+`1110` for the takings and `1115` for the pocket, so float spending is visible as its own movement
+rather than buried in one cash figure.
+
+### 11.2 ⛔ Rule one: a float pot BLOCKS at zero, and it is the first cashier account that does
+
+> **Ian:** *"if this is implemented we guard all accounts to never go negative, all stops at 0
+> never below."*
+
+⚠️ **This looked like it contradicted bible row 154**, which is Ian's own 2026-08-26 decision —
+*"warning for now, don't block… only cashier owned account"* — and whose reasoning is still sound: a
+takings drawer holds today's sales hours before they post at verify, so a drawer reading ₱0 at 2pm
+may hold ₱40,000, and refusing an outflow there refuses a shortfall that is not real.
+
+⭐ **It does not contradict it, and the reconciliation sharpens the original rule.** The warn-vs-block
+split was never really about the custodian — it is about **whether the ledger can see the whole
+balance**. Row 154's own comment says so about the office safe: *"its balance is complete — nothing
+is waiting to be posted into it."*
+
+**A float pot's balance is complete too.** It only ever moves by transfer, expense, or an opening
+entry — all of which post immediately. Nothing is waiting. So it blocks, while a takings drawer of
+the identical custodian still warns. There is a unit test asserting exactly that pair.
+
+⛔ **What I did NOT do: flip the takings drawer to blocking.** Ian's *"all accounts"* would extend
+there, and it would break the control it is meant to serve — a cashier paying a real ₱3,000
+delivery out of real takings that have not been verified yet would be refused, and would then put
+it on the float instead. **The float would read short at closing for a shortage that never
+happened**, which is precisely the false alarm the daily count exists to rule out. Raised here, not
+silently ignored.
+
+### 11.3 ⛔ Rule two: a float is never remitted, and the custodian check could not catch it
+
+The pot **is** custodian `cashier`, so `createRemittance`'s existing `from.custodian !== 'cashier'`
+guard waves it straight through. Without an explicit refusal the float would sit in the remittance
+picker one click from the office — the single thing Ian says never happens. Refused by name, with a
+test.
+
+### 11.4 One pot per store, enforced — and it is not tidiness
+
+`balanceOf` scopes a non-`1140` money account by `(gl code, store)` rather than by party, because
+these accounts are not `requires_party`. **Two pots in one store would share one balance** and the
+off-target detector would judge that single figure against two different targets. A partial unique
+index makes it impossible. Ian: *"1 store 1 till."*
+
+### 11.5 What the detector can and cannot see
+
+`tillFloatOffTarget` compares the pot's **ledger balance** to its target and reports short or over
+— over being the more expensive accident, since money paid into the pocket quietly leaves what has
+to be remitted.
+
+⛔ **It cannot see a cashier counting ₱19,500 one morning.** That is a physical count against the
+ledger, and Ian's *"every day opening and closing it is 20k"* is a **per-shift** check. v2 has no
+shift record (CAPABILITY-GAPS, 2026-08-29), so the count has nowhere to live yet. **The alarm built
+here catches a float spent, never funded, or overfunded — not one quietly short in the drawer.**
+
+## 12. Gates
+
+typecheck **0** · unit **616** · `expenses` **38/38** · `remittance` **23/23** ·
+`chart-of-accounts` **77/77** (pinned account count 100 → **101**)

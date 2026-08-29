@@ -24,6 +24,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import {
   closeDb,
+  findingsRepo,
   moneyAccountsRepo,
   remittanceRepo,
   storesRepo,
@@ -38,6 +39,7 @@ import {
   createMoneyTransfer,
   reverseRemittance,
   setStoreCashPolicy,
+  setTillFloat,
 } from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
@@ -628,5 +630,127 @@ describe('cash arriving by transfer is custody, and never becomes a day’s taki
       return moneyAccountsRepo.balanceOf(tx, f.orgId, acct!);
     });
     expect(Number(balance)).toBeCloseTo(15000, 2);
+  });
+});
+
+// =====================================================================================
+// T-153 — the till float: a side pocket with its own target
+// =====================================================================================
+
+describe('T-153 — the till float pot', () => {
+  const potFor = async (f: Fixture, target: string) =>
+    asOrg(f.orgId, (tx) => setTillFloat(tx, f.admin, { storeId: f.storeId, target }));
+
+  it('⭐ setting a target creates the pot — and it starts EMPTY, which the finding says at once', async () => {
+    const f = await fixture('float-new');
+    const { moneyAccountId } = await potFor(f, '20000.00');
+    const acct = await asOrg(f.orgId, (tx) =>
+      moneyAccountsRepo.getById(tx, f.orgId, moneyAccountId),
+    );
+    expect(acct!.glAccountCode).toBe('1115');
+    expect(acct!.custodian).toBe('cashier');
+    expect(Number(acct!.floatTarget)).toBe(20000);
+
+    // ⛔ Deliberate: a target is not money. The pot is ₱20,000 short until the office funds it,
+    // and the books must not pretend a side pocket has cash in it.
+    const found = await asOrg(f.orgId, (tx) => findingsRepo.tillFloatOffTarget(tx, f.orgId));
+    expect(found).toHaveLength(1);
+    expect(found[0]!.detail).toMatch(/short/);
+  });
+
+  it('⭐ funded from the office, it goes quiet', async () => {
+    const f = await fixture('float-funded');
+    await officeOpening(f, '2026-01-01', '50000.00');
+    const { moneyAccountId } = await potFor(f, '20000.00');
+    await asOrg(f.orgId, (tx) =>
+      createMoneyTransfer(tx, f.admin, {
+        fromMoneyAccountId: f.safe,
+        toMoneyAccountId: moneyAccountId,
+        amountOut: '20000.00',
+        amountIn: '20000.00',
+        transferDate: '2026-01-02',
+        notes: 'Fund the till float',
+      }),
+    );
+    expect(await asOrg(f.orgId, (tx) => findingsRepo.tillFloatOffTarget(tx, f.orgId))).toEqual([]);
+  });
+
+  it('⛔ a float is NEVER remitted — the custodian check alone would not catch it', async () => {
+    const f = await fixture('float-noremit');
+    await officeOpening(f, '2026-01-01', '50000.00');
+    const { moneyAccountId } = await potFor(f, '20000.00');
+    await asOrg(f.orgId, (tx) =>
+      createMoneyTransfer(tx, f.admin, {
+        fromMoneyAccountId: f.safe,
+        toMoneyAccountId: moneyAccountId,
+        amountOut: '20000.00',
+        amountIn: '20000.00',
+        transferDate: '2026-01-02',
+      }),
+    );
+    await verifiedDay(f, '2026-01-02');
+    await tillMovement(f, '2026-01-02', '5000.00');
+
+    // ⚠️ The pot IS custodian 'cashier', so `from.custodian !== 'cashier'` passes it happily.
+    // Without T-153's explicit refusal it would sit in the picker one click from the office.
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        createRemittance(tx, f.admin, {
+          storeId: f.storeId,
+          remittedOn: '2026-01-03',
+          lines: [{ fromMoneyAccountId: moneyAccountId, toMoneyAccountId: f.safe, amount: '5000.00' }],
+        }),
+      ),
+    ).rejects.toThrow(/never remitted/);
+  });
+
+  it('⛔ STAFF and MANAGER may not set a float — it is a risk figure, like the ceiling', async () => {
+    const f = await fixture('float-deny');
+    const staffId = await person(f.orgId, f.storeId, 'Staff', 'staff');
+    const mgrId = await person(f.orgId, f.storeId, 'Manager', 'manager');
+    for (const id of [staffId, mgrId]) {
+      await expect(
+        asOrg(f.orgId, (tx) =>
+          setTillFloat(tx, actor(f.orgId, id), { storeId: f.storeId, target: '20000.00' }),
+        ),
+      ).rejects.toThrow(AuthorizationError);
+    }
+  });
+
+  it('⛔ one pot per store — the database refuses a second', async () => {
+    const f = await fixture('float-one');
+    await potFor(f, '20000.00');
+    // ⭐ Not tidiness: `balanceOf` scopes a non-1140 account by (gl code, store), so two pots would
+    // share one balance and the detector would judge it against two targets.
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        moneyAccountsRepo.insertMoneyAccount(tx, {
+          orgId: f.orgId,
+          storeId: f.storeId,
+          name: 'Second float',
+          instrument: 'cash',
+          custodian: 'cashier',
+          glAccountCode: '1115',
+          floatTarget: '5000.00',
+        }),
+      ),
+    ).rejects.toThrow(/money_accounts_one_float_per_store/);
+  });
+
+  it('⛔ a float target may not sit on a wallet or an office safe', async () => {
+    const f = await fixture('float-shape');
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        moneyAccountsRepo.insertMoneyAccount(tx, {
+          orgId: f.orgId,
+          storeId: f.storeId,
+          name: 'Bogus float',
+          instrument: 'ewallet',
+          custodian: 'office',
+          glAccountCode: '1140',
+          floatTarget: '5000.00',
+        }),
+      ),
+    ).rejects.toThrow(/money_accounts_float_target_shape_check/);
   });
 });

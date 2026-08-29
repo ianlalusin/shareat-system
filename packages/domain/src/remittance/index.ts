@@ -95,6 +95,22 @@ async function runCreate(
           `"${from.name}" (${from.custodian}) → "${to.name}" (${to.custodian}) does not.`,
       );
     }
+    // ⛔ T-153 — A TILL FLOAT IS NEVER REMITTED, and the custodian check above cannot catch it:
+    // a float pot IS custodian 'cashier', so without this it would sit in the remittance picker
+    // one click from being handed to the office.
+    //
+    // > **Ian, 2026-08-29:** *"extra cash float that is NOT remitted to the manager or admin — it
+    // > sits on till forever… separated from the money being remitted."*
+    //
+    // ⚠️ A service-layer rule rather than a database one on purpose: the money may legitimately
+    // leave this account (an expense paid from the float, a transfer resizing it). What is refused
+    // is this DOCUMENT moving it — which is a question about the document, not about the value.
+    if (from.floatTarget !== null) {
+      throw new Error(
+        `createRemittance: "${from.name}" is a till float, and a float is never remitted — it ` +
+          'sits in the till and is counted against its target. Remit the takings drawer instead.',
+      );
+    }
   }
 
   const handedOver: Money = input.lines.reduce((sum, l) => add(sum, money(l.amount)), money('0'));
