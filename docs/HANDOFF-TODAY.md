@@ -1,267 +1,181 @@
-# Handoff — 2026-08-28
+# Handoff — 2026-08-29
 
 ## Where things stand
 
-**T-130 is finished and shipped: suppliers, supplier invoices, AP payments, open-item allocation.**
-No expense — cash or credit — can be recorded until its supplier invoice is verified; verification
-*is* the approval, so recording an expense against one posts immediately, no draft. New screens at
-`/ap`, `/ap/invoices/[id]`, `/ap/suppliers/[id]`. Smoketested end to end in a real browser: recorded
-a supplier, logged and verified an invoice, posted a credit AND a cash expense against it, watched
-recording capacity update, recorded a partial payment and watched the open item drop. A peer
-session's audit of the just-shipped code found three real issues (below); all three are fixed, gates
-re-run green, and the fixes are pushed. Nothing is half-built for this task; T-131 (AR) starts clean.
+**Waves 0–5 are complete, and so is the cutover machinery.** Every module that posts to the ledger
+exists, is tested, and has a screen or a script in front of it: AP, AR, expenses, sales days, fixed
+assets, prepaid, loans, equity, liabilities, customers, items, wholesale orders, inter-store
+transfers, channel settlement, the integrity watchdog, and the 31 December conversion.
 
-## Gates at `9a3cd96` (pushed to `main`, current HEAD)
+**Three tasks remain, all designed and none started:** T-136 cash custody, T-137 statutory discount
+logbook, T-146 invoice OCR (parked — it needs a GitHub repo URL from Ian).
 
-| Gate | Result |
-|---|---|
-| `typecheck` | ✅ exit 0 |
-| `npm test` (unit) | ✅ **598 / 598** |
-| `npm run test:integration` | ✅ **998 / 998** (2 new, from the audit fix) |
-| `npm run build` | ✅ exit 0 |
+**The nearest real deadline is the November cutover rehearsal**, roughly eleven weeks out. The
+wizard, the count sheet and the opening-balance entry all work; the purge is deliberately still a
+command-line step.
 
-**No `npm run lint`** — DEF-027, there isn't one.
+## Gates at `1db914a`
+
+typecheck 0 · unit **611/611** · integration **1173/1173** (40/40 files) · build 0
+
+⚠️ The build was run and green at this code state before the dev server was restarted for a UI
+walkthrough; port 9008 is live now, so a re-run would clobber the `.next` it is serving.
 
 ## What happened this session
 
-### T-130, built in this order
+### Wave 4 — the documents Wave 3 was built to feed
 
-1. **Spec first** (bible §1.2a) — `docs/tasks/130-accounts-payable.md`, grounded in reading
-   ERP-rebuild's real AP code (`ap-projection.server.ts`, `ap-payment.builder.ts`,
-   `payment.actions.ts`, `receipt.actions.ts`) as requirements, never as design.
-2. **Corrected twice by Ian, mid-spec, before any code** — the first draft dropped v1's
-   `pending → verified` receipt lifecycle as redundant with expense approval. It wasn't: *"receipt
-   and expense are 2 separate records... before an expense can be recorded it needs a verified
-   receipt — but expense may already be posted, no need for draft."* And it's universal — cash
-   expenses too, not just credit/AP. Then: *"look at how v1 expense is recorded and use that
-   pattern"* — the spec was rewritten to port v1's actual mechanism (`canTagExpenseToReceipt`, the
-   photo-at-create rule, receipt-date authority, the void-cascade-through-the-primitive lesson)
-   rather than a re-derived guess at one.
-3. **Schema, migration, repo, domain** — `suppliers`, `supplier_invoices`, `ap_payments`,
-   `ap_payment_allocations`; hand-written migration `0043` (DEF-073 — `db:generate` is still
-   unusable); `expenses.supplierId`/`supplierInvoiceId` now required; the DEF-055 photo gate
-   relocated from `expenses` to `supplier_invoices`, closing **DEF-057** (logged 2026-08-25 — this
-   is that row's own prescription, built as written).
-4. **Three of my own spec defects, caught and fixed before shipping** (§3.4a — report, don't
-   silently work around): a `funding_source` enum on `ap_payments` that would have reintroduced
-   the exact office-drawer anti-pattern DEF-058 already removed; a CHECK constraint that made
-   voiding an already-verified invoice impossible; two different "close enough" tolerances
-   conflated into one, which would have let a single expense overshoot an invoice's total by up to
-   a peso.
-5. **One bug the browser found, not the tests**: the "record expense" form embedded on the invoice
-   page failed over to `/expenses/new` on error — wrong page, every field wiped — surfaced by a
-   real overdraft rejection mid-smoketest. Fixed with a `returnTo` field.
+- **T-132 wholesale orders.** `ar_charges` had a total and no lines, so a franchisee sale was a lump
+  sum and the item master, price lists and `sellable_wholesale` had no reader. Now an order document
+  consumes all three. **The research already existed** — `docs/discovery/19-b2b-order-to-cash.md`
+  read ERPNext, Odoo, Tryton and Dolibarr at pinned commits — and its three open forks were taken on
+  its own recommendations: dispatch *is* the billing event, one credit gate, the rate is captured.
+- **⭐ Two findings from reading our own schema:** there was **no wholesale revenue account**
+  (`4300` added by migration — not `4200`, which the 2026-08-23 amendment removed), and
+  `customer_group`'s `internal` vs `wholesale` is a **chart boundary, not a label** — an own-branch
+  transfer eliminates against `5170` or the peso counts twice.
+- **T-133 inter-entity trade** turned out not to be a new document at all. ADR-008 §8 had already
+  decided it: *"one flow, two treatments — a mode is a fork; a derived treatment is a fact."*
+  `wholesale_orders` was renamed `trade_orders`, because the old name was about to start lying.
 
-### ⚠️ Three more, found by a peer session's audit AFTER T-130 first shipped — all fixed
+### ⛔ T-133 was wrong, and Ian's question found it within the hour
 
-A concurrent Claude session (`/daily-review`, sharing this working directory) reviewed T-130's diff
-and reported three findings mid-wrap-up. All three were independently re-verified against live
-behaviour before fixing — not taken on faith — and all three are now fixed, tested, and pushed.
+He asked how Malvar expenses a slab Lipa bought and processed. The honest answer under what had just
+shipped was: **it cannot, and Lipa carries 100% of a cost for goods it no longer holds.**
 
-1. **RLS policies since migration 0036 (including 3 of T-130's own new tables) use a raw
-   `current_setting('app.org_id', true)::uuid`** instead of the project's `app_current_org()`
-   function, which wraps the same call in `NULLIF(..., '')`. ⚠️ **This is reachable in production,
-   not theoretical — a first pass got that part wrong, and the same peer session's second pass
-   caught it.** `set_config('app.org_id', $1, true)` is `SET LOCAL` on a custom GUC; when that
-   transaction commits, PostgreSQL resets the GUC to `''`, not to unset/NULL — a documented quirk
-   of custom GUCs that were only ever assigned with `LOCAL`, and exactly why `app_current_org()`'s
-   `NULLIF` guard exists. `principal.ts`'s customer branch (*"NO org is set... evaluates against
-   NULL"*) is true on a fresh connection and false on a pooled, reused one that previously served a
-   staff request — `app.org_id` reads back `''`. Reproduced live with a `max: 1` pool forcing
-   connection reuse: a staff transaction sets a real org and commits, the next (customer) one on
-   the same connection sees `''`, and every table still on the raw idiom throws `22P02` instead of
-   denying. **Still not a data leak** (a policy error still returns zero rows), but it is a live,
-   reachable, customer-facing **500** on any affected table, depending on connection-pool reuse
-   history — my own first verification used a superuser connection (bypasses RLS,
-   `rolbypassrls=true`) and a never-reused connection, both of which hid this. Fixed for T-130's
-   own 4 tables — source migration and the already-applied live policies on both `shareat_dev` and
-   `shareat_test`. The ~10 pre-existing tables on the old idiom are **not** touched — logged as
-   **DEF-077** (severity raised 🔸→⚠️ after the correction) — but this is no longer background
-   cleanup; see "Pick up here" below.
-2. **`verifyInvoice`'s evidence check was truthiness-only** (`!!(invoice.receiptFileId || ...)`) —
-   a hand-typed, nonexistent `receiptFileId` would have passed. This regressed T-141's own
-   hardening (DEF-070's closure), which validates the file against `filesRepo.getById` — exists in
-   this org, belongs to this store — and only falls back to the plain-text URL when no file is
-   named. Restored that exact check in `verifyInvoice`; 2 new tests in `ap.test.ts` cover "no
-   evidence at all" and "a forged `receiptFileId`".
-3. **The wrap-up skill's own migration-drift check (patched earlier this same session) told the
-   reader to run `npm run db:generate`** — which DEF-073, read extensively during this session's
-   own T-130 work, says is unusable here. A self-contradiction, fixed: the check now diffs
-   `packages/db/schema/` against `packages/db/migrations/` and points at the hand-written-migration
-   convention instead.
+The posting followed `POSTING-PATTERNS.md` faithfully — and that pattern assumes **perpetual**
+inventory. This system is **periodic**: every expense category maps to a 5xxx COGS account, and
+before T-133 *nothing in the codebase debited 1310, 1330 or 1340*.
 
-### ⭐ Decisions Ian made, and where each is recorded
+**A transfer moves COST now**, via `5175 Cost transferred to branches` — the account `5170`'s own
+seed comment has demanded since T-102b and which had never been created. `POSTING-PATTERNS.md`
+carries both shapes, each labelled with the era it belongs to.
+
+### T-151 — the two delivery fees, which is Ian's rule verbatim
+
+> *"delivery fee from supplier to Lipa is added to price. delivery fee on top of that is the fee
+> from Lipa to Malvar."*
+
+Inbound freight is allocated across invoice lines **by value** and folded into landed cost; outbound
+freight rides **on top** of the trade order. Plus v1's branch price, ported at source — three modes,
+`max` of the last two receives, slab-linked costing, margin alert.
+
+⭐ **The one improvement on v1:** the basis is **derived** from invoice history, not stored. v1's
+rolling `lastReceivedCost` froze a chopstick price at ₱1,458 instead of ₱1.46 and could not
+self-heal. There is a test reproducing that exact case and proving it now heals on the next read.
+
+### T-150 — channel settlement, built to a peer session's spec
+
+`ianla-72` wrote `docs/tasks/150-channel-settlement.md`; Ian said build it. Both of its open
+decisions were taken on its own recommendations (`6420` seeded; `1220` and the clearing accounts
+keep separate jobs). **Withholding tax is an expense at `6800`, and no `1270` asset is seeded** —
+the credit cannot be realised, and an account that exists invites someone to use it.
+
+Three corrections while implementing: the spec's `1120` is staff-custodian cash, not a bank (the
+code now asks the chart whether the destination needs a party); v1's "void refuses while a loan
+payment stands" guard is **not needed here**, because the repayment is a leg inside this settlement's
+own entry; and the cross-store loan legs needed care.
+
+### T-135 — the watchdog, where only the acknowledgement is stored
+
+Seven ledger-integrity detectors, derived on every read. **A finding cannot be "resolved" while it
+is still true** — acknowledging says *"I accept this for now"*, is still counted, ages visibly, and
+expires after 30 days. Half-closes DEF-078.
+
+### T-134 — the conversion, its screens, and its buttons
+
+Twelve steps, four gates, resumable. `/cutover`, `/cutover/count`, `/cutover/opening`.
+
+**Two findings from building it:** two of the six ✅ checks **cannot be checked here** (they query v1
+data this system never holds — they say so rather than showing a tick they did not earn), and a
+verified check **can pass vacuously** — *"3900 nets to zero"* is trivially true on an empty ledger,
+so a blocked step is now never `done` even when its own check passes.
+
+**Three copy bugs that only looking could find:** the ⭐/⚠️/⛔ markers this project uses in source
+comments were rendering mid-sentence on screen; *"Checked by a query · not machine-verifiable"*
+appeared side by side; and a heading said "v1".
+
+### ⛔ DEF-079 — the purge could never have run
+
+`scripts/cutover-purge.ts` `DELETE`s the purge-class tables, and `journal_entries` has a BEFORE
+DELETE trigger that raises on any **posted** row. Every real ledger is posted rows.
+
+**Proved, not reasoned:** deleting a posted entry in `shareat_test` inside a rolled-back transaction
+returned the trigger's own message.
+
+**Nothing caught it because no test ever ran the purge against posted data.** T-119's tests cover
+classification and ordering — both correct. Fixed with `TRUNCATE`, which does not fire row triggers
+by definition, so invariant 5 stays armed everywhere else. Chosen over a GUC exemption (a flag a code
+path can forget to unset) and over `session_replication_role = 'replica'` (which disables FK
+enforcement too).
+
+### Also this session
+
+- **DEF-078** — the month-end runner has no installed trigger. Raised after I wrote the opposite
+  into the roadmap and caught it an hour later.
+- **The roadmap was two waves stale** — Wave 2 read "in progress" when all four tasks had shipped.
+- **Five task docs still said "Spec"/"design" after shipping** — corrected in this wrap-up.
+
+### Where the decisions are recorded
 
 | Decision | Recorded in |
 |---|---|
-| Aging is by **due date**, not invoice date, for both AP and AR | `docs/tasks/130-accounts-payable.md` Invariant 11 — **drafted as a bible row, not yet landed** (see below) |
-| Manager verifies supplier invoices | `docs/decisions/CAPABILITY-MATRIX.md`, `packages/auth/src/capabilities.ts` (`verify_supplier_invoice`) |
-| Capture VAT data on supplier invoices (not yet posted to a separate account) | `docs/tasks/130-accounts-payable.md` Contract §2; `supplier_invoices.vatType/vatRate/vatAmount/vatExclusiveAmount` |
-| The receipt/expense split is real, not redundant, and applies to every expense | `docs/tasks/130-accounts-payable.md` Contract §2's correction history; Invariant 2 |
-| DEF-057 closed by T-130 | `docs/DEFECTS-REGISTER.md` |
-
-⭐ **Nothing Ian decided is left in the transcript only** — except one, named explicitly below
-because it genuinely cannot be recorded by this session.
-
-### ⚠️ One decision NOT yet durably recorded, and why
-
-**Aging basis = due date** needs a `PROJECT_BIBLE.md` §13 row, and *"a Sonnet implementer never
-amends it, it reports a conflict and stops"* (§14) — this session is Sonnet, not the Opus planner.
-The exact row text is drafted and ready to paste, sitting in
-`docs/tasks/130-accounts-payable.md` right after Invariant 11. **An Opus pass needs to actually
-paste it in** before or alongside T-131, which depends on this basis matching.
+| Two delivery fees, two treatments | `docs/tasks/151-*.md` §1 |
+| Wholesale revenue is `4300`, not `4200` | migration `0056`, seed, task 132 §4 |
+| `internal` vs `wholesale` is a chart boundary | `docs/tasks/132-*.md` §3 |
+| A transfer moves cost, not inventory | `docs/tasks/133-*.md` §3, `POSTING-PATTERNS.md` |
+| Withholding tax is an expense; no `1270` | `docs/tasks/150-*.md` §7, migration `0057` |
+| `6420` seeded for settlement variance | migration `0057` §1 |
+| A finding is derived; only the ack is stored | `docs/tasks/135-*.md`, migration `0058` |
+| Purge uses TRUNCATE | **DEF-079**, `scripts/cutover-purge.ts` |
+| Month-end has no installed trigger | **DEF-078** |
 
 ## Pick up here
 
-**1. Get the aging-basis bible row landed** (Opus planner, five minutes) — the draft is sitting in
-   the task doc, see above.
-
-**2. T-131 — AR.** Finally posts to the `1210` control account `T-129`'s `customers` already
-   derives a balance from. Mirrors T-130's shape closely — this task doc is now the reference
-   pattern for "control account + subledger + open-item allocation," proven for the first time on
-   `2110`.
-
-**3. T-132 — wholesale orders**, the document that consumes a price list.
-
-**4. DEF-077's remaining scope — worth raising with Ian directly, not left as background cleanup.**
-   The ~10 tables from migrations 0036–0042 still use the raw `current_setting` idiom, and this is
-   now confirmed **live and reachable** (see above) — a customer-kind request on a connection
-   previously used for staff can 500 against any of them, not merely a theoretical inconsistency.
-   Not a data leak (fails to an error, not a leaked row), so not an emergency, but it should be
-   fixed sooner than "whenever someone gets to it." Mechanical fix: `DROP POLICY`/`CREATE POLICY`
-   against the already-applied live policies (a migration file edit alone won't re-apply).
-   **Verify with a `max: 1` pool forcing a staff-then-customer sequence on the same connection** —
-   a fresh/never-reused connection, or a superuser connection (`rolbypassrls=true`), both falsely
-   show the bug as absent.
+1. **T-136 cash custody**, or **T-137 statutory discount logbook** — the only two designed-and-unbuilt
+   tasks left. T-136 is the larger and the one that touches money.
+2. **Rehearse the cutover against a restored copy** before November rather than in it. Everything
+   needed now exists; DEF-079 is exactly what a rehearsal is for, and it was found early only because
+   a button was built.
+3. **The 94 import conflicts and 11 duplicate item pairs** are Ian's to action as super-admin.
 
 ## Do not decide these alone — they are Ian's
 
-| Question | The recommendation already on the table |
-|---|---|
-| **Entity structure** — sole proprietorship, partnership or corporation? | Carried over, unanswered, from the last several handoffs. Worth one conversation with the accountant before go-live |
-| Should input-VAT actually post to a GL account, now that supplier invoices capture the data? | Recommendation: not yet — nothing in `POSTING-PATTERNS.md` splits it today, and inventing the split without a discovery pass is exactly the unconfirmed-scope T-130 refused for withholding tax |
-| Expanded withholding tax on purchases — do any real suppliers need it? | Out of scope for T-130, named as a decision, not an oversight — needs a real answer on which suppliers are subject to it before it's designed |
-| Fold DEF-077's remaining ~10 tables into a dedicated task now, or leave it as a background item? | **Upgraded after a correction — confirmed live and reachable, not theoretical** (see above). Not a data leak, so not an emergency, but recommend a short, dedicated task soon rather than open-ended background cleanup, since it touches RLS policies on live tables and causes real customer-facing 500s today |
+- **T-146 invoice OCR** — parked pending the GitHub repo URL he mentioned. Recommendation on the
+  table: scaffold from an existing open-source project rather than build a reader.
+- **The 94 import conflicts / 11 duplicate pairs** — judgement calls on units and identity that a
+  machine should not make.
+- **DEF-078(a): installing the month-end timer.** There is no host yet; it belongs on the T-134
+  cutover checklist, and until then the finding will fire the moment a period completes. That is
+  intended.
 
-## Traps that have actually bitten, live in this area right now
+## Traps that have actually bitten
 
-- ⛔ **Two `funding_source`-shaped columns is the same mistake twice.** If a future module wants to
-  record "how money moved," check `ADR-010`/DEF-058 first — the account's own custodian decides,
-  never a typed label. Caught once already in T-130's own first draft.
-- ⚠️ **A biconditional CHECK on a status+anchor pair breaks the moment something can leave that
-  status while keeping its history** (voiding a verified invoice). One-directional
-  (`status <> 'X' or anchor is not null`) is usually what's actually wanted.
-- ⚠️ **Two tolerances that look like the same number are not the same question.** "Is this close
-  enough to call fully recorded" and "does this posting fit" need different epsilons — conflating
-  them lets postings overshoot.
-- ⚠️ **A server action shared by two different pages needs to know where to redirect on error.** A
-  hardcoded error-redirect target is only safe if the action has exactly one caller.
-- ⚠️ **A truthiness check on a stored id/URL is not evidence.** `!!row.someFileId` proves a field is
-  non-empty, not that the thing it names is real. If a check exists to gate something meaningful
-  (photo evidence, an attached document), it needs a repo lookup (`filesRepo.getById` or
-  equivalent) that can actually fail — copy an existing hardened check (T-141's) rather than
-  re-deriving a weaker one from the field's shape alone.
-- ⚠️ **`npm run db:generate` is unusable** (DEF-073). Hand-write migrations, journal them with
-  `previous.when + 86400000`.
-- ⚠️ **A raw `current_setting('app.org_id', true)::uuid` in an RLS policy throws instead of denying
-  on an empty-string `app.org_id`** — `app_current_org()` exists specifically to guard this with
-  `NULLIF`. ⛔ **And it IS live**, on a pooled connection: `SET LOCAL` on a custom GUC resets to
-  `''`, not NULL, when its transaction commits — a documented Postgres quirk, not a theoretical
-  edge case — so a connection previously used for a staff request leaves `app.org_id` as `''` for
-  the next request that sets no org of its own (`principal.ts`'s customer branch). A first pass on
-  this got "reachable?" wrong by testing only a never-reused connection; caught by a second,
-  independent pass. New RLS policies should use `app_current_org()`, never the raw idiom (DEF-077).
-- ⚠️ **Verifying an RLS claim from a superuser connection, or from a connection that's never been
-  reused, both prove nothing.** The `postgres` role used for local dev has `rolbypassrls=true`, so
-  it ignores every policy regardless of `FORCE ROW LEVEL SECURITY` — any probe must `SET LOCAL ROLE
-  shareat_app` first. Separately, a custom-GUC reset bug (above) only shows up on a **reused**
-  connection — a fresh one always looks fine. Both traps bit this exact session, on this exact
-  finding, in that order: first the wrong role, then the wrong connection lifecycle. A real RLS
-  probe needs the app role AND a `max: 1` pool exercising the actual sequence (e.g. staff, then
-  customer) that production connection pooling produces.
-- ⚠️ **A concurrent session sharing this working directory can check out a different branch out
-  from under you mid-session** — `git branch --show-current` silently changed from `main` to
-  `daily-review/2026-08-28` at some point this session, discovered mid-wrap-up. Fixed by switching
-  back once confirmed safe (0 commits ahead of `main` on that branch — only uncommitted
-  working-tree files). **Check `git branch --show-current` again right before committing**, not
-  just at session start.
-- ⚠️ **Solved, and it's a cautionary tale about trusting a review doc's own self-description.**
-  `docs/FILE-MAP.md`, `docs/reviews/NEXT-PROMPT.md`, and `docs/reviews/2026-08-28.md` are the
-  `/daily-review` skill's own declared outputs (SKILL.md §6–§8) — not authorship-unknown at all,
-  once someone actually checked the skill file instead of guessing from mtimes. **The run was
-  interrupted, and two of its three "needs a human" findings are false:**
-  `.claude/daily-review-state.json` still reads `lastReviewedSha: d404a70`/`2026-08-26` — §10
-  (write the new state) never ran. `daily-review/2026-08-28` has **zero commits** — confirmed via
-  `git rev-list --count 4b06a0e..daily-review/2026-08-28` = `0` — even though the review doc itself
-  asserts *"one commit — docs/FILE-MAP.md updated."* That commit does not exist; §9 never ran
-  either. Almost certainly the stale `.git/index.lock` (created 11:57:16, discovered and removed
-  earlier this same session) blocked §9's `git commit` around 12:11, right when the files were
-  written; the branch checkout back to `main` at 12:32 then carried the orphaned files along.
-  **The doc's own claims of a broken toolchain are stale/wrong**, not current fact: `npm test`
-  passes 598/598 clean (run independently, twice, by two different sessions this same day) against
-  its claimed *"vitest fails … Cannot find native binding"*; Postgres on 5435 was reachable both
-  before and after its claimed *"unreachable"* — most likely it hit the recorded two-concurrent-
-  integration-runs-share-one-test-DB trap while this session's own gates happened to be running.
-  **Do not commit these 3 files as they stand** — `NEXT-PROMPT.md` is written to be pasted into the
-  next session, and pasting it would tell that session to blow away `node_modules` chasing a
-  problem that isn't there. Since the state file never advanced, a fresh `/daily-review` run today
-  would cover the identical range (`d404a70..4b06a0e`) and should produce accurate output — **that
-  is Ian's call to trigger, not either session's to run unprompted.**
+- **⛔ The purge and posted entries** — DEF-079. Fixed with TRUNCATE; do not revert to DELETE.
+- **The balance check is DEFERRED** — every entry, draft included, must balance and have two lines
+  **at commit**. An unbalanced draft cannot exist, which is why each opening figure is its own
+  balanced pair against `3900`.
+- **`requires_party` accounts** — `1120`, `1140`, `1210`, `1220`, `1250`, `2110`, `2150`, `2400`,
+  `2500` refuse a line with no party. Test fixtures hit this repeatedly.
+- **Pinned guards are decisions, not chores** — the account count (97→100 across this session), the
+  capability count (47→48), the RLS and cutover registries. Each one caught something real.
+- **The Bash tool mangles markdown prose** — backticks in `git commit -m` are command substitution:
+  words vanish and it exits 0. Use `-F` or the Write tool.
 
 ## The paste-ready prompt
 
 ```
-Continue Shareat System at C:\Users\ianla\webapps\shareat-system.
+Continue on shareat-system (C:\Users\ianla\webapps\shareat-system).
 
-Read docs/HANDOFF-TODAY.md first, then docs/RULES.md, then the PROJECT_BIBLE.md
-sections it cites for your area.
+Read docs/RULES.md, then docs/HANDOFF-TODAY.md. Waves 0–5 and the cutover are
+built; T-136 cash custody, T-137 statutory discount logbook and T-146 OCR are
+the only tasks left, all designed and unstarted.
 
-⚠️ FIRST: the aging-basis bible row is drafted in docs/tasks/130-accounts-payable.md
-(Invariant 11) but not yet landed in PROJECT_BIBLE.md — only the Opus planner may
-amend it (§14). Land it before or alongside T-131.
+Standing rules that catch agents out: verify v1's shape at source before
+designing (ERP-rebuild is READ-ONLY and its name lies — it is the OLD live
+ERP); assess a new feature before building it and be willing to argue against
+it (/research-evaluate-propose); update docs/ROADMAP.html every wrap-up.
 
-Next task: T-131 accounts receivable — finally posts to the 1210 control account
-T-129's customers already derives a balance from. Write docs/tasks/131-*.md as a
-spec BEFORE any code (bible §1.2a). T-130 (docs/tasks/130-accounts-payable.md) is
-now the reference pattern for "control account + subledger + open-item
-allocation" — read it as a template for structure, not as a source of AR-specific
-answers. Ground the actual AR rules in reading ERP-rebuild as requirements, never
-as design. ERP-rebuild is the OLD live ERP and is read-only — the name lies.
-
-Gates at HEAD (9a3cd96): typecheck · 598 unit · 998 integration · build, all green.
-There is NO lint script in this repo (DEF-027) — do not report one.
-
-Before writing a migration, read DEF-073: db:generate is unusable here. Hand-write
-it and journal with previous.when + 86400000.
-
-Before writing any RLS policy, use app_current_org() — not a raw
-current_setting('app.org_id', true)::uuid cast, which throws instead of denying on
-an empty org_id. This is LIVE, not theoretical (DEF-077, corrected mid-session
-after an initial "unreachable" call was wrong): SET LOCAL on a custom GUC resets
-to '' on commit, not NULL, so a pooled connection previously used for a staff
-request leaves app.org_id as '' for the next request that sets no org (the
-customer principal). ~10 pre-existing tables still carry the bug — ask Ian
-whether to fold a fix into your own task or do it as its own.
-
-If you ever need to PROVE an RLS policy denies something: SET LOCAL ROLE
-shareat_app first (the local dev superuser connection bypasses RLS entirely), AND
-use a max: 1 pool that actually exercises connection reuse (a fresh connection
-hides the GUC-reset bug above). Both traps bit the previous session on this exact
-finding, in that order.
-
-Verify UI in a browser before claiming a screen works — T-130 found a real bug
-this way (a shared server action redirecting to the wrong page on error) that
-998 passing tests did not catch.
-
-Check `git branch --show-current` before committing, not only at session start —
-another session sharing this machine can check out a different branch mid-session.
-If it has, commit ONLY your own files explicitly — never sweep unrecognized
-uncommitted output into your commit. docs/FILE-MAP.md, docs/reviews/NEXT-PROMPT.md,
-and docs/reviews/2026-08-28.md are an INTERRUPTED /daily-review run's own declared
-outputs (its git commit step never ran — blocked by a since-removed stale
-.git/index.lock) sitting uncommitted as of this handoff. Two of its three findings
-are stale/false (a "broken toolchain" that both sessions' own gate runs disprove) —
-do NOT commit or paste NEXT-PROMPT.md as-is. Ask Ian whether to discard the 3
-files and re-run /daily-review fresh (its state file never advanced past
-d404a70, so a fresh run covers the same range) — do not decide this yourself.
+Start with T-136 cash custody unless Ian says otherwise. Spec first —
+docs/tasks/136-cash-custody.md exists as a design.
 ```
