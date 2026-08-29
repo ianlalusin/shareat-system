@@ -3,7 +3,9 @@
 > **Status:** SPEC, 2026-08-29. Written before implementation (bible §1.2a).
 > **Depends on:** T-172 (the dispatched order), T-165 (the perpetual shape), T-163 (the receipt
 > posting), T-166 (the delivery document it auto-creates).
-> **v1 read at source** — `branch-order-receive.actions.ts` (698 lines),
+> ⭐ **v1 RE-READ AT SOURCE 2026-08-29**, at Ian's instruction. §9 records what the source
+> added — including a DIVERGENCE from v1 this spec must state rather than inherit.
+> **v1 read at source** — `branch-order-receive.actions.ts` (780 lines),
 > `commissary-delivery-expense.actions.ts`, shared gate `autobook.ts:27-56`.
 > `docs/discovery/14` §O rows 13–17, and the *"Intent worth preserving"* entries for both.
 > ⭐ **`docs/discovery/14` calls this "the single most important cross-domain rule in the whole
@@ -126,6 +128,9 @@ grants. A one-sided check would break the highest-volume commissary flow — inv
    goods in a truck that never arrived are a real asset until somebody says otherwise.
 5. **No revenue leg. No `ar_charge`. The credit limit is not consulted.** A branch is not extended
    credit (T-133 invariant 4).
+   ⛔ **And no deferred cost recognition either.** v1 posts NO AP at receipt and has the branch
+   expense the delivery later; v2 posts the transfer here and nothing afterwards, so there is no
+   window in which a branch holds stock it has not accounted for (§9.1).
 6. ⚠️ **Unit-mismatch guard:** if the branch item's `base_unit` differs from what was dispatched, the
    **movement and the entry are written and flagged, and the branch BALANCE is skipped**. v1's
    reasoning is exactly right and is kept: *"adding commissary-denominated qty onto a branch balance
@@ -137,7 +142,10 @@ grants. A one-sided check would break the highest-volume commissary flow — inv
 10. **Period lock applies**, on both stores' legs — which is one entry, so one check.
 11. **The branch's layers are created at the received quantity × the line rate**, confirmed, and
     never provisional.
-12. **A short receipt does not block the confirm.** It posts what arrived and leaves the difference
+12. ⚠️ **A difference under 0.005 base units is not a discrepancy.** A measurement tolerance —
+    two scales disagreeing by five grams — carried as a named constant with its reason, and NOT
+    the float defence T-161 deleted (§9.4).
+13. **A short receipt does not block the confirm.** It posts what arrived and leaves the difference
     for T-174. ⛔ Blocking here is what forced v1's retroactive AR credits.
 
 ## 8. Tests
@@ -170,8 +178,76 @@ grants. A one-sided check would break the highest-volume commissary flow — inv
 13. `Σ 1310+1320+1330+1340` still equals `Σ` open-layer value across **both** stores — the Phase 3
     gate on the cross-store path.
 14. Live route on 9008: confirm a receipt as a branch cashier and read both stores' ledgers.
+15. ⭐ **No AP and no revenue exist anywhere after a confirm** — asserted by absence across `2110`,
+    `1210` and every `4xxx`. This is the v1 shape that must NOT be inherited (§9.1).
+16. A received quantity 0.004 under the dispatched one raises no discrepancy; 0.006 does.
 
-## 9. Out of scope
+## 9. ⭐ Read at source 2026-08-29 — one divergence and three details
+
+### 9.1 ⛔ v1 posts NO AP at receipt, and v2 must NOT copy that
+
+v1's own header:
+
+> *"Branch: stock IN for received qty per line + an auto-created delivery doc. **NO AP is posted
+> here** — the branch recognizes the cost later by expensing the commissary delivery (a COGS-group
+> expense), which single-sources the AP (or cash). Commissary: AR debit for received total, stock
+> OUT, arTransaction doc + AR customer outstanding bumped."*
+
+⚠️ **That whole shape goes.** v1 treats a branch as a *customer*: AR, revenue, and a payable the
+branch books later as an expense. ⭐ **A branch is not a customer of its own company** — and v1's
+own `excludeBranchSales` flag is the tell that the recognition was wrong upstream (T-133 §3).
+
+**v2 posts the four-leg internal transfer at receipt and nothing later.** There is no "recognise
+the cost later" step, so there is no window in which a branch holds stock it has not accounted for
+— which is the window v1's deferred expensing creates and which ADR-009 measured as the expensing
+lag.
+
+⭐ **The auto-created delivery document survives** (T-166's `kind='commissary'`, photo-gate exempt).
+It is the branch's own record of what arrived; it just no longer carries a deferred cost.
+
+### 9.2 ⭐ The incident, quoted precisely
+
+The first draft dated the drift to the traced order. The **sweep** and the **order** are different
+dates, and `autobook.ts` says so:
+
+> *"the wrapper was tightened to manager/admin-only in the **2026-07-19 cross-store sweep** while
+> the receipt gate still admitted cashiers, and every cashier-received delivery from then on
+> silently booked no AP."*
+
+⭐ **And v1's argument for why the two must be one is better than mine, so use it:**
+
+> *"Booking the mirroring AP is a **deterministic consequence** of that receipt — amounts come from
+> the delivery, categories from the pre-approved `commissaryItemMap` — so **anyone trusted to
+> receive must also be able to book**, or the branch silently ends up holding stock with no
+> payable."*
+
+The roles are `BRANCH_EXPENSE_POSITIONS = ['cashier', 'inventory staff']`, plus manager/admin.
+⚠️ Store-level access is a **separate** check owned by each caller; the shared predicate decides
+role only. Two dimensions, deliberately not merged.
+
+### 9.3 The unit-mismatch guard, in full
+
+Three details the summary compressed:
+
+1. ⭐ **Enforced only when the branch item's unit is KNOWN.** An unmapped same-id fallback posts as
+   before — the guard refuses to act on an assumption it cannot check.
+2. ⭐ **A mismatched line writes the ledger entry (flagged) and SKIPS the balance move**, so the
+   movement is auditable while the corrupt number never lands. v1's reason: adding
+   commissary-denominated quantity to a balance the branch reads in its own unit *"is exactly the
+   corruption we're preventing."*
+3. ⚠️ **Computed BEFORE the transaction**, deliberately — *"so a tx retry can't duplicate
+   warnings."* A retry that re-emits every warning trains people to ignore them.
+
+### 9.4 ⚠️ A discrepancy tolerance of 0.005
+
+`hasDiscrepancy = Math.abs(received - fulfilled) > 0.005`.
+
+⭐ **A measurement tolerance, like T-176's `PRODUCTION_QTY_EPS`, not a float defence like the
+`1e-6` T-161 deleted.** Five grams between what a commissary weighed out and a branch weighed in is
+two scales disagreeing, not a discrepancy worth a manager's morning. **Carry it as a named constant
+with its reason**, and say which kind it is.
+
+## 10. Out of scope
 
 ⛔ **Discrepancy disposition.** T-174 decides what the `1340` remainder becomes.
 ⛔ **Franchise receipts.** No second org (T-133 §4, bible row 111). The `inter_entity` treatment is
@@ -180,7 +256,7 @@ still refused, and the refusal names the ADR.
 ⛔ **A branch payment to the commissary.** `1250`/`2150` are settled by T-139's `money_transfers`,
 which already posts the four-leg cross-store shape with cash in place of goods.
 
-## 10. Done when
+## 11. Done when
 
 - [ ] Migration hand-written (DEF-073), next free number, journalled `previous.when + 86400000`.
 - [ ] `docs/POSTING-PATTERNS.md`'s `commissary_dispatch` section carries **the whole arc** —

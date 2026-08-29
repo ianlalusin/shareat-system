@@ -3,7 +3,10 @@
 > **Status:** SPEC, 2026-08-29. Written before implementation (bible §1.2a).
 > **Depends on:** T-171 (catalogue and map), T-160/T-161 (both stores' locations and ledger),
 > T-132/T-133 (`trade_orders` — ⭐ see §2), T-151 (price and outbound fee).
-> **v1 read at source** — `branch-order.actions.ts:307-640`, `branch-order-fulfilment.actions.ts`.
+> ⭐ **v1 RE-READ AT SOURCE 2026-08-29**, at Ian's instruction — the first draft cited
+> `docs/discovery/14` §O rather than the code. §9 records what the source added.
+> **v1 read at source** — `branch-order.actions.ts` (640), `branch-order-fulfilment.actions.ts` (703),
+> `order-helpers.ts`, `autobook.ts`.
 > `docs/discovery/14` §O rows 8–12.
 
 ## 1. Goal
@@ -124,6 +127,10 @@ dispatchOrder(id)                   // stock out -> 1340, §5
    ordering, applied at the point the line becomes real.
 7. ⭐ **Dispatch is refused if `fulfilled_quantity` exceeds the source location's on-hand.**
    Unknown or untracked counts as **zero** — fail closed.
+   ⚠️ **The same predicate fails OPEN at receipt** (T-173), and the asymmetry is deliberate: an
+   untracked item is the commissary's data problem, so refusing to DISPATCH makes them fix it,
+   while refusing to RECEIVE punishes the branch for someone else's gap and leaves goods
+   physically on their floor that the system will not admit exist (§9.1).
 8. **Dispatch posts the `1340` movement in the same transaction as the status flip** (§5), and is
    period-locked.
 9. **Void before dispatch posts nothing. Void after dispatch reverses the `1340` movement.**
@@ -132,6 +139,10 @@ dispatchOrder(id)                   // stock out -> 1340, §5
     one document, and each field has exactly one owner.
 11. **A stated rate on a line wins over the branch price** (T-151 invariant 6), and is **captured**
     on the line so a later price change never rewrites a dispatched order.
+12. ⭐ **The category that lets an order be SUBMITTED is the same one the receipt POSTS with — one
+    definition, never two.** v1 carries `hasFullCategory` for exactly this, shared by the
+    submit block and the auto-book test; had they drifted, an order could pass submit while its
+    lines were invisible to booking — the ₱12,184.71 failure by a second route (§9.2).
 
 ## 8. Tests
 
@@ -153,8 +164,58 @@ dispatchOrder(id)                   // stock out -> 1340, §5
 12. A line with a stated rate keeps it after `item_pricing` changes.
 13. Dispatch into a closed period is refused.
 14. Live route on 9008: place, accept, fulfil, propose a substitution, approve it, dispatch.
+15. ⭐ **The fail-direction asymmetry, both halves in one test:** an item with NO tracked balance
+    is refused at dispatch and ACCEPTED at receipt. A test of only the dispatch half would pass
+    against an implementation that had copied the function and forgotten the flag.
+16. An order whose line lost its expense category cannot be submitted — and the same predicate is
+    what the receipt reads, asserted by using one helper in both.
 
-## 9. Out of scope
+## 9. ⭐ Read at source 2026-08-29 — two rules the summary did not carry
+
+### 9.1 ⭐ The stock gate is fail-CLOSED at dispatch and fail-OPEN at receipt
+
+`insufficientStockLines(lines, onHand, { treatUnknownAsZero })`, and v1 states the asymmetry in
+its own comment:
+
+> *"`treatUnknownAsZero` blocks items with no tracked balance (used at dispatch — the commissary
+> must set inventory first); **leave it false at receipt so the branch isn't stranded by the
+> commissary's untracked items**."*
+
+⭐ **That is exactly right and the first draft had only half of it.** An untracked item is the
+*commissary's* data problem: refusing to dispatch makes them fix it, refusing to *receive* punishes
+the branch for someone else's gap and leaves goods physically on the branch floor that the system
+will not admit exist.
+
+⚠️ **Two different fail directions for one predicate, chosen per call site.** Copy the parameter,
+not just the function.
+
+### 9.2 ⭐ `hasFullCategory` — a SECOND pair of gates that must share one definition
+
+The ₱12,184.71 incident (T-173) is about the *authority* gates drifting. There is a second shared
+predicate right beside it, and it exists for the same reason:
+
+```ts
+hasFullCategory(m) = expenseEntryId && expenseCategory && expenseSubCategory
+```
+
+Used by **both** the order-submit block and the auto-book inclusion test. ⭐ If they drifted, an
+order could pass submit while its lines were invisible to auto-book — silently unbooked AP again,
+by a different route.
+
+⚠️ In v2 the equivalent is T-172 invariant 2's pre-submit hardening: **the same resolved category
+that lets an order be submitted is the one the receipt posts with.** One definition, or the bug
+returns wearing different clothes.
+
+### 9.3 The one-open-order statuses, exactly
+
+`draft → submitted → accepted → fulfilling → ready → dispatched` all block. **Only `received`,
+`cancelled` and `rejected` free the branch.** v1's reason for `dispatched` blocking: *"a dispatched
+order is goods-in-transit not yet received, so it BLOCKS — the branch must confirm receipt first."*
+
+⚠️ And it guards the **low-stock auto-order** too, which routes through the same create path
+(T-175). A branch cannot accumulate auto-drafted orders it never submits.
+
+## 10. Out of scope
 
 ⛔ **Confirm receipt and everything it posts.** T-173.
 ⛔ **Discrepancy resolution, settle, defer.** T-174.
@@ -162,7 +223,7 @@ dispatchOrder(id)                   // stock out -> 1340, §5
 ⛔ **A `branch_orders` table.** §2.
 ⛔ **Franchise (`inter_entity`) orders.** Still refused, naming T-133 §4 — no second org exists.
 
-## 10. Done when
+## 11. Done when
 
 - [ ] Migration hand-written (DEF-073), next free number, journalled `previous.when + 86400000`.
       ⚠️ The new columns are on an existing table — **RLS policies and indexes must be checked, not
