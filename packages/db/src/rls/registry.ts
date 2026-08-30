@@ -38,6 +38,116 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     reason: 'The tenancy boundary itself. A principal sees its own organization row and no other.',
   },
   stores: { scope: 'org_column', reason: 'Branches belong to one org. A franchise never sees another org’s stores.' },
+
+  // ---- T-160: the room model ------------------------------------------------------------
+  location_types: {
+    scope: 'org_column',
+    reason:
+      'How an org names its kinds of space. A franchise defines its own and must never see ' +
+      'another org’s.',
+  },
+  stock_usage_records: {
+    scope: 'org_column',
+    reason: 'A usage record belongs to a store, and a store to one org.',
+  },
+  stock_usage_lines: {
+    scope: 'derived',
+    reason: 'No org_id of its own — reached only through its record, like delivery_lines.',
+    via: 'exists (select 1 from stock_usage_records r where r.id = record_id and r.org_id = app_current_org())',
+  },
+
+  // ---- T-175: thresholds and the order thread ---------------------------------------------
+  store_item_thresholds: {
+    scope: 'org_column',
+    reason: 'A threshold belongs to a store, and a store to one org.',
+  },
+  trade_order_messages: {
+    scope: 'org_column',
+    reason:
+      'A conversation between two stores of one org. ⚠️ It carries its own `org_id` rather than ' +
+      'reaching through the order, because it is read on its own far more often than with one.',
+  },
+
+  // ---- T-174: the transit shortfall ------------------------------------------------------
+  trade_discrepancies: {
+    scope: 'org_column',
+    reason: 'A dispute between two stores of ONE org. It never spans one.',
+  },
+
+  // ---- T-171: the commissary catalogue --------------------------------------------------
+  commissary_links: {
+    scope: 'org_column',
+    reason:
+      'Both stores in a link belong to one org — that is what makes the transfer internal. A ' +
+      'franchise’s supply arrangements are its own.',
+  },
+  commissary_item_offerings: {
+    scope: 'org_column',
+    reason: 'A commissary’s catalogue belongs to its store, and a store to one org.',
+  },
+  commissary_item_map: {
+    scope: 'org_column',
+    reason: 'A correspondence between two stores of the SAME org. It never spans one.',
+  },
+
+  count_sessions: {
+    scope: 'org_column',
+    reason: 'A count belongs to a store, and a store to one org.',
+  },
+  count_session_locations: {
+    scope: 'derived',
+    reason: 'Reached only through its session.',
+    via: 'exists (select 1 from count_sessions s where s.id = session_id and s.org_id = app_current_org())',
+  },
+  count_lines: {
+    scope: 'derived',
+    reason: 'Reached only through its session.',
+    via: 'exists (select 1 from count_sessions s where s.id = session_id and s.org_id = app_current_org())',
+  },
+
+  deliveries: {
+    scope: 'org_column',
+    reason: 'A delivery belongs to a store, and a store to one org.',
+  },
+  delivery_lines: {
+    scope: 'derived',
+    reason:
+      'No org_id of its own — a line is only ever reached through its delivery, and duplicating ' +
+      'the org onto it would be a second copy of the same fact to keep in step.',
+    via: 'exists (select 1 from deliveries d where d.id = delivery_id and d.org_id = app_current_org())',
+  },
+
+  stock_layers: {
+    scope: 'org_column',
+    reason: 'A layer belongs to a store, and a store to one org. Cost is as tenant-private as money.',
+  },
+  stock_layer_consumptions: {
+    scope: 'org_column',
+    reason:
+      'The subledger carries its own org rather than deriving it through the layer: it is joined ' +
+      'from movements as often as from layers, so the policy belongs on the row being read.',
+  },
+
+  stock_movements: {
+    scope: 'org_column',
+    reason:
+      'Every movement carries its org directly. ⚠️ org_column rather than derived through the ' +
+      'location: this is the highest-volume table in the domain and every on-hand query filters ' +
+      'it, so the policy belongs on the row being read, not behind a join.',
+  },
+
+  stock_locations: {
+    scope: 'org_column',
+    reason:
+      'A room belongs to a store, and a store to one org. ⚠️ org_column rather than derived ' +
+      'THROUGH the store: every stock query filters by location, so carrying org_id here means ' +
+      'the policy is checked on the table actually being read rather than through a join the ' +
+      'planner might reorder.',
+  },
+  departments: {
+    scope: 'org_column',
+    reason: 'An org’s own attribution vocabulary. Never shared across a tenancy boundary.',
+  },
   persons: { scope: 'org_column', reason: 'The staff roster is per-org. A franchise owner must not see Ian’s staff.' },
   accounts: {
     scope: 'org_column',

@@ -27,6 +27,28 @@ export * from './trade';
 export * from './channel-settlements';
 export * from './findings';
 export * from './cutover';
+
+// ---- Phase 3, the inventory wave (T-160 to T-173) --------------------------------------------
+// ⚠️ These had no export line at all until T-173. The package exposes only `.`, so nothing outside
+// `packages/domain` could reach them — every UI route in the wave would have been blocked on this
+// before it was blocked on anything interesting.
+export * from './stock/quantity';
+export * from './stock/layers';
+export * from './stock/consume';
+export * from './stock/receipt-posting';
+export * from './stock/consumption-posting';
+export * from './stock/invoice-link';
+export * from './stock/wastage-reasons';
+export * from './stock/usage';
+export * from './stock/count-sessions';
+export * from './stock-locations/rules';
+export * from './deliveries/receive';
+export * from './deliveries/duplicate-risk';
+export * from './commissary/outcome';
+export * from './commissary/transfer';
+export * from './commissary/discrepancy';
+export * from './commissary/auto-order';
+export * from './commissary/messages';
 export * from './statutory-discounts';
 // T-154 — the staff master record: positions, employments, the roster (Phase 4, lane B).
 export * from './people';

@@ -49,6 +49,15 @@ export * from './trade';
 export * from './channel-settlements';
 export * from './findings';
 export * from './cutover';
+export * from './stock-locations';
+export * from './stock-ledger';
+export * from './stock-layers';
+export * from './deliveries';
+export * from './stock-usage';
+export * from './count-sessions';
+export * from './commissary';
+export * from './trade-discrepancies';
+export * from './item-thresholds';
 export * from './statutory-discounts';
 
 // T-154 — the staff master record: positions, employments, employment_positions.

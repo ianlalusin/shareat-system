@@ -120,3 +120,89 @@ timeout. **A clean re-run passes 1298/1298.**
 ⚠️ Recorded because a green retry after a red run is only trustworthy when the reason for the red
 one is named. If you see a lone timeout-shaped failure at an implausible duration, check whether
 the machine slept before hunting for a defect.
+
+## T-171 / T-172 / T-173 — the commissary pipeline (2026-08-29)
+
+The ledger side is built and green; **nothing with a URL exists yet**, and neither does the
+`confirm_receipt` capability row that goes with it (T-173 §12).
+
+| Needs a browser | Why it cannot be checked here |
+|---|---|
+| `apps/erp/src/app/commissary/orders/**` — the branch order form, the commissary's fulfil screen, the branch's receive screen | Not written. Port 9008 is held by another lane |
+| The catalogue read path and price resolution (T-171 §5) | Not written — it is the order form's data source |
+| ⚠️ **`trade_orders_submit_hardening_trg`'s three refusals, seen by a human** | The trigger is tested at the SQL level, but its messages are what a branch manager actually reads at 6am with a truck waiting. They should be read once by a person before they are the only explanation someone gets |
+
+⭐ **One thing to check that is NOT a screen:** run `npm run db:migrate` in each of the three
+worktrees and confirm the last journal tag matches what the database applied. **DEF-094** — the
+three lanes share one `shareat_dev`, and a lane whose migration `when` is below the shared maximum
+is skipped with no error and exit 0.
+
+## T-174 — discrepancy disposal and the day-open block (2026-08-30)
+
+| Needs a browser | Why it cannot be checked here |
+|---|---|
+| `apps/erp/src/app/commissary/discrepancies/**` — the list and the resolve dialog | Not written. Port 9008 is held by another lane |
+| ⭐ **`TransitShortfallBlockedError`'s message, read by a real manager** | A commissary manager meets this at 6am when the day will not open. The message names the quantity, the value and how many others there are — but whether that is enough to act on is a question only a person looking at the screen can answer |
+| The `resolve_trade_discrepancy` / `charge_staff_for_discrepancy` capability rows | Deliberately unbuilt — no caller yet, so their ✗ cannot be tested (T-174 §10.4) |
+
+⚠️ **One thing worth watching for in the data, not the browser:** `1230 Advances to employees`
+only ever grows (DEF-099). If anyone charges a shortfall to a staffer, that receivable has no
+drawdown path until Phase 5.
+
+## T-175 — low stock, the auto-draft, and the order thread (2026-08-30)
+
+| Needs a browser | Why it cannot be checked here |
+|---|---|
+| `apps/erp/src/app/inventory/low-stock/**` — the list and the threshold editor | Not written. Port 9008 is held by another lane |
+| The order thread on the order page | Not written |
+| ⭐ **An auto-drafted line, seen by the branch manager it is for** | This is §3's question in the only form that settles it. The line arrives with a SUGGESTED quantity rather than v1's zero — whether that reads as helpful or as presumptuous is a judgement nobody can make from a test |
+
+---
+
+## ⚠️ `docs/ROADMAP.html` is stale for the WHOLE Phase 3 wave, not just one lane
+
+Its task ids stop at **T-152** and it has no Phase 3 section at all, so T-160 through T-175 —
+every task in the inventory wave, across every lane — are invisible there. Each of those specs'
+*Done when* lists "update `docs/ROADMAP.html`" and none of them has.
+
+⛔ **Deliberately not fixed from inside one lane.** Three worktrees are writing tasks into that
+wave right now, and a single-file HTML roadmap rewritten by one of them is a conflict the other two
+discover at merge. It wants one pass, by whoever merges the lanes — or a generated file, which is
+the better answer given it is derived from `docs/tasks/` anyway.
+
+---
+
+# ✅ CLEARED 2026-08-30 — port 9008 came free and the wave got its screens
+
+⚠️ **The port was never actually taken.** The listener on 9008 was a ghost: a dead PID (51408)
+holding the socket, the same shape as the `9002 ghost listener` landmine. Everything below was
+blocked on a process that no longer existed.
+
+| Was pending | Now |
+|---|---|
+| T-171 catalogue read path | ⚠️ still unbuilt — it belongs with the order FORM, which is not built either |
+| T-172 order UI and state transitions | ⚠️ partly: `/commissary/orders` and the detail page READ an order. Creating, accepting, fulfilling and dispatching are not built |
+| T-173 receive screen | ⛔ not built. `confirmReceipt` still has no UI caller — the pipeline is driven by `npm run dev:seed:inventory` |
+| T-173/T-174/T-175 capability rows | ✅ **all four declared and covered** — `confirm_receipt`, `resolve_trade_discrepancy`, `set_item_threshold`, `post_order_message`. `authorize.test.ts` generates their denial and positive cases from the matrix itself |
+| T-174 discrepancy screen | ✅ built and used — decide, and defer once |
+| T-174 `TransitShortfallBlockedError`'s message read by a person | ⚠️ the BANNER is verified; the thrown message on `/sales-days/new` is not — nothing has tried to open a blocked day through the UI |
+| T-175 low-stock list and threshold editor | ✅ built and verified against real data |
+| T-175 auto-drafted line seen by a branch manager | ⛔ **still the open question.** `ensureAutoOrderLines` has no UI caller, so no line has ever been auto-drafted on a screen |
+| DEF-094 migrate check across lanes | ⚠️ still worth doing — this lane bumped past it twice by hand |
+
+## ⭐ What the screens found on their first run
+
+`/inventory` renders bible invariant 6's inventory arm — FIFO layers against `1310+1320+1330` —
+and immediately showed **Malvar ₱480 out of tie**. Traced: a pre-existing `demo_seed` fixture in
+`shareat_dev` posts `Dr 5300 / Cr 1310` for ₱480 with **no stock movement behind it**. Not this
+lane's data, and left in place on purpose: it is a truthful demonstration that the panel works.
+
+⚠️ **It also means `shareat_dev` has never tied**, and nobody knew, because until 2026-08-30 there
+was nowhere to look.
+
+## ⛔ Still no screen at all
+
+Receiving (T-166), usage and wastage (T-168), count sessions (T-169), and the whole ordering
+lifecycle (T-172). **The engine for all of them is green and unreachable.** They are the next
+UI slice, and the pattern is now established: a `lib.ts` of reads, a `page.tsx`, an `actions.ts`
+that authorises and calls the domain, and nothing re-implemented in between.

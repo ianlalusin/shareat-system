@@ -86,6 +86,11 @@ export type Capability =
   | 'adjust_inventory'
   | 'record_wastage'
   | 'charge_staff_for_discrepancy'
+  // Inventory — T-173/T-174/T-175, the commissary pipeline
+  | 'confirm_receipt'
+  | 'resolve_trade_discrepancy'
+  | 'set_item_threshold'
+  | 'post_order_message'
   // Suppliers, buyers and credit
   | 'approve_supplier'
   | 'approve_buyer'
@@ -148,6 +153,10 @@ export const CAPABILITIES: readonly Capability[] = [
   'adjust_inventory',
   'record_wastage',
   'charge_staff_for_discrepancy',
+  'confirm_receipt',
+  'resolve_trade_discrepancy',
+  'set_item_threshold',
+  'post_order_message',
   'approve_supplier',
   'approve_buyer',
   'set_credit_limit',
@@ -215,6 +224,21 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   adjust_inventory: 'store',
   record_wastage: 'store',
   charge_staff_for_discrepancy: 'store',
+
+  /**
+   * ⭐ **Store-scoped, and BOTH stores are legitimate callers** — T-173 invariant 8. A
+   * commissary-side actor and a branch-side actor both confirm receipts, from opposite grants; a
+   * one-sided check would break the highest-volume commissary flow. The domain checks that the
+   * actor's store is one of the two on the order, which is the half `authorize` cannot know.
+   */
+  confirm_receipt: 'store',
+  /**
+   * ⚠️ The goods are the COMMISSARY's asset, so only its side decides what the difference was
+   * (T-174 invariant 11). `resolveDiscrepancy` enforces WHICH store; this decides which ROLE.
+   */
+  resolve_trade_discrepancy: 'store',
+  set_item_threshold: 'store',
+  post_order_message: 'store',
 
   // T-130 correction: `suppliers` has no store_id — it is org-wide master data, same shape
   // as `customers` (ADR-008), which uses the org-scoped `manage_chart_of_accounts` for its
@@ -313,6 +337,19 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   adjust_inventory: { super_admin: true, admin: true, manager: true, staff: false },
   record_wastage: { super_admin: true, admin: true, manager: true, staff: true },
   charge_staff_for_discrepancy: { super_admin: true, admin: true, manager: true, staff: false },
+
+  // ⭐ Staff too: a branch cook signs for the crates that arrive, and requiring a manager on site
+  // to accept a delivery is the rule people work around by sharing a login. The two-sided store
+  // check is the real control here, not the role.
+  confirm_receipt: { super_admin: true, admin: true, manager: true, staff: true },
+  // ⛔ Manager and up. Deciding that goods were lost, or charging a named person for them, is a
+  // judgement with a posting behind it — the same class as `adjust_inventory`.
+  resolve_trade_discrepancy: { super_admin: true, admin: true, manager: true, staff: false },
+  // ⭐ Staff too, per v1: the person who notices the shelf is empty is the person on the floor,
+  // and making them find a manager is how thresholds stay unset (DEF-100's neighbour — an unset
+  // threshold is invisible, so friction here has no counter-pressure).
+  set_item_threshold: { super_admin: true, admin: true, manager: true, staff: true },
+  post_order_message: { super_admin: true, admin: true, manager: true, staff: true },
 
   approve_supplier: { super_admin: true, admin: true, manager: true, staff: false },
   approve_buyer: { super_admin: true, admin: true, manager: true, staff: false },

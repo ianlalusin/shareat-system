@@ -521,6 +521,165 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'it rebuilds from the first post-cutover invoice.',
   },
 
+  // ---- T-160: the room model ------------------------------------------------------------
+  location_types: {
+    // ⭐ keep: WHAT KINDS of space a store has is configuration, and it describes the building
+    // rather than anything the books did. Nothing about "we have a stockroom and a kitchen"
+    // becomes false when the ledger restarts.
+    class: 'keep',
+    reason:
+      'The catalogue of physical space kinds — Stockroom, Display, Kitchen, Receiving. ' +
+      'Configuration describing the premises, carrying no balance and no anchor. Re-keying it ' +
+      'at cutover would be pointless work with a fresh chance to mistype a room.',
+  },
+  stock_usage_records: {
+    class: 'purge',
+    reason:
+      'Operational stock movement documents — the same class as deliveries and stock_movements. ' +
+      'On 2027-01-01 every location opens at the counted figure (T-134), so the history of how it ' +
+      'got there belongs to the old books.',
+  },
+  stock_usage_lines: {
+    class: 'purge',
+    reason: 'The detail of a usage record, by CASCADE. Same class as its parent.',
+  },
+
+  // ---- T-175: thresholds and the order thread ---------------------------------------------
+  store_item_thresholds: {
+    // ⭐ keep: WHEN to reorder is a standing judgement about how this branch runs — the same class
+    // as `item_pricing`. It took a manager real thought per item, it carries no balance and no
+    // anchor, and nothing about "we reorder pork at 20 kg" becomes false when the ledger restarts.
+    class: 'keep',
+    reason:
+      'The reorder threshold per store per item — configuration, and the single most tedious ' +
+      'thing in this wave to re-key. ⚠️ A threshold missed at cutover is invisible: the item ' +
+      'simply never appears on the low-stock list again, and nothing says why.',
+  },
+  trade_order_messages: {
+    class: 'purge',
+    reason:
+      'The conversation about one order, by CASCADE. ⚠️ It is an audit trail, and an audit trail ' +
+      'of documents that no longer exist is not evidence of anything — keeping it while purging ' +
+      'the orders would leave messages discussing quantities nobody can look up.',
+  },
+
+  // ---- T-174: the transit shortfall ------------------------------------------------------
+  trade_discrepancies: {
+    // ⛔ purge: a dispute about a shipment that moved in the OLD books belongs to the old books.
+    // ⚠️ An unresolved one at cutover is not a data problem to migrate — it is a decision
+    // somebody still owes, and it must be made before the year closes, not carried across it.
+    class: 'purge',
+    reason:
+      'An operational dispute about one dispatch, and the `1340` balance it disposes of purges ' +
+      'with the rest of the ledger. On 2027-01-01 every location opens at the counted figure ' +
+      '(T-134), which is the answer to every transit question the old books had left open.',
+  },
+
+  // ---- T-171: the commissary catalogue --------------------------------------------------
+  commissary_links: {
+    // ⭐ keep: WHICH branch may order from WHICH commissary is a standing arrangement about the
+    // shape of the business, not a transaction. Nothing about "Malvar orders from Lipa" becomes
+    // false when the ledger restarts.
+    class: 'keep',
+    reason:
+      'The supply arrangement between two stores — configuration, carrying no balance and no ' +
+      'anchor. Re-keying it at cutover would be pointless work, and a missed pair silently stops ' +
+      'a branch ordering on 2 January.',
+  },
+  commissary_item_offerings: {
+    class: 'keep',
+    reason:
+      'What a commissary will dispatch, plus a manager-set cost of last resort. A catalogue, in ' +
+      'the same class as items and price lists. ⚠️ `manual_cost` is a CONFIGURED number, not a ' +
+      'derived one — it survives because nothing recomputes it.',
+  },
+  commissary_item_map: {
+    // ⭐ The single most expensive row here to re-key, and the most dangerous to get wrong: a
+    // missing map line is what makes a receipt land with nothing to credit.
+    class: 'keep',
+    reason:
+      'The cross-store item correspondence and the branch’s expense category for receiving it. ' +
+      'Configuration that took real effort to build and answers "which of MY products is this ' +
+      'commissary’s line" — a question the ledger restarting does not change.',
+  },
+
+  count_sessions: {
+    class: 'purge',
+    reason:
+      'A physical count is an operational event about a period that is ending. ⚠️ The 31 December ' +
+      'opening count is NOT this table — T-134 owns `opening_counts`, which is KEEP-classified ' +
+      'because it is the evidence behind the opening balance.',
+  },
+  count_session_locations: {
+    class: 'purge',
+    reason: 'Which rooms a count covered, by CASCADE. Same class as its session.',
+  },
+  count_lines: {
+    class: 'purge',
+    reason: 'The counted quantities and their variances. Same class as the session they belong to.',
+  },
+
+  deliveries: {
+    class: 'purge',
+    reason:
+      'The receiving document — operational, and the source of the stock_movements, stock_layers ' +
+      'and journal entries it created, all of which purge. ⚠️ Keeping deliveries while purging ' +
+      'what they caused would leave documents claiming stock that no longer exists.',
+  },
+  delivery_lines: {
+    class: 'purge',
+    reason: 'The detail of a delivery, hanging off it by CASCADE. Same class as its parent.',
+  },
+
+  stock_layers: {
+    // ⭐ purge, with stock_movements. A layer IS a valued receipt, so keeping layers while purging
+    // the movements that created them would leave cost with no quantity behind it — the two halves
+    // of one fact, separated.
+    class: 'purge',
+    reason:
+      'FIFO cost layers — the valued half of a stock receipt, and operational for exactly the ' +
+      'reason stock_movements is. ⚠️ The 2027-01-01 opening layer is written FRESH by the cutover ' +
+      'at counted value (T-134), so purging is what makes room for it rather than losing anything.',
+  },
+  stock_layer_consumptions: {
+    class: 'purge',
+    reason:
+      'The inventory subledger — which layer paid for which movement. Purged with both parents; ' +
+      'it is the detail behind journal entries that are themselves purged.',
+  },
+
+  stock_movements: {
+    // ⭐ PURGE, and it is the counterweight to `stock_locations` being KEEP. The rooms are
+    // configuration and survive; what was IN them is operational history and does not. On
+    // 2027-01-01 every store opens at zero on-hand and the opening count (T-134) is what puts
+    // stock back — which is row 106's "zero starting point" applied to quantity rather than money.
+    class: 'purge',
+    reason:
+      'The stock ledger — operational movements, the same class as journal_entries and expenses. ' +
+      'On-hand is derived from these rows, so purging them opens every location at zero, which is ' +
+      'exactly what the 31 December counted opening balance then replaces. ⚠️ Keeping them would ' +
+      'carry pilot stock into the real books while the ledger behind it was deleted.',
+  },
+
+  stock_locations: {
+    // ⭐ keep, and this is the one worth reading twice. The ROOMS survive; the STOCK IN THEM does
+    // not — stock lives in stock_movements (T-161), which purges. A room with no movements behind
+    // it is just a labelled shelf, and the shelf is still there on 2 January.
+    class: 'keep',
+    reason:
+      'The rooms themselves, not their contents. Stock is held in stock_movements, which purges ' +
+      'independently, so a kept room opens at zero on-hand exactly like a kept item opens with ' +
+      'no history. ⚠️ Purging these instead would delete the default-room and Receiving ' +
+      'configuration every store needs before it can receive anything at all.',
+  },
+  departments: {
+    class: 'keep',
+    reason:
+      'The attribution taxonomy usage is reported by — kitchen, bar. Org-level configuration, ' +
+      'the same class as expense_categories: a fixed vocabulary the reports group on, which ' +
+      'means nothing if it is re-invented per period.',
+  },
+
   store_item_sellability: {
     // ⭐ keep, like the items it qualifies: which store makes the bulgogi sauce and which buys it
     // is configuration about how the business operates, not activity. Nothing about it becomes

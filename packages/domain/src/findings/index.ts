@@ -67,6 +67,10 @@ export async function listFindings(
     ...(await findingsRepo.serviceChargeFloatAgeing(tx, orgId)),
     // T-153 — a till float not holding its configured amount.
     ...(await findingsRepo.tillFloatOffTarget(tx, orgId)),
+    // T-175 — a buyer store consuming items it has never set a reorder threshold for. ⭐ The
+    // replacement for v1's forcing function: nag the manager who can act, never block the cook
+    // who cannot.
+    ...(await findingsRepo.itemsMissingThreshold(tx, orgId)),
   ];
 
   const acks = await findingsRepo.liveAcknowledgements(tx, orgId);

@@ -150,6 +150,13 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
   // count is a PIN, so adding a capability is a deliberate act - which is exactly why it caught
   // this one before the matrix doc had a row for it.
   //
+  // ⭐ 49 -> 53 on 2026-08-30 (T-173/T-174/T-175): `confirm_receipt`,
+  // `resolve_trade_discrepancy`, `set_item_threshold`, `post_order_message`. All four had been
+  // DEFERRED across three task reports for the same reason — "no caller yet, so the ✗ cannot be
+  // tested" — and all four landed together the moment the commissary screens gave them one.
+  // ⚠️ That is the debt this pin is designed to make visible: a capability with no caller is a
+  // capability nobody has proved refuses anyone.
+  //
   // ⭐ 48 -> 49 on 2026-08-29 (T-152): `set_cash_policy`. STORE-scoped, admin and up, and
   // deliberately NOT manager — Ian: "configurable by admin". It is separate from
   // `manage_store_settings` because a manager must not be able to raise the ceiling their own
@@ -161,7 +168,11 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
   // ⭐ 50 -> 52 on 2026-08-30, at the T-137 merge: `record_statutory_discount` and
   // `void_statutory_discount`. Third independent addition in two days, on a third branch — the
   // count is the SUM of every lane's, never the last one to merge.
-  it('finds exactly 52 capability rows — NOT the "36" the task documents say in prose', () => {
+  // ⭐ 52 -> 56 on 2026-08-30, at the inventory merge: `confirm_receipt` (T-173),
+  // `resolve_trade_discrepancy` (T-174), `set_item_threshold` and `post_order_message` (T-175).
+  // FOURTH independent addition in three days, on a fourth branch. The count is the SUM of every
+  // lane's; taking one side of this conflict leaves a green test asserting a wrong number.
+  it('finds exactly 56 capability rows — NOT the "36" the task documents say in prose', () => {
     // docs/tasks/121-roles-and-access.md and CAPABILITY-MATRIX.md's own Contract section
     // both say "36 rows" / "36 capabilities". The table itself had 38: the two
     // ⚠️-flagged open cells (set_credit_limit, close_period) plus the two platform-only
@@ -178,7 +189,7 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // into the enforcement without also being written into the document people actually
     // read, and vice versa.
     const { rows } = parseCapabilityMatrixDoc();
-    expect(rows.length).toBe(52);
+    expect(rows.length).toBe(56);
   });
 
   it('has no duplicate capability names', () => {
@@ -249,10 +260,10 @@ describe('invariant 1 — every capability has an explicit decision for all four
     expect(problems).toEqual([]);
   });
 
-  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 52 capabilities', () => {
-    expect(CAPABILITIES.length).toBe(52);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(52);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(52);
+  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 56 capabilities', () => {
+    expect(CAPABILITIES.length).toBe(56);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(56);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(56);
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));
   });

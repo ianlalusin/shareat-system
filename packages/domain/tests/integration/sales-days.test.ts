@@ -35,6 +35,7 @@ import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import {
   createSalesDay,
+  TransitShortfallBlockedError,
   submitSalesDay,
   verifySalesDay,
   voidSalesDay,
@@ -179,6 +180,7 @@ function simpleDay(storeId: string, businessDate: string) {
 beforeAll(async () => {
   await sql`
     truncate table
+      trade_discrepancies, trade_order_lines, trade_orders, customers, items,
       money_accounts,
       sales_day_tenders, sales_day_channels, sales_days, sales_channels,
       expense_payments, expenses, expense_categories,
@@ -668,3 +670,103 @@ describe('invariant 9 — a sales day in org A is invisible to org B, with no WH
     expect(channelsSeenByB[0]!.c).toBe(0);
   });
 });
+
+// =========================================================================================
+// T-174 — ⭐ the transit-shortfall block
+// =========================================================================================
+
+/**
+ * ⚠️ v1's reason, kept because it is exactly right: *forces resolution before revenue can be
+ * understated further.* A commissary whose dispatched goods are unaccounted for is a commissary
+ * whose cost of sales is wrong, and every day opened on top of that makes the figure worse and
+ * harder to unpick later.
+ */
+describe('T-174 — an unresolved transit shortfall blocks a new day', () => {
+  /** The minimum that can carry a discrepancy: a counterparty, an order, and one line. */
+  async function shortfall(
+    f: { orgId: string; storeId: string; staffId: string },
+    over: { status?: string; deferredTo?: string | null } = {},
+  ): Promise<string> {
+    const [item] = await sql<{ id: string }[]>`
+      insert into items (org_id, code, name, kind, base_unit, created_by)
+      values (${f.orgId}, ${uid('itm')}, 'Pork', 'raw_material', 'kg', ${f.staffId}) returning id`;
+    const [cst] = await sql<{ id: string }[]>`
+      insert into customers (org_id, name, customer_group, created_by)
+      values (${f.orgId}, ${uid('Branch')}, 'internal', ${f.staffId}) returning id`;
+    const [ord] = await sql<{ id: string }[]>`
+      insert into trade_orders (org_id, store_id, customer_id, order_date, status, total_amount, created_by)
+      values (${f.orgId}, ${f.storeId}, ${cst!.id}, '2026-01-10', 'draft', 31000, ${f.staffId}) returning id`;
+    const [line] = await sql<{ id: string }[]>`
+      insert into trade_order_lines (org_id, order_id, item_id, quantity, unit, rate, line_total)
+      values (${f.orgId}, ${ord!.id}, ${item!.id}, 100, 'kg', 310, 31000) returning id`;
+    const [d] = await sql<{ id: string }[]>`
+      insert into trade_discrepancies (org_id, store_id, order_id, order_line_id, quantity, value, status, deferred_to)
+      values (${f.orgId}, ${f.storeId}, ${ord!.id}, ${line!.id}, 10, 3000,
+              ${over.status ?? 'open'}, ${over.deferredTo ?? null}) returning id`;
+    return d!.id;
+  }
+
+  it('⛔ refuses the day, and names what is unaccounted for', async () => {
+    const f = await setup('t174a');
+    await shortfall(f);
+    await expect(
+      asPerson(f.orgId, (tx) => createSalesDay(tx, actor(f.orgId, f.staffId), simpleDay(f.storeId, D1))),
+    ).rejects.toThrow(TransitShortfallBlockedError);
+  });
+
+  it('opens once the shortfall is resolved', async () => {
+    const f = await setup('t174b');
+    const id = await shortfall(f);
+    await sql`
+      update trade_discrepancies
+      set status = 'resolved', disposition = 'loss', resolved_at = now(), resolved_by = ${f.staffId}
+      where id = ${id}`;
+    const day = await asPerson(f.orgId, (tx) =>
+      createSalesDay(tx, actor(f.orgId, f.staffId), simpleDay(f.storeId, D1)),
+    );
+    expect(day.id).toBeTruthy();
+  });
+
+  it('⭐ a deferral buys time and no more — clear before the date, blocking ON it', async () => {
+    const f = await setup('t174c');
+    await shortfall(f, { status: 'deferred', deferredTo: '2026-01-20' });
+    // D1 is before the promised date, so the day opens.
+    const day = await asPerson(f.orgId, (tx) =>
+      createSalesDay(tx, actor(f.orgId, f.staffId), simpleDay(f.storeId, D1)),
+    );
+    expect(day.id).toBeTruthy();
+  });
+
+  it('⭐ …and blocks ON the promised date — the promise expires by itself', async () => {
+    // ⚠️ A FRESH fixture with no earlier day: otherwise the older-unverified-day block fires
+    // first and the test would pass on the wrong refusal.
+    const f = await setup('t174c2');
+    await shortfall(f, { status: 'deferred', deferredTo: '2026-01-20' });
+    await expect(
+      asPerson(f.orgId, (tx) =>
+        createSalesDay(tx, actor(f.orgId, f.staffId), simpleDay(f.storeId, '2026-01-20')),
+      ),
+    ).rejects.toThrow(TransitShortfallBlockedError);
+  });
+
+  it('⚠️ another store is not blocked by this one’s dispute', async () => {
+    const f = await setup('t174d');
+    await shortfall(f);
+    const day = await asPerson(f.orgId, (tx) =>
+      createSalesDay(tx, actor(f.orgId, f.adminId), simpleDay(f.storeId2, D1)),
+    );
+    expect(day.id).toBeTruthy();
+  });
+
+  it('⭐ an admin bypasses it, like the older-unverified-day block', async () => {
+    const f = await setup('t174e');
+    await shortfall(f);
+    // The bypass is the SAME `canBypassBlock` the create-block already uses — one definition of
+    // who may override, so the two blocks cannot drift apart on who is exempt.
+    const day = await asPerson(f.orgId, (tx) =>
+      createSalesDay(tx, actor(f.orgId, f.adminId), simpleDay(f.storeId, D1)),
+    );
+    expect(day.id).toBeTruthy();
+  });
+});
+

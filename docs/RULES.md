@@ -66,6 +66,8 @@ defect.* — §9
 | **The four verbs:** *duplicate* what's good · *correct* what's wrong · *add* what's missing · *delete* what's redundant | §1.2 |
 | **If a feature looks pointless, ASK — never delete.** Removing a redundant *implementation* is Claude's call; removing a *capability someone uses* is Ian's | §1.2 |
 | **Where v1 and correct accounting disagree, practice wins** — and the divergence is recorded. A v1-vs-v2 accounting difference is a **finding**, not a failure | §1.3 |
+| ⭐ **LOG WHAT YOU SEE, EVEN WHEN IT IS NOT YOUR TASK.** A bug, gap or flaw you notice **in passing** while reading v1 for some other reason is logged before you move on. *"I wasn't tasked with that area"* is not a reason to skip it — one row costs nothing, and you are the only person who will ever have that context. **Verification is not required:** state it as `reported`; a later session confirms it | **§13 row 164** |
+| ⭐ **Three doors, and the wrong one buries the finding.** v1 does it **wrong** → `docs/DEFECTS-REGISTER.md` A–D, cite `file:line` · v1 does it and **no phase owns it** → `docs/CAPABILITY-GAPS.md` (a gap is not a defect — that pass is what caught the five ledger modules January needed) · **Shareat System itself** is wrong → `DEFECTS-REGISTER.md` **section E** | **§13 row 164** |
 
 ---
 

@@ -437,6 +437,83 @@
       "breakpoints": true
     },
     {
+      "idx": 62,
+      "version": "7",
+      "when": 1791430307084,
+      "tag": "0062_t160_stock_locations",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1791516707084,
+      "tag": "0063_t161_stock_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1791603107084,
+      "tag": "0064_t162_stock_layers",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1791689507084,
+      "tag": "0065_t163_grni_and_price_variance",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1791775907084,
+      "tag": "0066_t166_deliveries",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1791862307084,
+      "tag": "0067_t168_stock_usage",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1791948707084,
+      "tag": "0068_t169_count_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1792035107084,
+      "tag": "0069_t171_commissary_catalogue",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1792121507084,
+      "tag": "0070_t172_branch_orders",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1792207907084,
+      "tag": "0071_t174_discrepancies",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1792294307084,
+      "tag": "0072_t175_thresholds_and_messages",
+      "breakpoints": true
+    },
+    {
       "idx": 80,
       "version": "7",
       "when": 1792985507084,

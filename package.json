@@ -21,6 +21,7 @@
     "capture": "tsx scripts/capture.ts",
     "db:generate": "npm run db:generate -w @shareat/db",
     "db:migrate": "npm run db:migrate -w @shareat/db",
+    "dev:seed:inventory": "tsx scripts/dev-seed-inventory.ts",
     "db:studio": "npm run db:studio -w @shareat/db",
     "check": "npm run typecheck && npm run test",
     "audit": "tsx scripts/audit.ts",

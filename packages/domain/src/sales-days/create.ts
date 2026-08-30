@@ -27,7 +27,7 @@
  * commit — the exemption is the newer decision.
  */
 import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
-import { moneyAccountsRepo, salesDaysRepo, transaction, type Tx } from '@shareat/db';
+import { moneyAccountsRepo, salesDaysRepo, tradeDiscrepanciesRepo, transaction, type Tx } from '@shareat/db';
 import { add, money, type Money } from '@shareat/core/money';
 
 export interface CreateSalesDayChannelInput {
@@ -65,6 +65,24 @@ export interface CreateSalesDayInput {
    *  `onlineCollected` is non-zero: `1140` is a control account and `verifySalesDay` refuses to
    *  post a day whose wallets do not sum to its online total. */
   tenders?: CreateSalesDayTenderInput[];
+}
+
+/**
+ * ⭐ T-174. Thrown when an unresolved transit shortfall blocks a new day at the COMMISSARY.
+ *
+ * ⚠️ v1's reason is exactly right and worth keeping in the code: *forces resolution before revenue
+ * can be understated further.* A commissary whose dispatched goods are unaccounted for is a
+ * commissary whose cost of sales is wrong, and every day it opens on top of that makes the figure
+ * worse and harder to unpick.
+ */
+export class TransitShortfallBlockedError extends Error {
+  constructor(
+    message: string,
+    readonly discrepancyIds: readonly string[],
+  ) {
+    super(message);
+    this.name = 'TransitShortfallBlockedError';
+  }
 }
 
 /** Thrown when an older unverified day blocks this one. A named type, not a bare Error, because
@@ -119,6 +137,29 @@ async function runCreate(tx: Tx, actor: Actor, input: CreateSalesDayInput): Prom
           `older one`,
         blocking.id,
         blocking.businessDate,
+      );
+    }
+
+    // ── T-174: the transit-shortfall block ────────────────────────────────────────────
+    // ⭐ Everything `open`, plus everything `deferred` whose date has ARRIVED — a deferral is a
+    // promise to decide by a date, not an exemption. ⛔ Derived from the rows every time, never a
+    // counter (DEF-075), and it is the SAME query the discrepancy screen lists from: one source,
+    // two consumers, so the block can never refuse a day over something the screen does not show.
+    const shortfalls = await tradeDiscrepanciesRepo.blocking(
+      tx,
+      actor.orgId,
+      input.storeId,
+      input.businessDate,
+    );
+    if (shortfalls.length > 0) {
+      const first = shortfalls[0]!;
+      throw new TransitShortfallBlockedError(
+        `createSalesDay: ${shortfalls.length} dispatched shipment` +
+          `${shortfalls.length === 1 ? ' has' : 's have'} goods unaccounted for — ` +
+          `${first.quantity} units worth ₱${first.value} and ` +
+          `${shortfalls.length - 1} other${shortfalls.length === 2 ? '' : 's'}. ` +
+          `Decide what happened to them before opening a new day`,
+        shortfalls.map((d) => d.id),
       );
     }
   }

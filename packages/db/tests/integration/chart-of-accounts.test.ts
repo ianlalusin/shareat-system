@@ -239,7 +239,10 @@ describe('invariant 7 — legacy_code is unique and never contains a per-entity 
 
 describe('invariant 8 — reserved accounts are exactly {2145, 2250, 4920}; every other account is active', () => {
   it('RESERVED_CODES matches the amended Contract §4 list exactly', () => {
-    expect(new Set(RESERVED_CODES)).toEqual(new Set(['2120', '2145', '2250', '4920']));
+    // ⭐ 2120 LEFT this set in T-163 (migration 0065): the receipt now credits it, so it is funded
+    // and therefore active. The describe title above has said {2145, 2250, 4920} all along — it
+    // was correct before 2120 was added here and is correct again now.
+    expect(new Set(RESERVED_CODES)).toEqual(new Set(['2145', '2250', '4920']));
   });
 
   it('the database reflects reserved vs active correctly after seeding', async () => {
@@ -248,7 +251,7 @@ describe('invariant 8 — reserved accounts are exactly {2145, 2250, 4920}; ever
     const rows = await fetchAccounts(orgId);
 
     const reserved = rows.filter((r) => r.status === 'reserved').map((r) => r.code);
-    expect(new Set(reserved)).toEqual(new Set(['2120', '2145', '2250', '4920']));
+    expect(new Set(reserved)).toEqual(new Set(['2145', '2250', '4920']));
 
     const others = rows.filter((r) => !reserved.includes(r.code));
     for (const r of others) {
@@ -316,7 +319,7 @@ describe('invariant 10 — account count matches the (amended) COA-ALIGNMENT lis
   //   4500 Other charges — leftover, packaging and similar. INCOME; the business keeps these.
   // Two things that look identical on a bill and are opposite in the books. This count is a PIN,
   // so changing it is a deliberate act — which is exactly why it caught the addition.
-  it('the seed data has exactly 101 accounts — 7 headers + 94 leaves', () => {
+  it('the seed data has exactly 102 accounts — 7 headers + 95 leaves', () => {
     // Originally 75 (7 headers + 68 leaves) under T-102. See task report for the
     // reasoning behind 75 rather than a literal reading of the §2 summary tables (77):
     // 1520/1530 (Property and equipment sub-range) are deliberately not seeded as rows —
@@ -329,20 +332,23 @@ describe('invariant 10 — account count matches the (amended) COA-ALIGNMENT lis
     // is forward-corrected rather than left silently wrong (bible §2 rule 8 precedent:
     // an applied migration is never edited, but a test asserting a now-superseded fact
     // is updated forward, the same way migration 0002 corrected 3200 forward).
-    expect(CHART_OF_ACCOUNTS.length).toBe(101);
+    expect(CHART_OF_ACCOUNTS.length).toBe(102);
     const headers = CHART_OF_ACCOUNTS.filter((a) => a.parentCode === null);
     expect(headers.length).toBe(7);
-    expect(CHART_OF_ACCOUNTS.length - headers.length).toBe(94);
+    expect(CHART_OF_ACCOUNTS.length - headers.length).toBe(95);
   });
 
   it('every account actually lands in the database for a freshly seeded org', async () => {
     const orgId = await insertOrg('inv10');
     await seedChartOfAccounts(sql, orgId);
     const rows = await fetchAccounts(orgId);
+    // ⭐ 101 -> 102 on 2026-08-29 (T-163): `5450 Purchase price variance` — where the difference
+    // lands when the supplier invoice disagrees with what was typed at receipt. ⚠️ T-163 also
+    // ACTIVATED `2120`, which changes no count: it was already seeded, merely reserved.
     // ⭐ 100 -> 101 on 2026-08-29 (T-153): `1115 Cash on hand — till float`. The side pocket gets
     // its own account so its balance is an INVARIANT against the configured target, and so
     // remittance can never sweep it out of `1110`.
-    expect(rows.length).toBe(101); // T-102b, T-123 (2160, 4500), T-127 (1260), T-128 (2500), T-132 (4300), T-133 (5175), T-150 (6420), T-153 (1115)
+    expect(rows.length).toBe(102); // T-102b, T-123 (2160, 4500), T-127 (1260), T-128 (2500), T-132 (4300), T-133 (5175), T-150 (6420), T-153 (1115), T-163 (5450)
   });
 
   it('4200 is not seeded — REVENUE AMENDMENT, take-out folded into 4150', async () => {
@@ -571,18 +577,18 @@ describe('T-102b invariant 5 — re-running the seed inserts nothing and changes
 });
 
 describe('T-102b invariant 6 — total account count is 92 (T-102\'s 75 + these 17)', () => {
-  it('the seed data has exactly 101 accounts', () => {
-    expect(CHART_OF_ACCOUNTS.length).toBe(101);
+  it('the seed data has exactly 102 accounts', () => {
+    expect(CHART_OF_ACCOUNTS.length).toBe(102);
     const headers = CHART_OF_ACCOUNTS.filter((a) => a.parentCode === null);
     expect(headers.length).toBe(7);
-    expect(CHART_OF_ACCOUNTS.length - headers.length).toBe(94);
+    expect(CHART_OF_ACCOUNTS.length - headers.length).toBe(95);
   });
 
   it('every account lands in the database for a freshly seeded org', async () => {
     const orgId = await insertOrg('102b-inv6');
     await seedChartOfAccounts(sql, orgId);
     const rows = await fetchAccounts(orgId);
-    expect(rows.length).toBe(101);
+    expect(rows.length).toBe(102);
   });
 });
 
