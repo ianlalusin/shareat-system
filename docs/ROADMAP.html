@@ -498,15 +498,69 @@
         <div class="wave-head">
           <h3>Cross-cutting &mdash; specced outside the waves</h3>
           <span class="chip c-part">mixed</span>
-          <span class="why">Three have shipped; T-136 is a requirements umbrella that is two-thirds built.</span>
+          <span class="why">All shipped. T-136 turned out to be a requirements umbrella, not a task &mdash; its parts became T-143, T-144, T-152 and T-153.</span>
         </div>
         <div class="tasks">
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-138</div><div class="task-what">Identity and sessions &mdash; PIN sign-in, server-side sessions</div><div class="task-note">Shipped. Removed the &ldquo;acting as&rdquo; dropdown</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-134</div><div class="task-what">The 31 December conversion &mdash; a guided, verified switch</div><div class="task-note">Shipped 28&ndash;29 Aug &middot; 12 steps, 4 gates, screens, and the opening-balance post &middot; found DEF-079: the purge could never have run</div></div>
-          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-135</div><div class="task-what">Integrity findings (OIL) &mdash; the standing books watchdog</div><div class="task-note">Shipped 28 Aug &middot; the finding is DERIVED, only the acknowledgement is stored &middot; watches DEF-044 and DEF-078</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-135</div><div class="task-what">Integrity findings (OIL) &mdash; the standing books watchdog</div><div class="task-note">Shipped 28 Aug &middot; the finding is DERIVED, only the acknowledgement is stored &middot; &starf; <b>and it had no SCREEN until 30 Aug</b> (DEF-084) &mdash; <code>/findings</code> now renders all eleven kinds; accepting a hard one does NOT unblock a close</div></div>
           <div class="task t-active"><div class="task-id"><span class="dot"></span>T-136</div><div class="task-what">Cash custody &mdash; a requirements umbrella, not a task</div><div class="task-note"><b>Two-thirds shipped under other numbers</b> &mdash; &sect;1/&sect;7/&sect;8 as T-143, &sect;5b as T-144. Assessed 29 Aug (&sect;9): &sect;4 specced as <b>T-152</b>, &sect;2 recommended against as designed, &sect;6 escalated &mdash; <b>DEF-082, nothing ever debits 2160</b></div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-152</div><div class="task-what">Remittance cadence and the un-remitted ceiling</div><div class="task-note">Shipped 29 Aug &middot; completes T-143, which shipped pooling and left the ceiling unenforced &middot; <b>three</b> detectors in T-135&rsquo;s layer, incl. DEF-082&rsquo;s service-charge alarm &middot; found <b>DEF-084</b>: T-135 had no screen at all</div></div>
-          <div class="task"><div class="task-id"><span class="dot"></span>T-137</div><div class="task-what">Statutory discount logbook</div><div class="task-note">Designed only</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-137</div><div class="task-what">Senior / PWD statutory register</div><div class="task-note">Shipped 30 Aug &middot; &starf; the lane <b>disproved its own spec first</b>: no SC/PWD identity is captured anywhere, in software or on paper &mdash; a live compliance exposure, not a modernisation</div></div>          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-153</div><div class="task-what">The till float &mdash; a side pocket, not a balance</div><div class="task-note">Shipped 30 Aug &middot; <code>1115</code>, a target the pot is judged against, and it blocks at zero &middot; Ian&rsquo;s worked example is a test to the peso</div></div>
+
+        </div>
+      </div>
+
+      <div class="wave">
+        <div class="wave-head">
+          <h3>Phase 3 &mdash; inventory becomes an asset</h3>
+          <span class="chip c-part">14 of 20 built</span>
+          <span class="why">Valuation is <b>FIFO</b>. &#9888; Backend and screens both exist, but nothing here has been driven against real stock yet &mdash; the six specced tasks are the rest of the wave.</span>
+        </div>
+        <div class="tasks">
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-160</div><div class="task-what">Stock locations and rooms</div><div class="task-note">A branch may hold ONE room, enforced by trigger &mdash; v1&rsquo;s repair tool has nothing left to repair</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-161</div><div class="task-what">Stock ledger and balances</div><div class="task-note">Four rules the database refuses rather than remembers</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-162</div><div class="task-what">FIFO cost layers</div><div class="task-note">A layer per receipt, consumed oldest-first &middot; bible row 110</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-163</div><div class="task-what">The receipt posts its value</div><div class="task-note"><code>2120</code> GRNI, ending the expensing lag &mdash; and the spec had its own variance backwards</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-164</div><div class="task-what">Consumption, wastage and variance</div><div class="task-note">Gross margin stops being wrong: cost follows consumption, not purchase</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-165</div><div class="task-what">The periodic &rarr; perpetual switch</div><div class="task-note">A dated split, per <b>ADR-011</b></div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-166</div><div class="task-what">Deliveries and receiving</div><div class="task-note">The seam five tasks were waiting for</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-168</div><div class="task-what">Usage, wastage and adjustment</div><div class="task-note">Closes the loop &mdash; Phase 3&rsquo;s exit gate passes on a real one</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-169</div><div class="task-what">Count sessions and commit</div><div class="task-note">One freeze for every writer, and the variance v1 never posted</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-171</div><div class="task-what">Commissary catalogue and item map</div><div class="task-note">The commissary&rarr;branch pipeline, ledger side</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-172</div><div class="task-what">Branch order and fulfilment</div><div class="task-note">&nbsp;</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-173</div><div class="task-what">Confirm receipt, cross-store</div><div class="task-note">Posts BOTH stores&rsquo; books at once</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-174</div><div class="task-what">Discrepancy settle and defer</div><div class="task-note">The goods that never arrived, and the <code>1340</code> hole it exposed</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-175</div><div class="task-what">Low stock becomes an order</div><div class="task-note">&starf; A finding replaces v1&rsquo;s block &mdash; nag whoever can act, never block whoever cannot</div></div>
+          <div class="task"><div class="task-id"><span class="dot"></span>T-167</div><div class="task-what">Stock transfers</div><div class="task-note">Spec</div></div>
+          <div class="task"><div class="task-id"><span class="dot"></span>T-170</div><div class="task-what">Supplier returns</div><div class="task-note">Spec</div></div>
+          <div class="task"><div class="task-id"><span class="dot"></span>T-176</div><div class="task-what">Production and prep conversion</div><div class="task-note">Spec</div></div>
+          <div class="task"><div class="task-id"><span class="dot"></span>T-177</div><div class="task-what">POS item mapping and usage pull</div><div class="task-note">Spec</div></div>
+          <div class="task"><div class="task-id"><span class="dot"></span>T-178</div><div class="task-what">Channel wastage disposition</div><div class="task-note">Spec</div></div>
+          <div class="task"><div class="task-id"><span class="dot"></span>T-179</div><div class="task-what">Customer returns and store credit</div><div class="task-note">Spec</div></div>
+        </div>
+      </div>
+
+      <div class="wave">
+        <div class="wave-head">
+          <h3>Phase 4 &mdash; attendance, and the two-lane hot path</h3>
+          <span class="chip c-done">shipped</span>
+          <span class="why">&starf; Its golden master runs on <b>550 real v1 sessions</b>, which is how DEF-088 was found: <b>v1 pays for shifts nobody worked</b> &mdash; 40.4 excess hours in one month, one session present 1.6 minutes and paid 5.</span>
+        </div>
+        <div class="tasks">
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-154</div><div class="task-what">Positions and employments</div><div class="task-note">The staff master record</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-155</div><div class="task-what">The shift day and attendance config</div><div class="task-note">05:00&ndash;05:00, and it is NOT the business day &middot; policy is effective-dated, so a day is judged by the policy that governed IT</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-156</div><div class="task-what">Attendance punches</div><div class="task-note">Append-only, one writer, replay is a silent success</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-157</div><div class="task-what">Adjudication</div><div class="task-note">Integer minutes throughout &mdash; hours are money one multiplication away</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-157b</div><div class="task-what">Open-hour anchor and overtime</div><div class="task-note">&starf; Under an hour credits NOTHING; an hour to half-day raises unverified OT a manager must accept</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-158</div><div class="task-what">Attendance adjustments</div><div class="task-note">Append-and-supersede, never an edit</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-159</div><div class="task-what">Firestore rules and device identity</div><div class="task-note">The terminal signs in AS ITSELF &mdash; a device principal, not a person</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-180</div><div class="task-what">The two-lane spike</div><div class="task-note">&starf; The spike Phase&nbsp;0 owed and never built (DEF-092). Written before anything relied on it</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-181</div><div class="task-what">Lane A publisher</div><div class="task-note">Transactional outbox</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-182</div><div class="task-what">Lane B ingestor</div><div class="task-note">And a quarantine that heals</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-183</div><div class="task-what">Quarantine and lane health</div><div class="task-note"><code>/attendance/lane</code> &middot; &ldquo;not measured&rdquo; is told apart from &ldquo;nothing waiting&rdquo;</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-184</div><div class="task-what">The offline clock terminal</div><div class="task-note">&starf; Phase 4&rsquo;s exit gate, met in a real browser &middot; found that <code>await setDoc()</code> HANGS forever offline &mdash; in the one condition the feature exists for</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-185</div><div class="task-what">Credential enrolment and mirror</div><div class="task-note">Card and fingerprint; never a PIN</div></div>
         </div>
       </div>
 
@@ -571,18 +625,18 @@
         <div class="ph-gate"><b>Exit gate</b>Subledgers tie to control accounts; a real closed period reconciles; divergences from v1 logged.</div>
       </div>
 
-      <div class="phase s-queued">
+      <div class="phase s-active">
         <div class="ph-num">3</div>
-        <div class="ph-top"><span class="ph-name">Inventory &amp; inventory accounting</span><span class="chip c-queued">not started</span></div>
-        <div class="ph-body">Items, locations, stock ledger, receiving, transfers, usage, wastage, counts, weighted-average valuation, COGS postings. Plus the commissary&ndash;branch order pipeline, roughly 24 capabilities that straddled Phases 2 and 3 and were owned by neither.</div>
-        <div class="ph-gate"><b>Exit gate</b>Inventory control account equals the sum of on-hand valuations; the stock ledger reconciles.</div>
+        <div class="ph-top"><span class="ph-name">Inventory &amp; inventory accounting</span><span class="chip c-active">14 of 20 built</span></div>
+        <div class="ph-body">Items, locations, stock ledger, receiving, transfers, usage, wastage, counts, <b>FIFO</b> valuation (bible row 110 &mdash; this page said &ldquo;weighted-average&rdquo; until 2026-08-30), COGS postings. Plus the commissary&ndash;branch order pipeline, roughly 24 capabilities that straddled Phases 2 and 3 and were owned by neither. &starf; Planned in one pass (<code>docs/plans/phase-3-inventory.md</code>) and sequenced by <b>ADR-011</b>, which settled the periodic&rarr;perpetual switch as a <em>dated split</em> rather than a retro-fit.</div>
+        <div class="ph-gate"><b>Exit gate</b>Inventory control account equals the sum of on-hand valuations; the stock ledger reconciles. &mdash; &starf; <b>MET</b>: T-168 passes it on a real consumption loop, and <code>/inventory</code> renders the check live (FIFO layers against 1310+1320+1330).</div>
       </div>
 
-      <div class="phase s-queued">
+      <div class="phase s-done">
         <div class="ph-num">4</div>
-        <div class="ph-top"><span class="ph-name">Attendance, biometrics &amp; the hot lane</span><span class="chip c-queued">not started</span></div>
-        <div class="ph-body">Punch model, server-side adjudication, the Firestore mirror publisher and inbox ingestor, offline clock terminal. Can run as a parallel track if capacity allows.</div>
-        <div class="ph-gate"><b>Exit gate</b>A terminal clocks in with the network pulled and reconciles cleanly on reconnect.</div>
+        <div class="ph-top"><span class="ph-name">Attendance, biometrics &amp; the hot lane</span><span class="chip c-done">shipped</span></div>
+        <div class="ph-body">Punch model, server-side adjudication in integer minutes, the Firestore mirror publisher and inbox ingestor, offline clock terminal. &starf; It also closed a gap nobody had noticed: <b>Phase&nbsp;0 was marked complete against an exit gate requiring an offline spike that had never been built</b> (DEF-092) &mdash; so the spike was written first, and bible &sect;5.2&rsquo;s two-lane rule is now enforced by a test that walks the real import graph rather than asserted in prose.</div>
+        <div class="ph-gate"><b>Exit gate</b>A terminal clocks in with the network pulled and reconciles cleanly on reconnect. &mdash; &starf; <b>MET in a real browser</b> against the Firestore emulator: two punches made offline survived a full reload, replayed on reconnect with no application queue code, and arrived in order. &#9888; <code>/clock</code> needs five <code>NEXT_PUBLIC_FIREBASE_*</code> values or it is a crash screen.</div>
       </div>
 
       <div class="phase s-queued">
