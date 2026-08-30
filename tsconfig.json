@@ -67,6 +67,9 @@
       "@shareat/storage-firebase": [
         "./packages/storage-firebase/src/index.ts"
       ],
+      "@shareat/sync-firestore": [
+        "./packages/sync-firestore/src/index.ts"
+      ],
       "@/*": [
         "./apps/erp/src/*"
       ]

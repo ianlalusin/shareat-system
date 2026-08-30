@@ -185,7 +185,7 @@ function happyCtx(capability: Capability): { storeId?: string } {
 // Invariant 5 — ⭐ every capability DENIES a role that lacks it. All 38, not a sample.
 // ---------------------------------------------------------------------------------------
 
-describe('invariant 5 — every capability denies a role that lacks it (all 53)', () => {
+describe('invariant 5 — every capability denies a role that lacks it (all 56)', () => {
   const denialCases: { capability: Capability; role: Role }[] = CAPABILITIES.flatMap((capability) =>
     ROLES.filter((role) => !CAPABILITY_MATRIX[capability][role]).map((role) => ({ capability, role })),
   );
@@ -227,15 +227,20 @@ describe('invariant 5 — every capability denies a role that lacks it (all 53)'
     // be answered. Locking the conversation to managers is how it goes back to being a phone
     // call, which is the thing T-175 set out to replace.
     'post_order_message',
+    // ⭐ T-137: recording an SC/PWD discount at the counter. Staff-open for the same reason
+    // create_expense is — the person holding the book is a cashier, and gating it to managers is
+    // how a statutory register stays empty. ⚠️ Its VOID counterpart is deliberately NOT here:
+    // `void_statutory_discount` denies staff, and that asymmetry is the control.
+    'record_statutory_discount',
   ];
 
-  it('every capability EXCEPT the universally-granted 11 has at least one denial case', () => {
+  it('every capability EXCEPT the universally-granted 9 has at least one denial case', () => {
     const covered = new Set(denialCases.map((c) => c.capability));
     const missing = CAPABILITIES.filter((c) => !covered.has(c));
     expect(missing.sort()).toEqual([...UNIVERSALLY_GRANTED].sort());
   });
 
-  it('the universally-granted 11 really are true for all four roles (why they are exempt)', () => {
+  it('the universally-granted 12 really are true for all four roles (why they are exempt)', () => {
     for (const c of UNIVERSALLY_GRANTED) {
       expect(ROLES.every((r) => CAPABILITY_MATRIX[c][r]), `${c} is not actually universal`).toBe(true);
     }

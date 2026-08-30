@@ -157,6 +157,24 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       're-seeding at cutover would change ids that pilot sales days reference, and the ' +
       'remittable flag is a business decision about each channel, not pilot data.',
   },
+  /** ⚠️ **This one is not obviously `purge`, and the reasoning is worth reading before changing
+   *  it.** Every other operational table is purged because the 2027-01-01 opening entry replaces
+   *  it. **This table is not replaced by anything** — the opening entry is a balance-sheet
+   *  position, and a statutory register is a list of transactions that already happened. Purging
+   *  it destroys evidence for sales the business really made, in periods BIR can still assess.
+   *  ⛔ But it is still `purge`, for the same reason as `etl_*`: the Oct–Dec rows are **pilot**
+   *  data, and a pilot register is not the store's statutory record — the paper logbook is
+   *  (T-137 §6). Keeping half-real rows past cutover would produce a register that looks
+   *  authoritative and is not. **If the pilot is ever declared the real record, this becomes
+   *  `date_scoped` on `business_date` — a decision for Ian, not a default.** */
+  statutory_discount_records: {
+    class: 'purge',
+    reason:
+      'Pilot-period statutory records, not the storeâs register of record — the paper logbook is ' +
+      '(T-137 §6). Purged like every other operational table so no half-real row survives to look ' +
+      'authoritative in a BIR audit. Revisit as date_scoped only if Ian declares the pilot register ' +
+      'the real one.',
+  },
   sales_days: {
     class: 'purge',
     reason:
@@ -190,6 +208,107 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'should outlive the cutover — a token minted in December has no business being valid in ' +
       'January. Purging them forces a clean re-authentication, which is the correct posture for ' +
       'the first day of a new ledger.',
+  },
+
+  // ---- T-154: the staff master record (Phase 4, lane B) --------------------------------
+  positions: {
+    class: 'keep',
+    reason:
+      'Configuration — the vocabulary of jobs a store has. The canonical six are seeded and a ' +
+      'store’s own extras are deliberate setup, not pilot transactions. Purging them would strand ' +
+      'every surviving employment’s position reference.',
+  },
+  employments: {
+    class: 'keep',
+    reason:
+      'Who works here. Same class as persons and person_credentials, and for the same reason: the ' +
+      'pilot is run by the actual staff, and emptying the roster on 1 January would mean nobody ' +
+      'can clock in on the morning the books open. An employment is a fact about a job, not a ' +
+      'transaction the ledger produced — nothing here posts.',
+  },
+  employment_positions: {
+    class: 'keep',
+    reason: 'As employments — its child rows, and meaningless without them.',
+  },
+
+  // ---- T-155: attendance policy (Phase 4, lane B) ---------------------------------------
+  store_attendance_config: {
+    class: 'keep',
+    reason:
+      'Configuration, and the SUPERSEDED rows are configuration history rather than pilot ' +
+      'transactions. ⭐ Purging them would be worse than losing settings: an attendance_days row ' +
+      'names the config row it was computed under, so dropping the history would leave every ' +
+      'surviving day unable to explain the hours it credited. Nothing here posts to the ledger.',
+  },
+
+  // ---- T-156: the punch (Phase 4, lane B) -----------------------------------------------
+  attendance_punches: {
+    class: 'purge',
+    reason:
+      'Operational, and the clearest case of it in this phase — a punch is an event the pilot ' +
+      'produced, not configuration. ⭐ It is safe to purge precisely BECAUSE attendance posts ' +
+      'nothing to the ledger (bible §10: attendance touches money only through payroll): the ' +
+      'opening books carry no balance derived from a 2026 punch. Pilot attendance is settled and ' +
+      'paid within the pilot; January opens on counted present-day facts, and a punch is neither.',
+  },
+
+  // ---- T-157: the adjudicated day (Phase 4, lane B) -------------------------------------
+  attendance_days: {
+    class: 'purge',
+    reason:
+      'Derived from attendance_punches, which is purged, and derived data cannot outlive its ' +
+      'source. Same argument as the punch: attendance posts nothing to the ledger, so no opening ' +
+      'balance depends on a 2026 day. ⚠️ Purged BEFORE its config rows, which are kept — a day ' +
+      'references the config it was computed under, and children go before parents.',
+  },
+
+  // ---- T-158: manager adjustments (Phase 4, lane B) -------------------------------------
+  attendance_adjustments: {
+    class: 'purge',
+    reason:
+      'Decisions about pilot days, which are themselves purged. A decision about a day that no ' +
+      'longer exists is not history worth keeping — it is a dangling judgement. Purged with its ' +
+      'days, and before them (children first).',
+  },
+
+  // ---- T-159: device identity (Phase 4, lane B) -----------------------------------------
+  clock_terminals: {
+    class: 'keep',
+    reason:
+      'The physical tablets on the counters survive 1 January — purging them would un-pair every ' +
+      'clock terminal in the group on the morning the books open, and re-pairing needs a manager ' +
+      'at each store with the device in hand. Configuration, not pilot activity.',
+  },
+
+  // ---- T-181: the Lane A outbox (Phase 4, lane B) ---------------------------------------
+  mirror_outbox: {
+    class: 'purge',
+    reason:
+      'A queue, not a record. Every row is an intent to publish something that has already been ' +
+      'published, and the source rows it points at are the truth. ⚠️ Purging it on 1 January is ' +
+      'safe ONLY because the mirror is rebuilt by re-enqueuing from source, never by replaying this ' +
+      'table — which is also why it carries no payload column.',
+  },
+
+  // ---- T-185: attendance credentials (Phase 4, lane B) ----------------------------------
+  attendance_credentials: {
+    class: 'keep',
+    reason:
+      'A badge does not stop being somebody’s badge because the books restarted, and re-enrolling ' +
+      'every staffer’s fingerprint on 1 January is a day of work that buys nothing. ⚠️ The rows are ' +
+      'kept, but every credential belonging to an employment that did NOT carry over must be ' +
+      'revoked in the same pass — a live badge for somebody who no longer works here is exactly ' +
+      'the credential that punches unnoticed.',
+  },
+
+  // ---- T-182: the Lane B quarantine (Phase 4, lane B) -----------------------------------
+  inbox_quarantine: {
+    class: 'purge',
+    reason:
+      'Failed pilot punches. Purged with attendance_punches, which it is the failed half of. ' +
+      '⚠️ An UNRESOLVED row at cutover is a punch nobody ever settled — the purge rehearsal ' +
+      '(ADR-007) should report the count rather than discard it silently, because a store with a ' +
+      'backlog here is a store whose attendance was never really working.',
   },
 
   // ---- T-124: fixed assets ---------------------------------------------------------------
@@ -695,7 +814,13 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
 };
 
 /** Tables the purge must never touch even if classified — belt and braces around views. */
-export const NON_TABLE_RELATIONS: readonly string[] = ['v_account_balance', 'v_trial_balance', 'v_income_statement'];
+export const NON_TABLE_RELATIONS: readonly string[] = [
+  'v_account_balance',
+  'v_trial_balance',
+  'v_income_statement',
+  // T-154 — 'is this person on the roster' is DERIVED, never a stored boolean (bible §4.2 rule 7).
+  'v_active_employments',
+];
 
 export function classify(table: string): CutoverEntry | undefined {
   return CUTOVER_CLASSIFICATION[table];

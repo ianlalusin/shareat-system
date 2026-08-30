@@ -42,6 +42,12 @@ export { CASH_REQUEST_STATUSES } from '../schema/cash-requests';
 export type { CashRequestStatus } from '../schema/cash-requests';
 export type { CashRequestRow, FloatPosition } from './repo/cash-requests';
 export type { OwnerRow, OwnerPosition, DrawingCloseRow, AgedReceivable } from './repo/owners';
+export type { PositionRow, EmploymentRow, RosterRow } from './repo/employment';
+export type { AttendanceConfigRow } from './repo/attendance-config';
+export type { AttendancePunchRow } from './repo/attendance-punches';
+export type { AttendanceDayRow } from './repo/attendance-days';
+export type { AttendanceAdjustmentRow } from './repo/attendance-adjustments';
+export type { ClockTerminalRow } from './repo/clock-terminals';
 export type { LiabilityRow, LiabilityPosition, LiabilityMovement } from './repo/liabilities';
 export type { CustomerRow, PriceListRow, PriceListItemRow } from './repo/customers';
 export { treatmentOf } from './repo/customers';
@@ -79,6 +85,27 @@ export * as filesRepo from './repo/files';
 export * as loansRepo from './repo/loans';
 export * as cashRequestsRepo from './repo/cash-requests';
 export * as ownersRepo from './repo/owners';
+// T-154 — the staff master record (Phase 4, lane B).
+export * as employmentRepo from './repo/employment';
+// T-155 — per-store attendance policy, effective-dated (Phase 4, lane B).
+export * as attendanceConfigRepo from './repo/attendance-config';
+// T-156 — the append-only punch (Phase 4, lane B).
+export * as attendancePunchesRepo from './repo/attendance-punches';
+// T-157 — the adjudicated day (Phase 4, lane B).
+export * as attendanceDaysRepo from './repo/attendance-days';
+// T-158 — the manager's decisions (Phase 4, lane B).
+export * as attendanceAdjustmentsRepo from './repo/attendance-adjustments';
+// T-159 — the provisioned device identity (Phase 4, lane B).
+export * as clockTerminalsRepo from './repo/clock-terminals';
+// T-185 — clock-in credentials. ⛔ No listTemplates: see the repo's header.
+export * as attendanceCredentialsRepo from './repo/attendance-credentials';
+export type { AttendanceCredentialRow } from './repo/attendance-credentials';
+// T-181/T-183 — Lane A's outbox, and the lag that says whether it is moving.
+export * as mirrorOutboxRepo from './repo/mirror-outbox';
+export type { OutboxRow, OutboxLag } from './repo/mirror-outbox';
+// T-182/T-183 — Lane B's quarantine: the events that did not make it, and can still be recovered.
+export * as inboxQuarantineRepo from './repo/inbox-quarantine';
+export type { InboxQuarantineRow, ReasonCount } from './repo/inbox-quarantine';
 export * as liabilitiesRepo from './repo/liabilities';
 export * as customersRepo from './repo/customers';
 export * as sessionsRepo from './repo/sessions';
@@ -88,6 +115,13 @@ export * as tradeRepo from './repo/trade';
 export * as channelSettlementsRepo from './repo/channel-settlements';
 export * as findingsRepo from './repo/findings';
 export * as cutoverRepo from './repo/cutover';
+export * as statutoryDiscountsRepo from './repo/statutory-discounts';
+export type {
+  StatutoryDiscountRow,
+  StatutoryDiscountSummary,
+  StatutoryDiscountKind,
+  StatutoryDiscountSource,
+} from './repo/statutory-discounts';
 export type { OpeningDraft, CutoverStepRow } from './repo/cutover';
 export type { ArChargeRow, ArCollectionRow, ArOpenItem, ArPosition, ArAgingBucket } from './repo/ar';
 export type { TradeOrderRow, TradeOrderLineRow } from './repo/trade';

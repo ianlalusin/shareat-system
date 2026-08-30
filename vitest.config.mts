@@ -23,17 +23,33 @@ const alias = {
   '@shareat/etl': `${root}packages/etl/src/index.ts`,
   '@shareat/etl-firestore': `${root}packages/etl-firestore/src/index.ts`,
   '@shareat/storage-firebase': `${root}packages/storage-firebase/src/index.ts`,
+  '@shareat/sync-firestore': `${root}packages/sync-firestore/src/index.ts`,
 };
 
 export default defineConfig({
   resolve: { alias },
   test: {
+    // ⭐ Let a test's own console output through. The golden master REPORTS its triage summary —
+    // which classes of v1-vs-v2 divergence exist and how many — and a summary nobody can see is
+    // not a report.
+    disableConsoleIntercept: true,
     projects: [
       {
         extends: true,
         test: {
           name: 'unit',
-          include: ['tests/unit/**/*.test.ts', 'packages/**/*.test.ts', 'apps/**/*.test.ts'],
+          // ⭐ DEF-081: `tests/invariants/` and `tests/golden/` existed as empty directories and
+          // matched NO include glob, so a test placed in either would never have run — while both
+          // are named in the definition of done. A guard that does not execute is worse than no
+          // guard, because it is credited. T-157 adds the first golden test and needs the glob to
+          // be real; proven by watching a deliberately failing golden test actually fail.
+          include: [
+            'tests/unit/**/*.test.ts',
+            'tests/invariants/**/*.test.ts',
+            'tests/golden/**/*.test.ts',
+            'packages/**/*.test.ts',
+            'apps/**/*.test.ts',
+          ],
           // A test that needs a database is not a unit test. CI runs the unit project
           // BEFORE migrations are applied, so a DB-touching test here fails on a fresh
           // database with "relation does not exist". Convention: anything under a

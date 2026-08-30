@@ -32,6 +32,8 @@ they need weekly, the boundary is wrong.
 | `submit_sales_day` | store | ✅ | ✅ | ✅ | ✅ | Cashier closes their own day |
 | `verify_sales_day` | store | ✅ | ✅ | ✅ | ✗ | **Segregation:** the person who submits should not be the one who verifies |
 | `void_sales_day` | store | ✅ | ✅ | ✅ | ✗ | v1's `canVoidRecords`, promoted to a role-level capability |
+| `record_statutory_discount` | store | ✅ | ✅ | ✅ | ✅ | T-137. **Staff-open deliberately** — until POS v2 every row is transcribed from the store's paper SC/PWD logbook, and the person holding that book is a cashier. Manager-gating it is how the register stays empty |
+| `void_statutory_discount` | store | ✅ | ✅ | ✅ | ✗ | T-137. **The asymmetry with the row above IS the control.** The burden of proof in a BIR audit is on the seller, so withdrawing a statutory record is supervisory — same shape as `void_sales_day` |
 | `accept_remittance` | store | ✅ | ✅ | ✅ | ✗ | **DEF-052** — in v1 this grant enforced nothing. Here it must have a denial test |
 | `transfer_funds` | store | ✅ | ✅ | ✅ | ✗ | Row 150. Moving money between accounts that already exist is RECORDING, not changing what the books can record against — that is `manage_chart_of_accounts` |
 
@@ -101,6 +103,7 @@ they need weekly, the boundary is wrong.
 | `manage_users` | org | ✅ | ✅ | ✗ | ✗ | Creating/assigning roles at manager level and above. **See §Open 3 — this is the friction point** |
 | `grant_capability` | org | ✅ | ✅ | ✗ | ✗ | Only an admin grants |
 | `manage_attendance` | store | ✅ | ✅ | ✅ | ✗ | v1's `attendanceManager` grant, now a manager capability |
+| `provision_clock_terminal` | store | ✅ | ✅ | ✗ | ✗ | T-159. ⭐ **ADMIN-ONLY** — Ian, 2026-08-29 (bible row 165), tightened from v1's manager-level `registerClockTerminalAction`. A provisioned terminal is the only principal permitted to read the credential mirror, so whoever may create one may read every enrolled template at that store. Deliberately NOT folded into `manage_attendance` (§7 rule 2). ⚠️ The cost is real and accepted: a manager cannot pair a replacement tablet without an admin |
 
 ## Configuration
 

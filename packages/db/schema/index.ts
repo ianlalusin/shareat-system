@@ -58,3 +58,32 @@ export * from './count-sessions';
 export * from './commissary';
 export * from './trade-discrepancies';
 export * from './item-thresholds';
+export * from './statutory-discounts';
+
+// T-154 — the staff master record: positions, employments, employment_positions.
+// docs/tasks/154-positions-and-employments.md (Phase 4, lane B).
+export * from './employment';
+
+// T-155 — per-store attendance policy, effective-dated (Phase 4, lane B).
+export * from './attendance-config';
+
+// T-156 — the append-only punch, the Lane B landing table (Phase 4, lane B).
+export * from './attendance-punches';
+
+// T-157 — the adjudicated day (Phase 4, lane B).
+export * from './attendance-days';
+
+// T-158 — the manager's decisions, as attributed inputs (Phase 4, lane B).
+export * from './attendance-adjustments';
+
+// T-159 — the provisioned device identity (Phase 4, lane B).
+export * from './clock-terminals';
+
+// T-181 — the Lane A transactional outbox (Phase 4, lane B).
+export * from './mirror-outbox';
+
+// T-182 — the Lane B quarantine (Phase 4, lane B).
+export * from './inbox-quarantine';
+
+// T-185 — clock-in credentials: card and fingerprint (Phase 4, lane B).
+export * from './attendance-credentials';

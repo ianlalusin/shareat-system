@@ -1,0 +1,15 @@
+{
+  "name": "shareat-firestore-rules",
+  "private": true,
+  "version": "0.0.0",
+  "description": "T-159 — the two-lane ruleset and its suite. Deliberately NOT a workspace member: it owns no application code, and the rules-testing SDK must not become a dependency of anything that ships.",
+  "type": "module",
+  "scripts": {
+    "test": "firebase emulators:exec --only firestore,auth --project shareat-rules \"vitest run\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
+    "firebase": "^11.1.0",
+    "vitest": "^4.1.8"
+  }
+}
