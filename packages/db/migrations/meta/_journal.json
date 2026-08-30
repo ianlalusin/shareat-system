@@ -617,6 +617,20 @@
       "when": 1795059107084,
       "tag": "0104_t188_supplier_master_data",
       "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1795145507084,
+      "tag": "0105_t189_pay_rates_and_pay_runs",
+      "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1795231907084,
+      "tag": "0106_t189_unfreeze_door",
+      "breakpoints": true
     }
   ]
 }

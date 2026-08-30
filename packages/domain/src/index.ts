@@ -13,6 +13,7 @@ export * from './money-accounts';
 export * from './money-transfers';
 export * from './prepaid';
 export * from './scheduler';
+export * from './payroll';
 export * from './remittance';
 export * from './till';
 export * from './files';

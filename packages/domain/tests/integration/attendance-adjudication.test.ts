@@ -196,13 +196,33 @@ describe('T-157 invariant 8 — ⛔ a recompute never promotes needs_review to p
   });
 });
 
+
+/**
+ * A REAL pay run to freeze a day against.
+ *
+ * ⚠️ These tests used to invent a UUID. T-189 created `pay_runs` and attached the FK T-157 had
+ * deliberately left off — *"the column lands now; Phase 5 sets it"* — so a made-up id is now
+ * refused, which is the FK doing its job.
+ */
+async function aPayRun(f: { orgId: string; storeId: string; adminId?: string }): Promise<string> {
+  const [acct] = await sql<{ id: string }[]>`
+    select id from money_accounts where store_id = ${f.storeId} and is_foundation limit 1`;
+  const [who] = await sql<{ id: string }[]>`
+    select id from persons where org_id = ${f.orgId} limit 1`;
+  const [run] = await sql<{ id: string }[]>`
+    insert into pay_runs (org_id, store_id, period_start, period_end, money_account_id, created_by)
+    values (${f.orgId}, ${f.storeId}, '2026-01-01', '2026-01-15', ${acct!.id}, ${who!.id})
+    returning id`;
+  return run!.id;
+}
+
 describe('T-157 invariant 9 — ⛔ a FROZEN day is never recomputed', () => {
   it('the service refuses, with a message naming the pay run', async () => {
     const f = await fixture('frozen-service');
     await addPunch(f, at(14), 'in');
     await addPunch(f, at(23), 'out');
     const d = await judge(f);
-    const payRun = '00000000-0000-0000-0000-0000000000aa';
+    const payRun = await aPayRun(f);
     await sql`
       update attendance_days set frozen_at = now(), frozen_by_pay_run_id = ${payRun} where id = ${d.id}`;
 
@@ -216,24 +236,60 @@ describe('T-157 invariant 9 — ⛔ a FROZEN day is never recomputed', () => {
     const d = await judge(f);
     await sql`
       update attendance_days set frozen_at = now(),
-        frozen_by_pay_run_id = '00000000-0000-0000-0000-0000000000bb' where id = ${d.id}`;
+        frozen_by_pay_run_id = ${await aPayRun(f)} where id = ${d.id}`;
 
     await expect(sql`update attendance_days set computed_minutes = 0 where id = ${d.id}`)
       .rejects.toThrow(/frozen/i);
     await expect(sql`delete from attendance_days where id = ${d.id}`).rejects.toThrow(/frozen/i);
   });
 
-  it('⭐ a frozen day cannot be quietly UN-frozen', async () => {
+  /**
+   * ⚠️ **AMENDED 2026-08-31 by T-189 (migration 0106), and the amendment is the point.**
+   *
+   * This used to assert that a freeze could never be lifted at all. That made `voidPayRun`
+   * impossible, and a mis-posted run stranded its days for ever: frozen against a run that no
+   * longer paid them, unpayable by anybody.
+   *
+   * ⭐ The invariant that actually matters survives intact — **a frozen day cannot be RESTATED.**
+   * The door is only wide enough to release it, whole, changing nothing else on the row.
+   */
+  it('⭐ a frozen day cannot be un-frozen WHILE ANYTHING ELSE CHANGES', async () => {
     const f = await fixture('unfreeze');
     await addPunch(f, at(14), 'in');
     await addPunch(f, at(23), 'out');
     const d = await judge(f);
     await sql`
       update attendance_days set frozen_at = now(),
-        frozen_by_pay_run_id = '00000000-0000-0000-0000-0000000000cc' where id = ${d.id}`;
+        frozen_by_pay_run_id = ${await aPayRun(f)} where id = ${d.id}`;
+
+    // ⛔ Smuggling a recomputation out under cover of an unfreeze is still refused.
+    await expect(
+      sql`update attendance_days set frozen_at = null, frozen_by_pay_run_id = null,
+            computed_minutes = 0 where id = ${d.id}`,
+    ).rejects.toThrow(/frozen/i);
+    await expect(
+      sql`update attendance_days set frozen_at = null, frozen_by_pay_run_id = null,
+            status = 'needs_review' where id = ${d.id}`,
+    ).rejects.toThrow(/frozen/i);
+  });
+
+  it('⭐ but a PURE release is allowed — it is the only way voiding a pay run can work', async () => {
+    const f = await fixture('unfreeze-pure');
+    await addPunch(f, at(14), 'in');
+    await addPunch(f, at(23), 'out');
+    const d = await judge(f);
+    const before = await sql`select computed_minutes, status from attendance_days where id = ${d.id}`;
+    await sql`
+      update attendance_days set frozen_at = now(),
+        frozen_by_pay_run_id = ${await aPayRun(f)} where id = ${d.id}`;
+
     await expect(
       sql`update attendance_days set frozen_at = null, frozen_by_pay_run_id = null where id = ${d.id}`,
-    ).rejects.toThrow(/frozen/i);
+    ).resolves.toBeDefined();
+
+    // ⚠️ And the day came back UNCHANGED — released, not restated.
+    const after = await sql`select computed_minutes, status from attendance_days where id = ${d.id}`;
+    expect(after[0]).toEqual(before[0]);
   });
 });
 

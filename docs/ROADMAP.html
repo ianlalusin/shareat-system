@@ -412,8 +412,8 @@
     </p>
     <div class="masthead-meta">
       <span>As at <b>31 August 2026</b></span>
-      <span>Now in <b>Phase 3 &middot; 14 of 20 built</b></span>
-      <span>Gates <b>typecheck &middot; 799 unit &middot; 1689 integration &middot; build</b></span>
+      <span>Now in <b>Phase 5 &middot; 1 of 5 built</b></span>
+      <span>Gates <b>typecheck &middot; 819 unit &middot; 1717 integration &middot; build</b></span>
     </div>
   </header>
 
@@ -620,6 +620,21 @@
         </div>
       </div>
 
+      <div class="wave">
+        <div class="wave-head">
+          <h3>Phase 5 &mdash; payroll</h3>
+          <span class="chip c-part">1 of 5 built</span>
+          <span class="why">&#9888; <b>Started by disproving the thing it was going to port.</b> A read-only probe of the live v1 data found payroll there has produced <b>ZERO payslips</b> across all seven stores &mdash; <code>payrollRuns</code> does not exist as a collection &mdash; and <b>not one of 126 staff carries an SSS, PhilHealth, Pag-IBIG or TIN number</b>. Three shipped v1 slices and a verified PH-2024 tax engine, running on nothing. &starf; So the plan is not a port: build the smallest thing that actually pays somebody, and let the data trigger the rest (<code>docs/plans/phase-5-payroll.md</code>).</span>
+        </div>
+        <div class="tasks">
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-189</div><div class="task-what">Pay rates, and the pay run that finally pays somebody</div><div class="task-note">Shipped 31 Aug &middot; &starf; <b>the first payslip this business has ever posted from software</b> &middot; effective-dated rate with <b>no <code>effective_to</code></b> to drift &middot; &starf; attaches the FK <b>T-157 left open</b> for it and freezes the days it paid &middot; period overlap refused by an <code>EXCLUDE USING gist</code>, per bible &sect;16.6 &middot; nets the advance off <code>1230</code> &middot; &#9888; needed <b>a door in another lane&rsquo;s freeze trigger</b> (0106) &mdash; without it a mis-posted run stranded the period for ever</div></div>
+          <div class="task"><div class="task-id"><span class="dot"></span>T-190</div><div class="task-what">Statutory contributions and withholding</div><div class="task-note">&#9888; <b>GATED, and the gate is data not effort.</b> Port <code>statutory.ts</code> (SSS / PhilHealth / Pag-IBIG / BIR RR 11-2018, 196 lines, 14 tests) <b>when the first employment carries a real SSS number</b> &mdash; today that is 0 of 126. &#9888; Review the rates against the current year first: SSS changes almost yearly. Also owes the <b>employer share</b> (<code>6110</code>/<code>6120</code>/<code>6130</code>), which v1 marks &ldquo;out of scope&rdquo; &mdash; bible &sect;16.7 defect #1</div></div>
+          <div class="task"><div class="task-id"><span class="dot"></span>T-191</div><div class="task-what">13th-month pay</div><div class="task-note">A confirmed <b>ADD</b>, not a port &mdash; bible row 90, Ian: <em>&ldquo;yes, we need to build it.&rdquo;</em> <code>6140</code> was provisioned in Phase 1 and has never been posted to</div></div>
+          <div class="task"><div class="task-id"><span class="dot"></span>T-192</div><div class="task-what">Separation, final pay and clearance</div><div class="task-note">The other confirmed <b>ADD</b> from bible row 90. Neither exists in v1</div></div>
+          <div class="task"><div class="task-id"><span class="dot"></span>T-193</div><div class="task-what">Statutory remittance &mdash; settling 2210&ndash;2240</div><div class="task-note">&#9888; Bible &sect;16.7 defect #2: the generic payment action would <b>double-count</b> already-withheld employee contributions as fresh OPEX. Needs T-190 first</div></div>
+        </div>
+      </div>
+
     </div>
   </section>
 
@@ -695,11 +710,11 @@
         <div class="ph-gate"><b>Exit gate</b>A terminal clocks in with the network pulled and reconciles cleanly on reconnect. &mdash; &starf; <b>MET in a real browser</b> against the Firestore emulator: two punches made offline survived a full reload, replayed on reconnect with no application queue code, and arrived in order. &#9888; <code>/clock</code> needs five <code>NEXT_PUBLIC_FIREBASE_*</code> values or it is a crash screen.</div>
       </div>
 
-      <div class="phase s-queued">
+      <div class="phase s-active">
         <div class="ph-num">5</div>
-        <div class="ph-top"><span class="ph-name">Payroll</span><span class="chip c-queued">not started</span></div>
-        <div class="ph-body">Periods, effective-dated compensation, late and overtime policy, salary advances, immutable pay runs, GL postings.</div>
-        <div class="ph-gate"><b>Exit gate</b>Parity on a historical payroll run, peso for peso; postings balance.</div>
+        <div class="ph-top"><span class="ph-name">Payroll</span><span class="chip c-part">1 of 5 built</span></div>
+        <div class="ph-body">Periods, effective-dated compensation, late and overtime policy, salary advances, immutable pay runs, GL postings. &starf; <b>T-189 shipped 31 Aug</b> &mdash; a rate, a run that computes from attendance, nets the advance off <code>1230</code>, posts, and freezes the days it paid.</div>
+        <div class="ph-gate"><b>Exit gate</b>&#9888; <b>REWRITTEN 31 Aug, because the original was unachievable.</b> It read &ldquo;parity on a historical payroll run, peso for peso&rdquo; &mdash; and a read-only probe of live v1 found <b>there are no historical payroll runs</b>: zero payslips across seven stores, <code>payrollRuns</code> never created. There is nothing to be at parity WITH. &starf; The gate is now: <b>a payslip a staff member could be shown, posted, with its attendance days frozen behind it and the trial balance still tying</b> &mdash; and an advance drawn against <code>1230</code> netted to zero by the run that follows it.</div>
       </div>
 
       <div class="phase s-queued">

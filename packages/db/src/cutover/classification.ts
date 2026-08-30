@@ -420,6 +420,25 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'what carries across as an opening balance. It must be settled or written off before ' +
       'cutover, not silently inherited.',
   },
+  pay_rates: {
+    class: 'keep',
+    reason:
+      'What a job pays is CONFIGURATION, like the roster it belongs to — purging it would leave ' +
+      'every employment unpayable on 2 January. ⚠️ Effective-dated rows from 2026 stay: a rate ' +
+      'that took effect in November is still the rate in force in January until somebody changes it.',
+  },
+  pay_runs: {
+    class: 'purge',
+    reason:
+      'A period paid against 2026 books, whose journal entries are themselves purged. v2 opens on a ' +
+      'zero starting point.',
+  },
+  payslips: {
+    class: 'purge',
+    reason:
+      'As pay_runs — what somebody earned in a purged period. ⚠️ These MUST go with the runs: a ' +
+      'payslip surviving its run would claim a person was paid out of books that no longer exist.',
+  },
   till_custody_shifts: {
     class: 'purge',
     reason:

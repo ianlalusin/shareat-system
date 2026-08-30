@@ -105,6 +105,8 @@ they need weekly, the boundary is wrong.
 | `manage_users` | org | ✅ | ✅ | ✗ | ✗ | Creating/assigning roles at manager level and above. **See §Open 3 — this is the friction point** |
 | `grant_capability` | org | ✅ | ✅ | ✗ | ✗ | Only an admin grants |
 | `manage_attendance` | store | ✅ | ✅ | ✅ | ✗ | v1's `attendanceManager` grant, now a manager capability |
+| `set_pay_rate` | store | ✅ | ✅ | **✗** | ✗ | T-189. ⛔ **Manager is deliberately ✗.** A manager who rosters a team must not be able to reprice it — raising your own team's cost is not an operating decision. Same shape as `set_cash_policy`: the number you are measured against is not yours to move |
+| `run_payroll` | store | ✅ | ✅ | **✗** | ✗ | T-189. Admin-only, preserving v1 (`postPayrollRunAction` is admin-only there). Payroll moves more money in one action than anything else in the system. ⛔ **Rank is not the only control**: `postPayRun` also refuses to pay the poster's OWN employment, and that identity check binds admins too |
 | `provision_clock_terminal` | store | ✅ | ✅ | ✗ | ✗ | T-159. ⭐ **ADMIN-ONLY** — Ian, 2026-08-29 (bible row 165), tightened from v1's manager-level `registerClockTerminalAction`. A provisioned terminal is the only principal permitted to read the credential mirror, so whoever may create one may read every enrolled template at that store. Deliberately NOT folded into `manage_attendance` (§7 rule 2). ⚠️ The cost is real and accepted: a manager cannot pair a replacement tablet without an admin |
 
 ## Configuration

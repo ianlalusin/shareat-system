@@ -124,6 +124,10 @@ export type Capability =
   | 'manage_users'
   | 'grant_capability'
   | 'manage_attendance'
+  /** T-189. ⛔ Manager DENIED — rostering a team must not include repricing it. */
+  | 'set_pay_rate'
+  /** T-189. ⛔ Admin-only, as v1's postPayrollRunAction is. */
+  | 'run_payroll'
   | 'provision_clock_terminal'
   // Configuration
   | 'manage_store_settings'
@@ -187,6 +191,8 @@ export const CAPABILITIES: readonly Capability[] = [
   'manage_users',
   'grant_capability',
   'manage_attendance',
+  'set_pay_rate',
+  'run_payroll',
   'provision_clock_terminal',
   'manage_store_settings',
   'set_cash_policy',
@@ -289,6 +295,8 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   manage_users: 'org',
   grant_capability: 'org',
   manage_attendance: 'store',
+  set_pay_rate: 'store',
+  run_payroll: 'store',
   provision_clock_terminal: 'store',
 
   manage_store_settings: 'store',
@@ -416,6 +424,8 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   manage_users: { super_admin: true, admin: true, manager: false, staff: false },
   grant_capability: { super_admin: true, admin: true, manager: false, staff: false },
   manage_attendance: { super_admin: true, admin: true, manager: true, staff: false },
+  set_pay_rate: { super_admin: true, admin: true, manager: false, staff: false },
+  run_payroll: { super_admin: true, admin: true, manager: false, staff: false },
   // ⭐ ADMIN-ONLY (Ian, 2026-08-29, bible row 165). A provisioned terminal is the ONLY principal
   // allowed to read the credential mirror, so whoever may create one may read every enrolled
   // fingerprint template and card id at that store. Manager was v1's level; this is tighter.

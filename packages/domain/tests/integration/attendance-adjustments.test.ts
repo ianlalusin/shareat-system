@@ -323,9 +323,18 @@ describe('T-158 invariant 6 — ⛔ C1, the inverting combination is refused at 
 describe('T-158 invariants 8 & 9 — the freeze, and what "verified" is allowed to mean', () => {
   it('adjusting a frozen day is refused', async () => {
     const f = await cleanDay('frozen');
+    // ⚠️ A REAL pay run — T-189 attached the FK T-157 deliberately left off, so an invented
+    // uuid is now refused by the database before the freeze is even set.
+    const [acct] = await sql<{ id: string }[]>`
+      select id from money_accounts where store_id = ${f.storeId} and is_foundation limit 1`;
+    const [who] = await sql<{ id: string }[]>`
+      select id from persons where org_id = ${f.orgId} limit 1`;
+    const [run] = await sql<{ id: string }[]>`
+      insert into pay_runs (org_id, store_id, period_start, period_end, money_account_id, created_by)
+      values (${f.orgId}, ${f.storeId}, '2026-01-01', '2026-01-15', ${acct!.id}, ${who!.id})
+      returning id`;
     await sql`
-      update attendance_days set frozen_at = now(),
-        frozen_by_pay_run_id = '00000000-0000-0000-0000-0000000000dd'
+      update attendance_days set frozen_at = now(), frozen_by_pay_run_id = ${run!.id}
       where employment_id = ${f.employment.id}`;
     await expect(adjust(f, { kind: 'verify' })).rejects.toThrow(/frozen/i);
   });

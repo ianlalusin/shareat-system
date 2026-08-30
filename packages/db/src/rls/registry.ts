@@ -369,6 +369,20 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       "Money that did not arrive, and who is being asked for it. A franchise seeing another " +
       "org\u2019s open variances would learn who it suspects of a shortage.",
   },
+  pay_rates: {
+    scope: 'org_column',
+    reason: 'What a job pays. A franchise reading another org’s rates would learn its labour cost.',
+  },
+  pay_runs: {
+    scope: 'org_column',
+    reason: 'Which periods an org has paid, and from which account.',
+  },
+  payslips: {
+    scope: 'org_column',
+    reason:
+      'What a named person earned, and what was recovered from them. ⚠️ The most personal row ' +
+      'in the schema — org isolation here is not tidiness, it is the whole point.',
+  },
   till_custody_shifts: {
     scope: 'org_column',
     reason:

@@ -176,7 +176,10 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
   // pair is deliberately asymmetric on `staff` — recording a count is the cashier's job,
   // charging the shortage it reveals is not. That asymmetry IS the control, so a future edit
   // that quietly equalises them should fail this file, not pass it.
-  it('finds exactly 58 capability rows — NOT the "36" the task documents say in prose', () => {
+  // ⭐ 58 -> 60 on 2026-08-31, T-189: `set_pay_rate` and `run_payroll`. Both admin-yes /
+  // manager-no, so both also JOIN the adminless-manager fallback below with no edit to any
+  // list — see the reasoning there before assuming that is a mistake.
+  it('finds exactly 60 capability rows — NOT the "36" the task documents say in prose', () => {
     // docs/tasks/121-roles-and-access.md and CAPABILITY-MATRIX.md's own Contract section
     // both say "36 rows" / "36 capabilities". The table itself had 38: the two
     // ⚠️-flagged open cells (set_credit_limit, close_period) plus the two platform-only
@@ -193,7 +196,7 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // into the enforcement without also being written into the document people actually
     // read, and vice versa.
     const { rows } = parseCapabilityMatrixDoc();
-    expect(rows.length).toBe(58);
+    expect(rows.length).toBe(60);
   });
 
   it('has no duplicate capability names', () => {
@@ -264,10 +267,10 @@ describe('invariant 1 — every capability has an explicit decision for all four
     expect(problems).toEqual([]);
   });
 
-  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 58 capabilities', () => {
-    expect(CAPABILITIES.length).toBe(58);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(58);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(58);
+  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 60 capabilities', () => {
+    expect(CAPABILITIES.length).toBe(60);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(60);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(60);
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));
   });
@@ -322,6 +325,16 @@ describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', (
         // admin the manager is the top of the tree and somebody must hold it. The grant is
         // materialised as an auditable row rather than inferred at check time.
         'set_cash_policy',
+        // ⭐ T-189's two JOINED this set on 2026-08-31, also with no edit to any list. ⚠️ Worth
+        // the same moment's thought: in an org with NO admin, a manager DOES get `set_pay_rate`
+        // and `run_payroll` as real granted rows. That is correct — somebody has to pay people,
+        // and where there is no admin the manager is the top of the tree.
+        //
+        // ⭐ And unlike `set_cash_policy`, payroll does not rely on rank alone: `postPayRun`
+        // refuses to pay the POSTER'S OWN employment whatever their role. The control moves from
+        // RANK to IDENTITY — the stronger of the two, exactly as it did for `write_off_receivable`.
+        'set_pay_rate',
+        'run_payroll',
         'manage_users',
         'grant_capability',
         'manage_price_lists',
