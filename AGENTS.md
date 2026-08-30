@@ -25,9 +25,9 @@ A task-to-document router. **Most work needs two or three of these, not the whol
 | **Posting anything to the ledger** | `docs/POSTING-PATTERNS.md` — 41 verified examples. **Look it up; do not decide** |
 | **Adding a table** | The build will stop you until you classify it in `packages/db/src/cutover/classification.ts` AND `packages/db/src/rls/registry.ts`. That is the guard working |
 | **Adding a capability or a permission** | `docs/decisions/CAPABILITY-MATRIX.md` — and every ✅ needs a test proving the ✗ fires |
-| **Asking “why is it like this?”** | `PROJECT_BIBLE.md` **§13**, the decision log — 139 rows, newest last. Then `docs/decisions/` for the ADRs |
+| **Asking “why is it like this?”** | `PROJECT_BIBLE.md` **§13**, the decision log — 164 rows, newest last. Then `docs/decisions/` for the ADRs |
 | **Asking “what does v1 do?”** | `docs/discovery/` — 25 read-only findings. **Read v1 as REQUIREMENTS, never as design** |
-| **Asking “what is already broken?”** | `docs/DEFECTS-REGISTER.md` — 63 entries |
+| **Asking “what is already broken?”** | `docs/DEFECTS-REGISTER.md` — 85 entries |
 | **Picking up a task** | `docs/tasks/NNN-*.md`, and `docs/plans/phase-2-source-documents.md` for the sequence |
 | **Wondering what the business does that we have not covered** | `docs/CAPABILITY-GAPS.md` |
 
@@ -111,6 +111,18 @@ opening it. Read them as *requirements*, not as design (bible section 1.2b).
   complete with a failing gate is worse than one reported blocked.
 - **Report spec defects; never silently work around them.** If a constraint cannot be built as
   specified, say so with the real error rather than substituting a weaker rule.
+- ⭐ **Log what you see, even when it is not your task** (bible §13 row 164). A bug, gap or flaw
+  you notice **in passing** — while reading v1 to trace a field, or check how a screen behaves —
+  is written down before you move on. *"I wasn't tasked with that area"* is not a reason to skip
+  it: one row costs nothing, and you are the only person who will ever have that context.
+  **Verification is not required to log** — mark it `reported` and move on.
+  **Three doors, and the wrong one buries the finding:**
+  v1 does it **wrong** → [`docs/DEFECTS-REGISTER.md`](./docs/DEFECTS-REGISTER.md) sections A–D,
+  citing `file:line` ·
+  v1 does it and **no phase of the rebuild owns it** →
+  [`docs/CAPABILITY-GAPS.md`](./docs/CAPABILITY-GAPS.md), because a gap is not a defect and the
+  register cannot express *"nobody has this"* ·
+  **Shareat System itself** is wrong → `DEFECTS-REGISTER.md` **section E**.
 - **Definition of done** is bible §9: typecheck clean · unit tests · integration tests against
   real Postgres · **smoketested in the running app** · build succeeds with the dev server
   stopped · self-reviewed · committed.
