@@ -145,3 +145,53 @@ check asks whether anything is left to post instead.
 ⚠️ **A no-op run still counts as having run.** That is why `scheduler_runs` records a row even when
 it posts nothing — *"it ran and there was nothing to do"* and *"it never ran"* must be
 distinguishable, and this detector is the thing that consumes that distinction.
+
+---
+
+## ⭐ The surface — specced 2026-08-30, because T-135 shipped without one
+
+> **DEF-084:** *"T-135 shipped a watchdog with no screen — nothing in the ERP renders a finding."*
+> `listFindings` had no caller in `apps/erp/src` at all until T-152 wired three cash kinds onto
+> `/remittance`. **Eight of eleven detector kinds are still invisible, and four of those are
+> `hard`** — meaning they block a period close from a page that does not exist.
+
+### Why this is the failure T-135 exists to prevent, one level up
+
+Bible row 147, written about a different list: *"a stuck status that needed a repair tool is a
+status nobody was watching — rendered in a column, in a list, among rows that all looked alike.
+Visible without being seen."* ⛔ **A finding nobody can render is further from watched than that.**
+
+### `/findings` — the whole feed, not a filtered slice
+
+| | |
+|---|---|
+| **Route** | `/findings` |
+| **Reads** | `listFindings(tx, orgId, { period })` — the same call `closeReadiness` makes, so the two can never disagree |
+| **Period** | Defaults to the **last completed month**, which is what the periodic-posting detectors ask about. Selectable, because closing January means asking about January |
+| **Gate to view** | Session only. ⚠️ Seeing that the books do not tie is not privileged information; **hiding it is how it stays unfixed** |
+| **Gate to acknowledge** | `close_period`, already enforced inside `acknowledgeFinding` — store-scoped when the finding names a store |
+
+### What it must show, and why each is not decoration
+
+1. ⭐ **`hard` first, then `soft`** — a hard finding means the books do not add up and blocks a
+   close; a soft one means something is overdue. Sorting by severity is the difference between a
+   list and a queue.
+2. ⭐ **The counts, including `acknowledgedCount`.** An acknowledged finding is *still counted* —
+   that is the entire distinction from "resolved", and a screen showing only the open count would
+   quietly restore the v1 behaviour this task was built to kill.
+3. ⭐ **The acknowledgement's AGE, in days.** `Finding.acknowledgementAgeDays` exists for this:
+   *an ageing acceptance is a smell*. A 3-day-old "I accept this for now" and a 28-day-old one are
+   different facts.
+4. **Close readiness for the selected period** — `ready`, and if not, exactly which hard findings
+   block it. ⚠️ Read from `closeReadiness`, never recomputed on the page.
+5. ⛔ **No "resolve" button, anywhere.** The only way a finding leaves this list is for its
+   condition to stop being true. Acknowledging says *"I accept this for now"* and expires after 30
+   days on its own.
+
+### Deliberately out
+
+| Out | Why |
+|---|---|
+| A per-store filter | Findings are org-wide by nature — a trial balance that does not tie is not a store's problem. The store is shown per row where one applies |
+| Removing `/remittance`'s three cash findings | ⭐ They belong **beside the cash they are about**. This page is the whole feed; that panel is the one a person acting on remittance needs without navigating away. Both read the same call |
+| Anything writing to the ledger | Invariant 6: this module never posts |

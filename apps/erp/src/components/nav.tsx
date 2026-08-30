@@ -56,6 +56,9 @@ const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
   {
     label: 'Reports',
     links: [
+      // ⭐ First in Reports on purpose: it answers "can this period close at all" before the
+      // statements that assume it can. DEF-084 — this feed had no screen until 2026-08-30.
+      { href: '/findings', label: 'Findings' },
       { href: '/reports/trial-balance', label: 'Trial balance' },
       { href: '/reports/income-statement', label: 'Income statement' },
       { href: '/cutover/count', label: 'Cutover count' },

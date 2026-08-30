@@ -359,3 +359,67 @@ delivery they paid for correctly.** So the message now says which kind it is in 
 *"short in the LEDGER… ⛔ this is NOT a counted shortage and must not be charged to a cashier"* —
 and a test asserts that sentence is present. It is the cheapest possible guard against the
 expensive misreading.
+
+---
+
+## ⭐ The shift-record pass — asked for by Ian, 2026-08-30
+
+> *"Sort this out, do the pass to confirm if they are the same, merge them into 1."*
+
+**Two lanes appeared to need the same object.** The cash side (T-153's *"opening and closing it is
+20k"*, T-143's *"a shortage names a person"*) needs a shift. The attendance lane then built
+`attendance_days` and `attendance_punches`. This is the pass.
+
+### ⛔ VERDICT: they are NOT the same object, and merging them would be wrong
+
+The evidence is in the uniqueness key:
+
+```
+uniqueIndex('attendance_days_employment_shift_day_unique').on(employmentId, shiftDay)
+```
+
+**One row per PERSON per 05:00-to-05:00 DAY.** Ian's till, meanwhile, is *"1 store 1 till, most is
+2 shifts, 1 morning 1 evening, same till"* — **one row per TILL per HANDOVER**. Those are different
+grains, and neither contains the other:
+
+| | `attendance_days` | what the cash count needs |
+|---|---|---|
+| **Grain** | person × shift-day | till × handover |
+| **Two cashiers, one day** | ✅ two rows (different `employmentId`) | ✅ two custody periods |
+| **One cashier, split shift** | ⛔ **ONE row** — the 05:00 day does not split | ⛔ two custody periods, and cash moved between them |
+| **Cash** | ⛔ nothing. Searched: the attendance schema models **no** cash, float, till or count | the entire point |
+| **Handover chain** | ⛔ no `prevShiftId`; each row is independent | ⭐ v1 had exactly this (`CashRemitShiftPlain.opening.prevShiftId`) |
+
+⚠️ **The decisive one is the third row.** A cashier who works morning, hands the till to a
+colleague, and comes back in the evening produces **one** `attendance_days` row and **two** custody
+periods. Keying cash custody on that row would make the second handover unrepresentable — and a
+handover that cannot be recorded is precisely the shortage that gets attributed to nobody.
+
+### ⭐ But they are not independent either, and this is the useful half
+
+`attendance_days` **already owns the two things the cash record must not invent**: the person, and
+the real in/out times (`firstInPunchId` / `lastOutPunchId`, derived from append-only punches on a
+provisioned terminal).
+
+**So the cash shift REFERENCES attendance, it does not duplicate it:**
+
+```
+attendance_days   — who was on, and when          (attendance lane owns it)
+        ↑ referenced by
+till_custody_shift — which till, opened/closed by whom, counted at what   (T-153's gap)
+```
+
+⛔ **What must NOT happen is a second table asserting when a shift started.** Two tables answering
+*"when did the evening cashier take over"* will drift, and the first symptom is a variance charged
+to the wrong person — exactly what row 144 forbids.
+
+### What this means for the two open items
+
+1. **T-153's float check** stays as built: ledger balance against `float_target`. The physical
+   open/close count needs `till_custody_shift`, which does not exist yet and is **not** blocked on
+   attendance — attendance supplies the person and the clock, nothing more.
+2. **T-143's variance attribution** is unblocked *in principle* the moment a custody shift exists,
+   because the person can then be looked up rather than inferred from a date.
+
+⭐ **Recorded rather than built.** The table is a real design task with its own spec, and inventing
+it inside a review pass is how it would end up disagreeing with the two lanes it sits between.

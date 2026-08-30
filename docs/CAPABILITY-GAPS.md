@@ -259,3 +259,10 @@ ever populated from Ian directly (13th-month pay, the separation workflow, and n
 answering *"what account does it belong to"* surfaced that the layer above it is missing. Discovery
 23 §4 already folded the cash handover to the ERP *"(Ian, 2026-08-25)"*, so this gap has a decided
 home and no builder. **Gap count: 35.**
+
+
+### ⭐ Resolved in part, 2026-08-30 — the shift pass Ian asked for
+
+The attendance lane's `attendance_days` was checked against what the cash count needs. **They are NOT the same object**: `attendance_days` is keyed `(employment_id, shift_day)` — one row per PERSON per 05:00 day — while the till needs one row per TILL per HANDOVER. A cashier who works a split shift produces one attendance row and two custody periods, so keying cash on it makes the second handover unrepresentable.
+
+⭐ **But attendance already owns the person and the clock** (`first_in_punch_id` / `last_out_punch_id`, from append-only punches). So the remaining gap is narrower than it was: a `till_custody_shift` that **references** `attendance_days` rather than restating it. ⛔ Two tables asserting when a shift started will drift, and the first symptom is a variance charged to the wrong person. Full reasoning in `docs/tasks/153-standing-till-float.md`.
