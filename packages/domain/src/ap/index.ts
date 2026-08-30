@@ -34,7 +34,12 @@ import {
   transaction,
   type Tx,
 } from '@shareat/db';
-import type { SupplierInvoiceVatType, SupplierVatStatus } from '@shareat/db/schema';
+import type {
+  SupplierClassification,
+  SupplierInvoiceVatType,
+  SupplierStatus,
+  SupplierVatStatus,
+} from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
@@ -58,6 +63,42 @@ export interface CreateSupplierInput {
   /** ⚠️ Coupled to invoice VAT fields — see `packages/db/schema/suppliers.ts`'s own comment. */
   vatStatus?: SupplierVatStatus | null;
   notes?: string | null;
+
+  // ---- T-188. Measured against live v1 data before being accepted here; the fields NOT ported
+  // are recorded in docs/tasks/188-supplier-master-data.md with their fill rates.
+  email?: string | null;
+  representativeName?: string | null;
+  /** v1's `vatRegistrationNo` — in the Philippines this IS the TIN. */
+  tin?: string | null;
+  /** ⚠️ A LABEL. ⛔ Nothing may branch on it — see `SUPPLIER_CLASSIFICATIONS`. */
+  classification?: SupplierClassification | null;
+  /** ⭐ Defaults the document type on invoices logged against this supplier. */
+  issuesOfficialReceipt?: boolean;
+  bankName?: string | null;
+  bankAccountName?: string | null;
+  bankAccountNumber?: string | null;
+}
+
+/**
+ * Everything `editSupplier` will accept.
+ *
+ * ⚠️ **Every field is OPTIONAL, including `name`** — the service writes only the keys actually
+ * present, so a caller that renders three fields must not be forced to send the other ten. Making
+ * `name` required here would have pushed callers into sending a whole object, which is exactly
+ * the shape that blanks the fields a form did not happen to show.
+ *
+ * ⛔ `reconciled*` is absent on purpose — an attestation is stamped by `reconcileSupplier`,
+ * never typed into an edit form.
+ */
+export interface EditSupplierInput extends Partial<CreateSupplierInput> {
+  supplierId: string;
+  status?: SupplierStatus;
+}
+
+/** Trim to null so an emptied field clears rather than storing `''`. */
+function orNull(v: string | null | undefined): string | null | undefined {
+  if (v === undefined) return undefined;
+  return v?.trim() || null;
 }
 
 export async function createSupplier(
@@ -77,7 +118,78 @@ export async function createSupplier(
       vatStatus: input.vatStatus ?? null,
       notes: input.notes?.trim() || null,
       createdBy: actor.personId,
+      email: orNull(input.email) ?? null,
+      representativeName: orNull(input.representativeName) ?? null,
+      tin: orNull(input.tin) ?? null,
+      classification: input.classification ?? null,
+      issuesOfficialReceipt: input.issuesOfficialReceipt ?? true,
+      bankName: orNull(input.bankName) ?? null,
+      bankAccountName: orNull(input.bankAccountName) ?? null,
+      bankAccountNumber: orNull(input.bankAccountNumber) ?? null,
     });
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/**
+ * ⭐ **Corrects a supplier.** T-188.
+ *
+ * `apRepo.updateSupplier` was written long ago and had **no caller at all** — no service, no
+ * screen — so a typo in a supplier's name was permanent. That is the gap this task exists to
+ * close; the write path was already there and merely unwired.
+ *
+ * ⛔ **Gated on `approve_supplier`, the same capability as CREATE, and deliberately so.** A name
+ * and a bank account number are the two fields that decide where money goes. A weaker gate on edit
+ * would make the stronger gate on create pointless — anyone could admit nothing and then rewrite
+ * everything.
+ *
+ * ⚠️ Only keys actually PRESENT on `input` are written. An absent key leaves the column alone;
+ * a present-but-empty one clears it. Passing a whole object would blank every field the caller
+ * did not happen to render.
+ */
+export async function editSupplier(
+  tx: Tx | null,
+  actor: Actor,
+  input: EditSupplierInput,
+): Promise<void> {
+  const run = async (trx: Tx) => {
+    await authorize(trx, actor, 'approve_supplier', {});
+
+    const existing = await apRepo.getSupplierById(trx, actor.orgId, input.supplierId);
+    if (!existing) {
+      throw new Error(`editSupplier: supplier ${input.supplierId} does not exist.`);
+    }
+
+    const values: Parameters<typeof apRepo.updateSupplier>[3] = {};
+    if (input.name !== undefined) {
+      const name = input.name.trim();
+      if (!name) throw new Error('editSupplier: a supplier needs a name people will recognise.');
+      values.name = name;
+    }
+    if (input.address !== undefined) values.address = orNull(input.address) ?? null;
+    if (input.contactNo !== undefined) values.contactNo = orNull(input.contactNo) ?? null;
+    if (input.vatStatus !== undefined) values.vatStatus = input.vatStatus;
+    if (input.notes !== undefined) values.notes = orNull(input.notes) ?? null;
+    if (input.status !== undefined) values.status = input.status;
+    if (input.email !== undefined) values.email = orNull(input.email) ?? null;
+    if (input.representativeName !== undefined) {
+      values.representativeName = orNull(input.representativeName) ?? null;
+    }
+    if (input.tin !== undefined) values.tin = orNull(input.tin) ?? null;
+    if (input.classification !== undefined) values.classification = input.classification;
+    if (input.issuesOfficialReceipt !== undefined) {
+      values.issuesOfficialReceipt = input.issuesOfficialReceipt;
+    }
+    if (input.bankName !== undefined) values.bankName = orNull(input.bankName) ?? null;
+    if (input.bankAccountName !== undefined) {
+      values.bankAccountName = orNull(input.bankAccountName) ?? null;
+    }
+    if (input.bankAccountNumber !== undefined) {
+      values.bankAccountNumber = orNull(input.bankAccountNumber) ?? null;
+    }
+
+    await apRepo.updateSupplier(trx, actor.orgId, input.supplierId, values);
   };
   if (tx) return run(tx);
   return transaction(run);
@@ -123,6 +235,8 @@ export async function reconcileSupplier(
 // -------------------------------------------------------------------------------------
 
 export interface RecordInvoiceInput {
+  /** ⚠️ Omit to inherit the supplier's default — see the copy at the insert below. */
+  isOfficialReceipt?: boolean;
   storeId: string;
   supplierId: string;
   invoiceNo?: string | null;
@@ -215,6 +329,15 @@ export async function recordInvoice(
       vatRate: input.vatRate ?? null,
       vatAmount: input.vatAmount ?? null,
       vatExclusiveAmount: input.vatExclusiveAmount ?? null,
+      /**
+       * ⭐ T-188. COPIED from the supplier's habit, not read through to it.
+       *
+       * ⛔ The distinction is the whole point: what a supplier *usually* issues and what *this
+       * document* was are different facts, and a BIR audit asks about the second. Reading through
+       * would mean flipping a supplier's setting today silently rewrites what last month's
+       * receipt was. The caller may still override.
+       */
+      isOfficialReceipt: input.isOfficialReceipt ?? supplier.issuesOfficialReceipt ?? true,
       createdBy: actor.personId,
     });
 

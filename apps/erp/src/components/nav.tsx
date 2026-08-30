@@ -48,7 +48,10 @@ const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
   {
     label: 'Trade',
     links: [
-      { href: '/ap/invoices', label: 'Supplier invoices' },
+      // ⚠️ `/ap/invoices` has no page — only `[id]`. It pointed here as a 404 until 2026-08-30
+      // (DEF-107). `/ap` lists pending invoices already; a dedicated register is T-188 §7's
+      // stated omission, not an oversight.
+      { href: '/ap', label: 'Supplier invoices' },
       { href: '/ap/suppliers', label: 'Suppliers' },
       { href: '/customers', label: 'Customers' },
       { href: '/customers/price-lists', label: 'Price lists' },

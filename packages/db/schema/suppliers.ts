@@ -48,6 +48,20 @@ export type SupplierVatStatus = (typeof SUPPLIER_VAT_STATUSES)[number];
 export const SUPPLIER_INVOICE_STATUSES = ['pending', 'verified', 'voided'] as const;
 export type SupplierInvoiceStatus = (typeof SUPPLIER_INVOICE_STATUSES)[number];
 
+/**
+ * v1's `classification`, ported as a LABEL. T-188 §4.2.
+ *
+ * ⚠️ **96% filled in v1 and it drives NOTHING there** — the editor writes it, the action saves
+ * it, and no code reads it for a decision. (Every `classification` that *does* branch in v1 belongs
+ * to `ARCustomerClassification`, a different entity with the same word.)
+ *
+ * ⛔ So nothing here may branch on it either, until somebody decides what it means. The natural
+ * future use is the BIR expanded-withholding split — individuals and corporations attract
+ * different EWT rates — and that is deliberately NOT built.
+ */
+export const SUPPLIER_CLASSIFICATIONS = ['corporate', 'individual', 'other'] as const;
+export type SupplierClassification = (typeof SUPPLIER_CLASSIFICATIONS)[number];
+
 export const SUPPLIER_INVOICE_VAT_TYPES = ['vatable', 'zero_rated', 'exempt', 'non_vat'] as const;
 export type SupplierInvoiceVatType = (typeof SUPPLIER_INVOICE_VAT_TYPES)[number];
 
@@ -85,6 +99,43 @@ export const suppliers = pgTable(
 
     status: text('status', { enum: SUPPLIER_STATUSES }).notNull().default('active'),
     notes: text('notes'),
+
+    // ---- T-188. Every one of these was measured against the live v1 data before being added;
+    // the fields that were NOT added (paymentOptions, contactNo2, logoPath, lastCreditDueDays)
+    // are recorded in the task doc with their fill rates. ⛔ Do not "complete" the port.
+    email: text('email'),
+    representativeName: text('representative_name'),
+
+    /** v1's `vatRegistrationNo`. ⚠️ **Renamed on purpose** — in the Philippines this IS the TIN,
+     *  and `vat_registration_no` sitting beside `vat_status` reads like a second status field. */
+    tin: text('tin'),
+
+    /** ⚠️ A LABEL, not a rule. See `SUPPLIER_CLASSIFICATIONS` — nothing may branch on it. */
+    classification: text('classification', { enum: SUPPLIER_CLASSIFICATIONS }),
+
+    /**
+     * ⭐ The one v1 field that actually does work: it DEFAULTS the document type when an invoice
+     * is logged against this supplier (v1 `receipt-editor.tsx:188`).
+     *
+     * ⛔ It is a default and nothing more. `supplier_invoices.is_official_receipt` holds what the
+     * document actually WAS, and the two are allowed to disagree — changing a supplier's habit
+     * today must never rewrite what last month's receipt was.
+     */
+    issuesOfficialReceipt: boolean('issues_official_receipt').notNull().default(true),
+
+    /**
+     * ⚠️ Three COLUMNS, not a child table, and the live data is why: **5 of 129 suppliers have
+     * bank details, and every one of them has exactly ONE account.** Odoo and ERPNext both use a
+     * child table because their users bank with several institutions; ours do not.
+     *
+     * `bankName` is deliberately free text so an e-wallet (GCash, Maya) fits without a second
+     * concept — which is what v1's unused `providerName` key was groping towards.
+     *
+     * ⭐ If a supplier ever genuinely needs two, THAT is the moment to add the table.
+     */
+    bankName: text('bank_name'),
+    bankAccountName: text('bank_account_name'),
+    bankAccountNumber: text('bank_account_number'),
 
     reconciledAsOf: date('reconciled_as_of'),
     reconciledAt: timestamp('reconciled_at', { withTimezone: true }),
@@ -193,6 +244,13 @@ export const supplierInvoices = pgTable(
 
     /** Real, server-recomputed VAT (v1: `receipt.actions.ts:283-325`), captured as data. Not yet
      *  posted to a separate input-VAT account — no split exists in `POSTING-PATTERNS.md` today. */
+    /**
+     * ⭐ T-188. What THIS document was, copied from the supplier's habit at creation and owned by
+     * the invoice thereafter. ⛔ Never read through to `suppliers.issues_official_receipt` — a BIR
+     * audit asks what the receipt was, not what the supplier usually issues.
+     */
+    isOfficialReceipt: boolean('is_official_receipt').notNull().default(true),
+
     vatType: text('vat_type', { enum: SUPPLIER_INVOICE_VAT_TYPES }),
     vatRate: numeric('vat_rate', { precision: 8, scale: 4 }),
     vatAmount: numeric('vat_amount', { precision: 14, scale: 2 }),

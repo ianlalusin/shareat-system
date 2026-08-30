@@ -16,6 +16,7 @@ import {
   suppliers,
   supplierInvoices,
   type SupplierStatus,
+  type SupplierClassification,
   type SupplierVatStatus,
   type SupplierInvoiceStatus,
   type SupplierInvoiceVatType,
@@ -55,6 +56,15 @@ export interface SupplierRow {
   reconciledAsOf: string | null;
   reconciledAt: Date | null;
   reconciledBy: string | null;
+  // ---- T-188
+  email: string | null;
+  representativeName: string | null;
+  tin: string | null;
+  classification: SupplierClassification | null;
+  issuesOfficialReceipt: boolean;
+  bankName: string | null;
+  bankAccountName: string | null;
+  bankAccountNumber: string | null;
   createdBy: string;
   createdAt: Date;
 }
@@ -69,6 +79,15 @@ export async function insertSupplier(
     vatStatus: SupplierVatStatus | null;
     notes: string | null;
     createdBy: string;
+    // ---- T-188. Optional so every existing caller keeps compiling unchanged.
+    email?: string | null;
+    representativeName?: string | null;
+    tin?: string | null;
+    classification?: SupplierClassification | null;
+    issuesOfficialReceipt?: boolean;
+    bankName?: string | null;
+    bankAccountName?: string | null;
+    bankAccountNumber?: string | null;
   },
 ): Promise<{ id: string }> {
   const [row] = await tx.insert(suppliers).values(input).returning({ id: suppliers.id });
@@ -113,6 +132,15 @@ export async function updateSupplier(
     reconciledAsOf: string | null;
     reconciledAt: Date | null;
     reconciledBy: string | null;
+    // ---- T-188
+    email: string | null;
+    representativeName: string | null;
+    tin: string | null;
+    classification: SupplierClassification | null;
+    issuesOfficialReceipt: boolean;
+    bankName: string | null;
+    bankAccountName: string | null;
+    bankAccountNumber: string | null;
   }>,
 ): Promise<void> {
   const updated = await tx
@@ -180,6 +208,8 @@ export async function insertSupplierInvoice(
     vatRate: string | null;
     vatAmount: string | null;
     vatExclusiveAmount: string | null;
+    /** T-188 — copied from the supplier at creation, owned by the invoice thereafter. */
+    isOfficialReceipt?: boolean;
     createdBy: string;
   },
 ): Promise<{ id: string }> {

@@ -8,6 +8,7 @@
 import { redirect } from 'next/navigation';
 import {
   createSupplier,
+  editSupplier,
   recordInvoice,
   setInvoiceLines,
   uploadFile,
@@ -34,6 +35,61 @@ function back(path: string, params: Record<string, string>): never {
   redirect(`${path}?${new URLSearchParams(params).toString()}`);
 }
 
+/**
+ * The T-188 fields, read once and shared by create and edit.
+ *
+ * ⚠️ A checkbox that is OFF sends NOTHING, so `issuesOfficialReceipt` must be derived from a
+ * companion hidden marker rather than from the checkbox alone — otherwise un-ticking it on an
+ * edit form would be indistinguishable from not rendering the field, and the value would never
+ * turn off. That is why `orPresent` exists.
+ */
+function supplierFieldsFrom(fd: FormData) {
+  const s = (k: string) => str(fd, k) || null;
+  const cls = str(fd, 'classification');
+  return {
+    email: s('email'),
+    representativeName: s('representativeName'),
+    tin: s('tin'),
+    classification: (cls || null) as 'corporate' | 'individual' | 'other' | null,
+    issuesOfficialReceipt: fd.has('issuesOfficialReceiptPresent')
+      ? fd.get('issuesOfficialReceipt') === 'on'
+      : undefined,
+    bankName: s('bankName'),
+    bankAccountName: s('bankAccountName'),
+    bankAccountNumber: s('bankAccountNumber'),
+  };
+}
+
+/**
+ * ⭐ **Corrects a supplier.** T-188 — the gap that motivated the task: `apRepo.updateSupplier`
+ * existed with no caller and no screen, so a typo in a name was permanent.
+ *
+ * ⛔ The gate is `approve_supplier`, inside `editSupplier` — the same capability as create, and
+ * deliberately not weaker. A name and a bank account number decide where money goes.
+ */
+export async function editSupplierAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const supplierId = str(formData, 'supplierId');
+  const path = `/ap/suppliers/${supplierId}`;
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      editSupplier(tx, actor, {
+        supplierId,
+        name: str(formData, 'name'),
+        address: str(formData, 'address'),
+        contactNo: str(formData, 'contactNo'),
+        notes: str(formData, 'notes'),
+        vatStatus: (str(formData, 'vatStatus') || null) as never,
+        status: (str(formData, 'status') || 'active') as never,
+        ...supplierFieldsFrom(formData),
+      }),
+    );
+  } catch (err) {
+    back(path, { error: errorMessage(err) });
+  }
+  back(path, { ok: 'Supplier updated.' });
+}
+
 export async function createSupplierAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   let id = '';
@@ -44,6 +100,7 @@ export async function createSupplierAction(formData: FormData): Promise<void> {
         address: str(formData, 'address') || null,
         contactNo: str(formData, 'contactNo') || null,
         notes: str(formData, 'notes') || null,
+        ...supplierFieldsFrom(formData),
       }),
     );
     id = created.id;

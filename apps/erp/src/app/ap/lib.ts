@@ -170,3 +170,36 @@ export async function whoSells(orgId: string, itemId: string): Promise<Catalogue
 export async function invoiceLines(orgId: string, invoiceId: string) {
   return withOrgPrincipal(orgId, (tx) => itemsRepo.linesForInvoice(tx, orgId, invoiceId));
 }
+
+/**
+ * ⚠️ **Masks a bank account number for a LIST.** T-188 §6.
+ *
+ * Business banking details are not a secret, but a register that puts every account number on one
+ * screen is a register nobody should leave open on a counter. The detail page shows it whole.
+ */
+export function maskAccountNumber(n: string | null): string | null {
+  if (!n) return null;
+  const t = n.trim();
+  if (t.length <= 4) return '•'.repeat(t.length);
+  return '•'.repeat(Math.min(t.length - 4, 8)) + t.slice(-4);
+}
+
+/** ⭐ Search over the register, on the fields a person would actually type. Case-insensitive. */
+export function matchesSupplier(s: SupplierRow, q: string): boolean {
+  const needle = q.trim().toLowerCase();
+  if (!needle) return true;
+  return [s.name, s.tin, s.representativeName, s.email, s.contactNo, s.bankName]
+    .some((f) => (f ?? '').toLowerCase().includes(needle));
+}
+
+/** Human labels. ⚠️ The stored value stays a closed enum — these only render it. */
+export const VAT_STATUS_LABEL: Record<string, string> = {
+  vat_registered: 'VAT-registered',
+  non_vat: 'Non-VAT',
+};
+
+export const CLASSIFICATION_LABEL: Record<string, string> = {
+  corporate: 'Corporate',
+  individual: 'Individual',
+  other: 'Other',
+};

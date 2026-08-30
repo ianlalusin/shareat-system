@@ -411,9 +411,9 @@
       Phase&nbsp;4 invalidates Phases 2 and 3.
     </p>
     <div class="masthead-meta">
-      <span>As at <b>30 August 2026</b></span>
+      <span>As at <b>31 August 2026</b></span>
       <span>Now in <b>Phase 3 &middot; 14 of 20 built</b></span>
-      <span>Gates <b>typecheck &middot; 790 unit &middot; 1677 integration &middot; build</b></span>
+      <span>Gates <b>typecheck &middot; 799 unit &middot; 1689 integration &middot; build</b></span>
     </div>
   </header>
 
@@ -562,7 +562,7 @@
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-152</div><div class="task-what">Remittance cadence and the un-remitted ceiling</div><div class="task-note">Shipped 29 Aug &middot; completes T-143, which shipped pooling and left the ceiling unenforced &middot; <b>three</b> detectors in T-135&rsquo;s layer, incl. DEF-082&rsquo;s service-charge alarm &middot; found <b>DEF-084</b>: T-135 had no screen at all</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-137</div><div class="task-what">Senior / PWD statutory register</div><div class="task-note">Shipped 30 Aug &middot; &starf; the lane <b>disproved its own spec first</b>: no SC/PWD identity is captured anywhere, in software or on paper &mdash; a live compliance exposure, not a modernisation</div></div>          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-153</div><div class="task-what">The till float &mdash; a side pocket, not a balance</div><div class="task-note">Shipped 30 Aug &middot; <code>1115</code>, a target the pot is judged against, and it blocks at zero &middot; Ian&rsquo;s worked example is a test to the peso</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-186</div><div class="task-what">The till custody shift &mdash; who held the drawer, and what they counted</div><div class="task-note">Shipped 30 Aug &middot; &starf; <b>it makes T-143&rsquo;s stated premise true</b> &mdash; that module assumed &ldquo;the till is counted daily and signed&rdquo; and there was nowhere to record a count. Grain is <em>till &times; handover</em>, NOT attendance&rsquo;s <em>person &times; day</em>: a split shift makes ONE attendance row and TWO custody periods. &starf; Names the person v1 cannot &mdash; v1 stores <code>cashierName</code> as a <em>nullable free-text string</em>. A counted short charges <code>1230</code>; a counted OVER posts <b>nothing at all</b> (tip box), asserted by a test. &#9888; Found <b>DEF-104</b>: 187 tests failed on a green tree because 13 migrations were permanently skipped in the test database</div></div>
-          <div class="task"><div class="task-id"><span class="dot"></span>T-187</div><div class="task-what">Service-charge distribution &mdash; clearing 2160</div><div class="task-note">&#9888; <b>Designed in T-136 &sect;6, unbuilt.</b> <b>DEF-082</b>: every sales day with a service charge CREDITS <code>2160</code> and nothing in the tree ever debits it &mdash; RA 11360 requires distribution at intervals of at most sixteen days. Ian, 29 Aug: <em>&ldquo;for now no we dont charge but im planning&rdquo;</em>, which is why T-152 shipped the ALARM and not the document. &#9888; The alarm fires permanently once service charge is switched on &mdash; <b>do not enable it in POS before this exists</b></div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-188</div><div class="task-what">Supplier master data &mdash; and the record you could not correct</div><div class="task-note">Shipped 31 Aug &middot; &starf; <b>the assessment changed the build</b>. A read-only probe of all 129 live v1 suppliers disproved the reason this task was picked (<code>bankAccounts</code> is filled on <b>3.9%</b>) and found the real gap: <b>a supplier could be created and never EDITED</b> &mdash; <code>updateSupplier</code> written in full with <b>no caller anywhere</b> (DEF-106). Also fixed two nav links to 404s (DEF-107). &#9888; Bank details are three COLUMNS, not the child table Odoo and ERPNext use &mdash; 5 suppliers, one account each. <code>paymentOptions</code> refused: 1.6% filled, both rows say &ldquo;Cash&rdquo;</div></div><div class="task"><div class="task-id"><span class="dot"></span>T-187</div><div class="task-what">Service-charge distribution &mdash; clearing 2160</div><div class="task-note">&#9888; <b>Designed in T-136 &sect;6, unbuilt.</b> <b>DEF-082</b>: every sales day with a service charge CREDITS <code>2160</code> and nothing in the tree ever debits it &mdash; RA 11360 requires distribution at intervals of at most sixteen days. Ian, 29 Aug: <em>&ldquo;for now no we dont charge but im planning&rdquo;</em>, which is why T-152 shipped the ALARM and not the document. &#9888; The alarm fires permanently once service charge is switched on &mdash; <b>do not enable it in POS before this exists</b></div></div>
 
         </div>
       </div>
@@ -783,6 +783,7 @@
         <strong>17%</strong>. The real figure is <strong>97%</strong> &mdash; because 55 of those
         87 fields did not vanish, they <em>moved</em> to the six tables that should always have
         owned them. <strong>Only the fourth column is a loss.</strong>
+        <br><br>&#9888; <b>And a field having a home is still not the same as a field anybody fills.</b> T-188 tested this against the live v1 data and found the supplier score of 67% almost entirely misleading &mdash; nine &ldquo;missing&rdquo; fields, of which <b>one</b> was doing any work. <b>Weight by use before you build from a bar on this page.</b>
       </p>
     </div>
 
@@ -862,19 +863,26 @@
       <div class="prow">
         <div class="pname">Suppliers <span class="pfields">27 fields</span></div>
         <div class="pbar">
-          <span class="seg s-carried" style="width:33.3%"></span><span class="seg s-moved" style="width:29.6%"></span><span class="seg s-derived" style="width:3.7%"></span><span class="seg s-dropped" style="width:33.3%"></span>
+          <span class="seg s-carried" style="width:55.6%"></span><span class="seg s-moved" style="width:29.6%"></span><span class="seg s-derived" style="width:3.7%"></span><span class="seg s-dropped" style="width:11.1%"></span>
         </div>
-        <div class="ppct pct-part">67%</div>
+        <div class="ppct pct-good">89%</div>
         <div class="pnote">
-          &#9888; <b>The thinnest master record in v2, and the one a real cutover would notice
-          first.</b> <code>outstandingBalance</code> being derived from the AP ledger is a genuine
-          improvement &mdash; v1 stores it and it drifts.
-          <br><b class="minus">&minus;</b> <code>bankAccounts</code>,
-          <code>vatRegistrationNo</code>, <code>email</code>, <code>contactNo2</code>,
-          <code>representativeName</code>, <code>paymentOptions</code>,
-          <code>issuesOfficialReceipt</code>, <code>lastCreditDueDays</code>,
-          <code>classification</code>. <b>You cannot pay a supplier from v2&rsquo;s record</b> &mdash;
-          the bank details are not in it.
+          <b>Was 67% until T-188 shipped on 31&nbsp;Aug</b> &mdash; and &#9888; <b>the 67% was
+          misleading, which the live data is what proved.</b> This page previously said &ldquo;you
+          cannot pay a supplier from v2&rsquo;s record.&rdquo; True, and worthless as an argument:
+          a read-only probe of all 129 v1 supplier documents found <b>bank details on 5 of them
+          (3.9%)</b> &mdash; <b>v1 cannot pay 96% of its suppliers from the record either.</b>
+          <br>&starf; <b>Measured by USE rather than counted, exactly one load-bearing field was
+          missing</b>: <code>issuesOfficialReceipt</code> (66% filled, and it defaults the document
+          type). <code>classification</code> is 96% filled and drives <em>nothing</em> in v1 &mdash;
+          ported as a label, with the ban on branching written into the enum itself.
+          <br><b class="minus">&minus;</b> <code>paymentOptions</code> (1.6%, and both rows say
+          &ldquo;Cash&rdquo;), <code>contactNo2</code> (1.6%), <code>lastCreditDueDays</code>
+          (3.1%, set to <code>null</code> by its only writer). <b>Refused with a number, not
+          forgotten.</b>
+          <br>&starf; <b>The real gap was never a field.</b> A supplier could be <em>created and
+          never edited</em> &mdash; <code>updateSupplier</code> sat in the repo with no caller
+          (DEF-106) &mdash; and two nav entries pointed at 404s (DEF-107).
         </div>
       </div>
 

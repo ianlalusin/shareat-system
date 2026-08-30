@@ -1,8 +1,10 @@
 import { notFound } from 'next/navigation';
 import { peso } from '../../../../lib/format';
 import { requireSession } from '../../../../lib/session';
-import { recordPaymentAction } from '../../actions';
+import { editSupplierAction, recordPaymentAction } from '../../actions';
 import { getSupplier, getPosition, listOpenItems, listInvoices, moneyAccountsFor, storesWithOpenItems, today } from '../../lib';
+import { SUPPLIER_CLASSIFICATIONS, SUPPLIER_STATUSES, SUPPLIER_VAT_STATUSES } from '@shareat/db';
+import { CLASSIFICATION_LABEL, VAT_STATUS_LABEL } from '../../lib';
 
 export const metadata = { title: 'Supplier — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -51,8 +53,8 @@ export default async function SupplierDetailPage({
     <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <a href="/ap" className="text-sm text-neutral-500 underline hover:no-underline dark:text-neutral-400">
-            ← Accounts payable
+          <a href="/ap/suppliers" className="text-sm text-neutral-500 underline hover:no-underline dark:text-neutral-400">
+            ← Suppliers
           </a>
           <h1 className="mt-1 text-2xl font-semibold">{supplier.name}</h1>
         </div>
@@ -72,6 +74,92 @@ export default async function SupplierDetailPage({
           {sp.ok}
         </div>
       )}
+
+      {/* ---------------------------------------------------------------- T-188: the record itself.
+          ⛔ Until 2026-08-30 a supplier could be CREATED and never EDITED — `updateSupplier`
+          existed in the repo with no caller — so a typo in a name was permanent. */}
+      <details className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <summary className="cursor-pointer text-sm font-medium">Edit this supplier</summary>
+        <form action={editSupplierAction} className="mt-4 space-y-4">
+          <input type="hidden" name="supplierId" value={supplier.id} />
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <TextField label="Name" name="name" defaultValue={supplier.name} required />
+            <TextField label="Representative" name="representativeName" defaultValue={supplier.representativeName} />
+            <TextField label="Contact no." name="contactNo" defaultValue={supplier.contactNo} />
+            <TextField label="Email" name="email" type="email" defaultValue={supplier.email} />
+            <TextField label="Address" name="address" defaultValue={supplier.address} />
+            <TextField label="TIN" name="tin" defaultValue={supplier.tin} />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">VAT status</span>
+              <select name="vatStatus" defaultValue={supplier.vatStatus ?? ''} className={INPUT}>
+                <option value="">Not stated</option>
+                {SUPPLIER_VAT_STATUSES.map((v) => (
+                  <option key={v} value={v}>{VAT_STATUS_LABEL[v] ?? v}</option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
+              {/* ⚠️ A LABEL, not a rule — nothing branches on it. See T-188 §4.2. */}
+              <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Classification</span>
+              <select name="classification" defaultValue={supplier.classification ?? ''} className={INPUT}>
+                <option value="">Not stated</option>
+                {SUPPLIER_CLASSIFICATIONS.map((c) => (
+                  <option key={c} value={c}>{CLASSIFICATION_LABEL[c]}</option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Status</span>
+              <select name="status" defaultValue={supplier.status} className={INPUT}>
+                {SUPPLIER_STATUSES.map((v) => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {/* ⭐ The one ported field that actually does work: it DEFAULTS the document type on a
+              new invoice. The invoice owns its own copy thereafter and may disagree. */}
+          <label className="flex items-start gap-2 text-sm">
+            <input type="hidden" name="issuesOfficialReceiptPresent" value="1" />
+            <input
+              type="checkbox"
+              name="issuesOfficialReceipt"
+              defaultChecked={supplier.issuesOfficialReceipt}
+              className="mt-1"
+            />
+            <span>
+              Issues an <strong>Official Receipt</strong> (BIR)
+              <span className="block text-xs text-neutral-500">
+                Defaults the document type when an invoice is logged against this supplier. ⚠️
+                Changing it does not alter invoices already recorded.
+              </span>
+            </span>
+          </label>
+
+          <fieldset className="grid gap-3 rounded border border-neutral-200 p-3 sm:grid-cols-3 dark:border-neutral-800">
+            <legend className="px-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">
+              Where payment goes
+            </legend>
+            <TextField label="Bank or e-wallet" name="bankName" defaultValue={supplier.bankName} />
+            <TextField label="Account name" name="bankAccountName" defaultValue={supplier.bankAccountName} />
+            <TextField label="Account number" name="bankAccountNumber" defaultValue={supplier.bankAccountNumber} />
+          </fieldset>
+
+          <TextField label="Notes" name="notes" defaultValue={supplier.notes} />
+
+          <button
+            type="submit"
+            className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+          >
+            Save changes
+          </button>
+        </form>
+      </details>
 
       {storeOptions.length > 1 && (
         <section className="space-y-2 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
@@ -199,6 +287,34 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
       <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
       {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
+    </label>
+  );
+}
+
+/** A plain labelled input for the T-188 edit form. Reuses this file's existing `INPUT`. */
+function TextField({
+  label,
+  name,
+  defaultValue,
+  type = 'text',
+  required,
+}: {
+  label: string;
+  name: string;
+  defaultValue?: string | null;
+  type?: string;
+  required?: boolean;
+}) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
+      <input
+        name={name}
+        type={type}
+        required={required}
+        defaultValue={defaultValue ?? ''}
+        className={INPUT}
+      />
     </label>
   );
 }
