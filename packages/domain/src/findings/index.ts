@@ -67,6 +67,10 @@ export async function listFindings(
     ...(await findingsRepo.serviceChargeFloatAgeing(tx, orgId)),
     // T-153 — a till float not holding its configured amount.
     ...(await findingsRepo.tillFloatOffTarget(tx, orgId)),
+    // T-186 — a CLOSED shift whose physical count did not match the ledger. ⚠️ Deliberately
+    // adjacent to the line above: they look identical as a number and mean opposite things,
+    // and only one of them names somebody who owes money.
+    ...(await findingsRepo.tillCountVarianceOpen(tx, orgId)),
     // T-175 — a buyer store consuming items it has never set a reorder threshold for. ⭐ The
     // replacement for v1's forcing function: nag the manager who can act, never block the cook
     // who cannot.

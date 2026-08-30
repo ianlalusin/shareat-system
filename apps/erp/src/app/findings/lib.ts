@@ -72,5 +72,6 @@ export const KIND_LABEL: Record<string, string> = {
   remittanceOverdue: 'Remittance overdue',
   serviceChargeFloatAgeing: 'Service-charge float ageing',
   tillFloatOffTarget: 'Till float off its target',
+  tillCountVarianceOpen: 'Counted variance on a closed shift',
   itemHasNoThreshold: 'Items with no reorder threshold',
 };

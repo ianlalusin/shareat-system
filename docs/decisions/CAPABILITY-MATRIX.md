@@ -36,6 +36,8 @@ they need weekly, the boundary is wrong.
 | `void_statutory_discount` | store | ✅ | ✅ | ✅ | ✗ | T-137. **The asymmetry with the row above IS the control.** The burden of proof in a BIR audit is on the seller, so withdrawing a statutory record is supervisory — same shape as `void_sales_day` |
 | `accept_remittance` | store | ✅ | ✅ | ✅ | ✗ | **DEF-052** — in v1 this grant enforced nothing. Here it must have a denial test |
 | `transfer_funds` | store | ✅ | ✅ | ✅ | ✗ | Row 150. Moving money between accounts that already exist is RECORDING, not changing what the books can record against — that is `manage_chart_of_accounts` |
+| `record_till_count` | store | ✅ | ✅ | ✅ | ✅ | T-186. ⭐ **Staff-open deliberately** — the person holding the drawer is the cashier, and a till is counted at open and close by whoever holds it. Manager-gating it is how the record stays empty; same reasoning as `record_statutory_discount` |
+| `resolve_till_variance` | store | ✅ | ✅ | ✅ | **✗** | T-186. ⛔ **The asymmetry with the row above IS the control.** Charging a counted shortage names a person and moves `1230`; a cashier must never be able to charge, forgive or write off their own count. Same shape as `submit_sales_day` / `verify_sales_day` |
 
 ## Expenses
 

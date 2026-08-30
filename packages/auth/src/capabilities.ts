@@ -74,6 +74,10 @@ export type Capability =
   | 'record_statutory_discount'
   | 'void_statutory_discount'
   | 'accept_remittance'
+  /** T-186. Staff-OPEN: the person holding the drawer is the cashier. */
+  | 'record_till_count'
+  /** T-186. Staff-DENIED, and the asymmetry with the line above IS the control. */
+  | 'resolve_till_variance'
   | 'transfer_funds'
   // Expenses
   | 'create_expense'
@@ -143,6 +147,8 @@ export const CAPABILITIES: readonly Capability[] = [
   'record_statutory_discount',
   'void_statutory_discount',
   'accept_remittance',
+  'record_till_count',
+  'resolve_till_variance',
   'transfer_funds',
   'create_expense',
   'edit_own_expense',
@@ -211,6 +217,8 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   record_statutory_discount: 'store',
   void_statutory_discount: 'store',
   accept_remittance: 'store',
+  record_till_count: 'store',
+  resolve_till_variance: 'store',
   // A transfer names two money accounts, and a money account belongs to a store.
   transfer_funds: 'store',
 
@@ -319,6 +327,8 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   // void_sales_day directly above.
   void_statutory_discount: { super_admin: true, admin: true, manager: true, staff: false },
   accept_remittance: { super_admin: true, admin: true, manager: true, staff: false },
+  record_till_count: { super_admin: true, admin: true, manager: true, staff: true },
+  resolve_till_variance: { super_admin: true, admin: true, manager: true, staff: false },
   // DECIDED — Ian 2026-08-26 (bible row 150): manager, deliberately NOT admin-only.
   // ⭐ Row 149 made OPENING an account admin-only, and the distinction between the two is
   // the point: adding an account changes what the books can record against, while moving

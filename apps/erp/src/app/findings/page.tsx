@@ -105,7 +105,7 @@ export default async function FindingsPage({
       {rows.length === 0 && (
         <p className="rounded-lg border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500 dark:border-neutral-700">
           Nothing is wrong that this system knows how to ask about. ⚠️ That is not the same as
-          nothing being wrong — it is the eleven questions above, answered.
+          nothing being wrong — it is the twelve questions above, answered.
         </p>
       )}
 

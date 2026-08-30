@@ -232,15 +232,21 @@ describe('invariant 5 — every capability denies a role that lacks it (all 56)'
     // how a statutory register stays empty. ⚠️ Its VOID counterpart is deliberately NOT here:
     // `void_statutory_discount` denies staff, and that asymmetry is the control.
     'record_statutory_discount',
+    // ⭐ T-186: counting the till at open and close. Staff-open for the same reason — the
+    // person holding the drawer IS the cashier, and a count only a manager can enter is a
+    // count that gets entered from memory hours later, if at all. ⚠️ Its resolution
+    // counterpart is deliberately NOT here: `resolve_till_variance` denies staff, because
+    // charging the shortage your own count revealed is the one thing you must not do.
+    'record_till_count',
   ];
 
-  it('every capability EXCEPT the universally-granted 9 has at least one denial case', () => {
+  it('every capability EXCEPT the universally-granted 13 has at least one denial case', () => {
     const covered = new Set(denialCases.map((c) => c.capability));
     const missing = CAPABILITIES.filter((c) => !covered.has(c));
     expect(missing.sort()).toEqual([...UNIVERSALLY_GRANTED].sort());
   });
 
-  it('the universally-granted 12 really are true for all four roles (why they are exempt)', () => {
+  it('the universally-granted 13 really are true for all four roles (why they are exempt)', () => {
     for (const c of UNIVERSALLY_GRANTED) {
       expect(ROLES.every((r) => CAPABILITY_MATRIX[c][r]), `${c} is not actually universal`).toBe(true);
     }

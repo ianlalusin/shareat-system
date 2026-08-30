@@ -369,6 +369,20 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       "Money that did not arrive, and who is being asked for it. A franchise seeing another " +
       "org\u2019s open variances would learn who it suspects of a shortage.",
   },
+  till_custody_shifts: {
+    scope: 'org_column',
+    reason:
+      'Who held a store’s till, when, and what they counted. A franchise seeing another ' +
+      'org’s shifts would learn which of its neighbours is short and who is being asked for it.',
+  },
+  till_count_lines: {
+    scope: 'derived',
+    via: 'exists (select 1 from till_custody_shifts s where s.id = till_count_lines.shift_id and s.org_id = app_current_org())',
+    reason:
+      'No org_id of its own — a count is reachable only through its shift. Scoped via the ' +
+      'parent so the two can never disagree about which org they belong to, exactly as ' +
+      'remittance_lines is.',
+  },
   scheduler_runs: {
     scope: 'org_column',
     reason:

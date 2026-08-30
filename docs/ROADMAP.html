@@ -193,6 +193,60 @@
 
   /* ---------- section ---------- */
   section { display: flex; flex-direction: column; gap: 20px; }
+
+  /* ---- v1 -> v2 data parity (added 2026-08-30) ------------------------------------- */
+  .parity-method { margin: 6px 0 18px; display: flex; flex-direction: column; gap: 10px; }
+  .parity-method p { margin: 0; font-size: 13.5px; color: var(--muted); max-width: 74ch; line-height: 1.55; }
+  .parity-method p.warn { color: var(--ink-2); background: var(--surface-2);
+    border-left: 3px solid var(--active); padding: 10px 14px; border-radius: 0 6px 6px 0; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: var(--muted); }
+  .legend b { color: var(--ink-2); font-weight: 600; }
+  .sw { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 6px;
+    vertical-align: -1px; }
+  .sw-carried, .seg.s-carried  { background: var(--done); }
+  .sw-moved,   .seg.s-moved    { background: color-mix(in srgb, var(--done) 42%, var(--surface-2)); }
+  .sw-derived, .seg.s-derived  { background: color-mix(in srgb, var(--active) 62%, var(--surface-2)); }
+  .sw-dropped, .seg.s-dropped  { background: var(--critical); }
+
+  .parity { display: flex; flex-direction: column; gap: 14px; }
+  .prow { display: grid; grid-template-columns: 180px 1fr 62px; gap: 6px 14px;
+    align-items: center; padding-bottom: 14px; border-bottom: 1px solid var(--rule); }
+  .prow:last-child { border-bottom: 0; }
+  .pname { font-size: 14px; font-weight: 600; color: var(--ink); display: flex;
+    flex-direction: column; gap: 2px; }
+  .pfields { font-size: 11.5px; font-weight: 400; color: var(--faint);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .pbar { display: flex; height: 15px; border-radius: 4px; overflow: hidden;
+    background: var(--surface-2); }
+  .seg { display: block; height: 100%; }
+  .ppct { font-size: 17px; font-weight: 650; text-align: right;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .pct-good { color: var(--done); }
+  .pct-part { color: var(--active); }
+  .pct-low  { color: var(--critical); }
+  .pnote { grid-column: 2 / -1; font-size: 12.5px; line-height: 1.55; color: var(--muted);
+    max-width: 82ch; }
+  .pnote code { font-size: 11.5px; }
+  .pnote .minus { color: var(--critical); font-weight: 700; }
+  .pnote .plus  { color: var(--done); font-weight: 700; }
+
+  .parity-read { margin-top: 22px; padding: 18px 20px; background: var(--surface);
+    border: 1px solid var(--rule); border-radius: 10px; box-shadow: var(--shadow); }
+  .parity-read h3 { margin: 0 0 10px; font-size: 15px; color: var(--ink); }
+  .parity-read ul { margin: 0 0 14px; padding-left: 20px; display: flex;
+    flex-direction: column; gap: 9px; }
+  .parity-read li { font-size: 13.5px; line-height: 1.55; color: var(--muted); max-width: 82ch; }
+  .parity-read li b { color: var(--ink-2); }
+  .parity-read p.warn { margin: 0; font-size: 13px; color: var(--ink-2);
+    background: var(--surface-2); border-left: 3px solid var(--active);
+    padding: 10px 14px; border-radius: 0 6px 6px 0; max-width: 82ch; }
+
+  @media (max-width: 720px) {
+    .prow { grid-template-columns: 1fr 56px; }
+    .pbar { grid-column: 1 / -1; }
+    .pnote { grid-column: 1 / -1; }
+  }
+
   .sec-head { display: flex; flex-direction: column; gap: 8px; }
   .sec-head h2 {
     font-family: Newsreader, Georgia, serif;
@@ -357,9 +411,9 @@
       Phase&nbsp;4 invalidates Phases 2 and 3.
     </p>
     <div class="masthead-meta">
-      <span>As at <b>28 August 2026</b></span>
-      <span>Now in <b>Phase 2 &middot; all six waves complete</b></span>
-      <span>Gates <b>typecheck &middot; 611 unit &middot; 1173 integration &middot; build</b></span>
+      <span>As at <b>30 August 2026</b></span>
+      <span>Now in <b>Phase 3 &middot; 14 of 20 built</b></span>
+      <span>Gates <b>typecheck &middot; 790 unit &middot; 1677 integration &middot; build</b></span>
     </div>
   </header>
 
@@ -498,7 +552,7 @@
         <div class="wave-head">
           <h3>Cross-cutting &mdash; specced outside the waves</h3>
           <span class="chip c-part">mixed</span>
-          <span class="why">All shipped, except two that are reasoned and not yet specced (T-186, T-187). T-136 turned out to be a requirements umbrella, not a task &mdash; its parts became T-143, T-144, T-152 and T-153.</span>
+          <span class="why">All shipped except <b>T-187</b>, which stays unbuilt on purpose until service charge is switched on. T-136 turned out to be a requirements umbrella, not a task &mdash; its parts became T-143, T-144, T-152, T-153 and, on 30 Aug, <b>T-186</b>.</span>
         </div>
         <div class="tasks">
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-138</div><div class="task-what">Identity and sessions &mdash; PIN sign-in, server-side sessions</div><div class="task-note">Shipped. Removed the &ldquo;acting as&rdquo; dropdown</div></div>
@@ -507,7 +561,7 @@
           <div class="task t-active"><div class="task-id"><span class="dot"></span>T-136</div><div class="task-what">Cash custody &mdash; a requirements umbrella, not a task</div><div class="task-note"><b>Two-thirds shipped under other numbers</b> &mdash; &sect;1/&sect;7/&sect;8 as T-143, &sect;5b as T-144. Assessed 29 Aug (&sect;9): &sect;4 specced as <b>T-152</b>, &sect;2 recommended against as designed, &sect;6 escalated &mdash; <b>DEF-082, nothing ever debits 2160</b></div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-152</div><div class="task-what">Remittance cadence and the un-remitted ceiling</div><div class="task-note">Shipped 29 Aug &middot; completes T-143, which shipped pooling and left the ceiling unenforced &middot; <b>three</b> detectors in T-135&rsquo;s layer, incl. DEF-082&rsquo;s service-charge alarm &middot; found <b>DEF-084</b>: T-135 had no screen at all</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-137</div><div class="task-what">Senior / PWD statutory register</div><div class="task-note">Shipped 30 Aug &middot; &starf; the lane <b>disproved its own spec first</b>: no SC/PWD identity is captured anywhere, in software or on paper &mdash; a live compliance exposure, not a modernisation</div></div>          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-153</div><div class="task-what">The till float &mdash; a side pocket, not a balance</div><div class="task-note">Shipped 30 Aug &middot; <code>1115</code>, a target the pot is judged against, and it blocks at zero &middot; Ian&rsquo;s worked example is a test to the peso</div></div>
-          <div class="task"><div class="task-id"><span class="dot"></span>T-186</div><div class="task-what">The till custody shift</div><div class="task-note">&#9888; <b>Reasoned, not specced.</b> The pass Ian asked for (T-153 &sect;14) found attendance&rsquo;s <code>attendance_days</code> is keyed <em>per person per 05:00 day</em> while a till needs <em>per till per handover</em> &mdash; a cashier working a split shift makes ONE attendance row and TWO custody periods, so keying cash on it makes the second handover unrepresentable. &starf; It must REFERENCE <code>attendance_days</code>, never restate it: two tables asserting when a shift started will drift, and the first symptom is a variance charged to the wrong person. <b>Unblocks</b> T-153&rsquo;s open/close count and T-143&rsquo;s named attribution</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-186</div><div class="task-what">The till custody shift &mdash; who held the drawer, and what they counted</div><div class="task-note">Shipped 30 Aug &middot; &starf; <b>it makes T-143&rsquo;s stated premise true</b> &mdash; that module assumed &ldquo;the till is counted daily and signed&rdquo; and there was nowhere to record a count. Grain is <em>till &times; handover</em>, NOT attendance&rsquo;s <em>person &times; day</em>: a split shift makes ONE attendance row and TWO custody periods. &starf; Names the person v1 cannot &mdash; v1 stores <code>cashierName</code> as a <em>nullable free-text string</em>. A counted short charges <code>1230</code>; a counted OVER posts <b>nothing at all</b> (tip box), asserted by a test. &#9888; Found <b>DEF-104</b>: 187 tests failed on a green tree because 13 migrations were permanently skipped in the test database</div></div>
           <div class="task"><div class="task-id"><span class="dot"></span>T-187</div><div class="task-what">Service-charge distribution &mdash; clearing 2160</div><div class="task-note">&#9888; <b>Designed in T-136 &sect;6, unbuilt.</b> <b>DEF-082</b>: every sales day with a service charge CREDITS <code>2160</code> and nothing in the tree ever debits it &mdash; RA 11360 requires distribution at intervals of at most sixteen days. Ian, 29 Aug: <em>&ldquo;for now no we dont charge but im planning&rdquo;</em>, which is why T-152 shipped the ALARM and not the document. &#9888; The alarm fires permanently once service charge is switched on &mdash; <b>do not enable it in POS before this exists</b></div></div>
 
         </div>
@@ -699,12 +753,196 @@
     </div>
   </section>
 
+  <section id="parity">
+    <div class="sec-head">
+      <h2>If v1&rsquo;s data were encoded into v2 today</h2>
+      <p>
+        Not a migration plan &mdash; <strong>v2 always opens on a zero starting point and no history
+        is ever carried across</strong>. This asks a different question: <em>if you sat down and
+        re-entered a live v1 record into v2 right now, how much of it would still have somewhere to
+        go?</em> That is the honest test of whether the rebuild has caught up with the thing it
+        replaces.
+      </p>
+    </div>
+
+    <div class="parity-method">
+      <p>
+        <strong>Method.</strong> Every field of v1&rsquo;s document type was read at source and
+        given exactly one of four verdicts. Field lists were extracted from the code, not
+        remembered; the verdicts are judged.
+      </p>
+      <div class="legend">
+        <span><i class="sw sw-carried"></i><b>Carried</b> &mdash; same fact, same table</span>
+        <span><i class="sw sw-moved"></i><b>Moved</b> &mdash; v2 keeps it, in a table that owns it properly</span>
+        <span><i class="sw sw-derived"></i><b>Derived</b> &mdash; v2 computes it on read, deliberately not stored</span>
+        <span><i class="sw sw-dropped"></i><b>No home</b> &mdash; nowhere in v2 to put it</span>
+      </div>
+      <p class="warn">
+        &#9888; <strong>A field-name diff would be badly wrong here, and that is the point.</strong>
+        Matching v1&rsquo;s names against v2&rsquo;s columns scores sales days at
+        <strong>17%</strong>. The real figure is <strong>97%</strong> &mdash; because 55 of those
+        87 fields did not vanish, they <em>moved</em> to the six tables that should always have
+        owned them. <strong>Only the fourth column is a loss.</strong>
+      </p>
+    </div>
+
+    <div class="parity">
+
+      <div class="prow">
+        <div class="pname">Attendance <span class="pfields">42 fields</span></div>
+        <div class="pbar">
+          <span class="seg s-carried" style="width:52.4%"></span><span class="seg s-moved" style="width:38.1%"></span><span class="seg s-derived" style="width:7.1%"></span><span class="seg s-dropped" style="width:2.4%"></span>
+        </div>
+        <div class="ppct pct-good">98%</div>
+        <div class="pnote">
+          &starf; <b>The most complete module in the system</b>, because the lane that rebuilt it
+          finished. v1&rsquo;s single <code>AttendanceSessionPlain</code> becomes three tables
+          &mdash; <code>attendance_punches</code> (the fact), <code>attendance_adjustments</code>
+          (the decision), <code>attendance_days</code> (the derived) &mdash; and that split is why
+          v2 can re-derive a day from truth where v1 cannot.
+          <br><b class="minus">&minus;</b> <code>shiftId</code> and the two scheduled-time stamps are
+          re-derived from <code>store_attendance_config</code> rather than copied onto the row.
+        </div>
+      </div>
+
+      <div class="prow">
+        <div class="pname">Expenses <span class="pfields">46 fields</span></div>
+        <div class="pbar">
+          <span class="seg s-carried" style="width:21.7%"></span><span class="seg s-moved" style="width:71.7%"></span><span class="seg s-derived" style="width:4.4%"></span><span class="seg s-dropped" style="width:2.2%"></span>
+        </div>
+        <div class="ppct pct-good">98%</div>
+        <div class="pnote">
+          v1&rsquo;s expense document carries its own payments, its own VAT split and its own
+          projection state. In v2 those are <code>expense_payments</code>,
+          <code>supplier_invoices</code> and a figure computed on read.
+          <br><b class="minus">&minus;</b> <code>budgetId</code> &mdash; and that one is a
+          <em>decision</em>, not a gap: expense budgets are on the deferred list below because they
+          post nothing to the ledger.
+          <br><b class="plus">+</b> <code>journal_entry_id</code> &mdash; v1 has no link from an
+          expense to the entry it produced, which is why its books cannot be walked backwards.
+        </div>
+      </div>
+
+      <div class="prow">
+        <div class="pname">Sales days <span class="pfields">87 fields</span></div>
+        <div class="pbar">
+          <span class="seg s-carried" style="width:24.1%"></span><span class="seg s-moved" style="width:63.2%"></span><span class="seg s-derived" style="width:9.2%"></span><span class="seg s-dropped" style="width:3.5%"></span>
+        </div>
+        <div class="ppct pct-good">97%</div>
+        <div class="pnote">
+          &starf; <b>The widest document in v1, and the clearest case for the rebuild.</b> Its 87
+          fields fan out into <code>sales_day_tenders</code>, <code>sales_day_channels</code>,
+          <code>remittances</code>, <code>remittance_variances</code>,
+          <code>statutory_discount_records</code> and &mdash; as of today &mdash;
+          <code>till_custody_shifts</code>, which finally takes the seven
+          <code>openedAt</code>&hellip;<code>closedByUid</code> fields that never belonged on a
+          sales day.
+          <br><b class="minus">&minus;</b> <code>totalSessions</code> and two denormalised name
+          copies. Nothing anybody reconciles against.
+        </div>
+      </div>
+
+      <div class="prow">
+        <div class="pname">Items <span class="pfields">25 fields</span></div>
+        <div class="pbar">
+          <span class="seg s-carried" style="width:32%"></span><span class="seg s-moved" style="width:36%"></span><span class="seg s-derived" style="width:8%"></span><span class="seg s-dropped" style="width:24%"></span>
+        </div>
+        <div class="ppct pct-part">76%</div>
+        <div class="pnote">
+          Pricing, thresholds and per-store sellability each got their own table, and
+          <code>totalOnHand</code> / <code>costPerUnit</code> are now FIFO figures computed from
+          <code>stock_layers</code> rather than a number somebody can edit.
+          <br><b class="minus">&minus;</b> <code>barcode</code>, <code>purchaseUnit</code> +
+          <code>conversionFactor</code>, <code>batchTracked</code>, <code>perishable</code>,
+          <code>sortOrder</code>. &#9888; <b>The purchase-unit pair is the one that matters</b>
+          &mdash; buying by the sack and issuing by the kilo has no representation in v2 today.
+        </div>
+      </div>
+
+      <div class="prow">
+        <div class="pname">Suppliers <span class="pfields">27 fields</span></div>
+        <div class="pbar">
+          <span class="seg s-carried" style="width:33.3%"></span><span class="seg s-moved" style="width:29.6%"></span><span class="seg s-derived" style="width:3.7%"></span><span class="seg s-dropped" style="width:33.3%"></span>
+        </div>
+        <div class="ppct pct-part">67%</div>
+        <div class="pnote">
+          &#9888; <b>The thinnest master record in v2, and the one a real cutover would notice
+          first.</b> <code>outstandingBalance</code> being derived from the AP ledger is a genuine
+          improvement &mdash; v1 stores it and it drifts.
+          <br><b class="minus">&minus;</b> <code>bankAccounts</code>,
+          <code>vatRegistrationNo</code>, <code>email</code>, <code>contactNo2</code>,
+          <code>representativeName</code>, <code>paymentOptions</code>,
+          <code>issuesOfficialReceipt</code>, <code>lastCreditDueDays</code>,
+          <code>classification</code>. <b>You cannot pay a supplier from v2&rsquo;s record</b> &mdash;
+          the bank details are not in it.
+        </div>
+      </div>
+
+      <div class="prow">
+        <div class="pname">Staff master <span class="pfields">38 fields</span></div>
+        <div class="pbar">
+          <span class="seg s-carried" style="width:15.8%"></span><span class="seg s-moved" style="width:31.6%"></span><span class="seg s-derived" style="width:0%"></span><span class="seg s-dropped" style="width:52.6%"></span>
+        </div>
+        <div class="ppct pct-low">47%</div>
+        <div class="pnote">
+          &#9888; <b>Under half &mdash; and the reason is a whole phase, not an oversight.</b>
+          v1&rsquo;s <code>StaffPlain</code> is three records in one: a person, an employment, and a
+          <em>payroll</em> record. v2 has the first two (<code>persons</code>,
+          <code>employments</code>, <code>positions</code>) and none of the third.
+          <br><b class="minus">&minus;</b> every pay rate (<code>dailyRate</code>,
+          <code>hourlyRate</code>, <code>rate</code>, <code>payType</code>,
+          <code>hourlyRateEffectiveFrom</code>), <code>deductionConfig</code>, all four statutory
+          numbers (<code>sss</code>, <code>philhealth</code>, <code>pagibig</code>,
+          <code>tin</code>), the signature triplet, and the personal-contact block.
+          <br>&starf; <b>This is the single largest data gap between the two systems</b>, and it is
+          the honest measure of how much of payroll is still ahead.
+        </div>
+      </div>
+
+    </div>
+
+    <div class="parity-read">
+      <h3>What the shape of this actually says</h3>
+      <ul>
+        <li>
+          <b>The transactional core has caught up.</b> Attendance, expenses and sales days all land
+          at 97&ndash;98%: re-entered today, essentially nothing about a day&rsquo;s trading would
+          have nowhere to go.
+        </li>
+        <li>
+          <b>The master data has not.</b> Suppliers at 67% and staff at 47% are where a real
+          cutover would stall &mdash; and neither is a modelling mistake. Both are simply phases
+          that have not been built.
+        </li>
+        <li>
+          &starf; <b>Almost every &ldquo;missing&rdquo; field is present under a better name.</b>
+          Two-thirds of v2&rsquo;s apparent losses are fields that moved to a table that owns them,
+          and a further slice are numbers v2 refuses to store because it can compute them &mdash;
+          <code>outstandingBalance</code>, <code>totalOnHand</code>, <code>costPerUnit</code>,
+          every remittance state. In v1 each of those is a stored number that can drift from the
+          ledger it claims to summarise.
+        </li>
+        <li>
+          &#9888; <b>Three gaps are worth a decision rather than a shrug:</b> supplier bank details
+          and TIN (you cannot pay from the record), the purchase-unit / conversion-factor pair (you
+          cannot buy by the sack and issue by the kilo), and the whole of payroll.
+        </li>
+      </ul>
+      <p class="warn">
+        &#9888; <b>These figures describe SHAPE, not readiness.</b> A field having a home in v2 says
+        the schema can hold the fact &mdash; not that a screen exists to enter it, nor that anyone
+        has driven it against real data. Read this beside the phase status above, never instead of it.
+      </p>
+    </div>
+  </section>
+
   <footer>
     Sources &mdash; PROJECT_BIBLE.md &sect;10 (phase plan) &middot; docs/plans/phase-1-accounting-spine.md &middot;
     docs/plans/phase-2-source-documents.md &middot; ADR-005 (books-first cutover) &middot;
     ADR-006 (period close) &middot; ADR-007 (pilot then purge).<br>
-    Status verified against the working tree at commit d93c1bd, 26 August 2026. Phase 1&rsquo;s two gaps
-    were confirmed by inspection, not taken from the plan.
+    Status verified against the working tree on 30 August 2026, with all four gates run, not quoted. Phase 1&rsquo;s two
+    gaps were confirmed by inspection, not taken from the plan. The v1&rarr;v2 parity figures were derived by reading
+    both schemas at source; the verdicts on each field are judged, and the method is stated with them.
   </footer>
 
 </div>

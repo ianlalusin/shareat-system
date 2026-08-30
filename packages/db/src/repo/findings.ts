@@ -426,7 +426,8 @@ export async function remittanceOverdue(tx: Tx, orgId: string): Promise<Detected
  *
  * ⚠️ **Reading this finding as "the cashier owes this" would charge somebody for a legitimate
  * expense**, which is why the message says which kind it is in as many words. The chargeable
- * version needs the shift count, and the shift count does not exist yet.
+ * version is `tillCountVarianceOpen` below — T-186 built the shift count this one lacked, so
+ * the two now sit side by side on the same page and the wording is what keeps them apart.
  */
 export async function tillFloatOffTarget(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
   const rows = (await tx.execute(sql`
@@ -672,4 +673,69 @@ export async function itemsMissingThreshold(tx: Tx, orgId: string): Promise<Dete
       `(e.g. ${r.example}). ⚠️ They can never appear on the low-stock list, and nothing else ` +
       'will say so — the store simply runs out.',
   }));
+}
+
+/**
+ * ⭐ T-186's question: a CLOSED shift whose closing count did not match the ledger.
+ *
+ * ⛔ **This is the COUNTED variance, and it is the one that DOES name a person.** Its sibling
+ * `tillFloatOffTarget` compares the LEDGER to a target and means the office should replenish;
+ * this compares a PHYSICAL COUNT to the ledger and means cash is missing from the pocket.
+ * T-153 §13.4 exists because reading one as the other charges somebody for a delivery they paid
+ * for correctly — so both messages say which kind they are, in as many words.
+ *
+ * Soft, not hard: the trial balance ties either way. A shortage is a business problem, not a
+ * ledger imbalance, and blocking a close on it would push people to fudge a count to keep
+ * trading — the same reasoning T-143 records for not blocking on an open remittance variance.
+ */
+export async function tillCountVarianceOpen(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    select l.id::text                          as line_id,
+           s.store_id::text                    as store_id,
+           s.business_date::text               as business_date,
+           s.shift_no::text                    as shift_no,
+           ma.name                             as name,
+           (l.counted - l.expected)::text      as variance,
+           coalesce(p.display_name, '')           as closed_by_name
+    from till_count_lines l
+    join till_custody_shifts s on s.id = l.shift_id
+    join money_accounts ma on ma.id = l.money_account_id
+    left join persons p on p.id = s.closed_by
+    where s.org_id = ${orgId}
+      and s.status = 'closed'
+      and l.moment = 'close'
+      and l.counted <> l.expected
+      -- Already charged: a posted shortage is answered, and re-reporting it would have
+      -- somebody chase a debt that is already on the books against a named person.
+      and not exists (
+        select 1 from journal_entries je
+        where je.org_id = s.org_id
+          and je.source_type = 'tillcountshortage'
+          and je.source_id = l.id::text
+          and je.status <> 'draft'
+      )
+  `)) as unknown as Record<string, string>[];
+
+  return rows.map((r) => {
+    const variance = Number(r.variance);
+    const who = r.closed_by_name ? ` Closed by ${r.closed_by_name}.` : '';
+    // ⚠️ The magnitude is formatted, never the signed number — `peso(-500)` renders "₱-500.00",
+    // which has bitten this file's siblings three times. The DIRECTION is a word, not a minus sign.
+    const magnitude = peso(Math.abs(variance));
+    return {
+      kind: 'tillCountVarianceOpen',
+      key: `tillCountVarianceOpen:${r.line_id}`,
+      storeId: String(r.store_id),
+      severity: 'soft' as const,
+      detail:
+        `${r.name}, ${r.business_date} shift ${r.shift_no}.${who} ` +
+        (variance < 0
+          ? `⭐ ${magnitude} SHORT ON A PHYSICAL COUNT — cash that should have been in the pocket ` +
+            'was not. ⚠️ This one IS chargeable to the cashier who held it, unlike a ledger ' +
+            'shortfall. Charge it or write it off; it will not clear on its own.'
+          : `${magnitude} OVER on a physical count. ⛔ An overage posts nothing at all — it is ` +
+            'money that was never in the books, and it goes to the tip box. Record the decision ' +
+            'so the count stops being reported as unanswered.'),
+    };
+  });
 }

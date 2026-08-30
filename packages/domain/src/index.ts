@@ -14,6 +14,7 @@ export * from './money-transfers';
 export * from './prepaid';
 export * from './scheduler';
 export * from './remittance';
+export * from './till';
 export * from './files';
 export * from './loans';
 export * from './cash-requests';

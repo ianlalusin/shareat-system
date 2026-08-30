@@ -59,6 +59,7 @@ export * from './commissary';
 export * from './trade-discrepancies';
 export * from './item-thresholds';
 export * from './statutory-discounts';
+export * from './till-shifts';
 
 // T-154 — the staff master record: positions, employments, employment_positions.
 // docs/tasks/154-positions-and-employments.md (Phase 4, lane B).

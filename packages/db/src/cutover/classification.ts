@@ -420,6 +420,19 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'what carries across as an opening balance. It must be settled or written off before ' +
       'cutover, not silently inherited.',
   },
+  till_custody_shifts: {
+    class: 'purge',
+    reason:
+      'A custody period over 2026 cash, against sales days that are themselves purged. v2 opens ' +
+      'on a zero starting point, so who held a till in November settles nothing in the new books.',
+  },
+  till_count_lines: {
+    class: 'purge',
+    reason:
+      'As till_custody_shifts — a count of a till that no longer has a shift. ⚠️ Same caveat ' +
+      'as remittance_variances: an UNRESOLVED counted shortage is a real claim against a real ' +
+      'person, so it must be settled or written off BEFORE cutover, never silently inherited.',
+  },
   scheduler_runs: {
     class: 'purge',
     reason:

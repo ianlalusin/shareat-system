@@ -172,7 +172,11 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
   // `resolve_trade_discrepancy` (T-174), `set_item_threshold` and `post_order_message` (T-175).
   // FOURTH independent addition in three days, on a fourth branch. The count is the SUM of every
   // lane's; taking one side of this conflict leaves a green test asserting a wrong number.
-  it('finds exactly 56 capability rows — NOT the "36" the task documents say in prose', () => {
+  // ⭐ 56 -> 58 on 2026-08-30, T-186: `record_till_count` and `resolve_till_variance`. The
+  // pair is deliberately asymmetric on `staff` — recording a count is the cashier's job,
+  // charging the shortage it reveals is not. That asymmetry IS the control, so a future edit
+  // that quietly equalises them should fail this file, not pass it.
+  it('finds exactly 58 capability rows — NOT the "36" the task documents say in prose', () => {
     // docs/tasks/121-roles-and-access.md and CAPABILITY-MATRIX.md's own Contract section
     // both say "36 rows" / "36 capabilities". The table itself had 38: the two
     // ⚠️-flagged open cells (set_credit_limit, close_period) plus the two platform-only
@@ -189,7 +193,7 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // into the enforcement without also being written into the document people actually
     // read, and vice versa.
     const { rows } = parseCapabilityMatrixDoc();
-    expect(rows.length).toBe(56);
+    expect(rows.length).toBe(58);
   });
 
   it('has no duplicate capability names', () => {
@@ -260,10 +264,10 @@ describe('invariant 1 — every capability has an explicit decision for all four
     expect(problems).toEqual([]);
   });
 
-  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 56 capabilities', () => {
-    expect(CAPABILITIES.length).toBe(56);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(56);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(56);
+  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 58 capabilities', () => {
+    expect(CAPABILITIES.length).toBe(58);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(58);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(58);
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));
   });
