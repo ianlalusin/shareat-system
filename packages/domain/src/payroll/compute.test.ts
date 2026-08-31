@@ -59,6 +59,62 @@ describe('basic pay — daily basis', () => {
     expect(p.basicPay).toBe(money('1600.00'));
   });
 
+  /**
+   * ⭐ **DEF-111.** `compute-day.ts:557` zeroes the minutes of a sub-half-day stint and says so —
+   * *"Below the half-day bar there is NO DAY"* — but it leaves `isHalfDay` **false**, because the
+   * half-day flag means "credited half a day", not "credited less than one". `unitsFor` read the
+   * flag alone and therefore paid a FULL daily rate for a five-minute session.
+   *
+   * ⛔ 31 of 560 sessions in the live golden corpus land in this branch. Three are under five
+   * minutes. This is DEF-088's anti-fraud rule defeated one layer downstream.
+   */
+  describe('⛔ DEF-111 — a day that credits nothing pays nothing', () => {
+    it('a zero-minute day contributes NO day and NO basic pay', () => {
+      const p = computePay([day({ computedMinutes: 0, isHalfDay: false })], M);
+      expect(p.daysWorked).toBe(0);
+      expect(p.basicPay).toBe(money('0'));
+      expect(p.grossPay).toBe(money('0'));
+    });
+
+    it('⭐ but its APPROVED overtime is still paid — the stint is not lost, only the basic day', () => {
+      // Ian's model: "1><5 hour record as unverified OT to be accepted by manager". Four hours
+      // approved against a 9h/₱540 day = 4/9 × 1.25 × 540 = ₱300.
+      const p = computePay([day({ computedMinutes: 0, isHalfDay: false, otMinutes: 240 })], M);
+      expect(p.daysWorked).toBe(0);
+      expect(p.basicPay).toBe(money('0'));
+      expect(p.otPay).toBe(money('300.00'));
+      expect(p.grossPay).toBe(money('300.00'));
+    });
+
+    /**
+     * ⛔ **The boundary is exactly zero, and payroll must NOT widen it.**
+     *
+     * It is tempting to zero anything under `MINIMUM_CREDITABLE_MINUTES` here too. That would be a
+     * second copy of a rule `computeDay` already owns — the same argument the bible makes about
+     * balance and period checks: *"a second source of truth, and the two will drift."* Attendance
+     * decides the bands; payroll only refuses to invent a day out of nothing.
+     *
+     * A positive-but-tiny credit (a break deduction eating a half day down to minutes) therefore
+     * still pays its unit. That is the daily-rate model's known coarseness, not DEF-111.
+     */
+    it('⚠️ one credited minute is NOT zero — payroll does not re-decide attendance bands', () => {
+      const p = computePay([day({ computedMinutes: 1, isHalfDay: false })], M);
+      expect(p.daysWorked).toBe(1);
+    });
+
+    it('⚠️ a HALF day is untouched — the locked 0.5 decision is not what is being fixed', () => {
+      const p = computePay([day({ computedMinutes: 300, isHalfDay: true })], M);
+      expect(p.daysWorked).toBe(0.5);
+      expect(p.basicPay).toBe(money('270.00'));
+    });
+
+    it('⚠️ a FULL day is untouched', () => {
+      const p = computePay([day({ computedMinutes: 540 })], M);
+      expect(p.daysWorked).toBe(1);
+      expect(p.basicPay).toBe(money('540.00'));
+    });
+  });
+
   it('an empty period is zero, not a crash', () => {
     const p = computePay([], M);
     expect(p.grossPay).toBe(money('0'));

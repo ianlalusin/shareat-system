@@ -131,6 +131,18 @@ function factor(n: number): string {
  * this back to hours.
  */
 function unitsFor(day: DayInput): number {
+  // ⛔ **DEF-111. Never infer the day from the flag alone.**
+  //
+  // `isHalfDay` means "credited HALF a day", not "credited less than one". A stint below the
+  // half-day bar is zeroed by `compute-day.ts:557` — *"Below the half-day bar there is NO DAY"* —
+  // which leaves `isHalfDay` **false**, so reading the flag alone paid a FULL daily rate for a
+  // five-minute session. 31 of 560 sessions in the live golden corpus land in that branch.
+  //
+  // ⚠️ The test is `<= 0` and must stay there. Widening it to `MINIMUM_CREDITABLE_MINUTES` would
+  // put a second copy of attendance's band rule in payroll, and the two would drift — the same
+  // argument the bible makes about re-implementing balance and period checks in TypeScript.
+  // Attendance decides the bands; payroll only refuses to invent a day out of nothing.
+  if (day.computedMinutes <= 0) return 0;
   return day.isHalfDay ? 0.5 : 1;
 }
 

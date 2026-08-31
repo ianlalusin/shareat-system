@@ -611,3 +611,105 @@ describe('⛔ DEF-109 — pending overtime is never paid unapproved', () => {
     expect(p.slips[0]!.otPay).toBe('0.00');
   });
 });
+
+// =====================================================================================
+
+/**
+ * ⛔ **T-194 / DEF-111 — a day that credits nothing must pay nothing, and must not be frozen.**
+ *
+ * `computeDay` zeroes the minutes of a sub-half-day stint — *"Below the half-day bar there is NO
+ * DAY"* — and leaves `isHalfDay` **false**, because the flag means "credited HALF a day", not
+ * "credited less than one". `unitsFor` read the flag alone and paid a FULL daily rate. 31 of 560
+ * sessions in the live golden corpus land in that branch; three are under five minutes.
+ *
+ * ⭐ The half of this that is not arithmetic: such a day is **entirely pending overtime**, and
+ * freezing it at ₱0 would put it permanently beyond `recordAdjustment`. The stint would be
+ * destroyed rather than deferred.
+ */
+describe('⛔ DEF-111 — a zero-credit day, and the overtime that must survive it', () => {
+  async function withZeroCreditDay(hint: string, otMinutes = 240) {
+    const f = await fixture(hint);
+    await asOrg(f.orgId, (tx) =>
+      setPayRate(tx, f.admin, {
+        employmentId: f.employmentId, storeId: f.storeId,
+        basis: 'daily', amount: '540.00', effectiveFrom: '2026-01-01',
+      }));
+    // A four-hour stint: below the 5h half-day bar, so no day is credited and the whole of it is
+    // raised as pending overtime for a manager to accept.
+    const zero = await addDay(f, '2026-01-05', { computedMinutes: 0, isHalfDay: false, ot: otMinutes, status: 'computed' });
+    const full = await addDay(f, '2026-01-06');
+    return { f, zero, full };
+  }
+
+  it('⛔ is HELD, not paid — and the run pays only the real day', async () => {
+    const { f } = await withZeroCreditDay('zcheld');
+    const p = await asOrg(f.orgId, (tx) =>
+      previewPayRun(tx, f.admin, { storeId: f.storeId, ...period }));
+    expect(p.heldZeroCreditDays).toBe(1);
+    expect(p.slips[0]!.daysWorked).toBe(1);
+    expect(p.slips[0]!.basicPay).toBe('540.00'); // ⛔ NOT 1080 — the zero day is not a day
+  });
+
+  it('⭐⭐ and posting does NOT freeze it — this is what stops the overtime being destroyed', async () => {
+    const { f, zero, full } = await withZeroCreditDay('zcfreeze');
+    const out = await asOrg(f.orgId, (tx) =>
+      postPayRun(tx, f.admin, { storeId: f.storeId, ...period, moneyAccountId: f.officeAccountId }));
+    const rows = await sql<{ id: string; frozen_at: string | null; frozen_by_pay_run_id: string | null }[]>`
+      select id::text, frozen_at, frozen_by_pay_run_id::text from attendance_days
+      where id = any(${[zero, full]}::uuid[])`;
+    const held = rows.find((r) => r.id === zero)!;
+    const paid = rows.find((r) => r.id === full)!;
+    expect(held.frozen_at).toBeNull();
+    expect(held.frozen_by_pay_run_id).toBeNull();
+    expect(paid.frozen_by_pay_run_id).toBe(out.runId);
+  });
+
+  it('⭐⭐⭐ the held day is paid by the NEXT run once approved — nothing was lost', async () => {
+    const { f } = await withZeroCreditDay('zcnextrun');
+    await asOrg(f.orgId, (tx) =>
+      postPayRun(tx, f.admin, { storeId: f.storeId, ...period, moneyAccountId: f.officeAccountId }));
+
+    // The manager finally decides: all four hours are accepted.
+    await approveOt(f, '2026-01-05', 240);
+
+    const p2 = await asOrg(f.orgId, (tx) =>
+      previewPayRun(tx, f.admin, { storeId: f.storeId, ...period }));
+    expect(p2.heldZeroCreditDays).toBe(0);
+    // ⭐ No basic day — the stint pays through overtime alone: 4h / 9h x 1.25 x 540 = 300.00
+    expect(p2.slips[0]!.daysWorked).toBe(0);
+    expect(p2.slips[0]!.basicPay).toBe('0.00');
+    expect(p2.slips[0]!.otPay).toBe('300.00');
+  });
+
+  it('⭐ a decision of ZERO settles the day — it is paid at nil AND frozen', async () => {
+    const { f, zero } = await withZeroCreditDay('zcdecidedzero');
+    await approveOt(f, '2026-01-05', 0); // a manager looked and approved nothing
+    const p = await asOrg(f.orgId, (tx) =>
+      previewPayRun(tx, f.admin, { storeId: f.storeId, ...period }));
+    expect(p.heldZeroCreditDays).toBe(0); // ⛔ null is undecided; 0 is a DECISION
+
+    const out = await asOrg(f.orgId, (tx) =>
+      postPayRun(tx, f.admin, { storeId: f.storeId, ...period, moneyAccountId: f.officeAccountId }));
+    const [row] = await sql<{ frozen_by_pay_run_id: string | null }[]>`
+      select frozen_by_pay_run_id::text from attendance_days where id = ${zero}`;
+    expect(row!.frozen_by_pay_run_id).toBe(out.runId);
+  });
+
+  it('⭐ a held day\'s overtime is still SURFACED — it is what the manager must act on', async () => {
+    const { f } = await withZeroCreditDay('zcsurfaced');
+    const p = await asOrg(f.orgId, (tx) =>
+      previewPayRun(tx, f.admin, { storeId: f.storeId, ...period }));
+    expect(p.unapprovedOtMinutes).toBe(240);
+  });
+
+  it('⭐ the trial balance still ties when a run contains a held day', async () => {
+    const { f } = await withZeroCreditDay('zctb');
+    await asOrg(f.orgId, (tx) =>
+      postPayRun(tx, f.admin, { storeId: f.storeId, ...period, moneyAccountId: f.officeAccountId }));
+    const [row] = await sql<{ diff: string }[]>`
+      select coalesce(sum(l.debit - l.credit), 0)::text as diff
+      from journal_lines l join journal_entries e on e.id = l.entry_id
+      where e.org_id = ${f.orgId} and e.status <> 'draft'`;
+    expect(Number(row!.diff)).toBe(0);
+  });
+});

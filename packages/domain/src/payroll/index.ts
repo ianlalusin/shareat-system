@@ -123,6 +123,15 @@ export interface PayRunPreview {
   unratedEmployments: { employmentId: string; personName: string; days: number }[];
   /** ⭐ Overtime recorded across the period that nobody has approved. Shown, never paid. */
   unapprovedOtMinutes: number;
+  /**
+   * ⛔ **T-194 / DEF-111.** Days the attendance engine credited ZERO minutes and on which nobody
+   * has yet made an overtime decision. **Held back — not paid, and deliberately NOT frozen**, so
+   * the pending overtime survives to be approved and paid by a later run.
+   *
+   * Same contract as `needsReviewDays`: excluded from pay and COUNTED, because a run that silently
+   * skipped them would look identical to a run where nobody worked.
+   */
+  heldZeroCreditDays: number;
 }
 
 /**
@@ -158,8 +167,30 @@ export async function previewPayRun(
       to: input.periodEnd,
     });
 
+    // ⛔ **T-194 / DEF-111 — the hold, and it must happen HERE rather than in the query.**
+    //
+    // A day credited zero minutes is one the attendance engine refused to make a day of
+    // (`compute-day.ts:557` — *"Below the half-day bar there is NO DAY"*), routing the whole stint
+    // to pending overtime instead. If such a day entered the run it would be paid ₱0 **and frozen**
+    // — and `adjustments.ts` refuses to touch a frozen day, so its overtime could never afterwards
+    // be approved. The stint would be silently destroyed, which is the exact opposite of what the
+    // pending status exists to do.
+    //
+    // ⚠️ `approvedOtMinutes === 0` is a DECISION OF ZERO and is NOT held: a manager who looked at
+    // the stint and approved nothing has settled that day, so the run pays it ₱0 and freezes it.
+    // Only `null` — nobody decided — is held. Do not collapse this to a falsy check; the same
+    // distinction is what DEF-109's fix rests on.
+    //
+    // ⛔ Not a `where` clause: a day filtered out in SQL is invisible to the run and therefore
+    // neither frozen nor counted. T-158: *"a rule buried in a query is a rule the next screen
+    // forgets."*
+    const isHeld = (d: (typeof days)[number]) =>
+      d.computedMinutes <= 0 && d.approvedOtMinutes === null;
+    const heldZeroCredit = days.filter(isHeld);
+    const payable = days.filter((d) => !isHeld(d));
+
     const byEmployment = new Map<string, typeof days>();
-    for (const d of days) {
+    for (const d of payable) {
       const list = byEmployment.get(d.employmentId) ?? [];
       list.push(d);
       byEmployment.set(d.employmentId, list);
@@ -267,7 +298,15 @@ export async function previewPayRun(
       totalAdvanceRecovered: add(ZERO, ...slips.map((s) => s.advanceRecovered)),
       needsReviewDays,
       unratedEmployments,
-      unapprovedOtMinutes: slips.reduce((n, x) => n + x.unapprovedOtMinutes, 0),
+      // ⚠️ The store-wide figure must include the HELD days' overtime as well as the payable days'.
+      // A held day is *entirely* pending overtime — that is what makes it held — so leaving it out
+      // would under-report the very thing the manager is being asked to act on, and would do it
+      // most for the days that need acting on most. The per-slip figure stays payable-days-only,
+      // because a slip should only account for the days it actually pays.
+      unapprovedOtMinutes:
+        slips.reduce((n, x) => n + x.unapprovedOtMinutes, 0) +
+        heldZeroCredit.reduce((n, d) => n + d.pendingOtMinutes, 0),
+      heldZeroCreditDays: heldZeroCredit.length,
     };
   };
   if (tx) return run(tx);

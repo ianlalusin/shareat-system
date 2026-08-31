@@ -207,6 +207,19 @@ export default async function PayrollPage({
             </p>
           )}
 
+          {pv.heldZeroCreditDays > 0 && (
+            <p className="rounded border border-amber-300 p-3 text-xs text-amber-900 dark:border-amber-800 dark:text-amber-300">
+              ⏸️ <strong>
+                {pv.heldZeroCreditDays} day(s) were too short to credit a day at all
+              </strong>{' '}
+              and are <strong>held</strong> — not paid here, and deliberately{' '}
+              <strong>not frozen</strong>. ⭐ The whole stint is waiting as overtime for a
+              manager&rsquo;s decision; once decided, the next run pays it. ⛔ Held, not lost —
+              paying them at ₱0 now would freeze them and put that overtime permanently out of
+              reach.
+            </p>
+          )}
+
           {pv.unapprovedOtMinutes > 0 && (
             <p className="rounded border border-amber-300 p-3 text-xs text-amber-900 dark:border-amber-800 dark:text-amber-300">
               ⚠️ <strong>
