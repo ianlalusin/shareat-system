@@ -35,7 +35,7 @@ import {
 import { organizations } from './organizations';
 
 /** The jobs the month-end run performs. One row per job per org per run. */
-export const SCHEDULER_JOBS = ['depreciation', 'amortisation'] as const;
+export const SCHEDULER_JOBS = ['depreciation', 'amortisation', 'attendance_sweep'] as const;
 export type SchedulerJob = (typeof SCHEDULER_JOBS)[number];
 
 export const SCHEDULER_OUTCOMES = ['ok', 'partial', 'failed'] as const;
@@ -87,7 +87,7 @@ export const schedulerRuns = pgTable(
     index('scheduler_runs_org_job_started_idx').on(t.orgId, t.job, t.startedAt),
     index('scheduler_runs_outcome_idx').on(t.outcome),
 
-    check('scheduler_runs_job_check', sql`${t.job} in ('depreciation', 'amortisation')`),
+    check('scheduler_runs_job_check', sql`${t.job} in ('depreciation', 'amortisation', 'attendance_sweep')`),
     check('scheduler_runs_outcome_check', sql`${t.outcome} in ('ok', 'partial', 'failed')`),
     check('scheduler_runs_period_shape_check', sql`${t.period} ~ '^[0-9]{4}-[0-9]{2}$'`),
     check(

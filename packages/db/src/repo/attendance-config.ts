@@ -22,6 +22,9 @@ export interface AttendanceConfigRow {
   anchorWindowMinutes: number;
   timeMode: TimeMode;
   halfDayOnMissingTap: boolean;
+  /** ⭐ T-199. `null` = this store never auto-clears. */
+  autoClockOutHour: number | null;
+  maxShiftHours: number;
   defaultWorkHours: string;
   defaultBreakHours: string;
 

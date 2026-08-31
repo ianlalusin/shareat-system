@@ -30,6 +30,7 @@ const policy = (over: Partial<DayPolicy> = {}): DayPolicy => ({
   requiredMinutes: 9 * 60,
   halfDayMinutes: 5 * 60,
   shortShiftHalfDayOt: false,
+  halfDayOnMissingTap: false,
   allowedShiftStartHours: [9, 10, 11, 14, 15, 16, 17, 18],
   lateGraceMinutes: 0,
   earlyOutGraceMinutes: 0,

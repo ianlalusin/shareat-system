@@ -249,6 +249,20 @@ export const storeAttendanceConfig = pgTable(
     lateInfractionPoints: integer('late_infraction_points').notNull().default(1),
 
     // ---- Terminal ---------------------------------------------------------------------
+    /**
+     * ⭐ **T-199.** The wall-clock hour at which every still-open day is cleared, *"so the floor is
+     * empty before the store opens"* (Ian, via v1). Live at all three v1 stores: **02:00**.
+     *
+     * ⛔ **Nullable, defaulting to null** — "this store never auto-clears" is where every store is
+     * today, and DEF-087's lesson is that an unset value must not masquerade as a chosen one.
+     * ⚠️ v1 needs a runtime guard here because `Number('')` is `0` — midnight, the one hour a floor
+     * is most likely to still have people on it. An integer column plus null makes that
+     * unrepresentable rather than merely guarded.
+     */
+    autoClockOutHour: integer('auto_clock_out_hour'),
+    /** ⭐ The per-day backstop: open longer than this was clearly forgotten. A BACKSTOP, not a
+     *  second policy on hours — which is why the CHECK floors it at 10 rather than at the shift. */
+    maxShiftHours: integer('max_shift_hours').notNull().default(16),
     breakEnabled: boolean('break_enabled').notNull().default(true),
     /**
      * ⭐ The per-method kill switches — bible §5.3 **hot-set item 3**, and explicitly *"a NEW cache

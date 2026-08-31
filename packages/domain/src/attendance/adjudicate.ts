@@ -57,6 +57,7 @@ export function policyFromConfig(config: AttendanceConfigRow): DayPolicy {
     requiredMinutes: toMinutes(config.requiredHoursPerShift),
     halfDayMinutes: toMinutes(config.halfDayHours),
     shortShiftHalfDayOt: config.shortShiftHalfDayOt,
+    halfDayOnMissingTap: config.halfDayOnMissingTap,
     allowedShiftStartHours: config.allowedShiftStartHours,
     lateGraceMinutes: config.lateGraceMinutes,
     earlyOutGraceMinutes: config.earlyOutGraceMinutes,

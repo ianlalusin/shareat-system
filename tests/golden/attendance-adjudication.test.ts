@@ -64,6 +64,7 @@ const V1_DEFAULTS = {
   requiredHoursPerShift: 9,
   halfDayHours: 5,
   shortShiftHalfDayOt: false,
+  halfDayOnMissingTap: false,
   allowedShiftStartHours: [9, 10, 11, 14, 15, 16, 17, 18],
   lateGraceMinutes: 0,
   earlyOutGraceMinutes: 0,
@@ -100,6 +101,8 @@ function toPolicy(raw: Specimen['config']): DayPolicy {
     requiredMinutes: Math.round(num(c.requiredHoursPerShift, 9) * 60),
     halfDayMinutes: Math.round(num(c.halfDayHours, 5) * 60),
     shortShiftHalfDayOt: Boolean(c.shortShiftHalfDayOt),
+    // ⭐ v1's own value, from the captured store document — all three stores have it ON.
+    halfDayOnMissingTap: Boolean(c.halfDayOnMissingTap),
     allowedShiftStartHours: Array.isArray(c.allowedShiftStartHours)
       ? (c.allowedShiftStartHours as number[])
       : [...V1_DEFAULTS.allowedShiftStartHours],

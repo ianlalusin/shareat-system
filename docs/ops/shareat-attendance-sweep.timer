@@ -1,0 +1,20 @@
+# T-199 — HOURLY, not daily, and the reason is not arbitrary.
+#
+# ⭐ The cut-off is a wall-clock hour PER STORE (v1: Lipa, Malvar and Banay-Banay are all on
+# 02:00, but nothing makes them agree). A daily timer could not serve two stores on different
+# hours. Each run asks every store whether its hour has come round; a store whose hour has not
+# arrived is a cheap no-op that still records a `scheduler_runs` row — because "it ran and there
+# was nothing to do" and "it never ran" must be distinguishable.
+
+[Unit]
+Description=Shareat — hourly attendance sweep
+
+[Timer]
+OnCalendar=hourly
+# ⚠️ Catch up after a reboot or an outage rather than skipping silently. A sweep that quietly
+# skipped the night the box restarted is DEF-044's shape all over again.
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

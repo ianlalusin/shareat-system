@@ -21,7 +21,14 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
-import { acknowledgeFinding, closeReadiness, listFindings } from '@shareat/domain';
+import {
+  acknowledgeFinding,
+  closeReadiness,
+  createEmployment,
+  listFindings,
+  seedAttendanceConfig,
+  seedCanonicalPositions,
+} from '@shareat/domain';
 import { postEntry } from '../../src/ledger/post-entry';
 
 const sql = postgres(url, { max: 5 });
@@ -498,5 +505,71 @@ describe('T-152 — DEF-082, the service-charge float nothing can discharge', ()
     // ⭐ The alarm is about the AGE of what is un-cleared, not the balance. A non-empty float that
     // is all recent is exactly the healthy state a working distribution produces.
     expect(await kinds(f)).not.toContain('serviceChargeFloatAgeing');
+  });
+});
+
+/**
+ * ⭐ **T-199 — the alarm that notices the sweep stopped.**
+ *
+ * ⛔ A check that asks *"did the cron run?"* needs something else scheduled to ask it. This detects
+ * the missing OUTCOME instead — open shifts sitting in the data — so it is true even when the sweep
+ * is dead, which is the only kind of watchdog that survives the failure it watches for.
+ *
+ * ⚠️ It is the control that would have caught all three of this business's historical failures:
+ * v1's depreciation cron that never existed, and POS's holiday-calendar and weather jobs.
+ */
+describe('⛔ T-199 — stale open shifts are a HARD finding', () => {
+  /** An open day (an in, no out) on a given shift day, inserted directly — the detector reads
+   *  `attendance_days`, so the day is the fixture and the punches are not needed. */
+  async function openDayOn(f: Fixture, shiftDay: string) {
+    const [worker] = await sql<{ id: string }[]>`
+      insert into persons (org_id, display_name) values (${f.orgId}, 'Maria Santos') returning id`;
+    await asOrg(f.orgId, (tx) => seedCanonicalPositions(tx, f.orgId));
+    const emp = await asOrg(f.orgId, (tx) =>
+      createEmployment(tx, f.admin, {
+        storeId: f.storeId, personId: worker!.id, employmentStatus: 'regular', startedOn: '2026-01-01',
+      }),
+    );
+    const cfg = await asOrg(f.orgId, (tx) =>
+      seedAttendanceConfig(tx, { orgId: f.orgId, storeId: f.storeId, effectiveFrom: '2026-01-01' }),
+    );
+    await sql`
+      insert into attendance_days
+        (org_id, store_id, person_id, employment_id, shift_day, attendance_config_id, anchor_mode,
+         status, computed_minutes, is_half_day, pending_ot_minutes, night_diff_minutes,
+         holiday_minutes, is_holiday, holiday_type)
+      values (${f.orgId}, ${f.storeId}, ${worker!.id}, ${emp.id}, ${shiftDay}, ${cfg.id},
+              'exact', 'open', 0, false, 0, 0, 0, false, null)`;
+  }
+
+  const manilaOffset = (days: number) => {
+    const d = new Date(Date.now() + 8 * 3_600_000);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+
+  it('⭐ a shift open for four days is reported, and reported HARD', async () => {
+    const f = await fixture('stale-open');
+    await openDayOn(f, manilaOffset(-4));
+    const found = (await feed(f)).findings.find((x) => x.kind === 'openShiftsStale');
+    expect(found).toBeDefined();
+    // ⛔ HARD, because an open day is unpayable and unpaid — closing a period over one books a
+    // month that still owes somebody wages.
+    expect(found!.severity).toBe('hard');
+    expect(found!.detail).toMatch(/never paid|unpaid/i);
+    // ⚠️ And it names the fix, because a finding nobody can act on is just an alarm.
+    expect(found!.detail).toMatch(/attendance-sweep/);
+  });
+
+  it('⛔ today’s open shift is NOT reported — somebody is simply still on the floor', async () => {
+    const f = await fixture('open-today');
+    await openDayOn(f, manilaOffset(0));
+    expect(await kinds(f)).not.toContain('openShiftsStale');
+  });
+
+  it('⚠️ yesterday’s is not reported either — a night shift and an offline replay both land there', async () => {
+    const f = await fixture('open-yesterday');
+    await openDayOn(f, manilaOffset(-1));
+    expect(await kinds(f)).not.toContain('openShiftsStale');
   });
 });

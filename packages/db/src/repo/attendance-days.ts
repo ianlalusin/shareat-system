@@ -276,3 +276,39 @@ function camelDays(rows: Record<string, unknown>[]): ReviewDayRow[] {
     return out as unknown as ReviewDayRow;
   });
 }
+
+/**
+ * ⭐ **T-199.** The sweep's one write: a day that will never get its clock-out becomes a day a
+ * manager must settle.
+ *
+ * ⛔ **No punch is fabricated and no end time is invented.** v1 states the rule and it is the half
+ * that matters: *"the staffer is clocked out, but the time is not captured. Nobody observed them
+ * leaving."* Only the status moves — the evidence is exactly as the staffer left it.
+ *
+ * ⚠️ The reason is appended to `explain` rather than stored in a new column: `explain` is already
+ * the day's narration and the review screen already renders it, so the manager reads *why this is
+ * in front of me* in the same place as everything else the engine decided.
+ */
+export async function markNeedsReview(
+  tx: Tx,
+  dayId: string,
+  why: 'cutoff_hour' | 'max_shift',
+): Promise<void> {
+  const note =
+    why === 'cutoff_hour'
+      ? 'Closed by the nightly sweep: still clocked in when the store’s cut-off hour passed. ' +
+        'No clock-out time was recorded, because nobody witnessed one.'
+      : 'Closed by the sweep: open longer than this store’s maximum shift, so the tap-out was ' +
+        'clearly forgotten. No clock-out time was recorded, because nobody witnessed one.';
+
+  await tx.execute(sql`
+    update attendance_days
+       set status = 'needs_review',
+           -- ⚠️ array[...] construction, NOT a bound JS array: passing the array itself makes
+           -- Postgres parse the sentence as an array literal and refuse it ("malformed array
+           -- literal"). Caught by the test, which is what tests are for.
+           -- ⛔ And no backticks in this comment: it lives inside a template literal, so one
+           -- would close the string. That mistake was made here once already.
+           explain = explain || array[${note}]::text[]
+     where id = ${dayId} and frozen_at is null`);
+}

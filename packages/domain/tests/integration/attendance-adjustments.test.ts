@@ -376,6 +376,7 @@ describe('T-158 §4 — ⭐ the materiality gate: do not ask what cannot change 
     requiredMinutes: 9 * 60,
     halfDayMinutes: 5 * 60,
     shortShiftHalfDayOt: false,
+    halfDayOnMissingTap: false,
     allowedShiftStartHours: [14, 15],
     lateGraceMinutes: 0,
     earlyOutGraceMinutes: 0,

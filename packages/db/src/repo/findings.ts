@@ -739,3 +739,47 @@ export async function tillCountVarianceOpen(tx: Tx, orgId: string): Promise<Dete
     };
   });
 }
+
+/**
+ * ⭐ **T-199 — the alarm that notices the sweep stopped, and the cheapest reliability here.**
+ *
+ * ⛔ A check that asks *"did the cron run?"* needs something else scheduled to ask it. Turtles.
+ * So this detects the missing **OUTCOME** instead: *"three shifts from two days ago are still
+ * open"* is sitting in the data, is derived on read, and is true whether or not anything is
+ * scheduled — **including when the sweep itself is dead**.
+ *
+ * ⚠️ It is the control that would have caught all three of this business's historical failures:
+ * v1's depreciation cron that never existed, POS's holiday calendar that shipped unscheduled, and
+ * POS's weather job. In every case the code was fine and nobody noticed for months.
+ *
+ * ⛔ **`hard` severity, and deliberately so.** An open day is unpayable and unpaid — `payableDays`
+ * excludes it and `resolveStatus` refuses to promote it — so closing a period over one books a
+ * month that still owes somebody wages.
+ */
+export async function openShiftsStale(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
+  // ⚠️ Two days, matching the sweep's own tolerance: a night shift belongs to the previous business
+  // day, and an offline terminal replays punches hours after the fact.
+  const rows = (await tx.execute(sql`
+    select d.store_id::text as store_id,
+           count(*)::int    as n,
+           min(d.shift_day)::text as oldest
+      from attendance_days d
+     where d.org_id = ${orgId}
+       and d.status = 'open'
+       and d.frozen_at is null
+       and d.shift_day < ((now() at time zone 'Asia/Manila')::date - 2)
+     group by d.store_id
+  `)) as unknown as Record<string, string>[];
+
+  return rows.map((r) => ({
+    kind: 'openShiftsStale',
+    key: `openShiftsStale:${r.store_id}`,
+    storeId: String(r.store_id),
+    severity: 'hard' as const,
+    detail:
+      `${r.n} shift(s) are still clocked in with no clock-out, the oldest from ${r.oldest}. ` +
+      '⛔ An open day is never paid — payroll excludes it and a recompute will not clear it — so ' +
+      'this is unpaid work sitting in the system. ⚠️ If this keeps appearing, the nightly sweep ' +
+      '(`npm run attendance-sweep`) is not running: check that its timer is installed on the host.',
+  }));
+}

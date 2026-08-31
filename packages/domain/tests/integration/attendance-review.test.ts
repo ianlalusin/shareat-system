@@ -39,6 +39,7 @@ import {
   seedCanonicalPositions,
   shiftDayRange,
   supersedeConfig,
+  sweepStore,
   toShiftDay,
 } from '@shareat/domain';
 
@@ -400,5 +401,159 @@ describe('⭐ T-197 — a short shift is a half day, and its remainder waits for
     const day = await dayFrom(f, at(14), at(21));
     expect(day.isHalfDay).toBe(false);
     expect(day.computedMinutes).toBe(420); // the full 7h, as before
+  });
+});
+
+// =====================================================================================
+
+/**
+ * ⛔ **T-199 — the missed clock-out sweep, and DEF-119.**
+ *
+ * The sweep settles a day that will never get its clock-out. ⭐ It writes NO punch: v1's rule is
+ * *"the staffer is clocked out, but the time is not captured. Nobody observed them leaving."*
+ */
+describe('⛔ T-199 — the sweep closes a shift nobody clocked out of', () => {
+  /**
+   * Puts a cut-off hour and a cap on the store, effective before the test's shift day.
+   *
+   * ⛔ Through `supersedeConfig`, never a raw UPDATE: T-155's trigger refuses an in-place edit by
+   * name, and it is right to — a config row is effective-dated because T-157 invariant 11 judges a
+   * day by the config that governed IT. (The first draft of these tests used an UPDATE and was
+   * refused, exactly as T-197's first migration was.)
+   */
+  async function withSweepPolicy(f: Fixture, autoClockOutHour: number | null, maxShiftHours = 16) {
+    await asOrg(f.orgId, (tx) =>
+      supersedeConfig(tx, f.admin, {
+        storeId: f.storeId,
+        effectiveFrom: parseShiftDay('2026-02-01'),
+        changes: { autoClockOutHour, maxShiftHours },
+      }),
+    );
+  }
+
+  const openDaysAt = (f: Fixture) =>
+    sql<{ id: string; status: string; explain: string[] }[]>`
+      select id::text, status, explain from attendance_days where store_id = ${f.storeId}`;
+
+  it('⭐⭐ an open day is settled to needs_review, and NO out-punch is invented', async () => {
+    const f = await fixture('sweepclose');
+    await withSweepPolicy(f, 2);
+    // An in with no out, opened long enough ago that both the guard and the cut-off are satisfied.
+    await addPunch(f, at(14), 'in');
+    await asOrg(f.orgId, (tx) => adjudicateDay(tx, { employmentId: f.employment.id, shiftDay: DAY }));
+
+    const before = await sql`select count(*)::int as n from attendance_punches
+                             where employment_id = ${f.employment.id}`;
+    const out = await asOrg(f.orgId, (tx) => sweepStore(tx, { storeId: f.storeId, nowMs: Date.now() }));
+    expect(out.swept).toHaveLength(1);
+
+    const [day] = await openDaysAt(f);
+    expect(day!.status).toBe('needs_review');
+    // ⛔ THE INVARIANT: the evidence is exactly as the staffer left it.
+    const after = await sql`select count(*)::int as n from attendance_punches
+                            where employment_id = ${f.employment.id}`;
+    expect((after as unknown as { n: number }[])[0]!.n).toBe(
+      (before as unknown as { n: number }[])[0]!.n,
+    );
+    // ...and the day says WHY it is in front of a manager.
+    expect(day!.explain.join(' ')).toMatch(/cut-off|forgotten/i);
+  });
+
+  it('⛔ a store with NO cut-off hour is left alone by the clock rule', async () => {
+    const f = await fixture('sweepnever');
+    await withSweepPolicy(f, null);
+    await addPunch(f, at(14), 'in');
+    await asOrg(f.orgId, (tx) => adjudicateDay(tx, { employmentId: f.employment.id, shiftDay: DAY }));
+
+    // ⚠️ Time is CHOSEN, not observed: two hours after the punch. Left to the real clock, the
+    // fixture's shift day is already yesterday, so the max-shift BACKSTOP would fire and this test
+    // would pass or fail depending on the hour it ran — which is what the first draft did.
+    const twoHoursIn = at(16).getTime();
+    const out = await asOrg(f.orgId, (tx) => sweepStore(tx, { storeId: f.storeId, nowMs: twoHoursIn }));
+    expect(out.swept).toHaveLength(0);
+    expect(out.leftOpen).toBe(1);
+    expect((await openDaysAt(f))[0]!.status).toBe('open');
+  });
+
+  it('⭐ the sweep is idempotent — a second run changes nothing', async () => {
+    const f = await fixture('sweeptwice');
+    await withSweepPolicy(f, 2);
+    await addPunch(f, at(14), 'in');
+    await asOrg(f.orgId, (tx) => adjudicateDay(tx, { employmentId: f.employment.id, shiftDay: DAY }));
+
+    await asOrg(f.orgId, (tx) => sweepStore(tx, { storeId: f.storeId, nowMs: Date.now() }));
+    const second = await asOrg(f.orgId, (tx) => sweepStore(tx, { storeId: f.storeId, nowMs: Date.now() }));
+    expect(second.swept).toHaveLength(0);
+  });
+
+  it('⭐⭐ a swept day lands in the review queue and can be settled there', async () => {
+    // ⛔ End to end: the sweep only makes a day VISIBLE. A manager is still the only thing that can
+    // settle it — `resolveStatus` refuses to promote `needs_review` on recompute, by design.
+    const f = await fixture('sweepqueue');
+    await withSweepPolicy(f, 2);
+    await addPunch(f, at(14), 'in');
+    await asOrg(f.orgId, (tx) => adjudicateDay(tx, { employmentId: f.employment.id, shiftDay: DAY }));
+    await asOrg(f.orgId, (tx) => sweepStore(tx, { storeId: f.storeId, nowMs: Date.now() }));
+
+    const q = await queue(f);
+    expect(q).toHaveLength(1);
+    expect(q[0]!.reasons).toContain('needs_review');
+  });
+});
+
+describe('⛔ DEF-119 — a forgotten tap-out pays a half day, not nothing', () => {
+  it('⭐ with halfDayOnMissingTap ON, an unpaired day credits a HALF DAY', async () => {
+    // ⚠️ All three v1 stores have this ON. Until now v2 had no reader for the column at all, so a
+    // staffer who forgot to tap out was paid HALF A DAY there and ₱0 here.
+    const f = await fixture('missingtapon');
+    await asOrg(f.orgId, (tx) =>
+      supersedeConfig(tx, f.admin, {
+        storeId: f.storeId,
+        effectiveFrom: parseShiftDay('2026-02-01'),
+        changes: { halfDayOnMissingTap: true },
+      }),
+    );
+    await addPunch(f, at(14), 'in');
+    const day = await asOrg(f.orgId, (tx) =>
+      adjudicateDay(tx, { employmentId: f.employment.id, shiftDay: DAY }));
+
+    expect(day.isHalfDay).toBe(true);
+    expect(day.computedMinutes).toBe(300); // the 5h half-day block
+    // ⛔ AND NO END TIME WAS INVENTED — nobody witnessed one.
+    expect(day.endMinute).toBeNull();
+  });
+
+  it('⛔ with it OFF, the day credits nothing — the store chose that', async () => {
+    const f = await fixture('missingtapoff');
+    await asOrg(f.orgId, (tx) =>
+      supersedeConfig(tx, f.admin, {
+        storeId: f.storeId,
+        effectiveFrom: parseShiftDay('2026-02-01'),
+        changes: { halfDayOnMissingTap: false },
+      }),
+    );
+    await addPunch(f, at(14), 'in');
+    const day = await asOrg(f.orgId, (tx) =>
+      adjudicateDay(tx, { employmentId: f.employment.id, shiftDay: DAY }));
+    expect(day.computedMinutes).toBe(0);
+    expect(day.isHalfDay).toBe(false);
+  });
+
+  it('⚠️ a missing IN is NOT credited, whatever the flag says', async () => {
+    // ⛔ There is no anchor, so there is nothing to credit FROM and no evidence anybody arrived
+    // when they say they did. A missing out and a missing in are different animals.
+    const f = await fixture('missingin');
+    await asOrg(f.orgId, (tx) =>
+      supersedeConfig(tx, f.admin, {
+        storeId: f.storeId,
+        effectiveFrom: parseShiftDay('2026-02-01'),
+        changes: { halfDayOnMissingTap: true },
+      }),
+    );
+    await addPunch(f, at(23), 'out');
+    const day = await asOrg(f.orgId, (tx) =>
+      adjudicateDay(tx, { employmentId: f.employment.id, shiftDay: DAY }));
+    expect(day.computedMinutes).toBe(0);
+    expect(day.isHalfDay).toBe(false);
   });
 });

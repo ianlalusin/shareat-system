@@ -25,6 +25,9 @@ import { schedulerRepo, transaction, type SchedulerFailure } from '@shareat/db';
 import { runDepreciationAsSystem } from '../fixed-assets/depreciate';
 import { runAmortisationAsSystem } from '../prepaid';
 
+import { sql } from 'drizzle-orm';
+import { sweepStore } from '../attendance/sweep';
+
 export interface MonthEndOptions {
   /** `YYYY-MM` to run THROUGH. Defaults to the last completed month. */
   period?: string;
@@ -38,7 +41,7 @@ export interface MonthEndOptions {
 export interface JobOutcome {
   orgId: string;
   orgName: string;
-  job: 'depreciation' | 'amortisation';
+  job: 'depreciation' | 'amortisation' | 'attendance_sweep';
   period: string;
   posted: number;
   skipped: number;
@@ -182,4 +185,94 @@ function endOfPeriod(period: string): string {
   const [y, m] = period.split('-').map(Number) as [number, number];
   const d = new Date(Date.UTC(y, m, 0));
   return d.toISOString().slice(0, 10);
+}
+
+// =====================================================================================
+
+/**
+ * ⭐ **T-199 — the attendance sweep, on the same scheduler as month-end.**
+ *
+ * ⚠️ **Hourly, not daily**, and that is what drives everything below: the cut-off is a wall-clock
+ * hour **per store** (v1: all three on 02:00). A daily timer could not serve two stores on
+ * different hours, so the timer fires every hour and each store decides whether its hour has come
+ * round. A store whose hour has not arrived is a no-op, cheaply.
+ */
+export interface SweepResult {
+  outcomes: JobOutcome[];
+  hadFailures: boolean;
+}
+
+export async function runAttendanceSweep(
+  options: { orgId?: string; trigger?: 'cron' | 'manual'; nowMs?: number } = {},
+): Promise<SweepResult> {
+  const trigger = options.trigger ?? 'cron';
+  const nowMs = options.nowMs ?? Date.now();
+  // ⚠️ `scheduler_runs.period` is shaped `YYYY-MM` by a CHECK. An hourly job has no month of its
+  // own, so it records the month it RAN in; `started_at` is what distinguishes one run from the
+  // next, and there is deliberately no unique key on (org, job, period).
+  const period = new Date(nowMs + 8 * 3_600_000).toISOString().slice(0, 7);
+
+  const orgs = await transaction((tx) => schedulerRepo.listOrgsToRun(tx, options.orgId));
+  const outcomes: JobOutcome[] = [];
+
+  for (const org of orgs) {
+    outcomes.push(await runSweepForOrg(org, period, trigger, nowMs));
+  }
+  return { outcomes, hadFailures: outcomes.some((o) => o.failed > 0 || o.error) };
+}
+
+async function runSweepForOrg(
+  org: { id: string; name: string },
+  period: string,
+  trigger: 'cron' | 'manual',
+  nowMs: number,
+): Promise<JobOutcome> {
+  const runId = await transaction((tx) =>
+    schedulerRepo.startRun(tx, { orgId: org.id, job: 'attendance_sweep', period, trigger }),
+  );
+  const base = { orgId: org.id, orgName: org.name, job: 'attendance_sweep' as const, period };
+
+  try {
+    const stores = await transaction((tx) =>
+      tx.execute(
+        sql`select s.id::text as "id" from stores s
+             join store_attendance_config c on c.store_id = s.id and c.superseded_at is null
+            where s.org_id = ${org.id}`,
+      ),
+    );
+
+    let swept = 0;
+    let leftOpen = 0;
+    const failures: SchedulerFailure[] = [];
+
+    // ⛔ One transaction PER STORE, matching T-124 §12's reasoning that month-end already follows:
+    // one bad store must not roll back the ones that succeeded. The day is derived, so a partial
+    // sweep is incomplete, never inconsistent.
+    for (const store of stores as unknown as { id: string }[]) {
+      try {
+        const out = await transaction((tx) => sweepStore(tx, { storeId: store.id, nowMs }));
+        swept += out.swept.length;
+        leftOpen += out.leftOpen;
+      } catch (err) {
+        failures.push({
+          subjectId: store.id,
+          subjectName: `store ${store.id}`,
+          reason: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    await transaction((tx) =>
+      schedulerRepo.finishRun(tx, runId, {
+        postedCount: swept,
+        skippedCount: leftOpen,
+        failures,
+      }),
+    );
+    return { ...base, posted: swept, skipped: leftOpen, failed: failures.length, failures };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await transaction((tx) => schedulerRepo.failRun(tx, runId, message));
+    return { ...base, posted: 0, skipped: 0, failed: 0, failures: [], error: message };
+  }
 }

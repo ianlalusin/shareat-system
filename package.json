@@ -30,7 +30,8 @@
     "month-end": "tsx scripts/month-end.ts",
     "dev:seed": "tsx scripts/dev-seed.ts",
     "storage-smoke": "tsx scripts/storage-smoke.ts",
-    "capture:attendance-golden": "tsx scripts/capture-attendance-golden.ts"
+    "capture:attendance-golden": "tsx scripts/capture-attendance-golden.ts",
+    "attendance-sweep": "tsx scripts/attendance-sweep.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",

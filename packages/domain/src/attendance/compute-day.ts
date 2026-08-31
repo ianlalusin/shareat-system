@@ -60,6 +60,15 @@ export interface DayPolicy {
   requiredMinutes: number;
   halfDayMinutes: number;
   shortShiftHalfDayOt: boolean;
+  /**
+   * ⛔ **DEF-119.** When a day has an `in` and no `out` and this store says so, the day is credited
+   * a HALF DAY rather than nothing.
+   *
+   * ⚠️ It was a column nothing read. All three v1 stores have it ON, so a staffer who forgot to tap
+   * out was paid **half a day there and ₱0 here** — an underpayment nobody reports because nobody
+   * can see it. Fifth in the DEF-109 family.
+   */
+  halfDayOnMissingTap: boolean;
   /** Wall-clock hours, 0-23, sorted and distinct (the DB guarantees that shape). */
   allowedShiftStartHours: number[];
   lateGraceMinutes: number;
@@ -436,6 +445,26 @@ export function computeDay(params: {
   }
 
   if (ins.length === 0 || outs.length === 0) {
+    /**
+     * ⛔ **DEF-119 — the missing-tap half day.**
+     *
+     * ⚠️ Only a missing OUT, and only when the store opted in. A missing *in* is a different animal:
+     * there is no anchor, so there is nothing to credit from and no evidence anybody arrived when
+     * they say they did.
+     *
+     * ⭐ **No end time is invented to get here.** v1 states the rule and it is the important half:
+     * *"the staffer is clocked out, but the time is not captured. Nobody observed them leaving."*
+     * The half day is a CREDIT, not a reconstructed shift — the same distinction `unitsFor` makes
+     * after T-194, where a half day pays half the daily rate and never the hours covered.
+     */
+    if (policy.halfDayOnMissingTap && ins.length > 0 && outs.length === 0) {
+      const day = empty();
+      explain.push(
+        'Clocked in with no clock-out. This store credits a half day for a missing tap — ⚠️ no ' +
+          'end time is recorded, because nobody witnessed one.',
+      );
+      return { ...day, computedMinutes: policy.halfDayMinutes, isHalfDay: true };
+    }
     explain.push('An unpaired day cannot be credited hours until a manager settles it.');
     return empty();
   }

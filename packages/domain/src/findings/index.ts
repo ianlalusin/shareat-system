@@ -75,6 +75,9 @@ export async function listFindings(
     // replacement for v1's forcing function: nag the manager who can act, never block the cook
     // who cannot.
     ...(await findingsRepo.itemsMissingThreshold(tx, orgId)),
+    // ⭐ T-199 — the sweep's alarm. Detects the missing OUTCOME, not the missing run, so it is
+    // true even when the sweep is dead. A "did the cron fire?" check needs a cron to ask it.
+    ...(await findingsRepo.openShiftsStale(tx, orgId)),
   ];
 
   const acks = await findingsRepo.liveAcknowledgements(tx, orgId);

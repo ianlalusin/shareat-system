@@ -110,12 +110,36 @@ describe('T-155 invariant 7 — every column is NOT NULL, so a store cannot be h
    * `fixed` at zero pesos an hour, and every overtime hour would silently pay nothing. Nullable
    * plus the conditional check makes the half-configured state unrepresentable.
    */
-  it('no column is nullable except the two lifecycle ones and the conditional OT amount', async () => {
+  /**
+   * ⚠️ **AMENDED AGAIN 2026-08-31 by T-199, and this exception rests on a DIFFERENT argument.**
+   *
+   * `overtime_fixed_hourly` above is nullable because a CHECK makes the half-configured state
+   * unrepresentable. `auto_clock_out_hour` has no such CHECK, because *"this store never
+   * auto-clears"* is a perfectly valid policy on its own — so the exception has to be justified
+   * another way, and it is worth stating rather than waving through:
+   *
+   * 1. ⭐ **An integer cannot express "never" without a magic number.** NOT NULL with a sentinel
+   *    (`-1`, say) would be strictly worse: it makes "never" LOOK like an hour and invites
+   *    arithmetic on it. Null is the honest encoding of "there is no hour".
+   * 2. ⛔ **The unset state is covered by a different NOT NULL column.** DEF-087's fear is that an
+   *    unchosen value fails quietly in the direction that looks fine. Here it cannot: a store with
+   *    no cut-off hour is still swept by `max_shift_hours`, which is NOT NULL and defaulted. The
+   *    un-chosen state degrades to *the backstop only*, never to *no protection*.
+   * 3. ⚠️ v1 needs a runtime guard here precisely because it has no types — `Number('')` is `0`,
+   *    which is midnight, *"the one hour a floor is most likely to still have people on it, at a
+   *    store that never opted in."* An integer column plus null makes that unrepresentable.
+   */
+  it('no column is nullable except the lifecycle pair, the OT amount and the cut-off hour', async () => {
     const cols = await sql<{ column_name: string; is_nullable: string }[]>`
       select column_name, is_nullable from information_schema.columns
       where table_name = 'store_attendance_config'`;
     const nullable = cols.filter((c) => c.is_nullable === 'YES').map((c) => c.column_name).sort();
-    expect(nullable).toEqual(['created_by', 'overtime_fixed_hourly', 'superseded_at']);
+    expect(nullable).toEqual([
+      'auto_clock_out_hour',
+      'created_by',
+      'overtime_fixed_hourly',
+      'superseded_at',
+    ]);
     // And the PIN switch is gone entirely, not merely defaulted to false (migration 0085).
     expect(cols.map((c) => c.column_name)).not.toContain('credential_passcode');
   });
