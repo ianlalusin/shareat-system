@@ -305,3 +305,110 @@ describe('T-181 invariant 8 — ⛔ only the three named entities, ever', () => 
     expect(rows[0]!.c).not.toContain('biometric');
   });
 });
+
+// -------------------------------------------------------------------------------------
+
+/**
+ * ⛔ **T-198 / DEF-118 — the day feed is the CURRENT business day, not all of history.**
+ *
+ * Bible §5.3 defines hot-set item 4 as the *"current business day"* punch feed — small, every few
+ * minutes. `mirror_enqueue` had no date filter and the trigger fired on every `attendance_days`
+ * write, so **24 of 24 publishes measured on the dev database were for days that are not today**.
+ * Payroll doubled it: `freezeDays` updates every day a run pays.
+ *
+ * ⭐ And nothing read any of it — `lane.ts` subscribes to roster, config and credentials only.
+ */
+describe('⛔ T-198 — day_feed publishes only the current business day and the one before', () => {
+  /** Inserts an adjudicated day directly on a given shift day. The trigger is what is under test,
+   *  so the row is written raw rather than derived — no punches are needed to fire it. */
+  async function addDayOn(f: Fixture, employmentId: string, shiftDay: string) {
+    const [cfg] = await sql<{ id: string }[]>`
+      select id from store_attendance_config where store_id = ${f.storeId} and superseded_at is null`;
+    const [d] = await sql<{ id: string }[]>`
+      insert into attendance_days
+        (org_id, store_id, person_id, employment_id, shift_day, attendance_config_id, anchor_mode,
+         status, computed_minutes, is_half_day, pending_ot_minutes, night_diff_minutes,
+         holiday_minutes, is_holiday, holiday_type)
+      values (${f.orgId}, ${f.storeId}, ${f.workerId}, ${employmentId}, ${shiftDay}, ${cfg!.id},
+              'exact', 'computed', 540, false, 0, 0, 0, false, null)
+      returning id`;
+    return d!.id;
+  }
+
+  const dayFeedCount = async (f: Fixture) => {
+    const [row] = await sql<{ n: number }[]>`
+      select count(*)::int as n from mirror_outbox
+      where org_id = ${f.orgId} and entity = 'day_feed'`;
+    return row!.n;
+  };
+
+  /** Manila, because the window is a BUSINESS date — see the migration's note on `current_date`. */
+  const manilaOffset = (days: number) => {
+    const now = new Date(Date.now() + 8 * 3_600_000); // UTC+8
+    now.setUTCDate(now.getUTCDate() + days);
+    return now.toISOString().slice(0, 10);
+  };
+
+  it('⭐ TODAY is published', async () => {
+    const f = await fixture('feedtoday');
+    const emp = await hire(f);
+    await sql`delete from mirror_outbox where org_id = ${f.orgId}`;
+    await addDayOn(f, emp.id, manilaOffset(0));
+    expect(await dayFeedCount(f)).toBe(1);
+  });
+
+  it('⭐ YESTERDAY is published — the night shift and the offline replay', async () => {
+    // ⚠️ Not slack. A shift starting 22:00 belongs to the previous business day and is still
+    // being punched after midnight, and an offline terminal replays hours late — `shift_day` is
+    // the BUSINESS day, not the arrival time. A one-day window would drop exactly the punches
+    // the offline lane exists to protect.
+    const f = await fixture('feedyesterday');
+    const emp = await hire(f);
+    await sql`delete from mirror_outbox where org_id = ${f.orgId}`;
+    await addDayOn(f, emp.id, manilaOffset(-1));
+    expect(await dayFeedCount(f)).toBe(1);
+  });
+
+  it('⛔ a day THIRTY DAYS old is not published, on insert', async () => {
+    const f = await fixture('feedold');
+    const emp = await hire(f);
+    await sql`delete from mirror_outbox where org_id = ${f.orgId}`;
+    const dayId = await addDayOn(f, emp.id, manilaOffset(-30));
+    expect(await dayFeedCount(f)).toBe(0);
+    // ...nor on update.
+    await sql`update attendance_days set computed_minutes = 480 where id = ${dayId}`;
+    expect(await dayFeedCount(f)).toBe(0);
+  });
+
+  it('⛔⭐ FREEZING an old day publishes nothing — the payroll case that doubled the volume', async () => {
+    const f = await fixture('feedfreeze');
+    const emp = await hire(f);
+    const dayId = await addDayOn(f, emp.id, manilaOffset(-14));
+    await sql`delete from mirror_outbox where org_id = ${f.orgId}`;
+
+    const [acct] = await sql<{ id: string }[]>`
+      select id from money_accounts where store_id = ${f.storeId}
+        and instrument = 'cash' and custodian = 'office' and is_foundation`;
+    const [person] = await sql<{ id: string }[]>`
+      select person_id::text as id from person_roles where org_id = ${f.orgId} limit 1`;
+    const [run] = await sql<{ id: string }[]>`
+      insert into pay_runs (org_id, store_id, period_start, period_end, money_account_id, status,
+                            created_by, posted_at, posted_by)
+      values (${f.orgId}, ${f.storeId}, ${manilaOffset(-20)}, ${manilaOffset(-7)}, ${acct!.id},
+              'posted', ${person!.id}, now(), ${person!.id})
+      returning id`;
+    await sql`update attendance_days set frozen_at = now(), frozen_by_pay_run_id = ${run!.id}
+              where id = ${dayId}`;
+
+    expect(await dayFeedCount(f)).toBe(0);
+  });
+
+  it('⚠️ roster and config are UNTOUCHED — they carry no date and must always publish', async () => {
+    // ⛔ A regression here would silently stop a credential kill switch reaching a terminal,
+    // which is landmine #15. The date window is day_feed's alone.
+    const f = await fixture('feedothers');
+    await hire(f);
+    const rows = await outbox(f);
+    expect(rows.some((r) => r.entity === 'roster')).toBe(true);
+  });
+});

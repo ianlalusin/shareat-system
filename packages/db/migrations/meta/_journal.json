@@ -666,6 +666,13 @@
       "when": 1795663907084,
       "tag": "0111_t197_short_shift_default_on",
       "breakpoints": true
+    },
+    {
+      "idx": 112,
+      "version": "7",
+      "when": 1795750307084,
+      "tag": "0112_t198_day_feed_scope",
+      "breakpoints": true
     }
   ]
 }
