@@ -264,6 +264,14 @@ export interface PayableDay {
   holidayMinutes: number;
   /** ⭐ Which KIND of holiday, so payroll applies the right configured multiplier. */
   holidayType: 'regular' | 'special_non_working' | 'special_working' | null;
+  /**
+   * ⛔ **The overtime a manager has APPROVED**, not the overtime worked.
+   *
+   * `pendingOtMinutes` is what the day recorded; this is what somebody agreed to pay for.
+   * `null` means nobody has decided yet — which is NOT the same as a decision of zero, and is why
+   * payroll pays nothing rather than everything (DEF-109).
+   */
+  approvedOtMinutes: number | null;
 }
 
 /**
@@ -287,8 +295,16 @@ export async function payableDays(
            d.pending_ot_minutes        as "pendingOtMinutes",
            d.night_diff_minutes        as "nightDiffMinutes",
            d.holiday_minutes           as "holidayMinutes",
-           d.holiday_type              as "holidayType"
+           d.holiday_type              as "holidayType",
+           adj.approved_ot_minutes     as "approvedOtMinutes"
     from attendance_days d
+    -- ⭐ The LIVE overtime approval for this day, if a manager has made one. Superseded rows are
+    -- excluded: a second decision replaces the first, it does not add to it.
+    left join attendance_adjustments adj
+      on adj.employment_id = d.employment_id
+     and adj.shift_day = d.shift_day
+     and adj.kind = 'overtime_approved'
+     and adj.superseded_by_adjustment_id is null
     where d.org_id = ${orgId}
       and d.store_id = ${input.storeId}
       and d.shift_day between ${input.from} and ${input.to}

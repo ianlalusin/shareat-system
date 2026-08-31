@@ -122,20 +122,59 @@ describe('which period a date falls in', () => {
   });
 });
 
-describe('the payout date', () => {
+const lag = (days: number) => ({ payoutMode: 'lag' as const, payoutLagDays: days, payoutDays: [] });
+const onDays = (...days: number[]) => ({
+  payoutMode: 'fixed_days' as const,
+  payoutLagDays: 0,
+  payoutDays: days,
+});
+
+describe('the payout date — lag mode', () => {
   it('is the period end plus the store lag', () => {
     const p = derivePeriods(semi(15), 2026, 8)[0]!;
-    expect(payoutDateFor(p, 0)).toBe('2026-08-15');
-    expect(payoutDateFor(p, 5)).toBe('2026-08-20');
+    expect(payoutDateFor(p, lag(0))).toBe('2026-08-15');
+    expect(payoutDateFor(p, lag(5))).toBe('2026-08-20');
   });
 
   it('⚠️ crosses a month boundary when the lag pushes it there', () => {
     const p = derivePeriods(semi(15), 2026, 8)[1]!; // ends 08-31
-    expect(payoutDateFor(p, 5)).toBe('2026-09-05');
+    expect(payoutDateFor(p, lag(5))).toBe('2026-09-05');
   });
 
   it('a negative lag is treated as none, never as paying early', () => {
     const p = derivePeriods(semi(15), 2026, 8)[0]!;
-    expect(payoutDateFor(p, -3)).toBe('2026-08-15');
+    expect(payoutDateFor(p, lag(-3))).toBe('2026-08-15');
+  });
+});
+
+describe('⭐ the payout date — FIXED DAYS, which a lag cannot express', () => {
+  const p = derivePeriods(semi(15), 2026, 8);
+
+  it('pays each period on its own configured day', () => {
+    // The classic Philippine arrangement: 1-15 paid on the 25th, 16-31 paid on the 10th.
+    expect(payoutDateFor(p[0]!, onDays(25, 10), 0)).toBe('2026-08-25');
+    expect(payoutDateFor(p[1]!, onDays(25, 10), 1)).toBe('2026-09-10'); // ⭐ NEXT month
+  });
+
+  it('⚠️ this is why a lag cannot do it — the gap differs every month', () => {
+    const sept = derivePeriods(semi(15), 2026, 9);
+    expect(payoutDateFor(sept[1]!, onDays(25, 10), 1)).toBe('2026-10-10');
+  });
+
+  it('⚠️ a day of 31 CLAMPS to the month end rather than being refused', () => {
+    const feb = derivePeriods(semi(15), 2026, 2);
+    expect(payoutDateFor(feb[1]!, onDays(31), 1)).toBe('2026-02-28');
+  });
+
+  it('⭐ fewer entries than periods is legal — the LAST one applies to the rest', () => {
+    const weeks = derivePeriods(weekly, 2026, 8);
+    expect(payoutDateFor(weeks[4]!, onDays(5), 4)).toBe('2026-09-05');
+  });
+
+  it('falls back to the lag when fixed_days is chosen but empty', () => {
+    // ⚠️ The CHECK stops that being STORED; this is what the pure function does regardless.
+    expect(
+      payoutDateFor(p[0]!, { payoutMode: 'fixed_days', payoutLagDays: 2, payoutDays: [] }),
+    ).toBe('2026-08-17');
   });
 });

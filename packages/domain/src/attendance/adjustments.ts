@@ -31,6 +31,8 @@ export interface RecordAdjustmentInput {
   chosenAnchorMinute?: number;
   effectiveOutMinute?: number;
   isHalfDay?: boolean;
+  /** ⭐ `overtime_approved` only — how many of the day's PENDING minutes are accepted. */
+  approvedOtMinutes?: number;
   reason?: string;
   /** The verified session the decision was made under. From `resolveActor` (§7.1). */
   sessionId: string;
@@ -116,6 +118,7 @@ export async function recordAdjustment(
     chosenAnchorMinute: input.chosenAnchorMinute ?? null,
     effectiveOutMinute: input.effectiveOutMinute ?? null,
     isHalfDay: input.isHalfDay === undefined ? null : String(input.isHalfDay),
+    approvedOtMinutes: input.approvedOtMinutes ?? null,
     reason: input.reason ?? null,
     decidedBySessionId: input.sessionId,
     decidedByPersonId: actor.personId,

@@ -167,20 +167,34 @@ describe('money discipline', () => {
 // =====================================================================================
 // T-189b — Ian, 2026-08-31
 
-describe('⭐ hours come in HALF-HOUR steps, and the remainder is dropped', () => {
-  it('steps to .5, 1, 1.5, 2 — "no hanging minutes"', () => {
-    expect(steppedHours(30)).toBe(0.5);
-    expect(steppedHours(60)).toBe(1);
-    expect(steppedHours(90)).toBe(1.5);
-    expect(steppedHours(120)).toBe(2);
+describe('⭐ hours come in HALF-HOUR steps, rounded at 25 and 50', () => {
+  it('⭐ the exact boundaries Ian gave, 2026-08-31', () => {
+    // "25 mins above but less than 50 mins is .5. 50 mins above to next hour and
+    //  24 mins 59 secs is 1."
+    expect(steppedHours(24)).toBe(0);
+    expect(steppedHours(25)).toBe(0.5);
+    expect(steppedHours(49)).toBe(0.5);
+    expect(steppedHours(50)).toBe(1);
+    expect(steppedHours(84)).toBe(1); // 1h24m is still 1
+    expect(steppedHours(85)).toBe(1.5); // 1h25m
+    expect(steppedHours(110)).toBe(2); // ⭐ 1h50m rounds UP to 2 — this is not a floor
   });
 
-  it('⚠️ DROPS the remainder rather than rounding up — 1h50m of overtime pays 1.5h', () => {
-    // ⛔ The direction is the decision: "no hanging minutes" means the leftover is discarded.
-    // Rounding up would pay for time nobody worked.
-    expect(steppedHours(110)).toBe(1.5);
-    expect(steppedHours(59)).toBe(0.5);
-    expect(steppedHours(29)).toBe(0); // ⚠️ and 29 minutes of overtime pays NOTHING
+  it('⚠️ 50 minutes rounds UP into the next whole hour', () => {
+    expect(steppedHours(50)).toBe(1);
+    expect(steppedHours(59)).toBe(1);
+    expect(steppedHours(60)).toBe(1);
+  });
+
+  it('⚠️ but under 25 minutes still pays nothing', () => {
+    expect(steppedHours(24)).toBe(0);
+    expect(steppedHours(1)).toBe(0);
+  });
+
+  it('⚠️ the thresholds are 25/50, NOT the midpoints 15/45', () => {
+    // Deliberately harder than nearest-half rounding: most of a block must be worked to earn it.
+    expect(steppedHours(20)).toBe(0);
+    expect(steppedHours(45)).toBe(0.5);
   });
 
   it('is never negative and never NaN', () => {
@@ -189,17 +203,19 @@ describe('⭐ hours come in HALF-HOUR steps, and the remainder is dropped', () =
     expect(steppedHours(Number.NaN)).toBe(0);
   });
 
-  it('⭐ overtime is priced on the STEPPED hours, not the raw minutes', () => {
-    // 110 minutes → 1.5h. hourly equiv 60 × 1.5 × 1.25 = 112.50
-    // ⚠️ Un-stepped it would have been 1.8333h → 137.50, so the step is worth ₱25 here.
-    expect(computePay([day({ otMinutes: 110 })], M).otPay).toBe(money('112.50'));
+  it('⭐ overtime is priced on the LADDERED hours, not the raw minutes', () => {
+    // 110 min (1h50m) → 2h. hourly equiv 60 × 2 × 1.25 = 150.00
+    expect(computePay([day({ otMinutes: 110 })], M).otPay).toBe(money('150.00'));
+    // 100 min (1h40m) → 1.5h → 112.50
+    expect(computePay([day({ otMinutes: 100 })], M).otPay).toBe(money('112.50'));
   });
 
-  it('⭐ night differential and holiday are stepped too — the rule is about HOURS', () => {
-    expect(computePay([day({ nightDiffMinutes: 110 })], M).nightDiffPay).toBe(money('9.00'));
+  it('⭐ night differential and holiday are laddered too — the rule is about HOURS', () => {
+    // 110 min → 2h. 2 × 60 × 0.10 = 12.00 ; 2 × 60 × 1.00 = 120.00
+    expect(computePay([day({ nightDiffMinutes: 110 })], M).nightDiffPay).toBe(money('12.00'));
     expect(
       computePay([day({ holidayMinutes: 110, holidayType: 'regular' })], M).holidayPay,
-    ).toBe(money('90.00'));
+    ).toBe(money('120.00'));
   });
 
   it('⛔ LATE is not stepped — it is not computed here at all', () => {
@@ -223,9 +239,10 @@ describe('⭐ overtime priced two ways', () => {
     );
   });
 
-  it('fixed mode is stepped as well — 1h50m pays 1.5 × the flat amount', () => {
+  it('fixed mode is laddered as well — 1h50m pays 2 × the flat amount', () => {
     const fixed: Multipliers = { ...M, overtimeMode: 'fixed', overtimeFixedHourly: '80.00' };
-    expect(computePay([day({ otMinutes: 110 })], fixed).otPay).toBe(money('120.00'));
+    expect(computePay([day({ otMinutes: 110 })], fixed).otPay).toBe(money('160.00'));
+    expect(computePay([day({ otMinutes: 100 })], fixed).otPay).toBe(money('120.00'));
   });
 
   it('⭐ fixed OT still pays when requiredHoursPerShift is misconfigured', () => {

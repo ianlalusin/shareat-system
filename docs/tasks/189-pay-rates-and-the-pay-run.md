@@ -436,3 +436,74 @@ because a late correction has to be payable even when it does not line up with a
 |---|---|---|---|
 | Lipa | semi-monthly, cut on the 15th | **₱80.00 / hour, flat** | same day |
 | Malvar | **weekly** — Aug 1–7, 8–14, … | ×1.25 | **3 days after** — "payable 2026-08-18" |
+
+---
+
+## 15. ⛔ T-189e — the overtime approval gate. **A defect in T-189, not an enhancement.**
+
+`attendance_days.pending_ot_minutes` carries this, written by the attendance lane and addressed to
+Phase 5:
+
+> ⛔ *"The short-shift / late-out remainder. **Recorded, never paid here** — the approval gate is
+> Phase 5, and auto-paying it is exactly what the pending status exists to prevent."*
+
+**T-189's `previewPayRun` read it straight into `otMinutes` and paid it.** Every pending minute
+became money the moment a run posted — the precise thing the pending status exists to prevent,
+walked past by the module the warning was addressed to. **DEF-109.**
+
+⚠️ **No test could have caught it.** The tests were written by the same author under the same
+misunderstanding, and they asserted the wrong behaviour confidently.
+
+### 15.1 The gate
+
+A **sixth adjustment kind**, `overtime_approved`, carrying `approved_ot_minutes` — not a column on
+the day, because `attendance_adjustments` is explicitly the DECISION layer: append-and-supersede,
+naming who decided and under which session. Approving overtime is exactly that kind of fact.
+
+```
+payslip OT minutes = min(approved ?? 0, worked)
+```
+
+| | |
+|---|---|
+| Nobody has decided (`null`) | pays **nothing** — not the same as a decision of zero |
+| Approved **less** than worked | pays the approved amount |
+| Approved **more** than worked | ⛔ capped at what was worked |
+| Approved **zero** | a real decision, pays zero |
+
+⭐ **Unapproved overtime is SURFACED on `/payroll`**, not silently dropped: *"1h 50m of overtime is
+awaiting a manager's approval and is not in these figures."* An unpaid hour that vanishes from the
+screen is indistinguishable from an hour nobody worked — which is the failure this module keeps
+finding in v1.
+
+### 15.2 This is Ian's model, and v2 already had the other half
+
+> **Ian, 2026-08-31:** *"undertime is provisional OT — for example 5hr is set halfday, 9hr for
+> wholeday; a 7 hour duty is halfday plus provisional 2 hour OT to be approved by manager."*
+
+`compute-day.ts` already implements exactly that under `shortShiftHalfDayOt`: a 7-hour duty against
+a 5-hour half day and a 9-hour shift becomes **5h paid + 2h pending**. ⚠️ **The half that was
+missing was the approval**, and without it the "pending" half was being paid automatically — which
+inverted the whole point of the model.
+
+⚠️ `shortShiftHalfDayOt` **defaults to `false`**, as it does in v1 (opt-in, so no store's pay moved
+when the rule shipped). A store that wants Ian's model has to switch it on.
+
+### 15.3 Two constraints that did their job
+
+- **T-158's `payload_shape_check` is an exhaustive whitelist** — every kind names exactly which
+  payload columns it may and may not carry — so it refused `overtime_approved` the instant it was
+  inserted. ⭐ Extending that one constraint is right; adding a second beside it would have left
+  two places describing one rule.
+- ⚠️ A CHECK constraint **may not contain a subquery**. `payout_days <@ ARRAY(SELECT
+  generate_series(1,31))` failed the whole migration; `1 <= ALL(...) AND 31 >= ALL(...)` is the
+  form that works.
+
+### 15.4 And a test-design lesson
+
+`approveOt` writes the adjustment row **directly**, not through `recordAdjustment` — because that
+service **re-adjudicates the day in the same transaction**, and re-adjudication derives the day
+from PUNCHES. These fixtures insert `attendance_days` directly with no punches behind them, so the
+service recomputed the day to zero and wiped the very `pending_ot_minutes` under test.
+
+⭐ That is T-158 working, not a bug: **a day IS its punches.**

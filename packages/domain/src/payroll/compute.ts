@@ -10,25 +10,48 @@
 import { ZERO, add, compare, money, multiply, type Money } from '@shareat/core/money';
 
 /**
- * ⭐ **Minutes become hours in HALF-HOUR STEPS, and the remainder is DROPPED.**
+ * ⭐ **Minutes become hours on a HALF-HOUR LADDER, rounded at 25 and 50.**
  *
- * Ian, 2026-08-31: *"time must be computed by .5 escalation so hours are .5, 1, 1.5, 2 like that,
- * no hanging minutes except for computation of late."*
+ * Ian, 2026-08-31, correcting an earlier floor: *"the conversion must be 25 mins above but less
+ * than 50 mins is .5. 50 mins above to next hour and 24 mins 59 secs is 1."*
  *
- * So 1h50m of overtime pays **1.5 hours**, and 25 minutes pays **nothing** — *"no hanging minutes"*
- * means the leftover is discarded, not rounded up. ⚠️ **That direction is a decision with a
- * consequence**: a store whose overtime is habitually 20 minutes will pay none of it, and the fix
- * for that is to change how overtime is approved, not to round it up quietly here.
+ * So within each hour the remainder decides:
  *
- * ⛔ **Late is deliberately NOT stepped.** Ian named it as the exception, and it is the right one:
- * lateness is a measurement of a person's conduct, and rounding 25 minutes late down to zero would
- * erase the fact. `attendance_days.lateMinutes` stays an exact integer minute, untouched by this.
+ * ```
+ *   0 – 24 min   →  +0        24 min of overtime is not half an hour
+ *  25 – 49 min   →  +0.5
+ *  50 – 59 min   →  +1        it rounds UP into the next whole hour
+ * ```
+ *
+ * which gives this ladder:
+ *
+ * | worked | paid | | worked | paid |
+ * |---:|---:|---|---:|---:|
+ * | 24 min | 0 | | 1 h 24 m | 1 |
+ * | 25 min | 0.5 | | 1 h 25 m | 1.5 |
+ * | 50 min | **1** | | 1 h 50 m | **2** |
+ *
+ * ⚠️ **The thresholds are 25 and 50, not the midpoints 15 and 45.** This is deliberately harder
+ * than nearest-half rounding: you have to work most of a block to earn it. But it is NOT a floor —
+ * 50 minutes rounds UP to a full hour rather than down to a half.
+ *
+ * ⚠️ **`attendance_days` stores whole minutes**, so Ian's "24 mins 59 secs" boundary needs no
+ * special handling: 24 rounds down and 25 rounds up, which is exactly the intent.
+ *
+ * ⛔ **Late is deliberately NOT laddered.** Ian named it as the exception, and it is the right one:
+ * lateness measures a person's conduct, and rounding 24 minutes late down to zero would erase the
+ * fact. `attendance_days.lateMinutes` stays an exact integer minute, untouched by this.
  */
-export const HOUR_STEP_MINUTES = 30;
+export const HALF_HOUR_THRESHOLD_MINUTES = 25;
+export const FULL_HOUR_THRESHOLD_MINUTES = 50;
 
 export function steppedHours(minutes: number): number {
   if (!Number.isFinite(minutes) || minutes <= 0) return 0;
-  return Math.floor(minutes / HOUR_STEP_MINUTES) / (60 / HOUR_STEP_MINUTES);
+  const wholeHours = Math.floor(minutes / 60);
+  const rest = minutes - wholeHours * 60;
+  if (rest < HALF_HOUR_THRESHOLD_MINUTES) return wholeHours;
+  if (rest < FULL_HOUR_THRESHOLD_MINUTES) return wholeHours + 0.5;
+  return wholeHours + 1;
 }
 
 /** ⚠️ Only `daily` has a compute path here — one of 126 live v1 staff is hourly (T-189 §4). */

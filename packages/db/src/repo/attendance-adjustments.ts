@@ -16,6 +16,8 @@ export interface AttendanceAdjustmentRow {
   reason: string | null;
   decidedBySessionId: string;
   decidedByPersonId: string;
+  /** ⭐ T-189e. `overtime_approved` only — the minutes a manager accepted for pay. */
+  approvedOtMinutes: number | null;
   supersededByAdjustmentId: string | null;
   createdAt: Date;
 }

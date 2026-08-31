@@ -41,7 +41,9 @@ export interface AttendanceConfigRow {
   // ---- T-189c. How this store's pay periods are cut.
   payrollPeriodType: 'monthly' | 'semi_monthly' | 'weekly';
   semiMonthlyCutoffDay: number;
+  payoutMode: 'lag' | 'fixed_days';
   payoutLagDays: number;
+  payoutDays: number[];
 
   lateGraceMinutes: number;
   earlyOutGraceMinutes: number;

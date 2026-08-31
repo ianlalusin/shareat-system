@@ -121,9 +121,54 @@ export function periodForDate(config: PeriodConfig, date: string): PayPeriod | n
   return derivePeriods(config, y, m).find((p) => date >= p.start && date <= p.end) ?? null;
 }
 
-/** When the money is actually handed over: the period end plus the store's payout lag. */
-export function payoutDateFor(period: PayPeriod, payoutLagDays: number): string {
-  const d = new Date(`${period.end}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + Math.max(0, payoutLagDays));
-  return d.toISOString().slice(0, 10);
+export interface PayoutConfig {
+  payoutMode: 'lag' | 'fixed_days';
+  payoutLagDays: number;
+  /** One day-of-month per period, in period order. ⚠️ Shorter than the period count is legal. */
+  payoutDays: number[];
+}
+
+/**
+ * ⭐ When the money is actually handed over. T-189d — Ian: *"the payout date must be configurable
+ * also."*
+ *
+ * | mode | payday |
+ * |---|---|
+ * | `lag` | the period end plus N days — v1's only model |
+ * | `fixed_days` | the next occurrence of this period's configured day-of-month, on or after the end |
+ *
+ * ⚠️ **A lag cannot express a fixed payday.** Paid on the 10th and the 25th means a different
+ * number of days after each period end, every month — which is why this is a mode and not a
+ * cleverer lag.
+ *
+ * ⚠️ **A day of 31 in a 30-day month CLAMPS to the month end** rather than being refused. "Pay on
+ * the last day" is a real instruction and 31 is how people write it.
+ */
+export function payoutDateFor(
+  period: PayPeriod,
+  cfg: PayoutConfig,
+  periodIndex = 0,
+): string {
+  if (cfg.payoutMode === 'lag' || cfg.payoutDays.length === 0) {
+    const d = new Date(`${period.end}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + Math.max(0, cfg.payoutLagDays));
+    return d.toISOString().slice(0, 10);
+  }
+
+  // ⚠️ Fewer entries than periods is legal: the LAST one applies to the rest.
+  const wanted = cfg.payoutDays[Math.min(periodIndex, cfg.payoutDays.length - 1)]!;
+
+  const end = new Date(`${period.end}T00:00:00Z`);
+  // Try this month, then the next — the payday is either still ahead in the period's own month or
+  // it has passed, in which case the money lands next month. Two candidates always suffice.
+  for (const monthOffset of [0, 1]) {
+    const y = end.getUTCFullYear();
+    const m = end.getUTCMonth() + monthOffset;
+    const last = lastDayOfMonth(new Date(Date.UTC(y, m, 1)).getUTCFullYear(), new Date(Date.UTC(y, m, 1)).getUTCMonth() + 1);
+    const day = Math.min(wanted, last);
+    const candidate = new Date(Date.UTC(y, m, day));
+    const iso = candidate.toISOString().slice(0, 10);
+    if (iso >= period.end) return iso;
+  }
+  return period.end;
 }

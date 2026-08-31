@@ -126,6 +126,44 @@ async function advance(f: Fixture, amount: string) {
   });
 }
 
+/** A verified session for an adjustment to be decided under (T-158 §7.1). */
+async function aSession(f: { orgId: string; storeId: string }, personId: string): Promise<string> {
+  const [cred] = await sql<{ id: string }[]>`
+    insert into person_credentials (person_id, kind, store_id, secret_hash, lookup_hash)
+    values (${personId}, 'pin', ${f.storeId}, ${uid('h')}, ${uid('l')}) returning id`;
+  const [sess] = await sql<{ id: string }[]>`
+    insert into sessions (token_hash, person_id, credential_id, credential_kind, store_id, expires_at)
+    values (${uid('t')}, ${personId}, ${cred!.id}, 'pin', ${f.storeId}, now() + interval '12 hours')
+    returning id`;
+  return sess!.id;
+}
+
+/**
+ * A manager's overtime approval, written DIRECTLY.
+ *
+ * ⚠️ **Not through `recordAdjustment`, and the reason is instructive**: that service re-adjudicates
+ * the day inside the same transaction, and re-adjudication derives the day from PUNCHES. These
+ * fixtures insert `attendance_days` directly with no punches behind them, so calling the service
+ * would recompute the day to zero and wipe the very `pending_ot_minutes` under test.
+ *
+ * ⭐ That is T-158 working, not a bug: a day IS its punches. Payroll's job here is to read an
+ * approval that exists, and T-158 already tests that approvals are recorded correctly — so the
+ * approval is an INPUT to these tests, exactly as the day is.
+ */
+async function approveOt(
+  f: { orgId: string; storeId: string; employmentId: string; adminId: string },
+  shiftDay: string,
+  minutes: number,
+): Promise<void> {
+  const sessionId = await aSession(f, f.adminId);
+  await sql`
+    insert into attendance_adjustments
+      (org_id, store_id, employment_id, shift_day, kind, approved_ot_minutes,
+       decided_by_session_id, decided_by_person_id)
+    values (${f.orgId}, ${f.storeId}, ${f.employmentId}, ${shiftDay}, 'overtime_approved',
+            ${minutes}, ${sessionId}, ${f.adminId})`;
+}
+
 const period = { periodStart: '2026-01-01', periodEnd: '2026-01-15' };
 
 afterAll(async () => {
@@ -438,6 +476,7 @@ describe('T-189b — overtime priced two ways, end to end', () => {
     return (async () => {
       const f = await rated('otfixed', { overtimeMode: 'fixed', overtimeFixedHourly: '80.00' });
       await addDay(f, '2026-01-05', { ot: 120 });
+      await approveOt(f, '2026-01-05', 120);
       const p = await asOrg(f.orgId, (tx) => previewPayRun(tx, f.admin, { storeId: f.storeId, ...period }));
       expect(p.slips[0]!.otPay).toBe('160.00'); // 2h × ₱80, not 2h × 60 × 1.25
     })();
@@ -453,20 +492,26 @@ describe('T-189b — overtime priced two ways, end to end', () => {
     ).rejects.toThrow(/fixed_ot_needs_amount/);
   });
 
-  it('⭐ overtime is priced on STEPPED hours — 1h50m pays 1.5h, not 1.83h', async () => {
+  it('⭐ overtime is priced on the LADDER — 1h50m pays 2h, 1h40m pays 1.5h', async () => {
     const f = await rated('otstep');
     await addDay(f, '2026-01-05', { ot: 110 });
+    await approveOt(f, '2026-01-05', 110);
     const p = await asOrg(f.orgId, (tx) => previewPayRun(tx, f.admin, { storeId: f.storeId, ...period }));
-    expect(p.slips[0]!.otPay).toBe('112.50');
+    expect(p.slips[0]!.otPay).toBe('150.00'); // 2h × 60 × 1.25
+
+    const g = await rated('otstep2');
+    await addDay(g, '2026-01-05', { ot: 100 });
+    await approveOt(g, '2026-01-05', 100);
+    const q = await asOrg(g.orgId, (tx) => previewPayRun(tx, g.admin, { storeId: g.storeId, ...period }));
+    expect(q.slips[0]!.otPay).toBe('112.50'); // 1.5h × 60 × 1.25
   });
 
-  it('⚠️ under half an hour of overtime pays NOTHING — "no hanging minutes"', async () => {
+  it('⚠️ under 25 minutes pays NOTHING even when approved — the ladder floor', async () => {
     const f = await rated('otcrumb');
-    await addDay(f, '2026-01-05', { ot: 25 });
+    await addDay(f, '2026-01-05', { ot: 24 });
+    await approveOt(f, '2026-01-05', 24);
     const p = await asOrg(f.orgId, (tx) => previewPayRun(tx, f.admin, { storeId: f.storeId, ...period }));
     expect(p.slips[0]!.otPay).toBe('0.00');
-    // ⚠️ But the MINUTES are still recorded on the payslip — the fact is kept even when unpaid.
-    expect(p.slips[0]!.otMinutes).toBe(25);
   });
 
   it('⭐ the holiday premium follows the holiday TYPE', async () => {
@@ -485,5 +530,84 @@ describe('T-189b — overtime priced two ways, end to end', () => {
       insert into store_attendance_config (org_id, store_id, effective_from, holiday_regular_multiplier)
       values (${f.orgId}, ${f.storeId}, '2026-02-01', '0.90')`,
     ).rejects.toThrow(/holiday_multipliers/);
+  });
+});
+
+
+// =====================================================================================
+// T-189e — DEF-109. Overtime is PAID only once a manager approves it.
+
+describe('⛔ DEF-109 — pending overtime is never paid unapproved', () => {
+  async function withPendingOt(hint: string, otMinutes: number) {
+    const f = await fixture(hint);
+    await asOrg(f.orgId, (tx) =>
+      setPayRate(tx, f.admin, {
+        employmentId: f.employmentId, storeId: f.storeId,
+        basis: 'daily', amount: '540.00', effectiveFrom: '2026-01-01',
+      }));
+    await addDay(f, '2026-01-05', { ot: otMinutes });
+    return f;
+  }
+
+  it('⛔ 2 hours of PENDING overtime pays NOTHING until somebody approves it', async () => {
+    // The attendance schema says it in as many words: "Recorded, never paid here — the approval
+    // gate is Phase 5, and auto-paying it is exactly what the pending status exists to prevent."
+    const f = await withPendingOt('otpending', 120);
+    const p = await asOrg(f.orgId, (tx) =>
+      previewPayRun(tx, f.admin, { storeId: f.storeId, ...period }));
+    expect(p.slips[0]!.otPay).toBe('0.00');
+    expect(p.slips[0]!.basicPay).toBe('540.00');
+  });
+
+  it('⭐ and pays once a manager approves it', async () => {
+    const f = await withPendingOt('otapproved', 120);
+    await approveOt(f, '2026-01-05', 120);
+    const p = await asOrg(f.orgId, (tx) =>
+      previewPayRun(tx, f.admin, { storeId: f.storeId, ...period }));
+    expect(p.slips[0]!.otPay).toBe('150.00'); // 2h x 60 x 1.25
+  });
+
+  it('⭐ a manager may approve LESS than was worked, and only that is paid', async () => {
+    const f = await withPendingOt('otpartial', 120);
+    await approveOt(f, '2026-01-05', 60);
+    const p = await asOrg(f.orgId, (tx) =>
+      previewPayRun(tx, f.admin, { storeId: f.storeId, ...period }));
+    expect(p.slips[0]!.otPay).toBe('75.00'); // 1h x 60 x 1.25
+  });
+
+  it('⛔ approving MORE than was worked cannot inflate the pay', async () => {
+    const f = await withPendingOt('otinflate', 120);
+    await approveOt(f, '2026-01-05', 600);
+    const p = await asOrg(f.orgId, (tx) =>
+      previewPayRun(tx, f.admin, { storeId: f.storeId, ...period }));
+    expect(p.slips[0]!.otPay).toBe('150.00'); // capped at the 120 minutes actually worked
+  });
+
+  it('⭐ approving ZERO is a real decision, and pays zero', async () => {
+    const f = await withPendingOt('otzero', 120);
+    await approveOt(f, '2026-01-05', 0);
+    const p = await asOrg(f.orgId, (tx) =>
+      previewPayRun(tx, f.admin, { storeId: f.storeId, ...period }));
+    expect(p.slips[0]!.otPay).toBe('0.00');
+  });
+
+  it('⛔ the DATABASE refuses an overtime approval carrying no minutes', async () => {
+    const f = await withPendingOt('otshape', 120);
+    const sessionId = await aSession(f, f.adminId);
+    await expect(sql`
+      insert into attendance_adjustments
+        (org_id, store_id, employment_id, shift_day, kind, decided_by_session_id, decided_by_person_id)
+      values (${f.orgId}, ${f.storeId}, ${f.employmentId}, '2026-01-05', 'overtime_approved',
+              ${sessionId}, ${f.adminId})`,
+    ).rejects.toThrow(/attendance_adjustments_payload_shape_check/);
+  });
+
+  it('⭐ and unapproved overtime is SURFACED, not silently dropped', async () => {
+    const f = await withPendingOt('otvisible', 120);
+    const p = await asOrg(f.orgId, (tx) =>
+      previewPayRun(tx, f.admin, { storeId: f.storeId, ...period }));
+    expect(p.unapprovedOtMinutes).toBe(120);
+    expect(p.slips[0]!.unapprovedOtMinutes).toBe(120);
+    expect(p.slips[0]!.otPay).toBe('0.00');
   });
 });

@@ -68,6 +68,10 @@ export type LatePolicy = (typeof LATE_POLICIES)[number];
 /** `open` = free clock in/out, hours from actual punches. `fixed` = a posted shift grid. */
 /** T-189b. How an overtime hour is priced. */
 /** T-189c. How a store's pay periods are cut. v1's `PayrollConfig.periodType`. */
+/** T-189d. How payday is set. Ian: "the payout date must be configurable also." */
+export const PAYOUT_MODES = ['lag', 'fixed_days'] as const;
+export type PayoutMode = (typeof PAYOUT_MODES)[number];
+
 export const PAYROLL_PERIOD_TYPES = ['monthly', 'semi_monthly', 'weekly'] as const;
 export type PayrollPeriodType = (typeof PAYROLL_PERIOD_TYPES)[number];
 
@@ -187,8 +191,31 @@ export const storeAttendanceConfig = pgTable(
      */
     semiMonthlyCutoffDay: integer('semi_monthly_cutoff_day').notNull().default(15),
 
+    /**
+     * ⭐ T-189d. How payday is decided.
+     *
+     * `lag` is v1's model — N days after the period ends. `fixed_days` is the more common
+     * Philippine one, and the one a lag **cannot express**: paid on the 10th and the 25th, where
+     * the gap from the period end is a different number of days every month.
+     */
+    payoutMode: text('payout_mode', { enum: PAYOUT_MODES }).notNull().default('lag'),
+
     /** Days after a period ends before the money is handed over. v1's `payoutLagDays`. */
     payoutLagDays: integer('payout_lag_days').notNull().default(0),
+
+    /**
+     * One day-of-month per period, in period order. ⚠️ Shorter than the period count is legal —
+     * the LAST entry then applies to the rest, which is what a store paying weekly on a Friday
+     * actually means.
+     *
+     * ⭐ An integer ARRAY for the same reason `allowedShiftStartHours` is: a set of small integers
+     * has no fields, no identity and no lifecycle, so a child table would mint a uuid in order to
+     * store the number 10. NOT a map-as-record.
+     */
+    payoutDays: integer('payout_days')
+      .array()
+      .notNull()
+      .default(sql`'{}'::integer[]`),
 
     // ---- Grace, all defaulting to 0 --------------------------------------------------
     /**
@@ -267,6 +294,13 @@ export const storeAttendanceConfig = pgTable(
       sql`${t.semiMonthlyCutoffDay} between 1 and 27`,
     ),
     check('store_attendance_config_payout_lag_check', sql`${t.payoutLagDays} between 0 and 31`),
+    check('store_attendance_config_payout_mode_check', sql`${t.payoutMode} in ('lag', 'fixed_days')`),
+    /** ⛔ A store that says it pays on fixed days must say WHICH, or payday would fall back to
+     *  the period end without anybody noticing. */
+    check(
+      'store_attendance_config_fixed_days_needed_check',
+      sql`${t.payoutMode} = 'lag' or cardinality(${t.payoutDays}) > 0`,
+    ),
     /** ⭐ The dangerous combination is unrepresentable — the same shape T-152 used for the
      *  un-remitted ceiling. A store on `fixed` with no amount would price every OT hour at zero. */
     check(

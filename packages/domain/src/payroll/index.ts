@@ -85,6 +85,14 @@ export async function setPayRate(
 
 export interface PayslipDraft {
   employmentId: string;
+  /**
+   * ⭐ Overtime the day recorded that NOBODY HAS APPROVED, so this run does not pay it.
+   *
+   * ⚠️ Surfaced rather than silently dropped. An unapproved hour that vanishes from the screen is
+   * indistinguishable from an hour nobody worked — which is the failure this whole module keeps
+   * finding in v1.
+   */
+  unapprovedOtMinutes: number;
   personId: string;
   personName: string;
   payRateId: string;
@@ -113,6 +121,8 @@ export interface PayRunPreview {
   needsReviewDays: number;
   /** Employments with payable days but NO rate in force. ⚠️ Refused, never paid at zero. */
   unratedEmployments: { employmentId: string; personName: string; days: number }[];
+  /** ⭐ Overtime recorded across the period that nobody has approved. Shown, never paid. */
+  unapprovedOtMinutes: number;
 }
 
 /**
@@ -185,7 +195,15 @@ export async function previewPayRun(
         inputs.push({
           shiftDay: d.shiftDay,
           isHalfDay: d.isHalfDay,
-          otMinutes: d.pendingOtMinutes,
+          // ⛔ **APPROVED overtime, never PENDING.** `attendance_days.pendingOtMinutes` carries
+          // the attendance lane's warning addressed to this module: *"Recorded, never paid here —
+          // the approval gate is Phase 5, and auto-paying it is exactly what the pending status
+          // exists to prevent."* T-189 paid it anyway; DEF-109. The gate is now the
+          // `overtime_approved` adjustment, and `null` (nobody decided) pays NOTHING.
+          //
+          // ⚠️ Capped at what was actually worked: a manager cannot approve more overtime than
+          // the day recorded, whatever they type.
+          otMinutes: Math.min(d.approvedOtMinutes ?? 0, d.pendingOtMinutes),
           nightDiffMinutes: d.nightDiffMinutes,
           holidayMinutes: d.holidayMinutes,
           computedMinutes: d.computedMinutes,
@@ -217,6 +235,12 @@ export async function previewPayRun(
         holidaySpecialWorkingMultiplier: config.holidaySpecialWorkingMultiplier,
       });
 
+      // ⚠️ What the days recorded but nobody approved. Shown, never paid.
+      const unapprovedOtMinutes = theirDays.reduce(
+        (n, d) => n + Math.max(0, d.pendingOtMinutes - (d.approvedOtMinutes ?? 0)),
+        0,
+      );
+
       const personId = theirDays[0]!.personId;
       const outstanding = await outstandingAdvance(trx, actor.orgId, personId);
       const advanceRecovered = advanceToRecover(pay.grossPay, outstanding);
@@ -227,6 +251,7 @@ export async function previewPayRun(
         personName: nameOf.get(employmentId) ?? 'unknown',
         payRateId,
         dayIds: theirDays.map((d) => d.id),
+        unapprovedOtMinutes,
         ...pay,
         advanceRecovered,
         netPay: subtract(pay.grossPay, advanceRecovered),
@@ -242,6 +267,7 @@ export async function previewPayRun(
       totalAdvanceRecovered: add(ZERO, ...slips.map((s) => s.advanceRecovered)),
       needsReviewDays,
       unratedEmployments,
+      unapprovedOtMinutes: slips.reduce((n, x) => n + x.unapprovedOtMinutes, 0),
     };
   };
   if (tx) return run(tx);

@@ -54,6 +54,16 @@ export const ADJUSTMENT_KINDS = [
   'verify',
   /** Discarded — duplicate or erroneous. */
   'void',
+  /**
+   * ⭐ T-189e. How many of the day's PENDING overtime minutes a manager accepts.
+   *
+   * Ian's model: *"undertime is provisional OT — 5hr is set halfday, 9hr for wholeday, a 7 hour
+   * duty is halfday plus provisional 2 hour OT to be approved by manager."*
+   *
+   * ⛔ Without this, `attendance_days.pendingOtMinutes` had no way to become payable, and T-189
+   * paid it unapproved — the exact thing the pending status exists to prevent (DEF-109).
+   */
+  'overtime_approved',
 ] as const;
 export type AdjustmentKind = (typeof ADJUSTMENT_KINDS)[number];
 
@@ -85,6 +95,11 @@ export const attendanceAdjustments = pgTable(
     effectiveOutMinute: integer('effective_out_minute'),
     /** `half_day_override` only. */
     isHalfDay: text('is_half_day'),
+
+    /** ⭐ `overtime_approved` only. ⚠️ Not the overtime WORKED — the day records that. This is what
+     *  somebody agreed to PAY for, which may be less. ⛔ Zero is a real decision ("I approved none
+     *  of it") and is not the same as never having decided. */
+    approvedOtMinutes: integer('approved_ot_minutes'),
 
     reason: text('reason'),
 

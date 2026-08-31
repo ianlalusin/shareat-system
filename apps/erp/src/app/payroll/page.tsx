@@ -159,7 +159,11 @@ export default async function PayrollPage({
               {cfg.payrollPeriodType.replace('_', '-')}
               {cfg.payrollPeriodType === 'semi_monthly' && `, cut on the ${cfg.semiMonthlyCutoffDay}th`}
             </b>
-            {cfg.payoutLagDays > 0 && `, paid ${cfg.payoutLagDays}d after`}
+            {cfg.payoutMode === 'fixed_days'
+              ? `, paid on the ${cfg.payoutDays.join(' & ')}`
+              : cfg.payoutLagDays > 0
+                ? `, paid ${cfg.payoutLagDays}d after`
+                : ''}
           </span>
           <span className="text-neutral-400">
             ⭐ Hours count in half-hour steps; anything under is not paid. Late is exact.
@@ -181,8 +185,16 @@ export default async function PayrollPage({
             <span className="text-xs text-neutral-500">
               {pv.slips.length} payslip(s) · gross {peso(Number(pv.totalGross))} · net{' '}
               {peso(Number(pv.totalNet))}
-              {cfg && cfg.payoutLagDays > 0 && (
-                <> · payable {payoutDateFor({ start: periodStart, end: periodEnd, label: '' }, cfg.payoutLagDays)}</>
+              {cfg && (
+                <>
+                  {' '}
+                  · payable{' '}
+                  {payoutDateFor(
+                    { start: periodStart, end: periodEnd, label: '' },
+                    cfg,
+                    Math.max(0, periodOptions.findIndex((o) => o.start === periodStart)),
+                  )}
+                </>
               )}
             </span>
           </div>
@@ -192,6 +204,17 @@ export default async function PayrollPage({
               ⚠️ <strong>{pv.needsReviewDays} day(s) still need a manager&rsquo;s review</strong> and
               are excluded from this run. ⛔ They are counted here on purpose — a run that silently
               skipped them would look identical to a run where nobody worked.
+            </p>
+          )}
+
+          {pv.unapprovedOtMinutes > 0 && (
+            <p className="rounded border border-amber-300 p-3 text-xs text-amber-900 dark:border-amber-800 dark:text-amber-300">
+              ⚠️ <strong>
+                {Math.floor(pv.unapprovedOtMinutes / 60)}h {pv.unapprovedOtMinutes % 60}m of
+                overtime is awaiting a manager&rsquo;s approval
+              </strong>{' '}
+              and is <strong>not</strong> in these figures. ⛔ Pending overtime is never paid
+              unapproved — approve it on the attendance day, then preview again.
             </p>
           )}
 
