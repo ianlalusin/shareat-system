@@ -26,6 +26,7 @@ import {
   apPaymentAllocations,
   type ApPaymentStatus,
 } from '../../schema/ap-payments';
+import type { ExpenseStatus } from './expenses';
 
 export const AP_CONTROL_CODE = '2110';
 export const ADVANCES_CODE = '1240';
@@ -319,17 +320,25 @@ export async function markInvoiceVoided(
   }
 }
 
+export interface LiveExpenseForInvoice {
+  id: string;
+  /** ⭐ T-196 — `voidInvoice` now branches on this: a DRAFT is deleted, a POSTED expense is
+   *  voided. Before T-196 every live-linked expense here was necessarily 'posted' (nothing else
+   *  could exist against an invoice at all), so the caller never had to look. */
+  status: ExpenseStatus;
+}
+
 /** Live-linked expenses (not voided) — what `voidInvoice` must cascade through. */
 export async function liveExpensesForInvoice(
   tx: Tx,
   orgId: string,
   invoiceId: string,
-): Promise<{ id: string }[]> {
+): Promise<LiveExpenseForInvoice[]> {
   const rows = (await tx.execute(sql`
-    select id from expenses
+    select id, status from expenses
     where org_id = ${orgId} and supplier_invoice_id = ${invoiceId} and status <> 'voided'
     order by created_at asc
-  `)) as unknown as { id: string }[];
+  `)) as unknown as LiveExpenseForInvoice[];
   return rows;
 }
 
@@ -348,7 +357,17 @@ export interface InvoiceCapacity {
   remaining: string;
 }
 
-export async function capacityOf(tx: Tx, orgId: string, invoiceId: string): Promise<InvoiceCapacity | undefined> {
+export async function capacityOf(
+  tx: Tx,
+  orgId: string,
+  invoiceId: string,
+  /** ⭐ T-196 — pass the expense's OWN id when it already exists (approveExpense's call: the
+   *  draft row is already in `expenses`, already `status <> 'voided'`, so without this it would
+   *  be summed into `recorded` AND checked against `remaining` a second time, always reading as
+   *  "0 remaining" for exactly the amount that is trying to post). Mirrors the trigger's own
+   *  `AND id <> NEW.id`. Omit for `createExpense`'s call — the row does not exist yet. */
+  excludeExpenseId?: string,
+): Promise<InvoiceCapacity | undefined> {
   const [row] = (await tx.execute(sql`
     select
       si.status,
@@ -357,6 +376,7 @@ export async function capacityOf(tx: Tx, orgId: string, invoiceId: string): Prom
       (si.total_amount - coalesce(sum(e.total_amount), 0))::text as remaining
     from supplier_invoices si
     left join expenses e on e.supplier_invoice_id = si.id and e.status <> 'voided'
+      ${excludeExpenseId ? sql`and e.id <> ${excludeExpenseId}` : sql``}
     where si.id = ${invoiceId} and si.org_id = ${orgId}
     group by si.id, si.status, si.total_amount
   `)) as unknown as Record<string, string>[];
@@ -369,21 +389,43 @@ export async function capacityOf(tx: Tx, orgId: string, invoiceId: string): Prom
   };
 }
 
-/** The clean, named error — the hand-written trigger (DEF-073) is the actual backstop. */
+/**
+ * The clean, named error — the hand-written trigger (DEF-073, replaced for T-196 by migration
+ * 0113) is the actual backstop.
+ *
+ * ⭐ T-196 — `target` mirrors the trigger's own two-part rule exactly:
+ *   - `'draft'`  — createExpense's call. Only "does it exist" and "is it voided" and "does it
+ *     fit" matter; a PENDING invoice is fine, that is the whole point of this task.
+ *   - `'posted'` — the approval path's call (`approveExpense`). The invoice must additionally be
+ *     `verified` — the same test the trigger applies on the UPDATE that flips a row to 'posted'.
+ * Message wording matches the trigger's, statement for statement, so a caller never sees two
+ * different explanations for the same refusal depending on which layer caught it first.
+ */
 export async function assertOpenForRecording(
   tx: Tx,
   orgId: string,
   invoiceId: string,
   amount: string,
+  target: 'draft' | 'posted',
+  /** ⭐ T-196 — the approval path's own expense id, already `status = 'draft'` and already in
+   *  the `recorded` sum by the time this runs. See `capacityOf`'s own comment. Omit for
+   *  `createExpense`'s call, where the row does not exist yet. */
+  excludeExpenseId?: string,
 ): Promise<void> {
-  const capacity = await capacityOf(tx, orgId, invoiceId);
+  const capacity = await capacityOf(tx, orgId, invoiceId, excludeExpenseId);
   if (!capacity) {
     throw new Error(`assertOpenForRecording: supplier invoice ${invoiceId} does not exist in org ${orgId}`);
   }
-  if (capacity.status !== 'verified') {
+  if (capacity.status === 'voided') {
     throw new Error(
-      `assertOpenForRecording: supplier invoice ${invoiceId} is ${capacity.status} — an expense ` +
-        'cannot be recorded until it is verified',
+      `assertOpenForRecording: supplier invoice ${invoiceId} is voided — nothing further may be ` +
+        'recorded against it',
+    );
+  }
+  if (target === 'posted' && capacity.status !== 'verified') {
+    throw new Error(
+      `assertOpenForRecording: supplier invoice ${invoiceId} is ${capacity.status} — a draft may ` +
+        'stand against it, but it cannot post until it is verified',
     );
   }
   if (Number(amount) > Number(capacity.remaining) + CAPACITY_EPSILON) {

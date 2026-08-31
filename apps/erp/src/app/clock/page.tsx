@@ -26,9 +26,30 @@ import {
   writePunch,
   type MirroredConfig,
   type MirroredCredential,
+  type MirroredDayFeed,
   type MirroredRoster,
   type PunchIntent,
 } from '../../lib/terminal/lane';
+
+/**
+ * ⛔ **Per-PERSON, and 30 seconds — copied from v1 with its reason, not just its number.**
+ *
+ * v1's comment records a MEASURED incident: *"a ~25s gap between the clock-out and the stray
+ * clock-in it triggered"* — long enough that a blanket re-arm delay *"can't cover it without
+ * stalling the whole terminal for everyone else queued behind them."*
+ *
+ * ⭐ So the guard excludes ONE person's badge briefly rather than freezing the reader. A global
+ * lock punishes the queue for one person's stray read. This prevents the CAUSE that
+ * `MINIMUM_CREDITABLE_MINUTES` currently cleans up after.
+ */
+const PUNCH_COOLDOWN_MS = 30_000;
+
+/** Minutes-from-midnight as a clock time. ⚠️ Tabular numerals in the markup keep these aligned. */
+function clockTime(minute: number | null): string {
+  if (minute === null || !Number.isFinite(minute)) return '—';
+  const total = ((minute % 1440) + 1440) % 1440;
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
 
 interface Claims {
   deviceId: string;
@@ -46,9 +67,14 @@ export default function ClockTerminalPage() {
   const [credentials, setCredentials] = useState<MirroredCredential[]>([]);
   const [mirrorError, setMirrorError] = useState<string | null>(null);
 
+  const [dayFeed, setDayFeed] = useState<MirroredDayFeed[]>([]);
   const [scan, setScan] = useState('');
-  const [intent, setIntent] = useState<PunchIntent>('in');
   const [message, setMessage] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
+  /** ⭐ The confirmation that takes over the scan panel — name large, so a glance is enough. */
+  const [confirmed, setConfirmed] = useState<{ name: string; intent: PunchIntent; at: string } | null>(null);
+  /** employmentId -> epoch ms until which that person's badge is ignored. §5.1. */
+  const [cooldowns, setCooldowns] = useState<Record<string, number>>({});
+  const [now, setNow] = useState(() => Date.now());
   const [pending, setPending] = useState<{ pending: number; fromCache: boolean } | null>(null);
   const [online, setOnline] = useState(true);
   const scanBox = useRef<HTMLInputElement>(null);
@@ -90,6 +116,7 @@ export default function ClockTerminalPage() {
     const { db } = terminalFirebase();
     return watchMirrors(db, claims.storeId, {
       roster: setRoster,
+      dayFeed: setDayFeed,
       config: setConfig,
       credentials: setCredentials,
       error: setMirrorError,
@@ -106,7 +133,30 @@ export default function ClockTerminalPage() {
     return watchPending(db, claims.deviceId, setPending);
   }, [claims?.deviceId]);
 
-  // ── Pairing ─────────────────────────────────────────────────────────────────────────
+  /** ⚠️ One timer for the whole screen: cooldown countdowns and the confirmation both expire on it. */
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    if (!confirmed) return;
+    const t = setTimeout(() => setConfirmed(null), 4000);
+    return () => clearTimeout(t);
+  }, [confirmed]);
+
+  /**
+   * ⭐ **Who is on the floor right now** — hot-set item 4, read at last (DEF-116/118).
+   *
+   * ⚠️ `status === 'open'` is the SERVER's verdict on "an in with no out". The device renders it;
+   * it never derives it. Bible §5.1: *"a device never computes a business outcome offline."*
+   */
+  const onShift = dayFeed.filter((d) => d.status === 'open');
+
+  /** Today's punches, newest first — the evidence that stops the anxious double-tap. */
+  const todayFeed = [...dayFeed].sort((a, b) => (b.anchorMinute ?? 0) - (a.anchorMinute ?? 0));
+
+    // ── Pairing ─────────────────────────────────────────────────────────────────────────
   async function pair(formData: FormData) {
     const token = String(formData.get('token') ?? '').trim();
     if (!token) return setPairError('Paste the pairing token from the provisioning screen.');
@@ -123,6 +173,8 @@ export default function ClockTerminalPage() {
       );
     }
   }
+
+  const rosterOf = (employmentId: string) => roster.find((r) => r.employmentId === employmentId);
 
   // ── The punch ───────────────────────────────────────────────────────────────────────
   async function submitScan(e: React.FormEvent) {
@@ -149,12 +201,40 @@ export default function ClockTerminalPage() {
       return;
     }
 
+    /**
+     * ⛔ **THE COOLDOWN, per person.** A badge read again inside the window is IGNORED — and says
+     * so. ⚠️ Silence would be indistinguishable from a broken reader, which is why this branch
+     * sets a message instead of returning quietly.
+     */
+    const until = cooldowns[credential.employmentId] ?? 0;
+    if (until > Date.now()) {
+      const left = Math.ceil((until - Date.now()) / 1000);
+      setMessage({
+        tone: 'bad',
+        text: `Just recorded — wait ${left}s before scanning again. This guards against a stray second read, not against you.`,
+      });
+      setScan('');
+      return;
+    }
+
     const method = credential.kind === 'card' ? 'qr' : 'fingerprint';
     if (credential.kind === 'card' && config && !config.credentialNfc) {
       setMessage({ tone: 'bad', text: 'Card clock-in is switched off for this store.' });
       setScan('');
       return;
     }
+
+    /**
+     * ⭐ **THE INTENT IS DERIVED, NOT CHOSEN.** The old screen made you press "Clock in" or
+     * "Clock out" BEFORE identifying yourself — an extra tap on the critical path and a whole
+     * class of wrong-intent punches the system already had the answer to.
+     *
+     * ⚠️ The field is called `assertedIntent` precisely because it is a CLAIM the server
+     * re-adjudicates from the punches. Deriving it from the mirrored day is using the field as
+     * designed, not bypassing a check: if the device is wrong, the server's pairing wins.
+     */
+    const mine = onShift.find((d) => d.staffCode && d.staffCode === rosterOf(credential.employmentId)?.staffCode);
+    const intent: PunchIntent = mine ? 'out' : 'in';
 
     try {
       const { db } = terminalFirebase();
@@ -180,13 +260,20 @@ export default function ClockTerminalPage() {
         setMessage({ tone: 'bad', text: `That punch was refused by the server: ${String(err)}` });
       });
 
-      const who = roster.find((r) => r.employmentId === credential.employmentId);
-      setMessage({
-        tone: 'ok',
-        text: `${who?.displayName ?? 'Recorded'} — clocked ${intent === 'in' ? 'in' : 'out'}${
-          online ? '' : ' (saved on this device; it will sync when the network is back)'
-        }.`,
+      const who = rosterOf(credential.employmentId);
+      setConfirmed({
+        name: who?.displayName ?? 'Recorded',
+        intent,
+        at: new Date().toLocaleTimeString('en-PH', {
+          timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit',
+        }),
       });
+      setMessage(
+        online
+          ? null
+          : { tone: 'ok', text: 'Saved on this device — it will sync when the network is back.' },
+      );
+      setCooldowns((c) => ({ ...c, [credential.employmentId]: Date.now() + PUNCH_COOLDOWN_MS }));
       setScan('');
     } catch (err) {
       setMessage({ tone: 'bad', text: `Could not record that: ${String(err)}` });
@@ -265,41 +352,44 @@ export default function ClockTerminalPage() {
         </p>
       )}
 
-      <div className="flex gap-2">
-        {(['in', 'out'] as const).map((k) => (
-          <button
-            key={k}
-            type="button"
-            onClick={() => setIntent(k)}
-            className={`flex-1 rounded px-4 py-3 text-base font-medium ${
-              intent === k
-                ? 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900'
-                : 'border border-neutral-300 dark:border-neutral-700'
-            }`}
-          >
-            Clock {k}
-          </button>
-        ))}
-      </div>
+      {/*
+        ⛔ **THE IN/OUT TOGGLE IS GONE, deliberately.** It asked the staffer to declare an intent
+        the system already knew, before it even knew who they were — an extra tap on the critical
+        path and a whole class of wrong-intent punches. The intent is derived in `submitScan`.
+      */}
 
-      {/* ⚠️ A plain text box on purpose: a USB badge reader and a QR scanner both TYPE. That is how
-          the hardware actually behaves, so this is the real interface, not a placeholder for one. */}
-      <form onSubmit={submitScan} className="space-y-3">
-        <input
-          ref={scanBox}
-          value={scan}
-          onChange={(e) => setScan(e.target.value)}
-          autoFocus
-          placeholder="Scan or tap your badge"
-          className="w-full rounded border border-neutral-300 p-4 text-center text-lg dark:border-neutral-700 dark:bg-neutral-900"
-        />
-        <button
-          type="submit"
-          className="w-full rounded bg-neutral-900 px-4 py-3 text-base font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
-        >
-          Record
-        </button>
-      </form>
+      {/* ⭐ THE FOCAL POINT. Either the scan prompt or the confirmation — never both, never a
+          layout shift between them, because the panel keeps one height. */}
+      <div className="flex min-h-[9.5rem] items-center justify-center rounded-xl border border-neutral-300 p-4 dark:border-neutral-700">
+        {confirmed ? (
+          <div className="text-center">
+            <p className="text-3xl font-semibold leading-tight">{confirmed.name}</p>
+            <p className="mt-1 text-sm uppercase tracking-widest text-neutral-500">
+              clocked {confirmed.intent} · <span className="tabular-nums">{confirmed.at}</span>
+            </p>
+          </div>
+        ) : (
+          /* ⚠️ A plain text box on purpose: a USB badge reader and a QR scanner both TYPE. That is
+             how the hardware actually behaves, so this is the real interface, not a placeholder. */
+          <form onSubmit={submitScan} className="w-full space-y-3">
+            <input
+              ref={scanBox}
+              value={scan}
+              onChange={(e) => setScan(e.target.value)}
+              autoFocus
+              aria-label="Scan or tap your badge"
+              placeholder="Scan or tap your badge"
+              className="w-full rounded-lg border border-neutral-300 p-4 text-center text-lg dark:border-neutral-700 dark:bg-neutral-900"
+            />
+            <button
+              type="submit"
+              className="min-h-[3rem] w-full rounded-lg bg-neutral-900 px-4 text-base font-medium text-white transition-opacity duration-150 ease-out hover:opacity-90 dark:bg-neutral-100 dark:text-neutral-900"
+            >
+              Record
+            </button>
+          </form>
+        )}
+      </div>
 
       {message && (
         <p
@@ -312,6 +402,63 @@ export default function ClockTerminalPage() {
           {message.text}
         </p>
       )}
+
+      {/* ⭐ HOT-SET ITEM 4, RENDERED AT LAST. The mirror has carried this since T-181 and nothing
+          had ever read it (DEF-116, DEF-118). Two panels, stacked on a phone and side by side on a
+          tablet — the scan panel above stays dominant at both sizes. */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <section className="space-y-2">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-neutral-500">
+            On shift now <span className="tabular-nums">({onShift.length})</span>
+          </h2>
+          {/* ⛔ READ-ONLY, and that is a deliberate divergence from v1, whose rows are tappable.
+              The badge is the primary path here, so a tap saves nothing — while clocking a
+              colleague out early costs them money, silently, recorded as their own punch. */}
+          {onShift.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-neutral-300 p-4 text-center text-sm text-neutral-500 dark:border-neutral-700">
+              The floor is empty.
+            </p>
+          ) : (
+            <ul className="divide-y divide-neutral-200 rounded-lg border border-neutral-200 dark:divide-neutral-800 dark:border-neutral-800">
+              {onShift.map((d) => {
+                const until = Object.entries(cooldowns).find(
+                  ([id]) => rosterOf(id)?.staffCode === d.staffCode,
+                )?.[1];
+                const left = until && until > now ? Math.ceil((until - now) / 1000) : 0;
+                return (
+                  <li key={d.id} className="flex items-baseline justify-between gap-3 px-3 py-2.5 text-sm">
+                    <span className="font-medium">{d.displayName}</span>
+                    <span className="tabular-nums text-xs text-neutral-500">
+                      {left > 0 ? `wait ${left}s` : `since ${clockTime(d.anchorMinute)}`}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-neutral-500">Today</h2>
+          {todayFeed.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-neutral-300 p-4 text-center text-sm text-neutral-500 dark:border-neutral-700">
+              No punches yet today.
+            </p>
+          ) : (
+            <ul className="divide-y divide-neutral-200 rounded-lg border border-neutral-200 dark:divide-neutral-800 dark:border-neutral-800">
+              {todayFeed.slice(0, 8).map((d) => (
+                <li key={d.id} className="flex items-baseline justify-between gap-3 px-3 py-2.5 text-sm">
+                  <span className="tabular-nums text-neutral-500">{clockTime(d.anchorMinute)}</span>
+                  <span className="flex-1 truncate px-2">{d.displayName}</span>
+                  <span className="text-xs uppercase tracking-wide text-neutral-500">
+                    {d.status === 'open' ? 'in' : clockTime(d.endMinute)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
 
       <p className="text-xs text-neutral-500 dark:text-neutral-500">
         {roster.length} on the roster · {credentials.length} badge

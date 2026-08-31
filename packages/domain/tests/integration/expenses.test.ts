@@ -741,8 +741,15 @@ describe('invariant 10 — "other" and "ar_collection" BLOCK posting with a name
 // Controls — invariants 11-14
 // =========================================================================================
 
-describe('invariant 11 — no VERIFIED invoice, no recording (DEF-055 relocated here by T-130)', () => {
-  it('createExpense rejects a pending (unverified) invoice; verifying it and retrying succeeds', async () => {
+describe('invariant 11 — no VERIFIED invoice, no POSTING (T-196 retimed the gate from EXISTENCE to POSTING)', () => {
+  /**
+   * ⭐ T-196 (docs/tasks/196-draft-expense-on-a-pending-invoice.md) rewrites what this invariant
+   * means. Before T-196, `createExpense` itself refused a pending invoice — DEF-055's photo gate,
+   * relocated here by T-130. After T-196, a DRAFT may sit against a pending invoice; only
+   * POSTING (`approveExpense`) still requires `verified`, and `verifyInvoice` posts the SAME
+   * draft the moment it verifies — no second `createExpense` call, no second document.
+   */
+  it('createExpense succeeds against a PENDING invoice (draft, zero journal rows); approveExpense on it is refused; verifying it posts the same draft', async () => {
     const f = await setup('inv11');
     const catId = await categoryId(f.orgId, 'Marketing and Advertising');
 
@@ -756,22 +763,7 @@ describe('invariant 11 — no VERIFIED invoice, no recording (DEF-055 relocated 
       }),
     );
 
-    await expect(
-      asPerson(f.orgId, (tx) =>
-        createExpense(tx, actor(f.orgId, f.staffId), {
-          storeId: f.storeId,
-          supplierId: f.supplierId,
-          supplierInvoiceId: pending.id,
-          businessDate: BUSINESS_DATE,
-          categoryId: catId,
-          particulars: 'No verified invoice yet',
-          payments: [{ method: 'cash', amount: '300.00', moneyAccountId: f.cashDrawerId }],
-        }),
-      ),
-    ).rejects.toThrow(/is pending/);
-
-    // Verifying it and retrying succeeds — proves the gate is the invoice's status, nothing else.
-    await asPerson(f.orgId, (tx) => verifyInvoice(tx, actor(f.orgId, f.managerId), pending.id, { supplier: true, invoice: true, items: true, price: true }));
+    // Test 1 — a cashier holding only create_expense drafts against a pending invoice.
     const created = await asPerson(f.orgId, (tx) =>
       createExpense(tx, actor(f.orgId, f.staffId), {
         storeId: f.storeId,
@@ -779,12 +771,63 @@ describe('invariant 11 — no VERIFIED invoice, no recording (DEF-055 relocated 
         supplierInvoiceId: pending.id,
         businessDate: BUSINESS_DATE,
         categoryId: catId,
-        particulars: 'Now verified',
+        particulars: 'Drafted before verification',
         payments: [{ method: 'cash', amount: '300.00', moneyAccountId: f.cashDrawerId }],
       }),
     );
-    const posted = await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
-    expect(posted.created).toBe(true);
+    const draftRow = await expenseRow(f.orgId, created.id);
+    expect(draftRow!.status).toBe('draft');
+    expect(draftRow!.journal_entry_id).toBeNull();
+
+    // Test 2 — the same actor (now a manager, so authorization is not what refuses this)
+    // calls approveExpense directly: still refused, by name, because the invoice is pending.
+    await expect(
+      asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id)),
+    ).rejects.toThrow(/is pending/);
+    const stillDraft = await expenseRow(f.orgId, created.id);
+    expect(stillDraft!.status).toBe('draft');
+    expect(stillDraft!.journal_entry_id).toBeNull();
+
+    // Verifying it posts the SAME draft, in the same transaction as the status flip.
+    await asPerson(f.orgId, (tx) =>
+      verifyInvoice(tx, actor(f.orgId, f.managerId), pending.id, { supplier: true, invoice: true, items: true, price: true }),
+    );
+    const posted = await expenseRow(f.orgId, created.id);
+    expect(posted!.status).toBe('posted');
+    expect(posted!.journal_entry_id).not.toBeNull();
+  });
+
+  // Test 3 — "the service check is a convenience; this is the control." The trigger
+  // (expenses_check_invoice_open_for_recording, migration 0113) is what actually holds when the
+  // service is bypassed entirely, e.g. a hand-written UPDATE.
+  it('⛔ a raw UPDATE that flips a draft to posted on a PENDING invoice is refused by the TRIGGER, not the service', async () => {
+    const f = await setup('inv11-trigger');
+    const catId = await categoryId(f.orgId, 'Marketing and Advertising');
+
+    const pending = await asPerson(f.orgId, (tx) =>
+      recordInvoice(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        supplierId: f.supplierId,
+        invoiceDate: BUSINESS_DATE,
+        totalAmount: '300.00',
+        receiptFileId: f.fixtureFileId,
+      }),
+    );
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: pending.id,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: 'Bypassing the service entirely',
+        payments: [{ method: 'cash', amount: '300.00', moneyAccountId: f.cashDrawerId }],
+      }),
+    );
+
+    await expect(
+      sql`update expenses set status = 'posted' where id = ${created.id}`,
+    ).rejects.toThrow(/cannot post until it is verified/);
   });
 });
 

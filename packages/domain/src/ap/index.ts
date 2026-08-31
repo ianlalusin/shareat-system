@@ -1,16 +1,19 @@
 /**
- * Suppliers, supplier invoices, and AP payments. T-130.
+ * Suppliers, supplier invoices, and AP payments. T-130. Gate timing changed by T-196.
  *
- * ## ⭐ The gate — corrected twice, by Ian, directly (docs/tasks/130-accounts-payable.md §2)
+ * ## ⭐ The gate — corrected twice, by Ian, directly (docs/tasks/130-accounts-payable.md §2),
+ * then RETIMED by T-196 (docs/tasks/196-draft-expense-on-a-pending-invoice.md)
  *
- * No expense — cash or credit — may be recorded until its `supplier_invoices` row is
- * `verified`. Verification IS the approval; recording an expense against a verified invoice
- * needs no separate draft step of its own. This module does not reimplement expense posting to
- * get that: `recordExpenseForInvoice` below calls `createExpense` then `approveExpense`
- * (`../expenses`) back to back, in ONE transaction — the same two primitives T-122 already
- * built, tested, and smoketested. The combined call authorizing on BOTH `create_expense` and
- * `approve_expense` is what makes only a manager (who holds both) able to complete it, without
- * this module minting a new, parallel posting capability.
+ * No expense — cash or credit — may POST until its `supplier_invoices` row is `verified`. Since
+ * T-196 this is a POSTING gate, not an EXISTENCE gate: a draft may sit against a `pending`
+ * invoice (`createExpense` alone, no `approve_expense` needed), and `verifyInvoice` below posts
+ * every draft standing against the invoice the moment it verifies — Ian, 2026-08-31: *"when
+ * receipt is verified the expense are posted."* `recordExpenseForInvoice` below still calls
+ * `createExpense` then `approveExpense` (`../expenses`) back to back, in ONE transaction, for the
+ * already-verified case — the manager-holding-both shortcut T-130 built, unchanged. The combined
+ * call authorizing on BOTH `create_expense` and `approve_expense` is what makes only a manager
+ * (who holds both) able to complete it in one click, without this module minting a new, parallel
+ * posting capability. Either way, `approveExpense` is the ONLY posting path there is.
  *
  * ## ⭐ `positionOf` / `openItems` — v1's `ap_open`, as a live query
  *
@@ -47,6 +50,7 @@ import { checkDraw } from '../money-accounts/overdraft';
 import { createExpense, type CreateExpensePaymentInput } from '../expenses/create';
 import { approveExpense, type ApproveExpenseResult } from '../expenses/approve';
 import { voidExpense } from '../expenses/void';
+import { deleteExpenseDraft } from '../expenses/delete';
 import { validateInvoiceLines, type InvoiceLineDraft } from '../items';
 
 export const AP_CONTROL_CODE = apRepo.AP_CONTROL_CODE;
@@ -433,6 +437,25 @@ export async function setInvoiceLines(
  *
  * ⛔ **Two people.** `verified_by <> created_by` is enforced by the database (migration 0046) and
  * checked here for a readable error. 44% of v1's verified receipts were self-verified.
+ *
+ * ## ⭐ T-196 — verification posts every draft standing against the invoice
+ *
+ * Immediately after `markInvoiceVerified`, **inside this same transaction**: every `draft`
+ * expense on the invoice, oldest first (`apRepo.liveExpensesForInvoice`'s own ordering), is
+ * posted through `approveExpense` — the same primitive every other posting path uses, never a
+ * reimplementation.
+ *
+ * ⚠️ **All or nothing, deliberately not verify-and-skip.** If any one draft cannot post — an
+ * unmapped category, a closed period, an office account that would go overdrawn —
+ * `approveExpense` throws, and because this whole function runs inside one transaction (either
+ * the caller's `tx` or the one `transaction(run)` opens), that throw unwinds `markInvoiceVerified`
+ * too: the invoice is left `pending`, not verified-with-stuck-drafts. A verified invoice that
+ * still carries a draft would be a NEW orphan class — worse than the pending pile this task
+ * exists to relieve, because nothing about the invoice's own status would say anything is wrong.
+ * The verifier — who already proved they hold `approve_expense` — is exactly the person who can
+ * see the failure and fix the coding, so the error is left to name the offending expense (it
+ * always does: every `approveExpense` failure message includes the expense id) rather than being
+ * swallowed and retried.
  */
 export async function verifyInvoice(
   tx: Tx | null,
@@ -499,15 +522,49 @@ export async function verifyInvoice(
     }
 
     await apRepo.markInvoiceVerified(trx, actor.orgId, invoiceId, { verifiedBy: actor.personId });
+
+    // ⭐ T-196 — post every draft standing against this invoice, oldest first, in the SAME
+    // transaction as the status flip above. See this function's own doc comment for why a
+    // failure here must unwind the verification rather than leaving it verified-with-stuck-drafts.
+    const live = await apRepo.liveExpensesForInvoice(trx, actor.orgId, invoiceId);
+    const drafts = live.filter((e) => e.status === 'draft');
+    for (const d of drafts) {
+      try {
+        await approveExpense(trx, actor, d.id);
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        throw new Error(
+          `verifyInvoice: supplier invoice ${invoiceId} cannot be verified — draft expense ${d.id} ` +
+            `failed to post: ${reason}`,
+        );
+      }
+    }
   };
   if (tx) return run(tx);
   return transaction(run);
 }
 
 /**
- * ⭐ Cascades through `voidExpense` for every live linked expense — sequential, fail-fast,
- * retry-safe: if one linked expense's void fails, the ones already voided stay voided and the
- * invoice is not flipped. Matches `voidReceiptAction`'s exact contract.
+ * ⭐ Cascades through the live-linked expenses — sequential, fail-fast, retry-safe: if one
+ * linked expense's void/delete fails, the ones already handled stay handled and the invoice is
+ * not flipped. Matches `voidReceiptAction`'s exact contract.
+ *
+ * ## ⭐ T-196 — branches on the child's status, a defect this task's own change creates
+ *
+ * Before T-196, every live-linked expense here was necessarily `posted` — nothing else could
+ * exist against an invoice at all — so a flat `voidExpense` loop was correct. Now a `pending`
+ * invoice can carry drafts, and `voidExpense` THROWS on a draft ("nothing has been posted yet to
+ * void; edit or discard it instead"). Branch on the status `apRepo.liveExpensesForInvoice` now
+ * returns:
+ *   - `draft`  → `deleteExpenseDraft` (row 125 — a draft is not a financial record, no entry, no
+ *     balance touched, nobody asserted it; nothing to reverse).
+ *   - `posted` → `voidExpense`, unchanged — a reversal entry, both entries stand.
+ * Both primitives are reused rather than the delete/reverse being hand-rolled inline — `ap/index.ts`'s
+ * own module comment records what happened last time a cascade was reimplemented (budget release,
+ * cash-request liquidation, the expense-summary projection and a CAPEX depreciation guard all
+ * silently skipped). `edit_any_expense` (what `deleteExpenseDraft` authorizes against) and
+ * `void_supplier_invoice` are both manager-and-above, so the actor voiding the invoice is already
+ * authorized for the delete.
  */
 export async function voidInvoice(
   tx: Tx | null,
@@ -524,7 +581,11 @@ export async function voidInvoice(
 
     const live = await apRepo.liveExpensesForInvoice(trx, actor.orgId, input.invoiceId);
     for (const e of live) {
-      await voidExpense(trx, actor, e.id, `Invoice voided: ${reason}`);
+      if (e.status === 'draft') {
+        await deleteExpenseDraft(trx, actor, e.id);
+      } else {
+        await voidExpense(trx, actor, e.id, `Invoice voided: ${reason}`);
+      }
     }
 
     await apRepo.markInvoiceVoided(trx, actor.orgId, input.invoiceId, {

@@ -14,12 +14,20 @@
  *
  * ⭐ T-130 — `supplierInvoiceId` is now required and gates creation itself.
  * `docs/tasks/130-accounts-payable.md` Invariant 2: no expense — cash or credit — may be
- * created until its `supplier_invoices` row is `verified` and has capacity for this amount.
- * Checked HERE for a clean, named error; the hand-written `expenses_check_invoice_open_for_recording`
- * trigger (migration, DEF-073) is the actual backstop regardless of which code path writes the
- * row. `businessDate` is never taken from the caller when an invoice is named — receipt-date
- * authority (Invariant 3, ported from v1's `expense.actions.ts:179-197`) forces it from the
- * invoice's own `invoiceDate`, server-side, always.
+ * created until its `supplier_invoices` row EXISTS and has capacity for this amount, and is not
+ * VOIDED. Checked HERE for a clean, named error; the hand-written
+ * `expenses_check_invoice_open_for_recording` trigger (migration, DEF-073) is the actual
+ * backstop regardless of which code path writes the row. `businessDate` is never taken from the
+ * caller when an invoice is named — receipt-date authority (Invariant 3, ported from v1's
+ * `expense.actions.ts:179-197`) forces it from the invoice's own `invoiceDate`, server-side,
+ * always.
+ *
+ * ⭐ T-196 — the invoice no longer has to be VERIFIED to create a draft against it. The gate
+ * moved from existence to posting: `assertOpenForRecording(..., 'draft')` below only refuses a
+ * missing or voided invoice, or one already full; a `pending` invoice is fine, which is the
+ * whole point — a cashier holding only `create_expense` can now draft against the paper they are
+ * holding, with no manager and no verification wait. `approveExpense` is where `'posted'` is
+ * checked, and that is what still requires `verified`.
  *
  * In the ordinary flow this is called immediately followed by `approveExpense` in the SAME
  * transaction — `packages/domain/src/ap`'s `recordExpenseForInvoice` does exactly that, which is
@@ -102,13 +110,15 @@ async function runCreateExpense(tx: Tx, actor: Actor, input: CreateExpenseInput)
 
   // ⭐ T-130 Invariant 2 — the gate, checked here for a clean error; the DB trigger is the
   // backstop. Also resolves receipt-date authority: the invoice's own date wins, always.
+  // ⭐ T-196 — target 'draft': a PENDING invoice is fine here. Only 'posted' (approveExpense)
+  // still requires 'verified'.
   const invoice = await apRepo.getSupplierInvoiceById(tx, actor.orgId, input.supplierInvoiceId);
   if (!invoice) {
     throw new Error(
       `createExpense: supplier invoice ${input.supplierInvoiceId} does not exist in org ${actor.orgId}`,
     );
   }
-  await apRepo.assertOpenForRecording(tx, actor.orgId, input.supplierInvoiceId, totalAmount);
+  await apRepo.assertOpenForRecording(tx, actor.orgId, input.supplierInvoiceId, totalAmount, 'draft');
 
   // ⛔ The invoice names its supplier, so the caller's `supplierId` is a SECOND source of truth
   // for the same fact — and two copies of one fact drift (bible §16.1's whole argument). Nothing

@@ -15,6 +15,7 @@
 import { redirect } from 'next/navigation';
 import {
   approveExpense,
+  createExpense,
   editExpense,
   voidExpense,
   deleteExpenseDraft,
@@ -47,30 +48,42 @@ function carryQs(fd: FormData): string {
   return params.toString();
 }
 
+interface ParsedExpenseForm {
+  storeId: string;
+  supplierId: string;
+  supplierInvoiceId: string;
+  categoryId: string;
+  particulars: string;
+  payments: { method: ExpensePaymentMethod; amount: string; staffId?: string; cashRequestId?: string; moneyAccountId?: string }[];
+  returnTo: string;
+  qs: string;
+}
+
 /**
- * ⭐ T-130: no more draft-then-approve here. `recordExpenseForInvoice` requires a VERIFIED
- * supplier invoice (the gate — docs/tasks/130-accounts-payable.md §2) and posts in the same
- * call — "expense may already be posted, no need for draft" (Ian, 2026-08-27). `businessDate`
- * and the old free-text `receiptPhotoUrl` field are gone: the date is forced from the invoice's
- * own date (receipt-date authority) and the evidence lives on the invoice, verified once.
+ * ⭐ Shared by both actions below — the two forms differ only in WHAT they call once the fields
+ * are in hand (create a draft vs. record-and-post against an already-verified invoice), never in
+ * how they are parsed. `supplierId` is resolved from the invoice when the form did not supply it
+ * (the invoice already names its supplier — the form only has to pick ONE thing).
  */
-export async function createExpenseAction(formData: FormData): Promise<void> {
-  const actor = await requireActor();
+async function parseExpenseForm(
+  formData: FormData,
+  actor: { orgId: string },
+  fallbackReturnTo: string,
+): Promise<ParsedExpenseForm> {
   const storeId = str(formData, 'storeId');
   const qs = carryQs(formData);
-  // ⭐ This action is now shared by two callers — the standalone /expenses/new page and the
-  // "record an expense" form embedded on /ap/invoices/[id]. A hardcoded error redirect back to
-  // /expenses/new silently drops the invoice-page caller onto the wrong screen with every field
-  // wiped (caught in the browser, not by a test: an overdraft rejection while smoketesting the
-  // embedded form). Each form names where it actually lives; this only supplies a fallback.
-  const returnTo = str(formData, 'returnTo') || '/expenses/new';
+  // ⭐ Each form names where it actually lives (`/expenses/new` or `/ap/invoices/[id]`) — a
+  // hardcoded error redirect back to one screen silently drops the other caller onto the wrong
+  // page with every field wiped (caught in the browser, not by a test: an overdraft rejection
+  // while smoketesting the embedded form). `fallbackReturnTo` only covers a form that omitted it.
+  const returnTo = str(formData, 'returnTo') || fallbackReturnTo;
 
   const categoryId = str(formData, 'categoryId');
   let supplierId = str(formData, 'supplierId');
   const supplierInvoiceId = str(formData, 'supplierInvoiceId');
   const particulars = str(formData, 'particulars');
 
-  const payments: { method: ExpensePaymentMethod; amount: string; staffId?: string; cashRequestId?: string; moneyAccountId?: string }[] = [];
+  const payments: ParsedExpenseForm['payments'] = [];
   for (let i = 1; i <= PAYMENT_ROW_COUNT; i++) {
     const method = str(formData, `method_${i}`);
     const amount = str(formData, `amount_${i}`);
@@ -88,36 +101,100 @@ export async function createExpenseAction(formData: FormData): Promise<void> {
     });
   }
 
+  if (!storeId) throw new Error('Choose a store.');
+  if (!supplierInvoiceId) throw new Error('Choose a supplier invoice.');
+  if (payments.length === 0) {
+    throw new Error('At least one payment row (method + amount) is required.');
+  }
+  if (!supplierId) {
+    const invoice = await withOrgPrincipal(actor.orgId, (tx) =>
+      apRepo.getSupplierInvoiceById(tx, actor.orgId, supplierInvoiceId),
+    );
+    if (!invoice) throw new Error(`Supplier invoice ${supplierInvoiceId} does not exist.`);
+    supplierId = invoice.supplierId;
+  }
+
+  return { storeId, supplierId, supplierInvoiceId, categoryId, particulars, payments, returnTo, qs };
+}
+
+/**
+ * ⭐ T-196 — creating no longer posts. `docs/tasks/196-draft-expense-on-a-pending-invoice.md` §3:
+ * this now calls `createExpense`, never `recordExpenseForInvoice` — the result is a DRAFT, and
+ * `create_expense` alone is sufficient to reach it. That is the whole point of the task: a
+ * cashier can record what they spent, against the paper they are holding, with no manager
+ * present and no verification wait. The invoice named may be `pending` OR `verified` — either
+ * way this only ever drafts; posting still requires `approveExpense` (the expense's own detail
+ * page offers it) or, for a pending invoice, waits for `verifyInvoice` to post it automatically.
+ *
+ * `recordExpenseForInvoiceAction` below is the OTHER entry point — unchanged, for the
+ * already-verified case embedded on `/ap/invoices/[id]`, which still posts in one call.
+ */
+export async function createExpenseAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  let parsed: ParsedExpenseForm;
+  try {
+    parsed = await parseExpenseForm(formData, actor, '/expenses/new');
+  } catch (err) {
+    const qs = carryQs(formData);
+    const returnTo = str(formData, 'returnTo') || '/expenses/new';
+    redirect(`${returnTo}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+  }
+
   let newId: string;
   try {
-    if (!storeId) throw new Error('Choose a store.');
-    if (!supplierInvoiceId) throw new Error('Choose a verified supplier invoice.');
-    if (payments.length === 0) {
-      throw new Error('At least one payment row (method + amount) is required.');
-    }
-    // The invoice already names its supplier — the form only has to pick ONE thing.
-    if (!supplierId) {
-      const invoice = await withOrgPrincipal(actor.orgId, (tx) =>
-        apRepo.getSupplierInvoiceById(tx, actor.orgId, supplierInvoiceId),
-      );
-      if (!invoice) throw new Error(`Supplier invoice ${supplierInvoiceId} does not exist.`);
-      supplierId = invoice.supplierId;
-    }
+    const result = await withOrgPrincipal(actor.orgId, (tx) =>
+      createExpense(tx, actor, {
+        storeId: parsed.storeId,
+        businessDate: '', // ignored — createExpense forces this from the invoice's own date
+        categoryId: parsed.categoryId,
+        supplierId: parsed.supplierId,
+        supplierInvoiceId: parsed.supplierInvoiceId,
+        particulars: parsed.particulars,
+        payments: parsed.payments,
+      }),
+    );
+    newId = result.id;
+  } catch (err) {
+    redirect(`${parsed.returnTo}?${parsed.qs}&error=${encodeURIComponent(errorMessage(err))}`);
+  }
+  redirect(`/expenses/${newId}?${parsed.qs}`);
+}
+
+/**
+ * ⭐ T-196 — `recordExpenseForInvoice` stays, unchanged, for the already-verified case: the
+ * embedded "record an expense" form on `/ap/invoices/[id]`, only ever shown once its invoice is
+ * `verified` (that page's own `canRecord` check). A manager holding both `create_expense` and
+ * `approve_expense` against a verified invoice should not be made to click twice — create then
+ * separately approve — when one call already does both, in one transaction.
+ */
+export async function recordExpenseForInvoiceAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  let parsed: ParsedExpenseForm;
+  try {
+    parsed = await parseExpenseForm(formData, actor, '/ap');
+  } catch (err) {
+    const qs = carryQs(formData);
+    const returnTo = str(formData, 'returnTo') || '/ap';
+    redirect(`${returnTo}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+  }
+
+  let newId: string;
+  try {
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       recordExpenseForInvoice(tx, actor, {
-        storeId,
-        supplierId,
-        supplierInvoiceId,
-        categoryId,
-        particulars,
-        payments,
+        storeId: parsed.storeId,
+        supplierId: parsed.supplierId,
+        supplierInvoiceId: parsed.supplierInvoiceId,
+        categoryId: parsed.categoryId,
+        particulars: parsed.particulars,
+        payments: parsed.payments,
       }),
     );
     newId = result.expenseId;
   } catch (err) {
-    redirect(`${returnTo}?${qs}&error=${encodeURIComponent(errorMessage(err))}`);
+    redirect(`${parsed.returnTo}?${parsed.qs}&error=${encodeURIComponent(errorMessage(err))}`);
   }
-  redirect(`/expenses/${newId}?${qs}`);
+  redirect(`/expenses/${newId}?${parsed.qs}`);
 }
 
 export async function approveExpenseAction(formData: FormData): Promise<void> {

@@ -38,6 +38,7 @@ import {
   recordExpenseForInvoice,
   recordPayment,
   voidPayment,
+  createExpense,
 } from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
@@ -182,6 +183,48 @@ async function creditExpense(f: FixtureWithSupplier, invoiceId: string, amount: 
       categoryId: f.categoryId,
       particulars,
       payments: [{ method: 'credit', amount }],
+    }),
+  );
+}
+
+// =========================================================================================
+// T-196 — a draft expense may sit against a PENDING supplier invoice; verification posts it.
+// docs/tasks/196-draft-expense-on-a-pending-invoice.md.
+// =========================================================================================
+
+/** Records an invoice and leaves it PENDING — never verifies it. */
+async function pendingInvoice(f: FixtureWithSupplier, totalAmount: string): Promise<string> {
+  const fileId = await receiptFile(f.orgId, f.storeId, f.staffId);
+  const created = await asOrg(f.orgId, (tx) =>
+    recordInvoice(tx, f.staff, {
+      storeId: f.storeId,
+      supplierId: f.supplierId,
+      invoiceDate: '2026-01-10',
+      totalAmount,
+      receiptFileId: fileId,
+    }),
+  );
+  return created.id;
+}
+
+/** ⭐ T-196 — `createExpense` directly, by the STAFF actor (create_expense alone is sufficient),
+ *  never `recordExpenseForInvoice` — this is the draft path, the whole point of the task. */
+async function draftExpense(
+  f: FixtureWithSupplier,
+  invoiceId: string,
+  amount: string,
+  categoryId: string,
+  particulars = 'Draft against a pending invoice',
+) {
+  return asOrg(f.orgId, (tx) =>
+    createExpense(tx, f.staff, {
+      storeId: f.storeId,
+      businessDate: '', // ignored — createExpense forces this from the invoice's own date
+      supplierId: f.supplierId,
+      supplierInvoiceId: invoiceId,
+      categoryId,
+      particulars,
+      payments: [{ method: 'cash', amount, moneyAccountId: f.drawerId }],
     }),
   );
 }
@@ -799,5 +842,148 @@ describe('⛔ a supplier must be ACTIVE, not merely on file', () => {
         }),
       ),
     ).rejects.toThrow(/not active/i);
+  });
+});
+
+// =========================================================================================
+// T-196 — drafts against a PENDING invoice: capacity, verification cascade, void cascade.
+// docs/tasks/196-draft-expense-on-a-pending-invoice.md. The gate before this task was
+// "no expense may EXIST until its invoice is verified" (T-130, tested above); after it, the
+// gate is "no expense may POST until its invoice is verified" — every test above that records a
+// CREDIT expense through `recordExpenseForInvoice` against an already-verified invoice is
+// unaffected (Test 10 of the spec's own list: "recordExpenseForInvoice against a verified
+// invoice → still posts in one call, unchanged" — proven repeatedly above, not re-proven here).
+// =========================================================================================
+
+describe('T-196 — capacity: drafts count against a PENDING invoice exactly like postings do', () => {
+  it('⛔ two drafts that together exceed the invoice total — the second does not fit, at the trigger', async () => {
+    const f = await fixtureWithSupplier('t196-capacity');
+    const invoiceId = await pendingInvoice(f, '1000.00');
+    await draftExpense(f, invoiceId, '700.00', f.categoryId, 'First draft, fits');
+
+    await expect(
+      draftExpense(f, invoiceId, '400.00', f.categoryId, 'Second draft, does not fit'),
+    ).rejects.toThrow(/does not fit/);
+  });
+
+  it('⛔ a draft may not be created against a VOIDED invoice', async () => {
+    const f = await fixtureWithSupplier('t196-voided-invoice');
+    const invoiceId = await pendingInvoice(f, '500.00');
+    await asOrg(f.orgId, (tx) => voidInvoice(tx, f.manager, { invoiceId, reason: 'Never mind, cancelled' }));
+
+    await expect(
+      draftExpense(f, invoiceId, '500.00', f.categoryId, 'Too late, invoice is voided'),
+    ).rejects.toThrow(/voided/);
+  });
+});
+
+describe('T-196 — verifyInvoice posts every draft standing against the invoice, in one transaction', () => {
+  it('manager verifies → every draft posts, journal_entry_id set on each, each entry balances', async () => {
+    const f = await fixtureWithSupplier('t196-verify-all');
+    const invoiceId = await pendingInvoice(f, '3000.00');
+    const a = await draftExpense(f, invoiceId, '1000.00', f.categoryId, 'First draft');
+    const b = await draftExpense(f, invoiceId, '2000.00', f.categoryId, 'Second draft');
+
+    await asOrg(f.orgId, (tx) =>
+      verifyInvoice(tx, f.manager, invoiceId, { supplier: true, invoice: true, items: true, price: true }),
+    );
+
+    for (const exp of [a, b]) {
+      const [row] = await sql<{ status: string; journal_entry_id: string | null }[]>`
+        select status, journal_entry_id from expenses where id = ${exp.id}
+      `;
+      expect(row!.status).toBe('posted');
+      expect(row!.journal_entry_id).not.toBeNull();
+      const lines = await sql<{ debit: string; credit: string }[]>`
+        select debit, credit from journal_lines where entry_id = ${row!.journal_entry_id}
+      `;
+      const debits = lines.reduce((t, l) => t + Number(l.debit), 0);
+      const credits = lines.reduce((t, l) => t + Number(l.credit), 0);
+      expect(debits).toBeCloseTo(credits, 2);
+      expect(debits).toBeGreaterThan(0);
+    }
+
+    const [invoiceRow] = await sql<{ status: string }[]>`select status from supplier_invoices where id = ${invoiceId}`;
+    expect(invoiceRow!.status).toBe('verified');
+  });
+
+  it('⛔ all-or-nothing: one unmapped-category draft rolls back the WHOLE verification, naming the offending expense', async () => {
+    const f = await fixtureWithSupplier('t196-rollback');
+    const invoiceId = await pendingInvoice(f, '2000.00');
+    const [badCat] = await sql<{ id: string }[]>`
+      insert into expense_categories (org_id, "group", category, account_code)
+      values (${f.orgId}, 'OPEX', 'T-196 Mystery Spend', null)
+      returning id
+    `;
+    const good = await draftExpense(f, invoiceId, '500.00', f.categoryId, 'Fine draft');
+    const bad = await draftExpense(f, invoiceId, '500.00', badCat!.id, 'Unmapped category draft');
+
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        verifyInvoice(tx, f.manager, invoiceId, { supplier: true, invoice: true, items: true, price: true }),
+      ),
+    ).rejects.toThrow(new RegExp(bad.id));
+
+    // ⚠️ Invariant 7/8 — the invoice stays PENDING (never verified-with-stuck-drafts) and BOTH
+    // drafts stay drafts, including the one that would have posted fine on its own. Verify-and-skip
+    // would have left the good one posted and the invoice pending with one stuck draft — a new
+    // orphan class this task exists to prevent.
+    const [invoiceRow] = await sql<{ status: string }[]>`select status from supplier_invoices where id = ${invoiceId}`;
+    expect(invoiceRow!.status).toBe('pending');
+    const [goodRow] = await sql<{ status: string }[]>`select status from expenses where id = ${good.id}`;
+    expect(goodRow!.status).toBe('draft');
+    const [badRow] = await sql<{ status: string }[]>`select status from expenses where id = ${bad.id}`;
+    expect(badRow!.status).toBe('draft');
+  });
+});
+
+describe('T-196 — voidInvoice branches on the child\'s status (a defect this task creates)', () => {
+  it('void a PENDING invoice carrying two drafts → both rows gone, invoice voided', async () => {
+    const f = await fixtureWithSupplier('t196-void-pending');
+    const invoiceId = await pendingInvoice(f, '2000.00');
+    const a = await draftExpense(f, invoiceId, '800.00', f.categoryId, 'Draft one');
+    const b = await draftExpense(f, invoiceId, '800.00', f.categoryId, 'Draft two');
+
+    // ⚠️ Before T-196 this cascade would have THROWN — voidExpense refuses a draft ("nothing has
+    // been posted yet to void; edit or discard it instead"), and until this task a pending
+    // invoice could never carry a draft in the first place.
+    await asOrg(f.orgId, (tx) => voidInvoice(tx, f.manager, { invoiceId, reason: 'Wrong invoice, never verified' }));
+
+    const rows = await sql<{ c: number }[]>`select count(*)::int c from expenses where id in (${a.id}, ${b.id})`;
+    expect(rows[0]!.c).toBe(0);
+    const [invoiceRow] = await sql<{ status: string }[]>`select status from supplier_invoices where id = ${invoiceId}`;
+    expect(invoiceRow!.status).toBe('voided');
+  });
+
+  it('void a VERIFIED invoice carrying one draft and one posted expense → draft deleted, posted reversed, both entries readable', async () => {
+    const f = await fixtureWithSupplier('t196-void-mixed');
+    const invoiceId = await verifiedInvoice(f, '3000.00');
+    const posted = await creditExpense(f, invoiceId, '1000.00', 'Posted before the new draft');
+    // ⭐ A NEW draft against an ALREADY-verified invoice is legitimate — createExpense never
+    // requires 'verified', only not-voided. Nothing auto-posts it: verifyInvoice already ran.
+    const draft = await draftExpense(f, invoiceId, '500.00', f.categoryId, 'Drafted after verification');
+
+    const [draftBefore] = await sql<{ status: string }[]>`select status from expenses where id = ${draft.id}`;
+    expect(draftBefore!.status).toBe('draft');
+
+    await asOrg(f.orgId, (tx) => voidInvoice(tx, f.manager, { invoiceId, reason: 'Supplier cancelled the order' }));
+
+    const [draftGone] = await sql<{ c: number }[]>`select count(*)::int c from expenses where id = ${draft.id}`;
+    expect(draftGone!.c).toBe(0);
+
+    const [postedRow] = await sql<{ status: string; journal_entry_id: string }[]>`
+      select status, journal_entry_id from expenses where id = ${posted.expenseId}
+    `;
+    expect(postedRow!.status).toBe('voided');
+
+    // Reversed, not deleted — the original stays visible AND the reversal exists, both readable.
+    const [reversal] = await sql<{ id: string }[]>`
+      select id from journal_entries where reversal_of_entry_id = ${postedRow!.journal_entry_id}
+    `;
+    expect(reversal).toBeTruthy();
+    const [original] = await sql<{ status: string }[]>`
+      select status from journal_entries where id = ${postedRow!.journal_entry_id}
+    `;
+    expect(original!.status).toBe('reversed');
   });
 });

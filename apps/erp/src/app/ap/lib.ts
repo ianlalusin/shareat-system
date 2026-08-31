@@ -58,19 +58,30 @@ export interface InvoicePickerOption {
   invoiceDate: string;
   totalAmount: string;
   remaining: string;
+  /** ⭐ T-196 — the picker now offers PENDING invoices too (draftable, no verification wait),
+   *  alongside VERIFIED ones (still draftable — `createExpense` never requires verified, only
+   *  not-voided). Surfaced so the option text can say which a cashier is picking. */
+  status: 'pending' | 'verified';
 }
 
-/** Every VERIFIED invoice with room left — what `expenses/new` and the "record expense" form
- *  on an invoice's own page both offer. One list, both screens; the two cannot drift. */
-export async function listVerifiedInvoicesForPicker(orgId: string): Promise<InvoicePickerOption[]> {
+/**
+ * ⭐ T-196 — every OPEN invoice (not voided) with room left, not only verified ones. Before
+ * T-196 a draft could not exist at all, so this only ever listed `verified` invoices; now
+ * `/expenses/new` drafts against a `pending` one just as legitimately (Ian, 2026-08-31: "cashier
+ * does not need verification to start recording"). The embedded "record expense" form on an
+ * invoice's own page (`/ap/invoices/[id]`) does NOT use this — it already knows its one invoice
+ * and only renders once that invoice is verified.
+ */
+export async function listOpenInvoicesForPicker(orgId: string): Promise<InvoicePickerOption[]> {
   return withOrgPrincipal(orgId, async (tx) => {
-    const [invoices, suppliers] = await Promise.all([
+    const [pending, verified, suppliers] = await Promise.all([
+      apRepo.listSupplierInvoices(tx, orgId, { status: 'pending' }),
       apRepo.listSupplierInvoices(tx, orgId, { status: 'verified' }),
       apRepo.listSuppliers(tx, orgId, { includeInactive: true }),
     ]);
     const supplierName = new Map(suppliers.map((s) => [s.id, s.name]));
     const out: InvoicePickerOption[] = [];
-    for (const inv of invoices) {
+    for (const inv of [...pending, ...verified]) {
       const capacity = await apRepo.capacityOf(tx, orgId, inv.id);
       if (!capacity || Number(capacity.remaining) < 1) continue;
       out.push({
@@ -81,6 +92,7 @@ export async function listVerifiedInvoicesForPicker(orgId: string): Promise<Invo
         invoiceDate: inv.invoiceDate,
         totalAmount: inv.totalAmount,
         remaining: capacity.remaining,
+        status: inv.status as 'pending' | 'verified',
       });
     }
     return out;

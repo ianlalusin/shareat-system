@@ -3,7 +3,7 @@ import { transaction, expensesRepo, apRepo } from '@shareat/db';
 import { peso } from '../../../../lib/format';
 import { requireSession } from '../../../../lib/session';
 import { verifyInvoiceAction, voidInvoiceAction, setInvoiceLinesAction } from '../../actions';
-import { createExpenseAction } from '../../../expenses/actions';
+import { recordExpenseForInvoiceAction } from '../../../expenses/actions';
 import { getInvoice, getSupplier, listCategoriesGrouped, listMoneyAccountsForPicker, itemPickerFor, invoiceLines, INVOICE_LINE_ROWS } from '../../lib';
 
 export const metadata = { title: 'Supplier invoice — Shareat System' };
@@ -43,6 +43,14 @@ export default async function InvoiceDetailPage({
 
   const canRecord = invoice.status === 'verified' && Number(capacity?.remaining ?? 0) >= 1;
   const groups: Array<'COGS' | 'OPEX' | 'PERSONAL' | 'CAPEX'> = ['COGS', 'OPEX', 'PERSONAL', 'CAPEX'];
+
+  // ⭐ T-196 §6 — what verifying is about to POST. Oldest first, matching verifyInvoice's own
+  // posting order (apRepo.liveExpensesForInvoice) exactly, so the running total on screen is the
+  // running total the cascade will actually produce.
+  const draftExpenses = linkedExpenses
+    .filter((e) => e.status === 'draft')
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  const categoryById = new Map(categories.map((c) => [c.id, c]));
 
   
   // ⭐ T-147: what this supplier has billed before comes first in the picker.
@@ -228,6 +236,53 @@ return (
         </section>
       )}
 
+      {invoice.status === 'pending' && draftExpenses.length > 0 && (
+        <section className="space-y-2 rounded-lg border border-amber-200 p-4 dark:border-amber-900">
+          <h2 className="font-medium">What verifying will post</h2>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            The four checks below attest the DOCUMENT is genuine. Posting attests the CODING is
+            right — 5100 COGS vs. 6500 Supplies vs. 3200 owner&rsquo;s drawings drives the tax
+            treatment, and one click is about to make both assertions. These drafts post the
+            instant you verify (T-196).
+          </p>
+          <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
+            <table className="w-full min-w-[640px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
+                  <th className="px-3 py-2 font-medium">Category</th>
+                  <th className="px-3 py-2 font-medium">Account</th>
+                  <th className="px-3 py-2 font-medium">Particulars</th>
+                  <th className="px-3 py-2 text-right font-medium">Amount</th>
+                  <th className="px-3 py-2 text-right font-medium">Running total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  let running = 0;
+                  return draftExpenses.map((e) => {
+                    const cat = categoryById.get(e.categoryId);
+                    running += Number(e.totalAmount);
+                    return (
+                      <tr key={e.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                        <td className="px-3 py-2">{cat?.category ?? e.categoryId}</td>
+                        <td className="px-3 py-2 font-mono text-xs text-neutral-500 dark:text-neutral-400">
+                          {cat?.accountCode ?? <span className="text-red-600 dark:text-red-400">unmapped — will block</span>}
+                        </td>
+                        <td className="px-3 py-2">
+                          <a href={`/expenses/${e.id}`} className="underline hover:no-underline">{e.particulars}</a>
+                        </td>
+                        <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(e.totalAmount)}</td>
+                        <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(running.toFixed(2))}</td>
+                      </tr>
+                    );
+                  });
+                })()}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
       {invoice.status === 'pending' && (
         <form
           action={verifyInvoiceAction}
@@ -284,7 +339,7 @@ return (
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             Posts immediately — verification already was the approval (Ian, 2026-08-27).
           </p>
-          <form action={createExpenseAction} className="space-y-3">
+          <form action={recordExpenseForInvoiceAction} className="space-y-3">
             <input type="hidden" name="returnTo" value={`/ap/invoices/${invoice.id}`} />
             <input type="hidden" name="supplierId" value={invoice.supplierId} />
             <input type="hidden" name="supplierInvoiceId" value={invoice.id} />

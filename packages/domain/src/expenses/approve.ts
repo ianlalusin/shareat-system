@@ -13,7 +13,7 @@
  * checked first" philosophy.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { expensesRepo, moneyAccountsRepo, ownersRepo, transaction, type Tx } from '@shareat/db';
+import { apRepo, expensesRepo, moneyAccountsRepo, ownersRepo, transaction, type Tx } from '@shareat/db';
 import { money } from '@shareat/core/money';
 import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry } from '../ledger/post-entry';
@@ -62,6 +62,22 @@ async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promi
   if (expense.status === 'voided') {
     throw new Error(`approveExpense: expense ${expenseId} is voided — cannot post`);
   }
+
+  // ⭐ T-196 — the gate moved from EXISTENCE to POSTING. `createExpense` no longer refuses a
+  // draft against a PENDING invoice (docs/tasks/196-draft-expense-on-a-pending-invoice.md), so
+  // by the time a draft reaches here its invoice may still be unverified. This is "the approval
+  // path" the spec means by `assertOpenForRecording(..., 'posted')` — checked here for a clean,
+  // named error (invariant 5); the trigger (`expenses_check_invoice_open_for_recording`,
+  // migration 0113) is the actual backstop when this service is bypassed, e.g. a raw
+  // `UPDATE expenses SET status = 'posted'`, same discipline as createExpense's own check.
+  await apRepo.assertOpenForRecording(
+    tx,
+    actor.orgId,
+    expense.supplierInvoiceId,
+    expense.totalAmount,
+    'posted',
+    expense.id,
+  );
 
   // ⭐ T-130: the DEF-055 photo gate RELOCATED. It used to live here ("invariant 11 — no photo,
   // no posting"), checking `expense.receiptFileId`/`receiptPhotoUrl`. Those columns are gone —

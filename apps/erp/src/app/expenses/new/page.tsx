@@ -1,5 +1,5 @@
 import { listStores, listCategoriesGrouped, listMoneyAccountsForPicker, PAYMENT_ROWS } from '../lib';
-import { listVerifiedInvoicesForPicker, peso } from '../../ap/lib';
+import { listOpenInvoicesForPicker, peso } from '../../ap/lib';
 import { requireSession } from '../../../lib/session';
 import { createExpenseAction } from '../actions';
 
@@ -22,7 +22,7 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
     listStores(orgId),
     listCategoriesGrouped(orgId),
     listMoneyAccountsForPicker(orgId),
-    listVerifiedInvoicesForPicker(orgId),
+    listOpenInvoicesForPicker(orgId),
   ]);
   const storeId = sp.store && storeRows.some((s) => s.id === sp.store) ? sp.store : (storeRows[0]?.id ?? '');
 
@@ -33,9 +33,11 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
       <div>
         <h1 className="text-2xl font-semibold">New expense</h1>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
-          Posts immediately against a <strong>verified</strong> supplier invoice — cash or
-          credit, no draft step (T-130). No invoice to pick from?{' '}
-          <a href="/ap" className="underline">Log and verify one first</a>.
+          Saves as a <strong>draft</strong> against the supplier invoice you pick — verified or
+          still pending. No manager and no verification wait: verifying the invoice later posts
+          this automatically, or approve it yourself from the expense once you can (T-196). No
+          invoice to pick from?{' '}
+          <a href="/ap" className="underline">Log one first</a>.
         </p>
       </div>
 
@@ -72,7 +74,7 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
 
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
-                Verified supplier invoice <span className="italic">(sets the date and the supplier)</span>
+                Supplier invoice <span className="italic">(sets the date and the supplier)</span>
               </span>
               <select
                 name="supplierInvoiceId"
@@ -81,11 +83,12 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
                 className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
               >
                 <option value="" disabled>
-                  {invoices.length === 0 ? 'No verified invoices yet' : 'Select…'}
+                  {invoices.length === 0 ? 'No open invoices yet' : 'Select…'}
                 </option>
                 {invoices.map((inv) => (
                   <option key={inv.id} value={inv.id}>
                     {inv.supplierName} — {inv.invoiceNo ?? inv.id.slice(0, 8)} ({inv.invoiceDate}) — {peso(inv.remaining)} left
+                    {inv.status === 'pending' ? ' — pending' : ' — verified'}
                   </option>
                 ))}
               </select>

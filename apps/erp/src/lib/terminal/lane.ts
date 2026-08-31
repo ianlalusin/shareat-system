@@ -33,6 +33,25 @@ export interface MirroredRoster {
   position: string | null;
 }
 
+/**
+ * ⭐ **T-200 — hot-set item 4, finally read.** Bible §5.3 mirrors this as *"on-shift roster +
+ * current business day punch feed"*, and until now **nothing consumed it** — the publisher wrote
+ * it and no terminal ever subscribed (DEF-118).
+ *
+ * ⚠️ `status === 'open'` is what "on shift right now" MEANS: an in with no out. It is derived by
+ * the server, never by the device — bible §5.1, *"a device never computes a business outcome."*
+ */
+export interface MirroredDayFeed {
+  id: string;
+  shiftDay: string;
+  status: string;
+  computedMinutes: number;
+  anchorMinute: number | null;
+  endMinute: number | null;
+  staffCode: string | null;
+  displayName: string;
+}
+
 export interface MirroredConfig {
   configId: string;
   credentialNfc: boolean;
@@ -52,6 +71,7 @@ export function watchMirrors(
   storeId: string,
   on: {
     roster: (rows: MirroredRoster[]) => void;
+    dayFeed: (rows: MirroredDayFeed[]) => void;
     config: (config: MirroredConfig | null) => void;
     credentials: (rows: MirroredCredential[]) => void;
     error: (message: string) => void;
@@ -73,6 +93,37 @@ export function watchMirrors(
         );
       },
       (err) => on.error(`Roster: ${err.message}`),
+    ),
+  );
+
+  /**
+   * ⛔ **QUERIED BY `shiftDay`, never a whole-collection subscription — T-198 §2.2.**
+   *
+   * T-198 scoped the publisher's trigger so no NEW old day is written, but it could not retract
+   * what was already pushed: 24 of 24 publishes measured before the fix were historical. A bare
+   * `collection()` listener reads what IS there, not what we meant to put there, and would pull
+   * that entire backlog onto the tablet on first load — the exact cost T-198 just removed.
+   *
+   * ⚠️ Two days, matching the trigger's own window: a 22:00 shift belongs to the previous business
+   * day, and an offline terminal replays punches hours late carrying the business day they
+   * happened on.
+   */
+  const from = new Date(Date.now() + 8 * 3_600_000); // Asia/Manila, as the publisher pins it
+  from.setUTCDate(from.getUTCDate() - 1);
+  unsubs.push(
+    onSnapshot(
+      query(
+        collection(db, `mirror/${storeId}/dayFeed`),
+        where('shiftDay', '>=', from.toISOString().slice(0, 10)),
+      ),
+      (snap) => {
+        on.dayFeed(
+          snap.docs
+            .map((d) => d.data() as MirroredDayFeed & { deletedAt?: unknown })
+            .filter((r) => !(r as { deletedAt?: unknown }).deletedAt),
+        );
+      },
+      (err) => on.error(`Day feed: ${err.message}`),
     ),
   );
 
