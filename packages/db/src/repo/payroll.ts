@@ -262,6 +262,8 @@ export interface PayableDay {
   pendingOtMinutes: number;
   nightDiffMinutes: number;
   holidayMinutes: number;
+  /** ⭐ Which KIND of holiday, so payroll applies the right configured multiplier. */
+  holidayType: 'regular' | 'special_non_working' | 'special_working' | null;
 }
 
 /**
@@ -284,7 +286,8 @@ export async function payableDays(
            d.computed_minutes          as "computedMinutes",
            d.pending_ot_minutes        as "pendingOtMinutes",
            d.night_diff_minutes        as "nightDiffMinutes",
-           d.holiday_minutes           as "holidayMinutes"
+           d.holiday_minutes           as "holidayMinutes",
+           d.holiday_type              as "holidayType"
     from attendance_days d
     where d.org_id = ${orgId}
       and d.store_id = ${input.storeId}

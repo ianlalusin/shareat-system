@@ -39,7 +39,10 @@ async function asOrg<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
 
 const actor = (orgId: string, personId: string): Actor => ({ personId, orgId });
 
-async function fixture(hint: string) {
+async function fixture(
+  hint: string,
+  cfg: { overtimeMode?: string; overtimeFixedHourly?: string | null } = {},
+) {
   const code = uid(`pr-${hint}`);
   const [org] = await sql<{ id: string }[]>`
     insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
@@ -52,10 +55,12 @@ async function fixture(hint: string) {
             values (${orgId}, '2026-01-01', '2026-01-31', 'open')`;
 
   // 9 required hours = 8 worked + 1 paid break, the live default.
-  const [cfg] = await sql<{ id: string }[]>`
+  const [config] = await sql<{ id: string }[]>`
     insert into store_attendance_config (org_id, store_id, effective_from, required_hours_per_shift,
-                                         overtime_multiplier, night_diff_multiplier)
-    values (${orgId}, ${storeId}, '2026-01-01', '9', '1.25', '1.10') returning id`;
+                                         overtime_multiplier, night_diff_multiplier,
+                                         overtime_mode, overtime_fixed_hourly)
+    values (${orgId}, ${storeId}, '2026-01-01', '9', '1.25', '1.10',
+            ${cfg.overtimeMode ?? 'multiplier'}, ${cfg.overtimeFixedHourly ?? null}) returning id`;
 
   const mk = async (name: string, role: string) => {
     const [p] = await sql<{ id: string }[]>`
@@ -77,7 +82,7 @@ async function fixture(hint: string) {
       and instrument = 'cash' and custodian = 'office' and is_foundation`;
 
   return {
-    orgId, storeId, configId: cfg!.id, adminId, managerId, workerId,
+    orgId, storeId, configId: config!.id, adminId, managerId, workerId,
     admin: actor(orgId, adminId), manager: actor(orgId, managerId), worker: actor(orgId, workerId),
     employmentId: emp!.id, officeAccountId: office!.id,
   };
@@ -89,15 +94,17 @@ type Fixture = Awaited<ReturnType<typeof fixture>>;
 async function addDay(
   f: Fixture,
   shiftDay: string,
-  over: Partial<{ status: string; isHalfDay: boolean; computedMinutes: number; ot: number; nd: number; hol: number }> = {},
+  over: Partial<{ status: string; isHalfDay: boolean; computedMinutes: number; ot: number; nd: number; hol: number; holType: string }> = {},
 ) {
   const [d] = await sql<{ id: string }[]>`
     insert into attendance_days
       (org_id, store_id, person_id, employment_id, shift_day, attendance_config_id, anchor_mode,
-       status, computed_minutes, is_half_day, pending_ot_minutes, night_diff_minutes, holiday_minutes)
+       status, computed_minutes, is_half_day, pending_ot_minutes, night_diff_minutes,
+       holiday_minutes, is_holiday, holiday_type)
     values (${f.orgId}, ${f.storeId}, ${f.workerId}, ${f.employmentId}, ${shiftDay}, ${f.configId},
             'exact', ${over.status ?? 'verified'}, ${over.computedMinutes ?? 540},
-            ${over.isHalfDay ?? false}, ${over.ot ?? 0}, ${over.nd ?? 0}, ${over.hol ?? 0})
+            ${over.isHalfDay ?? false}, ${over.ot ?? 0}, ${over.nd ?? 0}, ${over.hol ?? 0},
+            ${over.holType ? true : false}, ${over.holType ?? null})
     returning id`;
   return d!.id;
 }
@@ -412,5 +419,71 @@ describe('T-189 §8 — who may run payroll', () => {
     await expect(
       asOrg(f.orgId, (tx) => postPayRun(tx, f.admin, { storeId: f.storeId, ...period, moneyAccountId: f.officeAccountId })),
     ).rejects.toThrow(/pays your own employment/i);
+  });
+});
+
+
+// =====================================================================================
+// T-189b — Ian, 2026-08-31: OT configurable, hours in half-hour steps, holiday per type
+
+describe('T-189b — overtime priced two ways, end to end', () => {
+  async function rated(hint: string, cfg = {}) {
+    const f = await fixture(hint, cfg);
+    await asOrg(f.orgId, (tx) =>
+      setPayRate(tx, f.admin, { employmentId: f.employmentId, storeId: f.storeId, basis: 'daily', amount: '540.00', effectiveFrom: '2026-01-01' }));
+    return f;
+  }
+
+  it('⭐ FIXED mode pays a flat amount per OT hour, ignoring the daily rate', () => {
+    return (async () => {
+      const f = await rated('otfixed', { overtimeMode: 'fixed', overtimeFixedHourly: '80.00' });
+      await addDay(f, '2026-01-05', { ot: 120 });
+      const p = await asOrg(f.orgId, (tx) => previewPayRun(tx, f.admin, { storeId: f.storeId, ...period }));
+      expect(p.slips[0]!.otPay).toBe('160.00'); // 2h × ₱80, not 2h × 60 × 1.25
+    })();
+  });
+
+  it('⛔ the DATABASE refuses `fixed` with no amount — every OT hour would price at zero', async () => {
+    // ⚠️ Tested on INSERT, not UPDATE: `store_attendance_config` rows are immutable and
+    // append-and-supersede, so a bad setting can only ever arrive as a NEW row.
+    const f = await fixture('otbad');
+    await expect(sql`
+      insert into store_attendance_config (org_id, store_id, effective_from, overtime_mode)
+      values (${f.orgId}, ${f.storeId}, '2026-02-01', 'fixed')`,
+    ).rejects.toThrow(/fixed_ot_needs_amount/);
+  });
+
+  it('⭐ overtime is priced on STEPPED hours — 1h50m pays 1.5h, not 1.83h', async () => {
+    const f = await rated('otstep');
+    await addDay(f, '2026-01-05', { ot: 110 });
+    const p = await asOrg(f.orgId, (tx) => previewPayRun(tx, f.admin, { storeId: f.storeId, ...period }));
+    expect(p.slips[0]!.otPay).toBe('112.50');
+  });
+
+  it('⚠️ under half an hour of overtime pays NOTHING — "no hanging minutes"', async () => {
+    const f = await rated('otcrumb');
+    await addDay(f, '2026-01-05', { ot: 25 });
+    const p = await asOrg(f.orgId, (tx) => previewPayRun(tx, f.admin, { storeId: f.storeId, ...period }));
+    expect(p.slips[0]!.otPay).toBe('0.00');
+    // ⚠️ But the MINUTES are still recorded on the payslip — the fact is kept even when unpaid.
+    expect(p.slips[0]!.otMinutes).toBe(25);
+  });
+
+  it('⭐ the holiday premium follows the holiday TYPE', async () => {
+    const f = await rated('holtype');
+    await addDay(f, '2026-01-05', { hol: 540, holType: 'regular' });
+    await addDay(f, '2026-01-06', { hol: 540, holType: 'special_non_working' });
+    await addDay(f, '2026-01-07', { hol: 540, holType: 'special_working' });
+    const p = await asOrg(f.orgId, (tx) => previewPayRun(tx, f.admin, { storeId: f.storeId, ...period }));
+    // 540 (regular, ×2.0) + 162 (special non-working, ×1.3) + 270 (special working, ×1.5)
+    expect(p.slips[0]!.holidayPay).toBe('972.00');
+  });
+
+  it('⛔ a holiday multiplier below 1 is refused — it would turn a premium into a deduction', async () => {
+    const f = await fixture('holbad');
+    await expect(sql`
+      insert into store_attendance_config (org_id, store_id, effective_from, holiday_regular_multiplier)
+      values (${f.orgId}, ${f.storeId}, '2026-02-01', '0.90')`,
+    ).rejects.toThrow(/holiday_multipliers/);
   });
 });

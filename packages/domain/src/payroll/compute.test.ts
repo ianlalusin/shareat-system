@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { money } from '@shareat/core/money';
-import { advanceToRecover, computePay, type DayInput, type Multipliers } from './compute';
+import {
+  advanceToRecover,
+  computePay,
+  steppedHours,
+  type DayInput,
+  type Multipliers,
+} from './compute';
 
 /**
  * T-189's compute. **This is the code that decides somebody's money**, so it is pure and tested
@@ -8,9 +14,13 @@ import { advanceToRecover, computePay, type DayInput, type Multipliers } from '.
  */
 const M: Multipliers = {
   requiredHoursPerShift: '9', // 8 worked + 1 paid break — the live default
+  overtimeMode: 'multiplier',
   overtimeMultiplier: '1.25',
+  overtimeFixedHourly: null,
   nightDiffMultiplier: '1.10',
-  holidayMultiplier: '2.0',
+  holidayRegularMultiplier: '2.00',
+  holidaySpecialNonWorkingMultiplier: '1.30',
+  holidaySpecialWorkingMultiplier: '1.50',
 };
 
 const day = (over: Partial<DayInput> = {}): DayInput => ({
@@ -20,6 +30,7 @@ const day = (over: Partial<DayInput> = {}): DayInput => ({
   nightDiffMinutes: 0,
   holidayMinutes: 0,
   computedMinutes: 540,
+  holidayType: null,
   dailyRate: '540.00',
   ...over,
 });
@@ -73,13 +84,16 @@ describe('premiums', () => {
 
   it('⚠️ holiday is an ADD-ON too — 2.0 means one EXTRA day, not two days', () => {
     // 9h × 60 × (2.0 − 1) = 540 on top of the 540 already in basic
-    const p = computePay([day({ holidayMinutes: 540 })], M);
+    const p = computePay([day({ holidayMinutes: 540, holidayType: 'regular' })], M);
     expect(p.holidayPay).toBe(money('540.00'));
     expect(p.grossPay).toBe(money('1080.00'));
   });
 
   it('premiums stack onto one day and the gross identity holds', () => {
-    const p = computePay([day({ otMinutes: 60, nightDiffMinutes: 120, holidayMinutes: 540 })], M);
+    const p = computePay(
+      [day({ otMinutes: 60, nightDiffMinutes: 120, holidayMinutes: 540, holidayType: 'regular' })],
+      M,
+    );
     expect(p.grossPay).toBe(
       money(
         (
@@ -146,5 +160,109 @@ describe('money discipline', () => {
   it('a long period does not accumulate rounding drift', () => {
     const days = Array.from({ length: 26 }, () => day({ dailyRate: '333.33' }));
     expect(computePay(days, M).basicPay).toBe(money('8666.58'));
+  });
+});
+
+
+// =====================================================================================
+// T-189b — Ian, 2026-08-31
+
+describe('⭐ hours come in HALF-HOUR steps, and the remainder is dropped', () => {
+  it('steps to .5, 1, 1.5, 2 — "no hanging minutes"', () => {
+    expect(steppedHours(30)).toBe(0.5);
+    expect(steppedHours(60)).toBe(1);
+    expect(steppedHours(90)).toBe(1.5);
+    expect(steppedHours(120)).toBe(2);
+  });
+
+  it('⚠️ DROPS the remainder rather than rounding up — 1h50m of overtime pays 1.5h', () => {
+    // ⛔ The direction is the decision: "no hanging minutes" means the leftover is discarded.
+    // Rounding up would pay for time nobody worked.
+    expect(steppedHours(110)).toBe(1.5);
+    expect(steppedHours(59)).toBe(0.5);
+    expect(steppedHours(29)).toBe(0); // ⚠️ and 29 minutes of overtime pays NOTHING
+  });
+
+  it('is never negative and never NaN', () => {
+    expect(steppedHours(0)).toBe(0);
+    expect(steppedHours(-45)).toBe(0);
+    expect(steppedHours(Number.NaN)).toBe(0);
+  });
+
+  it('⭐ overtime is priced on the STEPPED hours, not the raw minutes', () => {
+    // 110 minutes → 1.5h. hourly equiv 60 × 1.5 × 1.25 = 112.50
+    // ⚠️ Un-stepped it would have been 1.8333h → 137.50, so the step is worth ₱25 here.
+    expect(computePay([day({ otMinutes: 110 })], M).otPay).toBe(money('112.50'));
+  });
+
+  it('⭐ night differential and holiday are stepped too — the rule is about HOURS', () => {
+    expect(computePay([day({ nightDiffMinutes: 110 })], M).nightDiffPay).toBe(money('9.00'));
+    expect(
+      computePay([day({ holidayMinutes: 110, holidayType: 'regular' })], M).holidayPay,
+    ).toBe(money('90.00'));
+  });
+
+  it('⛔ LATE is not stepped — it is not computed here at all', () => {
+    // Ian named late as the exception. `attendance_days.lateMinutes` stays an exact integer
+    // minute; nothing in this file reads or rounds it, and that is the guarantee.
+    expect(Object.keys(day())).not.toContain('lateMinutes');
+  });
+});
+
+describe('⭐ overtime priced two ways', () => {
+  it('multiplier mode: the hourly equivalent of the daily rate × 1.25', () => {
+    expect(computePay([day({ otMinutes: 120 })], M).otPay).toBe(money('150.00'));
+  });
+
+  it('⭐ FIXED mode pays a flat amount per hour and IGNORES the daily rate entirely', () => {
+    const fixed: Multipliers = { ...M, overtimeMode: 'fixed', overtimeFixedHourly: '80.00' };
+    // 2h × ₱80 = ₱160 — and it would be ₱160 whatever the daily rate is.
+    expect(computePay([day({ otMinutes: 120 })], fixed).otPay).toBe(money('160.00'));
+    expect(computePay([day({ otMinutes: 120, dailyRate: '2000.00' })], fixed).otPay).toBe(
+      money('160.00'),
+    );
+  });
+
+  it('fixed mode is stepped as well — 1h50m pays 1.5 × the flat amount', () => {
+    const fixed: Multipliers = { ...M, overtimeMode: 'fixed', overtimeFixedHourly: '80.00' };
+    expect(computePay([day({ otMinutes: 110 })], fixed).otPay).toBe(money('120.00'));
+  });
+
+  it('⭐ fixed OT still pays when requiredHoursPerShift is misconfigured', () => {
+    // A flat amount never divides by the shift length, so a bad setting cannot corrupt it —
+    // and there is no reason to withhold pay somebody earned because of an unrelated typo.
+    const fixed: Multipliers = {
+      ...M,
+      overtimeMode: 'fixed',
+      overtimeFixedHourly: '80.00',
+      requiredHoursPerShift: '0',
+    };
+    const p = computePay([day({ otMinutes: 120 })], fixed);
+    expect(p.otPay).toBe(money('160.00'));
+    expect(p.basicPay).toBe(money('540.00'));
+  });
+});
+
+describe('⭐ the holiday premium depends on WHICH holiday', () => {
+  const full = (kind: DayInput['holidayType']) =>
+    computePay([day({ holidayMinutes: 540, holidayType: kind })], M).holidayPay;
+
+  it('regular holiday at 2.0 pays one extra day', () => {
+    expect(full('regular')).toBe(money('540.00'));
+  });
+
+  it('special NON-WORKING at 1.3 pays 30% extra', () => {
+    expect(full('special_non_working')).toBe(money('162.00'));
+  });
+
+  it('special WORKING at 1.5 pays 50% extra', () => {
+    expect(full('special_working')).toBe(money('270.00'));
+  });
+
+  it('⚠️ a multiplier of exactly 1 pays no premium — the floor the CHECK enforces', () => {
+    const flat: Multipliers = { ...M, holidayRegularMultiplier: '1.00' };
+    expect(
+      computePay([day({ holidayMinutes: 540, holidayType: 'regular' })], flat).holidayPay,
+    ).toBe(money('0'));
   });
 });

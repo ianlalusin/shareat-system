@@ -289,3 +289,150 @@ drawing limit.
 
 `typecheck` ✅ · `unit` ✅ · `integration` ✅ · `build` ✅ · `/payroll` driven in Chrome: rate set,
 run previewed, posted, payslip read, voided, days unfrozen.
+
+---
+
+## 13. ✅ T-189b — overtime priced two ways, hours in half-hour steps, holiday per type
+
+> **Ian, 2026-08-31:** *"for OT it must be configurable to x1.25 or fix amount, and time must be
+> computed by .5 escalation so hours are .5, 1, 1.5, 2 like that, no hanging minutes except for
+> computation of late."*
+>
+> **and:** *"holiday must be configurable too. 1.3, 1.5, 2."*
+
+Migration `0107`. Three changes, and only the first two needed schema.
+
+### 13.1 Overtime: a multiplier, or a flat amount
+
+`store_attendance_config` gains `overtime_mode` (`multiplier` | `fixed`) and
+`overtime_fixed_hourly`. ⭐ **`fixed` REPLACES the rate rather than multiplying it** — a flat peso
+amount per overtime hour, which is what "or fix amount" means. It is a mode rather than a second
+number quietly reinterpreted, because those two things price an hour completely differently.
+
+⛔ **The dangerous combination is unrepresentable**, the same shape T-152 used for the un-remitted
+ceiling: `overtime_mode = 'multiplier' OR overtime_fixed_hourly IS NOT NULL`. Without it a store
+could switch to `fixed`, and every overtime hour would price at **zero** — no error, no visual
+difference, and the people who worked those hours paid nothing.
+
+⭐ **Fixed OT is exempt from the `requiredHoursPerShift > 0` guard**, deliberately: a flat amount
+never divides by the shift length, so a misconfigured shift cannot corrupt it and there is no
+reason to withhold pay somebody earned because of an unrelated typo.
+
+### 13.2 ⭐ Hours in half-hour steps — and the direction is a DECISION
+
+`steppedHours(minutes) = floor(minutes / 30) / 2`.
+
+| Worked | Paid |
+|---:|---:|
+| 30 min | 0.5 h |
+| 1 h 50 m | **1.5 h** |
+| 59 min | 0.5 h |
+| 29 min | **nothing** |
+
+⚠️ **The remainder is DROPPED, not rounded up** — *"no hanging minutes"* means the leftover is
+discarded, and rounding up would pay for time nobody worked. **This has a consequence worth
+stating:** a store whose overtime is habitually 20 minutes will pay none of it. The remedy is to
+change how overtime is approved, not to round it up quietly here. ⭐ **The minutes are still
+recorded on the payslip even when they pay nothing** — the fact is kept.
+
+Applied to overtime, night differential and holiday alike, because the rule is about *hours*.
+
+⛔ **Late is NOT stepped**, exactly as Ian said. It is the right exception: lateness measures a
+person's conduct, and rounding 25 minutes late down to zero would erase the fact.
+`attendance_days.lateMinutes` stays an exact integer minute and nothing in `compute.ts` touches it.
+
+### 13.3 ⭐ Holiday: THREE multipliers, not one
+
+`attendance_days.holidayType` already records which kind of holiday a day was — `regular`,
+`special_non_working`, `special_working` — so a single configurable number would have thrown that
+away and priced a regular holiday the same as a special one. ⚠️ **v1 hardcodes 2.0 / 1.3 and has no
+third at all.**
+
+| Setting | Default | Ian's figure |
+|---|---:|---|
+| `holiday_regular_multiplier` | 2.00 | 2 |
+| `holiday_special_non_working_multiplier` | 1.30 | 1.3 |
+| `holiday_special_working_multiplier` | 1.50 | 1.5 |
+
+⛔ A CHECK refuses anything below 1: the premium is an **add-on** (`× multiplier − 1`), so a value
+under 1 would turn working a holiday into a deduction.
+
+### 13.4 Verified in a browser, with figures that check on paper
+
+With 110 minutes of overtime, a regular holiday and a special non-working day in one period:
+
+```
+multiplier mode   OT 1.5h × 60 × 1.25 = 112.50   holiday 540.00 + 162.00   premiums 814.50
+fixed mode        OT 1.5h × ₱80       = 120.00   holiday unchanged        premiums 822.00
+```
+
+⭐ **The premium settings now render on `/payroll` itself.** They were constants in code; a number
+that decides somebody's pay belongs on the screen that spends it, not in a migration.
+
+---
+
+## 14. ✅ T-189c — payroll periods, configured rather than assumed
+
+> **Ian, 2026-08-31:** *"and look how payroll dates are configured in v1, it must be configurable."*
+
+Migration `0108`. `/payroll` was offering a hardcoded 1st-to-15th, which is simply wrong for a
+store on monthly or weekly periods.
+
+### 14.1 v1's shape, read at source
+
+```
+PayrollConfig {
+  periodType          'monthly' | 'semi_monthly' | 'weekly'    default semi_monthly
+  semiMonthlyCutoffs  [number, number]                          e.g. [15, 31]
+  payoutLagDays       number
+}
+```
+
+`derivePeriods(config, year, month)` — monthly is one window; weekly is 7-day windows from the 1st
+with a short last one; semi-monthly is `1..cutoff` and `cutoff+1..monthEnd`.
+
+### 14.2 ⚠️ One field of v1's is dead, and v2 does not port it
+
+`semiMonthlyCutoffs` is a **pair**, and `derivePeriods` only ever reads `[0]`. The second period
+always ends on the last day of the month, computed. **The stored second element is never read** —
+so a store can hold a `31` that is silently meaningless in February. v2 stores
+`semi_monthly_cutoff_day`, the one number that is actually used.
+
+⭐ This is the third dead field the live data or the source has turned up in three days —
+`paymentOptions` on suppliers, `staff.rate` in v1's own memory, and now this.
+
+### 14.3 ⭐ The invariant v1 states and never checks
+
+v1's comment claims *"every mode's periods tile the whole calendar month with no gaps and no
+overlaps, and periods never cross a month boundary"* — and three other functions rely on it
+(`periodForDate`, `payoutCoversDate`, `periodsOverlap`) with **no test asserting it anywhere**.
+
+`tilesTheMonth()` makes it checkable, and the tests check every mode, in every month, across a
+leap year — plus a negative case, so the checker itself cannot be vacuous.
+
+### 14.4 The clamp is in TWO places, deliberately
+
+The CHECK constraint refuses a cutoff outside **1–27**; `derivePeriods` clamps as well. That is not
+belt and braces:
+
+- The **database** stops a bad value being *stored*.
+- The **function** is pure and may be called with a config assembled anywhere — a test, a future
+  importer — and must not produce an inverted period if one reaches it another way.
+
+⚠️ **1–27, not 1–31.** A cutoff of 28 or later makes February's second period empty or inverted; 27
+is the last day that leaves a real second period in every month of every year. ⛔ v1 clamps only at
+read time, which means a store there can *hold* a value its own code ignores.
+
+### 14.5 One bug the browser caught
+
+The period picker and the two date inputs **both submit**, and the page read only the dates — so
+choosing a period looked like it worked and silently did nothing. Precedence is now explicit:
+picker, then typed dates, then the store's current period. ⚠️ The dates stay editable underneath,
+because a late correction has to be payable even when it does not line up with a configured window.
+
+### 14.6 Verified in a browser, two stores at once
+
+| Store | Periods | Overtime | Payout |
+|---|---|---|---|
+| Lipa | semi-monthly, cut on the 15th | **₱80.00 / hour, flat** | same day |
+| Malvar | **weekly** — Aug 1–7, 8–14, … | ×1.25 | **3 days after** — "payable 2026-08-18" |

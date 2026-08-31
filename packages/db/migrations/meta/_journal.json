@@ -631,6 +631,20 @@
       "when": 1795231907084,
       "tag": "0106_t189_unfreeze_door",
       "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1795318307084,
+      "tag": "0107_t189b_overtime_mode_and_half_hour_steps",
+      "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1795404707084,
+      "tag": "0108_t189c_payroll_periods",
+      "breakpoints": true
     }
   ]
 }

@@ -9,6 +9,28 @@
  */
 import { ZERO, add, compare, money, multiply, type Money } from '@shareat/core/money';
 
+/**
+ * ⭐ **Minutes become hours in HALF-HOUR STEPS, and the remainder is DROPPED.**
+ *
+ * Ian, 2026-08-31: *"time must be computed by .5 escalation so hours are .5, 1, 1.5, 2 like that,
+ * no hanging minutes except for computation of late."*
+ *
+ * So 1h50m of overtime pays **1.5 hours**, and 25 minutes pays **nothing** — *"no hanging minutes"*
+ * means the leftover is discarded, not rounded up. ⚠️ **That direction is a decision with a
+ * consequence**: a store whose overtime is habitually 20 minutes will pay none of it, and the fix
+ * for that is to change how overtime is approved, not to round it up quietly here.
+ *
+ * ⛔ **Late is deliberately NOT stepped.** Ian named it as the exception, and it is the right one:
+ * lateness is a measurement of a person's conduct, and rounding 25 minutes late down to zero would
+ * erase the fact. `attendance_days.lateMinutes` stays an exact integer minute, untouched by this.
+ */
+export const HOUR_STEP_MINUTES = 30;
+
+export function steppedHours(minutes: number): number {
+  if (!Number.isFinite(minutes) || minutes <= 0) return 0;
+  return Math.floor(minutes / HOUR_STEP_MINUTES) / (60 / HOUR_STEP_MINUTES);
+}
+
 /** ⚠️ Only `daily` has a compute path here — one of 126 live v1 staff is hourly (T-189 §4). */
 export interface DayInput {
   shiftDay: string;
@@ -17,6 +39,8 @@ export interface DayInput {
   nightDiffMinutes: number;
   holidayMinutes: number;
   computedMinutes: number;
+  /** ⭐ Which KIND of holiday, so the right multiplier applies. Null on an ordinary day. */
+  holidayType: 'regular' | 'special_non_working' | 'special_working' | null;
   /** The daily rate in force ON THIS DAY. ⭐ Resolved per day, so a mid-period raise pays both. */
   dailyRate: string;
 }
@@ -25,11 +49,30 @@ export interface Multipliers {
   /** From `store_attendance_config` — the hours a full shift owes, and the divisor for the
    *  hourly equivalent of a daily rate. */
   requiredHoursPerShift: string;
+
+  /**
+   * ⭐ T-189b. `multiplier` prices an OT hour as the hourly equivalent × `overtimeMultiplier`.
+   * `fixed` REPLACES that with `overtimeFixedHourly` pesos per hour — it multiplies nothing, which
+   * is why it is a mode rather than a second number quietly reinterpreted.
+   */
+  overtimeMode: 'multiplier' | 'fixed';
   overtimeMultiplier: string;
+  overtimeFixedHourly: string | null;
+
   nightDiffMultiplier: string;
-  /** ⚠️ Not in `store_attendance_config` yet. v1 hardcodes 2.0 regular / 1.3 special; the caller
-   *  passes it so the day it becomes configurable, nothing here changes. */
-  holidayMultiplier: string;
+
+  /** ⭐ One per holiday KIND, keyed to `attendance_days.holidayType`. v1 hardcodes 2.0 / 1.3 and
+   *  has no third; all three are settings here. */
+  holidayRegularMultiplier: string;
+  holidaySpecialNonWorkingMultiplier: string;
+  holidaySpecialWorkingMultiplier: string;
+}
+
+/** ⚠️ An ordinary day never reaches this — `holidayMinutes` is 0, so no premium is computed. */
+function holidayMultiplierFor(m: Multipliers, kind: DayInput['holidayType']): number {
+  if (kind === 'special_non_working') return Number(m.holidaySpecialNonWorkingMultiplier);
+  if (kind === 'special_working') return Number(m.holidaySpecialWorkingMultiplier);
+  return Number(m.holidayRegularMultiplier);
 }
 
 export interface ComputedPay {
@@ -80,7 +123,6 @@ export function computePay(days: DayInput[], m: Multipliers): ComputedPay {
   const required = Number(m.requiredHoursPerShift);
   const otMult = Number(m.overtimeMultiplier);
   const ndMult = Number(m.nightDiffMultiplier);
-  const holMult = Number(m.holidayMultiplier);
 
   let daysWorked = 0;
   let minutesWorked = 0;
@@ -107,22 +149,41 @@ export function computePay(days: DayInput[], m: Multipliers): ComputedPay {
     // ⚠️ Guard the divisor. A store configured with 0 required hours would otherwise turn every
     // premium into Infinity, and the CHECK constraints would reject the payslip with a message
     // about an identity rather than about the misconfiguration that caused it.
-    if (required <= 0) continue;
+    //
+    // ⭐ FIXED-mode overtime is exempt from that guard, and deliberately: a flat peso amount per
+    // hour never divides by the shift length, so a misconfigured `requiredHoursPerShift` has no
+    // way to corrupt it and there is no reason to withhold it.
+    if (required <= 0) {
+      if (m.overtimeMode === 'fixed') {
+        const flatHours = steppedHours(day.otMinutes);
+        if (flatHours > 0) {
+          otMinutes += 0; // already accumulated above
+          otPay = add(otPay, multiply(money(m.overtimeFixedHourly ?? '0'), factor(flatHours)));
+        }
+      }
+      continue;
+    }
 
-    if (day.otMinutes > 0) {
-      otPay = add(otPay, multiply(rate, factor((day.otMinutes / 60 / required) * otMult)));
+    // ⭐ Minutes become hours in HALF-HOUR STEPS, remainder dropped — `steppedHours`. 1h50m of
+    // overtime is 1.5 hours; 25 minutes is none. ⛔ Late is NOT stepped, and is not computed here.
+    const otHours = steppedHours(day.otMinutes);
+    const ndHours = steppedHours(day.nightDiffMinutes);
+    const holHours = steppedHours(day.holidayMinutes);
+
+    if (otHours > 0) {
+      // ⭐ `fixed` REPLACES the rate rather than multiplying it: a flat peso amount per OT hour.
+      otPay =
+        m.overtimeMode === 'fixed'
+          ? add(otPay, multiply(money(m.overtimeFixedHourly ?? '0'), factor(otHours)))
+          : add(otPay, multiply(rate, factor((otHours / required) * otMult)));
     }
-    if (day.nightDiffMinutes > 0) {
-      nightDiffPay = add(
-        nightDiffPay,
-        multiply(rate, factor((day.nightDiffMinutes / 60 / required) * (ndMult - 1))),
-      );
+    if (ndHours > 0) {
+      nightDiffPay = add(nightDiffPay, multiply(rate, factor((ndHours / required) * (ndMult - 1))));
     }
-    if (day.holidayMinutes > 0) {
-      holidayPay = add(
-        holidayPay,
-        multiply(rate, factor((day.holidayMinutes / 60 / required) * (holMult - 1))),
-      );
+    if (holHours > 0) {
+      // ⭐ The multiplier depends on WHICH holiday — regular, special non-working, special working.
+      const holMult = holidayMultiplierFor(m, day.holidayType);
+      holidayPay = add(holidayPay, multiply(rate, factor((holHours / required) * (holMult - 1))));
     }
   }
 

@@ -8,13 +8,14 @@
  * reads per page load. **Postgres does not have that problem, so the landmine is not ported.**
  */
 import { payrollRepo, type PayRunRow, type PayslipRow } from '@shareat/db';
-import { previewPayRun, type PayRunPreview } from '@shareat/domain';
+import { derivePeriods, previewPayRun, type PayPeriod, type PayRunPreview } from '@shareat/domain';
 import { withOrgPrincipal } from '../expenses/lib';
 
 export { peso } from '../../lib/format';
 export { listStores, withOrgPrincipal, listActingPersons } from '../expenses/lib';
 export type { StoreOption } from '../expenses/lib';
-export type { PayRunRow, PayslipRow, PayRunPreview };
+export type { PayRunRow, PayslipRow, PayRunPreview, PayPeriod };
+export { derivePeriods, payoutDateFor } from '@shareat/domain';
 
 /** ⚠️ Returns the error rather than throwing: a bad period should render a message, not a 500. */
 export async function preview(
@@ -52,6 +53,20 @@ export async function rosterFor(orgId: string, storeId: string) {
   });
 }
 
+/**
+ * ⭐ The premium settings a run is being computed under, shown on the page.
+ *
+ * ⚠️ Payroll used to price overtime and holidays from constants in code. They are per-store
+ * settings now (T-189b), and a number that decides somebody's pay should be visible on the screen
+ * that spends it rather than knowable only by reading a migration.
+ */
+export async function premiumSettingsFor(orgId: string, storeId: string) {
+  return withOrgPrincipal(orgId, async (tx) => {
+    const { attendanceConfigRepo } = await import('@shareat/db');
+    return attendanceConfigRepo.findLive(tx, storeId);
+  });
+}
+
 export async function cashAccountsFor(orgId: string, storeId: string) {
   return withOrgPrincipal(orgId, async (tx) => {
     const { moneyAccountsRepo } = await import('@shareat/db');
@@ -60,15 +75,27 @@ export async function cashAccountsFor(orgId: string, storeId: string) {
 }
 
 /**
- * The default period: the **first half of the current month**, in ISO dates.
+ * ⭐ The store's OWN pay periods for a month — derived from its configuration, not assumed.
  *
- * ⚠️ Semi-monthly is the Philippine norm and what v1's frequency table assumes. It is a starting
- * value on a form, never a rule — the user picks the actual bounds.
+ * ⛔ This replaced a hardcoded 1st-to-15th. Ian, 2026-08-31: *"look how payroll dates are
+ * configured in v1, it must be configurable."* A store on monthly or weekly periods was being
+ * offered a semi-monthly window it does not use.
  */
-export function defaultPeriod(now = new Date()): { start: string; end: string } {
-  const y = now.getUTCFullYear();
-  const m = String(now.getUTCMonth() + 1).padStart(2, '0');
-  return { start: `${y}-${m}-01`, end: `${y}-${m}-15` };
+export function periodsForMonth(
+  cfg: { payrollPeriodType: 'monthly' | 'semi_monthly' | 'weekly'; semiMonthlyCutoffDay: number },
+  now = new Date(),
+): PayPeriod[] {
+  return derivePeriods(cfg, now.getUTCFullYear(), now.getUTCMonth() + 1);
+}
+
+/** The period containing today, else the first of the month — what the form opens on. */
+export function currentPeriod(
+  cfg: { payrollPeriodType: 'monthly' | 'semi_monthly' | 'weekly'; semiMonthlyCutoffDay: number },
+  now = new Date(),
+): PayPeriod {
+  const today = now.toISOString().slice(0, 10);
+  const all = periodsForMonth(cfg, now);
+  return all.find((p) => today >= p.start && today <= p.end) ?? all[0]!;
 }
 
 /** ⚠️ A run's period, as one readable string. Dates only — a period has no time of day. */

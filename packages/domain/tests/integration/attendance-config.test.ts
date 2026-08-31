@@ -91,14 +91,37 @@ describe('T-155 invariant 7 — every column is NOT NULL, so a store cannot be h
     expect('credentialPasscode' in c).toBe(false);
   });
 
-  it('no column in the table is nullable except the two lifecycle ones', async () => {
+  /**
+   * ⚠️ **AMENDED 2026-08-31 by T-189b, and the amendment is the point.**
+   *
+   * The invariant is *"a store cannot be half-configured"*, and `overtime_fixed_hourly` is the one
+   * column where NULL is what ENFORCES that rather than what breaks it. The amount is meaningless
+   * unless `overtime_mode = 'fixed'`, and a CHECK requires it exactly then:
+   *
+   * ```
+   * overtime_mode = 'multiplier' OR overtime_fixed_hourly IS NOT NULL
+   * ```
+   *
+   * ⭐ NOT NULL with a default of `0` would have been the WEAKER guarantee: a store could sit on
+   * `fixed` at zero pesos an hour, and every overtime hour would silently pay nothing. Nullable
+   * plus the conditional check makes the half-configured state unrepresentable.
+   */
+  it('no column is nullable except the two lifecycle ones and the conditional OT amount', async () => {
     const cols = await sql<{ column_name: string; is_nullable: string }[]>`
       select column_name, is_nullable from information_schema.columns
       where table_name = 'store_attendance_config'`;
     const nullable = cols.filter((c) => c.is_nullable === 'YES').map((c) => c.column_name).sort();
-    expect(nullable).toEqual(['created_by', 'superseded_at']);
+    expect(nullable).toEqual(['created_by', 'overtime_fixed_hourly', 'superseded_at']);
     // And the PIN switch is gone entirely, not merely defaulted to false (migration 0085).
     expect(cols.map((c) => c.column_name)).not.toContain('credential_passcode');
+  });
+
+  it('⛔ ...and that one nullable column is guarded by a CHECK, not left to a caller', async () => {
+    const f = await fixture('ot-mode-guard');
+    await expect(sql`
+      insert into store_attendance_config (org_id, store_id, effective_from, overtime_mode)
+      values (${f.orgId}, ${f.storeId}, '2027-01-01', 'fixed')`,
+    ).rejects.toThrow(/fixed_ot_needs_amount/);
   });
 
   it('re-seeding a store that already has a config changes nothing', async () => {

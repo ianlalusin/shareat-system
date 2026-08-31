@@ -66,6 +66,14 @@ export const LATE_POLICIES = ['record_only', 'charge_per_minute', 'infraction'] 
 export type LatePolicy = (typeof LATE_POLICIES)[number];
 
 /** `open` = free clock in/out, hours from actual punches. `fixed` = a posted shift grid. */
+/** T-189b. How an overtime hour is priced. */
+/** T-189c. How a store's pay periods are cut. v1's `PayrollConfig.periodType`. */
+export const PAYROLL_PERIOD_TYPES = ['monthly', 'semi_monthly', 'weekly'] as const;
+export type PayrollPeriodType = (typeof PAYROLL_PERIOD_TYPES)[number];
+
+export const OVERTIME_MODES = ['multiplier', 'fixed'] as const;
+export type OvertimeMode = (typeof OVERTIME_MODES)[number];
+
 export const TIME_MODES = ['open', 'fixed'] as const;
 export type TimeMode = (typeof TIME_MODES)[number];
 
@@ -124,6 +132,63 @@ export const storeAttendanceConfig = pgTable(
     nightDiffEndHour: integer('night_diff_end_hour').notNull().default(6),
     nightDiffMultiplier: numeric('night_diff_multiplier', { precision: 4, scale: 2 }).notNull().default('1.10'),
     overtimeMultiplier: numeric('overtime_multiplier', { precision: 4, scale: 2 }).notNull().default('1.25'),
+
+    /**
+     * ⭐ T-189b. Ian, 2026-08-31: *"for OT it must be configurable to x1.25 or fix amount."*
+     *
+     * `multiplier` prices an overtime hour as the hourly equivalent of the daily rate times
+     * `overtimeMultiplier`. `fixed` REPLACES that with a flat peso amount per overtime hour — it is
+     * not a multiplier on anything, which is why it is a separate mode rather than a second number
+     * quietly reinterpreted.
+     */
+    overtimeMode: text('overtime_mode', { enum: OVERTIME_MODES }).notNull().default('multiplier'),
+    /** ⚠️ Pesos per overtime HOUR. Required when the mode is `fixed`, by CHECK — a store that says
+     *  it pays a flat amount and does not say what it is would price every OT hour at zero. */
+    overtimeFixedHourly: numeric('overtime_fixed_hourly', { precision: 14, scale: 2 }),
+
+    /**
+     * ⭐ T-189b. Ian: *"holiday must be configurable too. 1.3, 1.5, 2."*
+     *
+     * THREE, not one, because `attendance_days.holidayType` already records which kind of holiday
+     * a day was. A single number would price a regular holiday the same as a special one and throw
+     * that distinction away. ⚠️ v1 hardcodes 2.0 / 1.3 and has no third at all.
+     */
+    holidayRegularMultiplier: numeric('holiday_regular_multiplier', { precision: 4, scale: 2 })
+      .notNull()
+      .default('2.00'),
+    holidaySpecialNonWorkingMultiplier: numeric('holiday_special_non_working_multiplier', {
+      precision: 4,
+      scale: 2,
+    })
+      .notNull()
+      .default('1.30'),
+    holidaySpecialWorkingMultiplier: numeric('holiday_special_working_multiplier', {
+      precision: 4,
+      scale: 2,
+    })
+      .notNull()
+      .default('1.50'),
+
+    /**
+     * ⭐ T-189c. How this store's pay periods are cut. Ian: *"look how payroll dates are
+     * configured in v1, it must be configurable."*
+     */
+    payrollPeriodType: text('payroll_period_type', { enum: PAYROLL_PERIOD_TYPES })
+      .notNull()
+      .default('semi_monthly'),
+
+    /**
+     * The day the FIRST semi-monthly period ends; the second runs to month end.
+     *
+     * ⚠️ **ONE number, where v1 stores a pair.** v1's `semiMonthlyCutoffs` is `[number, number]`
+     * and `derivePeriods` only ever reads `[0]` — the second period always ends on the last day of
+     * the month, computed. The stored second element is dead weight that can disagree with reality
+     * (a 31 sitting in the config in February).
+     */
+    semiMonthlyCutoffDay: integer('semi_monthly_cutoff_day').notNull().default(15),
+
+    /** Days after a period ends before the money is handed over. v1's `payoutLagDays`. */
+    payoutLagDays: integer('payout_lag_days').notNull().default(0),
 
     // ---- Grace, all defaulting to 0 --------------------------------------------------
     /**
@@ -190,6 +255,34 @@ export const storeAttendanceConfig = pgTable(
     ),
     check('store_attendance_config_half_day_below_required_check', sql`${t.halfDayHours} < ${t.requiredHoursPerShift}`),
     check('store_attendance_config_positive_hours_check', sql`${t.requiredHoursPerShift} > 0 and ${t.halfDayHours} > 0`),
+    check('store_attendance_config_overtime_mode_check', sql`${t.overtimeMode} in ('multiplier', 'fixed')`),
+    check(
+      'store_attendance_config_period_type_check',
+      sql`${t.payrollPeriodType} in ('monthly', 'semi_monthly', 'weekly')`,
+    ),
+    /** ⛔ 1..27, not 1..31: 28 or later makes February's second period empty or inverted. v1
+     *  clamps at READ time, so a store there can hold a value its own code ignores. */
+    check(
+      'store_attendance_config_cutoff_day_check',
+      sql`${t.semiMonthlyCutoffDay} between 1 and 27`,
+    ),
+    check('store_attendance_config_payout_lag_check', sql`${t.payoutLagDays} between 0 and 31`),
+    /** ⭐ The dangerous combination is unrepresentable — the same shape T-152 used for the
+     *  un-remitted ceiling. A store on `fixed` with no amount would price every OT hour at zero. */
+    check(
+      'store_attendance_config_fixed_ot_needs_amount_check',
+      sql`${t.overtimeMode} = 'multiplier' or ${t.overtimeFixedHourly} is not null`,
+    ),
+    check(
+      'store_attendance_config_fixed_ot_positive_check',
+      sql`${t.overtimeFixedHourly} is null or ${t.overtimeFixedHourly} > 0`,
+    ),
+    /** ⛔ Below 1 would turn a holiday premium into a deduction — the premium is an ADD-ON. */
+    check(
+      'store_attendance_config_holiday_multipliers_check',
+      sql`${t.holidayRegularMultiplier} >= 1 and ${t.holidaySpecialNonWorkingMultiplier} >= 1
+          and ${t.holidaySpecialWorkingMultiplier} >= 1`,
+    ),
     check('store_attendance_config_anchor_window_check', sql`${t.anchorWindowMinutes} >= 0 and ${t.anchorWindowMinutes} <= 60`),
     check(
       'store_attendance_config_grace_non_negative_check',

@@ -23,6 +23,7 @@ import { reverseEntry } from '../ledger/reverse-entry';
 import { advanceToRecover, computePay, type DayInput } from './compute';
 
 export * from './compute';
+export * from './periods';
 
 /** `6100 Salaries and wages` — provisioned in Phase 1, and until now nothing had ever posted to it. */
 export const SALARIES_ACCOUNT = '6100';
@@ -35,10 +36,6 @@ export const SALARIES_ACCOUNT = '6100';
  * worth a refactor from inside a payroll task.
  */
 export const PAYROLL_ADVANCE_ACCOUNT = '1230';
-
-/** ⚠️ v1 hardcodes these too. Regular 2.0, special 1.3 — not configurable per store in either
- *  system yet, so the constant lives in one place with its origin written down. */
-export const HOLIDAY_MULTIPLIER = '2.0';
 
 // -------------------------------------------------------------------------------------
 
@@ -192,6 +189,7 @@ export async function previewPayRun(
           nightDiffMinutes: d.nightDiffMinutes,
           holidayMinutes: d.holidayMinutes,
           computedMinutes: d.computedMinutes,
+          holidayType: d.holidayType,
           dailyRate: rate.amount,
         });
       }
@@ -206,11 +204,17 @@ export async function previewPayRun(
       }
       if (inputs.length === 0 || !payRateId) continue;
 
+      // ⭐ Every premium is now a per-store SETTING rather than a constant (T-189b, Ian's
+      // "configurable to x1.25 or fix amount" and "holiday must be configurable too").
       const pay = computePay(inputs, {
         requiredHoursPerShift: config.requiredHoursPerShift,
+        overtimeMode: config.overtimeMode,
         overtimeMultiplier: config.overtimeMultiplier,
+        overtimeFixedHourly: config.overtimeFixedHourly,
         nightDiffMultiplier: config.nightDiffMultiplier,
-        holidayMultiplier: HOLIDAY_MULTIPLIER,
+        holidayRegularMultiplier: config.holidayRegularMultiplier,
+        holidaySpecialNonWorkingMultiplier: config.holidaySpecialNonWorkingMultiplier,
+        holidaySpecialWorkingMultiplier: config.holidaySpecialWorkingMultiplier,
       });
 
       const personId = theirDays[0]!.personId;

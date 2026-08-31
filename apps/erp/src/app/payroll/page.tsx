@@ -2,10 +2,13 @@ import { requireSession } from '../../lib/session';
 import { postPayRunAction, setPayRateAction, voidPayRunAction } from './actions';
 import {
   cashAccountsFor,
-  defaultPeriod,
+  currentPeriod,
   listStores,
+  payoutDateFor,
+  periodsForMonth,
   periodLabel,
   peso,
+  premiumSettingsFor,
   preview,
   rosterFor,
   runsFor,
@@ -17,6 +20,8 @@ export const dynamic = 'force-dynamic';
 
 interface SearchParams {
   store?: string;
+  /** ⭐ `start|end` from the period picker. Takes precedence over the raw dates below. */
+  period?: string;
   start?: string;
   end?: string;
   ok?: string;
@@ -48,9 +53,16 @@ export default async function PayrollPage({
     );
   }
 
-  const d = defaultPeriod();
-  const periodStart = sp.start || d.start;
-  const periodEnd = sp.end || d.end;
+  // ⭐ The period comes from the STORE'S configuration, not from a hardcoded 1st-to-15th.
+  const cfg = await premiumSettingsFor(actor.orgId, storeId);
+  const periodOptions = cfg ? periodsForMonth(cfg) : [];
+  const fallback = cfg ? currentPeriod(cfg) : { start: '', end: '', label: '' };
+  // ⚠️ The picker and the two date inputs BOTH submit, so precedence has to be explicit: the
+  // picker wins when it changed, otherwise the typed dates, otherwise the store's current period.
+  // Without this the select looked like it worked and silently did nothing.
+  const picked = sp.period?.split('|') ?? [];
+  const periodStart = (picked[0] || sp.start || fallback.start) as string;
+  const periodEnd = (picked[1] || sp.end || fallback.end) as string;
 
   const [{ preview: pv, error: previewError }, roster, runs, accounts] = await Promise.all([
     preview(actor.orgId, actor, { storeId, periodStart, periodEnd }),
@@ -84,8 +96,26 @@ export default async function PayrollPage({
             ))}
           </select>
         </label>
+        {/* ⭐ The store's OWN periods. ⚠️ The dates stay editable underneath — a late correction
+            has to be payable even when it does not line up with a configured window. */}
+        {periodOptions.length > 0 && (
+          <label className="flex flex-col gap-1">
+            <span className={LABEL}>Period</span>
+            <select
+              name="period"
+              defaultValue={`${periodStart}|${periodEnd}`}
+              className={`${FIELD} w-64`}
+            >
+              {periodOptions.map((p) => (
+                <option key={p.start} value={`${p.start}|${p.end}`}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="flex flex-col gap-1">
-          <span className={LABEL}>Period from</span>
+          <span className={LABEL}>From</span>
           <input name="start" type="date" defaultValue={periodStart} className={`${FIELD} w-44`} />
         </label>
         <label className="flex flex-col gap-1">
@@ -96,6 +126,46 @@ export default async function PayrollPage({
           Preview
         </button>
       </form>
+
+      {/* ⭐ The premium settings this run is computed under. ⚠️ These were constants in code until
+          T-189b; a number that decides somebody's pay belongs on the screen that spends it. */}
+      {cfg && (
+        <p className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-neutral-500">
+          <span>
+            Shift <b className="text-neutral-700 dark:text-neutral-300">{cfg.requiredHoursPerShift}h</b>
+          </span>
+          <span>
+            Overtime{' '}
+            <b className="text-neutral-700 dark:text-neutral-300">
+              {cfg.overtimeMode === 'fixed'
+                ? `${peso(Number(cfg.overtimeFixedHourly ?? 0))} / hour, flat`
+                : `×${cfg.overtimeMultiplier}`}
+            </b>
+          </span>
+          <span>
+            Night diff <b className="text-neutral-700 dark:text-neutral-300">&times;{cfg.nightDiffMultiplier}</b>
+          </span>
+          <span>
+            Holiday{' '}
+            <b className="text-neutral-700 dark:text-neutral-300">
+              regular &times;{cfg.holidayRegularMultiplier} · special non-working &times;
+              {cfg.holidaySpecialNonWorkingMultiplier} · special working &times;
+              {cfg.holidaySpecialWorkingMultiplier}
+            </b>
+          </span>
+          <span>
+            Periods{' '}
+            <b className="text-neutral-700 dark:text-neutral-300">
+              {cfg.payrollPeriodType.replace('_', '-')}
+              {cfg.payrollPeriodType === 'semi_monthly' && `, cut on the ${cfg.semiMonthlyCutoffDay}th`}
+            </b>
+            {cfg.payoutLagDays > 0 && `, paid ${cfg.payoutLagDays}d after`}
+          </span>
+          <span className="text-neutral-400">
+            ⭐ Hours count in half-hour steps; anything under is not paid. Late is exact.
+          </span>
+        </p>
+      )}
 
       {sp.error && <Banner tone="error">{sp.error}</Banner>}
       {sp.ok && <Banner tone="ok">{sp.ok}</Banner>}
@@ -111,6 +181,9 @@ export default async function PayrollPage({
             <span className="text-xs text-neutral-500">
               {pv.slips.length} payslip(s) · gross {peso(Number(pv.totalGross))} · net{' '}
               {peso(Number(pv.totalNet))}
+              {cfg && cfg.payoutLagDays > 0 && (
+                <> · payable {payoutDateFor({ start: periodStart, end: periodEnd, label: '' }, cfg.payoutLagDays)}</>
+              )}
             </span>
           </div>
 

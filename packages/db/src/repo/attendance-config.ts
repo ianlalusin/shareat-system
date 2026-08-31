@@ -30,6 +30,18 @@ export interface AttendanceConfigRow {
   nightDiffEndHour: number;
   nightDiffMultiplier: string;
   overtimeMultiplier: string;
+  // ---- T-189b. Every premium is a per-store SETTING rather than a constant.
+  overtimeMode: 'multiplier' | 'fixed';
+  /** ⚠️ Pesos per OT hour, and only meaningful when `overtimeMode` is `fixed`. */
+  overtimeFixedHourly: string | null;
+  /** ⭐ One per holiday KIND, keyed to `attendance_days.holidayType`. */
+  holidayRegularMultiplier: string;
+  holidaySpecialNonWorkingMultiplier: string;
+  holidaySpecialWorkingMultiplier: string;
+  // ---- T-189c. How this store's pay periods are cut.
+  payrollPeriodType: 'monthly' | 'semi_monthly' | 'weekly';
+  semiMonthlyCutoffDay: number;
+  payoutLagDays: number;
 
   lateGraceMinutes: number;
   earlyOutGraceMinutes: number;
