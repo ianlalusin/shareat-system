@@ -71,7 +71,11 @@ describe('T-155 invariant 7 — every column is NOT NULL, so a store cannot be h
     const c = f.seeded;
     expect(Number(c.requiredHoursPerShift)).toBe(9);
     expect(Number(c.halfDayHours)).toBe(5);
-    expect(c.shortShiftHalfDayOt).toBe(false);
+    // ⭐ T-197 / DEF-112. Corrected from `false`, and the correction is the test doing its job.
+    // The raw v1 capture shows all three operating stores running this ON, against a v1 default of
+    // false — so each turned it on deliberately, and v2 shipping `false` reversed live practice
+    // rather than preserving it. Measured on the 560-session corpus: 51.5 days a month.
+    expect(c.shortShiftHalfDayOt).toBe(true);
     expect(c.allowedShiftStartHours).toEqual([9, 10, 11, 14, 15, 16, 17, 18]);
     expect(c.timeMode).toBe('open');
     expect(c.nightDiffEnabled).toBe(true);

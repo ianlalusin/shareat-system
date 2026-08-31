@@ -105,7 +105,19 @@ export const storeAttendanceConfig = pgTable(
     /** v1 default 5. The hours that constitute a half day under the short-shift rule. */
     halfDayHours: numeric('half_day_hours', { precision: 4, scale: 2 }).notNull().default('5'),
     /** v1 default false — opt-in, so no store's pay moved when the rule shipped. */
-    shortShiftHalfDayOt: boolean('short_shift_half_day_ot').notNull().default(false),
+    /**
+     * ⭐ **T-197 / DEF-112 — default TRUE, because the business already runs it that way.**
+     *
+     * The raw v1 capture (no default merge) shows all three operating stores — Lipa, Malvar,
+     * Banay-Banay — carrying `true`, against a v1 default of `false`. Each turned it on
+     * deliberately. v2 shipping `false` did not preserve the status quo, it reversed it: measured
+     * on the 560-session live corpus, 51.5 days a month, ~9.2% of basic pay.
+     *
+     * ⚠️ The default is load-bearing here in a way it usually is not: v2 assumes a zero starting
+     * point, so every store is created fresh and `seedAttendanceConfig` inserts with no explicit
+     * values. A store that wants it off supersedes its config.
+     */
+    shortShiftHalfDayOt: boolean('short_shift_half_day_ot').notNull().default(true),
     /**
      * ⭐ The one non-scalar column, and the reasoning is in the task spec §B.3: landmine #2 forbids
      * MAPS-as-records — a map standing in for a row with fields. A set of small integers has no

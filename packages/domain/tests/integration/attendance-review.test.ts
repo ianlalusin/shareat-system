@@ -24,7 +24,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
   throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} — name must contain "_test".`);
 }
 
-import { APP_ROLE, transaction, type Tx } from '@shareat/db';
+import { APP_ROLE, attendanceConfigRepo, transaction, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import {
   adjudicateDay,
@@ -35,8 +35,10 @@ import {
   recordAdjustment,
   recordPunch,
   seedAttendanceConfig,
+  parseShiftDay,
   seedCanonicalPositions,
   shiftDayRange,
+  supersedeConfig,
   toShiftDay,
 } from '@shareat/domain';
 
@@ -327,5 +329,76 @@ describe('⛔ DEF-113 closed — the decisions finally reach payroll', () => {
        and adj.kind = 'overtime_approved' and adj.superseded_by_adjustment_id is null
       where d.id = ${day.id}`;
     expect(row!.approved).toBe(worked);
+  });
+});
+
+// =====================================================================================
+
+/**
+ * ⭐ **T-197 / DEF-112 — the short-shift rule, now ON by default.**
+ *
+ * The raw v1 capture shows all three operating stores carrying `shortShiftHalfDayOt: true` against
+ * a v1 default of `false`, so each turned it on deliberately. v2 shipped `false`, which reversed
+ * live practice rather than preserving it — 51.5 days a month on the 560-session corpus.
+ *
+ * ⛔ This could not have shipped before T-195: turning it on converts those days into PENDING
+ * overtime, and until the review screen existed nobody could approve any of it.
+ */
+describe('⭐ T-197 — a short shift is a half day, and its remainder waits for a decision', () => {
+  it('a newly seeded store gets the rule ON', async () => {
+    const f = await fixture('t197default');
+    const cfg = await asOrg(f.orgId, (tx) => attendanceConfigRepo.findLive(tx, f.storeId));
+    expect(cfg!.shortShiftHalfDayOt).toBe(true);
+  });
+
+  it('⭐ 7 hours against a 9-hour shift is a HALF DAY plus 2h of pending overtime', async () => {
+    // Ian's model, in his own words: "5hr is set halfday, 9hr for wholeday, a 7 hour duty is
+    // halfday plus provisional 2 hour OT to be approved by manager."
+    const f = await fixture('t197short');
+    const day = await dayFrom(f, at(14), at(21));
+    expect(day.isHalfDay).toBe(true);
+    expect(day.computedMinutes).toBe(300); // the 5h half-day block, not the 7h worked
+    expect(day.pendingOtMinutes).toBe(120); // the remaining 2h, waiting on a manager
+  });
+
+  it('⛔ and that overtime is queued, not silently paid', async () => {
+    const f = await fixture('t197queued');
+    await dayFrom(f, at(14), at(21));
+    const q = await queue(f);
+    expect(q).toHaveLength(1);
+    expect(q[0]!.reasons).toContain('unapproved_overtime');
+    expect(q[0]!.approvedOtMinutes).toBeNull(); // nobody decided — pays NOTHING (DEF-109)
+  });
+
+  it('⭐⭐ approving it through the review path settles the day', async () => {
+    const f = await fixture('t197approve');
+    await dayFrom(f, at(14), at(21));
+    await asOrg(f.orgId, (tx) =>
+      recordAdjustment(tx, f.admin, {
+        employmentId: f.employment.id, shiftDay: DAY,
+        kind: 'overtime_approved', approvedOtMinutes: 120, sessionId: f.sessionId,
+      }),
+    );
+    expect(await queue(f)).toHaveLength(0);
+  });
+
+  it('⚠️ a store that supersedes its config to OFF still gets the old behaviour', async () => {
+    // ⭐ The default decides only the UNCHOSEN case. An explicit choice still wins, and it is
+    // effective-dated rather than an in-place edit — T-155's immutability, which refused this
+    // task's first-draft migration by name.
+    const f = await fixture('t197override');
+    await asOrg(f.orgId, (tx) =>
+      supersedeConfig(tx, f.admin, {
+        storeId: f.storeId,
+        // ⚠️ Strictly AFTER the seed's own 2026-01-01, and before DAY, so it is the policy that
+        // governs the test's shift day. `supersedeConfig` refuses an equal date by name: "two
+        // policies claiming the same day cannot both be the answer."
+        effectiveFrom: parseShiftDay('2026-02-01'),
+        changes: { shortShiftHalfDayOt: false },
+      }),
+    );
+    const day = await dayFrom(f, at(14), at(21));
+    expect(day.isHalfDay).toBe(false);
+    expect(day.computedMinutes).toBe(420); // the full 7h, as before
   });
 });

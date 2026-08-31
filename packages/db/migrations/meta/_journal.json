@@ -659,6 +659,13 @@
       "when": 1795577507084,
       "tag": "0110_t189e_overtime_approval",
       "breakpoints": true
+    },
+    {
+      "idx": 111,
+      "version": "7",
+      "when": 1795663907084,
+      "tag": "0111_t197_short_shift_default_on",
+      "breakpoints": true
     }
   ]
 }
