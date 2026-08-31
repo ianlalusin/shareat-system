@@ -3,7 +3,7 @@
 > **Status:** ✅ **BUILT, 2026-08-30.** Spec written by the Opus planner (session `ianla-f9`, lane B); implemented on the `attendance` lane and verified by `ianla-e7` before merge — typecheck 0, unit 696, integration 1360/1360 against a database created empty for the run, build clean.
 > **Depends on:** T-157 (`adjudicateDay` takes adjustments as an input), T-138 (`resolveActor` —
 > without it every attribution below is theatre), T-121 (`manage_attendance`).
-> **Blocks:** T-166 (the review screen), Phase 5 (a payable day is one a manager has settled).
+> **Blocks:** T-195 (the review screen — ⚠️ specced as "T-166", a number the inventory lane took for Deliveries), Phase 5 (a payable day is one a manager has settled).
 
 ## The shape, and why it is not v1's
 
@@ -83,7 +83,7 @@ isStartDecisionMaterial(day, config): boolean
 
 True only when the two candidate anchors produce **different paid minutes, a different half-day
 verdict, or different late minutes under a `latePolicy` that costs something.** The review queue
-(T-166) surfaces only material days.
+(T-195, ⚠️ specced as "T-166" — the inventory lane took that number for Deliveries) surfaces only material days.
 
 ⭐ **This is an operational-load finding, not a technical one** (discovery 15 §8), and it survives
 even though the computation around it changed. Keep it as a named, tested function rather than a
@@ -151,7 +151,7 @@ a superseded anchor changing the day's paid minutes.
 
 ## Out of scope
 
-**The review UI** — T-166, which has both a queue and a roster to show · **Overtime approval** —
+**The review UI** — T-195 (⚠️ specced as "T-166"; the inventory lane took that number for Deliveries), which has both a queue and a roster to show · **Overtime approval** —
 Phase 5, and its self-approval block is a different control on a different object (discovery 15 §4:
 *"reject/void are deliberately left open since they only move pay DOWN"* — do not generalise the two
 into one guard, per "Intent worth preserving" #5) · **Filing an infraction from a late day** —

@@ -25,6 +25,7 @@ import {
   adjudicateDay,
   createEmployment,
   parseShiftDay,
+  recordAdjustment,
   recordPunch,
   seedAttendanceConfig,
   seedCanonicalPositions,
@@ -92,7 +93,7 @@ async function fixture(hint: string) {
     seedAttendanceConfig(tx, { orgId, storeId: store!.id, effectiveFrom: '2026-01-01' }),
   );
 
-  return { orgId, storeId: store!.id, admin: a, employment, config: cfg };
+  return { orgId, storeId: store!.id, admin: a, adminId: admin!.id, employment, config: cfg };
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 
@@ -107,6 +108,18 @@ const addPunch = (f: Fixture, when: Date, intent: 'in' | 'out' | 'break_start' |
       source: 'online',
     }),
   );
+
+/** A real, live session — every adjustment must name the session it was decided under (T-158 §7.1). */
+async function makeSession(orgId: string, personId: string, storeId: string): Promise<string> {
+  const [cred] = await sql<{ id: string }[]>`
+    insert into person_credentials (person_id, kind, store_id, secret_hash, lookup_hash)
+    values (${personId}, 'pin', ${storeId}, ${uid('h')}, ${uid('l')}) returning id`;
+  const [sess] = await sql<{ id: string }[]>`
+    insert into sessions (token_hash, person_id, credential_id, credential_kind, store_id, expires_at)
+    values (${uid('t')}, ${personId}, ${cred!.id}, 'pin', ${storeId}, now() + interval '12 hours')
+    returning id`;
+  return sess!.id;
+}
 
 const judge = (f: Fixture) =>
   asOrg(f.orgId, (tx) => adjudicateDay(tx, { employmentId: f.employment.id, shiftDay: DAY }));
@@ -185,14 +198,61 @@ describe('T-157 invariant 8 — ⛔ a recompute never promotes needs_review to p
     expect(d.anomalies).toContain('missing_out');
   });
 
+  /**
+   * ⛔ **Rewritten by T-195 / DEF-115, and the rewrite is the point.**
+   *
+   * This test used to force the status with raw SQL — `update attendance_days set status =
+   * 'verified'` — and then assert a recompute preserved it. That passed against the old
+   * `resolveStatus`, which returned `previous` for `verified`/`voided`: a status it could PRESERVE
+   * but never PRODUCE. The raw-SQL setup was the tell. Nothing in the system could make a day
+   * verified, so the test had to fake it, and the invariant it proved was about a mechanism that
+   * was itself the bug.
+   *
+   * The invariant is real and is kept — a recompute must not demote a settled day. It is now
+   * established the way the running app establishes it: a manager's `verify` decision.
+   */
   it('a verified day is not demoted by a recompute either', async () => {
     const f = await fixture('verified');
     await addPunch(f, at(14), 'in');
     await addPunch(f, at(23), 'out');
-    const d = await judge(f);
-    await sql`update attendance_days set status = 'verified' where id = ${d.id}`;
+    await judge(f);
+
+    const sessionId = await makeSession(f.orgId, f.adminId, f.storeId);
+    const { day } = await asOrg(f.orgId, (tx) =>
+      recordAdjustment(tx, f.admin, {
+        employmentId: f.employment.id,
+        shiftDay: DAY,
+        kind: 'verify',
+        sessionId,
+      }),
+    );
+    expect(day.status).toBe('verified');
+
     const again = await judge(f);
     expect(again.status).toBe('verified');
+  });
+
+  it('⛔ DEF-115 — and a VOIDED day is not resurrected by a recompute', async () => {
+    // ⚠️ The sharper half. `adjudicateRange` (the sweep) recomputes without passing adjustments,
+    // so before `adjudicateDay` learned to load them itself, a sweep would have turned a voided
+    // day back into a payable one — and payroll would have paid a day a manager discarded.
+    const f = await fixture('voided');
+    await addPunch(f, at(14), 'in');
+    await addPunch(f, at(23), 'out');
+    await judge(f);
+
+    const sessionId = await makeSession(f.orgId, f.adminId, f.storeId);
+    await asOrg(f.orgId, (tx) =>
+      recordAdjustment(tx, f.admin, {
+        employmentId: f.employment.id,
+        shiftDay: DAY,
+        kind: 'void',
+        reason: 'Duplicate tap',
+        sessionId,
+      }),
+    );
+    const again = await judge(f);
+    expect(again.status).toBe('voided');
   });
 });
 

@@ -3,7 +3,7 @@
 > **Status:** ✅ **BUILT, 2026-08-30.** Spec written by the Opus planner (session `ianla-f9`, lane B); implemented on the `attendance` lane and verified by `ianla-e7` before merge — typecheck 0, unit 696, integration 1360/1360 against a database created empty for the run, build clean.
 > **Depends on:** T-154 (`employments` — somebody to punch against), T-155 (`ShiftDay`), T-138
 > (`sessions` — attribution).
-> **Blocks:** T-157 (adjudication reads punches), T-182 (the ingestor's write target), T-166.
+> **Blocks:** T-157 (adjudication reads punches), T-182 (the ingestor's write target), T-195 (⚠️ specced as "T-166", a number the inventory lane took for Deliveries).
 > **Does NOT depend on T-180.** The Postgres side of the punch is driven by the domain, not by
 > Firestore; the ingestor adapts to whatever the spike finds. If T-180 fails, this table is still right.
 
@@ -185,7 +185,7 @@ the ingestor** — T-182, and `recordPunch` is deliberately transport-agnostic s
 know · **Break allowance arithmetic** — T-157. ⭐ Note that breaks need **no new machinery** here:
 they are punches with a different `assertedIntent`, which is how v2 gets an offline break path that
 v1 does not have at all (discovery 15 §1: *"v1 has **no offline path for breaks at all**"*) ·
-**The missed-clock-out sweep** — T-166 · **Any UI** — schema and service.
+**The missed-clock-out sweep** — see T-195 (⚠️ specced as "T-166"; that number went to the inventory lane's Deliveries, and T-195 §4 declined to build the sweep too — it still wants its own task) · **Any UI** — schema and service.
 
 ## Done when
 

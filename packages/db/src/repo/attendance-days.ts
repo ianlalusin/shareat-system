@@ -4,7 +4,7 @@
  * ⛔ No `update` that sets computed columns on a frozen day exists here — the trigger refuses it,
  * and a repo function offering it would only be a way to find that out at runtime.
  */
-import { and, asc, eq, gte, lte } from 'drizzle-orm';
+import { and, asc, eq, gte, lte, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import {
   attendanceDays,
@@ -128,4 +128,151 @@ export async function listDays(
     )
     .orderBy(asc(attendanceDays.shiftDay));
   return rows as AttendanceDayRow[];
+}
+
+/**
+ * ⭐ **T-195.** A day plus the person it belongs to and the live decisions standing on it.
+ *
+ * `listDays` returns bare rows, which is enough for a recompute and useless for a screen: a
+ * manager needs a NAME, and needs to know whether somebody has already decided this day.
+ */
+export interface ReviewDayRow extends AttendanceDayRow {
+  personName: string;
+  /** ⭐ The live `overtime_approved` decision. `null` means NOBODY HAS DECIDED, which is not the
+   *  same as a decision of zero — the distinction DEF-109's fix rests on. */
+  approvedOtMinutes: number | null;
+  /** Whether a live decision of each kind stands. Drives "already decided" on the screen. */
+  hasStartAnchor: boolean;
+  hasEarlyOut: boolean;
+  hasHalfDayOverride: boolean;
+}
+
+/**
+ * ⭐ **Why a day is waiting on a human.** Returned per row so the screen never shows a list
+ * without a reason — a queue you cannot interpret is the `needs_review` status all over again.
+ */
+export type ReviewReason =
+  | 'needs_review'
+  | 'open'
+  | 'unapproved_overtime'
+  | 'held_zero_credit';
+
+export interface QueuedDay extends ReviewDayRow {
+  reasons: ReviewReason[];
+}
+
+const REVIEW_SELECT = sql`
+  d.*,
+  p.display_name as "personName",
+  adj_ot.approved_ot_minutes as "approvedOtMinutes",
+  (adj_anchor.id is not null) as "hasStartAnchor",
+  (adj_out.id is not null) as "hasEarlyOut",
+  (adj_half.id is not null) as "hasHalfDayOverride"
+`;
+
+/**
+ * ⚠️ Every join is to the LIVE decision only — `superseded_by_adjustment_id is null`. A second
+ * decision replaces the first; it does not add to it, and a screen showing both would show a
+ * manager their own overwritten choice as though it still stood.
+ */
+const REVIEW_JOINS = sql`
+  from attendance_days d
+  join employments e on e.id = d.employment_id
+  join persons p on p.id = e.person_id
+  left join attendance_adjustments adj_ot
+    on adj_ot.employment_id = d.employment_id and adj_ot.shift_day = d.shift_day
+   and adj_ot.kind = 'overtime_approved' and adj_ot.superseded_by_adjustment_id is null
+  left join attendance_adjustments adj_anchor
+    on adj_anchor.employment_id = d.employment_id and adj_anchor.shift_day = d.shift_day
+   and adj_anchor.kind = 'start_anchor' and adj_anchor.superseded_by_adjustment_id is null
+  left join attendance_adjustments adj_out
+    on adj_out.employment_id = d.employment_id and adj_out.shift_day = d.shift_day
+   and adj_out.kind = 'early_out_approved' and adj_out.superseded_by_adjustment_id is null
+  left join attendance_adjustments adj_half
+    on adj_half.employment_id = d.employment_id and adj_half.shift_day = d.shift_day
+   and adj_half.kind = 'half_day_override' and adj_half.superseded_by_adjustment_id is null
+`;
+
+/** Every day in the range, decided or not — the roster half of T-195 §3.1. */
+export async function listDaysForReview(
+  tx: Tx,
+  input: { orgId: string; storeId: string; from: string; to: string; employmentId?: string },
+): Promise<ReviewDayRow[]> {
+  const rows = await tx.execute(sql`
+    select ${REVIEW_SELECT}
+    ${REVIEW_JOINS}
+    where d.org_id = ${input.orgId}
+      and d.store_id = ${input.storeId}
+      and d.shift_day between ${input.from} and ${input.to}
+      ${input.employmentId ? sql`and d.employment_id = ${input.employmentId}` : sql``}
+    order by d.shift_day desc, p.display_name
+  `);
+  return camelDays(rows as unknown as Record<string, unknown>[]);
+}
+
+/**
+ * ⭐ **The queue — the days waiting on a human**, T-195 §3.1.
+ *
+ * ⛔ Deliberately a superset of "what payroll will not pay": a day with unapproved overtime IS
+ * payable and WILL be paid, just not for the overtime — and the overtime vanishing quietly is
+ * exactly what DEF-109 was. Being payable is not the same as being settled.
+ */
+export async function reviewQueue(
+  tx: Tx,
+  input: { orgId: string; storeId: string; from: string; to: string },
+): Promise<QueuedDay[]> {
+  const rows = (await tx.execute(sql`
+    select ${REVIEW_SELECT}
+    ${REVIEW_JOINS}
+    where d.org_id = ${input.orgId}
+      and d.store_id = ${input.storeId}
+      and d.shift_day between ${input.from} and ${input.to}
+      and d.frozen_at is null
+      and (
+        d.status in ('needs_review', 'open')
+        or (d.pending_ot_minutes > 0 and adj_ot.approved_ot_minutes is null)
+        or (d.computed_minutes <= 0 and adj_ot.approved_ot_minutes is null)
+      )
+    order by d.shift_day desc, p.display_name
+  `)) as unknown as Record<string, unknown>[];
+
+  return camelDays(rows).map((d) => {
+    const reasons: ReviewReason[] = [];
+    if (d.status === 'needs_review') reasons.push('needs_review');
+    if (d.status === 'open') reasons.push('open');
+    // ⭐ Held is reported INSTEAD of plain unapproved overtime when the day credits nothing:
+    // both are true, but "this day pays nothing at all until you decide" is the sharper fact.
+    if (d.computedMinutes <= 0 && d.approvedOtMinutes === null) reasons.push('held_zero_credit');
+    else if (d.pendingOtMinutes > 0 && d.approvedOtMinutes === null) {
+      reasons.push('unapproved_overtime');
+    }
+    return { ...d, reasons };
+  });
+}
+
+/** One day, by id, for the decision surface. */
+export async function findDayForReview(
+  tx: Tx,
+  input: { orgId: string; dayId: string },
+): Promise<ReviewDayRow | undefined> {
+  const rows = (await tx.execute(sql`
+    select ${REVIEW_SELECT}
+    ${REVIEW_JOINS}
+    where d.org_id = ${input.orgId} and d.id = ${input.dayId}
+  `)) as unknown as Record<string, unknown>[];
+  return camelDays(rows)[0];
+}
+
+/**
+ * ⚠️ `d.*` comes back snake_case because it bypasses Drizzle's column mapping. Mapping it here,
+ * once, beats three call sites each remembering which half of the row is which.
+ */
+function camelDays(rows: Record<string, unknown>[]): ReviewDayRow[] {
+  return rows.map((r) => {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(r)) {
+      out[k.includes('_') ? k.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase()) : k] = v;
+    }
+    return out as unknown as ReviewDayRow;
+  });
 }

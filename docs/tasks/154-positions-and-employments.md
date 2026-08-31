@@ -213,7 +213,7 @@ to a staffer's rate are versioned, never overwritten, so a past payslip can be r
 — Phase 7 performance scoring, and it depends on the POS seam · **Infractions and performance** —
 Phase 7 · **Leave** — T-165, in this phase · **`person_credentials` for these people** — T-138 built
 the table; enrolling a clock credential is T-185 · **Any UI** — this task is schema and service.
-The roster screen arrives with T-166, which has something to show.
+The roster screen arrives with T-195, which has something to show. (⚠️ Originally promised as "T-166"; the inventory lane took that number for Deliveries.)
 
 ## Done when
 

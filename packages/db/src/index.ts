@@ -49,7 +49,13 @@ export type { OwnerRow, OwnerPosition, DrawingCloseRow, AgedReceivable } from '.
 export type { PositionRow, EmploymentRow, RosterRow } from './repo/employment';
 export type { AttendanceConfigRow } from './repo/attendance-config';
 export type { AttendancePunchRow } from './repo/attendance-punches';
-export type { AttendanceDayRow } from './repo/attendance-days';
+export type {
+  AttendanceDayRow,
+  /** T-195 — the review screen's read model. */
+  ReviewDayRow,
+  ReviewReason,
+  QueuedDay,
+} from './repo/attendance-days';
 export type { AttendanceAdjustmentRow } from './repo/attendance-adjustments';
 export type { ClockTerminalRow } from './repo/clock-terminals';
 export type { LiabilityRow, LiabilityPosition, LiabilityMovement } from './repo/liabilities';

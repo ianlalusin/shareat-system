@@ -16,6 +16,7 @@
  */
 import { authorize, type Actor } from '@shareat/auth';
 import {
+  attendanceAdjustmentsRepo,
   attendanceDaysRepo,
   attendancePunchesRepo,
   employmentRepo,
@@ -110,11 +111,25 @@ export async function adjudicateDay(tx: Tx, input: AdjudicateInput): Promise<Att
     shiftDay: input.shiftDay,
   });
 
+  // ⛔ **A recompute LOADS the live decisions rather than trusting the caller to pass them.**
+  //
+  // They used to be a parameter that only `recordAdjustment` ever filled, because it had just
+  // written one. Every other caller passed nothing — including `adjudicateRange`, the sweep — so a
+  // recompute silently dropped every standing decision on the day. With DEF-115's fix driving the
+  // day's STATUS from those decisions, that would have let a sweep **un-void a day a manager had
+  // discarded, and payroll would pay it again**.
+  //
+  // ⚠️ The parameter stays only as an explicit override for a caller that has already computed
+  // them inside the same transaction; `??` means forgetting it is now harmless rather than
+  // destructive. A default of `{}` was the footgun.
+  const adjustments =
+    input.adjustments ?? (await toDayAdjustments(tx, input.employmentId, input.shiftDay));
+
   const result = computeDay({
     shiftDay: input.shiftDay,
     punches: punches.map(toDayPunch),
     policy: policyFromConfig(config),
-    adjustments: input.adjustments,
+    adjustments,
   });
 
   const ins = punches.filter((p) => p.assertedIntent === 'in');
@@ -149,7 +164,7 @@ export async function adjudicateDay(tx: Tx, input: AdjudicateInput): Promise<Att
     holidayType: isHoliday ? (input.holidayType ?? 'regular') : null,
     holidayMinutes: isHoliday ? result.computedMinutes : 0,
     pendingOtMinutes: result.pendingOtMinutes,
-    status: resolveStatus(result.anomalies, punches, existing?.status),
+    status: resolveStatus(result.anomalies, punches, existing?.status, adjustments.managerDecision),
     anomalies: result.anomalies,
     explain: result.explain,
     computedFromPunchCount: punches.length,
@@ -171,8 +186,19 @@ function resolveStatus(
   anomalies: readonly string[],
   punches: readonly AttendancePunchRow[],
   previous: AttendanceDayStatus | undefined,
+  managerDecision: 'verified' | 'voided' | undefined,
 ): AttendanceDayStatus {
-  if (previous === 'voided' || previous === 'verified') return previous;
+  // ⛔ **DEF-115 — the manager's live decision decides, and it OUTRANKS everything below.**
+  //
+  // This used to read `if (previous === 'voided' || previous === 'verified') return previous`,
+  // which preserved those statuses but could never PRODUCE one — nothing anywhere wrote them. So
+  // T-158's §7 promise (*"a voided day contributes nothing to payroll"*) was never kept: a voided
+  // day stayed `computed` and `payableDays` paid it in full.
+  //
+  // ⭐ Driving it from the live adjustment is also strictly better than the sticky `previous`:
+  // superseding or removing the decision now lets the day fall back to its computed status,
+  // instead of a status that could never be undone once set.
+  if (managerDecision) return managerDecision;
   if (previous === 'needs_review') return 'needs_review';
 
   if (anomalies.some((a) => BLOCKING_ANOMALIES.has(a))) {
@@ -202,6 +228,34 @@ export async function adjudicateRange(
     out.push(
       await adjudicateDay(tx, { employmentId: p.employmentId, shiftDay: parseShiftDay(p.shiftDay) }),
     );
+  }
+  return out;
+}
+
+/** The live decisions, shaped for the computation. */
+export async function toDayAdjustments(
+  tx: Tx,
+  employmentId: string,
+  shiftDay: ShiftDay,
+): Promise<DayAdjustments> {
+  const live = await attendanceAdjustmentsRepo.listLive(tx, { employmentId, shiftDay });
+  const out: DayAdjustments = {};
+  for (const a of live) {
+    if (a.kind === 'start_anchor' && a.chosenAnchorMinute !== null) {
+      out.startAnchorMinute = a.chosenAnchorMinute;
+    }
+    if (a.kind === 'early_out_approved' && a.effectiveOutMinute !== null) {
+      out.earlyOutApprovedToMinute = a.effectiveOutMinute;
+    }
+    if (a.kind === 'half_day_override' && a.isHalfDay !== null) {
+      out.halfDayOverride = a.isHalfDay === 'true';
+    }
+    // ⛔ DEF-115. A void OUTRANKS a verify: the two cannot both stand as live decisions today,
+    // but if that ever changes, "discard this day" is the safer of the two to honour.
+    if (a.kind === 'void') out.managerDecision = 'voided';
+    else if (a.kind === 'verify' && out.managerDecision !== 'voided') {
+      out.managerDecision = 'verified';
+    }
   }
   return out;
 }

@@ -28,6 +28,7 @@ import {
   recordAdjustment,
   recordPunch,
   seedAttendanceConfig,
+  toDayAdjustments,
   seedCanonicalPositions,
   shiftDayRange,
   toShiftDay,
@@ -348,8 +349,25 @@ describe('T-158 invariants 8 & 9 — the freeze, and what "verified" is allowed 
 
   it('a clean day CAN be verified', async () => {
     const f = await cleanDay('verify-ok');
-    const { adjustment } = await adjust(f, { kind: 'verify' });
+    const { adjustment, day } = await adjust(f, { kind: 'verify' });
     expect(adjustment.kind).toBe('verify');
+    // ⛔ DEF-115. This assertion is the one that was missing. The test above it recorded the
+    // adjustment ROW and stopped, so §7's promise — "verify moves the day to verified" — went
+    // unkept and unnoticed: nothing anywhere wrote the status, and `verified` was unreachable.
+    expect(day.status).toBe('verified');
+  });
+
+  it('⭐ DEF-115 — and the verification SURVIVES a later recompute', async () => {
+    const f = await cleanDay('verify-sticky');
+    await adjust(f, { kind: 'verify' });
+    const again = await asOrg(f.orgId, async (tx) =>
+      adjudicateDay(tx, {
+        employmentId: f.employment.id,
+        shiftDay: DAY,
+        adjustments: await toDayAdjustments(tx, f.employment.id, DAY),
+      }),
+    );
+    expect(again.status).toBe('verified');
   });
 });
 
@@ -412,9 +430,19 @@ describe('T-158 invariant 11 — a voided day contributes nothing and its punche
   it('void records the decision and leaves the evidence alone', async () => {
     const f = await cleanDay('void');
     const before = await sql`select id from attendance_punches where employment_id = ${f.employment.id}`;
-    const { adjustment } = await adjust(f, { kind: 'void', reason: 'Duplicate of the day before' });
+    const { adjustment, day } = await adjust(f, { kind: 'void', reason: 'Duplicate of the day before' });
     expect(adjustment.kind).toBe('void');
     const after = await sql`select id from attendance_punches where employment_id = ${f.employment.id}`;
     expect(after).toHaveLength(before.length);
+
+    // ⛔ **DEF-115 — this half of invariant 11 lived in the test's NAME and not in its body.**
+    // "A voided day contributes nothing to payroll" was asserted nowhere, and it was false: the
+    // day stayed `computed`, which is in `PAYABLE_DAY_STATUSES`, so a manager could void a day
+    // and payroll would pay it in full anyway.
+    expect(day.status).toBe('voided');
+    const [payable] = await sql<{ n: number }[]>`
+      select count(*)::int as n from attendance_days
+      where id = ${day.id} and status in ('computed', 'verified')`;
+    expect(payable!.n).toBe(0);
   });
 });

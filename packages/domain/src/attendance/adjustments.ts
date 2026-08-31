@@ -124,10 +124,12 @@ export async function recordAdjustment(
     decidedByPersonId: actor.personId,
   });
 
+  // ⚠️ No `adjustments` argument: `adjudicateDay` loads the live decisions itself, including the
+  // one just inserted above (same transaction). Passing them here as well was the last remaining
+  // caller of a parameter whose whole purpose was to be forgotten by everyone else — see DEF-115.
   const day = await adjudicateDay(tx, {
     employmentId: input.employmentId,
     shiftDay: input.shiftDay,
-    adjustments: await toDayAdjustments(tx, input.employmentId, input.shiftDay),
   });
 
   return { adjustment, day };
@@ -139,28 +141,6 @@ export async function listAdjustments(
   input: { employmentId: string; shiftDay: ShiftDay },
 ): Promise<AttendanceAdjustmentRow[]> {
   return attendanceAdjustmentsRepo.listAll(tx, input);
-}
-
-/** The live decisions, shaped for the computation. */
-export async function toDayAdjustments(
-  tx: Tx,
-  employmentId: string,
-  shiftDay: ShiftDay,
-): Promise<DayAdjustments> {
-  const live = await attendanceAdjustmentsRepo.listLive(tx, { employmentId, shiftDay });
-  const out: DayAdjustments = {};
-  for (const a of live) {
-    if (a.kind === 'start_anchor' && a.chosenAnchorMinute !== null) {
-      out.startAnchorMinute = a.chosenAnchorMinute;
-    }
-    if (a.kind === 'early_out_approved' && a.effectiveOutMinute !== null) {
-      out.earlyOutApprovedToMinute = a.effectiveOutMinute;
-    }
-    if (a.kind === 'half_day_override' && a.isHalfDay !== null) {
-      out.halfDayOverride = a.isHalfDay === 'true';
-    }
-  }
-  return out;
 }
 
 /**

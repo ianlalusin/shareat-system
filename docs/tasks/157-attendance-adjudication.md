@@ -2,7 +2,7 @@
 
 > **Status:** ✅ **BUILT, 2026-08-30.** Spec written by the Opus planner (session `ianla-f9`, lane B); implemented on the `attendance` lane and verified by `ianla-e7` before merge — typecheck 0, unit 696, integration 1360/1360 against a database created empty for the run, build clean.
 > **Depends on:** T-155 (`ShiftDay`, config), T-156 (`attendance_punches`).
-> **Blocks:** T-158, T-166, and **all of Phase 5** — payroll multiplies this task's output by a rate.
+> **Blocks:** T-158, T-195 (⚠️ specced as "T-166", a number the inventory lane took for Deliveries), and **all of Phase 5** — payroll multiplies this task's output by a rate.
 > ⚠️ **This is the highest-risk task in the phase.** It is a re-derivation of the densest business
 > logic in v1, and discovery 15 §3 says so directly: *"read `shift-boundaries.ts`, `workday.ts` and
 > `session-hours.ts` **in full** before touching any of it in v2; the doc comments in these three
@@ -241,7 +241,7 @@ materiality gate are that task's · **The C1 inverted-window guard** — it defe
 created; noted here so it is not lost · **Overtime approval and any pay figure** — Phase 5. This task
 records `pendingOtMinutes` and stops · **The late-policy money and the infraction filing** — Phase 5
 and Phase 7 respectively; `latePolicy` is read only to know whether to record minutes · **The missed
-clock-out sweep** — T-166 · **The holiday calendar's CRUD** — this task consumes a dated list; the
+clock-out sweep** — see T-195 (⚠️ specced as "T-166"; T-195 §4 declined to build the sweep too — it still wants its own task) · **The holiday calendar's CRUD** — this task consumes a dated list; the
 management screen is Phase 7 · **Fixed-mode shift templates** — T-155 Out of scope, and no store runs
 fixed mode.
 

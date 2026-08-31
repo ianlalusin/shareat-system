@@ -19,6 +19,7 @@ const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
       { href: '/sales-days', label: 'Sales days' },
       { href: '/remittance', label: 'Remittance' },
       { href: '/till', label: 'Till custody' },
+      { href: '/attendance', label: 'Attendance' },
       { href: '/payroll', label: 'Payroll' },
       { href: '/expenses', label: 'Expenses' },
       { href: '/cash-requests', label: 'Cash requests' },

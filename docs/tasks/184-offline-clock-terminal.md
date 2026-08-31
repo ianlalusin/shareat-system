@@ -36,7 +36,7 @@ never once been checked.
 **Modify:** `apps/erp/package.json` (the `firebase` client SDK) · `.env.example`.
 **Out of bounds:** the ZK9500 fingerprint plugin (D2 parked) · face (online-only, and not on this
 path at all) · enrolment screens (T-185 is the domain; its UI is not in Phase 4's gate) · the
-missed-clock-out sweep (T-166).
+missed-clock-out sweep (⚠️ specced as "T-166"; that number went to the inventory lane's Deliveries — see T-195 §4, which also declined to build the sweep, leaving it still needing its own task).
 
 ---
 

@@ -89,6 +89,16 @@ export interface DayAdjustments {
   earlyOutApprovedToMinute?: number;
   /** Force a half day on or off, overriding the automatic rule. */
   halfDayOverride?: boolean;
+  /**
+   * ⛔ **DEF-115.** The manager's sign-off or discard, as an INPUT like every other decision.
+   *
+   * T-158 §7 promised *"`verify` moves the day to `verified`"* and *"`void` moves it to `voided`.
+   * A voided day contributes nothing to payroll"* — and nothing ever wrote either status, so a
+   * voided day stayed `computed` and **was paid in full**. Carried here rather than patched onto
+   * the row afterwards, because that is the architecture the whole adjustment table rests on:
+   * decisions are attributed inputs, never patches on an output.
+   */
+  managerDecision?: 'verified' | 'voided';
 }
 
 export interface DayComputation {
