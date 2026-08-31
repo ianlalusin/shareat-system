@@ -1,6 +1,7 @@
 # T-198 — The clock mirror stops publishing the entire attendance history
 
-> **Status:** specced 2026-08-31 · closes **DEF-118** · Ian, 2026-08-31: *"2. fix it"*
+> **Status:** ✅ **BUILT AND COMMITTED 2026-08-31** (`05ee465`). DEF-118 fixed. Migration 0112. 24 of 24 publishes measured were historical, and nothing read the feed at all. TDD-verified by reverting the trigger first.
+> Specced 2026-08-31 · closes **DEF-118** · Ian, 2026-08-31: *"2. fix it"*
 > **Depends on:** T-181 (`mirror_outbox`, the publisher)
 > **Feeds:** T-200 (the clock screen, which becomes the first thing that ever READS this feed)
 

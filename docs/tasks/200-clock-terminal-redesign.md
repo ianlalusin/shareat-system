@@ -1,6 +1,7 @@
 # T-200 — The clock terminal, redesigned around what the staffer actually does
 
-> **Status:** specced 2026-08-31 · Ian, 2026-08-31: *"3. plan well and build a better one then.
+> **Status:** ✅ **BUILT AND COMMITTED 2026-08-31** (`4242f1f`). Hot-set item 4 rendered at last; the in/out toggle removed and the intent derived. Verified live against the Firebase emulator. ⚠️ Breaks parked at Ian’s instruction.
+> Specced 2026-08-31 · Ian, 2026-08-31: *"3. plan well and build a better one then.
 > your call. park the break dont build yet."*
 > **Depends on:** T-198 (the day feed is now scoped — ⛔ and §6 depends on that being true)
 > **Closes:** the on-shift-roster and punch-feed halves of **DEF-116**

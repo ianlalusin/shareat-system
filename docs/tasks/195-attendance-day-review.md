@@ -1,6 +1,7 @@
 # T-195 — The attendance day review screen
 
-> **Status:** specced 2026-08-31 · fixes **DEF-113** · chosen by Ian from the item-1 assessment
+> **Status:** ✅ **BUILT AND COMMITTED 2026-08-31** (`d448402`). DEF-113 fixed, and DEF-115 found by building it. `recordAdjustment` had no caller outside tests; the review screen was overwritten by a task-number collision.
+> Specced 2026-08-31 · fixes **DEF-113** · chosen by Ian from the item-1 assessment
 > **⭐ This task has been promised four times under a number that no longer means it.** T-154,
 > T-156, T-157 and T-158 all name **T-166** as "the review screen"; the inventory lane shipped
 > **T-166 as *Deliveries and receiving***. The screen was not descoped — it was **overwritten**.

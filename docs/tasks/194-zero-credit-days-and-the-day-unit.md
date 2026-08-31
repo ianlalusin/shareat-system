@@ -1,6 +1,7 @@
 # T-194 — A day that credits nothing must pay nothing
 
-> **Status:** specced 2026-08-31 · fixes **DEF-111** · chosen by Ian from the item-1 assessment
+> **Status:** ✅ **BUILT AND COMMITTED 2026-08-31** (`cee26f1`). DEF-111 fixed. A zero-credit day paid a full daily rate; 31 of 560 live sessions, three under five minutes. Held, not frozen, so the overtime survives.
+> Specced 2026-08-31 · fixes **DEF-111** · chosen by Ian from the item-1 assessment
 > **Depends on:** T-189 (`computePay`, `payableDays`, the freeze), T-157 (`computeDay`'s three bands)
 > **Blocks:** nothing. ⭐ **Deliberately ahead of T-195** — this is wrong money going out *today*,
 > in both `shortShiftHalfDayOt` states, and it does not need the review screen to be correct.

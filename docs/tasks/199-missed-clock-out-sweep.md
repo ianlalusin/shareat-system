@@ -1,6 +1,7 @@
 # T-199 — The missed clock-out sweep, and the alarm that notices it stopped
 
-> **Status:** specced 2026-08-31 · closes **DEF-119**, and the sweep half of **DEF-116**
+> **Status:** ✅ **BUILT AND COMMITTED 2026-08-31** (`93408a7`). DEF-119 fixed and the sweep half of DEF-116 closed. Migration 0114. ⛔ The systemd timer is committed to docs/ops/ and INSTALLING IT ON THE DROPLET IS STILL TO DO.
+> Specced 2026-08-31 · closes **DEF-119**, and the sweep half of **DEF-116**
 > Ian, 2026-08-31: *"1. lets do it"* — the sweep **and** the staleness alarm
 > **Depends on:** T-140 (the scheduler pattern, `system` principal, `scheduler_runs`), T-157
 > (`computeDay`), T-195 (`/attendance` — where a swept day lands)

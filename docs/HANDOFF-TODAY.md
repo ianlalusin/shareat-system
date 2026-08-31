@@ -2,145 +2,132 @@
 
 ## Where things stand
 
-**Phase 5 (payroll) opened, and the first slice shipped: this business now has a payslip.** T-189
-computes pay from `attendance_days`, nets what a person already drew against `1230`, posts
-`Dr 6100 / Cr 1230 / Cr cash`, and freezes the days it paid. Four follow-ups the same day made
-every premium and every date a per-store setting.
+**Seven tasks shipped, and five of them were defects nobody knew about.** The session began as
+*"turn on one payroll flag"* and the flag turned out to be the least of it: probing before building
+found that **payroll paid a full day for a four-minute shift**, that **a manager could void a day
+and payroll paid it anyway**, and that **the entire manager-adjustment layer had no caller**.
 
-Before that, the three lanes were consolidated into one `main` (attendance, inventory, T-137), and
-**T-186** (till custody) and **T-188** (supplier master) shipped.
+⭐ **Phase 5 is 13 of 17 built.** The one thing that is *code-complete but not live* is the
+attendance sweep: its systemd timer sits in `docs/ops/` and **nobody has installed it on the
+droplet.** That is the single most important line in this document.
 
-⚠️ **Statutory contributions and withholding are NOT built, and the blocker is data, not effort** —
-see "Do not decide these alone".
-
-## Gates at `2ca399e`
+## Gates at `93408a7`
 
 ```
-typecheck  ✅ 0 errors
-unit       ✅ 856 passed, 1 skipped (857)
-integration ✅ 1731 passed (1731)
-build      ✅ clean
+typecheck   ✅ exit 0
+unit        ✅ 872 passed, 1 skipped (873)
+integration ✅ 1778 passed (1778)
+build       ✅ exit 0, dev server stopped first
 ```
 
-All four run on the committed tree. Port 9008 free.
+All four run on the committed tree, exit codes checked rather than output skimmed.
 
 ## What happened this session
 
-### Payroll — Phase 5 opened by disproving what it was going to port
-
-A read-only probe of the **live v1 data** before any design:
+### ⛔ Five defects, and four of them are one family
 
 | | |
-|---|---:|
-| payroll runs across 7 stores | **0** — `payrollRuns` collection never created |
-| payslips ever produced | **0** |
-| staff with an SSS / PhilHealth / Pag-IBIG / TIN number | **0 of 126** |
-| `payType` filled | 51, and **every one is `daily`** |
-| `salaryAdvances` | **614** — the real staff-money process |
+|---|---|
+| **DEF-111** | ⛔ **A day crediting ZERO minutes was paid a FULL daily rate.** `unitsFor` read only `isHalfDay`, and `compute-day.ts:557` says *"there is NO DAY"* by zeroing the minutes while leaving that flag false. **31 of 560 live sessions; three under five minutes.** Fixed in **T-194** — and such a day is now *held*, not paid-and-frozen, because freezing it would put its overtime permanently beyond reach |
+| **DEF-113** | ⛔ **`recordAdjustment` had NO CALLER outside tests.** Six adjustment kinds shipped a month ago and nothing invoked them, so overtime could never be approved and a `needs_review` day could never be settled by anything. Root cause: **a task-number collision** — four specs promised the screen as "T-166" and the inventory lane shipped T-166 as *Deliveries*. Fixed in **T-195** |
+| **DEF-115** | ⛔ **Voiding a day did nothing; payroll paid it in full.** Found by *building* T-195. `verify` was equally dead, so a flagged day could never be rescued. ⭐ **The cause was the test**: invariant 11 is titled *"a voided day contributes nothing"* and asserted only that the adjustment row was written. *The half of the invariant that involved money lived in the test's name, not its body* |
+| **DEF-118** | ⚠️ **The clock mirror published every attendance day ever.** 24 of 24 measured were historical; payroll's freeze doubled it. ⭐ And **nothing read the feed at all**. Fixed in **T-198** |
+| **DEF-119** | ⛔ **`halfDayOnMissingTap` was a column nothing read.** All three v1 stores have it ON, so a forgotten tap-out paid **half a day there and ₱0 here** — an underpayment nobody reports because nobody can see it. Fixed in **T-199** |
 
-v1's payroll is three shipped slices, ~4,200 lines and a verified PH-2024 tax engine that **has
-never paid anybody**. So the plan is not a port. `docs/plans/phase-5-payroll.md` records what the
-evidence says to leave out and exactly what triggers porting the rest.
+⭐ **DEF-109, 111, 113, 115, 119 are one shape**: stored intent that the consuming layer never
+reads. Five occurrences in two days. **If you find a comment addressed to a future module, check
+that module actually reads it.**
 
-**Shipped:** `pay_rates` (effective-dated, append-only, **no `effective_to`** to drift), `pay_runs`,
-`payslips`; the period-overlap guard as an `EXCLUDE USING gist` per bible §16.6; and the FK **T-157
-deliberately left open** for this task. Migration `0106` opens one narrow door in T-157's freeze
-trigger so a mis-posted run can be voided — without it the days were stranded for ever.
+### What shipped
 
-**Then, from Ian, the same day** — every premium and date became a per-store setting:
-overtime as `×1.25` **or a flat amount per hour**; hours on a **25/50 ladder**; **three** holiday
-multipliers keyed to `holidayType`; periods monthly / semi-monthly / weekly; payday as a lag **or
-fixed days of the month**.
-
-### ⛔ DEF-109 — the defect worth reading
-
-`attendance_days.pending_ot_minutes` carries a warning written by the attendance lane and addressed
-to Phase 5: *"Recorded, never paid here — the approval gate is Phase 5, and auto-paying it is
-exactly what the pending status exists to prevent."*
-
-**T-189 read it straight into `otMinutes` and paid it.** No test caught it — the tests were written
-by the same author under the same misunderstanding. Fixed by `0110`: a sixth adjustment kind
-`overtime_approved`; pay is `min(approved, worked)`; **nobody-decided pays nothing**; and unapproved
-overtime is now **surfaced** on `/payroll` rather than silently dropped.
-
-### T-186 · T-188 · the consolidation
-
-- **T-186 till custody** — grain is *till × handover*, not attendance's *person × day*. A short
-  charges `1230` to a named person; **an over posts nothing at all** (tip box), asserted by a test.
-  Found **DEF-104**.
-- **T-188 supplier master** — the probe disproved the reason it was picked (`bankAccounts` filled on
-  **3.9%**). The real gap was **DEF-106**: a supplier could be created and never *edited*.
-- **The v1→v2 parity section** on `docs/ROADMAP.html` — every field of six v1 documents classified
-  *carried / moved / derived / no home*.
+| Task | |
+|---|---|
+| **T-194** | Zero-credit days pay nothing and are **held**, not frozen |
+| **T-195** | `/attendance` — the review queue and the decision surface. Every reason stated on the row |
+| **T-197** | `shortShiftHalfDayOt` **on by default** — all three live stores already ran it that way, so v2's `false` was *reversing* practice, not preserving it. Worth **51.5 days a month, ~9.2% of basic pay** |
+| **T-198** | The mirror's day feed scoped to two days |
+| **T-199** | The missed clock-out sweep + `openShiftsStale`, the alarm that works when the sweep is dead |
+| **T-200** | The clock terminal rebuilt: no in/out toggle, intent derived, on-shift roster and today's feed rendered at last, per-person 30s cooldown |
+| **T-196** | Draft expense on a pending invoice — specced by a peer session, implemented here by a Sonnet subagent |
 
 ### Where the decisions were recorded
 
-| Decision | Recorded in |
+| Decision (Ian's words) | Recorded in |
 |---|---|
-| OT ×1.25 **or** flat amount; 25/50 ladder; late exact | `docs/tasks/189-*.md` §13, migration `0107` |
-| Holiday configurable — 1.3 / 1.5 / 2, **per type** | §13.3, `0107` |
-| Payroll dates configurable | §14, `0108` |
-| Payout date configurable | migration `0109` |
-| "Undertime is provisional OT — 7h = half day + 2h to approve" | §15.2, `0110` |
-| DEF-104, 105, 106, 107, 108, 109, 110 | `docs/DEFECTS-REGISTER.md` |
-| Phase 5 exit gate **rewritten** (the old one was unachievable) | `docs/ROADMAP.html` |
+| *"1 turn on and test it"* | `docs/tasks/197-*.md`, migration `0111` |
+| *"2. fix it"* (the mirror) | `docs/tasks/198-*.md`, migration `0112` |
+| *"3. plan well and build a better one. your call. park the break"* | `docs/tasks/200-*.md` §3 and §8 |
+| *"1. lets do it"* (sweep **and** alarm) | `docs/tasks/199-*.md`, `docs/ops/README.md` |
+| *"lastly do the t196 too"* | implemented; spec is the peer session's, unamended |
+| DEF-111 → 119 | `docs/DEFECTS-REGISTER.md` |
 
-⚠️ **Roadmap: updated.** Phase 5 wave added, T-186/188/189/189b–e carded, masthead and gate numbers
-refreshed, suppliers parity row corrected 67% → 89%.
+⚠️ **Roadmap: updated.** All seven cards added and marked done; the Phase 5 chip corrected from
+*"1 of 5 built"* to **13 of 17**; masthead gates refreshed.
+
+⛔ **Nothing needing a bible amendment came up.** No `PROJECT_BIBLE.md` §13 row was required and
+none was written — the decisions above are all task-level.
 
 ## Pick up here
 
-1. ⭐ **Turn on `shortShiftHalfDayOt` for the stores that want Ian's model.** It defaults to
-   `false` (opt-in, as in v1), so *"a 7 hour duty is halfday plus provisional 2h OT"* is **inert
-   until somebody sets it**. One column, per store, and it changes pay — so it is Ian's call, not
-   a default to flip quietly.
-2. **A settings screen for payroll configuration.** Overtime mode, the three holiday multipliers,
-   period type, cutoff day and payout days are all settings with **no UI** — `/payroll` *shows*
-   them all, so nothing is invisible, but changing one needs SQL. Small, well-bounded task.
-3. **T-191, 13th-month pay** — a confirmed ADD (bible row 90), and `6140` has existed since Phase 1
+1. ⛔ **INSTALL THE SWEEP TIMER ON THE DROPLET.** `docs/ops/README.md` has the four commands. The
+   job is written, tested and committed and **it is not running.** ⚠️ Three jobs in this business's
+   history shipped and were never scheduled — v1's depreciation (two months, ₱35,483.98/month
+   unbooked, found by an audit), POS's holiday calendar, POS's weather job. **This is that step.**
+   `systemctl enable --now` — *without* `--now` it arms for the next boot and not for today.
+2. **The payroll settings screen.** Overtime mode, three holiday multipliers, period type, cutoff
+   day, payout days, and now the sweep's cut-off hour and max-shift cap — **all of them need SQL to
+   change.** `/payroll` displays them, so nothing is invisible; nothing is editable either.
+3. **T-191, 13th-month pay** — a confirmed ADD (bible row 90); `6140` has existed since Phase 1
    with nothing posting to it.
 
 ## Do not decide these alone — they are Ian's
 
-| Question | The recommendation already on the table |
+| Question | The recommendation on the table |
 |---|---|
-| **Statutory is blocked on DATA, not effort** — 0 of 126 staff have any SSS/PhilHealth/Pag-IBIG/TIN number | Someone must enter them before T-190 can be built. ⚠️ This is also a live compliance exposure independent of software: the contributions are mandatory whether or not the ERP knows the numbers |
-| **The 24-minute rule** — under 25 minutes of overtime now pays nothing | Ian set the 25/50 thresholds explicitly. If stores routinely run 20 minutes over, the fix is how overtime is *approved*, not a quieter threshold |
-| **`shortShiftHalfDayOt` default** | Left `false`. Turning it on moves pay for every short shift |
-| **DEF-105** — `remittance.shortage` is a documented posting pattern nothing implements | ~1 hour. A variance can be marked "charged" against a person while the ledger shows no receivable |
-| **DEF-108** — an owner's drawing cap is not freed by the payroll that recovers it | Belongs to the owners lane; the scoping it would relax is what stopped a ₱600 staff shortage eating a drawing limit |
-| **DEF-110 — the late/early-out grace improvement Ian asked for is NOT built** | ⚠️ Stated plainly: **v2 has no late charge at all yet**, so there is nothing for a grace to apply to. The v1 defect is recorded (v1 applies the same grace as a *cutoff* in one path and a *deduction* in another — 20 minutes late charges pay for 20 and files an infraction for 5). The fix is named: one function, and cutoff-vs-deduct as a setting defaulting to deduct. It needs the late charge to land first, which changes the payslip identity and wants its own task |
+| ⛔ **Statutory is blocked on DATA, not effort** | 0 of 126 staff have an SSS/PhilHealth/Pag-IBIG/TIN number. Somebody must enter them before T-190 can exist. ⚠️ Also a live compliance exposure independent of software |
+| **Breaks are unreachable** | Parked at Ian's instruction. The schema has `break_start`/`break_end` and `computeDay` deducts break excess — the rules exist and no button reaches them |
+| **`/clock` cannot run on a dev machine** | `NEXT_PUBLIC_FIREBASE_PROJECT_ID` and `_API_KEY` are **empty** in `.env.local`. T-200 was verified against the Firebase emulator instead. Filling them, or documenting the emulator path in `HANDOFF.md`, is a small job nobody owns |
+| **DEF-114** | DEF-087 says Malvar has 3 config keys and Banay-Banay 1; the raw capture shows **23 and 21**, with store-specific values. One of them is wrong. ⛔ Do not migrate either store's config until it is settled |
+| **DEF-116's remainder** | The stale `dayFeed` docs already in Firestore. Harmless (T-200 queries by date) but a destructive one-off to clean, so it needs an explicit go-ahead and a counted dry run |
+| **DEF-117** | Not mine — a peer session's. `closeReadiness` can report a period ready to close while pending invoices hold spend outside it |
 
 ## Traps that have actually bitten — live in this area now
 
-- ⛔ **A migration journal must keep `when` rising with `idx`.** DEF-039's damage is **permanent** on
-  any database migrated during a broken window — `migrate` cannot repair it (**DEF-104**). After any
-  timestamp correction, check every existing database; the remedy is drop and recreate.
-- ⛔ **`attendance_days` is DERIVED from punches.** `recordAdjustment` re-adjudicates in the same
-  transaction, so a fixture that inserts days directly and then calls the service will have its
-  days recomputed to zero.
-- ⚠️ **A CHECK constraint may not contain a subquery.** `ARRAY(SELECT generate_series(...))` fails
-  the whole migration; use `ALL(...)`.
-- ⚠️ **`${INPUT} w-24`** puts `w-full` and `w-24` in one class string and `w-full` wins — the form
-  stacks full-width while every test stays green. **Tests assert props, never geometry.**
-- ⚠️ **A comment addressed to a future module is only as good as that module reading it** (DEF-109).
+- ⛔ **Task numbers collide.** T-166 cost a month. **And it happened again today**: a peer session
+  and I both took `T-196` and `DEF-117` within three minutes. Both were caught before either
+  committed. ⚠️ **Two agents share this one working tree — `ListAgents` before you start.**
+- ⛔ **`store_attendance_config` rows are IMMUTABLE.** A migration that `UPDATE`s one is refused by
+  name. Supersede with a new row — and `supersedeConfig` will also refuse to back-date over
+  already-computed days.
+- ⚠️ **Backticks inside a `sql\`\`` template literal close the string.** Made twice today, the
+  second time *inside the comment warning about the first*.
+- ⚠️ **A JS array bound into SQL is not an array literal.** Use `array[...]` construction.
+- ⛔ **Two clocks in one decision.** The sweep's query used the database's `now()` while its rule
+  took `nowMs` — untestable at a chosen time, and disagreeing with itself on any run straddling a
+  second.
+- ⚠️ **Integration files `truncate` unscoped by org.** Never run the full suite beside a busy peer.
+- ⚠️ **Migration `when` must rise with `idx`** or Drizzle skips it silently. 0111–0114 are correct.
 
 ## The paste-ready prompt
 
 ```
 Continue on shareat-system (C:\Users\ianla\webapps\shareat-system).
 
-Read docs/RULES.md, then docs/HANDOFF-TODAY.md. main is at 2ca399e, all gates
-green (typecheck 0 · 856 unit · 1731 integration · build).
+Read docs/RULES.md, then docs/HANDOFF-TODAY.md. main is at 93408a7, all gates
+green (typecheck 0 · 872 unit · 1778 integration · build).
 
-Phase 5 payroll opened yesterday and T-189 shipped — the first payslip this
-business has posted from software. Read docs/plans/phase-5-payroll.md before
-touching payroll: it argues from a live-data probe that v1's payroll has NEVER
-produced a payslip, and it records what the evidence says NOT to port.
+⚠️ ANOTHER AGENT MAY BE IN THIS SAME WORKING TREE. Run ListAgents before you
+start, and coordinate on task numbers, defect numbers and migration numbers —
+we collided on all three yesterday. Next migration is 0115.
 
-Start with item 1 in the handoff's "Pick up here". Before building anything,
-assess it and be willing to argue against it (/research-evaluate-propose) —
-probing the live v1 data has changed the shape of three tasks in a row.
+Item 1 in the handoff's "Pick up here" is NOT a coding task: the attendance
+sweep is built and committed and its systemd timer has never been installed on
+the droplet. docs/ops/README.md has the commands. Three jobs in this project's
+history shipped and were never scheduled; do not let this be the fourth.
+
+Before building anything, assess it and be willing to argue against it
+(/research-evaluate-propose). Probing live v1 data changed the shape of every
+task this week — including one where my own defect report turned out to be wrong.
 
 Standing rules: ERP-rebuild is READ-ONLY and its name lies (it is the OLD live
 ERP). No implementation without a written task spec in docs/tasks/. Verify UI in

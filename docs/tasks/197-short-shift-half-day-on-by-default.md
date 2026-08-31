@@ -6,7 +6,8 @@
 > ⛔ **This is the T-166 collision happening again, live** — see DEF-116. Numbers in this project
 > are claimed by writing a file, and two agents can write the same one within minutes.
 
-> **Status:** specced 2026-08-31 · closes **DEF-112** · Ian, 2026-08-31: *"1 turn on and test it"*
+> **Status:** ✅ **BUILT AND COMMITTED 2026-08-31** (`05b0b3a`). DEF-112 fixed. The default flipped; all three live stores already ran it ON. Migration 0111. ⛔ The first draft tried to UPDATE existing rows and T-155 refused it — see §2.1.
+> Specced 2026-08-31 · closes **DEF-112** · Ian, 2026-08-31: *"1 turn on and test it"*
 > **Depends on:** T-195 (⛔ **hard** — turning this on creates pending overtime, and until T-195
 > nobody could approve any), T-194 (the zero-credit hold), T-155 (`store_attendance_config`)
 > **Evidence:** the raw v1 capture in `tests/golden/fixtures/attendance-sessions.json`
