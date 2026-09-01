@@ -9,6 +9,7 @@ import { and, eq, gte, lte, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { payRuns, payslips } from '../../schema/payroll';
 import { persons } from '../../schema/persons';
+import { separations } from '../../schema/separations';
 import {
   thirteenthMonthPayouts,
   thirteenthMonthRuns,
@@ -22,15 +23,20 @@ import {
  * journal entries were reversed and the days unfrozen, so counting it would pay 13th-month on
  * money that was taken back.
  *
- * ⚠️ Attributed by `period_end` falling in `[year-01-01, year-12-31]` — the year a period is PAID
- * FOR, not the year it happens to be posted in. A period straddling New Year's is rare enough at
+ * ⚠️ Attributed by `period_end` falling in `[year-01-01, asOf]` — the year a period is PAID FOR,
+ * not the year it happens to be posted in. A period straddling New Year's is rare enough at
  * semi-monthly/monthly cadence that this is the defensible simple answer, not a rounding hack.
+ *
+ * @param asOf T-192's own reason this parameter exists: a separation prices a job's 13th month
+ *   through the separation date, not the whole year. Defaults to `year-12-31` — T-191's original,
+ *   unchanged behaviour when omitted.
  */
 export async function basicPayEarnedInYear(
   tx: Tx,
   orgId: string,
   employmentId: string,
   year: number,
+  asOf?: string,
 ): Promise<string> {
   const [row] = await tx
     .select({ total: sql<string>`coalesce(sum(${payslips.basicPay}), 0)::text` })
@@ -42,10 +48,38 @@ export async function basicPayEarnedInYear(
         eq(payslips.employmentId, employmentId),
         eq(payRuns.status, 'posted'),
         gte(payRuns.periodEnd, `${year}-01-01`),
-        lte(payRuns.periodEnd, `${year}-12-31`),
+        lte(payRuns.periodEnd, asOf ?? `${year}-12-31`),
       ),
     );
   return row?.total ?? '0';
+}
+
+/**
+ * ⛔ **T-192's fix for the double-payment T-192 would otherwise create.** Whether a POSTED
+ * separation already exists for this employment covering the given year — if so,
+ * `preview13thMonthRun` (the annual, store-wide run) must exclude it, because `postSeparation`
+ * already paid this job's pro-rated 13th month once.
+ */
+export async function hasPostedSeparationInYear(
+  tx: Tx,
+  orgId: string,
+  employmentId: string,
+  year: number,
+): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: separations.id })
+    .from(separations)
+    .where(
+      and(
+        eq(separations.orgId, orgId),
+        eq(separations.employmentId, employmentId),
+        eq(separations.status, 'posted'),
+        gte(separations.separationDate, `${year}-01-01`),
+        lte(separations.separationDate, `${year}-12-31`),
+      ),
+    )
+    .limit(1);
+  return !!row;
 }
 
 // -------------------------------------------------------------------------------------

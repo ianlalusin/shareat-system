@@ -453,6 +453,13 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'As thirteenth_month_runs — what somebody earned in a purged run. Must go with the run it ' +
       'belongs to, same reasoning as payslips.',
   },
+  separations: {
+    class: 'purge',
+    reason:
+      'A 2026 pilot separation, whose journal entry is itself purged — same shape as every other ' +
+      '2026-dated payroll table. v2 opens on a zero starting point; a real separation processed ' +
+      'in 2027 is real data from day one.',
+  },
   till_custody_shifts: {
     class: 'purge',
     reason:

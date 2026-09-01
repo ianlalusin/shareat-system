@@ -62,6 +62,11 @@ export async function preview13thMonthRun(
   let totalAdvanceRecovered = ZERO;
 
   for (const emp of roster) {
+    // ⛔ T-192's fix: a posted separation already paid this job's pro-rated 13th month once. The
+    // annual run must not also pay it — see thirteenth-month.ts's schema comment and
+    // hasPostedSeparationInYear's own doc.
+    if (await thirteenthMonthRepo.hasPostedSeparationInYear(tx, actor.orgId, emp.id, input.year)) continue;
+
     const earned = money(await thirteenthMonthRepo.basicPayEarnedInYear(tx, actor.orgId, emp.id, input.year));
     // ⭐ No payslips that year — nothing owed, nothing paid. Excluded, not paid at ₱0, same
     // reasoning previewPayRun uses for "only people who worked."

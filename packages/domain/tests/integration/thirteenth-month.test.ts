@@ -25,7 +25,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
-import { post13thMonthRun, preview13thMonthRun, void13thMonthRun } from '@shareat/domain';
+import { post13thMonthRun, postSeparation, preview13thMonthRun, void13thMonthRun } from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -274,5 +274,23 @@ describe('T-191 — the sum, the year boundary, and the posting pattern', () => 
         }),
       ),
     ).rejects.toThrow(AuthorizationError);
+  });
+
+  it('⛔ T-192: a posted separation excludes that employment from THIS annual run — no double payment', async () => {
+    const f = await fixture('separated');
+    await postedPeriod(f, { periodStart: '2026-01-01', periodEnd: '2026-01-15', basicPay: '6000.00' });
+    await asOrg(f.orgId, (tx) =>
+      postSeparation(tx, f.admin, {
+        storeId: f.storeId,
+        employmentId: f.employmentId,
+        separationDate: '2026-06-30',
+        cause: 'resignation',
+        separationPayAmount: '0',
+        moneyAccountId: f.officeAccountId,
+        clearanceConfirmedBy: f.adminId,
+      }),
+    );
+    const annual = await asOrg(f.orgId, (tx) => preview13thMonthRun(tx, f.admin, { storeId: f.storeId, year: 2026 }));
+    expect(annual.payouts.find((p) => p.employmentId === f.employmentId)).toBeUndefined();
   });
 });

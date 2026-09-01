@@ -393,6 +393,12 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'What a named person earned as their 13th-month pay. Same sensitivity as payslips — org ' +
       'isolation here is the whole point, not tidiness.',
   },
+  separations: {
+    scope: 'org_column',
+    reason:
+      'Why a named person left and what they were paid on the way out — arguably the single most ' +
+      'sensitive HR row in the schema. Org isolation is the whole point, not tidiness.',
+  },
   till_custody_shifts: {
     scope: 'org_column',
     reason:

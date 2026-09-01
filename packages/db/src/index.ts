@@ -91,6 +91,8 @@ export * as remittanceRepo from './repo/remittance';
 export * as payrollRepo from './repo/payroll';
 // T-191 — 13th-month pay (Phase 5, after T-189).
 export * as thirteenthMonthRepo from './repo/thirteenth-month';
+// T-192 — separations, final pay, clearance (Phase 5, after T-191).
+export * as separationsRepo from './repo/separations';
 export type { PayRateRow, PayRunRow, PayslipRow, PayableDay } from './repo/payroll';
 export * as tillShiftsRepo from './repo/till-shifts';
 export type { TillShiftRow, TillCountRow, CountLineWithShift, CountedVarianceRow } from './repo/till-shifts';

@@ -85,9 +85,14 @@ export default async function PayrollPage({
             correction goes through payroll, not by restating the day.
           </p>
         </div>
-        <a href="/payroll/thirteenth-month" className="shrink-0 text-sm underline">
-          13th-month pay
-        </a>
+        <span className="flex shrink-0 gap-3 text-sm">
+          <a href="/payroll/thirteenth-month" className="underline">
+            13th-month pay
+          </a>
+          <a href="/payroll/separations" className="underline">
+            Separations
+          </a>
+        </span>
       </div>
 
       <form className="flex flex-wrap items-end gap-3">

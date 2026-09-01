@@ -559,3 +559,6 @@ export async function voidPayRun(
 // -------------------------------------------------------------------------------------
 // T-191 — 13th-month pay. See this file's own top comment for why the circular import is safe.
 export * from './thirteenth-month';
+// T-192 — separation, final pay, clearance. Same circular-import shape and same safety reasoning
+// (`outstandingAdvance`/`PAYROLL_ADVANCE_ACCOUNT` used only inside function bodies).
+export * from './separation';
