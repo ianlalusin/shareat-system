@@ -76,13 +76,18 @@ export default async function PayrollPage({
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 p-4 sm:p-8">
-      <div>
-        <h1 className="text-2xl font-semibold">Payroll</h1>
-        <p className="max-w-3xl text-sm text-neutral-600 dark:text-neutral-400">
-          Pay computed from attendance, with what each person already drew netted off{' '}
-          <code>1230</code>. ⭐ Posting <strong>freezes</strong> the days it paid — after that a
-          correction goes through payroll, not by restating the day.
-        </p>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-semibold">Payroll</h1>
+          <p className="max-w-3xl text-sm text-neutral-600 dark:text-neutral-400">
+            Pay computed from attendance, with what each person already drew netted off{' '}
+            <code>1230</code>. ⭐ Posting <strong>freezes</strong> the days it paid — after that a
+            correction goes through payroll, not by restating the day.
+          </p>
+        </div>
+        <a href="/payroll/thirteenth-month" className="shrink-0 text-sm underline">
+          13th-month pay
+        </a>
       </div>
 
       <form className="flex flex-wrap items-end gap-3">

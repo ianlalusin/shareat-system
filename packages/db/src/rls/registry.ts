@@ -383,6 +383,16 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'What a named person earned, and what was recovered from them. ⚠️ The most personal row ' +
       'in the schema — org isolation here is not tidiness, it is the whole point.',
   },
+  thirteenth_month_runs: {
+    scope: 'org_column',
+    reason: 'Which years an org has paid 13th-month for, and from which account.',
+  },
+  thirteenth_month_payouts: {
+    scope: 'org_column',
+    reason:
+      'What a named person earned as their 13th-month pay. Same sensitivity as payslips — org ' +
+      'isolation here is the whole point, not tidiness.',
+  },
   till_custody_shifts: {
     scope: 'org_column',
     reason:

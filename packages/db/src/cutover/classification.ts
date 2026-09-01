@@ -439,6 +439,20 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'As pay_runs — what somebody earned in a purged period. ⚠️ These MUST go with the runs: a ' +
       'payslip surviving its run would claim a person was paid out of books that no longer exist.',
   },
+  thirteenth_month_runs: {
+    class: 'purge',
+    reason:
+      'A year paid against 2026 pilot books, whose journal entries are themselves purged — same ' +
+      'shape as pay_runs. ⚠️ T-191 itself never runs against 2026 for real: v2 has at most Oct–Dec ' +
+      '2026 posted, and that is pilot data due to be purged, not a full year. The real 2026 payout ' +
+      'happens outside v2. Kept here only so the class matches every other 2026-dated run.',
+  },
+  thirteenth_month_payouts: {
+    class: 'purge',
+    reason:
+      'As thirteenth_month_runs — what somebody earned in a purged run. Must go with the run it ' +
+      'belongs to, same reasoning as payslips.',
+  },
   till_custody_shifts: {
     class: 'purge',
     reason:

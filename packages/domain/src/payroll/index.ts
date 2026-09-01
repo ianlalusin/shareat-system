@@ -24,6 +24,11 @@ import { advanceToRecover, computePay, type DayInput } from './compute';
 
 export * from './compute';
 export * from './periods';
+// ⚠️ `./thirteenth-month` imports `outstandingAdvance` / `PAYROLL_ADVANCE_ACCOUNT` FROM this file
+// (they are only defined here, not in a sibling module) — a deliberate circular import, safe only
+// because both are used inside thirteenth-month.ts's function BODIES, never at its module top
+// level. Exporting it from the END of this file, after both are already defined below, means the
+// live binding is never accessed during the temporal dead zone even on the first evaluation pass.
 
 /** `6100 Salaries and wages` — provisioned in Phase 1, and until now nothing had ever posted to it. */
 export const SALARIES_ACCOUNT = '6100';
@@ -550,3 +555,7 @@ export async function voidPayRun(
   if (tx) return run(tx);
   return transaction(run);
 }
+
+// -------------------------------------------------------------------------------------
+// T-191 — 13th-month pay. See this file's own top comment for why the circular import is safe.
+export * from './thirteenth-month';
