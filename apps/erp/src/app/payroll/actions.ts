@@ -10,31 +10,11 @@ import { redirect } from 'next/navigation';
 import { postPayRun, setPayRate, voidPayRun } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
+import { errorMessage } from '../../lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-/** ⚠️ Only the WORDING is ours — re-checking these in TypeScript would be a second source of truth. */
-const CONSTRAINT_MESSAGES: Record<string, string> = {
-  pay_runs_no_overlapping_posted_period:
-    'A posted run already covers part of that period. ⛔ Periods may not overlap — the overlap ' +
-    'would be paid twice. Void the existing run first, or choose dates outside it.',
-  pay_rates_employment_from_unique:
-    'That job already has a rate starting on that date. Pick a different effective date, or ' +
-    'supersede it from the day the new rate really begins.',
-  pay_rates_amount_positive_check: 'A pay rate has to be more than zero.',
-  payslips_run_employment_unique: 'That person already has a payslip in this run.',
-  attendance_days_frozen_by_pay_run_fk: 'Those days belong to a pay run that still exists.',
-};
-
-function errorMessage(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err);
-  for (const [constraint, message] of Object.entries(CONSTRAINT_MESSAGES)) {
-    if (raw.includes(constraint)) return message;
-  }
-  return raw.replace(/^[a-zA-Z][A-Za-z0-9_]*:\s*/, '');
 }
 
 function back(params: Record<string, string>): never {

@@ -67,13 +67,23 @@ that module actually reads it.**
 ⛔ **Nothing needing a bible amendment came up.** No `PROJECT_BIBLE.md` §13 row was required and
 none was written — the decisions above are all task-level.
 
-## Pick up here
+1. ~~⛔ INSTALL THE SWEEP TIMER ON THE DROPLET~~ — **corrected 2026-09-01, do not act on the
+   original framing below.** Read-only SSH inspection of `159.223.78.207` found no
+   `/srv/shareat`, no `shareat` OS user, no shareat-system systemd units, and no CI deploy step —
+   **the app has never been deployed to production at all**, so there is nothing yet to point a
+   timer at. This matches ADR-005/ADR-007: pilot go-live is **Oct–Dec 2026**, not now. The
+   precondition and correction live in `docs/ops/README.md`. The original text is preserved below
+   only so the mistake is visible, not as an instruction:
 
-1. ⛔ **INSTALL THE SWEEP TIMER ON THE DROPLET.** `docs/ops/README.md` has the four commands. The
-   job is written, tested and committed and **it is not running.** ⚠️ Three jobs in this business's
-   history shipped and were never scheduled — v1's depreciation (two months, ₱35,483.98/month
-   unbooked, found by an audit), POS's holiday calendar, POS's weather job. **This is that step.**
-   `systemctl enable --now` — *without* `--now` it arms for the next boot and not for today.
+   > ~~INSTALL THE SWEEP TIMER ON THE DROPLET. `docs/ops/README.md` has the four commands. The
+   > job is written, tested and committed and it is not running. Three jobs in this business's
+   > history shipped and were never scheduled — v1's depreciation (two months, ₱35,483.98/month
+   > unbooked, found by an audit), POS's holiday calendar, POS's weather job. This is that step.
+   > `systemctl enable --now` — without `--now` it arms for the next boot and not for today.~~
+
+   **Next step here is a task spec for the first production deployment** (provision DO Managed
+   Postgres, create the `shareat` user, ship a build via CI, *then* install the timer) — not
+   something to execute ad hoc, and not due until closer to the pilot.
 2. **The payroll settings screen.** Overtime mode, three holiday multipliers, period type, cutoff
    day, payout days, and now the sweep's cut-off hour and max-shift cap — **all of them need SQL to
    change.** `/payroll` displays them, so nothing is invisible; nothing is editable either.

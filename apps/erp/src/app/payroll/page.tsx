@@ -130,7 +130,10 @@ export default async function PayrollPage({
       {/* ⭐ The premium settings this run is computed under. ⚠️ These were constants in code until
           T-189b; a number that decides somebody's pay belongs on the screen that spends it. */}
       {cfg && (
-        <p className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-neutral-500">
+        <p className="flex flex-wrap items-baseline gap-x-5 gap-y-1 text-xs text-neutral-500">
+          <a href={`/settings/attendance?store=${storeId}`} className="underline">
+            Edit these settings
+          </a>
           <span>
             Shift <b className="text-neutral-700 dark:text-neutral-300">{cfg.requiredHoursPerShift}h</b>
           </span>

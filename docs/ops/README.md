@@ -13,6 +13,25 @@
 
 ---
 
+## ⛔ Precondition, verified 2026-09-01: the app has never been deployed here
+
+Both units below assume `/srv/shareat` exists, is a checked-out+built tree, is owned by a
+`shareat` OS user, and can reach Postgres. **None of that exists on the droplet as of
+2026-09-01** — confirmed by direct (read-only) SSH inspection: no `/srv/shareat`, no `shareat`
+user, no shareat-system systemd units, no local Postgres for it. The droplet currently runs only
+the old ERPNext (Frappe) stack and the POS archive DB (`pos_archive_db`), both unrelated to this
+project. `.github/workflows/ci.yml` has no deploy step to the droplet either.
+
+**This is expected, not a bug** — ADR-005 / ADR-007 put the pilot go-live at **Oct–Dec 2026**,
+so there is nothing to schedule a sweep against yet. A prior session's `HANDOFF-TODAY.md` framed
+this as "just install the timer," which is wrong; do not act on that framing before the first
+production deployment (its own task spec, not yet written) has actually happened.
+
+**Before running anything below**, confirm `/srv/shareat` and the `shareat` user exist. If they
+don't, stop — that's a much bigger job than this file covers.
+
+---
+
 ## The jobs
 
 | Job | Command | Cadence | Why that cadence |
