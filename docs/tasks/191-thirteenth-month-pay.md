@@ -1,7 +1,10 @@
 # T-191 — 13th-month pay
 
-> **Status:** 📝 SPECCED, implementing same session. Handoff item 3, phase-5-payroll.md's next
-> slice after T-189. Assessed via `/research-evaluate-propose` first.
+> **Status:** ✅ **BUILT AND COMMITTED 2026-09-01** (`6a526cf`). Migration `0115`. Smoketested live
+> end-to-end (preview → post → void → repayable). ⚠️ **Amended same day by T-192** (`038590f`):
+> `preview13thMonthRun` now excludes an employment with a posted separation for the year — see
+> `docs/tasks/192-separation-final-pay-clearance.md` §2.3. Handoff item 3, phase-5-payroll.md's
+> next slice after T-189. Assessed via `/research-evaluate-propose` first.
 > **Depends on:** T-189 (`pay_rates`/`pay_runs`/`payslips`, `postEntry`, `outstandingAdvance`,
 > `advanceToRecover` — all reused, none modified). Bible row 90 (confirmed ADD). `6140` provisioned
 > in Phase 1, unused since.

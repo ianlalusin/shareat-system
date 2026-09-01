@@ -1,8 +1,11 @@
 # T-192 — separation, final pay, and clearance (first slice)
 
-> **Status:** 📝 SPECCED, implementing same session. Handoff item 3's sibling; phase-5-payroll.md
-> sequences it directly after T-191. Assessed via `/research-evaluate-propose` first, **and Ian
-> answered two scoping questions before this was written** — see §1.
+> **Status:** ✅ **BUILT AND COMMITTED 2026-09-01** (`038590f`). Migration `0116`. Smoketested live
+> end-to-end (post with a manual separation-pay decision, confirmed the annual 13th-month run's
+> exclusion, void, repost). Caught and fixed one real bug in the pass — a mismatched hidden form
+> field name — that only the browser smoketest surfaced. Handoff item 3's sibling;
+> phase-5-payroll.md sequences it directly after T-191. Assessed via `/research-evaluate-propose`
+> first, **and Ian answered two scoping questions before this was written** — see §1.
 > **Depends on:** T-191 (reuses `basicPayEarnedInYear`, extended with an `asOf` bound), T-189
 > (`outstandingAdvance`, `advanceToRecover`, `postEntry`). **Modifies T-191's `preview13thMonthRun`**
 > — see §2.3, the reason this could not simply be additive.

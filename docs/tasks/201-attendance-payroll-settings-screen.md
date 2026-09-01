@@ -1,6 +1,8 @@
 # T-201 — the attendance & payroll settings screen
 
-> **Status:** 📝 SPECCED, not yet built. Handoff `docs/HANDOFF-TODAY.md` "Pick up here" item 2.
+> **Status:** ✅ **BUILT AND COMMITTED 2026-09-01** (`987ec3a`). Smoketested live: save, `/payroll`'s
+> summary line picking up the new value, the backdating rejection, and the nullable
+> `autoClockOutHour` staying blank. Handoff `docs/HANDOFF-TODAY.md` "Pick up here" item 2.
 > Assessed via `/research-evaluate-propose` before writing this — see §1.
 > **Depends on:** T-155 (`store_attendance_config` + `supersedeConfig`, both already built and
 > integration-tested — this task adds **no new domain code and no migration**), T-189b/c/d (the
