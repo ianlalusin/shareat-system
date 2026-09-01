@@ -1,146 +1,158 @@
-# Handoff — 2026-08-31
+# Handoff — 2026-09-01
 
 ## Where things stand
 
-**Seven tasks shipped, and five of them were defects nobody knew about.** The session began as
-*"turn on one payroll flag"* and the flag turned out to be the least of it: probing before building
-found that **payroll paid a full day for a four-minute shift**, that **a manager could void a day
-and payroll paid it anyway**, and that **the entire manager-adjustment layer had no caller**.
+**Three tasks shipped, and one required going back to fix another one.** The session began by
+correcting a false premise in yesterday's handoff — the production droplet has never had the app
+deployed to it at all — then built the attendance/payroll settings screen, 13th-month pay, and a
+first slice of separation/final-pay/clearance. Building the third forced a real fix to the second:
+without it, a departed employee's 13th month would have been paid twice.
 
-⭐ **Phase 5 is 13 of 17 built.** The one thing that is *code-complete but not live* is the
-attendance sweep: its systemd timer sits in `docs/ops/` and **nobody has installed it on the
-droplet.** That is the single most important line in this document.
-
-## Gates at `93408a7`
+## Gates at `6d16fdc`
 
 ```
 typecheck   ✅ exit 0
-unit        ✅ 872 passed, 1 skipped (873)
-integration ✅ 1778 passed (1778)
+unit        ✅ 879 passed, 1 skipped (880)
+integration ✅ 1797 passed (1797)
 build       ✅ exit 0, dev server stopped first
 ```
 
-All four run on the committed tree, exit codes checked rather than output skimmed.
+Verified at `038590f` (the last code commit) immediately before that commit; nothing code-facing
+changed since — `6d16fdc` is docs only (task-spec status lines, `docs/ROADMAP.html`).
 
 ## What happened this session
 
-### ⛔ Five defects, and four of them are one family
+### The deploy that never happened
+
+Item 1 in yesterday's handoff said "install the sweep timer on the droplet." Read-only SSH
+inspection of `159.223.78.207` found **the app has never been deployed there at all** — no
+`/srv/shareat`, no `shareat` OS user, no shareat-system systemd units, no CI deploy step. Matches
+ADR-005/ADR-007: pilot go-live is Oct–Dec 2026, not now. Corrected in `docs/ops/README.md` and
+(at the time) `docs/HANDOFF-TODAY.md`, so nobody acts on the stale framing. **Production was left
+untouched** — Ian confirmed correcting the record over scoping or executing a first deploy.
+
+### T-201 — attendance & payroll settings screen
+
+`/settings/attendance`. Turned `supersedeConfig` (T-155, already built and tested) into a form —
+until now the only way to change a policy value was an engineer hand-writing SQL, which cost real
+time twice last week (T-197, DEF-119). No schema change, no migration. Smoketested live: save,
+`/payroll`'s summary line picking up the new value, the backdating rejection, the nullable
+`autoClockOutHour` staying blank rather than coercing to 0.
+
+### T-191 — 13th-month pay
+
+`/payroll/thirteenth-month`. A confirmed ADD (bible row 90) that turned out to be a sum, not a new
+engine: `payslips.basicPay` already excludes overtime/night-diff/holiday premiums and already
+reflects actual attendance — column-for-column DOLE's statutory formula. Migration `0115`,
+hand-written (see DEF-121 below). Smoketested live end-to-end: preview → post → void → repayable,
+verified against the dev server's own request log, not just the UI.
+
+⚠️ **Flagged, not solved**: 2026 is not real here — v2 pilots Oct–Dec 2026 and purges every
+operational table 1 Jan 2027 (ADR-007), so the real 2026 payout has to happen outside v2. The
+banner on the page says so.
+
+### T-192 — separation, final pay, clearance (first slice)
+
+`/payroll/separations`. The other confirmed ADD from bible row 90. **Ian answered two scoping
+questions before any code was written**: no track record of paying separation pay (decide the
+policy now), and skip unused-leave conversion (no data source in v2 at all). Separation pay is
+therefore a **manual decision**, never an auto-computed formula — PH law (Labor Code Art.
+298/299) owes it only for specific authorized causes.
+
+⛔ **Required amending T-191**: the annual run summed a full year for every employment, ended ones
+included — correct only because nothing else paid a departed employee's 13th month yet. A posted
+separation now excludes that employment from the annual run (`hasPostedSeparationInYear`), or
+December would pay it twice. T-191's own test 9 is unaffected. Migration `0116`.
+
+Smoketested live end-to-end, and that pass caught a real bug the type checker could not: the void
+form's hidden field was named `store`, the action read `storeId` — silently producing an empty
+redirect. Found, fixed, re-verified live.
+
+### Two defects logged in passing
 
 | | |
 |---|---|
-| **DEF-111** | ⛔ **A day crediting ZERO minutes was paid a FULL daily rate.** `unitsFor` read only `isHalfDay`, and `compute-day.ts:557` says *"there is NO DAY"* by zeroing the minutes while leaving that flag false. **31 of 560 live sessions; three under five minutes.** Fixed in **T-194** — and such a day is now *held*, not paid-and-frozen, because freezing it would put its overtime permanently beyond reach |
-| **DEF-113** | ⛔ **`recordAdjustment` had NO CALLER outside tests.** Six adjustment kinds shipped a month ago and nothing invoked them, so overtime could never be approved and a `needs_review` day could never be settled by anything. Root cause: **a task-number collision** — four specs promised the screen as "T-166" and the inventory lane shipped T-166 as *Deliveries*. Fixed in **T-195** |
-| **DEF-115** | ⛔ **Voiding a day did nothing; payroll paid it in full.** Found by *building* T-195. `verify` was equally dead, so a flagged day could never be rescued. ⭐ **The cause was the test**: invariant 11 is titled *"a voided day contributes nothing"* and asserted only that the adjustment row was written. *The half of the invariant that involved money lived in the test's name, not its body* |
-| **DEF-118** | ⚠️ **The clock mirror published every attendance day ever.** 24 of 24 measured were historical; payroll's freeze doubled it. ⭐ And **nothing read the feed at all**. Fixed in **T-198** |
-| **DEF-119** | ⛔ **`halfDayOnMissingTap` was a column nothing read.** All three v1 stores have it ON, so a forgotten tap-out paid **half a day there and ₱0 here** — an underpayment nobody reports because nobody can see it. Fixed in **T-199** |
+| **DEF-120** | 🔸 v1's AI-generated user manual describes a "13th-month estimate" on the pay-rate editor that has zero backing code anywhere in the repo — a documentation hallucination, not a feature |
+| **DEF-121** | ⚠️ `drizzle-kit generate` has been effectively unusable in this repo since ~migration 0020 — only 12 of 116 migrations have a snapshot file, so it can't diff cleanly and re-litigates decades-old renames on unrelated tables. Every migration since has almost certainly been hand-written for this reason, just not previously named as the reason. Migrations `0115`/`0116` were hand-written and verified by direct apply to dev + test DBs |
 
-⭐ **DEF-109, 111, 113, 115, 119 are one shape**: stored intent that the consuming layer never
-reads. Five occurrences in two days. **If you find a comment addressed to a future module, check
-that module actually reads it.**
+### Roadmap brought current
 
-### What shipped
+`docs/ROADMAP.html` had drifted: Phase 5's chip said "13 of 17," the masthead's gate numbers said
+"872 unit / 1778 integration," a separate mini-tracker further down said "1 of 5 built," and the
+footer's "status verified" date said 30 August. All corrected. T-201 added as a new entry (it
+wasn't in the original 17-slice count).
 
-| Task | |
-|---|---|
-| **T-194** | Zero-credit days pay nothing and are **held**, not frozen |
-| **T-195** | `/attendance` — the review queue and the decision surface. Every reason stated on the row |
-| **T-197** | `shortShiftHalfDayOt` **on by default** — all three live stores already ran it that way, so v2's `false` was *reversing* practice, not preserving it. Worth **51.5 days a month, ~9.2% of basic pay** |
-| **T-198** | The mirror's day feed scoped to two days |
-| **T-199** | The missed clock-out sweep + `openShiftsStale`, the alarm that works when the sweep is dead |
-| **T-200** | The clock terminal rebuilt: no in/out toggle, intent derived, on-shift roster and today's feed rendered at last, per-person 30s cooldown |
-| **T-196** | Draft expense on a pending invoice — specced by a peer session, implemented here by a Sonnet subagent |
+## Pick up here
 
-### Where the decisions were recorded
-
-| Decision (Ian's words) | Recorded in |
-|---|---|
-| *"1 turn on and test it"* | `docs/tasks/197-*.md`, migration `0111` |
-| *"2. fix it"* (the mirror) | `docs/tasks/198-*.md`, migration `0112` |
-| *"3. plan well and build a better one. your call. park the break"* | `docs/tasks/200-*.md` §3 and §8 |
-| *"1. lets do it"* (sweep **and** alarm) | `docs/tasks/199-*.md`, `docs/ops/README.md` |
-| *"lastly do the t196 too"* | implemented; spec is the peer session's, unamended |
-| DEF-111 → 119 | `docs/DEFECTS-REGISTER.md` |
-
-⚠️ **Roadmap: updated.** All seven cards added and marked done; the Phase 5 chip corrected from
-*"1 of 5 built"* to **13 of 17**; masthead gates refreshed.
-
-⛔ **Nothing needing a bible amendment came up.** No `PROJECT_BIBLE.md` §13 row was required and
-none was written — the decisions above are all task-level.
-
-1. ~~⛔ INSTALL THE SWEEP TIMER ON THE DROPLET~~ — **corrected 2026-09-01, do not act on the
-   original framing below.** Read-only SSH inspection of `159.223.78.207` found no
-   `/srv/shareat`, no `shareat` OS user, no shareat-system systemd units, and no CI deploy step —
-   **the app has never been deployed to production at all**, so there is nothing yet to point a
-   timer at. This matches ADR-005/ADR-007: pilot go-live is **Oct–Dec 2026**, not now. The
-   precondition and correction live in `docs/ops/README.md`. The original text is preserved below
-   only so the mistake is visible, not as an instruction:
-
-   > ~~INSTALL THE SWEEP TIMER ON THE DROPLET. `docs/ops/README.md` has the four commands. The
-   > job is written, tested and committed and it is not running. Three jobs in this business's
-   > history shipped and were never scheduled — v1's depreciation (two months, ₱35,483.98/month
-   > unbooked, found by an audit), POS's holiday calendar, POS's weather job. This is that step.
-   > `systemctl enable --now` — without `--now` it arms for the next boot and not for today.~~
-
-   **Next step here is a task spec for the first production deployment** (provision DO Managed
-   Postgres, create the `shareat` user, ship a build via CI, *then* install the timer) — not
-   something to execute ad hoc, and not due until closer to the pilot.
-2. **The payroll settings screen.** Overtime mode, three holiday multipliers, period type, cutoff
-   day, payout days, and now the sweep's cut-off hour and max-shift cap — **all of them need SQL to
-   change.** `/payroll` displays them, so nothing is invisible; nothing is editable either.
-3. **T-191, 13th-month pay** — a confirmed ADD (bible row 90); `6140` has existed since Phase 1
-   with nothing posting to it.
+1. **T-190/T-193 (statutory contributions, remittance) remain gated on DATA, not effort.** 0 of
+   126 staff have an SSS/PhilHealth/Pag-IBIG/TIN number. This is not a coding task — somebody has
+   to enter the numbers before either can be specced. Also a live compliance exposure independent
+   of software.
+2. **The first production deployment still doesn't exist.** T-201's finding stands: provisioning
+   DO Managed Postgres, creating the `shareat` user, shipping a build via CI, is its own task spec
+   — not due until closer to the Oct 2026 pilot per ADR-005/007, but somebody eventually has to
+   write it.
+3. **No specific direction beyond payroll was given.** With Phase 5 at 16 of 18 (only the two
+   gated ones left), the next reasonable lane is Ian's call: Phase 3 inventory has 6 specced tasks
+   remaining (T-167, T-170, T-176–179), or T-187 (service-charge distribution, unbuilt on purpose
+   until service charge is switched on).
 
 ## Do not decide these alone — they are Ian's
 
 | Question | The recommendation on the table |
 |---|---|
-| ⛔ **Statutory is blocked on DATA, not effort** | 0 of 126 staff have an SSS/PhilHealth/Pag-IBIG/TIN number. Somebody must enter them before T-190 can exist. ⚠️ Also a live compliance exposure independent of software |
-| **Breaks are unreachable** | Parked at Ian's instruction. The schema has `break_start`/`break_end` and `computeDay` deducts break excess — the rules exist and no button reaches them |
-| **`/clock` cannot run on a dev machine** | `NEXT_PUBLIC_FIREBASE_PROJECT_ID` and `_API_KEY` are **empty** in `.env.local`. T-200 was verified against the Firebase emulator instead. Filling them, or documenting the emulator path in `HANDOFF.md`, is a small job nobody owns |
-| **DEF-114** | DEF-087 says Malvar has 3 config keys and Banay-Banay 1; the raw capture shows **23 and 21**, with store-specific values. One of them is wrong. ⛔ Do not migrate either store's config until it is settled |
-| **DEF-116's remainder** | The stale `dayFeed` docs already in Firestore. Harmless (T-200 queries by date) but a destructive one-off to clean, so it needs an explicit go-ahead and a counted dry run |
-| **DEF-117** | Not mine — a peer session's. `closeReadiness` can report a period ready to close while pending invoices hold spend outside it |
+| **T-192's void-after-annual-run edge case** | If a separation is voided after that year's annual 13th-month run already posted, the employment is not automatically re-included. Named in the task spec §5 as a real gap, not solved — a correction would need a new run, same as any other void-after-the-fact in this codebase |
+| **DEF-121, the broken drizzle-kit snapshot chain** | Low urgency — hand-writing migrations already IS this project's practice. Worth a deliberate fix eventually (regenerate the missing snapshots, or just say so explicitly in `docs/RULES.md` rather than the next session re-discovering it) |
+| **Who enters 126 staff members' statutory numbers** | Blocks T-190/T-193 entirely. Not a software question |
 
 ## Traps that have actually bitten — live in this area now
 
-- ⛔ **Task numbers collide.** T-166 cost a month. **And it happened again today**: a peer session
-  and I both took `T-196` and `DEF-117` within three minutes. Both were caught before either
-  committed. ⚠️ **Two agents share this one working tree — `ListAgents` before you start.**
-- ⛔ **`store_attendance_config` rows are IMMUTABLE.** A migration that `UPDATE`s one is refused by
-  name. Supersede with a new row — and `supersedeConfig` will also refuse to back-date over
-  already-computed days.
-- ⚠️ **Backticks inside a `sql\`\`` template literal close the string.** Made twice today, the
-  second time *inside the comment warning about the first*.
-- ⚠️ **A JS array bound into SQL is not an array literal.** Use `array[...]` construction.
-- ⛔ **Two clocks in one decision.** The sweep's query used the database's `now()` while its rule
-  took `nowMs` — untestable at a chosen time, and disagreeing with itself on any run straddling a
-  second.
-- ⚠️ **Integration files `truncate` unscoped by org.** Never run the full suite beside a busy peer.
-- ⚠️ **Migration `when` must rise with `idx`** or Drizzle skips it silently. 0111–0114 are correct.
+- ⛔ **A browser click can silently no-op.** `find` + `computer left_click` on a ref sometimes does
+  not register — no error, just no state change. Confirmed via the dev server's own request log
+  (no new POST line), not the extension's success message. **Screenshot + explicit coordinate
+  click is the reliable fallback**, used repeatedly this session.
+- ⚠️ **A `FormData` field-name mismatch passes every gate and is invisible until a live click.**
+  `name="store"` vs `str(formData, 'storeId')` typechecks fine — strings are strings. Only the
+  browser smoketest caught it (T-192's void redirect went to `?store=` empty).
+- ⚠️ **A design that is correct today can become a double-payment bug when a sibling feature
+  lands.** T-191's "ended employments still get the annual 13th month" was right in isolation and
+  wrong the moment T-192 could also pay one. When building a task that touches money a sibling
+  task already computes, ask whether the sibling's own exclusion logic still holds.
+- ⛔ **`drizzle-kit generate` cannot be trusted in this repo** — DEF-121. Hand-write the migration
+  from `schema.ts`, following the nearest sibling migration's exact style, then verify by applying
+  directly to both `shareat_dev` and `shareat_test` (`export DATABASE_URL=... && npm run db:migrate --workspace=@shareat/db`).
+- ⚠️ **Two agents share this one working tree — `ListAgents` before you start.** No collisions
+  this session, but a peer (`ianla-a6`) was active throughout.
 
 ## The paste-ready prompt
 
 ```
 Continue on shareat-system (C:\Users\ianla\webapps\shareat-system).
 
-Read docs/RULES.md, then docs/HANDOFF-TODAY.md. main is at 93408a7, all gates
-green (typecheck 0 · 872 unit · 1778 integration · build).
+Read docs/RULES.md, then docs/HANDOFF-TODAY.md. main is at 6d16fdc, all gates
+green (typecheck 0 · 879 unit + 1 skipped · 1797 integration · build).
 
 ⚠️ ANOTHER AGENT MAY BE IN THIS SAME WORKING TREE. Run ListAgents before you
-start, and coordinate on task numbers, defect numbers and migration numbers —
-we collided on all three yesterday. Next migration is 0115.
+start. Next task number is 202; next migration is 0117.
 
-Item 1 in the handoff's "Pick up here" is NOT a coding task: the attendance
-sweep is built and committed and its systemd timer has never been installed on
-the droplet. docs/ops/README.md has the commands. Three jobs in this project's
-history shipped and were never scheduled; do not let this be the fourth.
+Phase 5 (payroll) is 16 of 18 built. The two remaining — T-190 (statutory
+contributions) and T-193 (statutory remittance) — are gated on DATA, not
+effort: 0 of 126 staff have an SSS/PhilHealth/Pag-IBIG/TIN number. Do not
+attempt to spec or build either without that data existing first.
+
+No specific direction was given beyond payroll. Before picking a next lane,
+ask Ian: Phase 3 inventory (6 specced tasks: T-167, T-170, T-176-179), T-187
+(service-charge distribution, deliberately unbuilt until service charge is
+switched on), or something else entirely.
 
 Before building anything, assess it and be willing to argue against it
-(/research-evaluate-propose). Probing live v1 data changed the shape of every
-task this week — including one where my own defect report turned out to be wrong.
+(/research-evaluate-propose) — it changed the shape of every task this week,
+including a real design conflict between T-191 and T-192 that needed fixing
+after the fact.
 
 Standing rules: ERP-rebuild is READ-ONLY and its name lies (it is the OLD live
-ERP). No implementation without a written task spec in docs/tasks/. Verify UI in
-a browser — a green build is blind to whether anyone can see the thing. Update
-docs/ROADMAP.html at every wrap-up.
+ERP). No implementation without a written task spec in docs/tasks/. Verify UI
+in a browser — a green build is blind to whether anyone can see the thing,
+and this session found a real bug (mismatched form field name) that only a
+live click caught. Update docs/ROADMAP.html at every wrap-up.
 ```
