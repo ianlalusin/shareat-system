@@ -1,9 +1,12 @@
 # T-166 — Deliveries: the document goods actually arrive on
 
-> **Status:** ⚠️ **BUILT AND APPLIED 2026-08-29 — the document and the receive path.**
-> `deliveries` + `delivery_lines`, migration `0066`, `receiveDelivery`, duplicate-risk,
-> **16 integration tests**. ⭐ **This is the seam T-161/162/163 were waiting for.**
-> ⛔ The `/inventory/deliveries` route is NOT built — port 9008 is held. §7.6.
+> **Status:** ✅ **BUILT 2026-09-03 — the document, the receive path, AND the screen.**
+> `deliveries` + `delivery_lines` (migration `0066`, 2026-08-29), `receiveDelivery`, duplicate-risk
+> — plus, as of today, `createDeliveryDocument` / `receiveDeliveryDocument`
+> (`packages/domain/src/deliveries/documents.ts`) and `/inventory/deliveries` +
+> `/inventory/deliveries/[id]`, both wired to the real domain. **31 integration tests** (16 from
+> 8/29's `receive-delivery.test.ts`, untouched, + 15 new in `deliveries.test.ts`). DEF-135's T-166
+> portion is closed. ⛔ **Void is still not built** — §10.5.
 > **Depends on:** T-160 (locations), T-161 (movements), T-162 (layers), T-163 (receipt posting),
 > T-130 (`supplier_invoices`), T-141 (file brokering, for the photo gate).
 > **v1 read at source** — `delivery.actions.ts` (1,470 lines), `receive-allocation.ts`,
@@ -214,12 +217,138 @@ times a rate" is how two halves of one system come to disagree about what a deli
 
 ## 9. Done when
 
-- [ ] Migration hand-written (DEF-073), next free number, journalled `previous.when + 86400000`.
-- [ ] `classification.ts` **PURGE** (operational); `rls/registry.ts` NULLIF-guarded (DEF-077).
-- [ ] `CAPABILITY-MATRIX.md`: `receive_delivery`, `allow_over_receipt` (manager+),
-      `void_delivery` — each with a test proving the ✗ fires.
-- [ ] `typecheck` · `npm test` · `npm run test:integration` · `npm run build` green (dev server
-      stopped; `ListAgents` first).
-- [ ] ⭐ Test 12 performed in the browser, not asserted from a server action —
-      *a shipped server action is not a shipped feature.*
-- [ ] `docs/ROADMAP.html` updated.
+- [x] Migration hand-written (DEF-073), next free number, journalled `previous.when + 86400000`.
+      — Already true from the 2026-08-29 pass (`0066`). This pass needed no schema change; the
+      document layer is built entirely on the existing tables.
+- [x] `classification.ts` **PURGE** (operational); `rls/registry.ts` NULLIF-guarded (DEF-077).
+      — Already true from 2026-08-29; verified still present (`deliveries`/`delivery_lines` rows
+      in both files), not re-touched.
+- [x] `CAPABILITY-MATRIX.md`: `receive_delivery`, `allow_over_receipt` (manager+) — each with a
+      test proving the ✗ fires (both new, in `deliveries.test.ts`: staff refused even with the
+      flag; manager refused without it). `void_delivery` — **deliberately NOT declared.** Void is
+      not in this pass; see §10.5.
+- [x] `typecheck` green · [x] `npm test` (unit) green, 942/943 (1 pre-existing skip, unrelated) ·
+      [x] integration tests green — **31/31**, run against the private `shareat_test_t166`
+      database via `it.mjs`, never the shared `shareat_test` (`npm run test:integration` itself was
+      not run, per the concurrency rule — four lanes share one tree and one shared test DB right
+      now). · [x] `npm run build` — run by the coordinator 2026-09-03 with the dev server stopped,
+      after all four lanes and the review fixes: clean.
+- [x] ⭐ Test 12 performed in the browser, not asserted from a server action. Scripted headless
+      Chromium on 9008, Lipa (LIP), **2026-09-03** — §10.4 for the full narrative and DB evidence.
+- [x] `docs/ROADMAP.html` updated — by the coordinator 2026-09-03: T-166's line names the
+      zero-caller gap, the Lipa run, and the unbuilt void.
+
+## 10. Built 2026-09-03 — the document and the screen
+
+**Landed:** `packages/db/src/repo/deliveries.ts` extended — `insertDelivery`, `insertDeliveryLines`,
+`getDeliveryDocument`, `listDeliveries`, `updateLineReceipt`, `markReceived`, `listLocationsLike`,
+`recentDeliveriesForRisk` (`getDelivery`/`getDeliveryLine`/`createCommissaryDelivery` untouched — T-170/
+T-173's own callers) · `packages/domain/src/deliveries/documents.ts` (the stub overwritten) —
+`createDeliveryDocument`, `receiveDeliveryDocument` · `packages/domain/src/deliveries/receive.ts`'s
+`toBaseUnits` made `export` (no behaviour change, reused by the duplicate-risk check) ·
+`apps/erp/src/app/inventory/deliveries/{page.tsx,lib.ts,actions.ts,NewDeliveryForm.tsx,[id]/page.tsx}` ·
+`packages/domain/tests/integration/deliveries.test.ts` (15 cases).
+
+### 10.1 What a person can now do that they could not yesterday
+
+Sign in as a cashier, draft a supplier delivery or a cash purchase — kind, supplier, reference,
+date, a required photo, dynamic item lines (item, quantity, purchase unit, conversion factor, unit
+cost, an optional room) — and receive it: a per-line received quantity defaulting to what was
+ordered, a shortage-reason picker, a room override, and one "allow over-receipt" checkbox that
+does nothing for a cashier except get refused. This closes the T-166 slice of **DEF-135**: the
+engine has been green and unreachable since 2026-08-29; today it has a door.
+
+### 10.2 The role gate and the DB trigger stay two separate jobs
+
+`receiveDeliveryDocument` computes what to WRITE (auto `not_received` on a zero-received line;
+pass the picked reason through unchanged on a short line) and calls `authorize(tx, actor,
+'allow_over_receipt', …)` **only when a line asks for it** — that is the one check the trigger
+structurally cannot make, because `over_receipt_allowed` is just a boolean column with no memory
+of who is allowed to set it true. Everything else — "a short line needs a reason", "an over line
+needs the flag" — is left to `delivery_lines_shortage_explained_trg` to refuse and to `actions.ts`
+to translate, per the instruction not to re-implement a rule the database already enforces.
+
+⚠️ **Ordering matters and is easy to get backwards**: `markReceived` runs BEFORE the per-line
+receipt-field writes, not after. The trigger reads the delivery's CURRENT status; writing the
+lines first would have it check against `draft` and validate nothing at all. Both writes are
+inside one call to `receiveDelivery` in the same transaction, so a refusal anywhere unwinds all
+of it — the header included.
+
+### 10.3 A spec defect found and fixed: `recentDeliveriesForRisk`'s "(non-void)" made a warning dead code
+
+The Build section's literal text asked for `recentDeliveriesForRisk(tx, storeId, days)` to return
+**non-void** deliveries. Tracing `duplicateRisk`'s own `same_reference` branch shows why that
+can't be right: it fires only when an EXISTING entry matches the new draft's (supplier,
+reference) exactly — but `deliveries_supplier_reference_key` (the hard unique index) already
+refuses any two NON-void deliveries sharing those two values, org-wide, with no day window. A
+non-void match in the "recent" list would always hit the index and throw before the warning is
+ever computed; the branch would be unreachable in real use. `duplicate-risk.ts`'s own header names
+the one case where it is NOT dead — *"a voided prior document that the unique index deliberately
+excludes."* `recentDeliveriesForRisk` now includes void rows for exactly that reason (comment left
+in place at the call site). Per bible §3.4a this is reported rather than silently kept as written;
+closing test in `deliveries.test.ts` constructs a voided prior on purpose and asserts all three
+warnings fire together, and the receive still succeeds.
+
+### 10.4 ⭐ Test 12, live on 9008 — Lipa, store LIP, 2026-09-03
+
+Scripted headless Chromium (Playwright from the npx cache), signed in as **Dev Cashier**:
+
+1. Created a supplier delivery from **Batangas Meat Supply** — PORK-SMOKE 10 kg @ ₱300, a MILKIS
+   24 pcs @ ₱25, a real small PNG as the proof photo. Landed on the detail page as a draft; an
+   amber duplicate-risk banner correctly fired (leftover same-day items from earlier smoketest
+   runs) and did **not** block the save.
+2. Received it: 10 of 10 pork, 20 of 24 milkis with `supplier_short`. Screen showed **"Received.
+   Posted at ₱3,500.00"**. Lipa has no Receiving-purpose room, so both lines parked in the
+   store's one and only room (Stockroom A, its default) — invariant 5's fallback, exercised live,
+   not just in a fixture.
+3. `/inventory?store=LIP` — **"Inventory ties to the ledger": FIFO layers ₱8,700.00 = 1310+1320+1330
+   ₱8,700.00, Difference ₱0.00**, right after a real receipt through the real screen. Pork Belly
+   27 kg (17 seeded + 10 received), Milkis 20 pcs.
+4. A second delivery, 5 kg pork ordered. As the **cashier**, tried to receive 8 with "allow
+   over-receipt" ticked — refused **on screen**: *"Only a manager or admin can approve receiving
+   more than what was ordered — untick 'allow over-receipt', or ask a manager to receive it."*
+   Nothing was written; the redisplayed form showed the pristine 5.000 default, unchecked box.
+5. Signed in as **Dev Manager**, same delivery, same 8-of-5 with the flag ticked — accepted:
+   **"Received. Posted at ₱2,400.00"**, the line showing `8.000 kg` against `5.000 kg` ordered with
+   an amber **"(over-receipt approved)"** note.
+
+**DB evidence**, both deliveries: two `receipt` movements (10 kg, 8 kg, both PORK-SMOKE) and one
+more (20 pcs MILKIS) · three `stock_layers` rows at ₱300.0000 / ₱300.0000 / ₱25.0000 · two journal
+entries — `Dr 1310 ₱3,000 + Dr 1310 ₱500 / Cr 2120 ₱3,500` and `Dr 1310 ₱2,400 / Cr 2120 ₱2,400` ·
+two `stored_files` rows, `purpose='receipt_photo'`, `content_type='image/png'` · both deliveries
+`status='received'`, the second carrying `over_receipt_allowed=true` on its one line. Final on-hand
+at Lipa: PORK-SMOKE 35 kg (17 + 10 + 8), MILKIS-014313 20 pcs. Ten screenshots captured, one per
+meaningful state (register, filled form, draft, filled receive form, received, stock-on-hand,
+over-receipt attempt, refusal, manager attempt, acceptance).
+
+⚠️ **The run before this one hit a dev-server fault, not a code fault** — Turbopack's dynamic-route
+compile worker had wedged (`"Jest worker encountered 2 child process exceptions, exceeding retry
+limit"` on every `/inventory/deliveries/[id]` request, confirmed NOT specific to this route by the
+same failure briefly appearing on unrelated existing routes under the same load, and confirmed
+NOT a code defect by the domain layer's own 31 green integration tests against real Postgres).
+The coordinator restarted the dev server; the run above is the clean one taken after confirming it
+answered again. Recorded here because it cost real time diagnosing and is exactly the kind of
+"looked like my bug, wasn't" trap the next session should not re-walk.
+
+### 10.5 Same-day review fixes (coordinator)
+
+- **The over-receipt approval flag is stamped only on lines that ARE over-received.** The screen
+  sends one document-wide checkbox, and `receiveDeliveryDocument` wrote `over_receipt_allowed =
+  true` on every line — so a cashier ticking it on an in-full delivery recorded a manager-only
+  approval nobody was asked for (no stock effect; the trigger reads the flag only on an over
+  line, and `allow_over_receipt` was still authorised whenever a line was actually over). Now
+  `cmp > 0 && overReceiptOk`.
+- **Warning 2's wording matched its data.** With §10.3's change, `existing` includes drafts and
+  voided documents, so *"were already received on {date}"* could be false. It now reads *"were
+  already recorded on a delivery dated {date} (drafts and voided ones included)"*.
+- The store's active rooms are read through `stockLocationsRepo`, not a drizzle query in
+  `lib.ts` (bible §4.3). `nav.tsx` and `/inventory` now link the route.
+
+### 10.6 Not built
+
+| Piece | Why |
+|---|---|
+| Void, with its cascade | Unchanged from §7.6's reasoning — needs a real usage/consumption path to test the "any layer consumed" refusal against. T-168 (usage) is being built in parallel this same session by another lane; picking this up is now unblocked, but was out of this lane's scope |
+| `void_delivery` capability | Deliberately not declared — see above |
+| The expense/invoice link | `linkInvoiceToReceipt` (T-163) exists and is tested; wiring a delivery to a supplier invoice is the AP screen's job, unchanged from §7.6 |
+| Nav entry | `nav.tsx` is off-limits to this lane (shared file, four lanes editing concurrently). The route works at `/inventory/deliveries` but is not yet linked from anywhere — needs a one-line addition from whoever next touches `nav.tsx` |

@@ -189,7 +189,14 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
   // `manage_commissary_map` (manager+, store-scoped to the commissary and the branch
   // respectively). T-171's third, `import_commissary_catalogue`, is NOT added: the bulk import
   // is unbuilt and a capability with no caller is the debt this pin exists to expose.
-  it('finds exactly 74 capability rows — NOT the "36" the task documents say in prose', () => {
+  // ⭐ 74 -> 81 on 2026-09-03, DEF-135 (T-160/T-166/T-168/T-169 finally get screens):
+  // `manage_locations` (manager+), `receive_delivery` (staff-open), `allow_over_receipt`
+  // (manager+), `post_usage` and `void_usage_record` (manager+), `open_count_session` and
+  // `commit_count` (manager+). The four specs also named `allocate_stock`, `can_charge_staff`,
+  // `bypass_count_freeze` and `can_adjust_inventory`: the first three are NOT added (no caller —
+  // the same debt as `import_commissary_catalogue`), and the last two already exist as
+  // `charge_staff_for_discrepancy` / `adjust_inventory`.
+  it('finds exactly 81 capability rows — NOT the "36" the task documents say in prose', () => {
     // docs/tasks/121-roles-and-access.md and CAPABILITY-MATRIX.md's own Contract section
     // both say "36 rows" / "36 capabilities". The table itself had 38: the two
     // ⚠️-flagged open cells (set_credit_limit, close_period) plus the two platform-only
@@ -206,7 +213,7 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // into the enforcement without also being written into the document people actually
     // read, and vice versa.
     const { rows } = parseCapabilityMatrixDoc();
-    expect(rows.length).toBe(74);
+    expect(rows.length).toBe(81);
   });
 
   it('has no duplicate capability names', () => {
@@ -277,10 +284,10 @@ describe('invariant 1 — every capability has an explicit decision for all four
     expect(problems).toEqual([]);
   });
 
-  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 74 capabilities', () => {
-    expect(CAPABILITIES.length).toBe(74);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(74);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(74);
+  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 81 capabilities', () => {
+    expect(CAPABILITIES.length).toBe(81);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(81);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(81);
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));
   });

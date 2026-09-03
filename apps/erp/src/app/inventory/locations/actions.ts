@@ -1,0 +1,193 @@
+'use server';
+
+/**
+ * Server actions for the stock-locations screen — T-160 / DEF-135, 2026-09-03.
+ *
+ * Thin adapters: parse `FormData`, call the domain, redirect with a message. ⭐ The actor comes
+ * from the session, never the form (T-138) — authorization is `createLocation` /
+ * `updateLocation` / `setDefaultLocation` / `deactivateLocation` / `reactivateLocation` /
+ * `ensureLocationTypes` / `seedStoreLocations`'s own FIRST statement, not repeated here. Every
+ * mutation runs under the org's RLS principal (`withOrgPrincipal`), the same shape
+ * `commissary/catalogue/actions.ts` established.
+ */
+import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
+import {
+  createLocation,
+  deactivateLocation,
+  ensureLocationTypes,
+  reactivateLocation,
+  seedStoreLocations,
+  setDefaultLocation,
+  updateLocation,
+} from '@shareat/domain';
+import { withOrgPrincipal } from './lib';
+import { requireActor } from '../../../lib/session';
+
+function str(fd: FormData, key: string): string {
+  const v = fd.get(key);
+  return typeof v === 'string' ? v.trim() : '';
+}
+
+/** Turns a thrown domain/DB message into one sentence a manager can act on. Kept LOCAL to this
+ *  file — `apps/erp/src/lib/constraint-messages.ts` is shared and not this task's to edit. */
+function errorMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+
+  if (/may not 'manage_locations'/.test(raw)) {
+    return 'Only a manager or admin scoped to this store may manage its rooms.';
+  }
+  if (/no store scope for/.test(raw)) {
+    return 'You do not have access to manage rooms for this store.';
+  }
+  if (/is single_room and already has an active non-Receiving room/.test(raw)) {
+    return 'This store keeps stock in ONE room. Deactivate or repurpose the existing room before adding another.';
+  }
+  if (/stock_locations_one_receiving_per_store/.test(raw)) {
+    return 'This store already has a Receiving room — there can be only one.';
+  }
+  if (/stock_locations_one_default_per_store/.test(raw)) {
+    return 'This store already has a default room.';
+  }
+  if (/stock_locations_store_code_key/.test(raw)) {
+    return 'That room code is already used in this store — pick another.';
+  }
+  if (/stock_locations_receiving_is_storage_check/.test(raw) || /Receiving room is always a storage room/.test(raw)) {
+    return 'The Receiving room must be a storage room, not operating.';
+  }
+  if (/holds stock and cannot be deactivated/.test(raw)) {
+    return raw.replace(/^deactivateLocation:\s*/, '');
+  }
+  if (/not_blank_check/.test(raw)) {
+    return 'A room needs both a code and a name.';
+  }
+  if (/role_check|purpose_check/.test(raw)) {
+    return 'That role or purpose is not recognised.';
+  }
+  return raw.replace(/^[a-z][A-Za-z0-9_]*:\s*/, '');
+}
+
+function back(storeId: string, extra: Record<string, string>): never {
+  const params = new URLSearchParams({ store: storeId, ...extra });
+  redirect(`/inventory/locations?${params.toString()}`);
+}
+
+export async function setupRoomsAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/inventory/locations');
+  const storeId = str(fd, 'storeId');
+
+  let message = '';
+  try {
+    const result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      await ensureLocationTypes(tx, actor, { storeId });
+      return seedStoreLocations(tx, actor, { storeId });
+    });
+    message =
+      result.created.length > 0
+        ? `Rooms set up: ${result.created.map((c) => c.code).join(', ')}.`
+        : 'This store already has its rooms — nothing to add.';
+  } catch (err) {
+    back(storeId, { error: errorMessage(err) });
+  }
+  revalidatePath('/inventory/locations');
+  back(storeId, { ok: message });
+}
+
+export async function createLocationAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/inventory/locations');
+  const storeId = str(fd, 'storeId');
+
+  let message = '';
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      createLocation(tx, actor, {
+        storeId,
+        code: str(fd, 'code'),
+        name: str(fd, 'name'),
+        typeId: str(fd, 'typeId'),
+        role: str(fd, 'role'),
+        purpose: fd.get('isReceiving') === 'on' ? 'receiving' : 'normal',
+        isDefault: fd.get('isDefault') === 'on',
+      }),
+    );
+    message = 'Room created.';
+  } catch (err) {
+    back(storeId, { error: errorMessage(err) });
+  }
+  revalidatePath('/inventory/locations');
+  back(storeId, { ok: message });
+}
+
+export async function updateLocationAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/inventory/locations');
+  const storeId = str(fd, 'storeId');
+  const id = str(fd, 'id');
+  const role = str(fd, 'role');
+
+  let message = '';
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      updateLocation(tx, actor, {
+        id,
+        name: str(fd, 'name'),
+        typeId: str(fd, 'typeId'),
+        // ⚠️ The Receiving room's edit form never renders a role select (page.tsx) — an absent
+        // field here means "not changing it", never "clear it".
+        role: role || undefined,
+      }),
+    );
+    message = 'Room updated.';
+  } catch (err) {
+    back(storeId, { error: errorMessage(err) });
+  }
+  revalidatePath('/inventory/locations');
+  back(storeId, { ok: message });
+}
+
+export async function setDefaultAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/inventory/locations');
+  const storeId = str(fd, 'storeId');
+  const id = str(fd, 'id');
+
+  let message = '';
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => setDefaultLocation(tx, actor, { id }));
+    message = 'Default room updated.';
+  } catch (err) {
+    back(storeId, { error: errorMessage(err) });
+  }
+  revalidatePath('/inventory/locations');
+  back(storeId, { ok: message });
+}
+
+export async function deactivateLocationAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/inventory/locations');
+  const storeId = str(fd, 'storeId');
+  const id = str(fd, 'id');
+
+  let message = '';
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => deactivateLocation(tx, actor, { id }));
+    message = 'Room deactivated.';
+  } catch (err) {
+    back(storeId, { error: errorMessage(err) });
+  }
+  revalidatePath('/inventory/locations');
+  back(storeId, { ok: message });
+}
+
+export async function reactivateLocationAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/inventory/locations');
+  const storeId = str(fd, 'storeId');
+  const id = str(fd, 'id');
+
+  let message = '';
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => reactivateLocation(tx, actor, { id }));
+    message = 'Room reactivated.';
+  } catch (err) {
+    back(storeId, { error: errorMessage(err) });
+  }
+  revalidatePath('/inventory/locations');
+  back(storeId, { ok: message });
+}

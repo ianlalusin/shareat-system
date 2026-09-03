@@ -1,10 +1,13 @@
 # T-160 — Stock locations: the room model every movement is keyed to
 
-> **Status:** ⚠️ **BUILT AND APPLIED 2026-08-29, except the screen.** Schema, migration
-> (`0062`, applied to dev and test), both registries, the pure rules and 20 integration tests
-> against real Postgres. `typecheck` clean · **656 unit** · **1226 integration, 41 files**.
-> ⛔ Repo/service and the `/inventory/locations` route are NOT built — a peer's dev server
-> holds port 9008, so there is no smoketest and no `npm run build`. §9.
+> **Status:** ✅ **BUILT 2026-09-03 — the repo functions, the domain service, the
+> `/inventory/locations` screen, and invariant 5's trigger (migration `0122`), smoketested live
+> on 9008.** DEF-135's gap for this task is closed: before this pass the only writer of a real
+> `stock_locations` row anywhere in the app was a raw SQL insert in a dev-seed script.
+> `typecheck` clean · unit 942/943 (1 pre-existing skip, unrelated) · this task's own integration
+> files 30/30 against a private database (§11 — the shared suite was not run, by design).
+> ⛔ `npm run build` and `docs/ROADMAP.html` are the coordinator's for this session — not run or
+> edited here (three other lanes share this dev server and this tree). See §11.
 > ⏳ **Wave 0 of Phase 3, and blocked on ADR-011** only in the sense that Wave 0 ships as one
 > switch — this table's shape does not change whichever way ADR-011 goes, so it may be built first.
 > **Depends on:** T-101 (`stores`, `persons`), T-121 (roles — DEF-053's lesson: check it is BUILT),
@@ -212,16 +215,145 @@ anyone else has it, that door closes.
 
 ## 10. Done when
 
-- [ ] Migration hand-written (DEF-073 — **do not run `db:generate`**), next free number, journalled
-      `previous.when + 86400000`.
-- [ ] Both registries updated: `cutover/classification.ts` (**KEEP** — configuration, like `items`)
-      and `rls/registry.ts` with `app_current_org()`'s NULLIF-guarded form (DEF-077).
-- [ ] `typecheck` · `npm test` · `npm run test:integration` green. ⚠️ Check `ListAgents` first —
-      the integration suite truncates a shared database (§3.4).
-- [ ] `npm run build` green **with the dev server stopped**.
-- [ ] ⭐ **Smoketested at a live route** on 9008 — `/inventory/locations` renders, creates a room,
-      and refuses a second Receiving with a readable error. *A shipped server action is not a
-      shipped feature* (§9 of the phase plan).
-- [ ] `docs/decisions/CAPABILITY-MATRIX.md` gains `manage_locations` and `allocate_stock`
-      (admin-only), each with a test proving the ✗ fires.
-- [ ] `docs/ROADMAP.html` updated — standing rule, Ian 2026-08-28.
+- [x] Migration hand-written (DEF-073 — **do not run `db:generate`**), next free number, journalled
+      `previous.when + 86400000`. *(`0062` by the 2026-08-29 session; `0122` — invariant 5's
+      deactivation guard — by this session, 2026-09-03, same discipline.)*
+- [x] Both registries updated: `cutover/classification.ts` (**KEEP** — configuration, like `items`)
+      and `rls/registry.ts` with `app_current_org()`'s NULLIF-guarded form (DEF-077). *(Done in the
+      2026-08-29 pass for `0062`'s three new tables. `0122` adds a trigger to an already-classified
+      table — nothing new to register.)*
+- [x] `typecheck` · `npm test` green. `npm run test:integration` **deliberately NOT run** —
+      three other lanes share `shareat_test` this session (§3.4/concurrency rule); this task's own
+      two files (`stock-locations-service.test.ts`, new, 10 cases; `stock-locations.test.ts`,
+      pre-existing, 20 cases, still green) ran instead against a private database,
+      `shareat_test_t160` — 30/30.
+- [x] `npm run build` green **with the dev server stopped** — run by the coordinator 2026-09-03
+      after all four lanes landed and the review fixes were in: dev server killed, `next build`
+      clean, every route listed, then the server restarted and the four routes re-driven.
+- [x] ⭐ **Smoketested at a live route** on 9008 — `/inventory/locations` renders; "Set up rooms"
+      seeds both the single-room shape (Malvar: Main + Receiving) and, via the integration tests,
+      the multi-room shape; a second non-Receiving room is refused with the single-room sentence;
+      a room is renamed; an empty room deactivates and reactivates; a room holding stock refuses
+      deactivation (demonstrated as a read+attempt on Lipa's `Stockroom A`, 17 kg — no other change
+      made there); a staff actor is refused with a readable sentence. *A shipped server action is
+      not a shipped feature* (§9 of the phase plan) — this one has screenshots and DB reads to
+      back it, in the closing report.
+- [x] `docs/decisions/CAPABILITY-MATRIX.md` gains `manage_locations` — **already present**,
+      declared by an earlier pass (store-scoped, manager+); confirmed still correct and exercised
+      here by a fresh staff-✗ test and a manager-with-no-scope-for-that-store-✗ test.
+      `allocate_stock` deliberately **NOT** declared — no caller, confirmed still true.
+- [x] `docs/ROADMAP.html` updated — by the coordinator 2026-09-03: T-160's line names the missing
+      writer/screen, migration `0122`, and the Malvar run; Phase 3's "why" text no longer claims
+      screens that did not exist (DEF-135).
+
+## 11. Built 2026-09-03 — the service, the screen, and invariant 5's trigger
+
+DEF-135 named this task's exact gap: schema, migration `0062`, the pure rules and 20 db-level
+tests landed 2026-08-29 with **zero writers anywhere in application code** — the only INSERT into
+`stock_locations` in the whole tree was a raw SQL line in `scripts/dev-seed-inventory.ts`. This
+pass closes it.
+
+**Landed:**
+
+| | |
+|---|---|
+| `packages/db/src/repo/stock-locations.ts` | Extended, not replaced — `defaultLocationFor` and `listActiveLocations` untouched. Added `listLocations`, `getLocation`, `insertLocation`, `updateLocation`, `clearDefaults`, `setLocationStatus`, `listLocationTypes`, `insertLocationType`, `holdsStock`, `getStoreStockModel` |
+| `packages/domain/src/stock-locations/service.ts` | Overwrote the stub. Seven exports: `ensureLocationTypes`, `seedStoreLocations`, `createLocation`, `updateLocation`, `setDefaultLocation`, `deactivateLocation`, `reactivateLocation` |
+| `packages/db/migrations/0122_t160_location_deactivation_guard.sql` | Invariant 5's trigger — hand-written (DEF-073), journalled `idx 122`, `when` = `0121`'s `+ 86400000`, applied to `shareat_dev` and this lane's private `shareat_test_t160` |
+| `apps/erp/src/app/inventory/locations/{page.tsx,lib.ts,actions.ts}` | The screen: store picker, the store's `stock_model` explained in one sentence, "Set up rooms" when a store has none, a room table with per-row rename/re-type/re-role + Make default + Deactivate/Reactivate, and an Add room form with a Receiving checkbox |
+| `packages/domain/tests/integration/stock-locations-service.test.ts` | 10 new integration tests, real Postgres |
+
+### 11.1 A spec-filling decision: `ensureLocationTypes` needed a `storeId`
+
+§4's illustrative signature was `ensureLocationTypes(tx, actor, { orgId })`. But `manage_locations`
+is a STORE-scoped capability (CAPABILITY-MATRIX.md, already declared), and `authorize()` throws
+immediately for a store-scoped capability given no `storeId`. `location_types` is itself org-wide
+(§5's own contract), so there is no single store to check "against" in any structural sense.
+**Resolution:** widened the input to `{ orgId, storeId }`, where `storeId` is used ONLY to
+authorize — the screen's currently-selected store stands in for "this actor may administer
+locations here at all," documented in the function's own comment rather than silently narrowed
+(bible §3.4a). Not a business-rule defect worth its own DEFECTS-REGISTER row — it is a one-line
+interface gap in an illustrative signature — but named here per the instruction to report rather
+than silently paper over.
+
+### 11.2 Every mutation THROWS; none return `{ ok: false }`
+
+The Build section's general domain convention (return `{ ok: false, reason }` for a pre-write
+business refusal, throw only for a post-write surprise) describes workflow modules with several
+preconditions to check before a first write — `receiveDelivery`, `transferNow`. Every function in
+this service is a single admin write with no such sequence, so it follows the shape
+`commissary/catalogue.ts` already established for exactly that shape of function: throw, and let
+`actions.ts`'s own local `errorMessage` translate. Named here because the general convention and
+the specific template this task explicitly said to copy "exactly" point in slightly different
+directions for this module; the template won, because `actions.ts` had to match it.
+
+### 11.3 `seedStoreLocations`'s idempotency also covers a pre-existing partial state
+
+Lipa's `Stockroom A` already existed (an earlier task's smoketest, raw SQL) as a `single_room`
+store's default room with **no** Receiving room. `seedStoreLocations` checks "has an active
+non-Receiving room" and "has an active Receiving room" independently, so calling it on a store
+like Lipa would add only the missing Receiving room, never a duplicate default. Not exercised on
+Lipa this session — Lipa was read-only, by the task's own instruction — but both the all-missing
+path (Malvar) and the idempotent all-present path (a second call, both store shapes) are covered
+by `stock-locations-service.test.ts`.
+
+### 11.4 Spec defects found
+
+None beyond §11.1's interface gap, which is a documentation ambiguity in the task spec rather than
+a business-rule error.
+
+### 11.5 What is NOT built, and why
+
+| | |
+|---|---|
+| `allocate_stock` capability | Confirmed still undeclared — no caller (task's own §Out of scope) |
+| A departments UI | Out of scope (§8). `departments` (migration `0062`) has no reader or writer in `apps/` yet |
+| Switching a store's `stock_model` | Out of scope (invariant 8 — its own task, the reconcile transition) |
+| `npm run build` | Coordinator's gate this session — the dev server is live on 9008, shared by three other lanes; stopping it was out of scope here |
+| `docs/ROADMAP.html` | Coordinator's file this session — three lanes are landing tasks into the same wave |
+| `CAPABILITY-MATRIX.md` rows | Already present from an earlier pass — not re-added, per this task's own "already wired for you" instruction |
+
+### 11.6 Same-day review fixes (coordinator)
+
+- **`ensureLocationTypes` takes no `orgId`.** It authorised on the caller's `storeId` and then
+  wrote to a caller-supplied `orgId` never checked against the actor — defence-in-depth only
+  (RLS would have refused a foreign org), but the wrong shape. The rows land in `actor.orgId`;
+  §11.1's `storeId` stays, for the reason it gives.
+- **The default room cannot be deactivated.** `defaultLocationFor` filters on `active`, so
+  retiring the default silently left the store with no default and the next undecided receive
+  line with nowhere to park. `deactivateLocation` refuses it (*"make another room the default
+  first"*) — after the holds-stock check, which is the more fundamental refusal — and the screen
+  shows a note on the default row instead of a button that fails. Pinned by a new test.
+
+### 11.7 Smoketest — Malvar (MLV), Dev Manager, then Dev Cashier; a read+attempt on Lipa
+
+Flow, screenshots in `t160/` (scratchpad), every effect cross-checked against the database directly
+(never the on-screen banner alone):
+
+1. **Malvar had no rooms** (`stock_locations` empty for that store) — the screen shows "Set up
+   rooms" instead of a table. `01-malvar-no-rooms.png`.
+2. **"Set up rooms"** → `ensureLocationTypes` seeded the 7-code catalogue (org had 2 pre-existing
+   codes, `STK`/`STK2`, from an earlier ad-hoc seed; untouched) → `seedStoreLocations` created
+   `MAIN` (Kitchen type, `operating`, default) and `RECEIVING` (Receiving type, `storage`).
+   `02-malvar-rooms-created.png`; confirmed in the DB: exactly those two rows, active.
+3. **A second normal room, "SECOND"** → refused on screen with *"This store keeps stock in ONE
+   room. Deactivate or repurpose the existing room before adding another."* — the single-room
+   trigger's own message, translated. `03-malvar-second-room-refused.png`; confirmed in the DB:
+   `count(code='SECOND') = 0`.
+4. **Renamed "Main" → "Main Room"** via the per-row form. `04-malvar-main-renamed.png`; confirmed
+   in the DB.
+5. **Deactivated the empty Receiving room**, then **reactivated it** — both succeeded.
+   `05-malvar-receiving-deactivated.png`, `06-malvar-receiving-reactivated.png`; confirmed in the
+   DB: `status` round-tripped `active → inactive → active`.
+6. **Read Lipa** (`07-lipa-before.png`) — `Stockroom A`, single_room, default, active, holding
+   17 kg (pre-existing, another lane's smoketest data, untouched). **Attempted to deactivate it**
+   → refused on screen with *`"Stockroom A" still holds stock and cannot be deactivated.`*
+   `08-lipa-deactivate-refused.png`. Confirmed in the DB: `Stockroom A` still `active`, still
+   `is_default`, and the 17 kg balance unchanged — **no other change made to Lipa**, as instructed.
+7. **Signed in as Dev Cashier (`333333`, `staff`)** on Malvar, attempted to add a room →
+   refused with *"Only a manager or admin scoped to this store may manage its rooms."*
+   `09-malvar-cashier-view.png`, `10-malvar-cashier-refused.png`. Confirmed in the DB: no
+   `CASHTRY` row was ever written.
+
+All 11 scripted assertions passed on the first full run; the smoketest script is
+`t160/smoketest.js` in the scratchpad, kept for re-running if the screen changes again.

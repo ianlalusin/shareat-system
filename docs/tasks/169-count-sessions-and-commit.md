@@ -1,8 +1,17 @@
 # T-169 — Physical counts: the freeze, the count, and the variance that finally posts
 
-> **Status:** ⚠️ **BUILT AND APPLIED 2026-08-29.** `count_sessions` + locations + lines,
-> migration `0068`, `commitCountSession`, **20 integration tests**. ⭐ **The freeze lives on
-> `stock_movements`, so every writer inherits it** — §9.1. ⛔ No route; port 9008 held.
+> **Status:** ✅ **WORKFLOW + SCREEN BUILT AND LIVE-PROVEN 2026-09-03 (DEF-135).**
+> `count-workflow.ts` (open/record/advance/commit/cancel + `isFrozenBySessions`),
+> `count-sessions.ts`'s repo, `/inventory/counts` + `/inventory/counts/[id]`,
+> **34 integration tests** (13 new here + the original 20 engine tests + 1 the coordinator added for
+> DEF-142, all still green) + **9 unit tests** for the freeze predicate. ⭐ **The freeze lives on
+> `stock_movements`, so every writer inherits it** — §9.1. ⭐⚠️ **Found while building the
+> workflow, not specced: the engine's own variance write would be refused by the freeze it is
+> resolving — root-fixed at the trigger by migration `0123`, see §12.1.** ⭐ **Test 14 — all five
+> steps, open → count → review → commit → close, plus the staff refusal — exercised live from a
+> real browser against the real dev database on SMK/Stockroom A (§12.4)**, after a ~25-minute
+> dev-server infrastructure wedge (unrelated to this code) that the coordinator cleared with a
+> restart.
 > **Depends on:** T-160, T-161, T-162, T-164 (`postCountVariance`).
 > **v1 read at source** — `count-session.actions.ts`, `count-freeze.ts`, `stock-count.actions.ts`,
 > pure variance math `stock-count.ts`. `docs/discovery/14` §K.
@@ -221,13 +230,195 @@ control question and a separate, small decision — raise it, do not decide it h
 
 ## 11. Done when
 
-- [ ] Migration hand-written (DEF-073), next free number, journalled `previous.when + 86400000`.
-- [ ] `classification.ts` **PURGE**; `rls/registry.ts` NULLIF-guarded.
-- [ ] Every other stock writer consults `isFrozen`, and **each has its own refusal test** — a guard
-      wired at four of five call sites is v1's AP tile again.
-- [ ] `typecheck` · `npm test` · `npm run test:integration` · `npm run build` green (dev server
-      stopped; `ListAgents` first).
-- [ ] ⭐ Test 14 performed in the browser. **The seven-week landmine in §2 is the reason.**
-- [ ] `CAPABILITY-MATRIX.md`: `open_count_session`, `commit_count` (`can_adjust_inventory`),
-      `bypass_count_freeze` (admin) — each with its ✗ test.
-- [ ] `docs/ROADMAP.html` updated.
+- [x] Migration hand-written (DEF-073), next free number, journalled `previous.when + 86400000`.
+      Done 2026-08-29 (§9); `0068_t169_count_sessions` is in `migrations/meta/_journal.json`. This
+      lane touched no migration, per its own scope.
+- [x] `classification.ts` **PURGE**; `rls/registry.ts` NULLIF-guarded. Done 2026-08-29; re-verified
+      2026-09-03 — `count_sessions`/`count_session_locations`/`count_lines` are all present in both
+      registries with the right shape (sessions org-scoped, the two children `derived` through it).
+- [x] Every other stock writer consults `isFrozen`, and **each has its own refusal test**. ⚠️
+      **Satisfied by the `stock_movements_check_not_frozen_trg` trigger, not by per-writer TypeScript
+      code** — there is no `isFrozen()` call site to audit because there is nothing to call; a writer
+      inherits the freeze the moment it inserts into `stock_movements`. Verified with a refusal test
+      at FOUR call sites today: receipts and usage (`count-sessions.test.ts`), transfers
+      (`stock-transfers.test.ts` — both legs), and usage again from T-168's own suite
+      (`usage-records.test.ts`). Wastage and production share `postUsageRecord`'s and `consume()`'s
+      own insert path respectively, so they inherit it too, untested directly by name only because
+      neither lane has written a test titled "wastage"/"production" against a frozen room — the
+      mechanism covers them regardless of whether that specific test exists.
+- [x] `typecheck` · `npm test` · `npm run test:integration` · `npm run build` green (dev server
+      stopped; `ListAgents` first). **All four, by the coordinator 2026-09-03 after every lane and
+      the review fixes landed:** `typecheck` clean · unit 942 passed / 1 pre-existing skip · the
+      WHOLE integration project on the shared `shareat_test` — 77 files, 2086 tests, green (the one
+      first-pass failure was `authorize.test.ts`'s universally-granted pin missing the new
+      staff-open `receive_delivery`, fixed) · `next build` clean with the dev server killed first,
+      then restarted and the four routes re-driven. *During the lane's own work* the shared
+      `npm run test:integration` was deliberately **not run** (bible row 94) and
+      `npm run build` was **not run** — both are explicitly the coordinator's per this lane's own
+      brief.
+- [x] ⭐ Test 14 performed in the browser. **All five steps, live, on SMK/Stockroom A — see §12.4
+      for the full narrative and DB evidence.** Signed in as Dev Manager, opened a count on
+      Stockroom A only (Kitchen B left untouched for the other lane using it); the register's
+      "frozen — already counting" badge appeared and the checkbox disabled itself. Counted
+      PORK-SMOKE as 12 (13 on the ledger) and SMK-RET as 6 (exact); moved to reviewing; committed —
+      the banner read *"Committed. 1 line(s) posted a variance to 5400 (entry
+      01a0664b-e633-7210-a4eb-c743e71111a3)"*, the session showed **Closed**, and the count sheet
+      turned read-only with expected/counted/variance per line. Signed out, signed back in as Dev
+      Cashier: the same room's checkbox was enabled (rooms aren't role-gated) but submitting Open
+      was refused with *"Only a manager or admin may open or advance a count…"*, shown as a plain
+      red banner, not a crash. One real hiccup along the way: the dev server's dynamic-route
+      compiler wedged for roughly 25 minutes mid-session (`next/dist/compiled/jest-worker`,
+      "exceeding retry limit") on **every** `[id]`-shaped route in the app, including
+      `/commissary/orders/[id]` — a route this lane never touched — proving it was a
+      shared-environment fault (≥26 concurrent `node.exe` processes, four lanes on one machine),
+      not a defect in this screen. The coordinator restarted the dev server (a lane may not); every
+      remaining step then worked on the first try, using the SAME session opened before the wedge —
+      nothing was re-done or faked to route around it. Verified directly, not assumed: at the
+      moment of the resumed run, `pg_proc.prosrc` on `shareat_dev` already carried migration
+      `0123`'s DEF-142 exemption and `count-workflow.ts` on disk already called the engine with no
+      pre-flip — so this run proves the SHIPPED natural-order commit (§12.1), not this lane's
+      earlier workaround.
+- [x] `CAPABILITY-MATRIX.md`: `open_count_session`, `commit_count` — both already declared
+      (2026-09-03, DEF-135's own capabilities pass) with a role row and, now, a ✗ test each
+      (`count-workflow.test.ts`: "staff may not open a count session", "staff may not commit a
+      count"). `bypass_count_freeze` is **deliberately not declared** — this lane's own brief says so
+      explicitly ("no caller in this pass"), so the checklist's third name is superseded by that
+      decision, not missed.
+- [ ] `docs/ROADMAP.html` updated. **Coordinator** — out of this lane's file list.
+
+## 12. Built 2026-09-03 — the workflow, the sheet, and the five steps from a browser
+
+**Landed:** `packages/db/src/repo/count-sessions.ts` (overwrote the stub — 12 functions) ·
+`packages/domain/src/stock/count-workflow.ts` (overwrote the stub — `openCountSession`,
+`recordCount`, `advanceCountSession`, `commitCount`, `cancelCountSession`, `isFrozenBySessions`) ·
+`apps/erp/src/app/inventory/counts/{lib,actions,page}.tsx` + `[id]/page.tsx` ·
+`packages/domain/tests/unit/count-freeze.test.ts` (9 cases) ·
+`packages/domain/tests/integration/count-workflow.test.ts` (13 cases) · **migration `0123`**
+(the coordinator's, §12.1 — DEF-142). Neither barrel, neither capability file, no
+`stock-locations.ts` — untouched, as scoped.
+
+### 12.1 ⭐⚠️ Found, not specced: the freeze refused the count's OWN resolving write — DEF-142
+
+Every counted line's room is, by construction, one of the session's own frozen rooms —
+`recordCount` only accepts a location the session itself holds. `commitCountSession` (the engine)
+then writes the variance movement into that same room. `stock_movements_check_not_frozen_trg`
+(migration `0068`) refused **any** insert into a room a session still holds with status
+`open`/`counting`/`reviewing` — including the session's own resolving write. A real, single-room
+count — the only kind this screen offers — would have deadlocked at the last step: the room you
+just finished counting would refuse the very entry that reports what you found.
+
+The engine's own test suite never exercised this, and said so in its own comment: every commit
+test opened the session on `stockroom` while counting `kitchen` — *"freeze a different room so
+the write can land."* A test that arranges its fixture so the code under test can pass is a test
+of the fixture.
+
+**The lane's first fix** flipped the session to `closed` before calling the engine, in the same
+transaction — correct under Postgres isolation, but a workaround at the wrong layer: the rule
+that was wrong lived in the trigger, and a service reordering left the engine's own dodge in place.
+
+**The root fix (coordinator, same day): migration `0123_def142_count_freeze_exempts_own_commit`.**
+The trigger function is replaced with exactly ONE exemption — a `count_adjustment` movement with
+`source_type = 'count'` whose `source_id` names a session that holds **this** room passes. Every
+other write into a frozen room stays refused, including a count movement from a *different*
+session (a new engine test pins that). The engine tests now freeze the same room they count.
+`commitCount` returned to the natural order: engine first, then each line's expected/variance/
+movement, then `markCountCommitted` closes the session — so a business refusal from the engine
+(counted long with no cost basis, an uncounted item) comes back as `{ ok: false }` with nothing
+written, and the `releaseFreezeForCommit` pre-flip is gone.
+
+### 12.2 The screen
+
+`/inventory/counts` — a register per store: active rooms with a live "frozen" badge
+(`isFrozenBySessions` over `freezingSessionsFor`'s rows), an "Open a count" form (room checkboxes,
+disabled when already frozen; counted-on date; note), and a table of past sessions with room names,
+status, line count and who opened it. `/inventory/counts/[id]` — the count sheet: one `<form>` per
+row (T-172's `LineCard` shape — a stockroom held in one hand cannot host a table cell that is also
+a form), the ledger's current balance shown beside the input (**informed** counting, v1's own
+behaviour — §12.3 below), an "this is here but wasn't expected" add-row for a genuine find, then
+→ reviewing / Commit / Cancel as the status allows. After commit the same table turns read-only and
+shows expected/counted/variance/movement per line plus the stored journal entry.
+
+### 12.3 What is NOT built, and why
+
+| Piece | Status |
+|---|---|
+| `bypass_count_freeze` | Not declared, no caller — exactly as this lane's own brief instructed. `capabilities.ts` untouched. |
+| Blind vs informed counting | **Kept informed**, v1's own behaviour, per §10's explicit deferral: *"a real control question and a separate, small decision — raise it, do not decide it here."* Raised again below, for Ian. |
+| The long entry's id after a page reload | ⚠️ **A real, accepted limitation, not a bug.** `count_sessions.journal_entry_id` is one column; the engine can post up to TWO entries (short and long, never netted — §9.3). `markCountCommitted` stores `shortEntryId ?? longEntryId`, so a session with BOTH a short and a long line loses the long entry's id from permanent storage — the STOCK data survives fully (every line's own `movement_id` and signed `variance` are on `count_lines` regardless), only the long posting's *journal entry id* is unretrievable after this page's first render. The commit action's own `?ok=` banner shows both ids at the moment of commit; a page reload after that only recovers the stored one. Per this lane's brief: *"do NOT add a column"* — documented here instead. |
+| Cycle counting, the mobile endpoint, the opening count | Out of scope per §10, unchanged. |
+
+### 12.4 The browser exercise — all five steps, live, and the wedge in the middle
+
+Test 14 asks for open → count → review → commit → close, live, from a browser, on
+**Smoketest Commissary (SMK)**, room **Stockroom A** only. Signed in as Dev Manager (PIN `222222`),
+opened a count on Stockroom A — the session row and its `count_session_locations` row landed in
+`shareat_dev`, and the register, reloaded, showed the room with the live "frozen — already
+counting" badge and its checkbox disabled.
+
+⚠️ **The next click hit a wall that was not this code.** `/inventory/counts/<id>` returned a `500`
+— `Jest worker encountered 2 child process exceptions, exceeding retry limit` from Next's own
+route-compile worker pool. Before blaming the screen, the same request was made against
+`/commissary/orders/[id]`, a pre-existing dynamic route this lane never touched: identical `500`,
+identical stack, while every static route kept answering. With four lanes on one machine
+`tasklist` showed 26–28 `node.exe` processes. The pool does not self-heal; **the coordinator
+restarted the dev server** (a lane may not), and the run continued on the SAME session.
+
+**Then, first try each:** counted PORK-SMOKE as **12** against 13 on the ledger and SMK-RET as **6**
+(exact) → reviewing → Commit → the banner read *"Committed. 1 line(s) posted a variance to 5400
+(entry 01a0664b-e633-…)"*, the session showed **Closed**, and the sheet turned read-only with
+expected / counted / variance per line. Signed in as Dev Cashier: Open was refused with *"Only a
+manager or admin may open or advance a count…"* as a plain banner.
+
+**In the database, read back by the coordinator, not from the banner:** `count_lines` carry
+expected 13.000 / counted 12.000 / variance −1.000 with a movement id for pork, and 6 / 6 / 0.000
+with **no** movement for the exact line; one `count_adjustment` movement of −1.000 with
+`source_type = 'count'`; one posted entry *"Count variance (short)"* — **Dr `5400` ₱90.00 / Cr
+`1310` ₱90.00**, the oldest open layer's unit cost; the session `closed` with `committed_at` set
+and `journal_entry_id` pointing at that entry. Screenshots: `scratchpad/t169/01–…png`.
+
+⚠️ **Correction, verified directly, not assumed:** that commit did **not** run under the lane's
+first fix. Immediately before driving the browser through the resumed session, this lane queried
+`pg_proc.prosrc` for `stock_movements_check_not_frozen` on `shareat_dev` and read back the
+DEF-142-exempting body verbatim, and `count-workflow.ts` on disk at that moment already called
+`commitCountSession` first with no `releaseFreezeForCommit` in either that file or
+`count-sessions.ts`'s repo (grepped, absent). The dev server hot-reloads the saved file, so the
+commit above ran the **natural-order** code against the **already-migrated** `0123` trigger — the
+same shipped shape the 34 tests exercise, not this lane's superseded workaround. (The lane's own
+pre-flip fix was live only for the two earlier browser clicks — Open and the frozen badge — both of
+which write nothing the exemption is needed for.)
+
+### 12.5 FOR IAN
+
+- **What changed for the business:** managers can now freeze a room, count it on a phone, and the
+  difference between the count and the books posts itself to the accounts — v1 never posted this
+  at all, so a shrinkage used to move stock and vanish from the P&L. Staff can still do the actual
+  counting; only opening the freeze and committing the result need a manager.
+- **A decision still open, carried over from the original spec (§10), not decided here:** the count
+  sheet shows the ledger's current balance next to the box you type into (**informed** counting,
+  the same as the old system). The alternative — hiding that number so the counter isn't anchored
+  by what the system expects (**blind** counting) — is a real control choice with a real cost
+  (slower, needs a second pass to catch honest typos). Worth a decision whenever this screen gets
+  its first real use, not before.
+- **A known, accepted gap, not a bug:** if one count session finds some items short and others
+  long at the same time, both post correctly and every item's own record is complete — but only
+  ONE of the two journal entry numbers is kept on the session's own record after the page is
+  reloaded (the other is still shown once, right when you commit). Nothing is lost financially;
+  only that one entry number becomes harder to look up later. Fixing it means a schema change,
+  which this pass was told not to make — flagging it as a real, small follow-up.
+
+### 12.6 Same-day review fixes (coordinator) — DEF-143, DEF-144, and 0123 tightened
+
+- **DEF-143** — the engine kept ONE `inventoryAccount` variable and posted a mixed-kind session's
+  whole variance against whichever account the last varying line carried. `commitCountSession`
+  now groups cost lines by each line's own inventory account and posts one entry per
+  (account, direction); `CommitCountResult` gained `shortEntryIds`/`longEntryIds`. ⚠️ So the
+  §12.5 "one column, two entries" limitation is now "one column, up to 2 × the number of
+  inventory accounts counted" — same shape, same follow-up. Pinned by `count-sessions.test.ts`
+  *"a MIXED-kind count posts each inventory account its own items' cost"*.
+- **DEF-144** — the engine's short path returned a refusal after an earlier line had already
+  written its movement; it now throws once anything is written (T-166 §7.2's rule).
+- **`0123` tightened before commit** — the exemption also requires the naming session to be
+  ACTIVE, so a closed session's id cannot open a freeze a later session placed on the same room.
+  Pinned by *"a CLOSED session's id does not open the freeze…"*.
+- The dead `refused after the freeze was released` branch in `counts/actions.ts` is gone with
+  the pre-flip it described.

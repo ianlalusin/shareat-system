@@ -266,3 +266,15 @@ home and no builder. **Gap count: 35.**
 The attendance lane's `attendance_days` was checked against what the cash count needs. **They are NOT the same object**: `attendance_days` is keyed `(employment_id, shift_day)` — one row per PERSON per 05:00 day — while the till needs one row per TILL per HANDOVER. A cashier who works a split shift produces one attendance row and two custody periods, so keying cash on it makes the second handover unrepresentable.
 
 ⭐ **But attendance already owns the person and the clock** (`first_in_punch_id` / `last_out_punch_id`, from append-only punches). So the remaining gap is narrower than it was: a `till_custody_shift` that **references** `attendance_days` rather than restating it. ⛔ Two tables asserting when a shift started will drift, and the first symptom is a variance charged to the wrong person. Full reasoning in `docs/tasks/153-standing-till-float.md`.
+
+## Added 2026-09-03 — found while fixing the bible §4.3 layering findings over T-168's screen (DEF-135)
+
+| Capability | v1 has it | v2 state | Why it is a gap, not a defect |
+|---|---|---|---|
+| **A per-item COGS category** — the split COA-ALIGNMENT §4.1 wants between `5120` sides, `5130` condiments, `5140` sauces and `5200` beverages | ⛔ **No — v1 does the same coarse thing.** `meat-usage.actions.ts` never varied its posting account by item either; every non-meat/retail/supply kind lands on one line | ⛔ **`items` carries no costing taxonomy, only `kind`** (T-149 spent that column's budget on three sellability flags instead). `cogsCategoryForItemKind` (`packages/domain/src/stock/usage-records.ts:58-72`) maps every `raw_material`/`prepped` item — sides, condiments, sauces and beverages all included — to the `food` catch-all, `5100` | COA-ALIGNMENT §4.1 marks `5100` **"drive to zero,"** but nothing in the eight-phase plan owns adding the column that would let a consumption posting land anywhere finer. Not a defect: the mapping is intentional parity with v1, named where it was found rather than silently worked around (T-168 §12.2). It just means `5120`/`5130`/`5140`/`5200` will never receive a single consumption posting from this pathway until an item carries its own category |
+
+⭐ **The fix and its cost, named so it is a placement rather than an absence.** A `cogs_category`
+column on `items`, set from the item master screen and read by `usage-records.ts` in place of the
+`kind` switch above, costs: a migration, a change to the items screen (one more field to set per
+item), and a backfill — trivial for the seven dev-fixture items, real work for every live item at
+cutover, since nobody has ever had to classify stock this way before. **Gap count: 36.**

@@ -85,8 +85,11 @@ export function duplicateRisk(input: DuplicateRiskInput): DuplicateWarning[] {
     warnings.push({
       code: 'same_item_same_day',
       message:
-        `${repeated.length} item(s) on this delivery were already received on ${input.deliveredOn}. ` +
-        `A supplier splitting a load across two vans is normal; a second save of the same paper is not.`,
+        // ⚠️ "recorded", not "received" — `existing` includes drafts and voided documents on
+        // purpose (see `recentDeliveriesForRisk`), so a second draft of the same paper is warned
+        // about before either is received.
+        `${repeated.length} item(s) on this delivery were already recorded on a delivery dated ${input.deliveredOn} ` +
+        `(drafts and voided ones included). A supplier splitting a load across two vans is normal; a second save of the same paper is not.`,
     });
   }
 

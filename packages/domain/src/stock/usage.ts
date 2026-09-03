@@ -18,7 +18,8 @@
  * interchangeable inside a transaction.*
  */
 import { add, ZERO, type Money } from '@shareat/core/money';
-import type { Tx } from '@shareat/db';
+import { journalRepo, type Tx } from '@shareat/db';
+import { reverseEntry } from '../ledger/reverse-entry';
 import { consume, reverseConsumption } from './consume';
 import { postConsumption, postWastage } from './consumption-posting';
 import { isReservedUsageCategory, type WastageReason } from './wastage-reasons';
@@ -119,7 +120,16 @@ export async function postUsageRecord(tx: Tx, input: PostUsageInput): Promise<Po
       sourceId: input.recordId,
       createdBy: input.postedBy,
     });
-    if (!result.ok) return result;
+    if (!result.ok) {
+      // ⛔ A refusal on line 2+ arrives AFTER line 1's movement and layer consumptions are written.
+      // Returning it would let the caller COMMIT a half-post — item A consumed, no entry, the record
+      // still `draft`, and a second press consuming A again. Found by the 2026-09-03 review; the
+      // same rule this file already states for the posting step below.
+      if (movementIds.length > 0) {
+        throw new Error(`postUsageRecord: refused after stock was written — ${result.reason}`);
+      }
+      return result;
+    }
 
     movementIds.push(result.movementId);
     totalCost = add(totalCost, result.totalCost);
@@ -137,11 +147,10 @@ export async function postUsageRecord(tx: Tx, input: PostUsageInput): Promise<Po
       inventoryAccount: group.input.inventoryAccount,
       movedOn: input.usedOn,
       sourceType: input.kind,
-      // ⚠️ The key rides the source id so two groups on one record do not collide on idempotency.
-      sourceId: `${input.recordId}` as string,
       costLines: group.lines,
       postedBy: input.postedBy,
     };
+    // ⚠️ The key rides the source id so two groups on one record do not collide on idempotency.
     const posted =
       input.kind === 'wastage'
         ? await postWastage(tx, { ...common, sourceId: `${input.recordId}:${key}`, reason: input.reason! })
@@ -171,19 +180,30 @@ export interface VoidUsageInput {
   readonly lines: readonly { itemId: string; movementId: string; quantity: Quantity }[];
   readonly voidedBy: string;
   readonly hasLiveStaffCharge?: boolean;
+  /** Lands on the reversal entries' memo. Defaults to naming the record, never empty. */
+  readonly reason?: string | null;
 }
 
 /**
- * Void a posted usage record — stock back, layers restored.
+ * Void a posted usage record — stock back, layers restored, **and the entry reversed.**
  *
  * ⭐ **A linked staff charge is voided FIRST**, and the ordering is v1's for a real reason: a
  * failure must never leave a reversed stock movement standing beside an un-reversed pay deduction.
  * Somebody is still being charged for meat that is back on the shelf.
+ *
+ * ⚠️ DEF-141 (2026-09-03): until the screen arrived, this reversed the movements and the layers
+ * and **left the `Dr 5110 / Cr 1310` entry standing** — the spec's invariant 7 says "stock, layers
+ * and entry in one transaction", the engine's own test asserted only the first two, and nothing
+ * called it from `apps/` to notice. A voided usage therefore silently kept its COGS. The entries
+ * are found by the `(source_type, source_id prefix)` they were posted under — one per
+ * (account, category) group — and each is reversed through `reverseEntry`, so the ledger's own
+ * reversal discipline (idempotent by `reverse:{entryId}`, linked, original flipped to `reversed`)
+ * applies rather than a hand-rolled opposite entry.
  */
 export async function voidUsageRecord(
   tx: Tx,
   input: VoidUsageInput,
-): Promise<{ ok: true; movementIds: string[] } | { ok: false; reason: string }> {
+): Promise<{ ok: true; movementIds: string[]; reversalEntryIds: string[] } | { ok: false; reason: string }> {
   if (input.hasLiveStaffCharge && !SALARY_ADVANCE_AVAILABLE) {
     return {
       ok: false,
@@ -208,8 +228,32 @@ export async function voidUsageRecord(
       sourceId: input.recordId,
       createdBy: input.voidedBy,
     });
-    if (!result.ok) return result;
+    if (!result.ok) {
+      // ⛔ Same rule as the post: a refusal after an earlier line's reversal was written must
+      // unwind it, never be handed back for the caller to commit.
+      if (movementIds.length > 0) {
+        throw new Error(`voidUsageRecord: refused after stock was reversed — ${result.reason}`);
+      }
+      return result;
+    }
     movementIds.push(result.movementId);
   }
-  return { ok: true, movementIds };
+
+  // ⭐ The entry, third — after the stock and the layers, inside the same transaction. A reversal
+  // that fails (closed period for `voidedOn`, say) THROWS and unwinds the stock above with it:
+  // "all of it or none" holds in the void direction exactly as it does in the post direction.
+  const reason = (input.reason ?? '').trim() || `void of ${input.kind} record ${input.recordId}`;
+  const entries = await journalRepo.findPostedEntriesBySource(tx, input.orgId, input.kind, `${input.recordId}:`);
+  const reversalEntryIds: string[] = [];
+  for (const entry of entries) {
+    const reversed = await reverseEntry(tx, {
+      entryId: entry.id,
+      reason,
+      reversalDate: input.voidedOn,
+      reversedBy: input.voidedBy,
+    });
+    reversalEntryIds.push(reversed.reversalEntryId);
+  }
+
+  return { ok: true, movementIds, reversalEntryIds };
 }

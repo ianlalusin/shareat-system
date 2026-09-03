@@ -29,6 +29,12 @@ const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
     label: 'Inventory',
     links: [
       { href: '/inventory', label: 'Stock on hand' },
+      // ⭐ DEF-135 — the whole physical stock lifecycle (rooms, receiving, usage, counting) had a
+      // tested engine and NO screen until 2026-09-03. Four routes, four lanes, one day.
+      { href: '/inventory/locations', label: 'Rooms' },
+      { href: '/inventory/deliveries', label: 'Deliveries' },
+      { href: '/inventory/usage', label: 'Usage & wastage' },
+      { href: '/inventory/counts', label: 'Counts' },
       { href: '/inventory/low-stock', label: 'Low stock' },
       { href: '/commissary/orders', label: 'Branch orders' },
       // ⭐ DEF-129 — `commissary_item_map` had no writer anywhere until 2026-09-03, so every real

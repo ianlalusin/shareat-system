@@ -57,8 +57,12 @@ export interface VarianceLine {
 export interface CommitCountResult {
   readonly ok: true;
   readonly lines: readonly VarianceLine[];
+  /** The first short / long entry — kept for callers that store one id. */
   readonly shortEntryId: string | null;
   readonly longEntryId: string | null;
+  /** ⭐ One entry per (inventory account, direction) — a mixed-kind count posts several. */
+  readonly shortEntryIds: readonly string[];
+  readonly longEntryIds: readonly string[];
   readonly shortCost: Money | null;
   readonly longCost: Money | null;
 }
@@ -107,9 +111,14 @@ export async function commitCountSession(
   }
 
   const lines: VarianceLine[] = [];
-  const shortLines: ConsumedLine[] = [];
-  const longValue: ConsumedLine[] = [];
-  let inventoryAccount = input.lines[0]!.inventoryAccount;
+  // ⭐ Grouped by each line's OWN inventory account. A commissary counts pork (`1310`) and takeout
+  // boxes (`1320`) in one room; each account must move by exactly its own items' cost, or the
+  // control accounts stop tying to the layers (invariant 6). ⚠️ Until the 2026-09-03 review this
+  // posted the WHOLE variance against whichever account the last varying line carried — reachable
+  // for the first time once T-169's screen let one session hold two kinds.
+  const shortByAccount = new Map<string, ConsumedLine[]>();
+  const longByAccount = new Map<string, ConsumedLine[]>();
+  let anyWritten = false;
 
   for (const line of input.lines) {
     // ⚠️ Read INSIDE the transaction, with the lock the consume path takes anyway.
@@ -123,8 +132,6 @@ export async function commitCountSession(
       continue;
     }
 
-    inventoryAccount = line.inventoryAccount;
-
     if (compareQuantity(variance, quantity('0')) < 0) {
       // Counted SHORT — relieve the oldest layers for the missing quantity.
       const missing = subtractQuantity(quantity('0'), variance);
@@ -135,8 +142,16 @@ export async function commitCountSession(
         kind: 'count_adjustment', sourceType: 'count', sourceId: input.sessionId,
         createdBy: input.committedBy,
       });
-      if (!result.ok) return result;
-      shortLines.push(...result.lines);
+      if (!result.ok) {
+        // ⛔ A refusal after an earlier line already wrote its movement must UNWIND the
+        // transaction, never be handed back for the caller to commit (T-166 §7.2).
+        if (anyWritten) throw new Error(`commitCountSession: refused after stock was written — ${result.reason}`);
+        return result;
+      }
+      anyWritten = true;
+      const group = shortByAccount.get(line.inventoryAccount) ?? [];
+      group.push(...result.lines);
+      shortByAccount.set(line.inventoryAccount, group);
       lines.push({ itemId: line.itemId, locationId: line.locationId, expected, counted: line.countedQuantity, variance, movementId: result.movementId });
     } else {
       // Counted LONG — a movement IN, and a new layer at the fallback cost (§ header).
@@ -153,45 +168,54 @@ export async function commitCountSession(
         quantity: variance, unitCost, source: 'count',
         sourceId: input.sessionId, movementId: movement.id,
       });
-      longValue.push({ layerId: layer.id, quantity: variance, unitCost, cost: lineCost(variance, unitCost) });
+      anyWritten = true;
+      const group = longByAccount.get(line.inventoryAccount) ?? [];
+      group.push({ layerId: layer.id, quantity: variance, unitCost, cost: lineCost(variance, unitCost) });
+      longByAccount.set(line.inventoryAccount, group);
       lines.push({ itemId: line.itemId, locationId: line.locationId, expected, counted: line.countedQuantity, variance, movementId: movement.id });
     }
   }
 
-  // ⭐ Two entries at most, not one per line: short and long move in opposite directions and
-  // netting them would hide a store that lost 40 kg of beef and found 40 kg of rice.
-  let shortEntryId: string | null = null;
-  let longEntryId: string | null = null;
+  // ⭐ One entry per (inventory account, direction), never one per line — and short and long are
+  // never netted: netting would hide a store that lost 40 kg of beef and found 40 kg of rice.
+  const shortEntryIds: string[] = [];
+  const longEntryIds: string[] = [];
+  let shortCost: Money | null = null;
+  let longCost: Money | null = null;
 
-  if (shortLines.length > 0) {
+  for (const [inventoryAccount, costLines] of shortByAccount) {
     const posted = await postCountVariance(tx, {
       orgId: input.orgId, storeId: input.storeId, inventoryAccount,
       movedOn: input.countedOn, sourceType: 'count',
-      sourceId: `${input.sessionId}:short`, costLines: shortLines,
+      sourceId: `${input.sessionId}:short:${inventoryAccount}`, costLines,
       postedBy: input.committedBy, direction: 'short',
     });
     if (!posted.ok) throw new Error(`commitCountSession: ${posted.reason}`);
-    shortEntryId = posted.entryId;
+    shortEntryIds.push(posted.entryId);
+    shortCost = add(shortCost ?? ZERO, sum(costLines));
   }
 
-  if (longValue.length > 0) {
+  for (const [inventoryAccount, costLines] of longByAccount) {
     const posted = await postCountVariance(tx, {
       orgId: input.orgId, storeId: input.storeId, inventoryAccount,
       movedOn: input.countedOn, sourceType: 'count',
-      sourceId: `${input.sessionId}:long`, costLines: longValue,
+      sourceId: `${input.sessionId}:long:${inventoryAccount}`, costLines,
       postedBy: input.committedBy, direction: 'long',
     });
     if (!posted.ok) throw new Error(`commitCountSession: ${posted.reason}`);
-    longEntryId = posted.entryId;
+    longEntryIds.push(posted.entryId);
+    longCost = add(longCost ?? ZERO, sum(costLines));
   }
 
   return {
     ok: true,
     lines,
-    shortEntryId,
-    longEntryId,
-    shortCost: shortLines.length > 0 ? sum(shortLines) : null,
-    longCost: longValue.length > 0 ? sum(longValue) : null,
+    shortEntryId: shortEntryIds[0] ?? null,
+    longEntryId: longEntryIds[0] ?? null,
+    shortEntryIds,
+    longEntryIds,
+    shortCost,
+    longCost,
   };
 }
 

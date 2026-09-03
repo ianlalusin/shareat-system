@@ -154,6 +154,32 @@ describe('T-168 — ⭐ the loop closes', () => {
   });
 });
 
+describe('T-168 — a multi-line post is all or nothing (review 2026-09-03)', () => {
+  it('⛔ a refusal on line 2 UNWINDS line 1 — nothing is consumed', async () => {
+    // Before the fix `postUsageRecord` returned line 2's refusal after line 1's movement and layer
+    // consumptions were written, and the caller committed a half-post: item A gone, no entry, the
+    // record still `draft`, and a second press consuming A again.
+    await stockUp();
+    const [rice] = await sql<{ id: string }[]>`
+      insert into items (org_id, code, name, kind, base_unit, created_by)
+      values (${orgA},'RICE','Rice','raw_material','kg',${personA}) returning id`;
+    await expect(
+      transaction((tx) =>
+        postUsageRecord(tx, usageInput({
+          lines: [
+            { lineId: '1', itemId: itemA, cogsCategory: 'meat', inventoryAccount: '1310', quantity: quantity('5') },
+            { lineId: '2', itemId: rice!.id, cogsCategory: 'meat', inventoryAccount: '1310', quantity: quantity('1') },
+          ],
+        })),
+      ),
+    ).rejects.toThrow(/refused after stock was written/);
+    expect(await onHand()).toBe('18.000');
+    const [n] = await sql<{ c: string }[]>`select count(*)::text as c from stock_layer_consumptions`;
+    expect(n!.c).toBe('0');
+    expect((await balances())['5110']).toBeUndefined();
+  });
+});
+
 describe('T-168 — the reserved category, and the charge that must not vanish', () => {
   it('⭐ a wastage reason of "transfer" is REFUSED, with the reason explained', async () => {
     await stockUp();
@@ -285,6 +311,44 @@ describe('T-168 — void gives stock back to the layers it came from', () => {
       select remaining_quantity from stock_layers order by received_at`;
     expect(after.map((r) => r.remaining_quantity)).toEqual(['10.000', '8.000']);
     expect(await onHand()).toBe('18.000');
+  });
+
+  it('⭐ and REVERSES the entry — 5110 and 1310 return to their pre-post balances (DEF-141)', async () => {
+    // Spec test 8 says "void reverses stock and entry"; until 2026-09-03 this file asserted only the
+    // stock half, and the engine reversed only the stock half. A voided usage silently kept its
+    // COGS, and no screen existed to notice.
+    await stockUp();
+    const input = usageInput({ kind: 'wastage', reason: 'spoilage' });
+    const posted = await transaction((tx) => postUsageRecord(tx, input));
+    expect(posted.ok).toBe(true);
+    if (!posted.ok) return;
+    expect((await balances())['5300']).toBe('1600.00');
+    expect((await balances())['1310']).toBe('360.00');
+
+    const res = await transaction((tx) =>
+      voidUsageRecord(tx, {
+        orgId: orgA, storeId: storeA, locationId: kitchen, recordId: input.recordId,
+        kind: 'wastage', voidedOn: '2026-08-21', voidedBy: personA, reason: 'counted wrong',
+        lines: [{ itemId: itemA, movementId: posted.movementIds[0]!, quantity: quantity('15') }],
+      }),
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.reversalEntryIds).toHaveLength(1);
+
+    const b = await balances();
+    expect(b['5300']).toBe('0.00');
+    expect(b['1310']).toBe('1960.00');
+
+    // The ledger's own discipline, not a hand-rolled opposite entry: the original is `reversed`,
+    // the reversal points back at it, and it carries the reason.
+    const [orig] = await sql<{ status: string }[]>`select status from journal_entries where id = ${posted.entryIds[0]!}`;
+    expect(orig!.status).toBe('reversed');
+    const [rev] = await sql<{ reversal_of_entry_id: string; memo: string; entry_date: string }[]>`
+      select reversal_of_entry_id, memo, entry_date::text from journal_entries where id = ${res.reversalEntryIds[0]!}`;
+    expect(rev!.reversal_of_entry_id).toBe(posted.entryIds[0]);
+    expect(rev!.memo).toBe('counted wrong');
+    expect(rev!.entry_date).toBe('2026-08-21');
   });
 
   it('⛔ a void carrying a live staff charge is refused while Phase 5 is unbuilt', async () => {

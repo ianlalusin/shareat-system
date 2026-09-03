@@ -200,9 +200,29 @@ lane's data, and left in place on purpose: it is a truthful demonstration that t
 ⚠️ **It also means `shareat_dev` has never tied**, and nobody knew, because until 2026-08-30 there
 was nowhere to look.
 
-## ⛔ Still no screen at all
-
-Receiving (T-166), usage and wastage (T-168), count sessions (T-169), and the whole ordering
-lifecycle (T-172). **The engine for all of them is green and unreachable.** They are the next
-UI slice, and the pattern is now established: a `lib.ts` of reads, a `page.tsx`, an `actions.ts`
-that authorises and calls the domain, and nothing re-implemented in between.
+## ~~⛔ Still no screen at all~~ — ✅ CLEARED 2026-09-03 (DEF-135)
+
+*As written 2026-08-30:* Receiving (T-166), usage and wastage (T-168), count sessions (T-169), and
+the whole ordering lifecycle (T-172). **The engine for all of them is green and unreachable.**
+
+*2026-09-03:* T-172 cleared the same day under DEF-136. The other three, plus T-160's missing
+service, cleared as **DEF-135** — four lanes in parallel, each on its own store and its own
+migrated test database, the pattern above followed exactly (`lib.ts` reads under
+`withOrgPrincipal`, `page.tsx`, `actions.ts` that authorises and calls the domain). Each was driven
+live on 9008 and read back from the database, not the banner:
+
+| Route | Live evidence |
+|---|---|
+| `/inventory/locations` | Malvar set up from zero; the single-room trigger refused a second room on screen; Lipa's 17 kg room refused deactivation (migration `0122`) |
+| `/inventory/deliveries` | Lipa: a two-line supplier delivery with a real photo received short with a reason → `Dr 1310 / Cr 2120` ₱3,500, `/inventory` tying to the peso; cashier over-receipt ✗, manager's approved |
+| `/inventory/usage` | Commissary Kitchen B: cashier drafts, Post ✗; manager posts `Dr 5100 / Cr 1310` at FIFO; wastage `Dr 5300`; void reverses stock, layers and entry |
+| `/inventory/counts` | Commissary Stockroom A: open → frozen badge → 12 of 13 → reviewing → commit `Dr 5400 / Cr 1310` ₱90 → closed; cashier Open ✗ |
+
+⭐ **What the screens found on their first run, again:** two engine bugs that green tests had hidden
+— a usage void that left its COGS entry standing (**DEF-141**) and a count freeze that refused the
+count's own resolving write while the engine's tests froze a *different* room "so the write can
+land" (**DEF-142**). Both fixed the same day. The lesson is the one this file was written for: a
+test that arranges its fixture so the code can pass is a test of the fixture.
+
+⚠️ **Still unbuilt, named in each task doc:** delivery void (T-166), `adjustment`/`opening` usage
+kinds and staff charges (T-168), the admin freeze bypass (T-169), `allocate_stock` (T-160).

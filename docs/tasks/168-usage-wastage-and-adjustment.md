@@ -1,9 +1,11 @@
 # T-168 — Usage, wastage, adjustment: the busiest door in the domain
 
-> **Status:** ⚠️ **BUILT AND APPLIED 2026-08-29 — post and void.** `stock_usage_records` +
-> `stock_usage_lines`, migration `0067`, `consume.ts`, `usage.ts`, **19 integration tests**.
-> ⭐ **The loop closes here** — received, layered, consumed, costed. §9.
-> ⛔ The route is NOT built; port 9008 is held. §7's two questions were built as recommended.
+> **Status:** ✅ **BUILT, SCREENED AND SMOKETESTED 2026-09-03 — DEF-135 closed for this task.**
+> `stock_usage_records` + `stock_usage_lines`, migration `0067`, `consume.ts`, `usage.ts` (engine,
+> 20 integration tests) — and now `usage-records.ts` (the authorize-and-orchestrate document
+> layer), `repo/stock-usage.ts`, and the `/inventory/usage` + `/inventory/usage/[id]` screens.
+> ⭐ **The loop closes here** — received, layered, consumed, costed — **and now it has a door**.
+> §12. §7's two questions were built as recommended (unchanged since 08-29).
 > **Depends on:** T-160, T-161, T-162, T-164 (which owns the postings this task triggers).
 > **v1 read at source** — `general-inventory.actions.ts` (the single busiest file, 8 transaction
 > sites), `meat-usage.actions.ts`, `reserved-usage-categories.ts`. `docs/discovery/14` §B, §I.
@@ -249,12 +251,172 @@ which would be a silent re-costing (T-162 invariant 7). Asserted per layer.
 
 ## 11. Done when
 
-- [ ] Migration hand-written (DEF-073), next free number, journalled `previous.when + 86400000`.
-- [ ] `classification.ts` **PURGE**; `rls/registry.ts` NULLIF-guarded.
-- [ ] §7.1 and §7.2 built as recommended, and **both raised in the task report's `FOR IAN` block**
-      — a decision taken by a spec is still a decision Ian gets to see (§3.5).
-- [ ] `typecheck` · `npm test` · `npm run test:integration` · `npm run build` green (dev server
-      stopped; `ListAgents` first).
-- [ ] `CAPABILITY-MATRIX.md`: `post_usage`, `can_adjust_inventory`, `can_charge_staff`,
-      `void_usage_record`, `bypass_count_freeze` (admin) — each with its ✗ test.
-- [ ] `docs/ROADMAP.html` updated.
+- [x] Migration hand-written (DEF-073), next free number, journalled `previous.when + 86400000`.
+      **Done 2026-08-29** (`0067_t168_stock_usage.sql`) — no migration in this session; the screen
+      needed none.
+- [x] `classification.ts` **PURGE**; `rls/registry.ts` NULLIF-guarded. **Done 2026-08-29.**
+- [x] §7.1 and §7.2 built as recommended, and **both raised in the task report's `FOR IAN` block**
+      — a decision taken by a spec is still a decision Ian gets to see (§3.5). Built 2026-08-29;
+      **restated again in this session's `FOR IAN` block**, since a decision that only reaches Ian
+      once is one re-read away from being forgotten.
+- [x] `typecheck` clean. [x] `npm test` (unit) green — 942 passed, 1 skipped, 56 files, including
+      this session's new `cogs-category.test.ts`.
+      [x] **Integration — scoped, not the shared command.** ⛔ Per this lane's own constraints,
+      `npm run test:integration` was never run (it truncates the SHARED `shareat_test` another lane
+      may be using). Ran ONLY this task's files against the private `shareat_test_t168`:
+      `usage-records.test.ts` (this session, 30 cases) + `stock-usage.test.ts` (the engine,
+      unchanged, now 20 cases after DEF-141) — **50/50 green**, real Postgres, twice (before and
+      after DEF-141's fix landed).
+      [x] `npm run build` — run by the coordinator 2026-09-03 with the dev server stopped, after
+      all four lanes and the review fixes (DEF-144 included): clean.
+- [x] `CAPABILITY-MATRIX.md`: `post_usage`, `void_usage_record` — **already declared 2026-08-29**,
+      each with its ✗ test via the shared `authorize.test.ts` generator, and re-exercised directly
+      in `usage-records.test.ts` (staff ✗ on both, staff ✅ on the draft). `can_adjust_inventory`
+      maps to the existing `adjust_inventory` (manager+, staff ✗) — **not exercised**, because this
+      pass does not build `kind='adjustment'`'s draft/post path, so there is no caller to test yet.
+      `can_charge_staff` = the existing `charge_staff_for_discrepancy` — same story, no caller
+      (Phase 5). `bypass_count_freeze` is **deliberately not declared** — no caller, per the brief.
+- [x] `docs/ROADMAP.html` updated — by the coordinator 2026-09-03: T-168's line names the
+      zero-caller gap, DEF-141, and the unbuilt adjustment/opening kinds.
+
+## 12. Built 2026-09-03 — the document and the screen (DEF-135)
+
+DEF-135 named this task's gap exactly: *"T-168 (`postUsageRecord`/`voidUsageRecord`) is fully
+built, fully tested — but grepped across all of `apps/`, none has a single non-test caller."* This
+session closes that gap. §9's engine is untouched except by the coordinator's own fix (§12.4); this
+section is entirely new work built on top of it.
+
+### 12.1 What shipped
+
+- **`packages/domain/src/stock/usage-records.ts`** (overwrote the barrel stub) — the
+  authorize-and-orchestrate document layer §9.2's own header says T-167/T-169 already carry twice:
+  an engine with no `Actor` and no `authorize()` call, and a document layer above it that turns "a
+  person, acting" into the engine's plain inputs. Exports: `saveUsageDraft`, `addUsageLine`,
+  `removeUsageLine`, `deleteUsageDraft`, `postUsage`, `voidUsage`, `cogsCategoryForItemKind` — all
+  new names, none colliding with the barrel (`postUsageRecord`/`voidUsageRecord`/`saveDraft`/
+  `dispatch` stayed taken, as flagged).
+- **`packages/db/src/repo/stock-usage.ts`** (overwrote the barrel stub) — `insertUsageRecord`,
+  `insertUsageLines`, `getUsageRecord`, `listUsageRecords`, `listUsageLines`, `deleteUsageLine`,
+  `deleteUsageDraft`, `setUsageLineMovement`, `markUsagePosted`, `markUsageVoid`,
+  `listOperatingLocations`, `listDepartments` — the last two are reads against `stock_locations`/
+  `departments` kept in THIS file rather than T-160's `repo/stock-locations.ts`, per the brief's
+  explicit steer to avoid editing a file another lane owns mid-flight.
+- **`apps/erp/src/app/inventory/usage/`** — `page.tsx` (register + "New record" form, dynamic item
+  rows, kind toggles the wastage-reason field), `NewUsageForm.tsx` (client), `actions.ts`
+  (`saveUsageDraftAction`/`postUsageAction`/`deleteUsageDraftAction`/`voidUsageAction`), `lib.ts`
+  (reads, `withOrgPrincipal`); `[id]/page.tsx` — lines with current on-hand in the record's own
+  room beside each, Post/Delete-draft/Void, the post confirmation showing FIFO cost and the journal
+  id(s) in the `?ok=` banner.
+- **`packages/domain/tests/unit/cogs-category.test.ts`** — 6 cases for `cogsCategoryForItemKind`.
+- **`packages/domain/tests/integration/usage-records.test.ts`** — 30 cases covering spec §8 tests
+  1, 2, 3 (table-driven over every `RESERVED_USAGE_CATEGORIES` entry), 4, 6, 11's refusal half, 12,
+  the authorize boundary (staff ✗ on post/void, staff ✅ on draft), void-restores-exact-layers, and
+  the domain-owned validation (`WASTAGE_REASONS` membership, quantity > 0, non-empty lines) the
+  engine itself does not check (see §12.3).
+
+### 12.2 The COGS-category derivation — a real gap ported as parity, not silently
+
+Items carry no COGS-category column (`packages/db/schema/items.ts` has `kind` only — T-149 spent
+that column budget on three independent sellability flags, not a costing taxonomy).
+`cogsCategoryForItemKind(kind)` bridges the two: `meat_slab`/`meat_sliced` → `meat`, `retail` →
+`retail`, `supply` → `packaging`, `raw_material`/`prepped` (the latter not yet a real `ItemKind` —
+T-176's future conversion output) and anything else → the `food` catch-all. ⭐ **v1 does the same
+thing** — `meat-usage.actions.ts` never varied its account by item either — so this is parity, not
+a regression, and COA-ALIGNMENT §4.1 already marks `5100` "drive to zero" for exactly the items a
+coarser mapping cannot place more precisely. A real per-item COGS-category column is future work,
+not assumed here.
+
+### 12.3 What `usage.ts` does NOT validate, and why that had to live here
+
+Building `postUsage` found that `postUsageRecord`'s own reserved-category check
+(`isReservedUsageCategory(input.reason)`) never verifies the reason is a real `WastageReason` at
+all — any string that is not on the reserved-synonym list passes through untouched. Nothing was
+wrong with the engine (it takes typed input and trusts its caller, same as every other tx-level
+function in this codebase), but nothing above it enforced `WASTAGE_REASONS` membership either,
+until `saveUsageDraft` did. This is now checked at DRAFT time, in the order that matches the
+engine's own (`isReservedUsageCategory` first, then `isWastageReason`) so the reserved-category
+message — "a usage writes only an OUT leg…" — still fires for every synonym even though none of
+them are valid `WastageReason`s to begin with (test §8.3's table-driven case exercises exactly
+this).
+
+### 12.4 ✅ DEF-141 — void reversed stock and layers but left the entry standing, found here, fixed by the coordinator
+
+Building `voidUsage` and reading `usage.ts`'s `voidUsageRecord` line by line (bible §3.4a: report a
+spec defect, never patch around it) found that void reversed `stock_movements` and `stock_layers`
+via `reverseConsumption` but **never touched the journal entry `postUsage` wrote** — no
+`stock_usage_line`, and no `stock_movements` row, carries a link back to the (possibly grouped)
+entry a post creates, so nothing above the engine could safely find it either. Reported rather than
+patched, since `usage.ts` is out of this lane's scope. **The coordinator fixed it in the engine
+itself, logged as DEF-141**, same session: `voidUsageRecord` now finds the posted entries by
+`(source_type = kind, source_id LIKE '<recordId>:%')` via `journalRepo.findPostedEntriesBySource`
+and reverses each through `reverseEntry`, returning `reversalEntryIds`; `VoidUsageInput` gained an
+optional `reason` that lands on the reversal entries' memo. `voidUsage` here was updated to pass
+the caller's void reason through and surface `reversalEntryIds`; `usage-records.test.ts`'s own void
+test now asserts `5100` and `1310` return to their exact pre-post balances, not just that the
+layers and quantity come back. **Smoketested live** (§12.5) with the reversal entry's id shown on
+screen.
+
+### 12.5 Smoketested live on 9008 — SMK, Kitchen B only
+
+Store **Smoketest Commissary (SMK)**, room **Kitchen B** (operating), item `PORK-SMOKE`. Stockroom
+A was never touched. Flow, scripted headless Chromium:
+
+1. **Dev Cashier** (staff) drafts a 3 kg usage of `PORK-SMOKE` from Kitchen B → saved, nothing
+   moved.
+2. Cashier clicks **Post** → refused on screen: *"Only a manager or admin can post — a floor
+   worker can draft, but posting is what moves stock and the books."*
+3. **Dev Manager** signs in, opens the same record, clicks **Post** → succeeds: `Dr 5100 ₱300.00 /
+   Cr 1310 ₱300.00` (3 kg × the FIFO-oldest ₱100 layer; `raw_material` → `food` → `5100`, never
+   `5110`), one `usage` movement of `-3`, one `stock_layer_consumptions` row. On-hand banner and
+   `/inventory?store=SMK` both show the new total.
+4. Manager drafts a 1 kg **wastage**, reason `spoilage`, from Kitchen B → posts → `Dr 5300 ₱100.00
+   / Cr 1310 ₱100.00` — never `5100`/`5110`.
+5. Manager **voids** the wastage with a reason (*"smoketest — recorded in error"*) → on screen:
+   *"Voided. Stock and the FIFO layers are restored, and the entry is reversed — journal
+   \<id\>."* DB confirms: the original entry flipped `posted → reversed`; a new entry posts `Dr
+   1310 ₱100.00 / Cr 5300 ₱100.00`; a `wastage_void` movement of `+1` restores the layer.
+6. Kitchen B's on-hand: 8 kg (original) + 20 kg (topped up live through the real `/inventory/
+   deliveries` screen another lane shipped today, since the item's only pre-existing FIFO layer had
+   already been fully depleted by unrelated smoketests — see §12.6) − 3 kg (usage) − 1 kg (wastage,
+   posted) + 1 kg (wastage, voided) = **25 kg**, exactly as the ledger predicts.
+
+Twelve screenshots captured (register, draft form filled, draft saved, cashier refusal, manager
+pre/post, on-hand before/after, wastage draft/posted/voided, on-hand final).
+
+### 12.6 A pre-existing data-drift found while smoketesting, not caused here
+
+The task doc's own smoketest plan assumed `PORK-SMOKE` held 8 kg of real, layer-backed value in
+Kitchen B. On the day, `stock_movements` still showed 8 kg physically in the room, but the item's
+FIFO layer at the STORE level (layers are per-store, not per-room — T-162 invariant 6) had already
+been fully consumed to `0.000` by other lanes' same-day smoketests (DEF-136/DEF-140's own commissary
+pork dispatches). This is exactly the class of drift `inventoryControlDoesNotMatchValuation` exists
+to catch, and it is not this task's to fix — it was worked around, not patched, by receiving a
+fresh 20 kg delivery into Kitchen B **through the real `/inventory/deliveries` screen** (another
+lane's T-166 build, live the same day), never by SQL. Recorded here because a future session
+reading this task's smoketest and finding different numbers should not conclude the screen is
+broken — the store's layer history has simply moved on again.
+
+### 12.7 Same-day review fixes (coordinator) — DEF-144, and two smaller ones
+
+The Opus review of the four DEF-135 lanes found that `postUsageRecord` and `voidUsageRecord`
+looped `consume()` / `reverseConsumption()` with `if (!result.ok) return result` — right for the
+first line, wrong for every later one, where the earlier line's movement and layer consumptions
+were already written and `postUsage` → `actions.ts` → `withOrgPrincipal` would COMMIT the
+half-post. **DEF-144**: both loops now throw once anything has been written, so the transaction
+unwinds; a refusal on the first line is still returned with nothing to unwind. Pinned by
+`stock-usage.test.ts` *"a refusal on line 2 UNWINDS line 1"*. Also: a dead `sourceId` field in the
+posting group's common input was removed, and `voidUsage` passes the user's void reason through
+to the reversal entries' memo (DEF-141's `VoidUsageInput.reason`). The `cogsCategoryForItemKind`
+parity choice (§12.2) is now a row in `docs/CAPABILITY-GAPS.md` so the `5100` balance is a known
+debt, not a surprise in the first P&L.
+
+### 12.8 Not built in this pass, named rather than hidden
+
+| Piece | Why |
+|---|---|
+| `kind='adjustment'` draft/post | T-168 §7.2/§9.7's own scoping — its posting is T-164's `postCountVariance`, and its document is T-169's count session (a different, concurrently-built lane) |
+| `kind='opening'` | Admin-only, new-store-joining-after-cutover case (§7.2) — no caller in this pass |
+| `chargePersonId` / staff charges | Phase 5. The engine already refuses a charge outright (§9.4); nothing here tries to route around that |
+| The admin freeze-bypass (`bypass_count_freeze`) | Not declared, per this lane's brief — no caller |
+| `addUsageLine`/`removeUsageLine` UI wiring | Built to the domain contract (§5) and unit-tested, but the "New record" form creates every starting line in one dynamic-row submission (matching `NewOrderForm`'s own shape) — no screen currently calls them one line at a time. A deliberate scope choice, not an oversight |
+| Persistent redisplay of FIFO cost / entry ids on a re-visited posted record | Shown once, in the post confirmation `?ok=` banner — `stock_usage_records` carries no column for either, and parsing them back out of `journal_entries.source_id` was considered and deliberately deferred as scope the brief did not ask for |

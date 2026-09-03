@@ -18,7 +18,7 @@
  *     `packages/domain/src/ledger/post-entry.ts` drives: insert draft, insert lines,
  *     flip to posted.
  */
-import { and, eq, gte, lte, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, isNull, like, lte, sql } from 'drizzle-orm';
 import { accounts, fiscalPeriods, journalEntries, journalLines } from '../../schema';
 import type { Tx } from '../client';
 
@@ -98,6 +98,40 @@ export async function findEntryByIdempotencyKey(
     .where(and(eq(journalEntries.orgId, orgId), eq(journalEntries.idempotencyKey, idempotencyKey)))
     .limit(1);
   return row;
+}
+
+/**
+ * The still-standing POSTED entries a source document wrote, by `(source_type, source_id prefix)`
+ * — the pair `journal_entries_source_type_source_id_idx` indexes. DEF-141 (2026-09-03): a usage
+ * record posts one entry per (inventory account, COGS category) group under
+ * `source_id = '<recordId>:<account>:<category>'` and stores no entry id anywhere, so its void
+ * could not find what to reverse. This is how it finds them.
+ *
+ * ⚠️ Excludes reversals (`reversal_of_entry_id IS NOT NULL`) and anything not `posted`: a reversal
+ * carries the SAME source pair as its original (reverse-entry.ts), so a naive match would hand a
+ * second void the first void's own entries. The prefix's `%`/`_` are escaped — a uuid has neither,
+ * but a caller passing anything else must not turn a prefix into a pattern.
+ */
+export async function findPostedEntriesBySource(
+  tx: Tx,
+  orgId: string,
+  sourceType: string,
+  sourceIdPrefix: string,
+): Promise<{ id: string; sourceId: string }[]> {
+  const escaped = sourceIdPrefix.replace(/[\\%_]/g, (c) => `\\${c}`);
+  return tx
+    .select({ id: journalEntries.id, sourceId: journalEntries.sourceId })
+    .from(journalEntries)
+    .where(
+      and(
+        eq(journalEntries.orgId, orgId),
+        eq(journalEntries.sourceType, sourceType),
+        like(journalEntries.sourceId, `${escaped}%`),
+        eq(journalEntries.status, 'posted'),
+        isNull(journalEntries.reversalOfEntryId),
+      ),
+    )
+    .orderBy(asc(journalEntries.sourceId));
 }
 
 export interface InsertDraftEntryInput {

@@ -138,6 +138,26 @@ export type Capability =
   /** T-172. ⛔ Manager+. The posting event — stock leaves into `1340`. Same asymmetry as
    *  dispatch_wholesale_order. ⚠️ Separate from T-173's confirm_receipt (phase plan §5.4). */
   | 'dispatch_branch_order'
+  // Inventory — DEF-135 (2026-09-03): the four Phase 3 documents get their screens
+  /** T-160. A store's rooms: create, rename, re-role, set default, deactivate. Manager+, as v1's
+   *  location CRUD is. `allocate_stock` is deliberately NOT declared — no caller. */
+  | 'manage_locations'
+  /** T-166. Draft a delivery/purchase and receive it. Staff-open, same reasoning as
+   *  `confirm_receipt`: the person signing at the dock is a cook or cashier. */
+  | 'receive_delivery'
+  /** T-166 invariant 3. ⛔ Manager+: over-receipt needs the flag AND a manager. */
+  | 'allow_over_receipt'
+  /** T-168. ⛔ Manager+: posting is the only step that moves stock. A floor worker drafts under
+   *  `record_stock_movement` / `record_wastage`; a manager posts. */
+  | 'post_usage'
+  /** T-168. ⛔ Manager+, same asymmetry as `void_transfer`. */
+  | 'void_usage_record'
+  /** T-169. ⛔ Manager+: opening a session FREEZES the room for every writer. Counting a line
+   *  stays under `record_stock_movement`. */
+  | 'open_count_session'
+  /** T-169. ⛔ Manager+: the variance posts to `5400`, a write-off in disguise — the same class
+   *  as `adjust_inventory`. Cancelling rides on this too. */
+  | 'commit_count'
   // Suppliers, buyers and credit
   | 'approve_supplier'
   | 'approve_buyer'
@@ -229,6 +249,13 @@ export const CAPABILITIES: readonly Capability[] = [
   'place_branch_order',
   'fulfil_branch_order',
   'dispatch_branch_order',
+  'manage_locations',
+  'receive_delivery',
+  'allow_over_receipt',
+  'post_usage',
+  'void_usage_record',
+  'open_count_session',
+  'commit_count',
   'approve_supplier',
   'approve_buyer',
   'set_credit_limit',
@@ -338,6 +365,16 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   place_branch_order: 'store',
   fulfil_branch_order: 'store',
   dispatch_branch_order: 'store',
+
+  // DEF-135 — every one of these is an act on ONE store's stock: its rooms, its dock, its kitchen,
+  // its count. A location, a delivery, a usage record and a count session all carry a store_id.
+  manage_locations: 'store',
+  receive_delivery: 'store',
+  allow_over_receipt: 'store',
+  post_usage: 'store',
+  void_usage_record: 'store',
+  open_count_session: 'store',
+  commit_count: 'store',
 
   // T-130 correction: `suppliers` has no store_id — it is org-wide master data, same shape
   // as `customers` (ADR-008), which uses the org-scoped `manage_chart_of_accounts` for its
@@ -483,6 +520,24 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   place_branch_order: { super_admin: true, admin: true, manager: true, staff: true },
   fulfil_branch_order: { super_admin: true, admin: true, manager: true, staff: true },
   dispatch_branch_order: { super_admin: true, admin: true, manager: true, staff: false },
+
+  // DEF-135 (2026-09-03). The pattern across all four documents is the one this matrix already
+  // uses everywhere else: RECORDING is floor work and staff-open; the act that moves stock, posts
+  // to the ledger, or locks a room out is supervisory.
+  // T-160: manager+, exactly v1's `isAdmin || isManager` gate on location CRUD.
+  manage_locations: { super_admin: true, admin: true, manager: true, staff: false },
+  // T-166: staff too — the person signing for the crates is a cook or a cashier (confirm_receipt's
+  // reasoning). The photo CHECK and the shortage trigger are the controls, not the role.
+  receive_delivery: { super_admin: true, admin: true, manager: true, staff: true },
+  // ⛔ Over-receipt is a gated exception, never a silent cashier bypass (T-166 invariant 3).
+  allow_over_receipt: { super_admin: true, admin: true, manager: true, staff: false },
+  // T-168: a floor worker DRAFTS (record_stock_movement / record_wastage); a manager POSTS.
+  post_usage: { super_admin: true, admin: true, manager: true, staff: false },
+  void_usage_record: { super_admin: true, admin: true, manager: true, staff: false },
+  // T-169: opening freezes the room for every writer; committing posts to 5400. Both supervisory.
+  // Counting a line is record_stock_movement, staff-open.
+  open_count_session: { super_admin: true, admin: true, manager: true, staff: false },
+  commit_count: { super_admin: true, admin: true, manager: true, staff: false },
 
   approve_supplier: { super_admin: true, admin: true, manager: true, staff: false },
   approve_buyer: { super_admin: true, admin: true, manager: true, staff: false },

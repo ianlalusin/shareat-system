@@ -186,8 +186,15 @@ export async function receiveDelivery(tx: Tx, input: ReceiveDeliveryInput): Prom
   };
 }
 
-/** `purchase quantity × conversionFactor`, exact, in thousandths. */
-function toBaseUnits(purchaseQuantity: Quantity, conversionFactor: string): Quantity {
+/**
+ * `purchase quantity × conversionFactor`, exact, in thousandths.
+ *
+ * ⭐ Exported for `documents.ts`'s duplicate-risk check, which must compare an INCOMING draft
+ * quantity (still in purchase units) against on-hand (in base units) — the same "one
+ * implementation" reasoning as `lineCost` above. No behaviour change; this function was already
+ * used by every case in `receive-delivery.test.ts`.
+ */
+export function toBaseUnits(purchaseQuantity: Quantity, conversionFactor: string): Quantity {
   const factorThousandths = BigInt(Math.round(Number(conversionFactor) * 1000));
   const product = (toThousandths(purchaseQuantity) * factorThousandths) / 1000n;
   return quantity(product);

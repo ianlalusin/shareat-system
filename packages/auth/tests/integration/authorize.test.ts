@@ -259,6 +259,13 @@ describe('invariant 5 — every capability denies a role that lacks it (all 56)'
     // denies staff, same asymmetry as `dispatch_wholesale_order`.
     'place_branch_order',
     'fulfil_branch_order',
+    // ---- T-166 / DEF-135, 2026-09-03 ----
+    // Drafting a delivery and receiving it are one act by the person at the dock — a cook or a
+    // cashier signing for the crates — and `confirm_receipt`'s reasoning applies verbatim: a
+    // manager-only gate is the rule people work around by sharing a login. The real controls are
+    // the photo CHECK, 0066's shortage/over-receipt trigger, and `allow_over_receipt` (manager+,
+    // NOT in this list) on the one line that is actually over.
+    'receive_delivery',
   ];
 
   it('every capability EXCEPT the universally-granted 16 has at least one denial case', () => {

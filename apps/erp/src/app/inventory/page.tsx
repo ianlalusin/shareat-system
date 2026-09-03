@@ -35,7 +35,22 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
     <main className="mx-auto max-w-5xl p-8">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <h1 className="text-2xl font-semibold">Stock on hand</h1>
-        <div className="flex gap-4 text-sm">
+        {/* ⭐ DEF-135 (2026-09-03): rooms, deliveries, usage and counts each had a tested engine
+            and no screen. They are the four doors stock actually passes through; this page is
+            where their effect is read back, so it links to every one of them. */}
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+          <Link href={`/inventory/locations?store=${storeId}`} className="underline underline-offset-4">
+            Rooms →
+          </Link>
+          <Link href={`/inventory/deliveries?store=${storeId}`} className="underline underline-offset-4">
+            Deliveries →
+          </Link>
+          <Link href={`/inventory/usage?store=${storeId}`} className="underline underline-offset-4">
+            Usage & wastage →
+          </Link>
+          <Link href={`/inventory/counts?store=${storeId}`} className="underline underline-offset-4">
+            Counts →
+          </Link>
           <Link href="/inventory/transfers" className="underline underline-offset-4">
             Transfers →
           </Link>
@@ -115,8 +130,11 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
 
       {summary.rows.length === 0 ? (
         <p className="mt-8 text-sm text-neutral-600 dark:text-neutral-400">
-          No item in this store has a balance. Stock arrives through a delivery or a commissary
-          receipt.
+          No item in this store has a balance. Stock arrives through a{' '}
+          <Link href={`/inventory/deliveries?store=${storeId}`} className="underline underline-offset-4">
+            delivery
+          </Link>{' '}
+          or a commissary receipt.
         </p>
       ) : (
         <table className="mt-8 w-full border-collapse text-sm">

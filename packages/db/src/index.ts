@@ -185,6 +185,10 @@ export type { ItemKind, BaseUnit, PurchaseUnit, ItemStatus } from '../schema/ite
 // not need to reach into packages/db/src/rls/registry.ts directly.
 export { APP_ROLE } from './rls/registry';
 export * as stockLocationsRepo from './repo/stock-locations';
+// DEF-135 (2026-09-03) — the usage document's and the count session's SQL. Until now the only
+// writers of either table were test fixtures.
+export * as stockUsageRepo from './repo/stock-usage';
+export * as countSessionsRepo from './repo/count-sessions';
 export * as commissaryRepo from './repo/commissary';
 // T-171 / DEF-129 — links, offerings and the item map: the catalogue's own SQL.
 export * as commissaryCatalogueRepo from './repo/commissary-catalogue';

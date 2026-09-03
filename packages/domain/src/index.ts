@@ -50,6 +50,12 @@ export * from './stock/supplier-returns';
 export * from './stock-locations/rules';
 export * from './deliveries/receive';
 export * from './deliveries/duplicate-risk';
+// DEF-135 (2026-09-03) — the four Phase 3 documents finally get their services and screens.
+// ⚠️ Each of these had a tested engine and ZERO callers in apps/ for five days.
+export * from './stock-locations/service';
+export * from './deliveries/documents';
+export * from './stock/usage-records';
+export * from './stock/count-workflow';
 export * from './commissary/outcome';
 export * from './commissary/transfer';
 export * from './commissary/discrepancy';

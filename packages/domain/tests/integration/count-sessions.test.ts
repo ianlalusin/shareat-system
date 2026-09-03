@@ -202,7 +202,10 @@ describe('T-169 — ⭐ the freeze, enforced once for every writer', () => {
 describe('T-169 — ⭐ the variance that v1 never posted', () => {
   it('counted SHORT relieves the layers and posts 5400 at FIFO cost', async () => {
     await stockUp('10', '100.0000');
-    const sessionId = await openSession(stockroom); // freeze a different room so the write can land
+    // ⭐ DEF-142: the session freezes the SAME room it counts — the only shape a real count has.
+    // Until migration 0123 this test froze the stockroom "so the write can land", which is how the
+    // freeze refusing its own session's resolving write went unnoticed for five days.
+    const sessionId = await openSession(kitchen);
 
     const res = await transaction((tx) =>
       commitCountSession(tx, {
@@ -220,9 +223,26 @@ describe('T-169 — ⭐ the variance that v1 never posted', () => {
     expect(await onHand()).toBe('8.000');
   });
 
+  it('⛔ DEF-142: a count movement from a DIFFERENT session is still refused by the freeze', async () => {
+    // The exemption is exactly one shape: THIS session's own write into a room THIS session holds.
+    // Session A holds the kitchen; session B (holding the stockroom) tries to post a kitchen line.
+    await stockUp('10', '100.0000');
+    await openSession(kitchen);
+    const other = await openSession(stockroom);
+    await expect(
+      transaction((tx) =>
+        commitCountSession(tx, {
+          orgId: orgA, storeId: storeA, sessionId: other, countedOn: '2026-08-20', committedBy: personA,
+          lines: [{ itemId: itemA, locationId: kitchen, countedQuantity: quantity('8'), inventoryAccount: '1310' }],
+        }),
+      ),
+    ).rejects.toThrow(/frozen/);
+    expect(await onHand()).toBe('10.000');
+  });
+
   it('⭐ counted LONG runs the other way, at the most recent layer cost', async () => {
     await stockUp('10', '100.0000');
-    const sessionId = await openSession(stockroom);
+    const sessionId = await openSession(kitchen); // DEF-142 — same room, see above
 
     const res = await transaction((tx) =>
       commitCountSession(tx, {
@@ -255,6 +275,62 @@ describe('T-169 — ⭐ the variance that v1 never posted', () => {
     expect(res.reason).toContain('no cost basis');
     const [n] = await sql<{ c: string }[]>`select count(*)::text as c from stock_movements`;
     expect(n!.c).toBe('0');
+  });
+
+  it('⭐ a MIXED-kind count posts each inventory account its own items\' cost (review 2026-09-03)', async () => {
+    // Pork is raw_material → 1310; a takeout box is supply → 1320. Before the fix the whole
+    // variance landed on whichever account the last varying line carried, and 1310/1320 stopped
+    // tying to the layers (invariant 6).
+    await stockUp('10', '100.0000');
+    const [box] = await sql<{ id: string }[]>`
+      insert into items (org_id, code, name, kind, base_unit, created_by)
+      values (${orgA},'BOX','Takeout box','supply','pcs',${personA}) returning id`;
+    const [d] = await sql<{ id: string }[]>`
+      insert into deliveries (org_id, store_id, kind, delivered_on, proof_file_id, created_by)
+      values (${orgA},${storeA},'purchase','2026-08-02',${fileA},${personA}) returning id`;
+    await transaction((tx) =>
+      receiveDelivery(tx, {
+        orgId: orgA, storeId: storeA, deliveryId: d!.id, deliveredOn: '2026-08-02',
+        locations: locations(), receivedBy: personA,
+        lines: [{ lineId: '1', itemId: box!.id, itemKind: 'supply', receivedQuantity: quantity('10'), conversionFactor: '1', unitCost: '5.0000', locationId: kitchen }],
+      }),
+    );
+    const sessionId = await openSession(kitchen);
+
+    const res = await transaction((tx) =>
+      commitCountSession(tx, {
+        orgId: orgA, storeId: storeA, sessionId, countedOn: '2026-08-20', committedBy: personA,
+        lines: [
+          { itemId: itemA, locationId: kitchen, countedQuantity: quantity('8'), inventoryAccount: '1310' },
+          { itemId: box!.id, locationId: kitchen, countedQuantity: quantity('6'), inventoryAccount: '1320' },
+        ],
+      }),
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.shortEntryIds).toHaveLength(2);
+    expect(res.shortCost).toBe(money('220.00')); // 2 kg × ₱100 + 4 boxes × ₱5
+
+    const b = await balances();
+    expect(b['1310']).toBe('800.00'); // 1,000 − 200, pork's own loss only
+    expect(b['1320']).toBe('30.00'); // 50 − 20, the boxes' own loss only
+    expect(b['5400']).toBe('220.00');
+  });
+
+  it('⛔ DEF-142: a CLOSED session\'s id does not open the freeze a later session placed on the room', async () => {
+    await stockUp('10', '100.0000');
+    const stale = await openSession(kitchen);
+    await sql`update count_sessions set status='closed', closed_at=now(), closed_by=${personA} where id=${stale}`;
+    await openSession(kitchen); // a NEW, active freeze on the same room
+    await expect(
+      transaction((tx) =>
+        commitCountSession(tx, {
+          orgId: orgA, storeId: storeA, sessionId: stale, countedOn: '2026-08-20', committedBy: personA,
+          lines: [{ itemId: itemA, locationId: kitchen, countedQuantity: quantity('8'), inventoryAccount: '1310' }],
+        }),
+      ),
+    ).rejects.toThrow(/frozen/);
+    expect(await onHand()).toBe('10.000');
   });
 
   it('an exact count posts nothing at all', async () => {
