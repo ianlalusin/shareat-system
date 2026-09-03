@@ -72,6 +72,230 @@ export interface SettlementResult {
 }
 
 /**
+ * ⭐ **What this settlement WILL do, before it does it** — DEF-137.
+ *
+ * The screen has to show a variance or a gain *before* the Post button, because the tolerance
+ * refusal is the whole control: *"that is a disagreement, not rounding — reconcile it."* Telling
+ * somebody that only after they post is telling them too late.
+ *
+ * ⚠️ **The obvious implementation is the wrong one.** Recomputing the arithmetic in the form —
+ * or in the page, or in a second service — is a second source of truth for the one number this
+ * feature exists to police, and the two would drift the first time a deduction kind is added.
+ * So `computeSettlement` below is the ONLY place the arithmetic lives, and `recordChannelSettlement`
+ * and `previewChannelSettlement` are both callers of it. A preview that disagreed with the posting
+ * would be worse than no preview at all.
+ */
+export interface SettlementPreview {
+  channelName: string;
+  storeId: string;
+  /** What `1220` says this channel is still owed, right now. Derived, never stored. */
+  outstanding: string;
+  /** What this settlement would credit `1220` — capped at what is actually owed. */
+  outstandingCleared: string;
+  /** The six deduction kinds, summed. **Signed** — a promo day can make this negative. */
+  feesTotal: string;
+  loanDeduction: string;
+  netDeposited: string;
+  variance: string;
+  settlementGain: string;
+  tolerance: string;
+  destinationAccountName: string | null;
+  /**
+   * Why this cannot post as entered. **Empty means it will post.** The first entry is the exact
+   * sentence `recordChannelSettlement` would throw, because they come from the same function.
+   */
+  blockers: string[];
+  /** True when the ONLY thing in the way is the explicit "recognise the gain" acknowledgement. */
+  needsGainAcknowledgement: boolean;
+}
+
+interface ComputedSettlement {
+  outstandingCleared: number;
+  feesTotal: number;
+  loanDeduction: number;
+  netDeposited: number;
+  variance: number;
+  settlementGain: number;
+  tolerance: number;
+  blockers: string[];
+  needsGainAcknowledgement: boolean;
+}
+
+/**
+ * ⭐ **The one copy of the arithmetic and of every refusal that depends on it.**
+ *
+ * Pure: it takes the figures and the ledger's answer for what is outstanding, and returns what
+ * would be posted plus the reasons it would be refused. It never reads and never writes, which is
+ * exactly what lets the preview and the posting be the same code rather than two implementations
+ * of one rule.
+ */
+function computeSettlement(
+  input: Pick<RecordSettlementInput, 'grossAmount' | 'netDeposited' | 'deductions' | 'loan' | 'recognizeGain'>,
+  outstanding: number,
+  channelName: string,
+): ComputedSettlement {
+  const d = input.deductions ?? {};
+  const num = (v: string | undefined) => Number(v ?? 0);
+  const commission = num(d.commission);
+  const marketing = num(d.marketing);
+  const platformFee = num(d.platformFee);
+  const vatOnFees = num(d.vatOnFees);
+  const withholdingTax = num(d.withholdingTax);
+  const penalty = num(d.penalty);
+  const feesTotal = commission + marketing + platformFee + vatOnFees + withholdingTax + penalty;
+  const loanDeduction = input.loan ? Number(input.loan.amount) : 0;
+  const netDeposited = Number(input.netDeposited);
+  const gross = Number(input.grossAmount);
+  const tolerance = toleranceFor(gross);
+
+  const blockers: string[] = [];
+
+  if (netDeposited < 0) {
+    blockers.push(
+      'fees exceeding the payout is a refusal, not a negative deposit. ' +
+        'Check the figures against the platform statement.',
+    );
+  }
+  if (outstanding <= EPSILON) {
+    blockers.push(
+      `${channelName} has nothing outstanding to settle. Either the sales day was never ` +
+        'verified, or this payout is already settled.',
+    );
+  }
+
+  // The receivable this clears is capped at what is actually outstanding — settling more than
+  // is owed would drive 1220 negative, which is never a real state.
+  const outstandingCleared = Math.min(outstanding, gross);
+
+  // ⭐ variance is a statement about the SALES DAY, not about the platform.
+  //    positive → staff over-reported; the shortfall is swept to 6420
+  //    negative → staff under-reported; the excess is income at 7100
+  const difference = outstandingCleared - (feesTotal + loanDeduction + netDeposited);
+  const variance = difference > 0 ? difference : 0;
+  const settlementGain = difference < 0 ? -difference : 0;
+
+  if (variance > tolerance + EPSILON) {
+    blockers.push(
+      `the day is short by ₱${variance.toFixed(2)}, past the ₱${tolerance.toFixed(2)} tolerance. ` +
+        'That is a disagreement, not rounding — reconcile it against the platform statement ' +
+        'rather than sweeping it to expense.',
+    );
+  }
+  const needsGainAcknowledgement = settlementGain > tolerance + EPSILON && !input.recognizeGain;
+  if (needsGainAcknowledgement) {
+    blockers.push(
+      `the payout exceeds the day by ₱${settlementGain.toFixed(2)}, past the ` +
+        `₱${tolerance.toFixed(2)} tolerance. Pass recognizeGain to book it as income — a typo ` +
+        'must not quietly become revenue.',
+    );
+  }
+
+  return {
+    outstandingCleared,
+    feesTotal,
+    loanDeduction,
+    netDeposited,
+    variance,
+    settlementGain,
+    tolerance,
+    blockers,
+    needsGainAcknowledgement,
+  };
+}
+
+/**
+ * Everything a settlement needs to know before the arithmetic: the channel's configuration, what
+ * the ledger says it is owed, and whether this day is already settled.
+ *
+ * ⚠️ Shared by the preview and the posting so a screen cannot be shown a green light the posting
+ * then refuses. `authorize()` is the FIRST thing either does — a preview reveals a channel's
+ * outstanding balance, so it is gated exactly as recording is.
+ */
+async function gatherSettlementContext(
+  trx: Tx,
+  actor: Actor,
+  input: { storeId: string; channelId: string; businessDate: string },
+): Promise<{
+  config: { name: string; storeId: string; destinationMoneyAccountId: string | null; taxTreatment: string };
+  destinationName: string | null;
+  outstanding: number;
+  configBlockers: string[];
+}> {
+  await authorize(trx, actor, 'record_ar_collection', { storeId: input.storeId });
+
+  const config = await R.channelConfig(trx, actor.orgId, input.channelId);
+  if (!config) throw new Error(`channel ${input.channelId} does not exist.`);
+
+  const configBlockers: string[] = [];
+  // ⚠️ The channel names its own store, and the caller names one too. They must agree, or the
+  // 1220 leg lands on a store that never made the sale — a cross-store misposting that nothing
+  // downstream would flag, because both stores are legitimate rows in the same books.
+  if (config.storeId !== input.storeId) {
+    configBlockers.push(
+      `${config.name} belongs to another store. A settlement is recorded by the store whose ` +
+        'sales day raised the receivable.',
+    );
+  }
+  if (!config.destinationMoneyAccountId) {
+    configBlockers.push(
+      `${config.name} has no destination account set, so there is nowhere to bank this. Set the ` +
+        'channel’s destination money account first.',
+    );
+  }
+
+  const already = await R.postedSettlementFor(trx, actor.orgId, input.channelId, input.businessDate);
+  if (already) {
+    configBlockers.push(
+      `${config.name} already has a posted settlement for ${input.businessDate}. Void that one ` +
+        'first — a correction is void and re-post, never a second row.',
+    );
+  }
+
+  let destinationName: string | null = null;
+  if (config.destinationMoneyAccountId) {
+    const destination = await moneyAccountsRepo.getById(trx, actor.orgId, config.destinationMoneyAccountId);
+    destinationName = destination?.name ?? null;
+  }
+
+  const outstanding = Number(await R.outstandingFor(trx, actor.orgId, input.channelId));
+  return { config, destinationName, outstanding, configBlockers };
+}
+
+/**
+ * What `recordChannelSettlement` would do with these figures — **without doing it.**
+ *
+ * Reads only. Returns every refusal it would hit rather than throwing the first one, because a
+ * form that fixes one error at a time makes four round trips out of one.
+ */
+export async function previewChannelSettlement(
+  tx: Tx | null,
+  actor: Actor,
+  input: Omit<RecordSettlementInput, 'salesDayId' | 'settledOn'> & { settledOn?: string },
+): Promise<SettlementPreview> {
+  const run = async (trx: Tx): Promise<SettlementPreview> => {
+    const ctx = await gatherSettlementContext(trx, actor, input);
+    const c = computeSettlement(input, ctx.outstanding, ctx.config.name);
+    return {
+      channelName: ctx.config.name,
+      storeId: ctx.config.storeId,
+      outstanding: ctx.outstanding.toFixed(2),
+      outstandingCleared: c.outstandingCleared.toFixed(2),
+      feesTotal: c.feesTotal.toFixed(2),
+      loanDeduction: c.loanDeduction.toFixed(2),
+      netDeposited: c.netDeposited.toFixed(2),
+      variance: c.variance.toFixed(2),
+      settlementGain: c.settlementGain.toFixed(2),
+      tolerance: c.tolerance.toFixed(2),
+      destinationAccountName: ctx.destinationName,
+      blockers: [...ctx.configBlockers, ...c.blockers],
+      needsGainAcknowledgement: c.needsGainAcknowledgement,
+    };
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/**
  * Record and post one platform payout against one channel-day.
  *
  * ⚠️ **Deductions are SIGNED.** A negative is a real credit — a promo-heavy day genuinely returns
@@ -83,28 +307,21 @@ export async function recordChannelSettlement(
   input: RecordSettlementInput,
 ): Promise<SettlementResult> {
   const run = async (trx: Tx): Promise<SettlementResult> => {
-    await authorize(trx, actor, 'record_ar_collection', { storeId: input.storeId });
+    // ⭐ One POSTED settlement per channel-day, one destination account, one store. The partial
+    // unique index refuses a duplicate too — this says WHY, and it is the same context the
+    // preview reads, so a screen cannot show a green light this then refuses.
+    const ctx = await gatherSettlementContext(trx, actor, input);
+    const config = ctx.config;
+    const c = computeSettlement(input, ctx.outstanding, config.name);
 
-    const config = await R.channelConfig(trx, actor.orgId, input.channelId);
-    if (!config) throw new Error(`recordChannelSettlement: channel ${input.channelId} does not exist.`);
-    if (!config.destinationMoneyAccountId) {
-      throw new Error(
-        `recordChannelSettlement: ${config.name} has no destination account set, so there is ` +
-          'nowhere to bank this. Set the channel’s destination money account first.',
-      );
-    }
+    // ⚠️ Config refusals first — "no destination account" explains a settlement that cannot be
+    // banked far better than the arithmetic error it would otherwise cause.
+    const blockers = [...ctx.configBlockers, ...c.blockers];
+    if (blockers.length > 0) throw new Error(`recordChannelSettlement: ${blockers[0]}`);
 
-    // ⭐ One POSTED settlement per channel-day. A second is refused, never duplicated — the
-    // partial unique index refuses it too, but saying so here explains WHY.
-    const already = await R.postedSettlementFor(trx, actor.orgId, input.channelId, input.businessDate);
-    if (already) {
-      throw new Error(
-        `recordChannelSettlement: ${config.name} already has a posted settlement for ` +
-          `${input.businessDate}. Void that one first — a correction is void and re-post, never a ` +
-          'second row.',
-      );
-    }
-
+    const {
+      outstandingCleared, variance, settlementGain, loanDeduction, netDeposited,
+    } = c;
     const d = input.deductions ?? {};
     const num = (v: string | undefined) => Number(v ?? 0);
     const commission = num(d.commission);
@@ -113,55 +330,7 @@ export async function recordChannelSettlement(
     const vatOnFees = num(d.vatOnFees);
     const withholdingTax = num(d.withholdingTax);
     const penalty = num(d.penalty);
-    const loanDeduction = input.loan ? Number(input.loan.amount) : 0;
-    const netDeposited = Number(input.netDeposited);
     const gross = Number(input.grossAmount);
-
-    if (netDeposited < 0) {
-      throw new Error(
-        'recordChannelSettlement: fees exceeding the payout is a refusal, not a negative deposit. ' +
-          'Check the figures against the platform statement.',
-      );
-    }
-
-    // What the ledger says this channel is still owed. ⭐ Derived, never stored.
-    const outstanding = Number(await R.outstandingFor(trx, actor.orgId, input.channelId));
-    if (outstanding <= EPSILON) {
-      throw new Error(
-        `recordChannelSettlement: ${config.name} has nothing outstanding to settle. Either the ` +
-          'sales day was never verified, or this payout is already settled.',
-      );
-    }
-
-    // The receivable this clears is capped at what is actually outstanding — settling more than
-    // is owed would drive 1220 negative, which is never a real state.
-    const outstandingCleared = Math.min(outstanding, gross);
-
-    const feesAndDeductions =
-      commission + marketing + platformFee + vatOnFees + withholdingTax + penalty + loanDeduction + netDeposited;
-
-    // ⭐ variance is a statement about the SALES DAY, not about the platform.
-    //    positive → staff over-reported; the shortfall is swept to 6420
-    //    negative → staff under-reported; the excess is income at 7100
-    const difference = outstandingCleared - feesAndDeductions;
-    const variance = difference > 0 ? difference : 0;
-    const settlementGain = difference < 0 ? -difference : 0;
-    const tolerance = toleranceFor(gross);
-
-    if (variance > tolerance + EPSILON) {
-      throw new Error(
-        `recordChannelSettlement: the day is short by ₱${variance.toFixed(2)}, past the ` +
-          `₱${tolerance.toFixed(2)} tolerance. That is a disagreement, not rounding — reconcile ` +
-          'it against the platform statement rather than sweeping it to expense.',
-      );
-    }
-    if (settlementGain > tolerance + EPSILON && !input.recognizeGain) {
-      throw new Error(
-        `recordChannelSettlement: the payout exceeds the day by ₱${settlementGain.toFixed(2)}, past ` +
-          `the ₱${tolerance.toFixed(2)} tolerance. Pass recognizeGain to book it as income — a ` +
-          'typo must not quietly become revenue.',
-      );
-    }
 
     const { id: settlementId } = await R.insertSettlement(trx, {
       orgId: actor.orgId,
@@ -183,18 +352,23 @@ export async function recordChannelSettlement(
       loanId: input.loan?.loanId ?? null,
       loanOwnerStoreId: input.loan?.ownerStoreId ?? null,
       netDeposited: netDeposited.toFixed(2),
-      destinationMoneyAccountId: config.destinationMoneyAccountId,
+      destinationMoneyAccountId: config.destinationMoneyAccountId!,
       reference: input.reference?.trim() || null,
       settledOn: input.settledOn,
+      // ⛔ DEF-146. This was accepted on the input, documented in the schema as *"the one document
+      // that cannot be obtained retroactively"*, and never written — an `as never` on this object
+      // was hiding the fact that the repo's row type had no such field. A 2307 attached on screen
+      // vanished on save, silently, which is precisely the failure this project exists to end.
+      withholdingCertificateFileId: input.withholdingCertificateFileId ?? null,
       createdBy: actor.personId,
-    } as never);
+    });
 
     const memo = `${config.name} settlement — ${input.businessDate}`;
     const lines: Parameters<typeof postEntry>[1]['lines'] = [];
 
     // The money that actually landed.
     if (netDeposited > EPSILON) {
-      const destination = await moneyAccountsRepo.getById(trx, actor.orgId, config.destinationMoneyAccountId);
+      const destination = await moneyAccountsRepo.getById(trx, actor.orgId, config.destinationMoneyAccountId!);
       if (!destination) throw new Error('recordChannelSettlement: the channel’s destination account no longer exists.');
       // ⚠️ Asked of the chart, not hard-coded: 1140 demands a money_account party, 1130 does not,
       // and which one a channel banks into is configuration.
@@ -319,6 +493,60 @@ export async function recordChannelSettlement(
       variance: variance.toFixed(2),
       settlementGain: settlementGain.toFixed(2),
     };
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/**
+ * ⭐ **Point a channel at the account its payouts land in** — DEF-137.
+ *
+ * ⛔ **This had no writer anywhere.** `sales_channels.destination_money_account_id` was added by
+ * T-150's own migration, is read on every posting, and was set by exactly one thing in the whole
+ * repository: a test fixture. So every real channel had it null, and `recordChannelSettlement`
+ * correctly refused every real settlement — *"there is nowhere to bank this"*. A screen alone
+ * would not have fixed DEF-137; the configuration it depends on had to become reachable too.
+ *
+ * ⚠️ **`manage_store_settings`, not `manage_chart_of_accounts`.** Bible row 149 reserves for an
+ * admin the act of *creating a place money can be recorded against*. This creates nothing: it
+ * chooses among money accounts that already exist, which is operational routing of the same kind
+ * as `receivable_account_code`. A branch manager who already accepts a remittance — the largest
+ * transfer this business makes (row 150) — may say which wallet Foodpanda pays into.
+ */
+export async function setChannelPayoutDestination(
+  tx: Tx | null,
+  actor: Actor,
+  input: { channelId: string; moneyAccountId: string },
+): Promise<{ channelId: string; moneyAccountId: string }> {
+  const run = async (trx: Tx) => {
+    const config = await R.channelConfig(trx, actor.orgId, input.channelId);
+    if (!config) {
+      throw new Error(`setChannelPayoutDestination: channel ${input.channelId} does not exist.`);
+    }
+    await authorize(trx, actor, 'manage_store_settings', { storeId: config.storeId });
+
+    const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.moneyAccountId);
+    if (!account) {
+      throw new Error('setChannelPayoutDestination: that money account does not exist.');
+    }
+    // ⚠️ Same store, and this is a money-safety rule rather than tidiness: a payout banked into
+    // another store's wallet moves one store's revenue into another store's custody with no
+    // due-from/due-to pair to make it visible (bible rows 152–153). Cross-store money movement
+    // is a transfer, made deliberately, never a side effect of a configuration screen.
+    if (account.storeId !== config.storeId) {
+      throw new Error(
+        `setChannelPayoutDestination: ${account.name} belongs to another store. A channel banks ` +
+          'into its own store’s account; moving money between stores is a transfer, not a setting.',
+      );
+    }
+    if (!account.isActive) {
+      throw new Error(
+        `setChannelPayoutDestination: ${account.name} is retired, so nothing can be banked into it.`,
+      );
+    }
+
+    await R.setDestinationAccount(trx, actor.orgId, input.channelId, input.moneyAccountId);
+    return { channelId: input.channelId, moneyAccountId: input.moneyAccountId };
   };
   if (tx) return run(tx);
   return transaction(run);

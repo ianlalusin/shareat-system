@@ -139,7 +139,7 @@ collection volume with no home, and Phase 2's exit gate cannot pass while `1220`
 
 | # | Task |
 |---|---|
-| **T-150** ✅ | Channel settlement: clears the `1220` receivable T-123 already raises on every verified Foodpanda / Grab day, through the `1221`/`1222` clearing accounts — signed deductions to real accounts, variance and gain with a tolerance, loan deduction incl. cross-store |
+| **T-150** ✅ | Channel settlement: clears the `1220` receivable T-123 already raises on every verified Foodpanda / Grab day — signed deductions to real accounts, variance and gain with a tolerance, loan deduction incl. cross-store. ⚠️ **Domain 28 Aug, screen 3 Sep** — it had no caller for five days (**DEF-137**), and wiring one found four more defects (DEF-145–149), the largest being that `destination_money_account_id` had **no writer anywhere**, so every real channel was unsettleable. ⛔ **The `1221`/`1222` clearing accounts are seeded active and nothing posts to them** — the shipped design clears `1220` directly; that is one of the two account-code decisions still awaiting Ian |
 
 ---
 

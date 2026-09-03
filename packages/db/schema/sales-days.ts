@@ -86,7 +86,13 @@ export const salesChannels = pgTable(
      * Foodpanda do not have to bank into the same account, and hard-coding one would be wrong the
      * first time they differ.
      */
-    destinationMoneyAccountId: uuid('destination_money_account_id'),
+    /** ⚠️ The FK is declared here as well as in migration `0057`, which already created it. The
+     *  schema file is where a table is DEFINED (bible §8), and a constraint that exists only in
+     *  the migration is a constraint the definition does not know about — exactly the drift
+     *  `db:generate` would one day "fix" by dropping it (DEF-073). */
+    destinationMoneyAccountId: uuid('destination_money_account_id').references(() => moneyAccounts.id, {
+      onDelete: 'restrict',
+    }),
     /**
      * ⭐ T-150 §7. Withholding tax is booked to `6800 Taxes and licences` — an EXPENSE, not an
      * asset. RR 2-98 §2.58.3(B): a creditable withholding tax may be claimed only when the income

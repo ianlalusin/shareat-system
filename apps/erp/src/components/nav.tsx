@@ -17,6 +17,11 @@ const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
     label: 'Daily',
     links: [
       { href: '/sales-days', label: 'Sales days' },
+      // ⭐ DEF-137 — `recordChannelSettlement` shipped 2026-08-28 with no screen and no nav entry,
+      // so the `1220` receivable every verified Foodpanda/Grab day raises had nothing that ever
+      // cleared it. Beside Sales days on purpose: that screen creates the receivable, this one
+      // ends it.
+      { href: '/channel-settlements', label: 'Channel settlements' },
       { href: '/remittance', label: 'Remittance' },
       { href: '/till', label: 'Till custody' },
       { href: '/attendance', label: 'Attendance' },
@@ -97,8 +102,12 @@ export async function Nav() {
           <Link href="/" className="text-sm font-semibold tracking-tight">
             Shareat
           </Link>
+          {/* ⚠️ DEF-149 — each group carries `flex-wrap` too, not only the row above. A group was
+              an unwrappable row, so at 390px the Inventory group alone ran 237px past the viewport
+              and EVERY route in the app scrolled sideways. Phone portrait is the canvas; measured
+              on four routes before and after. */}
           {GROUPS.map((group) => (
-            <div key={group.label} className="flex items-baseline gap-2">
+            <div key={group.label} className="flex flex-wrap items-baseline gap-2">
               <span className="text-[11px] font-medium uppercase tracking-wide text-neutral-400">
                 {group.label}
               </span>

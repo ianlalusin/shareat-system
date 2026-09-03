@@ -1,10 +1,17 @@
 # T-150 — Channel settlement: clearing the platform receivable Foodpanda and Grab raise
 
-> **Status:** Spec written 2026-08-28 by the Opus planner (session `ianla-72`); **built the same
-> day by a peer session — commit `f9d1efb`.** Both open decisions in §4 and §5 were taken on this
-> spec's own recommendations: `6420` is seeded, and `1220` keeps a job separate from `1221`/`1222`.
-> The unticked boxes below are not stale by neglect — they are unticked because *this* session did
-> not verify them; the implementing session's report is the record.
+> **Status:** Spec written 2026-08-28 by the Opus planner (session `ianla-72`); the domain and
+> schema **built the same day by a peer session — commit `f9d1efb`.** ⛔ **It had no caller for five
+> days** — no screen, no nav entry — logged as **DEF-137** by the 2026-09-02 roadmap audit and
+> **closed 2026-09-03** with `apps/erp/src/app/channel-settlements/` (see §UI below).
+>
+> ⚠️ **The two open decisions in §4 and §5 were taken IN CODE and have never been confirmed by
+> Ian.** The 2026-08-28 session implemented this spec's own recommendations — `6420` seeded
+> **active**, and `1220` carrying the receivable while `1221`/`1222` are seeded active and posted
+> to by nothing — and ticked neither box. The 2026-09-03 session left both exactly as shipped
+> rather than change a live posting shape on its own authority, and **raised them in its report**.
+> They are the last two unticked boxes below, and they are unticked because the decision is
+> genuinely outstanding, not because nobody looked.
 > **Depends on:** T-123 (`sales_channels`, `sales_day_channels` — the receivable this clears),
 > T-131 (AR, and the `6400` fee leg it already books once), T-126 (loans), T-139 (money transfers /
 > destination accounts).
@@ -212,6 +219,53 @@ someone to use it, and an unrealisable asset on the balance sheet is worse than 
 is the one document that cannot be obtained retroactively if the posture ever changes. Under
 `creditable` it becomes required at posting.
 
+## UI — the screen (added 2026-09-03, DEF-137)
+
+`apps/erp/src/app/channel-settlements/` — one route, four files, nothing under `[id]`. A
+settlement is small enough to read in a row; a detail page would be a second place to show the
+same figures.
+
+| File | Holds |
+|---|---|
+| `page.tsx` | The unwired-channel banner, what each channel is owed, the queue of waiting days, the form, and the history with its void control |
+| `lib.ts` | Repo composition only. ⛔ **No SQL** — three app `lib.ts` files were caught holding drizzle queries during the DEF-135 review |
+| `actions.ts` | `previewSettlementAction` · `recordSettlementAction` · `voidSettlementAction` · `setPayoutDestinationAction`. Thin: actor from the session, parse, call the domain, redirect |
+| `SettlementForm.tsx` | The one client component, and the only reason there is one |
+
+### ⭐ The variance is shown before the posting, by the same code that posts it
+
+The spec's tolerance refusal — *"that is a disagreement, not rounding — reconcile it"* — is the
+control this whole document exists for, and a control that fires only after the entry is posted has
+arrived too late to be one. So:
+
+- `computeSettlement` is a **pure function** and the only place the arithmetic and its refusals
+  live. `recordChannelSettlement` and the new `previewChannelSettlement` are both callers of it.
+- **The preview cannot disagree with the posting**, because there is no second implementation to
+  drift. Recomputing in the form would have been a second source of truth for the one number this
+  document polices.
+- The preview **returns every blocker rather than throwing the first**, so a form is fixed in one
+  pass instead of four round trips.
+- **Post is disabled until a check has run for the current figures**, and re-disables the moment
+  one changes (`figuresKey`). ⚠️ The gain acknowledgement therefore travels as a hidden field, not
+  as the checkbox's own `name`: ticking it makes the check stale, the next check clears the blocker
+  and unmounts the checkbox, and a named checkbox would then be absent at submit — the posting
+  would refuse the very thing the person had just agreed to.
+
+### ⛔ What the screen alone would NOT have fixed — DEF-147
+
+`sales_channels.destination_money_account_id` is read on every posting and had **no writer anywhere
+in the repository** except a test fixture. Every channel in `shareat_dev` read null, so the screen
+would have shipped and refused every settlement. `setChannelPayoutDestination` closes it, gated on
+**`manage_store_settings`** — bible row 149 reserves *creating a place money can be recorded
+against* for an admin; choosing among wallets that already exist is routing, the same kind of
+setting as `receivable_account_code`.
+
+### Out of scope, restated because the screen makes them tempting
+
+**Batch payout upload and the parsers** (this spec's own §Out of scope) · **discrepancy → infraction**
+(Phase 7) · **a multi-day payout in one submission** — still N rows sharing a reference, and there
+is no UI to enter them together, which is a real gap rather than a decision.
+
 ## Invariants
 
 1. Clearing (`1221`/`1222`) nets to **exactly zero** on every posted settlement.
@@ -254,11 +308,25 @@ is checkable precisely because a settlement clears one day; a multi-day payout i
 
 ## Done when
 
-- [ ] All twelve invariants pass against real Postgres.
-- [ ] Migration hand-written per DEF-073, journalled with `previous.when + 86400000`.
-- [ ] `typecheck` · `npm test` · `npm run test:integration` · `npm run build` green.
-- [ ] New tables classified in `classification.ts` **and** registered in `rls/registry.ts`.
-- [ ] `POSTING-PATTERNS.md` gains the `channel_settlement.*` patterns.
+*Ticked 2026-09-03 by the session that closed DEF-137. A box is ticked only where that session ran
+the check itself; the two account-code decisions stay open because they are genuinely outstanding.*
+
+- [x] All twelve invariants pass against real Postgres. **26 tests in
+      `packages/domain/tests/integration/channel-settlements.test.ts`** (15 from 2026-08-28, 11
+      added with the screen), green. ⚠️ **Invariant 1 is vacuously true and worth saying so:**
+      nothing in the shipped design ever posts to `1221`/`1222`, so "clearing nets to zero" holds
+      because the accounts are never touched. See §4's open decision.
+- [x] Migration hand-written per DEF-073, journalled with `previous.when + 86400000`.
+      ⭐ **No migration was needed for the screen** — `withholding_certificate_file_id` and
+      `destination_money_account_id` both already existed. `0057` remains the only one.
+- [x] `typecheck` · `npm test` · `npm run test:integration` · `npm run build` green — real numbers
+      in the closing report.
+- [x] New tables classified in `classification.ts` **and** registered in `rls/registry.ts` —
+      `channel_settlements` was already in both (verified, lines 867/940 and 589).
+- [x] `POSTING-PATTERNS.md` gains the `channel_settlement.*` patterns —
+      `channel_settlement.plain` and `channel_settlement.promo_credit` are both there
+      (`docs/POSTING-PATTERNS.md`, the "Channel settlement" section). Verified by reading it, not
+      by grep for the heading alone.
 - [x] ~~`channel.settlement` specimen added to the ETL corpus.~~ ⛔ **DEFERRED, with a
       reason.** The corpus exists to replay v1 documents through the converter, and a
       specimen needs a `channel.settlement` case class plus a converter branch that turns a
@@ -267,6 +335,49 @@ is checkable precisely because a settlement clears one day; a multi-day payout i
       testing a path nothing takes. The regression risk the spec names is instead covered by
       the two `channel_settlement.*` worked examples in `POSTING-PATTERNS.md`, which the
       doc-parity guard keeps honest.
-- [ ] `docs/ROADMAP.html` and `docs/plans/phase-2-source-documents.md` updated.
-- [ ] **Ian has answered the two open decisions:** `1220` vs `1221`/`1222` roles (§4, recommended)
-      and whether `6420` is seeded for settlement variance (§5).
+- [x] `docs/ROADMAP.html` and `docs/plans/phase-2-source-documents.md` updated.
+- [x] ⭐ **A SCREEN EXISTS AND IS REACHABLE.** Not in the original checklist, which is exactly how
+      DEF-137 happened: every box above could be ticked with no caller anywhere.
+      `/channel-settlements`, linked from `nav.tsx`'s Daily group beside Sales days — that screen
+      raises the receivable, this one ends it.
+- [x] ⭐ **Live-smoketested on 9008 with a worked example.** Malvar Foodpanda, business date
+      2026-09-02, through the real screens: a ₱12,000 verified day split Walk-in ₱4,000 /
+      Foodpanda ₱8,000 raised `1220` **₱8,000.00**; the payout account was set from the screen;
+      gross ₱8,000 with ₱1,600 commission, a **−₱200 promo credit**, ₱40 withheld and ₱6,520
+      banked previewed *"Shortfall → 6420 ₱40.00, tolerance ₱800.00"* with Post disabled before
+      the check and enabled after; posting wrote
+      `Dr 1140 6,520 · Dr 6400 1,600 · Cr 6400 200 · Dr 6420 40 · Dr 6800 40 · Cr 1220 8,000`
+      and **`1220` for that channel then read exactly `0.00`**. Void with a reason put it back to
+      `8,000.00` with the row still listed; a re-post then succeeded, which the partial unique
+      index allows because it binds `posted` rows only.
+      ⭐ **A second example after the build and restart drove the GAIN path**, business date
+      2026-09-01: a ₱5,000 Foodpanda-only day paid out at ₱6,000. Preview read
+      *"Excess → 7100 ₱1,000.00, tolerance ₱500.00"* and listed the refusal; **Post stayed disabled
+      while the gain was unacknowledged, stayed disabled immediately after ticking** (the tick makes
+      the check stale by design) and enabled only after re-checking — so the acknowledgement is
+      re-verified by the server rather than trusted from the browser. Posted
+      `Dr 1140 6,000 · Cr 7100 1,000 · Cr 1220 5,000`; `1220` for that channel back to `0.00` and
+      the whole dev trial balance still ties to `0.00`.
+- [ ] ⚠️ **Ian has answered the two open decisions:** `1220` vs `1221`/`1222` roles (§4,
+      recommended) and whether `6420` is seeded for settlement variance (§5).
+      ⛔ **STILL OPEN, AND BOTH ARE ALREADY LIVE IN CODE.** The 2026-08-28 session implemented this
+      spec's recommendations without the box being ticked, so the decisions were made *implicitly*:
+      - **§4 —** `1220` carries the receivable with `party = channel`, and the settlement posts
+        `1220 → cash` in **one step**. `1221` and `1222` are seeded **`active`** and
+        **nothing anywhere posts to them** — grepped across `packages/` and `apps/`, and zero legs
+        in `shareat_dev`. ⚠️ **They are not quite dead, and that is the interesting part:**
+        `findingsRepo.clearingNotAtRest` watches them for a non-zero balance and reports
+        *"Something did not finish."* So the OIL feed carries **an alarm for a condition that
+        cannot arise**, which is a worse state than either alternative — it reads as coverage.
+        The clearing hop is what a **batch** payout needs (land the batch in clearing, allocate it
+        across days), and batch upload is this spec's own §Out of scope. So the honest choice is
+        between marking them `reserved` until batch arrives — bible §16.9's state for exactly
+        this — or keeping them active because batch is next. What should not persist is the third
+        state, *active, permanently zero, and watched*.
+      - **§5 —** `6420 Channel settlement variance` is seeded **`active`** and takes every
+        below-tolerance shortfall. The alternative this spec named — folding it into `6400` — is
+        the cheaper chart and the worse signal: a channel systematically short by ₱40 a day reads
+        as a slightly worse fee rate and is never seen.
+      Both are defensible and both were recommended by this spec. Neither was confirmed, and
+      **a session that ticks this box on the strength of the code having done it has laundered an
+      assumption into a decision.**

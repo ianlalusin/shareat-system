@@ -28,6 +28,10 @@ export const LOAN_LIABILITY_CODE = '2400';
 export const INTEREST_EXPENSE_CODE = '7200';
 export const DISBURSEMENT_SOURCE = 'loan_disbursement';
 export const PAYMENT_SOURCE = 'loan_payment';
+/** ⭐ `2400` is party-requiring and the party is THE LOAN, not the lender (bible row 158) — a
+ *  lender can hold two loans, which v1's own data proves. That is what lets a position be read
+ *  from the account rather than from a list of document types (DEF-145). */
+export const LOAN_PARTY_TYPE = 'loan';
 
 export interface LoanRow {
   id: string;
@@ -125,6 +129,25 @@ export interface LoanPosition {
 /**
  * What this loan currently owes, summed from the ledger.
  *
+ * ## ⛔ DEF-145 — the principal is read from the ACCOUNT AND PARTY, never from a list of documents
+ *
+ * This used to filter `je.source_type in ('loan_disbursement', 'loan_payment')`, which quietly
+ * assumed the loan module is the only thing that ever moves `2400`. It is not: a platform docks a
+ * repayment out of a payout, and `recordChannelSettlement` posts that `2400` debit as a leg of a
+ * `channel_settlement` entry (T-150 §6 — two of v1's live channels do exactly this, one of them
+ * cross-store). Under the old filter that repayment was **invisible here**: the trial balance was
+ * right, the loan screen still showed the full amount outstanding, and nothing anywhere disagreed
+ * loudly enough to notice.
+ *
+ * ⭐ This is bible row 145's rule in a second place: *"summed over enumerated document types, any
+ * transaction missing from the enumeration silently breaks the reconciliation."* `2400` is a
+ * party-requiring control account, so the loan's own balance on it is the answer, and it counts
+ * repayment paths nobody has invented yet.
+ *
+ * ⚠️ Interest stays keyed on `loan_payment` deliberately: `7200` carries no party, and a platform
+ * dock posts no interest at all — it books the whole deduction to principal. That is a real gap in
+ * the settlement's model, named in DEF-145 rather than papered over here.
+ *
  * ## ⚠️ Reversed entries are INCLUDED, and that is the correction
  *
  * The obvious filter — `status <> 'reversed'` — is **worse than no filter at all**, and the tests
@@ -139,19 +162,24 @@ export interface LoanPosition {
 export async function positionOf(tx: Tx, orgId: string, loanId: string): Promise<LoanPosition> {
   const [row] = await tx.execute(sql`
     select
-      coalesce(sum(case when a.code = ${LOAN_LIABILITY_CODE} and je.source_type = ${DISBURSEMENT_SOURCE}
+      coalesce(sum(case when a.code = ${LOAN_LIABILITY_CODE} and jl.party_id = ${loanId}
+                         and je.source_type = ${DISBURSEMENT_SOURCE}
                         then jl.credit - jl.debit else 0 end), 0)::text as disbursed,
-      coalesce(sum(case when a.code = ${LOAN_LIABILITY_CODE} and je.source_type = ${PAYMENT_SOURCE}
+      coalesce(sum(case when a.code = ${LOAN_LIABILITY_CODE} and jl.party_id = ${loanId}
+                         and je.source_type <> ${DISBURSEMENT_SOURCE}
                         then jl.debit - jl.credit else 0 end), 0)::text as principal_paid,
-      coalesce(sum(case when a.code = ${INTEREST_EXPENSE_CODE}
+      coalesce(sum(case when a.code = ${INTEREST_EXPENSE_CODE} and je.source_id = ${loanId}
+                         and je.source_type = ${PAYMENT_SOURCE}
                         then jl.debit - jl.credit else 0 end), 0)::text as interest_paid
     from journal_lines jl
     join journal_entries je on je.id = jl.entry_id
     join accounts a on a.id = jl.account_id
     where je.org_id = ${orgId}
-      and je.source_id = ${loanId}
-      and je.source_type in (${DISBURSEMENT_SOURCE}, ${PAYMENT_SOURCE})
       and je.status <> 'draft'
+      and (
+        (a.code = ${LOAN_LIABILITY_CODE} and jl.party_type = ${LOAN_PARTY_TYPE} and jl.party_id = ${loanId})
+        or (a.code = ${INTEREST_EXPENSE_CODE} and je.source_type = ${PAYMENT_SOURCE} and je.source_id = ${loanId})
+      )
   `) as unknown as Record<string, string>[];
 
   const disbursed = Number(row?.disbursed ?? 0);
@@ -245,24 +273,39 @@ export async function lastPaymentDate(
   return row?.d ?? null;
 }
 
-/** Every loan's position in one query — the register screen's N+1 guard. */
+/**
+ * Every loan's position in one query — the register screen's N+1 guard.
+ *
+ * ⛔ **DEF-145 applies here identically**, and the register is where it showed: `2400` movements
+ * are keyed on the LOAN PARTY, so a repayment docked out of a platform payout counts. Interest is
+ * a second leg because `7200` carries no party — hence the union rather than one scan.
+ */
 export async function positionsByLoan(tx: Tx, orgId: string): Promise<Map<string, LoanPosition>> {
   const rows = await tx.execute(sql`
-    select je.source_id::text as loan_id,
-      coalesce(sum(case when a.code = ${LOAN_LIABILITY_CODE} and je.source_type = ${DISBURSEMENT_SOURCE}
-                        then jl.credit - jl.debit else 0 end), 0)::text as disbursed,
-      coalesce(sum(case when a.code = ${LOAN_LIABILITY_CODE} and je.source_type = ${PAYMENT_SOURCE}
-                        then jl.debit - jl.credit else 0 end), 0)::text as principal_paid,
-      coalesce(sum(case when a.code = ${INTEREST_EXPENSE_CODE}
-                        then jl.debit - jl.credit else 0 end), 0)::text as interest_paid
-    from journal_lines jl
-    join journal_entries je on je.id = jl.entry_id
-    join accounts a on a.id = jl.account_id
-    where je.org_id = ${orgId}
-      and je.source_type in (${DISBURSEMENT_SOURCE}, ${PAYMENT_SOURCE})
+    select loan_id,
+           coalesce(sum(disbursed), 0)::text      as disbursed,
+           coalesce(sum(principal_paid), 0)::text as principal_paid,
+           coalesce(sum(interest_paid), 0)::text  as interest_paid
+    from (
+      select jl.party_id::text as loan_id,
+             case when je.source_type = ${DISBURSEMENT_SOURCE} then jl.credit - jl.debit else 0 end as disbursed,
+             case when je.source_type <> ${DISBURSEMENT_SOURCE} then jl.debit - jl.credit else 0 end as principal_paid,
+             0 as interest_paid
+      from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id
+      join accounts a on a.id = jl.account_id
       -- ⚠️ Reversed entries stay IN: they and their reversals net to zero. See positionOf.
-      and je.status <> 'draft'
-    group by je.source_id
+      where je.org_id = ${orgId} and je.status <> 'draft'
+        and a.code = ${LOAN_LIABILITY_CODE} and jl.party_type = ${LOAN_PARTY_TYPE} and jl.party_id is not null
+      union all
+      select je.source_id::text, 0, 0, jl.debit - jl.credit
+      from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id
+      join accounts a on a.id = jl.account_id
+      where je.org_id = ${orgId} and je.status <> 'draft'
+        and a.code = ${INTEREST_EXPENSE_CODE} and je.source_type = ${PAYMENT_SOURCE}
+    ) legs
+    group by loan_id
   `);
 
   const map = new Map<string, LoanPosition>();

@@ -23,6 +23,13 @@ export type { Custodian, MoneyInstrument } from '../schema/money-accounts';
 export type { MoneyTransferStatus } from '../schema/money-transfers';
 export type { MoneyAccountRow } from './repo/money-accounts';
 export type { MoneyTransferRow, MoneyTransferListRow } from './repo/money-transfers';
+export type { ChannelSettlementStatus } from '../schema/channel-settlements';
+export type {
+  ChannelSettlementRow,
+  SettlementChannelRow,
+  SettleableChannelDayRow,
+  SettlementListRow,
+} from './repo/channel-settlements';
 export { PREPAID_CATEGORIES, PREPAID_STATUSES } from '../schema/prepaid';
 export type { PrepaidCategory, PrepaidStatus } from '../schema/prepaid';
 export type { PrepaidItemRow } from './repo/prepaid';
