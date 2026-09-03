@@ -151,6 +151,14 @@ export interface RecordCollectionInput {
   referenceNo?: string | null;
   notes?: string | null;
   allocations: ArAllocationInput[];
+  /**
+   * ⭐ T-179. Store credit spent against this collection instead of cash — mirrors T-170's
+   * `recordPayment`/`creditApplied` on the AP side exactly, pointed the other way: `2140` is
+   * drawn down instead of `1240`. ⚠️ `moneyAccountId` is still required even when this covers the
+   * whole amount — `ar_collections.money_account_id` is NOT NULL, the same attribution-only
+   * shape `ap_payments.money_account_id` already accepts for a fully-credit-funded payment.
+   */
+  creditApplied?: string;
 }
 
 export async function recordCollection(
@@ -183,8 +191,21 @@ export async function recordCollection(
 
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.moneyAccountId);
     if (!account) throw new Error('recordCollection: that money account does not exist.');
-    // ⭐ v1's real rule: proof is required when the money arrived online, never for cash.
-    if (account.instrument !== 'cash' && !input.receiptFileId) {
+
+    const creditApplied = Number(input.creditApplied ?? '0');
+    if (creditApplied < 0) throw new Error('recordCollection: creditApplied cannot be negative.');
+    if (creditApplied > 0) {
+      const balance = Number(await arRepo.creditBalanceOf(trx, actor.orgId, input.customerId));
+      if (creditApplied > balance + 0.005) {
+        throw new Error(
+          `recordCollection: ${customer.name} holds only ₱${balance.toFixed(2)} of store credit — ` +
+            `₱${input.creditApplied} does not fit.`,
+        );
+      }
+    }
+    // ⭐ v1's real rule: proof is required when the money arrived online, never for cash. ⚠️ Only
+    // when cash is actually moving — a fully credit-funded collection touches no account.
+    if (creditApplied < amount - fee - 0.005 && account.instrument !== 'cash' && !input.receiptFileId) {
       throw new Error(
         'recordCollection: an online collection needs proof of payment — attach the deposit slip ' +
           'or transfer screenshot.',
@@ -224,24 +245,48 @@ export async function recordCollection(
 
     const surplus = Math.max(0, amount - allocatedTotal);
     const net = amount - fee;
+    if (creditApplied > net + 0.005) {
+      throw new Error(
+        `recordCollection: creditApplied (₱${input.creditApplied}) cannot exceed the ₱${net.toFixed(2)} ` +
+          'the collection nets after its fee.',
+      );
+    }
+    const cashPortion = net - creditApplied;
 
     /**
-     * ⭐ POSTING-PATTERNS.md `ar_collection`, ported exactly:
-     *   Dr money account   net (amount − fee)
+     * ⭐ POSTING-PATTERNS.md `ar_collection`, ported exactly, plus T-179's credit leg:
+     *   Dr money account   cashPortion (net − creditApplied)   ← ONLY when there is one
+     *   Dr 2140            creditApplied  party = customer     ← ONLY when there is one
      *   Dr 6400            fee            ← ONLY when there is one. Never a zero leg.
      *   Cr 1210            allocated      party = customer
      *   Cr 2140            surplus        party = customer, only when there is one
      */
     const lines = [
-      {
-        accountCode: account.glAccountCode,
-        storeId: input.storeId,
-        debit: net.toFixed(2),
-        ...(account.glAccountCode === '1140'
-          ? { partyType: 'money_account' as const, partyId: account.id }
-          : {}),
-        lineMemo: `Collection — ${customer.name}`,
-      },
+      ...(cashPortion > 0
+        ? [
+            {
+              accountCode: account.glAccountCode,
+              storeId: input.storeId,
+              debit: cashPortion.toFixed(2),
+              ...(account.glAccountCode === '1140'
+                ? { partyType: 'money_account' as const, partyId: account.id }
+                : {}),
+              lineMemo: `Collection — ${customer.name}`,
+            },
+          ]
+        : []),
+      ...(creditApplied > 0
+        ? [
+            {
+              accountCode: STORE_CREDIT_CODE,
+              storeId: input.storeId,
+              debit: creditApplied.toFixed(2),
+              partyType: 'customer' as const,
+              partyId: input.customerId,
+              lineMemo: `Store credit applied — ${customer.name}`,
+            },
+          ]
+        : []),
       ...(fee > 0
         ? [
             {

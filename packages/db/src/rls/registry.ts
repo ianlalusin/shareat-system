@@ -136,6 +136,46 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'it, so the policy belongs on the row being read, not behind a join.',
   },
 
+  // ---- T-167: stock transfers ------------------------------------------------------------
+  stock_transfers: {
+    scope: 'org_column',
+    reason: 'A transfer belongs to a store, and a store to one org.',
+  },
+  stock_transfer_lines: {
+    scope: 'derived',
+    reason: 'No org_id of its own — reached only through its transfer, like delivery_lines.',
+    via: 'exists (select 1 from stock_transfers t where t.id = transfer_id and t.org_id = app_current_org())',
+  },
+  stock_reservations: {
+    scope: 'org_column',
+    reason:
+      'Every reservation carries its org directly, same reasoning as stock_movements: it is ' +
+      'looked up by (item, location) as often as by transfer, so the policy belongs on the row ' +
+      'being read rather than behind a join.',
+  },
+
+  // ---- T-170: supplier returns ------------------------------------------------------------
+  supplier_returns: {
+    scope: 'org_column',
+    reason: 'A return belongs to a store, and a store to one org.',
+  },
+  supplier_return_lines: {
+    scope: 'derived',
+    reason: 'No org_id of its own — reached only through its return, like delivery_lines.',
+    via: 'exists (select 1 from supplier_returns r where r.id = return_id and r.org_id = app_current_org())',
+  },
+
+  // ---- T-179: customer returns -------------------------------------------------------------
+  customer_returns: {
+    scope: 'org_column',
+    reason: 'A return belongs to a store, and a store to one org.',
+  },
+  customer_return_lines: {
+    scope: 'derived',
+    reason: 'No org_id of its own — reached only through its return, like supplier_return_lines.',
+    via: 'exists (select 1 from customer_returns r where r.id = return_id and r.org_id = app_current_org())',
+  },
+
   stock_locations: {
     scope: 'org_column',
     reason:

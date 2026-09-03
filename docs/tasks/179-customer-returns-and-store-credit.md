@@ -1,11 +1,33 @@
 # T-179 — Customer returns: the goods come back, and they hold a credit
 
-> **Status:** SPEC, 2026-08-29. Written before implementation (bible §1.2a).
-> ⭐ **A capability no phase has ever owned.** It arrived with Ian's answer on supplier returns
-> (bible **row 166**) and is not in `CAPABILITY-GAPS.md`'s 34, not in v1, and not in the phase plan
-> as first written — because **v1 cannot do it**, so no capability inventory could have found it.
+> **Status:** ✅ **BUILT 2026-09-02.** Migration `0119` (+ `0120`, see DEF-128 below),
+> `packages/db/schema/customer-returns.ts`, `packages/domain/src/trade/returns.ts`,
+> `apps/erp/src/app/trade/returns/`. 17 integration tests + 4 worked-examples fixtures
+> (`customer.return-ar`, `customer.return-credit`, `customer.credit-applied`,
+> `customer.return-internal`), all green against real Postgres. **Smoketested live on 9008**:
+> recorded a return against a real dispatched wholesale order, watched the returnable-quantity
+> table drop 5→3, confirmed `reduce_ar` settlement (the buyer had not paid), then voided it and
+> watched it revert 3→5. **Only reachable via a seeded fixture** — no `apps/erp` screen exists to
+> CREATE a trade order at all (T-172's own acknowledged gap), so the return screen has nothing to
+> return against without one.
+> ⭐ **Only buildable because T-165 was fixed first, same session (DEF-125)** — before that,
+> wholesale dispatch touched no stock at all, so there was nothing real for a return to reverse.
+> ⭐ **Found and fixed DEF-128 along the way**: `stockLayersRepo.reverseConsumption` silently
+> reversed a consumption row's FULL quantity regardless of what a PARTIAL return actually asked
+> for — dormant until this task's own test 3 (a return spanning two consumed layers) hit it for
+> the first time. Fixed by making a partial reversal SPLIT the row (migration `0120` relaxes
+> `stock_layer_consumptions_layer_movement_key` to unreversed rows only); regression-verified
+> against every other module that reverses stock (113 tests, unchanged).
+> ⚠️ **Two spec corrections, reported not silently absorbed**: `settlement` widened to include
+> `'mixed'` (invariant 9's own split-in-one-entry requirement needs a name for it — the identical
+> correction T-170's `credit_basis` needed); `returnableQuantity` renamed
+> `customerReturnableQuantity` in this package's exports (T-170's supplier-side function already
+> claims the shorter name). §7's supersession of T-131's out-of-scope line is recorded there, not
+> deleted.
 > **Depends on:** T-162 (`stock_layer_consumptions` — ⭐ the return's cost basis), T-164, T-131 (AR,
-> `2140`), T-132/T-133 (`trade_orders` and the derived treatment), T-173 (the internal path).
+> `2140`), T-132/T-133 (`trade_orders` and the derived treatment, extended by T-165), T-173 (the
+> internal path). ⭐ **Also depended on T-165's actual rewiring**, undocumented in the original
+> spec because T-165 was assumed already atomic with Wave 0 — it was not (DEF-125).
 > **Sibling:** T-170 is this shape pointing the other way.
 
 ## 1. Goal
@@ -248,17 +270,30 @@ that conversation will start if it happens.
 
 ## 12. Done when
 
-- [ ] Migration hand-written (DEF-073), next free number, journalled `previous.when + 86400000`.
-- [ ] `classification.ts` **PURGE**; `rls/registry.ts` NULLIF-guarded (DEF-077).
-- [ ] `docs/POSTING-PATTERNS.md` gains `customer.return-credit`, `customer.return-ar`,
-      `customer.credit-applied` and `customer.return-internal`, pinned by `fixtures.ts`.
-      ⚠️ `npm run toc`.
-- [ ] `customerCreditAgeing` registered in `repo/findings.ts` — an unredeemed credit is a liability
-      the customer may have forgotten and we have not.
-- [ ] ⭐ **T-131's out-of-scope line annotated** with what this task superseded and why (§7). ⛔ Do
-      not delete it — the retail half is still true.
-- [ ] `typecheck` · `npm test` · `npm run test:integration` · `npm run build` green (dev server
-      stopped; `ListAgents` first).
-- [ ] `CAPABILITY-MATRIX.md`: `record_customer_return`, `refund_customer` (manager+),
-      `apply_customer_credit`, `void_customer_return` — each with its ✗ test.
-- [ ] `docs/ROADMAP.html` updated.
+- [x] ~~Migration hand-written (DEF-073), next free number, journalled `previous.when + 86400000`.~~
+      ✅ `0119`. Plus an UNPLANNED second migration, `0120` — DEF-128's constraint relaxation,
+      found building this task's own test 3, journalled the same way.
+- [x] ~~`classification.ts` **PURGE**; `rls/registry.ts` NULLIF-guarded (DEF-077).~~ ✅ Both tables,
+      mirroring `supplier_returns`/`supplier_return_lines` exactly.
+- [x] ~~`docs/POSTING-PATTERNS.md` gains `customer.return-credit`, `customer.return-ar`,
+      `customer.credit-applied` and `customer.return-internal`, pinned by `fixtures.ts`.~~ ✅ All
+      four, `npm run toc` re-run, `toc-freshness.test.ts` and `posting-patterns-doc.test.ts` green,
+      proven against real Postgres by `posting-patterns.test.ts` (268/268).
+- [x] ~~`customerCreditAgeing` registered in `repo/findings.ts`.~~ ✅ Done, mirrors
+      `supplierCreditAgeing` exactly.
+- [x] ~~**T-131's out-of-scope line annotated** with what this task superseded and why (§7).~~ ✅
+      Done — the retail half of the sentence is untouched.
+- [x] ~~`typecheck` · `npm test` · `npm run test:integration` · `npm run build` green.~~ ✅ All
+      four green 2026-09-02. 904 unit, 17 new integration tests (all green in isolation and in
+      the full suite).
+- [x] ~~`CAPABILITY-MATRIX.md`: `record_customer_return`, `refund_customer` (manager+),
+      `apply_customer_credit`, `void_customer_return` — each with its ✗ test.~~ ✅ All four added
+      to `capabilities.ts` + the doc mirror; `record_customer_return` added to
+      `authorize.test.ts`'s `UNIVERSALLY_GRANTED` list (staff-open, so no denial case exists for
+      it); the other three get theirs free from the generic per-role sweep.
+- [x] ~~`docs/ROADMAP.html` updated.~~ ✅ T-179 marked shipped; Phase 3 wave and phase chips both
+      17/20; gate numbers refreshed.
+- [x] ~~Live route on 9008.~~ ✅ Seeded a fixture (no `apps/erp` screen exists to CREATE a trade
+      order — T-172's own gap, not this task's to fix), recorded a return, watched the
+      returnable-quantity table update and the correct settlement derive, voided it, watched it
+      revert. `apps/erp/src/app/trade/returns/` is new; linked from the Trade nav.

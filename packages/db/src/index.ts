@@ -143,18 +143,29 @@ export type {
 } from './repo/statutory-discounts';
 export type { OpeningDraft, CutoverStepRow } from './repo/cutover';
 export type { ArChargeRow, ArCollectionRow, ArOpenItem, ArPosition, ArAgingBucket } from './repo/ar';
-export type { TradeOrderRow, TradeOrderLineRow } from './repo/trade';
+export type { TradeOrderRow, TradeOrderLineRow, TradeOrderListRow } from './repo/trade';
 export { AR_DOC_STATUSES } from '../schema/ar';
 export type { ArDocStatus } from '../schema/ar';
 export * as itemsRepo from './repo/items';
 export * as stockLedgerRepo from './repo/stock-ledger';
 export * as stockLayersRepo from './repo/stock-layers';
+export * as stockTransfersRepo from './repo/stock-transfers';
+export * as supplierReturnsRepo from './repo/supplier-returns';
 export * as deliveriesRepo from './repo/deliveries';
 export * as tradeDiscrepanciesRepo from './repo/trade-discrepancies';
 export * as lowStockRepo from './repo/low-stock';
 export type { LowStockRow, OrderMessageRow } from './repo/low-stock';
 export type { TradeDiscrepancyRow } from './repo/trade-discrepancies';
-export type { CatalogueEntry, SimilarItem, ItemRequestRow, MergeReport, DuplicateCandidate } from './repo/items';
+export type {
+  CatalogueEntry,
+  SimilarItem,
+  ItemRequestRow,
+  MergeReport,
+  DuplicateCandidate,
+  ResolvedSellability,
+  StoreSellabilityOverrideRow,
+  ItemPricingRow,
+} from './repo/items';
 export { SIMILARITY_FLOOR } from './repo/items';
 export { ITEM_REQUEST_STATUSES } from '../schema/items';
 export type { ItemRequestStatus } from '../schema/items';
@@ -173,3 +184,8 @@ export type { ItemKind, BaseUnit, PurchaseUnit, ItemStatus } from '../schema/ite
 // Re-exported so a caller establishing a principal around an authorize() call (T-121) does
 // not need to reach into packages/db/src/rls/registry.ts directly.
 export { APP_ROLE } from './rls/registry';
+export * as stockLocationsRepo from './repo/stock-locations';
+export * as commissaryRepo from './repo/commissary';
+// T-171 / DEF-129 — links, offerings and the item map: the catalogue's own SQL.
+export * as commissaryCatalogueRepo from './repo/commissary-catalogue';
+export * as customerReturnsRepo from './repo/customer-returns';

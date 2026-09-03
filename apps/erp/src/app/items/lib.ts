@@ -6,12 +6,51 @@ import {
   type ItemRow,
   type PriceObservation,
   type PriceMonth,
+  type ResolvedSellability,
+  type StoreSellabilityOverrideRow,
   type SupplierPrice,
 } from '@shareat/db';
-import { withOrgPrincipal } from '../expenses/lib';
+import { listStores, withOrgPrincipal } from '../expenses/lib';
 
 export { peso } from '../../lib/format';
 export { withOrgPrincipal };
+
+/** One store's view of an item — the RESOLVED answer, and the raw override behind it if any. */
+export interface StoreSellabilityView {
+  storeId: string;
+  storeName: string;
+  storeCode: string;
+  resolved: ResolvedSellability;
+  /** `null` when the store has said nothing and simply follows the organisation. */
+  override: StoreSellabilityOverrideRow | null;
+}
+
+/**
+ * ⭐ DEF-130. What each store does with this item. T-149's bulgogi case rendered: Lipa makes the
+ * sauce and sells it wholesale; another branch buys it in. The override table stays EMPTY for a
+ * store that agrees with the org, so most rows here carry `override: null`.
+ */
+export async function sellabilityByStore(orgId: string, itemId: string): Promise<StoreSellabilityView[]> {
+  const stores = await listStores(orgId);
+  return withOrgPrincipal(orgId, async (tx) => {
+    const overrides = await itemsRepo.listStoreSellabilityOverrides(tx, orgId, itemId);
+    const byStore = new Map(overrides.map((o) => [o.storeId, o]));
+    const out: StoreSellabilityView[] = [];
+    for (const s of stores) {
+      const resolved = await itemsRepo.sellabilityAt(tx, orgId, itemId, s.id);
+      if (!resolved) continue;
+      out.push({ storeId: s.id, storeName: s.name, storeCode: s.code, resolved, override: byStore.get(s.id) ?? null });
+    }
+    return out;
+  });
+}
+
+/** "retail · wholesale", "wholesale", or "—" — plus "made, not bought" when nobody bills us for it. */
+export function soldAsLabel(item: Pick<ItemRow, 'isPurchasable' | 'sellableRetail' | 'sellableWholesale'>): string {
+  const sold = [item.sellableRetail && 'retail', item.sellableWholesale && 'wholesale'].filter(Boolean).join(' · ');
+  const made = item.isPurchasable ? '' : 'made, not bought';
+  return [sold || '—', made].filter(Boolean).join(' · ');
+}
 
 export async function listItems(orgId: string, includeInactive = true): Promise<ItemRow[]> {
   return withOrgPrincipal(orgId, (tx) => itemsRepo.listItems(tx, orgId, { includeInactive }));

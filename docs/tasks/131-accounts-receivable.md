@@ -208,11 +208,17 @@ Mirrors `recordPayment` (T-130) deliberately, including its lock:
 **Channel settlement** (fee breakdown, settlement gain, loan deductions, auto-creating channel
 receivables from a sales day) — 74% of v1's collection volume and a genuinely different document;
 its own task, currently unowned · **Store credit redemption** — `2140` accrues here, spending it
-is a POS concern · **Coverage date ranges** — unvalidated metadata in v1, never reconciled against
-anything · **Re-applying old unallocated cash** — there is none to re-apply, because surplus
-becomes a liability at the moment it arrives · **Customer credit limits** — `set_credit_limit`
-and `override_credit_limit` exist as capabilities with no enforcement point yet; enforcing them
-belongs with the document that creates the exposure (T-132) · **Dunning and statements**.
+is a POS concern **for a retail diner. ⚠️ SUPERSEDED 2026-09-02, T-179, for a wholesale/trade-order
+customer**: bible row 166 (Ian: *"us being the supplier to other customers, return to us must be
+treated the same"*) creates a customer who has no till to spend a credit at, so redemption against
+a trade order is built there (`applyCredit`, extending `recordCollection` with `creditApplied` —
+the AR mirror of T-170's `apply_supplier_credit`). ⛔ This line still stands for the retail path —
+not deleted, the POS half of it never got built** · **Coverage date ranges** — unvalidated metadata
+in v1, never reconciled against anything · **Re-applying old unallocated cash** — there is none to
+re-apply, because surplus becomes a liability at the moment it arrives · **Customer credit
+limits** — `set_credit_limit` and `override_credit_limit` exist as capabilities with no enforcement
+point yet; enforcing them belongs with the document that creates the exposure (T-132) · **Dunning
+and statements**.
 
 ## Done when
 

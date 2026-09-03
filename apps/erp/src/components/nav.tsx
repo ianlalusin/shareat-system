@@ -31,6 +31,9 @@ const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
       { href: '/inventory', label: 'Stock on hand' },
       { href: '/inventory/low-stock', label: 'Low stock' },
       { href: '/commissary/orders', label: 'Branch orders' },
+      // ⭐ DEF-129 — `commissary_item_map` had no writer anywhere until 2026-09-03, so every real
+      // internal receipt threw. Links, offerings and the map live here.
+      { href: '/commissary/catalogue', label: 'Commissary catalogue' },
       { href: '/commissary/discrepancies', label: 'Transit shortfalls' },
       { href: '/items', label: 'Items' },
     ],
@@ -57,6 +60,10 @@ const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
       { href: '/ap/suppliers', label: 'Suppliers' },
       { href: '/customers', label: 'Customers' },
       { href: '/customers/price-lists', label: 'Price lists' },
+      // ⭐ DEF-138 — the entry point to the whole wholesale / inter-entity feature had no screen
+      // until 2026-09-03; returns (T-179) shipped a day before the orders they return against.
+      { href: '/trade/orders', label: 'Trade orders' },
+      { href: '/trade/returns', label: 'Customer returns' },
     ],
   },
   {

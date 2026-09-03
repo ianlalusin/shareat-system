@@ -6,7 +6,7 @@ import {
   rejectItemRequestAction,
   requestItemAction,
 } from './actions';
-import { listItems, pendingRequests, duplicateCandidates } from './lib';
+import { listItems, pendingRequests, duplicateCandidates, soldAsLabel } from './lib';
 
 export const metadata = { title: 'Items — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -163,6 +163,8 @@ export default async function ItemsPage({
                   <th className="px-3 py-2 font-medium">Code</th>
                   <th className="px-3 py-2 font-medium">Kind</th>
                   <th className="px-3 py-2 font-medium">Priced per</th>
+                  {/* ⭐ DEF-130. The org's default — a store may differ; see the item's page. */}
+                  <th className="px-3 py-2 font-medium">Sold as</th>
                 </tr>
               </thead>
               <tbody>
@@ -177,6 +179,7 @@ export default async function ItemsPage({
                     <td className="px-3 py-2 font-mono text-xs">{i.code}</td>
                     <td className="px-3 py-2">{i.kind.replace(/_/g, ' ')}</td>
                     <td className="px-3 py-2">{i.baseUnit}</td>
+                    <td className="px-3 py-2 text-xs text-neutral-600 dark:text-neutral-400">{soldAsLabel(i)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -229,6 +232,37 @@ export default async function ItemsPage({
             </span>
             <input name="reason" className={INPUT} />
           </label>
+          {/*
+            ⭐ DEF-130. T-149's three independent facts. Until 2026-09-03 the form never asked, both
+            "sold" columns default to false, and every item made here was sold to nobody — which
+            `createTradeOrder` then refused, correctly, on its own gate.
+          */}
+          <fieldset className="space-y-2 rounded border border-neutral-200 p-3 dark:border-neutral-800">
+            <legend className="px-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">
+              What it may be bought and sold as
+            </legend>
+            <div className="grid gap-2 text-sm sm:grid-cols-3">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" name="isPurchasable" defaultChecked className="h-4 w-4" />
+                Bought from suppliers
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" name="sellableRetail" className="h-4 w-4" />
+                Sold à la carte (retail)
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" name="sellableWholesale" className="h-4 w-4" />
+                Sold wholesale / to franchisees
+              </label>
+            </div>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+              Three independent facts — Milkis is all three, a bento box is retail-only and made
+              here, charcoal is bought and sold to nobody. ⚠️ Applied when a super-admin{' '}
+              <strong>adds directly</strong>; a request carries only name, kind and unit, so set
+              these on the item&rsquo;s page once it is approved. A store that differs from the
+              organisation says so there too.
+            </p>
+          </fieldset>
           <div className="flex flex-wrap gap-2">
             <button type="submit" className={BTN}>Request item</button>
             <button

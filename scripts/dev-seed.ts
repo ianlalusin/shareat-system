@@ -31,6 +31,10 @@ import { seedExpenseCategories } from '../packages/db/seed/expense-categories';
  *  ⚠️ These PINs are printed on the sign-in page in development ONLY — see that page's
  *  NODE_ENV guard. A convenience that reaches production is not a convenience. */
 const SEED_PEOPLE = [
+  // ⭐ DEF-130 (2026-09-03). Adding an item directly, approving a request and merging are ALL
+  // super-admin only (T-148, `approve_item`), and the seed had no super-admin — so the item
+  // screen's own create path could never be exercised against a seeded database.
+  { displayName: 'Dev Super Admin', role: 'super_admin' as const, pin: '000000' },
   { displayName: 'Dev Admin', role: 'admin' as const, pin: '111111' },
   { displayName: 'Dev Manager', role: 'manager' as const, pin: '222222' },
   { displayName: 'Dev Cashier', role: 'staff' as const, pin: '333333' },

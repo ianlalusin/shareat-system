@@ -219,11 +219,18 @@ export async function createDraftOrder(
   return row!;
 }
 
+/**
+ * ⭐ T-172 invariant 5: a line the commissary PROPOSED counts toward nothing until the branch
+ * approves it, and a rejected one never does. The same predicate `tradeRepo.lineCounts` states in
+ * TypeScript, here in SQL — the dispatch and the receipt read the TS one, the total reads this one,
+ * and `branch-orders.test.ts` asserts they agree.
+ */
 export async function refreshOrderTotal(tx: Tx, orderId: string): Promise<void> {
   await tx.execute(sql`
     update ${tradeOrders}
     set total_amount = greatest((
-      select coalesce(sum(l.line_total), 0) from ${tradeOrderLines} l where l.order_id = ${orderId}
+      select coalesce(sum(l.line_total), 0) from ${tradeOrderLines} l
+      where l.order_id = ${orderId} and l.approval in ('not_required', 'approved')
     ), 0.01)
     where id = ${orderId}
   `);
@@ -306,11 +313,19 @@ export async function offeringCost(
 export interface BranchOrderRow {
   readonly id: string;
   readonly orderDate: string;
-  readonly status: string;
+  readonly status: 'draft' | 'confirmed' | 'dispatched' | 'received' | 'void';
+  /** T-172. The stage markers `branchOrderStage()` derives from — see `domain/src/commissary/orders.ts`. */
+  readonly acceptedAt: Date | null;
+  readonly readyAt: Date | null;
+  readonly rejectedAt: Date | null;
   readonly totalAmount: string;
+  readonly commissaryStoreId: string;
   readonly commissaryName: string;
+  readonly branchStoreId: string | null;
   readonly branchName: string | null;
   readonly lineCount: number;
+  /** Lines the commissary proposed that the branch has not answered — what the list should flag. */
+  readonly pendingCount: number;
   readonly messageCount: number;
 }
 
@@ -326,10 +341,16 @@ export async function branchOrders(tx: Tx, orgId: string, storeId: string): Prom
     select o.id,
            o.order_date::text                                as "orderDate",
            o.status,
+           o.accepted_at                                     as "acceptedAt",
+           o.ready_at                                        as "readyAt",
+           o.rejected_at                                     as "rejectedAt",
            o.total_amount::text                              as "totalAmount",
+           o.store_id                                        as "commissaryStoreId",
            cs.name                                           as "commissaryName",
+           o.requested_by_store_id                           as "branchStoreId",
            bs.name                                           as "branchName",
            (select count(*)::int from trade_order_lines l where l.order_id = o.id)      as "lineCount",
+           (select count(*)::int from trade_order_lines l where l.order_id = o.id and l.approval = 'pending') as "pendingCount",
            (select count(*)::int from trade_order_messages m where m.order_id = o.id)   as "messageCount"
     from trade_orders o
     join stores cs on cs.id = o.store_id

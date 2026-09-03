@@ -1,6 +1,6 @@
 # T-171 — What a branch may order, at what price, called what
 
-> **Status:** ⭐ **DATA LAYER BUILT, 2026-08-29** — migration `0069`, `packages/db/schema/commissary.ts`, cutover and RLS registry entries. ⚠️ **The catalogue READ path and the price resolution (§5) are NOT built** — they belong with the order screen, which is blocked on port 9008.
+> **Status:** ✅ **WRITERS, READ PATH AND SCREEN BUILT, 2026-09-03 (DEF-129)** — `packages/db/src/repo/commissary-catalogue.ts` and `packages/domain/src/commissary/catalogue.ts` (links, offerings, the map — every writer this table never had), `apps/erp/src/app/commissary/catalogue/`, two capabilities, `commissary-catalogue.test.ts` (11 tests, green). The catalogue READ path and the price fallback (§4 `orderableCatalogue`, `listAvailableCommissaries`, §5's tiers) shipped the same day inside T-172's `orders.ts`, because the order form is their first reader. ⛔ **Bulk import (`importCatalogueIntoBranch`) is NOT built — §10.** Data layer: migration `0069`, 2026-08-29.
 > **Depends on:** T-145 (`items`, org-level), T-149 (`store_item_sellability`), T-151
 > (`item_pricing`, landed cost), T-129 (`customers` and `counterparty_store_id`).
 > **v1 read at source** — `branch-order.actions.ts:68-248`, `commissary-item-config.actions.ts`,
@@ -153,12 +153,40 @@ transfer gets applied across a legal-entity boundary (bible row 111).
 
 ## 9. Done when
 
-- [ ] Migration hand-written (DEF-073), next free number, journalled `previous.when + 86400000`.
-- [ ] `classification.ts`: **KEEP** — this is configuration, like `items` and `item_pricing`.
+- [x] Migration hand-written (DEF-073), next free number, journalled `previous.when + 86400000` —
+      `0069`, 2026-08-29. No further migration was needed for the writers.
+- [x] `classification.ts`: **KEEP** — this is configuration, like `items` and `item_pricing`.
       ⚠️ Not PURGE: a branch's catalogue and map are exactly the kind of setup nobody wants to
-      re-enter on 1 January. `rls/registry.ts` NULLIF-guarded.
-- [ ] `typecheck` · `npm test` · `npm run test:integration` · `npm run build` green (dev server
-      stopped; `ListAgents` first).
-- [ ] `CAPABILITY-MATRIX.md`: `manage_commissary_offerings`, `manage_commissary_map`,
-      `import_commissary_catalogue` — each with its ✗ test.
-- [ ] `docs/ROADMAP.html` updated.
+      re-enter on 1 January. `rls/registry.ts` NULLIF-guarded. (2026-08-29.)
+- [x] `typecheck` · `npm test` · `npm run test:integration` · `npm run build` green (dev server
+      stopped; `ListAgents` first) — 2026-09-03, real numbers in the commit message.
+- [x] `CAPABILITY-MATRIX.md`: `manage_commissary_offerings`, `manage_commissary_map` — each with
+      its ✗ test (role AND store-scope, both directions, `commissary-catalogue.test.ts`).
+      ⛔ **`import_commissary_catalogue` deliberately NOT declared**: the bulk import is unbuilt, and
+      a capability with no caller is one nobody has proved refuses anyone (the pin in
+      `tests/unit/capability-matrix.test.ts` exists to expose exactly that debt). Declare it with
+      the import.
+- [x] `docs/ROADMAP.html` updated.
+- [x] Live on 9008, 2026-09-03: link → two offerings → two map rows through the screen, then a
+      branch order placed against them (T-172 §12.6).
+
+## 10. ⭐ Built 2026-09-03 — what shipped, and what did not
+
+**Shipped.** `upsertCommissaryLink` (commissary side; ⭐ also creates the branch's INTERNAL
+customer row if none exists — `trade_orders.customer_id` is NOT NULL and names the branch through
+`counterparty_store_id`, so a branch that may order always has one; the reasoning for not routing
+that through `createCustomer`'s admin gate is in the function's own comment), `upsertOffering`
+(refuses an inactive or non-purchasable item — invariant 3), `upsertMap` (refuses an unlinked pair,
+an unknown category, and ⭐ **mismatched base units** — invariant 8's refusal-to-guess, applied at
+map time so `confirmReceipt` never has to refuse the stock later), `removeMap`. The screen is one
+page with three sections — links, offerings, and the map per linked branch. `orderableCatalogue`
+and `listAvailableCommissaries` (§4) and the three-tier price (§5 — T-151's `branchPriceFor`, then
+the offering's `manual_cost`, never a silent zero) live in T-172's `orders.ts`.
+
+**Not shipped, named.** `importCatalogueIntoBranch` (§4, invariant 8, test 7) — the idempotent
+bulk import with same-name reuse and unit-conflict reporting. Nothing today needs it: a branch is
+mapped one item at a time on the screen, and the dev catalogue is a handful of items. Build it
+when a branch with hundreds of lines is onboarded; declare `import_commissary_catalogue` then.
+Tests 1, 3–5 of §7 (the query-count assertion and the price tiers) are covered indirectly by
+`branch-orders.test.ts` (rate resolution, `priced: false`) rather than by a catalogue test of their
+own.

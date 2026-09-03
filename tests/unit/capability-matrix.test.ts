@@ -179,7 +179,17 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
   // ⭐ 58 -> 60 on 2026-08-31, T-189: `set_pay_rate` and `run_payroll`. Both admin-yes /
   // manager-no, so both also JOIN the adminless-manager fallback below with no edit to any
   // list — see the reasoning there before assuming that is a mistake.
-  it('finds exactly 60 capability rows — NOT the "36" the task documents say in prose', () => {
+  // ⭐ 60 -> 62 on 2026-09-02, T-167: `transfer_stock` (staff-open) and `void_transfer`
+  // (manager+, same asymmetry as `void_expense`). 62 -> 65 same day, T-170:
+  // `record_supplier_return` (staff-open), `void_supplier_return` (manager+),
+  // `apply_supplier_credit` (manager+, checked inside recordPayment).
+  // ⭐ 69 -> 74 on 2026-09-03, DEF-136/DEF-129: `place_branch_order` and `fulfil_branch_order`
+  // (both staff-open — the two SIDES of one order, each resolved at a different store) and
+  // `dispatch_branch_order` (manager+, the posting event); `manage_commissary_offerings` and
+  // `manage_commissary_map` (manager+, store-scoped to the commissary and the branch
+  // respectively). T-171's third, `import_commissary_catalogue`, is NOT added: the bulk import
+  // is unbuilt and a capability with no caller is the debt this pin exists to expose.
+  it('finds exactly 74 capability rows — NOT the "36" the task documents say in prose', () => {
     // docs/tasks/121-roles-and-access.md and CAPABILITY-MATRIX.md's own Contract section
     // both say "36 rows" / "36 capabilities". The table itself had 38: the two
     // ⚠️-flagged open cells (set_credit_limit, close_period) plus the two platform-only
@@ -196,7 +206,7 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // into the enforcement without also being written into the document people actually
     // read, and vice versa.
     const { rows } = parseCapabilityMatrixDoc();
-    expect(rows.length).toBe(60);
+    expect(rows.length).toBe(74);
   });
 
   it('has no duplicate capability names', () => {
@@ -267,10 +277,10 @@ describe('invariant 1 — every capability has an explicit decision for all four
     expect(problems).toEqual([]);
   });
 
-  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 60 capabilities', () => {
-    expect(CAPABILITIES.length).toBe(60);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(60);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(60);
+  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 74 capabilities', () => {
+    expect(CAPABILITIES.length).toBe(74);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(74);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(74);
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));
   });

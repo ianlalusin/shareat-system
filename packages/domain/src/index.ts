@@ -26,6 +26,7 @@ export * from './ap';
 export * from './items';
 export * from './ar';
 export * from './trade';
+export * from './trade/returns';
 export * from './channel-settlements';
 export * from './findings';
 export * from './cutover';
@@ -43,6 +44,9 @@ export * from './stock/invoice-link';
 export * from './stock/wastage-reasons';
 export * from './stock/usage';
 export * from './stock/count-sessions';
+export * from './stock/transfer-rules';
+export * from './stock/transfers';
+export * from './stock/supplier-returns';
 export * from './stock-locations/rules';
 export * from './deliveries/receive';
 export * from './deliveries/duplicate-risk';
@@ -51,6 +55,11 @@ export * from './commissary/transfer';
 export * from './commissary/discrepancy';
 export * from './commissary/auto-order';
 export * from './commissary/messages';
+// T-172 / DEF-136 — the branch order's two sides, built 2026-09-03.
+export * from './commissary/orders';
+export * from './commissary/fulfilment';
+// T-171 / DEF-129 — the catalogue's writers, built 2026-09-03.
+export * from './commissary/catalogue';
 export * from './statutory-discounts';
 // T-154 — the staff master record: positions, employments, the roster (Phase 4, lane B).
 export * from './people';

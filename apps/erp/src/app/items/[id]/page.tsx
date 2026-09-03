@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation';
 import { requireSession } from '../../../lib/session';
-import { getItem, itemPrices, peso } from '../lib';
+import { getItem, itemPrices, peso, sellabilityByStore, soldAsLabel } from '../lib';
 import { whoSells } from '../../ap/lib';
+import { clearStoreSellabilityAction, setStoreSellabilityAction, updateItemFlagsAction } from '../actions';
 
 export const metadata = { title: 'Item — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -11,15 +12,43 @@ function per(value: string): string {
   return peso(Number(value).toFixed(2));
 }
 
-export default async function ItemDetailPage({ params }: { params: Promise<{ id: string }> }) {
+const SELECT =
+  'rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+const BTN =
+  'rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-white dark:text-neutral-900';
+const BTN_QUIET =
+  'rounded border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900';
+
+/** Renders a tri-state override as its select value. `null` is "follow the org", never "no". */
+function triValue(v: boolean | null | undefined): string {
+  return v === true ? 'yes' : v === false ? 'no' : '';
+}
+
+export default async function ItemDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string; ok?: string }>;
+}) {
   const { id } = await params;
+  const sp = await searchParams;
   const { actor } = await requireSession(`/items/${id}`);
   const item = await getItem(actor.orgId, id);
   if (!item) notFound();
 
-  const { history, movement, bySupplier } = await itemPrices(actor.orgId, id);
-  const sellers = await whoSells(actor.orgId, id);
+  const [{ history, movement, bySupplier }, sellers, byStore] = await Promise.all([
+    itemPrices(actor.orgId, id),
+    whoSells(actor.orgId, id),
+    sellabilityByStore(actor.orgId, id),
+  ]);
   const peak = movement.reduce((m, r) => Math.max(m, Number(r.maxPrice)), 0);
+
+  const FLAGS = [
+    { key: 'isPurchasable', label: 'Bought from suppliers', org: item.isPurchasable },
+    { key: 'sellableRetail', label: 'Sold à la carte', org: item.sellableRetail },
+    { key: 'sellableWholesale', label: 'Sold wholesale', org: item.sellableWholesale },
+  ] as const;
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
@@ -30,9 +59,121 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
         <h1 className="mt-1 text-2xl font-semibold">{item.name}</h1>
         <p className="text-sm text-neutral-500 dark:text-neutral-400">
           <span className="font-mono text-xs">{item.code}</span> · {item.kind.replace(/_/g, ' ')} ·
-          priced per {item.baseUnit}
+          priced per {item.baseUnit} · {soldAsLabel(item)}
         </p>
       </div>
+
+      {sp.error && (
+        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+          {sp.error}
+        </div>
+      )}
+      {sp.ok && (
+        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
+          {sp.ok}
+        </div>
+      )}
+
+      {/*
+        ⭐ DEF-130 / T-149. Three independent facts, and TWO layers: the organisation's answer,
+        then the store that differs. Bulgogi sauce is one item — one identity, one price history —
+        but Lipa MAKES it and sells it wholesale while another branch buys it in. The override
+        table holds only the exceptions, so a store that agrees with the org has no row at all.
+      */}
+      <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <div>
+          <h2 className="font-medium">What it may be bought and sold as</h2>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            The organisation&rsquo;s answer first. A wholesale order is refused for an item the{' '}
+            <strong>selling store</strong> does not sell wholesale, and a supplier invoice is refused
+            for one the store makes rather than buys — so an item nobody has flagged can be
+            neither sold nor bought.
+          </p>
+        </div>
+
+        <form action={updateItemFlagsAction} className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+          <input type="hidden" name="itemId" value={item.id} />
+          {FLAGS.map((f) => (
+            <label key={f.key} className="flex items-center gap-2">
+              <input type="checkbox" name={f.key} defaultChecked={f.org} className="h-4 w-4" />
+              {f.label}
+            </label>
+          ))}
+          <button type="submit" className={BTN}>
+            Save organisation default
+          </button>
+        </form>
+
+        {byStore.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium">Where a store differs</h3>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+              ⚠️ &ldquo;Follow the organisation&rdquo; is not the same as &ldquo;no&rdquo; — it keeps
+              tracking the default above when that changes; a store that says &ldquo;no&rdquo;
+              freezes its own answer.
+            </p>
+            <ul className="space-y-2">
+              {byStore.map((s) => (
+                <li
+                  key={s.storeId}
+                  className="flex flex-wrap items-end gap-3 rounded border border-neutral-200 p-3 text-sm dark:border-neutral-800"
+                >
+                  {/*
+                    ⚠️ Save and Clear are TWO forms, side by side, not one form with a
+                    `formAction` button. A click that lands before React hydrates submits the
+                    form natively, and a native submit ignores a server-action `formAction` —
+                    "Clear" then SAVED the override instead. Two plain forms behave the same
+                    with or without JS.
+                  */}
+                  <form action={setStoreSellabilityAction} className="flex flex-wrap items-end gap-3">
+                    <input type="hidden" name="itemId" value={item.id} />
+                    <input type="hidden" name="storeId" value={s.storeId} />
+                    <div className="min-w-[8rem]">
+                      <div className="font-medium">{s.storeName}</div>
+                      <div className="text-xs text-neutral-500 dark:text-neutral-400">
+                        {s.override ? 'has its own answer' : 'follows the organisation'}
+                        {' · here: '}
+                        {soldAsLabel(s.resolved)}
+                      </div>
+                    </div>
+                    {FLAGS.map((f) => (
+                      <label key={f.key} className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
+                        {f.label}
+                        <select name={f.key} defaultValue={triValue(s.override?.[f.key])} className={SELECT}>
+                          <option value="">Follow the organisation ({f.org ? 'yes' : 'no'})</option>
+                          <option value="yes">Yes, here</option>
+                          <option value="no">No, here</option>
+                        </select>
+                      </label>
+                    ))}
+                    <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
+                      Why
+                      <input
+                        name="note"
+                        defaultValue={s.override?.note ?? ''}
+                        placeholder="made in-house here"
+                        className={`${SELECT} w-40`}
+                      />
+                    </label>
+                    <button type="submit" className={BTN}>
+                      Save
+                    </button>
+                  </form>
+                  {s.override && (
+                    <form action={clearStoreSellabilityAction}>
+                      <input type="hidden" name="itemId" value={item.id} />
+                      <input type="hidden" name="storeId" value={s.storeId} />
+                      <button type="submit" className={BTN_QUIET}>
+                        Clear
+                      </button>
+                    </form>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
 
       {sellers.length > 0 && (
         <section className="space-y-2">

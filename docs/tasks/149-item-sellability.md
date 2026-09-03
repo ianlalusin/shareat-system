@@ -1,6 +1,12 @@
 # T-149 — What an item may be bought and sold as
 
-> **Status:** Spec written 2026-08-28 by the Opus planner, implemented same session.
+> **Status:** Spec written 2026-08-28 by the Opus planner, implemented same session — **schema and
+> service only.** ⚠️ **No screen exposed any of the three flags until 2026-09-03 (DEF-130):**
+> `createItemAction` never passed them, so every item made through the app defaulted to sold-to-nobody
+> and `createTradeOrder`'s wholesale gate refused it. Closed 2026-09-03: checkboxes on the `/items`
+> create form, an org-default editor plus a per-store override row on `/items/[id]` (wired to
+> `updateItem` / `setStoreSellability` / `clearStoreSellability`), a "Sold as" column on the register.
+> Smoketested live; see the DEF-130 row for the exact walk.
 > **Depends on:** T-145 (`items`), T-129 (`price_lists`), T-148 (item governance).
 > **Assessed before specced**, per bible row 163 — the assessment is summarised below because it
 > changed the shape from an enum to three booleans.

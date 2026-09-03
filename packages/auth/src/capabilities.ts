@@ -53,16 +53,23 @@ export const ROLES = ['super_admin', 'admin', 'manager', 'staff'] as const;
 export type Role = (typeof ROLES)[number];
 
 // -----------------------------------------------------------------------------------------
-// The 49 capabilities, exactly as CAPABILITY-MATRIX.md lists them (grep-counted against
+// The 65 capabilities, exactly as CAPABILITY-MATRIX.md lists them (grep-counted against
 // the document, not hand-counted — see the task report: the document's own prose says
 // "36 rows" in two places, but the table itself had 38 entries including the two
 // ⚠️-flagged open cells and the two platform-only rows, and transfer_funds (row 150) is
 // the 39th; T-125's manage_prepaid_items and run_amortisation make 41. T-130 adds
 // record_supplier_invoice, verify_supplier_invoice and void_supplier_invoice, making 44.
-// T-159 adds provision_clock_terminal (Phase 4), making 49. Do NOT hand-count this number:
-// the matrix test parses the document and compares, and it caught 48-vs-49 here.
+// T-159 adds provision_clock_terminal (Phase 4), making 49. T-137's record_statutory_discount
+// and void_statutory_discount make 50 (2026-08-30's own additions took it on to 58 via
+// record_till_count/resolve_till_variance, and T-189 to 60 via set_pay_rate/run_payroll —
+// see tests/unit/capability-matrix.test.ts's own running history, which stayed in sync
+// where this comment did not). T-167 adds transfer_stock and void_transfer, making 62. T-170
+// adds record_supplier_return, void_supplier_return and apply_supplier_credit, making 65. T-179
+// adds record_customer_return, void_customer_return, apply_customer_credit and refund_customer,
+// making 69.
+// Do NOT hand-count this number: the matrix test parses the document and compares.
 // Invariant 3's parser is the proof: it fails loudly if this list and the document ever
-// disagree, in EITHER direction).
+// disagree, in EITHER direction.
 // -----------------------------------------------------------------------------------------
 
 export type Capability =
@@ -90,11 +97,47 @@ export type Capability =
   | 'adjust_inventory'
   | 'record_wastage'
   | 'charge_staff_for_discrepancy'
+  /** T-167. Room-to-room within one store. */
+  | 'transfer_stock'
+  /** T-167. ⛔ Manager+, same asymmetry as `void_expense` — voiding is supervisory. */
+  | 'void_transfer'
+  /** T-170. Staff-open, same bar as record_stock_movement — a return is recorded when the goods
+   *  physically leave, one act by one person, no draft state to review later. */
+  | 'record_supplier_return'
+  /** T-170. ⛔ Manager+, same asymmetry as void_transfer/void_expense. */
+  | 'void_supplier_return'
+  /** T-170. Spending the `1240` credit inside `recordPayment` — a distinct decision from
+   *  recording the payment itself, even though `record_ap_payment` (manager+) already gates the
+   *  call it lives inside. */
+  | 'apply_supplier_credit'
+  /** T-179. Staff-open, same bar as record_supplier_return — a customer return is recorded when
+   *  the goods physically arrive, one act by one person. */
+  | 'record_customer_return'
+  /** T-179. ⛔ Manager+, same asymmetry as void_supplier_return. */
+  | 'void_customer_return'
+  /** T-179. Spending the `2140` credit inside `recordCollection` — the AR mirror of
+   *  apply_supplier_credit. */
+  | 'apply_customer_credit'
+  /** T-179. Paying OUT cash against a return — a financial decision distinct from recording the
+   *  goods coming back. */
+  | 'refund_customer'
   // Inventory — T-173/T-174/T-175, the commissary pipeline
   | 'confirm_receipt'
   | 'resolve_trade_discrepancy'
   | 'set_item_threshold'
   | 'post_order_message'
+  // Inventory — T-172, the branch order itself (2026-09-03, DEF-136)
+  /** T-172. The BRANCH side: draft, add/remove lines, submit, answer a proposed substitution,
+   *  withdraw before dispatch. Staff-open — the person who notices the shelf is empty is the one
+   *  who orders, same bar as set_item_threshold; v1 gated none of the order flow by role.
+   *  Store-scoped to the BRANCH (`requested_by_store_id`), which is invariant 10's half. */
+  | 'place_branch_order'
+  /** T-172. The COMMISSARY side: accept, reject, adjust fulfilment, propose a substitution, mark
+   *  ready. Staff-open — packing crates is floor work. Store-scoped to the COMMISSARY. Posts nothing. */
+  | 'fulfil_branch_order'
+  /** T-172. ⛔ Manager+. The posting event — stock leaves into `1340`. Same asymmetry as
+   *  dispatch_wholesale_order. ⚠️ Separate from T-173's confirm_receipt (phase plan §5.4). */
+  | 'dispatch_branch_order'
   // Suppliers, buyers and credit
   | 'approve_supplier'
   | 'approve_buyer'
@@ -134,6 +177,13 @@ export type Capability =
   /** ⭐ Separate from `manage_store_settings` ON PURPOSE — see the role grid below. */
   | 'set_cash_policy'
   | 'manage_price_lists'
+  /** T-171 (DEF-129, 2026-09-03). What THIS commissary offers and at what manual cost, plus the
+   *  link that says which branch may order here. Store-scoped to the COMMISSARY. Manager+. */
+  | 'manage_commissary_offerings'
+  /** T-171. Which of the branch's OWN items a commissary line becomes, the ledger-only decision
+   *  and the receiving expense category. Store-scoped to the BRANCH — the correspondence is the
+   *  branch's to own (T-171 invariant 9). Manager+. */
+  | 'manage_commissary_map'
   | 'manage_fixed_assets'
   | 'run_depreciation'
   | 'manage_prepaid_items'
@@ -163,10 +213,22 @@ export const CAPABILITIES: readonly Capability[] = [
   'adjust_inventory',
   'record_wastage',
   'charge_staff_for_discrepancy',
+  'transfer_stock',
+  'void_transfer',
+  'record_supplier_return',
+  'void_supplier_return',
+  'apply_supplier_credit',
+  'record_customer_return',
+  'void_customer_return',
+  'apply_customer_credit',
+  'refund_customer',
   'confirm_receipt',
   'resolve_trade_discrepancy',
   'set_item_threshold',
   'post_order_message',
+  'place_branch_order',
+  'fulfil_branch_order',
+  'dispatch_branch_order',
   'approve_supplier',
   'approve_buyer',
   'set_credit_limit',
@@ -197,6 +259,8 @@ export const CAPABILITIES: readonly Capability[] = [
   'manage_store_settings',
   'set_cash_policy',
   'manage_price_lists',
+  'manage_commissary_offerings',
+  'manage_commissary_map',
   'manage_fixed_assets',
   'run_depreciation',
   'manage_prepaid_items',
@@ -238,6 +302,18 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   adjust_inventory: 'store',
   record_wastage: 'store',
   charge_staff_for_discrepancy: 'store',
+  // A transfer's two locations are both in one store — T-167 §8 out-of-scope excludes cross-store.
+  transfer_stock: 'store',
+  void_transfer: 'store',
+  record_supplier_return: 'store',
+  void_supplier_return: 'store',
+  // Checked inside recordPayment, which is itself store-scoped (record_ap_payment).
+  apply_supplier_credit: 'store',
+  record_customer_return: 'store',
+  void_customer_return: 'store',
+  // Checked inside recordCollection, which is itself store-scoped (record_ar_collection).
+  apply_customer_credit: 'store',
+  refund_customer: 'store',
 
   /**
    * ⭐ **Store-scoped, and BOTH stores are legitimate callers** — T-173 invariant 8. A
@@ -253,6 +329,15 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   resolve_trade_discrepancy: 'store',
   set_item_threshold: 'store',
   post_order_message: 'store',
+  /**
+   * ⭐ T-172. Store-scoped, and each side of ONE document is a different store: the branch's
+   * capability is checked against `requested_by_store_id`, the commissary's two against
+   * `store_id`. That is how invariant 10 ("each field has exactly one owner") is enforced — not
+   * by a column-level rule, but by which store the capability is resolved at.
+   */
+  place_branch_order: 'store',
+  fulfil_branch_order: 'store',
+  dispatch_branch_order: 'store',
 
   // T-130 correction: `suppliers` has no store_id — it is org-wide master data, same shape
   // as `customers` (ADR-008), which uses the org-scoped `manage_chart_of_accounts` for its
@@ -302,6 +387,10 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   manage_store_settings: 'store',
   set_cash_policy: 'store',
   manage_price_lists: 'org',
+  // T-171. STORE-scoped, unlike price lists: an offering belongs to one commissary, a map to one
+  // branch, and invariant 9 says a caller may only edit the side they hold.
+  manage_commissary_offerings: 'store',
+  manage_commissary_map: 'store',
   manage_fixed_assets: 'org',
   run_depreciation: 'org',
   // Org-scoped like their fixed-asset twins: a policy or a licence is bought by the business,
@@ -355,6 +444,25 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   adjust_inventory: { super_admin: true, admin: true, manager: true, staff: false },
   record_wastage: { super_admin: true, admin: true, manager: true, staff: true },
   charge_staff_for_discrepancy: { super_admin: true, admin: true, manager: true, staff: false },
+  // T-167. Staff-open, same bar as record_stock_movement: a floor worker moves crates between
+  // rooms without finding a manager first.
+  transfer_stock: { super_admin: true, admin: true, manager: true, staff: true },
+  // ⛔ Voiding is supervisory, same asymmetry as void_expense / void_statutory_discount.
+  void_transfer: { super_admin: true, admin: true, manager: true, staff: false },
+  // T-170. Staff-open — a return is one act by one person when the goods physically leave, same
+  // bar as record_stock_movement.
+  record_supplier_return: { super_admin: true, admin: true, manager: true, staff: true },
+  void_supplier_return: { super_admin: true, admin: true, manager: true, staff: false },
+  // Same level as record_ap_payment, the capability the call it lives inside already requires —
+  // spending a credit is at least as consequential as recording the payment itself.
+  apply_supplier_credit: { super_admin: true, admin: true, manager: true, staff: false },
+
+  // T-179. Staff-open — the AR mirror of record_supplier_return, same reasoning.
+  record_customer_return: { super_admin: true, admin: true, manager: true, staff: true },
+  void_customer_return: { super_admin: true, admin: true, manager: true, staff: false },
+  // Same level as apply_supplier_credit — spending or paying out is a financial decision.
+  apply_customer_credit: { super_admin: true, admin: true, manager: true, staff: false },
+  refund_customer: { super_admin: true, admin: true, manager: true, staff: false },
 
   // ⭐ Staff too: a branch cook signs for the crates that arrive, and requiring a manager on site
   // to accept a delivery is the rule people work around by sharing a login. The two-sided store
@@ -368,6 +476,13 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   // threshold is invisible, so friction here has no counter-pressure).
   set_item_threshold: { super_admin: true, admin: true, manager: true, staff: true },
   post_order_message: { super_admin: true, admin: true, manager: true, staff: true },
+  // ⭐ T-172. Both SIDES of the order are staff-open, and the posting event is not. v1 gates none
+  // of the order flow by role (only discrepancy resolution checks isManager); v2 keeps that for
+  // the conversation — draft, submit, accept, pack, propose, answer — and holds the one act that
+  // moves stock and posts to `1340` to the same bar as dispatch_wholesale_order.
+  place_branch_order: { super_admin: true, admin: true, manager: true, staff: true },
+  fulfil_branch_order: { super_admin: true, admin: true, manager: true, staff: true },
+  dispatch_branch_order: { super_admin: true, admin: true, manager: true, staff: false },
 
   approve_supplier: { super_admin: true, admin: true, manager: true, staff: false },
   approve_buyer: { super_admin: true, admin: true, manager: true, staff: false },
@@ -445,6 +560,11 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
    */
   set_cash_policy: { super_admin: true, admin: true, manager: false, staff: false },
   manage_price_lists: { super_admin: true, admin: true, manager: false, staff: false },
+  // T-171. Manager+, same bar as manage_items: a store manager curates what their commissary
+  // offers and what their branch receives it as. ⚠️ NOT admin-only like price lists — a map row
+  // is operational setup ("which of my items is this"), not a commercial price decision.
+  manage_commissary_offerings: { super_admin: true, admin: true, manager: true, staff: false },
+  manage_commissary_map: { super_admin: true, admin: true, manager: true, staff: false },
   manage_fixed_assets: { super_admin: true, admin: true, manager: false, staff: false },
   run_depreciation: { super_admin: true, admin: true, manager: false, staff: false },
   // ⭐ Mirrors manage_fixed_assets / run_depreciation exactly, and is SEPARATE from them on

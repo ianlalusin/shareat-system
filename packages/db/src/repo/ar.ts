@@ -138,6 +138,26 @@ export async function positionOf(
   return { controlBalance: Number(row?.balance ?? 0).toFixed(2) };
 }
 
+/**
+ * ⭐ T-179. A customer's spendable store credit — `2140`, party-filtered, never a stored balance
+ * (DEF-075). Mirrors T-170's `advancesPositionOf` (`repo/ap.ts`) pointed the other way: `2140` is
+ * a LIABILITY, so its balance is `credit - debit`, opposite `positionOf`'s asset-side `1210`.
+ */
+export async function creditBalanceOf(tx: Tx, orgId: string, customerId: string): Promise<string> {
+  const [row] = (await tx.execute(sql`
+    select coalesce(sum(jl.credit - jl.debit), 0)::text as balance
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId}
+      and jl.party_type = ${PARTY_TYPE}
+      and jl.party_id = ${customerId}
+      and a.code = ${STORE_CREDIT_CODE}
+      and je.status <> 'draft'
+  `)) as unknown as Record<string, string>[];
+  return Number(row?.balance ?? 0).toFixed(2);
+}
+
 export interface ArOpenItem {
   chargeId: string;
   customerId: string;
@@ -200,6 +220,32 @@ export async function openItems(
     writtenOffAmount: Number(r.written_off_amount).toFixed(2),
     outstanding: Number(r.outstanding).toFixed(2),
   }));
+}
+
+/**
+ * ⭐ T-179 invariant 9. What is still owed on ONE specific charge — not the customer's whole
+ * position, which `positionOf` already gives and which a return must not reduce by more than
+ * this one order actually still owes.
+ */
+export async function outstandingForCharge(tx: Tx, orgId: string, chargeId: string): Promise<string> {
+  const [row] = (await tx.execute(sql`
+    with allocated as (
+      select a.ar_charge_id, sum(a.amount_applied) as amt
+      from ar_collection_allocations a
+      join ar_collections c on c.id = a.ar_collection_id
+      where c.status = 'posted'
+      group by a.ar_charge_id
+    ),
+    written as (
+      select ar_charge_id, sum(amount) as amt from ar_write_offs group by ar_charge_id
+    )
+    select (ch.total_amount - coalesce(al.amt, 0) - coalesce(w.amt, 0))::text as outstanding
+    from ar_charges ch
+    left join allocated al on al.ar_charge_id = ch.id
+    left join written w on w.ar_charge_id = ch.id
+    where ch.org_id = ${orgId} and ch.id = ${chargeId} and ch.status = 'posted'
+  `)) as unknown as Record<string, string>[];
+  return row ? Number(row.outstanding).toFixed(2) : '0.00';
 }
 
 export interface ArAgingBucket {

@@ -1,6 +1,12 @@
 # T-130 — Accounts payable: supplier invoices, payments, open-item allocation
 
-> **Status:** Spec ready, not yet implemented. **Depends on:** T-118 (subledger party pattern,
+> **Status:** ⚠️ **BUILT 2026-08-28 (`f438316`) — this line was stale.** Found during T-167's
+> assessment pass 2026-09-02: `packages/domain/src/ap/index.ts` is fully implemented
+> (`createSupplier`/`recordInvoice`/`verifyInvoice`/`voidInvoice`/`recordPayment`/`voidPayment`,
+> 874 lines) and has been for days — its own header even documents T-196 correcting it further —
+> but this status line was never updated off "Spec ready, not yet implemented." T-170 (supplier
+> returns) depends on knowing this: its `1240` credit allocation source belongs in
+> `recordPayment` here, not a second allocator. **Depends on:** T-118 (subledger party pattern,
 > DEF-037), T-122 (expenses — the credit-method booking leg already exists), T-129 (customers —
 > the counterparty pattern this mirrors), ADR-010 (money locations, bible row 142).
 > **Blocks:** T-131 (AR — needs the aging-basis decision this spec raises settled first),

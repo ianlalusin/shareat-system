@@ -573,6 +573,147 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
   },
 
   // =========================================================================================
+  // supplier_return — v2-only, bible row 166. "The goods go back, and we hold a credit." Which
+  // credit leg fires is DERIVED from whether the receipt carries a linked supplier invoice.
+  // =========================================================================================
+  {
+    id: 'supplier.return-grni',
+    sourceType: 'supplier_return',
+    title: 'Supplier return, uninvoiced — no credit arises',
+    narrative: 'Returning 10 kg of a 30 kg receipt that has not been invoiced yet. The supplier ' +
+      'will simply bill for less; there is nothing to credit.',
+    frequency: 1,
+    input: { supplierId: 'SUP-0450', quantity: '10.000', unitCost: '100.0000' },
+    expect: [
+      D('2120', '1000.00', null, { lineMemo: 'supplier return, uninvoiced' }),
+      C('1310', '1000.00', null, { lineMemo: 'inventory relieved' }),
+    ],
+    entryDate: '2026-03-01',
+  },
+  {
+    id: 'supplier.return-credit',
+    sourceType: 'supplier_return',
+    title: 'Supplier return, invoiced — a real, spendable credit',
+    narrative: 'Returning 10 kg of a receipt that HAS been invoiced. 1240 already exists as a ' +
+      'party-carrying asset — the same account an AP overpayment lands in.',
+    frequency: 1,
+    input: { supplierId: 'SUP-0450', quantity: '10.000', unitCost: '100.0000' },
+    expect: [
+      D('1240', '1000.00', { type: 'supplier', id: 'supplier:SUP-0450' }, { lineMemo: 'return credit held' }),
+      C('1310', '1000.00', null, { lineMemo: 'inventory relieved' }),
+    ],
+    entryDate: '2026-03-02',
+    trap: 'Never a supplier_credits table and never a credit_balance column — the balance is a ' +
+      'query over 1240\'s own party-filtered lines (DEF-075\'s pattern, refused the ninth time). ' +
+      'Not a negative balance netted into 2110 either: that would hide the credit inside "what we owe."',
+  },
+  {
+    id: 'supplier.credit-applied',
+    sourceType: 'ap_payment',
+    title: 'The return credit spent — inside an AP payment, not a new document type',
+    narrative: 'A ₱1,000 invoice paid ENTIRELY from an existing ₱1,000 return credit. No cash ' +
+      'moves; the money-account leg is a zero-amount line and is omitted.',
+    frequency: 1,
+    input: { supplierId: 'SUP-0450', amountApplied: '1000.00', creditApplied: '1000.00' },
+    expect: [
+      D('2110', '1000.00', { type: 'supplier', id: 'supplier:SUP-0450' }, { lineMemo: 'AP cleared' }),
+      C('1240', '1000.00', { type: 'supplier', id: 'supplier:SUP-0450' }, { lineMemo: 'return credit applied' }),
+    ],
+    entryDate: '2026-03-03',
+    trap: 'moneyAccountId is still named on the payment record (ADR-010: always a real account, ' +
+      'never a label) even though no draw happens against it. A refund posts the mirror image — ' +
+      'Dr the money account, Cr 1240 — and is also not a new document type.',
+  },
+
+  // =========================================================================================
+  // customer_return — T-179, bible row 166. T-170's shape pointing the other way — but a
+  // customer return reverses THREE things (revenue, cost, stock) where a supplier return
+  // reverses two, because we recognised revenue on the way out and did not on the way in.
+  // =========================================================================================
+  {
+    id: 'customer.return-ar',
+    sourceType: 'customer_return',
+    title: 'Customer return, still owed — reduces the receivable directly',
+    narrative: 'A ₱5,000 wholesale line, costing ₱900, returned in full. The customer had not ' +
+      'paid yet, so the reversal reduces 1210 directly rather than creating a credit.',
+    frequency: 1,
+    input: { customerId: 'CUST-WS-01', quantity: '10.000', rate: '500.00', unitCost: '90.0000' },
+    expect: [
+      D('4950', '5000.00', null, { lineMemo: 'return — revenue reversed' }),
+      C('1210', '5000.00', { type: 'customer', id: 'customer:CUST-WS-01' }, { lineMemo: 'return — receivable reduced' }),
+      D('1310', '900.00', null, { lineMemo: 'return — inventory reopened' }),
+      C('5100', '900.00', null, { lineMemo: 'return — cost reversed' }),
+    ],
+    entryDate: '2026-03-04',
+    trap: 'Never a debit to 4300 directly (invariant 3) — a return is a fact worth seeing on ' +
+      'its own line, and netting it into revenue hides the return rate, a number a wholesale ' +
+      'operation manages. The cost leg is what the SALE\'s own consumption actually relieved, ' +
+      'read from stock_layer_consumptions — never recomputed from today\'s layers (T-179 §5).',
+  },
+  {
+    id: 'customer.return-credit',
+    sourceType: 'customer_return',
+    title: 'Customer return, already paid — a real, spendable credit',
+    narrative: 'A ₱500 line, costing ₱90, returned by a customer who has already paid in full. ' +
+      '2140 is party-required, same account an AR overpayment already lands in.',
+    frequency: 1,
+    input: { customerId: 'CUST-WS-02', quantity: '1.000', rate: '500.00', unitCost: '90.0000' },
+    expect: [
+      D('4950', '500.00', null, { lineMemo: 'return — revenue reversed' }),
+      C('2140', '500.00', { type: 'customer', id: 'customer:CUST-WS-02' }, { lineMemo: 'return credit held' }),
+      D('1310', '90.00', null, { lineMemo: 'return — inventory reopened' }),
+      C('5100', '90.00', null, { lineMemo: 'return — cost reversed' }),
+    ],
+    entryDate: '2026-03-05',
+    trap: 'Never a customer_credits table and never a credit_balance column — the balance is a ' +
+      'query over 2140\'s own party-filtered lines (DEF-075\'s pattern). A return exceeding what ' +
+      'is still owed splits across 1210 AND 2140 in this SAME entry (invariant 9) — settlement ' +
+      'is then \'mixed\', a value the task spec\'s own contract did not list (reported, same ' +
+      'correction T-170\'s credit_basis needed for the identical reason).',
+  },
+  {
+    id: 'customer.credit-applied',
+    sourceType: 'ar_collection',
+    title: 'The return credit spent — inside an AR collection, not a new document type',
+    narrative: 'A ₱600 trade order paid ENTIRELY from an existing ₱600 return credit. No cash ' +
+      'moves; the money-account leg is a zero-amount line and is omitted.',
+    frequency: 1,
+    input: { customerId: 'CUST-WS-02', amountApplied: '600.00', creditApplied: '600.00' },
+    expect: [
+      D('2140', '600.00', { type: 'customer', id: 'customer:CUST-WS-02' }, { lineMemo: 'store credit applied' }),
+      C('1210', '600.00', { type: 'customer', id: 'customer:CUST-WS-02' }, { lineMemo: 'collection — receivable cleared' }),
+    ],
+    entryDate: '2026-03-06',
+    trap: 'moneyAccountId is still named on the collection record even though no draw happens ' +
+      'against it — same attribution-only shape T-170\'s ap_payments accepts for a fully ' +
+      'credit-funded payment. Built by extending recordCollection with creditApplied, never a ' +
+      'bare journal entry — bypassing the real AR subledger (ar_collections/allocations) would ' +
+      'drift openItems from the raw ledger, the exact 13.3% class of bug repo/ar.ts exists to ' +
+      'prevent.',
+  },
+  {
+    id: 'customer.return-internal',
+    sourceType: 'customer_return',
+    title: 'Internal return — a branch sending goods back to its own commissary, T-173 backwards',
+    narrative: 'A branch returns ₱400 of prepped goods to the commissary that shipped them. No ' +
+      'revenue, no contra-revenue, no 2140, no refund — a branch has no credit relationship with ' +
+      'its own commissary (ADR-008 §8, the same derived-treatment fact that decides a dispatch).',
+    frequency: 1,
+    input: { branchCode: 'MLV', commissaryCode: 'LIP', quantity: '4.000', unitCost: '100.0000' },
+    expect: [
+      D('2150', '400.00', { type: 'store', id: 'store:LIP' }, { lineMemo: 'return LIP -> MLV' }),
+      C('1310', '400.00', null, { lineMemo: 'return LIP -> MLV' }),
+      D('1310', '400.00', null, { lineMemo: 'return LIP -> MLV' }),
+      C('1250', '400.00', { type: 'store', id: 'store:MLV' }, { lineMemo: 'return LIP -> MLV' }),
+    ],
+    entryDate: '2026-03-07',
+    trap: 'Asserted by absence in the real test — the tempting implementation treats every ' +
+      'return the same way and adds a 4950/2140/refund leg here too. ⛔ There is no margin to ' +
+      'carry on a straight return (unlike T-133\'s dispatch), so the value moves at exactly what ' +
+      'the branch\'s own layer was valued at — never a fresh cost, never the day\'s price list.',
+  },
+
+  // =========================================================================================
   // cash_request_release (82) / cash_request_return (52) — the pair, together. leg-mapping:
   // "Source OUT + cash__staff IN" / "cash__staff OUT + return-target IN".
   //

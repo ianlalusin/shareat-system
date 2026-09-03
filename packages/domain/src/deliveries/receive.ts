@@ -199,8 +199,12 @@ function toBaseUnits(purchaseQuantity: Quantity, conversionFactor: string): Quan
  * ⚠️ Rounded half-up at the fourth place, once. The layer's total value is then
  * `remaining × unitCost`, so a rounding here is a fraction of a centavo across a whole layer —
  * and T-163's invoice true-up corrects the real number anyway.
+ *
+ * ⭐ Exported — T-170 reuses it for a supplier-return line's weighted-average unit cost when one
+ * line's quantity was relieved from more than one layer. One implementation of "money ÷ quantity
+ * → 4dp", not a second copy.
  */
-function perBaseUnit(lineCost: Money, baseQuantity: Quantity): string {
+export function perBaseUnit(lineCost: Money, baseQuantity: Quantity): string {
   const raw = toCentavos(lineCost);
   const centavos = raw < 0n ? -raw : raw;
   const units = toThousandths(baseQuantity);

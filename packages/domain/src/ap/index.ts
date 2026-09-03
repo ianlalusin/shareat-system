@@ -661,6 +661,16 @@ export interface RecordApPaymentInput {
   /** The TOTAL handed over — allocated + unallocated (overpayment). */
   amount: string;
   moneyAccountId: string;
+  /**
+   * ⭐ T-170 §5: `1240`'s twin as a FUNDING source, not only an overpayment destination. Drawn
+   * down from the supplier's existing return credit (`apRepo.advancesPositionOf`) BEFORE the
+   * money account covers the rest — `0` (the default) leaves this payment exactly as it was
+   * before T-170. When `creditApplied` covers the whole `amount`, the money-account leg is a
+   * zero-amount line and is omitted (same omission rule the overpayment leg already follows);
+   * `moneyAccountId` stays required regardless (ADR-010 — always a real account, never a label),
+   * even though no draw happens against it that day.
+   */
+  creditApplied?: string;
   /** Set when this payment draws on a released cash request — attribution only, mirrors
    *  `expense_payments.cashRequestId`'s role exactly. */
   cashRequestId?: string | null;
@@ -749,7 +759,38 @@ export async function recordPayment(
       // ⭐ Cross-store money movement — same rule as `approveExpense` (bible row 153).
       await authorize(trx, actor, 'transfer_funds', { storeId: account.storeId });
     }
-    const warning = await checkDraw(trx, actor.orgId, account, amount, 'recordPayment');
+
+    // ⭐ T-170 §5. Validated against the LIVE balance, never trusted from the caller — same
+    // check-then-write discipline as `openItems` above. `advancesPositionOf` is a query over
+    // `journal_lines`, never a stored column (DEF-075's pattern, refused again).
+    const creditApplied = Number(input.creditApplied ?? '0');
+    if (creditApplied > 0) {
+      // ⭐ A distinct decision from recording the payment itself, checked separately even though
+      // only manager+ ever holds `record_ap_payment` anyway (this file's own top authorize call).
+      await authorize(trx, actor, 'apply_supplier_credit', { storeId: input.storeId });
+    }
+    if (creditApplied < 0) throw new Error('recordPayment: creditApplied cannot be negative.');
+    if (creditApplied > amount + 0.005) {
+      throw new Error(
+        `recordPayment: creditApplied (₱${creditApplied.toFixed(2)}) cannot exceed the ` +
+          `₱${input.amount} payment it is funding.`,
+      );
+    }
+    if (creditApplied > 0) {
+      const balance = Number(await apRepo.advancesPositionOf(trx, actor.orgId, input.supplierId));
+      if (creditApplied > balance + 0.005) {
+        throw new Error(
+          `recordPayment: ${supplier.name} holds only ₱${balance.toFixed(2)} of return credit — ` +
+            `₱${creditApplied.toFixed(2)} does not fit.`,
+        );
+      }
+    }
+
+    // ⭐ Only the CASH portion draws the money account — a payment fully funded by credit draws
+    // nothing from it at all, so `checkDraw` (an overdraft check on a real account) is skipped
+    // rather than asked about a draw of zero.
+    const cashPortion = Math.max(0, amount - creditApplied);
+    const warning = cashPortion > 0 ? await checkDraw(trx, actor.orgId, account, cashPortion, 'recordPayment') : undefined;
 
     const unallocated = Math.max(0, amount - allocatedTotal);
     const allocated = allocatedTotal;
@@ -775,15 +816,31 @@ export async function recordPayment(
             },
           ]
         : []),
-      {
-        accountCode: account.glAccountCode,
-        storeId: input.storeId,
-        credit: input.amount,
-        ...(account.glAccountCode === '1140'
-          ? { partyType: 'money_account' as const, partyId: account.id }
-          : {}),
-        lineMemo: `Payment to ${supplier.name}`,
-      },
+      ...(creditApplied > 0
+        ? [
+            {
+              accountCode: ADVANCES_CODE,
+              storeId: input.storeId,
+              credit: creditApplied.toFixed(2),
+              partyType: 'supplier' as const,
+              partyId: input.supplierId,
+              lineMemo: `Return credit applied — ${supplier.name}`,
+            },
+          ]
+        : []),
+      ...(cashPortion > 0
+        ? [
+            {
+              accountCode: account.glAccountCode,
+              storeId: input.storeId,
+              credit: cashPortion.toFixed(2),
+              ...(account.glAccountCode === '1140'
+                ? { partyType: 'money_account' as const, partyId: account.id }
+                : {}),
+              lineMemo: `Payment to ${supplier.name}`,
+            },
+          ]
+        : []),
     ];
 
     const { id: paymentId } = await apRepo.insertApPayment(trx, {

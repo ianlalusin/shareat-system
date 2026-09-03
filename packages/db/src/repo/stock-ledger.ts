@@ -114,6 +114,30 @@ export async function onHand(
   return row?.total ?? '0';
 }
 
+/**
+ * ⭐ T-165. `dispatchOrder`'s stock gate is keyed by item, store-wide — layers are per STORE, not
+ * per location (T-162 invariant 6), so the gate must sum across every room a commissary holds the
+ * item in, not just the one line names.
+ *
+ * ⚠️ **`null` when the store has NEVER moved the item** — not `'0'`. `dispatchOrder`'s gate reads
+ * an ABSENT entry as "untracked" and refuses it with *"set the commissary's inventory first"*
+ * (T-172 §9.1); a `'0'` would be refused too, but as a plain shortage, and the person fixing it
+ * would go looking for a count that does not exist. Found by `branch-orders.test.ts` test 15 on
+ * 2026-09-03: the caller was filling the map for every line, so the untracked branch could never
+ * fire from the one path a real order takes.
+ */
+export async function onHandByItemInStore(tx: Tx, storeId: string, itemId: string): Promise<string | null> {
+  const [row] = await tx
+    .select({
+      total: sql<string>`coalesce(sum(${stockMovements.quantity}), 0)::text`,
+      rows: sql<number>`count(*)::int`,
+    })
+    .from(stockMovements)
+    .where(and(eq(stockMovements.storeId, storeId), eq(stockMovements.itemId, itemId)));
+  if (!row || row.rows === 0) return null;
+  return row.total;
+}
+
 /** Every item with a non-zero balance in a store, for the low-stock list and the count sheet. */
 export async function onHandByStore(
   tx: Tx,
@@ -151,4 +175,31 @@ export async function findMovement(tx: Tx, id: string): Promise<StockMovementRow
     .from(stockMovements)
     .where(eq(stockMovements.id, id));
   return row;
+}
+
+/**
+ * ⭐ T-165. `stock_movements_source_pair_key` guarantees at most one non-reversed movement per
+ * (source, item, location), so a source id is a safe way to find what a void must give back —
+ * without a trade-order line growing its own `movement_id` column to remember it.
+ */
+export async function movementsBySource(
+  tx: Tx,
+  sourceType: string,
+  sourceId: string,
+): Promise<{ id: string; itemId: string; locationId: string; storeId: string }[]> {
+  return tx
+    .select({
+      id: stockMovements.id,
+      itemId: stockMovements.itemId,
+      locationId: stockMovements.locationId,
+      storeId: stockMovements.storeId,
+    })
+    .from(stockMovements)
+    .where(
+      and(
+        eq(stockMovements.sourceType, sourceType),
+        eq(stockMovements.sourceId, sourceId),
+        sql`${stockMovements.reversalOfId} is null`,
+      ),
+    );
 }

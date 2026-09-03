@@ -1,9 +1,25 @@
 # T-165 — ⭐ The switch: six shipped modules move to the perpetual shape
 
-> **Status:** ✅ **UNBLOCKED 2026-08-29 — ADR-011 accepted, bible row 165.** Ian: *"let's build it
-> right for v2 … so when we test the app we are testing its final deliverable shape and won't need
-> to adjust later."* **Retro-fit, one shape, no dated split and no boundary constant.**
-> **Depends on:** T-160 – T-164, all of them, and **all shipped together with this one**.
+> **Status:** ✅ **BUILT 2026-09-02 — the trade-order rewiring only; DEF-125.** ⛔ **Found NOT
+> actually built despite this line reading "UNBLOCKED"** while starting T-179, which depends on
+> it: `dispatchTradeOrder`'s two branches touched no stock at all, and its internal branch still
+> posted the OLD periodic `5170`/`5175` four-leg entry this task exists to retire. Fixed same
+> session — `dispatchTradeOrder`'s internal branch now calls `dispatchOrder`
+> (`packages/domain/src/commissary/transfer.ts`, T-172/173); its external branch now consumes
+> stock and posts a real COGS entry (`consume()`/`postConsumption()`) after `recordCharge`;
+> `receiveTradeOrder` now calls `confirmReceipt` for internal orders. `voidTradeOrder` extended to
+> reverse the new stock/COGS effects; void of an already-received internal transfer is explicitly
+> REFUSED (a two-store reverse-transfer, out of this pass, named not silently skipped).
+> `trade.test.ts` rewritten to the new shape (38 tests, green — several encoded the retired
+> periodic shape as truth). Full suite 1861/1861. ⚠️ **NOT done, named rather than skipped**:
+> T-161 invariant 9's `journal_entry_id` CHECK — no caller anywhere backfills it after an entry
+> posts, so tightening it now would break every existing consumption path, not just this one.
+> ⛔ **Not smoketested live** — no `apps/erp` screen exists for trade orders at all.
+> Ian: *"let's build it right for v2 … so when we test the app we are testing its final
+> deliverable shape and won't need to adjust later."* **Retro-fit, one shape, no dated split.**
+> **Depends on:** T-160 – T-164, all of them, and **all shipped together with this one** — except
+> they were not: T-160–164 shipped and were marked done while this task's own rewiring did not,
+> which is exactly the violation DEF-125 names.
 > **This is the last task of Wave 0 and it is the point of Wave 0.**
 
 ## 1. Goal
@@ -47,39 +63,39 @@ against **zero** production rows.
 | **T-132** trade orders | Sale: `4xxx` revenue + `1210` | **Plus** `Dr 5xxx COGS · Cr 1310/1330` at dispatch — the goods leave, and until now nothing said so |
 | **T-133** internal transfer | `5175` seller-credit / `5170` buyer-debit + `1250`/`2150` | **`1330` seller-credit / `1330` buyer-debit** + `1250`/`2150`. ⭐ Already written in `POSTING-PATTERNS.md` as *"⛔ The Phase 3 target — inventory movement, NOT live"* |
 
-### ⭐ UPDATE 2026-08-29 — the perpetual side is already BUILT, so this task is a rewiring
-
-T-172/T-173 shipped `dispatchOrder` and `confirmReceipt` (`packages/domain/src/commissary/
-transfer.ts`) with 20 green integration tests. They post the target shape below **and nothing
-calls them**. So this task's commissary row is no longer *"write the perpetual transfer"* — it is:
-
-1. point `dispatchTradeOrder`'s `treatment === 'internal'` branch at `dispatchOrder`;
-2. give the receipt path a caller for `confirmReceipt` (today `receiveTradeOrder` records who
-   signed and posts nothing — under perpetual that is where **both stores** move);
-3. delete the `5170`/`5175` legs from `trade/index.ts`, keeping the accounts (§4).
-
-⛔ **Until then both shapes exist in the tree and must not both run for one order** — the transfer
-would be counted twice, once through the P&L and once through the balance sheet, and **the trial
-balance would still tie**, so nothing would announce it. The warning is carried in both modules'
-headers and in `POSTING-PATTERNS.md` §`commissary_dispatch.transfer`.
-
-⚠️ **`1340` is the piece the periodic shape had no room for.** The old pattern posts once, at
-dispatch, because there was no asset to track in between. Perpetual has one — goods on a truck are
-still the commissary's inventory — so the switch also turns one event into two.
-### ⭐ UPDATE 2026-08-30 — `5175` is not merely KEPT, it is LOAD-BEARING
-
-§4 below argues `5175` survives for the franchise case. There is a second and closer reason,
-found by DEF-098: **under perpetual it carries the transfer margin.**
-
-`1340` is debited at what the goods COST (₱300/kg) and must be relieved at that; the transfer
-happens at ₱310/kg because the price carries the commissary's processing work. The ₱10/kg
-difference has to land somewhere, and `5175` is exactly where — it nets the commissary's payroll
-for that job back to zero, because **an internal transfer earns nothing**. Consolidated,
-`5170 + 5175 = 0` still holds; only the accounts either side of it changed.
-
-⛔ So the switch does **not** remove `5175` from the transfer entry. It removes `5170` from the
-branch side (the branch now debits inventory, not COGS) and it keeps `5175` on the commissary side
-for the margin alone rather than the whole transfer value.
+### ⭐ UPDATE 2026-08-29 — the perpetual side is already BUILT, so this task is a rewiring
+
+T-172/T-173 shipped `dispatchOrder` and `confirmReceipt` (`packages/domain/src/commissary/
+transfer.ts`) with 20 green integration tests. They post the target shape below **and nothing
+calls them**. So this task's commissary row is no longer *"write the perpetual transfer"* — it is:
+
+1. point `dispatchTradeOrder`'s `treatment === 'internal'` branch at `dispatchOrder`;
+2. give the receipt path a caller for `confirmReceipt` (today `receiveTradeOrder` records who
+   signed and posts nothing — under perpetual that is where **both stores** move);
+3. delete the `5170`/`5175` legs from `trade/index.ts`, keeping the accounts (§4).
+
+⛔ **Until then both shapes exist in the tree and must not both run for one order** — the transfer
+would be counted twice, once through the P&L and once through the balance sheet, and **the trial
+balance would still tie**, so nothing would announce it. The warning is carried in both modules'
+headers and in `POSTING-PATTERNS.md` §`commissary_dispatch.transfer`.
+
+⚠️ **`1340` is the piece the periodic shape had no room for.** The old pattern posts once, at
+dispatch, because there was no asset to track in between. Perpetual has one — goods on a truck are
+still the commissary's inventory — so the switch also turns one event into two.
+### ⭐ UPDATE 2026-08-30 — `5175` is not merely KEPT, it is LOAD-BEARING
+
+§4 below argues `5175` survives for the franchise case. There is a second and closer reason,
+found by DEF-098: **under perpetual it carries the transfer margin.**
+
+`1340` is debited at what the goods COST (₱300/kg) and must be relieved at that; the transfer
+happens at ₱310/kg because the price carries the commissary's processing work. The ₱10/kg
+difference has to land somewhere, and `5175` is exactly where — it nets the commissary's payroll
+for that job back to zero, because **an internal transfer earns nothing**. Consolidated,
+`5170 + 5175 = 0` still holds; only the accounts either side of it changed.
+
+⛔ So the switch does **not** remove `5175` from the transfer entry. It removes `5170` from the
+branch side (the branch now debits inventory, not COGS) and it keeps `5175` on the commissary side
+for the margin alone rather than the whole transfer value.
 ### ⚠️ T-133's `5175` does not get deleted
 
 `5175 Cost transferred to branches` is the contra-COGS the chart demanded since T-102b, and under
@@ -189,15 +205,27 @@ only once Ian has answered.
 - [x] ~~ADR-011 answered and recorded in the bible's decision log.~~ ✅ **Done 2026-08-29 — rows 165
       and 166, bible v3.0.** Nothing further is owed here; ⛔ this task still does not amend the
       bible itself (§14).
-- [ ] Migration hand-written (DEF-073), next free number, journalled `previous.when + 86400000`.
-- [ ] `POSTING-PATTERNS.md`'s `commissary_dispatch.transfer`: the ⛔ *"Phase 3 target"* block becomes
-      **the live pattern**, and the periodic block is relabelled as historical with its date.
-      ⚠️ `npm run toc`.
-- [ ] `inventoryControlDoesNotMatchValuation` registered in `repo/findings.ts` and **green on a
-      populated fixture** — not vacuously on an empty one (T-134's own lesson).
-- [ ] `typecheck` · `npm test` · `npm run test:integration` · `npm run build` green (dev server
-      stopped; `ListAgents` first — Wave 0 touches shared schema and the migration journal).
-- [ ] ⭐ Smoketested on 9008: receive goods, consume them, and read a P&L where **gross margin is
-      the margin on what was sold**.
-- [ ] `docs/ROADMAP.html` updated, and `docs/DEFECTS-REGISTER.md` §16.7 #5 and #6 marked closed with
-      the closing tests named.
+- [ ] ⚠️ **Not done, named not skipped.** Migration hand-written (DEF-073) tightening T-161
+      invariant 9's `journal_entry_id` CHECK. No caller anywhere — including this rewiring —
+      backfills a movement's `journal_entry_id` after its entry posts, so this constraint would
+      break every existing consumption path today, not just trade orders. Needs its own pass
+      through `stock/consume.ts`, `stock/consumption-posting.ts` and every caller first.
+- [x] ~~`POSTING-PATTERNS.md`'s `commissary_dispatch.transfer`: the ⛔ *"Phase 3 target"* block
+      becomes **the live pattern**, and the periodic block is relabelled as historical with its
+      date.~~ ✅ **Done 2026-09-02.** `npm run toc` re-run; `toc-freshness.test.ts` and
+      `posting-patterns-doc.test.ts` both green.
+- [x] ~~`inventoryControlDoesNotMatchValuation` registered in `repo/findings.ts` and green on a
+      populated fixture.~~ ✅ **Done 2026-09-02**, org-wide across every store. Proven non-vacuous
+      by `trade.test.ts`'s own receipt test — real stock moved at two real stores, feed stays
+      quiet — rather than only on an empty fixture (T-134's own lesson, honored).
+- [x] ~~`typecheck` · `npm test` · `npm run test:integration` · `npm run build` green.~~ ✅ **All
+      four green 2026-09-02.** Full suite 1861/1861 (2 apparent failures were a parallel-worker
+      deadlock on an unrelated pre-existing file, confirmed by isolated re-run: 28/28 clean).
+- [ ] ⛔ **NOT smoketested on 9008 — cannot be.** No `apps/erp` screen exists for trade orders at
+      all; this task's own Scope never named one. Domain + integration test coverage only.
+- [x] ~~`docs/ROADMAP.html` updated, and `docs/DEFECTS-REGISTER.md` §16.7 #5 and #6 marked closed
+      with the closing tests named.~~ ✅ **DEFECTS-REGISTER updated** (DEF-125 marked fixed, with
+      the closing tests named). ⚠️ **§16.7 is in `PROJECT_BIBLE.md`, not `DEFECTS-REGISTER.md`**
+      — this line's own file reference was wrong; bible §16.7 #5/#6 left as-is pending the
+      deferred CHECK-constraint pass above, since "no inventory valuation" (#5) is now
+      substantially addressed but the invariant enforcing it at the DB level is not yet built.

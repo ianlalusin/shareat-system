@@ -374,11 +374,21 @@ export async function confirmReceipt(
 
   // ---- Pass 2: write. ------------------------------------------------------------------------
   for (const { line } of accepted) {
+    // ⭐ DEF-140 (2026-09-03). The movement's source is the order LINE row, not the order: two
+    // commissary items may legitimately map to ONE branch item (a slab and its trimmed cut both
+    // arriving as "pork belly"), and `stock_movements_source_pair_key` — one source touching one
+    // (item, location) once — refused the second line's movement outright, with the whole receipt
+    // rolled back. Per line, the index still does its job: a retried receipt of the same line
+    // writes nothing new. `source_id` is a uuid, so it is the `trade_order_lines` id when the
+    // caller supplied it (every real path does), and the order for a bare transfer with no rows.
+    // ⚠️ The layer below keeps the ORDER as its source; nothing reads either back by id (grepped).
     const movement = await stockLedgerRepo.insertMovement(tx, {
       orgId: input.orgId, storeId: input.branchStoreId, locationId: line.branchLocationId,
       itemId: line.branchItemId, movedAt: new Date(`${input.receivedOn}T00:00:00Z`),
       quantity: line.receivedQuantity, kind: 'transfer_in',
-      sourceType: 'trade_order_receipt', sourceId: input.orderId, createdBy: input.receivedBy,
+      sourceType: 'trade_order_receipt',
+      sourceId: input.orderLineIdByLineId?.[line.lineId] ?? input.orderId,
+      createdBy: input.receivedBy,
     });
     branchMovements.push({ lineId: line.lineId, movementId: movement.id });
 

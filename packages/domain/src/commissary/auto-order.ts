@@ -24,6 +24,7 @@
 import { lowStockRepo, transaction, type Tx } from '@shareat/db';
 import { lineCost } from '../stock/layers';
 import { quantity, toThousandths, type Quantity } from '../stock/quantity';
+import { resolveBranchRate } from './orders';
 import type { Outcome } from './outcome';
 
 export interface AutoOrderInput {
@@ -143,9 +144,10 @@ export async function ensureAutoOrderLines(
 /**
  * The commissary's price for this item.
  *
- * ⚠️ Tier 3 of T-171's fallback only — the manager-set `manual_cost` on the offering. The richer
- * basis (a slab link, then the item's own landed history) is T-151's `item_pricing`, and wiring
- * this to it belongs with the catalogue read path, which is unbuilt. ⛔ Returning null rather than
+ * ⭐ Since 2026-09-03 (T-172) this is `resolveBranchRate` — T-151's branch-price rule first, then
+ * the manager-set `manual_cost` on the offering — the SAME fallback a hand-made line uses, so a
+ * machine-made line and a typed one cannot price differently. Until then it read tier 3 alone,
+ * because the catalogue read path it belongs with was unbuilt. ⛔ Returning null rather than
  * guessing is the point: an unpriced line does not get created.
  */
 async function resolveRate(
@@ -154,7 +156,8 @@ async function resolveRate(
   commissaryStoreId: string,
   itemId: string,
 ): Promise<string | null> {
-  return lowStockRepo.offeringCost(tx, orgId, commissaryStoreId, itemId);
+  const resolved = await resolveBranchRate(tx, orgId, commissaryStoreId, itemId);
+  return resolved?.rate ?? null;
 }
 
 /**

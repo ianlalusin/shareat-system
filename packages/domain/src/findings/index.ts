@@ -75,9 +75,18 @@ export async function listFindings(
     // replacement for v1's forcing function: nag the manager who can act, never block the cook
     // who cannot.
     ...(await findingsRepo.itemsMissingThreshold(tx, orgId)),
+    // T-167 — a room-to-room transfer dispatched but never received.
+    ...(await findingsRepo.stuckStockTransfer(tx, orgId)),
+    // T-170 — a supplier return credit sitting unspent.
+    ...(await findingsRepo.supplierCreditAgeing(tx, orgId)),
     // ⭐ T-199 — the sweep's alarm. Detects the missing OUTCOME, not the missing run, so it is
     // true even when the sweep is dead. A "did the cron fire?" check needs a cron to ask it.
     ...(await findingsRepo.openShiftsStale(tx, orgId)),
+    // ⭐ T-165 invariant 1 — Phase 3's own exit gate. `/inventory` renders the same comparison
+    // per store; this is the org-wide sweep that does not need someone to open the screen.
+    ...(await findingsRepo.inventoryControlDoesNotMatchValuation(tx, orgId)),
+    // T-179 — a customer store credit sitting unredeemed. The AR mirror of supplierCreditAgeing.
+    ...(await findingsRepo.customerCreditAgeing(tx, orgId)),
   ];
 
   const acks = await findingsRepo.liveAcknowledgements(tx, orgId);

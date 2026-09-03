@@ -1,6 +1,13 @@
 # T-132 — Wholesale orders: the document a franchisee sale has never had
 
-> **Status:** ✅ **BUILT 2026-08-28.** Spec by the Opus planner the same day; Wave 4's first
+> **Status:** ✅ **BUILT 2026-08-28** — domain and tests; ⚠️ **no screen until 2026-09-03**
+> (DEF-138: `createTradeOrder`/`dispatchTradeOrder` had zero callers in `apps/`, every live test
+> used a seeded order). Screen added 2026-09-03: `apps/erp/src/app/trade/orders/` — register,
+> create form (rate blank = the price-list rate, shown as the placeholder before it is captured),
+> detail with Dispatch / Receive / Void; `nav.tsx` Trade › Trade orders. Smoketested live end to
+> end, postings verified in the database — see the DEF-138 row. ⚠️ **§8's "no COGS" is no longer
+> true**: T-165 (2026-09-02) made dispatch relieve stock and post cost of sales.
+> Spec by the Opus planner the same day; Wave 4's first
 > item. `4300 Wholesale sales` added to the chart by migration — every other 4xxx leaf is retail.
 > **Depends on:** T-129 (`customers`, `price_lists`), T-145 (`items`), T-149 (`sellable_wholesale`),
 > T-131 (`ar_charges`), T-105 (`postEntry`).

@@ -815,6 +815,39 @@ export async function upsertStoreSellability(
     });
 }
 
+export interface StoreSellabilityOverrideRow {
+  storeId: string;
+  /** ⚠️ `null` is "no opinion — follow the org", and the screen must render it as such, never as `false`. */
+  isPurchasable: boolean | null;
+  sellableRetail: boolean | null;
+  sellableWholesale: boolean | null;
+  note: string | null;
+}
+
+/**
+ * ⭐ DEF-130. The RAW override rows for one item, one per store that has said anything — what the
+ * item screen's per-store editor reads. `sellabilityAt` answers the RESOLVED question and cannot
+ * tell "the store said false" from "the store said nothing and the org says false"; an editor
+ * needs the distinction, because clearing and setting-to-false are different acts.
+ */
+export async function listStoreSellabilityOverrides(
+  tx: Tx,
+  orgId: string,
+  itemId: string,
+): Promise<StoreSellabilityOverrideRow[]> {
+  const rows = await tx
+    .select({
+      storeId: storeItemSellability.storeId,
+      isPurchasable: storeItemSellability.isPurchasable,
+      sellableRetail: storeItemSellability.sellableRetail,
+      sellableWholesale: storeItemSellability.sellableWholesale,
+      note: storeItemSellability.note,
+    })
+    .from(storeItemSellability)
+    .where(and(eq(storeItemSellability.orgId, orgId), eq(storeItemSellability.itemId, itemId)));
+  return rows;
+}
+
 /** Drop a store's override, returning it to the org default. */
 export async function clearStoreSellability(
   tx: Tx,
@@ -869,6 +902,29 @@ export async function getItemPricing(
     fixedMarkupAmount: row.fixed_markup_amount ?? null,
     marginAlertThresholdPct: row.margin_alert_threshold_pct ?? null,
   };
+}
+
+/**
+ * ⭐ DEF-138. Every rule in the org, in one query — so a screen can show "this will default to
+ * ₱X" for the handful of items that carry a rule without asking `getItemPricing` once per item in
+ * the catalogue (385 items in v1's import; one round trip each is a page that takes seconds).
+ */
+export async function listItemPricing(tx: Tx, orgId: string): Promise<ItemPricingRow[]> {
+  const rows = (await tx.execute(sql`
+    select item_id, pricing_mode, fixed_amount::text as fixed_amount,
+           markup_percent::text as markup_percent,
+           fixed_markup_amount::text as fixed_markup_amount,
+           margin_alert_threshold_pct::text as margin_alert_threshold_pct
+    from item_pricing where org_id = ${orgId}
+  `)) as unknown as Record<string, string | null>[];
+  return rows.map((row) => ({
+    itemId: String(row.item_id),
+    pricingMode: row.pricing_mode as ItemPricingRow['pricingMode'],
+    fixedAmount: row.fixed_amount ?? null,
+    markupPercent: row.markup_percent ?? null,
+    fixedMarkupAmount: row.fixed_markup_amount ?? null,
+    marginAlertThresholdPct: row.margin_alert_threshold_pct ?? null,
+  }));
 }
 
 export async function upsertItemPricing(

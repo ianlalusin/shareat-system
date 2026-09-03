@@ -151,8 +151,18 @@ export const stockLayerConsumptions = pgTable(
   },
   (t) => [
     check('stock_layer_consumptions_quantity_positive_check', sql`${t.quantity} > 0`),
-    /** One row per (layer, movement) — a retried consumption cannot double-relieve a layer. */
-    uniqueIndex('stock_layer_consumptions_layer_movement_key').on(t.layerId, t.movementId),
+    /**
+     * ⭐ T-179/DEF-128. AT MOST ONE UNREVERSED row per (layer, movement) — a retried consumption
+     * still cannot double-relieve a layer, but a PARTIAL reversal now legitimately produces a
+     * second row for the same pair: the original shrinks to what remains outstanding, and a new
+     * row, already reversed, carries exactly what was given back. `quantity`'s own CHECK forbids
+     * a row ever reaching zero, so a full reversal cannot be represented by shrinking — only a
+     * partial one can, and only while genuinely unreversed. Same partial-uniqueness shape as
+     * `stock_movements_source_pair_key`.
+     */
+    uniqueIndex('stock_layer_consumptions_layer_movement_key')
+      .on(t.layerId, t.movementId)
+      .where(sql`${t.reversedByMovementId} is null`),
     index('stock_layer_consumptions_movement_idx').on(t.movementId),
     /** T-179's query: what is still outstanding for a movement, newest consumed first. */
     index('stock_layer_consumptions_outstanding_idx')

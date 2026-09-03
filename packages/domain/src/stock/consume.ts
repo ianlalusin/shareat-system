@@ -153,7 +153,7 @@ export async function reverseConsumption(
   for (const line of plan.lines) {
     const row = outstanding.find((c) => c.layerId === line.layerId);
     if (!row) return { ok: false, reason: `no outstanding consumption for layer ${line.layerId}` };
-    await stockLayersRepo.reverseConsumption(tx, row.id, movement.id);
+    await stockLayersRepo.reverseConsumption(tx, row.id, line.quantity, movement.id);
   }
 
   return { ok: true, movementId: movement.id, lines: plan.lines, totalCost: plan.totalCost };

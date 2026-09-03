@@ -676,6 +676,152 @@ export async function itemsMissingThreshold(tx: Tx, orgId: string): Promise<Dete
 }
 
 /**
+ * ⭐ T-170: a supplier credit (`1240`) nobody has spent is money sitting with a supplier — the
+ * exact gap Ian's answer closed by making a return a spendable credit instead of a silent
+ * write-off. `1240` is pooled per supplier, not tracked per return (invariant 6: a query, never a
+ * stored balance), so this does not attempt FIFO ageing of individual returns against later
+ * spends — it flags a supplier whose CURRENT balance is positive AND whose oldest still-open
+ * `supplier_advance` return is older than the threshold, which is the practical question
+ * ("has this been sitting a while with nobody drawing it down") without needing to reconstruct
+ * which peso of a fungible balance came from which return.
+ */
+export async function supplierCreditAgeing(
+  tx: Tx,
+  orgId: string,
+  thresholdDays = 30,
+): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    select s.id as supplier_id, s.name as supplier_name,
+           coalesce(sum(jl.debit - jl.credit), 0)::text as balance,
+           min(sr.returned_on)::text as oldest_return
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    join suppliers s on s.id::text = jl.party_id and jl.party_type = 'supplier'
+    left join supplier_returns sr on sr.supplier_id = s.id and sr.credit_basis in ('supplier_advance', 'mixed')
+      and sr.status = 'posted'
+    where je.org_id = ${orgId} and a.code = '1240' and je.status <> 'draft'
+    group by s.id, s.name
+    having coalesce(sum(jl.debit - jl.credit), 0) > 0
+       and min(sr.returned_on) < (current_date - (${thresholdDays} || ' days')::interval)
+  `)) as unknown as { supplier_id: string; supplier_name: string; balance: string; oldest_return: string }[];
+
+  return rows.map((r) => ({
+    kind: 'supplierCreditAgeing',
+    key: `supplierCreditAgeing:${r.supplier_id}`,
+    storeId: null,
+    severity: 'soft' as const,
+    detail:
+      `${r.supplier_name} holds a ${peso(Number(r.balance))} return credit, unspent since at ` +
+      `least ${r.oldest_return}. Apply it on the next AP payment or it goes unnoticed until the ` +
+      'relationship ends.',
+  }));
+}
+
+/**
+ * ⭐ T-179's own Done-when — the AR mirror of `supplierCreditAgeing`. An unredeemed `2140`
+ * balance is a liability the customer may have forgotten and we have not.
+ */
+export async function customerCreditAgeing(
+  tx: Tx,
+  orgId: string,
+  thresholdDays = 30,
+): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    select c.id as customer_id, c.name as customer_name,
+           coalesce(sum(jl.credit - jl.debit), 0)::text as balance,
+           min(cr.returned_on)::text as oldest_return
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    join customers c on c.id::text = jl.party_id and jl.party_type = 'customer'
+    left join customer_returns cr on cr.customer_id = c.id and cr.settlement in ('store_credit', 'mixed')
+      and cr.status = 'posted'
+    where je.org_id = ${orgId} and a.code = '2140' and je.status <> 'draft'
+    group by c.id, c.name
+    having coalesce(sum(jl.credit - jl.debit), 0) > 0
+       and min(cr.returned_on) < (current_date - (${thresholdDays} || ' days')::interval)
+  `)) as unknown as { customer_id: string; customer_name: string; balance: string; oldest_return: string }[];
+
+  return rows.map((r) => ({
+    kind: 'customerCreditAgeing',
+    key: `customerCreditAgeing:${r.customer_id}`,
+    storeId: null,
+    severity: 'soft' as const,
+    detail:
+      `${r.customer_name} holds a ${peso(Number(r.balance))} return credit, unspent since at ` +
+      `least ${r.oldest_return}. Apply it on their next order or refund it before it is forgotten.`,
+  }));
+}
+
+/**
+ * ⭐ T-167's stuck-transfer report, as a finding rather than a screen someone has to remember to
+ * open. Per store, matching `stuckTransfers`'s own default — a room-to-room transfer that has sat
+ * `in_transit` for more than the threshold is either forgotten or the goods never actually moved.
+ */
+export async function stuckStockTransfer(
+  tx: Tx,
+  orgId: string,
+  thresholdDays = 3,
+): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    select t.store_id::text as store_id, s.name as store_name, count(*)::int as n,
+           min(t.dispatched_at)::text as oldest
+    from stock_transfers t
+    join stores s on s.id = t.store_id
+    where t.org_id = ${orgId} and t.status = 'in_transit'
+      and t.dispatched_at < now() - (${thresholdDays} || ' days')::interval
+    group by t.store_id, s.name
+  `)) as unknown as { store_id: string; store_name: string; n: number; oldest: string }[];
+
+  return rows.map((r) => ({
+    kind: 'stuckStockTransfer',
+    key: `stuckStockTransfer:${r.store_id}`,
+    storeId: r.store_id,
+    severity: 'soft' as const,
+    detail:
+      `${r.store_name} has ${r.n} stock transfer${r.n === 1 ? '' : 's'} dispatched but never ` +
+      `received, the oldest from ${r.oldest}. Goods that are neither on the shelf nor moving.`,
+  }));
+}
+
+/**
+ * ⭐ T-165 invariant 1 — Phase 3's exit gate, as a finding rather than only a screen someone has
+ * to remember to open (`/inventory` renders the same comparison, one store at a time; this walks
+ * every store in the org). `1340` in-transit is deliberately EXCLUDED — goods on a truck are in
+ * no FIFO layer, and conflating the two is DEF-098.
+ */
+export async function inventoryControlDoesNotMatchValuation(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    with layers as (
+      select store_id, coalesce(sum(remaining_quantity * unit_cost), 0) as layer_value
+      from stock_layers where org_id = ${orgId} group by store_id
+    ), acct as (
+      select l.store_id, sum(l.debit - l.credit) as account_value
+      from journal_lines l join accounts a on a.id = l.account_id
+      where a.org_id = ${orgId} and a.code in ('1310','1320','1330') and l.store_id is not null
+      group by l.store_id
+    )
+    select coalesce(layers.store_id, acct.store_id) as store_id, s.name as store_name,
+           coalesce(layers.layer_value, 0)::text as layer_value,
+           coalesce(acct.account_value, 0)::text as account_value
+    from layers full outer join acct on layers.store_id = acct.store_id
+    join stores s on s.id = coalesce(layers.store_id, acct.store_id)
+    where abs(coalesce(layers.layer_value, 0) - coalesce(acct.account_value, 0)) > 0.005
+  `)) as unknown as { store_id: string; store_name: string; layer_value: string; account_value: string }[];
+
+  return rows.map((r) => ({
+    kind: 'inventoryControlDoesNotMatchValuation',
+    key: `inventoryControlDoesNotMatchValuation:${r.store_id}`,
+    storeId: r.store_id,
+    severity: 'hard' as const,
+    detail:
+      `${r.store_name}: FIFO layers total ${peso(Number(r.layer_value))} but 1310+1320+1330 total ` +
+      `${peso(Number(r.account_value))}. Inventory does not tie to the ledger.`,
+  }));
+}
+
+/**
  * ⭐ T-186's question: a CLOSED shift whose closing count did not match the ledger.
  *
  * ⛔ **This is the COUNTED variance, and it is the one that DOES name a person.** Its sibling

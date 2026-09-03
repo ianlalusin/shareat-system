@@ -714,6 +714,49 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'carry pilot stock into the real books while the ledger behind it was deleted.',
   },
 
+  stock_transfers: {
+    class: 'purge',
+    reason:
+      'A room-to-room movement document — operational, same class as stock_movements. ⚠️ It posts ' +
+      'no journal entry and consumes no layer (T-162 invariant 6), so purging it loses no value ' +
+      'the ledger needs; every store opens 2027-01-01 already knowing nothing crossed a doorway.',
+  },
+  stock_transfer_lines: {
+    class: 'purge',
+    reason: 'The detail of a transfer, hanging off it by CASCADE. Same class as its parent.',
+  },
+  stock_reservations: {
+    class: 'purge',
+    reason:
+      'A "goods in the truck" marker for an in-transit transfer. Operational, and every ' +
+      'reservation is either released or belongs to a transfer that purges with it — there is no ' +
+      'live truck to carry across a cutover.',
+  },
+
+  supplier_returns: {
+    class: 'purge',
+    reason:
+      'A goods-back document — operational, same class as deliveries. ⚠️ The CREDIT it left ' +
+      'behind (1240) is a live balance sheet fact and survives independently through the ' +
+      'opening balance, the same way an AP invoice\'s liability survives its own purged document.',
+  },
+  supplier_return_lines: {
+    class: 'purge',
+    reason: 'The detail of a return, hanging off it by CASCADE. Same class as its parent.',
+  },
+
+  customer_returns: {
+    class: 'purge',
+    reason:
+      'A goods-back document — operational, same class as trade_orders. ⚠️ The CREDIT it left ' +
+      "behind (2140) is a live balance sheet fact and survives independently through the " +
+      "opening balance, the same way an AR charge's receivable survives its own purged document.",
+  },
+  customer_return_lines: {
+    class: 'purge',
+    reason: 'The detail of a return, hanging off it by CASCADE. Same class as its parent.',
+  },
+
   stock_locations: {
     // ⭐ keep, and this is the one worth reading twice. The ROOMS survive; the STOCK IN THEM does
     // not — stock lives in stock_movements (T-161), which purges. A room with no movements behind

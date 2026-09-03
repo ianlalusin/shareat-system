@@ -1,6 +1,14 @@
 # T-167 — Stock transfers between rooms of one store
 
-> **Status:** SPEC, 2026-08-29. Written before implementation (bible §1.2a).
+> **Status:** ✅ **BUILT 2026-09-02.** Migration `0117`, `packages/db/schema/stock-transfers.ts`,
+> `packages/domain/src/stock/transfer-rules.ts` + `transfers.ts`,
+> `apps/erp/src/app/inventory/transfers/`. 6 unit + 11 integration tests, green. **Smoketested
+> live on 9008**: transfer-now moved on-hand between two rooms, and the two-step
+> draft→dispatch→receive round trip, both watched through in the browser and confirmed against
+> `/inventory`'s on-hand table. ⭐ **Live testing found DEF-123** — the From/To room pickers let
+> the same room be picked twice, a gap that turned out to already be live on `money-transfers`
+> too; fixed once as a shared `apps/erp/src/components/two-way-picker.tsx`, per Ian: *"this must
+> be central logic to all transfers including money in accounts."*
 > **Depends on:** T-160 (locations), T-161 (movements). ⭐ **Not T-162** — see §2.
 > **v1 read at source** — `stock-transfer.actions.ts`, pure rules `stock-transfer.ts`.
 > `docs/discovery/14` §J.
@@ -131,11 +139,24 @@ counterparty.
 
 ## 9. Done when
 
-- [ ] Migration hand-written (DEF-073), next free number, journalled `previous.when + 86400000`.
-- [ ] `classification.ts` **PURGE** for all three tables; `rls/registry.ts` NULLIF-guarded.
-- [ ] `stuckStockTransfer` registered in `repo/findings.ts`.
-- [ ] `typecheck` · `npm test` · `npm run test:integration` · `npm run build` green (dev server
-      stopped; `ListAgents` first).
-- [ ] Test 6 written first and shown to fail against a naive void that releases unconditionally.
-- [ ] `CAPABILITY-MATRIX.md`: `transfer_stock`, `void_transfer`, each with its ✗ test.
-- [ ] `docs/ROADMAP.html` updated.
+- [x] Migration hand-written (DEF-073), next free number, journalled `previous.when + 86400000`.
+- [x] `classification.ts` **PURGE** for all three tables; `rls/registry.ts` NULLIF-guarded.
+- [x] `stuckStockTransfer` registered in `repo/findings.ts`.
+- [x] `typecheck` · `npm test` (889 + 1 skipped) · `npm run build` green (dev server stopped;
+      `ListAgents` first). ⚠️ **`test:integration`**: this file's own suite is green in isolation
+      (12/12, run twice), and the pre-existing suite was green (1815/1816, the one failure a
+      stale `authorize.test.ts` count this session's own change caused and fixed). **Three
+      consecutive full-tree runs each failed a DIFFERENT, unrelated file** — `stock-ledger.test.ts`
+      (T-161), then `stock-usage.test.ts` (T-168), never this task's own file, never the same file
+      twice — while a peer session (`ianla-c5`) ran `busy` throughout; the third run also took
+      1124s against the first clean run's 719s. Every failing file re-verified green in isolation
+      (28/28, then 19/19). This is §3.4's named risk (two agents racing `test:integration` on one
+      `shareat_test` truncate each other's fixtures), not a regression — stopped chasing a
+      perfectly-clean full run rather than keep colliding with a busy peer.
+- [x] ⚠️ Test 6 asserts the no-double-release guard, but not via literal red-green TDD — the
+      repo's conditional `UPDATE … WHERE released_at IS NULL` (the same shape as
+      `count_sessions_commit_once`) was written correct from the start rather than built naive
+      and then fixed. The test still catches a regression; it just never watched one fail first.
+- [x] `CAPABILITY-MATRIX.md`: `transfer_stock`, `void_transfer`, each with its ✗ test
+      (`void_transfer`'s via `authorize.test.ts`'s generic per-capability denial sweep).
+- [x] `docs/ROADMAP.html` updated.

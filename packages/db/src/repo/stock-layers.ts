@@ -134,32 +134,93 @@ export async function outstandingConsumptions(
     .orderBy(asc(stockLayerConsumptions.createdAt), asc(stockLayerConsumptions.id));
 }
 
-/** Give a consumption back to the layer it came from — a void, or a customer return. */
+/**
+ * Give a consumption back to the layer it came from — a void, or a customer return.
+ *
+ * ⭐ **T-179/DEF-128.** `quantity` is REQUIRED, not derived from the row — `planReversal`
+ * (`domain/src/stock/layers.ts`) can ask for LESS than a row's full amount (the last layer a
+ * partial return touches is rarely consumed exactly to the edge). ⚠️ **Found live**: this
+ * function used to ignore the plan's own `give` and always reverse a row's FULL quantity —
+ * silently wrong the moment two sequential partial returns crossed one row, cured only by luck
+ * whenever a return happened to reverse whole rows. A row is never mutated to "become smaller" —
+ * `unit_cost` is a fact and stays exactly attached to its own row (invariant 5) — so a partial
+ * take SPLITS: the original row shrinks to what is STILL outstanding, and a new row, already
+ * reversed, carries exactly the amount given back.
+ */
 export async function reverseConsumption(
   tx: Tx,
   consumptionId: string,
+  quantity: string,
   reversedByMovementId: string,
 ): Promise<void> {
   const [row] = await tx
-    .select({ layerId: stockLayerConsumptions.layerId, quantity: stockLayerConsumptions.quantity })
+    .select({
+      orgId: stockLayerConsumptions.orgId, layerId: stockLayerConsumptions.layerId,
+      movementId: stockLayerConsumptions.movementId, quantity: stockLayerConsumptions.quantity,
+      unitCost: stockLayerConsumptions.unitCost, cost: stockLayerConsumptions.cost,
+    })
     .from(stockLayerConsumptions)
     .where(eq(stockLayerConsumptions.id, consumptionId));
   if (!row) throw new Error(`consumption ${consumptionId} not found`);
+  if (Number(quantity) > Number(row.quantity) + 0.0005) {
+    throw new Error(`reverseConsumption: row ${consumptionId} only has ${row.quantity} outstanding, ${quantity} requested`);
+  }
 
-  await tx
-    .update(stockLayerConsumptions)
-    .set({ reversedByMovementId })
-    .where(eq(stockLayerConsumptions.id, consumptionId));
+  const reversedCost = (Number(quantity) * Number(row.unitCost)).toFixed(2);
+
+  if (Number(quantity) >= Number(row.quantity) - 0.0005) {
+    // The whole row — no split needed.
+    await tx
+      .update(stockLayerConsumptions)
+      .set({ reversedByMovementId })
+      .where(eq(stockLayerConsumptions.id, consumptionId));
+  } else {
+    // ⭐ Partial — the original row shrinks to what remains outstanding (never touching
+    // unit_cost, the fact §5 requires stays fixed); a new, already-reversed row carries exactly
+    // the amount given back, against the SAME original movement.
+    const remainingQuantity = (Number(row.quantity) - Number(quantity)).toFixed(3);
+    const remainingCost = (Number(row.cost) - Number(reversedCost)).toFixed(2);
+    await tx
+      .update(stockLayerConsumptions)
+      .set({ quantity: remainingQuantity, cost: remainingCost })
+      .where(eq(stockLayerConsumptions.id, consumptionId));
+    await tx.insert(stockLayerConsumptions).values({
+      orgId: row.orgId, layerId: row.layerId, movementId: row.movementId,
+      quantity, unitCost: row.unitCost, cost: reversedCost, reversedByMovementId,
+    });
+  }
 
   // ⭐ Back to the layer it actually came from — never to the oldest open layer, which would be a
   // silent re-costing (T-162 invariant 7).
   await tx
     .update(stockLayers)
     .set({
-      remainingQuantity: sql`${stockLayers.remainingQuantity} + ${row.quantity}::numeric`,
+      remainingQuantity: sql`${stockLayers.remainingQuantity} + ${quantity}::numeric`,
       updatedAt: new Date(),
     })
     .where(eq(stockLayers.id, row.layerId));
+}
+
+/**
+ * ⭐ T-170's `credit_basis` derivation. A delivery's layers are tagged `source='delivery',
+ * sourceId=deliveryId` at receipt (one per line — see `deliveries/receive.ts`), so this is the
+ * one query that answers "does the receipt this item came from carry a linked supplier invoice?"
+ * — `isProvisional` is false exactly when `invoiceLineId` is set (the schema's own CHECK).
+ *
+ * Returns the layer regardless of `remainingQuantity` — a fully-consumed layer's invoice status
+ * still answers the question; only the COST a return relieves comes from wherever stock actually
+ * is now (T-162 invariant 4), never from this row.
+ */
+export async function findByDeliveryItem(
+  tx: Tx,
+  deliveryId: string,
+  itemId: string,
+): Promise<{ id: string; isProvisional: boolean } | undefined> {
+  const [row] = await tx
+    .select({ id: stockLayers.id, isProvisional: stockLayers.isProvisional })
+    .from(stockLayers)
+    .where(and(eq(stockLayers.source, 'delivery'), eq(stockLayers.sourceId, deliveryId), eq(stockLayers.itemId, itemId)));
+  return row;
 }
 
 /**

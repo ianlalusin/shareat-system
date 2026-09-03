@@ -66,11 +66,27 @@ export async function createItem(tx: Tx | null, actor: Actor, input: CreateItemI
   return transaction(run);
 }
 
+/**
+ * ⭐ DEF-130. The three T-149 flags are editable here too — the ORG's default answer. Until
+ * 2026-09-03 this signature did not admit them, so no screen could ever change what an existing
+ * item is sold as, and `createItemAction` never passed them either: every item made through the
+ * app was sold to nobody, and a wholesale order on it was refused by its own gate. A store that
+ * disagrees with the org still says so through `setStoreSellability`, never here.
+ */
 export async function updateItem(
   tx: Tx | null,
   actor: Actor,
   itemId: string,
-  values: Partial<{ code: string; name: string; kind: ItemKind; baseUnit: BaseUnit; notes: string | null }>,
+  values: Partial<{
+    code: string;
+    name: string;
+    kind: ItemKind;
+    baseUnit: BaseUnit;
+    notes: string | null;
+    isPurchasable: boolean;
+    sellableRetail: boolean;
+    sellableWholesale: boolean;
+  }>,
 ): Promise<void> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'manage_items', {});

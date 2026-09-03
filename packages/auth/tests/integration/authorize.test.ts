@@ -238,15 +238,36 @@ describe('invariant 5 — every capability denies a role that lacks it (all 56)'
     // counterpart is deliberately NOT here: `resolve_till_variance` denies staff, because
     // charging the shortage your own count revealed is the one thing you must not do.
     'record_till_count',
+    // ⭐ T-167: room-to-room within one store. Staff-open, same bar as record_stock_movement — a
+    // floor worker moves crates between rooms without finding a manager first. ⚠️ Its VOID
+    // counterpart is deliberately NOT here: `void_transfer` denies staff, same asymmetry as
+    // `void_statutory_discount`/`resolve_till_variance` above.
+    'transfer_stock',
+    // ⭐ T-170: a return is one act by one person when the goods physically leave. Staff-open,
+    // same bar as record_stock_movement/transfer_stock. ⚠️ Its VOID counterpart is deliberately
+    // NOT here: `void_supplier_return` denies staff, same asymmetry as `void_transfer` above.
+    'record_supplier_return',
+    // ⭐ T-179: the AR mirror of record_supplier_return, same reasoning. ⚠️ Its VOID counterpart
+    // is likewise NOT here: `void_customer_return` denies staff.
+    'record_customer_return',
+    // ⭐ T-172 (2026-09-03): the two SIDES of a branch order. Staff-open because v1 gates none of
+    // the order conversation by role and the person who notices the empty shelf is the one who
+    // orders. The real control is STORE SCOPE, and it is asymmetric on purpose: `place_` resolves
+    // at the branch (`requested_by_store_id`) and `fulfil_` at the commissary (`store_id`), which
+    // is how "the branch edits only its lines; the commissary only fulfilment fields" (invariant
+    // 10) is enforced. ⚠️ The posting event is deliberately NOT here: `dispatch_branch_order`
+    // denies staff, same asymmetry as `dispatch_wholesale_order`.
+    'place_branch_order',
+    'fulfil_branch_order',
   ];
 
-  it('every capability EXCEPT the universally-granted 13 has at least one denial case', () => {
+  it('every capability EXCEPT the universally-granted 16 has at least one denial case', () => {
     const covered = new Set(denialCases.map((c) => c.capability));
     const missing = CAPABILITIES.filter((c) => !covered.has(c));
     expect(missing.sort()).toEqual([...UNIVERSALLY_GRANTED].sort());
   });
 
-  it('the universally-granted 13 really are true for all four roles (why they are exempt)', () => {
+  it('the universally-granted 15 really are true for all four roles (why they are exempt)', () => {
     for (const c of UNIVERSALLY_GRANTED) {
       expect(ROLES.every((r) => CAPABILITY_MATRIX[c][r]), `${c} is not actually universal`).toBe(true);
     }

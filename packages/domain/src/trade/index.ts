@@ -26,53 +26,72 @@
  */
 import {
   arRepo,
+  commissaryRepo,
   customersRepo,
   itemsRepo,
+  journalRepo,
   moneyTransfersRepo,
+  stockLedgerRepo,
+  stockLocationsRepo,
   transaction,
   tradeRepo,
   type Tx,
 } from '@shareat/db';
-import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
+import { authorize, AuthorizationError, type Actor, type Capability } from '@shareat/auth';
 import { recordCharge, voidCharge } from '../ar';
 import { branchPriceFor } from '../items';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
+import type { Money } from '@shareat/core/money';
+import { confirmReceipt, dispatchOrder, type ReceiptLineInput } from '../commissary/transfer';
+import { consume, reverseConsumption } from '../stock/consume';
+import { postConsumption } from '../stock/consumption-posting';
+import type { ConsumedLine } from '../stock/layers';
+import { isPositiveQuantity, quantity, type Quantity } from '../stock/quantity';
+
+/**
+ * ⭐ T-172. A BRANCH order has two legitimate actors from two stores — the branch that asked and
+ * the commissary that fills it — and some acts are either's (receiving: T-173 invariant 8;
+ * withdrawing before anything moved). `authorize()` deliberately throws on the first failing axis
+ * and answers for ONE store, so "either store" is tried in turn and the LAST refusal is what the
+ * caller sees. ⚠️ Only an `AuthorizationError` moves on to the next attempt — a dead connection or
+ * a missing person stays loud, exactly as the credit-override check below treats it.
+ */
+async function authorizeEither(
+  tx: Tx,
+  actor: Actor,
+  attempts: readonly { capability: Capability; storeId: string }[],
+): Promise<void> {
+  let refused: AuthorizationError | undefined;
+  for (const attempt of attempts) {
+    try {
+      await authorize(tx, actor, attempt.capability, { storeId: attempt.storeId });
+      return;
+    } catch (e) {
+      if (!(e instanceof AuthorizationError)) throw e;
+      refused = e;
+    }
+  }
+  throw refused ?? new AuthorizationError('authorizeEither: nothing to try', attempts[0]!.capability);
+}
+import { INVENTORY_ACCOUNT_BY_ITEM_KIND } from '../stock/receipt-posting';
+import type { StockMovementKind } from '@shareat/db/schema';
 
 /** The account T-132 adds to the chart. Every 4xxx leaf before it was retail. */
 export const WHOLESALE_REVENUE_CODE = '4300';
 
 /**
- * ⚠️ **SUPERSEDED SHAPE, STILL LIVE.** ADR-011 made this system perpetual, and T-172/T-173 built
- * the replacement — `dispatchOrder`/`confirmReceipt` in `../commissary/transfer.ts`, where the cost
- * stays an ASSET the whole way (`1310`/`1320`/`1330` → `1340` → the branch's inventory) and never
- * enters the P&L. Those functions are built and tested and **called by nothing**; this one is what
- * a real order still posts. **T-165 rewires the internal branch below onto them.** ⛔ Do not call
- * both for one order — the transfer would be counted twice and the trial balance would still tie.
- *
- * ⭐ T-133's internal-transfer legs. A transfer moves **COST**, not inventory.
- *
- * ⛔ `POSTING-PATTERNS.md` §`commissary_dispatch.transfer` moves `1330` inventory between stores,
- * and that pattern assumes **perpetual** inventory. This system is **periodic**: every expense
- * category maps to a 5xxx COGS account, there is no capitalisation path, and nothing anywhere
- * debits `1310`/`1330`/`1340`. Moving inventory that was never recognised drove the seller's
- * `1330` negative and left the cost stranded in the seller's P&L — so the receiving branch could
- * not expense what it received at all. Found by Ian, 2026-08-28.
- *
- * ⭐ The fix is what the chart already described: `5170`'s own comment has said since T-102b that
- * it *"must ELIMINATE against the commissary's transfer-out"*. `5175` is that transfer-out.
- *
- *     seller   DR 1250 Due from related store   /  CR 5175 Cost transferred to branches
- *     buyer    DR 5170 COGS — commissary transfers  /  CR 2150 Due to related store
- *
- * ⚠️ The transfer PRICE carries the seller's processing cost. Lipa buying a slab at ₱300/kg and
- * processing it at ₱10/kg transfers at ₱310 — that is the mechanism by which Lipa's work reaches
- * Malvar's books, and it is why the rate is on the line rather than derived.
+ * ⭐ **RETIRED 2026-09-02 — T-165, the switch.** Until then this file posted the PERIODIC
+ * internal-transfer shape itself (`Dr 1250 · Cr 5175` at the seller, `Dr 5170 · Cr 2150` at the
+ * buyer, one entry, both stores, at DISPATCH). `dispatchOrder`/`confirmReceipt`
+ * (`../commissary/transfer.ts`, T-172/173) were built alongside it and called by nothing — this
+ * file now calls them instead: `dispatchTradeOrder`'s internal branch relieves the commissary's
+ * real layers into `1340`, and `receiveTradeOrder` is where both stores' books move, keyed to
+ * what actually arrived. `5170`/`5175` stay in the chart (ADR-008 §4 / bible row 111 — a
+ * franchise dispatch, not built, still needs them) but nothing here posts to them any more; see
+ * `commissary/transfer.ts`'s header for where `5175` is load-bearing now (the transfer MARGIN,
+ * not the whole value). DEF-125 names why this rewiring was overdue.
  */
-export const TRANSFER_OUT_CODE = '5175';
-export const COMMISSARY_COGS_CODE = '5170';
-export const DUE_FROM_STORE_CODE = '1250';
-export const DUE_TO_STORE_CODE = '2150';
 
 /** Decimal noise only, never a business allowance. Same value and reasoning as AP's and AR's. */
 const EPSILON = 0.005;
@@ -308,7 +327,14 @@ export async function dispatchTradeOrder(
   const run = async (trx: Tx): Promise<DispatchResult> => {
     const order = await tradeRepo.getOrderById(trx, actor.orgId, input.orderId);
     if (!order) throw new Error(`dispatchTradeOrder: order ${input.orderId} does not exist.`);
-    await authorize(trx, actor, 'approve_buyer', { storeId: order.storeId });
+    // ⭐ T-172. A BRANCH order's dispatch is its own capability — the posting event on the
+    // commissary's side, manager+ — and never `approve_buyer`, which is about extending credit to
+    // a buyer. A branch is not a buyer.
+    if (order.requestedByStoreId) {
+      await authorize(trx, actor, 'dispatch_branch_order', { storeId: order.storeId });
+    } else {
+      await authorize(trx, actor, 'approve_buyer', { storeId: order.storeId });
+    }
 
     // Idempotent by design — a retried dispatch must not raise a second receivable.
     if (order.status === 'dispatched' || order.status === 'received') {
@@ -327,67 +353,106 @@ export async function dispatchTradeOrder(
     if (order.status !== 'draft' && order.status !== 'confirmed') {
       throw new Error(`dispatchTradeOrder: order is ${order.status}, so it cannot be dispatched.`);
     }
+    // ⭐ T-172. A branch order goes out READY or not at all — "ready" is the commissary's statement
+    // that the list is final, after the branch has answered every proposal. The trigger (0121)
+    // refuses this at the database too; this names the reason.
+    if (order.requestedByStoreId && !order.readyAt) {
+      throw new Error(
+        'dispatchTradeOrder: a branch order is dispatched only after the commissary marks it ready ' +
+          `(it is ${order.status === 'draft' ? 'still a draft' : order.acceptedAt ? 'being packed' : 'awaiting acceptance'}).`,
+      );
+    }
 
     const customer = await customersRepo.getById(trx, actor.orgId, order.customerId);
     if (!customer) throw new Error('dispatchTradeOrder: the order names a customer that no longer exists.');
 
     // -----------------------------------------------------------------------------------------
-    // ⭐ T-133 — the INTERNAL transfer. One entry, four legs, two stores, and it ELIMINATES.
-    //
-    // ⛔ NO REVENUE: a branch is not a customer of its own company. What moves is COST — see the
-    // account constants above for why this is not the inventory movement POSTING-PATTERNS.md
-    // describes, and what has to change for that shape to become correct.
+    // ⭐ T-165. The INTERNAL transfer, on the REAL perpetual shape — `dispatchOrder`
+    // (`../commissary/transfer.ts`, T-172/173), not the periodic `5170`/`5175`/`1250`/`2150`
+    // four-leg entry this branch posted before. That old shape moved COST with no stock ledger
+    // effect at all; this one relieves the commissary's actual layers into `1340`, and the
+    // cross-store legs post at CONFIRM RECEIPT (`receiveTradeOrder` below), not here — see
+    // `commissary/transfer.ts`'s header for why running both would count one transfer twice.
+    // ⛔ NO REVENUE: a branch is not a customer of its own company.
     // -----------------------------------------------------------------------------------------
     if (customersRepo.treatmentOf(customer) === 'internal') {
-      const toStoreId = customer.counterpartyStoreId!;
-      const codes = await moneyTransfersRepo.storeCodes(trx, actor.orgId, [order.storeId, toStoreId]);
-      const fromCode = codes.get(order.storeId);
-      const toCode = codes.get(toStoreId);
-      if (!fromCode || !toCode) {
-        throw new Error('dispatchTradeOrder: could not resolve both store codes for the transfer.');
+      const allLines = await tradeRepo.linesFor(trx, actor.orgId, order.id);
+      if (allLines.length === 0) {
+        throw new Error('dispatchTradeOrder: order has no lines — that is a bug, createTradeOrder refuses this.');
       }
-      const memo = `Transfer ${fromCode} → ${toCode} — ${order.referenceNo ?? order.id}`;
-      const posted = await postEntry(trx, {
+      // ⭐ T-172 invariant 5. A line the commissary PROPOSED counts toward nothing until the branch
+      // approves it — not the total, not this gate, not the truck — and a rejected one never does.
+      // `lineCounts` is the ONE predicate the total, the dispatch and the receipt all read. And a
+      // line fulfilled at ZERO ("we couldn't fill this") has nothing to relieve.
+      if (allLines.some((l) => l.approval === 'pending')) {
+        throw new Error('dispatchTradeOrder: a proposed line still awaits the branch\'s decision.');
+      }
+      const lines = allLines.filter(
+        (l) => tradeRepo.lineCounts(l) && isPositiveQuantity(quantity(l.fulfilledQuantity ?? l.quantity)),
+      );
+      if (lines.length === 0) {
+        throw new Error('dispatchTradeOrder: nothing would be sent — every line is at zero or declined.');
+      }
+      // ⭐ T-172's `fulfilLine` sets the source room per line since 2026-09-03; a line that has none
+      // — every commissary-initiated transfer, and a branch line the packer left at the default —
+      // falls back to the store's one default room, the same "optional override, else the obvious
+      // default" shape rate capture and unit fallback already use elsewhere in this file.
+      const commissaryDefault = await stockLocationsRepo.defaultLocationFor(trx, order.storeId);
+
+      const dispatchLines: {
+        lineId: string; itemId: string; itemKind: string; sourceLocationId: string; fulfilledQuantity: Quantity;
+      }[] = [];
+      const onHandByItem: Record<string, Quantity> = {};
+      for (const line of lines) {
+        const item = await itemsRepo.getItemById(trx, actor.orgId, line.itemId);
+        if (!item) throw new Error('dispatchTradeOrder: a line names an item that no longer exists.');
+        const sourceLocationId = line.sourceLocationId ?? commissaryDefault?.id;
+        if (!sourceLocationId) {
+          throw new Error(
+            `dispatchTradeOrder: ${item.name} has no source room, and ${customer.name}'s commissary ` +
+              'has no default location either — set one before dispatching.',
+          );
+        }
+        dispatchLines.push({
+          lineId: line.id, itemId: line.itemId, itemKind: item.kind, sourceLocationId,
+          fulfilledQuantity: quantity(line.fulfilledQuantity ?? line.quantity),
+        });
+        if (!(line.itemId in onHandByItem)) {
+          // ⚠️ An item the commissary has NEVER moved stays ABSENT from the map — that is how
+          // `dispatchOrder` tells "untracked" from "zero on hand", and the two get different
+          // refusals on purpose (T-172 §9.1: an untracked item is the commissary's data problem).
+          const onHand = await stockLedgerRepo.onHandByItemInStore(trx, order.storeId, line.itemId);
+          if (onHand !== null) onHandByItem[line.itemId] = quantity(onHand);
+        }
+      }
+
+      const dispatched = await dispatchOrder(trx, {
         orgId: actor.orgId,
-        entryDate: order.orderDate,
-        sourceType: 'commissary_dispatch',
-        sourceId: order.id,
-        idempotencyKey: `commissary_dispatch:${order.id}:transfer`,
-        memo,
-        postedBy: actor.personId,
-        lines: [
-          // ⭐ The seller's cost LEAVES its P&L. It bought the goods (5110) and processed them
-          // (payroll); crediting 5175 for the transfer price nets both back out, so the seller
-          // ends at zero cost for goods it no longer holds.
-          { accountCode: TRANSFER_OUT_CODE, storeId: order.storeId, credit: order.totalAmount, lineMemo: memo },
-          // ...and the seller is owed for them. ⚠️ party_id is the OTHER store's CODE, not a uuid
-          // — there is no party FK yet (DEF-040) and store codes are stable.
-          {
-            accountCode: DUE_FROM_STORE_CODE, storeId: order.storeId, debit: order.totalAmount,
-            partyType: 'store' as const, partyId: toCode, lineMemo: `Due from ${toCode} — ${memo}`,
-          },
-          // ⭐ The buyer expenses what it received, into the account v1 already uses for exactly
-          // this — so a commissary transfer reads the same on Malvar's P&L either way.
-          { accountCode: COMMISSARY_COGS_CODE, storeId: toStoreId, debit: order.totalAmount, lineMemo: memo },
-          // ...and the buyer owes for them. Equal and opposite, so invariant 6's reciprocal check
-          // holds by construction rather than by anyone remembering.
-          {
-            accountCode: DUE_TO_STORE_CODE, storeId: toStoreId, credit: order.totalAmount,
-            partyType: 'store' as const, partyId: fromCode, lineMemo: `Due to ${fromCode} — ${memo}`,
-          },
-        ],
+        commissaryStoreId: order.storeId,
+        orderId: order.id,
+        dispatchedOn: order.orderDate,
+        dispatchedBy: actor.personId,
+        onHandByItem,
+        lines: dispatchLines,
       });
+      if (!dispatched.ok) throw new Error(`dispatchTradeOrder: ${dispatched.reason}`);
+
+      // ⭐ Persisted so `receiveTradeOrder` can relieve `1340` at what the goods actually COST,
+      // never at `rate` — the mechanism `commissary/transfer.ts`'s header names as load-bearing.
+      for (const [lineId, cost] of Object.entries(dispatched.costByLineId)) {
+        await tradeRepo.setLineDispatchCost(trx, lineId, cost);
+      }
 
       await tradeRepo.markDispatched(trx, actor.orgId, order.id, {
         arChargeId: null,
-        journalEntryId: posted.entryId,
+        journalEntryId: dispatched.entryId,
         dispatchedBy: actor.personId,
         creditOverrideBy: null,
         creditOverrideReason: null,
       });
       // ⛔ No credit gate. A branch is not extended credit, so a limit on an internal counterparty
       // is meaningless and is deliberately not consulted.
-      return { orderId: order.id, chargeId: null, entryId: posted.entryId, creditOverridden: false, treatment: 'internal' };
+      return { orderId: order.id, chargeId: null, entryId: dispatched.entryId, creditOverridden: false, treatment: 'internal' };
     }
 
     // ---------------------------------------------------------------------------------------
@@ -438,6 +503,64 @@ export async function dispatchTradeOrder(
       notes: `Wholesale order ${order.referenceNo ?? order.id}`,
     });
 
+    // ---------------------------------------------------------------------------------------
+    // ⭐ T-165 / DEF-125. COGS and inventory relief — T-132's own header called this a "stated
+    // omission" back when no inventory module existed; Phase 3 shipped one and this dispatch
+    // never gained the leg that goes with it, so every wholesale sale silently overstated its
+    // margin. Posted as its OWN entry, the same separation `postConsumption`/`recordCharge`
+    // already keep everywhere else — one document for the sale, a second for what it cost.
+    // ⚠️ `cogsCategory` has no per-item source of truth anywhere in the schema yet (T-164's own
+    // callers take it as a caller-supplied field with nothing behind it either) — every line
+    // here books through the `food` catch-all COA-ALIGNMENT §4.1 names for exactly this case,
+    // flagged rather than invented as a real classification.
+    // ---------------------------------------------------------------------------------------
+    const sellingLocation = await stockLocationsRepo.defaultLocationFor(trx, order.storeId);
+    if (!sellingLocation) {
+      throw new Error(`dispatchTradeOrder: ${order.storeId} has no default stock location to sell from.`);
+    }
+    const soldLines = await tradeRepo.linesFor(trx, actor.orgId, order.id);
+
+    // ⭐ EVERY refusal decided before the first write — the T-166 lesson, applied here exactly as
+    // `dispatchOrder` applies it for the internal path. Validating inside the write loop leaves
+    // line 1's stock moved when line 2 is the one with no inventory account.
+    const cogsLines: { itemId: string; quantity: Quantity; inventoryAccount: string }[] = [];
+    for (const line of soldLines) {
+      const item = await itemsRepo.getItemById(trx, actor.orgId, line.itemId);
+      if (!item) throw new Error('dispatchTradeOrder: a line names an item that no longer exists.');
+      const inventoryAccount = INVENTORY_ACCOUNT_BY_ITEM_KIND[item.kind];
+      if (!inventoryAccount) {
+        throw new Error(`dispatchTradeOrder: item kind "${item.kind}" has no inventory account in COA-ALIGNMENT §4.1.`);
+      }
+      cogsLines.push({ itemId: line.itemId, quantity: quantity(line.quantity), inventoryAccount });
+    }
+
+    const cogsGroups = new Map<string, { inventoryAccount: string; lines: ConsumedLine[] }>();
+    for (const line of cogsLines) {
+      const consumed = await consume(trx, {
+        orgId: actor.orgId, storeId: order.storeId, locationId: sellingLocation.id,
+        itemId: line.itemId, quantity: line.quantity,
+        movedAt: new Date(`${order.orderDate}T00:00:00Z`),
+        kind: 'usage', sourceType: 'trade_order_dispatch', sourceId: order.id,
+        createdBy: actor.personId,
+      });
+      // ⛔ Validated above, so a refusal here is a real shortfall, not a data problem — thrown
+      // rather than returned, since the AR charge above has already posted (T-166 §7.2).
+      if (!consumed.ok) throw new Error(`dispatchTradeOrder: posting refused after billing — ${consumed.reason}`);
+      const group = cogsGroups.get(line.inventoryAccount);
+      if (group) group.lines.push(...consumed.lines);
+      else cogsGroups.set(line.inventoryAccount, { inventoryAccount: line.inventoryAccount, lines: [...consumed.lines] });
+    }
+    for (const [inventoryAccount, group] of cogsGroups) {
+      const posted = await postConsumption(trx, {
+        orgId: actor.orgId, storeId: order.storeId, inventoryAccount,
+        movedOn: order.orderDate, sourceType: 'trade_order_dispatch',
+        sourceId: `${order.id}:${inventoryAccount}`, costLines: group.lines,
+        cogsCategory: 'food', postedBy: actor.personId,
+      });
+      // ⛔ Stock is already written. Throw so the transaction unwinds — T-166 §7.2's lesson.
+      if (!posted.ok) throw new Error(`dispatchTradeOrder: posting refused after stock moved — ${posted.reason}`);
+    }
+
     await tradeRepo.markDispatched(trx, actor.orgId, order.id, {
       arChargeId: chargeId,
       journalEntryId: entryId,
@@ -455,6 +578,57 @@ export async function dispatchTradeOrder(
   return transaction(run);
 }
 
+/** `-3.500` → `3.500`. `Quantity` carries no arithmetic of its own — this is string trimming. */
+function absQuantity(q: string): Quantity {
+  return (q.startsWith('-') ? q.slice(1) : q) as Quantity;
+}
+
+/**
+ * ⭐ T-165. Give back whatever a dispatch moved — the stock, either treatment, and (for an
+ * EXTERNAL sale only) the COGS entries that came with it; an internal transfer's ONE entry is
+ * already reversed by `voidTradeOrder` itself just above this call. ⚠️ Movements are found BY
+ * SOURCE, not remembered on the order line — `stock_movements_source_pair_key` guarantees at
+ * most one non-reversed movement per (item, location), so this is safe rather than a workaround.
+ */
+async function reverseDispatchStock(
+  tx: Tx,
+  actor: Actor,
+  order: { id: string },
+  reason: string,
+): Promise<void> {
+  const movements = await stockLedgerRepo.movementsBySource(tx, 'trade_order_dispatch', order.id);
+  const cogsAccounts = new Set<string>();
+
+  for (const m of movements) {
+    const original = await stockLedgerRepo.findMovement(tx, m.id);
+    if (!original) continue;
+
+    const reversed = await reverseConsumption(tx, {
+      orgId: actor.orgId, storeId: m.storeId, locationId: m.locationId, itemId: m.itemId,
+      originalMovementId: m.id, quantity: absQuantity(original.quantity), movedAt: new Date(),
+      kind: original.kind as StockMovementKind,
+      sourceType: 'trade_order_dispatch_void', sourceId: order.id, createdBy: actor.personId,
+    });
+    if (!reversed.ok) throw new Error(`voidTradeOrder: ${reversed.reason}`);
+
+    if (original.kind === 'usage') {
+      const item = await itemsRepo.getItemById(tx, actor.orgId, m.itemId);
+      const account = item && INVENTORY_ACCOUNT_BY_ITEM_KIND[item.kind];
+      if (account) cogsAccounts.add(account);
+    }
+  }
+
+  // ⭐ Reconstructed, not stored: the same deterministic (item kind → account) map the dispatch
+  // used to key the entry, so the same key finds it again.
+  for (const account of cogsAccounts) {
+    const entry = await journalRepo.findEntryByIdempotencyKey(
+      tx, actor.orgId, `trade_order_dispatch:${order.id}:${account}:consumption`,
+    );
+    if (!entry) continue;
+    await reverseEntry(tx, { entryId: entry.id, reason, reversedBy: actor.personId });
+  }
+}
+
 /**
  * Void an order. ⚠️ A dispatched order's receivable is **reversed**, never deleted — `voidCharge`
  * posts the mirror entry, so the ledger keeps both halves of what happened.
@@ -467,11 +641,38 @@ export async function voidTradeOrder(
   const run = async (trx: Tx) => {
     const order = await tradeRepo.getOrderById(trx, actor.orgId, input.orderId);
     if (!order) throw new Error(`voidTradeOrder: order ${input.orderId} does not exist.`);
-    await authorize(trx, actor, 'approve_buyer', { storeId: order.storeId });
+    if (order.requestedByStoreId) {
+      // ⭐ T-172. Before anything moved, EITHER side may withdraw — the branch its own request, the
+      // commissary an order it will not fill (rejectOrder is the same act with a reason column).
+      // After dispatch it reverses a posting, which is the dispatcher's capability, manager+.
+      if (order.status === 'dispatched' || order.status === 'received') {
+        await authorize(trx, actor, 'dispatch_branch_order', { storeId: order.storeId });
+      } else {
+        await authorizeEither(trx, actor, [
+          { capability: 'place_branch_order', storeId: order.requestedByStoreId },
+          { capability: 'fulfil_branch_order', storeId: order.storeId },
+        ]);
+      }
+    } else {
+      await authorize(trx, actor, 'approve_buyer', { storeId: order.storeId });
+    }
     if (order.status === 'void') throw new Error('voidTradeOrder: this order is already void.');
 
     const reason = input.reason.trim();
     if (!reason) throw new Error('voidTradeOrder: say why this order is being voided.');
+
+    // ⭐ T-165. Voiding an already-RECEIVED internal transfer needs a real reverse-transfer —
+    // BOTH stores' layers unwound, T-174's discrepancy rows accounted for — which is a
+    // materially bigger problem than this task, reported rather than attempted blind. Voiding
+    // before receipt (the common case — an order dispatched in error) is single-store and safe,
+    // and is what this function builds.
+    if (order.status === 'received' && !order.arChargeId) {
+      throw new Error(
+        'voidTradeOrder: this internal transfer has already been received at the other store — ' +
+          'voiding it needs a two-store reverse-transfer that is not built yet. Correct it with a ' +
+          'new transfer the other way instead.',
+      );
+    }
 
     let reversedEntryId: string | null = null;
     if (order.status === 'dispatched' || order.status === 'received') {
@@ -479,10 +680,14 @@ export async function voidTradeOrder(
         // A sale: AR owns the money, so AR unwinds it.
         const { entryId } = await voidCharge(trx, actor, { chargeId: order.arChargeId, reason });
         reversedEntryId = entryId;
+
+        // ⭐ T-165/DEF-125. `voidCharge` only unwinds the revenue/AR leg — give the goods and the
+        // COGS entry back too, or a voided sale permanently loses the stock it never delivered.
+        await reverseDispatchStock(trx, actor, order, reason);
       } else {
-        // ⭐ An internal transfer raised no receivable, so there is no charge to void — the
-        // four-leg entry is reversed directly. ⚠️ reverseEntry, never a delete: the ledger keeps
-        // both halves, and the reciprocal pair nets to zero again the honest way.
+        // ⭐ T-165. The internal dispatch's `1340`/inventory entry, reversed directly — ⚠️
+        // reverseEntry, never a delete: the ledger keeps both halves, and the reciprocal pair
+        // nets to zero again the honest way.
         if (!order.journalEntryId) {
           throw new Error('voidTradeOrder: order is dispatched but carries no entry — that is a bug.');
         }
@@ -492,6 +697,7 @@ export async function voidTradeOrder(
           reversedBy: actor.personId,
         });
         reversedEntryId = reversal.reversalEntryId;
+        await reverseDispatchStock(trx, actor, order, reason);
       }
     }
 
@@ -516,20 +722,156 @@ export async function voidTradeOrder(
  * ⛔ It becomes a posting when the counterparty is another ORG, whose side cannot be written from
  * here at all. See `docs/tasks/133-inter-entity-trade.md` §4.
  */
+export interface ReceiveTradeOrderLineInput {
+  readonly lineId: string;
+  /** Omit for a full receipt — what was dispatched. T-174's short-receipt input. */
+  readonly receivedQuantity?: string | null;
+  readonly shortageReason?: ReceiptLineInput['shortageReason'];
+}
+
+export interface ReceiveTradeOrderInput {
+  readonly orderId: string;
+  readonly lines?: readonly ReceiveTradeOrderLineInput[];
+  /** YYYY-MM-DD. Defaults to today — this is a real-time signing event, not backdated. */
+  readonly receivedOn?: string;
+}
+
+export interface ReceiveTradeOrderResult {
+  readonly receivedAt: Date;
+  /** `null` for an EXTERNAL order (nothing posts here) or an all-ledger-only internal receipt. */
+  readonly entryId: string | null;
+}
+
+/**
+ * ⭐ T-165/T-173. For an INTERNAL transfer this is now the one event where BOTH stores' books
+ * move — `confirmReceipt`, keyed to what was actually received, never to what was dispatched
+ * (`commissary/transfer.ts`'s header rule). For an EXTERNAL sale this still posts nothing: the
+ * value moved at dispatch, and receipt is a recorded fact about who signed for it.
+ */
 export async function receiveTradeOrder(
   tx: Tx | null,
   actor: Actor,
-  input: { orderId: string },
-): Promise<{ receivedAt: Date }> {
-  const run = async (trx: Tx) => {
+  input: ReceiveTradeOrderInput,
+): Promise<ReceiveTradeOrderResult> {
+  const run = async (trx: Tx): Promise<ReceiveTradeOrderResult> => {
     const order = await tradeRepo.getOrderById(trx, actor.orgId, input.orderId);
     if (!order) throw new Error(`receiveTradeOrder: order ${input.orderId} does not exist.`);
-    await authorize(trx, actor, 'approve_buyer', { storeId: order.storeId });
+    if (order.requestedByStoreId) {
+      // ⭐ T-173 invariant 8, finally wired: BOTH stores are legitimate callers of a branch order's
+      // receipt, from opposite grants — the branch cook who signs for the crates, or the commissary
+      // side on the branch's behalf. `confirm_receipt` is staff-open precisely because the real
+      // control is this two-sided store check, not the role (CAPABILITY-MATRIX.md).
+      await authorizeEither(trx, actor, [
+        { capability: 'confirm_receipt', storeId: order.requestedByStoreId },
+        { capability: 'confirm_receipt', storeId: order.storeId },
+      ]);
+    } else {
+      await authorize(trx, actor, 'approve_buyer', { storeId: order.storeId });
+    }
     if (order.status !== 'dispatched') {
       throw new Error(`receiveTradeOrder: order is ${order.status}, not dispatched.`);
     }
+
+    const customer = await customersRepo.getById(trx, actor.orgId, order.customerId);
+    if (!customer) throw new Error('receiveTradeOrder: the order names a customer that no longer exists.');
+
+    let entryId: string | null = null;
+
+    if (customersRepo.treatmentOf(customer) === 'internal') {
+      const branchStoreId = customer.counterpartyStoreId!;
+      const receivedOn = input.receivedOn ?? new Date().toISOString().slice(0, 10);
+      const orderLines = await tradeRepo.linesFor(trx, actor.orgId, order.id);
+      const overrides = new Map((input.lines ?? []).map((l) => [l.lineId, l]));
+      const codes = await moneyTransfersRepo.storeCodes(trx, actor.orgId, [order.storeId, branchStoreId]);
+      const commissaryStoreCode = codes.get(order.storeId);
+      const branchStoreCode = codes.get(branchStoreId);
+      if (!commissaryStoreCode || !branchStoreCode) {
+        throw new Error('receiveTradeOrder: could not resolve both store codes for the receipt.');
+      }
+      const branchLocation = await stockLocationsRepo.defaultLocationFor(trx, branchStoreId);
+
+      const receiptLines: ReceiptLineInput[] = [];
+      const orderLineIdByLineId: Record<string, string> = {};
+      for (const line of orderLines) {
+        // ⭐ T-172. A declined proposal never arrives, and a line fulfilled at zero was never packed
+        // — neither was dispatched, neither carries a dispatch cost, neither is received. The same
+        // `lineCounts` predicate the dispatch used decides it here.
+        if (!tradeRepo.lineCounts(line)) continue;
+        const dispatchedQuantity = quantity(line.fulfilledQuantity ?? line.quantity);
+        if (!isPositiveQuantity(dispatchedQuantity)) continue;
+
+        const item = await itemsRepo.getItemById(trx, actor.orgId, line.itemId);
+        if (!item) throw new Error('receiveTradeOrder: a line names an item that no longer exists.');
+
+        // ⭐ T-172 invariant 12. A BRANCH order captured its ledger-only decision onto the line at
+        // submit (or at approval), and THAT is what the receipt honours — a map edited while the
+        // goods were on the truck does not reach it. A commissary-initiated transfer has no
+        // capture, so the map decides.
+        if (order.requestedByStoreId && line.isLedgerOnly) continue;
+
+        // ⭐ T-171. Required — commissary_item_map.branch_item_id is NOT NULL by design (the
+        // schema's own comment: an overloaded null cannot tell "unmapped" from "deliberately
+        // ledger-only"), so a missing row is refused rather than guessed at receipt time.
+        const map = await commissaryRepo.mapItem(trx, order.storeId, branchStoreId, line.itemId);
+        if (!map) {
+          throw new Error(
+            `receiveTradeOrder: ${item.name} has no commissary_item_map row for this store pair — ` +
+              'map it (T-171) before confirming receipt.',
+          );
+        }
+        if (!order.requestedByStoreId && map.isLedgerOnly) continue;
+
+        const branchItem = await itemsRepo.getItemById(trx, actor.orgId, map.branchItemId);
+        if (!branchItem) throw new Error('receiveTradeOrder: the mapped branch item no longer exists.');
+        if (!line.dispatchCost) {
+          throw new Error(`receiveTradeOrder: ${item.name} carries no dispatch cost — that is a bug.`);
+        }
+        if (!branchLocation) {
+          throw new Error(`receiveTradeOrder: the branch has no default location to receive into.`);
+        }
+
+        const override = overrides.get(line.id);
+        const receivedQuantity =
+          override?.receivedQuantity != null ? quantity(override.receivedQuantity) : dispatchedQuantity;
+
+        receiptLines.push({
+          lineId: line.id,
+          itemId: line.itemId,
+          branchItemId: map.branchItemId,
+          branchLocationId: branchLocation.id,
+          dispatchedQuantity,
+          receivedQuantity,
+          branchBaseUnit: branchItem.baseUnit,
+          commissaryBaseUnit: item.baseUnit,
+          rate: line.rate,
+          dispatchCost: line.dispatchCost as Money,
+          branchItemKind: branchItem.kind,
+          shortageReason: override?.shortageReason ?? null,
+        });
+        orderLineIdByLineId[line.id] = line.id;
+        await tradeRepo.setLineReceivedQuantity(trx, line.id, receivedQuantity);
+      }
+
+      if (receiptLines.length > 0) {
+        const confirmed = await confirmReceipt(trx, {
+          orgId: actor.orgId,
+          commissaryStoreId: order.storeId,
+          branchStoreId,
+          commissaryStoreCode,
+          branchStoreCode,
+          orderId: order.id,
+          receivedOn,
+          lines: receiptLines,
+          receivedBy: actor.personId,
+          orderLineIdByLineId,
+        });
+        if (!confirmed.ok) throw new Error(`receiveTradeOrder: ${confirmed.reason}`);
+        entryId = confirmed.entryId;
+      }
+    }
+
     const receivedAt = await tradeRepo.markReceived(trx, actor.orgId, order.id, actor.personId);
-    return { receivedAt };
+    return { receivedAt, entryId };
   };
   if (tx) return run(tx);
   return transaction(run);

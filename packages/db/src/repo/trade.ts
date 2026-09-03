@@ -25,22 +25,124 @@ export interface TradeOrderRow {
   notes: string | null;
   status: TradeOrderStatus;
   totalAmount: string;
+  /** T-151. Outbound freight, ON TOP of the lines — see `schema/trade.ts`. Always present, `0.00` when none. */
+  deliveryFee: string;
+  otherFees: string;
   arChargeId: string | null;
   journalEntryId: string | null;
+  /** T-172. Set when a BRANCH drafted this order; null for one entered at the selling store. */
+  requestedByStoreId: string | null;
+  /**
+   * ⭐ T-172. The branch order's STAGE markers. `status` stays the five-value set 0070 kept on
+   * purpose; "submitted" is `confirmed` with none of these, "accepted" is `confirmed` + `acceptedAt`,
+   * "ready" adds `readyAt`, and "rejected" is `void` + `rejectedAt`. Derived by
+   * `branchOrderStage()` in the domain — never stored (bible §4.2).
+   */
+  acceptedAt: Date | null;
+  acceptedBy: string | null;
+  readyAt: Date | null;
+  readyBy: string | null;
+  rejectedAt: Date | null;
+  rejectedBy: string | null;
+  rejectReason: string | null;
   dispatchedAt: Date | null;
+  dispatchedBy: string | null;
   receivedAt: Date | null;
   receivedBy: string | null;
   creditOverrideReason: string | null;
+  voidedAt: Date | null;
+  voidReason: string | null;
+  createdBy: string;
+  createdAt: Date;
+}
+
+/** One row of the trade-orders register — the order plus the two facts a list needs joined in. */
+export interface TradeOrderListRow {
+  id: string;
+  storeId: string;
+  customerId: string;
+  customerName: string;
+  /** ⭐ The treatment is DERIVED from this on the screen too, never stored (ADR-008 §2). */
+  counterpartyStoreId: string | null;
+  orderDate: string;
+  referenceNo: string | null;
+  status: TradeOrderStatus;
+  totalAmount: string;
+  lineCount: number;
+  dispatchedAt: Date | null;
+  receivedAt: Date | null;
+}
+
+/**
+ * ⭐ DEF-138. Every order this store is on, from EITHER end — as the seller, or as the branch
+ * an internal transfer is going to. Same rule as `lowStockRepo.branchOrders`: two screens each
+ * showing "my orders" from opposite ends is how the two sides come to disagree about what was
+ * sent. An external sale appears only at the selling store; the buyer is not a store.
+ */
+export async function listOrders(tx: Tx, orgId: string, storeId: string): Promise<TradeOrderListRow[]> {
+  const rows = (await tx.execute(sql`
+    select o.id, o.store_id as "storeId", o.customer_id as "customerId", c.name as "customerName",
+           c.counterparty_store_id as "counterpartyStoreId",
+           o.order_date::text as "orderDate", o.reference_no as "referenceNo", o.status,
+           o.total_amount::text as "totalAmount",
+           (select count(*)::int from trade_order_lines l where l.order_id = o.id) as "lineCount",
+           o.dispatched_at as "dispatchedAt", o.received_at as "receivedAt"
+    from trade_orders o
+    join customers c on c.id = o.customer_id
+    where o.org_id = ${orgId}
+      and (o.store_id = ${storeId} or c.counterparty_store_id = ${storeId})
+    order by o.order_date desc, o.created_at desc
+    limit 200
+  `)) as unknown as TradeOrderListRow[];
+  return rows;
 }
 
 export interface TradeOrderLineRow {
   id: string;
   orderId: string;
   itemId: string;
+  /**
+   * ⚠️ For a BRANCH order this is the branch's ASK (or a proposal's quantity) and never changes
+   * after submit; the commissary's answer is `fulfilledQuantity`. Readers that move stock use
+   * `fulfilledQuantity ?? quantity` — the one expression, in `dispatchTradeOrder` and
+   * `receiveTradeOrder` both.
+   */
   quantity: string;
   unit: string;
   rate: string;
+  /** For a branch order: (fulfilled ?? requested) × rate — what this line COUNTS for. Zero when fulfilled is zero. */
   lineTotal: string;
+  /** T-172. The room the goods leave. Set by `fulfilLine`; T-165 falls back to the store's default. */
+  sourceLocationId: string | null;
+  /** T-172. What the branch asked for. Null on a commissary-added line and on a sale. */
+  requestedQuantity: string | null;
+  /** T-172. What the commissary will send. Seeded from `requestedQuantity` at accept (invariant 4); ZERO is "none". */
+  fulfilledQuantity: string | null;
+  /** T-172. What the branch signed for, written by `confirmReceipt`'s caller. */
+  receivedQuantity: string | null;
+  /** T-172. `requested` by the branch, or `commissary_added` (a substitution awaiting the branch). */
+  origin: 'requested' | 'commissary_added';
+  approval: 'not_required' | 'pending' | 'approved' | 'rejected';
+  /** T-171 invariant 2. Captured from the map at submit / approval — the explicit "no branch stock moves" decision. */
+  isLedgerOnly: boolean;
+  /** Captured from the map at submit / approval (invariant 12 — the same category the receipt reads). */
+  expenseCategoryId: string | null;
+  /** T-175. What the low-stock auto-order proposed; never refreshed. */
+  suggestedQuantity: string | null;
+  /** T-165/T-172. What the goods cost the commissary at dispatch — `dispatchOrder`'s own output,
+   *  persisted here so `confirmReceipt` can read it back rather than being told (T-133 §5). */
+  dispatchCost: string | null;
+  createdAt: Date;
+}
+
+/**
+ * ⭐ T-172. Does this line COUNT — toward the total, the dispatch, the receipt? A line the
+ * commissary proposed counts for nothing until the branch approves it (invariant 5), and a
+ * rejected one never does. ⚠️ One predicate, used by the total refresh, the dispatch and the
+ * receipt — three readers, one definition, so they cannot disagree about which lines are real.
+ */
+export function lineCounts(line: Pick<TradeOrderLineRow, 'approval'>): boolean {
+  return line.approval === 'not_required' || line.approval === 'approved';
 }
 
 export async function insertOrder(
@@ -82,12 +184,21 @@ export async function getOrderById(
   tx: Tx,
   orgId: string,
   id: string,
+  opts: {
+    /**
+     * ⭐ T-172. `SELECT … FOR UPDATE`, so two people working one order from opposite stores — the
+     * commissary marking it ready while the branch is still answering a proposal — serialise on
+     * the row instead of both reading the same stage and both proceeding.
+     */
+    forUpdate?: boolean;
+  } = {},
 ): Promise<TradeOrderRow | undefined> {
-  const [row] = await tx
+  const query = tx
     .select()
     .from(tradeOrders)
     .where(and(eq(tradeOrders.orgId, orgId), eq(tradeOrders.id, id)))
     .limit(1);
+  const [row] = opts.forUpdate ? await query.for('update') : await query;
   return row as TradeOrderRow | undefined;
 }
 
@@ -100,6 +211,15 @@ export async function linesFor(
     .select()
     .from(tradeOrderLines)
     .where(and(eq(tradeOrderLines.orgId, orgId), eq(tradeOrderLines.orderId, orderId)))) as TradeOrderLineRow[];
+}
+
+/** ⭐ T-179. A single line, by its own id — what a return line names. */
+export async function getLineById(tx: Tx, orgId: string, id: string): Promise<TradeOrderLineRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(tradeOrderLines)
+    .where(and(eq(tradeOrderLines.orgId, orgId), eq(tradeOrderLines.id, id)));
+  return row as TradeOrderLineRow | undefined;
 }
 
 export async function setStatus(
@@ -181,6 +301,130 @@ export async function quotedRate(
   `)) as unknown as Record<string, string | null>[];
   if (!row) return undefined;
   return { rate: String(row.rate), unit: row.unit ?? null };
+}
+
+/**
+ * ⭐ T-165. `dispatchOrder`'s own output, persisted so `confirmReceipt` can read back what the
+ * DISPATCHED quantity cost — never `rate`, which carries the margin (T-133 §5's whole point).
+ */
+export async function setLineDispatchCost(tx: Tx, lineId: string, dispatchCost: string): Promise<void> {
+  await tx.update(tradeOrderLines).set({ dispatchCost }).where(eq(tradeOrderLines.id, lineId));
+}
+
+/** ⭐ T-165/T-172. What the branch actually signed for — read back by `receiveTradeOrder`. */
+export async function setLineReceivedQuantity(tx: Tx, lineId: string, receivedQuantity: string): Promise<void> {
+  await tx.update(tradeOrderLines).set({ receivedQuantity }).where(eq(tradeOrderLines.id, lineId));
+}
+
+// ---- T-172: the branch order's own writes ------------------------------------------------------
+// ⚠️ These are the ONLY writers of the fulfilment and approval columns. Every one is called from
+// `domain/src/commissary/orders.ts` (the branch's side) or `fulfilment.ts` (the commissary's), and
+// which file may call which is invariant 10 — "each field has exactly one owner" — made concrete.
+
+export interface InsertBranchLineInput {
+  orgId: string;
+  orderId: string;
+  itemId: string;
+  quantity: string;
+  unit: string;
+  rate: string;
+  lineTotal: string;
+  requestedQuantity: string | null;
+  fulfilledQuantity: string | null;
+  origin: TradeOrderLineRow['origin'];
+  approval: TradeOrderLineRow['approval'];
+  isLedgerOnly: boolean;
+  expenseCategoryId: string | null;
+  sourceLocationId: string | null;
+}
+
+export async function insertBranchLine(tx: Tx, input: InsertBranchLineInput): Promise<{ id: string }> {
+  const [row] = await tx.insert(tradeOrderLines).values(input).returning({ id: tradeOrderLines.id });
+  return row!;
+}
+
+/** The writable subset. ⚠️ `quantity` is included only because a DRAFT edit changes the ask itself. */
+export interface UpdateLinePatch {
+  quantity?: string;
+  rate?: string;
+  lineTotal?: string;
+  requestedQuantity?: string | null;
+  fulfilledQuantity?: string | null;
+  sourceLocationId?: string | null;
+  approval?: TradeOrderLineRow['approval'];
+  isLedgerOnly?: boolean;
+  expenseCategoryId?: string | null;
+}
+
+export async function updateLine(tx: Tx, orgId: string, lineId: string, patch: UpdateLinePatch): Promise<void> {
+  await tx
+    .update(tradeOrderLines)
+    .set(patch)
+    .where(and(eq(tradeOrderLines.orgId, orgId), eq(tradeOrderLines.id, lineId)));
+}
+
+export async function deleteLine(tx: Tx, orgId: string, lineId: string): Promise<void> {
+  await tx.delete(tradeOrderLines).where(and(eq(tradeOrderLines.orgId, orgId), eq(tradeOrderLines.id, lineId)));
+}
+
+/** The commissary said yes. Seeding `fulfilled_quantity` from the ask is the caller's job (invariant 4). */
+export async function markAccepted(tx: Tx, orgId: string, id: string, acceptedBy: string): Promise<void> {
+  await tx
+    .update(tradeOrders)
+    .set({ acceptedBy, acceptedAt: sql`now()`, updatedAt: sql`now()` })
+    .where(and(eq(tradeOrders.orgId, orgId), eq(tradeOrders.id, id)));
+}
+
+export async function markReady(tx: Tx, orgId: string, id: string, readyBy: string): Promise<void> {
+  await tx
+    .update(tradeOrders)
+    .set({ readyBy, readyAt: sql`now()`, updatedAt: sql`now()` })
+    .where(and(eq(tradeOrders.orgId, orgId), eq(tradeOrders.id, id)));
+}
+
+/**
+ * ⭐ "Ready" is the commissary's statement that the list is FINAL. A fulfilment edit or a new
+ * proposal after it un-says that, so the order drops back to accepted and ready must be re-declared
+ * — the same discipline as a re-count after a change.
+ */
+export async function clearReady(tx: Tx, orgId: string, id: string): Promise<void> {
+  await tx
+    .update(tradeOrders)
+    .set({ readyBy: null, readyAt: null, updatedAt: sql`now()` })
+    .where(and(eq(tradeOrders.orgId, orgId), eq(tradeOrders.id, id)));
+}
+
+/**
+ * The commissary said no. ⚠️ `status` becomes `void` — 0070's decision: v1's separate `rejected`
+ * and `cancelled` states change nothing about the books, so they are a reason on a void, not a
+ * state. `rejected_at` is what distinguishes the two afterwards.
+ */
+export async function markRejected(
+  tx: Tx,
+  orgId: string,
+  id: string,
+  values: { rejectedBy: string; reason: string },
+): Promise<void> {
+  await tx
+    .update(tradeOrders)
+    .set({
+      status: 'void',
+      rejectedBy: values.rejectedBy,
+      rejectedAt: sql`now()`,
+      rejectReason: values.reason,
+      voidedBy: values.rejectedBy,
+      voidedAt: sql`now()`,
+      voidReason: values.reason,
+      updatedAt: sql`now()`,
+    })
+    .where(and(eq(tradeOrders.orgId, orgId), eq(tradeOrders.id, id)));
+}
+
+export async function setNotes(tx: Tx, orgId: string, id: string, notes: string | null): Promise<void> {
+  await tx
+    .update(tradeOrders)
+    .set({ notes, updatedAt: sql`now()` })
+    .where(and(eq(tradeOrders.orgId, orgId), eq(tradeOrders.id, id)));
 }
 
 /**

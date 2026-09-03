@@ -35,9 +35,17 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
     <main className="mx-auto max-w-5xl p-8">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <h1 className="text-2xl font-semibold">Stock on hand</h1>
-        <Link href="/inventory/low-stock" className="text-sm underline underline-offset-4">
-          Low stock →
-        </Link>
+        <div className="flex gap-4 text-sm">
+          <Link href="/inventory/transfers" className="underline underline-offset-4">
+            Transfers →
+          </Link>
+          <Link href="/inventory/returns" className="underline underline-offset-4">
+            Returns →
+          </Link>
+          <Link href="/inventory/low-stock" className="underline underline-offset-4">
+            Low stock →
+          </Link>
+        </div>
       </div>
       <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
         On-hand is a query over every movement ever recorded — there is no balance column to drift.

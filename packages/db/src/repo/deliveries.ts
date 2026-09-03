@@ -12,8 +12,46 @@
  * (`deliveries_proof_required_check`) precisely because it is system-generated: there is no paper
  * to photograph and the counterpart store's dispatch is the corroboration.
  */
+import { eq } from 'drizzle-orm';
 import { deliveries, deliveryLines, type ShortageReason } from '../../schema/deliveries';
 import type { Tx } from '../client';
+
+export interface DeliveryRow {
+  readonly id: string;
+  readonly orgId: string;
+  readonly storeId: string;
+  readonly supplierId: string | null;
+}
+
+/** ⭐ T-170 invariant 11: a return may not name a supplier the linked delivery did not come from. */
+export async function getDelivery(tx: Tx, id: string): Promise<DeliveryRow | undefined> {
+  const [row] = await tx
+    .select({ id: deliveries.id, orgId: deliveries.orgId, storeId: deliveries.storeId, supplierId: deliveries.supplierId })
+    .from(deliveries)
+    .where(eq(deliveries.id, id));
+  return row;
+}
+
+export interface DeliveryLineRow {
+  readonly id: string;
+  readonly deliveryId: string;
+  readonly itemId: string;
+  readonly receivedQuantity: string | null;
+}
+
+/** ⭐ T-170 invariant 2: a return is capped at `received − already returned` for this line. */
+export async function getDeliveryLine(tx: Tx, id: string): Promise<DeliveryLineRow | undefined> {
+  const [row] = await tx
+    .select({
+      id: deliveryLines.id,
+      deliveryId: deliveryLines.deliveryId,
+      itemId: deliveryLines.itemId,
+      receivedQuantity: deliveryLines.receivedQuantity,
+    })
+    .from(deliveryLines)
+    .where(eq(deliveryLines.id, id));
+  return row;
+}
 
 export interface CommissaryDeliveryLineInput {
   readonly lineNo: string;

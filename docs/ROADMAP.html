@@ -411,9 +411,9 @@
       Phase&nbsp;4 invalidates Phases 2 and 3.
     </p>
     <div class="masthead-meta">
-      <span>As at <b>1 September 2026</b></span>
-      <span>Now in <b>Phase 5 &middot; 16 of 18 built</b></span>
-      <span>Gates <b>typecheck &middot; 879 unit + 1 skipped &middot; 1797 integration &middot; build</b></span>
+      <span>As at <b>2 September 2026</b></span>
+      <span>Now in <b>Phase 3 &middot; 17 of 20 built</b></span>
+      <span>Gates <b>typecheck &middot; 903 unit + 1 skipped &middot; 1914 integration &middot; build</b></span>
     </div>
   </header>
 
@@ -570,8 +570,8 @@
       <div class="wave">
         <div class="wave-head">
           <h3>Phase 3 &mdash; inventory becomes an asset</h3>
-          <span class="chip c-part">14 of 20 built</span>
-          <span class="why">Valuation is <b>FIFO</b>. &#9888; Backend and screens both exist, but nothing here has been driven against real stock yet &mdash; the six specced tasks are the rest of the wave.</span>
+          <span class="chip c-part">17 of 20 built</span>
+          <span class="why">Valuation is <b>FIFO</b>. &#9888; Backend and screens both exist, but nothing here has been driven against real stock yet &mdash; the three remaining specced tasks (T-176/177/178) are the rest of the wave.</span>
         </div>
         <div class="tasks">
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-160</div><div class="task-what">Stock locations and rooms</div><div class="task-note">A branch may hold ONE room, enforced by trigger &mdash; v1&rsquo;s repair tool has nothing left to repair</div></div>
@@ -579,21 +579,21 @@
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-162</div><div class="task-what">FIFO cost layers</div><div class="task-note">A layer per receipt, consumed oldest-first &middot; bible row 110</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-163</div><div class="task-what">The receipt posts its value</div><div class="task-note"><code>2120</code> GRNI, ending the expensing lag &mdash; and the spec had its own variance backwards</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-164</div><div class="task-what">Consumption, wastage and variance</div><div class="task-note">Gross margin stops being wrong: cost follows consumption, not purchase</div></div>
-          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-165</div><div class="task-what">The periodic &rarr; perpetual switch</div><div class="task-note">A dated split, per <b>ADR-011</b></div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-165</div><div class="task-what">The periodic &rarr; perpetual switch</div><div class="task-note">Actually shipped 2 Sep &mdash; DEF-125: this line said &ldquo;done&rdquo; for days while trade-order dispatch still posted the retired periodic shape and touched no stock. Rewired to real <code>dispatchOrder</code>/<code>confirmReceipt</code> &middot; the <code>journal_entry_id</code> CHECK tightening is the one piece still deferred, named not skipped</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-166</div><div class="task-what">Deliveries and receiving</div><div class="task-note">The seam five tasks were waiting for</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-168</div><div class="task-what">Usage, wastage and adjustment</div><div class="task-note">Closes the loop &mdash; Phase 3&rsquo;s exit gate passes on a real one</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-169</div><div class="task-what">Count sessions and commit</div><div class="task-note">One freeze for every writer, and the variance v1 never posted</div></div>
-          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-171</div><div class="task-what">Commissary catalogue and item map</div><div class="task-note">The commissary&rarr;branch pipeline, ledger side</div></div>
-          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-172</div><div class="task-what">Branch order and fulfilment</div><div class="task-note">&nbsp;</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-171</div><div class="task-what">Commissary catalogue and item map</div><div class="task-note">Data layer 29 Aug; writers, read path and screen 3 Sep &mdash; DEF-129: <code>commissary_item_map</code> had NO writer anywhere, so every real internal receipt threw. Links, offerings and the map now have a screen; the link creates the branch&rsquo;s internal customer; mismatched units refused at map time &middot; bulk import still unbuilt, named in §10</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-172</div><div class="task-what">Branch order and fulfilment</div><div class="task-note">Actually built 3 Sep &mdash; DEF-136: this line read &ldquo;done&rdquo; while all eight contract functions were absent. Stages are DERIVED from <code>accepted_at</code>/<code>ready_at</code>, never a new status &middot; migration <code>0121</code> makes &ldquo;fulfilled zero&rdquo; representable and guards dispatch at the DB &middot; five capabilities, two sides of one document resolved at two stores &middot; 30 tests + the full loop live on 9008</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-173</div><div class="task-what">Confirm receipt, cross-store</div><div class="task-note">Posts BOTH stores&rsquo; books at once</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-174</div><div class="task-what">Discrepancy settle and defer</div><div class="task-note">The goods that never arrived, and the <code>1340</code> hole it exposed</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-175</div><div class="task-what">Low stock becomes an order</div><div class="task-note">&starf; A finding replaces v1&rsquo;s block &mdash; nag whoever can act, never block whoever cannot</div></div>
-          <div class="task"><div class="task-id"><span class="dot"></span>T-167</div><div class="task-what">Stock transfers</div><div class="task-note">Spec</div></div>
-          <div class="task"><div class="task-id"><span class="dot"></span>T-170</div><div class="task-what">Supplier returns</div><div class="task-note">Spec</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-167</div><div class="task-what">Stock transfers</div><div class="task-note">Shipped 2 Sep &middot; room-to-room posts NO journal entry, NO layer &mdash; a layer is per STORE (T-162 invariant 6) &middot; composite FK makes &ldquo;same-store&rdquo; a database fact, not an app check</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-170</div><div class="task-what">Supplier returns</div><div class="task-note">Shipped 2 Sep &middot; credit_basis widened to include &lsquo;mixed&rsquo; &mdash; one return can span both an invoiced and an uninvoiced line on the same delivery &middot; extends T-130&rsquo;s payment allocation with <code>creditApplied</code> rather than a parallel allocator</div></div>
           <div class="task"><div class="task-id"><span class="dot"></span>T-176</div><div class="task-what">Production and prep conversion</div><div class="task-note">Spec</div></div>
           <div class="task"><div class="task-id"><span class="dot"></span>T-177</div><div class="task-what">POS item mapping and usage pull</div><div class="task-note">Spec</div></div>
           <div class="task"><div class="task-id"><span class="dot"></span>T-178</div><div class="task-what">Channel wastage disposition</div><div class="task-note">Spec</div></div>
-          <div class="task"><div class="task-id"><span class="dot"></span>T-179</div><div class="task-what">Customer returns and store credit</div><div class="task-note">Spec</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-179</div><div class="task-what">Customer returns and store credit</div><div class="task-note">Shipped 2 Sep &middot; T-170's shape reversed, but reverses THREE things (revenue, cost, stock) not two &middot; found &amp; fixed DEF-128 (a real, pre-existing FIFO partial-reversal bug) along the way &middot; smoketested live on 9008</div></div>
         </div>
       </div>
 
@@ -699,7 +699,7 @@
 
       <div class="phase s-active">
         <div class="ph-num">3</div>
-        <div class="ph-top"><span class="ph-name">Inventory &amp; inventory accounting</span><span class="chip c-active">14 of 20 built</span></div>
+        <div class="ph-top"><span class="ph-name">Inventory &amp; inventory accounting</span><span class="chip c-active">17 of 20 built</span></div>
         <div class="ph-body">Items, locations, stock ledger, receiving, transfers, usage, wastage, counts, <b>FIFO</b> valuation (bible row 110 &mdash; this page said &ldquo;weighted-average&rdquo; until 2026-08-30), COGS postings. Plus the commissary&ndash;branch order pipeline, roughly 24 capabilities that straddled Phases 2 and 3 and were owned by neither. &starf; Planned in one pass (<code>docs/plans/phase-3-inventory.md</code>) and sequenced by <b>ADR-011</b>, which settled the periodic&rarr;perpetual switch as a <em>dated split</em> rather than a retro-fit.</div>
         <div class="ph-gate"><b>Exit gate</b>Inventory control account equals the sum of on-hand valuations; the stock ledger reconciles. &mdash; &starf; <b>MET</b>: T-168 passes it on a real consumption loop, and <code>/inventory</code> renders the check live (FIFO layers against 1310+1320+1330).</div>
       </div>

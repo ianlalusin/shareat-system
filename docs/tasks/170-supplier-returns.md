@@ -1,12 +1,27 @@
 # T-170 — Supplier returns: the goods go back, and we hold a credit
 
-> **Status:** SPEC, 2026-08-29. ⭐ **RESPECIFIED the same day** — Ian answered the open question
-> this spec was built to raise, and the answer changed the posting (§2).
-> **Depends on:** T-161, T-162, T-163, T-166 (deliveries), T-130 (AP — ⚠️ and this task **extends**
-> its allocation, §5).
+> **Status:** ✅ **BUILT 2026-09-02.** Migration `0118`,
+> `packages/db/schema/supplier-returns.ts`, `packages/domain/src/stock/supplier-returns.ts`,
+> `apps/erp/src/app/inventory/returns/`. 16 integration tests + 3 worked-examples fixtures
+> (`supplier.return-grni`, `supplier.return-credit`, `supplier.credit-applied`), all green against
+> real Postgres. **Smoketested live on 9008**: recorded a 5kg return against an uninvoiced
+> delivery, confirmed the posting was `Dr 2120 (GRNI) / Cr 1310 (Inventory)` for ₱450 by reading
+> the journal lines directly, watched the returnable-quantity table drop 15→10, then voided the
+> same return and watched it revert 10→15 and the row disappear from further void. ⭐ **Two spec
+> corrections, both reported, not silently worked around**: `credit_basis` widened from
+> `'grni' | 'supplier_advance'` to include `'mixed'`, since one return can span both bases across
+> different lines on one delivery (§3 amended); and `refundSupplierCredit` added as a small
+> necessary function beyond this spec's own Contract, needed by invariant 8's cash-refund posting.
+> Extended `recordPayment` (T-130, confirmed already built despite a stale status line — DEF-122)
+> with `creditApplied` per §5, rather than a parallel allocator. **Found DEF-124** in passing:
+> `stock_layers.invoiceLineId`/`isProvisional` is set once at layer creation and never updated by
+> any domain function — `credit_basis` derivation works around it per-test with a raw update; the
+> real gap is in T-163's invoice-arrival path, not here.
+> **Depends on:** T-161, T-162, T-163, T-166 (deliveries), T-130 (AP — extended, §5, per above).
 > **Decided:** bible **row 166**. **v1 read at source** — `supplier-return.actions.ts`,
 > `INVENTORY_GAPS.md:120-135`. `docs/discovery/14` §G.
-> **Sibling:** T-179 is the same shape pointing the other way — a customer returning to us.
+> **Sibling:** T-179 is the same shape pointing the other way — a customer returning to us. Not
+> yet started.
 
 ## 1. Goal
 

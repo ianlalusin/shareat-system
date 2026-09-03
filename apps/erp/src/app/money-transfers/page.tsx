@@ -1,15 +1,9 @@
 import Link from 'next/link';
 import { requireSession } from '../../lib/session';
+import type { PickerOption } from '../../components/two-way-picker';
 import { createMoneyTransferAction, voidMoneyTransferAction } from './actions';
-import {
-  CUSTODIAN_LABEL,
-  listRecentTransfers,
-  listStores,
-  listTransferableAccounts,
-  peso,
-  type AccountOption,
-  type StoreOption,
-} from './lib';
+import { RecordTransferForm } from './RecordTransferForm';
+import { CUSTODIAN_LABEL, listRecentTransfers, listStores, listTransferableAccounts, peso } from './lib';
 
 export const metadata = { title: 'Money transfers — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -48,6 +42,17 @@ export default async function MoneyTransfersPage({
   const byStore = stores
     .map((s) => ({ store: s, accounts: accounts.filter((a) => a.storeId === s.id) }))
     .filter((g) => g.accounts.length > 0);
+
+  // ⭐ Built server-side, WITH `peso` already applied — a plain function cannot cross the
+  // server/client boundary as a prop, so `RecordTransferForm` (a client component, for
+  // `TwoWayPicker`'s From/To state) receives finished labels, never the formatter itself.
+  const accountOptions: PickerOption[] = byStore.flatMap((g) =>
+    g.accounts.map((a) => ({
+      id: a.id,
+      label: `${a.name} — ${peso(a.balance)}`,
+      groupLabel: `${g.store.name} (${g.store.code})`,
+    })),
+  );
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
@@ -162,84 +167,7 @@ export default async function MoneyTransfersPage({
           </p>
         </div>
 
-        <form action={createMoneyTransferAction} className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="From — money left here">
-              <AccountPicker name="fromMoneyAccountId" byStore={byStore} />
-            </Field>
-            <Field label="To — money landed here">
-              <AccountPicker name="toMoneyAccountId" byStore={byStore} />
-            </Field>
-
-            {/*
-              ⭐ TWO amounts, deliberately — see T-139 §3.
-
-              v1 asks for one "amount" and adds the fee to the source; this project's own posting
-              doc narrates the same legs the other way round. Both readings are real here (a bank
-              wire adds its fee to the source; a cash-out deducts it from the target), so a single
-              box would silently mean different things on different days. Both figures are
-              observable — one on each statement — which is what makes a transfer checkable.
-            */}
-            <Field label="Amount that left" hint="What the source account was reduced by">
-              <input
-                name="amountOut"
-                type="number"
-                step="0.01"
-                min="0.01"
-                required
-                inputMode="decimal"
-                placeholder="0.00"
-                className={INPUT}
-              />
-            </Field>
-            <Field
-              label="Amount that arrived"
-              hint="Leave blank if nothing was deducted — the usual case"
-            >
-              <input
-                name="amountIn"
-                type="number"
-                step="0.01"
-                min="0.01"
-                inputMode="decimal"
-                placeholder="Same as above"
-                className={INPUT}
-              />
-            </Field>
-
-            <Field label="Date">
-              <input
-                name="transferDate"
-                type="date"
-                required
-                defaultValue={today}
-                className={INPUT}
-              />
-            </Field>
-            <Field label="Reference" hint="The bank or wallet reference, if there is one">
-              <input name="reference" maxLength={120} className={INPUT} />
-            </Field>
-          </div>
-
-          <Field label="Notes">
-            <input name="notes" className={INPUT} />
-          </Field>
-
-          <p className="text-xs text-neutral-400 dark:text-neutral-600">
-            Any gap between the two amounts is booked as a fee to{' '}
-            <span className="font-mono">6870</span> Bank charges — a real expense, not a rounding
-            difference. Money that arrives without leaving somewhere is income, and cannot be
-            recorded here. A transfer between two stores also records what one owes the other, so
-            the group&apos;s books still balance while each store carries its own position.
-          </p>
-
-          <button
-            type="submit"
-            className="rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-          >
-            Record transfer
-          </button>
-        </form>
+        <RecordTransferForm action={createMoneyTransferAction} options={accountOptions} today={today} />
       </section>
 
       {/* ── History ──────────────────────────────────────────────────────────────────── */}
@@ -331,46 +259,3 @@ export default async function MoneyTransfersPage({
   );
 }
 
-const INPUT =
-  'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-
-function AccountPicker({
-  name,
-  byStore,
-}: {
-  name: string;
-  byStore: { store: StoreOption; accounts: AccountOption[] }[];
-}) {
-  return (
-    <select name={name} required defaultValue="" className={INPUT}>
-      <option value="">Choose an account…</option>
-      {byStore.map((g) => (
-        <optgroup key={g.store.id} label={`${g.store.name} (${g.store.code})`}>
-          {g.accounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name} — {peso(a.balance)}
-            </option>
-          ))}
-        </optgroup>
-      ))}
-    </select>
-  );
-}
-
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
-      {children}
-      {hint && <span className="text-xs text-neutral-400 dark:text-neutral-600">{hint}</span>}
-    </label>
-  );
-}

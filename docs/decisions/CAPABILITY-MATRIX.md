@@ -57,10 +57,22 @@ they need weekly, the boundary is wrong.
 | `adjust_inventory` | store | ✅ | ✅ | ✅ | ✗ | v1's `canAdjustInventory`. An adjustment is a write-off in disguise |
 | `record_wastage` | store | ✅ | ✅ | ✅ | ✅ | Recording waste must be frictionless, or it goes unrecorded |
 | `charge_staff_for_discrepancy` | store | ✅ | ✅ | ✅ | ✗ | v1's `canChargeStaff`. Takes money off a person — never staff-level |
+| `transfer_stock` | store | ✅ | ✅ | ✅ | ✅ | T-167. Room-to-room within one store — a floor worker moves crates without finding a manager first, same bar as `record_stock_movement` |
+| `void_transfer` | store | ✅ | ✅ | ✅ | ✗ | T-167. Voiding is supervisory — same asymmetry as `void_expense` |
+| `record_supplier_return` | store | ✅ | ✅ | ✅ | ✅ | T-170. One act by one person when the goods physically leave — same bar as `record_stock_movement` |
+| `void_supplier_return` | store | ✅ | ✅ | ✅ | ✗ | T-170. Voiding is supervisory — same asymmetry as `void_transfer`/`void_expense` |
+| `apply_supplier_credit` | store | ✅ | ✅ | ✅ | ✗ | T-170. Spending the `1240` credit inside `recordPayment` — checked separately from `record_ap_payment` even though only manager+ ever holds that one either |
+| `record_customer_return` | store | ✅ | ✅ | ✅ | ✅ | T-179. One act by one person when the goods physically arrive — the AR mirror of `record_supplier_return`, same bar |
+| `void_customer_return` | store | ✅ | ✅ | ✅ | ✗ | T-179. Voiding is supervisory — same asymmetry as `void_supplier_return` |
+| `apply_customer_credit` | store | ✅ | ✅ | ✅ | ✗ | T-179. Spending the `2140` credit inside `recordCollection` — the AR mirror of `apply_supplier_credit` |
+| `refund_customer` | store | ✅ | ✅ | ✅ | ✗ | T-179. Paying out cash against a return is a financial decision distinct from recording the goods coming back |
 | `confirm_receipt` | store | ✅ | ✅ | ✅ | ✅ | T-173. ⭐ **Both stores are legitimate callers** — a commissary-side and a branch-side actor, from opposite grants. A branch cook signs for the crates; requiring a manager on site is the rule people work around by sharing a login. The real control is the two-sided STORE check in `confirmReceipt`, not the role |
 | `resolve_trade_discrepancy` | store | ✅ | ✅ | ✅ | ✗ | T-174. ⛔ Deciding goods were lost, or charging a named person, is a judgement with a posting behind it — same class as `adjust_inventory`. ⚠️ The goods are the COMMISSARY's asset, so `resolveDiscrepancy` also refuses the branch outright, whatever the role |
 | `set_item_threshold` | store | ✅ | ✅ | ✅ | ✅ | T-175, per v1. ⭐ The person who notices the shelf is empty is the person on the floor. An unset threshold is **invisible** — the item simply never appears on the low-stock list — so friction here has no counter-pressure and thresholds silently stay unset |
 | `post_order_message` | store | ✅ | ✅ | ✅ | ✅ | T-175. Either store on the order may talk about it; the thread is append-only, so the worst a wrong message can do is be answered |
+| `place_branch_order` | store | ✅ | ✅ | ✅ | ✅ | T-172 (DEF-136, 2026-09-03). The BRANCH side — draft, lines, submit, answer a proposed substitution, withdraw before dispatch. ⭐ Staff-open: the person who notices the shelf is empty is the one who orders, same bar as `set_item_threshold`; v1 gates none of the order flow by role. Store-scoped to the **branch** (`requested_by_store_id`), so a commissary-only login cannot edit a branch's ask — that is invariant 10's "each field has one owner", enforced by WHICH store the capability resolves at |
+| `fulfil_branch_order` | store | ✅ | ✅ | ✅ | ✅ | T-172. The COMMISSARY side — accept, reject, adjust quantity/rate/room, propose a substitution, mark ready. Staff-open: packing crates is floor work. Store-scoped to the **commissary** (`store_id`), so a branch login cannot touch fulfilment fields. Nothing posts |
+| `dispatch_branch_order` | store | ✅ | ✅ | ✅ | ✗ | T-172. ⛔ **The posting event** — stock leaves the commissary into `1340` at FIFO cost. Not staff, same asymmetry as `dispatch_wholesale_order`. ⚠️ Separate from `confirm_receipt` (phase plan §5.4): dispatch and receipt are two acts by two stores, and a person may hold one without the other |
 
 ## Suppliers, buyers and credit
 
@@ -116,6 +128,8 @@ they need weekly, the boundary is wrong.
 | `manage_store_settings` | store | ✅ | ✅ | ✅ | ✗ | *"Store settings tied to operation"* — Ian's words |
 | `set_cash_policy` | store | ✅ | ✅ | **✗** | ✗ | The remittance cadence and un-remitted ceiling (T-152). Ian, 2026-08-29: *"configurable by admin."* ⛔ **Manager is deliberately ✗ while `manage_store_settings` is ✅** — the ceiling is the number a store's cash custody is *measured against*, so whoever is measured must not move it. A manager running late could otherwise raise it and watch the finding vanish. A risk limit is not an operating setting |
 | `manage_price_lists` | org | ✅ | ✅ | ✗ | ✗ | Pricing is a commercial decision, not an operational one |
+| `manage_commissary_offerings` | store | ✅ | ✅ | ✅ | ✗ | T-171 (DEF-129, 2026-09-03). What THIS commissary offers, the manual cost of last resort, and the link that says which branch may order here. **Store-scoped to the commissary**; a branch manager cannot edit another store's offerings (T-171 invariant 9). Manager+, same bar as `manage_items` — ⚠️ NOT admin-only like `manage_price_lists`: this is operational setup, not a commercial price |
+| `manage_commissary_map` | store | ✅ | ✅ | ✅ | ✗ | T-171. Which of the branch's OWN items a commissary line becomes on arrival, the explicit ledger-only decision, and the receiving expense category. **Store-scoped to the branch** — the correspondence is the branch's to own (invariant 9). ⚠️ `commissary_item_map` had no writer anywhere in the app until 2026-09-03 (DEF-129); every real internal receipt threw. ⛔ `import_commissary_catalogue` (T-171 §9) is deliberately NOT declared yet: the bulk import is unbuilt, and a capability with no caller is one nobody has proved refuses anyone |
 | `manage_fixed_assets` | org | ✅ | ✅ | ✗ | ✗ | |
 | `run_depreciation` | org | ✅ | ✅ | ✗ | ✗ | **Scheduled, not clicked** — v1's stopped scheduler is DEF-044 |
 | `manage_prepaid_items` | org | ✅ | ✅ | ✗ | ✗ | T-125. Separate from `manage_fixed_assets` on purpose — the asset register and the insurance policies are not the same trust |

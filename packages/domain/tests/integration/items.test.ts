@@ -36,6 +36,7 @@ import {
   setStoreSellability,
   recordInvoice,
   undeclareSupplierItem,
+  updateItem,
   verifyInvoice,
   voidInvoice,
 } from '@shareat/domain';
@@ -685,5 +686,51 @@ describe('sellability: the bento box, the wholesale pack, and Milkis', () => {
     );
     // ⚠️ A price list is an ORG-wide rate card, so one store selling it wholesale makes it quotable.
     expect(await asOrg(f.orgId, (tx) => itemsRepo.sellableWholesaleAnywhere(tx, f.orgId, sauce.id))).toBe(true);
+  });
+
+  // ⭐ DEF-130. Until 2026-09-03 nothing outside this file ever set a flag: the create screen never
+  // passed them and there was no edit screen at all, so every item made through the app was
+  // sold to nobody. These two tests cover what the item screen now reads and writes.
+  it('⭐ DEF-130 — the org default can be changed on an EXISTING item, and every store follows it', async () => {
+    const f = await fixture('flagedit');
+    const item = await asOrg(f.orgId, (tx) =>
+      createItem(tx, f.superAdmin, { code: 'MILKIS-1', name: `Milkis ${uid('m')}`, kind: 'retail', baseUnit: 'pcs' }),
+    );
+    const before = await asOrg(f.orgId, (tx) => itemsRepo.sellabilityAt(tx, f.orgId, item.id, f.storeId));
+    expect(before!.sellableWholesale).toBe(false);
+
+    // An ADMIN may do this — manage_items, not approve_item. Creating is super-admin only;
+    // deciding what an existing item is sold as is ordinary master-data upkeep.
+    await asOrg(f.orgId, (tx) =>
+      updateItem(tx, f.admin, item.id, { isPurchasable: true, sellableRetail: true, sellableWholesale: true }),
+    );
+    const after = await asOrg(f.orgId, (tx) => itemsRepo.sellabilityAt(tx, f.orgId, item.id, f.storeId));
+    expect(after).toMatchObject({ isPurchasable: true, sellableRetail: true, sellableWholesale: true, overridden: false });
+
+    // Staff may not.
+    await expect(
+      asOrg(f.orgId, (tx) => updateItem(tx, f.staff, item.id, { sellableWholesale: false })),
+    ).rejects.toThrow(/manage_items/);
+  });
+
+  it('⭐ DEF-130 — a store’s raw override is listable, nulls and all, and vanishes when cleared', async () => {
+    const f = await fixture('overridelist');
+    const item = await asOrg(f.orgId, (tx) =>
+      createItem(tx, f.superAdmin, { code: 'SAUCE-3', name: `Sauce ${uid('s')}`, kind: 'raw_material', baseUnit: 'ltr' }),
+    );
+    expect(await asOrg(f.orgId, (tx) => itemsRepo.listStoreSellabilityOverrides(tx, f.orgId, item.id))).toEqual([]);
+
+    await asOrg(f.orgId, (tx) =>
+      setStoreSellability(tx, f.admin, { storeId: f.storeId, itemId: item.id, sellableWholesale: true, note: 'made here' }),
+    );
+    const rows = await asOrg(f.orgId, (tx) => itemsRepo.listStoreSellabilityOverrides(tx, f.orgId, item.id));
+    expect(rows).toHaveLength(1);
+    // ⚠️ The untouched flags come back NULL — "no opinion" — never as a frozen copy of the default.
+    expect(rows[0]).toMatchObject({
+      storeId: f.storeId, isPurchasable: null, sellableRetail: null, sellableWholesale: true, note: 'made here',
+    });
+
+    await asOrg(f.orgId, (tx) => clearStoreSellability(tx, f.admin, { storeId: f.storeId, itemId: item.id }));
+    expect(await asOrg(f.orgId, (tx) => itemsRepo.listStoreSellabilityOverrides(tx, f.orgId, item.id))).toEqual([]);
   });
 });

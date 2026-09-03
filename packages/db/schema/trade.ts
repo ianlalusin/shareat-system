@@ -149,6 +149,21 @@ export const tradeOrders = pgTable(
       'trade_orders_credit_override_shape_check',
       sql`(${t.creditOverrideBy} is null) = (${t.creditOverrideReason} is null)`,
     ),
+    /**
+     * ⭐ T-172 (migration `0121`). The stage columns 0070 added, given shapes: ready implies
+     * accepted, accepted implies a BRANCH order, and each timestamp travels with its person. A
+     * rejection carries who and why, and voids the row — "rejected" is a derived stage of `void`,
+     * exactly as "submitted" / "accepted" / "ready" are derived stages of `confirmed`. ⛔ There
+     * are deliberately no new status values; see `0121`'s header.
+     */
+    check(
+      'trade_orders_branch_stage_check',
+      sql`(${t.readyAt} is null or ${t.acceptedAt} is not null) and (${t.acceptedAt} is null or ${t.requestedByStoreId} is not null) and ((${t.acceptedAt} is null) = (${t.acceptedBy} is null)) and ((${t.readyAt} is null) = (${t.readyBy} is null))`,
+    ),
+    check(
+      'trade_orders_rejected_shape_check',
+      sql`((${t.rejectedAt} is null) = (${t.rejectedBy} is null)) and ((${t.rejectedAt} is null) = (${t.rejectReason} is null)) and (${t.rejectedAt} is null or ${t.status} = 'void')`,
+    ),
     index('trade_orders_org_customer_idx').on(t.orgId, t.customerId),
     index('trade_orders_org_store_date_idx').on(t.orgId, t.storeId, t.orderDate),
     uniqueIndex('trade_orders_ar_charge_key').on(t.arChargeId).where(sql`${t.arChargeId} is not null`),
@@ -241,7 +256,19 @@ export const tradeOrderLines = pgTable(
   (t) => [
     check('trade_order_lines_quantity_positive_check', sql`${t.quantity} > 0`),
     check('trade_order_lines_rate_non_negative_check', sql`${t.rate} >= 0`),
-    check('trade_order_lines_total_positive_check', sql`${t.lineTotal} > 0`),
+    /**
+     * ⭐ T-172 (migration `0121`). A FULFILLED quantity of zero is a real answer — v1: *"zero is
+     * the commissary's way of saying 'we couldn't fulfill this line'"* — and a rejected
+     * substitution is zero-fulfilled too. Such a line totals zero; every other line still cannot.
+     * ⚠️ `quantity` above stays > 0: it is the branch's ASK (or the proposed quantity of an
+     * addition), never the commissary's answer — `fulfilled_quantity` is.
+     */
+    check(
+      'trade_order_lines_total_positive_check',
+      sql`${t.lineTotal} > 0 or (${t.fulfilledQuantity} is not null and ${t.fulfilledQuantity} = 0 and ${t.lineTotal} = 0)`,
+    ),
+    check('trade_order_lines_fulfilled_quantity_check', sql`${t.fulfilledQuantity} is null or ${t.fulfilledQuantity} >= 0`),
+    check('trade_order_lines_requested_quantity_check', sql`${t.requestedQuantity} is null or ${t.requestedQuantity} > 0`),
     check('trade_order_lines_dispatch_cost_check', sql`${t.dispatchCost} is null or ${t.dispatchCost} >= 0`),
     check('trade_order_lines_suggested_quantity_check', sql`${t.suggestedQuantity} is null or ${t.suggestedQuantity} > 0`),
     /** ⭐ One line per item per INTERNAL order — what makes the auto-append idempotent. */

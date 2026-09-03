@@ -104,8 +104,8 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
           // working PIN is exactly the kind of convenience that ships by accident.
           <p className="rounded border border-dashed border-neutral-300 p-3 text-xs text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
             <strong>Dev only:</strong> <code>npm run dev:seed</code> creates{' '}
-            <code>111111</code> (admin), <code>222222</code> (manager) and <code>333333</code>{' '}
-            (cashier) for every store.
+            <code>000000</code> (super-admin), <code>111111</code> (admin), <code>222222</code>{' '}
+            (manager) and <code>333333</code> (cashier) for every store.
           </p>
         )}
       </div>

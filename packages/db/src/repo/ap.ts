@@ -486,6 +486,32 @@ export async function positionsBySupplier(tx: Tx, orgId: string): Promise<Map<st
   return map;
 }
 
+/**
+ * ⭐ T-170's `supplierCreditBalance` — the `1240` twin of `positionOf`'s `2110` query, but on the
+ * OTHER side: `1240` is an asset, so its normal balance is `debit - credit`, not `credit - debit`.
+ * A return DEBITS `1240` (T-170 §3b: `Dr 1240 / Cr inventory` — the credit we now hold). Spending
+ * it in `recordPayment` CREDITS `1240` back down (`Dr 2110 / Cr 1240`). A balance of zero means
+ * nothing is currently held or owed either way.
+ */
+export async function advancesPositionOf(
+  tx: Tx,
+  orgId: string,
+  supplierId: string,
+): Promise<string> {
+  const [row] = (await tx.execute(sql`
+    select coalesce(sum(jl.debit - jl.credit), 0)::text as balance
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId}
+      and jl.party_type = ${PARTY_TYPE}
+      and jl.party_id = ${supplierId}
+      and a.code = ${ADVANCES_CODE}
+      and je.status <> 'draft'
+  `)) as unknown as Record<string, string>[];
+  return Number(row?.balance ?? 0).toFixed(2);
+}
+
 export interface OpenItem {
   expenseId: string;
   supplierId: string;

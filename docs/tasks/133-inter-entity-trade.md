@@ -1,9 +1,17 @@
 # T-133 — Inter-entity trade: the internal half of the one order flow
 
 > **Status:** ✅ **BUILT 2026-08-28, then CORRECTED the same day.** ⚠️ The first cut moved `1330`
-> inventory between stores, which assumes perpetual inventory this system does not have — Ian's
-> question about a processed meat slab exposed it within the hour. It moves COST now (§3), and
+> inventory between stores, which assumes perpetual inventory this system did not have then — Ian's
+> question about a processed meat slab exposed it within the hour. It moved COST after that (§3), and
 > `5175 Cost transferred to branches` is the account the chart had demanded since T-102b.
+> ⚠️ **§3's four-leg periodic shape is itself retired**: T-165 (2026-09-02) made the system
+> perpetual, so dispatch now relieves the commissary's layers into `1340` at cost and receipt is where
+> both stores post (`1250`/`2150` at the transfer value, branch `1310`, `5175` carrying only the
+> margin) — see `packages/domain/src/trade/index.ts`'s header. **No screen until 2026-09-03**
+> (DEF-138); the internal path now has one — `/trade/orders`, with a per-line signed-for quantity and
+> shortage reason at receipt — smoketested live with a short receipt and the postings verified in the
+> database. `commissary_item_map` still has no writer (DEF-129): a real internal receipt needs the
+> map row first.
 > **Depends on:** T-132 (the order document), T-129 (`customers` and their derived treatment),
 > T-139 (`money_transfers`, which already posts the four-leg cross-store shape).
 > **Research: already done and NOT repeated.** `docs/discovery/19-b2b-order-to-cash.md` §7 read
