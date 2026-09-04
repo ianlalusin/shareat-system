@@ -589,3 +589,101 @@ export async function voidChannelSettlement(
   if (tx) return run(tx);
   return transaction(run);
 }
+
+// =====================================================================================
+// ⭐ T-178 — exposing this module's parsed deductions for order-wastage's settlement matcher.
+//
+// ⛔ ADDS a read path only; nothing above this line changes. `wastage/settlement-match.ts` is
+// pure and must not build a second settlement parser (T-178 §4) — these two functions are the
+// ONLY way it ever sees a settlement's own figures, composed entirely from the repo calls already
+// used above (`getById`, `listSettlements`, `channelConfig`), never a new query shape.
+// =====================================================================================
+
+export interface PostedSettlementSummary {
+  settlementId: string;
+  storeId: string;
+  /** The channel's NAME, not its id — order_wastages.channel is free text matched by name (see
+   *  that schema file's own comment on why there is no channel_id FK there). */
+  channel: string;
+  businessDate: string;
+  grossAmount: string;
+  outstandingCleared: string;
+  netDeposited: string;
+  deductions: SettlementDeductions;
+  variance: string;
+  settlementGain: string;
+}
+
+function toSummary(row: {
+  id: string; storeId: string; channelName: string; businessDate: string;
+  grossAmount: string; outstandingCleared: string; netDeposited: string;
+  commission: string; marketing: string; platformFee: string; vatOnFees: string;
+  withholdingTax: string; penalty: string; variance: string; settlementGain: string;
+}): PostedSettlementSummary {
+  return {
+    settlementId: row.id,
+    storeId: row.storeId,
+    channel: row.channelName,
+    businessDate: row.businessDate,
+    grossAmount: row.grossAmount,
+    outstandingCleared: row.outstandingCleared,
+    netDeposited: row.netDeposited,
+    deductions: {
+      commission: row.commission,
+      marketing: row.marketing,
+      platformFee: row.platformFee,
+      vatOnFees: row.vatOnFees,
+      withholdingTax: row.withholdingTax,
+      penalty: row.penalty,
+    },
+    variance: row.variance,
+    settlementGain: row.settlementGain,
+  };
+}
+
+/** One channel-day's POSTED settlement, if one exists — read-gated the same as a preview. */
+export async function findPostedSettlementForChannelDay(
+  tx: Tx | null,
+  actor: Actor,
+  input: { channelId: string; businessDate: string },
+): Promise<PostedSettlementSummary | null> {
+  const run = async (trx: Tx): Promise<PostedSettlementSummary | null> => {
+    const config = await R.channelConfig(trx, actor.orgId, input.channelId);
+    if (!config) return null;
+    await authorize(trx, actor, 'record_ar_collection', { storeId: config.storeId });
+    const posted = await R.postedSettlementFor(trx, actor.orgId, input.channelId, input.businessDate);
+    if (!posted) return null;
+    const row = await R.getById(trx, actor.orgId, posted.id);
+    if (!row) return null;
+    return toSummary({ ...row, channelName: config.name, businessDate: row.businessDate });
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/**
+ * Every POSTED settlement for a store, most recent first — what the wastage screen hands to the
+ * pure matcher alongside a store's open wastages. Composes `listSettlements` (already read-gated
+ * by nothing itself — see below) with `getById` per row for the deduction breakdown that list
+ * view does not carry.
+ */
+export async function listPostedSettlementsForStore(
+  tx: Tx | null,
+  actor: Actor,
+  input: { storeId: string; limit?: number },
+): Promise<PostedSettlementSummary[]> {
+  const run = async (trx: Tx): Promise<PostedSettlementSummary[]> => {
+    await authorize(trx, actor, 'record_ar_collection', { storeId: input.storeId });
+    const listed = await R.listSettlements(trx, actor.orgId, { storeId: input.storeId, limit: input.limit ?? 100 });
+    const posted = listed.filter((s) => s.status === 'posted');
+    const out: PostedSettlementSummary[] = [];
+    for (const s of posted) {
+      const row = await R.getById(trx, actor.orgId, s.id);
+      if (!row) continue;
+      out.push(toSummary({ ...row, channelName: s.channelName, businessDate: row.businessDate }));
+    }
+    return out;
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}

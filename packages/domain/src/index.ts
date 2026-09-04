@@ -73,3 +73,10 @@ export * from './people';
 export * from './attendance';
 // T-181 — the Lane A publisher, transport-free (Phase 4, lane B).
 export * from './sync';
+// T-176 — production: slab -> slice, recipe -> batch, and the payroll lock.
+export * from './production';
+export * from './production/validate';
+export * from './production/unit-conversion';
+// T-178 — order/channel wastage disposition.
+export * from './wastage/orders';
+export * from './wastage/settlement-match';

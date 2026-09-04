@@ -913,6 +913,41 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
   },
 
   // =========================================================================================
+  // production_conversion — v2-only, T-176. A slicing run or a prep batch posts as ONE stock
+  // transaction: inputs out, outputs in, cost carried across — a conversion, not a purchase or
+  // a sale. The output's account is derived from its OWN item kind (INVENTORY_ACCOUNT_BY_ITEM_
+  // KIND), never hardcoded — see DEF-154/DEF-155 on why this differs from the task spec's own
+  // worked example.
+  // =========================================================================================
+  {
+    id: 'production.conversion.slice',
+    sourceType: 'production_slice',
+    title: 'Slab -> slice, with a yield gap and labour',
+    narrative: '100 kg slab @ ₱300/kg is cut into 97 kg of three sliced products, ₱1,000 ' +
+      'labour. The 3 kg gap is valued at the input rate and lands in 5300, never inflating the ' +
+      'output cost.',
+    frequency: 1,
+    input: {
+      itemId: 'SLAB-BEEF',
+      inputQuantity: '100.000',
+      inputUnitCost: '300.0000',
+      outputQuantity: '97.000',
+      labourCost: '1000.00',
+    },
+    expect: [
+      D('1310', '30100.00', null, { lineMemo: 'sliced output value' }),
+      D('5300', '900.00', null, { lineMemo: 'yield gap' }),
+      C('1310', '30000.00', null, { lineMemo: 'slab relief' }),
+      C('6100', '1000.00', null, { lineMemo: 'labour capitalised' }),
+    ],
+    entryDate: '2026-08-10',
+    trap: 'Spec-defect note (DEF-154/DEF-155): the account is 1310, not 1330 as the task spec\'s ' +
+      'own §3 states, and these exact figures correct that spec\'s own §9 test 1 numbers, which ' +
+      'do not reconcile with its stated formula — this fixture uses the mathematically ' +
+      'consistent figures instead.',
+  },
+
+  // =========================================================================================
   // wastage_expense — 16 legs. v2 wastage debits 5300 and credits inventory DIRECTLY —
   // COA-ALIGNMENT §2's "Retire" table explicitly retires v1's net-zero memo-pair
   // (income__wastage_writeoff_contra): "a real economic entry, no memo needed."
@@ -934,6 +969,53 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
     trap: 'Do NOT port v1\'s net-zero contra-memo pair forward (`income__wastage_writeoff_contra` ' +
       'is explicitly RETIRED). This is a real, single economic entry: an expense against an ' +
       'asset, not an expense against an income-side memo that cancels itself out.',
+  },
+
+  // =========================================================================================
+  // order_wastage — v2-only, T-178. A refunded or remade CHANNEL order — order-economics and
+  // staff accountability, NOT stock wastage (see wastage_expense above): no stock movement, no
+  // layer. 1220 is the credit in every case that posts; platform_paid posts nothing.
+  // =========================================================================================
+  {
+    id: 'wastage.order-absorbed',
+    sourceType: 'order_wastage',
+    title: 'Order wastage — the store eats a ₱150 Foodpanda refund',
+    narrative: 'A Foodpanda order is refunded and nobody is charged for it — the store absorbs ' +
+      'the ₱150 as a real cost.',
+    frequency: 1,
+    input: { channel: 'foodpanda', amount: '150.00', disposition: 'absorbed' },
+    expect: [
+      D('5300', '150.00', null, { lineMemo: 'order wastage — absorbed' }),
+      C('1220', '150.00', { type: 'channel', id: 'CH-FOODPANDA' }, { lineMemo: 'order wastage — absorbed' }),
+    ],
+    entryDate: '2026-08-15',
+  },
+  {
+    id: 'wastage.order-charged',
+    sourceType: 'order_wastage',
+    title: 'Order wastage — split 60/40 between two staff',
+    narrative: 'A ₱100 remade dine-in order is split 60/40 between the two staff whose mistake ' +
+      'caused it.',
+    frequency: 1,
+    input: {
+      channel: 'dine_in',
+      amount: '100.00',
+      disposition: 'charged',
+      allocations: [
+        { personId: 'STAFF-A', percent: 60 },
+        { personId: 'STAFF-B', percent: 40 },
+      ],
+    },
+    expect: [
+      D('1230', '60.00', { type: 'employee', id: 'STAFF-A' }, { lineMemo: 'order wastage — charged' }),
+      D('1230', '40.00', { type: 'employee', id: 'STAFF-B' }, { lineMemo: 'order wastage — charged' }),
+      C('1220', '100.00', { type: 'channel', id: 'CH-DINEIN' }, { lineMemo: 'order wastage — charged' }),
+    ],
+    entryDate: '2026-08-15',
+    trap: 'Gated on Phase 5 (staff advances) — refused with a named error until ' +
+      'isPhase5StaffAdvancesAvailable() is true. platform_paid posts nothing at all: T-150\'s ' +
+      'settlement already cleared 1220 for the day, proved not to double-clear against this in ' +
+      'order-wastage.test.ts.',
   },
 
   // =========================================================================================

@@ -38,6 +38,10 @@ import { organizations } from './organizations';
  * The jobs the scheduler performs. One row per job per org per run.
  *
  * `mirror_publish`/`inbox_relay` — T-204, the Firestore sync relay (closes DEF-132/DEF-134).
+ * `order_wastage_backstop` — T-178, the 15-day auto-charge/absorb backstop for tracked order
+ * wastages. ⚠️ SHARED with the T-140 pattern: adding a job here also needs migration 0126's
+ * `scheduler_runs_job_check` widened to match — see that migration's own comment on the risk of a
+ * second lane widening the same constraint independently.
  */
 export const SCHEDULER_JOBS = [
   'depreciation',
@@ -45,6 +49,7 @@ export const SCHEDULER_JOBS = [
   'attendance_sweep',
   'mirror_publish',
   'inbox_relay',
+  'order_wastage_backstop',
 ] as const;
 export type SchedulerJob = (typeof SCHEDULER_JOBS)[number];
 
@@ -99,7 +104,7 @@ export const schedulerRuns = pgTable(
 
     check(
       'scheduler_runs_job_check',
-      sql`${t.job} in ('depreciation', 'amortisation', 'attendance_sweep', 'mirror_publish', 'inbox_relay')`,
+      sql`${t.job} in ('depreciation', 'amortisation', 'attendance_sweep', 'mirror_publish', 'inbox_relay', 'order_wastage_backstop')`,
     ),
     check('scheduler_runs_outcome_check', sql`${t.outcome} in ('ok', 'partial', 'failed')`),
     check('scheduler_runs_period_shape_check', sql`${t.period} ~ '^[0-9]{4}-[0-9]{2}$'`),

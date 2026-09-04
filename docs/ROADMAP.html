@@ -411,9 +411,9 @@
       Phase&nbsp;4 invalidates Phases 2 and 3.
     </p>
     <div class="masthead-meta">
-      <span>As at <b>2 September 2026</b></span>
-      <span>Now in <b>Phase 3 &middot; 17 of 20 built</b></span>
-      <span>Gates <b>typecheck &middot; 903 unit + 1 skipped &middot; 1914 integration &middot; build</b></span>
+      <span>As at <b>4 September 2026</b></span>
+      <span>Now in <b>Phase 3 &middot; 19 of 20 built</b></span>
+      <span>Gates <b>typecheck &middot; 942 unit + 1 skipped &middot; 2117 integration &middot; build</b></span>
     </div>
   </header>
 
@@ -451,6 +451,36 @@
         <div class="stop-away">~18 weeks away</div>
         <div class="stop-what"><b>Books-first cutover.</b> 2026 pilot data is purged, 2027 stays, and v2 becomes the system of record.</div>
       </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="callout warn">
+      <h3>Production infrastructure shipped 4 Sep &mdash; not yet actually deployed</h3>
+      <p>
+        <b>T-205</b> landed same-day: a dedicated new droplet (<b>159.223.46.224</b>, not the old shared
+        159.223.78.207 that also runs ERPNext + the POS archive DB &mdash; Ian&rsquo;s call, removing the
+        capacity and port-sharing constraints the first draft was written against), the DO Managed Postgres
+        cluster, the GitHub Actions deploy workflow, the long-running <code>shareat-erp</code> systemd unit,
+        the month-end timer pair that had only ever been a table row, and a one-time <code>provision.sh</code>
+        Ian ran by hand. SSH auth and the deploy key are live and tested against the real box.
+        <b>&#9888; The deploy workflow has not yet been triggered for a first real run</b> &mdash; the
+        infrastructure exists and is reachable; nothing has actually shipped to it through CI yet.
+      </p>
+      <p>
+        Two real bugs were caught by testing against the live droplet rather than trusting the written code:
+        <code>dotenv</code>/<code>tsx</code> were <code>devDependencies</code>, which would have broken
+        <code>next start</code> and all three scheduled jobs under the bible&rsquo;s own
+        <code>npm ci --omit=dev</code> rule; and the <code>shareat</code> user&rsquo;s <code>nologin</code>
+        shell blocked the deploy workflow&rsquo;s own non-interactive SSH commands.
+      </p>
+      <p>
+        Still open: <b>DEF-153</b> &mdash; the bible&rsquo;s own infra summary table (line 598) and
+        ADR-002&rsquo;s overview/&sect;5 still describe the rejected Cloud SQL + Firebase App Hosting
+        architecture, contradicting &sect;13 row 61, which supersedes that with Option B. Correcting the
+        bible text is an Opus-planner edit (rule 14) that T-205 deliberately did not make itself &mdash;
+        still unresolved.
+      </p>
     </div>
   </section>
 
@@ -544,7 +574,7 @@
           <span class="why">Wave 3 raised the receivable and nothing had ever cleared it.</span>
         </div>
         <div class="tasks">
-          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-150</div><div class="task-what">Channel settlement &mdash; clears the <code>1220</code> Foodpanda / Grab receivable, with signed deductions, variance and gain, and cross-store loan deduction</div><div class="task-note">Domain shipped 28 Aug, <strong>screen 3 Sep</strong> &mdash; it had no caller for five days (DEF-137) &middot; 74% of v1&rsquo;s AR volume &middot; withholding tax is an EXPENSE, and no creditable-tax asset is seeded &middot; <strong>&#9888; the two account-code decisions (<code>1220</code> vs <code>1221</code>/<code>1222</code>, and <code>6420</code>) are live in code and still unconfirmed by Ian</strong></div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-150</div><div class="task-what">Channel settlement &mdash; clears the <code>1220</code> Foodpanda / Grab receivable, with signed deductions, variance and gain, and cross-store loan deduction</div><div class="task-note">Domain shipped 28 Aug, <strong>screen 3 Sep</strong> &mdash; it had no caller for five days (DEF-137) &middot; 74% of v1&rsquo;s AR volume &middot; withholding tax is an EXPENSE, and no creditable-tax asset is seeded &middot; the two account-code decisions (<code>1220</code> vs <code>1221</code>/<code>1222</code>, and <code>6420</code>) were live in code since 28 Aug and <strong>confirmed by Ian 4 Sep (DEF-139)</strong> &mdash; no posting-shape change, the Done-when checklist and register row now record the confirmation</div></div>
         </div>
       </div>
 
@@ -560,7 +590,7 @@
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-135</div><div class="task-what">Integrity findings (OIL) &mdash; the standing books watchdog</div><div class="task-note">Shipped 28 Aug &middot; the finding is DERIVED, only the acknowledgement is stored &middot; &starf; <b>and it had no SCREEN until 30 Aug</b> (DEF-084) &mdash; <code>/findings</code> now renders all eleven kinds; accepting a hard one does NOT unblock a close</div></div>
           <div class="task t-active"><div class="task-id"><span class="dot"></span>T-136</div><div class="task-what">Cash custody &mdash; a requirements umbrella, not a task</div><div class="task-note"><b>Two-thirds shipped under other numbers</b> &mdash; &sect;1/&sect;7/&sect;8 as T-143, &sect;5b as T-144. Assessed 29 Aug (&sect;9): &sect;4 specced as <b>T-152</b>, &sect;2 recommended against as designed, &sect;6 escalated &mdash; <b>DEF-082, nothing ever debits 2160</b></div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-152</div><div class="task-what">Remittance cadence and the un-remitted ceiling</div><div class="task-note">Shipped 29 Aug &middot; completes T-143, which shipped pooling and left the ceiling unenforced &middot; <b>three</b> detectors in T-135&rsquo;s layer, incl. DEF-082&rsquo;s service-charge alarm &middot; found <b>DEF-084</b>: T-135 had no screen at all</div></div>
-          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-137</div><div class="task-what">Senior / PWD statutory register</div><div class="task-note">Shipped 30 Aug &middot; &starf; the lane <b>disproved its own spec first</b>: no SC/PWD identity is captured anywhere, in software or on paper &mdash; a live compliance exposure, not a modernisation</div></div>          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-153</div><div class="task-what">The till float &mdash; a side pocket, not a balance</div><div class="task-note">Shipped 30 Aug &middot; <code>1115</code>, a target the pot is judged against, and it blocks at zero &middot; Ian&rsquo;s worked example is a test to the peso</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-137</div><div class="task-what">Senior / PWD statutory register</div><div class="task-note">Shipped 30 Aug &middot; &starf; the lane <b>disproved its own spec first</b>: no SC/PWD identity is captured anywhere, in software or on paper &mdash; a live compliance exposure, not a modernisation &middot; &#9888; the screen shipped with <b>no nav entry</b> (DEF-139) &mdash; fixed 4 Sep, one line in <code>nav.tsx</code></div></div>          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-153</div><div class="task-what">The till float &mdash; a side pocket, not a balance</div><div class="task-note">Shipped 30 Aug &middot; <code>1115</code>, a target the pot is judged against, and it blocks at zero &middot; Ian&rsquo;s worked example is a test to the peso</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-186</div><div class="task-what">The till custody shift &mdash; who held the drawer, and what they counted</div><div class="task-note">Shipped 30 Aug &middot; &starf; <b>it makes T-143&rsquo;s stated premise true</b> &mdash; that module assumed &ldquo;the till is counted daily and signed&rdquo; and there was nowhere to record a count. Grain is <em>till &times; handover</em>, NOT attendance&rsquo;s <em>person &times; day</em>: a split shift makes ONE attendance row and TWO custody periods. &starf; Names the person v1 cannot &mdash; v1 stores <code>cashierName</code> as a <em>nullable free-text string</em>. A counted short charges <code>1230</code>; a counted OVER posts <b>nothing at all</b> (tip box), asserted by a test. &#9888; Found <b>DEF-104</b>: 187 tests failed on a green tree because 13 migrations were permanently skipped in the test database</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-188</div><div class="task-what">Supplier master data &mdash; and the record you could not correct</div><div class="task-note">Shipped 31 Aug &middot; &starf; <b>the assessment changed the build</b>. A read-only probe of all 129 live v1 suppliers disproved the reason this task was picked (<code>bankAccounts</code> is filled on <b>3.9%</b>) and found the real gap: <b>a supplier could be created and never EDITED</b> &mdash; <code>updateSupplier</code> written in full with <b>no caller anywhere</b> (DEF-106). Also fixed two nav links to 404s (DEF-107). &#9888; Bank details are three COLUMNS, not the child table Odoo and ERPNext use &mdash; 5 suppliers, one account each. <code>paymentOptions</code> refused: 1.6% filled, both rows say &ldquo;Cash&rdquo;</div></div><div class="task"><div class="task-id"><span class="dot"></span>T-187</div><div class="task-what">Service-charge distribution &mdash; clearing 2160</div><div class="task-note">&#9888; <b>Designed in T-136 &sect;6, unbuilt.</b> <b>DEF-082</b>: every sales day with a service charge CREDITS <code>2160</code> and nothing in the tree ever debits it &mdash; RA 11360 requires distribution at intervals of at most sixteen days. Ian, 29 Aug: <em>&ldquo;for now no we dont charge but im planning&rdquo;</em>, which is why T-152 shipped the ALARM and not the document. &#9888; The alarm fires permanently once service charge is switched on &mdash; <b>do not enable it in POS before this exists</b></div></div>
 
@@ -570,8 +600,8 @@
       <div class="wave">
         <div class="wave-head">
           <h3>Phase 3 &mdash; inventory becomes an asset</h3>
-          <span class="chip c-part">17 of 20 built</span>
-          <span class="why">Valuation is <b>FIFO</b>. &#9888; Until <b>3 Sep</b> this line read &ldquo;backend and screens both exist&rdquo; while <code>docs/PENDING-VERIFICATION.md</code> in the same repo said the opposite (DEF-135): the engine for rooms, receiving, usage and counts was green for five days with <b>no screen and no caller</b>. All four screens now exist and have each been driven live on 9008 against real stock, and building them found two engine bugs the tests had hidden (DEF-141, DEF-142). The three remaining specced tasks (T-176/177/178) are the rest of the wave.</span>
+          <span class="chip c-part">19 of 20 built</span>
+          <span class="why">Valuation is <b>FIFO</b>. &#9888; Until <b>3 Sep</b> this line read &ldquo;backend and screens both exist&rdquo; while <code>docs/PENDING-VERIFICATION.md</code> in the same repo said the opposite (DEF-135): the engine for rooms, receiving, usage and counts was green for five days with <b>no screen and no caller</b>. All four screens now exist and have each been driven live on 9008 against real stock, and building them found two engine bugs the tests had hidden (DEF-141, DEF-142). T-176 and T-178 shipped 4 Sep as two concurrent lanes on isolated test databases, sharing no tables; T-177 (POS mapping) is the one task left, now unblocked since it depends on T-176&rsquo;s recipe/unit-conversion module.</span>
         </div>
         <div class="tasks">
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-160</div><div class="task-what">Stock locations and rooms</div><div class="task-note">A branch may hold ONE room, enforced by trigger &mdash; v1&rsquo;s repair tool has nothing left to repair &middot; &#9888; <b>had no writer and no screen until 3 Sep</b> (DEF-135): <code>/inventory/locations</code>, the service, and migration <code>0122</code> making &ldquo;a room holding stock cannot be deactivated&rdquo; a trigger &middot; live on Malvar</div></div>
@@ -590,9 +620,9 @@
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-175</div><div class="task-what">Low stock becomes an order</div><div class="task-note">&starf; A finding replaces v1&rsquo;s block &mdash; nag whoever can act, never block whoever cannot</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-167</div><div class="task-what">Stock transfers</div><div class="task-note">Shipped 2 Sep &middot; room-to-room posts NO journal entry, NO layer &mdash; a layer is per STORE (T-162 invariant 6) &middot; composite FK makes &ldquo;same-store&rdquo; a database fact, not an app check</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-170</div><div class="task-what">Supplier returns</div><div class="task-note">Shipped 2 Sep &middot; credit_basis widened to include &lsquo;mixed&rsquo; &mdash; one return can span both an invoiced and an uninvoiced line on the same delivery &middot; extends T-130&rsquo;s payment allocation with <code>creditApplied</code> rather than a parallel allocator</div></div>
-          <div class="task"><div class="task-id"><span class="dot"></span>T-176</div><div class="task-what">Production and prep conversion</div><div class="task-note">Spec</div></div>
-          <div class="task"><div class="task-id"><span class="dot"></span>T-177</div><div class="task-what">POS item mapping and usage pull</div><div class="task-note">Spec</div></div>
-          <div class="task"><div class="task-id"><span class="dot"></span>T-178</div><div class="task-what">Channel wastage disposition</div><div class="task-note">Spec</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-176</div><div class="task-what">Production and prep conversion</div><div class="task-note">Shipped 4 Sep &middot; slab &rarr; slice posts as ONE transaction &middot; DEF-093 (v1&rsquo;s cook path never converts units &mdash; a 500g line deducted 500 KILOS) closed structurally: ONE conversion module, hard-blocked when a pairing can&rsquo;t convert &middot; the &sect;7 slicer-payment lock lives on the production record as a derived query, Phase 5&rsquo;s table stubbed &mdash; the coupling point is designed, not discovered &middot; &#9888; two spec-defects found and logged rather than silently matched: DEF-154 (the spec&rsquo;s own worked numbers don&rsquo;t reconcile with its formula) and DEF-155 (sliced output posts to <code>1310</code>, not the spec&rsquo;s stated <code>1330</code> &mdash; the existing account router already routes <code>meat_sliced</code> there, and a <code>prepped</code> item kind for <code>1330</code> was never added, out of this task&rsquo;s scope)</div></div>
+          <div class="task"><div class="task-id"><span class="dot"></span>T-177</div><div class="task-what">POS item mapping and usage pull</div><div class="task-note">Spec &middot; depends on T-176 (recipe explosion + unit conversion), now shipped</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-178</div><div class="task-what">Channel wastage disposition</div><div class="task-note">Shipped 4 Sep &middot; order-economics, not stock &mdash; NO layer, NO movement &middot; <code>1220</code> clears in every posting case; <code>platform_paid</code> posts nothing, proven not to double-clear against T-150&rsquo;s own settlement &middot; 15-day backstop (allocated split &rarr; Monitor &rarr; store absorbs) registered as a real T-140 job, uniform including disputed records &middot; &#9888; the staff-charge disposition is gated behind one flag pending Ian&rsquo;s go-ahead &mdash; the machinery it needs already exists, refused today on purpose, degrading the backstop to store-absorbed and saying so on the record</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-179</div><div class="task-what">Customer returns and store credit</div><div class="task-note">Shipped 2 Sep &middot; T-170's shape reversed, but reverses THREE things (revenue, cost, stock) not two &middot; found &amp; fixed DEF-128 (a real, pre-existing FIFO partial-reversal bug) along the way &middot; smoketested live on 9008</div></div>
         </div>
       </div>
@@ -604,19 +634,22 @@
           <span class="why">&starf; Its golden master runs on <b>550 real v1 sessions</b>, which is how DEF-088 was found: <b>v1 pays for shifts nobody worked</b> &mdash; 40.4 excess hours in one month, one session present 1.6 minutes and paid 5.</span>
         </div>
         <div class="tasks">
-          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-154</div><div class="task-what">Positions and employments</div><div class="task-note">The staff master record</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-154</div><div class="task-what">Positions and employments</div><div class="task-note">The staff master record &middot; &#9940; had <b>no live caller anywhere</b> until T-202 (4 Sep, DEF-131) &mdash; and nothing created a <code>persons</code> row either</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-155</div><div class="task-what">The shift day and attendance config</div><div class="task-note">05:00&ndash;05:00, and it is NOT the business day &middot; policy is effective-dated, so a day is judged by the policy that governed IT</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-156</div><div class="task-what">Attendance punches</div><div class="task-note">Append-only, one writer, replay is a silent success</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-157</div><div class="task-what">Adjudication</div><div class="task-note">Integer minutes throughout &mdash; hours are money one multiplication away</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-157b</div><div class="task-what">Open-hour anchor and overtime</div><div class="task-note">&starf; Under an hour credits NOTHING; an hour to half-day raises unverified OT a manager must accept</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-158</div><div class="task-what">Attendance adjustments</div><div class="task-note">Append-and-supersede, never an edit</div></div>
-          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-159</div><div class="task-what">Firestore rules and device identity</div><div class="task-note">The terminal signs in AS ITSELF &mdash; a device principal, not a person</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-159</div><div class="task-what">Firestore rules and device identity</div><div class="task-note">The terminal signs in AS ITSELF &mdash; a device principal, not a person &middot; &#9940; <code>createFirestoreTerminalDriver()</code> had <b>no caller anywhere in <code>apps/</code></b> until T-203 (4 Sep, DEF-133)</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-180</div><div class="task-what">The two-lane spike</div><div class="task-note">&starf; The spike Phase&nbsp;0 owed and never built (DEF-092). Written before anything relied on it</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-181</div><div class="task-what">Lane A publisher</div><div class="task-note">Transactional outbox</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-182</div><div class="task-what">Lane B ingestor</div><div class="task-note">And a quarantine that heals</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-183</div><div class="task-what">Quarantine and lane health</div><div class="task-note"><code>/attendance/lane</code> &middot; &ldquo;not measured&rdquo; is told apart from &ldquo;nothing waiting&rdquo;</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-184</div><div class="task-what">The offline clock terminal</div><div class="task-note">&starf; Phase 4&rsquo;s exit gate, met in a real browser &middot; found that <code>await setDoc()</code> HANGS forever offline &mdash; in the one condition the feature exists for</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-185</div><div class="task-what">Credential enrolment and mirror</div><div class="task-note">Card and fingerprint; never a PIN</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-202</div><div class="task-what">Staff onboarding &mdash; <code>/staff</code>, <code>/staff/hire</code>, <code>/staff/[employmentId]</code></div><div class="task-note">Shipped 4 Sep &middot; closes DEF-131 &middot; create a person + employment, assign positions, end an employment</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-203</div><div class="task-what">Terminal &amp; credential admin &mdash; <code>/attendance/terminals</code>, <code>/staff/[employmentId]/credentials</code></div><div class="task-note">Shipped 4 Sep &middot; closes DEF-133 &middot; one-time pairing token shown as text + QR, never re-fetchable &middot; live-smoketested against real <code>shareat-hub-v2</code>: minted, re-paired, revoked</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-204</div><div class="task-what">The Firestore sync relay actually runs</div><div class="task-note">Shipped 4 Sep &middot; closes DEF-132/134 &middot; <code>runFirestoreRelay</code> drains the mirror outbox and ingests the inbox against REAL Firestore for the first time ever; a fresh punch now bootstraps its own attendance day the moment it lands &middot; found &amp; fixed <b>DEF-151</b> along the way: a blank <code>FIREBASE_SERVICE_ACCOUNT_KEY</code> was winning over the file path via <code>??</code>, failing every real driver call since both factories shipped &middot; &#9888; cadence every 2 minutes, the systemd timer is written but <b>not installed</b> &mdash; that&rsquo;s T-205</div></div>
         </div>
       </div>
 
@@ -699,7 +732,7 @@
 
       <div class="phase s-active">
         <div class="ph-num">3</div>
-        <div class="ph-top"><span class="ph-name">Inventory &amp; inventory accounting</span><span class="chip c-active">17 of 20 built</span></div>
+        <div class="ph-top"><span class="ph-name">Inventory &amp; inventory accounting</span><span class="chip c-active">19 of 20 built</span></div>
         <div class="ph-body">Items, locations, stock ledger, receiving, transfers, usage, wastage, counts, <b>FIFO</b> valuation (bible row 110 &mdash; this page said &ldquo;weighted-average&rdquo; until 2026-08-30), COGS postings. Plus the commissary&ndash;branch order pipeline, roughly 24 capabilities that straddled Phases 2 and 3 and were owned by neither. &starf; Planned in one pass (<code>docs/plans/phase-3-inventory.md</code>) and sequenced by <b>ADR-011</b>, which settled the periodic&rarr;perpetual switch as a <em>dated split</em> rather than a retro-fit.</div>
         <div class="ph-gate"><b>Exit gate</b>Inventory control account equals the sum of on-hand valuations; the stock ledger reconciles. &mdash; &starf; <b>MET</b>: T-168 passes it on a real consumption loop, and <code>/inventory</code> renders the check live (FIFO layers against 1310+1320+1330).</div>
       </div>
@@ -966,7 +999,13 @@
     ADR-006 (period close) &middot; ADR-007 (pilot then purge).<br>
     Status verified against the working tree on 1 September 2026, with all four gates run, not quoted. Phase 1&rsquo;s two
     gaps were confirmed by inspection, not taken from the plan. The v1&rarr;v2 parity figures were derived by reading
-    both schemas at source; the verdicts on each field are judged, and the method is stated with them.
+    both schemas at source; the verdicts on each field are judged, and the method is stated with them.<br><br>
+    Refreshed 4 September 2026 against the four commits landed since (DEF-131&ndash;134/151 &middot; DEF-139 &middot;
+    the two ADR-002 amendments) and the new, in-progress <code>docs/tasks/205-first-production-deployment.md</code>.
+    This pass is a documentation sync, not a fresh gate run &mdash; the unit/integration figures above are the
+    numbers <code>7d46bea</code>&rsquo;s own report gave, carried forward rather than independently re-verified;
+    a live session was mid-way through T-205 at the time of this edit, so nothing under <code>docs/ops/</code>,
+    <code>.github/workflows/</code>, or its own uncommitted files was touched here.
   </footer>
 
 </div>

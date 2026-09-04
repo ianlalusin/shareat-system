@@ -22,6 +22,9 @@ const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
       // cleared it. Beside Sales days on purpose: that screen creates the receivable, this one
       // ends it.
       { href: '/channel-settlements', label: 'Channel settlements' },
+      // T-178. Beside Channel settlements on purpose: that screen clears 1220 for a channel-day
+      // as a whole; this one disposes of one refunded or remade order within it.
+      { href: '/wastage', label: 'Order wastage' },
       { href: '/remittance', label: 'Remittance' },
       { href: '/till', label: 'Till custody' },
       // ⭐ DEF-131 — the FK every Phase 4/5 table depends on had no live path that created one
@@ -47,6 +50,8 @@ const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
       { href: '/inventory/deliveries', label: 'Deliveries' },
       { href: '/inventory/usage', label: 'Usage & wastage' },
       { href: '/inventory/counts', label: 'Counts' },
+      // T-176, 2026-09-04 — a slicing run or prep batch posts as one stock transaction.
+      { href: '/inventory/production', label: 'Production' },
       { href: '/inventory/low-stock', label: 'Low stock' },
       { href: '/commissary/orders', label: 'Branch orders' },
       // ⭐ DEF-129 — `commissary_item_map` had no writer anywhere until 2026-09-03, so every real

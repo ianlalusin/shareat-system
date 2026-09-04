@@ -24,6 +24,7 @@
 import { APP_ROLE, schedulerRepo, storesRepo, transaction, type SchedulerFailure, type Tx } from '@shareat/db';
 import { runDepreciationAsSystem } from '../fixed-assets/depreciate';
 import { runAmortisationAsSystem } from '../prepaid';
+import { runOrderWastageBackstop } from '../wastage/orders';
 
 import { sql } from 'drizzle-orm';
 import { sweepStore } from '../attendance/sweep';
@@ -42,7 +43,13 @@ export interface MonthEndOptions {
 export interface JobOutcome {
   orgId: string;
   orgName: string;
-  job: 'depreciation' | 'amortisation' | 'attendance_sweep' | 'mirror_publish' | 'inbox_relay';
+  job:
+    | 'depreciation'
+    | 'amortisation'
+    | 'attendance_sweep'
+    | 'mirror_publish'
+    | 'inbox_relay'
+    | 'order_wastage_backstop';
   period: string;
   posted: number;
   skipped: number;
@@ -546,6 +553,78 @@ async function runInboxRelayForOrg(
     // re-delivered quarantine upsert just bumps `attempts`. Retrying the whole org next run is the
     // safe, simple choice; a Firestore write outage is worth surfacing loudly (`error`, non-zero
     // exit), not swallowed per-event.
+    const message = err instanceof Error ? err.message : String(err);
+    await transaction((tx) => schedulerRepo.failRun(tx, runId, message));
+    return { ...base, posted: 0, skipped: 0, failed: 0, failures: [], error: message };
+  }
+}
+
+// =====================================================================================
+
+/**
+ * ⭐ **T-178 — the 15-day order-wastage backstop, on the same scheduler as everything above.**
+ *
+ * DEF-044's own lesson, restated for a new module: a job that exists but that nothing on any host
+ * actually calls is indistinguishable, from the outside, from a job that was never built. This is
+ * the ONLY thing that fires `runOrderWastageBackstop` — there is no separate cron path (task §11).
+ *
+ * ⚠️ Hourly-shaped like `attendance_sweep`, not monthly: a wastage's 15-day clock does not line up
+ * with a calendar month, so `period` records the `YYYY-MM` this run happened IN, same convention
+ * as the sweep and the Firestore relay above — never a period being closed.
+ */
+export interface OrderWastageBackstopResult {
+  outcomes: JobOutcome[];
+  hadFailures: boolean;
+}
+
+export async function runOrderWastageBackstopSweep(
+  options: { orgId?: string; trigger?: 'cron' | 'manual'; nowMs?: number } = {},
+): Promise<OrderWastageBackstopResult> {
+  const trigger = options.trigger ?? 'cron';
+  const nowMs = options.nowMs ?? Date.now();
+  const period = new Date(nowMs + 8 * 3_600_000).toISOString().slice(0, 7);
+
+  const orgs = await transaction((tx) => schedulerRepo.listOrgsToRun(tx, options.orgId));
+  const outcomes: JobOutcome[] = [];
+  for (const org of orgs) {
+    outcomes.push(await runOrderWastageBackstopForOrg(org, period, trigger, nowMs));
+  }
+  return { outcomes, hadFailures: outcomes.some((o) => o.failed > 0 || o.error) };
+}
+
+async function runOrderWastageBackstopForOrg(
+  org: { id: string; name: string },
+  period: string,
+  trigger: 'cron' | 'manual',
+  nowMs: number,
+): Promise<JobOutcome> {
+  const runId = await transaction((tx) =>
+    schedulerRepo.startRun(tx, { orgId: org.id, job: 'order_wastage_backstop', period, trigger }),
+  );
+  const base = { orgId: org.id, orgName: org.name, job: 'order_wastage_backstop' as const, period };
+
+  try {
+    // ⚠️ One transaction for the WHOLE org's due wastages, not one per row — invariant 11's
+    // period-lock refusal and invariant 12's idempotency both flow through the shared `postEntry`
+    // called inside; a single wastage whose channel is unconfigured is caught per-row inside
+    // `runOrderWastageBackstop` (`failures`), which does not abort the rest of the batch.
+    const result = await transaction((tx) =>
+      runOrderWastageBackstop(tx, org.id, { now: new Date(nowMs), postedBy: null }),
+    );
+    const failures: SchedulerFailure[] = result.failures.map((f) => ({
+      subjectId: f.wastageId,
+      subjectName: `order wastage ${f.wastageId}`,
+      reason: f.reason,
+    }));
+    await transaction((tx) =>
+      schedulerRepo.finishRun(tx, runId, {
+        postedCount: result.outcomes.length,
+        skippedCount: 0,
+        failures,
+      }),
+    );
+    return { ...base, posted: result.outcomes.length, skipped: 0, failed: failures.length, failures };
+  } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await transaction((tx) => schedulerRepo.failRun(tx, runId, message));
     return { ...base, posted: 0, skipped: 0, failed: 0, failures: [], error: message };

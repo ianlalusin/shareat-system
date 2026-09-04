@@ -17,6 +17,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
+import { persons } from './persons';
 
 /**
  * How often a store physically carries its cash to the office. T-152, bible row 129.
@@ -91,6 +92,15 @@ export const stores = pgTable(
      * bounds the pile becomes compulsory.
      */
     unremittedCeiling: numeric('unremitted_ceiling', { precision: 14, scale: 2 }),
+
+    /**
+     * ⭐ T-178. The store's default responsible party for a TRACKED order wastage with no named
+     * staffer — "a tracked wastage always has a chargeable owner from the moment it exists...
+     * so a manager re-tags the real person later rather than starting from nothing" (T-178 §3).
+     * Nullable: an unassigned Monitor is not a failure — it is the last rung of the backstop's
+     * own fallback order (allocated split -> Monitor 100% -> store absorbs net-zero).
+     */
+    wastageMonitorPersonId: uuid('wastage_monitor_person_id').references(() => persons.id, { onDelete: 'restrict' }),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),

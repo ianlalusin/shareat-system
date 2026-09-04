@@ -87,6 +87,9 @@ export async function listFindings(
     ...(await findingsRepo.inventoryControlDoesNotMatchValuation(tx, orgId)),
     // T-179 — a customer store credit sitting unredeemed. The AR mirror of supplierCreditAgeing.
     ...(await findingsRepo.customerCreditAgeing(tx, orgId)),
+    // ⭐ T-178 — the tell that the 15-day order-wastage backstop is not running: a wastage a
+    // scheduled run should have closed and did not.
+    ...(await findingsRepo.orderWastageOpenPastBackstop(tx, orgId)),
   ];
 
   const acks = await findingsRepo.liveAcknowledgements(tx, orgId);

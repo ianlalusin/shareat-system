@@ -66,7 +66,16 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'Configuration. With ADR-008 this is a real tenancy boundary, not a placeholder — a ' +
       'franchise is an organization.',
   },
-  stores: { class: 'keep', reason: 'Configuration — the branch list.' },
+  stores: {
+    // ⭐ T-178: keep_shell, not plain keep. Every other column is configuration and survives
+    // untouched (the branch list itself). `wastage_monitor_person_id` alone is cleared — the task
+    // spec's own instruction (§11) — because who held that pilot-era responsibility is an
+    // assignment to re-decide for production, the same treatment a reconciliation anchor gets,
+    // not a fact about the store itself.
+    class: 'keep_shell',
+    reason: 'Configuration — the branch list. wastage_monitor_person_id is cleared and re-assigned at cutover.',
+    clearColumns: ['wastage_monitor_person_id'],
+  },
   persons: {
     class: 'keep',
     reason:
@@ -872,6 +881,20 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     reason:
       'A posting document. The receivable it cleared is replaced by the cutover opening balance.',
   },
+  // ---- T-178: order/channel wastage disposition ------------------------------------------
+  order_wastages: {
+    // Purge, same reasoning as channel_settlements directly above: a posting document that
+    // clears (or explains not clearing) a channel receivable the opening balance replaces. It
+    // also points at a sales_day and journal_entry, both themselves purged.
+    class: 'purge',
+    reason:
+      'A posting/decision document over a channel receivable superseded by the cutover opening ' +
+      'balance, exactly like channel_settlements and ar_charges. Not carried forward.',
+  },
+  order_wastage_allocations: {
+    class: 'purge',
+    reason: 'Child of order_wastages (ON DELETE CASCADE); purges with its parent for the same reason.',
+  },
   ar_charges: {
     class: 'purge',
     reason:
@@ -907,6 +930,30 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
   etl_runs: { class: 'purge', notBefore: '2027-01-31', reason: 'As etl_source_documents — the run history that dates the evidence.' },
   etl_quarantine: { class: 'purge', notBefore: '2027-01-31', reason: 'As etl_source_documents — what could not be converted, and why.' },
   etl_reconciliation: { class: 'purge', notBefore: '2027-01-31', reason: 'As etl_source_documents — the proof nothing landed went missing.' },
+
+  // ---- T-176: production — slab -> slice, recipe -> batch --------------------------------
+  production_recipes: {
+    class: 'keep',
+    reason:
+      'A repeatable prep conversion is a standing instruction ("this is how we cut a slab"), ' +
+      'configuration exactly like expense_categories or sales_channels — not a transaction the ' +
+      'pilot produced.',
+  },
+  production_recipe_lines: {
+    class: 'keep',
+    reason: 'The detail of a recipe, hanging off it by CASCADE. Same class as its parent.',
+  },
+  production_records: {
+    class: 'purge',
+    reason:
+      'Operational — one real conversion event, the same class as stock_movements and ' +
+      'journal_entries. Replaced wholesale by the 2027-01-01 opening entry (row 106); no pilot ' +
+      'production run survives the cutover.',
+  },
+  production_record_lines: {
+    class: 'purge',
+    reason: 'The detail of a record, hanging off it by CASCADE. Same class as its parent.',
+  },
 };
 
 /** Tables the purge must never touch even if classified — belt and braces around views. */

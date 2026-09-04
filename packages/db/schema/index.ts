@@ -94,3 +94,9 @@ export * from './inbox-quarantine';
 
 // T-185 — clock-in credentials: card and fingerprint (Phase 4, lane B).
 export * from './attendance-credentials';
+
+// T-178 — order/channel wastage disposition: order_wastages, order_wastage_allocations.
+export * from './order-wastage';
+
+// T-176 — production: slab -> slice, recipe -> batch, and the payroll lock.
+export * from './production';

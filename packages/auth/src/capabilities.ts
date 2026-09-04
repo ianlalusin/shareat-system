@@ -209,6 +209,26 @@ export type Capability =
   | 'manage_prepaid_items'
   | 'run_amortisation'
   | 'manage_chart_of_accounts'
+  // T-176 — production: slab -> slice, recipe -> batch, and the payroll lock. Manager+ on all
+  // three, same asymmetry as post_usage/void_usage_record — a floor worker DRAFTS under
+  // record_stock_movement; posting, editing a posted record, and voiding are all supervisory.
+  | 'post_production'
+  | 'edit_posted_production'
+  | 'void_production'
+  // T-178 — order/channel wastage disposition. Recording is staff-open, same bar as
+  // record_wastage/record_statutory_discount — frictionless, or it goes unrecorded. Resolving and
+  // charging are supervisory, same asymmetry as resolve_trade_discrepancy/
+  // charge_staff_for_discrepancy — a disposition is a judgement with a posting behind it, and
+  // taking money off a named person is never staff-level.
+  /** T-178. Staff-open: the person at the counter logs a refunded or remade order. */
+  | 'record_order_wastage'
+  /** T-178. ⛔ Manager+: deciding platform_paid / absorbed / charged is a judgement call. */
+  | 'resolve_order_wastage'
+  /** T-178. ⛔ Manager+, same asymmetry as charge_staff_for_discrepancy — a SECOND, stricter gate
+   *  on top of resolve_order_wastage, checked only when the chosen disposition is `charged`. */
+  | 'charge_staff_for_wastage'
+  /** T-178. ⛔ Manager+: undoing a backstop's own auto-charge within its 30-day window. */
+  | 'reverse_auto_charge'
   // Platform — super-admin only
   | 'cross_org_access'
   | 'view_franchise_sales';
@@ -293,6 +313,13 @@ export const CAPABILITIES: readonly Capability[] = [
   'manage_prepaid_items',
   'run_amortisation',
   'manage_chart_of_accounts',
+  'post_production',
+  'edit_posted_production',
+  'void_production',
+  'record_order_wastage',
+  'resolve_order_wastage',
+  'charge_staff_for_wastage',
+  'reverse_auto_charge',
   'cross_org_access',
   'view_franchise_sales',
 ];
@@ -435,6 +462,18 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   manage_prepaid_items: 'org',
   run_amortisation: 'org',
   manage_chart_of_accounts: 'org',
+
+  // T-176. STORE-scoped, same bar as post_usage/void_usage_record: a production run belongs to
+  // one store's stock and its own fiscal period.
+  post_production: 'store',
+  edit_posted_production: 'store',
+  void_production: 'store',
+
+  // T-178. Every order wastage carries a store_id and posts a store-scoped 1220/5300/1230 leg.
+  record_order_wastage: 'store',
+  resolve_order_wastage: 'store',
+  charge_staff_for_wastage: 'store',
+  reverse_auto_charge: 'store',
 
   cross_org_access: 'platform',
   view_franchise_sales: 'platform',
@@ -632,6 +671,23 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   manage_prepaid_items: { super_admin: true, admin: true, manager: false, staff: false },
   run_amortisation: { super_admin: true, admin: true, manager: false, staff: false },
   manage_chart_of_accounts: { super_admin: true, admin: true, manager: false, staff: false },
+
+  // T-176. Manager+, all three — posting, editing a posted record, and voiding all move stock
+  // and the books; same asymmetry as post_usage/void_usage_record (staff drafts, manager posts).
+  post_production: { super_admin: true, admin: true, manager: true, staff: false },
+  edit_posted_production: { super_admin: true, admin: true, manager: true, staff: false },
+  void_production: { super_admin: true, admin: true, manager: true, staff: false },
+
+  // T-178. Recording is staff-open — frictionless, or it goes unrecorded, same bar as
+  // record_wastage/record_statutory_discount. Resolving and charging are supervisory: a
+  // disposition is a judgement with a posting behind it, and charge_staff_for_wastage is a
+  // SECOND, stricter gate on top of resolve_order_wastage — same asymmetry as
+  // resolve_trade_discrepancy/charge_staff_for_discrepancy. Reversing an auto-charge is
+  // supervisory too, same bar as reverse_entry.
+  record_order_wastage: { super_admin: true, admin: true, manager: true, staff: true },
+  resolve_order_wastage: { super_admin: true, admin: true, manager: true, staff: false },
+  charge_staff_for_wastage: { super_admin: true, admin: true, manager: true, staff: false },
+  reverse_auto_charge: { super_admin: true, admin: true, manager: true, staff: false },
 
   cross_org_access: { super_admin: true, admin: false, manager: false, staff: false },
   view_franchise_sales: { super_admin: true, admin: false, manager: false, staff: false },

@@ -80,6 +80,13 @@ they need weekly, the boundary is wrong.
 | `void_usage_record` | store | ✅ | ✅ | ✅ | ✗ | T-168. Voiding is supervisory — same asymmetry as `void_transfer` / `void_expense` |
 | `open_count_session` | store | ✅ | ✅ | ✅ | ✗ | T-169 (DEF-135). Opening a session FREEZES the room — every stock write into it is refused until the count closes — so it is a supervisory act. Recording a counted quantity stays under `record_stock_movement` ("Receiving, transfers, **counts**"), staff-open: the person holding the clipboard is on the floor |
 | `commit_count` | store | ✅ | ✅ | ✅ | ✗ | T-169. Commit posts the variance to `5400` at FIFO cost — a write-off in disguise, the same class as `adjust_inventory` and held at the same level. Cancelling a session (releases the freeze, posts nothing) rides on this too |
+| `post_production` | store | ✅ | ✅ | ✅ | ✗ | T-176. Manager+, same asymmetry as `post_usage` — a floor worker drafts a slicing/cooking run under `record_stock_movement`; posting moves stock and the books |
+| `edit_posted_production` | store | ✅ | ✅ | ✅ | ✗ | T-176. Reverses and re-applies a posted record's legs in place, incrementing its revision — supervisory, same bar as posting |
+| `void_production` | store | ✅ | ✅ | ✅ | ✗ | T-176. Voiding is supervisory — same asymmetry as `void_transfer`/`void_usage_record` |
+| `record_order_wastage` | store | ✅ | ✅ | ✅ | ✅ | T-178. A refunded or remade channel/dine-in order — staff-open, same bar as `record_wastage`: the person who hits it is the person who knows |
+| `resolve_order_wastage` | store | ✅ | ✅ | ✅ | ✗ | T-178. Deciding platform-paid / store-absorbed / staff-charged is a judgement with a posting behind it — same class as `adjust_inventory`/`resolve_trade_discrepancy` |
+| `charge_staff_for_wastage` | store | ✅ | ✅ | ✅ | ✗ | T-178. A second, stricter gate on top of `resolve_order_wastage`, checked only when the chosen disposition is `charged` — takes money off a person, same bar as `charge_staff_for_discrepancy` |
+| `reverse_auto_charge` | store | ✅ | ✅ | ✅ | ✗ | T-178. Undoing the 15-day backstop's own decision, within 30 days — a reversal plus a new resolution, never an edit |
 
 ## Suppliers, buyers and credit
 

@@ -266,15 +266,20 @@ describe('invariant 5 — every capability denies a role that lacks it (all 56)'
     // the photo CHECK, 0066's shortage/over-receipt trigger, and `allow_over_receipt` (manager+,
     // NOT in this list) on the one line that is actually over.
     'receive_delivery',
+    // ⭐ T-178 (2026-09-04): a refunded or remade channel/dine-in order. Staff-open, same bar as
+    // record_wastage — the person who hits it is the person who knows. ⚠️ Its disposition
+    // counterparts are deliberately NOT here: `resolve_order_wastage`/`charge_staff_for_wastage`
+    // deny staff, same asymmetry as every other record_*/resolve_* pair above.
+    'record_order_wastage',
   ];
 
-  it('every capability EXCEPT the universally-granted 16 has at least one denial case', () => {
+  it('every capability EXCEPT the universally-granted 20 has at least one denial case', () => {
     const covered = new Set(denialCases.map((c) => c.capability));
     const missing = CAPABILITIES.filter((c) => !covered.has(c));
     expect(missing.sort()).toEqual([...UNIVERSALLY_GRANTED].sort());
   });
 
-  it('the universally-granted 15 really are true for all four roles (why they are exempt)', () => {
+  it('the universally-granted 20 really are true for all four roles (why they are exempt)', () => {
     for (const c of UNIVERSALLY_GRANTED) {
       expect(ROLES.every((r) => CAPABILITY_MATRIX[c][r]), `${c} is not actually universal`).toBe(true);
     }

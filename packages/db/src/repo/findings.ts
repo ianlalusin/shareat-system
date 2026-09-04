@@ -902,6 +902,44 @@ export async function tillCountVarianceOpen(tx: Tx, orgId: string): Promise<Dete
  * excludes it and `resolveStatus` refuses to promote it — so closing a period over one books a
  * month that still owes somebody wages.
  */
+/**
+ * ⭐ T-178 — the tell that the 15-day order-wastage backstop is not running (DEF-044's shape,
+ * restated for a new module). A tracked wastage still `open` or `disputed` well past its own
+ * 15-day clock is exactly what the backstop exists to close; if one is sitting here, either the
+ * scheduler job (`order_wastage_backstop`) is not firing, or it fired and failed on that row.
+ *
+ * ⚠️ A generous default threshold (`20`, not `15`) — a wastage genuinely closed ON day 15 by a
+ * scheduled run that fires once a day should not flap this finding every single time it is a few
+ * hours late; this is a "the job looks dead" alarm, not a live restatement of the SLA itself.
+ */
+export async function orderWastageOpenPastBackstop(
+  tx: Tx,
+  orgId: string,
+  thresholdDays = 20,
+): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    select w.store_id::text as store_id, s.name as store_name, count(*)::int as n,
+           min(w.opened_at)::text as oldest, coalesce(sum(w.amount), 0)::text as amount
+    from order_wastages w
+    join stores s on s.id = w.store_id
+    where w.org_id = ${orgId} and w.type_mode = 'tracked'
+      and w.status in ('open', 'disputed')
+      and w.opened_at < now() - (${thresholdDays} || ' days')::interval
+    group by w.store_id, s.name
+  `)) as unknown as { store_id: string; store_name: string; n: number; oldest: string; amount: string }[];
+
+  return rows.map((r) => ({
+    kind: 'orderWastageOpenPastBackstop',
+    key: `orderWastageOpenPastBackstop:${r.store_id}`,
+    storeId: r.store_id,
+    severity: 'soft' as const,
+    detail:
+      `${r.store_name} has ${r.n} order wastage${r.n === 1 ? '' : 's'} worth ${peso(Number(r.amount))} still ` +
+      `open past the 15-day backstop, the oldest opened ${r.oldest}. ⚠️ If this keeps appearing, ` +
+      'the `order_wastage_backstop` scheduler job is not running: check that its timer is installed on the host.',
+  }));
+}
+
 export async function openShiftsStale(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
   // ⚠️ Two days, matching the sweep's own tolerance: a night shift belongs to the previous business
   // day, and an offline terminal replays punches hours after the fact.

@@ -592,6 +592,19 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'What Foodpanda and Grab actually paid an org, and every fee they deducted. Its commission ' +
       'rate is commercially sensitive and its variance column is an internal control signal.',
   },
+
+  // ---- T-178: order/channel wastage disposition ------------------------------------------
+  order_wastages: {
+    scope: 'org_column',
+    reason:
+      'Which orders were refunded or remade, and who was charged for them. Staff accountability ' +
+      'data a competing franchise must never read.',
+  },
+  order_wastage_allocations: {
+    scope: 'derived',
+    reason: 'No org_id of its own — reached only through its wastage, same shape as trade_order_lines.',
+    via: 'exists (select 1 from order_wastages w where w.id = wastage_id and w.org_id = app_current_org())',
+  },
   ar_charges: {
     scope: 'org_column',
     reason: 'What a customer owes this org. A franchise reading another’s would learn its wholesale book.',
@@ -716,6 +729,26 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
   },
   etl_quarantine: { scope: 'system_only', reason: 'As etl_source_documents — ETL machinery.' },
   etl_reconciliation: { scope: 'system_only', reason: 'As etl_source_documents — ETL machinery.' },
+
+  // ---- T-176: production — slab -> slice, recipe -> batch --------------------------------
+  production_recipes: {
+    scope: 'org_column',
+    reason: 'A recipe belongs to an org, org-wide master data, same class as items itself.',
+  },
+  production_recipe_lines: {
+    scope: 'derived',
+    reason: 'No org_id of its own — reached only through its recipe, like supplier_return_lines.',
+    via: 'exists (select 1 from production_recipes r where r.id = recipe_id and r.org_id = app_current_org())',
+  },
+  production_records: {
+    scope: 'org_column',
+    reason: 'A production record belongs to a store, and a store to one org.',
+  },
+  production_record_lines: {
+    scope: 'derived',
+    reason: 'No org_id of its own — reached only through its record, like production_recipe_lines.',
+    via: 'exists (select 1 from production_records r where r.id = record_id and r.org_id = app_current_org())',
+  },
 };
 
 export function rlsScopeOf(table: string): RlsEntry | undefined {

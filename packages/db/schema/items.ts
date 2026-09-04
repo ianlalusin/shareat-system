@@ -108,6 +108,14 @@ export const items = pgTable(
     costBasisItemId: uuid('cost_basis_item_id'),
     /** Set together with `status = 'merged'` — the DB refuses one without the other. */
     mergedIntoId: uuid('merged_into_id'),
+    /**
+     * ⭐ T-176 §6. A sliced product's source slab. Bare `uuid` — no `.references()` — same
+     * self-referencing convention as `mergedIntoId` above; the FK, the `kind = 'meat_sliced'`
+     * CHECK, and the two database-level refusals (an item may not recategorise away from
+     * `meat_slab` while a child points at it; a child's `base_unit` must match its slab's) all
+     * live in migration `0125_t176_production.sql`, not here.
+     */
+    parentSlabItemId: uuid('parent_slab_item_id'),
     notes: text('notes'),
     createdBy: uuid('created_by')
       .notNull()

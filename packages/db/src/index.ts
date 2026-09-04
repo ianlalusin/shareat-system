@@ -203,3 +203,18 @@ export * as customerReturnsRepo from './repo/customer-returns';
 // T-202 / DEF-131 — the persons writer that never existed until now.
 export * as personsRepo from './repo/persons';
 export type { PersonRow } from './repo/persons';
+// T-178 — order/channel wastage disposition.
+export * as orderWastageRepo from './repo/order-wastage';
+export type { OrderWastageRow, AllocationRow as OrderWastageAllocationRow } from './repo/order-wastage';
+export { ORDER_WASTAGE_TYPE_MODES, ORDER_WASTAGE_STATUSES, ORDER_WASTAGE_DISPOSITIONS } from '../schema/order-wastage';
+export type { OrderWastageTypeMode, OrderWastageStatus, OrderWastageDisposition } from '../schema/order-wastage';
+// T-176 — production: slab -> slice, recipe -> batch. Recipes and records, plus a narrow
+// production-only item projection that carries parent_slab_item_id.
+export * as productionRepo from './repo/production';
+export type {
+  ProductionItemRow,
+  RecipeRow,
+  RecipeLineRow,
+  ProductionRecordRow,
+  ProductionRecordLineRow,
+} from './repo/production';
