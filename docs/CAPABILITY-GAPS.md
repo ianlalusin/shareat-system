@@ -278,3 +278,15 @@ column on `items`, set from the item master screen and read by `usage-records.ts
 `kind` switch above, costs: a migration, a change to the items screen (one more field to set per
 item), and a backfill — trivial for the seven dev-fixture items, real work for every live item at
 cutover, since nobody has ever had to classify stock this way before. **Gap count: 36.**
+
+## Added 2026-09-04 — found auditing the accounting foundation at Ian's request
+
+| Capability | v1 has it | v2 state | Why it is a gap, not a defect |
+|---|---|---|---|
+| **Creditable / expanded withholding tax on supplier payments** (BIR Form 1601-E — rent, professional fees, contractor payments above the statutory threshold) | ⛔ **No.** Grepped `ERP-rebuild`'s whole tree: its only withholding-tax code is platform-payout related (Foodpanda/Grab commission deductions), already carried forward via `channel_settlements` | ⛔ **Also absent.** `2240` exists and is scoped to *payroll* withholding only (bible §16.5's SSS/PhilHealth/Pag-IBIG/BIR table); nothing in `expenses`/`ap` splits a withheld portion out of a supplier payment or tracks the remittance obligation for it | Neither system does this and the business needs it the moment a branch pays rent or a professional fee above the EWT threshold — the same "neither system does it" blind spot row 242 already named for customer returns. Distinct from payroll withholding (2210–2240, built) and platform withholding (channel-settlements, built) |
+
+⚠️ **The exposure is live, not hypothetical, the moment a store starts paying rent or a contractor
+through this system** — BIR 1601-E is a monthly filing obligation with its own penalties for
+non-withholding, independent of whether the rebuild ever touches it. Needs a deliberate yes/no from
+Ian, the same way the SC/PWD capture gap (row 216) and the statutory-remittance one did, rather than
+staying silently absent. **Gap count: 37.**
