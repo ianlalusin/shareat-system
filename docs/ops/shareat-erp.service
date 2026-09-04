@@ -1,0 +1,35 @@
+# T-205 — the web process itself. INSTALL INSTRUCTIONS: docs/ops/README.md
+#
+# Distinct from the three JOB units (firestore-relay, attendance-sweep, month-end), which are
+# Type=oneshot and run on a timer. This one is long-running and serves traffic.
+#
+# ⚠️ Binds to localhost:9008 only (`next start -p 9008`, apps/erp/package.json). It is NOT the
+# public listener — Caddy (installed by provision.sh when given a domain) reverse-proxies 443/80
+# to this port with automatic Let's Encrypt TLS. This is its own dedicated droplet, so there is no
+# traefik/ERPNext conflict on 80/443 the way there would have been on the old shared box.
+
+[Unit]
+Description=Shareat System — ERP web app (next start)
+After=network-online.target
+Wants=network-online.target
+# Do NOT add After=postgresql.service — the database is DO Managed Postgres, off-box
+# (ADR-002 §1 Option B). A local Postgres unit does not exist and never will for this project.
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/shareat/apps/erp
+ExecStart=/usr/bin/npm run start
+User=shareat
+Group=shareat
+Restart=always
+RestartSec=5
+
+# ⚠️ NEVER build here. This is a 2 GB droplet; a build OOMs it. This unit runs an
+# already-installed, already-built tree shipped by CI — bible §2.10.
+Environment=NODE_ENV=production
+
+StandardOutput=append:/var/log/shareat/erp.log
+StandardError=append:/var/log/shareat/erp.log
+
+[Install]
+WantedBy=multi-user.target

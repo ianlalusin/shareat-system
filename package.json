@@ -34,17 +34,19 @@
     "attendance-sweep": "tsx scripts/attendance-sweep.ts",
     "firestore-relay": "tsx scripts/firestore-relay.ts"
   },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "tsx": "^4.19.2"
+  },
   "devDependencies": {
     "@types/node": "^22.10.5",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "autoprefixer": "^10.4.20",
-    "dotenv": "^16.4.7",
     "drizzle-kit": "^0.30.1",
     "pino-pretty": "^13.0.0",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.1",
-    "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "vitest": "^4.1.8"
   },

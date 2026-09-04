@@ -13,22 +13,26 @@
 
 ---
 
-## ⛔ Precondition, verified 2026-09-01: the app has never been deployed here
+## Status as of 2026-09-04: T-205 in progress — first production deployment
 
-Both units below assume `/srv/shareat` exists, is a checked-out+built tree, is owned by a
-`shareat` OS user, and can reach Postgres. **None of that exists on the droplet as of
-2026-09-01** — confirmed by direct (read-only) SSH inspection: no `/srv/shareat`, no `shareat`
-user, no shareat-system systemd units, no local Postgres for it. The droplet currently runs only
-the old ERPNext (Frappe) stack and the POS archive DB (`pos_archive_db`), both unrelated to this
-project. `.github/workflows/ci.yml` has no deploy step to the droplet either.
+**As of 2026-09-01 none of this existed anywhere** (confirmed by direct read-only SSH inspection of
+the old shared droplet): no `/srv/shareat`, no `shareat` user, no shareat-system systemd units, no
+reachable Postgres. That box ran only the old ERPNext (Frappe) stack and the POS archive DB
+(`pos_archive_db`), both unrelated to this project — and that stays true, because as of 2026-09-04
+**Ian decided shareat-system gets its own new, dedicated droplet** instead of joining that one.
+The old droplet is retired in full eventually, but only once v2 grows its own POS/Customer apps
+(ADR-003) and everything is migrated off it — a distant, separate task this file's instructions
+never touch. See `docs/tasks/205-first-production-deployment.md` for the full spec.
 
-**This is expected, not a bug** — ADR-005 / ADR-007 put the pilot go-live at **Oct–Dec 2026**,
-so there is nothing to schedule a sweep against yet. A prior session's `HANDOFF-TODAY.md` framed
-this as "just install the timer," which is wrong; do not act on that framing before the first
-production deployment (its own task spec, not yet written) has actually happened.
+**T-205 ships the CI-side half**: `.github/workflows/deploy.yml`, `docs/ops/provision.sh`, and the
+`shareat-erp.service` + `shareat-month-end.{service,timer}` units below, all targeting the NEW
+droplet. None of it touches anything by itself — creating the droplet, provisioning it, and the
+credential steps are Ian's, per `IAN-SETUP-CHECKLIST.md` §4b (no standing agent/human SSH access;
+deploys through a GitHub Actions deploy key instead).
 
-**Before running anything below**, confirm `/srv/shareat` and the `shareat` user exist. If they
-don't, stop — that's a much bigger job than this file covers.
+**Before running anything below**, confirm the new droplet exists and `/srv/shareat` and the
+`shareat` user are provisioned on it — `docs/ops/provision.sh` creates both, optionally with a
+domain argument to also set up Caddy + automatic TLS on 80/443 (no traefik conflict on a fresh box).
 
 ---
 
@@ -36,41 +40,44 @@ don't, stop — that's a much bigger job than this file covers.
 
 | Job | Command | Cadence | Why that cadence |
 |---|---|---|---|
-| Month-end (T-140) | `npm run month-end` | Monthly, 1st | Depreciation and amortisation are per-period |
+| **Month-end (T-140 / units by T-205)** | `npm run month-end` | Monthly, 1st | Depreciation and amortisation are per-period |
 | **Attendance sweep (T-199)** | `npm run attendance-sweep` | ⚠️ **Hourly** | The cut-off is a wall-clock hour **per store**. A daily timer cannot serve two stores on different hours |
 | **Firestore sync relay (T-204)** | `npm run firestore-relay` | Every 2 minutes | No wall-clock anchor — punches and mirror writes are useful as soon as possible, but a late run breaks nothing (idempotent, Firestore durable in the meantime). Closes DEF-132 (nothing ever ran either lane against real Firestore) and DEF-134 (nothing ever computed a fresh day's `attendance_days` row) |
 
-**T-204 is the third job named here, and — same as the other two — shipping the code is not the
-same as it running.** `docs/tasks/204-firestore-sync-relay-and-day-bootstrap.md`'s own scope
-deliberately ships the unit files, not a live install; see the precondition above. ⚠️ T-204's
-implementer had no SSH access to the droplet in-session to repeat the 2026-09-01 read-only
-inspection directly — the precondition is carried forward on IN-REPO evidence only (no deploy
-step in `.github/workflows/ci.yml`, no deploy-shaped commit since, `HANDOFF.md`'s phase plan
-still reading pilot go-live Oct-Dec 2026), which is consistent with nothing having changed but is
-not the same class of check as the original SSH inspection. **A future session with real SSH
-access should still do the direct check before assuming this line is current.**
+Plus a fourth unit that is not a scheduled job but the app itself: **`shareat-erp.service`**
+(`next start -p 9008`, long-running, `Restart=always`) — installed and enabled the same way, by
+`docs/ops/provision.sh` plus the deploy workflow.
 
-## Installing the attendance sweep
+**All four were written before the droplet could run them.** Same lesson as the table above —
+shipping the code is not the finish line, installing and arming the timer is. `docs/tasks/205-first-production-deployment.md`
+covers the deployment that finally gives these something to run against.
+
+## Installing everything (after `docs/ops/provision.sh` has run once)
+
+`provision.sh` installs all seven unit files (`shareat-erp.service` +
+three `.service`/`.timer` pairs) via `systemctl daemon-reload`, but does **not** enable or start
+them — there is nothing to point them at until the first deploy lands. After `deploy.yml` has run
+successfully at least once:
 
 ```sh
-sudo install -m 644 docs/ops/shareat-attendance-sweep.service /etc/systemd/system/
-sudo install -m 644 docs/ops/shareat-attendance-sweep.timer   /etc/systemd/system/
-sudo mkdir -p /var/log/shareat && sudo chown shareat:shareat /var/log/shareat
-
-sudo systemctl daemon-reload
+sudo systemctl enable --now shareat-erp.service
+sudo systemctl enable --now shareat-firestore-relay.timer
 sudo systemctl enable --now shareat-attendance-sweep.timer
+sudo systemctl enable --now shareat-month-end.timer
 ```
 
-**Verify it is actually armed** — this is the step that has never been done:
+**Verify each is actually armed** — this is the step that has historically never been done:
 
 ```sh
-systemctl list-timers shareat-attendance-sweep.timer   # NEXT and LEFT must be populated
-sudo systemctl start shareat-attendance-sweep.service  # run it once, now
-journalctl -u shareat-attendance-sweep.service -n 50
+systemctl list-timers   # NEXT and LEFT must be populated for all three timers
+sudo systemctl start shareat-attendance-sweep.service   # run each job once, now
+sudo systemctl start shareat-firestore-relay.service
+sudo systemctl start shareat-month-end.service
+journalctl -u shareat-attendance-sweep.service -n 50    # repeat per unit
 ```
 
 ⚠️ **`systemctl enable` without `--now` arms it for the next boot and not for today.** That single
-missing flag is the shape of every failure in the table above.
+missing flag is the shape of every failure in the table at the top of this file.
 
 ## ⭐ How you find out it stopped — without another cron
 

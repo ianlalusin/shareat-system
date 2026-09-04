@@ -5,8 +5,10 @@
 
 [Unit]
 Description=Shareat — close shifts nobody clocked out of
-After=network-online.target postgresql.service
+After=network-online.target
 Wants=network-online.target
+# T-205: no After=postgresql.service — the database is DO Managed Postgres, off-box
+# (ADR-002 §1 Option B), not a local unit on this host.
 
 [Service]
 Type=oneshot
@@ -15,8 +17,8 @@ ExecStart=/usr/bin/npm run attendance-sweep
 User=shareat
 Group=shareat
 
-# ⚠️ NEVER build here. The droplet is 4 GB and runs Postgres; a build OOMs the box and takes the
-# database down with it. This unit runs an already-installed tree — bible §2.10.
+# ⚠️ NEVER build here. This is a 2 GB droplet; a build OOMs it. This unit runs an
+# already-installed tree shipped by CI — bible §2.10.
 Environment=NODE_ENV=production
 
 # ⭐ The exit code is load-bearing: non-zero when anything failed, so the host's mailer speaks up.

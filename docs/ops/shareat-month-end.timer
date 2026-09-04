@@ -1,0 +1,18 @@
+# T-205 — MONTHLY, on the 1st. Depreciation and amortisation are per-period; running this more
+# than once a period would double-post, and the job itself must be idempotent per period regardless
+# — this timer just decides when it's asked to check.
+
+[Unit]
+Description=Shareat — month-end close, monthly on the 1st
+
+[Timer]
+OnCalendar=*-*-01 02:00:00
+# ⚠️ Catch up after a reboot or an outage rather than skipping silently. A month-end that quietly
+# skipped because the box was down on the 1st is DEF-044's shape all over again — that defect was
+# exactly this job (v1's depreciation cron) going silent for two months, found by an audit, not a
+# person.
+Persistent=true
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target

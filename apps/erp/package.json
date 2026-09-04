@@ -14,14 +14,12 @@
     "@shareat/domain": "*",
     "@shareat/storage-firebase": "*",
     "@shareat/sync-firestore": "*",
+    "dotenv": "^16.4.7",
     "firebase": "^11.10.0",
     "firebase-admin": "^13.0.2",
     "next": "^16.1.6",
     "qrcode-generator": "^2.0.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
-  },
-  "devDependencies": {
-    "dotenv": "^16.4.7"
   }
 }

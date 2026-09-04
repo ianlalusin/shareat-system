@@ -1,0 +1,142 @@
+name: Deploy
+
+# T-205 — first production deployment. Gated on `CI` (ci.yml) succeeding on `main`, per Ian's
+# decision to auto-deploy every green push. NEVER builds on the droplet (bible §2.10 / RULES
+# rule 11) — everything through "prune devDependencies" runs on the runner; the droplet only
+# receives a finished artifact, runs migrations against it, and restarts.
+#
+# ⚠️ 2026-09-04: this now targets a NEW droplet dedicated to shareat-system, NOT the old shared
+# 159.223.78.207 (ERPNext + POS archive DB) — Ian's call, so a build here never risks that box.
+# DEPLOY_HOST has no fallback on purpose: silently defaulting to the old droplet if the secret
+# were ever unset would ship this app onto someone else's live production box. Fail closed instead.
+#
+# Needs GitHub Secrets that do not exist yet (checklist §4b — Ian sets these, never through an
+# agent): DEPLOY_SSH_KEY, DEPLOY_HOST (the new droplet's IP — REQUIRED, no default), DATABASE_URL,
+# SESSION_SECRET, FIREBASE_PROJECT_ID, FIREBASE_SERVICE_ACCOUNT_KEY_FILE (a path already on the
+# droplet — the key itself is never in Secrets), NEXT_PUBLIC_FIREBASE_API_KEY,
+# NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN, NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+# NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET, NEXT_PUBLIC_FIREBASE_APP_ID.
+# Until they exist this workflow fails at the "Require DEPLOY_HOST" step below — intentional
+# (fail closed, bible §7 rule 9), not a bug to work around.
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '22'
+  DEPLOY_USER: shareat
+
+jobs:
+  deploy:
+    name: build, ship, migrate, restart
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - name: Checkout the exact commit CI verified
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Require DEPLOY_HOST (fail closed — never guess a production target)
+        run: |
+          if [ -z "${{ secrets.DEPLOY_HOST }}" ]; then
+            echo "::error::DEPLOY_HOST is not set. This must be the NEW dedicated droplet's IP —" \
+                 "there is deliberately no fallback, so a missing secret never silently deploys" \
+                 "to the wrong box."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install (full — needed to build)
+        run: npm ci --no-audit --no-fund
+
+      - name: Build
+        env:
+          NODE_ENV: production
+          NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+          NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
+        run: npm run build
+
+      - name: Prune devDependencies (bible §8 — runtime deps only from here on)
+        run: npm ci --omit=dev --no-audit --no-fund
+
+      - name: Package the artifact
+        run: |
+          # apps/erp/public is optional — Next only needs it if it exists (no static assets today)
+          PATHS="apps/erp/.next apps/erp/package.json apps/erp/next.config.js packages scripts package.json package-lock.json node_modules"
+          [ -d apps/erp/public ] && PATHS="$PATHS apps/erp/public"
+          tar -czf /tmp/shareat-artifact.tar.gz \
+            --exclude='.git' \
+            --exclude='secrets' \
+            --exclude='**/*.test.ts' \
+            --exclude='**/tests' \
+            $PATHS
+
+      - name: Set up the deploy key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Ship the artifact (shareat user only — never root)
+        run: |
+          scp -i ~/.ssh/deploy_key /tmp/shareat-artifact.tar.gz \
+            "${{ env.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/shareat-artifact.tar.gz"
+
+      - name: Unpack, migrate, restart
+        run: |
+          # Releases/current-symlink pattern (provision.sh sets up the directories once):
+          #   /srv/shareat-releases/<ts>/   each deploy unpacks into its own timestamped dir
+          #   /srv/shareat -> .../releases/<ts>   symlink, swapped atomically at the end
+          #   /srv/shareat-shared/.env.local      persistent, never shipped, symlinked in
+          # A failed unpack or failed migration never touches the currently-running release.
+          ssh -i ~/.ssh/deploy_key "${{ env.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" bash -s <<'REMOTE'
+            set -euo pipefail
+            RELEASE="/srv/shareat-releases/$(date +%Y%m%d%H%M%S)"
+            mkdir -p "$RELEASE"
+            tar -xzf /tmp/shareat-artifact.tar.gz -C "$RELEASE"
+            rm -f /tmp/shareat-artifact.tar.gz
+            ln -sf /srv/shareat-shared/.env.local "$RELEASE/.env.local"
+
+            cd "$RELEASE"
+            npm run db:migrate
+
+            ln -sfn "$RELEASE" /srv/shareat.new
+            mv -Tf /srv/shareat.new /srv/shareat
+            sudo /usr/bin/systemctl restart shareat-erp.service
+
+            # Keep the last 3 releases only
+            ls -1dt /srv/shareat-releases/*/ | tail -n +4 | xargs -r rm -rf
+          REMOTE
+
+      - name: Confirm the app is up
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ env.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" bash -s <<'REMOTE'
+            set -euo pipefail
+            for i in 1 2 3 4 5 6; do
+              if curl -fsS -o /dev/null http://127.0.0.1:9008/api/health; then
+                echo "healthy after ${i} attempt(s)"
+                exit 0
+              fi
+              sleep 5
+            done
+            echo "health check failed after 30s — restart did not bring the app up" >&2
+            exit 1
+          REMOTE
