@@ -308,21 +308,13 @@ env vars), confirm it works, destroy it. Costs pennies and means the actual cuto
 the first time the deploy process has run for real. Skippable if Ian would rather not spend the
 time.
 
-### ⚠️ Open, not resolved here: "Supabase" vs. the decided Option B
+### "Supabase" — false alarm, corrected 2026-09-04
 
-This session referred to the new database as **"Supabase,"** which is not what §1 decided
-(**Option B — DO Managed Postgres**). They are not interchangeable:
-
-- **Supabase's hosted platform** instead of DO Managed Postgres breaks §1's co-location
-  constraint (app on the droplet, database elsewhere is exactly the split §1 ruled out) and would
-  need its own decision line.
-- **Self-hosting the Supabase stack** (Postgres + GoTrue + PostgREST + Realtime + Storage + Kong +
-  Studio — roughly a dozen containers) on the droplet is materially heavier than "DO Managed
-  Postgres + app," and the ~2 GB of free RAM measured above would not comfortably hold it.
-- If "Supabase" was shorthand for "a managed Postgres instance," nothing changes — Option B
-  already covers it.
-
-**Flagged for Ian to confirm** — it changes what "load my new project to my DO" actually deploys.
+Ian: *"sorry its not supabase my db is postgresql on my laptop."* No drift from §1 after all —
+this is exactly the local dev setup §4 already specifies (native Postgres, port 5435). Option B
+(DO Managed Postgres + app on the droplet) stands unchanged as the production target for
+cutover; "my DO" in the original question meant the droplet the app deploys to, not the database
+vendor.
 
 ### Not done in this amendment
 
