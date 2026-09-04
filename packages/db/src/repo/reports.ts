@@ -13,7 +13,7 @@
  * view; this file never re-derives them.
  */
 import { and, eq, gte, lte, ne, sql } from 'drizzle-orm';
-import { vIncomeStatement, vTrialBalance } from '../../schema';
+import { vBalanceSheet, vIncomeStatement, vTrialBalance } from '../../schema';
 import type { Executor } from '../client';
 
 export interface DateRangeFilter {
@@ -168,4 +168,56 @@ export async function getIncomeStatementLines(
     .orderBy(vIncomeStatement.category, vIncomeStatement.accountCode);
 
   return rows as IncomeStatementRow[];
+}
+
+export interface BalanceSheetRow {
+  accountId: string;
+  accountCode: string;
+  accountName: string;
+  accountType: 'asset' | 'liability' | 'equity';
+  debitTotal: string;
+  creditTotal: string;
+  /** Signed by the account's TYPE (asset debit-positive, liability/equity credit-positive) —
+   * see views.ts's top comment. Never the account's own `normal_balance`. */
+  netAmount: string;
+}
+
+/**
+ * Per-account balance-sheet rows for the given org, optional store, and inclusive date
+ * range — T-209a. Restricted to asset/liability/equity accounts by the view itself. The
+ * domain layer passes `fromDate` as the earliest possible date and `toDate` as the
+ * as-of date, because a balance sheet is a snapshot from inception, not a range — bible
+ * row 106 means there is never real data before an org's own creation.
+ */
+export async function getBalanceSheetLines(ex: Executor, filter: DateRangeFilter): Promise<BalanceSheetRow[]> {
+  const includeYearClose = filter.includeYearClose ?? true;
+
+  const conditions = [
+    eq(vBalanceSheet.orgId, filter.orgId),
+    gte(vBalanceSheet.entryDate, filter.fromDate),
+    lte(vBalanceSheet.entryDate, filter.toDate),
+  ];
+  if (filter.storeId) {
+    conditions.push(eq(vBalanceSheet.storeId, filter.storeId));
+  }
+  if (!includeYearClose) {
+    conditions.push(ne(vBalanceSheet.sourceType, 'year_close'));
+  }
+
+  const rows = await ex
+    .select({
+      accountId: vBalanceSheet.accountId,
+      accountCode: vBalanceSheet.accountCode,
+      accountName: vBalanceSheet.accountName,
+      accountType: vBalanceSheet.accountType,
+      debitTotal: sql<string>`coalesce(sum(${vBalanceSheet.debitTotal}), 0)::numeric(14,2)`,
+      creditTotal: sql<string>`coalesce(sum(${vBalanceSheet.creditTotal}), 0)::numeric(14,2)`,
+      netAmount: sql<string>`coalesce(sum(${vBalanceSheet.netAmount}), 0)::numeric(14,2)`,
+    })
+    .from(vBalanceSheet)
+    .where(and(...conditions))
+    .groupBy(vBalanceSheet.accountId, vBalanceSheet.accountCode, vBalanceSheet.accountName, vBalanceSheet.accountType)
+    .orderBy(vBalanceSheet.accountType, vBalanceSheet.accountCode);
+
+  return rows as BalanceSheetRow[];
 }

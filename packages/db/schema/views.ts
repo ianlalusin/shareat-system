@@ -70,6 +70,20 @@
  * decides, per ADR-006's own requirement: "a date-range P&L must be able to exclude it; a
  * balance-sheet-as-of must include it." Baking the exclusion into the view would make the
  * other case impossible.
+ *
+ * v_balance_sheet — T-209a (docs/tasks/209-reporting-read-model-and-statements.md).
+ * Restricted to `accounts.type IN ('asset', 'liability', 'equity')` — the mirror image of
+ * v_income_statement's income/expense restriction, and it shares that view's shape for the
+ * same reason: `net_amount` is signed by the account's TYPE (asset debit-positive,
+ * liability/equity credit-positive), UNIFORMLY, never by the account's own
+ * `normal_balance`. This is deliberately the v_income_statement convention, not the
+ * v_trial_balance/v_account_balance one — a type-bucketed "total assets" must subtract
+ * `1590` (accumulated depreciation: type=asset, normal_balance=CREDIT) from gross PP&E,
+ * which only happens if 1590 is signed by the asset convention (debit − credit, negative)
+ * rather than its own (credit − debit, positive — which would ADD it to gross assets
+ * instead). `docs/tasks/111-property-based-invariant-tests.md` made exactly this mistake
+ * once already, on the analogous "extended accounting equation" property test; this view
+ * is built the correct way from the start rather than re-discovering the same defect.
  */
 import { sql } from 'drizzle-orm';
 import { date, numeric, pgView, text, uuid } from 'drizzle-orm/pg-core';
@@ -189,4 +203,40 @@ export const vIncomeStatement = pgView('v_income_statement', {
   where je.status in ('posted', 'reversed')
     and a.type in ('income', 'expense')
   group by je.org_id, jl.store_id, jl.account_id, a.code, a.name, a.type, hdr.code, je.entry_date, je.source_type
+`);
+
+export const vBalanceSheet = pgView('v_balance_sheet', {
+  orgId: uuid('org_id').notNull(),
+  storeId: uuid('store_id'),
+  accountId: uuid('account_id').notNull(),
+  accountCode: text('account_code').notNull(),
+  accountName: text('account_name').notNull(),
+  accountType: text('account_type').notNull(),
+  entryDate: date('entry_date').notNull(),
+  sourceType: text('source_type').notNull(),
+  debitTotal: numeric('debit_total', { precision: 14, scale: 2 }).notNull(),
+  creditTotal: numeric('credit_total', { precision: 14, scale: 2 }).notNull(),
+  netAmount: numeric('net_amount', { precision: 14, scale: 2 }).notNull(),
+}).as(sql`
+  select
+    je.org_id as org_id,
+    jl.store_id as store_id,
+    jl.account_id as account_id,
+    a.code as account_code,
+    a.name as account_name,
+    a.type as account_type,
+    je.entry_date as entry_date,
+    je.source_type as source_type,
+    coalesce(sum(jl.debit), 0)::numeric(14,2) as debit_total,
+    coalesce(sum(jl.credit), 0)::numeric(14,2) as credit_total,
+    (case
+      when a.type = 'asset' then coalesce(sum(jl.debit), 0) - coalesce(sum(jl.credit), 0)
+      else coalesce(sum(jl.credit), 0) - coalesce(sum(jl.debit), 0)
+    end)::numeric(14,2) as net_amount
+  from journal_lines jl
+  join journal_entries je on je.id = jl.entry_id
+  join accounts a on a.id = jl.account_id
+  where je.status in ('posted', 'reversed')
+    and a.type in ('asset', 'liability', 'equity')
+  group by je.org_id, jl.store_id, jl.account_id, a.code, a.name, a.type, je.entry_date, je.source_type
 `);

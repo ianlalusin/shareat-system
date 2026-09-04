@@ -6,6 +6,7 @@ export * from './ledger/post-entry';
 export * from './ledger/reverse-entry';
 export * from './reports/trial-balance';
 export * from './reports/income-statement';
+export * from './reports/balance-sheet';
 export * from './expenses';
 export * from './sales-days';
 export * from './fixed-assets';

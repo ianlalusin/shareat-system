@@ -981,6 +981,8 @@ export const NON_TABLE_RELATIONS: readonly string[] = [
   'v_account_balance',
   'v_trial_balance',
   'v_income_statement',
+  // T-209a — the fourth reporting view; docs/tasks/209-reporting-read-model-and-statements.md.
+  'v_balance_sheet',
   // T-154 — 'is this person on the roster' is DERIVED, never a stored boolean (bible §4.2 rule 7).
   'v_active_employments',
 ];
