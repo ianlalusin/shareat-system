@@ -250,9 +250,84 @@ No single terrifying switchover night.
    built-in PITR. Neon is a legitimate zero-cost start if you would rather defer spend —
    and it is migratable later, since it is the same Postgres.
 2. **Decommission the DigitalOcean droplet** once Frappe is retired? It stops a bill.
-   Confirm nothing else is running on it first.
+   Confirm nothing else is running on it first. ✅ **RESOLVED 2026-09-04 — reused, not
+   decommissioned.** See the Amendment at the bottom of this file.
 3. **Same GCP project as ERP-rebuild, or a new one?** *Recommend a **new** project* —
    clean IAM boundary, no chance of Shareat System work touching v1's resources, and a separate bill
    line so you can see what v2 actually costs. Firebase Auth users can be shared across
    projects, but that needs checking before committing.
 4. **Confirm Firebase Auth stays** as the identity provider (recommended).
+
+---
+
+## Amendment — 2026-09-04: droplet reuse at cutover, resolving §8 item 2
+
+**Ian, 2026-09-04, on a fresh session:** *"i dont want to spend more is it ok if i build the
+whole system try it prepare it for cutover locally then when time to move i will retire frappe
+offload it then load my new project to my DO?"*
+
+**✅ Decided: yes.** No second droplet, no spend before cutover. Closes §8 item 2.
+
+### The sequence
+
+| Phase | What happens | Where | Cost |
+|---|---|---|---|
+| **Now → cutover** | Build and test Shareat System entirely | Local machine — Postgres 5435, app on 9008 (§4) | $0, zero risk to the live droplet |
+| **At cutover** | Retire the Frappe/ERPNext stack, reclaim the droplet, deploy Shareat System onto it | The existing SharEat-Droplet (`159.223.78.207`) | Reuses hardware already paid for |
+
+**Confirmed live on the droplet 2026-09-04** (read-only check, nothing changed): 2 vCPU / 3.8 GB
+RAM, 1.8 GB used / ~2 GB free / 392 MB already in swap; 77 GB disk, 20 GB used. 11
+`erpnext_prod-*` containers up 4 weeks, plus `pos_archive_db` (the unrelated POS transaction
+archive Postgres — already live proof that a Postgres container coexists with the MariaDB stack
+here without conflict). The headroom is real but not generous, which is exactly why this
+amendment reuses the box **sequentially** (Frappe retires, then v2 arrives) rather than running
+both **in parallel** — a second full database stack alongside a live, mid-cutover ERPNext would
+be the wrong risk for the ~$6–12/mo a second droplet would have cost instead.
+
+### Retirement steps, in order — none of this is optional
+
+1. **Confirm with whoever operates Frappe first.** Per §1.2a, `ERP-rebuild` and the Frappe
+   migration are both "actively owned by someone else alongside" Ian. Retiring Frappe is not a
+   unilateral infra call just because Ian holds root on the box — get sign-off before step 2.
+2. **Final backup, verified**: `bench backup --with-files`, confirmed complete, with the existing
+   rclone job having shipped it to Spaces (`shareat-erp-backups`, SGP1) before anything is
+   stopped.
+3. **Never delete the Spaces backups.** Already decided above (§1) — they are the only surviving
+   record of the Frappe/ERPNext work. Statutory retention (BIR) runs years, not months. A copy on
+   Ian's PC is a *second* copy for convenience, never the *only* copy.
+4. **Stop and remove the `erpnext_prod` stack** (`docker compose -p erpnext_prod down`, then
+   `docker system prune`) to reclaim the ~13 GB currently held by old images and build cache.
+5. **Deploy Shareat System onto the freed droplet** per Option B (§1 above): app on the droplet,
+   database managed, both in the same private VPC. Same IP, DNS, and firewall already
+   configured — no infrastructure gets rebuilt from scratch.
+
+### ⭐ Recommended, not required: one rehearsal deploy before the real date
+
+Spin up a throwaway droplet for a day, deploy Shareat System to it end-to-end (migrations, SSL,
+env vars), confirm it works, destroy it. Costs pennies and means the actual cutover night is not
+the first time the deploy process has run for real. Skippable if Ian would rather not spend the
+time.
+
+### ⚠️ Open, not resolved here: "Supabase" vs. the decided Option B
+
+This session referred to the new database as **"Supabase,"** which is not what §1 decided
+(**Option B — DO Managed Postgres**). They are not interchangeable:
+
+- **Supabase's hosted platform** instead of DO Managed Postgres breaks §1's co-location
+  constraint (app on the droplet, database elsewhere is exactly the split §1 ruled out) and would
+  need its own decision line.
+- **Self-hosting the Supabase stack** (Postgres + GoTrue + PostgREST + Realtime + Storage + Kong +
+  Studio — roughly a dozen containers) on the droplet is materially heavier than "DO Managed
+  Postgres + app," and the ~2 GB of free RAM measured above would not comfortably hold it.
+- If "Supabase" was shorthand for "a managed Postgres instance," nothing changes — Option B
+  already covers it.
+
+**Flagged for Ian to confirm** — it changes what "load my new project to my DO" actually deploys.
+
+### Not done in this amendment
+
+**`PROJECT_BIBLE.md` §13 is not updated here.** Per the bible's own §14 amendment protocol, only
+an Opus planner session may add to the bible's decision log — a Sonnet session reports the
+conflict and stops rather than editing it. This ADR carries the decision in full; an Opus session
+should add the corresponding §13 row (and resolve the "Supabase" question above) the next time
+one runs.
