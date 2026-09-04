@@ -413,7 +413,7 @@
     <div class="masthead-meta">
       <span>As at <b>4 September 2026</b></span>
       <span>Now in <b>Phase 3 &middot; 19 of 20 built</b></span>
-      <span>Gates <b>typecheck &middot; 942 unit + 1 skipped &middot; 2117 integration &middot; build</b></span>
+      <span>Gates <b>typecheck &middot; 996 unit + 1 skipped &middot; 2202 integration &middot; build</b></span>
     </div>
   </header>
 
@@ -455,24 +455,27 @@
   </section>
 
   <section>
-    <div class="callout warn">
-      <h3>Production infrastructure shipped 4 Sep &mdash; not yet actually deployed</h3>
+    <div class="callout">
+      <h3>Production is live &mdash; <a href="https://erp2.shareat.net">erp2.shareat.net</a>, shipped 4 Sep</h3>
       <p>
-        <b>T-205</b> landed same-day: a dedicated new droplet (<b>159.223.46.224</b>, not the old shared
-        159.223.78.207 that also runs ERPNext + the POS archive DB &mdash; Ian&rsquo;s call, removing the
-        capacity and port-sharing constraints the first draft was written against), the DO Managed Postgres
-        cluster, the GitHub Actions deploy workflow, the long-running <code>shareat-erp</code> systemd unit,
-        the month-end timer pair that had only ever been a table row, and a one-time <code>provision.sh</code>
-        Ian ran by hand. SSH auth and the deploy key are live and tested against the real box.
-        <b>&#9888; The deploy workflow has not yet been triggered for a first real run</b> &mdash; the
-        infrastructure exists and is reachable; nothing has actually shipped to it through CI yet.
+        <b>T-205</b> landed same-day, in two commits: a dedicated new droplet (<b>159.223.46.224</b>, not
+        the old shared 159.223.78.207 that also runs ERPNext + the POS archive DB &mdash; Ian&rsquo;s call,
+        removing the capacity and port-sharing constraints the first draft was written against), the DO
+        Managed Postgres cluster, the GitHub Actions deploy workflow, the long-running
+        <code>shareat-erp</code> systemd unit, the month-end timer pair that had only ever been a table row,
+        and a one-time <code>provision.sh</code> Ian ran by hand &mdash; then a real deploy through the CI
+        pipeline, all four systemd units enabled/armed/verified with a real <code>journalctl</code> exit per
+        job, not just &ldquo;enabled.&rdquo;
       </p>
       <p>
         Two real bugs were caught by testing against the live droplet rather than trusting the written code:
         <code>dotenv</code>/<code>tsx</code> were <code>devDependencies</code>, which would have broken
         <code>next start</code> and all three scheduled jobs under the bible&rsquo;s own
         <code>npm ci --omit=dev</code> rule; and the <code>shareat</code> user&rsquo;s <code>nologin</code>
-        shell blocked the deploy workflow&rsquo;s own non-interactive SSH commands.
+        shell blocked the deploy workflow&rsquo;s own non-interactive SSH commands. A second ADR-002
+        amendment reconciled a real conflict head-on: a concurrent session had Ian deciding to reuse the old
+        droplet at cutover, minutes before this session had him ask for a separate new one &mdash; flagged
+        explicitly rather than silently picking a side, and Ian confirmed keeping the new droplet.
       </p>
       <p>
         Still open: <b>DEF-153</b> &mdash; the bible&rsquo;s own infra summary table (line 598) and
@@ -1000,12 +1003,16 @@
     Status verified against the working tree on 1 September 2026, with all four gates run, not quoted. Phase 1&rsquo;s two
     gaps were confirmed by inspection, not taken from the plan. The v1&rarr;v2 parity figures were derived by reading
     both schemas at source; the verdicts on each field are judged, and the method is stated with them.<br><br>
-    Refreshed 4 September 2026 against the four commits landed since (DEF-131&ndash;134/151 &middot; DEF-139 &middot;
-    the two ADR-002 amendments) and the new, in-progress <code>docs/tasks/205-first-production-deployment.md</code>.
-    This pass is a documentation sync, not a fresh gate run &mdash; the unit/integration figures above are the
-    numbers <code>7d46bea</code>&rsquo;s own report gave, carried forward rather than independently re-verified;
-    a live session was mid-way through T-205 at the time of this edit, so nothing under <code>docs/ops/</code>,
-    <code>.github/workflows/</code>, or its own uncommitted files was touched here.
+    Refreshed 4 September 2026, in two passes. The first synced DEF-131&ndash;134/151, DEF-139 and T-205's two
+    ADR-002 amendments against commit messages, not a fresh gate run. The second is a real one: T-176 and
+    T-178 were built as two concurrent lanes on isolated test databases, merged by hand (migrations
+    journalled, shared docs combined, the missing <code>/inventory/production</code> nav entry added), then
+    the full suite above (typecheck, 996 unit, 2202 integration, build) was run once on the fully combined
+    tree and both new screens were live-smoketested on 9008 against real data &mdash; which is how a
+    server-action bug (every save on <code>/wastage</code> showing the literal string
+    <code>NEXT_REDIRECT</code> instead of its real result) was caught and fixed; no test suite exercises the
+    real Next.js redirect plumbing. Separately, T-205 finished and went live at
+    <a href="https://erp2.shareat.net">erp2.shareat.net</a> while this session's own two lanes were running.
   </footer>
 
 </div>
