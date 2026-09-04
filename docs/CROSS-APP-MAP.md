@@ -172,6 +172,49 @@ to `liability__void_cash_suspense` at posting. Receipt-level fields: `voidCashPa
 
 ---
 
+## 1b. POS → ERP — the daily inventory usage pull ✅ (T-177, 2026-09-04)
+
+The mechanism that keeps stock-on-hand honest against actual sales, instead of drifting until
+the next physical count explains it as shrinkage.
+
+| | |
+|---|---|
+| Mechanism | HTTP GET, POS `api/external/sold-items?storeId=&date=` |
+| Auth | Same `x-api-key` → `resolveExternalKeyScope` + `storeAllowed` as §1 |
+| Consumer | `packages/domain/src/pos/usage-pull.ts` → `fetchPosSoldItemsLive`, called from both
+`buildPlan` (plan time) and `finalizeSections` (a fresh re-fetch, at finalize time, to catch a
+POS-side mutation between the two — invariant 2's `PLAN_CHANGED`) |
+| Source of truth | POS's own bounded receipts scan for the day (`POS/src/lib/analytics/sold-items-core.ts`), **not** the pre-aggregated analytics day doc §1 reads — verified at source, `POS/src/app/api/external/sold-items/route.ts` |
+| Lands in | Shareat System `pos_usage_pulls` / `pos_usage_pull_lines`, then — once finalized — `stock_usage_records` (T-168) and the ledger (T-164), through the same document layer a human uses |
+
+### Freshness ownership
+
+The snapshot is fetched **on demand**, not cached or cron-pulled: once when a manager opens the
+plan (`pos_usage_pulls.snapshot_taken_at` stamps that moment), and **again, live**, the instant
+finalize runs. `snapshot_taken_at` alone gates the one-hour staleness refusal (`SNAPSHOT_STALE`);
+the finalize-time re-fetch is what actually catches a receipt voided after the plan was built.
+Nobody owns a background refresh — the person finalizing is the one who guarantees freshness, by
+finalizing promptly after they build the plan.
+
+### Physical quantity — already netted by POS, never recomputed here
+
+`items[].physicalQty` in the response is POS's own sold + comped − voided figure
+(`POS/src/lib/analytics/sold-items-core.ts`'s header). Shareat System trusts it as given — see
+`packages/domain/src/pos/plan.ts`'s own header for why recomputing it here would be a second,
+divergent implementation of the same rule.
+
+### Out of scope, deliberately (T-177 §9)
+
+⛔ **Writing back to POS** — this seam is read-only, matching ADR-003's staged direction (POS
+stays its own live system through Q1). ⛔ **`api/external/inventory-items`** (POS's full sellable
+catalogue) — not called; the mapping screen manages existing maps/requests and lets a manager key
+a new mapping's POS item key/name directly rather than browsing POS's live catalogue, since a new
+unmapped item is discovered organically as an `orphan` line in the very next pull. Fetching the
+full catalogue remains a real, un-built capability if a "map before the first sale" workflow is
+ever wanted — flagged here rather than silently assumed done.
+
+---
+
 ## 2. POS online orders — not yet live ⚠️ ✅
 
 Ian, 2026-08-23: **no online transactions as of now** — so there is no historical online data
@@ -205,7 +248,7 @@ All eight are key-scoped through `resolveExternalKeyScope` + `storeAllowed`.
 | Route | Direction | Believed consumer | Status |
 |---|---|---|---|
 | `api/external/sales` | POS → ERP | Daily sales / books feed | ✅ §1 |
-| `api/external/sold-items` | POS → ERP | Inventory usage pull | ⬜ |
+| `api/external/sold-items` | POS → ERP | Inventory usage pull | ✅ §1b |
 | `api/external/inventory-items` | POS → ERP | Item master sync | ⬜ |
 | `api/external/payment-methods` | POS → ERP | Payment-method mapping | ⬜ |
 | `api/external/staff-metrics` | POS → ERP | Performance scoring | ⬜ |

@@ -77,6 +77,10 @@ export * from './sync';
 export * from './production';
 export * from './production/validate';
 export * from './production/unit-conversion';
+// T-177 — POS item mapping and the daily usage pull.
+export * from './pos/plan';
+export * from './pos/item-map';
+export * from './pos/usage-pull';
 // T-178 — order/channel wastage disposition.
 export * from './wastage/orders';
 export * from './wastage/settlement-match';

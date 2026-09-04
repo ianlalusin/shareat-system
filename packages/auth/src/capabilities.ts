@@ -229,6 +229,19 @@ export type Capability =
   | 'charge_staff_for_wastage'
   /** T-178. ⛔ Manager+: undoing a backstop's own auto-charge within its 30-day window. */
   | 'reverse_auto_charge'
+  // T-177 — POS item mapping and the daily usage pull.
+  /** T-177. Manager+, same bar as `manage_locations`/`manage_items`: a standing "this POS item
+   *  means this stock item" decision is configuration, curated by whoever runs the store. */
+  | 'manage_pos_map'
+  /** T-177 invariant 7. Staff-open, same bar as `record_stock_movement` — "the person who hits an
+   *  unmappable item mid-pull is the person who knows," and the request itself moves no stock. */
+  | 'request_pos_map'
+  /** T-177. ⛔ Manager+: approving silences the item as a recorded `no_stock` decision; rejecting
+   *  returns it to unmapped — both are judgement calls the requester's own capability may not make. */
+  | 'decide_pos_map_request'
+  /** T-177 invariant 5. ⛔ Manager+, same asymmetry as `post_usage`/`post_production` — finalizing
+   *  is the step that writes real usage records and posts through the ledger. */
+  | 'finalize_pos_usage_pull'
   // Platform — super-admin only
   | 'cross_org_access'
   | 'view_franchise_sales';
@@ -320,6 +333,10 @@ export const CAPABILITIES: readonly Capability[] = [
   'resolve_order_wastage',
   'charge_staff_for_wastage',
   'reverse_auto_charge',
+  'manage_pos_map',
+  'request_pos_map',
+  'decide_pos_map_request',
+  'finalize_pos_usage_pull',
   'cross_org_access',
   'view_franchise_sales',
 ];
@@ -474,6 +491,13 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   resolve_order_wastage: 'store',
   charge_staff_for_wastage: 'store',
   reverse_auto_charge: 'store',
+
+  // T-177. A map, a request and a pull all carry a store_id — a POS item means something
+  // different at each branch, same bar as record_order_wastage.
+  manage_pos_map: 'store',
+  request_pos_map: 'store',
+  decide_pos_map_request: 'store',
+  finalize_pos_usage_pull: 'store',
 
   cross_org_access: 'platform',
   view_franchise_sales: 'platform',
@@ -688,6 +712,15 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   resolve_order_wastage: { super_admin: true, admin: true, manager: true, staff: false },
   charge_staff_for_wastage: { super_admin: true, admin: true, manager: true, staff: false },
   reverse_auto_charge: { super_admin: true, admin: true, manager: true, staff: false },
+
+  // T-177. Mapping is manager+ curation, same bar as manage_locations/manage_items. Requesting an
+  // unmappable item is staff-open, same bar as record_stock_movement — the person who hits it is
+  // the person who knows. Deciding a request and finalizing a pull are both supervisory: the
+  // former is a judgement call, the latter is the step that writes real usage records and posts.
+  manage_pos_map: { super_admin: true, admin: true, manager: true, staff: false },
+  request_pos_map: { super_admin: true, admin: true, manager: true, staff: true },
+  decide_pos_map_request: { super_admin: true, admin: true, manager: true, staff: false },
+  finalize_pos_usage_pull: { super_admin: true, admin: true, manager: true, staff: false },
 
   cross_org_access: { super_admin: true, admin: false, manager: false, staff: false },
   view_franchise_sales: { super_admin: true, admin: false, manager: false, staff: false },

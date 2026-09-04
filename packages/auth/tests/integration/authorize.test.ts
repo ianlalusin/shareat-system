@@ -271,15 +271,21 @@ describe('invariant 5 — every capability denies a role that lacks it (all 56)'
     // counterparts are deliberately NOT here: `resolve_order_wastage`/`charge_staff_for_wastage`
     // deny staff, same asymmetry as every other record_*/resolve_* pair above.
     'record_order_wastage',
+    // ⭐ T-177 (2026-09-04): flagging a POS item that can't be mapped, mid-pull. Staff-open, same
+    // bar as record_stock_movement/record_order_wastage — "the person who hits it is the person
+    // who knows," and the request itself moves no stock. ⚠️ Its decision counterpart is
+    // deliberately NOT here: `decide_pos_map_request` denies staff, same asymmetry as every other
+    // record_*/resolve_* pair above.
+    'request_pos_map',
   ];
 
-  it('every capability EXCEPT the universally-granted 20 has at least one denial case', () => {
+  it('every capability EXCEPT the universally-granted 21 has at least one denial case', () => {
     const covered = new Set(denialCases.map((c) => c.capability));
     const missing = CAPABILITIES.filter((c) => !covered.has(c));
     expect(missing.sort()).toEqual([...UNIVERSALLY_GRANTED].sort());
   });
 
-  it('the universally-granted 20 really are true for all four roles (why they are exempt)', () => {
+  it('the universally-granted 21 really are true for all four roles (why they are exempt)', () => {
     for (const c of UNIVERSALLY_GRANTED) {
       expect(ROLES.every((r) => CAPABILITY_MATRIX[c][r]), `${c} is not actually universal`).toBe(true);
     }

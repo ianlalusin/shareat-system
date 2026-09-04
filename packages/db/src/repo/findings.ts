@@ -1077,3 +1077,44 @@ export async function openShiftsStale(tx: Tx, orgId: string): Promise<DetectedFi
       '(`npm run attendance-sweep`) is not running: check that its timer is installed on the host.',
   }));
 }
+
+/**
+ * T-177 Sec2 - the one Phase 3 failure the exit gate cannot catch. A sale that never decrements
+ * stock leaves cost never reaching COGS, so the inventory-control-equals-valuation gate stays
+ * green on BOTH sides being equally wrong - inventoryControlDoesNotMatchValuation above cannot
+ * see this. This detector asks a different question: for a store that has opted into POS-driven
+ * consumption (it has at least one active pos_item_map), did a VERIFIED sales day get a
+ * FINALIZED pull?
+ *
+ * Bounded to the last 14 days (read-cost discipline) - an older gap is still real but is no
+ * longer this detector's job to nag about forever; it becomes a standing data-quality fact for
+ * the daily review to log once, not a permanent hard finding.
+ */
+export async function posUsagePullNotRun(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    select d.store_id::text as store_id, s.name as store_name,
+           count(*)::int as n, min(d.business_date)::text as oldest
+      from sales_days d
+      join stores s on s.id = d.store_id
+     where d.org_id = ${orgId}
+       and d.status = 'verified'
+       and d.business_date >= ((now() at time zone 'Asia/Manila')::date - 14)
+       and exists (select 1 from pos_item_maps m where m.store_id = d.store_id and m.status = 'active')
+       and not exists (
+         select 1 from pos_usage_pulls p where p.sales_day_id = d.id and p.status = 'finalized'
+       )
+     group by d.store_id, s.name
+  `)) as unknown as { store_id: string; store_name: string; n: number; oldest: string }[];
+
+  return rows.map((r) => ({
+    kind: 'posUsagePullNotRun',
+    key: `posUsagePullNotRun:${r.store_id}`,
+    storeId: r.store_id,
+    severity: 'hard' as const,
+    detail:
+      `${r.store_name} has ${r.n} verified sales day${r.n === 1 ? '' : 's'} with no finalized POS ` +
+      `usage pull, the oldest from ${r.oldest}. Stock that was sold but never consumed here means ` +
+      'its cost never reached COGS, so gross margin looks better than it is until the next ' +
+      'physical count explains the gap as shrinkage.',
+  }));
+}

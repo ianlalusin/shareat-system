@@ -954,6 +954,26 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     class: 'purge',
     reason: 'The detail of a record, hanging off it by CASCADE. Same class as its parent.',
   },
+  pos_item_maps: {
+    class: 'keep',
+    reason:
+      'A standing "this POS item means this stock item" decision — configuration, the same class ' +
+      'as production_recipes. Nobody wants to re-map a menu on 1 January.',
+  },
+  pos_map_requests: {
+    class: 'keep',
+    reason: 'The provenance of a mapping decision, same class as item_requests — kept with the map it produced.',
+  },
+  pos_usage_pulls: {
+    class: 'purge',
+    reason:
+      'Operational — one real reconciliation event per (store, sales day), the same class as ' +
+      'stock_usage_records. No pilot pull survives the cutover.',
+  },
+  pos_usage_pull_lines: {
+    class: 'purge',
+    reason: 'The detail of a pull, hanging off it by CASCADE. Same class as its parent.',
+  },
 };
 
 /** Tables the purge must never touch even if classified — belt and braces around views. */

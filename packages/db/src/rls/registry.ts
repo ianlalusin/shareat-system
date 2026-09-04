@@ -749,6 +749,25 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     reason: 'No org_id of its own — reached only through its record, like production_recipe_lines.',
     via: 'exists (select 1 from production_records r where r.id = record_id and r.org_id = app_current_org())',
   },
+
+  // ---- T-177: POS item mapping and the daily usage pull -----------------------------------
+  pos_item_maps: {
+    scope: 'org_column',
+    reason: 'A mapping decision belongs to a store, and a store to one org.',
+  },
+  pos_map_requests: {
+    scope: 'org_column',
+    reason: 'As pos_item_maps — a store-scoped decision, org-wide isolation.',
+  },
+  pos_usage_pulls: {
+    scope: 'org_column',
+    reason: 'A pull belongs to a store, and a store to one org.',
+  },
+  pos_usage_pull_lines: {
+    scope: 'derived',
+    reason: 'No org_id of its own — reached only through its pull, like production_record_lines.',
+    via: 'exists (select 1 from pos_usage_pulls p where p.id = pull_id and p.org_id = app_current_org())',
+  },
 };
 
 export function rlsScopeOf(table: string): RlsEntry | undefined {

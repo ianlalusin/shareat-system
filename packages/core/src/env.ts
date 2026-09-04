@@ -95,6 +95,15 @@ const serverSchema = z.object({
    */
   FIREBASE_STORAGE_BUCKET: blankAsAbsent(),
 
+  /**
+   * T-177. POS's external, key-scoped API (`docs/CROSS-APP-MAP.md` §3) — `GET
+   * {POS_API_URL}/api/external/sold-items`, the daily usage pull's snapshot source. Optional for
+   * the same reason `FIREBASE_*` is above: nothing calls it outside this one feature, and demanding
+   * it blocks local dev on a credential most work does not touch.
+   */
+  POS_API_URL: blankAsAbsent(),
+  POS_API_KEY: blankAsAbsent(),
+
   /** Signs shared-terminal session tokens (bible §7.1). Never defaulted. */
   SESSION_SECRET: requiredSecret(32),
 

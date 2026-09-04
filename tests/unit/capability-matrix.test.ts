@@ -212,11 +212,13 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // 88 since T-176 (`post_production`, `edit_posted_production`, `void_production`) and
     // T-178 (`record_order_wastage`, `resolve_order_wastage`, `charge_staff_for_wastage`,
     // `reverse_auto_charge`) landed as two concurrent lanes and both sets of rows merged.
+    // 92 since T-177 (`manage_pos_map`, `request_pos_map`, `decide_pos_map_request`,
+    // `finalize_pos_usage_pull`).
     // Having to edit this number is the guard WORKING: a capability cannot be slipped
     // into the enforcement without also being written into the document people actually
     // read, and vice versa.
     const { rows } = parseCapabilityMatrixDoc();
-    expect(rows.length).toBe(88);
+    expect(rows.length).toBe(92);
   });
 
   it('has no duplicate capability names', () => {
@@ -287,10 +289,10 @@ describe('invariant 1 — every capability has an explicit decision for all four
     expect(problems).toEqual([]);
   });
 
-  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 88 capabilities', () => {
-    expect(CAPABILITIES.length).toBe(88);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(88);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(88);
+  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 92 capabilities', () => {
+    expect(CAPABILITIES.length).toBe(92);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(92);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(92);
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));
   });

@@ -84,6 +84,10 @@ they need weekly, the boundary is wrong.
 | `edit_posted_production` | store | ✅ | ✅ | ✅ | ✗ | T-176. Reverses and re-applies a posted record's legs in place, incrementing its revision — supervisory, same bar as posting |
 | `void_production` | store | ✅ | ✅ | ✅ | ✗ | T-176. Voiding is supervisory — same asymmetry as `void_transfer`/`void_usage_record` |
 | `record_order_wastage` | store | ✅ | ✅ | ✅ | ✅ | T-178. A refunded or remade channel/dine-in order — staff-open, same bar as `record_wastage`: the person who hits it is the person who knows |
+| `manage_pos_map` | store | ✅ | ✅ | ✅ | ✗ | T-177. A standing "this POS item means this stock item" decision — configuration, same bar as `manage_locations`/`manage_items` |
+| `request_pos_map` | store | ✅ | ✅ | ✅ | ✅ | T-177 invariant 7. Staff-open, same bar as `record_stock_movement` — the person who hits an unmappable item mid-pull is the person who knows, and the request itself moves no stock |
+| `decide_pos_map_request` | store | ✅ | ✅ | ✅ | ✗ | T-177. Approving records a `no_stock` decision; rejecting returns the item to unmapped — both are judgement calls, not staff-level |
+| `finalize_pos_usage_pull` | store | ✅ | ✅ | ✅ | ✗ | T-177 invariant 5. Finalizing writes real usage records and posts through the ledger — same asymmetry as `post_usage`/`post_production` |
 | `resolve_order_wastage` | store | ✅ | ✅ | ✅ | ✗ | T-178. Deciding platform-paid / store-absorbed / staff-charged is a judgement with a posting behind it — same class as `adjust_inventory`/`resolve_trade_discrepancy` |
 | `charge_staff_for_wastage` | store | ✅ | ✅ | ✅ | ✗ | T-178. A second, stricter gate on top of `resolve_order_wastage`, checked only when the chosen disposition is `charged` — takes money off a person, same bar as `charge_staff_for_discrepancy` |
 | `reverse_auto_charge` | store | ✅ | ✅ | ✅ | ✗ | T-178. Undoing the 15-day backstop's own decision, within 30 days — a reversal plus a new resolution, never an edit |

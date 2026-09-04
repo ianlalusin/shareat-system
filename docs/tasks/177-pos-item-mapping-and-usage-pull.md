@@ -1,6 +1,19 @@
 # T-177 — POS item mapping and the daily usage pull
 
-> **Status:** SPEC, 2026-08-29. Written before implementation (bible §1.2a).
+> **Status:** ✅ **BUILT, 2026-09-04** — `packages/db/schema/pos-mapping.ts`, migration `0127`,
+> `packages/domain/src/pos/{plan,item-map,usage-pull}.ts`, `packages/db/src/repo/pos-mapping.ts`,
+> `/inventory/pos-map` + `/inventory/pos-usage`, 9 unit + 18 integration tests, green. `typecheck` ·
+> `npm test` (1013/1014, 1 pre-existing skip) · `npm run test:integration` (2257/2257, full suite) ·
+> `npm run build` all green. **Live-smoketested on 9008** end to end against a mock POS server
+> (real `fetch`, not an injected stub): built a plan, finalized the direct section, confirmed
+> on-hand dropped by the sold quantity and `Dr 5160 / Cr 1310` posted at FIFO cost. ⚠️ Two reasoned
+> deviations from this spec's own contract table, both documented in `pos-mapping.ts`'s schema
+> header and reported in the task report below — `location_id` (both `pos_item_maps` and
+> `pos_usage_pulls`, v1-informed: a store may have more than one active operating room) and three
+> `*_finalized_at` timestamps plus a stricter live-pull uniqueness (`where status <> 'void'`, not
+> the literal `where status = 'planned'`). One unrelated defect found in passing and logged, not
+> silently patched: DEF-165 (`production/index.ts`'s `scaleRecipeToTarget` is 1000x too small;
+> dormant, zero callers, out of this task's file scope to fix).
 > **Depends on:** T-161, T-162, T-164, T-168, T-176 (recipes), T-169 (the freeze it must respect),
 > T-123 (sales day — the pull is scoped to one).
 > **v1 read at source** — `pos-item-map.actions.ts` (981 lines), `pos-usage-pull.actions.ts`
@@ -163,15 +176,24 @@ Per-sale decrement is a different architecture and nobody has asked for it.
 
 ## 10. Done when
 
-- [ ] Migration hand-written (DEF-073), next free number, journalled `previous.when + 86400000`.
-- [ ] `classification.ts`: maps **KEEP** (configuration — nobody wants to re-map a menu on
-      1 January), pulls and requests **PURGE**. `rls/registry.ts` NULLIF-guarded.
-- [ ] `docs/CROSS-APP-MAP.md` gains the POS → ERP snapshot seam, including where the snapshot comes
-      from and who owns its freshness.
-- [ ] `posUsagePullNotRun` registered in `repo/findings.ts` — ⭐ **the detector that catches §2**,
-      because the exit gate cannot: a verified sales day with no finalized pull.
-- [ ] `typecheck` · `npm test` · `npm run test:integration` · `npm run build` green (dev server
-      stopped; `ListAgents` first).
-- [ ] `CAPABILITY-MATRIX.md`: `manage_pos_map`, `request_pos_map` (any usage-recorder),
-      `decide_pos_map_request` (manager), `finalize_pos_usage_pull` (manager) — each with its ✗ test.
-- [ ] `docs/ROADMAP.html` updated.
+- [x] Migration hand-written (DEF-073), next free number (`0127`), journalled — `when` stepped by
+      exactly `previous.when + 86400000` from `0126`, matching every prior entry's own spacing.
+- [x] `classification.ts`: maps **KEEP** (configuration — nobody wants to re-map a menu on
+      1 January), pulls and requests **PURGE**. `rls/registry.ts` NULLIF-guarded (`app_current_org()`,
+      the same function every other org-scoped/derived table in this registry already uses).
+- [x] `docs/CROSS-APP-MAP.md` gains the POS → ERP snapshot seam (§1b) — mechanism, source, and who
+      owns freshness (the person finalizing, via the one-hour `SNAPSHOT_STALE` gate).
+- [x] `posUsagePullNotRun` registered in `repo/findings.ts` and wired into `findings/index.ts`'s
+      `listFindings` — the detector that catches §2, because the exit gate cannot: a verified sales
+      day (last 14 days, for a store that has opted in) with no finalized pull.
+- [x] `typecheck` clean · `npm test` 1013/1014 (1 pre-existing skip, unrelated) · `npm run
+      test:integration` 2257/2257 (full suite, two runs — the second after a fix to
+      `authorize.test.ts`'s universally-granted-capability list) · `npm run build` exit 0, dev
+      server confirmed stopped first. `ListAgents` checked before starting and again before each
+      gate run — one concurrent session (T-208), coordinated on the shared `repo/findings.ts` file,
+      no collision.
+- [x] `CAPABILITY-MATRIX.md`: `manage_pos_map`, `request_pos_map` (any usage-recorder),
+      `decide_pos_map_request` (manager), `finalize_pos_usage_pull` (manager) — each with its ✗ test
+      (auto-derived by `authorize.test.ts`'s invariant 5 from `CAPABILITY_MATRIX` itself, plus
+      `request_pos_map` added to that file's `UNIVERSALLY_GRANTED` list since it is staff-open).
+- [x] `docs/ROADMAP.html` updated.

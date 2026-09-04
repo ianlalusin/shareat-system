@@ -94,6 +94,9 @@ export async function listFindings(
     // ⭐ T-178 — the tell that the 15-day order-wastage backstop is not running: a wastage a
     // scheduled run should have closed and did not.
     ...(await findingsRepo.orderWastageOpenPastBackstop(tx, orgId)),
+    // ⭐ T-177 §2 — the one Phase 3 failure inventoryControlDoesNotMatchValuation cannot catch: a
+    // verified sales day with no finalized POS usage pull.
+    ...(await findingsRepo.posUsagePullNotRun(tx, orgId)),
   ];
 
   const acks = await findingsRepo.liveAcknowledgements(tx, orgId);

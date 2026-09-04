@@ -100,3 +100,6 @@ export * from './order-wastage';
 
 // T-176 — production: slab -> slice, recipe -> batch, and the payroll lock.
 export * from './production';
+
+// T-177 — POS item mapping and the daily usage pull.
+export * from './pos-mapping';

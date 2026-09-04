@@ -218,3 +218,27 @@ export type {
   ProductionRecordRow,
   ProductionRecordLineRow,
 } from './repo/production';
+// T-177 — POS item mapping and the daily usage pull.
+export * as posMappingRepo from './repo/pos-mapping';
+export type {
+  PosItemMapRow,
+  PosMapRequestRow,
+  RecipeForExplosion,
+  PosUsagePullRow,
+  PullLineRow,
+  InsertPullLine,
+} from './repo/pos-mapping';
+export {
+  POS_MAP_MODES,
+  POS_MAP_STATUSES,
+  POS_MAP_REQUEST_STATUSES,
+  POS_USAGE_PULL_STATUSES,
+  POS_USAGE_PULL_SECTIONS,
+} from '../schema/pos-mapping';
+export type {
+  PosMapMode as PosItemMapMode,
+  PosMapStatus,
+  PosMapRequestStatus,
+  PosUsagePullStatus,
+  PosUsagePullSection,
+} from '../schema/pos-mapping';
