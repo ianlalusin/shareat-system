@@ -1,6 +1,17 @@
 # T-178 — Order/channel wastage: the other thing called "wastage"
 
-> **Status:** SPEC, 2026-08-29. Written before implementation (bible §1.2a).
+> **Status:** ✅ **BUILT, 2026-09-04** — `packages/domain/src/wastage/{orders,settlement-match}.ts`,
+> `packages/db/schema/order-wastage.ts`, migration `0126`, `/wastage`, 19 integration + 10 unit tests,
+> green. Built as one of two concurrent Sonnet lanes (with T-176) on an isolated test database, merged
+> and live-smoketested by the coordinator afterward. ⭐ The staff-charge disposition is gated behind
+> `isPhase5StaffAdvancesAvailable()` — refused with a named error today; the 15-day backstop degrades
+> to store-absorbed and records that it did. **The coordinator's own live smoketest found and fixed a
+> real bug outside this task's stated scope**: all five server actions in `apps/erp/src/app/wastage/
+> actions.ts` called `redirect()` from inside their own `try` block, so every save/dispute/resolve/
+> reverse click showed the literal string `"NEXT_REDIRECT"` instead of its real result — no test suite
+> exercises the real Next.js redirect plumbing, only a live click does. Fixed with a re-throw guard in
+> all five `catch` blocks, reverified live: record → resolve absorbed → `Dr 5300 150.00 / Cr 1220 150.00`
+> confirmed directly against `shareat_dev`.
 > **Depends on:** T-123 (sales day), T-150 (channel settlement — ⭐ the upload this reconciles
 > against already exists), T-131 (AR), and Phase 5 for the staff-charge leg (§6).
 > **v1 read at source** — `wastage.actions.ts` (1,573 lines), `src/types/wastage.ts:1-16`,

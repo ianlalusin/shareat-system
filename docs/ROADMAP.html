@@ -478,6 +478,13 @@
         explicitly rather than silently picking a side, and Ian confirmed keeping the new droplet.
       </p>
       <p>
+        <b>T-206</b>, written the same day now that the new droplet decouples deployment from it: scopes
+        retiring the OLD shared droplet (159.223.78.207) &mdash; ERPNext, and a second live system on the
+        same box with no retirement plan of its own, the POS Transaction Archive. Explicit trigger
+        conditions so this does not start before v2 has its own POS app and the ADR-007 pilot/purge window
+        arrives &mdash; not begun.
+      </p>
+      <p>
         Still open: <b>DEF-153</b> &mdash; the bible&rsquo;s own infra summary table (line 598) and
         ADR-002&rsquo;s overview/&sect;5 still describe the rejected Cloud SQL + Firebase App Hosting
         architecture, contradicting &sect;13 row 61, which supersedes that with Option B. Correcting the
@@ -652,7 +659,7 @@
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-185</div><div class="task-what">Credential enrolment and mirror</div><div class="task-note">Card and fingerprint; never a PIN</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-202</div><div class="task-what">Staff onboarding &mdash; <code>/staff</code>, <code>/staff/hire</code>, <code>/staff/[employmentId]</code></div><div class="task-note">Shipped 4 Sep &middot; closes DEF-131 &middot; create a person + employment, assign positions, end an employment</div></div>
           <div class="task t-done"><div class="task-id"><span class="dot"></span>T-203</div><div class="task-what">Terminal &amp; credential admin &mdash; <code>/attendance/terminals</code>, <code>/staff/[employmentId]/credentials</code></div><div class="task-note">Shipped 4 Sep &middot; closes DEF-133 &middot; one-time pairing token shown as text + QR, never re-fetchable &middot; live-smoketested against real <code>shareat-hub-v2</code>: minted, re-paired, revoked</div></div>
-          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-204</div><div class="task-what">The Firestore sync relay actually runs</div><div class="task-note">Shipped 4 Sep &middot; closes DEF-132/134 &middot; <code>runFirestoreRelay</code> drains the mirror outbox and ingests the inbox against REAL Firestore for the first time ever; a fresh punch now bootstraps its own attendance day the moment it lands &middot; found &amp; fixed <b>DEF-151</b> along the way: a blank <code>FIREBASE_SERVICE_ACCOUNT_KEY</code> was winning over the file path via <code>??</code>, failing every real driver call since both factories shipped &middot; &#9888; cadence every 2 minutes, the systemd timer is written but <b>not installed</b> &mdash; that&rsquo;s T-205</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-204</div><div class="task-what">The Firestore sync relay actually runs</div><div class="task-note">Shipped 4 Sep &middot; closes DEF-132/134 &middot; <code>runFirestoreRelay</code> drains the mirror outbox and ingests the inbox against REAL Firestore for the first time ever; a fresh punch now bootstraps its own attendance day the moment it lands &middot; found &amp; fixed <b>DEF-151</b> along the way: a blank <code>FIREBASE_SERVICE_ACCOUNT_KEY</code> was winning over the file path via <code>??</code>, failing every real driver call since both factories shipped &middot; &#9888; cadence every 2 minutes &mdash; installed and armed on the real droplet as of T-205, 4 Sep</div></div>
         </div>
       </div>
 

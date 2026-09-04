@@ -1,6 +1,14 @@
 # T-176 — Production: slab → slice, recipe → batch, and the payroll lock
 
-> **Status:** SPEC, 2026-08-29. Written before implementation (bible §1.2a).
+> **Status:** ✅ **BUILT, 2026-09-04** — `packages/domain/src/production/{index,validate,unit-conversion}.ts`,
+> `packages/db/schema/production.ts`, migration `0125`, `/inventory/production`, 23 integration + 30 unit
+> tests, green. Built as one of two concurrent Sonnet lanes (with T-178) on an isolated test database,
+> merged and live-smoketested by the coordinator afterward. ⚠️ Two spec-defects found and NOT silently
+> matched — see DEF-154 (§9 test 1's worked numbers don't reconcile with its own formula) and DEF-155
+> (§3 says the sliced output posts to `1330`; the existing `INVENTORY_ACCOUNT_BY_ITEM_KIND` map already
+> routes `meat_sliced` to `1310`, and this implementation reused it rather than hardcode a second router).
+> No `[id]`-page UI for editing a posted record or scaling a recipe — the domain functions exist and are
+> tested, the screen only wires Post/Void, a scope trim under time pressure.
 > **Depends on:** T-161, T-162, T-164, T-168. ⚠️ **Phase 5 for slicer pay** — this task builds the
 > lock, not the payroll (§7).
 > ⭐ **v1 RE-READ AT SOURCE 2026-08-29, at Ian's instruction** — the first draft cited
