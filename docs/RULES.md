@@ -62,6 +62,7 @@ defect.* — §9
 | Rule | § |
 |---|---|
 | **Read them as REQUIREMENTS, not as design.** Every feature exists because the business needed it and staff use it daily. The code may be wrong; the *need* is proven. **Authoritative about WHAT, never about HOW** | §1.2b · row 84 |
+| ⭐ **UI/UX is a third authority.** A screen should be familiar-but-upgraded, never reinvented — same record workflow, better presentation. One uniform, reusable pattern set across screens. `apps/erp`/`pos`/`customer` are one visual family. **POS, not ERP-rebuild, is today's presentation-quality benchmark** where the two disagree | §1.2c · row 171 |
 | **Reading needs no permission and no announcement.** Read freely and often — guessing what the old system does is far more dangerous than opening it | §2.1 |
 | **The four verbs:** *duplicate* what's good · *correct* what's wrong · *add* what's missing · *delete* what's redundant | §1.2 |
 | **If a feature looks pointless, ASK — never delete.** Removing a redundant *implementation* is Claude's call; removing a *capability someone uses* is Ian's | §1.2 |
