@@ -323,3 +323,33 @@ an Opus planner session may add to the bible's decision log — a Sonnet session
 conflict and stops rather than editing it. This ADR carries the decision in full; an Opus session
 should add the corresponding §13 row (and resolve the "Supabase" question above) the next time
 one runs.
+
+## Amendment — 2026-09-04 (later the same day): superseded — a new droplet now, not reuse at cutover
+
+**The "droplet reuse timing" amendment above no longer reflects what happened.** Minutes after
+that amendment was recorded, in a *different* concurrent session, Ian asked: *"can we add another
+droplet first so it is separate from the erpnext and i will just retire the whole droplet soon?"*
+— the opposite of "no second droplet, reuse the existing one at cutover."
+
+Flagged explicitly to Ian rather than silently picking either version (two of his own sessions had
+recorded conflicting decisions about the same piece of infrastructure) — confirmed: **keep the new
+droplet.** T-205 (`docs/tasks/205-first-production-deployment.md`) proceeded on that basis and is
+now live.
+
+**What actually exists, as of this amendment:**
+- A new droplet, `shareat-system-prod` (`159.223.46.224`, SGP1, 2 GB/2 vCPU), dedicated to
+  Shareat System — **not** the old `SharEat-Droplet` (`159.223.78.207`).
+- DO Managed Postgres `shareat-system-db`, same VPC as the new droplet, trusted source = that
+  droplet only.
+- The app live at `https://erp2.shareat.net`, deployed via GitHub Actions.
+
+**The old droplet's full retirement is unchanged in substance, only in sequencing**: it still
+happens once Frappe/ERPNext and v1 POS are backed up and Shareat System has grown its own
+POS/Customer apps (ADR-003, "1 backend for erp and pos and customer app") — it is simply no longer
+the thing v2's *first* deployment waits on. `§8 item 2`'s "Confirm nothing else is running on it
+first" still applies whenever that retirement is actually scheduled.
+
+Same caveat as the amendment above: `PROJECT_BIBLE.md` §13 is not updated here (§14 amendment
+protocol — Opus planner only). Whoever adds the row for the amendment above should fold this one
+in with it, or add a second row noting the reversal — both amendments are now part of this file's
+history and should stay legible as *sequence*, not be silently edited away.

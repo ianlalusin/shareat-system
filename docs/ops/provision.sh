@@ -50,6 +50,13 @@ mkdir -p /var/log/shareat
 chown -R shareat:shareat /srv/shareat-releases /srv/shareat-shared /var/log/shareat
 chmod 700 /srv/shareat-shared/secrets
 
+# The deploy's releases/current-symlink swap creates/replaces /srv/shareat itself, which needs
+# WRITE on the containing directory (/srv), not on shareat-releases or shareat-shared — found the
+# hard way on a live deploy ("ln: failed to create symbolic link '/srv/shareat.new': Permission
+# denied"). Group-write only, root keeps ownership — nothing else lives in /srv on this droplet.
+chgrp shareat /srv
+chmod g+w /srv
+
 if [ ! -f /srv/shareat-shared/.env.local ]; then
   touch /srv/shareat-shared/.env.local
   chown shareat:shareat /srv/shareat-shared/.env.local
@@ -113,17 +120,26 @@ else
 fi
 
 echo ""
-echo "== Provisioning done. What is NOT yet true: =="
-echo "  - /srv/shareat does not exist yet — the first deploy creates it (see deploy.yml)."
-echo "  - No unit is enabled or started yet — nothing to point them at until the first deploy."
-echo "  - /srv/shareat-shared/.env.local is empty — fill it in before the first deploy runs,"
-echo "    or shareat-erp.service will fail closed on startup (bible §7 rule 9) — by design."
-echo "  - FIREBASE_SERVICE_ACCOUNT_KEY_FILE must be an ABSOLUTE path into"
-echo "    /srv/shareat-shared/secrets/ (T-205 blocker 2) — place the key file there first."
-echo ""
-echo "After the first deploy succeeds, enable the timers:"
-echo "  systemctl enable --now shareat-erp.service"
-echo "  systemctl enable --now shareat-firestore-relay.timer"
-echo "  systemctl enable --now shareat-attendance-sweep.timer"
-echo "  systemctl enable --now shareat-month-end.timer"
-echo "Then verify each is actually armed — 'systemctl list-timers' — per docs/ops/README.md."
+echo "== Provisioning done. =="
+# This block used to be static text printed on every run, including re-runs after a real deploy
+# had already happened — misleading on a second invocation (e.g. adding a domain later). Check
+# actual state instead.
+if [ ! -L /srv/shareat ]; then
+  echo "  - /srv/shareat does not exist yet — the first deploy creates it (see deploy.yml)."
+  echo "  - No unit is enabled or started yet — nothing to point them at until the first deploy."
+fi
+if [ ! -s /srv/shareat-shared/.env.local ]; then
+  echo "  - /srv/shareat-shared/.env.local is empty — fill it in before the first deploy runs,"
+  echo "    or shareat-erp.service will fail closed on startup (bible §7 rule 9) — by design."
+  echo "  - FIREBASE_SERVICE_ACCOUNT_KEY_FILE must be an ABSOLUTE path into"
+  echo "    /srv/shareat-shared/secrets/ (T-205 blocker 2) — place the key file there first."
+fi
+if [ -L /srv/shareat ] && [ -s /srv/shareat-shared/.env.local ]; then
+  echo "  - A deploy has already landed and .env.local is filled in — nothing further needed here."
+  echo "    If the timers aren't enabled yet:"
+  echo "      systemctl enable --now shareat-erp.service"
+  echo "      systemctl enable --now shareat-firestore-relay.timer"
+  echo "      systemctl enable --now shareat-attendance-sweep.timer"
+  echo "      systemctl enable --now shareat-month-end.timer"
+  echo "    Then verify each is actually armed — 'systemctl list-timers' — per docs/ops/README.md."
+fi

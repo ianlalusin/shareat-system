@@ -1,16 +1,26 @@
 # T-205 — Shareat System's first production deployment, and installing the three scheduled jobs
 
-> **Status:** 🚧 **CI-side half built, 2026-09-04. Gates green; nothing deployed yet.** Written
-> after `/research-evaluate-propose` on Ian's ask to "install the systemd timers" found the real
-> task was much larger: the app has never been deployed anywhere, so there is nothing to point a
-> timer at. See `docs/DEFECTS-REGISTER.md` **DEF-153** for a related documentation defect found
-> while researching this (bible's infra summary table contradicts its own superseding decision).
+> **Status:** ✅ **LIVE, 2026-09-04.** Shareat System is in production for the first time ever, at
+> **https://erp2.shareat.net**, on its own dedicated droplet (`159.223.46.224`) with DO Managed
+> Postgres (`shareat-system-db`, private VPC). Written after `/research-evaluate-propose` on Ian's
+> ask to "install the systemd timers" found the real task was much larger: the app had never been
+> deployed anywhere, so there was nothing to point a timer at. See `docs/DEFECTS-REGISTER.md`
+> **DEF-153** for a related documentation defect found while researching this.
 > **Gates:** typecheck clean · unit 942/943 (1 pre-existing skip) · integration 79 files / 2117
-> tests green (real Postgres) · `npm run build` exit 0 · smoketested on 9008 (`/api/health` and
-> `/sign-in` both 200 after the `dotenv`/`tsx` dependency fix). **Not committed — Ian's call.**
-> **Cannot go further without Ian**: the deploy workflow, provisioning script and new units are
-> all written, but nothing on the droplet exists yet and none of the required GitHub Secrets do
-> either — see Phase 0/4 in the plan and the open questions below.
+> tests green (real Postgres) · `npm run build` exit 0 · smoketested locally on 9008, then for
+> real in production: `GET /api/health` → `{"status":"ok","database":"reachable"}` both over
+> `127.0.0.1:9008` on the droplet and over `https://erp2.shareat.net` through Caddy's TLS.
+> **Committed and pushed** — `3b0f87c` (main).
+> **Verified live**: `shareat-erp.service` enabled and serving; all three job timers enabled,
+> armed (`systemctl list-timers` shows populated `NEXT`/`LEFT` for all three, including
+> `shareat-month-end.timer` correctly next-firing 2026-10-01), and each run once by hand with a
+> clean `journalctl` exit — the step `docs/ops/README.md` says this business's history keeps
+> skipping.
+> **Three real bugs found and fixed only by actually deploying, not by reading the code**: (1)
+> `dotenv`/`tsx` were devDependencies, breaking `next start` and every job script under
+> `npm ci --omit=dev`; (2) the `shareat` user's `nologin` shell blocked the deploy workflow's own
+> non-interactive SSH commands; (3) `/srv` itself needed group-write for `shareat` to swap the
+> releases symlink — none of these were visible from reading `provision.sh`, only from running it.
 > **Depends on:** ADR-002 §1 (Option B — DO Managed Postgres + the app on its own droplet, both
 > SGP1, same VPC), `IAN-SETUP-CHECKLIST.md` §4b (GitHub Actions + a deploy key in Secrets; no
 > standing shell access for any human or agent), bible §2.10 / RULES rule 11 (never build on the
