@@ -290,3 +290,33 @@ through this system** — BIR 1601-E is a monthly filing obligation with its own
 non-withholding, independent of whether the rebuild ever touches it. Needs a deliberate yes/no from
 Ian, the same way the SC/PWD capture gap (row 216) and the statutory-remittance one did, rather than
 staying silently absent. **Gap count: 37.**
+
+## Added 2026-09-04 — from `docs/discovery/26-reporting-dashboards-and-insights.md`, while planning Phase 6
+
+### ⭐ A correction to this file's own classification: **OIL is not an AI feature**
+
+Line 168 files *"OIL lapse-detection engine"* under **nice-to-have → deferred past cutover**,
+beside the AI insights/briefing layer. **Both halves of that placement are wrong**, and the
+discovery pass flagged it rather than silently reclassifying it (bible §13 row 164):
+
+| | |
+|---|---|
+| **It is not AI** | v1's own `src/types/integrity.ts:1-3`: *"Daily Insights — Open Items & Lapses (OIL). **Deterministic** integrity findings surfaced over existing operational/financial records. Pure observation layer — never touches the GL."* Zero LLM tokens. All 13 detectors are threshold/date logic over data Phases 2–5 already produce in Postgres |
+| **It is not nice-to-have** | ⭐ **441 findings resolved by managers** at the two engaged stores (discovery 26 §C.2) — the strongest usage evidence anywhere in that pass, against **13 uses ever** for Ask ERP and **0 opens in 88 days** for the AI briefing at one enrolled store |
+| **And it is mostly built** | **T-135 shipped the engine** — 22 detector kinds, the derived-not-stored model, acknowledgement with a 30-day expiry, and the `/findings` screen. What remains is the operational detectors whose data now exists, plus the scorecard: **~3–5 engineer-days, no new infrastructure** |
+
+⭐ **Owner assigned: Phase 6** — `docs/plans/phase-6-reporting-and-dashboards.md` §4.4 (detectors,
+T-213) and §5.1 (the manager responsiveness scorecard, T-214). The **AI narrative briefing layer**
+and **Ask ERP** keep their deferral on line 168, with reasons restated in that plan's §4.5 and §4.6.
+**No change to the gap count** — this row moves a capability from "deferred" to an owner.
+
+### A new gap — receiving-dispute ageing has no backstop
+
+| Capability | v1 has it | v2 state | Why it is a gap, not a defect |
+|---|---|---|---|
+| **A forced-resolution backstop on commissary / branch-order RECEIVING disputes** | ⛔ **No — and the asymmetry is the finding.** v1 runs an automatic **15-day** forced-resolution cron for order/channel **wastage** disputes, and nothing equivalent for **receiving** disputes; a code comment argues one is unnecessary because *"disputes get resolved"* | ⛔ **Also absent.** T-178 carries the wastage backstop forward; **T-174** (discrepancy, settle, defer) has a *defer-once* rule but no ageing backstop, and no phase owns one | ⚠️ **The self-bounding assumption is measurably false today.** Live probe, discovery 26 §B.2: **2 of 5 open disputes at Lipa and 2 of 4 at Malvar already exceed 15 days** — the very threshold the *other* dispute path in the same codebase treats as serious enough to automate. Neither system does this, so it is a gap rather than a defect |
+
+**Recommendation:** the control belongs to **T-174**, not to Phase 6. Phase 6 builds only the
+`receivingDisputeOverdue` **detector** (plan §6 Q3), which makes the ageing visible either way and
+is worth having even if Ian decides manual follow-up suffices at nine open disputes. **Needs a
+yes/no from Ian on the backstop itself. Gap count: 38.**
