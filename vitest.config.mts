@@ -43,9 +43,12 @@ export default defineConfig({
           // are named in the definition of done. A guard that does not execute is worse than no
           // guard, because it is credited. T-157 adds the first golden test and needs the glob to
           // be real; proven by watching a deliberately failing golden test actually fail.
+          // `tests/invariants/` moved OUT to the integration project below (T-111) — the standing
+          // invariant checks it holds post through the real `postEntry` against real Postgres, so
+          // they are DB-touching by nature and belong with every other suite this file already
+          // routes there, not here.
           include: [
             'tests/unit/**/*.test.ts',
-            'tests/invariants/**/*.test.ts',
             'tests/golden/**/*.test.ts',
             'packages/**/*.test.ts',
             'apps/**/*.test.ts',
@@ -62,7 +65,14 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'integration',
-          include: ['tests/integration/**/*.test.ts', 'packages/**/tests/integration/**/*.test.ts'],
+          // T-111 (DEF-081): `tests/invariants/` holds the standing, continuous invariant checks
+          // (bible §16.1) — they post through the real `postEntry`, so they need real Postgres and
+          // run here, not under `unit`.
+          include: [
+            'tests/integration/**/*.test.ts',
+            'tests/invariants/**/*.test.ts',
+            'packages/**/tests/integration/**/*.test.ts',
+          ],
           exclude: ['**/node_modules/**', '**/.next/**'],
           environment: 'node',
           setupFiles: ['tests/integration/setup.ts'],

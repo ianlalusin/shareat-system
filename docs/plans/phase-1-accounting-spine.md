@@ -336,7 +336,7 @@ The first of these is already running (`docs/discovery/17-industry-erp-patterns.
 | T-108 | Worked examples as fixtures | T-102 |
 | T-109 | The ten invariants as CI tests | T-105 |
 | T-110 | Reporting views | T-105 |
-| T-111 | Property-based test suite | T-109 |
+| T-111 ✅ | Property-based test suite — **built 2026-09-05, closing DEF-080/DEF-081** (`docs/tasks/111-property-based-invariant-tests.md`). `tests/invariants/accounting-equation.test.ts`, `fast-check` generating random valid transaction sets through the real `postEntry`, invariants 9 and 10 asserted after every posted entry | T-109 |
 | T-112 | ETL framework + reconciliation reporter | T-103 |
 | T-113 | Nominal-leg mapping table | **Ian's review** |
 | T-114 | ETL Stage 1 — analysis mode + audit report | T-112, T-113 |
