@@ -24,8 +24,11 @@ import type { Actor } from '@shareat/auth';
 import {
   acknowledgeFinding,
   closeReadiness,
+  createCashRequest,
   createEmployment,
+  decideCashRequest,
   listFindings,
+  releaseCashRequest,
   seedAttendanceConfig,
   seedCanonicalPositions,
 } from '@shareat/domain';
@@ -183,6 +186,102 @@ describe('each detector fires when its condition holds', () => {
   it('⛔ and it does NOT fire when there is nothing to depreciate', async () => {
     const f = await fixture('noassets');
     expect(await kinds(f)).not.toContain('depreciationNotBooked');
+  });
+
+  it('⭐ DEF-157 — a reimbursement owed to an employee, unpaid for over 30 days', async () => {
+    const f = await fixture('reimb');
+    await post(
+      f,
+      [
+        { code: '6300', debit: '650.00' },
+        { code: '2130', credit: '650.00', party: { t: 'employee', id: f.personId } },
+      ],
+      uid('k'),
+    );
+    const result = await feed(f);
+    const finding = result.findings.find((x) => x.kind === 'reimbursablePayableAgeing');
+    expect(finding).toBeDefined();
+    expect(finding!.key).toBe(`reimbursablePayableAgeing:${f.personId}`);
+    expect(finding!.severity).toBe('soft');
+    expect(finding!.detail).toMatch(/₱650\.00/);
+  });
+
+  it('⚠️ and it stays quiet once the reimbursement is paid', async () => {
+    const f = await fixture('reimbpaid');
+    await post(
+      f,
+      [
+        { code: '6300', debit: '650.00' },
+        { code: '2130', credit: '650.00', party: { t: 'employee', id: f.personId } },
+      ],
+      uid('k1'),
+    );
+    await post(
+      f,
+      [
+        { code: '2130', debit: '650.00', party: { t: 'employee', id: f.personId } },
+        { code: '1110', credit: '650.00' },
+      ],
+      uid('k2'),
+    );
+    expect(await kinds(f)).not.toContain('reimbursablePayableAgeing');
+  });
+
+  it('⭐ DEF-159 — a cash-request float released and never liquidated, past 30 days', async () => {
+    const f = await fixture('floatold');
+    const [till] = await sql<{ id: string }[]>`
+      select id from money_accounts where store_id = ${f.storeId}
+        and instrument = 'cash' and custodian = 'cashier' and is_foundation`;
+    const req = await asOrg(f.orgId, (tx) =>
+      createCashRequest(tx, f.admin, {
+        storeId: f.storeId, requestedFor: f.personId, purpose: 'Market run', amount: '2000.00', on: '2026-01-05',
+      }),
+    );
+    await asOrg(f.orgId, (tx) =>
+      decideCashRequest(tx, f.admin, { requestId: req.id, decision: 'approve', amount: '2000.00', on: '2026-01-05' }),
+    );
+    await asOrg(f.orgId, (tx) =>
+      releaseCashRequest(tx, f.admin, { requestId: req.id, amount: '2000.00', fromMoneyAccountId: till!.id, on: '2026-01-05' }),
+    );
+
+    const result = await feed(f);
+    const finding = result.findings.find((x) => x.kind === 'cashRequestFloatAgeing');
+    expect(finding).toBeDefined();
+    expect(finding!.key).toBe(`cashRequestFloatAgeing:${req.id}`);
+    expect(finding!.severity).toBe('soft');
+    expect(finding!.detail).toMatch(/₱2,000\.00/);
+  });
+
+  it('⛔ and it does NOT fire while the float is recent', async () => {
+    const f = await fixture('floatrecent');
+    // A period covering TODAY, so a float "released" a couple of days ago is genuinely recent
+    // relative to the detector's real wall-clock threshold — fixture()'s own period only covers
+    // January 2026.
+    const today = new Date();
+    const yyyy = today.getUTCFullYear();
+    const mm = String(today.getUTCMonth() + 1).padStart(2, '0');
+    const lastDay = new Date(Date.UTC(yyyy, today.getUTCMonth() + 1, 0)).getUTCDate();
+    await sql`
+      insert into fiscal_periods (org_id, starts_on, ends_on, status)
+      values (${f.orgId}, ${`${yyyy}-${mm}-01`}, ${`${yyyy}-${mm}-${lastDay}`}, 'open')
+      on conflict do nothing`;
+    const recentDate = new Date(today.getTime() - 2 * 86_400_000).toISOString().slice(0, 10);
+
+    const [till] = await sql<{ id: string }[]>`
+      select id from money_accounts where store_id = ${f.storeId}
+        and instrument = 'cash' and custodian = 'cashier' and is_foundation`;
+    const req = await asOrg(f.orgId, (tx) =>
+      createCashRequest(tx, f.admin, {
+        storeId: f.storeId, requestedFor: f.personId, purpose: 'Market run', amount: '500.00', on: recentDate,
+      }),
+    );
+    await asOrg(f.orgId, (tx) =>
+      decideCashRequest(tx, f.admin, { requestId: req.id, decision: 'approve', amount: '500.00', on: recentDate }),
+    );
+    await asOrg(f.orgId, (tx) =>
+      releaseCashRequest(tx, f.admin, { requestId: req.id, amount: '500.00', fromMoneyAccountId: till!.id, on: recentDate }),
+    );
+    expect(await kinds(f)).not.toContain('cashRequestFloatAgeing');
   });
 });
 

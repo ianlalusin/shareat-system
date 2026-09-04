@@ -87,6 +87,10 @@ export async function listFindings(
     ...(await findingsRepo.inventoryControlDoesNotMatchValuation(tx, orgId)),
     // T-179 — a customer store credit sitting unredeemed. The AR mirror of supplierCreditAgeing.
     ...(await findingsRepo.customerCreditAgeing(tx, orgId)),
+    // DEF-157 — a reimbursement owed to an employee, sitting unpaid on 2130.
+    ...(await findingsRepo.reimbursablePayableAgeing(tx, orgId)),
+    // DEF-159 — a cash-request float released and never liquidated.
+    ...(await findingsRepo.cashRequestFloatAgeing(tx, orgId)),
     // ⭐ T-178 — the tell that the 15-day order-wastage backstop is not running: a wastage a
     // scheduled run should have closed and did not.
     ...(await findingsRepo.orderWastageOpenPastBackstop(tx, orgId)),

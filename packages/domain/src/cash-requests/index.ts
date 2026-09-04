@@ -189,6 +189,21 @@ export async function releaseCashRequest(
       );
     }
 
+    // DEF-159 / bible §16.10: "enforce liquidation before a new advance to the same person."
+    // A float is created here (release), not at request or approval, so this is the one point
+    // that actually creates the exposure the rule is protecting against.
+    const openForPerson = (await cashRequestsRepo.openFloats(trx, actor.orgId)).filter(
+      (r) => r.requestedFor === req.requestedFor,
+    );
+    if (openForPerson.length > 0) {
+      const other = openForPerson[0]!;
+      throw new Error(
+        `releaseCashRequest: this person already holds an unliquidated float of ` +
+          `${other.approvedAmount} (request ${other.id}, released ${other.releasedOn}). ` +
+          'Liquidate it before releasing a new one.',
+      );
+    }
+
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.fromMoneyAccountId);
     if (!account) throw new Error('releaseCashRequest: that money account does not exist.');
     // ⚠️ Cross-store funding is T-144 §6's named next slice — it needs the 1250/2150 pair, which

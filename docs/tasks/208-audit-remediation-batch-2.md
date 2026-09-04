@@ -1,8 +1,9 @@
-# T-208 — accounting-foundation audit remediation, batch 2 (blocked)
+# T-208 — accounting-foundation audit remediation, batch 2
 
-Status: blocked — `packages/domain/src/findings/index.ts` and `packages/db/src/repo/findings.ts`
-are mid-edit by a concurrent session (T-176/T-178, uncommitted) as of 2026-09-04. Do not start
-until that work lands and those two files are clean in `git status`.
+Status: done — 2026-09-04. The original blocker cleared (the concurrent T-176/T-178 session
+committed and wrapped up); a second concurrent session (T-177) confirmed it had not yet touched
+`findings.ts` before this landed, and will layer its own `posUsagePullNotRun` detector on top
+afterward. See `docs/DEFECTS-REGISTER.md`'s DEF-157/DEF-159 rows for closing detail.
 
 ## Goal
 
@@ -46,7 +47,9 @@ having data to work with at all).
 
 ## Done when
 
-- [ ] `findings/index.ts`/`repo/findings.ts` confirmed clean (not mid-edit by another session)
+- [x] `findings/index.ts`/`repo/findings.ts` confirmed clean (not mid-edit by another session)
   before starting.
-- [ ] Same gate list as T-207.
-- [ ] `docs/DEFECTS-REGISTER.md`'s DEF-157/DEF-159 rows updated with their closing disposition.
+- [x] Same gate list as T-207 — typecheck clean · unit 996/997 (1 pre-existing skip) · full
+  integration suite, 81 files / 2223 tests, green against `shareat_test_207` · `npm run build`
+  exit 0.
+- [x] `docs/DEFECTS-REGISTER.md`'s DEF-157/DEF-159 rows updated with their closing disposition.

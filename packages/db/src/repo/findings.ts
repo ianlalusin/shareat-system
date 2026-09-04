@@ -755,6 +755,116 @@ export async function customerCreditAgeing(
 }
 
 /**
+ * DEF-157 — `2130 Reimbursements payable to employees` is credited on every reimbursable
+ * expense (`expenses/routing.ts`) and, until `payReimbursement` (T-208), had no clearing path at
+ * all. Same shape as `supplierCreditAgeing`/`customerCreditAgeing`, but with no companion table
+ * to read an originating date from — so the "since" date is FIFO'd from the entries themselves,
+ * the same technique `serviceChargeFloatAgeing` uses for a single control account, applied here
+ * per employee.
+ */
+export async function reimbursablePayableAgeing(
+  tx: Tx,
+  orgId: string,
+  thresholdDays = 30,
+): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    select jl.party_id as employee_id, coalesce(p.display_name, jl.party_id) as employee_name,
+           je.entry_date::text as entry_date,
+           coalesce(sum(jl.credit), 0)::text as credited,
+           coalesce(sum(jl.debit), 0)::text as debited
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    left join persons p on p.id::text = jl.party_id
+    where je.org_id = ${orgId} and je.status <> 'draft'
+      and a.code = '2130' and jl.party_type = 'employee'
+    group by jl.party_id, p.display_name, je.entry_date
+    order by jl.party_id, je.entry_date asc
+  `)) as unknown as {
+    employee_id: string; employee_name: string; entry_date: string; credited: string; debited: string;
+  }[];
+
+  const byEmployee = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const list = byEmployee.get(r.employee_id) ?? [];
+    list.push(r);
+    byEmployee.set(r.employee_id, list);
+  }
+
+  const findings: DetectedFinding[] = [];
+  for (const [employeeId, entries] of byEmployee) {
+    const balance = entries.reduce((n, r) => n + Number(r.credited) - Number(r.debited), 0);
+    if (balance < 0.005) continue;
+
+    // FIFO: consume the oldest credits with everything ever debited for this employee.
+    let remainingDebits = entries.reduce((n, r) => n + Number(r.debited), 0);
+    let oldestUncleared: string | null = null;
+    for (const r of entries) {
+      const credited = Number(r.credited);
+      if (credited <= 0) continue;
+      if (remainingDebits >= credited - 0.005) {
+        remainingDebits -= credited;
+        continue;
+      }
+      oldestUncleared = r.entry_date;
+      break;
+    }
+    if (oldestUncleared === null) continue;
+
+    const ageDays = Math.floor(
+      (Date.now() - new Date(`${oldestUncleared}T00:00:00Z`).getTime()) / 86_400_000,
+    );
+    if (ageDays <= thresholdDays) continue;
+
+    findings.push({
+      kind: 'reimbursablePayableAgeing',
+      key: `reimbursablePayableAgeing:${employeeId}`,
+      storeId: null,
+      severity: 'soft',
+      detail:
+        `${entries[0]!.employee_name} is owed ${peso(balance)} in reimbursements, unpaid since ` +
+        `${oldestUncleared} (${ageDays} days). Settle it with a reimbursement payout.`,
+    });
+  }
+  return findings;
+}
+
+/**
+ * DEF-159 / bible §16.10 — "age unliquidated advances; they are a standing control risk." Unlike
+ * the ageing detectors above, `cash_requests` already carries its own status and release date
+ * directly — no ledger FIFO needed, the row itself says whether it is still open.
+ */
+export async function cashRequestFloatAgeing(
+  tx: Tx,
+  orgId: string,
+  thresholdDays = 30,
+): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    select cr.id as request_id, coalesce(p.display_name, cr.requested_for::text) as person_name,
+           cr.approved_amount::text as amount, cr.released_on::text as released_on
+    from cash_requests cr
+    left join persons p on p.id = cr.requested_for
+    where cr.org_id = ${orgId} and cr.status = 'released'
+      and cr.released_on < (current_date - (${thresholdDays} || ' days')::interval)
+  `)) as unknown as { request_id: string; person_name: string; amount: string; released_on: string }[];
+
+  return rows.map((r) => {
+    const ageDays = Math.floor(
+      (Date.now() - new Date(`${r.released_on}T00:00:00Z`).getTime()) / 86_400_000,
+    );
+    return {
+      kind: 'cashRequestFloatAgeing',
+      key: `cashRequestFloatAgeing:${r.request_id}`,
+      storeId: null,
+      severity: 'soft' as const,
+      detail:
+        `${r.person_name} has held a ${peso(Number(r.amount))} float since ${r.released_on} ` +
+        `(${ageDays} days) with no liquidation. Settle it before releasing anything further to them.`,
+    };
+  });
+}
+
+/**
  * ⭐ T-167's stuck-transfer report, as a finding rather than a screen someone has to remember to
  * open. Per store, matching `stuckTransfers`'s own default — a room-to-room transfer that has sat
  * `in_transit` for more than the threshold is either forgotten or the goods never actually moved.

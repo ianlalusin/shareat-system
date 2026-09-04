@@ -19,6 +19,33 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { expenseCategories, expensePayments, expenses } from '../../schema';
 import type { Tx } from '../client';
 
+/** DEF-157: the account `expense/routing.ts` credits for a reimbursable payment. Duplicated as
+ *  a literal, the same way `arRepo`/`loansRepo` hardcode their own control-account codes rather
+ *  than importing across the domain/db boundary. */
+const REIMBURSABLE_TO_EMPLOYEES_CODE = '2130';
+
+/**
+ * The outstanding balance owed to one employee on `2130` — same shape as `arRepo.positionOf` /
+ * `loansRepo.positionOf`: derived from the ledger, never a stored running total. A liability
+ * account, so outstanding = credit − debit.
+ */
+export async function reimbursablePayableOf(
+  tx: Tx,
+  orgId: string,
+  employeeId: string,
+): Promise<{ outstanding: string }> {
+  const [row] = (await tx.execute(sql`
+    select coalesce(sum(jl.credit - jl.debit), 0)::text as outstanding
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId} and je.status <> 'draft'
+      and a.code = ${REIMBURSABLE_TO_EMPLOYEES_CODE}
+      and jl.party_type = 'employee' and jl.party_id = ${employeeId}
+  `)) as unknown as { outstanding: string }[];
+  return { outstanding: Number(row?.outstanding ?? 0).toFixed(2) };
+}
+
 // -----------------------------------------------------------------------------------------
 // expense_categories — read-only from this module's own point of view (seeding is
 // packages/db/seed/expense-categories.ts's job, not this repo's).

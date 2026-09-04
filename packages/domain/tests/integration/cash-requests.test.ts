@@ -448,3 +448,73 @@ describe('withdrawing a request', () => {
     ).rejects.toThrow(/only one that has not been released/);
   });
 });
+
+describe('⛔ DEF-159 — a second float cannot be released while the first is unliquidated', () => {
+  it('refuses to release a new request for a person who already holds one', async () => {
+    const f = await fixture('def159-blocked');
+    await released(f, '1000.00');
+
+    const second = await asOrg(f.orgId, (tx) =>
+      createCashRequest(tx, f.staff, {
+        storeId: f.storeId, requestedFor: f.staffId, purpose: 'A second errand', amount: '500.00', on: '2026-01-06',
+      }),
+    );
+    await asOrg(f.orgId, (tx) =>
+      decideCashRequest(tx, f.manager, { requestId: second.id, decision: 'approve', amount: '500.00', on: '2026-01-06' }),
+    );
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        releaseCashRequest(tx, f.manager, {
+          requestId: second.id, amount: '500.00', fromMoneyAccountId: f.till, on: '2026-01-06',
+        }),
+      ),
+    ).rejects.toThrow(/already holds an unliquidated float/);
+  });
+
+  it('releases fine once the first float is liquidated', async () => {
+    const f = await fixture('def159-cleared');
+    const first = await released(f, '1000.00');
+    await asOrg(f.orgId, (tx) =>
+      settleCashRequest(tx, f.manager, {
+        requestId: first, returnedAmount: '1000.00', toMoneyAccountId: f.till, on: '2026-01-06',
+      }),
+    );
+
+    const second = await asOrg(f.orgId, (tx) =>
+      createCashRequest(tx, f.staff, {
+        storeId: f.storeId, requestedFor: f.staffId, purpose: 'A second errand', amount: '500.00', on: '2026-01-07',
+      }),
+    );
+    await asOrg(f.orgId, (tx) =>
+      decideCashRequest(tx, f.manager, { requestId: second.id, decision: 'approve', amount: '500.00', on: '2026-01-07' }),
+    );
+    const released2 = await asOrg(f.orgId, (tx) =>
+      releaseCashRequest(tx, f.manager, {
+        requestId: second.id, amount: '500.00', fromMoneyAccountId: f.till, on: '2026-01-07',
+      }),
+    );
+    expect(released2.entryId).toBeTruthy();
+  });
+
+  it('does not block a DIFFERENT person from releasing their own float', async () => {
+    const f = await fixture('def159-otherperson');
+    await released(f, '1000.00'); // f.staffId's float, still open
+
+    const otherStaffId = await person(f.orgId, f.storeId, 'Ben', 'staff');
+    const other = actor(f.orgId, otherStaffId);
+    const req = await asOrg(f.orgId, (tx) =>
+      createCashRequest(tx, other, {
+        storeId: f.storeId, requestedFor: otherStaffId, purpose: 'Different errand', amount: '300.00', on: '2026-01-06',
+      }),
+    );
+    await asOrg(f.orgId, (tx) =>
+      decideCashRequest(tx, f.manager, { requestId: req.id, decision: 'approve', amount: '300.00', on: '2026-01-06' }),
+    );
+    const result = await asOrg(f.orgId, (tx) =>
+      releaseCashRequest(tx, f.manager, {
+        requestId: req.id, amount: '300.00', fromMoneyAccountId: f.till, on: '2026-01-06',
+      }),
+    );
+    expect(result.entryId).toBeTruthy();
+  });
+});

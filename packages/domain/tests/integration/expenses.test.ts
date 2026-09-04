@@ -52,7 +52,8 @@ import { CUTOVER_CLASSIFICATION } from '../../../db/src/cutover/classification';
 import { RLS_REGISTRY } from '../../../db/src/rls/registry';
 import { closeDb, findingsRepo, moneyAccountsRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
-import { approveExpense, createExpense, deleteExpenseDraft, editExpense, voidExpense, routeExpense, recordInvoice, verifyInvoice, setTillFloat } from '@shareat/domain';
+import { approveExpense, createExpense, deleteExpenseDraft, editExpense, voidExpense, routeExpense, recordInvoice, verifyInvoice, setTillFloat, payReimbursement } from '@shareat/domain';
+import { reimbursablePayableOf } from '../../../db/src/repo/expenses';
 
 const sql = postgres(url, { max: 5 });
 
@@ -1459,5 +1460,80 @@ describe("T-153 — Ian's worked example: the drawer runs out and the float cove
         return approveExpense(tx, actor(f.orgId, f.managerId), created.id);
       }),
     ).rejects.toThrow(/side pocket/);
+  });
+});
+
+describe('⛔ DEF-157 — payReimbursement settles 2130, which nothing previously cleared', () => {
+  async function reimbursableExpense(f: Fixture, amount: string): Promise<void> {
+    const catId = await categoryId(f.orgId, 'Supplies and Stocks');
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: 'Staff fronted the cost',
+        payments: [{ method: 'reimbursable', amount, staffId: f.staffId }],
+      }),
+    );
+    await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
+  }
+
+  it('DR 2130 (party=employee) / CR the money account, and the outstanding balance drops', async () => {
+    const f = await setup('def157-basic');
+    await fundAccount(f.orgId, f.storeId, '1110', '10000.00', null);
+    await reimbursableExpense(f, '1000.00');
+
+    expect((await asPerson(f.orgId, (tx) => reimbursablePayableOf(tx, f.orgId, f.staffId))).outstanding)
+      .toBe('1000.00');
+
+    const paid = await asPerson(f.orgId, (tx) =>
+      payReimbursement(tx, actor(f.orgId, f.managerId), {
+        storeId: f.storeId, employeeId: f.staffId, amount: '600.00',
+        fromMoneyAccountId: f.cashDrawerId, on: '2026-01-16',
+      }),
+    );
+    expect(paid.outstanding).toBe('400.00');
+
+    const lines = await linesFor(paid.entryId);
+    expect(lines).toHaveLength(2);
+    const debit = lines.find((l) => l.debit !== '0.00')!;
+    const credit = lines.find((l) => l.credit !== '0.00')!;
+    expect(debit.code).toBe('2130');
+    expect(debit.debit).toBe('600.00');
+    expect(debit.party_type).toBe('employee');
+    expect(debit.party_id).toBe(f.staffId);
+    expect(credit.code).toBe('1110');
+    expect(credit.credit).toBe('600.00');
+  });
+
+  it('⛔ refuses to pay more than is owed — there is nowhere for the overpayment to land', async () => {
+    const f = await setup('def157-over');
+    await fundAccount(f.orgId, f.storeId, '1110', '10000.00', null);
+    await reimbursableExpense(f, '500.00');
+
+    await expect(
+      asPerson(f.orgId, (tx) =>
+        payReimbursement(tx, actor(f.orgId, f.managerId), {
+          storeId: f.storeId, employeeId: f.staffId, amount: '5000.00',
+          fromMoneyAccountId: f.cashDrawerId, on: '2026-01-16',
+        }),
+      ),
+    ).rejects.toThrow(/more than the 500.00 owed/);
+  });
+
+  it('⛔ refuses an employee with nothing outstanding', async () => {
+    const f = await setup('def157-nothing');
+    await fundAccount(f.orgId, f.storeId, '1110', '10000.00', null);
+
+    await expect(
+      asPerson(f.orgId, (tx) =>
+        payReimbursement(tx, actor(f.orgId, f.managerId), {
+          storeId: f.storeId, employeeId: f.staffId, amount: '100.00',
+          fromMoneyAccountId: f.cashDrawerId, on: '2026-01-16',
+        }),
+      ),
+    ).rejects.toThrow(/has nothing outstanding/);
   });
 });
