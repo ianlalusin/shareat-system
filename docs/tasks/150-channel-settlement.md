@@ -5,13 +5,12 @@
 > days** — no screen, no nav entry — logged as **DEF-137** by the 2026-09-02 roadmap audit and
 > **closed 2026-09-03** with `apps/erp/src/app/channel-settlements/` (see §UI below).
 >
-> ⚠️ **The two open decisions in §4 and §5 were taken IN CODE and have never been confirmed by
-> Ian.** The 2026-08-28 session implemented this spec's own recommendations — `6420` seeded
-> **active**, and `1220` carrying the receivable while `1221`/`1222` are seeded active and posted
-> to by nothing — and ticked neither box. The 2026-09-03 session left both exactly as shipped
-> rather than change a live posting shape on its own authority, and **raised them in its report**.
-> They are the last two unticked boxes below, and they are unticked because the decision is
-> genuinely outstanding, not because nobody looked.
+> ✅ **The two open decisions in §4 and §5 were taken IN CODE and confirmed by Ian 2026-09-04.**
+> The 2026-08-28 session implemented this spec's own recommendations — `6420` seeded **active**,
+> and `1220` carrying the receivable while `1221`/`1222` are seeded active and posted to by
+> nothing — without the box being ticked. The 2026-09-03 session left both exactly as shipped
+> rather than change a live posting shape on its own authority, and raised them in its report.
+> Ian has since reviewed and ratified both as-is; see the Done-when checklist below.
 > **Depends on:** T-123 (`sales_channels`, `sales_day_channels` — the receivable this clears),
 > T-131 (AR, and the `6400` fee leg it already books once), T-126 (loans), T-139 (money transfers /
 > destination accounts).
@@ -358,10 +357,12 @@ the check itself; the two account-code decisions stay open because they are genu
       re-verified by the server rather than trusted from the browser. Posted
       `Dr 1140 6,000 · Cr 7100 1,000 · Cr 1220 5,000`; `1220` for that channel back to `0.00` and
       the whole dev trial balance still ties to `0.00`.
-- [ ] ⚠️ **Ian has answered the two open decisions:** `1220` vs `1221`/`1222` roles (§4,
+- [x] ⚠️ **Ian has answered the two open decisions:** `1220` vs `1221`/`1222` roles (§4,
       recommended) and whether `6420` is seeded for settlement variance (§5).
-      ⛔ **STILL OPEN, AND BOTH ARE ALREADY LIVE IN CODE.** The 2026-08-28 session implemented this
-      spec's recommendations without the box being ticked, so the decisions were made *implicitly*:
+      ✅ **CONFIRMED by Ian, 2026-09-04** — both already-shipped choices ratified as-is: `1220`
+      stays the receivable, `1221`/`1222` stay seeded for the batch-clearing hop, `6420` stays the
+      dedicated variance account rather than folding into `6400`. Reasoning below, kept for the
+      record; nothing in the posting shape changed.
       - **§4 —** `1220` carries the receivable with `party = channel`, and the settlement posts
         `1220 → cash` in **one step**. `1221` and `1222` are seeded **`active`** and
         **nothing anywhere posts to them** — grepped across `packages/` and `apps/`, and zero legs

@@ -92,6 +92,9 @@ const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
       { href: '/findings', label: 'Findings' },
       { href: '/reports/trial-balance', label: 'Trial balance' },
       { href: '/reports/income-statement', label: 'Income statement' },
+      // ⭐ DEF-139 — the screen worked and was tested but had no nav entry, so it was reachable
+      // only by typing the URL. Same failure shape as this file's own header comment.
+      { href: '/statutory-discounts', label: 'SC/PWD register' },
       { href: '/cutover/count', label: 'Cutover count' },
       { href: '/cutover/opening', label: 'Opening balances' },
     ],
