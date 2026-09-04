@@ -21,12 +21,13 @@
  * there was nothing to do"* and *"it never ran"* must be tellable apart. A scheduler that fails
  * quietly is **worse than the button**, since nobody is even expecting to press anything.
  */
-import { schedulerRepo, transaction, type SchedulerFailure } from '@shareat/db';
+import { APP_ROLE, schedulerRepo, storesRepo, transaction, type SchedulerFailure, type Tx } from '@shareat/db';
 import { runDepreciationAsSystem } from '../fixed-assets/depreciate';
 import { runAmortisationAsSystem } from '../prepaid';
 
 import { sql } from 'drizzle-orm';
 import { sweepStore } from '../attendance/sweep';
+import { drainOutbox, ingestEvents, type InboxDriver, type MirrorDriver } from '../sync';
 
 export interface MonthEndOptions {
   /** `YYYY-MM` to run THROUGH. Defaults to the last completed month. */
@@ -41,13 +42,20 @@ export interface MonthEndOptions {
 export interface JobOutcome {
   orgId: string;
   orgName: string;
-  job: 'depreciation' | 'amortisation' | 'attendance_sweep';
+  job: 'depreciation' | 'amortisation' | 'attendance_sweep' | 'mirror_publish' | 'inbox_relay';
   period: string;
   posted: number;
   skipped: number;
   failed: number;
   failures: SchedulerFailure[];
   error?: string;
+  /**
+   * T-204 — `inbox_relay` only. A punch that landed safely but whose day's recompute failed (most
+   * commonly: the day is already frozen by a paid pay run). ⛔ Deliberately NOT folded into
+   * `failed`/`failures` — the punch itself succeeded, only its adjudication didn't — but it must
+   * still be visible somewhere on the outcome rather than silently dropped (bible §15.6).
+   */
+  adjudicationFailures?: { clientPunchId: string; detail: string }[];
 }
 
 export interface MonthEndResult {
@@ -271,6 +279,273 @@ async function runSweepForOrg(
     );
     return { ...base, posted: swept, skipped: leftOpen, failed: failures.length, failures };
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await transaction((tx) => schedulerRepo.failRun(tx, runId, message));
+    return { ...base, posted: 0, skipped: 0, failed: 0, failures: [], error: message };
+  }
+}
+
+// =====================================================================================
+
+/**
+ * ⭐ **T-204 — the Firestore sync relay, on the same scheduler as month-end and the sweep.**
+ * Closes DEF-132 (nothing ever called `drainOutbox`/`ingestEvents` against real Firestore) and
+ * DEF-134 (nothing ever computed a fresh day's `attendance_days` row) with one job.
+ *
+ * ## ⚠️ The RLS-principal switch, and why it lives HERE rather than being imported
+ *
+ * Every existing request-serving code path in `apps/erp` applies row-level security through
+ * `withOrgPrincipal` (`apps/erp/src/app/expenses/lib.ts`) — `set local role` + `set_config`
+ * inside one Drizzle transaction. **That function is unreachable from this file**: this is
+ * `packages/domain`, and bible §8 rule 13 (`tests/unit/app-boundaries.test.ts`) forbids a package
+ * importing from an app. So this is a small package-local copy of the same three statements,
+ * built from the same `@shareat/db` primitives (`APP_ROLE`, `transaction`) the app helper and the
+ * integration test suites' own local `asOrg` helpers already use — this is the third independent
+ * copy of an identical five-line idiom, which might be worth centralising in `@shareat/db`
+ * someday; not this task's scope.
+ *
+ * ## ⚠️ Two lanes, two different relationships to "per org"
+ *
+ * **`mirror_publish` (Lane A) is genuinely per-org.** `mirror_outbox` rows already carry `org_id`
+ * and its RLS policy (`org_column`, `packages/db/src/rls/registry.ts`) scopes `claimUnpublished`'s
+ * unfiltered query down to one org for free the moment the transaction runs under that org's
+ * principal — no code change to `publisher.ts`/`mirror-outbox.ts` needed. Looping per org (rather
+ * than draining everything at once as `system`) is also what lets `DrainReport`'s own counts map
+ * straight onto one `scheduler_runs` row per org, unmodified, per DEF-044's rule that even an
+ * org with nothing to do still gets a row.
+ *
+ * **`inbox_relay` (Lane B) is NOT naturally per-org** — `/inbox` is one flat Firestore collection
+ * and an event carries a `storeId`, never an `orgId`. Org membership is resolved in Postgres as a
+ * `system` connection (RLS bypassed, sees every org's stores in one query — the same shape
+ * `schedulerRepo.listOrgsToRun` already uses) BEFORE any org-scoped transaction opens; only once
+ * an event's org is known does its batch run under that org's `withOrgPrincipal`. Getting this
+ * backwards either has RLS silently return nothing (org-scoped too early, before the lookup can
+ * see other orgs) or lets the ingest step see across orgs when it must not (system-scoped when it
+ * should be org-scoped, which is exactly what would let `ingestEvents`'s `app_current_org()` call
+ * write a quarantine row with no org at all — a NOT NULL violation, not a quiet bug).
+ */
+async function withOrgPrincipal<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return transaction(async (tx) => {
+    await tx.execute(sql.raw(`set local role ${APP_ROLE}`));
+    await tx.execute(sql`select set_config('app.principal_kind', 'staff', true)`);
+    await tx.execute(sql`select set_config('app.org_id', ${orgId}, true)`);
+    return fn(tx);
+  });
+}
+
+export interface RelayResult {
+  outcomes: JobOutcome[];
+  hadFailures: boolean;
+}
+
+export async function runFirestoreRelay(
+  drivers: { mirror: MirrorDriver; inbox: InboxDriver },
+  options: { orgId?: string; trigger?: 'cron' | 'manual'; limit?: number } = {},
+): Promise<RelayResult> {
+  const trigger = options.trigger ?? 'cron';
+  const limit = options.limit ?? 500;
+  // ⚠️ Same reasoning as `runAttendanceSweep`: neither lane has a period of its own, so the row
+  // records the YYYY-MM this run happened IN (PH local, UTC+8), not a period being closed.
+  const period = new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 7);
+
+  const orgs = await transaction((tx) => schedulerRepo.listOrgsToRun(tx, options.orgId));
+  const outcomes: JobOutcome[] = [];
+
+  for (const org of orgs) {
+    outcomes.push(await runMirrorPublishJob(org, period, trigger, drivers.mirror, limit));
+  }
+
+  outcomes.push(...(await runInboxRelayJobs(orgs, period, trigger, drivers.inbox, limit)));
+
+  // ⚠️ Adjudication failures do NOT flip this. They are an expected, benign outcome (a replayed
+  // old punch landing on a day payroll already closed) — visible on the outcome, but not the
+  // thing a cron mailer should page anyone about. Only a genuine ingest/publish failure does.
+  return { outcomes, hadFailures: outcomes.some((o) => o.failed > 0 || o.error) };
+}
+
+async function runMirrorPublishJob(
+  org: { id: string; name: string },
+  period: string,
+  trigger: 'cron' | 'manual',
+  driver: MirrorDriver,
+  limit: number,
+): Promise<JobOutcome> {
+  const runId = await transaction((tx) =>
+    schedulerRepo.startRun(tx, { orgId: org.id, job: 'mirror_publish', period, trigger }),
+  );
+  const base = { orgId: org.id, orgName: org.name, job: 'mirror_publish' as const, period };
+
+  try {
+    const report = await withOrgPrincipal(org.id, (tx) => drainOutbox(tx, driver, { limit }));
+
+    // ⚠️ `DrainReport.failed` is a COUNT, not a list — the per-row detail already lives on
+    // `mirror_outbox.last_error` (`recordFailure`), which this job does not re-read. `finishRun`
+    // derives `scheduler_runs.failed_count` from `failures.length`, so the array below has to
+    // carry exactly `report.failed` entries for that stored count to stay truthful, even though
+    // each entry's own text is generic.
+    const failures: SchedulerFailure[] = Array.from({ length: report.failed }, (_, i) => ({
+      subjectId: org.id,
+      subjectName: org.name,
+      reason: `An outbox row failed to publish (see mirror_outbox.last_error) — failure ${i + 1} of ${report.failed}.`,
+    }));
+
+    await transaction((tx) =>
+      schedulerRepo.finishRun(tx, runId, {
+        postedCount: report.published,
+        skippedCount: report.skipped,
+        failures,
+      }),
+    );
+    return { ...base, posted: report.published, skipped: report.skipped, failed: report.failed, failures };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await transaction((tx) => schedulerRepo.failRun(tx, runId, message));
+    return { ...base, posted: 0, skipped: 0, failed: 0, failures: [], error: message };
+  }
+}
+
+type InboxDoc = { docId: string; data: unknown };
+
+function eventStoreId(doc: InboxDoc): string | undefined {
+  const storeId = (doc.data as { storeId?: unknown } | null)?.storeId;
+  return typeof storeId === 'string' ? storeId : undefined;
+}
+
+function eventClientPunchId(doc: InboxDoc): string | undefined {
+  const id = (doc.data as { clientPunchId?: unknown } | null)?.clientPunchId;
+  return typeof id === 'string' ? id : undefined;
+}
+
+/**
+ * One global read, then a per-org fan-out — see the module comment above for why Lane B cannot be
+ * a simple per-org loop the way Lane A is.
+ */
+async function runInboxRelayJobs(
+  orgs: { id: string; name: string }[],
+  period: string,
+  trigger: 'cron' | 'manual',
+  driver: InboxDriver,
+  limit: number,
+): Promise<JobOutcome[]> {
+  let events: InboxDoc[];
+  try {
+    events = await driver.readUnprocessed({ limit });
+  } catch (err) {
+    // The read itself blew up, before any org could even be attempted. Every org named in this
+    // run still gets a row saying so — DEF-044's rule applies to the whole job, not just to a
+    // per-org slice of it.
+    const message = err instanceof Error ? err.message : String(err);
+    return Promise.all(orgs.map((org) => failedInboxRun(org, period, trigger, message)));
+  }
+
+  const storeIds = [...new Set(events.map(eventStoreId).filter((s): s is string => s !== undefined))];
+  const orgByStore = storeIds.length
+    ? await transaction((tx) => storesRepo.orgIdsForStoreIds(tx, storeIds))
+    : new Map<string, string>();
+
+  // §3 step 3: a storeId matching no known store is left un-stamped and excluded from EVERY
+  // group — it is simply never pushed anywhere below, so it is retried next run by construction.
+  const byOrg = new Map<string, InboxDoc[]>();
+  for (const doc of events) {
+    const storeId = eventStoreId(doc);
+    const orgId = storeId ? orgByStore.get(storeId) : undefined;
+    if (!orgId) continue;
+    if (!byOrg.has(orgId)) byOrg.set(orgId, []);
+    byOrg.get(orgId)!.push(doc);
+  }
+
+  const outcomes: JobOutcome[] = [];
+  for (const org of orgs) {
+    outcomes.push(await runInboxRelayForOrg(org, period, trigger, driver, byOrg.get(org.id) ?? []));
+  }
+  return outcomes;
+}
+
+async function failedInboxRun(
+  org: { id: string; name: string },
+  period: string,
+  trigger: 'cron' | 'manual',
+  message: string,
+): Promise<JobOutcome> {
+  const runId = await transaction((tx) =>
+    schedulerRepo.startRun(tx, { orgId: org.id, job: 'inbox_relay', period, trigger }),
+  );
+  await transaction((tx) => schedulerRepo.failRun(tx, runId, message));
+  return {
+    orgId: org.id,
+    orgName: org.name,
+    job: 'inbox_relay',
+    period,
+    posted: 0,
+    skipped: 0,
+    failed: 0,
+    failures: [],
+    error: message,
+  };
+}
+
+async function runInboxRelayForOrg(
+  org: { id: string; name: string },
+  period: string,
+  trigger: 'cron' | 'manual',
+  driver: InboxDriver,
+  events: InboxDoc[],
+): Promise<JobOutcome> {
+  const runId = await transaction((tx) =>
+    schedulerRepo.startRun(tx, { orgId: org.id, job: 'inbox_relay', period, trigger }),
+  );
+  const base = { orgId: org.id, orgName: org.name, job: 'inbox_relay' as const, period };
+
+  try {
+    const report = await withOrgPrincipal(org.id, (tx) => ingestEvents(tx, events.map((e) => e.data)));
+
+    // §3 step 5: EVERY event handed to `ingestEvents` gets exactly one outcome — ingested,
+    // already-processed, quarantined, or discarded (T-182 invariant 4) — so every one of them is
+    // "decided" and is stamped here. Only the unresolved-org group above (never reaching this
+    // function at all) is left un-stamped. A discarded event is stamped too: a manager already
+    // made that call in Postgres, and re-reading it forever on every future run would let a
+    // devices's redelivery loop crowd a busy inbox's `limit` out on its own — nothing about
+    // Firestore's `processedAt` flag is what would let that decision be reversed later; that
+    // lives on `inbox_quarantine.resolved_at`/`resolution` in Postgres, untouched by this stamp.
+    for (const doc of events) {
+      const clientPunchId = eventClientPunchId(doc);
+      const punchId = (clientPunchId && report.processed[clientPunchId]) || null;
+      await driver.markProcessed({ docId: doc.docId, punchId });
+    }
+
+    // ⚠️ Same shape as `mirror_publish` above: `finishRun` derives `failed_count` from
+    // `failures.length`, so this needs exactly `report.quarantined` entries. Unlike the mirror
+    // job, real detail is available — `byReason` already breaks the count down by reason code.
+    const failures: SchedulerFailure[] = [];
+    for (const [reason, count] of Object.entries(report.byReason)) {
+      for (let i = 0; i < (count ?? 0); i++) {
+        failures.push({ subjectId: org.id, subjectName: org.name, reason: `quarantined: ${reason}` });
+      }
+    }
+
+    await transaction((tx) =>
+      schedulerRepo.finishRun(tx, runId, {
+        postedCount: report.ingested,
+        skippedCount: report.alreadyProcessed + report.refusedDiscarded,
+        failures,
+      }),
+    );
+    return {
+      ...base,
+      posted: report.ingested,
+      skipped: report.alreadyProcessed + report.refusedDiscarded,
+      failed: report.quarantined,
+      failures,
+      adjudicationFailures: report.adjudicationFailures.length ? report.adjudicationFailures : undefined,
+    };
+  } catch (err) {
+    // ⭐ Covers both an `ingestEvents` failure outright AND a `markProcessed` write failure. The
+    // latter is safe to let fail this org's run: whatever `ingestEvents` decided already committed
+    // in Postgres (its own transaction returned before this loop starts), and every one of those
+    // outcomes is idempotent on replay — a re-delivered already-ingested punch is a no-op, a
+    // re-delivered quarantine upsert just bumps `attempts`. Retrying the whole org next run is the
+    // safe, simple choice; a Firestore write outage is worth surfacing loudly (`error`, non-zero
+    // exit), not swallowed per-event.
     const message = err instanceof Error ? err.message : String(err);
     await transaction((tx) => schedulerRepo.failRun(tx, runId, message));
     return { ...base, posted: 0, skipped: 0, failed: 0, failures: [], error: message };

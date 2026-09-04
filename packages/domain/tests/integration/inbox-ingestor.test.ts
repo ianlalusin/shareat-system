@@ -163,16 +163,34 @@ describe('T-182 invariants 1 & 8 — idempotency is a constraint, not a timer', 
     expect(rows).toHaveLength(1);
   });
 
-  it('⭐ 8. a batch of 500 where 499 are replays does 499 no-ops and one insert', async () => {
-    const f = await fixture('batch');
-    const existing = Array.from({ length: 499 }, () => event(f));
-    await ingest(f, existing);
-    const fresh = event(f);
-    const report = await ingest(f, [...existing, fresh]);
-    expect(report.seen).toBe(500);
-    expect(report.alreadyProcessed).toBe(499);
-    expect(report.ingested).toBe(1);
-  });
+  it(
+    '⭐ 8. a batch of 500 where 499 are replays does 499 no-ops and one insert',
+    async () => {
+      // ⚠️ T-204's own bump: `existing`'s first ingest is 499 GENUINELY NEW punches (distinct
+      // clientPunchIds), so each one now also adjudicates its day (Contract §2) — 499 sequential
+      // recomputes, each several DB round trips, comfortably exceeds the default 30s locally even
+      // though every individual step is correct. Measured standalone (a fresh employment, no other
+      // concurrent test-file load): ~20-90ms per adjudicated event with real variance but no clean
+      // quadratic signature (400 events did NOT cost noticeably more per-event than 200 did) — this
+      // reads as ordinary local Postgres/IO noise, not an algorithmic blow-up in `computeDay`.
+      // `adjudicateDay` is explicitly out of this task's scope to touch, and 500 punches landing on
+      // the SAME employment at the SAME millisecond is a stress fixture, not a realistic
+      // clock-terminal shape — so the fix here is more time, not a different assertion. Worth
+      // knowing for production sizing: a relay batch of genuinely-new punches (`limit: 500`) could
+      // legitimately take tens of seconds now that every one of them adjudicates; the 2-minute
+      // timer cadence gives headroom for an ordinary run, but a real outage-catchup batch is worth
+      // watching once this is live.
+      const f = await fixture('batch');
+      const existing = Array.from({ length: 499 }, () => event(f));
+      await ingest(f, existing);
+      const fresh = event(f);
+      const report = await ingest(f, [...existing, fresh]);
+      expect(report.seen).toBe(500);
+      expect(report.alreadyProcessed).toBe(499);
+      expect(report.ingested).toBe(1);
+    },
+    180_000,
+  );
 });
 
 describe('T-182 invariants 2 & 9 — nothing is dropped, and one bad event stops nothing', () => {
@@ -414,5 +432,103 @@ describe('T-182 invariant 6 — the terminal is stamped, and the loop closes', (
     expect(day.computedMinutes).toBe(9 * 60);
     expect(day.status).toBe('computed');
     expect(day.anomalies).toEqual([]);
+  });
+});
+
+/**
+ * A REAL pay run to freeze a day against — copied from `attendance-adjudication.test.ts`'s own
+ * helper. T-189 attached a real FK from `attendance_days.frozen_by_pay_run_id` to `pay_runs`, so
+ * a made-up id is refused; this needs a genuine row.
+ */
+async function aPayRun(f: { orgId: string; storeId: string }): Promise<string> {
+  const [acct] = await sql<{ id: string }[]>`
+    select id from money_accounts where store_id = ${f.storeId} and is_foundation limit 1`;
+  const [who] = await sql<{ id: string }[]>`
+    select id from persons where org_id = ${f.orgId} limit 1`;
+  const [run] = await sql<{ id: string }[]>`
+    insert into pay_runs (org_id, store_id, period_start, period_end, money_account_id, created_by)
+    values (${f.orgId}, ${f.storeId}, '2026-01-01', '2026-01-15', ${acct!.id}, ${who!.id})
+    returning id`;
+  return run!.id;
+}
+
+describe('T-204/DEF-134 — a genuinely new punch bootstraps its day, closing the wiring gap', () => {
+  it('produces an attendance_days row that did NOT exist before, and the report says so', async () => {
+    const f = await fixture('adjudicate-new');
+    const before = await sql`select id from attendance_days where employment_id = ${f.employment.id}`;
+    expect(before).toHaveLength(0);
+
+    const report = await ingest(f, [event(f, { occurredAt: at(14), assertedIntent: 'in' })]);
+    expect(report.ingested).toBe(1);
+    expect(report.adjudicated).toBe(1);
+    expect(report.adjudicationFailed).toBe(0);
+    expect(report.adjudicationFailures).toEqual([]);
+
+    const after = await sql<{ id: string; status: string }[]>`
+      select id, status from attendance_days where employment_id = ${f.employment.id}`;
+    expect(after).toHaveLength(1);
+    // ⭐ A single unmatched IN reads as an open shift, not an anomaly — proof the row was really
+    // computed from the punch, not just inserted as an empty shell.
+    expect(after[0]!.status).toBe('open');
+  });
+
+  it('⛔ a REPLAY of the exact same punch does NOT re-adjudicate', async () => {
+    const f = await fixture('adjudicate-replay');
+    const e = event(f, { occurredAt: at(14), assertedIntent: 'in' });
+    const first = await ingest(f, [e]);
+    expect(first.ingested).toBe(1);
+    expect(first.adjudicated).toBe(1);
+
+    const [dayAfterFirst] = await sql<{ id: string }[]>`
+      select id from attendance_days where employment_id = ${f.employment.id}`;
+
+    // The SAME clientPunchId, delivered again — a replay, not a new punch.
+    const second = await ingest(f, [e]);
+    expect(second.ingested).toBe(0);
+    expect(second.alreadyProcessed).toBe(1);
+    // ⭐ The invariant this test exists for: a replay never triggers a SECOND adjudication.
+    expect(second.adjudicated).toBe(0);
+    expect(second.adjudicationFailed).toBe(0);
+
+    // Still exactly one day row — nothing was duplicated or disturbed.
+    const daysAfterSecond = await sql`select id from attendance_days where employment_id = ${f.employment.id}`;
+    expect(daysAfterSecond).toHaveLength(1);
+    expect(daysAfterSecond[0]!.id).toBe(dayAfterFirst!.id);
+  });
+
+  it('a punch for an already-FROZEN day still records the punch and reports the recompute failure — never quarantined, never lost', async () => {
+    const f = await fixture('adjudicate-frozen');
+
+    // A first punch bootstraps the day (open shift), then it gets frozen — as if payroll had
+    // already run over an in-progress or since-corrected day.
+    await ingest(f, [event(f, { occurredAt: at(14), assertedIntent: 'in' })]);
+    const [day] = await sql<{ id: string }[]>`
+      select id from attendance_days where employment_id = ${f.employment.id}`;
+    const payRun = await aPayRun(f);
+    await sql`update attendance_days set frozen_at = now(), frozen_by_pay_run_id = ${payRun}
+              where id = ${day!.id}`;
+
+    // A SECOND, genuinely new punch lands on the SAME (now frozen) shift day — an out, pairing
+    // naturally with the earlier in, but the day it belongs to cannot be recomputed any more.
+    const report = await ingest(f, [event(f, { occurredAt: at(23), assertedIntent: 'out' })]);
+
+    // ⭐ The punch itself is not fatal to record, and is not quarantined.
+    expect(report.ingested).toBe(1);
+    expect(report.quarantined).toBe(0);
+
+    // ⭐ But its adjudication failed, and the report says exactly that.
+    expect(report.adjudicated).toBe(0);
+    expect(report.adjudicationFailed).toBe(1);
+    expect(report.adjudicationFailures).toHaveLength(1);
+    expect(report.adjudicationFailures[0]!.detail).toMatch(/frozen/i);
+
+    // ⛔ The punch really landed — never lost, per T-182 invariant 2 and this task's invariant 3.
+    const punches = await sql`select id from attendance_punches where employment_id = ${f.employment.id}`;
+    expect(punches.length).toBe(2);
+
+    // ⛔ The day itself is untouched — still frozen, still exactly as it was before this punch.
+    const [dayAfter] = await sql<{ frozen_at: Date | null }[]>`
+      select frozen_at from attendance_days where id = ${day!.id}`;
+    expect(dayAfter!.frozen_at).not.toBeNull();
   });
 });

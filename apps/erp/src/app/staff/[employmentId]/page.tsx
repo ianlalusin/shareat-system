@@ -1,0 +1,159 @@
+import { notFound } from 'next/navigation';
+import { ENDED_STATUSES } from '@shareat/db/schema';
+import { toBusinessDate } from '@shareat/core/datetime';
+import { requireSession } from '../../../lib/session';
+import { endEmploymentAction, setPositionsAction } from '../actions';
+import { employmentDetail, positionsForStore } from '../lib';
+
+export const metadata = { title: 'Employment — Shareat System' };
+export const dynamic = 'force-dynamic';
+
+const INPUT =
+  'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+const BTN =
+  'rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
+
+export default async function EmploymentDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ employmentId: string }>;
+  searchParams: Promise<{ error?: string; ok?: string }>;
+}) {
+  const { employmentId } = await params;
+  const sp = await searchParams;
+  const { actor } = await requireSession(`/staff/${employmentId}`);
+  const detail = await employmentDetail(actor.orgId, employmentId);
+  if (!detail) notFound();
+
+  const isEnded = detail.employment.endedOn !== null;
+  const positions = await positionsForStore(actor.orgId, detail.employment.storeId);
+  const assignedIds = new Set(detail.positions.map((p) => p.positionId));
+  const primaryId = detail.positions.find((p) => p.isPrimary)?.positionId;
+
+  return (
+    <main className="mx-auto max-w-3xl space-y-6 p-4 sm:p-8">
+      <div>
+        <a href="/staff" className="text-sm text-neutral-500 underline underline-offset-2 dark:text-neutral-400">
+          ← Staff
+        </a>
+        <h1 className="mt-1 text-2xl font-semibold">{detail.personName}</h1>
+        <p className="text-sm text-neutral-500 dark:text-neutral-400">
+          <span className="font-mono text-xs">{detail.employment.staffCode}</span> ·{' '}
+          {detail.storeName} · {detail.employment.employmentStatus.replace(/-/g, ' ')} · started{' '}
+          {detail.employment.startedOn}
+          {isEnded && ` · ended ${detail.employment.endedOn}`}
+        </p>
+        {isEnded && (
+          <p className="mt-2 inline-block rounded bg-neutral-100 px-2 py-1 text-xs text-neutral-600 dark:bg-neutral-900 dark:text-neutral-400">
+            This employment has ended. The record stays visible — ending is not deleting (T-154
+            invariant 4).
+          </p>
+        )}
+      </div>
+
+      {sp.error && (
+        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+          {sp.error}
+        </div>
+      )}
+      {sp.ok && (
+        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
+          {sp.ok}
+        </div>
+      )}
+
+      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="font-medium">Positions</h2>
+        {isEnded ? (
+          <ul className="flex flex-wrap gap-2 text-sm">
+            {detail.positions.length === 0 ? (
+              <li className="text-neutral-500 dark:text-neutral-400">None assigned.</li>
+            ) : (
+              detail.positions.map((p) => (
+                <li
+                  key={p.positionId}
+                  className="rounded-lg border border-neutral-200 px-3 py-1.5 dark:border-neutral-800"
+                >
+                  {p.name}
+                  {p.isPrimary && <span className="ml-1 text-xs text-neutral-400">(primary)</span>}
+                </li>
+              ))
+            )}
+          </ul>
+        ) : (
+          <form action={setPositionsAction} className="space-y-2">
+            <input type="hidden" name="employmentId" value={employmentId} />
+            {positions.map((p) => (
+              <div key={p.id} className="flex items-center gap-3 text-sm">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    name="positionIds"
+                    value={p.id}
+                    defaultChecked={assignedIds.has(p.id)}
+                    className="h-4 w-4"
+                  />
+                  {p.name}
+                </label>
+                <label className="flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
+                  <input type="radio" name="primaryPositionId" value={p.id} defaultChecked={primaryId === p.id} />
+                  primary
+                </label>
+              </div>
+            ))}
+            <button type="submit" className={BTN}>
+              Save positions
+            </button>
+          </form>
+        )}
+      </section>
+
+      <section className="space-y-2 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="font-medium">Clock-in credentials</h2>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          Card and fingerprint enrolment live on their own screen (T-203).
+        </p>
+        <a href={`/staff/${employmentId}/credentials`} className="text-sm underline underline-offset-4">
+          Manage credentials →
+        </a>
+      </section>
+
+      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="font-medium">End employment</h2>
+        {isEnded ? (
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">
+            Ended {detail.employment.endedOn} as {detail.employment.employmentStatus.replace(/-/g, ' ')}.
+          </p>
+        ) : (
+          <form action={endEmploymentAction} className="flex flex-wrap items-end gap-3">
+            <input type="hidden" name="employmentId" value={employmentId} />
+            <label className="text-sm">
+              <span className="block text-neutral-600 dark:text-neutral-400">End date</span>
+              <input type="date" name="endedOn" required defaultValue={toBusinessDate()} className={INPUT} />
+            </label>
+            <label className="text-sm">
+              <span className="block text-neutral-600 dark:text-neutral-400">Status</span>
+              <select name="employmentStatus" required defaultValue="" className={INPUT}>
+                <option value="" disabled>
+                  Select
+                </option>
+                {ENDED_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="submit"
+              className="rounded-md border border-red-300 px-4 py-2.5 text-sm font-medium text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
+            >
+              End employment
+            </button>
+          </form>
+        )}
+      </section>
+    </main>
+  );
+}

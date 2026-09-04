@@ -28,6 +28,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore, type Firestore } from 'firebase-admin/firestore';
 import type { MirrorDocument, MirrorDriver } from '@shareat/domain';
 import type { TerminalIdentityDriver } from '@shareat/domain';
+import type { InboxDriver } from '@shareat/domain';
 
 /** Fixed name so a second call reuses the app — `initializeApp` is a singleton-per-name API. */
 const APP_NAME = 'shareat-sync';
@@ -49,7 +50,14 @@ function loadServiceAccount(env: NodeJS.ProcessEnv = process.env): ServiceAccoun
       'Both FIREBASE_SERVICE_ACCOUNT_KEY and FIREBASE_SERVICE_ACCOUNT_KEY_FILE are set. Set exactly one.',
     );
   }
-  const raw = inline ?? readKeyFile(file);
+  // ⛔ T-204/DEF-151 fix: `??` treats `''` as PRESENT (nullish-coalescing only falls through on
+  // null/undefined), so `FIREBASE_SERVICE_ACCOUNT_KEY=` set-but-blank in `.env.local` (the normal
+  // shape when `_FILE` is the one actually configured, per this project's own "preferred" env
+  // convention) fed `JSON.parse('')` an empty string and failed every real call with a misleading
+  // "did not parse as JSON" — never caught before because DEF-132 established nothing had ever
+  // called this outside a test. `||` treats blank the same as absent, matching `file`'s own
+  // truthiness check three lines up.
+  const raw = inline || readKeyFile(file);
   try {
     return JSON.parse(raw) as ServiceAccountJson;
   } catch {
@@ -167,6 +175,41 @@ export function createFirestoreTerminalDriver(): TerminalIdentityDriver {
         // legitimate act — and the Postgres row is what the ingestor checks, so nothing is weaker.
         if ((error as { code?: string }).code !== 'auth/user-not-found') throw error;
       }
+    },
+  };
+}
+
+// -------------------------------------------------------------------------------------
+// T-204 — the inbox driver, T-182's own missing half. DEF-132: nothing has ever called
+// `ingestEvents` against a live stream of real `/inbox` documents; this is what reads them.
+// -------------------------------------------------------------------------------------
+
+/**
+ * ⚠️ **Deliberately no `orderBy` and no composite index.** `where('processedAt','==',null)` alone
+ * needs no `firestore.indexes.json` entry — Firestore auto-indexes single-field equality. Adding
+ * an `orderBy(occurredAt)` would need a composite index, which needs a real deploy
+ * (`firebase deploy --only firestore:indexes`) against the shared `shareat-hub-v2` project, and
+ * this project has already recorded a live incident of a blind index deploy deleting ~44
+ * unrelated indexes (`reference_pos_firestore_indexes_drift`). Not worth it for a job that
+ * reprocesses whatever's left every run regardless of order.
+ *
+ * ⚠️ **A quarantined event is still "processed" for this driver's purposes.** `markProcessed` with
+ * `punchId: null` on anything `ingestEvents` decided NOT to turn into a punch (malformed, unknown
+ * device, etc.) — T-182 invariant 6 already establishes that a quarantined event keeps its
+ * document; this driver just needs to stop re-reading it every run. The quarantine TABLE itself,
+ * not this Firestore flag, is what a manager's screen reads to act on it.
+ */
+export function createFirestoreInboxDriver(): InboxDriver {
+  return {
+    async readUnprocessed({ limit }) {
+      const snap = await db().collection('inbox').where('processedAt', '==', null).limit(limit).get();
+      return snap.docs.map((d) => ({ docId: d.id, data: d.data() }));
+    },
+    async markProcessed({ docId, punchId }) {
+      await db().collection('inbox').doc(docId).update({
+        processedAt: FieldValue.serverTimestamp(),
+        ...(punchId ? { punchId } : {}),
+      });
     },
   };
 }

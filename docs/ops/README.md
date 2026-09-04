@@ -38,6 +38,17 @@ don't, stop — that's a much bigger job than this file covers.
 |---|---|---|---|
 | Month-end (T-140) | `npm run month-end` | Monthly, 1st | Depreciation and amortisation are per-period |
 | **Attendance sweep (T-199)** | `npm run attendance-sweep` | ⚠️ **Hourly** | The cut-off is a wall-clock hour **per store**. A daily timer cannot serve two stores on different hours |
+| **Firestore sync relay (T-204)** | `npm run firestore-relay` | Every 2 minutes | No wall-clock anchor — punches and mirror writes are useful as soon as possible, but a late run breaks nothing (idempotent, Firestore durable in the meantime). Closes DEF-132 (nothing ever ran either lane against real Firestore) and DEF-134 (nothing ever computed a fresh day's `attendance_days` row) |
+
+**T-204 is the third job named here, and — same as the other two — shipping the code is not the
+same as it running.** `docs/tasks/204-firestore-sync-relay-and-day-bootstrap.md`'s own scope
+deliberately ships the unit files, not a live install; see the precondition above. ⚠️ T-204's
+implementer had no SSH access to the droplet in-session to repeat the 2026-09-01 read-only
+inspection directly — the precondition is carried forward on IN-REPO evidence only (no deploy
+step in `.github/workflows/ci.yml`, no deploy-shaped commit since, `HANDOFF.md`'s phase plan
+still reading pilot go-live Oct-Dec 2026), which is consistent with nothing having changed but is
+not the same class of check as the original SSH inspection. **A future session with real SSH
+access should still do the direct check before assuming this line is current.**
 
 ## Installing the attendance sweep
 

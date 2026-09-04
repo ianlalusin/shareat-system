@@ -48,6 +48,20 @@ const METHOD_CREDENTIAL: Record<PunchMethod, CredentialKind | null> = {
 };
 import { recordPunch } from '../attendance/punches';
 import { toShiftDay } from '../attendance/shift-day';
+import { adjudicateDay } from '../attendance/adjudicate';
+
+/**
+ * What a Lane B transport must do. T-204/DEF-132 — this is the missing half T-182's own Contract
+ * §2 already named ("packages/sync-firestore — reads /inbox, stamps processedAt, deletes
+ * nothing") and never built. Same shape as `MirrorDriver` in `./publisher.ts`: faked in tests,
+ * real in `packages/sync-firestore`.
+ */
+export interface InboxDriver {
+  /** Unprocessed /inbox docs, capped at `limit`. No ordering guarantee. */
+  readUnprocessed(input: { limit: number }): Promise<{ docId: string; data: unknown }[]>;
+  /** Stamp processedAt (+ the punch id, when there is one) on one document. Never deletes. */
+  markProcessed(input: { docId: string; punchId: string | null }): Promise<void>;
+}
 
 /**
  * One document from `/inbox`, exactly as it arrived.
@@ -93,6 +107,18 @@ export interface IngestReport {
   byReason: Partial<Record<QuarantineReason, number>>;
   /** `clientPunchId` -> the punch it became, for the transport to stamp back. */
   processed: Record<string, string>;
+  /**
+   * T-204/DEF-134 — a genuinely NEW punch (never a replay) recomputes the `attendance_days` row
+   * for the day it lands in. This is the count of times that recompute actually ran.
+   */
+  adjudicated: number;
+  /**
+   * The recompute FAILED — most commonly because the day is already frozen by a paid pay run.
+   * ⛔ The punch itself is still safely recorded either way; a failed recompute is counted here,
+   * never thrown, never silently dropped (bible §15.6).
+   */
+  adjudicationFailed: number;
+  adjudicationFailures: { clientPunchId: string; detail: string }[];
 }
 
 /** Ordinary device clock skew; beyond it the device is broken, not imprecise. Matches T-156. */
@@ -118,6 +144,9 @@ export async function ingestEvents(
     refusedDiscarded: 0,
     byReason: {},
     processed: {},
+    adjudicated: 0,
+    adjudicationFailed: 0,
+    adjudicationFailures: [],
   };
 
   for (const raw of events) {
@@ -137,6 +166,14 @@ export async function ingestEvents(
         report.ingested++;
         report.processed[outcome.clientPunchId] = outcome.punchId;
         if (outcome.healed) report.healed++;
+        if (outcome.adjudicated) report.adjudicated++;
+        if (outcome.adjudicationFailure) {
+          report.adjudicationFailed++;
+          report.adjudicationFailures.push({
+            clientPunchId: outcome.clientPunchId,
+            detail: outcome.adjudicationFailure,
+          });
+        }
       } else if (outcome.kind === 'already') {
         report.alreadyProcessed++;
         report.processed[outcome.clientPunchId] = outcome.punchId;
@@ -168,7 +205,16 @@ export async function ingestEvents(
 }
 
 type Outcome =
-  | { kind: 'ingested'; clientPunchId: string; punchId: string; healed: boolean }
+  | {
+      kind: 'ingested';
+      clientPunchId: string;
+      punchId: string;
+      healed: boolean;
+      /** T-204/DEF-134 — see `IngestReport.adjudicated`. */
+      adjudicated: boolean;
+      /** Set only when the recompute failed. See `IngestReport.adjudicationFailed`. */
+      adjudicationFailure: string | null;
+    }
   | { kind: 'already'; clientPunchId: string; punchId: string }
   | { kind: 'discarded'; clientPunchId: string }
   | { kind: 'quarantined'; reason: QuarantineReason };
@@ -301,9 +347,40 @@ async function ingestOne(tx: Tx, raw: unknown): Promise<Outcome> {
   // difference between a quarantine and a dead letter.
   const healed = await inboxQuarantineRepo.resolveIngested(tx, clientPunchId);
 
+  // ⭐⭐ T-204/DEF-134: this is the ONLY place in the running system that computes an
+  // `attendance_days` row for a day nobody has touched before — the ingestor is where a punch
+  // first lands, so it is also where the day it belongs to should first get computed.
+  //
+  // ⛔ Gated on `!alreadyProcessed` — a REPLAY must not re-adjudicate. The day was already
+  // computed when the punch first arrived, and `adjudicateDay` refuses to recompute a FROZEN day
+  // (one already locked into a pay run). A redelivered old punch must never throw on a day
+  // payroll has already closed — it must just quietly do nothing more, exactly like the rest of
+  // this function's replay handling.
+  let adjudicated = false;
+  let adjudicationFailure: string | null = null;
+  if (!alreadyProcessed) {
+    try {
+      // ⭐ ANOTHER SAVEPOINT — same reasoning as the outer loop's own comment in `ingestEvents`:
+      // `adjudicateDay` touches the database, and a thrown error already aborts the enclosing
+      // transaction on Postgres. Without this nested savepoint, a frozen-day refusal here would
+      // abort the SAME transaction `recordPunch` just committed within, discarding the punch that
+      // was correctly recorded a moment ago. The punch write must survive even when the recompute
+      // doesn't — `tx.transaction()` is a SAVEPOINT (as it already is one level up), so the outer
+      // transaction stays usable after this one rolls back.
+      await tx.transaction((inner) =>
+        adjudicateDay(inner as Tx, { employmentId: employment.id, shiftDay }),
+      );
+      adjudicated = true;
+    } catch (error) {
+      // Not fatal to the punch — it is already safely recorded. Counted, not thrown, not
+      // silently dropped either (bible §15.6).
+      adjudicationFailure = String(error).slice(0, 300);
+    }
+  }
+
   return alreadyProcessed
     ? { kind: 'already', clientPunchId, punchId: punch.id }
-    : { kind: 'ingested', clientPunchId, punchId: punch.id, healed };
+    : { kind: 'ingested', clientPunchId, punchId: punch.id, healed, adjudicated, adjudicationFailure };
 }
 
 function shapeErrors(event: Partial<InboxEvent>): string | null {

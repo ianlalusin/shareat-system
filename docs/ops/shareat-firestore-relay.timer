@@ -1,0 +1,21 @@
+# T-204 — every 2 minutes, not hourly, and the reason is the opposite of the attendance sweep's.
+#
+# ⭐ The sweep's HOURLY cadence comes from a real anchor: a wall-clock hour PER STORE. This job has
+# no such anchor — punches and mirror updates are useful as soon as possible, but nothing breaks
+# if a run is a few minutes late. Both `drainOutbox` and `ingestEvents` are idempotent, and
+# Firestore is durable storage in the meantime, not a queue that drops. Something in the 1-5
+# minute range is a defensible default matching what a real clock terminal's UX needs — a punch
+# should reach the roster within a couple of minutes, not by the next hour.
+
+[Unit]
+Description=Shareat — Firestore mirror publish + inbox relay, every 2 minutes
+
+[Timer]
+OnCalendar=*:0/2
+# ⚠️ Catch up after a reboot or an outage rather than skipping silently. DEF-044's shape all over
+# again if a run that was due during a restart just never happens.
+Persistent=true
+AccuracySec=15sec
+
+[Install]
+WantedBy=timers.target

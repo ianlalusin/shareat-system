@@ -1,0 +1,26 @@
+# T-204 — the Firestore sync relay. INSTALL INSTRUCTIONS: docs/ops/README.md
+#
+# ⛔ Runs as a `system` principal with no session and no person. T-140's decision, unchanged:
+# a service account holding an admin role is a standing credential nobody watches.
+
+[Unit]
+Description=Shareat — drain the Firestore mirror outbox and ingest the Firestore inbox
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/shareat
+ExecStart=/usr/bin/npm run firestore-relay
+User=shareat
+Group=shareat
+
+# ⚠️ NEVER build here. The droplet is 4 GB and runs Postgres; a build OOMs the box and takes the
+# database down with it. This unit runs an already-installed tree — bible §2.10.
+Environment=NODE_ENV=production
+
+# ⭐ The exit code is load-bearing: non-zero when a publish or an ingest failed OUTRIGHT, so the
+# host's mailer speaks up. A per-punch adjudication failure (a replayed old punch landing on an
+# already-frozen day) does not flip it — see scripts/firestore-relay.ts's own header.
+StandardOutput=append:/var/log/shareat/firestore-relay.log
+StandardError=append:/var/log/shareat/firestore-relay.log

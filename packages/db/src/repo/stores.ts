@@ -5,7 +5,7 @@
  * lives here is the **cash-custody policy** (bible row 129), because it is a money control and
  * changing it changes how much cash may sit in a drawer.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { stores, type RemittanceCadence } from '../../schema/stores';
 
@@ -57,4 +57,26 @@ export async function setCashPolicy(
       updatedAt: new Date(),
     })
     .where(and(eq(stores.orgId, orgId), eq(stores.id, input.storeId)));
+}
+
+/**
+ * T-204 — resolves a batch of store ids to their orgs, for the Firestore inbox relay: an event
+ * carries a `storeId`, never an `orgId` (bible §5.1's own inbox shape), so `inbox_relay` needs a
+ * `system`-principal cross-org lookup BEFORE it can open any org-scoped transaction. A storeId
+ * absent from the returned map means no known store matches it — the caller leaves that event
+ * un-stamped and excluded, per T-204 Contract §3 step 3.
+ *
+ * ⚠️ Deliberately no orgId filter — this runs as `system` (RLS bypassed by design, same as
+ * `schedulerRepo.listOrgsToRun`) precisely because it must see every org's stores in one query.
+ */
+export async function orgIdsForStoreIds(
+  tx: Tx,
+  storeIds: readonly string[],
+): Promise<Map<string, string>> {
+  if (storeIds.length === 0) return new Map();
+  const rows = await tx
+    .select({ id: stores.id, orgId: stores.orgId })
+    .from(stores)
+    .where(inArray(stores.id, [...storeIds]));
+  return new Map(rows.map((r) => [r.id, r.orgId]));
 }

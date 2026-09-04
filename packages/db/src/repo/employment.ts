@@ -218,6 +218,54 @@ export async function replaceEmploymentPositions(
   }
 }
 
+// -------------------------------------------------------------------------------------
+// Position assignments, READ side. T-202 — `RosterRow`/`listActiveRoster` above carry no
+// position information at all, and the staff-onboarding Contract's roster columns ("positions,
+// primary marked") and employment-detail pre-fill both need it. Two small additive reads; no
+// schema or migration change.
+// -------------------------------------------------------------------------------------
+
+export interface EmploymentPositionRow {
+  employmentId: string;
+  positionId: string;
+  positionName: string;
+  isPrimary: boolean;
+}
+
+/** Every position currently assigned to ONE employment — the detail page's pre-fill for the
+ *  `setEmploymentPositions` form. */
+export async function listEmploymentPositions(tx: Tx, employmentId: string): Promise<EmploymentPositionRow[]> {
+  const rows = await tx
+    .select({
+      employmentId: employmentPositions.employmentId,
+      positionId: employmentPositions.positionId,
+      positionName: positions.name,
+      isPrimary: employmentPositions.isPrimary,
+    })
+    .from(employmentPositions)
+    .innerJoin(positions, eq(positions.id, employmentPositions.positionId))
+    .where(eq(employmentPositions.employmentId, employmentId))
+    .orderBy(asc(positions.name));
+  return rows as EmploymentPositionRow[];
+}
+
+/** Same shape, batched for a whole roster — one query rather than N+1 per row. */
+export async function listEmploymentPositionsFor(tx: Tx, employmentIds: string[]): Promise<EmploymentPositionRow[]> {
+  if (employmentIds.length === 0) return [];
+  const rows = await tx
+    .select({
+      employmentId: employmentPositions.employmentId,
+      positionId: employmentPositions.positionId,
+      positionName: positions.name,
+      isPrimary: employmentPositions.isPrimary,
+    })
+    .from(employmentPositions)
+    .innerJoin(positions, eq(positions.id, employmentPositions.positionId))
+    .where(inArray(employmentPositions.employmentId, employmentIds))
+    .orderBy(asc(positions.name));
+  return rows as EmploymentPositionRow[];
+}
+
 /** The roster — reads the VIEW, which is the only answer to "who is active". */
 export async function listActiveRoster(tx: Tx, storeId: string): Promise<RosterRow[]> {
   const result = await tx.execute(sql`

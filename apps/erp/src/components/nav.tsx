@@ -24,7 +24,14 @@ const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
       { href: '/channel-settlements', label: 'Channel settlements' },
       { href: '/remittance', label: 'Remittance' },
       { href: '/till', label: 'Till custody' },
+      // ⭐ DEF-131 — the FK every Phase 4/5 table depends on had no live path that created one
+      // until 2026-09-04. Beside Attendance on purpose: that screen needs an employmentId this
+      // one is the only way to create.
+      { href: '/staff', label: 'Staff' },
       { href: '/attendance', label: 'Attendance' },
+      // ⭐ DEF-133 — provisioning a clock terminal or enrolling a card/fingerprint had no admin UI
+      // until 2026-09-04; only hand-run SQL could. `provision_clock_terminal` is admin-only.
+      { href: '/attendance/terminals', label: 'Clock terminals' },
       { href: '/payroll', label: 'Payroll' },
       { href: '/expenses', label: 'Expenses' },
       { href: '/cash-requests', label: 'Cash requests' },

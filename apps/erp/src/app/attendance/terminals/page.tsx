@@ -1,0 +1,200 @@
+import { requireSession } from '../../../lib/session';
+import { mintTerminalTokenAction, provisionTerminalAction, revokeTerminalAction } from './actions';
+import { isReady, listStores, terminalsForStore, type ClockTerminalRow } from './lib';
+import { ProvisionForm } from './ProvisionForm';
+import { RepairButton } from './RepairButton';
+
+export const metadata = { title: 'Clock terminals — Shareat System' };
+export const dynamic = 'force-dynamic';
+
+interface SearchParams {
+  store?: string;
+  error?: string;
+  ok?: string;
+}
+
+const SELECT =
+  'rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+const BTN_SM =
+  'rounded border border-neutral-300 px-3 py-1 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900';
+
+function fmt(d: Date | null): string {
+  if (!d) return '—';
+  return d.toLocaleString('en-PH', {
+    timeZone: 'Asia/Manila',
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+}
+
+/**
+ * ⭐ Invariant 1: "not ready" is stated, not implied. `isReady` is `terminals.ts`'s own function,
+ * reused rather than reimplemented (spec §1: "reuse it, do not reimplement the readiness check").
+ */
+function stateOf(t: ClockTerminalRow): { text: string; ready: boolean } {
+  return isReady(t)
+    ? { text: `Active — paired ${fmt(t.activatedAt)}`, ready: true }
+    : { text: 'Provisioned — not yet paired. Cannot punch.', ready: false };
+}
+
+/*
+  ⭐ T-203, closing DEF-133. Until this screen existed, `provisionTerminal` / `activateTerminal` /
+  `revokeTerminal` / `mintTerminalToken` (T-159) and `createFirestoreTerminalDriver()`
+  (`packages/sync-firestore`) had zero callers anywhere in `apps/` — `/clock`'s own pairing screen
+  (`apps/erp/src/app/clock/page.tsx:162,292`) already referenced "the provisioning screen" as
+  where its token comes from, and that screen simply did not exist.
+
+  ⚠️ `provision_clock_terminal` (admin/super-admin only) gates provisioning, re-pairing and
+  revoking; `manage_attendance` (manager and up) gates reading this list — both already decided,
+  `packages/auth/src/capabilities.ts:602,596`. This screen adds no capability of its own.
+*/
+export default async function TerminalsPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const sp = await searchParams;
+  const { actor } = await requireSession('/attendance/terminals');
+  const stores = await listStores(actor.orgId);
+  const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;
+
+  if (!storeId) {
+    return (
+      <main className="mx-auto max-w-4xl p-8">
+        <h1 className="text-2xl font-semibold">Clock terminals</h1>
+        <p className="mt-4 text-sm text-neutral-600 dark:text-neutral-400">
+          This organisation has no stores yet.
+        </p>
+      </main>
+    );
+  }
+
+  const terminals = await terminalsForStore(actor.orgId, actor, storeId);
+
+  return (
+    <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+      <div>
+        <h1 className="text-2xl font-semibold">Clock terminals</h1>
+        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+          Provision a device to punch attendance at a store, and see its one-time pairing token —
+          as text and as a QR code — while it is still online. ⭐ Provisioning, re-pairing and
+          revoking need <strong>admin or super-admin</strong>; everyone with manage-attendance
+          (manager and up) can read this list.
+        </p>
+      </div>
+
+      {sp.error && (
+        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+          {sp.error}
+        </div>
+      )}
+      {sp.ok && (
+        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
+          {sp.ok}
+        </div>
+      )}
+
+      <form method="get" className="flex items-end gap-3">
+        <label className="text-sm">
+          <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
+          <select name="store" defaultValue={storeId} className={SELECT}>
+            {stores.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name} ({s.code})
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="submit" className={BTN_SM}>
+          Show
+        </button>
+      </form>
+
+      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="font-medium">Provision a new terminal</h2>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          The pairing token is shown <strong>once</strong>, right after provisioning — never
+          written to a log and never re-fetchable from this screen afterwards. If it is lost before
+          pairing finishes, use &ldquo;Re-pair&rdquo; on the terminal&rsquo;s row below rather than
+          provisioning a duplicate.
+        </p>
+        <ProvisionForm storeId={storeId} action={provisionTerminalAction} />
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="font-medium">
+          Terminals at this store <span className="text-sm font-normal text-neutral-500">({terminals.length})</span>
+        </h2>
+        {terminals.length === 0 ? (
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">
+            No terminal provisioned here yet.
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
+            <table className="w-full min-w-[640px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
+                  <th className="px-3 py-2 font-medium">Label</th>
+                  <th className="px-3 py-2 font-medium">Status</th>
+                  <th className="px-3 py-2 font-medium">Last seen</th>
+                  <th className="px-3 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {terminals.map((t) => {
+                  const state = stateOf(t);
+                  return (
+                    <tr
+                      key={t.id}
+                      className="border-b border-neutral-100 align-top last:border-0 dark:border-neutral-900"
+                    >
+                      <td className="px-3 py-2 font-medium">{t.label}</td>
+                      <td
+                        className={`px-3 py-2 ${
+                          state.ready
+                            ? 'text-emerald-700 dark:text-emerald-400'
+                            : 'text-amber-700 dark:text-amber-500'
+                        }`}
+                      >
+                        {state.text}
+                      </td>
+                      <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">
+                        {fmt(t.lastSeenAt)}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex flex-col items-start gap-2">
+                          <RepairButton terminalId={t.id} label={t.label} action={mintTerminalTokenAction} />
+                          <form action={revokeTerminalAction} className="flex flex-wrap items-center gap-2">
+                            <input type="hidden" name="terminalId" value={t.id} />
+                            <input type="hidden" name="storeId" value={storeId} />
+                            <input
+                              name="reason"
+                              required
+                              placeholder="Reason to revoke"
+                              className="rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
+                            />
+                            <button
+                              type="submit"
+                              className="rounded border border-red-300 px-2 py-1 text-xs text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
+                            >
+                              Revoke
+                            </button>
+                          </form>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="text-xs text-neutral-500 dark:text-neutral-500">
+          ⚠️ A revoked terminal stops appearing above — it still exists in Postgres, marked revoked
+          with its reason, just not in this live list. Provision a new one rather than trying to
+          revive it; its history stays intact under its own id.
+        </p>
+      </section>
+    </main>
+  );
+}

@@ -10,7 +10,16 @@
  * v1's equivalent is a client-supplied parameter on ~24 server actions (landmine #17).
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { employmentRepo, type EmploymentRow, type PositionRow, type RosterRow, type Tx } from '@shareat/db';
+import {
+  accessRepo,
+  employmentRepo,
+  personsRepo,
+  type EmploymentRow,
+  type PersonRow,
+  type PositionRow,
+  type RosterRow,
+  type Tx,
+} from '@shareat/db';
 import { DEFAULT_POSITION, type EmploymentStatus } from '@shareat/db/schema';
 
 export class EmploymentError extends Error {
@@ -86,6 +95,68 @@ export async function createEmployment(
   });
 
   return employment;
+}
+
+/**
+ * ⭐ T-202 / DEF-131. The gap T-154 didn't anticipate: no domain function anywhere created a
+ * `persons` row — the only writer in the whole repo was raw SQL in `scripts/dev-seed.ts:102`, and
+ * `createEmployment` above requires an existing `personId`. A real onboarding screen cannot work
+ * without this.
+ *
+ * Authorises `enrol_staff` scoped to `input.storeId` — **the same capability `createEmployment`
+ * already checks**, not a new one. `storeId` is context for the authorize call only; it is never
+ * persisted on `persons` (bible §4.2 — a person has no store of its own, an employment does).
+ */
+export async function createPerson(
+  tx: Tx,
+  actor: Actor,
+  input: { storeId: string; displayName: string },
+): Promise<PersonRow> {
+  await authorize(tx, actor, 'enrol_staff', { storeId: input.storeId });
+
+  const displayName = input.displayName.trim();
+  if (!displayName) throw new EmploymentError('A person needs a name.');
+
+  return personsRepo.insertPerson(tx, { orgId: actor.orgId, displayName });
+}
+
+/**
+ * ⭐ T-202. Finds "the same Maria who already works Lipa" so the hire flow can offer the existing
+ * person back instead of minting a duplicate — T-154 invariant 8 (one person, two stores, two
+ * employments) only works if the UI ever does.
+ *
+ * `enrol_staff` has store scope (Contract §2), and this call carries no single store to check —
+ * a manager searching for someone to hire may cover several. Authorised against **every store the
+ * actor covers**, refused only if none of them pass — the same sweep
+ * `statutoryDiscounts/authorizeRead` already uses for a store-scoped capability with no one store
+ * named.
+ */
+export async function searchPersons(
+  tx: Tx,
+  actor: Actor,
+  input: { query: string },
+): Promise<PersonRow[]> {
+  const storeIds = await accessRepo.storeIdsForPerson(tx, actor.personId);
+  if (storeIds.length === 0) {
+    throw new EmploymentError('You have no store scope, so you may not search for staff to hire.');
+  }
+
+  let lastError: unknown;
+  let authorized = false;
+  for (const storeId of storeIds) {
+    try {
+      await authorize(tx, actor, 'enrol_staff', { storeId });
+      authorized = true;
+      break;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  if (!authorized) {
+    throw lastError instanceof Error ? lastError : new EmploymentError('Not authorized to search staff.');
+  }
+
+  return personsRepo.searchPersons(tx, { orgId: actor.orgId, query: input.query });
 }
 
 /**

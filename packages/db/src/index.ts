@@ -53,7 +53,7 @@ export { CASH_REQUEST_STATUSES } from '../schema/cash-requests';
 export type { CashRequestStatus } from '../schema/cash-requests';
 export type { CashRequestRow, FloatPosition } from './repo/cash-requests';
 export type { OwnerRow, OwnerPosition, DrawingCloseRow, AgedReceivable } from './repo/owners';
-export type { PositionRow, EmploymentRow, RosterRow } from './repo/employment';
+export type { PositionRow, EmploymentRow, RosterRow, EmploymentPositionRow } from './repo/employment';
 export type { AttendanceConfigRow } from './repo/attendance-config';
 export type { AttendancePunchRow } from './repo/attendance-punches';
 export type {
@@ -200,3 +200,6 @@ export * as commissaryRepo from './repo/commissary';
 // T-171 / DEF-129 — links, offerings and the item map: the catalogue's own SQL.
 export * as commissaryCatalogueRepo from './repo/commissary-catalogue';
 export * as customerReturnsRepo from './repo/customer-returns';
+// T-202 / DEF-131 — the persons writer that never existed until now.
+export * as personsRepo from './repo/persons';
+export type { PersonRow } from './repo/persons';
