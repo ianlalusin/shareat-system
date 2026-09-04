@@ -10,7 +10,7 @@
  * layer on top; they are not what a loan is.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { loansRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
+import { journalRepo, loansRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
 import { money, type Money } from '@shareat/core/money';
 import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry } from '../ledger/post-entry';
@@ -267,6 +267,13 @@ export async function recordLoanPayment(
 
 /**
  * ⛔ Reverse, never delete. And re-opens a `paid_off` loan, because the debt is back.
+ *
+ * DEF-156: `entryId` is caller-supplied, so before touching anything this confirms the entry
+ * actually carries a `2400` line partied to THIS loan — checked by party, not by `source_type`,
+ * the same reason `positionOf` reads that way (DEF-145: a repayment can legitimately arrive as a
+ * leg inside an unrelated document, e.g. a channel settlement's dock). Without this check, anyone
+ * holding `record_ap_payment` at this loan's store could reverse any posted entry in the org by
+ * naming its id here.
  */
 export async function reverseLoanEntry(
   tx: Tx | null,
@@ -280,6 +287,20 @@ export async function reverseLoanEntry(
 
     const reason = input.reason.trim();
     if (!reason) throw new Error('reverseLoanEntry: a reason is required.');
+
+    const lines = await journalRepo.findLinesForEntryWithAccountCodes(trx, input.entryId);
+    const belongsToThisLoan = lines.some(
+      (l) =>
+        l.accountCode === LOAN_LIABILITY_CODE &&
+        l.partyType === 'loan' &&
+        l.partyId === loan.id,
+    );
+    if (!belongsToThisLoan) {
+      throw new Error(
+        `reverseLoanEntry: entry ${input.entryId} does not belong to loan ${loan.id} — it carries ` +
+          `no ${LOAN_LIABILITY_CODE} line partied to this loan.`,
+      );
+    }
 
     const reversal = await reverseEntry(trx, {
       entryId: input.entryId,

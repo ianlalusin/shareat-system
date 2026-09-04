@@ -237,12 +237,15 @@ describe('invariant 7 — legacy_code is unique and never contains a per-entity 
   });
 });
 
-describe('invariant 8 — reserved accounts are exactly {2145, 2250, 4920}; every other account is active', () => {
+describe('invariant 8 — reserved accounts are exactly {2145, 2250, 4920, 2900}; every other account is active', () => {
   it('RESERVED_CODES matches the amended Contract §4 list exactly', () => {
     // ⭐ 2120 LEFT this set in T-163 (migration 0065): the receipt now credits it, so it is funded
     // and therefore active. The describe title above has said {2145, 2250, 4920} all along — it
     // was correct before 2120 was added here and is correct again now.
-    expect(new Set(RESERVED_CODES)).toEqual(new Set(['2145', '2250', '4920']));
+    // ⭐ 2900 JOINED this set — DEF-161: seeded active with a legacy mapping and zero writers
+    // anywhere (v1's void-cash-retained mechanic was never ported), which reads as built when it
+    // is not. Reserved is the honest state until that mechanic is scoped and built.
+    expect(new Set(RESERVED_CODES)).toEqual(new Set(['2145', '2250', '4920', '2900']));
   });
 
   it('the database reflects reserved vs active correctly after seeding', async () => {
@@ -251,7 +254,7 @@ describe('invariant 8 — reserved accounts are exactly {2145, 2250, 4920}; ever
     const rows = await fetchAccounts(orgId);
 
     const reserved = rows.filter((r) => r.status === 'reserved').map((r) => r.code);
-    expect(new Set(reserved)).toEqual(new Set(['2145', '2250', '4920']));
+    expect(new Set(reserved)).toEqual(new Set(['2145', '2250', '4920', '2900']));
 
     const others = rows.filter((r) => !reserved.includes(r.code));
     for (const r of others) {

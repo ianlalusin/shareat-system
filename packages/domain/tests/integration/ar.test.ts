@@ -83,7 +83,11 @@ async function fixture(hint: string) {
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 
-async function charge(f: Fixture, amount: string, opts: { date?: string; dueDate?: string; by?: Actor } = {}) {
+async function charge(
+  f: Fixture,
+  amount: string,
+  opts: { date?: string; dueDate?: string; by?: Actor; creditOverrideReason?: string } = {},
+) {
   return asOrg(f.orgId, (tx) =>
     recordCharge(tx, opts.by ?? f.manager, {
       storeId: f.storeId,
@@ -92,8 +96,15 @@ async function charge(f: Fixture, amount: string, opts: { date?: string; dueDate
       dueDate: opts.dueDate ?? null,
       totalAmount: amount,
       revenueAccountCode: '4150',
+      ...(opts.creditOverrideReason !== undefined
+        ? { creditOverrideReason: opts.creditOverrideReason }
+        : {}),
     }),
   );
+}
+
+async function setCreditLimit(f: Fixture, amount: string) {
+  await sql`update customers set credit_limit = ${amount} where id = ${f.customerId}`;
 }
 
 interface Line { code: string; debit: string; credit: string; party_id: string | null }
@@ -365,5 +376,35 @@ describe('org isolation', () => {
     await charge(a, '1000.00');
     const seen = await asOrg(b.orgId, (tx) => arRepo.openItems(tx, b.orgId, a.customerId, a.storeId));
     expect(seen).toHaveLength(0);
+  });
+});
+
+describe('⛔ DEF-158 — recordCharge enforces the credit limit itself, not only its one caller', () => {
+  it('a breach with no reason given is refused, and the message shows the arithmetic', async () => {
+    const f = await fixture('def158-breach');
+    await setCreditLimit(f, '500.00');
+    await expect(charge(f, '900.00')).rejects.toThrow(/limit of ₱500.00/);
+  });
+
+  it('a manager may charge anyway by saying why, and it posts', async () => {
+    const f = await fixture('def158-override');
+    await setCreditLimit(f, '500.00');
+    const result = await charge(f, '900.00', {
+      creditOverrideReason: 'Paying on delivery, agreed with the owner.',
+    });
+    expect(result.entryId).toBeTruthy();
+  });
+
+  it('⚠️ a NULL limit never blocks — that is not the same as a limit of zero', async () => {
+    const f = await fixture('def158-nolimit');
+    const result = await charge(f, '99999.00');
+    expect(result.entryId).toBeTruthy();
+  });
+
+  it('the limit counts what is ALREADY owed, not just this charge', async () => {
+    const f = await fixture('def158-cumulative');
+    await setCreditLimit(f, '1000.00');
+    await charge(f, '700.00');
+    await expect(charge(f, '500.00')).rejects.toThrow(/owes ₱700.00/);
   });
 });

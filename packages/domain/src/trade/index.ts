@@ -25,7 +25,6 @@
  * MARGIN is not. See the spec's Out of scope.
  */
 import {
-  arRepo,
   commissaryRepo,
   customersRepo,
   itemsRepo,
@@ -455,45 +454,10 @@ export async function dispatchTradeOrder(
       return { orderId: order.id, chargeId: null, entryId: dispatched.entryId, creditOverridden: false, treatment: 'internal' };
     }
 
-    // ---------------------------------------------------------------------------------------
-    // The credit gate — ONE gate, here, because this is the one act that creates exposure.
-    // ⛔ ERPNext checks at three document-submit hooks; it has three documents. We have one.
-    // ---------------------------------------------------------------------------------------
-    let creditOverrideBy: string | null = null;
-    let creditOverrideReason: string | null = null;
-
-    if (customer.creditLimit !== null) {
-      // ⚠️ Derived from the ledger, never a stored balance — org-wide, because a credit limit is
-      // extended to a BUYER, not to a buyer at one branch.
-      const { controlBalance } = await arRepo.positionOf(trx, actor.orgId, order.customerId);
-      const after = Number(controlBalance) + Number(order.totalAmount);
-      if (after > Number(customer.creditLimit) + EPSILON) {
-        const reason = input.creditOverrideReason?.trim() || '';
-        // ⚠️ `authorize` throws rather than answering, and there is no `can()` in @shareat/auth.
-        // Catching ONLY AuthorizationError keeps a real failure (a dead connection, a missing
-        // person) loud instead of silently reading as "not permitted".
-        let mayOverride = true;
-        try {
-          await authorize(trx, actor, 'override_credit_limit', { storeId: order.storeId });
-        } catch (e) {
-          if (!(e instanceof AuthorizationError)) throw e;
-          mayOverride = false;
-        }
-        if (!mayOverride || !reason) {
-          throw new Error(
-            `dispatchTradeOrder: ${customer.name} owes ₱${controlBalance} and this order is ` +
-              `₱${order.totalAmount}, which would take them to ₱${after.toFixed(2)} against a ` +
-              `limit of ₱${customer.creditLimit}. A manager or admin can dispatch it anyway by ` +
-              'saying why.',
-          );
-        }
-        creditOverrideBy = actor.personId;
-        creditOverrideReason = reason;
-      }
-    }
-
-    // ⭐ Bills by calling AR, never by posting its own legs. One owner of the 1210/4200 entry.
-    const { chargeId, entryId } = await recordCharge(trx, actor, {
+    // ⭐ Bills by calling AR, never by posting its own legs. One owner of the 1210/4200 entry —
+    // and DEF-158, the credit-limit gate itself now lives inside `recordCharge`, the one place
+    // every AR-charging caller goes through, rather than a copy kept here.
+    const { chargeId, entryId, creditOverrideBy, creditOverrideReason } = await recordCharge(trx, actor, {
       storeId: order.storeId,
       customerId: order.customerId,
       chargeDate: order.orderDate,
@@ -501,6 +465,7 @@ export async function dispatchTradeOrder(
       revenueAccountCode: WHOLESALE_REVENUE_CODE,
       referenceNo: order.referenceNo,
       notes: `Wholesale order ${order.referenceNo ?? order.id}`,
+      creditOverrideReason: input.creditOverrideReason,
     });
 
     // ---------------------------------------------------------------------------------------

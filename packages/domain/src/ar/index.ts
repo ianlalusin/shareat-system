@@ -9,12 +9,15 @@
  * across two stores. `POSTING-PATTERNS.md`'s `ar_collection` is the authority for these legs.
  */
 import { arRepo, customersRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
-import { authorize, type Actor } from '@shareat/auth';
+import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 
 export const AR_CONTROL_CODE = arRepo.AR_CONTROL_CODE;
 export const STORE_CREDIT_CODE = arRepo.STORE_CREDIT_CODE;
+
+/** Decimal noise only — matches the tolerance every other money comparison in this codebase uses. */
+const EPSILON = 0.005;
 
 // -------------------------------------------------------------------------------------
 // Charges
@@ -29,17 +32,24 @@ export interface RecordChargeInput {
   revenueAccountCode: string;
   referenceNo?: string | null;
   notes?: string | null;
+  /** DEF-158: the reason for going over the customer's credit limit, if it applies. */
+  creditOverrideReason?: string | null;
 }
 
 /**
  * A customer owes us money. Posts `Dr 1210 (party=customer) / Cr <revenue>` immediately —
  * there is no draft step, matching the "verification IS the approval" shape T-130 settled.
+ *
+ * DEF-158: the credit-limit gate lives HERE, not only in `trade/index.ts`'s one caller — this is
+ * the general AR-charge primitive and bible §16.4 names the limit as enforced "at exactly one
+ * gate." A second caller of `recordCharge` (a manual billing screen, a catering charge) must not
+ * be able to bypass it just by not re-implementing the check trade/index.ts happened to add.
  */
 export async function recordCharge(
   tx: Tx | null,
   actor: Actor,
   input: RecordChargeInput,
-): Promise<{ chargeId: string; entryId: string }> {
+): Promise<{ chargeId: string; entryId: string; creditOverrideBy: string | null; creditOverrideReason: string | null }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'approve_buyer', { storeId: input.storeId });
 
@@ -50,6 +60,37 @@ export async function recordCharge(
     }
     if (Number(input.totalAmount) <= 0) {
       throw new Error('recordCharge: a charge has to be greater than zero.');
+    }
+
+    // ⛔ ONE gate, here, because this is the one act that creates AR exposure — every caller
+    // (trade orders today, anything else tomorrow) goes through it.
+    let creditOverrideBy: string | null = null;
+    let creditOverrideReason: string | null = null;
+    if (customer.creditLimit !== null) {
+      // ⚠️ Derived from the ledger, never a stored balance — org-wide, because a credit limit is
+      // extended to a BUYER, not to a buyer at one branch.
+      const { controlBalance } = await arRepo.positionOf(trx, actor.orgId, input.customerId);
+      const after = Number(controlBalance) + Number(input.totalAmount);
+      if (after > Number(customer.creditLimit) + EPSILON) {
+        const reason = input.creditOverrideReason?.trim() || '';
+        let mayOverride = true;
+        try {
+          await authorize(trx, actor, 'override_credit_limit', { storeId: input.storeId });
+        } catch (e) {
+          if (!(e instanceof AuthorizationError)) throw e;
+          mayOverride = false;
+        }
+        if (!mayOverride || !reason) {
+          throw new Error(
+            `recordCharge: ${customer.name} owes ₱${controlBalance} and this charge is ` +
+              `₱${input.totalAmount}, which would take them to ₱${after.toFixed(2)} against a ` +
+              `limit of ₱${customer.creditLimit}. A manager or admin can charge it anyway by ` +
+              'saying why.',
+          );
+        }
+        creditOverrideBy = actor.personId;
+        creditOverrideReason = reason;
+      }
     }
 
     const { id: chargeId } = await arRepo.insertCharge(trx, {
@@ -92,7 +133,7 @@ export async function recordCharge(
     });
 
     if (result.created) await arRepo.markChargePosted(trx, actor.orgId, chargeId, { journalEntryId: result.entryId });
-    return { chargeId, entryId: result.entryId };
+    return { chargeId, entryId: result.entryId, creditOverrideBy, creditOverrideReason };
   };
   if (tx) return run(tx);
   return transaction(run);

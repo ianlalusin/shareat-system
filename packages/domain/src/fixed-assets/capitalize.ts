@@ -27,6 +27,7 @@ import { authorize, type Actor } from '@shareat/auth';
 import {
   expensesRepo,
   fixedAssetsRepo,
+  journalRepo,
   transaction,
   type AssetCategory,
   type Tx,
@@ -34,6 +35,7 @@ import {
 import { compare, money } from '@shareat/core/money';
 import type { DepreciationInterval } from './schedule';
 import { readPolicyOrRefuse, resolveUsefulLifeMonths } from './policy';
+import { reverseEntry } from '../ledger/reverse-entry';
 
 export interface CreateAssetInput {
   storeId: string;
@@ -231,6 +233,70 @@ async function runCapitalise(
   });
 
   return { assetId: id, created: true, reason: 'created' };
+}
+
+export interface RetireAssetFromVoidedExpenseResult {
+  /** `null` when the expense never capitalised an asset — the ordinary case. */
+  assetId: string | null;
+  /** Posted depreciation entries reversed as a consequence. */
+  depreciationEntriesReversed: number;
+}
+
+/**
+ * DEF-160 — a CAPEX expense that auto-capitalised a `fixed_assets` row must not leave that row
+ * standing when the expense is voided, or it keeps depreciating a cost that no longer exists in
+ * the ledger.
+ *
+ * ⛔ **This does NOT post a cost-removal entry, and must never call {@link disposeAsset}.**
+ * `disposeAsset` credits `1510` for a real retirement — but this file's own header explains the
+ * capitalisation never posted its own entry: the ORIGINAL expense's `Dr 1510` already exists, and
+ * `voidExpense`'s `reverseEntry` call already credits it back to zero. A second credit here would
+ * double-count and leave `1510` negative by the asset's cost.
+ *
+ * What this retires is the REGISTER ROW only — reusing the `disposed` status (no new status value
+ * exists, and one is not needed: `disposed` already means "off the active register, not subject
+ * to further depreciation," which is exactly right here). Any depreciation already posted against
+ * the asset is reversed too, since it was computed against a cost that has just been unwound.
+ *
+ * ⛔ Not separately gated on `manage_fixed_assets`, for the same reason
+ * {@link capitalizeApprovedExpense} is not: the caller is not managing fixed assets, they are
+ * voiding a purchase, and the register row is a consequence the system must clean up — not a
+ * second, separately-permissioned action. Only `voidExpense` may call this.
+ */
+export async function retireAssetFromVoidedExpense(
+  tx: Tx,
+  actor: Actor,
+  input: { expenseId: string; expenseBusinessDate: string; reason: string },
+): Promise<RetireAssetFromVoidedExpenseResult> {
+  const asset = await fixedAssetsRepo.findBySourceExpense(tx, actor.orgId, input.expenseId);
+  if (!asset || asset.status !== 'active') {
+    // No asset, or one already retired/pending for an unrelated reason — nothing for the void
+    // to do. Refusing here would block a legitimate expense correction over a register state
+    // this action did not cause.
+    return { assetId: asset?.id ?? null, depreciationEntriesReversed: 0 };
+  }
+
+  const depreciationEntries = await journalRepo.findPostedEntriesBySource(
+    tx,
+    actor.orgId,
+    'depreciation',
+    asset.id,
+  );
+  for (const entry of depreciationEntries) {
+    await reverseEntry(tx, {
+      entryId: entry.id,
+      reason: `Asset retired — originating expense voided: ${input.reason}`,
+      reversedBy: actor.personId,
+    });
+  }
+
+  await fixedAssetsRepo.markDisposed(tx, actor.orgId, asset.id, {
+    disposedOn: input.expenseBusinessDate,
+    disposalReason: `Retired — the expense that capitalised this asset was voided: ${input.reason}`,
+    disposedBy: actor.personId,
+  });
+
+  return { assetId: asset.id, depreciationEntriesReversed: depreciationEntries.length };
 }
 
 /**

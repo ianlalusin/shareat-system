@@ -327,3 +327,56 @@ describe('⭐ paid_off is DERIVED, and a reversal re-opens it', () => {
     expect(after[0]!.paidOn).toBe('2026-05-13');
   });
 });
+
+describe('⛔ DEF-156 — reverseLoanEntry refuses an entry that is not this loan\'s own', () => {
+  it('refuses to reverse a DIFFERENT loan\'s disbursement, and leaves it untouched', async () => {
+    const f = await fixture('ownership-a');
+    const otherLoan = await asOrg(f.orgId, (tx) =>
+      createLoan(tx, f.admin, {
+        storeId: f.storeId,
+        lenderName: 'BDO',
+        name: 'BDO term loan',
+        principalAmount: '50000.00',
+        interestRate: '1.5',
+        ratePeriod: 'month',
+        interestMethod: 'straight',
+        paymentFrequency: 'monthly',
+        termPeriods: 12,
+        startDate: '2026-05-11',
+      }),
+    );
+    const otherDisbursement = await asOrg(f.orgId, (tx) =>
+      disburseLoan(tx, f.admin, {
+        loanId: otherLoan.id, amount: '50000.00', intoMoneyAccountId: f.safe, on: '2026-05-11',
+      }),
+    );
+
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        reverseLoanEntry(tx, f.admin, {
+          loanId: f.loanId, entryId: otherDisbursement.entryId, reason: 'Wrong loan',
+        }),
+      ),
+    ).rejects.toThrow(/does not belong to loan/);
+
+    // The other loan's own disbursement must still stand — nothing reversed it.
+    const otherPosition = await asOrg(f.orgId, (tx) => loansRepo.positionOf(tx, f.orgId, otherLoan.id));
+    expect(otherPosition.disbursed).toBe('50000.00');
+    expect(otherPosition.outstanding).toBe('50000.00');
+  });
+
+  it('still reverses the loan\'s OWN entry exactly as before', async () => {
+    const f = await fixture('ownership-b');
+    const disbursed = await asOrg(f.orgId, (tx) =>
+      disburseLoan(tx, f.admin, {
+        loanId: f.loanId, amount: '1000.00', intoMoneyAccountId: f.safe, on: '2026-05-11',
+      }),
+    );
+    await asOrg(f.orgId, (tx) =>
+      reverseLoanEntry(tx, f.admin, {
+        loanId: f.loanId, entryId: disbursed.entryId, reason: 'Wrong amount',
+      }),
+    );
+    expect((await position(f)).disbursed).toBe('0.00');
+  });
+});

@@ -208,7 +208,11 @@ describe('⛔ the boundary — obligations that already have a home', () => {
   it.each([
     ['2210', /SSS/],
     ['2240', /withholding tax/],
-    ['2300', /wages/],
+    // DEF-162: corrected 2026-09-04 — payroll does not accrue to 2300, it recognises and
+    // disburses pay in one entry. The old message ("payroll owns them") claimed an accrual step
+    // that does not exist; the charge is still refused (2300 is not a place to double-book pay),
+    // just for the accurate reason.
+    ['2300', /payroll recognises and disburses pay in one entry/],
     ['2400', /loan/],
     ['2110', /supplier invoice/],
   ])('⛔ charging %s is refused, naming the module that owns it', async (code, expected) => {

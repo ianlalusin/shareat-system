@@ -28,6 +28,7 @@ import {
   createPrepaidItem,
   prepaidSchedule,
   reverseAmortisation,
+  undoWriteOff,
   writeOffPrepaidItem,
 } from '@shareat/domain';
 
@@ -381,6 +382,60 @@ describe('invariant 6 — a refund never debits 6750, and cannot exceed what is 
         }),
       ),
     ).rejects.toThrow(/which account it landed in/);
+  });
+});
+
+describe('⭐ DEF-163 — undoWriteOff, the missing counterpart to reverseAmortisation', () => {
+  it('reverses the write-off entry and restores the item to active', async () => {
+    const f = await fixture('undo-writeoff');
+    const item = await policy(f); // ₱24,000 / 12 months
+    await asOrg(f.orgId, (tx) =>
+      amortisePrepaidItem(tx, f.admin, { prepaidItemId: item.id, asOfPeriod: '2026-06' }),
+    );
+    // ⭐ Captured BEFORE the write-off, so the assertions below check RESTORATION rather than an
+    // absolute figure — this fixture posts no purchase entry (no `sourceExpenseId`), so 1400's
+    // net is a running credit total, not a "remaining balance", and only the before/after
+    // comparison is meaningful.
+    const balanceBeforeWriteOff = await netOf(f.orgId, '1400');
+    const expenseBeforeWriteOff = await netOf(f.orgId, '6750');
+
+    // Six months released (₱12,000), ₱12,000 remaining written off with no refund.
+    await asOrg(f.orgId, (tx) =>
+      writeOffPrepaidItem(tx, f.admin, {
+        prepaidItemId: item.id,
+        writtenOffOn: '2026-07-10',
+        reason: 'Cancelled in error',
+      }),
+    );
+    expect((await asOrg(f.orgId, (tx) => prepaidRepo.getById(tx, f.orgId, item.id)))!.status)
+      .toBe('written_off');
+    expect(await netOf(f.orgId, '1400')).not.toBe(balanceBeforeWriteOff);
+
+    await asOrg(f.orgId, (tx) =>
+      undoWriteOff(tx, f.admin, { prepaidItemId: item.id, reason: 'Wrong item — meant a different policy' }),
+    );
+
+    const after = await asOrg(f.orgId, (tx) => prepaidRepo.getById(tx, f.orgId, item.id));
+    expect(after!.status).toBe('active');
+    // The write-off's own entry (Dr 6750 / Cr 1400 for the remainder) is undone, so both
+    // accounts are back to exactly what six months of amortisation alone left them at.
+    expect(await netOf(f.orgId, '1400')).toBe(balanceBeforeWriteOff);
+    expect(await netOf(f.orgId, '6750')).toBe(expenseBeforeWriteOff);
+
+    // ⭐ And amortisation can resume — the whole point of restoring 'active' rather than leaving
+    // a dead status behind.
+    const resumed = await asOrg(f.orgId, (tx) =>
+      amortisePrepaidItem(tx, f.admin, { prepaidItemId: item.id, asOfPeriod: '2026-07' }),
+    );
+    expect(resumed.posted).toEqual(['2026-07']);
+  });
+
+  it('⛔ refuses an item that was never written off', async () => {
+    const f = await fixture('undo-notwrittenoff');
+    const item = await policy(f);
+    await expect(
+      asOrg(f.orgId, (tx) => undoWriteOff(tx, f.admin, { prepaidItemId: item.id, reason: 'Nothing to undo' })),
+    ).rejects.toThrow(/is active, not written_off/);
   });
 });
 

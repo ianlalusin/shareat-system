@@ -240,8 +240,13 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
     legacyCode: 'liability__salaries_payable',
   }),
   leaf('2400', 'Loans payable', 'liability', 'credit', '2000', { requiresParty: true }), // control; liability__loan_{loanId} — T-118 party_type=supplier (the lender)
+  // DEF-161: seeded RESERVED, not active. The legacy mapping carries v1's void-cash-retained
+  // mechanic forward (bible §16.9's "designed, numbered, documented, costs nothing until needed"),
+  // but nothing in sales-days/remittance/till posts to it — an active, postable account with zero
+  // writers reads as built when it is not. Activate once that mechanic is scoped and built.
   leaf('2900', 'Suspense — void cash', 'liability', 'credit', '2000', {
     legacyCode: 'liability__void_cash_suspense',
+    status: 'reserved',
   }),
 
   // ---------------------------------------------------------------------------------

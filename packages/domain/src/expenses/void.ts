@@ -11,6 +11,7 @@
 import { authorize, type Actor } from '@shareat/auth';
 import { expensesRepo, transaction, type Tx } from '@shareat/db';
 import { reverseEntry } from '../ledger/reverse-entry';
+import { retireAssetFromVoidedExpense } from '../fixed-assets/capitalize';
 
 export interface VoidExpenseResult {
   reversalEntryId: string;
@@ -60,6 +61,14 @@ async function runVoidExpense(tx: Tx, actor: Actor, expenseId: string, reason: s
     await expensesRepo.markExpenseVoided(tx, actor.orgId, expenseId, {
       voidedBy: actor.personId,
       voidReason: trimmedReason,
+    });
+    // DEF-160: a CAPEX expense may have auto-capitalised a fixed asset (approve.ts). Retire that
+    // register row as a consequence of the void — see capitalize.ts's own header for why this
+    // must not post a second cost-removal entry.
+    await retireAssetFromVoidedExpense(tx, actor, {
+      expenseId,
+      expenseBusinessDate: expense.businessDate,
+      reason: trimmedReason,
     });
   }
 

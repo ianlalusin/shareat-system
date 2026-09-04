@@ -35,7 +35,7 @@ import { CUTOVER_CLASSIFICATION } from '../../../db/src/cutover/classification';
 import { RLS_REGISTRY } from '../../../db/src/rls/registry';
 import { closeDb, fixedAssetsRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
-import { createExpense, approveExpense } from '@shareat/domain';
+import { createExpense, approveExpense, voidExpense } from '@shareat/domain';
 import {
   buildSchedule,
   createAsset,
@@ -663,9 +663,13 @@ describe('the terms stamped on the asset', () => {
 // The T-122 seam — an approved CAPEX expense becomes a register row
 // =========================================================================================
 
-async function capexExpense(f: Fixture, amount: string): Promise<string> {
+async function expenseWithInvoice(
+  f: Fixture,
+  amount: string,
+  opts: { categoryName?: string; particulars?: string } = {},
+): Promise<string> {
   const [cat] = await sql<{ id: string }[]>`
-    select id from expense_categories where org_id = ${f.orgId} and category = 'Capital Expenditure'
+    select id from expense_categories where org_id = ${f.orgId} and category = ${opts.categoryName ?? 'Capital Expenditure'}
   `;
   // ⭐ T-130: every expense now names a real, verified supplier invoice. One per org, sized well
   // above anything this file spends, created on demand.
@@ -734,11 +738,15 @@ async function capexExpense(f: Fixture, amount: string): Promise<string> {
       supplierInvoiceId: invoice!.id,
       businessDate: '2026-01-20',
       categoryId: cat!.id,
-      particulars: 'Commercial deep fryer',
+      particulars: opts.particulars ?? 'Commercial deep fryer',
       payments: [{ method: 'cash', amount, moneyAccountId: drawer!.id }],
     }),
   );
   return created.id;
+}
+
+async function capexExpense(f: Fixture, amount: string): Promise<string> {
+  return expenseWithInvoice(f, amount);
 }
 
 describe('the capitalisation seam (spec §6)', () => {
@@ -816,6 +824,72 @@ describe('the capitalisation seam (spec §6)', () => {
     // Acquired 2026-01-20, 48,000 over 24 months = 2,000/month, three months charged.
     expect(charged.filter((c) => c.created)).toHaveLength(3);
     expect(Number(await ledgerTotal(f.orgId, posted.assetId!, '1590'))).toBe(6000);
+  });
+});
+
+describe('⛔ DEF-160 — voiding a CAPEX expense retires the asset it capitalised', () => {
+  it('with no depreciation posted yet, the asset retires and 1510 nets to zero', async () => {
+    const f = await setup('def160-plain');
+    const expenseId = await capexExpense(f, '45000.00');
+    const posted = await asPerson(f.orgId, (tx) =>
+      approveExpense(tx, actor(f.orgId, f.managerId), expenseId),
+    );
+    expect(posted.assetId).toBeTruthy();
+    // The expense's OWN entry already put ₱45,000 on 1510 — capitalisation adds no entry of its
+    // own (this file's earlier test already pins that). Confirm the starting state before voiding.
+    expect(Number(await ledgerTotal(f.orgId, expenseId, '1510'))).toBe(-45000);
+
+    await asPerson(f.orgId, (tx) =>
+      voidExpense(tx, actor(f.orgId, f.managerId), expenseId, 'Wrong supplier — re-entering'),
+    );
+
+    // The expense's reversal already unwinds 1510 to zero — that is voidExpense's existing
+    // behaviour and is not what this defect was ever about.
+    expect(Number(await ledgerTotal(f.orgId, expenseId, '1510'))).toBe(0);
+
+    const asset = await asPerson(f.orgId, (tx) => fixedAssetsRepo.getById(tx, f.orgId, posted.assetId!));
+    expect(asset!.status).toBe('disposed');
+    expect(asset!.disposalReason).toMatch(/expense.*voided/i);
+    // ⛔ The bug this closes: retiring the register row must NOT post a second cost-removal entry
+    // (that would double-credit 1510 — the expense reversal already did it once).
+    expect(Number(await ledgerTotal(f.orgId, posted.assetId!, '1510'))).toBe(0);
+  });
+
+  it('with depreciation already posted, those entries are reversed too', async () => {
+    const f = await setup('def160-depreciated');
+    const expenseId = await capexExpense(f, '48000.00');
+    const posted = await asPerson(f.orgId, (tx) =>
+      approveExpense(tx, actor(f.orgId, f.managerId), expenseId),
+    );
+    await asPerson(f.orgId, (tx) =>
+      depreciateAsset(tx, actor(f.orgId, f.adminId), { assetId: posted.assetId!, through: '2026-03' }),
+    );
+    expect(Number(await ledgerTotal(f.orgId, posted.assetId!, '1590'))).toBe(6000);
+
+    await asPerson(f.orgId, (tx) =>
+      voidExpense(tx, actor(f.orgId, f.managerId), expenseId, 'Never should have been capitalised'),
+    );
+
+    // The three depreciation entries are reversed, so the asset stops looking like it is still
+    // consuming a cost that no longer exists in the ledger.
+    expect(Number(await ledgerTotal(f.orgId, posted.assetId!, '1590'))).toBe(0);
+    const asset = await asPerson(f.orgId, (tx) => fixedAssetsRepo.getById(tx, f.orgId, posted.assetId!));
+    expect(asset!.status).toBe('disposed');
+  });
+
+  it('a non-CAPEX void is unaffected — no asset, nothing to retire', async () => {
+    const f = await setup('def160-plain-expense');
+    const expenseId = await expenseWithInvoice(f, '3000.00', {
+      categoryName: 'Utilities', particulars: 'Electric bill',
+    });
+    await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), expenseId));
+    await expect(
+      asPerson(f.orgId, (tx) =>
+        voidExpense(tx, actor(f.orgId, f.managerId), expenseId, 'Duplicate entry'),
+      ),
+    ).resolves.toBeTruthy();
+    const assets = await asPerson(f.orgId, (tx) => fixedAssetsRepo.listAssets(tx, f.orgId, {}));
+    expect(assets).toHaveLength(0);
   });
 });
 

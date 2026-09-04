@@ -28,7 +28,11 @@ export const RESERVED_LIABILITY_CODES: Readonly<Record<string, string>> = {
   '2230': 'Pag-IBIG — payroll accrues it and a statutory remittance settles it',
   '2240': 'withholding tax — payroll accrues it and a statutory remittance settles it',
   '2250': 'VAT — settled through the VAT return, not here',
-  '2300': 'wages — payroll owns them',
+  // DEF-162: corrected 2026-09-04 — payroll recognises and disburses pay in one entry (gross
+  // expense straight to cash/advance-recovery, `payroll/index.ts`), with no separate accrual
+  // leg. The old wording claimed an accrual step that does not exist. The charge is still
+  // refused here regardless — 2300 is not a place to double-book pay through a second door.
+  '2300': 'wages — payroll recognises and disburses pay in one entry, with nothing posted to 2300',
   '2400': 'borrowed money — that is a loan (T-126)',
 };
 

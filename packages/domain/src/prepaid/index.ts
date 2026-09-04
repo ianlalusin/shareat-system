@@ -25,7 +25,7 @@
  * gap too (`reverseAmortisation`, §7.8).
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { prepaidRepo, transaction, type PrepaidCategory, type Tx } from '@shareat/db';
+import { journalRepo, prepaidRepo, transaction, type PrepaidCategory, type Tx } from '@shareat/db';
 import { money, subtract, type Money } from '@shareat/core/money';
 import { buildStraightLine, periodsThroughOf } from '../shared/straight-line';
 import { readPolicyOrRefuse } from '../fixed-assets/policy';
@@ -438,6 +438,64 @@ async function runWriteOff(
   });
 
   return { entryId: result.entryId, expensed: String(expensed), refunded: String(refunded) };
+}
+
+/**
+ * DEF-163 — the missing counterpart to `reverseAmortisation`. A write-off wrongly recorded
+ * (wrong item, cancelled by mistake) had no undo of its own — only the generic `reverseEntry`
+ * on the entry id directly, which restores the ledger but leaves `prepaid_items.status` stuck
+ * at `written_off`, with nothing to move it back and no way to resume amortising.
+ */
+export async function undoWriteOff(
+  tx: Tx | null,
+  actor: Actor,
+  input: { prepaidItemId: string; reason: string },
+): Promise<{ reversalEntryId: string }> {
+  const run = async (trx: Tx) => {
+    await authorize(trx, actor, 'manage_prepaid_items', {});
+
+    const reason = input.reason.trim();
+    if (!reason) throw new Error('undoWriteOff: a reason is required.');
+
+    const item = await prepaidRepo.getById(trx, actor.orgId, input.prepaidItemId);
+    if (!item) {
+      throw new Error(`undoWriteOff: prepaid item ${input.prepaidItemId} does not exist.`);
+    }
+    if (item.status !== 'written_off') {
+      throw new Error(`undoWriteOff: ${item.name} is ${item.status}, not written_off.`);
+    }
+
+    const entries = await journalRepo.findPostedEntriesBySource(
+      trx,
+      actor.orgId,
+      'prepaid_write_off',
+      item.id,
+    );
+    const entry = entries[0];
+    if (!entry) {
+      throw new Error(`undoWriteOff: ${item.name} has no posted write-off entry to reverse.`);
+    }
+
+    const reversal = await reverseEntry(trx, {
+      entryId: entry.id,
+      reason,
+      reversedBy: actor.personId,
+    });
+
+    // Mirrors reverseAmortisation's own reasoning for the fully_amortised case: a status this
+    // ledger event caused must be undone alongside it, or the item is stuck in a state nothing
+    // can act on — no amortisation, no write-off, no way forward.
+    await prepaidRepo.markStatus(trx, actor.orgId, item.id, {
+      status: 'active',
+      writtenOffOn: null,
+      writeOffReason: null,
+      writtenOffBy: null,
+    });
+
+    return { reversalEntryId: reversal.reversalEntryId };
+  };
+  if (tx) return run(tx);
+  return transaction(run);
 }
 
 // -------------------------------------------------------------------------------------
