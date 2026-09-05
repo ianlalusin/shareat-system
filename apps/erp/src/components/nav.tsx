@@ -117,6 +117,21 @@ const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
       { href: '/cutover/opening', label: 'Opening balances' },
     ],
   },
+  {
+    label: 'Setup',
+    links: [
+      // ⭐ T-219 / DEF-167 — role assignment, store scope and capability grants were fully built
+      // and tested with no screen at all, so a hired person could sign in (T-217) and then be
+      // authorized for nothing. Not gated per-link: `manage_users` is matrix-false for manager,
+      // and the server refuses them properly. Hiding a link is presentation; the gate is the write.
+      { href: '/admin/users', label: 'Users and roles' },
+      // ⭐ DEF-181 — both of these shipped with T-201 and were linked from nowhere, reachable only
+      // by typing the URL. Exactly the failure this file's own header comment describes, re-created
+      // three routes later.
+      { href: '/settings', label: 'Settings' },
+      { href: '/settings/attendance', label: 'Attendance settings' },
+    ],
+  },
 ];
 
 export async function Nav() {

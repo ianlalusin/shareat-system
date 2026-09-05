@@ -1,0 +1,215 @@
+import { notFound } from 'next/navigation';
+import { ROLES } from '@shareat/auth';
+import { requireSession } from '../../../../lib/session';
+import { assignRoleAction, setCapabilityGrantAction, setStoreScopeAction } from '../actions';
+import { grantableCapabilitiesFor, userDetail } from '../lib';
+
+export const metadata = { title: 'User access — Shareat System' };
+export const dynamic = 'force-dynamic';
+
+const INPUT =
+  'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+const BTN =
+  'rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
+const LINK_BTN =
+  'rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900';
+
+const MANILA = { timeZone: 'Asia/Manila' } as const;
+
+export default async function UserAccessPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ personId: string }>;
+  searchParams: Promise<{ error?: string; ok?: string }>;
+}) {
+  const { personId } = await params;
+  const sp = await searchParams;
+  const { actor } = await requireSession(`/admin/users/${personId}`);
+  const detail = await userDetail(actor.orgId, personId);
+  if (!detail) notFound();
+
+  const { person, stores, grants } = detail;
+  const isSelf = actor.personId === personId;
+  const activeGrants = grants.filter((g) => g.revokedAt === null);
+  const revokedGrants = grants.filter((g) => g.revokedAt !== null);
+  const heldNames = new Set(activeGrants.map((g) => g.grantName));
+  const offerable = grantableCapabilitiesFor(person.role).filter((c) => !heldNames.has(c));
+  const scopedCount = stores.filter((s) => s.inScope).length;
+
+  return (
+    <main className="mx-auto max-w-3xl space-y-6 p-4 sm:p-8">
+      <div>
+        <a href="/admin/users" className="text-sm text-neutral-500 underline underline-offset-2 dark:text-neutral-400">
+          ← Users and roles
+        </a>
+        <h1 className="mt-1 text-2xl font-semibold">{person.displayName}</h1>
+        <p className="text-sm text-neutral-500 dark:text-neutral-400">
+          {person.role ? (
+            <>
+              {person.role.replace(/_/g, ' ')}
+              {person.grantedAt && ` since ${person.grantedAt.toLocaleDateString('en-PH', MANILA)}`}
+            </>
+          ) : (
+            'No role — authorized for nothing'
+          )}{' '}
+          · {scopedCount} store{scopedCount === 1 ? '' : 's'} · {activeGrants.length} extra grant
+          {activeGrants.length === 1 ? '' : 's'}
+        </p>
+      </div>
+
+      {sp.error && (
+        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+          {sp.error}
+        </div>
+      )}
+      {sp.ok && (
+        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
+          {sp.ok}
+        </div>
+      )}
+
+      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="font-medium">Role</h2>
+        {isSelf ? (
+          <p className="text-sm text-amber-700 dark:text-amber-400">
+            This is you. You cannot change your own role — that is what stops one mis-click locking
+            the organisation out of user management. Ask another admin.
+          </p>
+        ) : (
+          <>
+            <form action={assignRoleAction} className="flex flex-wrap items-end gap-3">
+              <input type="hidden" name="personId" value={personId} />
+              <label className="text-sm">
+                <span className="block text-neutral-600 dark:text-neutral-400">Role</span>
+                <select name="role" required defaultValue={person.role ?? ''} className={INPUT}>
+                  <option value="" disabled>
+                    Select
+                  </option>
+                  {ROLES.map((r) => (
+                    <option key={r} value={r}>
+                      {r.replace(/_/g, ' ')}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button type="submit" className={BTN}>
+                {person.role ? 'Change role' : 'Assign role'}
+              </button>
+            </form>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+              Appointing an <strong>admin</strong> requires super-admin, and grants them scope for
+              every active store at that moment. A role change is recorded as a revoke plus a new
+              grant, so &ldquo;what was their role in March&rdquo; stays answerable.
+            </p>
+          </>
+        )}
+      </section>
+
+      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="font-medium">Store scope</h2>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          Holding a capability is never enough on its own — a store-scoped action also needs the
+          store. Admin has no bypass here; their access is these rows.
+        </p>
+        {stores.length === 0 ? (
+          <p className="text-sm text-neutral-500 dark:text-neutral-400">
+            This organisation has no stores yet.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {stores.map((s) => (
+              <li key={s.id} className="flex items-center justify-between gap-3 text-sm">
+                <span>
+                  {s.name} <span className="font-mono text-xs text-neutral-400">{s.code}</span>
+                </span>
+                <form action={setStoreScopeAction}>
+                  <input type="hidden" name="personId" value={personId} />
+                  <input type="hidden" name="storeId" value={s.id} />
+                  <input type="hidden" name="granted" value={s.inScope ? 'false' : 'true'} />
+                  <button type="submit" className={LINK_BTN}>
+                    {s.inScope ? 'In scope — remove' : 'Add'}
+                  </button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        )}
+        {person.role !== 'admin' && scopedCount === stores.length && stores.length > 0 && (
+          <p className="text-xs text-amber-700 dark:text-amber-400">
+            This person still holds scope for every store. If they were recently demoted from admin,
+            those rows were deliberately left in place rather than cut silently — remove any they
+            should no longer have.
+          </p>
+        )}
+      </section>
+
+      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="font-medium">Extra capability grants</h2>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          Additive overrides on top of the role. A grant is never deleted — revoking one keeps the
+          row, with its date, so &ldquo;who could do this in March&rdquo; stays answerable.
+        </p>
+
+        {activeGrants.length === 0 ? (
+          <p className="text-sm text-neutral-500 dark:text-neutral-400">No extra grants.</p>
+        ) : (
+          <ul className="space-y-2">
+            {activeGrants.map((g) => (
+              <li key={g.id} className="flex items-center justify-between gap-3 text-sm">
+                <span className="font-mono text-xs">{g.grantName}</span>
+                <form action={setCapabilityGrantAction}>
+                  <input type="hidden" name="personId" value={personId} />
+                  <input type="hidden" name="grantId" value={g.id} />
+                  <input type="hidden" name="granted" value="false" />
+                  <button type="submit" className={LINK_BTN}>
+                    Revoke
+                  </button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {offerable.length > 0 && (
+          <form action={setCapabilityGrantAction} className="flex flex-wrap items-end gap-3">
+            <input type="hidden" name="personId" value={personId} />
+            <input type="hidden" name="granted" value="true" />
+            <label className="text-sm">
+              <span className="block text-neutral-600 dark:text-neutral-400">
+                Grant a capability this role does not have
+              </span>
+              <select name="capability" required defaultValue="" className={`${INPUT} font-mono text-xs`}>
+                <option value="" disabled>
+                  Select
+                </option>
+                {offerable.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="submit" className={BTN}>
+              Grant
+            </button>
+          </form>
+        )}
+
+        {revokedGrants.length > 0 && (
+          <details className="text-xs text-neutral-500 dark:text-neutral-400">
+            <summary className="cursor-pointer">{revokedGrants.length} revoked grant(s)</summary>
+            <ul className="mt-2 space-y-1">
+              {revokedGrants.map((g) => (
+                <li key={g.id}>
+                  <span className="font-mono">{g.grantName}</span> — revoked{' '}
+                  {g.revokedAt?.toLocaleDateString('en-PH', MANILA)}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </section>
+    </main>
+  );
+}

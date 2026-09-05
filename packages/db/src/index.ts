@@ -211,7 +211,9 @@ export * as commissaryCatalogueRepo from './repo/commissary-catalogue';
 export * as customerReturnsRepo from './repo/customer-returns';
 // T-202 / DEF-131 — the persons writer that never existed until now.
 export * as personsRepo from './repo/persons';
-export type { PersonRow } from './repo/persons';
+export type { PersonRow, PersonWithAccessRow } from './repo/persons';
+// T-219 / DEF-167 — the role/scope/grant rows the user-management screens render.
+export type { GrantRow, ActiveRoleRow, RoleName } from './repo/access';
 // T-178 — order/channel wastage disposition.
 export * as orderWastageRepo from './repo/order-wastage';
 export type { OrderWastageRow, AllocationRow as OrderWastageAllocationRow } from './repo/order-wastage';

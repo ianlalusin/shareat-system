@@ -15,8 +15,8 @@ export type { Role, Capability, CapabilityScope } from './capabilities';
 export { authorize, AuthorizationError } from './authorize';
 export type { Actor, AuthorizeContext } from './authorize';
 
-export { assignRole, elevateManager } from './roles';
-export type { AssignRoleInput, AssignRoleResult } from './roles';
+export { assignRole, assignRoleAsActor, elevateManager } from './roles';
+export type { AssignRoleInput, AssignRoleAsActorInput, AssignRoleResult } from './roles';
 
 export {
   signInWithPin,

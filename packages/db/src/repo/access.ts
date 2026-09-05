@@ -14,7 +14,7 @@
  * Every function takes a `Tx`, never the base connection (same convention as
  * `repo/journal.ts`) — so a caller cannot write outside a transaction by accident.
  */
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import { personGrants, personRoles, personStoreScope } from '../../schema/access';
 import { stores } from '../../schema/stores';
 import type { Tx } from '../client';
@@ -63,6 +63,31 @@ export async function hasActiveAdmin(tx: Tx, orgId: string): Promise<boolean> {
     .select({ id: personRoles.id })
     .from(personRoles)
     .where(and(eq(personRoles.orgId, orgId), eq(personRoles.role, 'admin'), isNull(personRoles.revokedAt)))
+    .limit(1);
+  return row !== undefined;
+}
+
+/**
+ * Whether an org has an active admin OTHER than `excludePersonId` — the "is this the last
+ * one?" question `hasActiveAdmin` cannot answer, because the person being demoted still
+ * holds the role at the moment the guard has to decide.
+ *
+ * T-219's lockout guard: demoting the org's only admin leaves nobody able to `manage_users`,
+ * and `CAPABILITY-MATRIX.md` §"Worth being conscious of" records that re-appointing one
+ * depends on Ian personally — so an org that does this to itself is not self-recoverable.
+ */
+export async function hasOtherActiveAdmin(tx: Tx, orgId: string, excludePersonId: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: personRoles.id })
+    .from(personRoles)
+    .where(
+      and(
+        eq(personRoles.orgId, orgId),
+        eq(personRoles.role, 'admin'),
+        isNull(personRoles.revokedAt),
+        ne(personRoles.personId, excludePersonId),
+      ),
+    )
     .limit(1);
   return row !== undefined;
 }

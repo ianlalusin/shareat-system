@@ -155,6 +155,21 @@ export default async function EmploymentDetailPage({
       </section>
 
       <section className="space-y-2 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="font-medium">Role and access</h2>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          A sign-in PIN lets this person authenticate; their <em>role</em> is what decides whether
+          any screen will serve them. Role, store scope and capability grants belong to the person,
+          not to this employment (one person can hold two), so they live on their own screen.
+        </p>
+        <a
+          href={`/admin/users/${detail.employment.personId}`}
+          className="text-sm underline underline-offset-4"
+        >
+          Manage role and access →
+        </a>
+      </section>
+
+      <section className="space-y-2 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Clock-in credentials</h2>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
           Card and fingerprint enrolment live on their own screen (T-203).
