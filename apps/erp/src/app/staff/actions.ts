@@ -19,6 +19,8 @@ import {
   type CreateEmploymentInput,
 } from '@shareat/domain';
 import type { EmploymentStatus } from '@shareat/db/schema';
+import { authorize, setPin } from '@shareat/auth';
+import { employmentRepo } from '@shareat/db';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 
@@ -45,7 +47,16 @@ function errorMessage(err: unknown): string {
   if (/A person needs a name/.test(raw)) return raw;
   if (/store scope, so you may not search/.test(raw)) return raw;
   if (/may not 'enrol_staff'/.test(raw)) {
-    return 'Only a manager or admin scoped to this store can hire, end an employment, or change positions.';
+    return 'Only a manager or admin scoped to this store can hire, end an employment, change positions, or issue a sign-in PIN.';
+  }
+  if (/must be exactly 6 digits/.test(raw)) return raw;
+  if (/already in use at this store/.test(raw)) return raw;
+  // DEF-177: `setPin`'s own pre-check only refuses a PIN already taken by a DIFFERENT person —
+  // re-entering the SAME person's own current PIN reaches the DB's unique index instead, which
+  // raises this raw Postgres message. Mapped here, at the presentation edge, without touching
+  // `setPin` itself (out of this task's Scope; see docs/DEFECTS-REGISTER.md DEF-177).
+  if (/person_credentials_lookup_hash_unique/.test(raw)) {
+    return "That's already this person's current PIN — nothing changed. Pick a different PIN to re-issue.";
   }
   if (/may not 'manage_store_settings'/.test(raw)) {
     return 'Only a manager or admin scoped to this store can add a position.';
@@ -162,6 +173,33 @@ export async function endEmploymentAction(formData: FormData): Promise<void> {
     backToEmployment(employmentId, { error: errorMessage(err) });
   }
   backToEmployment(employmentId, { ok: 'Employment ended. The record stays visible.' });
+}
+
+/**
+ * T-217 / DEF-174. `setPin` (`packages/auth/src/sessions.ts`) has no `authorize()` call of its
+ * own — it sits one layer below the domain, alongside `signInWithPin`, which correctly has no
+ * actor yet to check. Issuing or re-issuing a person's sign-in credential is a "granting system
+ * access" action, so this gates on `enrol_staff` (the same capability hiring already uses) rather
+ * than shipping it ungated.
+ */
+export async function issuePinAction(formData: FormData): Promise<void> {
+  const actor = await requireActor('/staff');
+  const employmentId = str(formData, 'employmentId');
+  const pin = str(formData, 'pin');
+
+  try {
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      const employment = await employmentRepo.getEmployment(tx, employmentId);
+      if (!employment || employment.orgId !== actor.orgId) {
+        throw new Error('That employment does not exist.');
+      }
+      await authorize(tx, actor, 'enrol_staff', { storeId: employment.storeId });
+      await setPin(tx, { personId: employment.personId, storeId: employment.storeId, pin });
+    });
+  } catch (err) {
+    backToEmployment(employmentId, { error: errorMessage(err) });
+  }
+  backToEmployment(employmentId, { ok: 'Sign-in PIN issued.' });
 }
 
 export async function upsertStorePositionAction(formData: FormData): Promise<void> {

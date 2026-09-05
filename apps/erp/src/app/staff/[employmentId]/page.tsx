@@ -2,8 +2,8 @@ import { notFound } from 'next/navigation';
 import { ENDED_STATUSES } from '@shareat/db/schema';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { requireSession } from '../../../lib/session';
-import { endEmploymentAction, setPositionsAction } from '../actions';
-import { employmentDetail, positionsForStore } from '../lib';
+import { endEmploymentAction, issuePinAction, setPositionsAction } from '../actions';
+import { employmentDetail, livePinFor, positionsForStore } from '../lib';
 
 export const metadata = { title: 'Employment — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -27,7 +27,10 @@ export default async function EmploymentDetailPage({
   if (!detail) notFound();
 
   const isEnded = detail.employment.endedOn !== null;
-  const positions = await positionsForStore(actor.orgId, detail.employment.storeId);
+  const [positions, livePin] = await Promise.all([
+    positionsForStore(actor.orgId, detail.employment.storeId),
+    livePinFor(actor.orgId, detail.employment.personId, detail.employment.storeId),
+  ]);
   const assignedIds = new Set(detail.positions.map((p) => p.positionId));
   const primaryId = detail.positions.find((p) => p.isPrimary)?.positionId;
 
@@ -106,6 +109,48 @@ export default async function EmploymentDetailPage({
               Save positions
             </button>
           </form>
+        )}
+      </section>
+
+      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="font-medium">Sign-in PIN</h2>
+        {livePin ? (
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">
+            Issued {livePin.issuedAt.toLocaleDateString('en-PH', { timeZone: 'Asia/Manila' })}. Can
+            sign in at <code>/sign-in</code> for {detail.storeName}.
+          </p>
+        ) : (
+          <p className="text-sm text-amber-700 dark:text-amber-400">
+            No sign-in PIN issued yet — this person cannot sign in.
+          </p>
+        )}
+        {!isEnded && (
+          <form action={issuePinAction} className="flex flex-wrap items-end gap-3">
+            <input type="hidden" name="employmentId" value={employmentId} />
+            <label className="text-sm">
+              <span className="block text-neutral-600 dark:text-neutral-400">
+                {livePin ? 'New PIN' : 'PIN'} (6 digits)
+              </span>
+              <input
+                name="pin"
+                required
+                pattern="[0-9]{6}"
+                maxLength={6}
+                inputMode="numeric"
+                placeholder="000000"
+                className={`${INPUT} font-mono`}
+              />
+            </label>
+            <button type="submit" className={BTN}>
+              {livePin ? 'Re-issue PIN' : 'Issue PIN'}
+            </button>
+          </form>
+        )}
+        {livePin && (
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            Re-issuing replaces the current PIN and ends any of this person&rsquo;s sessions at this
+            store right now.
+          </p>
         )}
       </section>
 

@@ -7,7 +7,7 @@
  * `withOrgPrincipal`. `searchPersonsFor` is the one read that carries a capability (`enrol_staff`
  * — Contract §2), so it takes the full `Actor`, not just an `orgId`, and calls the domain function.
  */
-import { employmentRepo, personsRepo, type EmploymentPositionRow, type EmploymentRow, type PersonRow, type PositionRow, type RosterRow } from '@shareat/db';
+import { employmentRepo, personsRepo, sessionsRepo, type EmploymentPositionRow, type EmploymentRow, type PersonRow, type PositionRow, type RosterRow } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { searchPersons } from '@shareat/domain';
 import { listStores, withOrgPrincipal, type StoreOption } from '../expenses/lib';
@@ -64,6 +64,17 @@ export async function employmentDetail(orgId: string, employmentId: string): Pro
       storeName: store?.name ?? employment.storeId,
       positions: positionRows.map((p) => ({ positionId: p.positionId, name: p.positionName, isPrimary: p.isPrimary })),
     };
+  });
+}
+
+/** T-217 / DEF-174. Whether this person already has a live sign-in PIN at this store — the read
+ *  half of "hired but no PIN issued yet," with no capability gate, matching every other roster
+ *  read on this page (the gate belongs to issuing one, not to looking). */
+export async function livePinFor(orgId: string, personId: string, storeId: string): Promise<{ issuedAt: Date } | null> {
+  return withOrgPrincipal(orgId, async (tx) => {
+    const rows = await sessionsRepo.listLiveForPerson(tx, personId, storeId);
+    const pin = rows.find((r) => r.kind === 'pin');
+    return pin ? { issuedAt: pin.createdAt } : null;
   });
 }
 

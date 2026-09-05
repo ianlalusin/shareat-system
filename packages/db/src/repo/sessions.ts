@@ -87,6 +87,35 @@ export interface InsertCredentialInput {
   externalId?: string | null;
 }
 
+/** Live (non-revoked) credentials for one person, optionally narrowed to one store — what an
+ *  "is this person able to sign in" screen needs. Mirrors `attendance-credentials.ts`'s
+ *  `listLiveForEmployment` shape; a different table because a PIN and a card/fingerprint are
+ *  different credential families (T-185's own comment: card and fingerprint, never a PIN). */
+export async function listLiveForPerson(
+  tx: Tx,
+  personId: string,
+  storeId?: string,
+): Promise<(CredentialRow & { createdAt: Date })[]> {
+  const conditions = [eq(personCredentials.personId, personId), isNull(personCredentials.revokedAt)];
+  if (storeId) conditions.push(eq(personCredentials.storeId, storeId));
+  const rows = await tx
+    .select({
+      id: personCredentials.id,
+      personId: personCredentials.personId,
+      kind: personCredentials.kind,
+      storeId: personCredentials.storeId,
+      secretHash: personCredentials.secretHash,
+      lookupHash: personCredentials.lookupHash,
+      externalId: personCredentials.externalId,
+      revokedAt: personCredentials.revokedAt,
+      createdAt: personCredentials.createdAt,
+    })
+    .from(personCredentials)
+    .where(and(...conditions))
+    .orderBy(personCredentials.createdAt);
+  return rows as (CredentialRow & { createdAt: Date })[];
+}
+
 export async function insertCredential(tx: Tx, input: InsertCredentialInput): Promise<{ id: string }> {
   const [row] = await tx
     .insert(personCredentials)

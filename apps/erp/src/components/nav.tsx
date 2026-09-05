@@ -16,6 +16,9 @@ const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
   {
     label: 'Daily',
     links: [
+      // T-211 — `/` used to be the Phase 0 scaffold; it's the dashboard now, so it earns a nav
+      // entry of its own rather than relying solely on the "Shareat" logo link.
+      { href: '/', label: 'Dashboard' },
       { href: '/sales-days', label: 'Sales days' },
       // ⭐ DEF-137 — `recordChannelSettlement` shipped 2026-08-28 with no screen and no nav entry,
       // so the `1220` receivable every verified Foodpanda/Grab day raises had nothing that ever

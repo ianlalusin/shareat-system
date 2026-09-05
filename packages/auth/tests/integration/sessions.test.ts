@@ -266,6 +266,41 @@ describe('changing a credential invalidates what it minted', () => {
   });
 });
 
+describe('listLiveForPerson — T-217 / DEF-174', () => {
+  it('a person with no credential returns nothing', async () => {
+    const f = await setup('live-none');
+    const rows = await asOrg(f.orgId, (tx) => sessionsRepo.listLiveForPerson(tx, f.personId));
+    expect(rows).toEqual([]);
+  });
+
+  it('a live PIN shows up, a revoked one does not', async () => {
+    const f = await setup('live-pin');
+    const { credentialId } = await asOrg(f.orgId, (tx) =>
+      setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '161616' }),
+    );
+    const live = await asOrg(f.orgId, (tx) => sessionsRepo.listLiveForPerson(tx, f.personId));
+    expect(live).toHaveLength(1);
+    expect(live[0]).toMatchObject({ personId: f.personId, kind: 'pin', storeId: f.storeId });
+
+    await asOrg(f.orgId, (tx) => sessionsRepo.revokeCredential(tx, credentialId, f.otherPersonId));
+    const afterRevoke = await asOrg(f.orgId, (tx) => sessionsRepo.listLiveForPerson(tx, f.personId));
+    expect(afterRevoke).toEqual([]);
+  });
+
+  it('a storeId narrows to that store only; omitting it returns every store', async () => {
+    const f = await setup('live-scope');
+    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '171717' }));
+    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId2, pin: '181818' }));
+
+    const scoped = await asOrg(f.orgId, (tx) => sessionsRepo.listLiveForPerson(tx, f.personId, f.storeId));
+    expect(scoped).toHaveLength(1);
+    expect(scoped[0]!.storeId).toBe(f.storeId);
+
+    const both = await asOrg(f.orgId, (tx) => sessionsRepo.listLiveForPerson(tx, f.personId));
+    expect(both).toHaveLength(2);
+  });
+});
+
 describe('the browser path', () => {
   it('a linked Firebase uid signs in; an unknown one does NOT auto-provision', async () => {
     // A login is not an introduction. Someone with an account but no person row has not been
