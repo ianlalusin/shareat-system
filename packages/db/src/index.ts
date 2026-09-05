@@ -160,6 +160,15 @@ export * as stockTransfersRepo from './repo/stock-transfers';
 export * as supplierReturnsRepo from './repo/supplier-returns';
 export * as deliveriesRepo from './repo/deliveries';
 export * as tradeDiscrepanciesRepo from './repo/trade-discrepancies';
+export * as commissaryKpisRepo from './repo/commissary-kpis';
+export type {
+  CommissaryKpiFilter,
+  InFlightStage,
+  InFlightStageRow,
+  OpenDisputeRow,
+  OpenDisputeSummary,
+  ReceivedSummary,
+} from './repo/commissary-kpis';
 export * as lowStockRepo from './repo/low-stock';
 export type { LowStockRow, OrderMessageRow } from './repo/low-stock';
 export type { TradeDiscrepancyRow } from './repo/trade-discrepancies';

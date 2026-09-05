@@ -52,7 +52,19 @@ export const tradeDiscrepancies = pgTable(
     orderLineId: uuid('order_line_id').notNull().references(() => tradeOrderLines.id, { onDelete: 'restrict' }),
     /** Dispatched minus received, in base units. Always positive — an over-receipt is not this. */
     quantity: numeric('quantity', { precision: 14, scale: 3 }).notNull(),
-    /** Quantity × the line's transfer rate. What is stranded in `1340`. */
+    /**
+     * ⭐ **AT COST — the un-received share of the line's `dispatch_cost`. NOT quantity × the
+     * transfer rate.** That is what is actually stranded in `1340 Inventory in transit`, which is
+     * debited at cost (`packages/domain/src/commissary/transfer.ts:423-429`); valuing the dispute
+     * at the transfer rate would relieve `1340` by more than the goods put into it — DEF-098's
+     * hole by a second route.
+     *
+     * ⚠️ **This comment said "Quantity × the line's transfer rate" from T-174 until 2026-09-05**,
+     * describing the opposite of what the code writes. Corrected under DEF-175: T-212's first
+     * draft trusted it and derived a received-value cross-check that could never have tied. To
+     * reconcile a shortfall against a TRANSFER-rate figure, multiply `quantity` by the LINE's own
+     * `rate` — never use this column for that.
+     */
     value: numeric('value', { precision: 14, scale: 2 }).notNull(),
     status: text('status', { enum: DISCREPANCY_STATUSES }).notNull().default('open'),
     disposition: text('disposition', { enum: DISCREPANCY_DISPOSITIONS }),

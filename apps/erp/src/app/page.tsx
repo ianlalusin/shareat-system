@@ -1,6 +1,6 @@
 import { getApAgingReport, getArAgingReport, getBalanceSheet, getIncomeStatement, getSalesRollup } from '@shareat/domain';
-import { cashRequestsRepo, employmentRepo, lowStockRepo } from '@shareat/db';
-import { add, formatMoney } from '@shareat/core/money';
+import { cashRequestsRepo, commissaryKpisRepo, employmentRepo, lowStockRepo } from '@shareat/db';
+import { add, formatMoney, money } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { reportScope, runReport } from './reports/lib';
 import { findingsFor, lastCompletedPeriod } from './findings/lib';
@@ -49,12 +49,17 @@ export default async function DashboardPage({
   const period = lastCompletedPeriod();
 
   const [
-    { incomeStatement, balanceSheet, arAging, apAging, salesRollup, activeStaff, lowStock, openFloats },
+    {
+      incomeStatement, balanceSheet, arAging, apAging, salesRollup, activeStaff, lowStock, openFloats,
+      inFlight, disputes, received,
+    },
     { feed },
   ] = await Promise.all([
     runReport(orgId, async (tx) => {
-      const [incomeStatement, balanceSheet, arAging, apAging, salesRollup, activeStaffRows, lowStockRows, floats] =
-        await Promise.all([
+      const [
+        incomeStatement, balanceSheet, arAging, apAging, salesRollup, activeStaffRows, lowStockRows, floats,
+        inFlight, disputes, received,
+      ] = await Promise.all([
           getIncomeStatement(tx, { orgId, storeId, fromDate, toDate }),
           getBalanceSheet(tx, { orgId, storeId, asOfDate: today }),
           getArAgingReport(tx, { orgId, storeId, asOfDate: today }),
@@ -63,6 +68,12 @@ export default async function DashboardPage({
           Promise.all(storesInScope.map((s) => employmentRepo.listActiveRoster(tx, s.id))),
           Promise.all(storesInScope.map((s) => lowStockRepo.lowStock(tx, orgId, s.id))),
           cashRequestsRepo.openFloats(tx, orgId),
+          // ⭐ T-212. No per-store loop: unlike `lowStock`, these three take `storeId: null` as
+          // "org-wide" in one query, and `reportScope` only ever yields an undefined `storeId` to
+          // somebody scoped to the whole org (`coversWholeOrg`), so the widening is authorised.
+          commissaryKpisRepo.inFlightOrders(tx, { orgId, storeId }),
+          commissaryKpisRepo.openDisputes(tx, { orgId, storeId }),
+          commissaryKpisRepo.receivedInRange(tx, { orgId, storeId, fromDate, toDate }),
         ]);
       const storeIds = new Set(storesInScope.map((s) => s.id));
       return {
@@ -74,6 +85,9 @@ export default async function DashboardPage({
         activeStaff: activeStaffRows.reduce((n, rows) => n + rows.length, 0),
         lowStock: lowStockRows.reduce((n, rows) => n + rows.length, 0),
         openFloats: floats.filter((f) => storeIds.has(f.storeId)).length,
+        inFlight,
+        disputes,
+        received,
       };
     }),
     findingsFor(orgId, period),
@@ -85,6 +99,39 @@ export default async function DashboardPage({
   const storeLabel = scope.storeId
     ? (storesInScope[0] ? `${storesInScope[0].name} (${storesInScope[0].code})` : scope.storeId)
     : 'All stores';
+
+  // ---- T-212: commissary KPIs -----------------------------------------------------------------
+  const inFlightCount = inFlight.reduce((n, r) => n + r.orderCount, 0);
+  const inFlightBasis =
+    inFlight.length > 0
+      ? `${inFlight.map((r) => `${r.orderCount} ${r.stage === 'submitted' ? 'awaiting dispatch' : r.stage}`).join(' · ')} · right now`
+      : 'nothing in transit · right now';
+
+  // ⚠️ "at cost" is not decoration — `trade_discrepancies.value` is the un-received share of
+  // dispatch COST, not the transfer rate (DEF-175). A tile that just says ₱ invites the reader to
+  // compare it against the transfer-rate figure beside it, which is the mistake the DEF records.
+  const disputeBasis =
+    disputes.count > 0
+      ? `oldest ${disputes.oldestAgeDays}d · ${formatMoney(money(disputes.totalValue))} stranded at cost` +
+        (disputes.buckets.overdue > 0 ? ` · ${disputes.buckets.overdue} past 15 days` : '') +
+        (disputes.deferredCount > 0 ? ` · ${disputes.deferredCount} deferred` : '')
+      : 'none open · right now';
+
+  // ⭐ The gap is SHOWN, not just corrected away — v1 reports the dispatched figure and calls it
+  // received. Stating both is what makes the correction legible instead of merely invisible.
+  const receivedExtras = [
+    Number(received.shortReceivedValue) !== 0
+      ? `${formatMoney(money(received.shortReceivedValue))} short`
+      : null,
+    Number(received.unrecordedValue) !== 0
+      ? `${formatMoney(money(received.unrecordedValue))} no receipt recorded`
+      : null,
+  ].filter(Boolean);
+  const receivedBasis =
+    `${received.orderCount} order${received.orderCount === 1 ? '' : 's'} · ${fromDate} to ${toDate}` +
+    (receivedExtras.length > 0
+      ? ` · of ${formatMoney(money(received.goodsDispatchedValue))} dispatched: ${receivedExtras.join(', ')}`
+      : '');
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
@@ -162,6 +209,25 @@ export default async function DashboardPage({
           basis="right now"
           href="/inventory/low-stock"
           tone={lowStock > 0 ? 'warn' : 'ok'}
+        />
+        <Tile
+          label="Commissary in flight"
+          value={String(inFlightCount)}
+          basis={inFlightBasis}
+          href="/commissary/orders"
+        />
+        <Tile
+          label="Open disputes"
+          value={String(disputes.count)}
+          basis={disputeBasis}
+          href="/commissary/discrepancies"
+          tone={disputes.buckets.overdue > 0 ? 'warn' : disputes.count > 0 ? 'neutral' : 'ok'}
+        />
+        <Tile
+          label="Received from commissary"
+          value={formatMoney(money(received.goodsReceivedValue))}
+          basis={receivedBasis}
+          href="/commissary/orders"
         />
       </section>
 
