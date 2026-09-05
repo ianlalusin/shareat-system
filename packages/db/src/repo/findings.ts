@@ -1118,3 +1118,328 @@ export async function posUsagePullNotRun(tx: Tx, orgId: string): Promise<Detecte
       'physical count explains the gap as shrinkage.',
   }));
 }
+
+// -----------------------------------------------------------------------------------------
+// T-213 — OIL wave 2, the operational detectors. docs/tasks/213-oil-wave-2-operational-detectors.md.
+// -----------------------------------------------------------------------------------------
+
+/**
+ * ⭐ A business day POS already reported sales for, still sitting unposted. The ledger's own
+ * silence is the finding — `posSourced`/`status`/`journalEntryId` already say everything a mirror-
+ * collection status filter would have to reconstruct.
+ *
+ * ⚠️ `(now() at time zone 'Asia/Manila')::date`, never bare `current_date` — migration 0112's own
+ * comment states the reason as a standing bible discipline: `current_date` follows the SESSION
+ * timezone, and a production database running UTC would roll this threshold eight hours off
+ * Manila's actual business day.
+ */
+export async function salesDayUnposted(tx: Tx, orgId: string, thresholdDays = 3): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    select d.store_id::text as store_id, s.name as store_name,
+           count(*)::int as n, min(d.business_date)::text as oldest
+      from sales_days d
+      join stores s on s.id = d.store_id
+     where d.org_id = ${orgId}
+       and d.pos_sourced = true
+       and d.status in ('open', 'submitted')
+       and d.business_date < (((now() at time zone 'Asia/Manila')::date) - (${thresholdDays} || ' days')::interval)
+     group by d.store_id, s.name
+  `)) as unknown as { store_id: string; store_name: string; n: number; oldest: string }[];
+
+  return rows.map((r) => ({
+    kind: 'salesDayUnposted',
+    key: `salesDayUnposted:${r.store_id}`,
+    storeId: r.store_id,
+    severity: 'hard' as const,
+    detail:
+      `${r.store_name} has ${r.n} POS-sourced sales day${r.n === 1 ? '' : 's'} still unposted, the ` +
+      `oldest from ${r.oldest}. Revenue POS already reported has not reached the ledger.`,
+  }));
+}
+
+/**
+ * ⚠️ **Corrected from the phase-6 plan's `expenseMissingCategory`.** `expenses.category_id` is
+ * `NOT NULL` (T-130) — a missing category cannot exist. What can exist is a draft stuck because
+ * its category resolves to no mapped account, which invariant 7 refuses to post. That is the
+ * live, derivable condition v1's materiality-gated sweep is standing in for now.
+ *
+ * ⚠️ `(now() at time zone 'Asia/Manila')::date`, never bare `current_date` — see `salesDayUnposted`.
+ */
+export async function expenseCategoryUnpostable(
+  tx: Tx,
+  orgId: string,
+  thresholdDays = 3,
+): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    select e.id as expense_id, e.store_id::text as store_id, s.name as store_name,
+           e.total_amount::text as amount, e.business_date::text as business_date,
+           ec.category as category
+      from expenses e
+      join stores s on s.id = e.store_id
+      join expense_categories ec on ec.id = e.category_id
+     where e.org_id = ${orgId}
+       and e.status = 'draft'
+       and ec.account_code is null
+       and e.business_date < (((now() at time zone 'Asia/Manila')::date) - (${thresholdDays} || ' days')::interval)
+  `)) as unknown as {
+    expense_id: string;
+    store_id: string;
+    store_name: string;
+    amount: string;
+    business_date: string;
+    category: string;
+  }[];
+
+  return rows.map((r) => ({
+    kind: 'expenseCategoryUnpostable',
+    key: `expenseCategoryUnpostable:${r.expense_id}`,
+    storeId: r.store_id,
+    severity: 'soft' as const,
+    detail:
+      `${r.store_name}'s ${peso(Number(r.amount))} expense from ${r.business_date} is stuck in ` +
+      `draft — category "${r.category}" has no account mapped, so it cannot post until one is.`,
+  }));
+}
+
+/**
+ * ⚠️ **Corrected from the phase-6 plan's `orphanExpense`.** `supplier_invoice_id` is `NOT NULL` and
+ * DB-enforced verified-at-insert (`expenses_require_verified_invoice`), so an expense can never
+ * lack an invoice. But a previously-verified invoice CAN be voided afterwards — the void-cascade
+ * design keeps the verified stamp as history rather than clearing it — so the real orphan
+ * condition is a live link whose evidence was voided out from under it after the fact.
+ */
+export async function expenseInvoiceVoidedAfterLink(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    select e.id as expense_id, e.store_id::text as store_id, s.name as store_name,
+           e.total_amount::text as amount, si.invoice_no as invoice_no
+      from expenses e
+      join stores s on s.id = e.store_id
+      join supplier_invoices si on si.id = e.supplier_invoice_id
+     where e.org_id = ${orgId}
+       and e.status <> 'voided'
+       and si.status = 'voided'
+  `)) as unknown as {
+    expense_id: string;
+    store_id: string;
+    store_name: string;
+    amount: string;
+    invoice_no: string | null;
+  }[];
+
+  return rows.map((r) => ({
+    kind: 'expenseInvoiceVoidedAfterLink',
+    key: `expenseInvoiceVoidedAfterLink:${r.expense_id}`,
+    storeId: r.store_id,
+    severity: 'hard' as const,
+    detail:
+      `${r.store_name}'s ${peso(Number(r.amount))} expense links invoice ` +
+      `${r.invoice_no ?? '(no number)'}, which was later voided. The expense still stands on ` +
+      'evidence that no longer exists.',
+  }));
+}
+
+/**
+ * ⭐ One statistical flag, no baseline table to maintain: the trailing-N-receipt median for the
+ * same item, read from a LATERAL subquery rather than a window frame — an ordered-set aggregate's
+ * frame support over ROWS is not guaranteed portable, and this needs to be right the first time.
+ */
+export async function receiptPriceSpike(
+  tx: Tx,
+  orgId: string,
+  windowSize = 10,
+  pctThreshold = 50,
+): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    select cur.line_id, cur.store_id::text as store_id, s.name as store_name,
+           i.name as item_name, cur.unit_cost::text as unit_cost,
+           cur.delivered_on::text as delivered_on, med.trailing_median::text as trailing_median
+      from (
+        select dl.id as line_id, d.store_id, d.org_id, dl.item_id, dl.unit_cost, d.delivered_on
+          from delivery_lines dl
+          join deliveries d on d.id = dl.delivery_id
+         where d.status = 'received'
+      ) cur
+      join stores s on s.id = cur.store_id
+      join items i on i.id = cur.item_id
+      cross join lateral (
+        select percentile_cont(0.5) within group (order by prior.unit_cost) as trailing_median
+          from (
+            select dl2.unit_cost
+              from delivery_lines dl2
+              join deliveries d2 on d2.id = dl2.delivery_id
+             where d2.status = 'received'
+               and dl2.item_id = cur.item_id
+               and d2.store_id = cur.store_id
+               and d2.delivered_on < cur.delivered_on
+             order by d2.delivered_on desc
+             limit ${windowSize}
+          ) prior
+      ) med
+     where cur.org_id = ${orgId}
+       and med.trailing_median is not null
+       and cur.unit_cost > med.trailing_median * (1 + ${pctThreshold}::numeric / 100)
+  `)) as unknown as {
+    line_id: string;
+    store_id: string;
+    store_name: string;
+    item_name: string;
+    unit_cost: string;
+    delivered_on: string;
+    trailing_median: string;
+  }[];
+
+  return rows.map((r) => ({
+    kind: 'receiptPriceSpike',
+    key: `receiptPriceSpike:${r.line_id}`,
+    storeId: r.store_id,
+    severity: 'soft' as const,
+    detail:
+      `${r.store_name} received ${r.item_name} on ${r.delivered_on} at ${peso(Number(r.unit_cost))}, ` +
+      `well above its trailing median of ${peso(Number(r.trailing_median))}. Worth a second look ` +
+      'before this cost flows into landed cost and FIFO.',
+  }));
+}
+
+/** A supplier's first-ever received delivery — a `NOT EXISTS` over prior receipts, nothing stored. */
+export async function newVendorFirstPurchase(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    select d.id as delivery_id, d.store_id::text as store_id, s.name as store_name,
+           sup.name as supplier_name, d.delivered_on::text as delivered_on
+      from deliveries d
+      join stores s on s.id = d.store_id
+      join suppliers sup on sup.id = d.supplier_id
+     where d.org_id = ${orgId}
+       and d.kind = 'supplier'
+       and d.status = 'received'
+       and not exists (
+         select 1 from deliveries d2
+          where d2.supplier_id = d.supplier_id
+            and d2.status = 'received'
+            and d2.delivered_on < d.delivered_on
+       )
+  `)) as unknown as {
+    delivery_id: string;
+    store_id: string;
+    store_name: string;
+    supplier_name: string;
+    delivered_on: string;
+  }[];
+
+  return rows.map((r) => ({
+    kind: 'newVendorFirstPurchase',
+    key: `newVendorFirstPurchase:${r.delivery_id}`,
+    storeId: r.store_id,
+    severity: 'soft' as const,
+    detail:
+      `${r.store_name} received its first delivery from ${r.supplier_name} on ${r.delivered_on}. ` +
+      'Not a problem — a nudge to confirm the supplier is who they say they are.',
+  }));
+}
+
+/**
+ * ⭐ **Extends `cashRequestFloatAgeing`, does not duplicate it.** That detector only sees the
+ * `cash_requests` document; `docs/POSTING-PATTERNS.md` shows `1230` is also debited by salary
+ * advances and till-shift shortages, neither of which is a `cash_requests` row. This reads the
+ * account itself — every party's live balance, whatever posted it.
+ *
+ * ⚠️ `(now() at time zone 'Asia/Manila')::date`, never bare `current_date` — see `salesDayUnposted`.
+ * ⛔ **`cashRequestFloatAgeing` itself does not follow this** (it compares against bare
+ * `current_date`, as do `supplierCreditAgeing`, `customerCreditAgeing` and
+ * `reimbursablePayableAgeing`) — logged as a defect, not fixed here; out of this task's scope.
+ */
+export async function advanceUnliquidated(tx: Tx, orgId: string, thresholdDays = 30): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    select jl.party_id, coalesce(p.display_name, jl.party_id) as person_name,
+           sum(jl.debit - jl.credit)::text as balance, min(je.entry_date)::text as oldest
+      from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id
+      join accounts a on a.id = jl.account_id
+      left join persons p on p.id::text = jl.party_id
+     where je.org_id = ${orgId}
+       and je.status <> 'draft'
+       and a.code = '1230'
+       and jl.party_type = 'employee'
+     group by jl.party_id, p.display_name
+    having sum(jl.debit - jl.credit) > 0.005
+       and min(je.entry_date) < (((now() at time zone 'Asia/Manila')::date) - (${thresholdDays} || ' days')::interval)
+  `)) as unknown as { party_id: string; person_name: string; balance: string; oldest: string }[];
+
+  return rows.map((r) => ({
+    kind: 'advanceUnliquidated',
+    key: `advanceUnliquidated:${r.party_id}`,
+    storeId: null,
+    severity: 'soft' as const,
+    detail:
+      `${r.person_name} carries a ${peso(Number(r.balance))} balance on 1230 open since ` +
+      `${r.oldest}, from a salary advance, a shortage charge, or a cash request — whichever it ` +
+      'was, it has not been liquidated.',
+  }));
+}
+
+/**
+ * ⚠️ **Corrected from the phase-6 plan's department-aware framing.** `departments` carries no
+ * store roster and no store↔department linking table, so "which departments does this store
+ * have" cannot be derived. This instead covers `posUsagePullNotRun`'s exact complement: a store
+ * with NO active `pos_item_maps` — so that detector's own gate never looks at it — that verified a
+ * sales day and recorded not one single usage entry of any kind.
+ */
+export async function usageRecordMissing(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    select d.store_id::text as store_id, s.name as store_name,
+           count(*)::int as n, min(d.business_date)::text as oldest
+      from sales_days d
+      join stores s on s.id = d.store_id
+     where d.org_id = ${orgId}
+       and d.status = 'verified'
+       and not exists (select 1 from pos_item_maps m where m.store_id = d.store_id and m.status = 'active')
+       and not exists (
+         select 1 from stock_usage_records u
+          where u.store_id = d.store_id and u.kind = 'usage' and u.used_on = d.business_date
+       )
+     group by d.store_id, s.name
+  `)) as unknown as { store_id: string; store_name: string; n: number; oldest: string }[];
+
+  return rows.map((r) => ({
+    kind: 'usageRecordMissing',
+    key: `usageRecordMissing:${r.store_id}`,
+    storeId: r.store_id,
+    severity: 'hard' as const,
+    detail:
+      `${r.store_name} has ${r.n} verified sales day${r.n === 1 ? '' : 's'} with no usage recorded ` +
+      `at all (no POS mapping active here either), the oldest from ${r.oldest}. Nothing here has ` +
+      'told the books what was consumed.',
+  }));
+}
+
+/** An open FIFO layer for a `meat_slab` item, ageing — a join now that layers exist to age. */
+export async function meatSlabStale(tx: Tx, orgId: string, thresholdDays = 14): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    select l.id as layer_id, l.store_id::text as store_id, s.name as store_name,
+           i.name as item_name, l.remaining_quantity::text as remaining_quantity,
+           l.received_at::text as received_at
+      from stock_layers l
+      join stores s on s.id = l.store_id
+      join items i on i.id = l.item_id
+     where l.org_id = ${orgId}
+       and i.kind = 'meat_slab'
+       and l.remaining_quantity > 0
+       and l.received_at < (now() - (${thresholdDays} || ' days')::interval)
+  `)) as unknown as {
+    layer_id: string;
+    store_id: string;
+    store_name: string;
+    item_name: string;
+    remaining_quantity: string;
+    received_at: string;
+  }[];
+
+  return rows.map((r) => ({
+    kind: 'meatSlabStale',
+    key: `meatSlabStale:${r.layer_id}`,
+    storeId: r.store_id,
+    severity: 'soft' as const,
+    detail:
+      `${r.store_name} still has ${r.remaining_quantity} of a ${r.item_name} slab received ` +
+      `${r.received_at}, past the freshness window. Worth a look before it becomes wastage.`,
+  }));
+}

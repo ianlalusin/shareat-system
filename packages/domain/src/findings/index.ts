@@ -97,6 +97,19 @@ export async function listFindings(
     // ⭐ T-177 §2 — the one Phase 3 failure inventoryControlDoesNotMatchValuation cannot catch: a
     // verified sales day with no finalized POS usage pull.
     ...(await findingsRepo.posUsagePullNotRun(tx, orgId)),
+    // T-213 — OIL wave 2, the operational detectors Phases 2-5 made computable.
+    ...(await findingsRepo.salesDayUnposted(tx, orgId)),
+    ...(await findingsRepo.expenseCategoryUnpostable(tx, orgId)),
+    ...(await findingsRepo.expenseInvoiceVoidedAfterLink(tx, orgId)),
+    ...(await findingsRepo.receiptPriceSpike(tx, orgId)),
+    ...(await findingsRepo.newVendorFirstPurchase(tx, orgId)),
+    // Extends cashRequestFloatAgeing above — reads the 1230 account directly, not just the
+    // cash_requests document, so a salary advance or a till-shortage charge ages too.
+    ...(await findingsRepo.advanceUnliquidated(tx, orgId)),
+    // The exact complement of posUsagePullNotRun above: a store with no active POS mapping at
+    // all, so that detector's own gate never looks at it.
+    ...(await findingsRepo.usageRecordMissing(tx, orgId)),
+    ...(await findingsRepo.meatSlabStale(tx, orgId)),
   ];
 
   const acks = await findingsRepo.liveAcknowledgements(tx, orgId);
