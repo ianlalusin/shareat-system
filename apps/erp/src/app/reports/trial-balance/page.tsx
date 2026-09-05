@@ -6,6 +6,7 @@ import { ReportBasis } from '@/components/reports/ReportBasis';
 import { ReportFilters } from '@/components/reports/ReportFilters';
 import { TieIndicator } from '@/components/reports/TieIndicator';
 import { TrialBalanceTable } from '@/components/reports/TrialBalanceTable';
+import { CsvExportLink } from '@/components/reports/CsvExportLink';
 
 export const metadata = { title: 'Trial Balance — Shareat System' };
 
@@ -78,20 +79,33 @@ export default async function TrialBalancePage({
         yearCloseHelp="Defaults to included — a trial balance is a balance-sheet-as-of view (ADR-006)."
       />
 
-      <ReportBasis
-        orgLabel={`${scope.orgName} (${scope.orgCode})`}
-        storeLabel={currentStore ? `${currentStore.name} (${currentStore.code})` : 'All stores'}
-        fromDate={fromDate}
-        toDate={toDate}
-        includeYearClose={includeYearClose}
-      />
+      <div className="flex items-center justify-between gap-4">
+        <ReportBasis
+          orgLabel={`${scope.orgName} (${scope.orgCode})`}
+          storeLabel={currentStore ? `${currentStore.name} (${currentStore.code})` : 'All stores'}
+          fromDate={fromDate}
+          toDate={toDate}
+          includeYearClose={includeYearClose}
+        />
+        <CsvExportLink
+          href={`/reports/trial-balance/export?${new URLSearchParams({ ...(storeId ? { store: storeId } : {}), from: fromDate, to: toDate, yearClose: includeYearClose ? 'include' : 'exclude' }).toString()}`}
+        />
+      </div>
 
       <TieIndicator ties={result.ties} totalDebit={result.totalDebit} totalCredit={result.totalCredit} />
 
       {result.lines.length === 0 ? (
         <EmptyState message={`No entries for ${fromDate} to ${toDate}.`} />
       ) : (
-        <TrialBalanceTable lines={result.lines} totalDebit={result.totalDebit} totalCredit={result.totalCredit} />
+        <TrialBalanceTable
+          lines={result.lines}
+          totalDebit={result.totalDebit}
+          totalCredit={result.totalCredit}
+          storeId={storeId}
+          fromDate={fromDate}
+          toDate={toDate}
+          includeYearClose={includeYearClose}
+        />
       )}
     </main>
   );

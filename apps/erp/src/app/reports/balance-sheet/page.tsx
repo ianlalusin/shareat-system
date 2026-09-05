@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/reports/EmptyState';
 import { ReportBasis } from '@/components/reports/ReportBasis';
 import { BalanceSheetFilters } from '@/components/reports/BalanceSheetFilters';
 import { BalanceSheetTable, BalanceSheetTieIndicator } from '@/components/reports/BalanceSheetTable';
+import { CsvExportLink } from '@/components/reports/CsvExportLink';
 
 export const metadata = { title: 'Balance Sheet — Shareat System' };
 
@@ -67,13 +68,18 @@ export default async function BalanceSheetPage({
         includeYearClose={includeYearClose}
       />
 
-      <ReportBasis
-        orgLabel={`${scope.orgName} (${scope.orgCode})`}
-        storeLabel={currentStore ? `${currentStore.name} (${currentStore.code})` : 'All stores'}
-        fromDate="Inception"
-        toDate={asOfDate}
-        includeYearClose={includeYearClose}
-      />
+      <div className="flex items-center justify-between gap-4">
+        <ReportBasis
+          orgLabel={`${scope.orgName} (${scope.orgCode})`}
+          storeLabel={currentStore ? `${currentStore.name} (${currentStore.code})` : 'All stores'}
+          fromDate="Inception"
+          toDate={asOfDate}
+          includeYearClose={includeYearClose}
+        />
+        <CsvExportLink
+          href={`/reports/balance-sheet/export?${new URLSearchParams({ ...(storeId ? { store: storeId } : {}), asOf: asOfDate, yearClose: includeYearClose ? 'include' : 'exclude' }).toString()}`}
+        />
+      </div>
 
       <BalanceSheetTieIndicator
         ties={result.ties}
@@ -89,6 +95,9 @@ export default async function BalanceSheetPage({
           liabilities={result.liabilities}
           equityLines={result.equityLines}
           equity={result.equity}
+          storeId={storeId}
+          asOfDate={asOfDate}
+          includeYearClose={includeYearClose}
         />
       ) : (
         <EmptyState message={`No entries as of ${asOfDate}.`} />

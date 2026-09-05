@@ -5,6 +5,7 @@ import { toBusinessDate } from '@shareat/core/datetime';
 import { EmptyState } from '@/components/reports/EmptyState';
 import { AgingFilters } from '@/components/reports/AgingFilters';
 import { ArAgingTable, ArAgingReconciliationIndicator, type ArAgingTableRow } from '@/components/reports/ArAgingTable';
+import { CsvExportLink } from '@/components/reports/CsvExportLink';
 
 export const metadata = { title: 'AR Aging — Shareat System' };
 
@@ -72,13 +73,18 @@ export default async function ArAgingPage({
         asOfDate={asOfDate}
       />
 
-      <p className="text-sm text-neutral-600 dark:text-neutral-400">
-        <span className="font-medium text-neutral-800 dark:text-neutral-200">{scope.orgName} ({scope.orgCode})</span>
-        {' · '}
-        {currentStore ? `${currentStore.name} (${currentStore.code})` : 'All stores'}
-        {' · '}
-        as of {asOfDate}
-      </p>
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+          <span className="font-medium text-neutral-800 dark:text-neutral-200">{scope.orgName} ({scope.orgCode})</span>
+          {' · '}
+          {currentStore ? `${currentStore.name} (${currentStore.code})` : 'All stores'}
+          {' · '}
+          as of {asOfDate}
+        </p>
+        <CsvExportLink
+          href={`/reports/ar-aging/export?${new URLSearchParams({ ...(storeId ? { store: storeId } : {}), asOf: asOfDate }).toString()}`}
+        />
+      </div>
 
       <ArAgingReconciliationIndicator
         reconciles={report.reconciles}

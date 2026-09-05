@@ -6,7 +6,17 @@ Status: **T-209a done — 2026-09-05.** **T-209b done — 2026-09-05.** Gates: t
 9008 against real dev data: AP aging renders the correct empty state (the dev org has zero open
 payables) with `Reconciles ₱0.00 = ₱0.00`; AR aging renders three real open charges totalling
 ₱3,220.00, reconciling exactly to the 1210 control balance; the store filter round-tripped through
-the URL and re-reconciled after narrowing to one store. T-209c not started.
+the URL and re-reconciled after narrowing to one store. **T-209c done — 2026-09-05.** Gates:
+typecheck clean · unit 1012/1014 (1 pre-existing skip + 1 pre-existing, already-diagnosed red —
+DEF-170, unrelated attendance golden-corpus divergences landed by a concurrent session, not this
+task) · full integration suite 88 files / 2283 tests, 2282 passing (the 1 failure was a timing-
+sensitive flake in an unrelated file under real system memory pressure — confirmed non-regression
+by isolated re-run, logged as DEF-171) · `npm run build` exit 0 (dev server stopped first) ·
+live-smoketested on 9008 as admin (Lipa): cash flow and store comparison rendered real, non-trivial
+dev-org figures and reconciled exactly; the trial-balance → journal-lines drill-down round-tripped
+with totals matching the source line to the centavo, including a correctly-flagged reversed entry;
+CSV export confirmed server-side (clean `200`s in the dev server log; the browser sandbox blocks
+the actual file save, which is expected and unrelated to the route's correctness).
 Full contract per `docs/plans/phase-6-reporting-and-dashboards.md` §7 Wave 1: balance sheet and
 AR/AP aging first (ADR-005's January subset — the 15 Nov go/no-go is judged partly on these), then
 cash flow, per-store P&L comparison, drill-down from a report line to its journal entries, and one
@@ -18,7 +28,7 @@ wait on the rest:
 |---|---|---|
 | **T-209a** | The balance sheet | done — 2026-09-05 |
 | **T-209b** | AR aging + AP aging reports, reconciled to their control accounts | **this session** |
-| **T-209c** | Cash flow, per-store P&L comparison, drill-down to source entries, CSV export | not started |
+| **T-209c** | Cash flow, per-store P&L comparison, drill-down to source entries, CSV export | done — 2026-09-05 |
 
 ## Goal
 
@@ -271,3 +281,183 @@ figure — `totals` is derived from `rows`, never a third independent SQL statem
 - [x] `docs/ROADMAP.html` and `docs/plans/phase-6-reporting-and-dashboards.md` updated to reflect
   T-209b shipped, T-209c still open.
 - [x] Nav entries added (`Reports → AP aging`, `Reports → AR aging`).
+
+---
+
+## T-209c — cash flow, per-store P&L comparison, drill-down, CSV export
+
+The last slice of T-209 — four smaller deliverables, none large enough to be its own task, all
+extending infrastructure T-209a/b already built. Not ADR-005 January-critical (that gate closed
+with T-209b); this is the rest of Phase 6 Wave 1.
+
+### ⛔ The one thing this task exists to get right: the cash flow statement's method
+
+No discovery pass or ADR names a cash-flow design — this task makes the call. **Indirect method,
+computed entirely as balance-sheet-account DELTAS between two snapshots, reusing
+`reportsRepo.getBalanceSheetLines` (already signed by account TYPE, exactly the convention this
+needs) rather than any new per-transaction classification.**
+
+Rejected alternative: classifying by each entry's `source_type` (30+ distinct values across the
+domain layer — `sale`, `ap_payment`, `loan_disbursement`, `depreciation`, `production_void`, …).
+A switch over 30+ strings that a new posting type can silently miss is exactly the "hand-maintained
+classification list" shape bible §16.0/§4.2 rule 7 already rules out elsewhere — and this project
+has no such list even for the P&L (`v_income_statement`'s `category` derives from the chart of
+accounts' PARENT HEADER, never from `source_type`). Cash flow gets the same discipline: classify by
+**account code**, not by transaction shape.
+
+**Operating starts from net income, not from zero — income/expense accounts are entirely absent
+from `v_balance_sheet`, so a pure cash sale (`Dr 1110 / Cr 4xxx`) has NO non-cash balance-sheet
+account to carry its effect.** Verified by hand against four cases before writing a line of code
+(a cash sale, a credit sale, a depreciation posting, a loan disbursement) — only the depreciation
+add-back "falls out for free" from the account-delta method; net income itself does not, and a
+first draft that omitted it would silently zero out every cash-generating transaction that never
+touches a working-capital account. So:
+
+```
+operating  = netIncome(fromDate..toDate, same store/includeYearClose)
+           + Σ non-cash balance-sheet account deltas bucketed "operating" (below)
+investing  = Σ non-cash balance-sheet account deltas bucketed "investing"
+financing  = Σ non-cash balance-sheet account deltas bucketed "financing"
+```
+
+**Why the account-delta terms still need no separate depreciation add-back, once net income is the
+base:** `v_balance_sheet` signs `1590` (accumulated depreciation, a contra-asset) by TYPE — asset,
+debit-positive — so as depreciation accrues, `1590`'s type-signed balance becomes MORE NEGATIVE.
+Bucketing `1590` as an ordinary operating asset account and applying the universal rule below
+produces a POSITIVE operating contribution automatically, which is arithmetically identical to the
+textbook "add back depreciation expense" line: the expense already reduced `netIncome` above, and
+the `1590` delta term exactly cancels that reduction because the posting is non-cash. Same reasoning
+`getBalanceSheet` used for the "Current period earnings" line (T-209a) and
+`getApAgingReport`/`getArAgingReport` used for `orgAgingTotal` (T-209b): find the shape that removes
+the special case rather than the one that adds a line to manage it (bible row 118) — it just does
+NOT extend to net income itself, which has no balance-sheet account to fall out of.
+
+**The universal per-account delta rule** (`closing` / `opening` are each non-cash balance-sheet
+account's TYPE-signed `netAmount` from `getBalanceSheetLines`, at `toDate` and
+`addDays(fromDate, -1)` respectively, over the SAME `orgId`/`storeId`/`includeYearClose`):
+
+- `type = 'asset'` → contribution = `-(closing - opening)` (an asset increase is a use of cash)
+- `type = 'liability' | 'equity'` → contribution = `+(closing - opening)` (an increase is a source)
+
+**Bucketing, by account code, for presentation only — the arithmetic above is identical in every
+bucket:**
+
+| Bucket | Codes | Reasoning |
+|---|---|---|
+| **Operating** | Every asset/liability/equity account not listed below | Working capital + the 1590 add-back, both fall out of the universal rule with no special case, added to `netIncome` above |
+| **Investing** | `1510` (Property and equipment, gross) | Its own line so capex is visible; a disposal shows as the code's normal decrease, again with no special case |
+| **Financing** | `2400` (Loans payable), `3100` (Owner's capital), `3200` (Owner's drawings) | External financing sources/uses. `3200` is debit-normal contra-equity — the universal equity rule (`+(closing-opening)`) already yields a NEGATIVE contribution as drawings accrue, because `getBalanceSheetLines` signs it credit-positive like every other equity account (T-209a's own contra convention, restated) |
+| **Excluded from every bucket** | none — `3300`/`3900` are ordinary equity accounts under the universal rule, bucketed "operating" | `3900` is invariant-enforced to net to zero at rest (`findings.ts`'s `openingBalanceResidual`) — if it ever doesn't, the cash flow statement SURFACES that as a real operating-bucket figure instead of hiding it behind an exclusion. `3300` only moves at a year-close entry, which `includeYearClose` (default **false**, matching the income statement's own date-range default — ADR-006) excludes from both this delta calculation and the `netIncome` figure together, so no double-count is possible |
+
+**The regression test this method exists to pass**: `operating + investing + financing` must equal
+the actual change in cash & cash-equivalent accounts (`1110`,`1115`,`1120`,`1130`,`1140`) for the
+same range, to the centavo — the cash-flow equivalent of T-209a's `ties` and T-209b's `reconciles`.
+This is not asserted by construction the way those two were (a hand-picked bucket table could
+still miss an account) — it is the actual proof the classification is complete, and if a future
+account code is added to the chart without landing in exactly one bucket or the excluded set, this
+test is what catches it.
+
+### Scope
+
+- `packages/db/src/repo/reports.ts` — new `getAccountEntries(ex, filter & { accountId })`: line-level
+  detail (not aggregated) for ONE account, for the drill-down. `status in ('posted','reversed')`,
+  matching every existing view's own filter, so the total shown on a drill-down screen never
+  disagrees with the report line that linked to it.
+- `packages/domain/src/reports/cash-flow.ts` — new `getCashFlow(ex, { orgId, storeId?, fromDate,
+  toDate, includeYearClose? })`, per the design above.
+- `packages/domain/src/reports/store-comparison.ts` — new `getStorePLComparison(ex, { orgId,
+  storeIds, fromDate, toDate, includeYearClose? })`: calls `getIncomeStatement` once per store
+  (Phase-6 plan §2.1 — no second definition of any P&L figure) and assembles the results side by
+  side. No new repo function.
+- `apps/erp/src/app/reports/cash-flow/page.tsx`, `apps/erp/src/app/reports/store-comparison/page.tsx`,
+  `apps/erp/src/app/reports/journal-lines/page.tsx` — three new screens.
+- `apps/erp/src/components/reports/CashFlowTable.tsx`, `StoreComparisonTable.tsx`,
+  `JournalLinesTable.tsx`, `AccountDrillLink.tsx` (a small `<Link>` wrapper the account-row reports
+  use to reach the drill-down with their own filter state carried over), `CsvExportLink.tsx`.
+- `apps/erp/src/lib/csv.ts` — the ONE shared CSV formatting function (`toCsv`), covering quoting a
+  value containing a comma, a quote, or a newline — the three cases a naive `join(',')` gets wrong.
+- `apps/erp/src/app/reports/trial-balance/page.tsx`, `income-statement/page.tsx`,
+  `balance-sheet/page.tsx` — add `AccountDrillLink` on each account row and `CsvExportLink` at the
+  top, proving the two shared pieces work on an already-shipped screen, not only a new one.
+- `apps/erp/src/components/nav.tsx` — `Reports → Cash flow`, `Reports → Store comparison`.
+- `packages/domain/tests/integration/cash-flow.test.ts`, `store-comparison.test.ts` — new.
+
+### Contract
+
+```ts
+getCashFlow(ex, { orgId, storeId?, fromDate, toDate, includeYearClose? }): Promise<{
+  operatingLines: CashFlowLine[]; operating: Money;
+  investingLines: CashFlowLine[]; investing: Money;
+  financingLines: CashFlowLine[]; financing: Money;
+  netChangeInCash: Money;              // operating + investing + financing
+  actualCashChange: Money;             // the independent check: Δ(1110,1115,1120,1130,1140)
+  reconciles: boolean;                 // netChangeInCash === actualCashChange, no tolerance
+  basis: { orgId; storeId; fromDate; toDate; includeYearClose };
+}>
+```
+
+`getStorePLComparison` returns `{ stores: { storeId; storeName; statement: IncomeStatementResult }[];
+basis }` — literally `IncomeStatementResult` per store, never a re-derived figure (§2.1 again).
+
+`getAccountEntries` returns one row per journal line: `{ entryId; entryDate; sourceType; sourceId;
+status; memo; lineMemo; storeId; partyType; partyId; debit; credit }`, ordered by `entryDate`.
+
+### Invariants
+
+Bible §4.2 rule 7 (derived data is a view or a live query, never a maintained summary) — cash flow
+adds no table, only two calls to an existing view-backed query plus one to the income statement.
+Phase-6 plan §2.1 (one query per figure) — `getStorePLComparison` and the drill-down both reuse
+existing domain functions rather than re-deriving a P&L or a balance figure a second way. Phase-6
+plan §9 item 9 pattern (extended here): cash flow's own reconciliation is rendered on screen, not
+only tested, matching T-209a's `ties` and T-209b's `reconciles`.
+
+### Tests
+
+- `cash-flow.test.ts` — posts a spread of transactions (a sale, a credit expense, a depreciation
+  entry touching `1590`, a loan disbursement, an owner drawing, an asset purchase to `1510`) and
+  asserts: `reconciles === true`; the depreciation entry's effect appears as a positive operating
+  contribution with NO separate "add-back" line item computed by the test (it falls out of the
+  universal rule); the `1510` purchase appears under `investing`, negative; the loan disbursement
+  and the owner's capital contribution appear under `financing`; a drawing appears under `financing`
+  as negative; `includeYearClose: false` (the default) excludes a year-close entry's effect from
+  BOTH `operating` and the net-income figure it starts from, so `reconciles` still holds across a
+  year-close boundary crossing.
+- `store-comparison.test.ts` — two stores with different revenue/expense, asserts each store's
+  figures match calling `getIncomeStatement` directly for that store alone (the "never re-derive"
+  proof), and that omitting a store from `storeIds` excludes it from the result without affecting
+  the others' figures.
+- Drill-down and CSV export are presentation-layer; covered by the existing report integration
+  tests continuing to pass plus a manual live-smoketest (small, low-risk, high-churn surface —
+  matches this codebase's existing precedent of not unit-testing JSX table components).
+
+### Out of scope
+
+- Retrofitting `AccountDrillLink` onto `/reports/ap-aging` and `/reports/ar-aging` — those tables
+  are keyed by PARTY, not by account, so "drill down to this account's entries" needs a different
+  query shape (this supplier's/customer's lines on the control account, which
+  `apRepo.openItems`/`arRepo.openItems` already answer for the OPEN-item case; a full history view
+  is a different, smaller task if Ian wants it). `CsvExportLink` has no such mismatch — a bucketed
+  aging table is already flat rows, so it IS wired onto both (see Done when).
+- A PDF/print export alongside CSV — CSV is the industry-standard, spreadsheet-round-trippable
+  shape the phase-6 plan names; a second export format is unrequested scope.
+- Drilling INTO a drill-down (viewing an entry's OTHER lines, not just the one on the queried
+  account) — the current screen shows enough to identify the source document (date, source type,
+  source id, memo); jumping to the source document's own screen by `sourceType`/`sourceId` would
+  need a per-source-type router this task does not build.
+- A dashboard tile for cash flow — that's T-211, and it will call `getCashFlow`, never re-derive it.
+
+### Done when
+
+- [x] `getAccountEntries` written; `/reports/journal-lines` renders and is linked from trial
+  balance, income statement, and balance sheet.
+- [x] `toCsv` written; `CsvExportLink` wired onto trial balance, income statement, balance sheet,
+  AP/AR aging (all five report screens shipped so far), plus the two new screens this task adds.
+- [x] `getStorePLComparison` written and tested; `/reports/store-comparison` renders.
+- [x] `getCashFlow` written and tested, including the reconciliation regression across a mixed
+  transaction set and across a year-close boundary.
+- [x] typecheck clean · unit tests pass (1 pre-existing, already-diagnosed red — DEF-170, unrelated)
+  · full integration suite green (1 pre-existing flake — DEF-171, unrelated, confirmed non-
+  regression) · `npm run build` exit 0 (dev server stopped first) · smoketested live on 9008.
+- [x] `docs/ROADMAP.html` and `docs/plans/phase-6-reporting-and-dashboards.md` updated to reflect
+  T-209 fully shipped.
+- [x] Nav entries added (`Reports → Cash flow`, `Reports → Store comparison`).

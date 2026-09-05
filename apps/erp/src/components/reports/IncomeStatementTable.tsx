@@ -1,10 +1,18 @@
 import { formatMoney, type Money } from '@shareat/core/money';
+import { AccountDrillLink } from './AccountDrillLink';
 
 export interface IncomeStatementTableLine {
   accountId: string;
   accountCode: string;
   accountName: string;
   amount: Money;
+}
+
+interface DrillFilter {
+  storeId?: string | null;
+  fromDate: string;
+  toDate: string;
+  includeYearClose: boolean;
 }
 
 /**
@@ -20,7 +28,7 @@ export interface IncomeStatementTableLine {
  * `operatingIncome` is shown as its own line specifically so it is never confused with the
  * final `netIncome` figure.
  */
-function LineRows({ lines }: { lines: IncomeStatementTableLine[] }) {
+function LineRows({ lines, filter }: { lines: IncomeStatementTableLine[]; filter: DrillFilter }) {
   if (lines.length === 0) {
     return (
       <tr>
@@ -36,7 +44,17 @@ function LineRows({ lines }: { lines: IncomeStatementTableLine[] }) {
         <tr key={line.accountId}>
           <td className="px-3 py-1.5 pl-8 text-neutral-600 dark:text-neutral-400">
             <span className="mr-2 font-mono text-xs text-neutral-400 dark:text-neutral-600">{line.accountCode}</span>
-            {line.accountName}
+            <AccountDrillLink
+              accountId={line.accountId}
+              accountCode={line.accountCode}
+              accountName={line.accountName}
+              storeId={filter.storeId}
+              fromDate={filter.fromDate}
+              toDate={filter.toDate}
+              includeYearClose={filter.includeYearClose}
+            >
+              {line.accountName}
+            </AccountDrillLink>
           </td>
           <td className="px-3 py-1.5 text-right tabular-nums text-neutral-600 dark:text-neutral-400">
             {formatMoney(line.amount)}
@@ -74,6 +92,10 @@ export function IncomeStatementTable({
   otherIncomeExpenseLines,
   otherIncomeExpense,
   netIncome,
+  storeId,
+  fromDate,
+  toDate,
+  includeYearClose,
 }: {
   revenueLines: IncomeStatementTableLine[];
   revenue: Money;
@@ -86,8 +108,13 @@ export function IncomeStatementTable({
   otherIncomeExpenseLines: IncomeStatementTableLine[];
   otherIncomeExpense: Money;
   netIncome: Money;
+  storeId?: string | null;
+  fromDate: string;
+  toDate: string;
+  includeYearClose: boolean;
 }) {
   const hasOther = otherIncomeExpenseLines.length > 0;
+  const filter: DrillFilter = { storeId, fromDate, toDate, includeYearClose };
 
   return (
     <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
@@ -98,7 +125,7 @@ export function IncomeStatementTable({
               Revenue
             </td>
           </tr>
-          <LineRows lines={revenueLines} />
+          <LineRows lines={revenueLines} filter={filter} />
           <SubtotalRow label="Total revenue (net of contra)" amount={revenue} />
 
           <tr className="bg-neutral-50 dark:bg-neutral-900">
@@ -106,7 +133,7 @@ export function IncomeStatementTable({
               Cost of sales
             </td>
           </tr>
-          <LineRows lines={costOfSalesLines} />
+          <LineRows lines={costOfSalesLines} filter={filter} />
           <SubtotalRow label="Total cost of sales" amount={costOfSales} />
 
           <SubtotalRow label="Gross profit" amount={grossProfit} emphasis />
@@ -116,7 +143,7 @@ export function IncomeStatementTable({
               Operating expenses
             </td>
           </tr>
-          <LineRows lines={operatingExpenseLines} />
+          <LineRows lines={operatingExpenseLines} filter={filter} />
           <SubtotalRow label="Total operating expenses" amount={operatingExpenses} />
 
           <SubtotalRow label="Operating income" amount={operatingIncome} emphasis />
@@ -128,7 +155,7 @@ export function IncomeStatementTable({
                   Other income and expense
                 </td>
               </tr>
-              <LineRows lines={otherIncomeExpenseLines} />
+              <LineRows lines={otherIncomeExpenseLines} filter={filter} />
               <SubtotalRow label="Total other income and expense" amount={otherIncomeExpense} />
             </>
           ) : null}

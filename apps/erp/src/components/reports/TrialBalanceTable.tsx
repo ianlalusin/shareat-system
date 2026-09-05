@@ -1,4 +1,5 @@
 import { formatMoney, type Money } from '@shareat/core/money';
+import { AccountDrillLink } from './AccountDrillLink';
 
 export interface TrialBalanceTableLine {
   accountId: string;
@@ -14,15 +15,27 @@ export interface TrialBalanceTableLine {
  * "account code, name, debits, credits, balance; totals row." Presentation only — every
  * figure it renders was already computed by packages/domain/src/reports/trial-balance.ts;
  * this component does no arithmetic beyond `formatMoney` at the display edge.
+ *
+ * ⭐ T-209c — the account name is now a drill-down link, carrying this SAME report's filter
+ * (`storeId`/`fromDate`/`toDate`/`includeYearClose`) so `/reports/journal-lines`'s total never
+ * disagrees with the line that linked to it.
  */
 export function TrialBalanceTable({
   lines,
   totalDebit,
   totalCredit,
+  storeId,
+  fromDate,
+  toDate,
+  includeYearClose,
 }: {
   lines: TrialBalanceTableLine[];
   totalDebit: Money;
   totalCredit: Money;
+  storeId?: string | null;
+  fromDate: string;
+  toDate: string;
+  includeYearClose: boolean;
 }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
@@ -40,7 +53,19 @@ export function TrialBalanceTable({
           {lines.map((line) => (
             <tr key={line.accountId} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
               <td className="px-3 py-2 font-mono text-neutral-500 dark:text-neutral-400">{line.accountCode}</td>
-              <td className="px-3 py-2">{line.accountName}</td>
+              <td className="px-3 py-2">
+                <AccountDrillLink
+                  accountId={line.accountId}
+                  accountCode={line.accountCode}
+                  accountName={line.accountName}
+                  storeId={storeId}
+                  fromDate={fromDate}
+                  toDate={toDate}
+                  includeYearClose={includeYearClose}
+                >
+                  {line.accountName}
+                </AccountDrillLink>
+              </td>
               <td className="px-3 py-2 text-right tabular-nums">{formatMoney(line.debit)}</td>
               <td className="px-3 py-2 text-right tabular-nums">{formatMoney(line.credit)}</td>
               <td className="px-3 py-2 text-right tabular-nums font-medium">{formatMoney(line.balance)}</td>

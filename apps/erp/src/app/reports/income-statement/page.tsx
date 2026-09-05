@@ -5,6 +5,7 @@ import { EmptyState } from '@/components/reports/EmptyState';
 import { IncomeStatementTable } from '@/components/reports/IncomeStatementTable';
 import { ReportBasis } from '@/components/reports/ReportBasis';
 import { ReportFilters } from '@/components/reports/ReportFilters';
+import { CsvExportLink } from '@/components/reports/CsvExportLink';
 
 export const metadata = { title: 'Income Statement — Shareat System' };
 
@@ -78,13 +79,18 @@ export default async function IncomeStatementPage({
         yearCloseHelp="Defaults to excluded — a date-range P&L excludes the year-close entry (ADR-006)."
       />
 
-      <ReportBasis
-        orgLabel={`${scope.orgName} (${scope.orgCode})`}
-        storeLabel={currentStore ? `${currentStore.name} (${currentStore.code})` : 'All stores'}
-        fromDate={fromDate}
-        toDate={toDate}
-        includeYearClose={includeYearClose}
-      />
+      <div className="flex items-center justify-between gap-4">
+        <ReportBasis
+          orgLabel={`${scope.orgName} (${scope.orgCode})`}
+          storeLabel={currentStore ? `${currentStore.name} (${currentStore.code})` : 'All stores'}
+          fromDate={fromDate}
+          toDate={toDate}
+          includeYearClose={includeYearClose}
+        />
+        <CsvExportLink
+          href={`/reports/income-statement/export?${new URLSearchParams({ ...(storeId ? { store: storeId } : {}), from: fromDate, to: toDate, yearClose: includeYearClose ? 'include' : 'exclude' }).toString()}`}
+        />
+      </div>
 
       {hasAnyActivity ? (
         <IncomeStatementTable
@@ -99,6 +105,10 @@ export default async function IncomeStatementPage({
           otherIncomeExpenseLines={result.otherIncomeExpenseLines}
           otherIncomeExpense={result.otherIncomeExpense}
           netIncome={result.netIncome}
+          storeId={storeId}
+          fromDate={fromDate}
+          toDate={toDate}
+          includeYearClose={includeYearClose}
         />
       ) : (
         <EmptyState message={`No entries for ${fromDate} to ${toDate}.`} />

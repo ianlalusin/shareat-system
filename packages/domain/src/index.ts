@@ -9,6 +9,8 @@ export * from './reports/income-statement';
 export * from './reports/balance-sheet';
 export * from './reports/ap-aging';
 export * from './reports/ar-aging';
+export * from './reports/cash-flow';
+export * from './reports/store-comparison';
 export * from './expenses';
 export * from './sales-days';
 export * from './fixed-assets';

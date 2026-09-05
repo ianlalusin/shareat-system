@@ -1,10 +1,18 @@
 import { formatMoney, type Money } from '@shareat/core/money';
+import { AccountDrillLink } from './AccountDrillLink';
 
 export interface BalanceSheetTableLine {
   accountId: string | null;
   accountCode: string | null;
   accountName: string;
   amount: Money;
+}
+
+interface DrillFilter {
+  storeId?: string | null;
+  fromDate: string;
+  toDate: string;
+  includeYearClose: boolean;
 }
 
 /**
@@ -17,7 +25,7 @@ export interface BalanceSheetTableLine {
  * shared component) because "total debits = total credits" is the wrong sentence for a
  * balance sheet reader; "Assets = Liabilities + Equity" is the one bible §10 actually names.
  */
-function LineRows({ lines }: { lines: BalanceSheetTableLine[] }) {
+function LineRows({ lines, filter }: { lines: BalanceSheetTableLine[]; filter: DrillFilter }) {
   if (lines.length === 0) {
     return (
       <tr>
@@ -35,7 +43,23 @@ function LineRows({ lines }: { lines: BalanceSheetTableLine[] }) {
             {line.accountCode ? (
               <span className="mr-2 font-mono text-xs text-neutral-400 dark:text-neutral-600">{line.accountCode}</span>
             ) : null}
-            {line.accountName}
+            {/* The synthesised "Current period earnings" line has no accountId — nothing to
+             *  drill into (T-209a's own note: it is not a ledger account). */}
+            {line.accountId ? (
+              <AccountDrillLink
+                accountId={line.accountId}
+                accountCode={line.accountCode}
+                accountName={line.accountName}
+                storeId={filter.storeId}
+                fromDate={filter.fromDate}
+                toDate={filter.toDate}
+                includeYearClose={filter.includeYearClose}
+              >
+                {line.accountName}
+              </AccountDrillLink>
+            ) : (
+              line.accountName
+            )}
           </td>
           <td className="px-3 py-1.5 text-right tabular-nums text-neutral-600 dark:text-neutral-400">
             {formatMoney(line.amount)}
@@ -118,6 +142,9 @@ export function BalanceSheetTable({
   liabilities,
   equityLines,
   equity,
+  storeId,
+  asOfDate,
+  includeYearClose,
 }: {
   assetLines: BalanceSheetTableLine[];
   assets: Money;
@@ -125,21 +152,27 @@ export function BalanceSheetTable({
   liabilities: Money;
   equityLines: BalanceSheetTableLine[];
   equity: Money;
+  storeId?: string | null;
+  asOfDate: string;
+  includeYearClose: boolean;
 }) {
+  // A balance sheet is a snapshot from inception, not a range (T-209a) — the drill-down needs
+  // the SAME fromDate the domain layer used internally, so its total matches this line exactly.
+  const filter: DrillFilter = { storeId, fromDate: '2000-01-01', toDate: asOfDate, includeYearClose };
   return (
     <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
       <table className="w-full min-w-[560px] border-collapse text-sm">
         <tbody>
           <SectionHeading label="Assets" />
-          <LineRows lines={assetLines} />
+          <LineRows lines={assetLines} filter={filter} />
           <SectionTotal label="Total assets" amount={assets} />
 
           <SectionHeading label="Liabilities" />
-          <LineRows lines={liabilityLines} />
+          <LineRows lines={liabilityLines} filter={filter} />
           <SectionTotal label="Total liabilities" amount={liabilities} />
 
           <SectionHeading label="Equity" />
-          <LineRows lines={equityLines} />
+          <LineRows lines={equityLines} filter={filter} />
           <SectionTotal label="Total equity" amount={equity} />
         </tbody>
       </table>

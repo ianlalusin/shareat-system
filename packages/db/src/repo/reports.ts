@@ -12,8 +12,8 @@
  * lives here — "is this a P&L account" and "which category" are already answered by the
  * view; this file never re-derives them.
  */
-import { and, eq, gte, lte, ne, sql } from 'drizzle-orm';
-import { vBalanceSheet, vIncomeStatement, vTrialBalance } from '../../schema';
+import { and, eq, gte, inArray, lte, ne, sql } from 'drizzle-orm';
+import { journalEntries, journalLines, vBalanceSheet, vIncomeStatement, vTrialBalance } from '../../schema';
 import type { Executor } from '../client';
 
 export interface DateRangeFilter {
@@ -220,4 +220,68 @@ export async function getBalanceSheetLines(ex: Executor, filter: DateRangeFilter
     .orderBy(vBalanceSheet.accountType, vBalanceSheet.accountCode);
 
   return rows as BalanceSheetRow[];
+}
+
+export interface AccountEntryLine {
+  entryId: string;
+  entryDate: string;
+  sourceType: string;
+  sourceId: string;
+  status: 'draft' | 'posted' | 'reversed';
+  memo: string | null;
+  lineMemo: string | null;
+  storeId: string | null;
+  partyType: string | null;
+  partyId: string | null;
+  debit: string;
+  credit: string;
+}
+
+/**
+ * The drill-down — T-209c. Line-level, NOT aggregated: every journal line posted to one
+ * account, for the given org/optional store/date range. `status in ('posted','reversed')`
+ * matches every reporting view's own filter exactly (views.ts's top comment) so the sum of
+ * what this returns never disagrees with the report line that linked here.
+ */
+export async function getAccountEntries(
+  ex: Executor,
+  filter: DateRangeFilter & { accountId: string },
+): Promise<AccountEntryLine[]> {
+  const includeYearClose = filter.includeYearClose ?? true;
+
+  const conditions = [
+    eq(journalEntries.orgId, filter.orgId),
+    eq(journalLines.accountId, filter.accountId),
+    gte(journalEntries.entryDate, filter.fromDate),
+    lte(journalEntries.entryDate, filter.toDate),
+    inArray(journalEntries.status, ['posted', 'reversed']),
+  ];
+  if (filter.storeId) {
+    conditions.push(eq(journalLines.storeId, filter.storeId));
+  }
+  if (!includeYearClose) {
+    conditions.push(ne(journalEntries.sourceType, 'year_close'));
+  }
+
+  const rows = await ex
+    .select({
+      entryId: journalEntries.id,
+      entryDate: journalEntries.entryDate,
+      sourceType: journalEntries.sourceType,
+      sourceId: journalEntries.sourceId,
+      status: journalEntries.status,
+      memo: journalEntries.memo,
+      lineMemo: journalLines.lineMemo,
+      storeId: journalLines.storeId,
+      partyType: journalLines.partyType,
+      partyId: journalLines.partyId,
+      debit: sql<string>`${journalLines.debit}::text`,
+      credit: sql<string>`${journalLines.credit}::text`,
+    })
+    .from(journalLines)
+    .innerJoin(journalEntries, eq(journalLines.entryId, journalEntries.id))
+    .where(and(...conditions))
+    .orderBy(journalEntries.entryDate, journalLines.lineNo);
+
+  return rows as AccountEntryLine[];
 }
