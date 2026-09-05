@@ -167,7 +167,8 @@ describe('T-157 golden master — v2 against real v1 attendance sessions', () =>
         { occurredAt: new Date(s.rawClockInMs), intent: 'in', arrivalLagMs: 0 },
         { occurredAt: new Date(s.rawClockOutMs), intent: 'out', arrivalLagMs: 0 },
       ];
-      const got = computeDay({ shiftDay: day, punches, policy: toPolicy(s.config) });
+      const policy = toPolicy(s.config);
+      const got = computeDay({ shiftDay: day, punches, policy });
 
       const v1Hours = s.expected.computedHours;
       const v2Hours = got.computedMinutes / 60;
@@ -216,6 +217,40 @@ describe('T-157 golden master — v2 against real v1 attendance sessions', () =>
         !currentHours.includes(s.expected.shiftStartHour % 24)
       ) {
         bump('E: v1 anchor is no longer an allowed start (config corrected)');
+        continue;
+      }
+
+      // ── Class H — ⭐ NIGHT-DIFF WAS ON WHEN THIS SESSION RAN. DEF-170.
+      //
+      // Same family as Class E — `attendanceConfig` is a single live, unversioned document per
+      // store, so today's capture pairs a historical session's stored result with TODAY's config.
+      // `session-hours.ts`'s own formula is `config.nightDiffEnabled === false ? 0 : nightDiffHoursInWindow(...)`
+      // — verified byte-for-byte identical to `nightDiffMinutes` above — so v1 could only have
+      // credited real night-diff hours if the flag was TRUE at the time. Every store's captured
+      // config today reads `nightDiffEnabled: false`; nothing else about the specimen differs.
+      if (
+        nightDiffers && !hoursDiffer && !modeDiffers && !halfDayDiffers &&
+        !policy.nightDiffEnabled && s.expected.nightDiffHours > 0
+      ) {
+        bump('H: nightDiffEnabled was on when this session ran (DEF-170, config drift)');
+        continue;
+      }
+
+      // ── Class I — ⭐ requiredHoursPerShift WAS SMALLER WHEN THIS SESSION RAN. DEF-170.
+      //
+      // Same family as E and H. v1 caps `computedHours` at `config.requiredHoursPerShift` — verified
+      // identical to v2's `Math.min(rawHours, requiredMinutes)` cap. v2 hits exactly TODAY's cap;
+      // v1's stored answer is smaller; and there was enough raw presence to have been capped at
+      // v2's value too — the only way v1 lands lower is a smaller cap in force back then. Malvar and
+      // Banay-Banay's captured `requiredHoursPerShift` reads `10` today.
+      const requiredHoursV2 = policy.requiredMinutes / 60;
+      if (
+        hoursDiffer && !modeDiffers && !halfDayDiffers && !nightDiffers &&
+        Math.abs(v2Hours - requiredHoursV2) < 1e-9 &&
+        v1Hours < v2Hours &&
+        presentMinutes / 60 >= v2Hours
+      ) {
+        bump('I: requiredHoursPerShift was smaller when this session ran (DEF-170, config drift)');
         continue;
       }
 
