@@ -9,6 +9,8 @@
  * set of numbers rather than a second definition of them.
  */
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
+// ⛔ T-218 — Manila, never bare current_date (DEF-172).
+import { MANILA_TODAY } from './sql-time';
 import type { Tx } from '../client';
 import { owners, type OwnerStatus, type PersonalExpenseTreatment } from '../../schema/owners';
 import { owner_drawing_closes } from '../../schema/owner-drawing-closes';
@@ -274,7 +276,8 @@ export async function agedReceivables(tx: Tx, orgId: string): Promise<AgedReceiv
       jl.party_id as owner_id,
       coalesce(sum(jl.debit - jl.credit), 0)::text as outstanding,
       min(case when jl.debit > 0 then je.entry_date end)::text as oldest_on,
-      (current_date - min(case when jl.debit > 0 then je.entry_date end))::int as days_outstanding
+      -- ⛔ T-218 / DEF-172. Manila, never bare current_date.
+      (${MANILA_TODAY} - min(case when jl.debit > 0 then je.entry_date end))::int as days_outstanding
     from journal_lines jl
     join journal_entries je on je.id = jl.entry_id
     join accounts a on a.id = jl.account_id

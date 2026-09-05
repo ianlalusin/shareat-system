@@ -15,6 +15,8 @@ import { findingAcknowledgements } from '../../schema/findings';
 // source of truth for a number the screen also shows — bible §6.3.
 import { CADENCE_DAYS } from '../../schema/stores';
 import { formatMoney, money } from '@shareat/core/money';
+// ⛔ T-218 — the ONE definition of "today" for the repo layer. Never bare `current_date`.
+import { MANILA_TODAY, daysBetweenDates } from './sql-time';
 
 /**
  * ⛔ **Never interpolate the symbol by hand.** A hand-rolled peso plus `toFixed(2)` renders a
@@ -26,6 +28,7 @@ import { formatMoney, money } from '@shareat/core/money';
  * ⭐ One formatter, `@shareat/core`'s — not a fourth copy of the `Intl` options.
  */
 const peso = (n: number): string => formatMoney(money(n.toFixed(2)));
+
 
 export interface DetectedFinding {
   kind: string;
@@ -314,7 +317,7 @@ async function storePositions(tx: Tx, orgId: string): Promise<StorePositionRow[]
            coalesce(sum(pd.owed) filter (where pd.is_verified and pd.owed > 0.005), 0)::text
                                                                     as remittable,
            min(pd.entry_date) filter (where pd.owed > 0.005)::text   as oldest_date,
-           (current_date - min(pd.entry_date) filter (where pd.owed > 0.005))::text as age_days
+           (${MANILA_TODAY} - min(pd.entry_date) filter (where pd.owed > 0.005))::text as age_days
     from stores st
     left join per_day pd on pd.store_id = st.id
     where st.org_id = ${orgId} and st.is_active = true
@@ -504,7 +507,11 @@ export async function serviceChargeFloatAgeing(
   const rows = (await tx.execute(sql`
     select je.entry_date::text                     as entry_date,
            coalesce(sum(jl.credit), 0)::text       as credited,
-           coalesce(sum(jl.debit), 0)::text        as debited
+           coalesce(sum(jl.debit), 0)::text        as debited,
+           -- ⭐ T-218. Today, from POSTGRES, in Manila — carried back so the age below is measured
+           -- against the same clock the rest of this module gates on. now() references no
+           -- grouped column, so it is legal beside the aggregates.
+           ${MANILA_TODAY}::text                   as manila_today
     from journal_lines jl
     join journal_entries je on je.id = jl.entry_id
     join accounts a        on a.id = jl.account_id
@@ -533,9 +540,7 @@ export async function serviceChargeFloatAgeing(
   }
   if (oldestUncleared === null) return [];
 
-  const ageDays = Math.floor(
-    (Date.now() - new Date(`${oldestUncleared}T00:00:00Z`).getTime()) / 86_400_000,
-  );
+  const ageDays = daysBetweenDates(oldestUncleared, String(rows[0]!.manila_today));
   if (ageDays <= SERVICE_CHARGE_MAX_DAYS) return [];
 
   return [{
@@ -703,7 +708,7 @@ export async function supplierCreditAgeing(
     where je.org_id = ${orgId} and a.code = '1240' and je.status <> 'draft'
     group by s.id, s.name
     having coalesce(sum(jl.debit - jl.credit), 0) > 0
-       and min(sr.returned_on) < (current_date - (${thresholdDays} || ' days')::interval)
+       and min(sr.returned_on) < (${MANILA_TODAY} - (${thresholdDays} || ' days')::interval)
   `)) as unknown as { supplier_id: string; supplier_name: string; balance: string; oldest_return: string }[];
 
   return rows.map((r) => ({
@@ -740,7 +745,7 @@ export async function customerCreditAgeing(
     where je.org_id = ${orgId} and a.code = '2140' and je.status <> 'draft'
     group by c.id, c.name
     having coalesce(sum(jl.credit - jl.debit), 0) > 0
-       and min(cr.returned_on) < (current_date - (${thresholdDays} || ' days')::interval)
+       and min(cr.returned_on) < (${MANILA_TODAY} - (${thresholdDays} || ' days')::interval)
   `)) as unknown as { customer_id: string; customer_name: string; balance: string; oldest_return: string }[];
 
   return rows.map((r) => ({
@@ -771,7 +776,11 @@ export async function reimbursablePayableAgeing(
     select jl.party_id as employee_id, coalesce(p.display_name, jl.party_id) as employee_name,
            je.entry_date::text as entry_date,
            coalesce(sum(jl.credit), 0)::text as credited,
-           coalesce(sum(jl.debit), 0)::text as debited
+           coalesce(sum(jl.debit), 0)::text as debited,
+           -- ⭐ T-218. See serviceChargeFloatAgeing — the FIFO walk below picks the date to age
+           -- from, so the age cannot be computed here, but the "today" it is measured against is
+           -- still Postgres's, in Manila, read once with the data.
+           ${MANILA_TODAY}::text as manila_today
     from journal_lines jl
     join journal_entries je on je.id = jl.entry_id
     join accounts a on a.id = jl.account_id
@@ -781,7 +790,8 @@ export async function reimbursablePayableAgeing(
     group by jl.party_id, p.display_name, je.entry_date
     order by jl.party_id, je.entry_date asc
   `)) as unknown as {
-    employee_id: string; employee_name: string; entry_date: string; credited: string; debited: string;
+    employee_id: string; employee_name: string; entry_date: string; credited: string;
+    debited: string; manila_today: string;
   }[];
 
   const byEmployee = new Map<string, typeof rows>();
@@ -811,9 +821,7 @@ export async function reimbursablePayableAgeing(
     }
     if (oldestUncleared === null) continue;
 
-    const ageDays = Math.floor(
-      (Date.now() - new Date(`${oldestUncleared}T00:00:00Z`).getTime()) / 86_400_000,
-    );
+    const ageDays = daysBetweenDates(oldestUncleared, String(rows[0]!.manila_today));
     if (ageDays <= thresholdDays) continue;
 
     findings.push({
@@ -841,17 +849,22 @@ export async function cashRequestFloatAgeing(
 ): Promise<DetectedFinding[]> {
   const rows = (await tx.execute(sql`
     select cr.id as request_id, coalesce(p.display_name, cr.requested_for::text) as person_name,
-           cr.approved_amount::text as amount, cr.released_on::text as released_on
+           cr.approved_amount::text as amount, cr.released_on::text as released_on,
+           -- ⭐ T-218. The age comes from the SAME statement, and the SAME clock, as the threshold
+           -- on the next line. It used to be recomputed in JS from Date.now() against a date
+           -- parsed as UTC midnight, so the badge could say "31 days" about a row the gate admitted
+           -- on Postgres's reckoning of 30 -- two clocks, disagreeing exactly when it mattered.
+           (${MANILA_TODAY} - cr.released_on)::int as age_days
     from cash_requests cr
     left join persons p on p.id = cr.requested_for
     where cr.org_id = ${orgId} and cr.status = 'released'
-      and cr.released_on < (current_date - (${thresholdDays} || ' days')::interval)
-  `)) as unknown as { request_id: string; person_name: string; amount: string; released_on: string }[];
+      and cr.released_on < (${MANILA_TODAY} - (${thresholdDays} || ' days')::interval)
+  `)) as unknown as {
+    request_id: string; person_name: string; amount: string; released_on: string; age_days: number;
+  }[];
 
   return rows.map((r) => {
-    const ageDays = Math.floor(
-      (Date.now() - new Date(`${r.released_on}T00:00:00Z`).getTime()) / 86_400_000,
-    );
+    const ageDays = Number(r.age_days);
     return {
       kind: 'cashRequestFloatAgeing',
       key: `cashRequestFloatAgeing:${r.request_id}`,
@@ -1047,6 +1060,74 @@ export async function orderWastageOpenPastBackstop(
       `${r.store_name} has ${r.n} order wastage${r.n === 1 ? '' : 's'} worth ${peso(Number(r.amount))} still ` +
       `open past the 15-day backstop, the oldest opened ${r.oldest}. ⚠️ If this keeps appearing, ` +
       'the `order_wastage_backstop` scheduler job is not running: check that its timer is installed on the host.',
+  }));
+}
+
+/**
+ * ⭐ **T-218 / DEF-176 — the receiving-dispute twin of `orderWastageOpenPastBackstop` above.**
+ *
+ * `docs/plans/phase-6-reporting-and-dashboards.md` §6 Q3 closed one of Ian’s open questions by
+ * promising this detector *"(`receivingDisputeOverdue`, T-213)"*. T-213 shipped eight detectors and
+ * this was not among them — a gap that stayed invisible because **both tasks read as done**.
+ *
+ * ⚠️ **The asymmetry it exists to expose.** v1 runs a 15-day forced-resolution backstop for order
+ * and channel *wastage* disputes and has nothing equivalent for *receiving* disputes, on the strength
+ * of a code comment arguing one is unnecessary because *"disputes get resolved."* Live, that
+ * assumption is about 44% false: **4 of 9 open disputes already exceed 15 days.**
+ *
+ * ⛔ **A `deferred` row still counts, and still ages.** A deferral is *"a promise to decide by a
+ * date, not an exemption"* (T-174’s schema header) — exempting it would make the detector agree
+ * with the postponement instead of observing it, which is the whole failure mode v1’s stored
+ * `resolved` flag has.
+ *
+ * ⚠️ `store_id` is the **COMMISSARY’s**, not the branch’s: the stranded value sits on its books and
+ * its manager disposes of it (T-174 invariant 11).
+ *
+ * ⚠️ `value` is **AT COST** — the un-received share of dispatch cost, not the transfer rate
+ * (DEF-175). The wording says so, because a peso figure beside a transfer-rate figure invites
+ * exactly the comparison that defect is about.
+ *
+ * ⛔ 15 days, not 20 — unlike the wastage backstop above there is **no scheduled job** to be
+ * generously late here, so there is nothing to flap against: the threshold is the SLA itself.
+ */
+export async function receivingDisputeOverdue(
+  tx: Tx,
+  orgId: string,
+  thresholdDays = 15,
+): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    select d.store_id::text as store_id, s.name as store_name, count(*)::int as n,
+           coalesce(sum(d.value), 0)::text as amount,
+           max(${MANILA_TODAY} - d.created_at::date)::int as oldest_age_days,
+           (count(*) filter (where d.status = 'deferred'))::int as deferred_n
+    from trade_discrepancies d
+    join stores s on s.id = d.store_id
+    where d.org_id = ${orgId}
+      -- ⭐ The SAME predicate tradeDiscrepanciesRepo.unresolved and .blocking use. That file's
+      -- header states the invariant: one source, several consumers. This is a fourth consumer,
+      -- never a fourth definition — a dispute that blocks a sales day and one this finding
+      -- reports must not be able to differ.
+      and d.status <> 'resolved'
+      and (${MANILA_TODAY} - d.created_at::date) > ${thresholdDays}
+    group by d.store_id, s.name
+  `)) as unknown as {
+    store_id: string; store_name: string; n: number; amount: string;
+    oldest_age_days: number; deferred_n: number;
+  }[];
+
+  return rows.map((r) => ({
+    kind: 'receivingDisputeOverdue',
+    key: `receivingDisputeOverdue:${r.store_id}`,
+    storeId: r.store_id,
+    severity: 'soft' as const,
+    detail:
+      `${r.store_name} has ${r.n} receiving dispute${r.n === 1 ? '' : 's'} unresolved past ` +
+      `${thresholdDays} days, worth ${peso(Number(r.amount))} at cost still stranded in 1340 ` +
+      `Inventory in transit — the oldest ${r.oldest_age_days} days old` +
+      (r.deferred_n > 0
+        ? `, ${r.deferred_n} of them deferred (a deferral is a promise to decide, not an exemption)`
+        : '') +
+      '. Dispose of each as audit, loss, charge or late receipt.',
   }));
 }
 

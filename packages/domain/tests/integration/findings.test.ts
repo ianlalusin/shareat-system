@@ -285,6 +285,99 @@ describe('each detector fires when its condition holds', () => {
   });
 });
 
+describe('T-218 / DEF-176 — receivingDisputeOverdue, the backstop receiving never got', () => {
+  /**
+   * A dispute needs an order and a line to hang off. ⚠️ A **draft** order is enough —
+   * `trade_orders_dispatch_shape_check` only demands a journal entry once an order reaches
+   * `dispatched`/`received`, and this detector reads `trade_discrepancies` and `stores` only.
+   *
+   * ⛔ `created_at` is stamped at **Manila noon**, N days back, never `now() - interval N days`:
+   * the detector floors a date difference, so a fixture stamped at the current instant sits on the
+   * boundary and flips with the clock. That is DEF-178 exactly, and it is the bug this whole task
+   * is about — reproducing it in the test that proves the fix would be a poor joke.
+   */
+  async function dispute(
+    f: Fixture,
+    opts: { ageDays: number; value?: string; status?: 'open' | 'deferred' | 'resolved' },
+  ) {
+    const tag = uid('disp');
+    const [cust] = await sql<{ id: string }[]>`
+      insert into customers (org_id, name, created_by)
+      values (${f.orgId}, ${`Branch ${tag}`}, ${f.personId}) returning id`;
+    const [item] = await sql<{ id: string }[]>`
+      insert into items (org_id, code, name, kind, base_unit, created_by)
+      values (${f.orgId}, ${tag}, 'Pork', 'raw_material', 'kg', ${f.personId}) returning id`;
+    const [ord] = await sql<{ id: string }[]>`
+      insert into trade_orders (org_id, store_id, customer_id, order_date, status, total_amount, created_by)
+      values (${f.orgId}, ${f.storeId}, ${cust!.id}, '2026-01-10', 'draft', '1000.00', ${f.personId})
+      returning id`;
+    const [line] = await sql<{ id: string }[]>`
+      insert into trade_order_lines (org_id, order_id, item_id, quantity, unit, rate, line_total)
+      values (${f.orgId}, ${ord!.id}, ${item!.id}, '10', 'kg', '100.00', '1000.00') returning id`;
+
+    const status = opts.status ?? 'open';
+    const [d] = await sql<{ id: string }[]>`
+      insert into trade_discrepancies (
+        org_id, store_id, order_id, order_line_id, quantity, value, status,
+        disposition, resolved_at, resolved_by, deferred_to, created_at)
+      values (
+        ${f.orgId}, ${f.storeId}, ${ord!.id}, ${line!.id}, '1', ${opts.value ?? '90.00'}, ${status},
+        ${status === 'resolved' ? 'loss' : null},
+        ${status === 'resolved' ? new Date() : null},
+        ${status === 'resolved' ? f.personId : null},
+        ${status === 'deferred' ? '2026-12-31' : null},
+        ((((now() at time zone 'Asia/Manila')::date - ${opts.ageDays}::int)::timestamp
+          + interval '12 hours') at time zone 'Asia/Manila'))
+      returning id`;
+    return d!.id;
+  }
+
+  it('⭐ fires on a dispute unresolved past 15 days, and says the age and the basis', async () => {
+    const f = await fixture('dispold');
+    await dispute(f, { ageDays: 20, value: '3000.00' });
+
+    const finding = (await feed(f)).findings.find((x) => x.kind === 'receivingDisputeOverdue');
+    expect(finding).toBeDefined();
+    expect(finding!.key).toBe(`receivingDisputeOverdue:${f.storeId}`);
+    expect(finding!.storeId).toBe(f.storeId);
+    expect(finding!.severity).toBe('soft');
+    expect(finding!.detail).toMatch(/20 days old/);
+    // ⚠️ DEF-175 — the figure is AT COST, and the wording has to say so.
+    expect(finding!.detail).toMatch(/₱3,000\.00 at cost/);
+  });
+
+  it('⛔ does NOT fire while the dispute is inside the threshold', async () => {
+    const f = await fixture('dispnew');
+    await dispute(f, { ageDays: 3 });
+    expect(await kinds(f)).not.toContain('receivingDisputeOverdue');
+  });
+
+  it('⛔ does NOT fire once the dispute is resolved, however old', async () => {
+    const f = await fixture('dispdone');
+    await dispute(f, { ageDays: 90, status: 'resolved' });
+    expect(await kinds(f)).not.toContain('receivingDisputeOverdue');
+  });
+
+  it('⭐ a DEFERRED dispute still fires — a deferral is a promise to decide, not an exemption', async () => {
+    const f = await fixture('dispdefer');
+    await dispute(f, { ageDays: 40, status: 'deferred' });
+
+    const finding = (await feed(f)).findings.find((x) => x.kind === 'receivingDisputeOverdue');
+    expect(finding).toBeDefined();
+    expect(finding!.detail).toMatch(/1 of them deferred/);
+  });
+
+  it('⚠️ exactly at the threshold it is not yet overdue; a day past it is', async () => {
+    const at = await fixture('dispat15');
+    await dispute(at, { ageDays: 15 });
+    expect(await kinds(at)).not.toContain('receivingDisputeOverdue');
+
+    const past = await fixture('dispat16');
+    await dispute(past, { ageDays: 16 });
+    expect(await kinds(past)).toContain('receivingDisputeOverdue');
+  });
+});
+
 describe('acknowledgement accepts a risk without pretending it is fixed', () => {
   async function withFinding(hint: string) {
     const f = await fixture(hint);

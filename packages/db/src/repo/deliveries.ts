@@ -13,6 +13,8 @@
  * to photograph and the counterpart store's dispatch is the corroboration.
  */
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
+// ⛔ T-218 — Manila, never bare current_date (DEF-172).
+import { MANILA_TODAY } from './sql-time';
 import {
   deliveries,
   deliveryLines,
@@ -429,7 +431,7 @@ export async function recentDeliveriesForRisk(
     .where(
       and(
         eq(deliveries.storeId, storeId),
-        sql`${deliveries.deliveredOn} >= (current_date - make_interval(days => ${days}))`,
+        sql`${deliveries.deliveredOn} >= (${MANILA_TODAY} - make_interval(days => ${days}))`,
       ),
     );
 

@@ -6,6 +6,8 @@
  * a maintained `outstandingAmount`.
  */
 import { and, eq, sql } from 'drizzle-orm';
+// ⛔ T-218 — Manila, never bare current_date (DEF-172).
+import { MANILA_TODAY } from './sql-time';
 import type { Tx } from '../client';
 import {
   channelSettlements,
@@ -283,7 +285,9 @@ export async function listSettleableChannelDays(
            c.name             as channel_name,
            sdc.amount::text   as reported_amount,
            c.destination_money_account_id::text,
-           (current_date - sd.business_date) as age_days
+           -- ⛔ T-218 / DEF-172. Manila, never bare current_date — this age drives an amber
+           -- badge at 14 days, so a day of drift moves a threshold a person acts on.
+           (${MANILA_TODAY} - sd.business_date) as age_days
     from sales_day_channels sdc
     join sales_days sd on sd.id = sdc.sales_day_id
     join sales_channels c on c.id = sdc.channel_id

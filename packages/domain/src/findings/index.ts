@@ -110,6 +110,11 @@ export async function listFindings(
     // all, so that detector's own gate never looks at it.
     ...(await findingsRepo.usageRecordMissing(tx, orgId)),
     ...(await findingsRepo.meatSlabStale(tx, orgId)),
+    // ⭐ T-218 / DEF-176 — the receiving-dispute twin of orderWastageOpenPastBackstop above. The
+    // phase-6 plan §6 Q3 closed one of Ian's open questions by promising this detector as part of
+    // T-213; T-213 shipped without it, and the gap stayed invisible because both tasks read as
+    // done. 4 of 9 live disputes are already past 15 days.
+    ...(await findingsRepo.receivingDisputeOverdue(tx, orgId)),
   ];
 
   const acks = await findingsRepo.liveAcknowledgements(tx, orgId);
