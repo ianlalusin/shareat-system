@@ -1,182 +1,194 @@
-# Handoff — 2026-09-05
+# Handoff — 2026-09-05 (evening)
 
 ## Where things stand
 
-The shell sprint the v2 completion blueprint called out as the fastest-available win is
-done: **T-211** (manager/owner dashboard at `/`) and **T-217** (404/error boundaries +
-sign-in PIN issuance, closing DEF-174) shipped this session, alongside **T-212**
-(commissary/inventory KPIs, `ianla-25`) landing three more tiles on that same dashboard.
-All three are committed and pushed. `ianla-25` is now mid-flight on **T-218** (findings
-clock correctness + a receiving-dispute detector — the DEF-172/DEF-176 follow-ups) in
-this same shared tree; check `ListAgents` before touching `packages/db/src/repo/findings.ts`.
+**Two tasks shipped and pushed since the midday wrap-up**: **T-219** (users and roles,
+`/admin/users`) and **T-218** (one clock for every findings detector, plus the detector T-213
+promised). Both are on `main` at `40a0cd0`, and the working tree is completely clean.
 
-## Gates at `b7c1eb7`
+**T-219 closed a chain that had been dangling since this morning.** `authorize.ts` treats *no
+active role* as a hard denial by design, and nothing in the hire flow assigns a role — so once
+T-217 shipped PIN issuance, the sequence read **hire → PIN → sign in → nothing**. Every hire could
+authenticate and was then authorized for zero capabilities at zero stores. The list page proves it
+with live data: the four `SMOKETEST T217` people hired that same morning all render *"no role —
+cannot do anything."*
 
-- **typecheck**: clean
-- **unit**: 1012 passed / 1 skipped / 1 known-red (1014) — the pre-existing DEF-170
-  golden-master residual, tracked, not a regression
-- **integration**: **2327/2327, 92/92 files, 0 failures** — run against the shared
-  `shareat_test` DB, ~20 min under this machine's current load. (`ianla-25`'s own run,
-  same code, against their isolated `shareat_test_lane25`, got 2326/2327 — the one
-  difference is DEF-178, a real-clock flake in `lane-health.test.ts` that passes 21/21
-  alone; not seen in this run, consistent with it being a timing flake, not a regression.)
-- **build**: exit 0 (Next.js 16.3.2/Turbopack, 6.5s compile + 20.8s typecheck, 11 static
-  pages) — run once by `ianla-25` covering both sessions' work rather than building the
-  shared tree twice; dev server on 9008 confirmed stopped first.
-- **smoketested live on 9008**: dashboard tiles render real figures (balance sheet ties
-  at ₱29,328.00); an unknown route returns a real HTTP 404; a staff role hitting
-  `/reports/trial-balance` renders the custom error page (HTTP 500, digest shown), not
-  Next's default chrome; a fresh hire shows "no PIN issued," issuing one persists and
-  signs in from a clean browser context; `ianla-25`'s three T-212 tiles render correctly,
-  including a real ₱700 short-receipt gap v1's own method would have silently absorbed.
+Phase 6 is effectively done (T-209–T-213, T-218, T-219). **T-214** (manager responsiveness
+scorecard) is next in the phase plan. Phase 7's other half — **store creation/management** — was
+deliberately deferred by Ian today and has no spec yet.
 
-## What happened this session (since the last wrap-up, `d612b95`)
+## Gates at `40a0cd0`
 
-**T-211 — the manager/owner dashboard.** Root `/` was the unmodified Phase 0 scaffold
-since T-183; it's now nine live-query KPI tiles (sales/expenses/net income, balance
-sheet ties, AR/AP outstanding, active staff, open cash-request floats, findings needing
-attention, low stock) plus a sales-by-channel table. Every figure calls the same named
-query function its own report page already calls — no second definition, no
-`FieldValue.increment`-shaped cache (bible §4.2 rule 7). **Found in passing, not a
-bug**: the combined "Expenses" tile can render negative over a short range when a
-commissary→branch cost transfer dominates — matches the income statement byte-for-byte;
-flagged for Ian in `docs/tasks/211-manager-owner-dashboard.md` in case four tiles read
-better than three.
+- **typecheck**: clean, exit 0
+- **unit**: **1016 passed / 1 skipped / 1 failed** — the failure is
+  `tests/golden/attendance-adjudication.test.ts`, DEF-170's 3 residual golden-master divergences.
+  Pre-existing, unchanged all day, tracked, **not a regression**.
+- **integration**: **2351/2351, 94/94 files, exit 0**, 1329s on an isolated lane DB
+  (`shareat_test_lane15`). ⭐ **This was T-218's first successful full-suite run ever** — that
+  session had never managed to complete one. Arithmetic, so nothing is assumed skipped: this
+  morning's 2327 across 92 files + T-219's 19 + T-218's 5 = 2351; 92 + T-219's two new files = 94.
+- **build**: **exit 0** — Next 16.3.2/Turbopack, compiled 8.9s, 11 static pages, dev server
+  confirmed stopped first. One run covering both tasks.
+- **smoketest (T-219)**: **20/20** live on 9008, headless Chromium, screenshots reviewed. §C.1's
+  refusal renders as a real sentence; appointing an admin reports *"granted store scope for 3
+  store(s)"* — **3, not 4, because one store is inactive**, so the active-store exclusion holds in
+  the app and not only in a test; the last admin cannot be demoted; the self page offers no role
+  form at all; grant/revoke round-trips; **zero horizontal overflow at 1280 AND 390**.
+- **smoketest (T-218)**, stated precisely because it matters: `/findings` rendered with no page
+  errors, but `receivingDisputeOverdue` **did not fire on real dev data** — both live disputes are
+  2 days old. One row was temporarily aged to 20 days to see it render, then restored to its exact
+  original timestamp. *Not* "seen on real data."
 
-**T-217 — shell hardening + PIN issuance, closing DEF-174.** `not-found.tsx` /
-`error.tsx` / `global-error.tsx` replace Next's default chrome (Next 16.3's recovery
-callback is `retry`, not the older `reset` — confirmed against the bundled docs before
-writing). Closed **DEF-174**: `setPin` had zero callers anywhere in `apps/erp`, despite
-being fully built and tested — a hired staff member had no path to ever receive a
-sign-in PIN. New `sessionsRepo.listLiveForPerson` (+3 integration tests) backs a
-"Sign-in PIN" section on `/staff/[employmentId]`; the issue/re-issue action gates on
-`enrol_staff` since `setPin` itself has no `authorize()` call of its own. Live-verified
-the full round trip: hire → not-issued state → issue → persists across reload → sign in
-from a cookie-free browser context → lands signed in. **Found DEF-177 in passing**:
-`setPin` leaks a raw Postgres "duplicate key" error when a person's own current PIN is
-re-submitted; mapped to a friendly message at the calling action without touching
-`setPin` itself (flagged for whoever next changes it).
+## What happened this session
 
-**T-212 — commissary and inventory KPIs (`ianla-25`).** Three more dashboard tiles: in-
-flight orders, open disputes (oldest age + value at cost — DEF-175 found and fixed a
-schema doc-comment that had the wrong basis, transfer rate instead of cost), and goods
-received this range, stating what v1's method would have silently missed (a real ₱700
-gap between dispatched and received on seeded data — external franchisee sales were
-being read as 100% short-received before a `counterparty_store_id` scoping fix, DEF-176
-recorded separately: a detector the phase-6 plan assigned to T-213 that T-213 never
-built).
+**T-219 — users and roles (`/admin/users`), closing DEF-167.** Specced first per RULES rule 8,
+then built. `assignRoleAsActor` is the single gated entry point and carries five checks:
+`authorize(manage_users)`, no self-change, target-in-org, the §C.1 authority chain (only a
+super-admin appoints an admin), and the last-admin guard. **It lives in `packages/auth`, not the
+server action `CAPABILITY-MATRIX.md` §C.1 literally names** — that ADR was written when no screen
+existed, and its actual rule is *"the check belongs at the call site and must be tested there."* A
+rule living in one route file is a rule the second caller misses, which is exactly how DEF-180
+happened, and a Next server action cannot be integration-tested against real Postgres. 19 new
+integration tests, each watched fail first.
 
-**Roadmap refreshed twice** — `docs/ROADMAP.html`'s T-211 and T-212 rows both marked
-done with real scope; Phase 6's status chips and the masthead gate line updated to the
-final numbers above. The **v2 completion blueprint artifact**
-(`https://claude.ai/code/artifact/d60fb51d-199c-43ff-a896-5f20a1402d69`) and its repo
-copy (`docs/plans/v2-completion-blueprint-2026-09-05.md`) were both updated to mark the
-shell sprint done throughout, rather than left describing a gap that no longer exists.
+**Four defects filed, and they are not all the same kind:**
 
-⚠️ **Shared-tree note, not a defect**: `ianla-25`'s DEF-175/DEF-176 register rows landed
-inside this session's `3e0089f` commit — they were written to `DEFECTS-REGISTER.md`
-between this session's `git add` and `git commit`, and `git add <path>` stages the
-whole file. No content was lost and both rows are correctly attributed in `ianla-25`'s
-own commit message (`f6350bd`), but if you read `3e0089f`'s diff cold and wonder why a
-T-211/T-217 commit carries two T-212 defect rows, that's why — the same hazard
-`project_shareat_system_concurrent_sessions` already documents.
+- **DEF-180** — `CAPABILITY-MATRIX.md` §C.2 decided on 2026-08-25 that appointing an admin
+  materialises a store-scope row per store. `assignRole` implemented §B.1's sibling decision and
+  **nothing for §C.2**. It never fired only because nothing called `assignRole`. Fixed inside
+  `assignRole`, not the caller.
+- **DEF-181** — `/settings` and `/settings/attendance` shipped with T-201 linked from nowhere, the
+  exact defect `nav.tsx`'s own header comment was written about. New "Setup" nav group.
+- **DEF-182** — `roles.ts` asserted the authority chain was *"enforced by the CALLER via
+  `authorize()`"*. §C.1 established six days later that `authorize()` **cannot** express it. The
+  comment named an enforcement that was impossible, and read as settled for two weeks.
+- **DEF-183** — ⭐ **the one worth reading.** `person_roles`' RLS policy checks the *row's*
+  `org_id`; its two sibling tables derive org *through the person* with an explicit `WITH CHECK`.
+  All three end in `= app_current_org()` and read as equivalent. **Only the latter two isolate**, so
+  a cross-org role assignment was allowed. Found by writing a test that expected a refusal and
+  getting *"promise resolved instead of rejecting."* Closed at the call site; **the proper fix is a
+  migration and is still open.**
+
+**T-218 — findings clock correctness (`ianla-25`'s work, committed here at `40a0cd0`).** DEF-172
+was filed as "four detectors use bare `current_date`" and was **ten sites across four files in
+three mechanisms**, with the row naming the wrong function for one. `MANILA_TODAY` /
+`daysBetweenDates` now live once in `packages/db/src/repo/sql-time.ts`, and
+`tests/unit/findings-single-clock.test.ts` fails the build on any bare `current_date` or
+`Date.now()` across all 55 files in `packages/db/src/repo`. DEF-176's `receivingDisputeOverdue`
+now exists and is registered.
+
+⭐ **Four of the day's rows share one shape, and it is worth naming**: *a claim of coverage with
+nothing executable behind it.* DEF-175 (a comment naming the wrong basis) · DEF-176 (a plan naming
+a task that never built it) · DEF-180 (an ADR decided, never written into the function) · DEF-182
+(a comment naming an impossible enforcement). **DEF-183 is the sharper counter-case**: there the
+prose was *right* and the mechanism was subtly wrong. Reading it reassured; running it refused.
+A sweep for coverage-claiming phrases that name no test was discussed and **deliberately not
+smuggled into either task** — it is Ian's to schedule.
+
+**Decisions of Ian's this session:** one — **store creation/management is a separate task from
+user/role management** (2026-09-05). Recorded in `docs/tasks/219-user-and-role-management.md`'s
+*Out of scope* with the reasoning. `ianla-25` confirms no design decisions of Ian's arose in their
+session; everything in T-212/T-218 was their own judgement and is already in the task docs and
+register rows. **Nothing is left living only in a transcript.**
+
+**Roadmap**: updated — T-218 and T-219 both marked `t-done` with real scope, masthead line and
+Phase 6 chip refreshed (`39db5b8`, `40a0cd0`).
 
 ## Pick up here
 
-1. **⭐ Phase 7's user/role management screen — the single largest remaining "built but
-   no caller" gap, same shape T-217 just closed for PIN issuance.** Confirmed this
-   session:
-   - `assignRole` / `elevateManager` (`packages/auth/src/roles.ts`, exported via
-     `packages/auth/src/index.ts`) are fully built, with real invariants already
-     implemented (revoke-then-insert on a role change; the admin-less-org elevated-grant
-     fallback for a newly appointed manager, computed from `CAPABILITY_MATRIX`, never
-     hand-listed).
-   - `accessRepo` (`packages/db/src/repo/access.ts`) already has every read/write a
-     screen would need: `activeRoleForPerson`, `hasActiveAdmin`, `grantStoreScope` /
-     `revokeStoreScope` / `storeIdsForPerson`, `grantCapability` / `revokeGrantById` /
-     `grantsForPerson`.
-   - **Zero callers anywhere in `apps/erp/src`** — confirmed by grep, same check this
-     session ran for `setPin` before finding DEF-174. No `/admin/users` or `/stores`
-     route exists at all.
-   - ⚠️ **Scope split worth confirming before starting**: user/role assignment
-     (`assignRole` etc.) is fully primed and ready for a screen today. **Store
-     creation/management is a different, larger question** — no `createStore`-shaped
-     function was found anywhere in this pass; `packages/db/src/repo/stores.ts` only has
-     cash-policy helpers. The blueprint bundles "admin/users, admin/stores" as one Phase
-     7 item; the next session should verify whether store creation needs its own design
-     pass before committing to both in one task, or ship user/role management alone
-     first.
-   - No `docs/tasks/` spec exists yet for this — per `docs/RULES.md` rule 8 ("no
-     implementation without a written task spec"), write one first, same shape as
-     `docs/tasks/217-shell-hardening-and-pin-issuance.md`.
-2. **T-218 (`ianla-25`, in flight)** — findings clock correctness + a receiving-dispute
-   detector, addressing DEF-172 (four detectors compare against bare `current_date`
-   instead of `Asia/Manila`) and DEF-176 (`receivingDisputeOverdue` was assigned to
-   T-213 by the phase plan and never built). Check `ListAgents` before touching
-   `packages/db/src/repo/findings.ts` or its tests.
-3. **DEF-170's 3 residual golden-master items** — low urgency, still needs an owner
-   (whoever holds the attendance lane), unchanged from prior handoffs.
+1. **⭐ DEF-183's RLS migration — small, and it should not wait.** Align `person_roles`' policy
+   with its two siblings by adding the person-org `EXISTS` clause to its `WITH CHECK`, so the
+   database enforces isolation rather than one function (RULES §6.3). T-218 added no migration and
+   T-219 changes no schema, so this has had no home; **the next access migration is its home.**
+   ⚠️ A person-keyed access table must use the `via_person` form whether or not it carries its own
+   `org_id` — the realistic failure is someone adding a fourth access table and copying whichever
+   policy they opened first.
+2. **Store creation/management (`/admin/stores`)** — Phase 7's other half, deferred by Ian today.
+   Needs its own spec. ⚠️ **It is not a form**: a store carries cash-custody policy behind a DB
+   check constraint (`stores_pooling_requires_ceiling_check`), and **§C.2's second half applies** —
+   *a store created later appears in nobody's scope*, so `createStore` must fan scope rows out to
+   that org's existing admins or a new branch is invisible to the person who just opened it,
+   failing like a permissions bug. No `createStore`-shaped function exists anywhere today.
+3. **T-214 — manager responsiveness scorecard**, next in
+   `docs/plans/phase-6-reporting-and-dashboards.md`.
+4. **DEF-170's 3 residual golden-master items** — low urgency, still needs an owner (whoever holds
+   the attendance lane). Unchanged from prior handoffs, and the reason `npm test` is 1-red.
 
 ## Do not decide these alone — they are Ian's
 
-- **Should the dashboard's "Expenses" tile split into Cost of sales / Operating
-  expenses (four tiles instead of three)?** Found live-testing T-211 — the combined
-  figure is correct but can read as a confusing negative when a commissary transfer
-  dominates a short range. `docs/tasks/211-manager-owner-dashboard.md`'s Open Questions.
-- **Should `/sign-in`'s default post-login redirect move from `/sales-days` to `/`
-  now that `/` is a real dashboard?** Only sound for roles that pass
-  `view_financial_reports` — staff would still need a different default. Deliberately
-  not decided inside T-211.
-- **Should PIN issuance require a capability distinct from viewing the staff roster?**
-  T-217 reused `enrol_staff` (the existing hire capability) rather than inventing one
-  unilaterally — flagged for Ian/Opus per `CAPABILITY-MATRIX.md`'s own process.
-- **DEF-063 (PIN sign-in rate limiting)** — deferred 2026-08-25 pending real staff/real
-  data; both conditions are now true (production live since T-205, pilot running).
-  Recommendation on the table: reactivate now.
-- **SC/PWD discount ID/name capture and BIR 1601-E withholding tax** — both live
-  compliance exposures, neither v1 nor v2 handles either today. Unchanged from prior
-  handoffs.
-- **Service-charge distribution (T-187)** — do not enable service charge in POS before
-  it exists (DEF-082, unchanged).
+- **Should `manage_users` move to `manager`, scoped to their own org?** `CAPABILITY-MATRIX.md`
+  §Open 3 already predicts this as *"the friction point"* and sets the trigger: *"if it happens
+  twice, move it."* Building the screen produces the first real evidence. **New today.**
+- **A sweep for "claims of coverage that name no test"** — four of today's defects share that
+  shape. Cheap version: grep `packages/**/src` and `docs/plans/**` for *"enforced by"*,
+  *"guaranteed by"*, *"covered by"*, *"handled in"*, then check each for a named test.
+  **Recommendation: worth one timeboxed pass. New today.**
+- **DEF-063 (PIN sign-in rate limiting)** — deferred 2026-08-25 pending real staff and real data;
+  both conditions are now true. **Recommendation on the table: reactivate.** Carried, unchanged.
+- **Should `/sign-in`'s default post-login redirect move from `/sales-days` to `/`?** Only sound
+  for roles passing `view_financial_reports`. Carried, unchanged.
+- **Should the dashboard's "Expenses" tile split into Cost of sales / Operating expenses?**
+  Carried, unchanged — `docs/tasks/211-manager-owner-dashboard.md`'s Open Questions.
+- **Should PIN issuance require a capability distinct from viewing the staff roster?** T-217 reused
+  `enrol_staff`. Carried, unchanged.
+- **SC/PWD discount ID/name capture and BIR 1601-E withholding tax** — both live compliance
+  exposures, neither v1 nor v2 handles either. Carried, unchanged.
+- **Service-charge distribution (T-187)** — do not enable service charge in POS before it exists
+  (DEF-082). Carried, unchanged.
 
 ## Traps that have actually bitten
 
-- **This repo is a shared tree, active today.** `ListAgents` before starting anything;
-  never run `build`/`test:integration` beside a busy peer without checking first (one
-  shared `shareat_test` DB) — a **per-lane test DB** (`shareat_test_lane25`, already
-  migrated, left in place by `ianla-25`) is available and works well for exactly this;
-  drop it when nobody needs it. Stage explicit paths, never `git add -A` — and even
-  explicit paths can sweep in a peer's concurrent edit to the same file (see the
-  DEF-175/176-in-`3e0089f` note above); say so plainly if it happens rather than
-  quietly re-editing history.
-- **Next.js 16.3's error-boundary recovery callback is `retry`, not `reset`** (stable
-  as of 16.3.0) — confirmed against `node_modules/next/dist/docs/.../error.md`'s own
-  version table before writing `error.tsx`/`global-error.tsx`. Worth checking the
-  bundled docs for any other file-convention component before assuming prior training
-  data still describes this version.
-- **`setPin` (`packages/auth/src/sessions.ts`) has no `authorize()` call of its own** —
-  unlike `enrolCard`/`enrolFingerprint`, which do. Any new caller needs to add its own
-  gate, not assume one exists. It also has the DEF-177 same-PIN-resubmit rough edge
-  (mapped to a friendly message in `staff/actions.ts`, not fixed at the source).
-- **`current_date` vs `(now() at time zone 'Asia/Manila')::date`** — bare `current_date`
-  follows the session timezone, wrong on a UTC server for any business-date comparison
-  (migration `0112`'s own comment; DEF-172, being fixed now in T-218).
-- **`trade_discrepancies.value` is written AT COST, not at the transfer rate** — a
-  schema doc comment said otherwise until DEF-175 fixed it today; read the code
-  (`packages/domain/src/commissary/transfer.ts`), not just the comment, before writing
-  arithmetic against that column.
+- ⛔ **We share the MACHINE, not just the tree — and you cannot trust your own belief about what
+  you stopped.** Tonight both sessions repeatedly believed processes were dead that were alive.
+  Three independent causes, each of which could only ever confirm what we already thought:
+  **(a)** stopping a backgrounded `npm run dev` / `npx vitest` kills the pipeline wrapper and
+  **orphans the real child** — seven live processes accumulated, including a 1.4 GB dev server,
+  while both sessions believed the machine was idle; **(b)** `pgrep -f vitest` in Git Bash
+  **cannot see Windows command lines** and silently returned nothing all evening; **(c)** a command
+  ending in `| grep …` **buffers**, so the log sits at 0 bytes until exit and a healthy run looks
+  dead. ⭐ **Verify by enumeration:**
+  `Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -like '*shareat-system*' }`
+  ⚠️ **Neither of tonight's two "the suite died" reports has any support left** — both are equally
+  consistent with a healthy run and a blind checker. Do not record them as OOM events.
+- **Vitest's default reporter prints nothing without a TTY** — a redirected log shows `RUN` and
+  then silence until the very end, indistinguishable from a hang. **Use `--reporter=dot`**;
+  `--maxWorkers=4` keeps parallelism without the memory spike. (`--reporter=basic` does not exist
+  in vitest 4 and dies with `ERR_LOAD_URL`, which reads like a project fault.)
+- **`git diff` shows whole-file rewrites in this repo and it is cosmetic.** `ROADMAP.html` reads as
+  ~2100 changed lines for ~5 real ones. It is a CRLF display artifact; **staging normalises** —
+  verified by identical blob hashes for LF and CRLF input via `git hash-object --path`. Read the
+  real diff with `git diff --ignore-cr-at-eol`. **Do not "fix" it.**
+- **`git add <path>` takes the whole file, and this tree is shared.** A peer's concurrent edit to
+  the same file lands in your commit. It happened three times today (`3e0089f`, `243da57`,
+  `39db5b8`). Say so plainly in the commit message rather than rewriting history.
+- **`next dev`'s worker pool wedges** — every dynamic `[id]` route returns 500 *"Jest worker
+  encountered 2 child process exceptions"* while static routes serve fine. It never self-heals.
+  Prove it is the server by hitting an untouched `[id]` route with a fake id, then kill by pid and
+  restart.
+- **`setPin` has no `authorize()` call of its own** — any new caller adds its own gate. Unchanged.
 
 ## The paste-ready prompt
 
 ```
 Read C:\Users\ianla\webapps\shareat-system\docs\HANDOFF-TODAY.md, then
-docs/RULES.md if you haven't this session. Pick up Phase 7's user/role
-management screen — assignRole/elevateManager (packages/auth/src/roles.ts)
-and accessRepo (packages/db/src/repo/access.ts) are fully built and tested
-with zero UI callers anywhere, same "done but uncalled" shape DEF-174 was.
-Write a docs/tasks/ spec first (RULES.md rule 8) before implementing, and
-confirm with Ian whether store creation/management is in scope for the same
-task or a separate one — no backing function for creating a store was found
-this pass. Check ListAgents first: ianla-25 may still be on T-218
-(packages/db/src/repo/findings.ts) in this same shared tree.
+docs/RULES.md if you haven't this session.
+
+Everything is committed and pushed at 40a0cd0 and the tree is clean —
+T-219 (users and roles) and T-218 (findings clock) both shipped, gates
+green except DEF-170's known-red golden master.
+
+Pick up DEF-183: person_roles' RLS policy checks the row's org_id, never
+the person's, unlike person_store_scope and person_grants which derive it
+through the person with an explicit WITH CHECK. A cross-org role
+assignment was therefore allowed; T-219 closed it at the call site in
+assignRoleAsActor, but RULES.md 6.3 says the database should enforce it.
+Write the migration. A person-keyed access table must use the via_person
+form whether or not it carries its own org_id.
+
+Then, if Ian agrees: spec store creation/management (Phase 7's other
+half, deferred 2026-09-05). It is not a form — see the handoff's "Pick up
+here" item 2 for the two constraints that make it a design pass.
+
+Check ListAgents first — this repo is a shared tree, and verify processes
+by enumeration, not by belief. See the handoff's traps section.
 ```
