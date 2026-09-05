@@ -6,93 +6,94 @@
 > generated from the headings below and verified by `tests/unit/toc-freshness.test.ts` —
 > if they are wrong, the build fails rather than misdirecting you.
 
-- ` 116–120   ` 0. Standing directive — how Claude engages
-  - ` 121–133   ` 0.1 The division of authority
-  - ` 134–149   ` 0.2 Brainstorm before executing
-  - ` 150–157   ` 0.3 Side with the project
-  - ` 158–173   ` 0.4 Push back — including hard
-  - ` 174–182   ` 0.5 What this does not license
-- ` 183–203  ` 1. Prime directive
-  - ` 204–229  ` 1.1 The real goal: CORRECT and SIMPLE accounting
-  - ` 230–254  ` 1.2 The four verbs — the editorial doctrine
-  - ` 255–266  ` 1.2a Reference repos — hands off, ALL of them
-  - ` 267–310  ` 1.2b How to read the reference repos — intent is authoritative, implementation is not
-  - ` 311–347  ` 1.2c UI/UX — one family, upgraded, not reinvented
-  - ` 348–378  ` 1.3 The parity contract — what is fixed, what is free
-  - ` 379–393  ` 1.4 The migration is the audit
-  - ` 394–414  ` 1.5 The three tests for data-layer decisions
-  - ` 415–423  ` Why re-platform at all
-  - ` 424–432  ` What is explicitly NOT in scope
-- ` 433–470  ` 2. Non-negotiables
-- ` 471–472  ` 3. Execution model — how work gets done
-  - ` 473–482  ` 3.1 The division of labour
-  - ` 483–510  ` 3.1a Which model, and why — Ian, 2026-08-23
-  - ` 511–522  ` 3.2 The work loop
-  - ` 523–535  ` 3.3 Task spec format (docs/tasks/NNN-<slug>.md)
-  - ` 536–553  ` 3.4 Subagent rules
-  - ` 554–575  ` 3.4a Report a spec defect; never work around it silently
-  - ` 576–583  ` 3.5 Reporting to Ian
-  - ` 584–601  ` 3.6 Research before planning — Ian, 2026-08-23
-  - ` 602–609  ` When it applies
-  - ` 610–628  ` Four guards, or this degrades into delay
-- ` 629–630  ` 4. Architecture — the relational core
-  - ` 631–647  ` 4.1 Stack
-  - ` 648–675  ` 4.2 Schema principles
-  - ` 676–696  ` 4.3 Application layering
-  - ` 697–726  ` 4.4 Reference data and seeds — how the duplicate-Rent problem dies
-- ` 727–731  ` 5. Architecture — the Firebase hot lane
-  - ` 732–764  ` 5.1 The two-lane contract
-  - ` 765–793  ` 5.2 What v1 actually does offline — and why v2 changes it
-  - ` 794–844  ` 5.3 The hot set — closed list
-  - ` 845–846  ` 5.4 Offline write-back rules
-  - ` 847–857  ` 5.3 Offline write-back rules
-- ` 858–859  ` 6. Data conventions
-  - ` 860–867  ` Money
-  - ` 868–878  ` Dates & time
-  - ` 879–884  ` Identifiers
-  - ` 885–889  ` Naming
-  - ` 890–895  ` Nulls
-- ` 896–938  ` 7. Security model
-  - ` 939–969  ` 7.1 Identity — the v1 mess, and the v2 rule
-- ` 970–971  ` 8. Repo & environment
-  - ` 972–1006 ` Layout
-  - `1007–1016 ` Ports — reserved, never shared
-  - `1017–1047 ` Build discipline — two rules, both absolute
-  - `1048–1058 ` Git
-- `1059–1075 ` 9. Definition of done
-  - `1076–1083 ` Parity gate
-- `1084–1118` 10. Phase plan
-- `1119–1135` 11. Migration & ETL rules
-- `1136–1184` 12. Inherited landmines — do not repeat these
-- `1185–1363` 13. Decision log
-- `1364–1383` 14. Amendment protocol
-- `1384–1388` 15. Engineering standards — the industry practices this project follows
-  - `1389–1394` 15.1 Build order: walking skeleton first
-  - `1395–1406` 15.2 Golden-master testing — the most important practice here
-  - `1407–1415` 15.3 Strangler Fig, not big-bang cutover
-  - `1416–1420` 15.4 No dual-write
-  - `1421–1425` 15.5 Expand/contract migrations
-  - `1426–1434` 15.6 Observability from day zero, not later
-  - `1435–1439` 15.7 CI gates
-  - `1440–1444` 15.8 Backups and a tested restore
-  - `1445–1449` 15.9 Twelve-Factor config
-  - `1450–1457` 15.10 Append-only ledgers — but not event sourcing
-  - `1458–1462` 15.11 Defence in depth
-  - `1463–1491` 15.12 Skills are lenses, not assurance
-  - `1492–1498` 15.13 Reconciliation is a permanent feature
-- `1499–1503` 16. The accounting spine
-  - `1504–1535` 16.0 What we are actually fixing — the diagnosis
-  - `1536–1579` 16.1 The ten invariants — non-negotiable
-  - `1580–1594` 16.2 The oracle: how "correct" is tested
-  - `1595–1616` 16.3 The model — header + lines, not legs
-  - `1617–1636` 16.4 Deliberately simpler than ERPNext
-  - `1637–1703` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1704–1728` 16.6 What v1 already gets right — preserve the intent
-  - `1729–1750` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1751–1765` 16.8 What v1's accounting already gets right
-  - `1766–1809` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1810–1860` 16.10 Posting patterns — one canonical pattern per business event
-  - `1861–1892` 16.11 Inventory's accounting integration
+- ` 117–121   ` 0. Standing directive — how Claude engages
+  - ` 122–134   ` 0.1 The division of authority
+  - ` 135–150   ` 0.2 Brainstorm before executing
+  - ` 151–158   ` 0.3 Side with the project
+  - ` 159–174   ` 0.4 Push back — including hard
+  - ` 175–183   ` 0.5 What this does not license
+- ` 184–204  ` 1. Prime directive
+  - ` 205–230  ` 1.1 The real goal: CORRECT and SIMPLE accounting
+  - ` 231–255  ` 1.2 The four verbs — the editorial doctrine
+  - ` 256–267  ` 1.2a Reference repos — hands off, ALL of them
+  - ` 268–311  ` 1.2b How to read the reference repos — intent is authoritative, implementation is not
+  - ` 312–348  ` 1.2c UI/UX — one family, upgraded, not reinvented
+  - ` 349–386  ` 1.2d The discovery method — synthesize the goal, weigh the live data, then build it better
+  - ` 387–417  ` 1.3 The parity contract — what is fixed, what is free
+  - ` 418–432  ` 1.4 The migration is the audit
+  - ` 433–453  ` 1.5 The three tests for data-layer decisions
+  - ` 454–462  ` Why re-platform at all
+  - ` 463–471  ` What is explicitly NOT in scope
+- ` 472–509  ` 2. Non-negotiables
+- ` 510–511  ` 3. Execution model — how work gets done
+  - ` 512–521  ` 3.1 The division of labour
+  - ` 522–549  ` 3.1a Which model, and why — Ian, 2026-08-23
+  - ` 550–561  ` 3.2 The work loop
+  - ` 562–574  ` 3.3 Task spec format (docs/tasks/NNN-<slug>.md)
+  - ` 575–592  ` 3.4 Subagent rules
+  - ` 593–614  ` 3.4a Report a spec defect; never work around it silently
+  - ` 615–622  ` 3.5 Reporting to Ian
+  - ` 623–640  ` 3.6 Research before planning — Ian, 2026-08-23
+  - ` 641–648  ` When it applies
+  - ` 649–667  ` Four guards, or this degrades into delay
+- ` 668–669  ` 4. Architecture — the relational core
+  - ` 670–686  ` 4.1 Stack
+  - ` 687–714  ` 4.2 Schema principles
+  - ` 715–735  ` 4.3 Application layering
+  - ` 736–765  ` 4.4 Reference data and seeds — how the duplicate-Rent problem dies
+- ` 766–770  ` 5. Architecture — the Firebase hot lane
+  - ` 771–803  ` 5.1 The two-lane contract
+  - ` 804–832  ` 5.2 What v1 actually does offline — and why v2 changes it
+  - ` 833–883  ` 5.3 The hot set — closed list
+  - ` 884–885  ` 5.4 Offline write-back rules
+  - ` 886–896  ` 5.3 Offline write-back rules
+- ` 897–898  ` 6. Data conventions
+  - ` 899–906  ` Money
+  - ` 907–917  ` Dates & time
+  - ` 918–923  ` Identifiers
+  - ` 924–928  ` Naming
+  - ` 929–934  ` Nulls
+- ` 935–977  ` 7. Security model
+  - ` 978–1008 ` 7.1 Identity — the v1 mess, and the v2 rule
+- `1009–1010 ` 8. Repo & environment
+  - `1011–1045 ` Layout
+  - `1046–1055 ` Ports — reserved, never shared
+  - `1056–1086 ` Build discipline — two rules, both absolute
+  - `1087–1097 ` Git
+- `1098–1114` 9. Definition of done
+  - `1115–1122` Parity gate
+- `1123–1157` 10. Phase plan
+- `1158–1174` 11. Migration & ETL rules
+- `1175–1223` 12. Inherited landmines — do not repeat these
+- `1224–1403` 13. Decision log
+- `1404–1423` 14. Amendment protocol
+- `1424–1428` 15. Engineering standards — the industry practices this project follows
+  - `1429–1434` 15.1 Build order: walking skeleton first
+  - `1435–1446` 15.2 Golden-master testing — the most important practice here
+  - `1447–1455` 15.3 Strangler Fig, not big-bang cutover
+  - `1456–1460` 15.4 No dual-write
+  - `1461–1465` 15.5 Expand/contract migrations
+  - `1466–1474` 15.6 Observability from day zero, not later
+  - `1475–1479` 15.7 CI gates
+  - `1480–1484` 15.8 Backups and a tested restore
+  - `1485–1489` 15.9 Twelve-Factor config
+  - `1490–1497` 15.10 Append-only ledgers — but not event sourcing
+  - `1498–1502` 15.11 Defence in depth
+  - `1503–1531` 15.12 Skills are lenses, not assurance
+  - `1532–1538` 15.13 Reconciliation is a permanent feature
+- `1539–1543` 16. The accounting spine
+  - `1544–1575` 16.0 What we are actually fixing — the diagnosis
+  - `1576–1619` 16.1 The ten invariants — non-negotiable
+  - `1620–1634` 16.2 The oracle: how "correct" is tested
+  - `1635–1656` 16.3 The model — header + lines, not legs
+  - `1657–1676` 16.4 Deliberately simpler than ERPNext
+  - `1677–1743` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1744–1768` 16.6 What v1 already gets right — preserve the intent
+  - `1769–1790` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1791–1805` 16.8 What v1's accounting already gets right
+  - `1806–1849` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1850–1900` 16.10 Posting patterns — one canonical pattern per business event
+  - `1901–1932` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -103,7 +104,7 @@
 
 | | |
 |---|---|
-| **Version** | 3.4 — **UI/UX is a third authority alongside §1.2b: v1's screens are familiar-but-upgraded, not reinvented, and ERP/POS/CUSTOMER are one visual family (§1.2c).** Carries 3.3 (an unverified supplier invoice may carry a DRAFT expense), 3.2 (inventory is PERPETUAL from v2's first posting; a return is a credit in both directions), 3.1 (no SC/PWD statutory record is kept) and 3.0 (the card id joins the hot set) — §13 rows 164–171 |
+| **Version** | 3.5 — **Discovery has a stated method (§1.2d): synthesize v1's goal in writing, weigh whether the live data is in good shape, then design v2 to beat that goal — v1 is the flawed version, v2 is the improved one.** Carries 3.4 (UI/UX is a third authority: familiar-but-upgraded screens, one visual family across ERP/POS/CUSTOMER), 3.3 (an unverified supplier invoice may carry a DRAFT expense), 3.2 (inventory is PERPETUAL from v2's first posting; a return is a credit in both directions), 3.1 (no SC/PWD statutory record is kept) and 3.0 (the card id joins the hot set) — §13 rows 164–172 |
 | **Created** | 2026-08-22 |
 | **Last amended** | 2026-09-05 |
 | **Status** | Accounting-correctness project (§1.1). All discovery complete. Root cause identified (§16.0). **Chart of accounts aligned and signed off.** Ready to write Phase 0/1 task specs. |
@@ -344,6 +345,44 @@ statement`, or any other already-shipped screen. The next surfaces it applies to
 `docs/plans/phase-6-reporting-and-dashboards.md`'s remaining tasks (T-209b/c, T-211). A concrete
 design system (shared tokens, a component catalogue) is future planning work, not decided here —
 this row records the standing principle a future pass works from.
+
+### 1.2d The discovery method — synthesize the goal, weigh the live data, then build it better
+
+*Ian, 2026-09-05: "v1 is a flawed version v2 is the improved version. discovery agent must study
+v1, synthesize what the v1 feature goal is or it tries to achieve, evaluate the live data if it
+is in good shape, with the goal of v1 as guide study how v2 can achieve the better more acurate
+correct improved output in more efffective and efficient way."*
+
+§1.2b says what v1 is authoritative **about**. This says **how** a discovery pass gets from
+reading v1 to designing v2 — four steps, in order, stated in every discovery doc and in any task
+spec that ports a v1 capability.
+
+1. **Study v1 at source.** The code, not a summary of the code (§2.1 — reading needs no
+   permission and no announcement; guessing is the expensive option).
+2. ⭐ **Synthesize the goal, in writing.** Not *"what does this code do"* but *"what was this
+   built to achieve for the business."* §1.2b already asks the question; this makes the answer a
+   **stated deliverable**, because everything downstream — the four verbs, the scope, the tests —
+   is measured against it. **A goal nobody wrote down cannot be improved on; it can only be
+   copied**, which is exactly how a flawed implementation survives a rebuild meant to correct it.
+3. ⭐ **Evaluate whether the live data is in good shape.** Count it before trusting it: is the
+   collection populated, internally consistent, and — the half that is always missed — **actually
+   consumed by anything downstream?** ⚠️ A module can be fully built, daily-used and still prove
+   nothing. §13 row 166 is the standing example: 624 attendance sessions in one month, 136
+   overtime records, and `payrollRuns` at **zero, ever**. The code looked proven; the data showed
+   the loop was never closed. ⛔ **A bad-data finding is not a footnote — it downgrades v1 from
+   proven practice to evidence of the need only**, and the v2 rule is then designed from first
+   principles rather than ported (row 166's own consequence: T-157b *replaced* the span anchor
+   instead of preserving it). Log what the count showed through row 167's three doors.
+4. ⭐ **Design v2 against the goal from step 2, never against v1's implementation.** The bar is
+   not *"avoid v1's flaw"* — it is **more accurate, more correct, more effective and more
+   efficient at the same goal**, and the discovery doc says in what way. §1.2's four verbs are
+   how the call gets made; this is what the call is measured against.
+
+**v1 is the flawed version; v2 is the improved one — stated plainly, so it stops being implicit.**
+This relaxes nothing: v1 still owns intent and never mechanism (§1.2b), correct practice still
+wins where the two disagree (§1.3), and removing a capability is still Ian's call (§1.2). It names
+the method — so a pass produces a goal, a data verdict and a stated improvement, rather than a
+retelling of what v1 does.
 
 ### 1.3 The parity contract — what is fixed, what is free
 
@@ -1359,6 +1398,7 @@ just a patch.**
 | 169 | 2026-08-29 | ⭐ **A RETURN IS A CREDIT, IN BOTH DIRECTIONS — AND THE GOODS COME BACK INTO INVENTORY AT THE COST THEY LEFT AT.** | Ian: *“supplier returns must be recognized as store credit for us that we can use for next purchase — that's for external suppliers. Us being the supplier to other customers, return to us must be treated the same I guess: store credit customer may use, or we refund.”* ⭐ **This closes `CAPABILITY-GAPS.md`'s standing “Needs Ian” on supplier returns, and it answers a question nobody had asked — the customer side, which no phase owned at all.** ⛔ **v1's supplier return is deliberately stock-and-audit-trail only**, with an operator-checked `apAlreadyHandled` box as a UI nudge; v1 called it *“a documentation gap, not data corruption.”* Under perpetual inventory that compromise stops being available: stock moves and the books do not, which breaks invariant 6 the moment the control account is real. **Two directions, and the account each lands in already exists:** goods **we** return to an external supplier credit `1240 Advances to suppliers` (party = supplier) when the receipt was invoiced, or `2120` when it was not — because an uninvoiced return simply means they will bill us less, and no credit arises; goods **a customer** returns to us credit `2140 Customer store credits payable` (party = customer), drawn down against their next order, **or refunded in cash** — their choice, recorded. ⭐ **The inventory half is the part v1 has no concept of at all:** returned goods re-enter stock as a **new FIFO layer at the cost the original consumption actually relieved**, reconstructed from `stock_layer_consumptions`' snapshotted unit cost — not at today's cost, which would silently re-value the return. ⚠️ **Two branches that must be explicit decisions, never assumptions:** goods returned **unsaleable** bring back no inventory and land in `5300`; and **an INTERNAL branch-to-commissary return is not a credit at all** — it is T-173's transfer run backwards (`1250`/`2150`), because a branch has no credit relationship with its own commissary. That falls straight out of ADR-008 §8's *“a mode is a fork; a derived treatment is a fact”* — the same `counterparty` fact that already decides how a dispatch posts decides how a return posts. | Yes — §16.11 gains the return rule; T-170 respecified, T-179 added |
 | 170 | 2026-08-31 | ⭐ **AN UNVERIFIED SUPPLIER INVOICE MAY CARRY A DRAFT EXPENSE. THE GATE MOVES FROM "AN EXPENSE MAY NOT EXIST" TO "AN EXPENSE MAY NOT POST"** (T-196) | Ian: *“we will improve that unverified receipt can then be posted against draft expense so cashier does not need verification to start recording. when receipt is verified the expense are posted. when receipt is rejected voided the draft expense is deleted or the posted expense is also voided.”* ⭐ **The rule T-130 built is right; its TIMING was the cost.** `expenses_check_invoice_open_for_recording()` (migration `0043:328`) refuses the expense ROW unless its invoice is already `verified`, and `recordExpenseForInvoice` requires **both** `create_expense` and `approve_expense` — so a cashier holding only `create_expense` **cannot record an expense at all**. Three people, strictly ordered, before a ₱300 purchase reaches the books, and **the one person who knows what the money was for is the one who cannot write it down.** ⭐ **This is row 126 generalised** — *“verification is what posts”*, already the rule for sales days — **and row 122 made unconditional**: *“Capture is always allowed; VERIFICATION is what is withheld… record the draft with its photo while memory is fresh.”* Row 122 decided exactly this shape for the closed-period case and nothing carried it to the ordinary one. ⚠️ **v1 is NOT the precedent here and the spec must not claim it is:** v1 writes every expense `status: 'posted'` immediately (`expense.actions.ts:627`) and its `canTagExpenseToReceipt` gate is `verified && open` — v1 cannot record before verification either. **This is an `add`, not a `duplicate`.** ⭐ **The change is small because T-130 already built every part except a reachable draft state:** `expenses.status` has carried `'draft'` since migration 0015, `approveExpense` has always been a separate verb, `deleteExpenseDraft` and `editExpense` are draft-only and shipped. **And the capacity arithmetic needs no change at all** — it already sums `status <> 'voided'`, which includes drafts, so a pending invoice cannot be over-committed and DEF-057's *“one receipt, many expenses, evidence attached once”* survives for free. ⛔ **It creates one defect that must be fixed in the same task:** `voidInvoice` cascades `liveExpensesForInvoice` through `voidExpense`, which **throws on a draft** (*“nothing has been posted yet to void”*). Once drafts can exist on a pending invoice, voiding one fails outright — so the cascade branches: `draft` → `deleteExpenseDraft` (row 125, a draft is not a financial record), `posted` → `voidExpense` (reversal; both entries stand). ⭐ **Verification must SHOW what it is about to post, and that is a control rather than polish.** The four attestations assert *the document is genuine*; posting asserts *the coding is right* — 5100 COGS vs 6500 Supplies vs 3200 owner's drawings, which drives row 160's drawing limit and the tax treatment. Different assertions, one click. A fifth checkbox is the wrong fix: **you cannot attest to what you cannot see.** ⛔ **Three things deliberately NOT built, each argued and refused:** (1) **no `rejected` status** — v1 has none either (`ReceiptPlain.status` is `pending` / `verified` / `voided`; `rejectionReason` is written only by the void path), and a rejected and a voided invoice would need identical cascades and identical reporting, so the difference would live in a word; (2) **evidence stays UNCONDITIONAL** — v1's per-category `needReceipts` is not ported, because it is precisely why v1 needs a detective scan for orphan expenses (`detect.ts:137`) and why its recurring-expense path bypasses the gate entirely; paperless spend gets a signed voucher, photographed, which is a document; (3) **no clearing entry at draft** — cash leaves the drawer before the books move, but the instrument for that is the till count (*counted cash + held receipts = expected*, row 128's imprest self-check), not a second journal entry per expense. ⚠️ **And the honest note on (3): this task does not create that gap, it NARROWS it** — today the spend cannot even be drafted, so the drawer is short with nothing anywhere naming the amount. | Yes — this row, and T-196. **No prose section stated the old gate** (it lived only in T-130's spec and the trigger), so there is nothing to rewrite — worth recording, because a rule enforced only in a migration is a rule the bible cannot arbitrate |
 | 171 | 2026-09-05 | ⭐ **UI/UX IS A THIRD AUTHORITY, ALONGSIDE §1.2B'S WHAT/HOW SPLIT: v1'S SCREENS ARE FAMILIAR-BUT-UPGRADED, NOT REINVENTED, AND ALL THREE APPS ARE ONE FAMILY.** (§1.2c) | Ian: *"the ui/ux design of this app must be an upgraded version of v1. i want it to be uniform flexible across screens and respect the workflow of records like v1. all in all i want it to feel familiar but improved one… i want the 3 apps erp, pos and customer to look and feel like they belong to one family… actually in ui POS has cleaner [UI] than erp."* ⭐ **Extends row 6** (*"port the UI layer, rewrite the data layer"*) from a build-order decision into a standing design rule, with three additions row 6 never stated: workflow familiarity is the FLOOR not the ceiling (upgrade the presentation, keep the record workflow recognisable); one uniform, reusable pattern set across screens, the same anti-duplication discipline §4.2 already requires of the data layer; and — new scope — `apps/pos`/`apps/customer` (reserved, §8) must share ERP's visual language once built, not diverge as three separate products. ⭐ **Names POS, not ERP-rebuild, as the presentation-quality reference** where the two disagree — narrower than §1.2b's WHAT/HOW split, which stays intact: this only says whose *presentation layer* to draw from when duplicating (§1.2). Does not reopen any already-shipped screen. | Yes — a future design-system pass (tokens, shared components) is not decided here, only the principle it will work from |
+| 172 | 2026-09-05 | ⭐ **DISCOVERY HAS A METHOD, AND IT IS NOW A RULE: STUDY v1 → SYNTHESIZE ITS GOAL IN WRITING → WEIGH WHETHER THE LIVE DATA IS IN GOOD SHAPE → DESIGN v2 AGAINST THAT GOAL, MORE ACCURATE AND MORE EFFICIENT THAN v1 MANAGED.** (§1.2d) | Ian: *"v1 is a flawed version v2 is the improved version. discovery agent must study v1, synthesize what the v1 feature goal is or it tries to achieve, evaluate the live data if it is in good shape, with the goal of v1 as guide study how v2 can achieve the better more acurate correct improved output in more efffective and efficient way."* ⭐ **Step 3 generalises row 166, which was logged as one module's lesson and never made binding:** *"before treating a v1 module as proven practice, check that anything downstream ever CONSUMED it. Reading the code cannot tell you that; counting the collection can, and it took one command."* That sentence has been true of every module since, and nothing obliged the next pass to act on it — so it is now a step, with its consequence stated: **bad data downgrades v1 from proven practice to evidence of the NEED only**, and the v2 rule is designed from first principles rather than ported. ⭐ **Step 2 is the other addition, and the quieter one.** §1.2b already says to ask *what problem was this solving*; it never said to **write the answer down**. An unwritten goal cannot be improved on — only copied — which is precisely how a flawed implementation survives a rebuild that was meant to correct it. ⚠️ **Sharpens §1.2b and replaces nothing:** v1 stays authoritative about WHAT and never about HOW (row 84), §1.3's practice-wins rule is untouched, and DELETE remains Ian's call (§1.2). ⭐ **First applied the same day, to the assessment that prompted the row.** v1's two production engines — meat slicing with per-output pay (`production.actions.ts`, 1,100 lines) and recipe cook with no pay concept at all (`production-recipe.actions.ts`, 513) — were read for their goal rather than their shape, and T-176 turned out to have already merged them into one kind-agnostic engine. **Reading the code alone would have proposed rebuilding a merge that shipped the day before**; reading for the goal found the real open question, which is Phase 5's pay attribution (`CAPABILITY-GAPS.md`'s unowned *"Slicer per-piece pay"*, absent from `phase-5-payroll.md` entirely). | Yes — §1.2d added |
 
 
 ## 14. Amendment protocol
