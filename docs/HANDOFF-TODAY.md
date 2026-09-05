@@ -86,8 +86,12 @@ A sweep for coverage-claiming phrases that name no test was discussed and **deli
 smuggled into either task** — it is Ian's to schedule.
 
 **Decisions of Ian's this session:** one — **store creation/management is a separate task from
-user/role management** (2026-09-05). Recorded in `docs/tasks/219-user-and-role-management.md`'s
-*Out of scope* with the reasoning. `ianla-25` confirms no design decisions of Ian's arose in their
+user/role management** (2026-09-05). Recorded as **`PROJECT_BIBLE.md` §13 row 174**, and in
+`docs/tasks/219-user-and-role-management.md`'s *Out of scope* with the reasoning. ⭐ The row keeps
+the generalisable half: the blueprint bundled *"admin/users, admin/stores"* because both are admin
+screens, but **screen location is not a unit of work — what backs a screen is.** One was a caller
+away from done; the other has no `createStore`-shaped function anywhere. Worth checking other
+bundled phase items the same way, by opening the functions rather than reading the plan. `ianla-25` confirms no design decisions of Ian's arose in their
 session; everything in T-212/T-218 was their own judgement and is already in the task docs and
 register rows. **Nothing is left living only in a transcript.**
 
@@ -173,7 +177,8 @@ Phase 6 chip refreshed (`39db5b8`, `40a0cd0`).
 Read C:\Users\ianla\webapps\shareat-system\docs\HANDOFF-TODAY.md, then
 docs/RULES.md if you haven't this session.
 
-Everything is committed and pushed at 40a0cd0 and the tree is clean —
+Everything is committed and pushed and the tree is clean — confirm with
+`git status` and `git log --oneline -8` rather than trusting this line.
 T-219 (users and roles) and T-218 (findings clock) both shipped, gates
 green except DEF-170's known-red golden master.
 
