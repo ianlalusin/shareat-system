@@ -1,8 +1,8 @@
 # T-212 — Commissary and inventory KPIs
 
-> **Status:** query layer + tests **shipped 2026-09-05**; the three dashboard tiles are held pending
-> T-211's commit (§"Wiring"). **Depends on:** T-211 (the dashboard
-> route itself — in progress in this shared tree by `ianla-15`), Phase 3 Wave 2 (T-172/T-173/T-174,
+> **Status:** ✅ **SHIPPED 2026-09-05** (`f6350bd`, not pushed — Ian's call). Query layer, tests and
+> the three dashboard tiles are all in. **Depends on:** T-211 (the dashboard
+> route itself — shipped by `ianla-15` as `3e0089f`), Phase 3 Wave 2 (T-172/T-173/T-174,
 > shipped). Named in `docs/plans/phase-6-reporting-and-dashboards.md` Wave 2, and inherited
 > explicitly from `docs/plans/phase-3-inventory.md` §5.3 row 27 and §8, both of which defer
 > *"commissary dashboard KPIs"* to Phase 6.
@@ -324,7 +324,8 @@ rather than a silent gap between two shipped tasks.
 - [x] Self-reviewed line by line.
 - [x] DEF-175 filed for the stale `value` comment; the comment fixed.
 - [x] DEF-176 filed for the missing `receivingDisputeOverdue` detector.
-- [ ] Tiles wired onto T-211's dashboard — **blocked on `ianla-15`'s commit**, by agreement.
-- [ ] `docs/ROADMAP.html` T-212 row updated — ⚠️ **deferred with the tiles; another session holds an
-      in-flight edit to that file and the row is not true until the tiles land.**
+- [x] Tiles wired onto T-211's dashboard, rebased on `ianla-15`'s commit `3e0089f` as agreed —
+      three tiles, live-smoketested on 9008 (see above).
+- [x] `docs/ROADMAP.html` T-212 row marked done and the Phase 6 chips refreshed, once the file was
+      clear of the other session's in-flight edit.
 - [x] This file's status line updated.
