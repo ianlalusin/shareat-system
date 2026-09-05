@@ -1,14 +1,63 @@
 # T-219 — User and role management (`/admin/users`)
 
-> **Status:** 📋 **Specified, not started.** Written 2026-09-05 by the Opus planner after the
-> T-211/T-217 session's handoff named this the largest remaining "built but no caller" gap.
-> Closes **DEF-167**. **Depends on:** nothing — every primitive it needs is built, tested and
-> exported today. Numbered 219 because 213–216 are reserved by
-> `docs/plans/phase-6-reporting-and-dashboards.md`, 217 shipped, and 218 is in flight with
+> **Status:** ✅ **Built and smoketested, 2026-09-05.** `/admin/users` and
+> `/admin/users/[personId]` ship, with `assignRoleAsActor` (the gated entry point carrying §C.1
+> and both lockout guards), `assignRole`'s §C.2 store-scope materialisation, and
+> `personsRepo.listWithAccessForOrg`. Closes **DEF-167**; fixes **DEF-180** and **DEF-181**;
+> found and fixed **DEF-182** and **DEF-183** on the way. **19 new integration tests**, each
+> watched fail first (12 in `packages/auth/tests/integration/roles.test.ts`, 6 in
+> `packages/db/tests/integration/persons.test.ts`, plus the cross-org one).
+> **Live-smoketested on 9008, 20/20** (headless Chromium, screenshots reviewed): §C.1's refusal
+> renders as a real sentence; appointing an admin reports *"granted store scope for 3 store(s)"*
+> — **3, not 4, because one store is inactive**, so the active-store exclusion holds in the app
+> and not only in a test; the last admin cannot be demoted; the self page offers no role form at
+> all; a demoted admin keeps their scope rows and the page says why; grant/revoke round-trips and
+> a revoked grant stays visible with its date; **zero horizontal overflow at 1280 AND 390**
+> (DEF-149's lesson — measured, not eyeballed). ⭐ **The list page is the argument for the task**:
+> the four `SMOKETEST T217` people, hired and PIN-issued that same morning, all render
+> *"no role — cannot do anything"* — real rows, not fixtures.
+> **Depends on:** nothing — every primitive it needs was built, tested and exported already.
+> Numbered 219 because 213–216 are reserved by
+> `docs/plans/phase-6-reporting-and-dashboards.md`, 217 shipped, and 218 was in flight with
 > `ianla-25`.
 >
 > ⚠️ **Scope decided by Ian, 2026-09-05:** user/role management **only**. Store
 > creation/management is explicitly **not** in this task — see *Out of scope*.
+
+## ⚠️ Deviations from this spec, made while implementing — reported, not slipped in
+
+Per `docs/RULES.md` §3.4a (*"report a spec defect; never silently work around it"*). The planner
+and the implementer were the same session here, which makes writing these down more important,
+not less — nobody else was going to catch them.
+
+1. **§C.1's check lives in `packages/auth/src/roles.ts`, in a new `assignRoleAsActor`, NOT in the
+   server action** as §3a below says. §C.1's literal words are *"the role-assignment server action
+   carries that extra condition"*, written when no screen existed. Its actual rule is the sentence
+   above that one: *"the check belongs at the call site and must be tested there."* A rule living
+   in one route file is a rule the second caller misses — **which is exactly how DEF-180 happened**
+   — and a Next server action cannot be integration-tested against real Postgres without a Next
+   runtime. `assignRoleAsActor` is now the single gated entry point (authorize → self guard → §C.1
+   → last-admin guard → delegate); `assignRole` stays the ungated primitive T-121 deliberately made
+   it. The server action is a thin adapter, as every other action in this app is.
+2. **`packages/db/src/repo/access.ts` gained `hasOtherActiveAdmin`**, which this spec's *Do not
+   touch* forbade. The last-admin guard must ask *"is there another admin, excluding this person?"*
+   and `hasActiveAdmin` cannot express it — the person being demoted still holds the role when the
+   guard runs. Access SQL lives nowhere else, so the alternative was a worse rule-break. The spec
+   was wrong to forbid it outright; it should have said "add only a read, and say so."
+3. **`packages/db/src/index.ts`** exports `PersonWithAccessRow`, `GrantRow`, `ActiveRoleRow` and
+   `RoleName` — the screens cannot type their own props otherwise. Not in the Scope list; a
+   barrel-only change.
+4. **`apps/erp/src/app/staff/[employmentId]/page.tsx`** gained the "Role and access" cross-link.
+   §1 asked for this link in prose but the Scope list did not name the file.
+5. **Test files** landed at `packages/auth/tests/integration/roles.test.ts` (12 tests) and
+   `packages/db/tests/integration/persons.test.ts` (6 tests). The spec named neither path.
+6. **A third defect was found and filed: DEF-182** — `roles.ts`'s own doc comment asserted the
+   authority chain was *"enforced by the CALLER via `authorize()` before this function is ever
+   reached"*, which §C.1 proves is impossible. Corrected in place.
+7. **`assignRoleAsActor` also checks the target belongs to the actor's org** — not in this spec,
+   which assumed RLS covered it. It does not: **DEF-183**, proved by a test that expected a
+   refusal and got a successful write. `person_roles`'s policy checks only the row's `org_id`,
+   not the person's. The real fix is a migration; see Open questions.
 
 ## Why this exists
 
@@ -258,6 +307,14 @@ Opus planner amends; an implementer reports and stops).
 
 ## Open questions
 
+- ⭐ **`person_roles`'s RLS policy should be tightened to match its two siblings — needs a
+  migration, so not done here.** DEF-183: `person_store_scope` and `person_grants` derive their
+  org through the person they name and refuse a cross-org write at the database;
+  `person_roles` checks only `org_id = app_current_org()`, which a row naming this org and
+  another org's person satisfies. T-219 closes it at the call site in `assignRoleAsActor`, but
+  RULES §6.3 is explicit that the database should enforce this, not one function. **Whoever
+  next writes an access migration should add the person-org `EXISTS` clause to that policy's
+  `WITH CHECK`.**
 - **Should `manage_users` move to `manager`, scoped to their own org?** `CAPABILITY-MATRIX.md`
   §Open 3 already predicts this as *"the friction point"* and sets the trigger: *"if it happens
   twice, move it."* Building this screen is what will produce the first real evidence either way —
