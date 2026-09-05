@@ -139,6 +139,25 @@ export async function positionOf(
 }
 
 /**
+ * ⭐ T-209b — the whole register's control balance, org-wide or for one store. Mirrors
+ * `apRepo.orgAgingTotal` pointed the other way (`1210` is an asset, `debit - credit`).
+ */
+export async function orgAgingTotal(tx: Tx, orgId: string, storeId?: string): Promise<string> {
+  const [row] = (await tx.execute(sql`
+    select coalesce(sum(jl.debit - jl.credit), 0)::text as balance
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId}
+      and jl.party_type = ${PARTY_TYPE}
+      and a.code = ${AR_CONTROL_CODE}
+      and je.status <> 'draft'
+      ${storeId ? sql`and jl.store_id = ${storeId}` : sql``}
+  `)) as unknown as Record<string, string>[];
+  return Number(row?.balance ?? 0).toFixed(2);
+}
+
+/**
  * ⭐ T-179. A customer's spendable store credit — `2140`, party-filtered, never a stored balance
  * (DEF-075). Mirrors T-170's `advancesPositionOf` (`repo/ap.ts`) pointed the other way: `2140` is
  * a LIABILITY, so its balance is `credit - debit`, opposite `positionOf`'s asset-side `1210`.

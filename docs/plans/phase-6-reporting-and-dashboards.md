@@ -394,7 +394,7 @@ check before writing `docs/tasks/209-*.md`.
 | # | Task | State / depends on |
 |---|---|---|
 | **T-209a** ✅ | **The balance sheet.** Shipped 2026-09-05 (`docs/tasks/209-reporting-read-model-and-statements.md`) — `v_balance_sheet` (a fourth view, type-signed like `v_income_statement`, never per-row `normal_balance` like `v_trial_balance`), `getBalanceSheet`, `/reports/balance-sheet`. ⭐ Folds unclosed net income into Equity as a derived "Current period earnings" line so the equation ties on any date, not only right after a year-close — found live while implementing, not planning: a first draft without it failed its own contra-account test the moment an entry touched an expense account | done |
-| **T-209b** | **AR aging and AP aging reports**, reconciled to their control accounts (`1210`/`2110`) with no tolerance — the aging math already exists in `repo/ap.ts` and `repo/ar.ts`, the *reports* do not | not started; needs only Phase 1 + T-130/T-131 |
+| **T-209b** ✅ | **AR aging and AP aging reports**, reconciled to their control accounts (`1210`/`2110`) with no tolerance. Shipped 2026-09-05 — a new `orgAgingTotal` query per side, straight off `journal_lines`, independent of the bucketed subledger total (`apRepo.aging`/`arRepo.aging`, T-130/T-131) and asserted to agree to the centavo; `getApAgingReport`/`getArAgingReport`, `/reports/ap-aging`, `/reports/ar-aging` | done |
 | **T-209c** | **Cash flow, per-store P&L comparison, drill-down from a report line to its journal entries, and one shared CSV export path** | not started; needs T-209a/b |
 | **T-210** | **Sales reporting over the ledger** — day / month / store / channel / mode roll-ups, the sales-day register, and the POS-day ↔ ledger reconciliation (§4.1) | after T-209; needs T-123 |
 

@@ -468,6 +468,27 @@ export async function positionOf(
   return { controlBalance: Number(row?.balance ?? 0).toFixed(2) };
 }
 
+/**
+ * ⭐ T-209b — the whole register's control balance, org-wide or for one store. The
+ * reconciliation partner for `aging()`'s bucketed total: two independent aggregation paths
+ * (this one straight off `journal_lines`, `aging()`'s own off `expenses`/`supplier_invoices`/
+ * `expense_payments`/`ap_payment_allocations`) that must agree to the centavo.
+ */
+export async function orgAgingTotal(tx: Tx, orgId: string, storeId?: string): Promise<string> {
+  const [row] = (await tx.execute(sql`
+    select coalesce(sum(jl.credit - jl.debit), 0)::text as balance
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId}
+      and jl.party_type = ${PARTY_TYPE}
+      and a.code = ${AP_CONTROL_CODE}
+      and je.status <> 'draft'
+      ${storeId ? sql`and jl.store_id = ${storeId}` : sql``}
+  `)) as unknown as Record<string, string>[];
+  return Number(row?.balance ?? 0).toFixed(2);
+}
+
 /** Every supplier's control balance in one query — the register's N+1 guard. */
 export async function positionsBySupplier(tx: Tx, orgId: string): Promise<Map<string, string>> {
   const rows = (await tx.execute(sql`
