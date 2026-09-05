@@ -38,62 +38,62 @@
   - ` 649–667  ` Four guards, or this degrades into delay
 - ` 668–669  ` 4. Architecture — the relational core
   - ` 670–686  ` 4.1 Stack
-  - ` 687–714  ` 4.2 Schema principles
-  - ` 715–735  ` 4.3 Application layering
-  - ` 736–765  ` 4.4 Reference data and seeds — how the duplicate-Rent problem dies
-- ` 766–770  ` 5. Architecture — the Firebase hot lane
-  - ` 771–803  ` 5.1 The two-lane contract
-  - ` 804–832  ` 5.2 What v1 actually does offline — and why v2 changes it
-  - ` 833–883  ` 5.3 The hot set — closed list
-  - ` 884–885  ` 5.4 Offline write-back rules
-  - ` 886–896  ` 5.3 Offline write-back rules
-- ` 897–898  ` 6. Data conventions
-  - ` 899–906  ` Money
-  - ` 907–917  ` Dates & time
-  - ` 918–923  ` Identifiers
-  - ` 924–928  ` Naming
-  - ` 929–934  ` Nulls
-- ` 935–977  ` 7. Security model
-  - ` 978–1008 ` 7.1 Identity — the v1 mess, and the v2 rule
-- `1009–1010 ` 8. Repo & environment
-  - `1011–1045 ` Layout
-  - `1046–1055 ` Ports — reserved, never shared
-  - `1056–1086 ` Build discipline — two rules, both absolute
-  - `1087–1097 ` Git
-- `1098–1114` 9. Definition of done
-  - `1115–1122` Parity gate
-- `1123–1157` 10. Phase plan
-- `1158–1174` 11. Migration & ETL rules
-- `1175–1223` 12. Inherited landmines — do not repeat these
-- `1224–1403` 13. Decision log
-- `1404–1423` 14. Amendment protocol
-- `1424–1428` 15. Engineering standards — the industry practices this project follows
-  - `1429–1434` 15.1 Build order: walking skeleton first
-  - `1435–1446` 15.2 Golden-master testing — the most important practice here
-  - `1447–1455` 15.3 Strangler Fig, not big-bang cutover
-  - `1456–1460` 15.4 No dual-write
-  - `1461–1465` 15.5 Expand/contract migrations
-  - `1466–1474` 15.6 Observability from day zero, not later
-  - `1475–1479` 15.7 CI gates
-  - `1480–1484` 15.8 Backups and a tested restore
-  - `1485–1489` 15.9 Twelve-Factor config
-  - `1490–1497` 15.10 Append-only ledgers — but not event sourcing
-  - `1498–1502` 15.11 Defence in depth
-  - `1503–1531` 15.12 Skills are lenses, not assurance
-  - `1532–1538` 15.13 Reconciliation is a permanent feature
-- `1539–1543` 16. The accounting spine
-  - `1544–1575` 16.0 What we are actually fixing — the diagnosis
-  - `1576–1619` 16.1 The ten invariants — non-negotiable
-  - `1620–1634` 16.2 The oracle: how "correct" is tested
-  - `1635–1656` 16.3 The model — header + lines, not legs
-  - `1657–1676` 16.4 Deliberately simpler than ERPNext
-  - `1677–1743` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1744–1768` 16.6 What v1 already gets right — preserve the intent
-  - `1769–1790` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1791–1805` 16.8 What v1's accounting already gets right
-  - `1806–1849` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1850–1900` 16.10 Posting patterns — one canonical pattern per business event
-  - `1901–1932` 16.11 Inventory's accounting integration
+  - ` 687–728  ` 4.2 Schema principles
+  - ` 729–749  ` 4.3 Application layering
+  - ` 750–779  ` 4.4 Reference data and seeds — how the duplicate-Rent problem dies
+- ` 780–784  ` 5. Architecture — the Firebase hot lane
+  - ` 785–817  ` 5.1 The two-lane contract
+  - ` 818–846  ` 5.2 What v1 actually does offline — and why v2 changes it
+  - ` 847–897  ` 5.3 The hot set — closed list
+  - ` 898–899  ` 5.4 Offline write-back rules
+  - ` 900–910  ` 5.3 Offline write-back rules
+- ` 911–912  ` 6. Data conventions
+  - ` 913–920  ` Money
+  - ` 921–931  ` Dates & time
+  - ` 932–937  ` Identifiers
+  - ` 938–942  ` Naming
+  - ` 943–948  ` Nulls
+- ` 949–991  ` 7. Security model
+  - ` 992–1022 ` 7.1 Identity — the v1 mess, and the v2 rule
+- `1023–1024 ` 8. Repo & environment
+  - `1025–1059 ` Layout
+  - `1060–1069 ` Ports — reserved, never shared
+  - `1070–1100` Build discipline — two rules, both absolute
+  - `1101–1111` Git
+- `1112–1128` 9. Definition of done
+  - `1129–1136` Parity gate
+- `1137–1171` 10. Phase plan
+- `1172–1188` 11. Migration & ETL rules
+- `1189–1237` 12. Inherited landmines — do not repeat these
+- `1238–1418` 13. Decision log
+- `1419–1438` 14. Amendment protocol
+- `1439–1443` 15. Engineering standards — the industry practices this project follows
+  - `1444–1449` 15.1 Build order: walking skeleton first
+  - `1450–1461` 15.2 Golden-master testing — the most important practice here
+  - `1462–1470` 15.3 Strangler Fig, not big-bang cutover
+  - `1471–1475` 15.4 No dual-write
+  - `1476–1480` 15.5 Expand/contract migrations
+  - `1481–1489` 15.6 Observability from day zero, not later
+  - `1490–1494` 15.7 CI gates
+  - `1495–1499` 15.8 Backups and a tested restore
+  - `1500–1504` 15.9 Twelve-Factor config
+  - `1505–1512` 15.10 Append-only ledgers — but not event sourcing
+  - `1513–1517` 15.11 Defence in depth
+  - `1518–1546` 15.12 Skills are lenses, not assurance
+  - `1547–1553` 15.13 Reconciliation is a permanent feature
+- `1554–1558` 16. The accounting spine
+  - `1559–1590` 16.0 What we are actually fixing — the diagnosis
+  - `1591–1634` 16.1 The ten invariants — non-negotiable
+  - `1635–1649` 16.2 The oracle: how "correct" is tested
+  - `1650–1671` 16.3 The model — header + lines, not legs
+  - `1672–1691` 16.4 Deliberately simpler than ERPNext
+  - `1692–1758` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1759–1783` 16.6 What v1 already gets right — preserve the intent
+  - `1784–1805` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1806–1820` 16.8 What v1's accounting already gets right
+  - `1821–1864` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1865–1915` 16.10 Posting patterns — one canonical pattern per business event
+  - `1916–1947` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -104,7 +104,7 @@
 
 | | |
 |---|---|
-| **Version** | 3.5 — **Discovery has a stated method (§1.2d): synthesize v1's goal in writing, weigh whether the live data is in good shape, then design v2 to beat that goal — v1 is the flawed version, v2 is the improved one.** Carries 3.4 (UI/UX is a third authority: familiar-but-upgraded screens, one visual family across ERP/POS/CUSTOMER), 3.3 (an unverified supplier invoice may carry a DRAFT expense), 3.2 (inventory is PERPETUAL from v2's first posting; a return is a credit in both directions), 3.1 (no SC/PWD statutory record is kept) and 3.0 (the card id joins the hot set) — §13 rows 164–172 |
+| **Version** | 3.6 — **§4.2 rule 7 covers every dashboard tile, not only accounting statements: a separately-accumulated counter is forbidden even when it is called a cache (§13 row 173).** Carries 3.5 (discovery has a stated method, §1.2d: synthesize v1's goal in writing, weigh whether the live data is in good shape, then design v2 to beat that goal — v1 is the flawed version, v2 is the improved one), 3.4 (UI/UX is a third authority: familiar-but-upgraded screens, one visual family across ERP/POS/CUSTOMER), 3.3 (an unverified supplier invoice may carry a DRAFT expense), 3.2 (inventory is PERPETUAL from v2's first posting; a return is a credit in both directions), 3.1 (no SC/PWD statutory record is kept) and 3.0 (the card id joins the hot set) — §13 rows 164–173 |
 | **Created** | 2026-08-22 |
 | **Last amended** | 2026-09-05 |
 | **Status** | Accounting-correctness project (§1.1). All discovery complete. Root cause identified (§16.0). **Chart of accounts aligned and signed off.** Ready to write Phase 0/1 task specs. |
@@ -704,6 +704,20 @@ evidence, never a plan.
    row. If a materialised view is too slow to refresh, the fallback is a summary
    table refreshed inside the same transaction as its source write — never by a
    separate writer.
+   ⭐ **This covers every DASHBOARD TILE and operational KPI, not only accounting
+   statements.** `docs/tasks/110` states the ban for *ledger* balances (trial balance,
+   income statement); it is the same rule, and *"open disputes"*, *"sales this month"*
+   and *"active staff"* are governed by it too. ⛔ **A separately-accumulated counter is
+   forbidden even when it is called a cache.** v1 supplies both counter-examples, and
+   they fail differently: `dashPresets` only ever ADDS a receipt to the windows that
+   currently contain its date, with no mechanism to subtract as a day ages out
+   (**observed 3×–11× inflation on "This Month"**, mitigated by a nightly rebuild cron
+   rather than fixed); and `dashboardSummary/live` self-heals only when a human opens
+   the page and finds it stale — one live store was found **123.7 hours stale** because
+   nobody had opened it. ⚠️ **A cache whose refresh trigger is a human being has no
+   staleness state at all when nobody looks.** A window is `SUM(…) WHERE day BETWEEN …`,
+   or a materialised view refreshed from fact rows — never a counter something
+   increments. (§13 row 173)
 8. **One writer per table.** If two code paths write the same table, one of them
    is wrong. (This is the single most expensive lesson from ERP-rebuild.)
 9. **Append-only where the audit trail matters** — ledger entries, stock movements,
@@ -1399,6 +1413,7 @@ just a patch.**
 | 170 | 2026-08-31 | ⭐ **AN UNVERIFIED SUPPLIER INVOICE MAY CARRY A DRAFT EXPENSE. THE GATE MOVES FROM "AN EXPENSE MAY NOT EXIST" TO "AN EXPENSE MAY NOT POST"** (T-196) | Ian: *“we will improve that unverified receipt can then be posted against draft expense so cashier does not need verification to start recording. when receipt is verified the expense are posted. when receipt is rejected voided the draft expense is deleted or the posted expense is also voided.”* ⭐ **The rule T-130 built is right; its TIMING was the cost.** `expenses_check_invoice_open_for_recording()` (migration `0043:328`) refuses the expense ROW unless its invoice is already `verified`, and `recordExpenseForInvoice` requires **both** `create_expense` and `approve_expense` — so a cashier holding only `create_expense` **cannot record an expense at all**. Three people, strictly ordered, before a ₱300 purchase reaches the books, and **the one person who knows what the money was for is the one who cannot write it down.** ⭐ **This is row 126 generalised** — *“verification is what posts”*, already the rule for sales days — **and row 122 made unconditional**: *“Capture is always allowed; VERIFICATION is what is withheld… record the draft with its photo while memory is fresh.”* Row 122 decided exactly this shape for the closed-period case and nothing carried it to the ordinary one. ⚠️ **v1 is NOT the precedent here and the spec must not claim it is:** v1 writes every expense `status: 'posted'` immediately (`expense.actions.ts:627`) and its `canTagExpenseToReceipt` gate is `verified && open` — v1 cannot record before verification either. **This is an `add`, not a `duplicate`.** ⭐ **The change is small because T-130 already built every part except a reachable draft state:** `expenses.status` has carried `'draft'` since migration 0015, `approveExpense` has always been a separate verb, `deleteExpenseDraft` and `editExpense` are draft-only and shipped. **And the capacity arithmetic needs no change at all** — it already sums `status <> 'voided'`, which includes drafts, so a pending invoice cannot be over-committed and DEF-057's *“one receipt, many expenses, evidence attached once”* survives for free. ⛔ **It creates one defect that must be fixed in the same task:** `voidInvoice` cascades `liveExpensesForInvoice` through `voidExpense`, which **throws on a draft** (*“nothing has been posted yet to void”*). Once drafts can exist on a pending invoice, voiding one fails outright — so the cascade branches: `draft` → `deleteExpenseDraft` (row 125, a draft is not a financial record), `posted` → `voidExpense` (reversal; both entries stand). ⭐ **Verification must SHOW what it is about to post, and that is a control rather than polish.** The four attestations assert *the document is genuine*; posting asserts *the coding is right* — 5100 COGS vs 6500 Supplies vs 3200 owner's drawings, which drives row 160's drawing limit and the tax treatment. Different assertions, one click. A fifth checkbox is the wrong fix: **you cannot attest to what you cannot see.** ⛔ **Three things deliberately NOT built, each argued and refused:** (1) **no `rejected` status** — v1 has none either (`ReceiptPlain.status` is `pending` / `verified` / `voided`; `rejectionReason` is written only by the void path), and a rejected and a voided invoice would need identical cascades and identical reporting, so the difference would live in a word; (2) **evidence stays UNCONDITIONAL** — v1's per-category `needReceipts` is not ported, because it is precisely why v1 needs a detective scan for orphan expenses (`detect.ts:137`) and why its recurring-expense path bypasses the gate entirely; paperless spend gets a signed voucher, photographed, which is a document; (3) **no clearing entry at draft** — cash leaves the drawer before the books move, but the instrument for that is the till count (*counted cash + held receipts = expected*, row 128's imprest self-check), not a second journal entry per expense. ⚠️ **And the honest note on (3): this task does not create that gap, it NARROWS it** — today the spend cannot even be drafted, so the drawer is short with nothing anywhere naming the amount. | Yes — this row, and T-196. **No prose section stated the old gate** (it lived only in T-130's spec and the trigger), so there is nothing to rewrite — worth recording, because a rule enforced only in a migration is a rule the bible cannot arbitrate |
 | 171 | 2026-09-05 | ⭐ **UI/UX IS A THIRD AUTHORITY, ALONGSIDE §1.2B'S WHAT/HOW SPLIT: v1'S SCREENS ARE FAMILIAR-BUT-UPGRADED, NOT REINVENTED, AND ALL THREE APPS ARE ONE FAMILY.** (§1.2c) | Ian: *"the ui/ux design of this app must be an upgraded version of v1. i want it to be uniform flexible across screens and respect the workflow of records like v1. all in all i want it to feel familiar but improved one… i want the 3 apps erp, pos and customer to look and feel like they belong to one family… actually in ui POS has cleaner [UI] than erp."* ⭐ **Extends row 6** (*"port the UI layer, rewrite the data layer"*) from a build-order decision into a standing design rule, with three additions row 6 never stated: workflow familiarity is the FLOOR not the ceiling (upgrade the presentation, keep the record workflow recognisable); one uniform, reusable pattern set across screens, the same anti-duplication discipline §4.2 already requires of the data layer; and — new scope — `apps/pos`/`apps/customer` (reserved, §8) must share ERP's visual language once built, not diverge as three separate products. ⭐ **Names POS, not ERP-rebuild, as the presentation-quality reference** where the two disagree — narrower than §1.2b's WHAT/HOW split, which stays intact: this only says whose *presentation layer* to draw from when duplicating (§1.2). Does not reopen any already-shipped screen. | Yes — a future design-system pass (tokens, shared components) is not decided here, only the principle it will work from |
 | 172 | 2026-09-05 | ⭐ **DISCOVERY HAS A METHOD, AND IT IS NOW A RULE: STUDY v1 → SYNTHESIZE ITS GOAL IN WRITING → WEIGH WHETHER THE LIVE DATA IS IN GOOD SHAPE → DESIGN v2 AGAINST THAT GOAL, MORE ACCURATE AND MORE EFFICIENT THAN v1 MANAGED.** (§1.2d) | Ian: *"v1 is a flawed version v2 is the improved version. discovery agent must study v1, synthesize what the v1 feature goal is or it tries to achieve, evaluate the live data if it is in good shape, with the goal of v1 as guide study how v2 can achieve the better more acurate correct improved output in more efffective and efficient way."* ⭐ **Step 3 generalises row 166, which was logged as one module's lesson and never made binding:** *"before treating a v1 module as proven practice, check that anything downstream ever CONSUMED it. Reading the code cannot tell you that; counting the collection can, and it took one command."* That sentence has been true of every module since, and nothing obliged the next pass to act on it — so it is now a step, with its consequence stated: **bad data downgrades v1 from proven practice to evidence of the NEED only**, and the v2 rule is designed from first principles rather than ported. ⭐ **Step 2 is the other addition, and the quieter one.** §1.2b already says to ask *what problem was this solving*; it never said to **write the answer down**. An unwritten goal cannot be improved on — only copied — which is precisely how a flawed implementation survives a rebuild that was meant to correct it. ⚠️ **Sharpens §1.2b and replaces nothing:** v1 stays authoritative about WHAT and never about HOW (row 84), §1.3's practice-wins rule is untouched, and DELETE remains Ian's call (§1.2). ⭐ **First applied the same day, to the assessment that prompted the row.** v1's two production engines — meat slicing with per-output pay (`production.actions.ts`, 1,100 lines) and recipe cook with no pay concept at all (`production-recipe.actions.ts`, 513) — were read for their goal rather than their shape, and T-176 turned out to have already merged them into one kind-agnostic engine. **Reading the code alone would have proposed rebuilding a merge that shipped the day before**; reading for the goal found the real open question, which is Phase 5's pay attribution (`CAPABILITY-GAPS.md`'s unowned *"Slicer per-piece pay"*, absent from `phase-5-payroll.md` entirely). | Yes — §1.2d added |
+| 173 | 2026-09-05 | ⭐ **§4.2 RULE 7 COVERS EVERY DASHBOARD TILE, NOT ONLY ACCOUNTING STATEMENTS — AND A SEPARATELY-ACCUMULATED COUNTER IS FORBIDDEN EVEN WHEN IT IS CALLED A CACHE.** | ⚠️ **A rule that existed for half the surfaces it should govern.** `docs/discovery/26` line 325 identified exactly this and could only recommend it: `docs/tasks/110` bans maintained summary rows for **ledger** balances (trial balance, income statement), and nothing extended that ban to **operational** KPI dashboards — so the discipline protected the trial balance and not *"open disputes"* or *"sales this month"*. ⭐ **v1 supplies both counter-examples, and they fail in two different ways.** `dashPresets` only ever ADDS a receipt to whichever rolling windows currently contain its date, with no mechanism to subtract once a day ages out — **observed 3×–11× inflation on "This Month"**, mitigated by a nightly rebuild cron rather than fixed. `dashboardSummary/live` self-heals only when a human opens `/dashboard` and finds it more than 6h stale — **SharEat Padre Garcia's was 123.7 hours stale at probe time**, because nobody had opened that store's dashboard since 2026-08-30. ⚠️ **The second is the more instructive failure, and it generalises past dashboards: a cache whose refresh trigger is a human being has no staleness state at all when nobody looks.** ⭐ **T-211 is the first task where this bites, and it lands as ratification rather than redirection** — the session building it had already excluded the incremental cache on its own reasoning, before this row existed. Found by the planner session verifying a peer's claim about doc-26 rather than accepting it; Ian approved the same day. | Yes — §4.2 rule 7 extended |
 
 
 ## 14. Amendment protocol

@@ -152,7 +152,7 @@ Nothing here is unassigned; "deferred" is a placement, not an omission.*
 |---|---|
 | Staff master record + position taxonomy | **4** — load-bearing for 4 and 5; previously unowned |
 | Absentee / leave tracking | 4 |
-| Slicer per-piece pay | 5 |
+| Slicer per-piece pay | 5 — ⭐ **live-probed 2026-09-05 (DEF-173) and re-scoped by it: 237 of 241 production records are SharEat Lipa ALONE**, every other operating store at zero, and `slicerPayments` totals **3** (2 paid, 1 draft) across ~5 months. Real and current, but **single-site and low-volume**. ⛔ **Sequence AFTER T-189**, which serves 126 staff who have never been paid through the system at all. **Header-level `performed_by_person_id` + the existing kind-agnostic `labour_cost`, NOT per-line pay attribution** — `isPaid:false` occurs on 1 output line in 102 |
 | **13th-month pay** 🆕 | 5 — confirmed ADD. Account 6140 already seeded |
 | **Separation / final-pay / clearance** 🆕 | 5 — confirmed ADD |
 | Reimbursement payout as a distinct liability | 2 |
