@@ -13,7 +13,16 @@
  * view; this file never re-derives them.
  */
 import { and, eq, gte, inArray, lte, ne, sql } from 'drizzle-orm';
-import { journalEntries, journalLines, vBalanceSheet, vIncomeStatement, vTrialBalance } from '../../schema';
+import {
+  journalEntries,
+  journalLines,
+  salesChannels,
+  salesDayChannels,
+  salesDays,
+  vBalanceSheet,
+  vIncomeStatement,
+  vTrialBalance,
+} from '../../schema';
 import type { Executor } from '../client';
 
 export interface DateRangeFilter {
@@ -284,4 +293,125 @@ export async function getAccountEntries(
     .orderBy(journalEntries.entryDate, journalLines.lineNo);
 
   return rows as AccountEntryLine[];
+}
+
+// -------------------------------------------------------------------------------------
+// T-210 — sales reporting over the ledger. docs/tasks/210-sales-reporting-over-the-ledger.md.
+// -------------------------------------------------------------------------------------
+
+export type SalesRollupGrouping = 'day' | 'month' | 'store';
+
+export interface SalesByPeriodRow {
+  /** Set for groupBy 'day'/'month' (a date or 'YYYY-MM' string); null for 'store'. */
+  period: string | null;
+  /** Set for groupBy 'store'; null otherwise. */
+  storeId: string | null;
+  total: string;
+}
+
+/**
+ * Recognised sales revenue (`4100`+`4150`, `source_type='sale'`), grouped by day, month, or
+ * store. `status in ('posted','reversed')` matches every other view/query in this file — a
+ * voided sales day's reversal entry inherits the ORIGINAL entry's `source_type` (`reverseEntry`),
+ * so the pair nets to zero here exactly as it does everywhere else, with no special case.
+ */
+export async function getSalesByPeriod(
+  ex: Executor,
+  filter: { orgId: string; storeId?: string | null; fromDate: string; toDate: string; groupBy: SalesRollupGrouping },
+): Promise<SalesByPeriodRow[]> {
+  const groupExpr =
+    filter.groupBy === 'month'
+      ? sql`to_char(je.entry_date, 'YYYY-MM')`
+      : filter.groupBy === 'store'
+        ? sql`jl.store_id`
+        : sql`je.entry_date`;
+
+  const rows = (await ex.execute(sql`
+    select
+      ${groupExpr} as group_key,
+      coalesce(sum(jl.credit - jl.debit), 0)::text as total
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${filter.orgId}
+      and je.source_type = 'sale'
+      and je.status in ('posted', 'reversed')
+      and je.entry_date >= ${filter.fromDate} and je.entry_date <= ${filter.toDate}
+      and a.code in ('4100', '4150')
+      ${filter.storeId ? sql`and jl.store_id = ${filter.storeId}` : sql``}
+    group by ${groupExpr}
+    order by ${groupExpr}
+  `)) as unknown as Record<string, string>[];
+
+  return rows.map((r) => ({
+    period: filter.groupBy === 'store' ? null : String(r.group_key),
+    storeId: filter.groupBy === 'store' ? String(r.group_key) : null,
+    total: Number(r.total).toFixed(2),
+  }));
+}
+
+export interface SalesChannelRollupRow {
+  channelId: string;
+  channelName: string;
+  isRemittedDaily: boolean;
+  total: string;
+}
+
+export interface SalesModeRollupRow {
+  mode: 'unli' | 'ala_carte';
+  total: string;
+}
+
+/**
+ * The channel and mode breakdown — from `sales_days`/`sales_day_channels`, `status='verified'`,
+ * NOT from `journal_lines`. See the task doc §2: the revenue credit lines T-123 posts (`4100`/
+ * `4150`) carry no channel party at all, so this dimension genuinely does not exist on the
+ * ledger. `status='verified'` is an exact proxy for "posted and still standing" — `voidSalesDay`
+ * always flips status to `voided` in the same transaction that reverses the entry — so this
+ * carries the same posted-only guarantee `getSalesByPeriod` gets from `journal_lines` directly.
+ * The domain layer asserts the two SUM to the same figure, which is the actual proof.
+ */
+export async function getSalesByChannelAndMode(
+  ex: Executor,
+  filter: { orgId: string; storeId?: string | null; fromDate: string; toDate: string },
+): Promise<{ channels: SalesChannelRollupRow[]; modes: SalesModeRollupRow[] }> {
+  const conditions = [
+    eq(salesDays.orgId, filter.orgId),
+    eq(salesDays.status, 'verified' as const),
+    gte(salesDays.businessDate, filter.fromDate),
+    lte(salesDays.businessDate, filter.toDate),
+  ];
+  if (filter.storeId) conditions.push(eq(salesDays.storeId, filter.storeId));
+
+  const [channelRows, modeRows] = await Promise.all([
+    ex
+      .select({
+        channelId: salesChannels.id,
+        channelName: salesChannels.name,
+        isRemittedDaily: salesChannels.isRemittedDaily,
+        total: sql<string>`coalesce(sum(${salesDayChannels.amount}), 0)::numeric(14,2)`,
+      })
+      .from(salesDayChannels)
+      .innerJoin(salesDays, eq(salesDayChannels.salesDayId, salesDays.id))
+      .innerJoin(salesChannels, eq(salesDayChannels.channelId, salesChannels.id))
+      .where(and(...conditions))
+      .groupBy(salesChannels.id, salesChannels.name, salesChannels.isRemittedDaily)
+      .orderBy(salesChannels.name),
+    ex
+      .select({
+        unliSales: sql<string>`coalesce(sum(${salesDays.unliSales}), 0)::numeric(14,2)`,
+        alaCarteSales: sql<string>`coalesce(sum(${salesDays.alaCarteSales}), 0)::numeric(14,2)`,
+      })
+      .from(salesDays)
+      .where(and(...conditions)),
+  ]);
+
+  const modeRow = modeRows[0];
+  return {
+    channels: channelRows as SalesChannelRollupRow[],
+    modes: [
+      { mode: 'unli', total: modeRow?.unliSales ?? '0.00' },
+      { mode: 'ala_carte', total: modeRow?.alaCarteSales ?? '0.00' },
+    ],
+  };
 }

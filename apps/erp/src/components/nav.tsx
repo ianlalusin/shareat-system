@@ -105,6 +105,8 @@ const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
       { href: '/reports/ar-aging', label: 'AR aging' },
       { href: '/reports/cash-flow', label: 'Cash flow' },
       { href: '/reports/store-comparison', label: 'Store comparison' },
+      { href: '/reports/sales-rollup', label: 'Sales rollup' },
+      { href: '/reports/pos-reconciliation', label: 'POS reconciliation' },
       // ⭐ DEF-139 — the screen worked and was tested but had no nav entry, so it was reachable
       // only by typing the URL. Same failure shape as this file's own header comment.
       { href: '/statutory-discounts', label: 'SC/PWD register' },

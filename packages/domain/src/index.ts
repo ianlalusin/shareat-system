@@ -11,6 +11,8 @@ export * from './reports/ap-aging';
 export * from './reports/ar-aging';
 export * from './reports/cash-flow';
 export * from './reports/store-comparison';
+export * from './reports/sales-rollup';
+export * from './reports/pos-day-reconciliation';
 export * from './expenses';
 export * from './sales-days';
 export * from './fixed-assets';
@@ -86,6 +88,8 @@ export * from './production/unit-conversion';
 export * from './pos/plan';
 export * from './pos/item-map';
 export * from './pos/usage-pull';
+// T-210 — the daily sales pull, for the POS-day reconciliation report.
+export * from './pos/sales-pull';
 // T-178 — order/channel wastage disposition.
 export * from './wastage/orders';
 export * from './wastage/settlement-match';
