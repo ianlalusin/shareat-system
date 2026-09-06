@@ -5,7 +5,7 @@
 Phase 6's detector work is finished; Phase 7 has started. **T-220** closed the last gaps the coverage
 sweep found, **T-221** closed a real cross-org RLS hole, **T-223** gave the low-stock auto-order its
 first caller, and **T-222** (store creation) is **specced with zero code**. Everything is committed
-and pushed — `main` is `0289cf7`, `origin/main` matches, tree clean.
+and pushed — `main` is `8a4e50f`, `origin/main` matches, tree clean.
 
 ⚠️ **DEF-186 is closed but its follow-up is not**: the durable answer — a detector for *below
 threshold with no draft line* — is deliberately a separate task. See Pick up here #1.
@@ -16,13 +16,13 @@ the whole repo for it (`docs/discovery/27-coverage-claims-sweep.md`), a guard th
 recurring, and **DEF-188 — where the auditor committed the exact failure being audited, shipped it,
 pushed it, and had it caught by the other session.**
 
-## Gates at `0289cf7`
+## Gates at `8a4e50f`
 
 | Gate | Result |
 |---|---|
 | **typecheck** | exit 0 |
 | **unit** | **1019 passed · 1 skipped · 1 failed** — `tests/golden/attendance-adjudication.test.ts`, DEF-170's 3 residual divergences (`lipa-0013`, `lipa-0359`, `banay-0012`). ⚠️ **Known red, tracked, not a regression** |
-| **integration** | ⚠️ **NOT CONFIRMED AT `0289cf7`** — a fresh full run was still in flight when this was written and pushed. **Last completed run was 2368 passed / 1 failed of 2369** at `dde8508`, and that single failure was DEF-178's clock flake, **which `0289cf7` then fixed** (21/21 for that file alone, verified). So the expected result is 2369/2369, but ⛔ **nobody has seen it. Run `npm run test:integration` before trusting a green integration number for this sha.** |
+| **integration** | ✅ **2369/2369 · 94/94 files · exit 0**, lane `shareat_test_lane25`. ⭐ Confirmed by a full run **after** DEF-178's fix — the previous run was 2368/1, and that single failure was the flake `0289cf7` removed. Nothing outstanding |
 | **build** | exit 0, dev server confirmed stopped **by process enumeration** first. 2 pre-existing `storage-firebase` warnings |
 | **smoketest** | `/admin/users` **9/9** (T-221) · `/inventory/usage` renders with T-223's wiring, **no errors**. ⚠️ That proves the page loads, **not** that the auto-order fires — proven by integration tests, and after DEF-188 a page load is not called evidence of behaviour |
 
@@ -155,7 +155,7 @@ unowned.**
 |---|---|
 | A person belongs to exactly **one org** | `PROJECT_BIBLE.md` §13 **row 175**, enforced by migration `0129` |
 | `createStore` = atomic auto half + derived checklist | ✅ **`PROJECT_BIBLE.md` §13 row 176** (Ian, 2026-09-06), plus `docs/tasks/222` Contract §2 |
-| ⭐ **Wrap-up now requires `npm run toc` after any bible row** | `.claude/skills/wrap-up/SKILL.md`, `7a1deff`. Stated **twice** on purpose: §2 for *forgetting to run it*, §3 as a pre-staging check for *running it after staging*, which commits a stale TOC anyway |
+| ⭐ **Wrap-up now requires `npm run toc` after any bible row** | `.claude/skills/wrap-up/SKILL.md`, `7a1deff`. Stated **twice** on purpose: §2 for *forgetting to run it*, §3 as a pre-staging check for *running it after staging*, which commits a stale TOC anyway. ⭐ **Exercised for real the same day, adding row 176: one inserted row shifted 29 TOC line-ranges.** Not ceremony — staging first would have committed a table that misdirects every reader of every section below §13. ⚠️ `npm run toc -- --check` is the CI form, and `tests/unit/toc-freshness.test.ts` is what fails the build |
 
 ## Pick up here
 
