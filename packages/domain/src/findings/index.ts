@@ -115,6 +115,13 @@ export async function listFindings(
     // T-213; T-213 shipped without it, and the gap stayed invisible because both tasks read as
     // done. 4 of 9 live disputes are already past 15 days.
     ...(await findingsRepo.receivingDisputeOverdue(tx, orgId)),
+    // ⛔ T-220 / DEF-184 — goods signed for that never reached a stock balance. `confirmReceipt`
+    // detected this all along and returned it in `unitMismatches`, which every production caller
+    // discarded; this is the surfacing that was specified in T-173 §6 and never built.
+    ...(await findingsRepo.commissaryUnitMismatch(tx, orgId)),
+    // ⭐ T-220 / DEF-185 — T-163's deferred detector. Its blocker ("no receipt document yet to age")
+    // was removed when T-166 shipped delivery documents, and nothing re-checked the deferral.
+    ...(await findingsRepo.grniNotAtRest(tx, orgId)),
   ];
 
   const acks = await findingsRepo.liveAcknowledgements(tx, orgId);

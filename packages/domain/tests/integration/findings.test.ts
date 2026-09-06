@@ -378,6 +378,155 @@ describe('T-218 / DEF-176 — receivingDisputeOverdue, the backstop receiving ne
   });
 });
 
+describe('T-220 / DEF-184 — commissaryUnitMismatch: goods signed for that never reached a balance', () => {
+  /**
+   * A received internal order line, with or without the stock movement `confirmReceipt` would have
+   * written. ⚠️ Inserted directly: the detector is a pure READ, and driving the real
+   * `confirmReceipt` here would test T-173's skip rather than this task's surfacing of it.
+   */
+  async function receivedLine(
+    f: Fixture,
+    opts: { withMovement: boolean; ledgerOnly?: boolean; receivedQty?: string | null },
+  ) {
+    const tag = uid('umm');
+    const [branch] = await sql<{ id: string }[]>`
+      insert into stores (org_id, code, name) values (${f.orgId}, ${tag}, ${'Branch ' + tag}) returning id`;
+    const [cust] = await sql<{ id: string }[]>`
+      insert into customers (org_id, name, counterparty_store_id, created_by)
+      values (${f.orgId}, ${'Branch ' + tag}, ${branch!.id}, ${f.personId}) returning id`;
+    const [item] = await sql<{ id: string }[]>`
+      insert into items (org_id, code, name, kind, base_unit, created_by)
+      values (${f.orgId}, ${tag}, 'Pork', 'raw_material', 'kg', ${f.personId}) returning id`;
+
+    const [period] = await sql<{ id: string }[]>`
+      select id from fiscal_periods where org_id = ${f.orgId} order by starts_on limit 1`;
+    const entryId = (await sql.begin(async (tx) => {
+      const [e] = await tx<{ id: string }[]>`
+        insert into journal_entries (org_id, entry_date, period_id, source_type, source_id, status, memo)
+        values (${f.orgId},'2026-01-10',${period!.id},'trade_order_dispatch',${crypto.randomUUID()},'draft','fx')
+        returning id`;
+      const [a1] = await tx<{ id: string }[]>`select id from accounts where org_id=${f.orgId} and code='1340'`;
+      const [a2] = await tx<{ id: string }[]>`select id from accounts where org_id=${f.orgId} and code='1310'`;
+      await tx`insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit)
+               values (${e!.id},1,${a1!.id},${f.storeId},'1.00','0'),
+                      (${e!.id},2,${a2!.id},${f.storeId},'0','1.00')`;
+      await tx`update journal_entries set status='posted', posted_at=now(), posted_by=${f.personId} where id=${e!.id}`;
+      return e!.id;
+    })) as unknown as string;
+
+    const [ord] = await sql<{ id: string }[]>`
+      insert into trade_orders (org_id, store_id, customer_id, order_date, status, total_amount,
+        dispatched_at, dispatched_by, journal_entry_id, received_at, received_by, created_by)
+      values (${f.orgId}, ${f.storeId}, ${cust!.id}, '2026-01-10', 'received', '1000.00',
+        now(), ${f.personId}, ${entryId}, now(), ${f.personId}, ${f.personId}) returning id`;
+    const [line] = await sql<{ id: string }[]>`
+      insert into trade_order_lines (org_id, order_id, item_id, quantity, unit, rate, line_total,
+        fulfilled_quantity, received_quantity, is_ledger_only)
+      values (${f.orgId}, ${ord!.id}, ${item!.id}, '10', 'kg', '100.00', '1000.00', '10',
+        ${opts.receivedQty === undefined ? '10' : opts.receivedQty}, ${opts.ledgerOnly ?? false})
+      returning id`;
+
+    if (opts.withMovement) {
+      const [lt] = await sql<{ id: string }[]>`
+        insert into location_types (org_id, code, name) values (${f.orgId}, ${tag}, 'Stockroom') returning id`;
+      const [room] = await sql<{ id: string }[]>`
+        insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by)
+        values (${f.orgId}, ${branch!.id}, ${tag}, 'Kitchen', ${lt!.id}, 'operating', true, ${f.personId})
+        returning id`;
+      await sql`
+        insert into stock_movements (org_id, store_id, location_id, item_id, moved_at, quantity, kind,
+          source_type, source_id, created_by)
+        values (${f.orgId}, ${branch!.id}, ${room!.id}, ${item!.id}, now(), '10', 'transfer_in',
+          'trade_order_receipt', ${line!.id}, ${f.personId})`;
+    }
+    return { branchId: branch!.id, lineId: line!.id };
+  }
+
+  it('⭐ fires when a received line moved no stock — the state T-173 refused to corrupt and nobody surfaced', async () => {
+    const f = await fixture('ummfire');
+    const { branchId } = await receivedLine(f, { withMovement: false });
+
+    const finding = (await feed(f)).findings.find((x) => x.kind === 'commissaryUnitMismatch');
+    expect(finding).toBeDefined();
+    expect(finding!.key).toBe(`commissaryUnitMismatch:${branchId}`);
+    expect(finding!.storeId).toBe(branchId);
+    expect(finding!.severity).toBe('hard');
+    expect(finding!.detail).toMatch(/never reached its stock ledger/);
+    expect(finding!.detail).toMatch(/1,000\.00/);
+  });
+
+  it('⛔ does NOT fire when the line moved stock normally', async () => {
+    const f = await fixture('ummok');
+    await receivedLine(f, { withMovement: true });
+    expect(await kinds(f)).not.toContain('commissaryUnitMismatch');
+  });
+
+  it('⛔ does NOT fire on a LEDGER-ONLY line — it is meant to move no stock', async () => {
+    const f = await fixture('ummledger');
+    await receivedLine(f, { withMovement: false, ledgerOnly: true });
+    expect(await kinds(f)).not.toContain('commissaryUnitMismatch');
+  });
+
+  it('⛔ does NOT fire on a line nobody signed for — a NULL received_quantity is "not received", not "lost"', async () => {
+    const f = await fixture('ummnull');
+    await receivedLine(f, { withMovement: false, receivedQty: null });
+    expect(await kinds(f)).not.toContain('commissaryUnitMismatch');
+  });
+});
+
+describe('T-220 — grniNotAtRest: a receipt whose invoice never arrived', () => {
+  /** Posts a `2120` GRNI credit dated `daysAgo`, partied to a supplier. */
+  async function grni(f: Fixture, daysAgo: number, amount = '5000.00') {
+    const tag = uid('grni');
+    const [sup] = await sql<{ id: string }[]>`
+      insert into suppliers (org_id, name, created_by)
+      values (${f.orgId}, ${'Supplier ' + tag}, ${f.personId}) returning id`;
+    const on = await sql<{ d: string }[]>`
+      select (((now() at time zone 'Asia/Manila')::date - ${daysAgo}::int))::text as d`;
+    const entryDate = on[0]!.d;
+    await sql`
+      insert into fiscal_periods (org_id, starts_on, ends_on, status)
+      values (${f.orgId}, ${entryDate}, ${entryDate}, 'open') on conflict do nothing`;
+    const [period] = await sql<{ id: string }[]>`
+      select id from fiscal_periods where org_id = ${f.orgId} and starts_on <= ${entryDate}
+        and ends_on >= ${entryDate} limit 1`;
+    await sql.begin(async (tx) => {
+      const [e] = await tx<{ id: string }[]>`
+        insert into journal_entries (org_id, entry_date, period_id, source_type, source_id, status, memo)
+        values (${f.orgId}, ${entryDate}, ${period!.id}, 'delivery_receipt', ${crypto.randomUUID()}, 'draft', 'fx')
+        returning id`;
+      const [g] = await tx<{ id: string }[]>`select id from accounts where org_id=${f.orgId} and code='2120'`;
+      const [stock] = await tx<{ id: string }[]>`select id from accounts where org_id=${f.orgId} and code='1310'`;
+      // ⚠️ NO party on the 2120 leg — it is not a party-requiring account, and
+      // journal_lines_check_party_requirement refuses one outright.
+      await tx`insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit)
+               values (${e!.id},1,${stock!.id},${f.storeId},${amount},'0'),
+                      (${e!.id},2,${g!.id},${f.storeId},'0',${amount})`;
+      await tx`update journal_entries set status='posted', posted_at=now(), posted_by=${f.personId} where id=${e!.id}`;
+    });
+    void sup;
+    return f.storeId;
+  }
+
+  it('⭐ fires on a GRNI balance older than the threshold, naming the age', async () => {
+    const f = await fixture('grniold');
+    const storeId = await grni(f, 45);
+
+    const finding = (await feed(f)).findings.find((x) => x.kind === 'grniNotAtRest');
+    expect(finding).toBeDefined();
+    expect(finding!.key).toBe(`grniNotAtRest:${storeId}`);
+    expect(finding!.severity).toBe('soft');
+    expect(finding!.detail).toMatch(/45 days/);
+    expect(finding!.detail).toMatch(/5,000\.00/);
+  });
+
+  it('⛔ does NOT fire inside the threshold', async () => {
+    const f = await fixture('grninew');
+    await grni(f, 5);
+    expect(await kinds(f)).not.toContain('grniNotAtRest');
+  });
+});
+
 describe('acknowledgement accepts a risk without pretending it is fixed', () => {
   async function withFinding(hint: string) {
     const f = await fixture(hint);

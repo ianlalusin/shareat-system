@@ -1064,6 +1064,166 @@ export async function orderWastageOpenPastBackstop(
 }
 
 /**
+ * ⭐ **T-220 / DEF-184 — goods signed for that never reached a stock balance, and nobody was told.**
+ *
+ * `confirmReceipt` correctly refuses to add a branch item denominated in `g` from a commissary
+ * dispatch in `kg`: it skips the line entirely — no movement, no layer — and leaves the value in
+ * `1340 Inventory in transit`. ⛔ **Skipping is right and must not be "fixed":** adding
+ * commissary-denominated quantity onto a branch balance the branch reads in its own unit is the
+ * corruption the check exists to prevent, and debiting `1310` for goods the stock ledger never
+ * received puts account and subledger permanently out of tie (T-173).
+ *
+ * ⚠️ **The defect was the silence, not the skip.** The line pushed an explanation onto
+ * `unitMismatches`, which `confirmReceipt` returns and **every production caller discarded** —
+ * `receiveTradeOrder` reads `.ok` and `.entryId` and nothing else. Four test assertions were its
+ * only readers.
+ *
+ * ⭐ **So this detects the CONSEQUENCE, not the cause**, and that is the decision worth keeping: the
+ * cause (a mismatched base unit) disappears the moment somebody fixes the item, while the goods stay
+ * missing from the balance forever. The consequence is persisted and exact — a received line that
+ * moved no stock.
+ *
+ * ⚠️ Every other reason a line has no movement is excluded by construction: a ledger-only line by
+ * its flag; a rejected substitution or zero-fulfilled line because `receiveTradeOrder` never reaches
+ * `setLineReceivedQuantity` for it, leaving `received_quantity` NULL.
+ *
+ * ⛔ **`hard`, unlike the ageing detectors around it.** Goods are physically at the branch, paid for,
+ * and absent from its stock ledger; every valuation and usage figure for that item is wrong until it
+ * is fixed, and the money is stranded. That is a books-do-not-reflect-reality fault.
+ */
+export async function commissaryUnitMismatch(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    select c.counterparty_store_id::text as store_id, s.name as store_name,
+           count(*)::int as n,
+           round(coalesce(sum(l.received_quantity * l.rate), 0), 2)::text as value,
+           min(o.received_at)::text as oldest
+    from trade_order_lines l
+    join trade_orders o on o.id = l.order_id
+    join customers c on c.id = o.customer_id
+    join stores s on s.id = c.counterparty_store_id
+    where l.org_id = ${orgId}
+      and o.status = 'received'
+      and c.counterparty_store_id is not null
+      and l.is_ledger_only = false
+      and l.received_quantity is not null
+      and l.received_quantity > 0
+      -- The whole detector: a received line that moved no stock.
+      and not exists (
+        select 1 from stock_movements m
+        where m.source_type = 'trade_order_receipt' and m.source_id = l.id
+      )
+    group by c.counterparty_store_id, s.name
+  `)) as unknown as {
+    store_id: string; store_name: string; n: number; value: string; oldest: string;
+  }[];
+
+  return rows.map((r) => ({
+    kind: 'commissaryUnitMismatch',
+    key: `commissaryUnitMismatch:${r.store_id}`,
+    storeId: r.store_id,
+    severity: 'hard' as const,
+    detail:
+      `${r.store_name} signed for ${r.n} commissary line${r.n === 1 ? '' : 's'} worth ` +
+      `${peso(Number(r.value))} that never reached its stock ledger — the oldest received ` +
+      `${String(r.oldest).slice(0, 10)}. Almost always a base-unit mismatch between the branch item ` +
+      'and the commissary item: the receipt refused to add the quantity rather than corrupt the ' +
+      'balance, and the value is still sitting in 1340 Inventory in transit. Fix the branch item base ' +
+      'unit, then confirm the receipt again.',
+  }));
+}
+
+/**
+ * ⭐ **T-220 — T-163's deferred detector, built now that its blocker is gone (DEF-185).**
+ *
+ * T-163 deferred this because *"there is no receipt document yet to age"*. **T-166 shipped delivery
+ * documents**, and nothing re-checked the deferral — which is the expired-deferral class this task
+ * exists to close.
+ *
+ * A `2120` balance is stock on the shelf, costed, whose invoice never arrived: the payable is
+ * provisional and the true cost is whatever the receipt guessed. `soft` — an ageing prompt, not a
+ * books-do-not-tie fault.
+ *
+ * ⚠️ **Per STORE, and pooled — not per supplier.** `2120` is deliberately **not** a party-requiring
+ * account (T-118 set `requires_party` on exactly nine control accounts and this is not one), and
+ * `postReceiptValue` writes *"one credit to 2120 for the whole receipt — the per-item detail is the
+ * layers, which is the subledger; splitting the credit would put detail in two places and tie
+ * neither."* A first draft of this detector grouped by `party_id` and was refused outright by
+ * `journal_lines_check_party_requirement`. **The database said no, and it was right.**
+ *
+ * ⭐ So the balance is a POOL, and the age comes from a FIFO walk over its own credits — the same
+ * shape `serviceChargeFloatAgeing` uses for the same reason. `manila_today` is carried back as a
+ * column so the age is measured against Postgres's clock, in Manila, read once (T-218).
+ */
+export async function grniNotAtRest(
+  tx: Tx,
+  orgId: string,
+  thresholdDays = 30,
+): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    select jl.store_id::text                        as store_id,
+           st.name                                  as store_name,
+           je.entry_date::text                      as entry_date,
+           coalesce(sum(jl.credit), 0)::text        as credited,
+           coalesce(sum(jl.debit), 0)::text         as debited,
+           ${MANILA_TODAY}::text                    as manila_today
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    join stores st on st.id = jl.store_id
+    where je.org_id = ${orgId} and a.code = '2120' and je.status <> 'draft'
+    group by jl.store_id, st.name, je.entry_date
+    order by jl.store_id, je.entry_date asc
+  `)) as unknown as {
+    store_id: string; store_name: string; entry_date: string;
+    credited: string; debited: string; manila_today: string;
+  }[];
+
+  const byStore = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const list = byStore.get(r.store_id) ?? [];
+    list.push(r);
+    byStore.set(r.store_id, list);
+  }
+
+  const findings: DetectedFinding[] = [];
+  for (const [storeId, entries] of byStore) {
+    const balance = entries.reduce((n, r) => n + Number(r.credited) - Number(r.debited), 0);
+    if (balance < 0.005) continue;
+
+    // FIFO: clear the oldest credits with everything ever debited against this store's pool.
+    let remainingDebits = entries.reduce((n, r) => n + Number(r.debited), 0);
+    let oldestUncleared: string | null = null;
+    for (const r of entries) {
+      const credited = Number(r.credited);
+      if (credited <= 0) continue;
+      if (remainingDebits >= credited - 0.005) {
+        remainingDebits -= credited;
+        continue;
+      }
+      oldestUncleared = r.entry_date;
+      break;
+    }
+    if (oldestUncleared === null) continue;
+
+    const ageDays = daysBetweenDates(oldestUncleared, String(entries[0]!.manila_today));
+    if (ageDays <= thresholdDays) continue;
+
+    findings.push({
+      kind: 'grniNotAtRest',
+      key: `grniNotAtRest:${storeId}`,
+      storeId,
+      severity: 'soft' as const,
+      detail:
+        `${entries[0]!.store_name} holds ${peso(balance)} of received-but-uninvoiced stock in 2120 ` +
+        `GRNI, the oldest uncleared since ${oldestUncleared} (${ageDays} days). The goods are on the ` +
+        'shelf and costed; the invoice never arrived. Chase it — until it does the payable stays ' +
+        'provisional and the true cost is whatever the receipt guessed.',
+    });
+  }
+  return findings;
+}
+
+/**
  * ⭐ **T-218 / DEF-176 — the receiving-dispute twin of `orderWastageOpenPastBackstop` above.**
  *
  * `docs/plans/phase-6-reporting-and-dashboards.md` §6 Q3 closed one of Ian’s open questions by

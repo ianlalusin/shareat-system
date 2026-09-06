@@ -210,6 +210,7 @@ transaction, so the stricter of the two governs and the receipt is refused. Only
 which posts nothing — can happen outside a period at all. Recorded because the two guards look
 inconsistent until you see why.
 
+<!-- STALE-IF-EXISTS: packages/domain/src/stock/cost-confirmation.ts -->
 ### 8.5 Not built
 
 | Piece | Why |

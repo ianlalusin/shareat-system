@@ -40,10 +40,10 @@ would waste a reader's day. "7 named things do not exist" is a list you can act 
 |---|---|---|
 | `stockLedgerDoesNotMatchBalance` | T-161 | ✅ **Honest.** Declined in writing with a reason that still holds — it compares the ledger to a cache, and §2 refuses to build a cache before a measured need. *"Registering a detector that cannot fail is T-134's own vacuous-pass lesson."* |
 | `receipt.provisional`, `production.conversion` | T-163, T-176 | ⚠️ `POSTING-PATTERNS.md` entries, declared not-built with a stated reason (pinning a shape before the documents exist makes the doc wrong rather than late) |
-| `grniNotAtRest` | T-163 | ⛔ **Expired deferral** |
-| `commissaryDiscrepancyOpen` | T-174 | ⛔ **Expired deferral** |
-| `autoOrderFailed` | T-175 | ⛔ **Expired deferral** |
-| `commissaryUnitMismatch` | T-173 | ⛔ **Silently dropped, and it is live exposure** — DEF-184 |
+| `grniNotAtRest` | T-163 | ⛔ Expired deferral → ✅ **BUILT** by T-220 |
+| `commissaryDiscrepancyOpen` | T-174 | ⛔ Expired deferral → ⛔ **REFUSED** by T-220 — duplicate of T-218's `receivingDisputeOverdue`, and the all-open variant fires on every ordinary short receipt |
+| `autoOrderFailed` | T-175 | ⛔ Expired deferral → ⛔ **REFUSED** by T-220 — the path it would watch has **no caller at all** (DEF-186) |
+| `commissaryUnitMismatch` | T-173 | ⛔ Silently dropped, live exposure → ✅ **BUILT** by T-220 (DEF-184) |
 
 ## ⭐ The real finding: the expired deferral
 
@@ -90,13 +90,23 @@ mechanism — the conditional deferral — has no owner, while everything around
 
 ## Recommendations
 
-1. ⭐ **File the four expired deferrals.** DEF-184 (below) for the live one; the other three are a
-   single small task — three detectors whose blockers are gone, all in `findings.ts`, all now
-   cheap. ⚠️ Not started here: this was a read-only pass.
-2. ⭐ **Make a deferral machine-checkable.** The cheapest version that would have caught all four: a
-   task doc's deferral names its blocker as a **symbol or path**, and a unit test asserts *"if this
-   path now exists, the deferral is stale."* That is the same grep-guard shape as T-218's
-   `findings-single-clock.test.ts`, pointed at prose instead of SQL.
+1. ⭐ **File the four expired deferrals.** DEF-184 for the live one; the rest a single small task.
+   ⚠️ Not started here: this was a read-only pass.
+   > ✅ **Done 2026-09-06 by T-220 — and the recommendation was half wrong, which is worth recording.**
+   > It assumed all four wanted building. On investigation **two were refused**: one duplicated a
+   > detector T-218 had already shipped and would have fired on every ordinary short receipt; the
+   > other would have watched a code path with **no caller at all** (DEF-186). ⛔ A sweep that had
+   > simply "closed its own findings" would have added two detectors, one noisy and one vacuous —
+   > which is the same unearned-assurance failure it was auditing, committed by the auditor.
+2. ⭐ **Make a deferral machine-checkable.** A task doc's deferral names its blocker as a **symbol or
+   path**, and a unit test asserts *"if this path now exists, the deferral is stale."*
+   > ✅ **Built 2026-09-06 by T-220** — `tests/unit/deferral-staleness.test.ts`, marker
+   > `<!-- STALE-IF-EXISTS: <path> -->`. **It went red on its first real run**, showing T-174 and
+   > T-175 still described routes as unbuilt that later tasks had built. ⚠️ Two design details it
+   > needed and this recommendation did not anticipate: it must **skip fenced code blocks** (the doc
+   > introducing the convention shows the marker as an example, so the guard failed on its own
+   > documentation), and it must carry its **own non-vacuity assertion**, or resolving the last
+   > marker leaves a guard watching nothing and showing green.
 3. ⚠️ **Do not build a "coverage lint" over comments.** Pass 1's 38/39 says the comment-level claims
    are already sound, and DEF-175's class (a comment naming the wrong *basis*) is not detectable by
    pattern — only by reading the code that writes the value. A lint here would be noise with a
@@ -113,3 +123,7 @@ mechanism — the conditional deferral — has no owner, while everything around
   same grep run directly returned hits. Use the harness's own search rather than shell loops.
 - ⛔ Filter v1 names out **before** reporting, not after. The first pass of §2 looked like 30
   defects and was 2.
+- ⚠️ **Widen the phrase list beyond the confident verbs.** This sweep grepped *“enforced by”*, *“covered by”*, *“guaranteed by”* and friends. `ianla-e2` then found one (DEF-187) hiding behind **“e.g.”** — a schema comment justifying a column with an illustrative example that turned out to be unreachable in the code. A claim does not have to sound like a guarantee to function as one; *“e.g.”*, *“so that”*, *“which lets”* and *“because”* all assert reachability.
+- ⭐ **A second class of tell, and it is the opposite of a confident claim: the parenthetical admission.** `ianla-e2` found `packages/db/../dev-seed.ts` opening with *“Migrations create 93 accounts and **(via whatever put them there)** an org and its stores.”* That parenthesis is an author saying they could not find the creating code — because none exists — and it has sat unconverted since T-101. ⚠️ **Nobody was hiding anything; the gap was noticed, written down, and never turned into a question.** Grep for hedges as well as guarantees: *“somehow”*, *“via whatever”*, *“presumably”*, *“I think”*, *“for now”*, *“until X exists”*, *“whoever”*. A confident claim that is false and an admitted uncertainty that is never chased cost the same.
+- ⚠️ **Where that one belongs is a real boundary, and the answer was NOT the register.** T-222's spec now owns store creation, so a row reading *“no store creation exists”* would duplicate a task rather than inform one. **The finding is not the missing feature — it is that an admission of ignorance sat in a comment for two months without becoming a question**, and that is a method note, which is why it is here.
+- ⭐ **The highest-yield check was not a phrase at all** — it was *“does this named thing exist, and does anything CALL it.”* Three defects this week (DEF-167, DEF-184, DEF-186) are built, tested, marked done code with **zero production callers**, and no phrase-grep would have found any of them.
