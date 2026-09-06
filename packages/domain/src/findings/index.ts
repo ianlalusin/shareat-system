@@ -122,6 +122,10 @@ export async function listFindings(
     // ⭐ T-220 / DEF-185 — T-163's deferred detector. Its blocker ("no receipt document yet to age")
     // was removed when T-166 shipped delivery documents, and nothing re-checked the deferral.
     ...(await findingsRepo.grniNotAtRest(tx, orgId)),
+    // ⭐ T-224 — DEF-186's durable half. T-223 wired the auto-order and reports a failure on the
+    // screen of whoever posted; a screen message dies with the request. This is the persisted
+    // consequence: below threshold, at a store that CAN order, with nothing on order for it.
+    ...(await findingsRepo.lowStockOrderNotProposed(tx, orgId)),
   ];
 
   const acks = await findingsRepo.liveAcknowledgements(tx, orgId);

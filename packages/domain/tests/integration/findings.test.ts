@@ -567,6 +567,170 @@ describe('T-220 — grniNotAtRest: a receipt whose invoice never arrived', () =>
   });
 });
 
+describe('T-224 / DEF-186 — lowStockOrderNotProposed: low, able to order, nothing on order', () => {
+  /** A branch linked to a commissary, an item with a threshold, and optional stock. */
+  async function lowItem(f: Fixture, opts: { linked?: boolean; onHand?: string; threshold?: string } = {}) {
+    const tag = uid('lsonp');
+    const [branch] = await sql<{ id: string }[]>`
+      insert into stores (org_id, code, name) values (${f.orgId}, ${tag}, ${'Branch ' + tag}) returning id`;
+    const [commissary] = await sql<{ id: string }[]>`
+      insert into stores (org_id, code, name) values (${f.orgId}, ${tag + 'C'}, ${'Com ' + tag}) returning id`;
+    if (opts.linked !== false) {
+      await sql`
+        insert into commissary_links (org_id, commissary_store_id, branch_store_id, created_by)
+        values (${f.orgId}, ${commissary!.id}, ${branch!.id}, ${f.personId})`;
+    }
+    const [item] = await sql<{ id: string }[]>`
+      insert into items (org_id, code, name, kind, base_unit, created_by)
+      values (${f.orgId}, ${tag}, ${'Pork ' + tag}, 'raw_material', 'kg', ${f.personId}) returning id`;
+    await sql`
+      insert into store_item_thresholds (org_id, store_id, item_id, low_stock_threshold, set_by)
+      values (${f.orgId}, ${branch!.id}, ${item!.id}, ${opts.threshold ?? '20'}, ${f.personId})`;
+
+    if (opts.onHand) {
+      const [lt] = await sql<{ id: string }[]>`
+        insert into location_types (org_id, code, name) values (${f.orgId}, ${tag}, 'Stockroom') returning id`;
+      const [room] = await sql<{ id: string }[]>`
+        insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by)
+        values (${f.orgId}, ${branch!.id}, ${tag}, 'Kitchen', ${lt!.id}, 'operating', true, ${f.personId})
+        returning id`;
+      await sql`
+        insert into stock_movements (org_id, store_id, location_id, item_id, moved_at, quantity, kind,
+          source_type, source_id, created_by)
+        values (${f.orgId}, ${branch!.id}, ${room!.id}, ${item!.id}, now(), ${opts.onHand},
+          'transfer_in', 'opening', ${crypto.randomUUID()}, ${f.personId})`;
+    }
+    return { branchId: branch!.id, commissaryId: commissary!.id, itemId: item!.id };
+  }
+
+  /** An order from branch to commissary carrying `itemId` as the BRANCH's ask. */
+  async function orderFor(
+    f: Fixture,
+    o: { branchId: string; commissaryId: string; itemId: string; status: string; requested?: boolean },
+  ) {
+    const [cust] = await sql<{ id: string }[]>`
+      insert into customers (org_id, name, counterparty_store_id, created_by)
+      values (${f.orgId}, ${'Cust ' + uid('c')}, ${o.branchId}, ${f.personId}) returning id`;
+
+    let entryId: string | null = null;
+    if (o.status === 'dispatched' || o.status === 'received') {
+      const [period] = await sql<{ id: string }[]>`
+        select id from fiscal_periods where org_id = ${f.orgId} order by starts_on limit 1`;
+      entryId = (await sql.begin(async (tx) => {
+        const [e] = await tx<{ id: string }[]>`
+          insert into journal_entries (org_id, entry_date, period_id, source_type, source_id, status, memo)
+          values (${f.orgId},'2026-01-10',${period!.id},'trade_order_dispatch',${crypto.randomUUID()},'draft','fx')
+          returning id`;
+        const [a1] = await tx<{ id: string }[]>`select id from accounts where org_id=${f.orgId} and code='1340'`;
+        const [a2] = await tx<{ id: string }[]>`select id from accounts where org_id=${f.orgId} and code='1310'`;
+        await tx`insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit)
+                 values (${e!.id},1,${a1!.id},${f.storeId},'1.00','0'),
+                        (${e!.id},2,${a2!.id},${f.storeId},'0','1.00')`;
+        await tx`update journal_entries set status='posted', posted_at=now(), posted_by=${f.personId} where id=${e!.id}`;
+        return e!.id;
+      })) as unknown as string;
+    }
+
+    const [ord] = await sql<{ id: string }[]>`
+      insert into trade_orders (org_id, store_id, customer_id, order_date, status, total_amount,
+        requested_by_store_id, dispatched_at, dispatched_by, journal_entry_id, created_by)
+      values (${f.orgId}, ${o.commissaryId}, ${cust!.id}, '2026-01-10', ${o.status}, '500.00',
+        ${o.branchId},
+        ${o.status === 'dispatched' ? sql`now()` : null},
+        ${o.status === 'dispatched' ? f.personId : null},
+        ${entryId}, ${f.personId}) returning id`;
+    await sql`
+      insert into trade_order_lines (org_id, order_id, item_id, quantity, unit, rate, line_total,
+        requested_quantity, origin, approval)
+      values (${f.orgId}, ${ord!.id}, ${o.itemId}, '5', 'kg', '100.00', '500.00',
+        ${o.requested === false ? null : '5'},
+        ${o.requested === false ? 'commissary_added' : 'requested'},
+        ${o.requested === false ? 'pending' : 'not_required'})`;
+    return ord!.id;
+  }
+
+  const find = async (f: Fixture) =>
+    (await feed(f)).findings.find((x) => x.kind === 'lowStockOrderNotProposed');
+
+  it('⭐ fires when a linked store is below threshold with NOTHING on order', async () => {
+    const f = await fixture('lsfire');
+    const { branchId } = await lowItem(f, { onHand: '4' });
+
+    const finding = await find(f);
+    expect(finding).toBeDefined();
+    expect(finding!.key).toBe(`lowStockOrderNotProposed:${branchId}`);
+    expect(finding!.storeId).toBe(branchId);
+    expect(finding!.severity).toBe('soft');
+    expect(finding!.detail).toMatch(/at or below threshold with nothing on order/);
+  });
+
+  it('⛔ silent when the item is on a DRAFT order', async () => {
+    const f = await fixture('lsdraft');
+    const ctx = await lowItem(f, { onHand: '4' });
+    await orderFor(f, { ...ctx, status: 'draft' });
+    expect(await find(f)).toBeUndefined();
+  });
+
+  it('⛔ silent when the item is on a DISPATCHED order — goods in a truck are ordered', async () => {
+    // ⚠️ THE noise case. A detector checking only `draft` fires on every item currently in transit
+    // — stock already ordered and physically on its way. openOrderFor treats dispatched as open for
+    // exactly this reason, and so must this.
+    const f = await fixture('lsdisp');
+    const ctx = await lowItem(f, { onHand: '4' });
+    await orderFor(f, { ...ctx, status: 'dispatched' });
+    expect(await find(f)).toBeUndefined();
+  });
+
+  it('⛔ silent for a store with NO commissary link — it cannot order', async () => {
+    const f = await fixture('lsnolink');
+    await lowItem(f, { onHand: '4', linked: false });
+    expect(await find(f)).toBeUndefined();
+  });
+
+  it('⛔ silent when on-hand is above threshold', async () => {
+    const f = await fixture('lsok');
+    await lowItem(f, { onHand: '50', threshold: '20' });
+    expect(await find(f)).toBeUndefined();
+  });
+
+  it('⚠️ fires when the open order carries a DIFFERENT item — an open order is not blanket cover', async () => {
+    const f = await fixture('lsother');
+    const ctx = await lowItem(f, { onHand: '4' });
+    const [other] = await sql<{ id: string }[]>`
+      insert into items (org_id, code, name, kind, base_unit, created_by)
+      values (${f.orgId}, ${uid('oth')}, 'Beef', 'raw_material', 'kg', ${f.personId}) returning id`;
+    await orderFor(f, { ...ctx, itemId: other!.id, status: 'draft' });
+    expect(await find(f)).toBeDefined();
+  });
+
+  it('⚠️ fires when the only line is a commissary_added proposal — that is not the branch ordering', async () => {
+    // requested_quantity is null on a substitution the commissary offered. itemsAlreadyOnOrder
+    // filters on it for the same reason: the branch has not asked for this.
+    const f = await fixture('lsadded');
+    const ctx = await lowItem(f, { onHand: '4' });
+    await orderFor(f, { ...ctx, status: 'draft', requested: false });
+    expect(await find(f)).toBeDefined();
+  });
+
+  it('one finding per STORE, not per item — 20 low items is one operational problem', async () => {
+    const f = await fixture('lsagg');
+    const { branchId, commissaryId } = await lowItem(f, { onHand: '4' });
+    for (let i = 0; i < 2; i++) {
+      const [extra] = await sql<{ id: string }[]>`
+        insert into items (org_id, code, name, kind, base_unit, created_by)
+        values (${f.orgId}, ${uid('x' + i)}, ${'Extra ' + i}, 'raw_material', 'kg', ${f.personId}) returning id`;
+      await sql`
+        insert into store_item_thresholds (org_id, store_id, item_id, low_stock_threshold, set_by)
+        values (${f.orgId}, ${branchId}, ${extra!.id}, '10', ${f.personId})`;
+    }
+    void commissaryId;
+
+    const all = (await feed(f)).findings.filter((x) => x.kind === 'lowStockOrderNotProposed');
+    expect(all).toHaveLength(1);
+    expect(all[0]!.detail).toMatch(/3 items/);
+  });
+});
+
 describe('acknowledgement accepts a risk without pretending it is fixed', () => {
   async function withFinding(hint: string) {
     const f = await fixture(hint);

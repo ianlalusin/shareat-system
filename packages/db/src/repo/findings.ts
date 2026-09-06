@@ -644,6 +644,102 @@ export async function acknowledgementHistory(
 }
 
 /**
+ * ⭐ **T-224 — the durable half of DEF-186.**
+ *
+ * T-223 gave the low-stock auto-order its first caller and made a failure visible as a clause on the
+ * success message of the post that triggered it. ⚠️ **A screen message dies with the request**:
+ * nobody sees it twice, nobody sees it who was not the person posting, and a *repeated* failure looks
+ * exactly like a first one.
+ *
+ * The consequence, though, is persisted — an item at or below its threshold, at a store that can
+ * order, with nothing on order for it. That survives a lost log line and the cook who posted at 11pm
+ * and went home, which is the difference between a message and a control.
+ *
+ * ## ⛔ It mirrors `ensureAutoOrderLines`' gates rather than inventing its own
+ *
+ * A finding that disagrees with the thing it watches is worse than no finding, so the three gates are
+ * the same three, in the same order: an **active commissary link** (a store that cannot order is
+ * never nagged for not ordering), **at or below threshold** on an **active** item, and **not already
+ * on the open order**.
+ *
+ * ⭐ **"Open" means `draft`, `confirmed` OR `dispatched`, and dispatched is the one that matters.**
+ * `openOrderFor`'s own comment: *"a dispatched order is goods-in-transit not yet received, so it
+ * BLOCKS."* ⛔ A detector checking only `draft` would fire on every item currently in a truck — stock
+ * already ordered and physically on its way. That is the noise failure this must not ship.
+ *
+ * ⚠️ And the line must carry `requested_quantity is not null`, matching `itemsAlreadyOnOrder`: a
+ * `commissary_added` substitution is the commissary's proposal, not the branch's ask.
+ *
+ * ⚠️ **`soft`, deliberately.** Nothing is wrong with the books — stock is low and nothing is on
+ * order. `hard` blocks a period close, and a close should not be held for a reorder.
+ */
+export async function lowStockOrderNotProposed(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    with linked as (
+      -- Gate 1: only stores that can actually order. Mirrors lowStockRepo.commissaryFor.
+      select cl.branch_store_id as store_id, cl.commissary_store_id, s.name as store_name
+      from commissary_links cl
+      join stores s on s.id = cl.branch_store_id
+      where cl.org_id = ${orgId} and cl.status = 'active'
+    ),
+    on_hand as (
+      select sm.store_id, sm.item_id, coalesce(sum(sm.quantity), 0) as qty
+      from stock_movements sm
+      where sm.org_id = ${orgId}
+      group by sm.store_id, sm.item_id
+    ),
+    low as (
+      -- Gate 2: the same predicate lowStockRepo.lowStock uses, including the <= and active items.
+      select ln.store_id, ln.store_name, ln.commissary_store_id,
+             t.item_id, i.name as item_name,
+             (t.low_stock_threshold - coalesce(h.qty, 0)) as shortfall
+      from store_item_thresholds t
+      join linked ln on ln.store_id = t.store_id
+      join items i on i.id = t.item_id
+      left join on_hand h on h.store_id = t.store_id and h.item_id = t.item_id
+      where t.org_id = ${orgId}
+        and i.status = 'active'
+        and coalesce(h.qty, 0) <= t.low_stock_threshold
+    )
+    select low.store_id::text as store_id,
+           low.store_name     as store_name,
+           count(*)::int      as n_items,
+           round(max(low.shortfall), 3)::text as deepest,
+           (array_agg(low.item_name order by low.shortfall desc))[1:3] as sample
+    from low
+    -- Gate 3: not already on the open order. draft | confirmed | DISPATCHED -- goods in a truck are
+    -- ordered, and requested_quantity is what separates the branch's ask from a commissary proposal.
+    where not exists (
+      select 1
+      from trade_orders o
+      join trade_order_lines tl on tl.order_id = o.id
+      where o.org_id = ${orgId}
+        and o.requested_by_store_id = low.store_id
+        and o.store_id = low.commissary_store_id
+        and o.status in ('draft', 'confirmed', 'dispatched')
+        and tl.item_id = low.item_id
+        and tl.requested_quantity is not null
+    )
+    group by low.store_id, low.store_name
+  `)) as unknown as {
+    store_id: string; store_name: string; n_items: number; deepest: string; sample: string[];
+  }[];
+
+  return rows.map((r) => ({
+    kind: 'lowStockOrderNotProposed',
+    key: `lowStockOrderNotProposed:${r.store_id}`,
+    storeId: r.store_id,
+    severity: 'soft' as const,
+    detail:
+      `${r.store_name} has ${r.n_items} item${r.n_items === 1 ? '' : 's'} at or below threshold with ` +
+      `nothing on order — ${(r.sample ?? []).join(', ')}${r.n_items > (r.sample ?? []).length ? ', …' : ''}. ` +
+      `The deepest is ${r.deepest} below its threshold. The auto-order proposes these lines when a ` +
+      'usage record is posted, so either none has been posted since the stock fell, or the ordering ' +
+      'path failed and only said so on the screen of whoever posted it.',
+  }));
+}
+
+/**
  * ⭐ T-175 — items being consumed in a store that has never had a reorder threshold set.
  *
  * ⚠️ **This is the replacement for v1's forcing function.** v1 blocked a usage post until somebody
