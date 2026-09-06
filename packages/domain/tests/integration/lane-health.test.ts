@@ -441,13 +441,28 @@ describe('T-183 invariant 5 — health warns on outbox lag', () => {
 
 describe('T-183 invariant 6 — a silent terminal is listed; a store that closed early is not', () => {
   it('25 hours quiet is a closed store; 30 hours quiet is an outage', async () => {
+    // ⛔ **DEF-178 — ONE clock on both sides, and that is the whole fix.** This used to stamp
+    // `last_seen_at` from POSTGRES (`now() - interval '30 hours'`) and assert against a value
+    // `terminalStatus` floors from a JAVASCRIPT `Date`. The two need only disagree by a millisecond
+    // in the wrong direction for `Math.floor((now - lastSeen) / 3_600_000)` to fall to 29.999… and
+    // floor to **29**, and under load they do: this reddened a full-suite run on 2026-09-06 while
+    // passing 21/21 when the file ran alone — the signature that makes it read as a real regression
+    // and get re-run rather than looked at.
+    //
+    // ⭐ `laneHealth` already accepts `now`, so the fix is to inject the SAME instant the fixture
+    // was stamped from. ⚠️ Deliberately NOT widened to `toBeGreaterThanOrEqual(30)` — that would
+    // hide the same class of bug inside `terminalStatus` itself, which is what the assertion is
+    // for. Pin the clock, keep the exact equality.
     const f = await fixture('silent');
-    await sql`update clock_terminals set last_seen_at = now() - interval '25 hours' where id = ${f.terminal.id}`;
-    const closedEarly = await health(f, f.manager);
+    const now = new Date();
+    const hoursAgo = (h: number) => new Date(now.getTime() - h * 3_600_000);
+
+    await sql`update clock_terminals set last_seen_at = ${hoursAgo(25)} where id = ${f.terminal.id}`;
+    const closedEarly = await health(f, f.manager, { now });
     expect(closedEarly.terminals[0]!.status).toBe('ok');
 
-    await sql`update clock_terminals set last_seen_at = now() - interval '30 hours' where id = ${f.terminal.id}`;
-    const down = await health(f, f.manager);
+    await sql`update clock_terminals set last_seen_at = ${hoursAgo(30)} where id = ${f.terminal.id}`;
+    const down = await health(f, f.manager, { now });
     expect(down.terminals[0]!.status).toBe('silent');
     expect(down.terminals[0]!.silentHours).toBe(30);
     expect(down.needsAttention).toBe(true);
