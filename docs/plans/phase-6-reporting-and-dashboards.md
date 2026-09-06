@@ -410,7 +410,7 @@ check before writing `docs/tasks/209-*.md`.
 | # | Task | State / depends on |
 |---|---|---|
 | **T-213** | **OIL wave 2 — the operational detectors** (§5). Every kind gets a test that makes the condition true and proves it fires, **and** one proving it does not fire when absent (T-135 invariants 1–2) | after Phases 2–5 land their data |
-| **T-214** | **The manager responsiveness scorecard** (§5.1) — two components re-weighted, not three with a zero term; the view log; `/findings` gains the accountability half it was specced without | after T-213 |
+| **T-214** ✅ | **The manager responsiveness scorecard** (§5.1) — two components re-weighted, not three with a zero term; the view log; `/findings` gains the accountability half it was specced without. **Shipped 2026-09-06** (`docs/tasks/214-manager-responsiveness-scorecard.md`). ⭐ **§5.1 understated it by two thirds**: v1's score needs a finding's first-seen date, and a v2 finding is a pure function of current state carrying no clock — so the task is mostly `finding_occurrences`, an append-only observation log written by a new **daily** scheduler job, and only then the score. ⛔ **And the naive port re-opens the hole T-135 closed** — mapping v1's *resolved* onto v2's *acknowledged* pays a manager to accept risk, so the action component counts occurrences that CLEARED and acknowledgement is reported, never scored | **done** |
 
 ### Wave 4 — the two financial capabilities `CAPABILITY-GAPS.md` assigns to Phase 6
 

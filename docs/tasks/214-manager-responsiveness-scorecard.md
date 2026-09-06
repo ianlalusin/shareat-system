@@ -1,7 +1,22 @@
 # T-214 — The manager responsiveness scorecard, and the clock findings do not have
 
-> **Status**: specced 2026-09-06. The last Phase 6 slice (`docs/plans/phase-6-reporting-and-dashboards.md`
-> §5.1, Wave 3). **Not implemented.**
+> **Status**: ✅ **BUILT 2026-09-06** (specced the same day). The last Phase 6 slice
+> (`docs/plans/phase-6-reporting-and-dashboards.md` §5.1, Wave 3).
+>
+> Ships as migration `0130` (`finding_occurrences`, `finding_views`), the `finding_observation`
+> daily scheduler job with its systemd unit pair, `managerScorecard`, and `/findings/scorecard`.
+>
+> ⚠️ **Two things in this spec turned out to be wrong when built, and both are corrected below:**
+>
+> 1. **§5.3's `clearRate = cleared / raised` was unfair and shipped visibly wrong for about ten
+>    minutes.** The first render showed **every store scoring 0** — their findings had been raised
+>    that morning and none was cleared, so `0/2`. A branch that has had a few hours has not
+>    "responded badly". Findings younger than the 14-day grace window are now **pending**: excluded
+>    from the denominator entirely, counting neither for nor against. See §5.3a. **Found by looking
+>    at the rendered page, not by any test** — every test passed both before and after.
+> 2. **§5.2's `lastCompletedPeriod` is not new.** `packages/domain/src/scheduler` already owns it
+>    (T-140). It is imported, not redefined — two copies would let the scorecard observe a different
+>    month from the one the screen shows.
 >
 > ⛔ **This is not a report over data that already exists.** The scorecard v1 ships cannot be ported,
 > because **the input it depends on does not exist in v2 and cannot be derived** — see §2. Two thirds
@@ -239,6 +254,30 @@ Per store (plus one org row), over occurrences with `opened_on` between `from` a
 | `acknowledged` | live acknowledgements for this store ⚠️ **reported, not scored** |
 | `oldestAcknowledgementDays` | `max(acknowledgementAgeDays)`. An ageing acceptance is a smell |
 | `lastViewedAt` / `lastViewedBy` | from §5.5, or null — *"nobody has opened this"* is the finding |
+
+### 5.3a ⭐ A finding too young to judge is PENDING — added during the build
+
+`clearRate` is **not** `cleared / raised`. It is:
+
+```
+countable = cleared + (still open AND opened more than 14 days ago)
+clearRate = countable > 0 ? cleared / countable : null
+```
+
+**Why, and it is not a refinement — the first version was wrong on screen.** With `cleared / raised`,
+the very first render of this page scored all three dev stores **0**. Every finding had been observed
+that morning; none had been cleared, because none *could* have been. The page told three innocent
+branches they had responded badly, on the strength of a few hours.
+
+A finding still open and younger than the grace window is **neither a win nor a loss**. It is
+excluded, shown in its own `Pending` column, and when everything is pending the denominator is zero,
+`clearRate` is null and the score is a **dash** — which is what invariant 7 asked for all along.
+
+⚠️ The grace window is the same 14 days as the speed horizon, deliberately: one number, one meaning —
+*"long enough that not acting on it is a choice."*
+
+⛔ **No test caught this and no test could have**, because the arithmetic was doing exactly what the
+spec said. It took rendering the page against real data and reading it as a manager would.
 
 ⚠️ **`avgDaysToClear` uses whole Manila dates**, so a finding opened and cleared the same day is
 **0 days**, not a fraction. Do not reach for `Date.now()`; `daysBetweenDates` in T-218's `sql-time.ts`
