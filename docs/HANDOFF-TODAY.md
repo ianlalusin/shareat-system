@@ -9,13 +9,13 @@ pushed; `main` is at the sha below and the tree is clean.
 The next agent is **starting Phase 7**, not finishing Phase 6. Nothing in `docs/tasks/` is
 half-built.
 
-## Gates at `<SHA>`
+## Gates at `b1c496c`
 
 | Gate | Result |
 |---|---|
 | **typecheck** | exit 0 |
-| **unit** | **1021 passed · 1 skipped · 1 failed** — `tests/golden/attendance-adjudication.test.ts`, DEF-170's 3 untriaged divergences. ⚠️ **Known red, unowned, NOT a regression** — red before this session, and nothing today touches attendance |
-| **integration** | `<INTEGRATION>` |
+| **unit** | ✅ **1022 passed · 1 skipped · 0 FAILED — green for the first time.** DEF-170 fixed this session (was 1021 / 1 failed) |
+| **integration** | ✅ **2422/2422 · 96/96 files · exit 0**, against `shareat_test` |
 | **T-214 alone** | ✅ **24/24**, run twice to prove no cross-run pollution |
 | **build** | ✅ exit 0, dev server stopped first by process enumeration. `/findings/scorecard` present |
 | **smoketest** | ✅ **13/13** on 9008 (T-214) · 0px horizontal overflow at 390px on both findings routes |
@@ -93,10 +93,11 @@ balanced (575/575 divs).
 
 1. ⛔ **THE TIMER CANNOT BE ARMED YET, AND THE REASON IS BIGGER THAN THE TIMER.** Ian asked for it
    on 2026-09-06 and it could not be done — established by checking, not assumed:
-   - **`Deploy` has never run.** Every run in the repo's history is `skipped` (`gh run list
-     --workflow=deploy.yml`), because it is gated on `ci.yml` succeeding and **CI fails on every
-     push to `main`** — sole cause: DEF-170 (item 3). So there is no `/srv/shareat` code and no
-     installed unit file on the droplet; there is nothing on the box to arm.
+   - **`Deploy` had never run** — every run in the repo's history read `skipped` (`gh run list
+     --workflow=deploy.yml`), because it is gated on `ci.yml` and CI failed on every push to `main`.
+     ✅ **That blocker is now removed: DEF-170 is fixed and the unit suite is green** (item 3), so
+     the next push to `main` should be the first `Deploy` that actually runs. **Check it did**
+     before assuming the droplet has code on it.
    - **No agent or human holds standing SSH**, by Ian's own decision (`IAN-SETUP-CHECKLIST.md` §4b):
      deploys run from GitHub Actions with a key in Secrets. ⛔ Do not seek a way round this.
    - `DEPLOY_HOST` / `DEPLOY_SSH_KEY` **do** exist in Secrets (set 2026-09-04), so the credential
@@ -113,13 +114,16 @@ balanced (575/575 divs).
    red build to production and is his call alone — no agent should trigger it.
 2. **Phase 7 planning.** Phase 6 is closed; there is no half-built work to inherit. `docs/ROADMAP.html`
    and `docs/CAPABILITY-GAPS.md` are the inputs.
-3. ⛔ **DEF-170 — and it is item 1 in disguise, because it is why the timer cannot be armed.**
-   Severity raised 🔸 → ⛔ today. This is CI's **only** failure; `deploy.yml` is gated on CI
-   succeeding, so **every `Deploy` run in the repo's history reads `skipped`** and **nothing has
-   ever been deployed**. Three consecutive handoffs (mine) called it *"known red, unowned, not a
-   regression"* — true, and badly incomplete: it read as housekeeping while it was a hard
-   production blocker. ⛔ **Not an agent's to triage**: `lipa-0359` diverges **v1 = 9 hours vs
-   v2 = 5 hours plus a half-day flag**, so explaining it away decides what somebody was paid.
+3. ✅ **DEF-170 — FIXED this session, which is what unblocked everything above.** It was CI's only
+   failure, `deploy.yml` is gated on CI, and so every `Deploy` run in the repo's history read
+   `skipped`. ⭐ **The engine was never touched** (`git diff` on `compute-day.ts` is empty) — both
+   causes were in the golden master's *triage*: two specimens had two known causes each and every
+   class carried a strict single-field signature, and `lipa-0359` was the mirror of class D, which
+   only ever covered one direction. ⚠️ **One thing there is still Ian's**, and it is in the
+   pay-movement list rather than hidden: `lipa-0359` claims **8h where v1 paid 9h** — a staffer who
+   punched in 20 minutes early on Lipa's stale grid (DEF-087) now gets 5h as a half day plus **3h
+   of PENDING overtime awaiting a manager**, by Ian's own `shortShiftHalfDayOt` rule. Nothing is
+   taken from them; it needs an approval that v1 did not.
 
 ## Do not decide these alone — they are Ian's
 
