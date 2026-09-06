@@ -65,35 +65,35 @@
 - `1137–1171` 10. Phase plan
 - `1172–1188` 11. Migration & ETL rules
 - `1189–1237` 12. Inherited landmines — do not repeat these
-- `1238–1420` 13. Decision log
-- `1421–1440` 14. Amendment protocol
-- `1441–1445` 15. Engineering standards — the industry practices this project follows
-  - `1446–1451` 15.1 Build order: walking skeleton first
-  - `1452–1463` 15.2 Golden-master testing — the most important practice here
-  - `1464–1472` 15.3 Strangler Fig, not big-bang cutover
-  - `1473–1477` 15.4 No dual-write
-  - `1478–1482` 15.5 Expand/contract migrations
-  - `1483–1491` 15.6 Observability from day zero, not later
-  - `1492–1496` 15.7 CI gates
-  - `1497–1501` 15.8 Backups and a tested restore
-  - `1502–1506` 15.9 Twelve-Factor config
-  - `1507–1514` 15.10 Append-only ledgers — but not event sourcing
-  - `1515–1519` 15.11 Defence in depth
-  - `1520–1548` 15.12 Skills are lenses, not assurance
-  - `1549–1555` 15.13 Reconciliation is a permanent feature
-- `1556–1560` 16. The accounting spine
-  - `1561–1592` 16.0 What we are actually fixing — the diagnosis
-  - `1593–1636` 16.1 The ten invariants — non-negotiable
-  - `1637–1651` 16.2 The oracle: how "correct" is tested
-  - `1652–1673` 16.3 The model — header + lines, not legs
-  - `1674–1693` 16.4 Deliberately simpler than ERPNext
-  - `1694–1760` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1761–1785` 16.6 What v1 already gets right — preserve the intent
-  - `1786–1807` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1808–1822` 16.8 What v1's accounting already gets right
-  - `1823–1866` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1867–1917` 16.10 Posting patterns — one canonical pattern per business event
-  - `1918–1949` 16.11 Inventory's accounting integration
+- `1238–1421` 13. Decision log
+- `1422–1441` 14. Amendment protocol
+- `1442–1446` 15. Engineering standards — the industry practices this project follows
+  - `1447–1452` 15.1 Build order: walking skeleton first
+  - `1453–1464` 15.2 Golden-master testing — the most important practice here
+  - `1465–1473` 15.3 Strangler Fig, not big-bang cutover
+  - `1474–1478` 15.4 No dual-write
+  - `1479–1483` 15.5 Expand/contract migrations
+  - `1484–1492` 15.6 Observability from day zero, not later
+  - `1493–1497` 15.7 CI gates
+  - `1498–1502` 15.8 Backups and a tested restore
+  - `1503–1507` 15.9 Twelve-Factor config
+  - `1508–1515` 15.10 Append-only ledgers — but not event sourcing
+  - `1516–1520` 15.11 Defence in depth
+  - `1521–1549` 15.12 Skills are lenses, not assurance
+  - `1550–1556` 15.13 Reconciliation is a permanent feature
+- `1557–1561` 16. The accounting spine
+  - `1562–1593` 16.0 What we are actually fixing — the diagnosis
+  - `1594–1637` 16.1 The ten invariants — non-negotiable
+  - `1638–1652` 16.2 The oracle: how "correct" is tested
+  - `1653–1674` 16.3 The model — header + lines, not legs
+  - `1675–1694` 16.4 Deliberately simpler than ERPNext
+  - `1695–1761` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1762–1786` 16.6 What v1 already gets right — preserve the intent
+  - `1787–1808` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1809–1823` 16.8 What v1's accounting already gets right
+  - `1824–1867` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1868–1918` 16.10 Posting patterns — one canonical pattern per business event
+  - `1919–1950` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1416,6 +1416,7 @@ just a patch.**
 | 173 | 2026-09-05 | ⭐ **§4.2 RULE 7 COVERS EVERY DASHBOARD TILE, NOT ONLY ACCOUNTING STATEMENTS — AND A SEPARATELY-ACCUMULATED COUNTER IS FORBIDDEN EVEN WHEN IT IS CALLED A CACHE.** | ⚠️ **A rule that existed for half the surfaces it should govern.** `docs/discovery/26` line 325 identified exactly this and could only recommend it: `docs/tasks/110` bans maintained summary rows for **ledger** balances (trial balance, income statement), and nothing extended that ban to **operational** KPI dashboards — so the discipline protected the trial balance and not *"open disputes"* or *"sales this month"*. ⭐ **v1 supplies both counter-examples, and they fail in two different ways.** `dashPresets` only ever ADDS a receipt to whichever rolling windows currently contain its date, with no mechanism to subtract once a day ages out — **observed 3×–11× inflation on "This Month"**, mitigated by a nightly rebuild cron rather than fixed. `dashboardSummary/live` self-heals only when a human opens `/dashboard` and finds it more than 6h stale — **SharEat Padre Garcia's was 123.7 hours stale at probe time**, because nobody had opened that store's dashboard since 2026-08-30. ⚠️ **The second is the more instructive failure, and it generalises past dashboards: a cache whose refresh trigger is a human being has no staleness state at all when nobody looks.** ⭐ **T-211 is the first task where this bites, and it lands as ratification rather than redirection** — the session building it had already excluded the incremental cache on its own reasoning, before this row existed. Found by the planner session verifying a peer's claim about doc-26 rather than accepting it; Ian approved the same day. | Yes — §4.2 rule 7 extended |
 | 174 | 2026-09-05 | ⭐ **STORE CREATION IS ITS OWN TASK, NOT HALF OF USER/ROLE MANAGEMENT — AND THE REASON GENERALISES: A PHASE ITEM BUNDLED BY WHERE ITS SCREEN LIVES IS NOT NECESSARILY ONE PIECE OF WORK.** | Asked of Ian while specifying T-219, because `docs/plans/v2-completion-blueprint-2026-09-05.md` bundles *"admin/users, admin/stores"* as a single Phase 7 item. **Ian: user/role management only; store creation gets its own task.** ⭐ **The two halves are different KINDS of work, and only reading the code shows it.** User/role management was pure wiring: `assignRole`/`elevateManager` and every `accessRepo` primitive already existed, were tested, and had zero callers — T-219 was their first. **Store creation has no backing function at all**: `packages/db/src/repo/stores.ts` holds only cash-custody policy (`cashPolicy`/`setCashPolicy`) plus an inbox-relay lookup, and no `createStore`-shaped function exists anywhere in the repo. ⚠️ **Two constraints make it a design pass rather than a form**, both found while specifying T-219 and both recorded in that task's *Out of scope*: (1) creating a store means choosing a remittance cadence and unremitted ceiling behind a database check constraint (`stores_pooling_requires_ceiling_check`), which is a money control, not a text field; (2) **`CAPABILITY-MATRIX.md` §C.2's second half applies in reverse** — *"a store created later appears in nobody's scope"* — so `createStore` must fan `person_store_scope` rows out to that org's existing admins, or a new branch is invisible to the person who just opened it and the failure looks like a permissions bug rather than a missing row. ⭐ **The transferable half**: the blueprint grouped these because both are admin screens. Screen location is not a unit of work — **what backs a screen is.** One was a caller away from done; the other needs a domain function with an invariant that does not exist yet. Worth checking any other bundled phase item the same way, by opening the functions rather than reading the plan. | No rule changed — a scope and sequencing decision. Recorded in `docs/tasks/219-user-and-role-management.md` *Out of scope*, DEF-180's disposition, and `docs/HANDOFF-TODAY.md` |
 | 175 | 2026-09-06 | ⭐ **A PERSON BELONGS TO EXACTLY ONE ORG. "Ian holds a franchise's org-admin" (row 114) is ONE PERSON ROW PER ORG, not one person holding roles across orgs** — and the database now enforces it (T-221, migration `0129`, DEF-183) | Ian, asked because the migration would have been **wrong** under the other answer and I was not willing to settle it by inference. `person_roles`'s RLS policy checked the *row's* `org_id` and never the *person's*, so a cross-org role assignment was accepted by Postgres; its two sibling access tables derive org *through* the person and refuse it. Aligning the three required knowing whether a cross-org role row is a **bug** or a **feature**. The registry said feature — *"a person can hold different roles in different orgs, e.g. Ian holding several franchises' admin"* — so it was checked rather than trusted, and **it is unreachable**: `sessions` carries no `org_id`, `findLiveByTokenHash` selects `orgId` from `persons`, no org switcher exists, and `authorize()` resolves a role only under the person's own org. Such a row therefore has **no reader anywhere in the system** (filed as DEF-187 — a claim of coverage wearing an *"e.g."* rather than an *"enforced by"*, in the one file whose job is to be believed about tenant isolation). ⭐ **The generalisable half: sibling tables protected by two policy shapes are not interchangeable, and both ended in `= app_current_org()`.** `org_id = app_current_org()` asks *"is this row LABELLED with my org?"*; the `via_person` form asks *"does this row's SUBJECT belong to my org?"* — only the second isolates a person-keyed table, and reading them side by side reassures. ⚠️ **Two corrections the build made to the stated fix**, both found by running it: the `org_id` conjunct is **kept, not swapped** (dropping it admits the mirror row — this org's person granted a role in ANOTHER org, a privilege pointing out of the tenant), and `USING` changed as well as `WITH CHECK`, which exposed a **second hole nobody had been sent to look for**: `UPDATE person_roles SET person_id = <other org's person>` walked a legitimate row across the tenant boundary and was allowed. A `WITH CHECK`-only fix passes the first three invariants and leaves it standing. **Consequence for franchise onboarding:** Ian gets a person row (and its own credential) in each org he administers; roles are never shared across orgs. Revisit `0129` only if an org switcher is ever built, which would additionally need a session org column, `findLiveByTokenHash` and `authorize()` axis 1 — the policy being the smallest and cheapest of the four to redo | Yes — closes DEF-183 at the database (RULES §6.3), and `packages/db/tests/integration/rls.test.ts` now fails the build if any person-keyed access table in `schema/access.ts` lacks the `via_person` form |
+| 176 | 2026-09-06 | ⭐ **CREATING A STORE IS TWO HALVES, AND ONLY ONE OF THEM IS THE SYSTEM'S: everything the database can make true by itself is ONE ATOMIC TRANSACTION, and everything that depends on the real world is a DERIVED CHECKLIST, never a stored status** — the store row, T-160's default room, and §C.2's admin store-scope fan-out commit together or not at all; whether the branch has staff, a till, a price list or an opening count is *computed on read* from the rows that would exist | Ian, 2026-09-06, deciding T-222's shape. ⛔ **The half that is not obvious is the fan-out.** A store created without `person_store_scope` rows for the org's existing admins is **invisible to the person who just created it**, and presents as a permissions bug rather than a missing step — the same *decided-in-an-ADR-never-written-into-the-function* shape as DEF-180. ⚠️ **And the checklist must be derived, not stored**: v1's `store-provision.actions.ts` kicked seeds off fire-and-forget from the client and `console.error`'d the failure **while the UI still said “Store Created”** — a success message with nothing executable behind it, which is DEF-185's shape rendered as a toast. v1 built an 11-item readiness registry in response, so it hit this hard enough to pay for a framework. A stored `isReady` flag would drift the moment someone deletes the price list; a query cannot. | Partly. The atomic half is enforceable and belongs in `createStore`'s own transaction; the derived half is enforced by **not having a column to drift** (§4.2 rule 7). ⚠️ **Not yet built — T-222 is a spec with zero code**, so this row records the shape a future implementer must not re-litigate, not a guarantee the code already keeps |
 
 
 ## 14. Amendment protocol

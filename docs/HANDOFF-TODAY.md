@@ -154,7 +154,7 @@ unowned.**
 | Decision | Recorded in |
 |---|---|
 | A person belongs to exactly **one org** | `PROJECT_BIBLE.md` §13 **row 175**, enforced by migration `0129` |
-| `createStore` = atomic auto half + derived checklist | `docs/tasks/222` Contract §2, `2ff09b5` body. ⚠️ **May deserve its own §13 row — Ian's call**; it is a shape future tasks will copy |
+| `createStore` = atomic auto half + derived checklist | ✅ **`PROJECT_BIBLE.md` §13 row 176** (Ian, 2026-09-06), plus `docs/tasks/222` Contract §2 |
 | ⭐ **Wrap-up now requires `npm run toc` after any bible row** | `.claude/skills/wrap-up/SKILL.md`, `7a1deff`. Stated **twice** on purpose: §2 for *forgetting to run it*, §3 as a pre-staging check for *running it after staging*, which commits a stale TOC anyway |
 
 ## Pick up here
@@ -171,8 +171,6 @@ unowned.**
 
 ## Do not decide these alone — they are Ian's
 
-- **Whether the `createStore` shape decision earns a `PROJECT_BIBLE.md` §13 row.** ⚠️ If yes, run
-  `npm run toc` and stage what it rewrites.
 - **T-221's composite FK** — `(person_id, org_id) → persons(id, org_id)` would enforce the one-org
   invariant for `postgres`, the ETL and every script, which RLS does not. Recommended as its own task.
 - **Service-charge distribution (T-187)** — unchanged: do not enable service charge in POS first.
