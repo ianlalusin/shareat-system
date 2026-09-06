@@ -618,6 +618,19 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'Which integrity problems an org has seen and accepted, and who accepted them. A record of ' +
       'known-bad books, which is exactly what a competitor or a franchisee should not read.',
   },
+  finding_occurrences: {
+    scope: 'org_column',
+    reason:
+      'T-214. When each integrity problem appeared and how long it went unfixed, per store. A ' +
+      'longer, more damaging record than the acknowledgements beside it: acceptances show what ' +
+      'was noticed, this shows what was ignored and for how many days.',
+  },
+  finding_views: {
+    scope: 'org_column',
+    reason:
+      'T-214. Which named person opened the findings screen on which day. Individually ' +
+      'attributable staff behaviour, and the raw material for "nobody has looked at this since".',
+  },
   channel_settlements: {
     scope: 'org_column',
     reason:

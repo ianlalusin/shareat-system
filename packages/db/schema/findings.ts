@@ -25,7 +25,7 @@
  * merely discouraged.
  */
 import { sql } from 'drizzle-orm';
-import { check, index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { check, date, index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
 import { persons } from './persons';
 import { stores } from './stores';
@@ -64,5 +64,113 @@ export const findingAcknowledgements = pgTable(
      */
     index('finding_acknowledgements_key_idx').on(t.orgId, t.findingKey, t.acknowledgedAt),
     index('finding_acknowledgements_org_kind_idx').on(t.orgId, t.kind),
+  ],
+);
+
+/**
+ * ⭐ **T-214 — the clock a finding does not carry.**
+ *
+ * ## ⛔ This is an OBSERVATION log, not finding state — and the difference is the whole design
+ *
+ * Read this file's header first. It says there is deliberately no `findings` table, because v1
+ * stored a finding's `state` and resolving one suppressed tomorrow's recompute *while the condition
+ * still held*. **That rule is intact.** This table records something categorically different: *"the
+ * detector reported this key on this day."*
+ *
+ * ⛔ **Nothing in the detection path reads this table.** `listFindings` does not join it, no
+ * detector consults it, and deleting every row here changes not one finding in the feed — which is
+ * asserted by a test rather than promised by this comment. It is evidence, never input.
+ *
+ * ## Why it has to exist at all
+ *
+ * A `DetectedFinding` is a pure function of current state: it carries no timestamp and cannot, and
+ * almost no detector can be re-asked *"as of"* a past date because they read live balances rather
+ * than an as-of ledger. So **when a finding first appeared is not recoverable from anywhere** — and
+ * both surviving components of the T-214 scorecard need it. Without this table there is no
+ * speed-to-clear and no denominator.
+ *
+ * ## ⚠️ There is no backfill, and there cannot be
+ *
+ * The history does not exist to recover. Findings that have held for weeks all get today's
+ * `opened_on` on the first run, so the screen must state the date this record began. A number that
+ * silently understates how long a problem has been ignored is worse than no number.
+ */
+export const findingOccurrences = pgTable(
+  'finding_occurrences',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    /** Null for an ORG-wide finding — a trial balance does not belong to one store. */
+    storeId: uuid('store_id').references(() => stores.id, { onDelete: 'restrict' }),
+    findingKey: text('finding_key').notNull(),
+    /** Denormalised so the scorecard groups by kind without re-running a detector. */
+    kind: text('kind').notNull(),
+    /** ⭐ `firstSeen`. The whole reason the table exists. Manila date. */
+    openedOn: date('opened_on').notNull(),
+    /** Advanced by every run that still sees the key. */
+    lastSeenOn: date('last_seen_on').notNull(),
+    /**
+     * ⛔ Set by the first run that asked this key's question and did NOT get it back.
+     *
+     * ⚠️ "asked this key's question" is load-bearing — see `recordFindingObservations`. Periodic
+     * keys embed their period (`depreciationNotBooked:2026-08`), so a run asking about September
+     * must NOT close August: the month stopped being asked about, nobody fixed anything.
+     */
+    closedOn: date('closed_on'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('finding_occurrences_window_check', sql`${t.lastSeenOn} >= ${t.openedOn}`),
+    check(
+      'finding_occurrences_closed_after_open_check',
+      sql`${t.closedOn} is null or ${t.closedOn} >= ${t.openedOn}`,
+    ),
+    /**
+     * ⭐ **At most one OPEN occurrence per key**, which is what makes the daily job idempotent and
+     * safely re-runnable. A closed one may repeat freely: a finding that comes back is a regression,
+     * a new occurrence, not the old one continuing.
+     *
+     * ⚠️ `coalesce` on `store_id` because NULL never equals NULL in a unique index, so org-wide
+     * findings would otherwise be exempt from the constraint that matters most to them.
+     */
+    uniqueIndex('finding_occurrences_one_open_idx')
+      .on(t.orgId, sql`coalesce(${t.storeId}, '00000000-0000-0000-0000-000000000000'::uuid)`, t.findingKey)
+      .where(sql`${t.closedOn} is null`),
+    index('finding_occurrences_period_idx').on(t.orgId, t.openedOn),
+    index('finding_occurrences_store_idx').on(t.orgId, t.storeId, t.openedOn),
+  ],
+);
+
+/**
+ * ⭐ **T-214 — who actually looked.**
+ *
+ * v1 logs whether the report was opened at all (`insightViewLog`), and T-135 kept that on purpose:
+ * *"a finding nobody is accountable for is a finding nobody clears."* This is the v2 equivalent,
+ * pointed at `/findings` because v2 has no AI briefing to log opens against.
+ *
+ * ⚠️ **Recorded, deliberately NOT scored.** Scoring page-opens pays people to open pages. It is
+ * shown as *"last looked at by X, N days ago"* — and a null there, meaning nobody has ever opened
+ * it, is the most useful thing on the row.
+ *
+ * ⛔ One row per person per Manila day, so a refresh is not a second view.
+ */
+export const findingViews = pgTable(
+  'finding_views',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    personId: uuid('person_id')
+      .notNull()
+      .references(() => persons.id, { onDelete: 'restrict' }),
+    viewedOn: date('viewed_on').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('finding_views_person_day_idx').on(t.orgId, t.personId, t.viewedOn),
+    index('finding_views_org_day_idx').on(t.orgId, t.viewedOn),
   ],
 );

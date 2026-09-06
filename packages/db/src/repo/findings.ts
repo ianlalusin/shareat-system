@@ -573,6 +573,8 @@ export async function serviceChargeFloatAgeing(
 
 export interface AcknowledgementRow {
   findingKey: string;
+  /** ⚠️ Null for an ORG-wide finding. Added by T-214 so the scorecard can group by store. */
+  storeId: string | null;
   acknowledgedBy: string;
   acknowledgedAt: Date;
   expiresAt: Date;
@@ -591,16 +593,17 @@ export async function liveAcknowledgements(
 ): Promise<Map<string, AcknowledgementRow>> {
   const rows = (await tx.execute(sql`
     select distinct on (finding_key)
-      finding_key, acknowledged_by, acknowledged_at, expires_at, note
+      finding_key, store_id, acknowledged_by, acknowledged_at, expires_at, note
     from finding_acknowledgements
     where org_id = ${orgId} and expires_at > now()
     order by finding_key, acknowledged_at desc
-  `)) as unknown as Record<string, string>[];
+  `)) as unknown as Record<string, string | null>[];
   return new Map(
     rows.map((r) => [
       String(r.finding_key),
       {
         findingKey: String(r.finding_key),
+        storeId: r.store_id == null ? null : String(r.store_id),
         acknowledgedBy: String(r.acknowledged_by),
         acknowledgedAt: new Date(String(r.acknowledged_at)),
         expiresAt: new Date(String(r.expires_at)),
@@ -1809,4 +1812,204 @@ export async function meatSlabStale(tx: Tx, orgId: string, thresholdDays = 14): 
       `${r.store_name} still has ${r.remaining_quantity} of a ${r.item_name} slab received ` +
       `${r.received_at}, past the freshness window. Worth a look before it becomes wastage.`,
   }));
+}
+
+// ---------------------------------------------------------------------------------------------
+// T-214 — occurrences: the clock a DetectedFinding does not carry
+// ---------------------------------------------------------------------------------------------
+
+export interface OpenOccurrenceRow {
+  readonly id: string;
+  readonly storeId: string | null;
+  readonly findingKey: string;
+  readonly kind: string;
+  readonly openedOn: string;
+}
+
+/** Every occurrence still open for an org. The daily job's working set. */
+export async function openOccurrences(tx: Tx, orgId: string): Promise<OpenOccurrenceRow[]> {
+  const rows = await tx.execute(sql`
+    select id, store_id, finding_key, kind, opened_on::text as opened_on
+    from finding_occurrences
+    where org_id = ${orgId} and closed_on is null
+    order by opened_on
+  `);
+  return (rows as unknown as Record<string, unknown>[]).map((r) => ({
+    id: String(r.id),
+    storeId: r.store_id == null ? null : String(r.store_id),
+    findingKey: String(r.finding_key),
+    kind: String(r.kind),
+    openedOn: String(r.opened_on),
+  }));
+}
+
+/**
+ * Record that a detector reported this key today.
+ *
+ * ⭐ **Idempotent by the partial unique index, not by a read-then-write.** Running the job twice in
+ * a day advances `last_seen_on` to the same date and changes nothing else — which matters because a
+ * systemd timer that fires twice after a clock change must not open a second occurrence.
+ *
+ * ⚠️ The conflict target must repeat the index's `coalesce` expression exactly, or Postgres cannot
+ * match it to the index and the upsert becomes a plain insert that violates it.
+ */
+export async function observeFinding(
+  tx: Tx,
+  input: { orgId: string; storeId: string | null; findingKey: string; kind: string },
+): Promise<void> {
+  await tx.execute(sql`
+    insert into finding_occurrences (org_id, store_id, finding_key, kind, opened_on, last_seen_on)
+    values (${input.orgId}, ${input.storeId}, ${input.findingKey}, ${input.kind},
+            ${MANILA_TODAY}, ${MANILA_TODAY})
+    on conflict (org_id, coalesce(store_id, '00000000-0000-0000-0000-000000000000'::uuid), finding_key)
+      where closed_on is null
+    do update set last_seen_on = ${MANILA_TODAY}
+  `);
+}
+
+/** Close one occurrence. ⛔ Only ever called for a key whose question the run actually asked. */
+export async function closeOccurrence(tx: Tx, occurrenceId: string): Promise<void> {
+  await tx.execute(sql`
+    update finding_occurrences
+    set closed_on = ${MANILA_TODAY}
+    where id = ${occurrenceId} and closed_on is null
+  `);
+}
+
+/** The date this record began — what the screen must disclose, because there is no backfill. */
+export async function firstObservationDate(tx: Tx, orgId: string): Promise<string | null> {
+  const rows = await tx.execute(sql`
+    select min(opened_on)::text as d from finding_occurrences where org_id = ${orgId}
+  `);
+  const d = (rows as unknown as Record<string, unknown>[])[0]?.d;
+  return d == null ? null : String(d);
+}
+
+export interface StoreScorecardRow {
+  readonly storeId: string | null;
+  readonly raised: number;
+  readonly cleared: number;
+  readonly stillOpen: number;
+  /**
+   * ⭐ Still open, and open LONGER than the grace window — so it has had a fair chance and counts
+   * against the store. See `scorecardByStore` for why this is not simply `stillOpen`.
+   */
+  readonly openPastGrace: number;
+  /** Still open but younger than the grace window: neither a win nor a loss yet. */
+  readonly pending: number;
+  /** Mean whole days open→closed over the cleared ones. Null when nothing cleared. */
+  readonly avgDaysToClear: number | null;
+}
+
+/**
+ * ⭐ The scorecard's arithmetic, in ONE statement, per store.
+ *
+ * ⚠️ **Grouped by `store_id` including NULL** — org-wide findings (a trial balance belongs to no
+ * branch) form their own row and must never be spread across stores, or every branch inherits the
+ * admin's problems.
+ *
+ * ⛔ `avg` over `closed_on - opened_on` is whole Manila days, computed by Postgres in the same
+ * statement as the rows it summarises. Do not recompute this in TypeScript from `Date.now()` —
+ * that is DEF-172's two-clock defect, and `findings-single-clock.test.ts` guards this file.
+ *
+ * ## ⭐ Why `open_past_grace` exists, and why the clear rate is not `cleared / raised`
+ *
+ * **Found by looking at the rendered page, not by a test.** On the first day of the record every
+ * store showed a score of **0** — every finding had been raised that morning and none had been
+ * cleared, so `cleared / raised` was `0/2`. But a finding raised today has not been *ignored*; it
+ * has not had a chance yet, and a screen that says a branch "responded badly" on the strength of
+ * a few hours is worse than showing nothing.
+ *
+ * So an occurrence still open and YOUNGER than the grace window is **pending** — neither a win nor
+ * a loss — and is excluded from the denominator entirely. The clear rate answers *"of the findings
+ * that have had a fair chance, how many were cleared?"* When everything is still pending the
+ * denominator is zero, the rate is null, and the score is null: correct, and exactly what invariant
+ * 7 asks for.
+ *
+ * ⚠️ The grace window is the same 14 days as the speed horizon, deliberately — one number, one
+ * meaning: *"long enough that not acting on it is a choice."*
+ */
+export async function scorecardByStore(
+  tx: Tx,
+  orgId: string,
+  fromIsoDate: string,
+  toIsoDate: string,
+  graceDays = 14,
+): Promise<StoreScorecardRow[]> {
+  const rows = await tx.execute(sql`
+    select
+      store_id,
+      count(*)::int                                        as raised,
+      count(*) filter (where closed_on is not null)::int    as cleared,
+      count(*) filter (where closed_on is null)::int        as still_open,
+      count(*) filter (
+        where closed_on is null and (${MANILA_TODAY} - opened_on) > ${graceDays}
+      )::int                                               as open_past_grace,
+      count(*) filter (
+        where closed_on is null and (${MANILA_TODAY} - opened_on) <= ${graceDays}
+      )::int                                               as pending,
+      avg(closed_on - opened_on) filter (where closed_on is not null) as avg_days
+    from finding_occurrences
+    where org_id = ${orgId}
+      and opened_on >= ${fromIsoDate}::date
+      and opened_on <= ${toIsoDate}::date
+    group by store_id
+  `);
+  return (rows as unknown as Record<string, unknown>[]).map((r) => ({
+    storeId: r.store_id == null ? null : String(r.store_id),
+    raised: Number(r.raised),
+    cleared: Number(r.cleared),
+    stillOpen: Number(r.still_open),
+    openPastGrace: Number(r.open_past_grace),
+    pending: Number(r.pending),
+    avgDaysToClear: r.avg_days == null ? null : Math.round(Number(r.avg_days) * 10) / 10,
+  }));
+}
+
+// ---------------------------------------------------------------------------------------------
+// T-214 — the view log
+// ---------------------------------------------------------------------------------------------
+
+/** ⛔ One row per person per Manila day. A refresh is not a second view. */
+export async function recordFindingView(
+  tx: Tx,
+  input: { orgId: string; personId: string },
+): Promise<void> {
+  await tx.execute(sql`
+    insert into finding_views (org_id, person_id, viewed_on)
+    values (${input.orgId}, ${input.personId}, ${MANILA_TODAY})
+    on conflict (org_id, person_id, viewed_on) do nothing
+  `);
+}
+
+export interface LastViewRow {
+  readonly personId: string;
+  readonly displayName: string;
+  readonly viewedOn: string;
+  readonly daysAgo: number;
+}
+
+/**
+ * Who last opened `/findings`, and how long ago.
+ *
+ * ⚠️ A `null` return is the useful answer, not a missing one: **nobody has ever opened this screen.**
+ */
+export async function lastFindingView(tx: Tx, orgId: string): Promise<LastViewRow | null> {
+  const rows = await tx.execute(sql`
+    select v.person_id, p.display_name, v.viewed_on::text as viewed_on,
+           (${MANILA_TODAY} - v.viewed_on)::int as days_ago
+    from finding_views v
+    join persons p on p.id = v.person_id
+    where v.org_id = ${orgId}
+    order by v.viewed_on desc
+    limit 1
+  `);
+  const r = (rows as unknown as Record<string, unknown>[])[0];
+  if (!r) return null;
+  return {
+    personId: String(r.person_id),
+    displayName: String(r.display_name),
+    viewedOn: String(r.viewed_on),
+    daysAgo: Number(r.days_ago),
+  };
 }

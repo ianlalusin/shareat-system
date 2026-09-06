@@ -50,6 +50,16 @@ export const SCHEDULER_JOBS = [
   'mirror_publish',
   'inbox_relay',
   'order_wastage_backstop',
+  /**
+   * `finding_observation` — T-214, DAILY. Records that a detector reported a key on a day, which is
+   * the clock a `DetectedFinding` cannot carry (see `findings.ts`'s `findingOccurrences`).
+   *
+   * ⛔ Named here because a writer with no caller is DEF-186 exactly: `replenishAfterUsage` was
+   * built, tested, marked done, and invoked by nothing for weeks. ⚠️ And merging is not the finish
+   * line — `docs/ops/README.md` says installing and ARMING the timer is, because v1's seed data
+   * claimed a depreciation cron that never existed (DEF-044).
+   */
+  'finding_observation',
 ] as const;
 export type SchedulerJob = (typeof SCHEDULER_JOBS)[number];
 
@@ -104,7 +114,7 @@ export const schedulerRuns = pgTable(
 
     check(
       'scheduler_runs_job_check',
-      sql`${t.job} in ('depreciation', 'amortisation', 'attendance_sweep', 'mirror_publish', 'inbox_relay', 'order_wastage_backstop')`,
+      sql`${t.job} in ('depreciation', 'amortisation', 'attendance_sweep', 'mirror_publish', 'inbox_relay', 'order_wastage_backstop', 'finding_observation')`,
     ),
     check('scheduler_runs_outcome_check', sql`${t.outcome} in ('ok', 'partial', 'failed')`),
     check('scheduler_runs_period_shape_check', sql`${t.period} ~ '^[0-9]{4}-[0-9]{2}$'`),

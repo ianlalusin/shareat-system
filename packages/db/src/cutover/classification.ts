@@ -873,6 +873,24 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'Acceptances of conditions in a ledger the cutover replaces. Keeping them would suppress ' +
       'findings about books that no longer exist.',
   },
+  finding_occurrences: {
+    // Purge, for the same reason as the acknowledgements above and one more. Every occurrence
+    // records how long a condition in the PRE-cutover ledger went unfixed, and that ledger is
+    // replaced wholesale. Keeping them would age findings against books that no longer exist, and
+    // would credit or blame a store for clearing something the cutover erased.
+    class: 'purge',
+    reason:
+      'The lifespan of conditions in a ledger the cutover replaces. Keeping them would age ' +
+      'findings against books that no longer exist.',
+  },
+  finding_views: {
+    // Purge. Who read a screen about the pre-cutover ledger says nothing about the new one, and
+    // the accountability record it feeds ("nobody has looked since...") would start out lying.
+    class: 'purge',
+    reason:
+      'Views of a screen about a ledger the cutover replaces. Carrying them forward would make ' +
+      '"last looked at" refer to books that no longer exist.',
+  },
   channel_settlements: {
     // Purge, like every other posting document. A settlement clears a receivable the opening
     // balance replaces, so keeping it would leave it pointing at a sales day that no longer
@@ -1005,6 +1023,8 @@ export function tablesInClass(cls: CutoverClass): string[] {
  */
 export const PURGE_ORDER_HINT: readonly string[] = [
   'sessions',
+  'finding_views',
+  'finding_occurrences',
   'finding_acknowledgements',
   'channel_settlements',
   'sales_day_channels',
