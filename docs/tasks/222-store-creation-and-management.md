@@ -14,9 +14,12 @@
 > the default room, and a fresh org has no `location_types`.
 >
 > ⛔ **DEF-189 was found by the smoketest, not by the test suite** — a manager clicking a store in
-> a list they may read got an HTTP 500 instead of a refusal. Fixed here. **Open question 3 (refuse
-> deactivation with an open sales day or unremitted cash) is still NOT implemented** and remains
-> Ian's call.
+> a list they may read got an HTTP 500 instead of a refusal. Fixed here.
+>
+> **Open question 2 (refuse deactivation with an open sales day or unremitted cash) is NOT
+> implemented** and remains Ian's call — `deactivateStore` currently deactivates unconditionally.
+> Questions 1 and 3 were answered by building: the `code` is not in `UpdateStorePatch` at all, and
+> a manager gets a refusal page rather than a read-only view (DEF-189's fix). Both are reversible.
 >
 > ⛔ **This is not a form.** A store row is the smallest part of creating a store. Everything
 > below exists because a store that is merely *inserted* is a store nobody can sign into, sell
