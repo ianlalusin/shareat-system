@@ -125,6 +125,10 @@ const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
       // authorized for nothing. Not gated per-link: `manage_users` is matrix-false for manager,
       // and the server refuses them properly. Hiding a link is presentation; the gate is the write.
       { href: '/admin/users', label: 'Users and roles' },
+      // ⭐ T-222 — until this shipped nothing in the codebase created a store; the four dev stores
+      // were inserted by hand. ⚠️ Linked here on purpose: DEF-181 was precisely a screen that
+      // shipped linked from nowhere, and this is the task that cites it.
+      { href: '/admin/stores', label: 'Stores' },
       // ⭐ DEF-181 — both of these shipped with T-201 and were linked from nowhere, reachable only
       // by typing the URL. Exactly the failure this file's own header comment describes, re-created
       // three routes later.
