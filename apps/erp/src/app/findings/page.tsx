@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { requireSession } from '../../lib/session';
 import { acknowledgeFindingAction } from './actions';
 import {
@@ -5,6 +6,7 @@ import {
   bySeverityThenStatus,
   findingsFor,
   lastCompletedPeriod,
+  noteFindingView,
   selectablePeriods,
 } from './lib';
 
@@ -29,6 +31,10 @@ export default async function FindingsPage({
   const period = sp.period && periods.includes(sp.period) ? sp.period : lastCompletedPeriod();
   const { feed, readiness } = await findingsFor(actor.orgId, period);
 
+  // ⭐ T-214 — record that a human actually looked. ⚠️ Deliberately AFTER the read and outside its
+  // transaction, and it swallows its own failure: the log is accountability, the page is the work.
+  await noteFindingView(actor.orgId, actor.personId);
+
   const rows = [...feed.findings].sort(bySeverityThenStatus);
   const hard = rows.filter((f) => f.severity === 'hard');
   const soft = rows.filter((f) => f.severity === 'soft');
@@ -36,7 +42,14 @@ export default async function FindingsPage({
   return (
     <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
       <div>
-        <h1 className="text-2xl font-semibold">Findings</h1>
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <h1 className="text-2xl font-semibold">Findings</h1>
+          {/* ⚠️ Linked, not orphaned. DEF-139 and DEF-181 were both screens reachable only by
+              typing the URL — a link is part of shipping. */}
+          <Link href="/findings/scorecard" className="text-sm underline underline-offset-2">
+            Responsiveness scorecard →
+          </Link>
+        </div>
         <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
           Every question the books are asked, answered on this page load. There is no findings
           table — <strong>a finding cannot be resolved while it is still true</strong>, only fixed

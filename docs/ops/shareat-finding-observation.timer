@@ -1,0 +1,24 @@
+# T-214 — DAILY, early morning Manila.
+#
+# ⭐ Why daily and not hourly or weekly. The occurrence log's resolution IS the resolution of the
+# scorecard's speed component, which is scored against a 14-day horizon: a weekly run makes
+# "cleared in 3 days" and "cleared in 9 days" indistinguishable. Hourly buys nothing — every
+# detector is day-grain, and none of them is cheap.
+#
+# ⚠️ 01:30 Manila is after the day has genuinely ended for every store, so a finding that was true
+# all day is recorded against that day rather than against tomorrow.
+
+[Unit]
+Description=Shareat — daily integrity-finding observation (T-214)
+
+[Timer]
+OnCalendar=*-*-* 01:30:00 Asia/Manila
+# ⚠️ Catch up after a reboot or an outage rather than skipping silently. A skipped day cannot be
+# reconstructed — the detectors read live state and cannot be asked "as of" yesterday — so a silent
+# skip permanently understates how long something went unfixed. Same reasoning as month-end's,
+# and the same defect behind it (DEF-044).
+Persistent=true
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target

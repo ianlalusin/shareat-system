@@ -42,20 +42,21 @@ domain argument to also set up Caddy + automatic TLS on 80/443 (no traefik confl
 |---|---|---|---|
 | **Month-end (T-140 / units by T-205)** | `npm run month-end` | Monthly, 1st | Depreciation and amortisation are per-period |
 | **Attendance sweep (T-199)** | `npm run attendance-sweep` | ⚠️ **Hourly** | The cut-off is a wall-clock hour **per store**. A daily timer cannot serve two stores on different hours |
+| **Finding observation (T-214)** | `npm run finding-observation` | **Daily, 01:30 Manila** | ⭐ It is the CLOCK, not a report. A finding is a pure function of current state and carries no timestamp, so a skipped day **cannot be reconstructed afterwards** — the detectors read live state and cannot be asked "as of" yesterday. Every age on the responsiveness scorecard is measured from what this job saw, so a silent skip permanently understates how long something went unfixed. Daily, not weekly, because the speed component is scored against a 14-day horizon and a weekly run cannot tell 3 days from 9 |
 | **Firestore sync relay (T-204)** | `npm run firestore-relay` | Every 2 minutes | No wall-clock anchor — punches and mirror writes are useful as soon as possible, but a late run breaks nothing (idempotent, Firestore durable in the meantime). Closes DEF-132 (nothing ever ran either lane against real Firestore) and DEF-134 (nothing ever computed a fresh day's `attendance_days` row) |
 
-Plus a fourth unit that is not a scheduled job but the app itself: **`shareat-erp.service`**
+Plus a fifth unit that is not a scheduled job but the app itself: **`shareat-erp.service`**
 (`next start -p 9008`, long-running, `Restart=always`) — installed and enabled the same way, by
 `docs/ops/provision.sh` plus the deploy workflow.
 
-**All four were written before the droplet could run them.** Same lesson as the table above —
+**All five were written before the droplet could run them.** Same lesson as the table above —
 shipping the code is not the finish line, installing and arming the timer is. `docs/tasks/205-first-production-deployment.md`
 covers the deployment that finally gives these something to run against.
 
 ## Installing everything (after `docs/ops/provision.sh` has run once)
 
-`provision.sh` installs all seven unit files (`shareat-erp.service` +
-three `.service`/`.timer` pairs) via `systemctl daemon-reload`, but does **not** enable or start
+`provision.sh` installs all nine unit files (`shareat-erp.service` +
+four `.service`/`.timer` pairs) via `systemctl daemon-reload`, but does **not** enable or start
 them — there is nothing to point them at until the first deploy lands. After `deploy.yml` has run
 successfully at least once:
 
@@ -64,15 +65,17 @@ sudo systemctl enable --now shareat-erp.service
 sudo systemctl enable --now shareat-firestore-relay.timer
 sudo systemctl enable --now shareat-attendance-sweep.timer
 sudo systemctl enable --now shareat-month-end.timer
+sudo systemctl enable --now shareat-finding-observation.timer
 ```
 
 **Verify each is actually armed** — this is the step that has historically never been done:
 
 ```sh
-systemctl list-timers   # NEXT and LEFT must be populated for all three timers
+systemctl list-timers   # NEXT and LEFT must be populated for all FOUR timers
 sudo systemctl start shareat-attendance-sweep.service   # run each job once, now
 sudo systemctl start shareat-firestore-relay.service
 sudo systemctl start shareat-month-end.service
+sudo systemctl start shareat-finding-observation.service
 journalctl -u shareat-attendance-sweep.service -n 50    # repeat per unit
 ```
 
@@ -89,3 +92,24 @@ an alarm, and a watchdog that is itself scheduled can die with the thing it watc
 true whether or not the sweep ever ran, and it is `hard` severity, so it blocks a period close.
 
 ⛔ **If that finding keeps appearing, the timer is not installed.** That is the whole design.
+
+### ⚠️ The exception: `finding_observation` has no such alarm, and cannot have one
+
+The trick above works because the sweep's *absence* leaves a trace in data that something else
+derives. **T-214's observation job is the thing that creates the trace**, so its silence looks
+exactly like a quiet week: no new occurrences, nothing overdue, a scorecard that simply stops
+moving. There is no derived finding that fires because the recorder stopped recording.
+
+What is available instead, and it is weaker on purpose rather than by oversight:
+
+- `/findings/scorecard` prints **"record began on \<date\>"** from `min(opened_on)`, and every
+  occurrence carries `last_seen_on`. A `last_seen_on` more than a day or two behind today means the
+  job has stopped — visible to anyone who opens the page, invisible to anyone who does not.
+- `scheduler_runs` holds a row per run, so `select max(started_at) where job = 'finding_observation'`
+  answers it exactly.
+
+⛔ **Do not "fix" this by adding a detector that reads `finding_occurrences`.** Nothing in the
+detection path may read that table — it is an observation log, not finding state, and the moment a
+detector consults it, T-135's rule is broken and v1's suppression defect is back. An integration
+test asserts this by deleting every row and re-reading the feed. The gap is real; closing it this
+way costs more than it buys.

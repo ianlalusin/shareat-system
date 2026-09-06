@@ -88,7 +88,8 @@ UNIT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 for f in shareat-erp.service \
          shareat-firestore-relay.service shareat-firestore-relay.timer \
          shareat-attendance-sweep.service shareat-attendance-sweep.timer \
-         shareat-month-end.service shareat-month-end.timer; do
+         shareat-month-end.service shareat-month-end.timer \
+         shareat-finding-observation.service shareat-finding-observation.timer; do
   install -m 644 "$UNIT_DIR/$f" "/etc/systemd/system/$f"
 done
 systemctl daemon-reload
@@ -141,5 +142,6 @@ if [ -L /srv/shareat ] && [ -s /srv/shareat-shared/.env.local ]; then
   echo "      systemctl enable --now shareat-firestore-relay.timer"
   echo "      systemctl enable --now shareat-attendance-sweep.timer"
   echo "      systemctl enable --now shareat-month-end.timer"
+  echo "      systemctl enable --now shareat-finding-observation.timer"
   echo "    Then verify each is actually armed — 'systemctl list-timers' — per docs/ops/README.md."
 fi
