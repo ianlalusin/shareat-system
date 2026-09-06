@@ -386,7 +386,7 @@ describe('T-220 / DEF-184 — commissaryUnitMismatch: goods signed for that neve
    */
   async function receivedLine(
     f: Fixture,
-    opts: { withMovement: boolean; ledgerOnly?: boolean; receivedQty?: string | null },
+    opts: { withMovement: boolean; ledgerOnly?: boolean; receivedQty?: string | null; makeRoom?: boolean },
   ) {
     const tag = uid('umm');
     const [branch] = await sql<{ id: string }[]>`
@@ -426,21 +426,28 @@ describe('T-220 / DEF-184 — commissaryUnitMismatch: goods signed for that neve
         ${opts.receivedQty === undefined ? '10' : opts.receivedQty}, ${opts.ledgerOnly ?? false})
       returning id`;
 
-    if (opts.withMovement) {
+    let roomId: string | null = null;
+    if (opts.withMovement || opts.makeRoom) {
       const [lt] = await sql<{ id: string }[]>`
         insert into location_types (org_id, code, name) values (${f.orgId}, ${tag}, 'Stockroom') returning id`;
       const [room] = await sql<{ id: string }[]>`
         insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by)
         values (${f.orgId}, ${branch!.id}, ${tag}, 'Kitchen', ${lt!.id}, 'operating', true, ${f.personId})
         returning id`;
+      roomId = room!.id;
+    }
+    if (opts.withMovement) {
       await sql`
         insert into stock_movements (org_id, store_id, location_id, item_id, moved_at, quantity, kind,
           source_type, source_id, created_by)
-        values (${f.orgId}, ${branch!.id}, ${room!.id}, ${item!.id}, now(), '10', 'transfer_in',
+        values (${f.orgId}, ${branch!.id}, ${roomId}, ${item!.id}, now(), '10', 'transfer_in',
           'trade_order_receipt', ${line!.id}, ${f.personId})`;
     }
-    return { branchId: branch!.id, lineId: line!.id };
+    return { branchId: branch!.id, lineId: line!.id, orderId: ord!.id, itemId: item!.id, roomId: roomId };
   }
+
+  /** Same fixture, named for the DEF-188 tests that need the order and room ids too. */
+  const receivedLineDetailed = (f: Fixture) => receivedLine(f, { withMovement: false, makeRoom: true });
 
   it('⭐ fires when a received line moved no stock — the state T-173 refused to corrupt and nobody surfaced', async () => {
     const f = await fixture('ummfire');
@@ -452,7 +459,40 @@ describe('T-220 / DEF-184 — commissaryUnitMismatch: goods signed for that neve
     expect(finding!.storeId).toBe(branchId);
     expect(finding!.severity).toBe('hard');
     expect(finding!.detail).toMatch(/never reached its stock ledger/);
-    expect(finding!.detail).toMatch(/1,000\.00/);
+    expect(finding!.detail).toMatch(/10\.000 in base units short/);
+  });
+
+  it('⛔ DEF-188 — does NOT fire when the receipt movement is sourced by the ORDER id, not the line id', async () => {
+    // ⭐ The regression test for the false positive this detector shipped with. `confirmReceipt`
+    // writes `source_id = orderLineIdByLineId[lineId] ?? orderId`, and DEF-140's comment claims
+    // "every real path" supplies the map — dev data disproved it. Two Lipa orders carried
+    // `trade_order_receipt` movements under the ORDER id, the stock had genuinely arrived, and a
+    // line-id-only lookup reported them as never received. At `hard` severity that blocks
+    // period-close readiness on a store whose books are fine.
+    const f = await fixture('ummorderid');
+    const { branchId, orderId, lineId, itemId, roomId } = await receivedLineDetailed(f);
+    void lineId;
+    await sql`
+      insert into stock_movements (org_id, store_id, location_id, item_id, moved_at, quantity, kind,
+        source_type, source_id, created_by)
+      values (${f.orgId}, ${branchId}, ${roomId}, ${itemId}, now(), '10', 'transfer_in',
+        'trade_order_receipt', ${orderId}, ${f.personId})`;
+
+    expect(await kinds(f)).not.toContain('commissaryUnitMismatch');
+  });
+
+  it('⚠️ DEF-188 — the amount is the goods at TRANSFER RATE, and the wording must not claim 1340', async () => {
+    // ⛔ `1340` is carried at COST. The first version of this detail said the figure was "sitting in
+    // 1340 Inventory in transit" while reporting a transfer-rate number — on dev data that read
+    // ₱1,400.00 against a `1340` balance of ₱180.00. Same wrong-basis mistake as DEF-175, made in a
+    // detector written after DEF-175 was filed. The assertion pins the wording, not just the number.
+    const f = await fixture('ummbasis');
+    await receivedLine(f, { withMovement: false });
+
+    const finding = (await feed(f)).findings.find((x) => x.kind === 'commissaryUnitMismatch');
+    expect(finding).toBeDefined();
+    expect(finding!.detail).toMatch(/in base units short/);
+    expect(finding!.detail).not.toMatch(/1340/);
   });
 
   it('⛔ does NOT fire when the line moved stock normally', async () => {

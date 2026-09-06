@@ -1,6 +1,7 @@
 # T-220 — The expired deferrals, the silent unit mismatch, and a guard for the class
 
-> **Status:** ✅ **SHIPPED 2026-09-06** (ianla-25). **Closes:** DEF-184, DEF-185.
+> **Status:** ✅ **SHIPPED 2026-09-06** (ianla-25), then **CORRECTED same day — see §5.**
+> **Closes:** DEF-184, DEF-185.
 > **Files:** DEF-186 (new). **Source:** `docs/discovery/27-coverage-claims-sweep.md`.
 > **Parallel lane:** `ianla-e2` holds T-221 (DEF-183's RLS migration) and the migration journal.
 > ⛔ **T-220 adds no migration**, so the journal is never touched from here.
@@ -188,3 +189,29 @@ reachable through `findingsFor`.
       `journal_lines_check_party_requirement`. Rewritten as a pooled per-store FIFO.
 - [ ] typecheck · unit · integration (lane DB, announced) · build (announced) · smoketest `/findings`.
 - [ ] DEF-184, DEF-185 closed. Roadmap + this status line updated.
+
+## 5. ⛔ What shipped wrong, and the correction — DEF-188
+
+`commissaryUnitMismatch` shipped in `ba33acb` asking *"has this LINE got a receipt movement?"* and
+reported two Lipa lines as never received. **Both had their stock.** `confirmReceipt` writes
+`source_id = orderLineIdByLineId[lineId] ?? orderId`, and dev data carries **both shapes at once**.
+
+⚠️ **Its tests agreed with the bug** — every fixture keyed the movement by line id, the one shape the
+predicate handled. ⛔ At `hard` severity it blocked period-close readiness for a store whose books
+were fine.
+
+⭐ **The lesson, and it is the counter-lesson to this project's own "verify by running it" discipline:
+firing on real data proved the query RUNS; it proved nothing about the query being RIGHT. A detector
+is the one place where a green run and a correct answer look identical.** Caught by `ianla-e2`
+checking the arithmetic behind the number after review, tests, a smoketest and a push had passed it.
+
+**The second attempt matters as much as the first.** The obvious repair — also accept a movement
+under the order id — has a *live* blind spot: multi-line orders exist in dev today, so one
+order-keyed movement would suppress the finding for every line of that order, trading a false
+positive for a silent miss at `hard` severity on exactly the case the detector exists for.
+
+So it now **compares quantities per order** (signed-for vs into-ledger, under either `source_id`
+shape) and **reports no peso figure at all** — the first version claimed ₱1,400 was "sitting in 1340"
+while `1340` held ₱180, which is DEF-175's wrong-basis mistake made after DEF-175 was filed.
+
+Verified on `shareat_dev`: **0 findings**, `signed_for == into_ledger` on all three received orders.

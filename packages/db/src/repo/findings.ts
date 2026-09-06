@@ -1067,54 +1067,85 @@ export async function orderWastageOpenPastBackstop(
  * ⭐ **T-220 / DEF-184 — goods signed for that never reached a stock balance, and nobody was told.**
  *
  * `confirmReceipt` correctly refuses to add a branch item denominated in `g` from a commissary
- * dispatch in `kg`: it skips the line entirely — no movement, no layer — and leaves the value in
- * `1340 Inventory in transit`. ⛔ **Skipping is right and must not be "fixed":** adding
- * commissary-denominated quantity onto a branch balance the branch reads in its own unit is the
- * corruption the check exists to prevent, and debiting `1310` for goods the stock ledger never
- * received puts account and subledger permanently out of tie (T-173).
+ * dispatch in `kg`: it skips the line entirely — no movement, no layer. ⛔ **Skipping is right and
+ * must not be "fixed":** adding commissary-denominated quantity onto a branch balance the branch
+ * reads in its own unit is the corruption the check exists to prevent, and debiting `1310` for goods
+ * the stock ledger never received puts account and subledger permanently out of tie (T-173).
  *
  * ⚠️ **The defect was the silence, not the skip.** The line pushed an explanation onto
- * `unitMismatches`, which `confirmReceipt` returns and **every production caller discarded** —
- * `receiveTradeOrder` reads `.ok` and `.entryId` and nothing else. Four test assertions were its
- * only readers.
+ * `unitMismatches`, which `confirmReceipt` returns and **every production caller discarded**.
  *
- * ⭐ **So this detects the CONSEQUENCE, not the cause**, and that is the decision worth keeping: the
- * cause (a mismatched base unit) disappears the moment somebody fixes the item, while the goods stay
- * missing from the balance forever. The consequence is persisted and exact — a received line that
- * moved no stock.
+ * ## ⛔ DEF-188 — this shipped WRONG once, and the corrections are the interesting part
  *
- * ⚠️ Every other reason a line has no movement is excluded by construction: a ledger-only line by
- * its flag; a rejected substitution or zero-fulfilled line because `receiveTradeOrder` never reaches
- * `setLineReceivedQuantity` for it, leaving `received_quantity` NULL.
+ * The first version asked *"has this LINE got a `stock_movements` row?"* and reported two Lipa lines
+ * as never received. **Both had their stock.** `confirmReceipt` writes
+ * `source_id = orderLineIdByLineId[lineId] ?? orderId`, and DEF-140's comment claims "every real
+ * path" supplies the map — dev data carries **both shapes at once**, across seven orders. Every
+ * finding it produced was false, and its tests agreed with it because they used line-keyed fixtures.
  *
- * ⛔ **`hard`, unlike the ageing detectors around it.** Goods are physically at the branch, paid for,
- * and absent from its stock ledger; every valuation and usage figure for that item is wrong until it
- * is fixed, and the money is stranded. That is a books-do-not-reflect-reality fault.
+ * ⚠️ The obvious repair — *also accept a movement under the order id* — has a **live** blind spot,
+ * not a theoretical one: multi-line orders exist today, so one order-keyed `transfer_in` would
+ * suppress the finding for every line of that order, including one that genuinely never arrived.
+ * That trades a false positive for a silent miss at `hard` severity, on exactly the case this
+ * detector exists for.
+ *
+ * ⭐ **So it compares QUANTITIES per order, not the existence of a row.** What the branch signed for
+ * across an order's countable lines, against what actually moved into its ledger under *either*
+ * `source_id` shape. A shortfall is real regardless of which shape the writer used, and a multi-line
+ * order stays detectable.
+ *
+ * ⛔ **And it reports no peso figure at all, deliberately.** The first version said the amount was
+ * *"sitting in 1340 Inventory in transit"* — `1340` is carried at COST and held ₱180.00 while the
+ * detector reported ₱1,400.00 at the transfer rate. That is DEF-175's wrong-basis mistake committed
+ * in a detector written *after* DEF-175 was filed. A quantity short and the orders it happened on
+ * are what a manager acts on; a synthetic peso number here would be a third basis nobody asked for.
+ *
+ * ⛔ **`hard`.** Goods are physically at the branch, paid for, and absent from its stock ledger, so
+ * every valuation and usage figure for that item is wrong until it is fixed.
  */
 export async function commissaryUnitMismatch(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
   const rows = (await tx.execute(sql`
-    select c.counterparty_store_id::text as store_id, s.name as store_name,
-           count(*)::int as n,
-           round(coalesce(sum(l.received_quantity * l.rate), 0), 2)::text as value,
-           min(o.received_at)::text as oldest
-    from trade_order_lines l
-    join trade_orders o on o.id = l.order_id
-    join customers c on c.id = o.customer_id
-    join stores s on s.id = c.counterparty_store_id
-    where l.org_id = ${orgId}
-      and o.status = 'received'
-      and c.counterparty_store_id is not null
-      and l.is_ledger_only = false
-      and l.received_quantity is not null
-      and l.received_quantity > 0
-      -- The whole detector: a received line that moved no stock.
-      and not exists (
-        select 1 from stock_movements m
-        where m.source_type = 'trade_order_receipt' and m.source_id = l.id
-      )
-    group by c.counterparty_store_id, s.name
+    with countable as (
+      select o.id                              as order_id,
+             c.counterparty_store_id           as branch_id,
+             s.name                            as store_name,
+             o.received_at                     as received_at,
+             sum(l.received_quantity)          as signed_for
+      from trade_order_lines l
+      join trade_orders o on o.id = l.order_id
+      join customers c on c.id = o.customer_id
+      join stores s on s.id = c.counterparty_store_id
+      where l.org_id = ${orgId}
+        and o.status = 'received'
+        and c.counterparty_store_id is not null
+        and l.is_ledger_only = false
+        and l.received_quantity is not null
+        and l.received_quantity > 0
+      group by o.id, c.counterparty_store_id, s.name, o.received_at
+    ),
+    moved as (
+      select ct.order_id,
+             coalesce(sum(m.quantity), 0) as into_ledger
+      from countable ct
+      left join stock_movements m
+        on m.source_type = 'trade_order_receipt'
+       and m.quantity > 0
+       and (m.source_id = ct.order_id
+            or m.source_id in (select l2.id from trade_order_lines l2 where l2.order_id = ct.order_id))
+      group by ct.order_id
+    )
+    select ct.branch_id::text                          as store_id,
+           ct.store_name                               as store_name,
+           count(*)::int                               as n_orders,
+           round(sum(ct.signed_for - mv.into_ledger), 3)::text as short_qty,
+           min(ct.received_at)::text                   as oldest
+    from countable ct
+    join moved mv on mv.order_id = ct.order_id
+    -- 0.001 matches the base-unit scale used everywhere else; a rounding whisker is not a finding.
+    where (ct.signed_for - mv.into_ledger) > 0.001
+    group by ct.branch_id, ct.store_name
   `)) as unknown as {
-    store_id: string; store_name: string; n: number; value: string; oldest: string;
+    store_id: string; store_name: string; n_orders: number; short_qty: string; oldest: string;
   }[];
 
   return rows.map((r) => ({
@@ -1123,12 +1154,11 @@ export async function commissaryUnitMismatch(tx: Tx, orgId: string): Promise<Det
     storeId: r.store_id,
     severity: 'hard' as const,
     detail:
-      `${r.store_name} signed for ${r.n} commissary line${r.n === 1 ? '' : 's'} worth ` +
-      `${peso(Number(r.value))} that never reached its stock ledger — the oldest received ` +
+      `${r.store_name} signed for goods on ${r.n_orders} commissary order${r.n_orders === 1 ? '' : 's'} ` +
+      `that never reached its stock ledger — ${r.short_qty} in base units short, the oldest received ` +
       `${String(r.oldest).slice(0, 10)}. Almost always a base-unit mismatch between the branch item ` +
       'and the commissary item: the receipt refused to add the quantity rather than corrupt the ' +
-      'balance, and the value is still sitting in 1340 Inventory in transit. Fix the branch item base ' +
-      'unit, then confirm the receipt again.',
+      'balance. Fix the branch item base unit, then confirm the receipt again.',
   }));
 }
 
