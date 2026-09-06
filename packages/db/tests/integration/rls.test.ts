@@ -17,7 +17,10 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
   throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} — name must contain "_test".`);
 }
 
-import { APP_ROLE } from '../../src/rls/registry';
+import { APP_ROLE, RLS_REGISTRY } from '../../src/rls/registry';
+import { getTableColumns, getTableName, is } from 'drizzle-orm';
+import { PgTable } from 'drizzle-orm/pg-core';
+import * as accessSchema from '../../schema/access';
 
 const sql = postgres(url, { max: 3 });
 
@@ -296,5 +299,154 @@ describe('DEF-077 — org policies read the org through app_current_org(), never
     } finally {
       await pooled.end({ timeout: 5 });
     }
+  });
+});
+
+/**
+ * T-221 / DEF-183 — a person-keyed ACCESS table must prove the PERSON belongs to the org,
+ * not merely that the row is LABELLED with it.
+ *
+ * ⭐ **Why this is its own describe block.** The T-121 invariant-13 block above already proves
+ * org A cannot *read* org B's role rows, and it passes both before and after this fix — reading
+ * was never the hole. The hole was a **write**: a row carrying org A's `org_id` and org B's
+ * `person_id` satisfies `org_id = app_current_org()` perfectly, and its FK to `persons` is
+ * satisfied too, because that person genuinely exists. Only an inserting test can tell the two
+ * policy shapes apart, which is exactly how DEF-183 was found — a T-219 test that expected a
+ * refusal reported *"promise resolved instead of rejecting."*
+ *
+ * Every refusal here asserts the **SQLSTATE**, never merely that the promise rejected: a
+ * constraint violation, a typo'd column name and a policy denial all reject, and only `42501`
+ * is this feature working. Same distinction DEF-077's tests make a few lines above.
+ */
+describe('T-221 / DEF-183 — person_roles refuses a cross-org role WRITE, not just a read', () => {
+  /** Runs `fn` and returns the SQLSTATE it failed with, or a loud string if it succeeded. */
+  async function sqlstateOf(fn: () => Promise<unknown>): Promise<string> {
+    try {
+      await fn();
+      return 'NO ERROR — the write was ALLOWED, which is DEF-183 itself';
+    } catch (e) {
+      return (e as { code?: string }).code ?? String(e);
+    }
+  }
+
+  it('⭐ invariant 1 — org A cannot give org B’s person a role in org A', async () => {
+    // The DEF-183 row exactly: this org's label, another org's subject.
+    const code = await sqlstateOf(() =>
+      asOrg(orgA, (tx) => tx`insert into person_roles (person_id, org_id, role) values (${bob}, ${orgA}, 'admin')`),
+    );
+    expect(code, 'the row names org B’s person — the person-org EXISTS clause must refuse it').toBe('42501');
+  });
+
+  it('⭐ invariant 2 — the MIRROR is refused too: org A’s person given a role in org B', async () => {
+    // Kept deliberately: this is why the fix ANDs the two conjuncts instead of replacing the
+    // org_id check with the EXISTS. Dropping org_id would admit this row, and a privilege
+    // grant pointing OUT of the tenant is worse than the dead row DEF-183 described.
+    const code = await sqlstateOf(() =>
+      asOrg(orgA, (tx) => tx`insert into person_roles (person_id, org_id, role) values (${alice}, ${orgB}, 'admin')`),
+    );
+    expect(code, 'the row is labelled with org B — the org_id conjunct must refuse it').toBe('42501');
+  });
+
+  it('invariant 3 — the LEGITIMATE row is unaffected: same org for person and label', async () => {
+    // A refusal test that passes because everything is refused proves nothing. This is the
+    // other half of the assertion.
+    await asOrg(orgA, (tx) => tx`insert into person_roles (person_id, org_id, role) values (${alice}, ${orgA}, 'manager')`);
+    const rows = await asOrg(orgA, async (tx) => tx<{ role: string }[]>`select role from person_roles`);
+    expect(rows.map((r) => r.role)).toEqual(['manager']);
+  });
+
+  it('invariant 2b — UPDATE cannot walk a legitimate row across the org boundary either', async () => {
+    // FOR ALL covers UPDATE, but WITH CHECK is what stops the row being MOVED. A policy that
+    // only fixed INSERT would pass invariants 1-3 and still leak here.
+    await asOrg(orgA, (tx) => tx`insert into person_roles (person_id, org_id, role) values (${alice}, ${orgA}, 'manager')`);
+    const code = await sqlstateOf(() =>
+      asOrg(orgA, (tx) => tx`update person_roles set person_id = ${bob} where org_id = ${orgA}`),
+    );
+    expect(code, 'repointing the row at org B’s person must be refused by WITH CHECK').toBe('42501');
+  });
+
+  it('invariant 7 — the system principal still sees every org’s rows (the migrator and audit must not break)', async () => {
+    await sql`insert into person_roles (person_id, org_id, role) values (${alice}, ${orgA}, 'manager'), (${bob}, ${orgB}, 'admin')`;
+    const [row] = await sql<{ c: number }[]>`select count(*)::int c from person_roles`;
+    expect(row!.c).toBe(2);
+  });
+});
+
+/**
+ * T-221 — the generalisable half, and the reason DEF-183's register row is written at length.
+ *
+ * ⛔ **The hazard it names:** *"whoever adds a FOURTH access table will copy whichever policy
+ * they happen to open first."* A comment cannot stop that; an enumeration can. This derives the
+ * table list from the SCHEMA rather than a hand-kept list, so a fourth access table added to
+ * `schema/access.ts` is covered the day it is added and nobody has to remember this rule.
+ *
+ * ⚠️ **Honest about its edge:** a person-keyed access table added to a DIFFERENT schema file is
+ * not caught by the file-derived half — the registry's `personKeyedAccess` marker is what carries
+ * the rule there, and a marker can be forgotten. This narrows the hazard; it does not eliminate it.
+ */
+describe('T-221 — every person-keyed access table uses the via_person form', () => {
+  /** Tables from `schema/access.ts` that key on a person, plus anything the registry marks. */
+  function personKeyedAccessTables(): string[] {
+    // Narrowed by `if` rather than by a `v is PgTable` predicate: the values of a schema module
+    // are each a CONCRETE PgTableWithColumns<…>, and the generic PgTable<TableConfig> is not
+    // assignable back to them, so an explicit predicate is a TS2677. Same loop shape as
+    // tests/unit/rls-registry.test.ts, which is the reason that one is written as a loop too.
+    const fromFile: string[] = [];
+    for (const value of Object.values(accessSchema)) {
+      if (!is(value, PgTable)) continue;
+      const keyedOnPerson = Object.values(getTableColumns(value)).some((c) => c.name === 'person_id');
+      if (keyedOnPerson) fromFile.push(getTableName(value));
+    }
+    const fromRegistry = Object.entries(RLS_REGISTRY)
+      .filter(([, e]) => e.personKeyedAccess === true)
+      .map(([name]) => name);
+    return [...new Set([...fromFile, ...fromRegistry])].sort();
+  }
+
+  it('the enumeration finds tables at all', () => {
+    // Without this floor a broken enumeration makes the assertion below pass vacuously — the
+    // one failure mode a coverage guard must never have (same reasoning as the RLS registry's
+    // own floor test in tests/unit/rls-registry.test.ts).
+    const tables = personKeyedAccessTables();
+    expect(tables.length).toBeGreaterThanOrEqual(4);
+    expect(tables).toEqual(expect.arrayContaining(['person_grants', 'person_identities', 'person_roles', 'person_store_scope']));
+  });
+
+  it('⭐ each one proves the PERSON’s org in BOTH qual and with_check — enumerated, so it cannot come back', async () => {
+    const tables = personKeyedAccessTables();
+    const policies = await sql<{ tablename: string; policyname: string; qual: string; wc: string }[]>`
+      select tablename, policyname, coalesce(qual::text, '') as qual, coalesce(with_check::text, '') as wc
+      from pg_policies where schemaname = 'public' and tablename = any(${sql.array(tables)})
+    `;
+    expect(policies.length, 'no policies found for the access tables — wrong database?').toBeGreaterThan(0);
+
+    // The clause that makes it the via_person form: a subquery on `persons` tying this row's
+    // person to the current org. Matched structurally rather than by exact text, because the
+    // parenthesisation pg_policies renders back is not the text the migration wrote.
+    const provesPersonOrg = (expr: string): boolean =>
+      /FROM persons/i.test(expr) && /person_id/.test(expr) && /p\.org_id = app_current_org\(\)/.test(expr);
+
+    const offenders: string[] = [];
+    for (const t of tables) {
+      const p = policies.find((x) => x.tablename === t);
+      if (!p) {
+        offenders.push(`${t} — person-keyed access table with NO policy at all`);
+        continue;
+      }
+      if (!provesPersonOrg(p.qual)) offenders.push(`${t}.${p.policyname} — USING does not prove the person's org`);
+      if (!provesPersonOrg(p.wc)) offenders.push(`${t}.${p.policyname} — WITH CHECK does not prove the person's org`);
+    }
+
+    expect(
+      offenders,
+      offenders.length === 0
+        ? ''
+        : `These person-keyed access tables do not use the via_person form (DEF-183):\n  ${offenders.join('\n  ')}\n\n` +
+            'An `org_id = app_current_org()` policy answers "is this row LABELLED with my org?".\n' +
+            'A person-keyed access table must also answer "does this row\'s SUBJECT belong to my org?":\n' +
+            '  EXISTS (SELECT 1 FROM persons p WHERE p.id = <table>.person_id AND p.org_id = app_current_org())\n' +
+            'in BOTH USING and WITH CHECK. See migration 0129 for the shape, and DEF-183 for why the\n' +
+            'two forms are not interchangeable even though both end in `= app_current_org()`.',
+    ).toEqual([]);
   });
 });

@@ -30,6 +30,26 @@ export interface RlsEntry {
   readonly reason: string;
   /** `derived` only — the SQL predicate linking this table to an org-bearing parent. */
   readonly via?: string;
+  /**
+   * ⛔ **An ACCESS table keyed on a person — its policy MUST also prove the person belongs to
+   * the org** (DEF-183), in BOTH `USING` and `WITH CHECK`, whether or not the table also
+   * carries its own `org_id`:
+   *
+   * ```sql
+   * EXISTS (SELECT 1 FROM persons p WHERE p.id = <table>.person_id AND p.org_id = app_current_org())
+   * ```
+   *
+   * `org_id = app_current_org()` alone answers *"is this row LABELLED with my org?"* — a row
+   * carrying MY org_id and ANOTHER org's person_id satisfies it perfectly, and its FK is
+   * satisfied too because that person genuinely exists. `person_roles` shipped that way for
+   * two weeks and a cross-org role write was allowed.
+   *
+   * Enforced by `packages/db/tests/integration/rls.test.ts` — *"every person-keyed access table
+   * uses the via_person form"* — which reads the LIVE policy out of `pg_policies` rather than
+   * trusting this flag. Tables in `schema/access.ts` are picked up automatically; this marker
+   * is what extends the guard to a person-keyed access table defined elsewhere.
+   */
+  readonly personKeyedAccess?: true;
 }
 
 export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
@@ -210,6 +230,7 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
   },
   person_identities: {
     scope: 'derived',
+    personKeyedAccess: true,
     via: 'exists (select 1 from persons p where p.id = person_identities.person_id and p.org_id = app_current_org())',
     reason: 'Login identities hang off persons, which carries the org.',
   },
@@ -217,13 +238,23 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
   // T-121 — the three access axes (docs/tasks/121-roles-and-access.md, bible row 114).
   person_roles: {
     scope: 'org_column',
+    personKeyedAccess: true,
     reason:
       'Who holds what role is per-org data — a franchise owner must not see, let alone infer, ' +
-      'Ian\'s own org role assignments. Carries org_id directly (a person can hold different ' +
-      'roles in different orgs, e.g. Ian holding several franchises\' admin — bible row 114 A.4).',
+      'Ian\'s own org role assignments. Carries org_id directly, so it is org_column — but it is ' +
+      'ALSO person-keyed, and org_column alone was not enough: see personKeyedAccess above and ' +
+      'migration 0129. ⚠️ This entry previously justified the org_id column with "a person can ' +
+      'hold different roles in different orgs, e.g. Ian holding several franchises\' admin". ' +
+      'That is NOT reachable in the running system and was corrected by T-221 (DEF-187): ' +
+      'sessions carry no org of their own, findLiveByTokenHash selects orgId FROM persons, and ' +
+      'there is no org switcher — so authorize() can only ever resolve a role under the ' +
+      'person\'s OWN org. A row whose org_id differs from its person\'s org has no reader ' +
+      'anywhere. If bible row 114\'s franchise-admin story is later built as one person holding ' +
+      'roles across orgs, migration 0129 must be revisited with it.',
   },
   person_store_scope: {
     scope: 'derived',
+    personKeyedAccess: true,
     via: 'exists (select 1 from persons p where p.id = person_store_scope.person_id and p.org_id = app_current_org())',
     reason:
       'No org_id of its own — "which stores can this person see" is reached only through the ' +
@@ -232,6 +263,7 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
   },
   person_grants: {
     scope: 'derived',
+    personKeyedAccess: true,
     via: 'exists (select 1 from persons p where p.id = person_grants.person_id and p.org_id = app_current_org())',
     reason:
       'No org_id of its own — grants hang off the person they were given to. DEF-052\'s lesson ' +
