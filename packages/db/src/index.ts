@@ -253,3 +253,6 @@ export type {
   PosUsagePullStatus,
   PosUsagePullSection,
 } from '../schema/pos-mapping';
+
+// T-215 — expense budgets. Consumption is DERIVED here; there is no counter to read.
+export * as budgetsRepo from './repo/budgets';

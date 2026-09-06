@@ -2,6 +2,9 @@ import { listStores, listCategoriesGrouped, listMoneyAccountsForPicker, PAYMENT_
 import { listOpenInvoicesForPicker, peso } from '../../ap/lib';
 import { requireSession } from '../../../lib/session';
 import { createExpenseAction } from '../actions';
+import { budgetsRepo } from '@shareat/db';
+import { withOrgPrincipal } from '../lib';
+import { BudgetHint } from './BudgetHint';
 
 export const metadata = { title: 'New expense — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -25,6 +28,14 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
     listOpenInvoicesForPicker(orgId),
   ]);
   const storeId = sp.store && storeRows.some((s) => s.id === sp.store) ? sp.store : (storeRows[0]?.id ?? '');
+
+  // T-215 §5 — the caps for THIS store and THIS period, so the person spending sees what is left
+  // before they commit. ⚠️ Read only: `manage_expense_budgets` is needed to SET a cap and must not
+  // be needed to SEE one, or the number is hidden from the only person it is for.
+  const periodKey = new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 7).replace('-', '');
+  const caps = storeId
+    ? await withOrgPrincipal(orgId, (tx) => budgetsRepo.listForStorePeriod(tx, orgId, storeId, periodKey))
+    : [];
 
   const groups: Array<'COGS' | 'OPEX' | 'PERSONAL' | 'CAPEX'> = ['COGS', 'OPEX', 'PERSONAL', 'CAPEX'];
 
@@ -54,6 +65,20 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
         </div>
       ) : (
         <form action={createExpenseAction} className="space-y-6">
+          {/* ⭐ T-215. The cap matters at the moment of spending — a report at month end is a
+              post-mortem. Renders nothing until a capped category is picked. */}
+          {caps.length > 0 && (
+            <BudgetHint
+              periodKey={periodKey}
+              caps={caps.map((c) => ({
+                categoryId: c.categoryId,
+                label: c.categoryLabel,
+                amount: c.amount,
+                consumed: c.consumed,
+                remaining: c.remaining,
+              }))}
+            />
+          )}
           {/* ⭐ No orgId, no "acting as" — the session supplies both (T-138). */}
           <div className="grid grid-cols-2 gap-4">
             <label className="flex flex-col gap-1 text-sm">

@@ -218,7 +218,7 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // into the enforcement without also being written into the document people actually
     // read, and vice versa.
     const { rows } = parseCapabilityMatrixDoc();
-    expect(rows.length).toBe(93);
+    expect(rows.length).toBe(94);
   });
 
   it('has no duplicate capability names', () => {
@@ -290,9 +290,9 @@ describe('invariant 1 — every capability has an explicit decision for all four
   });
 
   it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 93 capabilities', () => {
-    expect(CAPABILITIES.length).toBe(93);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(93);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(93);
+    expect(CAPABILITIES.length).toBe(94);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(94);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(94);
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));
   });

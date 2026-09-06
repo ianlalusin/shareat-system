@@ -95,3 +95,6 @@ export * from './wastage/orders';
 export * from './wastage/settlement-match';
 // T-222 — store creation and management.
 export * from './stores/service';
+
+// T-215 — expense budgets: the envelope, its cap, and the reissue schedule. Nothing posts.
+export * from './budgets';

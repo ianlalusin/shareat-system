@@ -33,7 +33,8 @@
     "capture:attendance-golden": "tsx scripts/capture-attendance-golden.ts",
     "attendance-sweep": "tsx scripts/attendance-sweep.ts",
     "firestore-relay": "tsx scripts/firestore-relay.ts",
-    "finding-observation": "tsx scripts/finding-observation.ts"
+    "finding-observation": "tsx scripts/finding-observation.ts",
+    "budget-reissue": "tsx scripts/budget-reissue.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

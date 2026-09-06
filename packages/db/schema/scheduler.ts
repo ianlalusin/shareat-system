@@ -60,6 +60,17 @@ export const SCHEDULER_JOBS = [
    * claimed a depreciation cron that never existed (DEF-044).
    */
   'finding_observation',
+  /**
+   * `budget_reissue` — T-215, DAILY. Rolls an expense envelope forward on its own schedule so
+   * nobody has to remember to recreate it.
+   *
+   * ⚠️ Two interval families and only one of them creates a row: a RESET interval (daily,
+   * weekly, bi-weekly) moves the same budget's window, and a PERIOD interval (monthly, quarterly,
+   * annually) inserts the NEXT period's row — and only once that period has arrived. v1's own
+   * comment gives the reason and it is ported verbatim: *"never pre-create future months, so the
+   * reissue processor can't run away."*
+   */
+  'budget_reissue',
 ] as const;
 export type SchedulerJob = (typeof SCHEDULER_JOBS)[number];
 

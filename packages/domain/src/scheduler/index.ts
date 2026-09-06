@@ -30,6 +30,8 @@ import { sql } from 'drizzle-orm';
 import { sweepStore } from '../attendance/sweep';
 import { drainOutbox, ingestEvents, type InboxDriver, type MirrorDriver } from '../sync';
 import { recordFindingObservations } from '../findings';
+import { budgetsRepo } from '@shareat/db';
+import { nextPeriodKey, resetWindowDays } from '../budgets';
 
 export interface MonthEndOptions {
   /** `YYYY-MM` to run THROUGH. Defaults to the last completed month. */
@@ -51,7 +53,8 @@ export interface JobOutcome {
     | 'mirror_publish'
     | 'inbox_relay'
     | 'order_wastage_backstop'
-    | 'finding_observation';
+    | 'finding_observation'
+    | 'budget_reissue';
   period: string;
   posted: number;
   skipped: number;
@@ -698,6 +701,186 @@ export async function runFindingObservation(
         failed: 0,
         failures: [],
         detail: `asked ${result.periodsAsked.join(', ')} · observed ${result.observed} · opened ${result.opened} · closed ${result.closed}`,
+      });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      await transaction((tx) => schedulerRepo.failRun(tx, runId, message));
+      outcomes.push({ ...base, posted: 0, skipped: 0, failed: 0, failures: [], error: message });
+    }
+  }
+
+  return { outcomes, hadFailures: outcomes.some((o) => o.failed > 0 || o.error) };
+}
+
+/**
+ * One transaction, run as the SYSTEM principal for one org.
+ *
+ * ⭐ Extracted for `budget_reissue` (T-215) and deliberately per-CALL rather than one transaction
+ * around the whole org: `reference_postgres_batch_needs_savepoint` — one DB error aborts the
+ * transaction it happened in, so a single bad budget inside a shared transaction would take the
+ * run's own `scheduler_runs` write down with it and the failure would leave no trace at all.
+ */
+async function asSystem<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return transaction(async (tx) => {
+    await tx.execute(sql.raw(`set local role ${APP_ROLE}`));
+    await tx.execute(sql`select set_config('app.principal_kind', 'system', true)`);
+    await tx.execute(sql`select set_config('app.org_id', ${orgId}, true)`);
+    return fn(tx);
+  });
+}
+
+/**
+ * `budget_reissue` — T-215, DAILY. Rolls an expense envelope forward so nobody has to remember to
+ * recreate it.
+ *
+ * ## Two interval families, and only one of them creates a row
+ *
+ * - **RESET** (`daily`, `weekly`, `bi_weekly`) — the same budget keeps going and its WINDOW moves.
+ *   ⭐ Consumption is derived, so there is no counter to zero; what changes is `last_reset_at`.
+ *   v1 had to mutate a stored number to do this, which is why its reset could not be replayed.
+ * - **PERIOD** (`monthly`, `quarterly`, `annually`) — insert the NEXT period's row, carrying the
+ *   same amount and config, **only once that period has actually arrived.**
+ *
+ * ⛔ **The restraint is ported verbatim, comment and all.** v1: *"never pre-create future months,
+ * so the reissue processor can't run away."* A job that creates the next twelve months on its
+ * first run has invented eleven caps nobody agreed to, and every one of them looks authoritative.
+ *
+ * ## ⭐ Idempotent as a database FACT, not as a promise
+ *
+ * `insertReissued` is `ON CONFLICT DO NOTHING` against the unique envelope, so a second run the
+ * same day creates nothing and does not throw. ⚠️ **One transaction per budget**, deliberately —
+ * bible §13 and `reference_postgres_batch_needs_savepoint`: one DB error aborts the whole
+ * transaction it happened in, so a per-row failure inside a shared transaction would take the
+ * run's own `scheduler_runs` write down with it and the failure would be invisible.
+ *
+ * ## ⚠️ Catch-up is bounded, and the bound is not arbitrary
+ *
+ * A monthly budget last reissued in January and a job that has not run since needs eleven rows,
+ * not one — so the loop advances until it reaches the current period. It is capped at 24 hops:
+ * beyond two years something is wrong with the data, and a runaway insert loop is worse than an
+ * unreissued budget.
+ */
+export async function runBudgetReissue(
+  options: { orgId?: string; trigger?: 'cron' | 'manual'; nowMs?: number } = {},
+): Promise<SweepResult> {
+  const trigger = options.trigger ?? 'cron';
+  const nowMs = options.nowMs ?? Date.now();
+  const now = new Date(nowMs);
+  // Manila, the same +8 shift every other job in this file uses.
+  const manila = new Date(nowMs + 8 * 3_600_000).toISOString().slice(0, 10);
+  const period = manila.slice(0, 7);
+  const currentPeriodKey = period.replace('-', '');
+
+  const orgs = await transaction((tx) => schedulerRepo.listOrgsToRun(tx, options.orgId));
+  const outcomes: JobOutcome[] = [];
+
+  for (const org of orgs) {
+    const runId = await transaction((tx) =>
+      schedulerRepo.startRun(tx, { orgId: org.id, job: 'budget_reissue', period, trigger }),
+    );
+    const base = { orgId: org.id, orgName: org.name, job: 'budget_reissue' as const, period };
+    const failures: SchedulerFailure[] = [];
+    let created = 0;
+    let reset = 0;
+    let skipped = 0;
+
+    try {
+      const budgets = await asSystem(org.id, (tx) => budgetsRepo.listAutoReissuing(tx, org.id));
+
+      // ⭐ Only the NEWEST period per (store, category) is a candidate. Without this an old row
+      // keeps re-proposing a period that already exists — harmless because of the unique index,
+      // and it would still mean the job's counters said "skipped" for ever while nobody noticed
+      // the chain had stopped advancing. `listAutoReissuing` orders period_key desc, so the first
+      // one seen for a key is the newest.
+      const newest = new Map<string, (typeof budgets)[number]>();
+      for (const b of budgets) {
+        const key = `${b.storeId}:${b.categoryId}`;
+        if (!newest.has(key)) newest.set(key, b);
+      }
+
+      for (const b of newest.values()) {
+        try {
+          const interval = b.reissueInterval;
+          // Unreachable while `expense_budgets_reissue_interval_check` holds; kept because a
+          // narrowing that relies on a database constraint should still be explicit in code.
+          if (interval === null) {
+            skipped += 1;
+            continue;
+          }
+
+          const windowDays = resetWindowDays(interval);
+          if (windowDays !== null) {
+            // ---- RESET family: move the window, create nothing. --------------------------
+            const startedAt =
+              b.lastResetAt ?? new Date(`${b.periodKey.slice(0, 4)}-${b.periodKey.slice(4, 6)}-01T00:00:00Z`);
+            const elapsedDays = Math.floor((now.getTime() - startedAt.getTime()) / 86_400_000);
+            if (elapsedDays < windowDays) {
+              skipped += 1;
+              continue;
+            }
+            // ⚠️ Advance by WHOLE windows from where the last one started, never to "now". Stamping
+            // `now` would let the window drift by however late the job ran, so a daily cap would
+            // slowly become a 25-hour one and a reader comparing two stores would see neither.
+            const hops = Math.floor(elapsedDays / windowDays);
+            const advanced = new Date(startedAt.getTime() + hops * windowDays * 86_400_000);
+            await asSystem(org.id, (tx) => budgetsRepo.stampReset(tx, org.id, b.id, advanced));
+            reset += 1;
+            continue;
+          }
+
+          // ---- PERIOD family: create the next row, once it has arrived. -------------------
+          let from = b;
+          let key = nextPeriodKey(b.periodKey, interval);
+          let hops = 0;
+          let madeAny = false;
+          while (key !== null && key <= currentPeriodKey && hops < 24) {
+            const row = await asSystem(org.id, (tx) =>
+              budgetsRepo.insertReissued(tx, {
+                orgId: org.id,
+                storeId: from.storeId,
+                categoryId: from.categoryId,
+                periodKey: key!,
+                amount: from.amount,
+                autoReissue: from.autoReissue,
+                reissueInterval: from.reissueInterval,
+                reissuedFromId: from.id,
+                createdBy: null,
+              }),
+            );
+            if (row) {
+              created += 1;
+              madeAny = true;
+              from = { ...from, id: row.id, periodKey: key };
+            } else {
+              // Already there — a second run today, or a hand-set cap for that period. Either way
+              // the chain continues from it rather than stopping.
+              from = { ...from, periodKey: key };
+            }
+            key = nextPeriodKey(key, interval);
+            hops += 1;
+          }
+          if (!madeAny) skipped += 1;
+        } catch (e) {
+          failures.push({
+            subjectId: b.id,
+            // ⚠️ The store and category, not the uuid — a failure line nobody can act on without
+            // a database session is a failure line nobody acts on.
+            subjectName: `store ${b.storeId} · category ${b.categoryId} · ${b.periodKey}`,
+            reason: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
+
+      await transaction((tx) =>
+        schedulerRepo.finishRun(tx, runId, { postedCount: created, skippedCount: skipped, failures }),
+      );
+      outcomes.push({
+        ...base,
+        posted: created,
+        skipped,
+        failed: failures.length,
+        failures,
+        detail: `budgets ${newest.size} · created ${created} · windows moved ${reset} · nothing due ${skipped}`,
       });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);

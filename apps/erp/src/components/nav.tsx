@@ -46,6 +46,9 @@ const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
       { href: '/attendance/lane', label: 'Clock lane' },
       { href: '/payroll', label: 'Payroll' },
       { href: '/expenses', label: 'Expenses' },
+      // ⭐ T-215 — beside Expenses on purpose: a cap only ever changes a decision at the moment of
+      // spending, and `/expenses/new` is where that moment is. This screen is where it gets set.
+      { href: '/budgets', label: 'Budgets' },
       { href: '/cash-requests', label: 'Cash requests' },
     ],
   },

@@ -103,3 +103,6 @@ export * from './production';
 
 // T-177 — POS item mapping and the daily usage pull.
 export * from './pos-mapping';
+
+// T-215 — expense budgets: the envelope a store spends a category out of.
+export * from './expense-budgets';

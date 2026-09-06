@@ -913,6 +913,17 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     class: 'purge',
     reason: 'Child of order_wastages (ON DELETE CASCADE); purges with its parent for the same reason.',
   },
+  expense_budgets: {
+    class: 'purge',
+    reason:
+      'A cap for a PERIOD, and every period it names is a 2026 period — the key is `YYYYMM`. ' +
+      '⚠️ The judgement worth stating: this is the closest call in the whole table, because a ' +
+      'budget LOOKS like configuration and a store will want its January caps on 1 January. But ' +
+      'ADR-007 §1 is about what a row MEANS, not how convenient it is: a 202612 envelope is a ' +
+      'statement about December trading, and carrying it forward would open the year with caps ' +
+      'nobody re-agreed. The auto-reissue job re-creates a live cap on its own schedule, so the ' +
+      'ones that should survive do — by being recreated deliberately, not by escaping a purge.',
+  },
   ar_charges: {
     class: 'purge',
     reason:
@@ -1026,6 +1037,10 @@ export const PURGE_ORDER_HINT: readonly string[] = [
   'finding_views',
   'finding_occurrences',
   'finding_acknowledgements',
+  // T-215. ⚠️ Self-referencing (`reissued_from_id`), so a reissued row points at its parent and
+  // the whole table has to go in one DELETE rather than in FK order — listed early for that
+  // reason, and because nothing else references it at all.
+  'expense_budgets',
   'channel_settlements',
   'sales_day_channels',
   'sales_days',

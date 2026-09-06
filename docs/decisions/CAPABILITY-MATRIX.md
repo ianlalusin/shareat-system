@@ -99,6 +99,7 @@ they need weekly, the boundary is wrong.
 | `approve_supplier` | org | ✅ | ✅ | ✅ | ✗ | Ian's list. **Scope corrected to `org` by T-130**: `suppliers` has no `store_id` — org-wide master data, same shape as `customers` (ADR-008). Nothing depended on the old `store` declaration (unimplemented until T-130) |
 | `approve_buyer` | store | ✅ | ✅ | ✅ | ✗ | Ian's list — **operational** judgement |
 | `set_credit_limit` | org | ✅ | ✅ | ✅ | ✗ | ✅ **Ian 2026-08-25 — manager too.** Coherent: managers already approve the buyer, and a **franchise** manager setting their own buyers' limits is risking their own money. Still split from `approve_buyer` — two decisions, not one |
+| `manage_expense_budgets` | store | ✅ | ✅ | ✅ | ✗ | **T-215.** Sets a spending cap per category per store per period. Same shape as `set_credit_limit` and the same reason — a manager who runs a branch's money sets that branch's caps — but **store**-scoped, because a cap is an envelope for one branch and one peso figure cannot fit a 40-cover branch and a 400-cover one. ⚠️ **Reading** a budget needs no capability beyond store scope: `/expenses/new` shows what is left to whoever is spending, and requiring the capability to SET one in order to SEE one would hide the number from the only person it is for |
 | `override_credit_limit` | store | ✅ | ✅ | ✅ | ✗ | Discovery 19 §2 — one gate, with an override. Every use logged |
 | `record_ap_payment` | store | ✅ | ✅ | ✅ | ✗ | |
 | `record_ar_collection` | store | ✅ | ✅ | ✅ | ✗ | |

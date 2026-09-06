@@ -162,6 +162,7 @@ export type Capability =
   | 'approve_supplier'
   | 'approve_buyer'
   | 'set_credit_limit'
+  | 'manage_expense_budgets'
   | 'override_credit_limit'
   | 'record_ap_payment'
   | 'record_ar_collection'
@@ -300,6 +301,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'approve_supplier',
   'approve_buyer',
   'set_credit_limit',
+  'manage_expense_budgets',
   'override_credit_limit',
   'record_ap_payment',
   'record_ar_collection',
@@ -436,6 +438,10 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   // schema decision to make, not assumed here.
   approve_supplier: 'org',
   approve_buyer: 'store',
+  // T-215. STORE-scoped, matching `approve_buyer` rather than `set_credit_limit`: a budget IS a
+  // store's envelope, and a cap set org-wide would mean the same peso figure for a branch doing
+  // 40 covers a day and one doing 400.
+  manage_expense_budgets: 'store',
   set_credit_limit: 'org', // OPEN — Ian to confirm (CAPABILITY-MATRIX.md §Open 1)
   override_credit_limit: 'store',
   record_ap_payment: 'store',
@@ -621,6 +627,10 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   // money. Still split from approve_buyer deliberately: approving someone and deciding how
   // much of your money they may owe are two decisions, not one.
   set_credit_limit: { super_admin: true, admin: true, manager: true, staff: false },
+  // T-215. Same shape and same reasoning as `set_credit_limit`: a manager who runs a branch's
+  // money sets that branch's caps. Staff false — a cap is a control ON spending, and the person
+  // it constrains is not the person who sets it.
+  manage_expense_budgets: { super_admin: true, admin: true, manager: true, staff: false },
   override_credit_limit: { super_admin: true, admin: true, manager: true, staff: false },
   record_ap_payment: { super_admin: true, admin: true, manager: true, staff: false },
   record_ar_collection: { super_admin: true, admin: true, manager: true, staff: false },

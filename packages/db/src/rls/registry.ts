@@ -650,6 +650,12 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     reason: 'No org_id of its own — reached only through its wastage, same shape as trade_order_lines.',
     via: 'exists (select 1 from order_wastages w where w.id = wastage_id and w.org_id = app_current_org())',
   },
+  expense_budgets: {
+    scope: 'org_column',
+    reason:
+      'What a store is allowed to spend, per category. A franchise reading another’s caps would ' +
+      'learn its cost structure category by category — closer to a P&L than most P&L lines are.',
+  },
   ar_charges: {
     scope: 'org_column',
     reason: 'What a customer owes this org. A franchise reading another’s would learn its wholesale book.',

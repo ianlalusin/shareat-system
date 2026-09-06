@@ -1,6 +1,31 @@
 # T-215 — Expense budgets
 
-> **Status**: 📝 **SPECIFIED 2026-09-06, not built.**
+> **Status**: ✅ **BUILT 2026-09-06 — everything except the two `docs/ops/` unit files.**
+>
+> ⛔ **One Scope item was NOT delivered, and it is a scope conflict rather than an omission.** The
+> spec lists `docs/ops/shareat-budget-reissue.service` + `.timer`, `docs/ops/README.md` and
+> `docs/ops/provision.sh`. **`docs/ops/**` belongs to another session and to Ian**, who own the
+> droplet and deployment, and this session was told not to touch it. The job, its CLI entry point
+> and its `npm run budget-reissue` script all ship; **the timer is unarmed and only Ian can arm
+> it** — which the spec's own §4 already says. Reported rather than worked around (RULES §3.4a).
+> ⚠️ Three jobs have now shipped unarmed (T-199, T-214, and this makes four counting the month-end
+> pair); DEF-194 explains why, and the fix is `scp -r docs/ops` onto the droplet first.
+>
+> **What shipped:** `expense_budgets` (migration `0131`, applied AND recorded on both databases);
+> `budgetsRepo` with consumption derived; `setExpenseBudget` / `removeExpenseBudget`;
+> `runBudgetReissue` + `scripts/budget-reissue.ts` + `npm run budget-reissue`; `/budgets`; the
+> `/expenses/new` hint; the `manage_expense_budgets` capability; **14 integration tests**.
+>
+> ⭐ **The §3 trap test was proved to work rather than assumed to.** With the consumption query
+> deliberately re-grouped by `account_code`, case 2 reports **₱1,250.00 where the truth is
+> ₱1,000.00** — two categories' spend merged — and **13 of the other tests still pass**. That is
+> exactly the claim §3 makes about it, now measured.
+>
+> ⚠️ **One design hole found and closed while building**, which the spec did not anticipate: a
+> reset-interval budget lives on a `YYYYMM` row, so keeping the period filter *as well as* the
+> window makes a weekly cap stop counting anything the moment its window crosses into the next
+> month — consumption reads **zero for ever** and the cap silently becomes infinite. Once a reset
+> has happened the window is the authority and the period no longer bounds it. Its own test.
 >
 > ⭐ **Pulled out of "deliberately deferred past January" by Ian on 2026-09-06** — *"do it now."*
 > `docs/ROADMAP.html` listed it under *Deliberately deferred past January* on the grounds that it
@@ -245,6 +270,41 @@ the same proof T-214's `finding_observation` used.
 from `packages/db/seed/expense-categories.ts` and that is the only writer. Filed as **DEF-193**.
 Budgets work fine on the seeded 39; a store that needs a fortieth category cannot have one, and
 therefore cannot budget for it.
+
+## What the build actually produced
+
+**14 integration tests, all green** (`packages/domain/tests/integration/budgets.test.ts`) — the
+nine the spec asked for plus five the build earned: negative remaining is not floored, setting a
+cap twice edits rather than collides, removing a cap is not the same as zeroing it, **staff are
+refused** (every ✅ in the matrix needs a test proving the ✗ fires), and the cross-month reset
+window above.
+
+**Fail-first evidence.** The eight database-constraint and capability cases passed before the
+implementation existed and the six consumption cases failed — but the honest detail is that they
+first failed on a **fixture** bug, not the code:
+`supplier_invoices_two_person_verification_check` refused an invoice recorded and verified by the
+same person. ⭐ Worth keeping, because it is the constraint doing its job on a test that was trying
+to take a shortcut around a workflow: **inserting around a workflow is fine; inserting around a
+constraint is not.**
+
+**The job, run twice against `shareat_dev`:**
+
+```
+budget-reissue: running (manual)
+  Shareat: budgets 2 · created 1 · windows moved 0 · nothing due 1     <- first run
+  Shareat: budgets 2 · created 0 · windows moved 0 · nothing due 2     <- second run
+```
+
+Four `scheduler_runs` rows, every one `ok`, including the no-ops — T-140's contract. The created
+row carries `reissued_from_id` and the same amount and interval; the hand-set cap beside it is
+untouched.
+
+**Smoketest on 9008, 390×844 — 11 of 11:** `Budgets` in the nav and opening; both halves rendering;
+a cap set and appearing; the `/expenses/new` hint showing **nothing** until a capped category is
+picked, then *"Capital Expenditure — ₱2,500.00 capped for 202609, ₱0.00 spent, ₱2,500.00 left"*;
+going over the cap **warning**; and ⛔ **the submit button still live** — asserted, not assumed,
+because "it warns and never blocks" is the decision this whole screen rests on. 0px horizontal
+overflow on both routes.
 
 ## Done when
 
