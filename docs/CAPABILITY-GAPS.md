@@ -345,7 +345,7 @@ and this whole tree sits one level down inside `manager/`.
 |---|---|---|---|
 | **A place to administer reference data at all** | ✅ `/manager/settings/*` (13 screens) + `/admin/configurations/*` | 🟡 `/settings/attendance` only — **and `/settings` itself is a nav entry with no page behind it (DEF-192)** | The *container* is the gap. Each item below is small; what is missing is the shelf they stand on |
 | **Expense categories** | ✅ `/admin/configurations/expense-entries` **and** `/manager/settings/expense-entries` — two screens, so it is real, daily reference data | ⛔ **Seed-only.** 39 rows from `packages/db/seed/expense-categories.ts`, no `createCategory`/`updateCategory` anywhere in `domain` or `repo` | ⚠️ Filed as **DEF-193** as well, because it has a second edge: T-213's `expenseCategoryUnpostable` detector fires on a category with no mapped account and **no screen exists on which to map one** |
-| **Positions** | ✅ `/manager/settings/positions` | ⛔ **Seed-only, and worse — `seedCanonicalPositions` (`domain/src/people/index.ts:256`) is the table's only writer and itself has no caller under `apps/`.** `positions` is a real FK-referenced table; a store cannot add one | ⭐ v1's own history proves the need: `project_add_griller_feature` was a whole task about adding **one position**. In v2 that is a migration, not a form |
+| **Positions** | ✅ `/manager/settings/positions` | ⛔ **Seed-only.** Two functions in a stack write this table and **neither has a caller under `apps/`**: `seedCanonicalPositions` (`packages/domain/src/people/index.ts:256`) wraps `employmentRepo.seedCanonical` (`packages/db/src/repo/employment.ts:56`), which holds the actual `insert into positions`. The domain one appears only in five attendance integration tests; `apps/` imports `employmentRepo` for `listActiveRoster`/`getEmployment` and never `seedCanonical`. `positions` is a real FK-referenced table and a store cannot add one | ⭐ v1's own history proves the need: `project_add_griller_feature` was a whole task about adding **one position**. In v2 that is a migration, not a form. ⚠️ **Same grep signature as DEF-190, opposite blast radius** — an org with no positions fails *loudly* at the first hire, where an uncleared `1210` fails *silently* forever. That is why this is a gap and DEF-190 is a defect |
 | **Wastage reasons** | ✅ `/manager/settings/wastages` | ⛔ A code constant (`WASTAGE_REASONS`), not a table — config by deploy | Small, and the right answer may well be *keep it a constant*: a reason list that anyone can extend stops being analysable. **Needs a verdict, not necessarily a screen** |
 | **Salary-advance policy** | ✅ `/manager/settings/salary-advance` | ⛔ No v2 equivalent found | Ties to T-189's advance recovery off `1230`. Phase 5 built the mechanism and not the policy surface |
 | **Organization details** | ✅ `/manager/settings/organization` | ⛔ No v2 equivalent. `organizations` rows are created by migration/seed; T-222 created the *store* screen and explicitly not the org one | Low volume — an org is edited once a year — but there is currently no way to correct a business name or TIN, and TIN is a statutory field |
@@ -369,3 +369,34 @@ migration." **Probable home: Phase 7**, as one *Reference data* screen group rat
 separate tasks.
 
 **Gap count: 44.**
+
+### The sweep that found these — reproducible, so it does not have to be re-invented
+
+⭐ Recorded here rather than left in a session log, because a method that produced four defects
+and lives only in a transcript is exactly `DEF-185`'s expired-deferral shape.
+
+1. **Every domain export, checked for a caller.** Collect every `^export (async )?function` under
+   `packages/domain/src` (excluding `*.test.ts`), then word-boundary match each name against every
+   `.ts`/`.tsx` under `apps/` — ⚠️ **excluding `apps/erp/.next`**, whose turbopack cache contains
+   compiled copies of the barrel and will match everything. 401 exports, **157 with no `apps/`
+   caller** on 2026-09-06.
+   ⛔ **The raw count is not the finding and must not be reported as one.** Most of the 157 are
+   correct: pure helpers called by other domain functions (`computeDay` via the adjudicator,
+   `planConsumption` via `postUsage`), and several action-shaped ones are reached through a
+   differently-named app wrapper — `commitCountSession` looks uncalled and is not, because
+   `/inventory/counts` calls `commitCount`. **The signal is action-shaped functions that move
+   money or state and have no wrapper either.** Read each candidate before filing it; this pass
+   discarded far more than it kept.
+2. **Every nav entry, checked for a route, and the reverse.** Compare every `href:` in
+   `apps/erp/src/components/nav.tsx` against every `page.tsx` under `apps/erp/src/app`. Both
+   directions matter and they catch different failures: nav→route found **DEF-192**, route→nav is
+   the check that would have caught **DEF-139** and **DEF-181**.
+3. **Every table, checked for a writer.** For a schema file with no `insert` anywhere outside
+   tests and seeds, ask whether that is deliberate. Found `audit_log` (**DEF-169**, zero writers
+   *and* zero readers), `expense_categories` (**DEF-193**) and `positions` (above).
+
+⚠️ **Both checks in 1 and 2 are mechanical enough to be tests rather than a periodic audit**, and
+`tests/unit/deferral-staleness.test.ts` (T-220) is the pattern to copy. Two lessons from building
+that one apply directly: seed the guard with a **live** failure so its first run is red — a guard
+whose first run is green has proved nothing — and assert non-vacuity, because a scan that silently
+matches zero files looks identical to a clean tree (`DEF-179`).

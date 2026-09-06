@@ -125,19 +125,39 @@ balanced (575/575 divs).
    - `DEPLOY_HOST` / `DEPLOY_SSH_KEY` **do** exist in Secrets (set 2026-09-04), so the credential
      half is done. Only a green CI is missing.
 
-   **What is actually left, and both steps need root on the droplet — Ian's, not an agent's:**
-   ```sh
-   # 1. Re-run provisioning. It is idempotent, it fixes /srv's group-write (which unblocks the
-   #    Deploy workflow), and it INSTALLS the new T-214 unit files, which is the only way they
-   #    reach the box — the deploy workflow does not ship unit files.
-   sudo bash /srv/shareat/docs/ops/provision.sh          # or from a fresh checkout
+   **What is actually left, and both steps need root ON THE DROPLET — Ian's, not an agent's:**
 
-   # 2. Arm the timer.
-   sudo systemctl enable --now shareat-finding-observation.timer
+   ⛔ **CORRECTED 2026-09-06 — DEF-194.** An earlier version of this block read
+   `sudo bash /srv/shareat/docs/ops/provision.sh`. **That path does not exist on the droplet**:
+   `.github/workflows/deploy.yml:82` ships `apps/erp/.next`, `packages`, `scripts`, `node_modules`
+   and the two manifests — **no `docs/`**, ever. It also does not say the step happens over SSH,
+   and Ian ran it in a Windows shell (*"Sudo is disabled on this machine"*). `provision.sh`'s own
+   header carries the right form and the reason: it installs the `*.service`/`*.timer` files that
+   live **beside** it, so the whole directory travels, not just the script.
+
+   ```powershell
+   # 1. From the repo on Ian's machine — ship docs/ops to the droplet, then provision.
+   #    Idempotent. Fixes /srv's group-write (which unblocks the Deploy workflow) and INSTALLS
+   #    the unit files, which is the ONLY way they reach the box.
+   cd C:\Users\ianla\webapps\shareat-system
+   scp -r docs\ops root@159.223.46.224:/root/shareat-ops
+   ssh root@159.223.46.224 "bash /root/shareat-ops/provision.sh"
+   ```
+
+   ⚠️ **Omit the domain argument, deliberately.** Passing `erp2.shareat.net` rewrites
+   `/etc/caddy/Caddyfile` and reloads Caddy on a site that is live and working, for no benefit.
+   Omitting it skips the Caddy block entirely and still does both things the deploy needs.
+
+   ```sh
+   # 2. Arm the timer — on the droplet (ssh root@159.223.46.224).
+   systemctl enable --now shareat-finding-observation.timer
    systemctl list-timers          # NEXT and LEFT must be populated for all FOUR timers
-   sudo systemctl start shareat-finding-observation.service   # prove it runs once, now
+   systemctl start shareat-finding-observation.service   # prove it runs once, now
    journalctl -u shareat-finding-observation.service -n 50
    ```
+
+   ⚠️ `provision.sh`'s own closing message lists only three timers plus `shareat-erp` — the
+   fourth, `finding-observation`, is new from T-214 and is why step 2 enables it by name.
    ⚠️ Step 1 is not optional and is easy to miss: **`provision.sh` is the only thing that installs
    unit files**, so without it `systemctl enable` in step 2 fails with "Unit not found".
    ⚠️ **A skipped day cannot be reconstructed** — the detectors read live state, so every day
