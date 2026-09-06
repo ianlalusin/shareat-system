@@ -104,7 +104,20 @@ export type VoidUsageOutcome =
   | { readonly ok: true; readonly reversalEntryIds: readonly string[] }
   | { readonly ok: false; readonly reason: string };
 export type PostOutcome =
-  | { readonly ok: true; readonly totalCost: Money; readonly entryIds: readonly string[] }
+  | {
+      readonly ok: true;
+      readonly totalCost: Money;
+      readonly entryIds: readonly string[];
+      /**
+       * ⭐ T-223. The store and the items this post touched, so the caller can trigger the low-stock
+       * auto-order **after the transaction commits** without re-reading them.
+       *
+       * ⚠️ Returned rather than re-fetched deliberately: the action would otherwise issue a second
+       * query for data already loaded here, and race a concurrent void while doing it.
+       */
+      readonly storeId: string;
+      readonly itemIds: readonly string[];
+    }
   | { readonly ok: false; readonly reason: string };
 
 function capabilityFor(kind: 'usage' | 'wastage'): 'record_wastage' | 'record_stock_movement' {
@@ -296,7 +309,13 @@ export async function postUsage(tx: Tx, actor: Actor, input: { readonly recordId
   }
   await stockUsageRepo.markUsagePosted(tx, record.id, actor.personId);
 
-  return { ok: true, totalCost: result.totalCost, entryIds: result.entryIds };
+  return {
+    ok: true,
+    totalCost: result.totalCost,
+    entryIds: result.entryIds,
+    storeId: record.storeId,
+    itemIds: lines.map((l) => l.itemId),
+  };
 }
 
 /**

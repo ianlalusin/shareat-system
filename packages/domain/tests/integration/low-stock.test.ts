@@ -349,6 +349,60 @@ describe('T-175 — ⭐ the order thread, and it is append-only', () => {
   });
 });
 
+describe('T-223 / DEF-186 — the caller the auto-order never had', () => {
+  it('⭐ resolves the counterparty customer itself when the caller has only the store', async () => {
+    // ⛔ THE change that makes wiring possible. The real caller is an ERP action that has just
+    // committed a usage post: it holds `storeId`, not `customerId`, and must not open a transaction
+    // of its own to go looking — the whole point is that it runs AFTER the commit.
+    await stock(branch, brKitchen, pork, '4');
+    await threshold(branch, pork, '20');
+
+    const res = await replenishAfterUsage({
+      orgId: orgA, branchStoreId: branch, orderedOn: '2026-08-25', createdBy: personA,
+      // ⭐ customerId deliberately omitted.
+    });
+
+    expect(res.failed).toBeNull();
+    expect(res.appended).toHaveLength(1);
+    expect(res.orderId).not.toBeNull();
+
+    // ⚠️ And it resolved to the SAME counterparty an explicit call would have used — a different
+    // customer would bill the wrong party for the branch's stock.
+    const [ord] = await sql<{ customer_id: string }[]>`
+      select customer_id from trade_orders where id = ${res.orderId!}`;
+    expect(ord!.customer_id).toBe(customerId);
+  });
+
+  it('⚠️ a store with no counterparty customer is a REPORT, not a throw', async () => {
+    // A store that is linked to a commissary but has no customer record cannot be billed for an
+    // internal order. ⛔ That is a note, exactly like "not a buyer store" — never an exception that
+    // would reach a caller who has already committed a usage post.
+    const [orphan] = await sql<{ id: string }[]>`
+      insert into stores (org_id, code, name) values (${orgA}, ${'ORPH-' + Date.now()}, 'Orphan Branch') returning id`;
+    await sql`
+      insert into commissary_links (org_id, commissary_store_id, branch_store_id, created_by)
+      values (${orgA}, ${commissary}, ${orphan!.id}, ${personA})`;
+
+    const res = await replenishAfterUsage({
+      orgId: orgA, branchStoreId: orphan!.id, orderedOn: '2026-08-25', createdBy: personA,
+    });
+
+    expect(res.failed).toBeNull();
+    expect(res.notes.join(' ')).toMatch(/counterparty customer/);
+    expect(res.orderId).toBeNull();
+  });
+
+  it('⚠️ an explicit customerId still wins — the resolution is a fallback, not an override', async () => {
+    await stock(branch, brKitchen, pork, '4');
+    await threshold(branch, pork, '20');
+    const res = await replenishAfterUsage({
+      orgId: orgA, branchStoreId: branch, customerId, orderedOn: '2026-08-25', createdBy: personA,
+    });
+    expect(res.failed).toBeNull();
+    expect(res.appended).toHaveLength(1);
+  });
+});
+
 describe('T-175 — ⭐ invariant 8: the ordering subsystem can fail without costing a usage post', () => {
   it('a broken auto-order reports its failure and throws NOTHING', async () => {
     await stock(branch, brKitchen, pork, '4');

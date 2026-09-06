@@ -21,7 +21,7 @@
  * what they used even when the ordering subsystem is down.* ⚠️ That is the whole reason the
  * function returns a report instead of throwing, and the reason `postUsageRecord` does not call it.
  */
-import { lowStockRepo, transaction, type Tx } from '@shareat/db';
+import { commissaryRepo, lowStockRepo, transaction, type Tx } from '@shareat/db';
 import { lineCost } from '../stock/layers';
 import { quantity, toThousandths, type Quantity } from '../stock/quantity';
 import { resolveBranchRate } from './orders';
@@ -30,8 +30,16 @@ import type { Outcome } from './outcome';
 export interface AutoOrderInput {
   readonly orgId: string;
   readonly branchStoreId: string;
-  /** The buyer's counterparty record — how an internal order names the branch. */
-  readonly customerId: string;
+  /**
+   * The buyer's counterparty record — how an internal order names the branch.
+   *
+   * ⭐ **Optional since T-223.** The real caller is an ERP action that has just committed a usage
+   * post; it holds the store, not the customer, and should not open a transaction of its own to go
+   * looking. Omitted, it is resolved here from the store, inside the transaction that is already
+   * open. ⛔ A store with no counterparty customer is **not a buyer**, which is a note and not an
+   * error — the same shape as having no commissary link.
+   */
+  readonly customerId?: string;
   readonly orderedOn: string;
   readonly createdBy: string;
   /** Restrict to the items a usage post just touched; omit to sweep the whole store. */
@@ -69,6 +77,17 @@ export async function ensureAutoOrderLines(
     return { ok: false, reason: 'this store has no active commissary link — it is not a buyer store' };
   }
 
+  // ⭐ T-223. Resolve the counterparty here when the caller did not supply one — see AutoOrderInput.
+  const customerId =
+    input.customerId ??
+    (await commissaryRepo.internalCustomerFor(tx, input.orgId, input.branchStoreId))?.id;
+  if (!customerId) {
+    return {
+      ok: false,
+      reason: 'this store has no counterparty customer record — it cannot be billed for an internal order',
+    };
+  }
+
   const low = await lowStockRepo.lowStock(tx, input.orgId, input.branchStoreId);
   const wanted = input.itemIds ? new Set(input.itemIds) : null;
   const candidates = wanted ? low.filter((r) => wanted.has(r.itemId)) : low;
@@ -98,7 +117,7 @@ export async function ensureAutoOrderLines(
   } else {
     const draft = await lowStockRepo.createDraftOrder(tx, {
       orgId: input.orgId, commissaryStoreId, branchStoreId: input.branchStoreId,
-      customerId: input.customerId, orderDate: input.orderedOn, createdBy: input.createdBy,
+      customerId: customerId, orderDate: input.orderedOn, createdBy: input.createdBy,
     });
     orderId = draft.id;
     created = true;

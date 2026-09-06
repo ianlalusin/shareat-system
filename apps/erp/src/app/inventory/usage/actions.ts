@@ -18,7 +18,8 @@
  */
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { deleteUsageDraft, postUsage, saveUsageDraft, voidUsage } from '@shareat/domain';
+import { deleteUsageDraft, postUsage, replenishAfterUsage, saveUsageDraft, voidUsage } from '@shareat/domain';
+import { toBusinessDate } from '@shareat/core/datetime';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { peso } from '../../../lib/format';
@@ -131,11 +132,39 @@ export async function postUsageAction(fd: FormData): Promise<void> {
     back(`/inventory/usage/${recordId}`, { error: result!.reason });
   }
 
+  // ⭐ T-223 / DEF-186 — THE low-stock auto-order's only caller, and the reason it must be here.
+  //
+  // `replenishAfterUsage` opens its OWN transaction and never throws, precisely so a cook can record
+  // what they used when the ordering subsystem is down. That only works if it runs AFTER the usage
+  // transaction has committed — and the layer that can do that is the layer that opened it, which is
+  // this action. `postUsage` and `postUsageRecord` are both handed a `tx` they do not own, which is
+  // why neither could ever have been the caller (auto-order.ts's own header).
+  //
+  // ⛔ It went unwired from T-175 until 2026-09-06: built, tested, and invoked by nothing, so the
+  // auto-order had never run once in production. DEF-186.
+  const replenish = await replenishAfterUsage({
+    orgId: actor.orgId,
+    branchStoreId: result!.storeId,
+    orderedOn: toBusinessDate(),
+    createdBy: actor.personId,
+    // ⚠️ Scoped to what this post touched, never a whole-store sweep on every usage record.
+    itemIds: result!.itemIds,
+  });
+
   revalidatePath('/inventory/usage');
   revalidatePath(`/inventory/usage/${recordId}`);
-  back(`/inventory/usage/${recordId}`, {
-    ok: `Posted at FIFO cost ${peso(result!.totalCost)} — journal ${result!.entryIds.join(', ')}.`,
-  });
+  if (replenish.orderId) revalidatePath('/inventory/low-stock');
+
+  // ⛔ **The failure is reported, never swallowed — that IS the defect this task closes.** The post
+  // is already committed and stands either way, so this is a clause on the success message and not
+  // an error banner: an error over a successful post teaches people to ignore banners.
+  const posted = `Posted at FIFO cost ${peso(result!.totalCost)} — journal ${result!.entryIds.join(', ')}.`;
+  const replenishNote = replenish.failed
+    ? ` ⚠️ The low-stock auto-order did not run: ${replenish.failed}. Your post is unaffected; add any reorder lines by hand.`
+    : replenish.appended.length > 0
+      ? ` Low stock: ${replenish.appended.length} line(s) added to the open commissary order.`
+      : '';
+  back(`/inventory/usage/${recordId}`, { ok: posted + replenishNote });
 }
 
 export async function deleteUsageDraftAction(fd: FormData): Promise<void> {
