@@ -38,6 +38,12 @@ const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
       // ⭐ DEF-133 — provisioning a clock terminal or enrolling a card/fingerprint had no admin UI
       // until 2026-09-04; only hand-run SQL could. `provision_clock_terminal` is admin-only.
       { href: '/attendance/terminals', label: 'Clock terminals' },
+      // ⭐ DEF-197 — the screen that exists so a dead letter is VISIBLE was itself invisible. This
+      // is landmine #14's whole structural fix (bible §12 row 14: v1's recovery path is a banner
+      // saying "tell a manager", and there is nothing for the manager to open), and it was in no
+      // nav group and linked from no page — reachable only by typing the URL, for five days.
+      // Found by T-227's own guard on its first run, which is what a guard is for.
+      { href: '/attendance/lane', label: 'Clock lane' },
       { href: '/payroll', label: 'Payroll' },
       { href: '/expenses', label: 'Expenses' },
       { href: '/cash-requests', label: 'Cash requests' },
@@ -129,10 +135,15 @@ const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
       // were inserted by hand. ⚠️ Linked here on purpose: DEF-181 was precisely a screen that
       // shipped linked from nowhere, and this is the task that cites it.
       { href: '/admin/stores', label: 'Stores' },
-      // ⭐ DEF-181 — both of these shipped with T-201 and were linked from nowhere, reachable only
-      // by typing the URL. Exactly the failure this file's own header comment describes, re-created
-      // three routes later.
-      { href: '/settings', label: 'Settings' },
+      // ⭐ DEF-181 — this shipped with T-201 linked from nowhere, reachable only by typing the URL.
+      // Exactly the failure this file's own header comment describes, re-created three routes later.
+      //
+      // ⚠️ DEF-192 — the fix over-corrected: it also added `{ href: '/settings' }`, and there is no
+      // `app/settings/page.tsx`, only `settings/attendance/`. So the entry that was meant to end a
+      // 404-by-omission introduced a 404-by-commission, and both directions went unchecked for six
+      // days. Dropped rather than backed by a hub page listing exactly one child — a screen that
+      // exists to satisfy a link is not a screen. When a second settings surface lands, a hub earns
+      // its place. T-227's guard now fails the build on either direction.
       { href: '/settings/attendance', label: 'Attendance settings' },
     ],
   },

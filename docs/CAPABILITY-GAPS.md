@@ -400,3 +400,25 @@ and lives only in a transcript is exactly `DEF-185`'s expired-deferral shape.
 that one apply directly: seed the guard with a **live** failure so its first run is red — a guard
 whose first run is green has proved nothing — and assert non-vacuity, because a scan that silently
 matches zero files looks identical to a clean tree (`DEF-179`).
+
+✅ **Done 2026-09-06 (T-227). Checks 1 and 2 are now tests and run in `npm test`:**
+
+| Check | Test | What it enforces |
+|---|---|---|
+| 2 | `tests/unit/nav-route-reachability.test.ts` | every `nav.tsx` `href:` resolves to a `page.tsx`, **and** every non-dynamic route is reachable from nav transitively. Exemptions live in `UNLINKED_BY_DESIGN` with a reason |
+| 1 | `tests/unit/domain-actions-have-callers.test.ts` | every export shaped `(tx, …, actor: Actor, …)` has an `apps/` caller, or an `EXEMPT` entry opening with `INTERNAL` / `WRAPPER` / `JOB` / `UNWIRED` and naming the other half |
+
+⭐ **Check 1's population is the thing worth carrying forward.** The raw *"401 exports, 157
+uncalled"* above is unusable as a gate — a guard that fires 157 times fires zero times. Narrowing to
+**exports that take an `actor`** — the ones that call `authorize()` and therefore presume a human —
+gives **214 in the population and 30 uncalled**, which is a list a person reads. The judgement the
+sweep note asks for ("read each candidate before filing it") is now made **once, in writing, in the
+exemption map**, and a second assertion deletes an entry the moment its export gains a caller.
+
+⛔ **Check 3 (every table, checked for a writer) is deliberately NOT a test.** *"Is this table
+supposed to have no writer?"* needs a per-table judgement a scan cannot make — `audit_log` with no
+writer is DEF-169, a seeded reference table with no writer is correct. The method above stays the
+record for it.
+
+⚠️ **Both guards' first run was red, on purpose and on live defects** — DEF-192, DEF-197, and (with
+the exemption map empty) the five AR functions of DEF-190.
