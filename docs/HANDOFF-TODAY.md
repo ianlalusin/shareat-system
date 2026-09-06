@@ -1,139 +1,165 @@
-# Handoff — 2026-09-06 (second wrap-up)
+# Handoff — 2026-09-06 (third wrap-up)
 
 ## Where things stand
 
-**Phase 6 is one task from done, and Phase 7's second half shipped today.** **T-222** — store
-creation — went from *specced with zero code* to built, gated, smoketested and pushed in this
-session. Until it landed, **nothing in the codebase created a store**: `dev-seed.ts` says so
-outright, and the four dev stores were inserted by hand.
+⭐ **Phase 6 is CLOSED.** T-214 — the manager responsiveness scorecard — was specced and built in
+this session, and it was the last slice. Earlier today T-222 shipped store creation. Both are
+pushed; `main` is at the sha below and the tree is clean.
 
-Everything is committed and pushed. `main` is `cc90516`, `origin/main` matches, tree clean. Five
-commits this session: four for T-222, one recording an access decision that had been made by
-accident.
+The next agent is **starting Phase 7**, not finishing Phase 6. Nothing in `docs/tasks/` is
+half-built.
 
-⭐ **The one finding worth carrying forward is DEF-189, and it is about how it was found.** The
-integration suite proved `AuthorizationError` is thrown — that test passed and always had. What
-nothing covered was **what the thrown error BECOMES by the time a human reads it**, and the answer
-was an **HTTP 500** for a manager clicking a store in a list they are allowed to read. A smoketest
-that drives the ✗ path in a real browser is not ceremony; it is the only thing that saw this.
-
-## Gates at `cc90516`
+## Gates at `<SHA>`
 
 | Gate | Result |
 |---|---|
 | **typecheck** | exit 0 |
-| **unit** | **1021 passed · 1 skipped · 1 failed** — `tests/golden/attendance-adjudication.test.ts`, DEF-170's 3 untriaged divergences. ⚠️ **Known red, unowned, NOT a regression** — it was red before this session and no work here touches attendance |
-| **integration** | ✅ **2398/2398 · 95/95 files · exit 0**, lane `shareat_test_lane25`, 1260s. ⭐ **Re-run at HEAD after the DEF-189 fix, not carried over from the pre-fix tree** — the fix touched `apps/erp` only, but a number reported in a handoff should be one that was actually run against what is being handed off |
-| **build** | ✅ exit 0, compiled 5.3s, dev server confirmed stopped **by process enumeration** first (`Get-NetTCPConnection` on 9008, not `pgrep`). Both `/admin/stores` routes present as `ƒ` |
-| **smoketest** | ✅ **22 checks** on 9008 for T-222, plus **10 more** for the DEF-189 fix, plus **2** probing `/admin/users` for the same defect. Zero horizontal overflow at **390px** on both routes |
+| **unit** | **1021 passed · 1 skipped · 1 failed** — `tests/golden/attendance-adjudication.test.ts`, DEF-170's 3 untriaged divergences. ⚠️ **Known red, unowned, NOT a regression** — red before this session, and nothing today touches attendance |
+| **integration** | `<INTEGRATION>` |
+| **T-214 alone** | ✅ **24/24**, run twice to prove no cross-run pollution |
+| **build** | ✅ exit 0, dev server stopped first by process enumeration. `/findings/scorecard` present |
+| **smoketest** | ✅ **13/13** on 9008 (T-214) · 0px horizontal overflow at 390px on both findings routes |
+| **the new job, for real** | ✅ `npm run finding-observation` on `shareat_dev`: 5 occurrences opened; **second run opened 0**, proving idempotence; both recorded in `scheduler_runs` |
 
 ## What happened this session
 
-### T-222 — store creation and management (`/admin/stores`)
+### T-222 — store creation (`/admin/stores`), and DEF-189
 
-Four commits. The service (`packages/domain/src/stores/service.ts`), the screens, the docs, and one
-correction.
+Shipped earlier today. Until it landed **nothing in the codebase created a store**. The store row,
+its default room and the §C.2 admin fan-out commit in one transaction, proved by an injected
+failure. **DEF-189** was found by the smoketest, not the suite: a manager clicking a store in a list
+they may read got an **HTTP 500** instead of a refusal. The trigger is **calling a domain function
+to satisfy a page read** (domain functions authorize by contract) — not, as it first appears, an
+ungated list beside a gated detail page; `/admin/users` is that shape and is clean.
 
-- **The atomic half and the derived half.** The store row, its default room and the
-  CAPABILITY-MATRIX §C.2 fan-out to every active admin commit in **one transaction**, so the
-  half-provisioned store v1 kept producing cannot exist. v1 had to report per-step because Firestore
-  had no multi-document transaction; Postgres does. Readiness is **recomputed on every page load and
-  stored nowhere** — bible row 123's lesson, because a stored "ready" flag survives the sales
-  channel that satisfied it.
-- **Rollback is proved by an INJECTED failure inside the transaction**, not a happy path. Atomicity
-  is this design's whole advantage, and an untested rollback is a claim with nothing behind it.
-- **Two spec defects reported rather than worked around** (RULES §3.4a). The spec says to build the
-  default room by reusing T-160's `createLocation` — that **cannot work**, because it authorizes
-  `manage_locations` at a store the actor cannot yet be scoped for, and **reordering does not rescue
-  it**: the fan-out grants to `admin` roles only, so a **super_admin** creator still ends with no
-  scope row. The room goes in through the repo; T-160's single-room **trigger** still refuses what
-  `createLocation` would have. Second: a fresh org has **no `location_types` at all**.
+### T-214 — the scorecard, and the clock findings do not have
 
-### DEF-189 — a refusal that arrived as a crash
+⭐ **Specifying it established that v1's scorecard cannot be ported at all.** v1's score needs a
+finding's **first-seen** date. A v2 `DetectedFinding` is a pure function of current state, carries no
+timestamp and cannot, and almost no detector can be re-asked *"as of"* a past date. So two thirds of
+the task is building the clock — `finding_occurrences`, an append-only log written by a new **daily**
+`finding_observation` scheduler job — and the score itself is about forty lines.
 
-Filed and fixed. `storeDetail` now converts `AuthorizationError` **server-side, where `instanceof`
-is still reliable**, and the page renders a sentence. It cannot be fixed in `app/error.tsx` — that
-boundary deliberately does not branch on error type, because Next replaces a Server Component
-error's message with a generic one plus a `digest` in production precisely to stop that detail
-crossing it.
+⛔ **That log is an OBSERVATION, not finding state.** Nothing in the detection path reads it, asserted
+by deleting every row and re-reading the feed. Bible row 123 stands.
 
-⭐ **The generalisation is narrower than it looks, and the obvious version of it is wrong.** The
-trigger is **not** "an ungated list beside a gated detail page" — `/admin/users` is exactly that
-shape and is **clean** (probed, HTTP 200 on both routes as a manager). The trigger is **calling a
-domain function to satisfy a page read**, because domain functions authorize by contract.
+⭐ **The design decision (bible row 177): score what was FIXED, never what was accepted.** Mapping
+v1's *resolved* onto v2's *acknowledged* re-opens exactly the hole T-135 closed — acknowledging means
+the condition **still holds** and is accepted for 30 days, so a score counting it pays managers to
+accept risk. The action component counts occurrences that **cleared**; acknowledgement is reported
+beside the score with its age, never inside it.
 
-### The access decision the unit suite caught
+### ⚠️ Three self-inflicted errors, none caught by a test — the real lesson of the day
 
-`manage_stores` **inherited** membership of `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER` — §B's elevated
-set is derived from the matrix table, so adding the row auto-joined it. **In an org with no admin, a
-manager can open a branch.** Consistent with §B, but never decided for this capability. Pinned with
-reasoning in `tests/unit/capability-matrix.test.ts` (92 → 93) rather than silently re-numbered, and
-now written into the matrix row itself rather than living only in a test.
+1. **The first render scored three innocent branches `0`.** Their findings had been raised that
+   morning; `cleared / raised` cannot tell *"ignored"* from *"has not had a chance"*. Findings inside
+   a 14-day grace window are now **pending** — excluded from the denominator, shown in their own
+   column, scoring a dash. **Every test passed both before and after.** Found by looking at the page.
+2. **Four of my own new tests were green only by luck** — their count queries were not scoped by
+   `org_id`, so they passed against an empty table and read `expected '8' to be '2'` on the second
+   run. Fixed, then verified green twice.
+3. ⛔ **A wrong claim reached a pushed document.** This morning's handoff said migration `0129` was
+   on "3 of 9 databases, `shareat_test` missing". It is **4 of 10 and `shareat_test` has it**. The
+   probe built each URL with a string `replace`, and **this project's Postgres password contains an
+   `@`**, so it connected elsewhere and reported confident nonsense. **The tell was visible and I did
+   not read it: a database supposedly missing a migration whose own suite was green.** ⚠️
+   `packages/db/migrate.ts` already carries a comment about that exact `@` (DEF-030).
+4. ⭐ **The sharpest one, and only the FULL suite could catch it.** I applied `0130` to four
+   databases **by hand**. That runs the SQL but does **not** write Drizzle's
+   `drizzle.__drizzle_migrations` journal — so the databases were right and the journal was wrong,
+   the real migrator considered `0130` unapplied, and `journal.test.ts`'s *"re-running the migration
+   is a no-op"* failed with `relation "finding_occurrences" already exists`. ⛔ **A hand-applied
+   migration is not an applied migration.** Fixed by reverting the objects on all four and letting
+   `migrate()` apply and record them (journal 113 → 114 each). My targeted test run was 24/24 and
+   could never have seen it.
 
 ### Where each decision is recorded
 
 | Decision / finding | Recorded in |
 |---|---|
-| DEF-189 + the "domain function in a page read" class | `docs/DEFECTS-REGISTER.md` |
-| T-222 shipped, with what is still open | `docs/tasks/222-store-creation-and-management.md` status block |
-| `manage_stores`, its ✗ test, and the admin-less elevation | `docs/decisions/CAPABILITY-MATRIX.md` |
-| createStore = atomic half + derived checklist | `PROJECT_BIBLE.md` row 176 (committed earlier, `8a4e50f`) |
-| T-222 done, phase headers | `docs/ROADMAP.html` — **T-222 now `t-done`**, both headers read T-218–T-224 |
+| Score what was fixed; the observation log is not finding state | `PROJECT_BIBLE.md` **row 177** (`npm run toc` run) |
+| T-222's atomic half + derived checklist | `PROJECT_BIBLE.md` row 176 — **its stale "not yet built" tail corrected** |
+| DEF-189, and the three errors above | `docs/DEFECTS-REGISTER.md` |
+| T-214 as built, incl. the two spec corrections | `docs/tasks/214-manager-responsiveness-scorecard.md` |
+| T-214 done, Phase 6 closed | `docs/plans/phase-6-reporting-and-dashboards.md` Wave 3 |
+| The new daily job, its timer, and how to arm it | `docs/ops/README.md` + `provision.sh` |
+| The URL landmine | Claude memory `reference_postgres_url_string_surgery.md` |
 
-**Roadmap: updated.** T-222's row went from `class="task"` to `class="task t-done"` with its note
-rewritten from "specced, not built" to what shipped; both phase chips corrected. HTML verified
-balanced (575 open / 575 close divs) after the edit.
+**Roadmap: updated.** T-214 is `t-done`, both phase headers now read **Phase 6 COMPLETE ·
+T-209–T-214, T-218–T-224 all shipped**, and the chip moved `c-active` → `c-done`. HTML verified
+balanced (575/575 divs).
 
 ## Pick up here
 
-1. **T-214 — manager responsiveness scorecard. ⚠️ SPEC IT FIRST — there is no `docs/tasks/214-*.md`.**
-   Checked this session: `docs/tasks/` jumps 213 → 217. T-214 exists only as a roadmap row and a
-   paragraph in `docs/plans/phase-6-reporting-and-dashboards.md`, and this project's rule is **no
-   implementation without a written task spec** (CLAUDE.md; Opus plans, Sonnet codes). So the first
-   move is the spec, not the code. What the roadmap says it is: *action-rate + speed-to-resolve,
-   re-weighted from v1's three components to two (no AI briefing to log opens against)* — and it is
-   safe here in a way it was not in v1, because **T-135's findings can be acknowledged, never
-   resolved**, so there is nothing to game by clearing a symptom. The phase plan's own line (§5.1,
-   Wave 3) is more specific than the roadmap and is the better starting point: *"two components
-   re-weighted, not three with a zero term; **the view log**; `/findings` gains the accountability
-   half it was specced without"* — so there is a **new write path** in here, not only a report.
-   Finishing it closes Phase 6.
-2. **DEF-170's 3 golden-master divergences** — the only red in the suite, and **unowned**. It has
-   survived several wrap-ups as "known red", which is how a red gate becomes furniture. Either
-   triage the three or write down that they are accepted.
-3. **The DEF-189 sweep, if Ian wants it.** The grep the register names returns **30+ files** in
-   `apps/erp/src/app` that import `@shareat/domain` in a page read. Most import pure calculation and
-   are fine; which of them reach an **authorizing** domain function is unknown. Sized, deliberately
-   not done — it is a task, not a thing T-222 should have quietly absorbed.
+1. ⛔ **THE TIMER CANNOT BE ARMED YET, AND THE REASON IS BIGGER THAN THE TIMER.** Ian asked for it
+   on 2026-09-06 and it could not be done — established by checking, not assumed:
+   - **`Deploy` has never run.** Every run in the repo's history is `skipped` (`gh run list
+     --workflow=deploy.yml`), because it is gated on `ci.yml` succeeding and **CI fails on every
+     push to `main`** — sole cause: DEF-170 (item 3). So there is no `/srv/shareat` code and no
+     installed unit file on the droplet; there is nothing on the box to arm.
+   - **No agent or human holds standing SSH**, by Ian's own decision (`IAN-SETUP-CHECKLIST.md` §4b):
+     deploys run from GitHub Actions with a key in Secrets. ⛔ Do not seek a way round this.
+   - `DEPLOY_HOST` / `DEPLOY_SSH_KEY` **do** exist in Secrets (set 2026-09-04), so the credential
+     half is done. Only a green CI is missing.
+
+   **Order of operations: fix DEF-170 → CI green → `Deploy` runs → then, on the droplet:**
+   ```sh
+   sudo systemctl enable --now shareat-finding-observation.timer
+   systemctl list-timers          # NEXT and LEFT must be populated
+   ```
+   ⚠️ **A skipped day cannot be reconstructed** — the detectors read live state, so every day
+   between now and arming is permanently absent from the record.
+   ⚠️ Ian *can* bypass CI with a manual `workflow_dispatch` (the job allows it), but that ships a
+   red build to production and is his call alone — no agent should trigger it.
+2. **Phase 7 planning.** Phase 6 is closed; there is no half-built work to inherit. `docs/ROADMAP.html`
+   and `docs/CAPABILITY-GAPS.md` are the inputs.
+3. ⛔ **DEF-170 — and it is item 1 in disguise, because it is why the timer cannot be armed.**
+   Severity raised 🔸 → ⛔ today. This is CI's **only** failure; `deploy.yml` is gated on CI
+   succeeding, so **every `Deploy` run in the repo's history reads `skipped`** and **nothing has
+   ever been deployed**. Three consecutive handoffs (mine) called it *"known red, unowned, not a
+   regression"* — true, and badly incomplete: it read as housekeeping while it was a hard
+   production blocker. ⛔ **Not an agent's to triage**: `lipa-0359` diverges **v1 = 9 hours vs
+   v2 = 5 hours plus a half-day flag**, so explaining it away decides what somebody was paid.
 
 ## Do not decide these alone — they are Ian's
 
-1. **T-222 open question 2 — should `deactivateStore` refuse while the store has an open sales day
-   or unremitted cash?** Right now it deactivates **unconditionally**. Recommendation on the table:
-   *yes, refuse and say which* — same shape as T-160's location-deactivation guard; deactivating a
-   store holding uncounted cash loses the custody trail. **Questions 1 and 3 were answered by
-   building** (the `code` is not in `UpdateStorePatch` at all; a manager gets a refusal page rather
-   than a read-only view).
-2. **Should `manage_stores` stay in the admin-less manager elevation?** In an org with no admin, a
-   manager can currently open a branch. Reversible by adding it to the exclusion list. It was
-   inherited, not chosen.
-3. **T-221's composite FK** proposal — still open from the previous session.
+1. **T-214 Q1 — is a per-STORE score acceptable?** A cleared finding has no actor, so per-person
+   attribution is not missing but *meaningless*. Built as per-store with managers listed beside it.
+2. **T-214 Q2 — should acknowledgement ever be scored, even negatively?** Currently reported only.
+   Recommendation: leave it, until there is real data — there are still **0 acknowledgements ever**.
+3. **T-214 Q3 — does the view log get scored later?** Built and shown, not scored.
+4. **T-222 Q2 — should `deactivateStore` refuse with an open sales day or unremitted cash?** Still
+   **not implemented**; it deactivates unconditionally.
+5. **Should `manage_stores` stay in the admin-less manager elevation?** In an org with no admin a
+   manager can open a branch. It was **inherited from the matrix, not chosen**.
+6. **T-221's composite FK** proposal — open from an earlier session.
 
 ## Traps that have actually bitten — live in this area right now
 
-- ⛔ **Migration `0129` is applied on only 3 of 9 DBs.** Verified this session by reading
-  `pg_policies` rather than trusting a note: **applied** on `shareat_dev`, `shareat_test_e2`,
-  `shareat_test_lane25`; **missing** on `shareat_test`, `_lane15`, `_a`, `_b`, `_202`, `_203`,
-  `_204`. Pick up a stale lane and you get DEF-183's cross-org hole back *and* a red `rls.test.ts`.
-- ⚠️ **`pgrep -f vitest` in Git Bash cannot see Windows command lines** — it reported 0 while 9 ran.
-  Use `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*shareat-system*' }`.
-- ⚠️ **`shareat_dev` has ZERO `store_item_thresholds` rows**, so the low-stock features (T-223/224)
-  cannot be exercised on dev data.
+- ⛔ **Never hand-split the Postgres URL.** The password contains an `@`; a string `replace` connects
+  somewhere else silently. Use `new URL()` and set `.pathname`. This produced a wrong claim in a
+  pushed handoff today.
+- ⛔ **`TEST_DATABASE_URL` is `shareat_test`, not a lane DB**, and `tests/integration/setup.ts` runs
+  **no migrations**. A new migration must be applied to it by hand or every new table is missing at
+  test time. Migration `0129` is on `shareat_dev`, `shareat_test`, `_e2`, `_lane25`; **missing** on
+  `_lane15`, `_a`, `_b`, `_202`, `_203`, `_204`. `0130` is on `shareat_dev`, `shareat_test`, `_e2`,
+  `_lane25`.
+- ⛔ **Never run two `vitest --project integration` processes at once** — they share `shareat_test`
+  and truncate each other's tables. It surfaces as `PostgresError: deadlock detected` in fixture
+  setup and looks like a code bug.
+- ⛔ **Never hand-apply a migration.** Running the SQL yourself leaves the database right and
+  Drizzle's `drizzle.__drizzle_migrations` journal wrong, and the divergence is invisible to every
+  test except `journal.test.ts`'s migrator re-run. Use `migrate()` (or `npm run db:migrate` with
+  `DATABASE_URL` pointed at the target), which applies **and records**.
+- ⚠️ **Backticks inside a double-quoted shell string are COMMAND SUBSTITUTION.** Two code spans
+  silently vanished from a `PROJECT_BIBLE.md` row today (`createLocation` and `manage_locations`
+  became empty). Use the Edit tool or a file, never inline shell, for prose containing backticks.
 - ⚠️ **`next-env.d.ts` flip-flops** between `./.next/dev/types/` and `./.next/types/` depending on
-  whether `dev` or `build` ran last. HEAD carries the **dev** variant; restore it rather than
-  committing the churn.
-- ⚠️ Backticks inside a `` sql`` `` template literal terminate the string — hit five times in the
-  previous session. And backticks in `git commit -m` are **command substitution**: use `-F`.
+  whether `dev` or `build` ran last. HEAD carries the **dev** variant; restore it, don't commit it.
+- ⚠️ **`pgrep -f vitest` in Git Bash cannot see Windows command lines.** Use
+  `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*shareat-system*' }`.
+- ⚠️ **`shareat_dev` still has ZERO `store_item_thresholds` rows**, so the low-stock features
+  (T-223/224) cannot be exercised on dev data.
 
 ## The paste-ready prompt
 
@@ -141,14 +167,17 @@ balanced (575 open / 575 close divs) after the edit.
 Read C:\Users\ianla\webapps\shareat-system\docs\HANDOFF-TODAY.md, then docs/RULES.md if you
 haven't this session. Check ListAgents first — this tree is shared and a peer may be mid-task.
 
-Pick up T-214 (manager responsiveness scorecard), the last Phase 6 slice. ⚠️ It has NO spec —
-docs/tasks/ jumps 213 to 217 — so WRITE docs/tasks/214-*.md first, from the roadmap row and
-docs/plans/phase-6-reporting-and-dashboards.md. Do not start coding from the roadmap alone.
+Phase 6 is CLOSED (T-214 shipped last session). Nothing is half-built. You are starting Phase 7 —
+read docs/ROADMAP.html and docs/CAPABILITY-GAPS.md, and ask Ian which slice he wants before
+writing a spec.
 
-T-222 shipped this session; don't re-derive it — docs/ROADMAP.html's Phase 6/7 sections and
-the handoff's "What happened" cover it.
+⛔ FIRST, and it is one line: the new daily timer from T-214 is installed but NOT ARMED —
+`sudo systemctl enable --now shareat-finding-observation.timer`. Until then the findings clock
+never starts and /findings/scorecard stays empty. docs/ops/README.md explains why this exact step
+has been missed three times before.
 
-Before running test:integration, confirm your lane DB has migration 0129 (only shareat_dev,
-_e2 and _lane25 have it). Before npm run build, confirm 9008 is free by process enumeration,
-not pgrep.
+Before test:integration, confirm your DB has migrations 0129 AND 0130 — TEST_DATABASE_URL is
+shareat_test (not a lane) and the setup runs no migrations. Never run two integration suites at
+once; they share that DB and deadlock. Before npm run build, confirm 9008 is free by process
+enumeration, not pgrep.
 ```
