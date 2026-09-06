@@ -131,18 +131,25 @@ notices" actually happen.
 ⚠️ And approving the OT lands at **0.92 D for 89% of the hours** — proportionate. The system's
 answer is already reasonable *once a human acts*; the defect was that nothing prompted the action.
 
-### 4.2 The question itself
+### 4.2 ✅ ANSWERED — Ian, 2026-09-06
 
-Flagging is settled. What an override should then credit is not, and must not be decided by default:
+> **Permitted undertime credits the TIME ACTUALLY WORKED. Approve the pending overtime; do not
+> override the half day to a full one.**
 
-- **Recommendation: credit the time actually worked.** Permission excuses the absence; it does not
-  manufacture the missing hour. In day-units terms that means approving the pending OT (0.92 D)
-  rather than flipping the day to a full unit.
-- The alternative is to flip `halfDayOverride` to false, paying a **full day (1.00 D) for 8 hours**.
-  ⚠️ That is what v1 effectively did — and v1 **paid more than the person was present in 58 of 346
-  sessions**, so inheriting it would be inheriting a defect rather than choosing a policy.
+**Permission excuses the absence; it does not pay for the missing time.** In day-units terms the
+manager approves the pending OT — `lipa-0359` lands at **0.92 D for 89% of the hours** — rather than
+flipping `halfDayOverride`, which would pay a **full day (1.00 D) for 8 hours**.
 
-**Out of scope until answered.** This task ships the flag; the override's pay semantics are untouched.
+⛔ **Rejected on purpose, and the reason matters more than the choice**: paying the full requirement
+is what v1 effectively did, and v1 **paid more than the person was present in 58 of 346 sessions**.
+Adopting it would have been inheriting a defect rather than choosing a policy.
+
+⚠️ **No pay code changed.** Both actions already existed; the decision is about *which one is
+right*, so it ships as **guidance on the screen where the choice is made** — the flagged day now
+names the correct action and names the wrong one explicitly. A decision recorded only in a task doc
+is a decision the person holding the mouse never sees.
+
+Recorded as **`PROJECT_BIBLE.md` §13 row 178**.
 
 ## 5. Scope
 

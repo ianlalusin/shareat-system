@@ -65,35 +65,35 @@
 - `1137–1171` 10. Phase plan
 - `1172–1188` 11. Migration & ETL rules
 - `1189–1237` 12. Inherited landmines — do not repeat these
-- `1238–1422` 13. Decision log
-- `1423–1442` 14. Amendment protocol
-- `1443–1447` 15. Engineering standards — the industry practices this project follows
-  - `1448–1453` 15.1 Build order: walking skeleton first
-  - `1454–1465` 15.2 Golden-master testing — the most important practice here
-  - `1466–1474` 15.3 Strangler Fig, not big-bang cutover
-  - `1475–1479` 15.4 No dual-write
-  - `1480–1484` 15.5 Expand/contract migrations
-  - `1485–1493` 15.6 Observability from day zero, not later
-  - `1494–1498` 15.7 CI gates
-  - `1499–1503` 15.8 Backups and a tested restore
-  - `1504–1508` 15.9 Twelve-Factor config
-  - `1509–1516` 15.10 Append-only ledgers — but not event sourcing
-  - `1517–1521` 15.11 Defence in depth
-  - `1522–1550` 15.12 Skills are lenses, not assurance
-  - `1551–1557` 15.13 Reconciliation is a permanent feature
-- `1558–1562` 16. The accounting spine
-  - `1563–1594` 16.0 What we are actually fixing — the diagnosis
-  - `1595–1638` 16.1 The ten invariants — non-negotiable
-  - `1639–1653` 16.2 The oracle: how "correct" is tested
-  - `1654–1675` 16.3 The model — header + lines, not legs
-  - `1676–1695` 16.4 Deliberately simpler than ERPNext
-  - `1696–1762` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1763–1787` 16.6 What v1 already gets right — preserve the intent
-  - `1788–1809` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1810–1824` 16.8 What v1's accounting already gets right
-  - `1825–1868` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1869–1919` 16.10 Posting patterns — one canonical pattern per business event
-  - `1920–1951` 16.11 Inventory's accounting integration
+- `1238–1423` 13. Decision log
+- `1424–1443` 14. Amendment protocol
+- `1444–1448` 15. Engineering standards — the industry practices this project follows
+  - `1449–1454` 15.1 Build order: walking skeleton first
+  - `1455–1466` 15.2 Golden-master testing — the most important practice here
+  - `1467–1475` 15.3 Strangler Fig, not big-bang cutover
+  - `1476–1480` 15.4 No dual-write
+  - `1481–1485` 15.5 Expand/contract migrations
+  - `1486–1494` 15.6 Observability from day zero, not later
+  - `1495–1499` 15.7 CI gates
+  - `1500–1504` 15.8 Backups and a tested restore
+  - `1505–1509` 15.9 Twelve-Factor config
+  - `1510–1517` 15.10 Append-only ledgers — but not event sourcing
+  - `1518–1522` 15.11 Defence in depth
+  - `1523–1551` 15.12 Skills are lenses, not assurance
+  - `1552–1558` 15.13 Reconciliation is a permanent feature
+- `1559–1563` 16. The accounting spine
+  - `1564–1595` 16.0 What we are actually fixing — the diagnosis
+  - `1596–1639` 16.1 The ten invariants — non-negotiable
+  - `1640–1654` 16.2 The oracle: how "correct" is tested
+  - `1655–1676` 16.3 The model — header + lines, not legs
+  - `1677–1696` 16.4 Deliberately simpler than ERPNext
+  - `1697–1763` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1764–1788` 16.6 What v1 already gets right — preserve the intent
+  - `1789–1810` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1811–1825` 16.8 What v1's accounting already gets right
+  - `1826–1869` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1870–1920` 16.10 Posting patterns — one canonical pattern per business event
+  - `1921–1952` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1418,6 +1418,7 @@ just a patch.**
 | 175 | 2026-09-06 | ⭐ **A PERSON BELONGS TO EXACTLY ONE ORG. "Ian holds a franchise's org-admin" (row 114) is ONE PERSON ROW PER ORG, not one person holding roles across orgs** — and the database now enforces it (T-221, migration `0129`, DEF-183) | Ian, asked because the migration would have been **wrong** under the other answer and I was not willing to settle it by inference. `person_roles`'s RLS policy checked the *row's* `org_id` and never the *person's*, so a cross-org role assignment was accepted by Postgres; its two sibling access tables derive org *through* the person and refuse it. Aligning the three required knowing whether a cross-org role row is a **bug** or a **feature**. The registry said feature — *"a person can hold different roles in different orgs, e.g. Ian holding several franchises' admin"* — so it was checked rather than trusted, and **it is unreachable**: `sessions` carries no `org_id`, `findLiveByTokenHash` selects `orgId` from `persons`, no org switcher exists, and `authorize()` resolves a role only under the person's own org. Such a row therefore has **no reader anywhere in the system** (filed as DEF-187 — a claim of coverage wearing an *"e.g."* rather than an *"enforced by"*, in the one file whose job is to be believed about tenant isolation). ⭐ **The generalisable half: sibling tables protected by two policy shapes are not interchangeable, and both ended in `= app_current_org()`.** `org_id = app_current_org()` asks *"is this row LABELLED with my org?"*; the `via_person` form asks *"does this row's SUBJECT belong to my org?"* — only the second isolates a person-keyed table, and reading them side by side reassures. ⚠️ **Two corrections the build made to the stated fix**, both found by running it: the `org_id` conjunct is **kept, not swapped** (dropping it admits the mirror row — this org's person granted a role in ANOTHER org, a privilege pointing out of the tenant), and `USING` changed as well as `WITH CHECK`, which exposed a **second hole nobody had been sent to look for**: `UPDATE person_roles SET person_id = <other org's person>` walked a legitimate row across the tenant boundary and was allowed. A `WITH CHECK`-only fix passes the first three invariants and leaves it standing. **Consequence for franchise onboarding:** Ian gets a person row (and its own credential) in each org he administers; roles are never shared across orgs. Revisit `0129` only if an org switcher is ever built, which would additionally need a session org column, `findLiveByTokenHash` and `authorize()` axis 1 — the policy being the smallest and cheapest of the four to redo | Yes — closes DEF-183 at the database (RULES §6.3), and `packages/db/tests/integration/rls.test.ts` now fails the build if any person-keyed access table in `schema/access.ts` lacks the `via_person` form |
 | 176 | 2026-09-06 | ⭐ **CREATING A STORE IS TWO HALVES, AND ONLY ONE OF THEM IS THE SYSTEM'S: everything the database can make true by itself is ONE ATOMIC TRANSACTION, and everything that depends on the real world is a DERIVED CHECKLIST, never a stored status** — the store row, T-160's default room, and §C.2's admin store-scope fan-out commit together or not at all; whether the branch has staff, a till, a price list or an opening count is *computed on read* from the rows that would exist | Ian, 2026-09-06, deciding T-222's shape. ⛔ **The half that is not obvious is the fan-out.** A store created without `person_store_scope` rows for the org's existing admins is **invisible to the person who just created it**, and presents as a permissions bug rather than a missing step — the same *decided-in-an-ADR-never-written-into-the-function* shape as DEF-180. ⚠️ **And the checklist must be derived, not stored**: v1's `store-provision.actions.ts` kicked seeds off fire-and-forget from the client and `console.error`'d the failure **while the UI still said “Store Created”** — a success message with nothing executable behind it, which is DEF-185's shape rendered as a toast. v1 built an 11-item readiness registry in response, so it hit this hard enough to pay for a framework. A stored `isReady` flag would drift the moment someone deletes the price list; a query cannot. | Partly. The atomic half is enforceable and belongs in `createStore`'s own transaction; the derived half is enforced by **not having a column to drift** (§4.2 rule 7). ✅ **BUILT 2026-09-06** (T-222). The fan-out is reported on screen (*"store scope granted to N admin(s)"*) rather than done silently, because §C.2’s first half went unnoticed for two weeks precisely by being invisible. ⚠️ Building it found the spec’s own step order impossible: `createLocation` authorizes `manage_locations` at a store the actor cannot yet be scoped for, and reordering does not save it because a **super_admin** creator gets no scope row either |
 | 177 | 2026-09-06 | ⭐ **A RESPONSIVENESS SCORE MEASURES WHAT WAS FIXED, NEVER WHAT WAS ACCEPTED — AND THE CLOCK IT NEEDS IS AN OBSERVATION LOG, WHICH IS NOT THE SAME THING AS STORING A FINDING** — the action component counts occurrences that CLEARED (the detector stopped returning the key), acknowledgements are reported beside the score and never inside it, and the unit of scoring is the STORE because a cleared finding has no actor | Ian, 2026-09-06, deciding T-214's shape. ⛔ **The naive port re-opens the hole T-135 closed.** v1 scored findings a manager marked *resolved*; v2 has no such act. Mapping it onto *acknowledged* pays a manager to ACCEPT risk — acknowledging means the condition still holds and is accepted for 30 days — and the score is then maximised by accepting everything having fixed nothing, which is exactly the gaming row 123's derived model was adopted to prevent. A cleared occurrence needs honesty from nobody. ⚠️ **The clock is the hard part and it did not exist**: a `DetectedFinding` is a pure function of current state, carries no timestamp and cannot, and almost no detector can be re-asked *"as of"* a past date — so *when* a condition first appeared was not recoverable from anywhere. `finding_occurrences` records *"the detector reported this key on this day"* and ⛔ **nothing in the detection path ever reads it**, asserted by deleting every row and re-reading the feed rather than promised in a comment. Row 123 stands: what is forbidden is storing a finding's STATE, because state feeds back into detection; an observation never does. | ✅ **BUILT 2026-09-06** (T-214, migration `0130`, daily `finding_observation` scheduler job). ⚠️ **Two consequences a future implementer must not re-litigate.** First, **there is no backfill and there cannot be one** — the history does not exist anywhere — so the screen states the date the record began, because a number that silently understates how long a problem was ignored is worse than no number. Second, **a finding younger than the 14-day grace window is PENDING, not a failure**: the first render scored three innocent branches 0 because their findings had been raised that morning, and `cleared / raised` cannot tell "ignored" from "not yet had a chance". ⛔ That defect was found by LOOKING at the rendered page; every test passed both before and after it |
+| 178 | 2026-09-06 | ⭐ **PERMITTED UNDERTIME CREDITS THE TIME ACTUALLY WORKED, NEVER THE FULL SHIFT — permission excuses the ABSENCE, it does not pay for the missing time** — so a manager who accepts that a short day was authorised approves the PENDING OVERTIME, and does not flip the day to a full one | Ian, 2026-09-06, closing T-225 §4. ⛔ **The rejected option is the one v1 effectively implemented**, which is why this needed deciding rather than defaulting: v1 paid the full requirement on a day it could not adjudicate, and across the golden corpus it **paid more than the person was physically present in 58 of 346 sessions**. Adopting that would have been inheriting a defect wearing the costume of a policy. ⚠️ **The arithmetic that makes the choice concrete**, from `payroll/compute.ts` — pay is in DAY UNITS (`unitsFor()` returns 0.5 or 1), the hourly equivalent is `dailyRate ÷ requiredHoursPerShift`, and overtime pays `× overtimeMultiplier`. For `lipa-0359` (8h worked of a 9h requirement, 1.25 multiplier) against a daily rate **D**: approving the pending OT pays **0.92 D for 89% of the hours** — proportionate; overriding the half day pays **1.00 D for 8 hours** — not. ⭐ **And the third row is the one that made T-225 urgent at all: if nobody acts, pending overtime pays NOTHING, so the day settles at 0.50 D for eight hours of work.** | ✅ **Shipped 2026-09-06 as GUIDANCE, not as new pay code.** Both actions already existed and neither changed; what was missing was that the person holding the mouse had no way to know which one was correct. The flagged day now names the right action **and names the wrong one explicitly**, on the screen where the choice is made. ⚠️ **A decision recorded only in a task doc is a decision nobody at the point of action ever reads** — the same failure as DEF-180 (an ADR decided and never written into the function) in a different costume: here it would have been decided and never written into the *screen*. |
 
 
 ## 14. Amendment protocol

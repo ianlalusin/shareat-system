@@ -189,6 +189,19 @@ function Evidence({ detail }: { detail: DayReviewDetail }) {
               sign-off that ignores them records an approval nobody actually made.
             </p>
           )}
+
+          {/* ⭐ T-225 §4, Ian's decision 2026-09-06. The flag is only useful if it says what to DO,
+              and the two available actions pay differently — so naming the wrong one is a real cost,
+              not a wording preference. Approving the pending overtime credits the time actually
+              worked; overriding the half day pays a FULL day for a shift that was short, which is
+              what v1 did and why it over-paid relative to presence in 58 of 346 sessions. */}
+          {day.anomalies.includes('half_day_near_full') && (
+            <p className="mt-3 rounded bg-amber-100 p-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-300">
+              <strong>If the undertime was permitted, approve the pending overtime</strong> — that
+              credits the hours actually worked. ⛔ Do <strong>not</strong> override the half day to
+              a full one: permission excuses the absence, it does not pay for the missing time.
+            </p>
+          )}
         </div>
       )}
     </div>
