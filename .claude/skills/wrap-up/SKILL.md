@@ -94,6 +94,28 @@ confirm it is recorded in the right durable place:
 | A task finished or advanced this session | its own `> **Status:**` line in `docs/tasks/NNN-*.md` — edit it directly, don't just say so in the handoff |
 | **What is now done, and what is next** | **`docs/ROADMAP.html` — every wrap-up, no exceptions.** See below |
 
+### ⚠️ A bible row means `npm run toc` — Ian, 2026-09-06
+
+**Any line inserted into `PROJECT_BIBLE.md` or `docs/POSTING-PATTERNS.md` must be followed
+by `npm run toc`.** A §13 decision row is a line inserted into `PROJECT_BIBLE.md`, so this
+rule fires on the row above it — **this ritual is where bible rows actually get written,
+which is exactly why the rule lives here.**
+
+Both files open with a **line-range table of contents that is build-verified**, because
+neither is meant to be read whole — you `offset`/`limit` into the one section you need.
+Insert a row and every range below it shifts by one. The ranges then misdirect, which is
+the single thing the TOC exists to make impossible.
+
+⛔ **The failure does not surface where you made the edit.** It surfaces later, as a check
+failing somewhere unrelated to the row you added — so the next session hunts the wrong
+thing, and the edit that caused it looks innocent because it was correct. Caught on
+2026-09-06 while adding row 175, and only because `CLAUDE.md` happens to describe the
+ranges as build-verified; **nothing warned at edit time.**
+
+`npm run toc` rewrites only the file that moved and says which (`wrote PROJECT_BIBLE.md` /
+`ok docs/POSTING-PATTERNS.md`). It is idempotent — run it whenever you are unsure rather
+than working out whether you need to.
+
 ### ⭐ The roadmap is updated EVERY wrap-up — Ian, 2026-08-28
 
 **Not "if it changed."** Every wrap-up opens `docs/ROADMAP.html` and makes it true
@@ -136,6 +158,10 @@ start actually reads first, and it goes stale silently otherwise.
   directory at its root. `git status --short` must not show it, and nothing staged
   may touch `secrets/` or `.env*`. A file that matches gets unstaged and is called
   out in the handoff explicitly — never committed silently, never assumed fine.
+- ⚠️ **If `PROJECT_BIBLE.md` or `docs/POSTING-PATTERNS.md` is in `git status`, run
+  `npm run toc` BEFORE staging** and stage whatever it rewrites along with your edit —
+  see §2's rule. Committing the row without the regenerated TOC ships a table of contents
+  that points at the wrong lines, and the red lands on the next session, not on you.
 - **Group by theme**, one commit per coherent change. Never one giant commit.
 - **Explicit `git add <path>`.** Never `git add -A` blindly — look at
   `git status --short` first and account for every file. A file you cannot explain
