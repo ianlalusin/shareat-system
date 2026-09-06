@@ -11,6 +11,28 @@ import {
   verifyDayAction,
   voidDayAction,
 } from './actions';
+import { isBlockingAnomaly } from '@shareat/domain';
+
+/**
+ * Plain-language names for the engine's anomaly codes.
+ *
+ * ⚠️ A manager reading `half_day_near_full` learns nothing; the point of surfacing it is that they
+ * act on it. Missing keys fall through to the raw code rather than being hidden, so a new anomaly
+ * is ugly here rather than invisible.
+ */
+const ANOMALY_LABEL: Record<string, string> = {
+  missing_in: 'No clock-in recorded',
+  missing_out: 'No clock-out recorded',
+  no_punches: 'No punches at all',
+  overlapping: 'Overlapping punches',
+  start_not_allowed: 'Started at an hour this store does not list',
+  break_not_closed: 'A break was started and never ended',
+  late_event_arrival: 'A punch reached the server more than 72h late',
+  inverted_window: 'Clock-out is before clock-in',
+  implausible_span: 'Credited far more time than the person was present',
+  half_day_near_full:
+    'Credited a half day, but worked closer to a FULL day — confirm whether the undertime was permitted',
+};
 
 export const metadata = { title: 'Attendance day — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -145,13 +167,28 @@ function Evidence({ detail }: { detail: DayReviewDetail }) {
           </h3>
           <ul className="mt-2 space-y-1 text-sm text-amber-900 dark:text-amber-300">
             {day.anomalies.map((a) => (
-              <li key={a}>⚠️ {a}</li>
+              <li key={a}>
+                {isBlockingAnomaly(a) ? '⛔' : '⚠️'} {ANOMALY_LABEL[a] ?? a}
+                {!isBlockingAnomaly(a) && (
+                  <span className="ml-1 text-xs text-amber-700 dark:text-amber-500">
+                    — advisory, does not block sign-off
+                  </span>
+                )}
+              </li>
             ))}
           </ul>
-          <p className="mt-2 text-xs text-amber-800 dark:text-amber-400">
-            ⛔ A day with an unresolved anomaly cannot be verified — a sign-off that ignores them
-            records an approval nobody actually made.
-          </p>
+          {/* ⚠️ This used to read "a day with an unresolved anomaly cannot be verified" for EVERY
+              anomaly, which was already untrue for `start_not_allowed` — advisory by design,
+              because on a stale grid it fires on a large share of sessions and blocking would hold
+              a store's pay for a data-entry problem (DEF-087). Prose claiming what the code does
+              not do is the exact class this project keeps filing defects about, so the line now
+              renders only when something actually blocks. */}
+          {day.anomalies.some((a) => isBlockingAnomaly(a)) && (
+            <p className="mt-2 text-xs text-amber-800 dark:text-amber-400">
+              ⛔ The blocking items above must be settled before this day can be verified — a
+              sign-off that ignores them records an approval nobody actually made.
+            </p>
+          )}
         </div>
       )}
     </div>

@@ -50,6 +50,23 @@ const BLOCKING_ANOMALIES = new Set([
   'implausible_span',
 ]);
 
+/**
+ * ⚠️ **Not every anomaly blocks, and the screen must say which.**
+ *
+ * `start_not_allowed` is advisory by design — on Lipa's stale grid it fires on a large share of
+ * sessions, and blocking there would hold a store's pay for a data-entry problem (DEF-087). T-225's
+ * `half_day_near_full` is advisory for the same reason: it asks a question, it does not assert the
+ * day is untrustworthy.
+ *
+ * ⛔ Exported because `/attendance/[dayId]` told the manager *"a day with an unresolved anomaly
+ * cannot be verified"*, which was **already untrue** for `start_not_allowed` before this existed —
+ * prose claiming something the code does not do, the shape this project has filed nine defects
+ * about. The screen now asks rather than restates.
+ */
+export function isBlockingAnomaly(anomaly: string): boolean {
+  return BLOCKING_ANOMALIES.has(anomaly);
+}
+
 /** Translate a stored config row into the pure function's policy. */
 export function policyFromConfig(config: AttendanceConfigRow): DayPolicy {
   const toMinutes = (hours: string) => Math.round(Number(hours) * 60);
