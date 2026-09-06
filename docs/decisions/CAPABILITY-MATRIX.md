@@ -133,6 +133,7 @@ they need weekly, the boundary is wrong.
 |---|---|:--:|:--:|:--:|:--:|---|
 | `enrol_staff` | store | ✅ | ✅ | ✅ | ✗ | Ian's list. **Staff only** — creating another manager is `manage_users` |
 | `manage_users` | org | ✅ | ✅ | ✗ | ✗ | Creating/assigning roles at manager level and above. **See §Open 3 — this is the friction point** |
+| `manage_stores` | org | ✅ | ✅ | ✗ | ✗ | ⭐ **T-222.** Opening or closing a BRANCH — org-structural, not a room inside one (`manage_locations` is store-scoped and governs rooms *within* a store). ⛔ **Manager ✗ deliberately**: creating a store fans access rows and establishes a cash-custody policy, so it sits at the same bar as `manage_users`. ⚠️ Org-scoped by necessity as well as by choice — a store-scoped capability needs a `storeId` that exists, and the store being authorized does not yet. **✗ proven by `stores.test.ts` invariant 1** (a manager and a staff member are each refused with `AuthorizationError`) |
 | `grant_capability` | org | ✅ | ✅ | ✗ | ✗ | Only an admin grants |
 | `manage_attendance` | store | ✅ | ✅ | ✅ | ✗ | v1's `attendanceManager` grant, now a manager capability |
 | `set_pay_rate` | store | ✅ | ✅ | **✗** | ✗ | T-189. ⛔ **Manager is deliberately ✗.** A manager who rosters a team must not be able to reprice it — raising your own team's cost is not an operating decision. Same shape as `set_cash_policy`: the number you are measured against is not yours to move |

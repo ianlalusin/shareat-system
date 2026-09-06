@@ -106,7 +106,7 @@ export type { TillShiftRow, TillCountRow, CountLineWithShift, CountedVarianceRow
 export * as storesRepo from './repo/stores';
 export { REMITTANCE_CADENCES, CADENCE_DAYS } from '../schema/stores';
 export type { RemittanceCadence } from '../schema/stores';
-export type { StoreCashPolicy } from './repo/stores';
+export type { StoreCashPolicy, StoreRow } from './repo/stores';
 export * as filesRepo from './repo/files';
 export * as loansRepo from './repo/loans';
 export * as cashRequestsRepo from './repo/cash-requests';

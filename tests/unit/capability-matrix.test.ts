@@ -212,13 +212,13 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // 88 since T-176 (`post_production`, `edit_posted_production`, `void_production`) and
     // T-178 (`record_order_wastage`, `resolve_order_wastage`, `charge_staff_for_wastage`,
     // `reverse_auto_charge`) landed as two concurrent lanes and both sets of rows merged.
-    // 92 since T-177 (`manage_pos_map`, `request_pos_map`, `decide_pos_map_request`,
+    // 93 since T-222 (`manage_stores`). 92 since T-177 (`manage_pos_map`, `request_pos_map`, `decide_pos_map_request`,
     // `finalize_pos_usage_pull`).
     // Having to edit this number is the guard WORKING: a capability cannot be slipped
     // into the enforcement without also being written into the document people actually
     // read, and vice versa.
     const { rows } = parseCapabilityMatrixDoc();
-    expect(rows.length).toBe(92);
+    expect(rows.length).toBe(93);
   });
 
   it('has no duplicate capability names', () => {
@@ -289,10 +289,10 @@ describe('invariant 1 — every capability has an explicit decision for all four
     expect(problems).toEqual([]);
   });
 
-  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 92 capabilities', () => {
-    expect(CAPABILITIES.length).toBe(92);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(92);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(92);
+  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 93 capabilities', () => {
+    expect(CAPABILITIES.length).toBe(93);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(93);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(93);
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));
   });
@@ -358,6 +358,15 @@ describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', (
         'set_pay_rate',
         'run_payroll',
         'manage_users',
+        // ⭐ T-222's `manage_stores` JOINED this set on 2026-09-06 with no edit to any list — it is
+        // admin-yes / manager-no, and the set is derived from exactly that. ⚠️ Worth the moment's
+        // thought this pinned copy exists to force, because it is a real access decision: in an org
+        // with NO admin, a manager DOES get `manage_stores` as a granted row and can open or close a
+        // branch. That is correct on the same reasoning as `manage_users` directly above it — the
+        // fallback lends a manager what only an admin holds, and where there is no admin the manager
+        // is the top of the tree and somebody must be able to. It is materialised as an auditable
+        // row rather than inferred at check time.
+        'manage_stores',
         'grant_capability',
         'manage_price_lists',
         'manage_fixed_assets',

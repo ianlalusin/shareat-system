@@ -93,3 +93,5 @@ export * from './pos/sales-pull';
 // T-178 — order/channel wastage disposition.
 export * from './wastage/orders';
 export * from './wastage/settlement-match';
+// T-222 — store creation and management.
+export * from './stores/service';

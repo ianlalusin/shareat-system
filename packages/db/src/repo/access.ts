@@ -195,6 +195,35 @@ export async function activeStoreIdsForOrg(tx: Tx, orgId: string): Promise<strin
 }
 
 /**
+ * ⭐ T-222. Every person holding an **active `admin` role** in this org — the input to
+ * CAPABILITY-MATRIX.md §C.2's *second* half: *"a store created later appears in nobody's scope, so
+ * creating a store must add scope rows for that org's existing admins."*
+ *
+ * ⚠️ **`admin` only, deliberately, mirroring T-219's first half** (`roles.ts` step 4, which fans on
+ * `input.role === 'admin'`). Widening this to `super_admin` here would quietly extend an ADR in the
+ * task that consumes it — if super-admins should hold store scope, that is a decision about §C.2,
+ * not a detail of store creation. ⛔ Note the consequence, which is real: a super_admin who creates
+ * a store gets **no** scope row for it and cannot then act on it store-scoped, because `authorize`
+ * gives admins no structural bypass (deliberately — v1 let admin bypass and v2 does not).
+ *
+ * `revoked_at is null` is what makes a role active; roles are revoked, never deleted, so "who was
+ * an admin in March" stays answerable (§B).
+ */
+export async function activeAdminPersonIds(tx: Tx, orgId: string): Promise<string[]> {
+  const rows = await tx
+    .select({ personId: personRoles.personId })
+    .from(personRoles)
+    .where(
+      and(
+        eq(personRoles.orgId, orgId),
+        eq(personRoles.role, 'admin'),
+        isNull(personRoles.revokedAt),
+      ),
+    );
+  return [...new Set(rows.map((r) => r.personId))];
+}
+
+/**
  * True iff `personId`'s store-scope rows cover EVERY active store in `orgId` — the literal
  * mechanism CAPABILITY-MATRIX.md §Open 2 resolves the row-101/row-114 conflict with:
  * "a manager may close only if their store scope covers the whole org". An org with zero

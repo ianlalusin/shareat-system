@@ -185,6 +185,14 @@ export type Capability =
   // People
   | 'enrol_staff'
   | 'manage_users'
+  /**
+   * ⭐ T-222. **Opening or closing a BRANCH — org-structural, not a room inside one.**
+   * `manage_locations` is store-scoped and governs rooms *within* a store, which is a different
+   * question from whether the store exists at all. ⛔ Manager is denied deliberately: creating a
+   * store fans access rows and establishes a cash-custody policy, so it sits at the same bar as
+   * `manage_users`.
+   */
+  | 'manage_stores'
   | 'grant_capability'
   | 'manage_attendance'
   /** T-189. ⛔ Manager DENIED — rostering a team must not include repricing it. */
@@ -311,6 +319,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'post_journal_entry',
   'enrol_staff',
   'manage_users',
+  'manage_stores',
   'grant_capability',
   'manage_attendance',
   'set_pay_rate',
@@ -459,6 +468,9 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
 
   enrol_staff: 'store',
   manage_users: 'org',
+  // ⛔ ORG-scoped, and it must be: a store-scoped capability needs a `storeId` that exists, and
+  // the store this authorizes the creation of does not exist yet.
+  manage_stores: 'org',
   grant_capability: 'org',
   manage_attendance: 'store',
   set_pay_rate: 'store',
@@ -655,6 +667,7 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
 
   enrol_staff: { super_admin: true, admin: true, manager: true, staff: false },
   manage_users: { super_admin: true, admin: true, manager: false, staff: false },
+  manage_stores: { super_admin: true, admin: true, manager: false, staff: false },
   grant_capability: { super_admin: true, admin: true, manager: false, staff: false },
   manage_attendance: { super_admin: true, admin: true, manager: true, staff: false },
   set_pay_rate: { super_admin: true, admin: true, manager: false, staff: false },
