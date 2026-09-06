@@ -9,6 +9,9 @@ import {
   type DayPolicy,
   type DayPunch,
 } from '../../packages/domain/src/attendance';
+// ⚠️ Imported from source rather than restated as a literal `5`: `anchorMinute` is measured from
+// the shift day's start, and a copy of that constant here would drift the day it ever moves.
+import { SHIFT_DAY_START_HOUR as SHIFT_DAY_START } from '../../packages/domain/src/attendance/shift-day';
 
 /**
  * T-157 §6 — GOLDEN MASTER over real v1 attendance sessions.
@@ -182,6 +185,32 @@ describe('T-157 golden master — v2 against real v1 attendance sessions', () =>
       const halfDayDiffers = got.isHalfDay !== s.expected.isHalfDay;
       const nightDiffers = Math.abs(got.nightDiffMinutes / 60 - s.expected.nightDiffHours) > 1e-9;
 
+      /**
+       * ⭐ **DEF-170 — the anchor HOUR, which is what the mode label is about.**
+       *
+       * `anchorMinute` is measured from the shift day's 05:00 start, so `+5` recovers the wall
+       * clock hour. Compared against v1's own `shiftStartHour`, this separates the two things a
+       * mode difference can mean, which the label alone conflates:
+       *
+       * - **Same anchor hour** — cosmetic. A punch at 14:59:32 rounds into the 15:00 start, so v2
+       *   says `exact` where v1 said `next`. Identical anchor, identical pay basis.
+       * - **Different anchor hour** — material. The day is credited from a different time.
+       */
+      const anchorHourV2 =
+        got.anchorMinute == null ? null : (Math.floor(got.anchorMinute / 60) + SHIFT_DAY_START) % 24;
+      const sameAnchorHour =
+        s.expected.shiftStartHour !== null && anchorHourV2 === s.expected.shiftStartHour % 24;
+      /**
+       * ⛔ **The fix that closed DEF-170's compound cases.** The classes below carry strict
+       * single-field signatures (`!modeDiffers && !hoursDiffer && …`), so a specimen with TWO
+       * independent, individually-understood causes fell through every one of them and was reported
+       * as unexplained. That is a limitation of the triage's shape, not a finding about the engine.
+       *
+       * A cosmetic relabel is not a divergence to explain, so it no longer blocks a class that
+       * explains the *other* field. ⚠️ It is still counted (class C) rather than hidden.
+       */
+      const modeDiffersMaterially = modeDiffers && !sameAnchorHour;
+
       if (!hoursDiffer && !modeDiffers && !halfDayDiffers && !nightDiffers) { bump('identical'); continue; }
 
       // ── Class A — DEF-088. v1 credited far more than the person was present for. v2 is right.
@@ -229,7 +258,7 @@ describe('T-157 golden master — v2 against real v1 attendance sessions', () =>
       // credited real night-diff hours if the flag was TRUE at the time. Every store's captured
       // config today reads `nightDiffEnabled: false`; nothing else about the specimen differs.
       if (
-        nightDiffers && !hoursDiffer && !modeDiffers && !halfDayDiffers &&
+        nightDiffers && !hoursDiffer && !modeDiffersMaterially && !halfDayDiffers &&
         !policy.nightDiffEnabled && s.expected.nightDiffHours > 0
       ) {
         bump('H: nightDiffEnabled was on when this session ran (DEF-170, config drift)');
@@ -245,7 +274,7 @@ describe('T-157 golden master — v2 against real v1 attendance sessions', () =>
       // Banay-Banay's captured `requiredHoursPerShift` reads `10` today.
       const requiredHoursV2 = policy.requiredMinutes / 60;
       if (
-        hoursDiffer && !modeDiffers && !halfDayDiffers && !nightDiffers &&
+        hoursDiffer && !modeDiffersMaterially && !halfDayDiffers && !nightDiffers &&
         Math.abs(v2Hours - requiredHoursV2) < 1e-9 &&
         v1Hours < v2Hours &&
         presentMinutes / 60 >= v2Hours
@@ -263,6 +292,39 @@ describe('T-157 golden master — v2 against real v1 attendance sessions', () =>
         bump('D: beyond the window on a STALE grid (DEF-087)');
         if (v2Total < v1Hours) {
           paysLess.push(`${s.id}: v1 ${v1Hours}h -> v2 ${v2Total.toFixed(2)}h claimed (${Math.round((v1Hours - v2Total) * 60)}m less) [stale grid]`);
+        }
+        continue;
+      }
+
+      // ── Class J — ⭐ THE MIRROR OF CLASS D, AND THE LAST UNEXPLAINED SPECIMEN. DEF-170.
+      //
+      // Class D covers v2 refusing to anchor where v1 did. **This is the other direction**: v1
+      // recorded `unallowed` with a null `shiftStartHour` and raised `shift_start_not_allowed`,
+      // while v2 anchored successfully — because `anchorWindowMinutes` is a v2-only setting with no
+      // v1 equivalent (see `toPolicy`'s own note). v1 demanded an exact grid hit; v2 treats a punch
+      // within 30 minutes of an allowed hour as aiming for it.
+      //
+      // ⛔ **This is not v2 being lax — it is v2 declining to send a payroll question to a human
+      // for a data-entry problem.** `lipa-0359` punched in at 06:40:43 against a grid whose first
+      // allowed hour is 07:00: twenty minutes early, on a stale grid (DEF-087). v1 could not anchor
+      // it, credited the full 9h cap, and flagged the day `needs_review`. v2 anchors 07:00, credits
+      // 8h of real presence, and — by Ian's OWN `shortShiftHalfDayOt` rule, which this store has ON
+      // — books 5h as a half day and raises the remaining 3h as PENDING overtime.
+      //
+      // ⚠️ **So it pays less on the automatic path and it is surfaced by name below.** Nothing is
+      // taken from the staffer: the 3h is waiting for a manager rather than gone. But v1 paid 9h
+      // outright for 8.43h of presence, and that is the comparison Ian needs to see rather than a
+      // count — which is why this class reports into `paysLess` exactly as B, D, F and G do.
+      if (
+        s.expected.startAnchorMode === 'unallowed' &&
+        s.expected.shiftStartHour === null &&
+        got.anchorMode !== 'unallowed'
+      ) {
+        bump('J: v1 could not anchor on a stale grid; v2 anchored within the window (DEF-087)');
+        if (v2Total < v1Hours) {
+          paysLess.push(
+            `${s.id}: v1 ${v1Hours}h -> v2 ${v2Total.toFixed(2)}h claimed (${Math.round((v1Hours - v2Total) * 60)}m less) [v1 could not anchor]`,
+          );
         }
         continue;
       }
@@ -313,7 +375,10 @@ describe('T-157 golden master — v2 against real v1 attendance sessions', () =>
     }
 
     const summary = Object.entries(counts).sort().map(([k, v]) => `  ${String(v).padStart(4)}  ${k}`);
-    console.log(['golden triage:', ...summary, `  ${String(paysLess.length).padStart(4)}  ...of class B, v2 pays LESS (needs Ian):`, ...paysLess.map((p) => `        ${p}`)].join(String.fromCharCode(10)));
+    // ⚠️ The label used to read "...of class B". It has not been B-only for some time — the list
+    // aggregates every class that surfaces movement (B, D, F, G and now J), and each entry is
+    // tagged with its own cause. A heading that names one class invites reading the rest as B.
+    console.log(['golden triage:', ...summary, `  ${String(paysLess.length).padStart(4)}  ...v2 claims LESS than v1 (needs Ian; cause tagged per row):`, ...paysLess.map((p) => `        ${p}`)].join(String.fromCharCode(10)));
 
     // ⛔ Only an UNTRIAGED divergence fails. A class that has been reasoned about and recorded is
     // knowledge; an unexplained one is a bug nobody has looked at yet.
