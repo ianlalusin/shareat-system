@@ -3,9 +3,12 @@
 ## Where things stand
 
 Phase 6's detector work is finished; Phase 7 has started. **T-220** closed the last gaps the coverage
-sweep found, **T-221** closed a real cross-org RLS hole, **T-222** (store creation) is **specced with
-zero code**. Everything is committed and pushed — `main` is `b388d72`, `origin/main` matches, tree
-clean.
+sweep found, **T-221** closed a real cross-org RLS hole, **T-223** gave the low-stock auto-order its
+first caller, and **T-222** (store creation) is **specced with zero code**. Everything is committed
+and pushed — `main` is `0289cf7`, `origin/main` matches, tree clean.
+
+⚠️ **DEF-186 is closed but its follow-up is not**: the durable answer — a detector for *below
+threshold with no draft line* — is deliberately a separate task. See Pick up here #1.
 
 ⭐ **The day's through-line was not a feature: it was prose that claims something the code does not
 do.** Nine defects of that shape were filed or closed. The lasting artefacts are a read-only audit of
@@ -13,15 +16,15 @@ the whole repo for it (`docs/discovery/27-coverage-claims-sweep.md`), a guard th
 recurring, and **DEF-188 — where the auditor committed the exact failure being audited, shipped it,
 pushed it, and had it caught by the other session.**
 
-## Gates at `b388d72`
+## Gates at `0289cf7`
 
 | Gate | Result |
 |---|---|
 | **typecheck** | exit 0 |
 | **unit** | **1019 passed · 1 skipped · 1 failed** — `tests/golden/attendance-adjudication.test.ts`, DEF-170's 3 residual divergences (`lipa-0013`, `lipa-0359`, `banay-0012`). ⚠️ **Known red, tracked, not a regression** |
-| **integration** | **2366/2366 · 94/94 files · exit 0**, lane `shareat_test_lane25` |
+| **integration** | ⚠️ **NOT CONFIRMED AT `0289cf7`** — a fresh full run was still in flight when this was written and pushed. **Last completed run was 2368 passed / 1 failed of 2369** at `dde8508`, and that single failure was DEF-178's clock flake, **which `0289cf7` then fixed** (21/21 for that file alone, verified). So the expected result is 2369/2369, but ⛔ **nobody has seen it. Run `npm run test:integration` before trusting a green integration number for this sha.** |
 | **build** | exit 0, dev server confirmed stopped **by process enumeration** first. 2 pre-existing `storage-firebase` warnings |
-| **smoketest** | `/admin/users` **9/9** (T-221). ⚠️ `/findings` was smoketested *before* DEF-188 and its finding was **false** — see below |
+| **smoketest** | `/admin/users` **9/9** (T-221) · `/inventory/usage` renders with T-223's wiring, **no errors**. ⚠️ That proves the page loads, **not** that the auto-order fires — proven by integration tests, and after DEF-188 a page load is not called evidence of behaviour |
 
 ⚠️ **Carry this caveat verbatim (ianla-e2):** *T-221's cross-org refusal is proven on the two-org lane
 fixture, **not** on dev data — `shareat_dev` has only one org. The dev server proved the legitimate
@@ -78,6 +81,37 @@ Closes DEF-184, DEF-185. Files DEF-186, DEF-188. **The refusals matter more than
 run and showed T-174/T-175 still describing routes as unbuilt that later tasks had built. ⚠️ Adopted
 by example — 3 markers, one a live sentinel; the other ~40 deferrals deliberately unmarked.
 
+### T-223 — the low-stock auto-order finally has a caller (`dde8508`), closes DEF-186
+
+`replenishAfterUsage` had **zero production callers** since T-175 — built, tested, invoked by
+nothing, so the auto-order had **never run once**.
+
+⭐ **DEF-186 framed the choice as "an ERP action or a scheduler job." Neither described the real
+constraint.** The function's header rules out `postUsageRecord` for taking a `tx` it does not own —
+but so does `postUsage`. The transaction begins and ends one layer higher, in **`postUsageAction`**,
+and that is the only layer that can run anything after the commit. ⛔ Not a scheduler job: a nightly
+sweep replenishes against yesterday's usage and adds a cron whose absence is invisible.
+
+- `PostOutcome` carries `storeId`/`itemIds` — already loaded, returned rather than re-fetched, so the
+  action does not issue a second query and race a concurrent void.
+- `customerId` is optional on `AutoOrderInput`, resolved from the store inside the open transaction.
+- ⛔ **The failure is reported, not swallowed — that was the defect.** A clause on the success
+  message; never an error banner over a post that committed.
+
+### DEF-178 fixed (`0289cf7`) — after it reddened a real gate
+
+Filed yesterday as *reported, not fixed*. It failed a full integration run **during a push**
+(`expected 29 to be 30`) while passing 21/21 alone. Two clocks: the fixture stamped `last_seen_at`
+from Postgres, the assertion floored a value from a JavaScript `Date`. `laneHealth` already accepted
+`now`, so the fixture now stamps from JS and injects the same instant.
+
+⭐ **The probe was worth more than the fix.** Verifying the repaired test still guards took three
+attempts, and the first two proved nothing: `floor`→`ceil` still passes (at exactly 30.0 they agree),
+and a 3% divisor error still passes (30.86 floors to 30). Only a change large enough to move the
+integer fails it. **The assertion tolerates just under an hour of arithmetic error** — an outage
+alarm, not a precision check. ⚠️ I nearly reported "still guards" after the first probe, which would
+have been DEF-188's failure one day later.
+
 ### T-221 — the database refuses a cross-org role (`40eecda`), closes DEF-183
 
 Migration `0129`. `person_roles`'s RLS checked the row's own `org_id`, never the person's. ⭐ **A
@@ -99,6 +133,22 @@ plan symbols are v1 names the plans legitimately quote. **The project does not o
 class is the **expired deferral**. ⚠️ **The sweep's own recommendation was half wrong** — it assumed
 all four deferrals wanted building; two did not.
 
+### Defects filed or closed today
+
+| # | What | State |
+|---|---|---|
+| DEF-183 | `person_roles` RLS checked the row's org, not the person's — a role could cross tenants | **fixed** (T-221) |
+| DEF-184 | A unit mismatch skipped a stock balance and told nobody | **fixed** (T-220) |
+| DEF-185 | ⭐ **The expired deferral** — a deferral records its blocker and nothing re-checks it | **fixed** (guard) |
+| DEF-186 | `replenishAfterUsage` had zero production callers — the auto-order never ran | **fixed** (T-223). ⚠️ Detector follow-up deliberately unbuilt |
+| DEF-187 | The RLS registry justified a column with an "e.g." that is unreachable | `reported` |
+| **DEF-188** | ⛔ **A detector fired on real data and every finding was FALSE** — its own tests agreed with it | **fixed** |
+| DEF-178 | A terminal-silence assertion mixed a Postgres clock with a JavaScript one | **fixed** — after it reddened a gate mid-push |
+| DEF-179 | ⭐ The row documenting that JS `.` does not match a carriage return **contained literal carriage returns** | **fixed** |
+
+⚠️ **DEF-170's 3 residual golden-master divergences remain the only red in the suite, and are still
+unowned.**
+
 ### Decisions Ian made today
 
 | Decision | Recorded in |
@@ -109,27 +159,31 @@ all four deferrals wanted building; two did not.
 
 ## Pick up here
 
-1. ⛔ **DEF-186 — wire `replenishAfterUsage`, or decide not to.** Built, tested, called by nothing, so
-   the low-stock auto-order has **never run**. ⚠️ **Do NOT call it from `postUsageRecord`** — it takes
-   a `tx` it does not own, and sharing the transaction would roll back a cook's usage record because
-   ordering failed. Seam is an ERP action or a scheduler job: **Ian's call.**
-2. **T-222 — build store creation.** Spec at `docs/tasks/222-*.md`.
+1. ⚠️ **A `lowStockOrderNotProposed` detector — DEF-186's durable half, deliberately NOT built.**
+   T-223 wired the auto-order and reports a failure on screen, but a screen message dies with the
+   request. *An item below its threshold with no draft order line* is derivable and persisted, so it
+   survives a lost log line and makes a **repeated** failure visible. ⛔ Left out of T-223 on purpose:
+   shipping a detector in the same commit as the path it watches gives independent evidence of
+   neither. Needs its own both-direction tests.
+2. **T-222 — build store creation.** Spec at `docs/tasks/222-*.md`, zero code.
 3. **T-214 — the manager responsiveness scorecard**, last Phase 6 slice.
+4. **DEF-170's 3 residual golden-master items** — the only red left in the suite, still unowned.
 
 ## Do not decide these alone — they are Ian's
 
-- **DEF-186's seam** (above).
 - **Whether the `createStore` shape decision earns a `PROJECT_BIBLE.md` §13 row.** ⚠️ If yes, run
   `npm run toc` and stage what it rewrites.
 - **T-221's composite FK** — `(person_id, org_id) → persons(id, org_id)` would enforce the one-org
   invariant for `postgres`, the ETL and every script, which RLS does not. Recommended as its own task.
-- **DEF-170's 3 residual golden-master items** — still unowned, still the only red.
 - **Service-charge distribution (T-187)** — unchanged: do not enable service charge in POS first.
 
 ## Traps that have actually bitten — ⭐ today's are about the MACHINE and about VERIFICATION
 
 1. ⭐ **A green run is not a right answer.** DEF-188. Where the code under test *is* a query, running
    it proves execution and nothing else. **Check the arithmetic against ground truth, by hand, once.**
+   ⚠️ **And the same applies to a probe that proves a test still works** — two of three probes on the
+   DEF-178 fix passed against deliberately broken code before one finally bit. A probe that cannot
+   fail proves nothing, exactly like a guard that scans nothing.
 2. ⛔ **We share the machine, not just the tree.** Budget ≈ **one heavy process**; a dev server counts.
    Separate lane DBs fix fixture collisions and do **nothing** for RAM.
 3. ⛔ **Killing a background task does NOT kill the process.** `npm run …` spawns the real thing;
@@ -160,17 +214,17 @@ those gets a confusing red. Run `npm run db:migrate` against it first.
 
 ```
 Read C:\Users\ianla\webapps\shareat-system\docs\HANDOFF-TODAY.md, then docs/RULES.md
-if you haven't this session. main is b388d72, pushed, tree clean; gates green apart
+if you haven't this session. main is 0289cf7, pushed, tree clean; gates green apart
 from DEF-170's known-red golden master.
 
 Read DEF-188 in the handoff first — a detector fired on real data and was 100%
 wrong, and its own tests agreed with it. That is the day's lesson and it is one
 paragraph.
 
-Then pick up DEF-186: replenishAfterUsage is built, tested, and called by nothing,
-so the low-stock auto-order has never run. Do NOT wire it into postUsageRecord
-(wrong transaction boundary) — the seam is Ian's call. After that, T-222 (store
-creation, specced, zero code) or T-214.
+Then pick up DEF-186's follow-up: T-223 wired the auto-order, but the durable
+half — a lowStockOrderNotProposed detector, below threshold with no draft line —
+is deliberately unbuilt. After that, T-222 (store creation, specced, zero code)
+or T-214.
 
 ⚠️ ListAgents first, and read the handoff's Traps section before running anything
 heavy: shared tree AND shared machine, one heavy process at a time, verified by
