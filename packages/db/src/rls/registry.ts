@@ -650,6 +650,12 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     reason: 'No org_id of its own — reached only through its wastage, same shape as trade_order_lines.',
     via: 'exists (select 1 from order_wastages w where w.id = wastage_id and w.org_id = app_current_org())',
   },
+  recurring_expenses: {
+    scope: 'org_column',
+    reason:
+      'Which fixed bills an org carries, at which stores, for how much — a franchise reading ' +
+      'another’s would learn its rent, its lease terms and its supplier retainers.',
+  },
   expense_budgets: {
     scope: 'org_column',
     reason:

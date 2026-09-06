@@ -49,6 +49,10 @@ const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
       // ⭐ T-215 — beside Expenses on purpose: a cap only ever changes a decision at the moment of
       // spending, and `/expenses/new` is where that moment is. This screen is where it gets set.
       { href: '/budgets', label: 'Budgets' },
+      // ⚠️ T-216 — the TEMPLATE register. Nothing acts on these yet and the screen says so in a
+      // banner: the daily job is blocked on Ian deciding whether a due template drafts an expense
+      // or pays itself. Linked anyway, because a screen reachable only by URL is DEF-181.
+      { href: '/expenses/recurring', label: 'Recurring bills' },
       { href: '/cash-requests', label: 'Cash requests' },
     ],
   },

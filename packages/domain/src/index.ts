@@ -98,3 +98,7 @@ export * from './stores/service';
 
 // T-215 — expense budgets: the envelope, its cap, and the reissue schedule. Nothing posts.
 export * from './budgets';
+
+// T-216 — recurring-expense templates. ⚠️ The JOB is not built: whether a due template drafts
+// or auto-pays is Ian's open decision, and it changes the job's shape rather than a flag.
+export * from './recurring-expenses';

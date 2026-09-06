@@ -806,6 +806,13 @@
       "when": 1797391907084,
       "tag": "0131_t215_expense_budgets",
       "breakpoints": true
+    },
+    {
+      "idx": 132,
+      "version": "7",
+      "when": 1797478307084,
+      "tag": "0132_t216_recurring_expenses",
+      "breakpoints": true
     }
   ]
 }

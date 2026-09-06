@@ -256,3 +256,6 @@ export type {
 
 // T-215 — expense budgets. Consumption is DERIVED here; there is no counter to read.
 export * as budgetsRepo from './repo/budgets';
+
+// T-216 — recurring-expense templates. Configuration, not documents: nothing here posts.
+export * as recurringExpensesRepo from './repo/recurring-expenses';

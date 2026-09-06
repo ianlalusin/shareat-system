@@ -163,6 +163,7 @@ export type Capability =
   | 'approve_buyer'
   | 'set_credit_limit'
   | 'manage_expense_budgets'
+  | 'manage_recurring_expenses'
   | 'override_credit_limit'
   | 'record_ap_payment'
   | 'record_ar_collection'
@@ -302,6 +303,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'approve_buyer',
   'set_credit_limit',
   'manage_expense_budgets',
+  'manage_recurring_expenses',
   'override_credit_limit',
   'record_ap_payment',
   'record_ar_collection',
@@ -442,6 +444,10 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   // store's envelope, and a cap set org-wide would mean the same peso figure for a branch doing
   // 40 covers a day and one doing 400.
   manage_expense_budgets: 'store',
+  // T-216. STORE-scoped for the same reason as the budget cap: a fixed bill belongs to a branch.
+  // ⛔ It governs the TEMPLATE only. Posting the expense a template produces still needs
+  // `approve_expense`, unchanged — automation must never become a way to pre-authorise spending.
+  manage_recurring_expenses: 'store',
   set_credit_limit: 'org', // OPEN — Ian to confirm (CAPABILITY-MATRIX.md §Open 1)
   override_credit_limit: 'store',
   record_ap_payment: 'store',
@@ -631,6 +637,9 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   // money sets that branch's caps. Staff false — a cap is a control ON spending, and the person
   // it constrains is not the person who sets it.
   manage_expense_budgets: { super_admin: true, admin: true, manager: true, staff: false },
+  // T-216. Same shape as `manage_expense_budgets`: a manager who runs a branch's money decides
+  // which of its bills recur. Staff false — setting up a standing payment is not a till act.
+  manage_recurring_expenses: { super_admin: true, admin: true, manager: true, staff: false },
   override_credit_limit: { super_admin: true, admin: true, manager: true, staff: false },
   record_ap_payment: { super_admin: true, admin: true, manager: true, staff: false },
   record_ar_collection: { super_admin: true, admin: true, manager: true, staff: false },

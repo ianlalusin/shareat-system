@@ -1,0 +1,238 @@
+/**
+ * Recurring-expense templates — create, edit, pause, resume, remove. T-216.
+ *
+ * ⛔ **THE JOB IS NOT HERE, AND THAT IS NOT AN OVERSIGHT.** Whether a due template **DRAFTS** an
+ * expense for a person to confirm (this task's design, `docs/tasks/216-*.md` §3) or **AUTO-PAYS**
+ * it on a cron (v1's) is an open decision for Ian, and it changes the job's *shape* rather than a
+ * flag. A template table is identical either way, so it ships; a job built against the wrong answer
+ * would have to be rewritten, and a job registered but never run is DEF-044's shape exactly — a
+ * cron claimed in data and absent in fact.
+ *
+ * ⚠️ **Consequence, stated on the screen too:** until that job exists, **a template drafts
+ * nothing.** It is a recorded intention and no more. Saying so out loud is the difference between
+ * an inert feature and a silent one.
+ *
+ * ⭐ **Nothing here posts.** A template carries no journal entry and no money.
+ */
+import { moneyAccountsRepo, recurringExpensesRepo, transaction, type Tx } from '@shareat/db';
+import type { RecurringInterval } from '@shareat/db/schema';
+import { authorize, type Actor } from '@shareat/auth';
+import { firstDueDate, isAnchorValid } from './recurrence';
+
+export interface CreateRecurringTemplateInput {
+  storeId: string;
+  name: string;
+  categoryId: string;
+  defaultAmount: string;
+  defaultMoneyAccountId?: string | null;
+  interval: RecurringInterval;
+  anchorDay: number;
+  /** Defaults to today (Manila). The first due date is derived, never typed. */
+  from?: string;
+  /**
+   * ⛔ Required to name a CASHIER account as the default. v1's `payment-routing.ts` resolves an
+   * ambiguous scheduled payment to office cash at runtime because *"a recurring/scheduled payment
+   * must never silently draw from the cashier till"* — the till is the daily operating drawer.
+   * Here the drift is impossible and the deliberate case is a **recorded fact**, not a fallback.
+   */
+  tillIsDeliberate?: boolean;
+}
+
+function manilaToday(nowMs = Date.now()): string {
+  return new Date(nowMs + 8 * 3_600_000).toISOString().slice(0, 10);
+}
+
+/**
+ * Shared by create and edit: the account must exist, belong to this store, and — if it is a
+ * cashier account — have been chosen deliberately.
+ */
+async function checkAccount(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+  accountId: string | null | undefined,
+  tillIsDeliberate: boolean,
+): Promise<boolean> {
+  if (!accountId) return false;
+  const account = await moneyAccountsRepo.getById(tx, orgId, accountId);
+  if (!account) throw new Error('that money account does not exist.');
+  if (account.storeId !== storeId) {
+    throw new Error(`${account.name} belongs to a different store — a template pays from its own store's account.`);
+  }
+  if (account.custodian === 'cashier' && !tillIsDeliberate) {
+    throw new Error(
+      `${account.name} is a CASHIER account — the till is the daily operating drawer, and a bill ` +
+        'that pays itself out of it leaves the day short with nothing naming why. Choose an office ' +
+        'account, or tick "yes, really pay this from the till".',
+    );
+  }
+  return account.custodian === 'cashier';
+}
+
+export async function createRecurringTemplate(
+  tx: Tx | null,
+  actor: Actor,
+  input: CreateRecurringTemplateInput,
+): Promise<{ id: string; nextDueDate: string }> {
+  const run = async (trx: Tx) => {
+    await authorize(trx, actor, 'manage_recurring_expenses', { storeId: input.storeId });
+
+    const name = input.name.trim();
+    if (!name) throw new Error('give the template a name — "Lipa branch rent", not "expense 3".');
+    if (Number(input.defaultAmount) <= 0) {
+      throw new Error('a default amount has to be greater than zero. ⚠️ It is a DEFAULT — the drafted expense is edited against the real bill.');
+    }
+    // ⚠️ The database refuses this too; this exists so a person reads a sentence instead of a
+    // constraint name. ⛔ It is not a second source of truth — the CHECK is the rule.
+    if (!isAnchorValid(input.interval, input.anchorDay)) {
+      throw new Error(
+        input.interval === 'weekly' || input.interval === 'bi_weekly'
+          ? `a ${input.interval} template is anchored on a day of the WEEK (0 = Sunday to 6).`
+          : 'a monthly, quarterly or annual template is anchored on a day of the MONTH (1 to 31). A 31st anchor clamps to the month end; it is not refused.',
+      );
+    }
+
+    const deliberate = input.tillIsDeliberate === true;
+    const isTill = await checkAccount(trx, actor.orgId, input.storeId, input.defaultMoneyAccountId, deliberate);
+
+    // ⭐ DERIVED, never typed. A template created on the 3rd with a monthly anchor of the 15th is
+    // due THIS month — getting that wrong makes every new template a month late, silently.
+    const nextDueDate = firstDueDate(input.from ?? manilaToday(), input.interval, input.anchorDay);
+
+    const { id } = await recurringExpensesRepo.insertTemplate(trx, {
+      orgId: actor.orgId,
+      storeId: input.storeId,
+      name,
+      categoryId: input.categoryId,
+      defaultAmount: Number(input.defaultAmount).toFixed(2),
+      defaultMoneyAccountId: input.defaultMoneyAccountId ?? null,
+      // ⚠️ Recorded ONLY when it is actually true of this account, so the flag never claims a
+      // deliberate choice about an office account nobody had to think about.
+      tillIsDeliberate: isTill && deliberate,
+      interval: input.interval,
+      anchorDay: input.anchorDay,
+      nextDueDate,
+      createdBy: actor.personId,
+    });
+    return { id, nextDueDate };
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+export interface UpdateRecurringTemplateInput {
+  templateId: string;
+  name?: string;
+  categoryId?: string;
+  defaultAmount?: string;
+  defaultMoneyAccountId?: string | null;
+  interval?: RecurringInterval;
+  anchorDay?: number;
+  tillIsDeliberate?: boolean;
+}
+
+export async function updateRecurringTemplate(
+  tx: Tx | null,
+  actor: Actor,
+  input: UpdateRecurringTemplateInput,
+): Promise<void> {
+  const run = async (trx: Tx) => {
+    const template = await recurringExpensesRepo.getById(trx, actor.orgId, input.templateId);
+    if (!template) throw new Error('that template does not exist.');
+    await authorize(trx, actor, 'manage_recurring_expenses', { storeId: template.storeId });
+
+    const interval = input.interval ?? template.interval;
+    const anchorDay = input.anchorDay ?? template.anchorDay;
+    if (!isAnchorValid(interval, anchorDay)) {
+      throw new Error(`anchor ${anchorDay} is out of range for a ${interval} template.`);
+    }
+    if (input.defaultAmount !== undefined && Number(input.defaultAmount) <= 0) {
+      throw new Error('a default amount has to be greater than zero.');
+    }
+
+    const deliberate = input.tillIsDeliberate ?? template.tillIsDeliberate;
+    const accountId =
+      input.defaultMoneyAccountId === undefined ? template.defaultMoneyAccountId : input.defaultMoneyAccountId;
+    const isTill = await checkAccount(trx, actor.orgId, template.storeId, accountId, deliberate);
+
+    // ⚠️ Changing the INTERVAL or the ANCHOR re-derives the cursor from today, not from the old due
+    // date: a template switched from monthly-on-the-30th to weekly-on-Tuesday has no sensible
+    // "next" derived from a date the new rule could never have produced.
+    //
+    // ⛔ Compared against the STORED values, not merely "was a value supplied". The screen posts
+    // every field on every save, so keying this on `!== undefined` would move the due date whenever
+    // anyone corrected a typo in the name — a silent change to when a bill comes up, made by an
+    // edit that had nothing to do with timing. Caught in self-review, not by a test.
+    const cursorMoved = interval !== template.interval || anchorDay !== template.anchorDay;
+
+    await recurringExpensesRepo.updateTemplate(trx, actor.orgId, input.templateId, {
+      ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+      ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
+      ...(input.defaultAmount !== undefined ? { defaultAmount: Number(input.defaultAmount).toFixed(2) } : {}),
+      ...(input.defaultMoneyAccountId !== undefined ? { defaultMoneyAccountId: accountId } : {}),
+      tillIsDeliberate: isTill && deliberate,
+      ...(input.interval !== undefined ? { interval } : {}),
+      ...(input.anchorDay !== undefined ? { anchorDay } : {}),
+      ...(cursorMoved ? { nextDueDate: firstDueDate(manilaToday(), interval, anchorDay) } : {}),
+    });
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/**
+ * Pause or resume.
+ *
+ * ⭐ Pausing is the ONLY way to stop a template that has already produced something. Deleting one
+ * that has drafted an expense would strand that expense's explanation — *"why does this draft
+ * exist?"* is answered by the template, and a deleted answer is worse than a paused one.
+ */
+export async function setRecurringTemplateStatus(
+  tx: Tx | null,
+  actor: Actor,
+  input: { templateId: string; status: 'active' | 'paused' },
+): Promise<void> {
+  const run = async (trx: Tx) => {
+    const template = await recurringExpensesRepo.getById(trx, actor.orgId, input.templateId);
+    if (!template) throw new Error('that template does not exist.');
+    await authorize(trx, actor, 'manage_recurring_expenses', { storeId: template.storeId });
+
+    // ⚠️ Resuming re-derives the cursor from TODAY. A template paused for three months would
+    // otherwise wake with a due date three months behind and draft its way forward — noise on the
+    // morning somebody switched it back on, and the opposite of what "resume" means.
+    const cursor =
+      input.status === 'active' && template.nextDueDate < manilaToday()
+        ? { nextDueDate: firstDueDate(manilaToday(), template.interval, template.anchorDay) }
+        : {};
+    await recurringExpensesRepo.updateTemplate(trx, actor.orgId, input.templateId, {
+      status: input.status,
+      ...cursor,
+    });
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/** ⛔ Only while it has never produced anything. Otherwise: pause it. */
+export async function deleteRecurringTemplate(
+  tx: Tx | null,
+  actor: Actor,
+  input: { templateId: string },
+): Promise<void> {
+  const run = async (trx: Tx) => {
+    const template = await recurringExpensesRepo.getById(trx, actor.orgId, input.templateId);
+    if (!template) throw new Error('that template does not exist.');
+    await authorize(trx, actor, 'manage_recurring_expenses', { storeId: template.storeId });
+    if (template.lastDraftedExpenseId !== null) {
+      throw new Error(
+        `${template.name} has already produced an expense, so it is history — pause it instead. ` +
+          'Deleting it would strand the answer to "why does this draft exist?".',
+      );
+    }
+    await recurringExpensesRepo.deleteTemplate(trx, actor.orgId, input.templateId);
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+export * from './recurrence';

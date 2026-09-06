@@ -106,3 +106,6 @@ export * from './pos-mapping';
 
 // T-215 — expense budgets: the envelope a store spends a category out of.
 export * from './expense-budgets';
+
+// T-216 — recurring-expense TEMPLATES. ⛔ No system/payroll rows, ever: read the header.
+export * from './recurring-expenses';

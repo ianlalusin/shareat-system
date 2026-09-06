@@ -913,6 +913,17 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     class: 'purge',
     reason: 'Child of order_wastages (ON DELETE CASCADE); purges with its parent for the same reason.',
   },
+  recurring_expenses: {
+    class: 'keep',
+    reason:
+      'CONFIGURATION, and the clearest case in the table. A template says "Lipa pays rent on the ' +
+      '5th" — a standing fact about how the business operates, not an event that happened in ' +
+      '2026. Purging it would mean re-typing every fixed bill on 1 January, which is exactly the ' +
+      'forgetting this module exists to prevent. ⛔ **The trap this classification exposed:** ' +
+      '`last_drafted_expense_id` points at `expenses`, which PURGES — a `restrict` FK there ' +
+      'would make a KEEP table BLOCK the purge of a PURGE one. It is `ON DELETE SET NULL` for ' +
+      'exactly that reason, and provenance of a deleted draft is worth nothing anyway.',
+  },
   expense_budgets: {
     class: 'purge',
     reason:

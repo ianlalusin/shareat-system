@@ -1,6 +1,36 @@
 # T-216 — Recurring-expense automation
 
-> **Status**: 📝 **SPECIFIED 2026-09-06, not built.**
+> **Status**: 🟡 **HALF BUILT 2026-09-06 — the template ships, the JOB does not, and the job is
+> the half that is blocked.**
+>
+> ⛔ **Open question 2 is unanswered and it must be answered before the job is built.** §3 argues
+> that v2 should **draft** where v1 **auto-pays**, and the spec says so itself: *"say no and it
+> changes the shape of the job, not just a flag — worth answering before build rather than after."*
+> That is exactly why the job is not here. Building it against the wrong answer means rewriting it;
+> registering a job nothing runs is DEF-044's shape, a cron claimed in data and absent in fact.
+>
+> **What shipped** — everything identical under either answer: `recurring_expenses` (migration
+> `0132`, applied AND recorded on both databases), the recurrence arithmetic ported from v1 with
+> **16 unit tests**, `recurringExpensesRepo`, create / edit / pause / resume / delete-if-unused,
+> the `manage_recurring_expenses` capability, `/expenses/recurring`, and **16 integration tests**.
+>
+> ⭐ **The screen SAYS the job does not exist**, in a banner, in plain language. A feature that
+> quietly does nothing is the defect class this project keeps hitting (DEF-190 and the eight before
+> it); one that tells you it does nothing *yet* is a plan with a visible next step. Verified in the
+> browser, not assumed.
+>
+> **What is NOT built and is waiting on the answer:** `runBudgetReissue`'s sibling
+> `runRecurringExpenses`, `scripts/recurring-expenses.ts`, the `recurring_expenses` entry in
+> `scheduler_runs_job_check` (deliberately untouched by `0132`), and integration cases 1–6, 9 and
+> 10, which are all job cases.
+>
+> ⚠️ **`docs/ops/**` is out of this session's bounds** — another session and Ian own the droplet —
+> so the systemd pair is not written here either. It would have nothing to arm yet regardless.
+>
+> ⭐ **A defect found by writing the cutover classification rather than by running the purge:**
+> `last_drafted_expense_id` points at `expenses`, which is class PURGE, while this table is class
+> KEEP. A `restrict` FK there would make a KEEP table **block the 1 January purge** of a PURGE one.
+> It is `ON DELETE SET NULL`, and provenance of a deleted draft is worth nothing anyway.
 >
 > ⭐ **Pulled out of "deliberately deferred past January" by Ian on 2026-09-06** — *"do it now."*
 > Same resolution as T-215: `ROADMAP.html` deferred it as *"automation over expenses, which are
@@ -278,6 +308,39 @@ post it → the ledger moves → the template shows next month's due date. 0px o
 3. **Which bills are actually recurring today, and at which stores?** Neither the roadmap nor the
    capability register has ever named them. Seeding the real list is a ten-minute conversation
    that decides whether this is five templates or fifty.
+
+## What the template half actually produced
+
+**16 unit tests** on the recurrence arithmetic (`packages/domain/src/recurring-expenses/recurrence.test.ts`)
+— v1's cases plus the ones its own tests do not cover: a leap February, **2100 (not a leap year, the
+century rule a naive `%4` gets wrong)**, a 31st anchor that clamps in February and then *returns to
+the 31st in March* rather than sticking at 28, and the fortnightly case where aligning to the anchor
+weekday before stepping would make the template stand still.
+
+⚠️ **Two deliberate changes in the port, both stated in the module header.** v1 parses local
+midnight and formats with `toLocaleDateString('en-CA')` — the two cancel out, so v1 is not wrong,
+it is *load-bearing on the server's timezone being the one it was written on*, which bible §6 bans
+for exactly this class of surprise. And v1 expands a whole date RANGE because its auto-pay runner
+scans a window; a cursor-based job only ever needs *"what comes after this one"*.
+
+**16 integration tests**, covering everything that is the same under either answer to Open
+question 2: the cursor derivation (**created on the 3rd with a 5th anchor is due THIS month**),
+clamping, the till rule in both directions, the database's own refusals (`anchor_day = 32`, a
+weekly template anchored on day 15, a zero amount), the staff denial, pause/resume, and the two
+edit rules.
+
+⭐ **Two rules that came out of building rather than from the spec:**
+- **Resuming a long-paused template moves its cursor FORWARD from today.** Otherwise it wakes with
+  a due date months behind and drafts its way forward — noise on the morning somebody switched it
+  back on, and the opposite of what *resume* means.
+- **An OFFICE account never sets `till_is_deliberate`, whatever the form sent.** Otherwise the flag
+  would claim a considered decision about an account nobody had to think about, and the one place
+  it means something would stop meaning anything.
+
+**Smoketest on 9008, 390×844 — 10 of 10:** the nav entry; **the banner saying the job is not
+built**; a cashier till **refused** without the tick (*"Cashier cash is a CASHIER account — the till
+is the daily operating drawer…"*); accepted with it, and called out on the row; the derived first
+due date said back on save (*"Template saved. First due 2026-10-05."*); pause; 0px overflow.
 
 ## Done when
 
