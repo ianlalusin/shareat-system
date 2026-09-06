@@ -4,11 +4,12 @@
 
 Phase 6's detector work is finished; Phase 7 has started. **T-220** closed the last gaps the coverage
 sweep found, **T-221** closed a real cross-org RLS hole, **T-223** gave the low-stock auto-order its
-first caller, and **T-222** (store creation) is **specced with zero code**. Everything is committed
-and pushed — `main` is `8a4e50f`, `origin/main` matches, tree clean.
+first caller, **T-224** added the detector that makes its failures durable, and **T-222** (store
+creation) is **specced with zero code**. Everything is committed and pushed — `main` is `0539d1c`,
+`origin/main` matches, tree clean.
 
-⚠️ **DEF-186 is closed but its follow-up is not**: the durable answer — a detector for *below
-threshold with no draft line* — is deliberately a separate task. See Pick up here #1.
+✅ **DEF-186 is now FULLY closed** — T-223 the message, T-224 the control. The register records why
+it needed both: a screen message dies with the request.
 
 ⭐ **The day's through-line was not a feature: it was prose that claims something the code does not
 do.** Nine defects of that shape were filed or closed. The lasting artefacts are a read-only audit of
@@ -16,14 +17,14 @@ the whole repo for it (`docs/discovery/27-coverage-claims-sweep.md`), a guard th
 recurring, and **DEF-188 — where the auditor committed the exact failure being audited, shipped it,
 pushed it, and had it caught by the other session.**
 
-## Gates at `8a4e50f`
+## Gates at `0539d1c`
 
 | Gate | Result |
 |---|---|
 | **typecheck** | exit 0 |
 | **unit** | **1019 passed · 1 skipped · 1 failed** — `tests/golden/attendance-adjudication.test.ts`, DEF-170's 3 residual divergences (`lipa-0013`, `lipa-0359`, `banay-0012`). ⚠️ **Known red, tracked, not a regression** |
-| **integration** | ✅ **2369/2369 · 94/94 files · exit 0**, lane `shareat_test_lane25`. ⭐ Confirmed by a full run **after** DEF-178's fix — the previous run was 2368/1, and that single failure was the flake `0289cf7` removed. Nothing outstanding |
-| **build** | exit 0, dev server confirmed stopped **by process enumeration** first. 2 pre-existing `storage-firebase` warnings |
+| **integration** | ✅ **2377/2377 · 94/94 files · exit 0**, lane `shareat_test_lane25`. ⭐ Up from 2369 by exactly T-224's 8 new tests — the arithmetic closes, so nothing was skipped |
+| **build** | ✅ exit 0, compiled 5.2s, dev server confirmed stopped **by process enumeration** first. 2 pre-existing `storage-firebase` warnings |
 | **smoketest** | `/admin/users` **9/9** (T-221) · `/inventory/usage` renders with T-223's wiring, **no errors**. ⚠️ That proves the page loads, **not** that the auto-order fires — proven by integration tests, and after DEF-188 a page load is not called evidence of behaviour |
 
 ⚠️ **Carry this caveat verbatim (ianla-e2):** *T-221's cross-org refusal is proven on the two-org lane
@@ -112,6 +113,28 @@ integer fails it. **The assertion tolerates just under an hour of arithmetic err
 alarm, not a precision check. ⚠️ I nearly reported "still guards" after the first probe, which would
 have been DEF-188's failure one day later.
 
+### T-224 — `lowStockOrderNotProposed` (`0539d1c`), completes DEF-186
+
+T-223 reports an auto-order failure as a clause on the success message of the post that triggered it.
+⚠️ **A screen message dies with the request** — nobody sees it twice, nobody sees it who was not the
+person posting, and a repeated failure looks exactly like a first one. This reads the persisted
+consequence instead: at or below threshold, at a store that **can** order, with nothing on order.
+
+⭐ **It mirrors `ensureAutoOrderLines`' own three gates rather than inventing its own** — a finding
+that disagrees with the thing it watches is worse than no finding.
+
+⛔ **The gate that matters is `dispatched`.** `openOrderFor` counts a dispatched order as open
+(*"goods-in-transit not yet received still BLOCKS"*), so a detector checking only `draft` would fire
+on **every item currently in a truck** — stock already ordered and on its way. Proved load-bearing by
+removing it and watching exactly that one test fail.
+
+⚠️ **Built as its own commit deliberately**: a detector shipped alongside the path it watches gives
+independent evidence of neither — DEF-188's mechanism exactly.
+
+⚠️ **Probed on dev: 0 findings, and that is NOT validation** — `shareat_dev` has **zero threshold
+rows**, so nothing can be below threshold. The detector is correctly silent on empty input; the eight
+tests are what establish it is right.
+
 ### T-221 — the database refuses a cross-org role (`40eecda`), closes DEF-183
 
 Migration `0129`. `person_roles`'s RLS checked the row's own `org_id`, never the person's. ⭐ **A
@@ -140,7 +163,7 @@ all four deferrals wanted building; two did not.
 | DEF-183 | `person_roles` RLS checked the row's org, not the person's — a role could cross tenants | **fixed** (T-221) |
 | DEF-184 | A unit mismatch skipped a stock balance and told nobody | **fixed** (T-220) |
 | DEF-185 | ⭐ **The expired deferral** — a deferral records its blocker and nothing re-checks it | **fixed** (guard) |
-| DEF-186 | `replenishAfterUsage` had zero production callers — the auto-order never ran | **fixed** (T-223). ⚠️ Detector follow-up deliberately unbuilt |
+| DEF-186 | `replenishAfterUsage` had zero production callers — the auto-order never ran | ✅ **fully closed** — T-223 the message, T-224 the control |
 | DEF-187 | The RLS registry justified a column with an "e.g." that is unreachable | `reported` |
 | **DEF-188** | ⛔ **A detector fired on real data and every finding was FALSE** — its own tests agreed with it | **fixed** |
 | DEF-178 | A terminal-silence assertion mixed a Postgres clock with a JavaScript one | **fixed** — after it reddened a gate mid-push |
@@ -159,15 +182,14 @@ unowned.**
 
 ## Pick up here
 
-1. ⚠️ **A `lowStockOrderNotProposed` detector — DEF-186's durable half, deliberately NOT built.**
-   T-223 wired the auto-order and reports a failure on screen, but a screen message dies with the
-   request. *An item below its threshold with no draft order line* is derivable and persisted, so it
-   survives a lost log line and makes a **repeated** failure visible. ⛔ Left out of T-223 on purpose:
-   shipping a detector in the same commit as the path it watches gives independent evidence of
-   neither. Needs its own both-direction tests.
-2. **T-222 — build store creation.** Spec at `docs/tasks/222-*.md`, zero code.
-3. **T-214 — the manager responsiveness scorecard**, last Phase 6 slice.
-4. **DEF-170's 3 residual golden-master items** — the only red left in the suite, still unowned.
+1. **T-222 — build store creation.** Spec at `docs/tasks/222-*.md`, zero code. Its shape is now
+   `PROJECT_BIBLE.md` §13 **row 176**, so the atomic-half / derived-checklist split is settled and
+   should not be re-litigated. ⚠️ `createStore` must fan `person_store_scope` to existing admins.
+2. **T-214 — the manager responsiveness scorecard**, last Phase 6 slice.
+3. **DEF-170's 3 residual golden-master items** — the only red left in the suite, still unowned.
+4. ⚠️ **`shareat_dev` has ZERO `store_item_thresholds` rows**, found probing T-224. That means
+   `itemHasNoThreshold` should be firing loudly for every item with stock movement — worth a look,
+   and it makes the low-stock features untestable against dev data until some exist.
 
 ## Do not decide these alone — they are Ian's
 
