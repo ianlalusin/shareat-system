@@ -413,7 +413,7 @@
     <div class="masthead-meta">
       <span>As at <b>5 September 2026</b></span>
       <span>Now in <b>Phase 6 COMPLETE &middot; T-209&ndash;T-214, T-218&ndash;T-224 all shipped</b></span>
-      <span>Gates <b>typecheck &middot; 1012 unit + 1 skipped + 1 known-red (DEF-170) &middot; 2312 integration &middot; build</b></span>
+      <span>Gates <b>typecheck &middot; 1030 unit + 1 skipped + 0 failed &middot; 2422 integration (96/96 files, at <code>b1c496c</code>) &middot; build</b> &mdash; &starf; <b>CI is green, for the first time in this repo&rsquo;s history.</b> DEF-170 was not merely &ldquo;known red&rdquo;: it was CI&rsquo;s <b>only</b> failure, <code>deploy.yml</code> is gated on CI, and so every <code>Deploy</code> run ever recorded here read <code>skipped</code>. Fixing it on 6 Sep let the deploy workflow run at all.</span>
     </div>
   </header>
 
@@ -790,7 +790,7 @@
 
       <div class="phase s-active">
         <div class="ph-num">5</div>
-        <div class="ph-top"><span class="ph-name">Payroll</span><span class="chip c-part">3 of 5 built</span></div>
+        <div class="ph-top"><span class="ph-name">Payroll</span><span class="chip c-part">16 of 18 built</span></div>
         <div class="ph-body">Periods, effective-dated compensation, late and overtime policy, salary advances, immutable pay runs, GL postings. &starf; <b>T-189 shipped 31 Aug</b> &mdash; a rate, a run that computes from attendance, nets the advance off <code>1230</code>, posts, and freezes the days it paid. <b>T-191 (13th-month) and T-192 (separation, first slice) shipped 1 Sep.</b> Remaining: T-190/T-193, both GATED on statutory numbers &mdash; 0 of 126 staff have one.</div>
         <div class="ph-gate"><b>Exit gate</b>&#9888; <b>REWRITTEN 31 Aug, because the original was unachievable.</b> It read &ldquo;parity on a historical payroll run, peso for peso&rdquo; &mdash; and a read-only probe of live v1 found <b>there are no historical payroll runs</b>: zero payslips across seven stores, <code>payrollRuns</code> never created. There is nothing to be at parity WITH. &starf; The gate is now: <b>a payslip a staff member could be shown, posted, with its attendance days frozen behind it and the trial balance still tying</b> &mdash; and an advance drawn against <code>1230</code> netted to zero by the run that follows it.</div>
       </div>
@@ -804,8 +804,8 @@
 
       <div class="phase s-queued">
         <div class="ph-num">7</div>
-        <div class="ph-top"><span class="ph-name">Peripheral modules</span><span class="chip c-queued">not started</span></div>
-        <div class="ph-body">Admin, onboarding, memos, performance, checklists, cookbook. &#9888; A real proposed scope now exists (not yet an Opus-reviewed plan file): <code>docs/plans/v2-completion-blueprint-2026-09-05.md</code> &sect;6 &mdash; user/store admin first (a tested capability with zero screen, see DEF-167), then activity log (DEF-169), memos, performance+team, checklists, infractions, a redesigned single-track onboarding (Ian, 2026-09-05: streamline v1's five-kind library into one linear gated track), cookbook last. Also adds two new shell defects for this phase's neighbourhood: no custom 404/error page (DEF-168).</div>
+        <div class="ph-top"><span class="ph-name">Peripheral modules</span><span class="chip c-active">2 of 9 &mdash; started early</span></div>
+        <div class="ph-body">Admin, onboarding, memos, performance, checklists, cookbook. Scope proposed in <code>docs/plans/v2-completion-blueprint-2026-09-05.md</code> &sect;6 (not an Opus-reviewed plan file). &starf; <b>Two items were pulled forward and shipped ahead of the phase</b>, because both were load-bearing rather than administrative: <b>T-219</b> user and role management, 5 Sep (closes DEF-167 &mdash; every hire could authenticate and was then authorized for nothing), and <b>T-222</b> store creation, 6 Sep (closes DEF-189; nothing in the codebase had ever created a store). The shell defect this row used to carry, <b>DEF-168</b>, was closed by T-217 on 5 Sep. <b>Remaining:</b> activity-log viewer (DEF-169 &mdash; &#9888; the table has zero writers as well as zero readers, so it is not the cheap wiring job it looks like), memos, performance+team, checklists, infractions, a redesigned single-track onboarding (Ian, 2026-09-05: streamline v1's five-kind library into one linear gated track), cookbook last. &#9888; <b>And one group nothing had named until 6 Sep</b>: reference-data administration &mdash; expense categories, positions, wastage reasons, salary-advance policy, organization details &mdash; see <code>docs/CAPABILITY-GAPS.md</code> (2026-09-06) and DEF-192/DEF-193. v1 has 13 screens under <code>/manager/settings/*</code>; v2 has one.</div>
         <div class="ph-gate"><b>Exit gate</b>Feature parity checklist complete.</div>
       </div>
 
@@ -839,8 +839,8 @@
       <p>Each of these is either not ledger-posting, or automation over a capability already in scope.</p>
     </div>
     <div class="deferred">
-      <div class="def"><div class="def-name">Expense budgets</div><div class="def-why">Not ledger-posting.</div></div>
-      <div class="def"><div class="def-name">Recurring-expense automation</div><div class="def-why">Automation over expenses, which are already in scope.</div></div>
+      <div class="def"><div class="def-name">&#9888; Expense budgets &mdash; NO LONGER DEFERRED</div><div class="def-why">&starf; <b>Ian, 2026-09-06: &ldquo;do it now.&rdquo;</b> Back in scope as <b>T-215</b>, specced the same day (<code>docs/tasks/215-expense-budgets.md</code>). This list and the completion blueprint &sect;9 had contradicted each other on it for a day. &#9888; The one-line scope this page used to carry was too small: v1&rsquo;s live feature is an envelope with a working auto-reissue cron, not just a budget-vs-actual query.</div></div>
+      <div class="def"><div class="def-name">&#9888; Recurring-expense automation &mdash; NO LONGER DEFERRED</div><div class="def-why">&starf; <b>Ian, 2026-09-06: &ldquo;do it now.&rdquo;</b> Back in scope as <b>T-216</b>, specced the same day (<code>docs/tasks/216-recurring-expense-automation.md</code>). &#9888; It ships a deliberate divergence needing Ian&rsquo;s confirmation: <b>v2 drafts, v1 auto-pays</b> &mdash; three of v1&rsquo;s five hardening rounds on that module exist only because a machine could move money unattended.</div></div>
       <div class="def"><div class="def-name">The books tie-out audit tool</div><div class="def-why">A standing check, not a posting path.</div></div>
       <div class="def"><div class="def-name">Depreciation &amp; amortisation gap watchdog</div><div class="def-why">The detector, not the run. The run itself must happen monthly from January.</div></div>
     </div>

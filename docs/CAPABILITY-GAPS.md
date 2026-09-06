@@ -329,3 +329,43 @@ yes/no from Ian on the backstop itself. Gap count: 38.**
 | **Staff onboarding as content + a comprehension check** | ✅ A real, separate system (not the account-creation gate it was initially assumed to be) — `onboardingDocs`/`onboardingExams`/`onboardingProgress`: handbook/rules/training/menu documents with versioned acknowledgment (a content edit forces re-acknowledgment), exams with auto-graded multiple-choice and manually-graded open-ended questions, staff-proposed content routed through an admin approve/reject queue, and per-item and per-staff completion tracking | ⛔ **No phase owns it**, and Ian's own assessment of v1's version is that it has more moving parts than its purpose needs | Not a straight port. **Ian, 2026-09-05: "even I who designed it don't fully understand it — streamline it, clear beginning and end, a progress, so no staff can jump to end without steps start and middle."** Redesigned scope: one ordered, strictly-gated track (`current_step_index` + `completed_at` per staff member) replacing the five-kind library, versioning, proposal pipeline and open-ended grading. Full redesign in the completion blueprint's §6. **Confirmed in scope (Add), starting with one universal track** — per-position tracks deferred |
 
 ⭐ **Verified by reading the actual v1 source this session**, not inferred from the route list alone — the STORE-ROSTER.md lesson (*"never derive a list from a capped query"*) applies here too: a route existing is not evidence of what it does. **Only onboarding is a genuinely new, unowned gap — budgets turned out to already be T-215 (Phase 6), corrected above rather than double-counted. Gap count: 39.**
+
+---
+
+## Added 2026-09-06 — found auditing the tree against `ROADMAP.html` and the completion blueprint
+
+⭐ **One gap, and it is a whole tree of screens that no phase, plan or register has ever named.**
+v1 carries **13 screens under `/manager/settings/*`** plus `/admin/configurations/*`. v2 has
+**one** (`/settings/attendance`, T-201). Several of the thirteen are genuinely covered elsewhere in
+v2 and are not gaps; the ones below are not covered anywhere, and the reason they were missed is
+structural — the completion blueprint's §6 catalog was built from v1's **top-level route groups**,
+and this whole tree sits one level down inside `manager/`.
+
+| Gap | v1 has it | v2 state | Why it is a gap, not a defect |
+|---|---|---|---|
+| **A place to administer reference data at all** | ✅ `/manager/settings/*` (13 screens) + `/admin/configurations/*` | 🟡 `/settings/attendance` only — **and `/settings` itself is a nav entry with no page behind it (DEF-192)** | The *container* is the gap. Each item below is small; what is missing is the shelf they stand on |
+| **Expense categories** | ✅ `/admin/configurations/expense-entries` **and** `/manager/settings/expense-entries` — two screens, so it is real, daily reference data | ⛔ **Seed-only.** 39 rows from `packages/db/seed/expense-categories.ts`, no `createCategory`/`updateCategory` anywhere in `domain` or `repo` | ⚠️ Filed as **DEF-193** as well, because it has a second edge: T-213's `expenseCategoryUnpostable` detector fires on a category with no mapped account and **no screen exists on which to map one** |
+| **Positions** | ✅ `/manager/settings/positions` | ⛔ **Seed-only, and worse — `seedCanonicalPositions` (`domain/src/people/index.ts:256`) is the table's only writer and itself has no caller under `apps/`.** `positions` is a real FK-referenced table; a store cannot add one | ⭐ v1's own history proves the need: `project_add_griller_feature` was a whole task about adding **one position**. In v2 that is a migration, not a form |
+| **Wastage reasons** | ✅ `/manager/settings/wastages` | ⛔ A code constant (`WASTAGE_REASONS`), not a table — config by deploy | Small, and the right answer may well be *keep it a constant*: a reason list that anyone can extend stops being analysable. **Needs a verdict, not necessarily a screen** |
+| **Salary-advance policy** | ✅ `/manager/settings/salary-advance` | ⛔ No v2 equivalent found | Ties to T-189's advance recovery off `1230`. Phase 5 built the mechanism and not the policy surface |
+| **Organization details** | ✅ `/manager/settings/organization` | ⛔ No v2 equivalent. `organizations` rows are created by migration/seed; T-222 created the *store* screen and explicitly not the org one | Low volume — an org is edited once a year — but there is currently no way to correct a business name or TIN, and TIN is a statutory field |
+
+**Already covered in v2, deliberately not counted as gaps** (verified at source, not inferred):
+`locations` → `/inventory/locations` (T-160) · `stocks` → `/inventory` · `meat` → `/items` +
+`/inventory/pos-map` · `payment-settings` → the destination-money-account picker on
+`/channel-settlements` (T-150/DEF-147) · `attendance` → `/settings/attendance` (T-201) ·
+`departments` → the usage-department field already on stock usage.
+
+**Deliberately NOT ported** — recorded so nobody re-adds them looking at a gap: `local-users`
+(superseded by the hire flow + PIN issuance; Ian, 2026-09-05: no self-service accounts, ever) ·
+`printer` (a POS device concern, not an ERP one) · `insights` (the AI briefing layer, deferred
+with its own reasoning in ROADMAP.html) · `ui-ux-sample` (a dev scaffold).
+
+⚠️ **Read this beside the phase status, not instead of it.** None of these blocks the January
+books — none posts to the ledger, which is exactly why the original capability inventory's triage
+rule filed nothing like them. They block *day-two operations*: the day somebody needs a fortieth
+expense category, a new position, or a corrected TIN, and the answer is "an engineer writes a
+migration." **Probable home: Phase 7**, as one *Reference data* screen group rather than six
+separate tasks.
+
+**Gap count: 44.**
