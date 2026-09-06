@@ -76,7 +76,35 @@ Plus a fifth unit that is not a scheduled job but the app itself: **`shareat-erp
 shipping the code is not the finish line, installing and arming the timer is. `docs/tasks/205-first-production-deployment.md`
 covers the deployment that finally gives these something to run against.
 
-## Installing everything (after `docs/ops/provision.sh` has run once)
+## ⛔ FIRST — getting `docs/ops` onto the droplet, because the pipeline never ships it
+
+**DEF-194, 2026-09-06.** This section used to open *"after `docs/ops/provision.sh` has run once"*
+and **never said how `docs/ops` gets there**. It does not get there:
+`.github/workflows/deploy.yml:82` ships `apps/erp/.next`, `packages`, `scripts`, `node_modules` and
+the two manifests — **no `docs/`, ever**. So `/srv/shareat/docs/ops/provision.sh` is a path that has
+never existed on any droplet, and an instruction naming it cannot work.
+
+⚠️ **It was written into a handoff in exactly that form and Ian ran it**, in a Windows shell, which
+failed twice over — wrong path *and* wrong host, because the step never said it happens over SSH.
+
+⭐ **`provision.sh`'s own header had the answer the whole time**, along with the reason: it installs
+the `*.service`/`*.timer` files that live **beside** it, so **the directory travels, not the file.**
+
+```sh
+# From the repo on a machine that can reach the droplet:
+scp -r docs/ops root@<DROPLET_IP>:/root/shareat-ops
+ssh root@<DROPLET_IP> 'bash /root/shareat-ops/provision.sh'
+```
+
+⚠️ **Omit the domain argument once the site is already live.** Passing it rewrites
+`/etc/caddy/Caddyfile` and reloads Caddy on a working site for no benefit; omitting it still creates
+the directories, fixes `/srv`'s group-write and installs every unit.
+
+⛔ **Every future "arm the timer" instruction starts here.** `provision.sh` is the only thing that
+installs unit files, and the pipeline ships no `docs/` — so a new job's unit reaches the box by this
+route or not at all. Three jobs have now shipped unarmed, and this missing step is part of why.
+
+## Installing everything (after `provision.sh` has run once, per the section above)
 
 `provision.sh` installs all nine unit files (`shareat-erp.service` +
 four `.service`/`.timer` pairs) via `systemctl daemon-reload`, but does **not** enable or start
