@@ -12,6 +12,9 @@
  */
 import { findingsRepo, transaction, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
+// ⭐ Reused, not redefined. T-140 already owns "the last COMPLETED month" and the scorecard must
+// observe exactly the month the screen shows, or the two disagree about what was ever asked.
+import { lastCompletedPeriod } from '../scheduler';
 
 /** ⭐ An accepted risk should be re-accepted, not forgotten. */
 export const ACKNOWLEDGEMENT_DAYS = 30;
@@ -212,4 +215,222 @@ export async function closeReadiness(
   // adding up, and a close is exactly the moment that distinction matters.
   const blocking = feed.findings.filter((f) => f.severity === 'hard');
   return { ready: blocking.length === 0, blocking };
+}
+
+// ---------------------------------------------------------------------------------------------
+// T-214 — the observation job, the scorecard, and the view log
+// ---------------------------------------------------------------------------------------------
+
+/** v1's 14-day scale, kept verbatim: a finding cleared in 14+ days scores zero for speed. */
+export const SPEED_HORIZON_DAYS = 14;
+/** ⭐ v1's raw weights. Kept, and normalised over PRESENT parts — see `compositeScore`. */
+export const WEIGHT_CLEAR_RATE = 0.4;
+export const WEIGHT_SPEED = 0.3;
+
+/**
+ * The period a key is ABOUT, or null when it is not period-scoped.
+ *
+ * ⛔ This is what stops the month-boundary bug. Periodic detectors embed the month in the key
+ * (`depreciationNotBooked:2026-08`), so a run asking about September never gets August's key back —
+ * and closing it on that basis would record August's unbooked depreciation as FIXED. Nobody fixed
+ * anything; the month stopped being asked about.
+ *
+ * ⚠️ A store-scoped key ends in a uuid, which cannot match a `YYYY-MM` suffix, so this test is
+ * unambiguous against every key shape in `repo/findings.ts` today.
+ */
+export function keyPeriod(findingKey: string): string | null {
+  const m = /:(\d{4}-\d{2})$/.exec(findingKey);
+  return m ? m[1]! : null;
+}
+
+export interface ObservationResult {
+  readonly periodsAsked: string[];
+  readonly observed: number;
+  readonly opened: number;
+  readonly closed: number;
+}
+
+/**
+ * ⭐ **T-214's daily job — record that each detector fired today, and close what stopped firing.**
+ *
+ * ⛔ **This is an observation, never finding state.** Nothing in the detection path reads what this
+ * writes; `listFindings` is called here, not the other way round. Delete every row it produces and
+ * the feed is identical — which an integration test asserts rather than this comment promising it.
+ *
+ * ## The closure rule, and the bug it exists to prevent
+ *
+ * A run asks about `lastCompletedPeriod()` **plus every earlier period that still has an open
+ * period-scoped occurrence** — bounded, and it shrinks as things get booked. An occurrence is closed
+ * only when the run **actually asked its question** and did not get it back. Without that, every
+ * month boundary would silently mark the previous month's unbooked depreciation as cleared and
+ * inflate the clear rate on exactly the `hard` findings that matter most.
+ */
+export async function recordFindingObservations(
+  tx: Tx,
+  orgId: string,
+  now = new Date(),
+): Promise<ObservationResult> {
+  const open = await findingsRepo.openOccurrences(tx, orgId);
+
+  // Ask about the current question, plus any older month still carrying an open occurrence.
+  const periods = new Set<string>([lastCompletedPeriod(now)]);
+  for (const o of open) {
+    const p = keyPeriod(o.findingKey);
+    if (p) periods.add(p);
+  }
+  const periodsAsked = [...periods].sort();
+
+  const seen = new Map<string, { storeId: string | null; kind: string }>();
+  for (const period of periodsAsked) {
+    const feed = await listFindings(tx, orgId, { period });
+    for (const f of feed.findings) seen.set(f.key, { storeId: f.storeId, kind: f.kind });
+  }
+
+  const openKeys = new Set(open.map((o) => o.findingKey));
+  for (const [key, meta] of seen) {
+    await findingsRepo.observeFinding(tx, {
+      orgId,
+      storeId: meta.storeId,
+      findingKey: key,
+      kind: meta.kind,
+    });
+  }
+
+  let closed = 0;
+  for (const o of open) {
+    if (seen.has(o.findingKey)) continue;
+    // ⛔ The guard. Only a run that asked this key's question may close it.
+    const p = keyPeriod(o.findingKey);
+    if (p && !periods.has(p)) continue;
+    await findingsRepo.closeOccurrence(tx, o.id);
+    closed += 1;
+  }
+
+  let opened = 0;
+  for (const key of seen.keys()) if (!openKeys.has(key)) opened += 1;
+
+  return { periodsAsked, observed: seen.size, opened, closed };
+}
+
+export interface StoreScore {
+  readonly storeId: string | null;
+  readonly raised: number;
+  readonly cleared: number;
+  readonly stillOpen: number;
+  /** ⭐ Still open but too young to count against the store yet — see `GRACE_DAYS`. */
+  readonly pending: number;
+  readonly clearRate: number | null;
+  readonly avgDaysToClear: number | null;
+  readonly speedScore: number | null;
+  /** ⚠️ **Null, never 0**, when there is nothing to judge. Zero says "responded badly". */
+  readonly score: number | null;
+  /** ⚠️ Reported, NEVER scored — see `managerScorecard`. */
+  readonly acknowledged: number;
+  readonly oldestAcknowledgementDays: number | null;
+}
+
+export interface Scorecard {
+  readonly from: string;
+  readonly to: string;
+  /** ⛔ Null until the job has run once. The screen MUST disclose it — there is no backfill. */
+  readonly recordBeganOn: string | null;
+  readonly stores: StoreScore[];
+  readonly lastViewedBy: string | null;
+  readonly lastViewedDaysAgo: number | null;
+}
+
+/**
+ * ⭐ v1's own normalisation, with the briefing part simply not pushed.
+ *
+ * v1 builds `parts` from whichever components are non-null and divides by their weight sum, so
+ * "two components re-weighted, not three with a permanently-zero term" needs **no new arithmetic** —
+ * it needs the third part left out. ⛔ Do NOT restate the weights as 0.5/0.5: that silently
+ * re-decides a ratio nobody asked to change. Action is 1.33x speed, as it was in v1 — 57/43.
+ */
+export function compositeScore(clearRate: number | null, speedScore: number | null): number | null {
+  const parts: Array<[number, number]> = [];
+  if (clearRate != null) parts.push([WEIGHT_CLEAR_RATE, clearRate]);
+  if (speedScore != null) parts.push([WEIGHT_SPEED, speedScore]);
+  const wsum = parts.reduce((a, [w]) => a + w, 0);
+  if (wsum === 0) return null;
+  return Math.round((100 * parts.reduce((a, [w, v]) => a + w * v, 0)) / wsum);
+}
+
+/**
+ * ⭐ **Scores what was FIXED, never what was accepted — and that is the whole design.**
+ *
+ * The naive port of v1 maps its `resolved` onto v2's `acknowledged`. ⛔ **That re-opens the hole
+ * T-135 closed.** Acknowledging means the condition STILL HOLDS and the risk is accepted for 30
+ * days; a score counting acknowledgements pays a manager to accept risk, and is maximised by
+ * acknowledging everything having fixed nothing.
+ *
+ * A cleared occurrence needs honesty from nobody: the detector simply stopped returning the key.
+ * ⚠️ It also has no actor — nobody clicks anything — which is why the unit of scoring is the STORE
+ * and not a person. Acknowledgements are reported beside the score, with their age, because an
+ * ageing acceptance is a smell (T-135) and not a credit.
+ */
+export async function managerScorecard(
+  tx: Tx,
+  orgId: string,
+  range: { from: string; to: string },
+): Promise<Scorecard> {
+  const rows = await findingsRepo.scorecardByStore(tx, orgId, range.from, range.to);
+  const acks = await findingsRepo.liveAcknowledgements(tx, orgId);
+
+  // ⚠️ One clock, read once — the same shape `listFindings` uses for `acknowledgementAgeDays`.
+  const now = Date.now();
+  const ackByStore = new Map<string | null, { n: number; oldest: number | null }>();
+  for (const a of acks.values()) {
+    const k = a.storeId ?? null;
+    const cur = ackByStore.get(k) ?? { n: 0, oldest: null };
+    const age = Math.floor((now - a.acknowledgedAt.getTime()) / 86_400_000);
+    ackByStore.set(k, {
+      n: cur.n + 1,
+      oldest: cur.oldest == null ? age : Math.max(cur.oldest, age),
+    });
+  }
+
+  const stores: StoreScore[] = rows.map((r) => {
+    // ⭐ Only findings that have had a FAIR CHANCE are judged. A finding raised this morning was
+    // not ignored — it has not had time to be anything yet — and scoring it as a failure is how
+    // the first render of this page told three innocent branches they had responded badly.
+    const countable = r.cleared + r.openPastGrace;
+    const clearRate = countable > 0 ? r.cleared / countable : null;
+    const speedScore =
+      r.avgDaysToClear == null
+        ? null
+        : Math.max(0, Math.min(1, 1 - r.avgDaysToClear / SPEED_HORIZON_DAYS));
+    const ack = ackByStore.get(r.storeId) ?? { n: 0, oldest: null };
+    return {
+      storeId: r.storeId,
+      raised: r.raised,
+      cleared: r.cleared,
+      stillOpen: r.stillOpen,
+      pending: r.pending,
+      clearRate,
+      avgDaysToClear: r.avgDaysToClear,
+      speedScore,
+      score: compositeScore(clearRate, speedScore),
+      acknowledged: ack.n,
+      oldestAcknowledgementDays: ack.oldest,
+    };
+  });
+
+  const view = await findingsRepo.lastFindingView(tx, orgId);
+  return {
+    from: range.from,
+    to: range.to,
+    recordBeganOn: await findingsRepo.firstObservationDate(tx, orgId),
+    stores,
+    lastViewedBy: view?.displayName ?? null,
+    lastViewedDaysAgo: view?.daysAgo ?? null,
+  };
+}
+
+/**
+ * ⚠️ A write on a read path, so callers treat it as forgiving: the log is accountability, the page
+ * is the work. A failure here must never cost someone the screen they came to use.
+ */
+export async function logFindingView(tx: Tx, orgId: string, personId: string): Promise<void> {
+  await findingsRepo.recordFindingView(tx, { orgId, personId });
 }

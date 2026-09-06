@@ -29,6 +29,7 @@ import { runOrderWastageBackstop } from '../wastage/orders';
 import { sql } from 'drizzle-orm';
 import { sweepStore } from '../attendance/sweep';
 import { drainOutbox, ingestEvents, type InboxDriver, type MirrorDriver } from '../sync';
+import { recordFindingObservations } from '../findings';
 
 export interface MonthEndOptions {
   /** `YYYY-MM` to run THROUGH. Defaults to the last completed month. */
@@ -49,7 +50,8 @@ export interface JobOutcome {
     | 'attendance_sweep'
     | 'mirror_publish'
     | 'inbox_relay'
-    | 'order_wastage_backstop';
+    | 'order_wastage_backstop'
+    | 'finding_observation';
   period: string;
   posted: number;
   skipped: number;
@@ -63,6 +65,13 @@ export interface JobOutcome {
    * still be visible somewhere on the outcome rather than silently dropped (bible §15.6).
    */
   adjudicationFailures?: { clientPunchId: string; detail: string }[];
+  /**
+   * T-214 — `finding_observation` only. Which months the run asked about, and how many occurrences
+   * it observed, opened and closed. ⚠️ The periods list is the part worth printing: it is the
+   * evidence that a month with an open occurrence was actually RE-ASKED rather than quietly
+   * abandoned at the boundary, which is the difference between a clear rate and a lie.
+   */
+  detail?: string;
 }
 
 export interface MonthEndResult {
@@ -629,4 +638,73 @@ async function runOrderWastageBackstopForOrg(
     await transaction((tx) => schedulerRepo.failRun(tx, runId, message));
     return { ...base, posted: 0, skipped: 0, failed: 0, failures: [], error: message };
   }
+}
+
+/**
+ * ⭐ **T-214 — the daily finding-observation run.**
+ *
+ * Findings are a pure function of current state and carry no clock, so *when* a condition first
+ * appeared is not recoverable from anywhere. This job is the clock: once a day it records that each
+ * detector fired, and closes the occurrences that stopped firing.
+ *
+ * ⛔ **It exists as a scheduler job specifically so it cannot become DEF-186** — `replenishAfterUsage`
+ * was built, tested, marked done, and invoked by nothing for weeks. ⚠️ And registering the job is
+ * still not the finish line: `docs/ops/README.md` carries the timer, and DEF-044 is what a job with
+ * no armed timer costs.
+ *
+ * ⚠️ `scheduler_runs.period` is shaped `YYYY-MM` by a CHECK, and a daily job has no month of its
+ * own, so it records the Manila month it RAN in — the same choice `runAttendanceSweep` makes and for
+ * the same reason.
+ */
+export async function runFindingObservation(
+  options: { orgId?: string; trigger?: 'cron' | 'manual'; nowMs?: number } = {},
+): Promise<SweepResult> {
+  const trigger = options.trigger ?? 'cron';
+  const nowMs = options.nowMs ?? Date.now();
+  const period = new Date(nowMs + 8 * 3_600_000).toISOString().slice(0, 7);
+
+  const orgs = await transaction((tx) => schedulerRepo.listOrgsToRun(tx, options.orgId));
+  const outcomes: JobOutcome[] = [];
+
+  // ⛔ One org at a time, and one org failing must never stop the next — T-140 rule 1.
+  for (const org of orgs) {
+    const runId = await transaction((tx) =>
+      schedulerRepo.startRun(tx, { orgId: org.id, job: 'finding_observation', period, trigger }),
+    );
+    const base = { orgId: org.id, orgName: org.name, job: 'finding_observation' as const, period };
+
+    try {
+      // ⚠️ ONE transaction per org, unlike month-end's per-item transactions. The whole point is a
+      // consistent daily snapshot: observing half the detectors and closing occurrences against the
+      // other half would invent clears that never happened.
+      const result = await transaction(async (tx) => {
+        await tx.execute(sql.raw(`set local role ${APP_ROLE}`));
+        await tx.execute(sql`select set_config('app.principal_kind', 'system', true)`);
+        await tx.execute(sql`select set_config('app.org_id', ${org.id}, true)`);
+        return recordFindingObservations(tx, org.id, new Date(nowMs));
+      });
+
+      await transaction((tx) =>
+        schedulerRepo.finishRun(tx, runId, {
+          postedCount: result.opened,
+          skippedCount: result.observed - result.opened,
+          failures: [],
+        }),
+      );
+      outcomes.push({
+        ...base,
+        posted: result.opened,
+        skipped: result.observed - result.opened,
+        failed: 0,
+        failures: [],
+        detail: `asked ${result.periodsAsked.join(', ')} · observed ${result.observed} · opened ${result.opened} · closed ${result.closed}`,
+      });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      await transaction((tx) => schedulerRepo.failRun(tx, runId, message));
+      outcomes.push({ ...base, posted: 0, skipped: 0, failed: 0, failures: [], error: message });
+    }
+  }
+
+  return { outcomes, hadFailures: outcomes.some((o) => o.failed > 0 || o.error) };
 }
