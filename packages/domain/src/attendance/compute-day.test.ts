@@ -581,3 +581,80 @@ describe('T-157 invariant 13 — every duration is an integer', () => {
     }
   });
 });
+
+/**
+ * T-225 — the half day that was nearly a full day.
+ *
+ * ⛔ The flag changes no arithmetic. These tests assert the credited minutes are untouched as
+ * firmly as they assert the flag fires, because a review flag that quietly moved pay would be far
+ * worse than no flag at all.
+ */
+describe('T-225 — half_day_near_full', () => {
+  const short = (inHour: number, outHour: number, p: Partial<DayPolicy> = {}) =>
+    day(
+      [punch(fromHour(inHour), 'in'), punch(fromHour(outHour), 'out')],
+      { allowedShiftStartHours: [inHour], shortShiftHalfDayOt: true, ...p },
+    );
+
+  it('⭐ fires when the day worked MORE than the midpoint of half-day..required', () => {
+    // 9h required, 5h half day -> midpoint 7h. An 8h day is closer to full than to half, so
+    // calling it a half day is plainly wrong and somebody should look.
+    const r = short(9, 17);
+    expect(r.isHalfDay).toBe(true);
+    expect(r.anomalies).toContain('half_day_near_full');
+    // ⛔ Pay is untouched: still the half day, with the remainder pending.
+    expect(r.computedMinutes).toBe(5 * 60);
+    expect(r.pendingOtMinutes).toBe(3 * 60);
+  });
+
+  it('⛔ stays SILENT at or below the midpoint — a genuinely short day is a half day', () => {
+    // 7h worked against a 7h midpoint. `>` not `>=`, so the boundary itself does not fire.
+    const r = short(9, 16);
+    expect(r.isHalfDay).toBe(true);
+    expect(r.anomalies).not.toContain('half_day_near_full');
+  });
+
+  it('⛔ stays silent on the majority case — a 5h day against a 9h requirement', () => {
+    // 45 of the corpus's 64 half days look like this. Flagging them would be the rubber-stamp
+    // queue this rule was measured specifically to avoid.
+    const r = short(9, 14);
+    expect(r.isHalfDay).toBe(true);
+    expect(r.anomalies).not.toContain('half_day_near_full');
+  });
+
+  it('⛔ never fires on a FULL day', () => {
+    const r = short(9, 18);
+    expect(r.isHalfDay).toBe(false);
+    expect(r.anomalies).not.toContain('half_day_near_full');
+  });
+
+  it('⛔ never fires when there is no day at all (under the half day)', () => {
+    // Below the half-day bar the whole stint becomes pending OT and no day is credited. That is a
+    // different decision with its own rule; this flag must not muddy it.
+    const r = short(9, 12);
+    expect(r.isHalfDay).toBe(false);
+    expect(r.computedMinutes).toBe(0);
+    expect(r.anomalies).not.toContain('half_day_near_full');
+  });
+
+  it('⭐ uses the STORE\u2019s own numbers — the boundary moves with requiredMinutes', () => {
+    // ⚠️ The case a hard-coded 7h midpoint would pass at Lipa and fail at Malvar. At a 10h store
+    // the midpoint is 7.5h, so an 8h day fires here exactly as it does at 9h...
+    const tenHour = short(9, 17, { requiredMinutes: 10 * 60 });
+    expect(tenHour.isHalfDay).toBe(true);
+    expect(tenHour.anomalies).toContain('half_day_near_full');
+
+    // ...and a 7h day, which is ABOVE a 9h store's midpoint boundary, is below a 10h store's.
+    const sevenAtTen = short(9, 16, { requiredMinutes: 10 * 60 });
+    expect(sevenAtTen.isHalfDay).toBe(true);
+    expect(sevenAtTen.anomalies).not.toContain('half_day_near_full');
+  });
+
+  it('the explain trail says what is being asked, without presuming the answer', () => {
+    const r = short(9, 17);
+    const line = r.explain.find((l) => l.includes('closer to a full day'));
+    expect(line).toBeDefined();
+    expect(line).toMatch(/Confirm whether the undertime was permitted/);
+    expect(line).toMatch(/half day stands until someone says otherwise/);
+  });
+});

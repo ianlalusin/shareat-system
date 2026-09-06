@@ -158,6 +158,64 @@ describe('T-157 golden master — v2 against real v1 attendance sessions', () =>
     expect(post.length).toBeGreaterThan(50);
   });
 
+  /**
+   * ⭐ **T-225 — the half day that was nearly a full day, pinned against real data.**
+   *
+   * The rule is narrow ON PURPOSE and the corpus is what proved it had to be: the half-day collapse
+   * fires on 64 of these 346 sessions, but **45 of those worked only 50–59% of the requirement** —
+   * genuinely half days. Flagging every short day would have produced a queue nobody reads, and a
+   * rubber-stamped queue is worse than a rule because it launders a guess as a decision.
+   *
+   * ⛔ **The second assertion is the one that matters more.** A review flag that quietly moved a
+   * credited minute would be far worse than no flag, so the pay figures are checked against the
+   * arithmetic stated independently here rather than trusted.
+   */
+  it.runIf(present)('T-225 — the near-full half day fires on exactly the doubtful band', () => {
+    const flagged: string[] = [];
+    let halfDays = 0;
+
+    for (const s of specimens.filter((x) => x.sessionDate >= ANCHOR_RULE_SHIPPED)) {
+      const policy = toPolicy(s.config);
+      const got = computeDay({
+        shiftDay: parseShiftDay(s.sessionDate),
+        punches: [
+          { occurredAt: new Date(s.rawClockInMs), intent: 'in', arrivalLagMs: 0 },
+          { occurredAt: new Date(s.rawClockOutMs), intent: 'out', arrivalLagMs: 0 },
+        ],
+        policy,
+      });
+      if (!got.isHalfDay) {
+        expect(got.anomalies).not.toContain('half_day_near_full');
+        continue;
+      }
+      halfDays += 1;
+
+      // ⛔ INVARIANT 1 — the flag changes no arithmetic. A collapsed day still pays exactly the half
+      // day, with everything above it pending, flagged or not.
+      expect(got.computedMinutes).toBe(policy.halfDayMinutes);
+      const worked = got.computedMinutes + got.pendingOtMinutes;
+
+      const midpoint = (policy.halfDayMinutes + policy.requiredMinutes) / 2;
+      if (got.anomalies.includes('half_day_near_full')) {
+        expect(worked).toBeGreaterThan(midpoint);
+        flagged.push(`${s.id}: ${(worked / 60).toFixed(2)}h of ${policy.requiredMinutes / 60}h`);
+      } else {
+        expect(worked).toBeLessThanOrEqual(midpoint);
+      }
+    }
+
+    console.log(
+      [`T-225: ${flagged.length} of ${halfDays} half days are closer to a full day —`, ...flagged.map((f) => `        ${f}`)]
+        .join(String.fromCharCode(10)),
+    );
+
+    // ⚠️ Pinned, not asserted loosely. If a future change to the anchor, the end-flooring or the
+    // half-day rule moves this population, that is a real behavioural change and it should be read
+    // rather than absorbed. Every member sits at 80–90% of a full day.
+    expect(halfDays).toBe(64);
+    expect(flagged).toHaveLength(8);
+  });
+
   it.runIf(present)('every divergence from v1 falls into a TRIAGED class', () => {
     const unexplained: string[] = [];
     const paysLess: string[] = [];

@@ -53,7 +53,16 @@ export type Anomaly =
   | 'late_event_arrival'
   | 'inverted_window'
   /** ⛔ Credited far more time than the person was actually present. See DEF-088. */
-  | 'implausible_span';
+  | 'implausible_span'
+  /**
+   * ⭐ **T-225 — collapsed to a half day, but worked closer to a FULL one.**
+   *
+   * Named for the condition, never the remedy. ⛔ Not `undertime_permitted` and not
+   * `needs_approval`: the system does not know whether the undertime was allowed — that is the
+   * entire reason a human is being asked — and a name that presumes the answer is the defect this
+   * flag exists to prevent.
+   */
+  | 'half_day_near_full';
 
 /** Everything the computation reads. Values, never a database — which is what makes it testable. */
 export interface DayPolicy {
@@ -614,6 +623,7 @@ export function computeDay(params: {
       );
     }
   } else if (policy.shortShiftHalfDayOt && computedMinutes < required) {
+    const workedBeforeCollapse = computedMinutes;
     const remainder = computedMinutes - policy.halfDayMinutes;
     pendingOtMinutes += remainder;
     computedMinutes = policy.halfDayMinutes;
@@ -622,6 +632,33 @@ export function computeDay(params: {
       `Short shift credited as a half day (${policy.halfDayMinutes}m); the remaining ${remainder}m ` +
         'is raised as PENDING overtime and pays only once approved.',
     );
+
+    /**
+     * ⭐ **T-225 — the half day that was nearly a full day.**
+     *
+     * ⛔ **This changes NOTHING about pay.** It raises a flag so a manager is TOLD which days to
+     * look at, and the override that acts on it (`halfDayOverride`, just below) already existed.
+     * The missing piece was never the mechanism — it was that nobody knew where to look.
+     *
+     * The midpoint between the half day and the requirement is the point where "half day" stops
+     * being a fair description: 7h at a 9h store, 7.5h at a 10h one. ⚠️ **Derived from the store's
+     * own two numbers rather than a constant**, so it cannot drift when a store is retuned, and a
+     * later reader has no magic number to wonder about.
+     *
+     * ⚠️ **Narrow on purpose.** Measured over the golden corpus: the collapse fires on 64 of 346
+     * sessions, but 45 of those worked only 50–59% of the requirement — genuinely half days, and
+     * flagging them all would be a queue nobody reads. This fires on **8**, every one at 80–90% of
+     * a full day, where calling it a half day is plainly wrong.
+     */
+    const doubtfulAbove = (policy.halfDayMinutes + required) / 2;
+    if (workedBeforeCollapse > doubtfulAbove) {
+      anomalies.push('half_day_near_full');
+      explain.push(
+        `⚠️ Worked ${workedBeforeCollapse}m of the ${required}m requirement — closer to a full day ` +
+          `than to the ${policy.halfDayMinutes}m half day. Confirm whether the undertime was ` +
+          'permitted; the half day stands until someone says otherwise.',
+      );
+    }
   }
 
   if (adjustments.halfDayOverride !== undefined && adjustments.halfDayOverride !== isHalfDay) {
