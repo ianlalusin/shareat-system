@@ -1,9 +1,22 @@
 # T-222 — Store creation and management (`/admin/stores`)
 
-> **Status**: specced 2026-09-06. Phase 7's other half, deferred by Ian on 2026-09-05 and
+> **Status**: ✅ **BUILT 2026-09-06.** Phase 7's other half, deferred by Ian on 2026-09-05 and
 > recorded as **`PROJECT_BIBLE.md` §13 row 174** — *store creation is its own task, not half of
 > user/role management, because screen location is not a unit of work; what backs a screen is.*
-> **Not yet implemented.** No `createStore`-shaped function exists anywhere in the codebase today.
+>
+> Ships as `packages/domain/src/stores/service.ts` (`createStore`, `updateStoreDetails`,
+> `deactivateStore`, `reactivateStore`, `storeReadiness`), the `manage_stores` capability, and
+> `apps/erp/src/app/admin/stores/`. Gates: typecheck 0 · unit 1021 · integration 2398/2398 ·
+> `npm run build` exit 0 · 22 browser checks on 9008 · 0px horizontal overflow at 390px.
+>
+> ⚠️ **Two defects in THIS spec were reported rather than worked around** (RULES §3.4a) — see
+> §2's own corrections below and the header of `service.ts`: `createLocation` cannot be reused for
+> the default room, and a fresh org has no `location_types`.
+>
+> ⛔ **DEF-189 was found by the smoketest, not by the test suite** — a manager clicking a store in
+> a list they may read got an HTTP 500 instead of a refusal. Fixed here. **Open question 3 (refuse
+> deactivation with an open sales day or unremitted cash) is still NOT implemented** and remains
+> Ian's call.
 >
 > ⛔ **This is not a form.** A store row is the smallest part of creating a store. Everything
 > below exists because a store that is merely *inserted* is a store nobody can sign into, sell
