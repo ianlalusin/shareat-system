@@ -13,6 +13,29 @@
 
 ---
 
+## ⚠️ Status as of 2026-09-06 — the app is LIVE, the DEPLOY WORKFLOW is not
+
+`https://erp2.shareat.net/` returns **HTTP 200**. But the `Deploy` workflow has **never completed**:
+29 runs `skipped`, 1 `failure`, 0 success. The live deployment was made another way (`9139f29`).
+⛔ **Do not read "the site is up" as "the pipeline works", or the reverse** — on 2026-09-06 both
+mistakes were made in one session, in both directions, each from trusting an indirect signal.
+
+**The first Deploy that actually ran** (CI went green once DEF-170 was fixed) got as far as *Ship the
+artifact* — droplet, deploy key and `shareat` user all confirmed working — then failed on:
+
+```
+ln: failed to create symbolic link '/srv/shareat.new': Permission denied
+```
+
+⭐ **`provision.sh` already fixes this** (`chgrp shareat /srv` + `chmod g+w /srv`, added in `9139f29`
+after hitting this same error live). **The repo is right and the droplet is stale** — it was
+provisioned before that line existed. Re-running `provision.sh` as root fixes the deploy **and**
+installs the T-214 units: the deploy workflow ships code, never unit files.
+
+⚠️ That failed run **still applied migrations to production** (*"Migrations applied in 288ms"*), so
+after a partial deploy the production schema can sit **ahead of the running code**. Harmless for
+`0130`, which is purely additive; not harmless in general (bible §15.5, expand/contract).
+
 ## Status as of 2026-09-04: T-205 in progress — first production deployment
 
 **As of 2026-09-01 none of this existed anywhere** (confirmed by direct read-only SSH inspection of

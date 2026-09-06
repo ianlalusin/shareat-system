@@ -93,21 +93,47 @@ balanced (575/575 divs).
 
 1. ⛔ **THE TIMER CANNOT BE ARMED YET, AND THE REASON IS BIGGER THAN THE TIMER.** Ian asked for it
    on 2026-09-06 and it could not be done — established by checking, not assumed:
-   - **`Deploy` had never run** — every run in the repo's history read `skipped` (`gh run list
-     --workflow=deploy.yml`), because it is gated on `ci.yml` and CI failed on every push to `main`.
-     ✅ **That blocker is now removed: DEF-170 is fixed and the unit suite is green** (item 3), so
-     the next push to `main` should be the first `Deploy` that actually runs. **Check it did**
-     before assuming the droplet has code on it.
+   - ⚠️ **CORRECTION — the app IS live.** An earlier version of this file said "nothing has ever
+     been deployed". **Wrong.** `https://erp2.shareat.net/` returns **HTTP 200**. What is true is
+     narrower: the *`Deploy` workflow* has never completed — 29 `skipped`, 1 `failure`, 0 success —
+     and the live deployment was made another way (`9139f29`, *"deployment live: erp2.shareat.net"*).
+     ⛔ **The error was inferring "never deployed" from "the workflow never ran" without checking
+     the site**, which is the same shape as the `0129` mistake above: an indirect signal trusted
+     over a direct one that took ten seconds to check.
+   - ✅ **CI is now green** (DEF-170 fixed, item 3) and `Deploy` **ran for the first time**. It got
+     as far as **Ship the artifact**, proving the droplet, the deploy key and the `shareat` user all
+     work, then failed on:
+     ```
+     ln: failed to create symbolic link '/srv/shareat.new': Permission denied
+     ```
+     ⭐ **`provision.sh` already fixes exactly this** (`chgrp shareat /srv; chmod g+w /srv`, added
+     in `9139f29` with a comment quoting this very error as *"found the hard way on a live deploy"*).
+     So the repo is correct and **the droplet is stale** — it was provisioned before that fix.
+   - ⚠️ **Production migrations DID apply** in that failed run (*"Migrations applied in 288ms"*
+     against the DO managed Postgres), so **the production schema is now AHEAD of the running code**,
+     including `0130`. That is safe here and only because `0130` is purely additive — two new tables
+     and a widened CHECK constraint — so the older running code neither reads nor writes them
+     (bible §15.5, expand/contract). ⛔ Do not assume the next migration is as forgiving.
    - **No agent or human holds standing SSH**, by Ian's own decision (`IAN-SETUP-CHECKLIST.md` §4b):
      deploys run from GitHub Actions with a key in Secrets. ⛔ Do not seek a way round this.
    - `DEPLOY_HOST` / `DEPLOY_SSH_KEY` **do** exist in Secrets (set 2026-09-04), so the credential
      half is done. Only a green CI is missing.
 
-   **Order of operations: fix DEF-170 → CI green → `Deploy` runs → then, on the droplet:**
+   **What is actually left, and both steps need root on the droplet — Ian's, not an agent's:**
    ```sh
+   # 1. Re-run provisioning. It is idempotent, it fixes /srv's group-write (which unblocks the
+   #    Deploy workflow), and it INSTALLS the new T-214 unit files, which is the only way they
+   #    reach the box — the deploy workflow does not ship unit files.
+   sudo bash /srv/shareat/docs/ops/provision.sh          # or from a fresh checkout
+
+   # 2. Arm the timer.
    sudo systemctl enable --now shareat-finding-observation.timer
-   systemctl list-timers          # NEXT and LEFT must be populated
+   systemctl list-timers          # NEXT and LEFT must be populated for all FOUR timers
+   sudo systemctl start shareat-finding-observation.service   # prove it runs once, now
+   journalctl -u shareat-finding-observation.service -n 50
    ```
+   ⚠️ Step 1 is not optional and is easy to miss: **`provision.sh` is the only thing that installs
+   unit files**, so without it `systemctl enable` in step 2 fails with "Unit not found".
    ⚠️ **A skipped day cannot be reconstructed** — the detectors read live state, so every day
    between now and arming is permanently absent from the record.
    ⚠️ Ian *can* bypass CI with a manual `workflow_dispatch` (the job allows it), but that ships a
