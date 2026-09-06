@@ -27,7 +27,14 @@ import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../db/seed/expense-categories';
 import { arRepo, closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
-import { createCustomer, recordCharge, recordCollection, voidCollection, writeOffCharge } from '@shareat/domain';
+import {
+  createCustomer,
+  recordCharge,
+  recordCollection,
+  voidCharge,
+  voidCollection,
+  writeOffCharge,
+} from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -406,5 +413,218 @@ describe('⛔ DEF-158 — recordCharge enforces the credit limit itself, not onl
     await setCreditLimit(f, '1000.00');
     await charge(f, '700.00');
     await expect(charge(f, '500.00')).rejects.toThrow(/owes ₱700.00/);
+  });
+});
+
+// =======================================================================================
+// T-226 / DEF-190 — the registers behind `/customers/[customerId]`
+//
+// ⛔ These reads exist because `1210` had a raising path, a reporting path and NO clearing
+// path a human could reach. The point of every assertion below is the same one: a figure
+// on that page must never be a second derivation of a figure the ledger already holds —
+// v1's stored `outstandingBalance` disagreed with its own inputs on 106 of 794 live rows.
+// =======================================================================================
+
+describe('T-226 — the customer detail registers', () => {
+  it('⭐ the charge register agrees with openItems AND outstandingForCharge for the same charge', async () => {
+    // The drift check, and the reason the three figures come out of ONE statement: three
+    // derivations of one number is exactly how v1's 13.3% disagreement happened.
+    const f = await fixture('t226-drift');
+    const { chargeId } = await charge(f, '5000.00');
+    await asOrg(f.orgId, (tx) =>
+      recordCollection(tx, f.manager, {
+        storeId: f.storeId, customerId: f.customerId, collectionDate: '2026-01-20',
+        amount: '1200.00', moneyAccountId: f.drawerId,
+        allocations: [{ chargeId, amountApplied: '1200.00' }],
+      }),
+    );
+    await asOrg(f.orgId, (tx) =>
+      writeOffCharge(tx, f.admin, { chargeId, amount: '300.00', reason: 'Short-paid, agreed' }),
+    );
+
+    const [list, open, one] = await asOrg(f.orgId, async (tx) => [
+      await arRepo.listChargesForCustomer(tx, f.orgId, f.customerId),
+      await arRepo.openItems(tx, f.orgId, f.customerId, f.storeId),
+      await arRepo.outstandingForCharge(tx, f.orgId, chargeId),
+    ]);
+    const row = list.find((r) => r.chargeId === chargeId)!;
+    expect(row.totalAmount).toBe('5000.00');
+    expect(row.allocatedAmount).toBe('1200.00');
+    expect(row.writtenOffAmount).toBe('300.00');
+    expect(row.outstanding).toBe('3500.00');
+    expect(row.outstanding).toBe(open.find((o) => o.chargeId === chargeId)!.outstanding);
+    expect(row.outstanding).toBe(one);
+  });
+
+  it('⚠️ a VOIDED charge lists with outstanding 0.00 — never its arithmetic remainder', async () => {
+    // Its entry was reversed, so nothing is owed. Showing the remainder would put a debt on
+    // screen that `1210` does not carry, and the page would stop tying to the control account.
+    const f = await fixture('t226-void');
+    const { chargeId } = await charge(f, '900.00');
+    await asOrg(f.orgId, (tx) => voidCharge(tx, f.manager, { chargeId, reason: 'Raised on the wrong customer' }));
+
+    const [list, open] = await asOrg(f.orgId, async (tx) => [
+      await arRepo.listChargesForCustomer(tx, f.orgId, f.customerId),
+      await arRepo.openItems(tx, f.orgId, f.customerId, f.storeId),
+    ]);
+    const row = list.find((r) => r.chargeId === chargeId)!;
+    expect(row.status).toBe('voided');
+    expect(row.outstanding).toBe('0.00');
+    expect(row.totalAmount).toBe('900.00'); // the document is still legible; it is not deleted
+    expect(open).toEqual([]);
+  });
+
+  it('the collection register says WHICH charges each payment settled, and they sum to it', async () => {
+    const f = await fixture('t226-alloc');
+    const a = await charge(f, '1000.00', { date: '2026-01-05' });
+    const b = await charge(f, '2000.00', { date: '2026-01-06' });
+    await asOrg(f.orgId, (tx) =>
+      recordCollection(tx, f.manager, {
+        storeId: f.storeId, customerId: f.customerId, collectionDate: '2026-01-20',
+        amount: '2500.00', moneyAccountId: f.drawerId,
+        allocations: [
+          { chargeId: a.chargeId, amountApplied: '1000.00' },
+          { chargeId: b.chargeId, amountApplied: '1500.00' },
+        ],
+      }),
+    );
+    const list = await asOrg(f.orgId, (tx) => arRepo.listCollectionsForCustomer(tx, f.orgId, f.customerId));
+    expect(list).toHaveLength(1);
+    const row = list[0]!;
+    expect(row.amount).toBe('2500.00');
+    expect(row.moneyAccountName).toBeTruthy();
+    const byCharge = new Map(row.allocations.map((x) => [x.chargeId, x.amountApplied]));
+    expect(byCharge.get(a.chargeId)).toBe('1000.00');
+    expect(byCharge.get(b.chargeId)).toBe('1500.00');
+    const summed = row.allocations.reduce((t, x) => t + Number(x.amountApplied), 0).toFixed(2);
+    expect(summed).toBe(row.amount);
+  });
+
+  it('⛔ a collection relieves 1210 by its GROSS amount, and the aging still ties to the control', async () => {
+    // The fee comes out of what LANDS, never out of what the customer owed — booking it against
+    // the receivable would forgive debt the customer still has. v1 recognised the same fee twice
+    // (₱198,148.29, 37 documents voided); this asserts the half that keeps the books tied.
+    const f = await fixture('t226-gross');
+    const { chargeId } = await charge(f, '4000.00');
+    const before = await asOrg(f.orgId, (tx) => arRepo.positionOf(tx, f.orgId, f.customerId));
+    expect(before.controlBalance).toBe('4000.00');
+
+    await asOrg(f.orgId, (tx) =>
+      recordCollection(tx, f.manager, {
+        storeId: f.storeId, customerId: f.customerId, collectionDate: '2026-01-20',
+        amount: '4000.00', platformFee: '150.00', moneyAccountId: f.drawerId,
+        allocations: [{ chargeId, amountApplied: '4000.00' }],
+      }),
+    );
+
+    const [after, agingTotal] = await asOrg(f.orgId, async (tx) => [
+      await arRepo.positionOf(tx, f.orgId, f.customerId),
+      await arRepo.orgAgingTotal(tx, f.orgId),
+    ]);
+    expect(after.controlBalance).toBe('0.00'); // relieved by 4000, NOT by 3850
+    expect(agingTotal).toBe(after.controlBalance); // invariant 6, at the org level
+  });
+
+  it('a surplus becomes real store credit at 2140 that the next payment can spend', async () => {
+    // v1 stamped a boolean called `overageAsStoreCredit` with no balance behind it — used 0 of
+    // 512 times — so an overpayment floated, unre-appliable. Here it is a liability with a number.
+    const f = await fixture('t226-surplus');
+    const first = await charge(f, '1000.00', { date: '2026-01-05' });
+    await asOrg(f.orgId, (tx) =>
+      recordCollection(tx, f.manager, {
+        storeId: f.storeId, customerId: f.customerId, collectionDate: '2026-01-20',
+        amount: '1500.00', moneyAccountId: f.drawerId,
+        allocations: [{ chargeId: first.chargeId, amountApplied: '1000.00' }],
+      }),
+    );
+    expect(await asOrg(f.orgId, (tx) => arRepo.creditBalanceOf(tx, f.orgId, f.customerId))).toBe('500.00');
+
+    const second = await charge(f, '800.00', { date: '2026-02-05' });
+    await asOrg(f.orgId, (tx) =>
+      recordCollection(tx, f.manager, {
+        storeId: f.storeId, customerId: f.customerId, collectionDate: '2026-02-10',
+        amount: '800.00', creditApplied: '500.00', moneyAccountId: f.drawerId,
+        allocations: [{ chargeId: second.chargeId, amountApplied: '800.00' }],
+      }),
+    );
+    expect(await asOrg(f.orgId, (tx) => arRepo.creditBalanceOf(tx, f.orgId, f.customerId))).toBe('0.00');
+    expect((await asOrg(f.orgId, (tx) => arRepo.positionOf(tx, f.orgId, f.customerId))).controlBalance).toBe('0.00');
+  });
+
+  it('a partial write-off leaves the remainder, a second clears it, and the register shows both', async () => {
+    // ⚠️ **The spec asked for "two identical write-offs do not collapse into one entry" and that
+    // is the wrong assertion** — `postEntry`'s idempotency key is
+    // `ar_write_off:{charge}:{amount}:{actor}`, so the same person writing off the same amount
+    // twice is a RETRY and collapsing it is the guard working. What must stay distinct is two
+    // write-offs that are genuinely different acts: different amounts, or different people.
+    // Reported as a spec defect (RULES §3.4a) rather than worked around.
+    const f = await fixture('t226-writeoff');
+    const { chargeId } = await charge(f, '1000.00', { by: f.manager });
+
+    const one = await asOrg(f.orgId, (tx) =>
+      writeOffCharge(tx, f.admin, { chargeId, amount: '400.00', reason: 'Disputed delivery' }),
+    );
+    let list = await asOrg(f.orgId, (tx) => arRepo.listChargesForCustomer(tx, f.orgId, f.customerId));
+    expect(list[0]!.writtenOffAmount).toBe('400.00');
+    expect(list[0]!.outstanding).toBe('600.00');
+
+    const two = await asOrg(f.orgId, (tx) =>
+      writeOffCharge(tx, f.admin, { chargeId, amount: '600.00', reason: 'Closed the account' }),
+    );
+    expect(two.entryId).not.toBe(one.entryId);
+
+    list = await asOrg(f.orgId, (tx) => arRepo.listChargesForCustomer(tx, f.orgId, f.customerId));
+    expect(list[0]!.writtenOffAmount).toBe('1000.00');
+    expect(list[0]!.outstanding).toBe('0.00');
+    expect((await asOrg(f.orgId, (tx) => arRepo.positionOf(tx, f.orgId, f.customerId))).controlBalance).toBe('0.00');
+
+    // Both write-offs are a HISTORY, not a total — who declared what dead, and when.
+    const offs = await asOrg(f.orgId, (tx) => arRepo.listWriteOffsForCharge(tx, f.orgId, chargeId));
+    expect(offs.map((o) => o.amount)).toEqual(['400.00', '600.00']);
+    expect(offs.map((o) => o.reason)).toEqual(['Disputed delivery', 'Closed the account']);
+    expect(new Set(offs.map((o) => o.journalEntryId)).size).toBe(2);
+  });
+
+  it('⭐ two admins writing off the SAME amount post two entries — the key carries the actor', async () => {
+    const f = await fixture('t226-twoadmins');
+    const { chargeId } = await charge(f, '1000.00', { by: f.manager });
+    const a = await asOrg(f.orgId, (tx) =>
+      writeOffCharge(tx, f.admin, { chargeId, amount: '250.00', reason: 'First tranche' }),
+    );
+    const b = await asOrg(f.orgId, (tx) =>
+      writeOffCharge(tx, f.admin2, { chargeId, amount: '250.00', reason: 'Second tranche' }),
+    );
+    expect(b.entryId).not.toBe(a.entryId);
+    const list = await asOrg(f.orgId, (tx) => arRepo.listChargesForCustomer(tx, f.orgId, f.customerId));
+    expect(list[0]!.writtenOffAmount).toBe('500.00');
+    expect(list[0]!.outstanding).toBe('500.00');
+  });
+
+  it('voiding a collection restores the position EXACTLY, and the register still shows it', async () => {
+    const f = await fixture('t226-voidcol');
+    const { chargeId } = await charge(f, '3000.00');
+    const before = (await asOrg(f.orgId, (tx) => arRepo.positionOf(tx, f.orgId, f.customerId))).controlBalance;
+
+    const { collectionId } = await asOrg(f.orgId, (tx) =>
+      recordCollection(tx, f.manager, {
+        storeId: f.storeId, customerId: f.customerId, collectionDate: '2026-01-20',
+        amount: '1200.00', moneyAccountId: f.drawerId,
+        allocations: [{ chargeId, amountApplied: '1200.00' }],
+      }),
+    );
+    await asOrg(f.orgId, (tx) => voidCollection(tx, f.manager, { collectionId, reason: 'Cheque bounced' }));
+
+    const after = (await asOrg(f.orgId, (tx) => arRepo.positionOf(tx, f.orgId, f.customerId))).controlBalance;
+    expect(after).toBe(before);
+
+    // ⛔ Reversed, never deleted. The voided collection stays on the register with its allocations
+    // intact — that is what lets somebody see WHY a charge that looked settled is open again.
+    const list = await asOrg(f.orgId, (tx) => arRepo.listCollectionsForCustomer(tx, f.orgId, f.customerId));
+    expect(list).toHaveLength(1);
+    expect(list[0]!.status).toBe('voided');
+    expect(list[0]!.allocations.map((a) => a.amountApplied)).toEqual(['1200.00']);
+    const charges = await asOrg(f.orgId, (tx) => arRepo.listChargesForCustomer(tx, f.orgId, f.customerId));
+    expect(charges[0]!.allocatedAmount).toBe('0.00'); // a voided collection allocates nothing
+    expect(charges[0]!.outstanding).toBe('3000.00');
   });
 });

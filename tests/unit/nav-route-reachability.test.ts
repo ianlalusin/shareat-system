@@ -33,9 +33,14 @@ const NAV_FILE = 'apps/erp/src/components/nav.tsx';
  * and every domain symbol; scanning it makes everything look linked and called. It is gitignored,
  * so enumerating from git cannot see it — the exclusion is structural rather than a rule someone
  * has to remember. Same reasoning as `no-ungated-read-surface.test.ts`.
+ *
+ * ⭐ `--others --exclude-standard` adds files that are NOT YET STAGED, and that is deliberate:
+ * a page written five minutes ago is exactly the one at risk of shipping unlinked, and a guard
+ * that only sees committed work would go green on it and red one commit later, for reasons
+ * nobody would connect. `--exclude-standard` still honours `.gitignore`, so `.next` stays out.
  */
 function trackedFiles(): string[] {
-  const out = execFileSync('git', ['ls-files', '-z'], { cwd: repoRoot, encoding: 'utf8' });
+  const out = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: repoRoot, encoding: 'utf8' });
   return out.split('\0').filter(Boolean);
 }
 

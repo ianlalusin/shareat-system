@@ -87,7 +87,11 @@ export default async function CustomersPage({
                   }`}
                 >
                   <td className="px-3 py-2">
-                    {c.name}
+                    {/* ⭐ T-226 — the register listed a balance and led nowhere, so `1210` could be
+                        raised and never cleared (DEF-190). This link is the whole entry point. */}
+                    <Link href={`/customers/${c.id}`} className="underline underline-offset-2 hover:no-underline">
+                      {c.name}
+                    </Link>
                     <div className="text-xs text-neutral-400 dark:text-neutral-600">
                       {GROUP_LABEL[c.customerGroup] ?? c.customerGroup}
                       {c.contactNo && ` · ${c.contactNo}`}

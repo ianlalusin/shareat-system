@@ -1,8 +1,27 @@
 # T-226 — AR collections, write-off, and the customer detail page (`/customers/[id]`)
 
-> **Status**: 📝 **SPECIFIED 2026-09-06, not built.** Written after a completeness audit found
-> that `1210 Accounts receivable` has a raising path and a reporting path and **no clearing path
-> a human can reach**.
+> **Status**: ✅ **BUILT 2026-09-06 — §§2–5, 7, 8 and 9.** ⚠️ **§6 (raise a charge outside a trade
+> order) is NOT built**, and is the one part still blocked on Open question 1: which revenue
+> account a manual credit sale credits. Everything that *clears* money shipped.
+>
+> **What shipped:** `/customers/[customerId]`; four server actions (`recordCollectionAction`,
+> `voidCollectionAction`, `voidChargeAction`, `writeOffChargeAction`); three register reads in
+> `packages/db/src/repo/ar.ts`; the link from `/customers`; seven integration tests.
+>
+> ⛔ **Two findings came out of building it, both filed and neither fixed here:**
+> **DEF-201** — a double-clicked write-off inserts a second `ar_write_offs` row against the SAME
+> journal entry, because `writeOffCharge` never reads `postEntry`'s `created` flag while its two
+> siblings twenty lines away both do. Measured on real Postgres: control `1210` ₱600, subledger
+> ₱200, **invariant 6 broken by a double-click.** The domain layer is out of this task's scope, so
+> it is reported, not edited (Scope, below).
+> **DEF-202** — a correct permission denial rendering as HTTP 500 on the two org-scoped reports.
+>
+> ⚠️ **One deliberate step outside Scope, stated here and in the report** (RULES §3.3): **DEF-200**
+> was fixed in `apps/erp/src/app/reports/lib.ts` — seven report screens were returning HTTP 500 for
+> **every** role, and `/reports/ar-aging` is the screen this task's own invariant 6 is checked on.
+>
+> ⭐ **The register's other half:** written after a completeness audit found that `1210 Accounts
+> receivable` has a raising path and a reporting path and **no clearing path a human can reach**.
 >
 > ⛔ **This is not a new module.** `packages/domain/src/ar/index.ts` (525 lines),
 > `packages/db/src/repo/ar.ts` (447), `packages/db/schema/ar.ts` (150) and
@@ -315,6 +334,41 @@ void the collection → confirm the position returns. **0px horizontal overflow 
    dispatch will bill outside the system instead.
 3. **Overdue receivables as a finding?** `aging` already buckets them and nothing watches them.
    Cheap, and it is the detector shape the phase already uses.
+
+## What the build actually found — recorded, because the numbers are the point
+
+**Tests seen failing for the right reason.** With `listChargesForCustomer`,
+`listCollectionsForCustomer` and `listWriteOffsForCharge` de-exported, six of the seven new tests
+fail with `TypeError: arRepo.listChargesForCustomer is not a function` — a missing export, not a
+missing row. ⚠️ **The seventh is honest about itself**: *"a collection relieves 1210 by its GROSS
+amount"* exercises only domain code that predates this task, so there was no state in which it
+could fail first. Said plainly rather than dressed up.
+
+**Smoketest on 9008, 390×844, against real dev data** (`Smoketest Wholesale Buyer`, a ₱2,500 posted
+charge). 17 of 19 checks passed on the first run; both failures are explained and neither was this
+task's code:
+
+| Step | Result |
+|---|---|
+| `/customers` row links to the detail page | ✅ the DEF-190 entry point exists |
+| ₱1,000 partial collection | ✅ outstanding ₱1,500 — relieved by the **gross** amount |
+| void that collection | ✅ position back to ₱2,500 **exactly**; the voided row stays, marked |
+| ₱2,600 collected against a ₱2,500 charge | ✅ *"₱100.00 more than was owed is now store credit"*, and ₱100 shows at 2140 |
+| write-off by the charge's own author | ✅ **refused**, in full: *"you recorded this charge, so you cannot also write it off. Declaring a debt uncollectible needs a second pair of eyes — ask another admin."* |
+| write-off by a **different** admin | ✅ *"₱360.00 written off to bad debt (6860)"* |
+| 0px horizontal overflow at 390px | ✅ on `/customers` and both detail pages |
+| `/reports/ar-aging` ties to `1210` | ⛔ **the page returned HTTP 500** — DEF-200, for every role. Fixed; then verified: all ten report routes 200, and the aging shows ₱360.00 |
+| the refusal assertion | ⚠️ a **harness** bug — it read the banner's `<strong>` and not the message beside it. The refusal itself is correct, quoted above |
+
+**Invariant 6, proved directly rather than through a screen** — computed over `journal_lines` with
+`positionOf`'s own semantics (`status <> 'draft'`, `party_type = 'customer'`) after all of the
+above: **control `1210` = ₱360.00, subledger = ₱360.00, difference ₱0.00.**
+
+⚠️ **A wrong first attempt worth recording**, because it nearly became a false alarm: computing the
+control with `status = 'posted'` instead of `<> 'draft'` reported a ₱2,000 break. A **reversed**
+entry keeps its lines and changes its status, so filtering to `posted` drops the original and keeps
+the reversal. **The books were right and the query was wrong** — check a reconciliation query
+against the repo function whose definition it is imitating before believing a break.
 
 ## Done when
 

@@ -32,7 +32,7 @@
  */
 import { accessRepo, transaction, type Tx } from '@shareat/db';
 import { authorize, type Actor, type Capability } from '@shareat/auth';
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { schema } from '@shareat/db';
 import { requireSession } from '../../lib/session';
 import { withOrgPrincipal } from '../expenses/lib';
@@ -91,7 +91,22 @@ export async function reportScope(
         code: schema.stores.code,
       })
       .from(schema.stores)
-      .where(eq(schema.stores.orgId, actor.orgId))
+      // ⛔ DEF-200 — ACTIVE stores only, and the `is_active` half is not a nicety, it is the whole
+      // bug. `personCoversWholeOrg` (`repo/access.ts`) answers "do you hold every store?" from
+      // `activeStoreIdsForOrg` — **active** stores. This query had no such filter, so a person who
+      // held every active store was told `coversWholeOrg = true` and then handed a store list that
+      // ALSO contained the retired ones. `authorizeForScope` proves the capability per store, hit a
+      // store nobody has a scope row for, and threw: **seven report screens returned HTTP 500 for
+      // every role**, super-admin included, from the moment one store was deactivated.
+      //
+      // ⭐ Two functions disagreeing about what "the org's stores" means — the same shape as every
+      // other two-sources-of-truth defect in this project. `personCoversWholeOrg` is the authority
+      // because it is the one the gate actually consults; this query now matches its definition.
+      //
+      // ⚠️ And a retired store has no business in a report scope anyway: it can post nothing new,
+      // and offering it as the default filter (it sorted last, so it was the one that broke) shows
+      // a period no one is trading in.
+      .where(and(eq(schema.stores.orgId, actor.orgId), eq(schema.stores.isActive, true)))
       .orderBy(asc(schema.stores.name));
 
     const coversWholeOrg = await accessRepo.personCoversWholeOrg(tx, actor.personId, actor.orgId);

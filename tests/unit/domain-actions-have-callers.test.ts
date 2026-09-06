@@ -44,9 +44,13 @@ const DOMAIN_ROOT = 'packages/domain/src/';
  * barrel and matches **every** symbol in it, so a walk would report every export as called and pass
  * for ever. `.next` is gitignored, so enumerating from git cannot see it — structural, not a rule
  * anyone has to remember. (`docs/CAPABILITY-GAPS.md`, the sweep's first trap.)
+ *
+ * ⭐ `--others --exclude-standard` includes files not yet staged — a service written five
+ * minutes ago is exactly the one at risk of shipping uncalled — while still honouring
+ * `.gitignore`, so `.next` remains invisible.
  */
 function trackedFiles(): string[] {
-  return execFileSync('git', ['ls-files', '-z'], { cwd: repoRoot, encoding: 'utf8' })
+  return execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: repoRoot, encoding: 'utf8' })
     .split('\0')
     .filter(Boolean);
 }
@@ -113,22 +117,18 @@ function appProductionSource(): string {
  *   3. *job*      — a scheduler, cron or script calls it; **name the job**.
  *   4. *unwired*  — nothing calls it and that is a gap; **cite the task or defect that owns it**.
  *
- * ⚠️ Kind 4 is not an excuse, it is a register. Thirty entries here were written on 2026-09-06 and
- * twenty-two of them are kind 4 — that is the size of the "built, tested, unreachable" debt, stated
- * once so it can be paid down and counted rather than rediscovered a screen at a time.
+ * ⚠️ Kind 4 is not an excuse, it is a register. Thirty entries were written here on 2026-09-06 and
+ * twenty-two were kind 4 — the measured size of the "built, tested, unreachable" debt, stated once
+ * so it can be paid down and counted rather than rediscovered a screen at a time. **Four were paid
+ * off the same day** by T-226, and the stale-exemption rule below is what forced their rows out.
  */
 const EXEMPT: Record<string, string> = {
   // ---- 1. internal: called by another domain function that is itself wired -------------------
   recordCharge:
     'INTERNAL — `dispatchTradeOrder` calls it (`trade/index.ts:460`); dispatch IS the billing ' +
-    'event. ⚠️ A charge raised OUTSIDE a trade order still has no screen — T-226 §6, blocked on ' +
-    'which revenue account a manual credit sale credits.',
-  voidCharge:
-    'INTERNAL — `voidTradeOrder` calls it (`trade/index.ts:646`). Voiding a charge on its own has ' +
-    'no screen; T-226 §8 owns it.',
-  recordCollection:
-    'INTERNAL — `trade/returns.ts` calls it to apply a customer return as credit. ⛔ Recording an ' +
-    'actual PAYMENT still has no screen, which is DEF-190 and the reason T-226 exists.',
+    'event. ⚠️ The LAST of DEF-190’s five still without a screen: a charge raised outside a trade ' +
+    'order is T-226 §6, and it is blocked on Ian deciding which revenue account a manual credit ' +
+    'sale credits — no wholesale-revenue account exists in the chart.',
   capitalizeApprovedExpense:
     'INTERNAL — `approveExpense` calls it for a CAPEX category (`expenses/approve.ts:231`). It is ' +
     'deliberately not a human boundary: the caller is approving an expense, not managing assets.',
@@ -140,12 +140,11 @@ const EXEMPT: Record<string, string> = {
     'rows a sales day owns. Exported for its types, not as an entry point.',
 
   // ---- 4. unwired: nothing calls it, and that is the gap -------------------------------------
-  voidCollection:
-    'UNWIRED — DEF-190. `1210` is raised by dispatch and cleared by nothing a human can reach. ' +
-    'T-226 §8 supplies the caller; delete this row when it does.',
-  writeOffCharge:
-    'UNWIRED — DEF-190 / DEF-191. v1 cannot write off a bad debt from any screen either, so this ' +
-    'is an `add`, not a `duplicate`. T-226 §7 supplies the caller; delete this row when it does.',
+  //
+  // ⭐ Four rows lived here for exactly one commit. `voidCollection`, `writeOffCharge`,
+  // `recordCollection` and `voidCharge` were DEF-190's unreachable half; T-226 gave them
+  // `/customers/[customerId]` and this test failed until the rows were deleted — which is the
+  // stale-exemption rule doing its whole job, on the very next task after the guard shipped.
   reconcileSupplier:
     'UNWIRED — DEF-198. Its mirror `reconcileCustomer` IS wired; the supplier side of the same ' +
     'attestation is not, so `/ap/suppliers/[id]` cannot stamp a reconciliation anchor.',
