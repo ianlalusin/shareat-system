@@ -2,20 +2,26 @@
 
 ## Where things stand
 
-⭐ **Phase 6 is CLOSED.** T-214 — the manager responsiveness scorecard — was specced and built in
-this session, and it was the last slice. Earlier today T-222 shipped store creation. Both are
-pushed; `main` is at the sha below and the tree is clean.
+⭐ **Phase 6 is CLOSED, and CI is green for the first time in this repo's history.** T-214 — the
+responsiveness scorecard — was specced and built today and was the last slice; T-222 shipped store
+creation this morning; **DEF-170 was fixed**, which turned CI green and let the `Deploy` workflow
+run for the very first time.
+
+⛔ **One thing is genuinely outstanding and it is Ian's**: that first Deploy failed on a stale
+droplet permission, so the T-214 timer is still not armed. Details in *Pick up here* item 1 — it is
+two commands as root, and no agent can or should do it.
 
 The next agent is **starting Phase 7**, not finishing Phase 6. Nothing in `docs/tasks/` is
-half-built.
+half-built. `main` is at the sha below and the tree is clean.
 
-## Gates at `b1c496c`
+## Gates at `c682e1e`
 
 | Gate | Result |
 |---|---|
 | **typecheck** | exit 0 |
 | **unit** | ✅ **1022 passed · 1 skipped · 0 FAILED — green for the first time.** DEF-170 fixed this session (was 1021 / 1 failed) |
-| **integration** | ✅ **2422/2422 · 96/96 files · exit 0**, against `shareat_test` |
+| **integration** | ✅ **2422/2422 · 96/96 files · exit 0**, against `shareat_test`. ⚠️ Last run at `b1c496c`; every commit since is markdown-only, so it is not re-run per doc edit |
+| **CI on `main`** | ✅ **success** at `d50555a` — the first green CI in this repo's history (`a748e58` was the last failure) |
 | **T-214 alone** | ✅ **24/24**, run twice to prove no cross-run pollution |
 | **build** | ✅ exit 0, dev server stopped first by process enumeration. `/findings/scorecard` present |
 | **smoketest** | ✅ **13/13** on 9008 (T-214) · 0px horizontal overflow at 390px on both findings routes |
@@ -181,9 +187,12 @@ balanced (575/575 divs).
   Drizzle's `drizzle.__drizzle_migrations` journal wrong, and the divergence is invisible to every
   test except `journal.test.ts`'s migrator re-run. Use `migrate()` (or `npm run db:migrate` with
   `DATABASE_URL` pointed at the target), which applies **and records**.
-- ⚠️ **Backticks inside a double-quoted shell string are COMMAND SUBSTITUTION.** Two code spans
-  silently vanished from a `PROJECT_BIBLE.md` row today (`createLocation` and `manage_locations`
-  became empty). Use the Edit tool or a file, never inline shell, for prose containing backticks.
+- ⛔ **Backticks inside a double-quoted shell string are COMMAND SUBSTITUTION, and it bit three
+  times today.** Two code spans silently vanished from a `PROJECT_BIBLE.md` row (`createLocation`
+  and `manage_locations` became empty), and the third attempt **actually executed `chgrp` and
+  `chmod /srv` on this machine** before failing harmlessly — prose containing a shell command will
+  run it. Use the Edit/Write tools or a quoted heredoc for any prose with backticks; never inline
+  `python -c "..."` or `-m` with a message.
 - ⚠️ **`next-env.d.ts` flip-flops** between `./.next/dev/types/` and `./.next/types/` depending on
   whether `dev` or `build` ran last. HEAD carries the **dev** variant; restore it, don't commit it.
 - ⚠️ **`pgrep -f vitest` in Git Bash cannot see Windows command lines.** Use
@@ -197,17 +206,26 @@ balanced (575/575 divs).
 Read C:\Users\ianla\webapps\shareat-system\docs\HANDOFF-TODAY.md, then docs/RULES.md if you
 haven't this session. Check ListAgents first — this tree is shared and a peer may be mid-task.
 
-Phase 6 is CLOSED (T-214 shipped last session). Nothing is half-built. You are starting Phase 7 —
-read docs/ROADMAP.html and docs/CAPABILITY-GAPS.md, and ask Ian which slice he wants before
-writing a spec.
+Phase 6 is CLOSED (T-214 shipped, DEF-170 fixed, CI green for the first time). Nothing is
+half-built. You are starting Phase 7 — read docs/ROADMAP.html and docs/CAPABILITY-GAPS.md and
+ask Ian which slice he wants before writing a spec.
 
-⛔ FIRST, and it is one line: the new daily timer from T-214 is installed but NOT ARMED —
-`sudo systemctl enable --now shareat-finding-observation.timer`. Until then the findings clock
-never starts and /findings/scorecard stays empty. docs/ops/README.md explains why this exact step
-has been missed three times before.
+⛔ ONE THING IS OUTSTANDING AND IT IS IAN'S, NOT YOURS. The Deploy workflow now runs (CI is
+green) but FAILS at the release symlink: "ln: failed to create symbolic link
+'/srv/shareat.new': Permission denied". provision.sh already fixes it; the droplet is stale.
+Ian must run, as root on the droplet:
+    sudo bash docs/ops/provision.sh              # fixes /srv, installs the T-214 units
+    sudo systemctl enable --now shareat-finding-observation.timer
+Until then every Deploy keeps failing the same way — that is expected, not a new bug — and
+T-214's findings clock never starts. Do NOT try to SSH: there is deliberately no agent access
+(IAN-SETUP-CHECKLIST §4b).
+
+⚠️ The app IS live at https://erp2.shareat.net (HTTP 200) even though the Deploy workflow has
+never completed. Do not infer either fact from the other.
 
 Before test:integration, confirm your DB has migrations 0129 AND 0130 — TEST_DATABASE_URL is
-shareat_test (not a lane) and the setup runs no migrations. Never run two integration suites at
-once; they share that DB and deadlock. Before npm run build, confirm 9008 is free by process
-enumeration, not pgrep.
+shareat_test (not a lane) and the setup runs no migrations. Never hand-apply a migration; use
+migrate(), or Drizzle's journal goes out of sync and journal.test.ts fails. Never run two
+integration suites at once; they share that DB and deadlock. Before npm run build, confirm 9008
+is free by process enumeration, not pgrep.
 ```
