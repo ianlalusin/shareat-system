@@ -110,3 +110,8 @@ defect.* — §9
 3. **The database enforces the rules, not the service layer.** Do not re-implement balance,
    period, or immutability checks in TypeScript — a second copy is a second source of truth,
    and the two will drift.
+   ⚠️ **This is about CHECK constraints and triggers (balance, period, immutability) — not
+   tenancy.** Tenancy is layered on purpose: the repository filters, RLS backstops (bible §7
+   rule 4 + §15.11). The binding rule for both is §15.11 — *no layer may be the only one for a
+   given risk*. DEF-210 is what it looks like when one is. (There is no "bible §6.3"; a citation
+   to it means this item — bible §15.11.)

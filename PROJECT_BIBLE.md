@@ -53,47 +53,47 @@
   - ` 954–959  ` Identifiers
   - ` 960–964  ` Naming
   - ` 965–970  ` Nulls
-- ` 971–1013 ` 7. Security model
-  - `1014–1044 ` 7.1 Identity — the v1 mess, and the v2 rule
-- `1045–1046 ` 8. Repo & environment
-  - `1047–1081 ` Layout
-  - `1082–1091 ` Ports — reserved, never shared
-  - `1092–1122` Build discipline — two rules, both absolute
-  - `1123–1133` Git
-- `1134–1150` 9. Definition of done
-  - `1151–1158` Parity gate
-- `1159–1193` 10. Phase plan
-- `1194–1210` 11. Migration & ETL rules
-- `1211–1259` 12. Inherited landmines — do not repeat these
-- `1260–1447` 13. Decision log
-- `1448–1467` 14. Amendment protocol
-- `1468–1472` 15. Engineering standards — the industry practices this project follows
-  - `1473–1478` 15.1 Build order: walking skeleton first
-  - `1479–1490` 15.2 Golden-master testing — the most important practice here
-  - `1491–1499` 15.3 Strangler Fig, not big-bang cutover
-  - `1500–1504` 15.4 No dual-write
-  - `1505–1509` 15.5 Expand/contract migrations
-  - `1510–1518` 15.6 Observability from day zero, not later
-  - `1519–1523` 15.7 CI gates
-  - `1524–1528` 15.8 Backups and a tested restore
-  - `1529–1533` 15.9 Twelve-Factor config
-  - `1534–1541` 15.10 Append-only ledgers — but not event sourcing
-  - `1542–1546` 15.11 Defence in depth
-  - `1547–1575` 15.12 Skills are lenses, not assurance
-  - `1576–1582` 15.13 Reconciliation is a permanent feature
-- `1583–1587` 16. The accounting spine
-  - `1588–1619` 16.0 What we are actually fixing — the diagnosis
-  - `1620–1663` 16.1 The ten invariants — non-negotiable
-  - `1664–1678` 16.2 The oracle: how "correct" is tested
-  - `1679–1700` 16.3 The model — header + lines, not legs
-  - `1701–1720` 16.4 Deliberately simpler than ERPNext
-  - `1721–1787` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1788–1812` 16.6 What v1 already gets right — preserve the intent
-  - `1813–1834` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1835–1849` 16.8 What v1's accounting already gets right
-  - `1850–1893` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1894–1944` 16.10 Posting patterns — one canonical pattern per business event
-  - `1945–1976` 16.11 Inventory's accounting integration
+- ` 971–1016 ` 7. Security model
+  - `1017–1047 ` 7.1 Identity — the v1 mess, and the v2 rule
+- `1048–1049 ` 8. Repo & environment
+  - `1050–1084 ` Layout
+  - `1085–1094 ` Ports — reserved, never shared
+  - `1095–1125` Build discipline — two rules, both absolute
+  - `1126–1136` Git
+- `1137–1153` 9. Definition of done
+  - `1154–1161` Parity gate
+- `1162–1196` 10. Phase plan
+- `1197–1213` 11. Migration & ETL rules
+- `1214–1262` 12. Inherited landmines — do not repeat these
+- `1263–1451` 13. Decision log
+- `1452–1471` 14. Amendment protocol
+- `1472–1476` 15. Engineering standards — the industry practices this project follows
+  - `1477–1482` 15.1 Build order: walking skeleton first
+  - `1483–1494` 15.2 Golden-master testing — the most important practice here
+  - `1495–1503` 15.3 Strangler Fig, not big-bang cutover
+  - `1504–1508` 15.4 No dual-write
+  - `1509–1513` 15.5 Expand/contract migrations
+  - `1514–1522` 15.6 Observability from day zero, not later
+  - `1523–1527` 15.7 CI gates
+  - `1528–1532` 15.8 Backups and a tested restore
+  - `1533–1537` 15.9 Twelve-Factor config
+  - `1538–1545` 15.10 Append-only ledgers — but not event sourcing
+  - `1546–1550` 15.11 Defence in depth
+  - `1551–1579` 15.12 Skills are lenses, not assurance
+  - `1580–1586` 15.13 Reconciliation is a permanent feature
+- `1587–1591` 16. The accounting spine
+  - `1592–1623` 16.0 What we are actually fixing — the diagnosis
+  - `1624–1667` 16.1 The ten invariants — non-negotiable
+  - `1668–1682` 16.2 The oracle: how "correct" is tested
+  - `1683–1704` 16.3 The model — header + lines, not legs
+  - `1705–1724` 16.4 Deliberately simpler than ERPNext
+  - `1725–1791` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1792–1816` 16.6 What v1 already gets right — preserve the intent
+  - `1817–1838` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1839–1853` 16.8 What v1's accounting already gets right
+  - `1854–1897` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1898–1948` 16.10 Posting patterns — one canonical pattern per business event
+  - `1949–1980` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -104,7 +104,7 @@
 
 | | |
 |---|---|
-| **Version** | 3.8 — **order-wastage tracked-vs-instant is a per-CHANNEL policy, not a per-record choice (§13 row 180).** Carries 3.7 (every v1 feature is accounted for in v2 — carried, folded or evolved, never silently dropped — and where v1's data shape drifted over time the most recent shape outweighs the old — §1.2d, §13 row 179), 3.6 (§4.2 rule 7 covers every dashboard tile, not only accounting statements: a separately-accumulated counter is forbidden even when it is called a cache — §13 row 173), 3.5 (discovery has a stated method, §1.2d: synthesize v1's goal in writing, weigh whether the live data is in good shape, then design v2 to beat that goal — v1 is the flawed version, v2 is the improved one), 3.4 (UI/UX is a third authority: familiar-but-upgraded screens, one visual family across ERP/POS/CUSTOMER), 3.3 (an unverified supplier invoice may carry a DRAFT expense), 3.2 (inventory is PERPETUAL from v2's first posting; a return is a credit in both directions), 3.1 (no SC/PWD statutory record is kept) and 3.0 (the card id joins the hot set) — §13 rows 164–173 |
+| **Version** | 3.9 — **the tenancy id never comes from the client, and RLS is the second layer behind the repository filter — never the only one, never absent (§13 row 181).** Carries 3.8 (order-wastage tracked-vs-instant is a per-CHANNEL policy, not a per-record choice — §13 row 180), 3.7 (every v1 feature is accounted for in v2 — carried, folded or evolved, never silently dropped — and where v1's data shape drifted over time the most recent shape outweighs the old — §1.2d, §13 row 179), 3.6 (§4.2 rule 7 covers every dashboard tile, not only accounting statements: a separately-accumulated counter is forbidden even when it is called a cache — §13 row 173), 3.5 (discovery has a stated method, §1.2d: synthesize v1's goal in writing, weigh whether the live data is in good shape, then design v2 to beat that goal — v1 is the flawed version, v2 is the improved one), 3.4 (UI/UX is a third authority: familiar-but-upgraded screens, one visual family across ERP/POS/CUSTOMER), 3.3 (an unverified supplier invoice may carry a DRAFT expense), 3.2 (inventory is PERPETUAL from v2's first posting; a return is a credit in both directions), 3.1 (no SC/PWD statutory record is kept) and 3.0 (the card id joins the hot set) — §13 rows 164–173 |
 | **Created** | 2026-08-22 |
 | **Last amended** | 2026-09-07 |
 | **Status** | Accounting-correctness project (§1.1). All discovery complete. Root cause identified (§16.0). **Chart of accounts aligned and signed off.** Ready to write Phase 0/1 task specs. |
@@ -980,6 +980,9 @@ Device identities authenticate with a server-issued credential, and that credent
 4. **Store scoping is enforced in the repository layer** — a repo function that takes
    a `storeId` filters on it unconditionally. Cross-store reads require an explicit,
    separately-authorized code path.
+   Row-level security is the second layer behind this one, not an alternative to it (§15.11,
+   §13 rows 112 and 181). **A path that carries a tenant id it did not derive from the session
+   has neither layer** — see DEF-210.
 5. **Firestore security rules in v2 are trivially small** and deny-by-default:
    mirror = read-only to authenticated members of that store; inbox = create-only
    with shape validation; everything else denied. If the ruleset grows past ~100
@@ -1442,6 +1445,7 @@ just a patch.**
 | 177 | 2026-09-06 | ⭐ **A RESPONSIVENESS SCORE MEASURES WHAT WAS FIXED, NEVER WHAT WAS ACCEPTED — AND THE CLOCK IT NEEDS IS AN OBSERVATION LOG, WHICH IS NOT THE SAME THING AS STORING A FINDING** — the action component counts occurrences that CLEARED (the detector stopped returning the key), acknowledgements are reported beside the score and never inside it, and the unit of scoring is the STORE because a cleared finding has no actor | Ian, 2026-09-06, deciding T-214's shape. ⛔ **The naive port re-opens the hole T-135 closed.** v1 scored findings a manager marked *resolved*; v2 has no such act. Mapping it onto *acknowledged* pays a manager to ACCEPT risk — acknowledging means the condition still holds and is accepted for 30 days — and the score is then maximised by accepting everything having fixed nothing, which is exactly the gaming row 123's derived model was adopted to prevent. A cleared occurrence needs honesty from nobody. ⚠️ **The clock is the hard part and it did not exist**: a `DetectedFinding` is a pure function of current state, carries no timestamp and cannot, and almost no detector can be re-asked *"as of"* a past date — so *when* a condition first appeared was not recoverable from anywhere. `finding_occurrences` records *"the detector reported this key on this day"* and ⛔ **nothing in the detection path ever reads it**, asserted by deleting every row and re-reading the feed rather than promised in a comment. Row 123 stands: what is forbidden is storing a finding's STATE, because state feeds back into detection; an observation never does. | ✅ **BUILT 2026-09-06** (T-214, migration `0130`, daily `finding_observation` scheduler job). ⚠️ **Two consequences a future implementer must not re-litigate.** First, **there is no backfill and there cannot be one** — the history does not exist anywhere — so the screen states the date the record began, because a number that silently understates how long a problem was ignored is worse than no number. Second, **a finding younger than the 14-day grace window is PENDING, not a failure**: the first render scored three innocent branches 0 because their findings had been raised that morning, and `cleared / raised` cannot tell "ignored" from "not yet had a chance". ⛔ That defect was found by LOOKING at the rendered page; every test passed both before and after it |
 | 179 | 2026-09-07 | ⭐ **EVERY v1 FEATURE IS ACCOUNTED FOR IN v2 — CARRIED, FOLDED OR EVOLVED, NEVER SILENTLY DROPPED — AND WHERE v1's DATA SHAPE DRIFTED OVER TIME THE MOST RECENT SHAPE OUTWEIGHS THE OLD** | Ian, 2026-09-07: *"v2 is an upgrade of v1. all features of v1 might be simplified, corrected, improved but all must be in v2 except faulty and nonsense ones that could be merged/folded to other feature or evolved to new one. same user of v1 and v2, non-techie people so all must feel same and familiar as much as possible. v1 has many inconsistent and unfinished works; its real data might have different shape from day one to most recent because it is being used while being developed. recent data shape must be considered more than old ones. both are tailored to fit the Shareat restaurant system."* ⭐ **Two things this makes explicit that were only implicit before.** (1) A **completeness guarantee** on top of §1.2's four verbs — carry-over is the *default*, deletion the last resort and Ian's alone, with merge/fold/evolve preferred over drop; a v1 feature absent from v2 must be traceable to a verb, never merely un-ported (recorded in §1.2d). (2) A **data-recency rule** for the discovery method — v1 was developed while in use, so a collection's shape drifts from its earliest documents to its most recent, and v2 is designed against the most recent *consistent* shape; the old shape is migration input at most (recorded in §1.2d step 3). ⛔ Neither reverses anything already decided: v1 still owns WHAT and never HOW (§1.2b), correct accounting still wins where it disagrees with v1 (§1.3), and familiar-but-upgraded UI still holds (§1.2c). | No — standing doctrine, sharpens §1.2 / §1.2b / §1.2c / §1.2d |
 | 180 | 2026-09-07 | ⭐ **ORDER-WASTAGE "TRACKED VS INSTANT" IS A PER-CHANNEL POLICY, NOT A PER-RECORD CHOICE** — the sales channel carries the disposition mode, and the person recording a wastage no longer picks it | Ian, 2026-09-07, deciding lane B's Q3. ⛔ **The rejected option is the status quo, which is why it needed deciding:** today `apps/erp/src/app/wastage/page.tsx` lets the recorder choose instant/absorbed per wastage, so a staffer can skip the monitor, the 48h dispute window and the 15-day auto-charge backstop on their own loss — the control is optional to the person it controls. v1 made it a store/channel policy for exactly that reason. ⚠️ **It removes a choice staff have today**, which is why it is Ian's (a WHAT decision, §0.1) and not the orchestrator's. Built as part of lane B's "sales channels: admin surface + wastage policy" package (with DEF-207): the channel gets a wastage-mode column, the admin surface sets it, and `orders.ts` reads it instead of the form. **Bundled decisions the same day:** T-228 pushed to production (Ian runs bootstrap-org himself); DEF-207 → a sales-channel admin surface (not seed-at-creation); DEF-209 → a dedicated RLS-enforcement assessment is scheduled. | Yes — a workflow change; T-178's disposition path and the wastage screen change, recorded here and in DEF-206/DEF-207's register rows |
+| 181 | 2026-09-07 | ⭐ **RLS IS ENFORCED AND ALWAYS WAS — the failure was in how we looked for it. THE TENANCY ID NEVER COMES FROM THE CLIENT, and RLS is the second layer behind the repository filter, never the only one and never absent.** | DEF-209 claimed RLS had zero production callers; the assessment (`docs/discovery/29-rls-enforcement-assessment.md`) found **310** — the canonical `withPrincipal` is typed for postgres.js and the app uses Drizzle, so the idiom is copied under another name (DEF-211). Proved live on a lane DB: the connecting role is superuser + `BYPASSRLS`, **and `SET LOCAL ROLE shareat_app` fully re-arms RLS** — zero rows with no principal, own-org only with one, cross-org write refused 42501. **68 of 99 integration files exercise the policies on every CI run.** ⛔ **The real defect it uncovered (DEF-210): 5 server actions read `orgId` out of `FormData`, on the 3 files that never take a principal** — the same shape as DEF-064, on writes. ⭐ **The generalisable half:** we had a structural guard for a client-supplied *person* (`no-client-supplied-actor.test.ts`) and none for a client-supplied *org*, though row 112 calls the org the more consequential of the two. **A guard that names one half of an identity is not a guard** — T-231 adds the other half. ⚠️ **And a method lesson worth more than the finding — it bit TWICE in one afternoon, both times invisibly.** A heredoc ate a script's regex escapes so it reported *"0 functions touch an org-scoped table"* and exited 0; a registry parser then silently dropped 5 of 125 entries and published two wrong totals that self-review caught. **A sweep that reports a total must first be made to report a known non-zero control** — neither bug was visible in its output, and both were one line away from being caught. Same family as the CRLF `.*$` landmine (§12): a guard that scans nothing is indistinguishable from a guard that finds nothing. ⚠️ Also settled here: RULES §6 item 3 (*the database enforces the rules*) is about CHECK/triggers and bible §7 rule 4 (*store scoping in the repository layer*) is about tenancy; **§15.11 governs both** — no layer may be the only one for a given risk. And **`bible §6.3` does not exist** (34 citations across code and docs point at it) — the correct citation is RULES §6 item 3, bible home §15.11; a sweep with a guard test is queued behind T-230 | Yes — DEF-209 amended, DEF-210 and DEF-211 filed; RULES §6 item 3 and bible §7 rule 4 each gained the reconciling sentence; T-231 (Option C, ~2 days, no migration) specified by lane A; Ian to confirm sequencing against `bootstrap-org` and run the production role probe (discovery 29 §7) |
 | 178 | 2026-09-06 | ⭐ **PERMITTED UNDERTIME CREDITS THE TIME ACTUALLY WORKED, NEVER THE FULL SHIFT — permission excuses the ABSENCE, it does not pay for the missing time** — so a manager who accepts that a short day was authorised approves the PENDING OVERTIME, and does not flip the day to a full one | Ian, 2026-09-06, closing T-225 §4. ⛔ **The rejected option is the one v1 effectively implemented**, which is why this needed deciding rather than defaulting: v1 paid the full requirement on a day it could not adjudicate, and across the golden corpus it **paid more than the person was physically present in 58 of 346 sessions**. Adopting that would have been inheriting a defect wearing the costume of a policy. ⚠️ **The arithmetic that makes the choice concrete**, from `payroll/compute.ts` — pay is in DAY UNITS (`unitsFor()` returns 0.5 or 1), the hourly equivalent is `dailyRate ÷ requiredHoursPerShift`, and overtime pays `× overtimeMultiplier`. For `lipa-0359` (8h worked of a 9h requirement, 1.25 multiplier) against a daily rate **D**: approving the pending OT pays **0.92 D for 89% of the hours** — proportionate; overriding the half day pays **1.00 D for 8 hours** — not. ⭐ **And the third row is the one that made T-225 urgent at all: if nobody acts, pending overtime pays NOTHING, so the day settles at 0.50 D for eight hours of work.** | ✅ **Shipped 2026-09-06 as GUIDANCE, not as new pay code.** Both actions already existed and neither changed; what was missing was that the person holding the mouse had no way to know which one was correct. The flagged day now names the right action **and names the wrong one explicitly**, on the screen where the choice is made. ⚠️ **A decision recorded only in a task doc is a decision nobody at the point of action ever reads** — the same failure as DEF-180 (an ADR decided and never written into the function) in a different costume: here it would have been decided and never written into the *screen*. |
 
 
