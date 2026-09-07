@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { and, asc, desc, eq, inArray, sql as dsql } from 'drizzle-orm';
-import { schema, transaction } from '@shareat/db';
+import { schema } from '@shareat/db';
 import { supplierCreditBalance } from '@shareat/domain';
 import { listStores } from '../lib';
 import { recordReturnAction, refundCreditAction, voidReturnAction } from './actions';
 import { requireSession } from '../../../lib/session';
+import { withOrgPrincipal } from '../../expenses/lib';
 
 export const metadata = { title: 'Supplier returns — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -28,7 +29,7 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
     );
   }
 
-  const { returnableLines, suppliers, credits, recent, locations, moneyAccountId } = await transaction(async (tx) => {
+  const { returnableLines, suppliers, credits, recent, locations, moneyAccountId } = await withOrgPrincipal(actor.orgId, async (tx) => {
     // ⭐ Returnable = received − already returned (posted only) — invariant 2's cap, rendered.
     const lines = await tx.execute(dsql`
       select dl.id as delivery_line_id, d.id as delivery_id, d.supplier_id, s.name as supplier_name,

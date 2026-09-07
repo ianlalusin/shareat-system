@@ -10,10 +10,11 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { authorize } from '@shareat/auth';
-import { transaction } from '@shareat/db';
+
 import { toBusinessDate } from '@shareat/core/datetime';
 import { deferDiscrepancy, resolveDiscrepancy, type Disposition } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
+import { withOrgPrincipal } from '../../expenses/lib';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -32,7 +33,7 @@ export async function resolveDiscrepancyAction(fd: FormData): Promise<void> {
   const disposition = str(fd, 'disposition') as Disposition;
   const chargePersonId = str(fd, 'chargePersonId');
 
-  const result = await transaction(async (tx) => {
+  const result = await withOrgPrincipal(actor.orgId, async (tx) => {
     await authorize(tx, actor, 'resolve_trade_discrepancy', { storeId });
     // ⚠️ A charge takes money off a named person. That is a SECOND decision and a second
     // capability — v1's `canChargeStaff`, and never staff-level.
@@ -66,7 +67,7 @@ export async function deferDiscrepancyAction(fd: FormData): Promise<void> {
 
   let result: Awaited<ReturnType<typeof deferDiscrepancy>>;
   try {
-    result = await transaction(async (tx) => {
+    result = await withOrgPrincipal(actor.orgId, async (tx) => {
       await authorize(tx, actor, 'resolve_trade_discrepancy', { storeId });
       return deferDiscrepancy(tx, {
         orgId: actor.orgId,

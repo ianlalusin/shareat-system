@@ -56,8 +56,9 @@ export interface ExpenseCategoryRow {
   orgId: string;
   group: 'OPEX' | 'COGS' | 'CAPEX' | 'PERSONAL';
   category: string;
-  subCategory: string | null;
   accountCode: string | null;
+  isSystem: boolean;
+  isActive: boolean;
 }
 
 export async function getCategoryById(
@@ -71,8 +72,9 @@ export async function getCategoryById(
       orgId: expenseCategories.orgId,
       group: expenseCategories.group,
       category: expenseCategories.category,
-      subCategory: expenseCategories.subCategory,
       accountCode: expenseCategories.accountCode,
+      isSystem: expenseCategories.isSystem,
+      isActive: expenseCategories.isActive,
     })
     .from(expenseCategories)
     .where(and(eq(expenseCategories.id, categoryId), eq(expenseCategories.orgId, orgId)))
@@ -86,12 +88,90 @@ export async function getCategoryById(
 // reported drafts stuck behind an unmapped category and told the reader to map one. **DEF-193.**
 // -----------------------------------------------------------------------------------------
 
+// -----------------------------------------------------------------------------------------
+// T-229 slice 2 — create, rename, retire. ⛔ No business rule here: who may write, what a
+// seeded row may not have done to it, and what counts as a duplicate name are all
+// `packages/domain/src/expenses/categories.ts`'s call. **DEF-205.**
+// -----------------------------------------------------------------------------------------
+
+export interface InsertExpenseCategoryInput {
+  orgId: string;
+  group: 'OPEX' | 'COGS' | 'CAPEX' | 'PERSONAL';
+  category: string;
+  accountCode: string | null;
+}
+
+/** ⚠️ Always a USER row — `is_system` defaults false and this function never sets it. The seed is
+ *  the only writer of system rows (bible §4.4 rule 5, one writer per row class). */
+export async function insertCategory(
+  tx: Tx,
+  input: InsertExpenseCategoryInput,
+): Promise<{ id: string }> {
+  const [row] = await tx
+    .insert(expenseCategories)
+    .values({
+      orgId: input.orgId,
+      group: input.group,
+      category: input.category,
+      accountCode: input.accountCode,
+    })
+    .returning({ id: expenseCategories.id });
+  return row!;
+}
+
+export async function renameCategory(
+  tx: Tx,
+  orgId: string,
+  categoryId: string,
+  category: string,
+): Promise<void> {
+  await tx
+    .update(expenseCategories)
+    .set({ category, updatedAt: new Date() })
+    .where(and(eq(expenseCategories.id, categoryId), eq(expenseCategories.orgId, orgId)));
+}
+
+/** ⛔ There is deliberately no `deleteCategory`. `expenses.category_id` is `on delete restrict`,
+ *  and bible §4.4 rule 2 is explicit: reference data is deactivated, never deleted. */
+export async function setCategoryActive(
+  tx: Tx,
+  orgId: string,
+  categoryId: string,
+  isActive: boolean,
+): Promise<void> {
+  await tx
+    .update(expenseCategories)
+    .set({ isActive, updatedAt: new Date() })
+    .where(and(eq(expenseCategories.id, categoryId), eq(expenseCategories.orgId, orgId)));
+}
+
+/**
+ * The name-collision pre-read, normalised exactly as the unique index is.
+ * ⚠️ It exists ONLY to word the refusal — `expense_categories_org_id_category_unique` is the
+ * authority, and a caller that skips this (or races another transaction) is still refused.
+ */
+export async function categoryByNormalisedName(
+  tx: Tx,
+  orgId: string,
+  category: string,
+): Promise<{ id: string; category: string } | null> {
+  const [row] = (await tx.execute(sql`
+    select id, category from expense_categories
+     where org_id = ${orgId} and lower(trim(category)) = lower(trim(${category}))
+     limit 1
+  `)) as unknown as Record<string, unknown>[];
+  return row ? { id: String(row.id), category: String(row.category) } : null;
+}
+
 /** One row of the admin screen: the category, the account it resolves to, and what it is blocking. */
 export interface ExpenseCategoryAdminRow {
   id: string;
   group: 'OPEX' | 'COGS' | 'CAPEX' | 'PERSONAL';
   category: string;
   accountCode: string | null;
+  /** Seeded rows may be retired but never renamed — bible §4.4 rules 2 and 5. */
+  isSystem: boolean;
+  isActive: boolean;
   /** The mapped account's name, resolved for display. Null when unmapped. */
   accountName: string | null;
   /** How many DRAFT expenses this category's missing mapping is holding up. */
@@ -124,6 +204,8 @@ export async function listCategoriesForAdmin(
            ec."group"                 as "group",
            ec.category                as category,
            ec.account_code            as account_code,
+           ec.is_system               as is_system,
+           ec.is_active               as is_active,
            a.name                     as account_name,
            case when ec.account_code is null then (
              select count(*)::int from expenses e
@@ -132,7 +214,7 @@ export async function listCategoriesForAdmin(
       from expense_categories ec
       left join accounts a on a.org_id = ec.org_id and a.code = ec.account_code
      where ec.org_id = ${orgId}
-     order by (ec.account_code is not null) asc, ec."group" asc, ec.category asc
+     order by ec.is_active desc, (ec.account_code is not null) asc, ec."group" asc, ec.category asc
   `)) as unknown as Record<string, unknown>[];
 
   return rows.map((r) => ({
@@ -141,6 +223,8 @@ export async function listCategoriesForAdmin(
     category: String(r.category),
     accountCode: r.account_code === null || r.account_code === undefined ? null : String(r.account_code),
     accountName: r.account_name === null || r.account_name === undefined ? null : String(r.account_name),
+    isSystem: r.is_system === true,
+    isActive: r.is_active === true,
     blockedDraftCount: Number(r.blocked_draft_count ?? 0),
   }));
 }
@@ -213,18 +297,32 @@ export async function setCategoryAccountCode(
     .where(and(eq(expenseCategories.id, categoryId), eq(expenseCategories.orgId, orgId)));
 }
 
-export async function listCategories(tx: Tx, orgId: string): Promise<ExpenseCategoryRow[]> {
+/**
+ * ⚠️ **`activeOnly` defaults to FALSE on purpose.** An expense already recorded against a category
+ * that was later retired must still render its own category, and the filter screen must still be
+ * able to filter history by it. A PICKER offering a NEW choice is the caller that passes `true`.
+ */
+export async function listCategories(
+  tx: Tx,
+  orgId: string,
+  opts: { activeOnly?: boolean } = {},
+): Promise<ExpenseCategoryRow[]> {
   const rows = await tx
     .select({
       id: expenseCategories.id,
       orgId: expenseCategories.orgId,
       group: expenseCategories.group,
       category: expenseCategories.category,
-      subCategory: expenseCategories.subCategory,
       accountCode: expenseCategories.accountCode,
+      isSystem: expenseCategories.isSystem,
+      isActive: expenseCategories.isActive,
     })
     .from(expenseCategories)
-    .where(eq(expenseCategories.orgId, orgId))
+    .where(
+      opts.activeOnly
+        ? and(eq(expenseCategories.orgId, orgId), eq(expenseCategories.isActive, true))
+        : eq(expenseCategories.orgId, orgId),
+    )
     .orderBy(asc(expenseCategories.group), asc(expenseCategories.category));
   return rows as ExpenseCategoryRow[];
 }

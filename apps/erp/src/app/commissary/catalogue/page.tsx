@@ -297,7 +297,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                         <td className="px-3 py-2">{m.isLedgerOnly ? 'Yes' : 'No'}</td>
                         <td className="px-3 py-2">
                           {m.expenseGroup
-                            ? `${m.expenseGroup} — ${m.expenseCategory}${m.expenseSubCategory ? ` / ${m.expenseSubCategory}` : ''}`
+                            ? `${m.expenseGroup} — ${m.expenseCategory}`
                             : '—'}
                         </td>
                         <td className="px-3 py-2 text-right">
@@ -357,8 +357,9 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                 <span className="block text-neutral-600 dark:text-neutral-400">Expense category (optional)</span>
                 <select name="expenseCategoryId" defaultValue="" className={INPUT}>
                   <option value="">None</option>
+                  {/* ⭐ T-229 slice 2 — active only: this mapping governs FUTURE receipts. */}
                   {EXPENSE_GROUPS.map((g) => {
-                    const rows = categories.filter((c) => c.group === g);
+                    const rows = categories.filter((c) => c.group === g && c.isActive);
                     if (rows.length === 0) return null;
                     return (
                       <optgroup key={g} label={g}>

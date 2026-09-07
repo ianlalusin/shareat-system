@@ -21,7 +21,7 @@
 
 **(a) ⛔ The lane brief's guard description misses more than half of what needs guarding.** It asks
 for a unit guard that *"no apps/erp `actions.ts` or `lib.ts` calls `transaction(` directly."* The
-34 unprincipalled authenticated sites break down as **14 in `actions.ts`, 4 in `lib.ts`, and 16 in
+35 unprincipalled authenticated sites break down as **14 in `actions.ts`, 5 in `lib.ts`, and 16 in
 `page.tsx`** — Server Components doing reads. A guard covering only the first two would pass while
 `app/expenses/[id]/page.tsx` and nine others still read on the unrestricted owner connection, and
 it is exactly the shape DEF-064 already had: *a read has no choke point, because a mutation must
@@ -125,7 +125,7 @@ file** — verified by grep across `apps`, `packages`, `scripts`. Nothing else c
 |---|---|
 | `packages/db/src/rls/principal.ts` | **add** the Drizzle-shaped `withOrgPrincipal` (contract 3). The existing postgres.js `applyPrincipal`/`withPrincipal` stay — the integration suites use that shape |
 | `apps/erp/src/app/expenses/lib.ts` | delete the local copy at `:134-141`, re-export the shared one so its ~290 importers do not all change |
-| `packages/domain/src/scheduler/index.ts` | delete the local copy at `:346-353`, import the shared one; `:684` and `:725` use it too |
+| `packages/domain/src/scheduler/index.ts` | delete the local `withOrgPrincipal` at `:346-353`, import the shared one. ⛔ **NOT `:684`/`:725`** — those are the `'system'`-principal variant (`asSystem`), a different declaration, left alone |
 | `apps/erp/src/app/reports/lib.ts` | delete `export { transaction }` at `:175` (finding (b)) |
 | **the 33 remaining unprincipalled files** | listed below — wrap in `withOrgPrincipal` |
 | `tests/unit/no-direct-transaction-in-erp.test.ts` | **create** — contract 5 |
@@ -142,37 +142,38 @@ export { withOrgPrincipal } from './rls/principal';
 
 Until that line lands, slice 2's own tests import by relative path (`../../src/rls/principal`).
 
-### The 34 paths, file by file — and the one lane B owns
+### The 35 paths, file by file — measured, not grepped
 
-`n` = plain `transaction()` call sites in that file.
+⚠️ **This table replaces the draft's 34/20 figure.** That came from a line-based grep, which cannot
+see a `transaction` import spanning several lines — `app/inventory/lib.ts` was invisible to it. The
+count below is from a whole-file scan (`n` = plain `transaction()` call sites), and it prints its
+own control (250 files scanned) before any total.
 
-| File (under `apps/erp/src/`) | n | lines |
-|---|---|---|
-| `app/ap/invoices/[id]/page.tsx` | 2 | 35, 36 |
-| `app/commissary/discrepancies/actions.ts` | 2 | 35, 69 |
-| `app/commissary/discrepancies/page.tsx` | 1 | 40 |
-| `app/commissary/orders/[id]/actions.ts` | 1 | 72 |
-| `app/commissary/orders/page.tsx` | 1 | 49 |
-| `app/expenses/[id]/page.tsx` | 3 | 44, 48, 65 |
-| `app/expenses/lib.ts` | 2 | 117, 135 |
-| `app/expenses/page.tsx` | 1 | 36 |
-| `app/fixed-assets/lib.ts` | 1 | 87 |
-| `app/inventory/low-stock/actions.ts` | 1 | 26 |
-| `app/inventory/low-stock/page.tsx` | 1 | 30 |
-| `app/inventory/returns/actions.ts` | 3 | 33, 55, 69 |
-| `app/inventory/returns/page.tsx` | 1 | 31 |
-| `app/inventory/transfers/actions.ts` | 4 | 49, 60, 68, 77 |
-| `app/inventory/transfers/page.tsx` | 1 | 36 |
-| `app/sales-days/[id]/page.tsx` | 3 | 29, 33, 42 |
-| `app/sales-days/lib.ts` | 1 | 36 — was lane B's (T-230). **R1: slice 2 starts after T-230 commits, so this is wrapped with the rest, no exemption** |
-| `app/sales-days/page.tsx` | 1 | 37 |
-| `app/trade/returns/actions.ts` | 3 | 31, 53, 66 |
-| `app/trade/returns/page.tsx` | 1 | 31 |
-| **Total** | **34** | 14 in `actions.ts`, 4 in `lib.ts`, 16 in `page.tsx` |
-
-⚠️ `app/sales-days/page.tsx` and `app/sales-days/[id]/page.tsx` are **not** lane B's (its set is
-`sales-days/lib.ts` and `sales-days/new/page.tsx`), but they sit in the same directory — check
-`git status` before editing and, if lane B has them open, defer them with `lib.ts`.
+| File (under `apps/erp/src/`) | n |
+|---|---|
+| `app/ap/invoices/[id]/page.tsx` | 2 |
+| `app/commissary/discrepancies/actions.ts` | 2 |
+| `app/commissary/discrepancies/page.tsx` | 1 |
+| `app/commissary/orders/[id]/actions.ts` | 1 |
+| `app/commissary/orders/page.tsx` | 1 |
+| `app/expenses/[id]/page.tsx` | 3 |
+| `app/expenses/lib.ts` | 2 |
+| `app/expenses/page.tsx` | 1 |
+| `app/fixed-assets/lib.ts` | 1 |
+| ⭐ `app/inventory/lib.ts` | 1 — **the one the grep missed** |
+| `app/inventory/low-stock/actions.ts` | 1 |
+| `app/inventory/low-stock/page.tsx` | 1 |
+| `app/inventory/returns/actions.ts` | 3 |
+| `app/inventory/returns/page.tsx` | 1 |
+| `app/inventory/transfers/actions.ts` | 4 |
+| `app/inventory/transfers/page.tsx` | 1 |
+| `app/reports/lib.ts` | 0 — re-export only |
+| `app/sales-days/[id]/page.tsx` | 3 |
+| `app/sales-days/lib.ts` | 1 — was lane B's; **free since T-230 at `736dffc`, no exemption needed** |
+| `app/sales-days/page.tsx` | 1 |
+| `app/trade/returns/actions.ts` | 3 |
+| `app/trade/returns/page.tsx` | 1 |
+| **Total** | **35 sites across 22 files** — 14 in `actions.ts`, 5 in `lib.ts`, 16 in `page.tsx` |
 
 ### ⛔ The pre-auth allowlist — these four MUST keep a plain `transaction()`
 
@@ -386,7 +387,7 @@ the wrong org id, then remove the field and change the assertion to a compile-ti
 
 | Test | Must fail first with |
 |---|---|
-| `tests/unit/no-direct-transaction-in-erp.test.ts` | **21 files** named — the 20 in the table above **plus `app/reports/lib.ts`** for its re-export (it calls `transaction` nowhere itself). The three pre-auth files are allowlisted and must NOT appear. Assert the count explicitly: the number is the evidence the scan works, and 20 or 22 both mean the matcher is wrong |
+| `tests/unit/no-direct-transaction-in-erp.test.ts` | ⚠️ **22 files**, not the 21 this spec first estimated. The 21st is `app/reports/lib.ts` (re-export only, 0 direct calls); the 22nd is **`app/inventory/lib.ts`**, which a line-based grep could not see because its `transaction` import spans several lines. **The guard reads whole files and found it; the spec's own count was an undercount.** The three pre-auth files are allowlisted and must NOT appear |
 | its control assertion | must pass immediately (>50 files scanned); if it fails, the glob is wrong and every other result in the file is meaningless |
 | `rls.test.ts` — the folded helper arms RLS | pre-implementation the helper does not exist: a module-resolution error is an acceptable first failure here, but re-run after the helper lands and **before** the call sites change, so assertion 3 (no leak onto the next transaction) is proven on its own |
 
@@ -470,7 +471,7 @@ it does **not** change what this task does, so slice 1 must not wait for it.
 ## Done when
 
 **Slice 1**
-- `TENANT_FIELDS` guard was watched failing with **five** named offenders, then passes.
+- `TENANT_FIELDS` guard was watched failing naming **3 files containing 5 read sites** (`orgId ×2`, `×1`, `×2`), then passes. ⚠️ **Corrected 2026-09-07**: the draft said "five named offenders". The scanner reports per FILE and counts occurrences, so 3/5 is the right pair of numbers; reported to the orchestrator rather than quietly satisfied.
 - Three integration tests were watched failing with the **wrong org id stamped on the row**, then pass.
 - `orgId` appears in none of the five entry-point input types, and `grep -rn "str(fd, 'orgId')" apps/erp/src` is empty.
 - The hidden fields are gone from all four `.tsx` files, and `NewTransferForm` no longer takes the prop.
@@ -478,11 +479,19 @@ it does **not** change what this task does, so slice 1 must not wait for it.
 - typecheck clean · `npm run test` green · lane integration green on `shareat_test_t228` · `npm run build` with the dev server stopped · self-reviewed line by line.
 
 **Slice 2**
-- The new guard was watched failing with **21 files**, then passes with **no exemption beyond the
+- The new guard was watched failing with **22 files**, then passes with **no exemption beyond the
   three pre-auth entries** (orchestrator R1 — slice 2 starts only after T-230 is committed, so
   `app/sales-days/lib.ts` is wrapped like the other 19).
 - The three `rls.test.ts` assertions pass, assertion 3 having been proven before the call sites moved.
-- Exactly one definition of `withOrgPrincipal` exists in source: `grep -rn "set local role\|set_config('role'" packages apps --include=*.ts | grep -v tests` returns **one** line.
+- Exactly one **staff**-principal helper exists in source: `packages/db/src/rls/principal.ts`.
+  ⚠️ **Corrected 2026-09-07** — the draft said that grep returns ONE line. It returns **four**, and
+  three of them are correct:
+  `principal.ts:46` is `applyPrincipal`, the postgres.js pair kept deliberately (open question 1);
+  `scheduler/index.ts:685` and `:726` are the **system**-principal variant, which sets
+  `app.principal_kind` to `'system'`, not `'staff'`. ⛔ **My draft said those two "use it too". They
+  do not** — folding them into `withOrgPrincipal` would silently change the declared principal kind.
+  Nothing reads `app_principal_kind()` today (zero policies reference it), which is exactly why the
+  distinction is easy to erase by accident.
 - `apps/erp/src/app/reports/lib.ts` no longer re-exports `transaction`.
 - All 20 pages smoketested on 9008 and **rendering the same rows as before the change**.
 - The barrel line is handed to the orchestrator verbatim, not applied by this lane.

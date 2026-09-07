@@ -62,7 +62,7 @@ behind it clears on the next detector run.
 | # | Ships | Migration | New capability | Blocked on |
 |---|---|---|---|---|
 | **1** ✅ | ⭐ **The `/settings` hub + map a category to an account** — DEF-193's remedy | ⛔ **none** | ⛔ **none** | — **BUILT 2026-09-07** |
-| **2** | Create / rename / retire a category, `is_system`, the normalised unique index | ✅ one | none | slice 1 |
+| **2** ✅ | Create / rename / retire a category, `is_system`/`is_active`, the normalised unique index — **DEF-205** | ✅ **0134** | ⛔ none | — **BUILT 2026-09-07** |
 | **3** ✅ | ⭐ **Assign the store's Wastage Monitor** — DEF-206 | ⛔ **none** | ⛔ **none** | — **BUILT 2026-09-07** |
 | **4** | Store & organization identity — legal name, TIN, tax type, address | ✅ one | ⚠️ open q. 5 | T-228 landing (discovery §9) |
 | ~~**5**~~ | ~~Order-wastage mode moves onto the sales channel; the form stops asking~~ | — | — | ⛔ **MOVED OUT 2026-09-07 → T-230** |
@@ -133,7 +133,37 @@ path is not a link"*). The links worked at runtime and the build was red anyway 
 right by its own contract. Fixed by making every hub `href` a literal at the call site; the page's
 header comment says so, so nobody tidies it back into a data table.
 
-### Slice 2
+### Slice 2 ✅ **BUILT 2026-09-07** — migration `0134_t229_expense_category_admin.sql`
+
+> ⛔ **Q2's premise was WRONG, recorded here so the next reader does not inherit it.** Q2 was taken
+> on *"`sub_category` is NULL on all 38 seeded rows, read by nothing"*. The first half held; the
+> second did not — the column had **four live SQL readers** (`budgets.listForStorePeriod`,
+> `budgets.categoriesWithoutBudget`, `commissary.orderableCatalogue`'s label CASE, and
+> `commissary-catalogue.listMap`'s `expenseSubCategory`, which `/commissary/catalogue` rendered).
+> ⚠️ **Only `repo/expenses.ts` used Drizzle's typed builder; the other three are raw `sql` strings
+> TypeScript cannot see** — so dropping it would have gone green through typecheck, unit tests and
+> build, then failed at runtime on the budgets screen and the commissary catalogue. Found by
+> grepping the **snake_case** column name before writing the migration; the lesson generalises.
+> All four were fixed in the same commit, readers first, and each is now **executed** against real
+> Postgres by tests 16-18.
+>
+> ⭐ **Retire is wired all the way through the pickers** — Ian, 2026-09-07, overruling this lane's
+> proposal to defer it: *"fix the pickers too, don't wait for lane A."* `listCategories` gained an
+> `activeOnly` option and `expenses/lib.ts` gained `listActiveCategoriesGrouped` beside the existing
+> `listCategoriesGrouped` (**additive only** — lane A holds that file for DEF-211, so its function
+> bodies were not touched). ⚠️ **It is a picker-vs-history split, not a blanket filter**, the same
+> distinction T-230 drew for sales channels: `/expenses/new`, recurring templates and the commissary
+> map take the ACTIVE list; `/expenses`' filter and the AP invoice's existing-line labels keep the
+> FULL list; and `/expenses/[id]`'s edit select shows retired options only when the expense already
+> carries one, marked `(retired)` — filtering them out unconditionally would silently re-point the
+> expense at whatever option happened to be first. Test 19 pins both halves and was watched to fail
+> with the filter defeated.
+>
+> ⚠️ **A second invisible coupling:** `seedExpenseCategories`' `on conflict (org_id, category)`
+> names the very index 0134 replaces, and Postgres infers the arbiter from an existing unique
+> index — so the old clause matched nothing. It now repeats the index expression exactly. Loud
+> rather than silent (the seed runs in T-228's bootstrap and most fixtures), but invisible from
+> either file alone.
 
 **Create** `packages/db/migrations/XXXX_expense_category_admin.sql` (⛔ hand-written from the schema file —
 `npm run db:generate` is unusable here, its snapshot chain dead since 0019 (DEF-073/DEF-121, 0133's header) — and never hand-applied).

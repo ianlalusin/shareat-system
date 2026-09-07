@@ -200,6 +200,9 @@ export type { ItemKind, BaseUnit, PurchaseUnit, ItemStatus } from '../schema/ite
 // Re-exported so a caller establishing a principal around an authorize() call (T-121) does
 // not need to reach into packages/db/src/rls/registry.ts directly.
 export { APP_ROLE } from './rls/registry';
+// T-231 / DEF-211 — the ONE Drizzle-shaped principal helper. Replaces the copies in
+// apps/erp/src/app/expenses/lib.ts and packages/domain/src/scheduler/index.ts.
+export { withOrgPrincipal } from './rls/principal';
 export * as stockLocationsRepo from './repo/stock-locations';
 // DEF-135 (2026-09-03) — the usage document's and the count session's SQL. Until now the only
 // writers of either table were test fixtures.

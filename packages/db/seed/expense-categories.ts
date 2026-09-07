@@ -139,12 +139,25 @@ export async function seedExpenseCategories(
   // set out at length in `seedChartOfAccounts` (T-228, DEF-204): `sql.json()` throws inside a
   // Drizzle transaction and a single `::jsonb` cast throws on a plain client, so neither works
   // in both worlds and this function is called from both. Keep the two casts.
+  // ⭐ T-229 slice 2, two changes, and the FIRST one is not optional.
+  //
+  // ⛔ `on conflict (org_id, category)` STOPPED WORKING at migration 0134. Postgres infers an
+  // arbiter from an existing unique index, and 0134 replaced `(org_id, category)` with
+  // `(org_id, lower(trim(category)))` (bible §4.4 rule 3, DEF-205). The old inference matches no
+  // index and raises "there is no unique or exclusion constraint matching the ON CONFLICT
+  // specification" — so the expression must be repeated here EXACTLY as the index declares it.
+  // ⚠️ This is loud rather than silent: `seedExpenseCategories` runs in T-228's org bootstrap and
+  // in most integration fixtures, so it fails immediately and everywhere. Recorded because the
+  // coupling is invisible from either file alone.
+  //
+  // ⭐ `is_system = true`: these are the seeded rows bible §4.4 rule 2 protects — deactivatable,
+  // never deletable, and never written by the admin screen (rule 5, one writer per row class).
   const rows = await sql<{ id: string }[]>`
-    insert into expense_categories (org_id, "group", category, account_code)
-    select ${orgId}::uuid, v."group", v.category, v.account_code
+    insert into expense_categories (org_id, "group", category, account_code, is_system)
+    select ${orgId}::uuid, v."group", v.category, v.account_code, true
     from jsonb_to_recordset((${JSON.stringify(payload)})::text::jsonb)
       as v("group" text, category text, account_code text)
-    on conflict (org_id, category) do nothing
+    on conflict (org_id, lower(trim(category))) do nothing
     returning expense_categories.id
   `;
 

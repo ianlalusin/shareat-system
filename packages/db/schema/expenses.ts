@@ -63,7 +63,17 @@ export const expenseCategories = pgTable(
       .references(() => organizations.id, { onDelete: 'restrict' }),
     group: text('group', { enum: ['OPEX', 'COGS', 'CAPEX', 'PERSONAL'] }).notNull(),
     category: text('category').notNull(),
-    subCategory: text('sub_category'),
+    /** ⭐ T-229 slice 2, bible §4.4 rule 2. Seeded rows are DEACTIVATED, never deleted, and a user
+     *  row and a seeded row are never confused for one another (rule 5: the seed owns system rows,
+     *  the screen owns user rows, neither writes the other's). */
+    isSystem: boolean('is_system').notNull().default(false),
+    /** Retiring keeps the category readable on every expense already posted against it. */
+    isActive: boolean('is_active').notNull().default(true),
+    // ⛔ `sub_category` was DROPPED in migration 0134 (T-229 slice 2). NULL on all 38 seeded rows,
+    //    and v1's second free-text level is what produced its 8 catch-all categories
+    //    (discovery 08 §5.5). ⚠️ It had no data but FOUR live SQL readers, three of them raw
+    //    template strings TypeScript could not see — see 0134's header before re-adding anything
+    //    like it.
     // NULLABLE ON PURPOSE (§4) — a category with no account mapped blocks posting rather
     // than defaulting to 6900 (invariant 7). Never given a default value.
     accountCode: text('account_code'),
@@ -79,11 +89,15 @@ export const expenseCategories = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
   (t) => [
-    // Category strings are unique per org — leg-mapping.ts's crosswalk keys are already
-    // globally unique (no OPEX/COGS name collision), and expenses.category_id resolves
-    // routing by id, never by re-matching the string, but the picker needs this to stay
-    // meaningful.
-    uniqueIndex('expense_categories_org_id_category_unique').on(t.orgId, t.category),
+    // NOTE: uniqueness is `(org_id, lower(trim(category)))` — case- and whitespace-INSENSITIVE,
+    // bible §4.4 rule 3, DEF-205. That is an expression index Drizzle's builder cannot express; it
+    // is hand-added in migration 0134, exactly as `positions` (employment.ts:126-134) and
+    // `sales_channels` (0133) already document.
+    // ⛔ Do NOT restore a `uniqueIndex(...)` line here. The builder can only express the
+    // case-SENSITIVE version, and `db:generate` would then "fix" the drift by dropping the correct
+    // index and recreating the broken one (DEF-073's shape).
+    // ⚠️ `group` is deliberately NOT in the key: including it would allow "Rent" in OPEX and
+    // "rent" in COGS, which is the duplicate the index exists to refuse.
     index('expense_categories_org_id_group_idx').on(t.orgId, t.group),
     check('expense_categories_group_check', sql`${t.group} in ('OPEX', 'COGS', 'CAPEX', 'PERSONAL')`),
   ],

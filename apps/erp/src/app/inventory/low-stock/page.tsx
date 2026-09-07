@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import { asc, eq } from 'drizzle-orm';
-import { lowStockRepo, schema, transaction } from '@shareat/db';
+import { lowStockRepo, schema } from '@shareat/db';
 import { listStores } from '../lib';
 import { setThresholdAction } from './actions';
 import { requireSession } from '../../../lib/session';
+import { withOrgPrincipal } from '../../expenses/lib';
 
 export const metadata = { title: 'Low stock — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -27,7 +28,7 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
     );
   }
 
-  const { low, missing, thresholds, items } = await transaction(async (tx) => {
+  const { low, missing, thresholds, items } = await withOrgPrincipal(actor.orgId, async (tx) => {
     const [lowRows, missingRows, thresholdRows, itemRows] = await Promise.all([
       lowStockRepo.lowStock(tx, actor.orgId, storeId),
       lowStockRepo.itemsWithoutThreshold(tx, actor.orgId, storeId),

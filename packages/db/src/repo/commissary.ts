@@ -171,8 +171,10 @@ export async function orderableCatalogue(
            bi.base_unit                       as "branchItemBaseUnit",
            coalesce(m.is_ledger_only, false)  as "isLedgerOnly",
            m.expense_category_id              as "expenseCategoryId",
+           -- The trailing sub-category segment is gone: that column was dropped in 0134
+           -- (T-229 slice 2), NULL on every row, so the tail never rendered.
            case when ec.id is null then null
-                else ec."group" || ' — ' || ec.category || coalesce(' / ' || ec.sub_category, '') end
+                else ec."group" || ' — ' || ec.category end
                                               as "expenseCategoryLabel"
     from commissary_item_offerings o
     join items i on i.id = o.item_id

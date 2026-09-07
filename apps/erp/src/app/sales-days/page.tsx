@@ -1,8 +1,9 @@
-import { transaction, salesDaysRepo } from '@shareat/db';
+import { salesDaysRepo } from '@shareat/db';
 import { formatMoney, money } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { listStores } from './lib';
 import { requireSession } from '../../lib/session';
+import { withOrgPrincipal } from '../expenses/lib';
 
 export const metadata = { title: 'Sales days — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -34,7 +35,7 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
       ? sp.status
       : undefined;
 
-  const days = await transaction((tx) =>
+  const days = await withOrgPrincipal(orgId, (tx) =>
     salesDaysRepo.listSalesDays(tx, { orgId, storeId, status, limit: 100 }),
   );
   const storeById = new Map(stores.map((s) => [s.id, s]));

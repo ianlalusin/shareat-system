@@ -8,9 +8,9 @@
  * `voidCustomerReturn`'s own first statement, not repeated here.
  */
 import { revalidatePath } from 'next/cache';
-import { transaction } from '@shareat/db';
 import { applyCredit, recordCustomerReturn, voidCustomerReturn } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
+import { withOrgPrincipal } from '../../expenses/lib';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -27,7 +27,7 @@ export async function recordReturnAction(fd: FormData): Promise<void> {
   const refund = str(fd, 'refund') === 'true';
   const moneyAccountId = str(fd, 'moneyAccountId') || null;
 
-  const result = await transaction((tx) =>
+  const result = await withOrgPrincipal(actor.orgId, (tx) =>
     recordCustomerReturn(tx, {
       tradeOrderId,
       returnedOn: new Date().toISOString().slice(0, 10),
@@ -48,7 +48,7 @@ export async function voidReturnAction(fd: FormData): Promise<void> {
   const returnId = str(fd, 'returnId');
   const reason = str(fd, 'reason');
 
-  const result = await transaction((tx) => voidCustomerReturn(tx, actor, returnId, reason));
+  const result = await withOrgPrincipal(actor.orgId, (tx) => voidCustomerReturn(tx, actor, returnId, reason));
   if (!result.ok) throw new Error(result.reason ?? 'void refused');
 
   revalidatePath('/trade/returns');
@@ -60,7 +60,7 @@ export async function applyCreditAction(fd: FormData): Promise<void> {
   const moneyAccountId = str(fd, 'moneyAccountId');
   const amount = str(fd, 'amount');
 
-  const result = await transaction((tx) =>
+  const result = await withOrgPrincipal(actor.orgId, (tx) =>
     applyCredit(tx, actor, {
       tradeOrderId,
       amount,

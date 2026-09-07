@@ -9,7 +9,6 @@
  * statement, not repeated here.
  */
 import { revalidatePath } from 'next/cache';
-import { transaction } from '@shareat/db';
 import {
   dispatch,
   quantity,
@@ -19,6 +18,7 @@ import {
   voidTransfer,
 } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
+import { withOrgPrincipal } from '../../expenses/lib';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -44,7 +44,7 @@ export async function createTransferAction(fd: FormData): Promise<void> {
     actor,
   };
 
-  const result = await transaction((tx) =>
+  const result = await withOrgPrincipal(actor.orgId, (tx) =>
     mode === 'two_step' ? saveDraft(tx, input) : transferNow(tx, input),
   );
   if (!result.ok) throw new Error(result.reason);
@@ -55,7 +55,7 @@ export async function createTransferAction(fd: FormData): Promise<void> {
 export async function dispatchTransferAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/inventory/transfers');
   const transferId = str(fd, 'transferId');
-  const result = await transaction((tx) => dispatch(tx, actor, transferId));
+  const result = await withOrgPrincipal(actor.orgId, (tx) => dispatch(tx, actor, transferId));
   if (!result.ok) throw new Error(result.reason);
   revalidatePath('/inventory/transfers');
 }
@@ -63,7 +63,7 @@ export async function dispatchTransferAction(fd: FormData): Promise<void> {
 export async function receiveTransferAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/inventory/transfers');
   const transferId = str(fd, 'transferId');
-  const result = await transaction((tx) => receiveTransfer(tx, actor, transferId));
+  const result = await withOrgPrincipal(actor.orgId, (tx) => receiveTransfer(tx, actor, transferId));
   if (!result.ok) throw new Error(result.reason);
   revalidatePath('/inventory/transfers');
 }
@@ -72,7 +72,7 @@ export async function voidTransferAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/inventory/transfers');
   const transferId = str(fd, 'transferId');
   const reason = str(fd, 'reason');
-  const result = await transaction((tx) => voidTransfer(tx, actor, transferId, reason));
+  const result = await withOrgPrincipal(actor.orgId, (tx) => voidTransfer(tx, actor, transferId, reason));
   if (!result.ok) throw new Error(result.reason);
   revalidatePath('/inventory/transfers');
 }

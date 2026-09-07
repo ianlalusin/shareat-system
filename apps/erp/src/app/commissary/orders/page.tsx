@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { lowStockRepo, transaction } from '@shareat/db';
+import { lowStockRepo } from '@shareat/db';
 import { requireSession } from '../../../lib/session';
 import { createOrderAction } from './actions';
 import {
@@ -11,6 +11,7 @@ import {
   today,
   type CommissaryChoice,
 } from './lib';
+import { withOrgPrincipal } from '../../expenses/lib';
 
 export const metadata = { title: 'Branch orders — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -46,7 +47,7 @@ export default async function BranchOrdersPage({ searchParams }: { searchParams:
   }
 
   const [orders, choices] = await Promise.all([
-    transaction((tx) => lowStockRepo.branchOrders(tx, actor.orgId, storeId)),
+    withOrgPrincipal(actor.orgId, (tx) => lowStockRepo.branchOrders(tx, actor.orgId, storeId)),
     newOrderPanelData(actor.orgId, storeId),
   ]);
   const store = stores.find((s) => s.id === storeId)!;

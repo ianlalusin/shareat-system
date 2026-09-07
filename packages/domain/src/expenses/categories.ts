@@ -33,6 +33,45 @@
 import { authorize, type Actor } from '@shareat/auth';
 import { expensesRepo, transaction, type Tx } from '@shareat/db';
 
+/**
+ * Org-scoped, admin-only. ⭐ **One capability for the whole screen — create, map, rename and
+ * retire alike.** Splitting create from map would let a manager create a category they cannot make
+ * postable, which manufactures DEF-193's condition deliberately (T-229 open question 1, answered
+ * 2026-09-07). It matches v1's own gate: every mutation in its `expense-entry.actions.ts` is
+ * `ctx.isAdmin`.
+ */
+const CAPABILITY = 'manage_chart_of_accounts' as const;
+
+/**
+ * ⭐ **The one place account eligibility is decided**, shared by mapping (slice 1) and creating
+ * with a mapping (slice 2) — a second copy would be a second answer to "is this account usable?",
+ * and the two would drift.
+ *
+ * Bible §16.9: only leaf accounts are postable, and `reserved` is "No" in the postable, picker and
+ * report columns alike. A category mapped to a header or a reserved account stores happily and
+ * fails days later, at posting time, in front of somebody who did not choose it and cannot see
+ * why — so the check belongs at the moment of the decision.
+ */
+async function assertMappableAccount(tx: Tx, orgId: string, code: string): Promise<void> {
+  const account = await expensesRepo.accountForMapping(tx, orgId, code);
+  if (!account) {
+    throw new Error(`no account with code '${code}' exists in org ${orgId}`);
+  }
+  if (!account.isPostable) {
+    throw new Error(
+      `account '${code}' (${account.name}) is a header and cannot be posted to — only leaf ` +
+        'accounts are postable (bible §16.9). Map to one of its children instead.',
+    );
+  }
+  if (account.status !== 'active') {
+    throw new Error(
+      `account '${code}' (${account.name}) is ${account.status}, not active. A reserved account ` +
+        'is defined but deliberately not postable and not in pickers (bible §16.9); activate it ' +
+        'first if this mapping is really wanted.',
+    );
+  }
+}
+
 export interface SetCategoryAccountInput {
   categoryId: string;
   /**
@@ -73,7 +112,7 @@ async function run(tx: Tx, actor: Actor, input: SetCategoryAccountInput): Promis
   // words for it are "the technical residue. Exactly what Ian was right not to hand over" — and
   // it matches v1's gate exactly (every mutation in v1's `expense-entry.actions.ts` is
   // `ctx.isAdmin`).
-  await authorize(tx, actor, 'manage_chart_of_accounts', {});
+  await authorize(tx, actor, CAPABILITY, {});
 
   const category = await expensesRepo.getCategoryById(tx, actor.orgId, input.categoryId);
   if (!category) {
@@ -89,27 +128,139 @@ async function run(tx: Tx, actor: Actor, input: SetCategoryAccountInput): Promis
   // survive the round trip through an HTML input.
   const code = input.accountCode === null ? null : input.accountCode.trim() || null;
 
+  // ⚠️ Extracted to `assertMappableAccount` in slice 2 so creating-with-a-mapping cannot answer
+  // "is this account usable?" differently from mapping an existing one. The message is prefixed
+  // here so the thrown sentence still names the operation.
   if (code !== null) {
-    const account = await expensesRepo.accountForMapping(tx, actor.orgId, code);
-    if (!account) {
-      throw new Error(
-        `setCategoryAccount: no account with code '${code}' exists in org ${actor.orgId}`,
-      );
-    }
-    if (!account.isPostable) {
-      throw new Error(
-        `setCategoryAccount: account '${code}' (${account.name}) is a header and cannot be posted ` +
-          'to — only leaf accounts are postable (bible §16.9). Map to one of its children instead.',
-      );
-    }
-    if (account.status !== 'active') {
-      throw new Error(
-        `setCategoryAccount: account '${code}' (${account.name}) is ${account.status}, not active. ` +
-          'A reserved account is defined but deliberately not postable and not in pickers ' +
-          '(bible §16.9); activate it first if this mapping is really wanted.',
-      );
+    try {
+      await assertMappableAccount(tx, actor.orgId, code);
+    } catch (err) {
+      throw new Error(`setCategoryAccount: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
   await expensesRepo.setCategoryAccountCode(tx, actor.orgId, input.categoryId, code);
+}
+
+// -----------------------------------------------------------------------------------------
+// T-229 slice 2 — create, rename, retire. **DEF-205.**
+//
+// ⭐ **The migration is what made this slice possible, and it is the whole point.** Slice 1's
+// header explains why creation waited: the shipped index was `(org_id, category)`, case- and
+// whitespace-SENSITIVE, so `Rent`, `rent` and `Rent ` were three different rows and a human create
+// path would have re-opened the duplicated-Rent defect bible §4.4 exists to close. Migration 0134
+// replaces it with `(org_id, lower(trim(category)))` — *"the actual fix"* — and creation ships in
+// the same migration, never after.
+//
+// ⚠️ **`manage_chart_of_accounts`, the same capability as slice 1, and the whole screen or none of
+// it.** Splitting create from map across two capabilities would let a manager create a category
+// they cannot make postable, which manufactures DEF-193's condition deliberately.
+// -----------------------------------------------------------------------------------------
+
+export type ExpenseCategoryGroup = 'OPEX' | 'COGS' | 'CAPEX' | 'PERSONAL';
+
+export interface CreateCategoryInput {
+  readonly group: ExpenseCategoryGroup;
+  readonly category: string;
+  /** Optional at creation — an unmapped category blocks posting rather than guessing, which is a
+   *  legitimate state to create one in and then map (invariant 3). */
+  readonly accountCode?: string | null;
+}
+
+function cleanCategoryName(raw: string): string {
+  const name = raw.trim();
+  if (!name) throw new Error('createCategory: a category needs a name.');
+  return name;
+}
+
+/**
+ * ⚠️ Only to WORD the refusal. `expense_categories_org_id_category_unique` — now on
+ * `lower(trim(category))` — is what actually refuses a collision, including one this pre-read
+ * raced. Bible §4.4 rule 3: *"rejected BY THE DATABASE, with an error naming the existing row."*
+ *
+ * ⛔ **The check is org-wide, not per group.** `group` is deliberately absent from the key: with
+ * it, "Rent" in OPEX and "rent" in COGS would both insert — one keystroke apart, and exactly the
+ * duplicate the index exists to refuse.
+ */
+async function refuseDuplicateName(
+  tx: Tx,
+  orgId: string,
+  category: string,
+  exceptCategoryId?: string,
+): Promise<void> {
+  const existing = await expensesRepo.categoryByNormalisedName(tx, orgId, category);
+  if (existing && existing.id !== exceptCategoryId) {
+    throw new Error(
+      `This organisation already has a category called "${existing.category}" — names are ` +
+        'compared ignoring case and spacing, so it would be the same category twice.',
+    );
+  }
+}
+
+export async function createCategory(
+  tx: Tx,
+  actor: Actor,
+  input: CreateCategoryInput,
+): Promise<{ categoryId: string }> {
+  await authorize(tx, actor, CAPABILITY, {});
+  const category = cleanCategoryName(input.category);
+  await refuseDuplicateName(tx, actor.orgId, category);
+
+  const accountCode = input.accountCode ?? null;
+  if (accountCode !== null) await assertMappableAccount(tx, actor.orgId, accountCode);
+
+  const { id } = await expensesRepo.insertCategory(tx, {
+    orgId: actor.orgId,
+    group: input.group,
+    category,
+    accountCode,
+  });
+  return { categoryId: id };
+}
+
+/**
+ * ⛔ **A seeded row may never be renamed.** Bible §4.4 rule 2 — seeded rows *"may be deactivated
+ * but never deleted, and their `code` is stable forever"* — and rule 5, one writer per row class:
+ * the seed owns system rows, the screen owns user rows, neither writes the other's. Renaming a
+ * seeded row here would also make the next `seedExpenseCategories` re-insert the original name
+ * beside it, since the seed matches on the name.
+ */
+export async function renameCategory(
+  tx: Tx,
+  actor: Actor,
+  input: { categoryId: string; category: string },
+): Promise<void> {
+  await authorize(tx, actor, CAPABILITY, {});
+  const existing = await expensesRepo.getCategoryById(tx, actor.orgId, input.categoryId);
+  if (!existing) throw new Error('renameCategory: that category does not exist in this organisation.');
+  if (existing.isSystem) {
+    throw new Error(
+      `"${existing.category}" is a seeded category, so its name is fixed — the seed owns it, and ` +
+        'renaming it here would have the next seed re-create the original beside it. Retire it and ' +
+        'add your own if it is wrong for this business.',
+    );
+  }
+
+  const category = cleanCategoryName(input.category);
+  await refuseDuplicateName(tx, actor.orgId, category, input.categoryId);
+  await expensesRepo.renameCategory(tx, actor.orgId, input.categoryId, category);
+}
+
+/**
+ * ⭐ Retire, never delete — bible §4.4 rule 2, and `expenses.category_id` is `on delete restrict`
+ * so a delete is impossible anyway. A retired category stays readable on every expense already
+ * posted against it; it simply stops being offered for new ones.
+ *
+ * ⚠️ **A SEEDED row may be retired.** That is rule 2's own wording, and it is what makes the
+ * 38-row seed survivable for a business that does not use all of it.
+ */
+export async function setCategoryActive(
+  tx: Tx,
+  actor: Actor,
+  input: { categoryId: string; isActive: boolean },
+): Promise<void> {
+  await authorize(tx, actor, CAPABILITY, {});
+  const existing = await expensesRepo.getCategoryById(tx, actor.orgId, input.categoryId);
+  if (!existing) throw new Error('setCategoryActive: that category does not exist in this organisation.');
+  await expensesRepo.setCategoryActive(tx, actor.orgId, input.categoryId, input.isActive);
 }

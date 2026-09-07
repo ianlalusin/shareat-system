@@ -30,7 +30,7 @@
  * already enforces for every store-scoped capability. Someone scoped to Lipa sees Lipa; someone
  * scoped to every store in the org sees the org-wide view.
  */
-import { accessRepo, transaction, type Tx } from '@shareat/db';
+import { accessRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor, type Capability } from '@shareat/auth';
 import { and, asc, eq } from 'drizzle-orm';
 import { schema } from '@shareat/db';
@@ -172,4 +172,3 @@ export async function runReport<T>(orgId: string, fn: (tx: Tx) => Promise<T>): P
   return withOrgPrincipal(orgId, fn);
 }
 
-export { transaction };

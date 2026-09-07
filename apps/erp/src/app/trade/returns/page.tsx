@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { and, desc, eq, sql as dsql } from 'drizzle-orm';
-import { schema, transaction } from '@shareat/db';
+import { schema } from '@shareat/db';
 import { customerCreditBalance } from '@shareat/domain';
 import { listStores } from '../../inventory/lib';
 import { recordReturnAction, voidReturnAction } from './actions';
 import { requireSession } from '../../../lib/session';
+import { withOrgPrincipal } from '../../expenses/lib';
 
 export const metadata = { title: 'Customer returns — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -28,7 +29,7 @@ export default async function CustomerReturnsPage({ searchParams }: { searchPara
     );
   }
 
-  const { returnableLines, customers, credits, recent, moneyAccountId } = await transaction(async (tx) => {
+  const { returnableLines, customers, credits, recent, moneyAccountId } = await withOrgPrincipal(actor.orgId, async (tx) => {
     // ⭐ Returnable = sold − already returned (posted only) — invariant 1's cap. Internal orders
     // cap at receivedQuantity (what the branch actually signed for, T-165's confirmReceipt);
     // external orders have no separate per-line receiving step from our side, so the cap is what

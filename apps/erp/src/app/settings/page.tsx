@@ -112,10 +112,6 @@ export default async function SettingsPage() {
             keeps hitting; one that says it does nothing YET is a plan with a visible next step. */}
         <ul className="mt-2 list-disc space-y-1 pl-5">
           <li>
-            <strong>Adding, renaming or retiring an expense category.</strong> Needs a database
-            change first, so that a hand-typed name cannot collide with a seeded one.
-          </li>
-          <li>
             <strong>The staff-advance ceiling.</strong> Deliberately not a form yet: four different
             things put a staff member into debt and none of them checks a limit, so a box here
             would look like a control without being one.

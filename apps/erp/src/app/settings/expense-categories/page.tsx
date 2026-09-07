@@ -1,5 +1,10 @@
 import { requireSession } from '../../../lib/session';
-import { setCategoryAccountAction } from './actions';
+import {
+  createCategoryAction,
+  renameCategoryAction,
+  setCategoryAccountAction,
+  setCategoryActiveAction,
+} from './actions';
 import { categoriesForAdmin, mappableAccounts } from './lib';
 
 export const metadata = { title: 'Expense categories — Shareat System' };
@@ -98,16 +103,57 @@ export default async function ExpenseCategoriesSettingsPage({
                 <tr
                   key={c.id}
                   className={`border-b border-neutral-100 align-middle dark:border-neutral-900 ${
-                    isUnmapped ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''
+                    !c.isActive ? 'opacity-60' : isUnmapped ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''
                   }`}
                 >
                   <td className="py-2 pr-3">
-                    {c.category}
+                    {/* ⛔ A SEEDED row cannot be renamed — the seed owns its name (bible §4.4
+                        rule 5), and renaming it here would have the next seed re-create the
+                        original beside it. It can still be retired, which is rule 2's own wording
+                        and what makes a 38-row seed survivable for a business that uses 20. */}
+                    {c.isSystem ? (
+                      c.category
+                    ) : (
+                      <form action={renameCategoryAction} className="flex flex-wrap items-center gap-1">
+                        <input type="hidden" name="categoryId" value={c.id} />
+                        <input
+                          name="category"
+                          defaultValue={c.category}
+                          required
+                          aria-label={`Name of ${c.category}`}
+                          className={`${FIELD} w-44 py-1`}
+                        />
+                        <button type="submit" className="text-xs underline underline-offset-2">
+                          Rename
+                        </button>
+                      </form>
+                    )}
                     {isUnmapped && (
                       <span className="ml-2 rounded bg-amber-200 px-1.5 py-0.5 text-[11px] font-medium text-amber-900 dark:bg-amber-900 dark:text-amber-100">
                         unmapped
                       </span>
                     )}
+                    {c.isSystem && (
+                      <span className="ml-2 rounded bg-neutral-200 px-1.5 py-0.5 text-[11px] font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
+                        seeded
+                      </span>
+                    )}
+                    {!c.isActive && (
+                      <span className="ml-2 rounded bg-neutral-200 px-1.5 py-0.5 text-[11px] font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
+                        retired
+                      </span>
+                    )}
+                    <form action={setCategoryActiveAction} className="mt-1">
+                      <input type="hidden" name="categoryId" value={c.id} />
+                      <input type="hidden" name="categoryLabel" value={c.category} />
+                      <input type="hidden" name="isActive" value={c.isActive ? 'false' : 'true'} />
+                      <button
+                        type="submit"
+                        className="text-xs text-neutral-500 underline underline-offset-2 hover:text-neutral-800 dark:hover:text-neutral-200"
+                      >
+                        {c.isActive ? 'Retire' : 'Reinstate'}
+                      </button>
+                    </form>
                   </td>
                   <td className="py-2 pr-3 text-neutral-500 dark:text-neutral-400">{c.group}</td>
                   <td className="py-2 pr-3 text-neutral-500 dark:text-neutral-400">
@@ -151,10 +197,49 @@ export default async function ExpenseCategoriesSettingsPage({
         </table>
       </div>
 
+      {/* ⭐ T-229 slice 2. The database change this paragraph used to promise is migration 0134:
+          uniqueness moved to `lower(trim(category))`, so a hand-typed name can no longer collide
+          with a seeded one by case or spacing — bible §4.4 rule 3, DEF-205. */}
+      <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="font-medium">Add a category</h2>
+        <form action={createCategoryAction} className="mt-3 flex flex-wrap items-end gap-3 text-sm">
+          <label className="flex flex-col gap-1">
+            <span className="text-neutral-600 dark:text-neutral-400">Name</span>
+            <input name="category" required placeholder="Scooter rental" className={`${FIELD} w-56`} />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-neutral-600 dark:text-neutral-400">Group</span>
+            <select name="group" defaultValue="OPEX" className={FIELD}>
+              <option value="OPEX">OPEX — running cost</option>
+              <option value="COGS">COGS — cost of goods sold</option>
+              <option value="CAPEX">CAPEX — equipment</option>
+              <option value="PERSONAL">PERSONAL — owner&apos;s drawings</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-neutral-600 dark:text-neutral-400">Posts to</span>
+            <select name="accountCode" defaultValue="" className={`${FIELD} max-w-[22rem]`}>
+              <option value="">— none (blocks posting) —</option>
+              {accounts.map((a) => (
+                <option key={a.code} value={a.code}>
+                  {a.code} · {a.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="submit" className={BTN}>
+            Add category
+          </button>
+        </form>
+        <p className="mt-3 text-xs text-neutral-500 dark:text-neutral-400">
+          Names are compared ignoring case and spacing, so <code>Rent</code> and{' '}
+          <code>rent&nbsp;</code> are the same category and the second is refused by the database.
+          A category is <strong>retired, never deleted</strong> — everything already recorded in it
+          keeps working.
+        </p>
+      </section>
+
       <p className="text-xs text-neutral-500 dark:text-neutral-400">
-        Adding, renaming and retiring a category are not here yet — they need a database change
-        that makes <code>Rent</code> and <code>rent&nbsp;</code> the same name, so that a manual
-        add cannot collide with a seeded row. Until then this list is the 38 seeded categories.
         Stuck drafts appear on{' '}
         <a href="/findings" className="underline">
           /findings

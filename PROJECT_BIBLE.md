@@ -64,36 +64,36 @@
   - `1154–1161` Parity gate
 - `1162–1196` 10. Phase plan
 - `1197–1213` 11. Migration & ETL rules
-- `1214–1262` 12. Inherited landmines — do not repeat these
-- `1263–1452` 13. Decision log
-- `1453–1472` 14. Amendment protocol
-- `1473–1477` 15. Engineering standards — the industry practices this project follows
-  - `1478–1483` 15.1 Build order: walking skeleton first
-  - `1484–1495` 15.2 Golden-master testing — the most important practice here
-  - `1496–1504` 15.3 Strangler Fig, not big-bang cutover
-  - `1505–1509` 15.4 No dual-write
-  - `1510–1514` 15.5 Expand/contract migrations
-  - `1515–1523` 15.6 Observability from day zero, not later
-  - `1524–1528` 15.7 CI gates
-  - `1529–1533` 15.8 Backups and a tested restore
-  - `1534–1538` 15.9 Twelve-Factor config
-  - `1539–1546` 15.10 Append-only ledgers — but not event sourcing
-  - `1547–1551` 15.11 Defence in depth
-  - `1552–1580` 15.12 Skills are lenses, not assurance
-  - `1581–1587` 15.13 Reconciliation is a permanent feature
-- `1588–1592` 16. The accounting spine
-  - `1593–1624` 16.0 What we are actually fixing — the diagnosis
-  - `1625–1668` 16.1 The ten invariants — non-negotiable
-  - `1669–1683` 16.2 The oracle: how "correct" is tested
-  - `1684–1705` 16.3 The model — header + lines, not legs
-  - `1706–1725` 16.4 Deliberately simpler than ERPNext
-  - `1726–1792` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1793–1817` 16.6 What v1 already gets right — preserve the intent
-  - `1818–1839` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1840–1854` 16.8 What v1's accounting already gets right
-  - `1855–1898` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1899–1949` 16.10 Posting patterns — one canonical pattern per business event
-  - `1950–1981` 16.11 Inventory's accounting integration
+- `1214–1278` 12. Inherited landmines — do not repeat these
+- `1279–1468` 13. Decision log
+- `1469–1488` 14. Amendment protocol
+- `1489–1493` 15. Engineering standards — the industry practices this project follows
+  - `1494–1499` 15.1 Build order: walking skeleton first
+  - `1500–1511` 15.2 Golden-master testing — the most important practice here
+  - `1512–1520` 15.3 Strangler Fig, not big-bang cutover
+  - `1521–1525` 15.4 No dual-write
+  - `1526–1530` 15.5 Expand/contract migrations
+  - `1531–1539` 15.6 Observability from day zero, not later
+  - `1540–1544` 15.7 CI gates
+  - `1545–1549` 15.8 Backups and a tested restore
+  - `1550–1554` 15.9 Twelve-Factor config
+  - `1555–1562` 15.10 Append-only ledgers — but not event sourcing
+  - `1563–1567` 15.11 Defence in depth
+  - `1568–1596` 15.12 Skills are lenses, not assurance
+  - `1597–1603` 15.13 Reconciliation is a permanent feature
+- `1604–1608` 16. The accounting spine
+  - `1609–1640` 16.0 What we are actually fixing — the diagnosis
+  - `1641–1684` 16.1 The ten invariants — non-negotiable
+  - `1685–1699` 16.2 The oracle: how "correct" is tested
+  - `1700–1721` 16.3 The model — header + lines, not legs
+  - `1722–1741` 16.4 Deliberately simpler than ERPNext
+  - `1742–1808` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1809–1833` 16.6 What v1 already gets right — preserve the intent
+  - `1834–1855` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1856–1870` 16.8 What v1's accounting already gets right
+  - `1871–1914` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1915–1965` 16.10 Posting patterns — one canonical pattern per business event
+  - `1966–1997` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -104,7 +104,7 @@
 
 | | |
 |---|---|
-| **Version** | 3.10 — **the cutover wipes transactional data, not stores and store settings — the Wastage Monitor survives cutover (§13 row 182).** Carries 3.9 (the tenancy id never comes from the client, and RLS is the second layer behind the repository filter — never the only one, never absent — §13 row 181), 3.8 (order-wastage tracked-vs-instant is a per-CHANNEL policy, not a per-record choice — §13 row 180), 3.7 (every v1 feature is accounted for in v2 — carried, folded or evolved, never silently dropped — and where v1's data shape drifted over time the most recent shape outweighs the old — §1.2d, §13 row 179), 3.6 (§4.2 rule 7 covers every dashboard tile, not only accounting statements: a separately-accumulated counter is forbidden even when it is called a cache — §13 row 173), 3.5 (discovery has a stated method, §1.2d: synthesize v1's goal in writing, weigh whether the live data is in good shape, then design v2 to beat that goal — v1 is the flawed version, v2 is the improved one), 3.4 (UI/UX is a third authority: familiar-but-upgraded screens, one visual family across ERP/POS/CUSTOMER), 3.3 (an unverified supplier invoice may carry a DRAFT expense), 3.2 (inventory is PERPETUAL from v2's first posting; a return is a credit in both directions), 3.1 (no SC/PWD statutory record is kept) and 3.0 (the card id joins the hot set) — §13 rows 164–173 |
+| **Version** | 3.11 — **§12 gains the sweep-control landmine: a sweep that reports a total must first report a known non-zero control (§13 row 181).** Carries 3.10 (the cutover wipes transactional data, not stores and store settings — the Wastage Monitor survives cutover — §13 row 182), 3.9 (the tenancy id never comes from the client, and RLS is the second layer behind the repository filter — never the only one, never absent — §13 row 181), 3.8 (order-wastage tracked-vs-instant is a per-CHANNEL policy, not a per-record choice — §13 row 180), 3.7 (every v1 feature is accounted for in v2 — carried, folded or evolved, never silently dropped — and where v1's data shape drifted over time the most recent shape outweighs the old — §1.2d, §13 row 179), 3.6 (§4.2 rule 7 covers every dashboard tile, not only accounting statements: a separately-accumulated counter is forbidden even when it is called a cache — §13 row 173), 3.5 (discovery has a stated method, §1.2d: synthesize v1's goal in writing, weigh whether the live data is in good shape, then design v2 to beat that goal — v1 is the flawed version, v2 is the improved one), 3.4 (UI/UX is a third authority: familiar-but-upgraded screens, one visual family across ERP/POS/CUSTOMER), 3.3 (an unverified supplier invoice may carry a DRAFT expense), 3.2 (inventory is PERPETUAL from v2's first posting; a return is a credit in both directions), 3.1 (no SC/PWD statutory record is kept) and 3.0 (the card id joins the hot set) — §13 rows 164–173 |
 | **Created** | 2026-08-22 |
 | **Last amended** | 2026-09-07 |
 | **Status** | Accounting-correctness project (§1.1). All discovery complete. Root cause identified (§16.0). **Chart of accounts aligned and signed off.** Ready to write Phase 0/1 task specs. |
@@ -1257,6 +1257,22 @@ each one **structurally impossible**, not merely avoided by care.
 
 **Rule: when a v2 bug is found, it gets a row in this table and a structural fix — not
 just a patch.**
+
+- ⛔ **A SWEEP THAT REPORTS A TOTAL MUST FIRST REPORT A KNOWN NON-ZERO CONTROL.** Three times in
+  one day, on one task, a tool produced a confident number that was wrong and looked fine: a Bash
+  heredoc ate the `\b` escapes in a script's regexes, so it reported *"0 functions touch an
+  org-scoped table"* and exited 0; a registry parser's single-line pattern could not span an entry
+  whose `reason` is a multi-line string, silently dropping 5 of 125 tables and publishing two wrong
+  totals plus one fabricated discrepancy; and a line-based `grep` for an import could not see one
+  that spans lines, undercounting the RLS gap by a file and a call site (DEF-209's own assessment,
+  2026-09-07). **None was visible in its own output; none was caught by review; each was caught by
+  a later tool that read whole files.** Same family as the CRLF `.*$` landmine above: a guard that
+  scans nothing is indistinguishable from a guard that finds nothing. Both guards T-231 added assert
+  a >50-file control before asserting anything about offenders, and the counting script prints how
+  many files it scanned before any total. §13 row 181. The same day, "null on every row, read by
+  nothing" turned out to be half true — four raw `sql` readers TypeScript could not see (T-229
+  slice 2): **grep raw SQL for the snake_case name before dropping any column**, and make every
+  changed raw reader EXECUTE against Postgres in a test after the drop.
 
 ---
 

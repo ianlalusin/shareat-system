@@ -21,7 +21,15 @@
  * there was nothing to do"* and *"it never ran"* must be tellable apart. A scheduler that fails
  * quietly is **worse than the button**, since nobody is even expecting to press anything.
  */
-import { APP_ROLE, schedulerRepo, storesRepo, transaction, type SchedulerFailure, type Tx } from '@shareat/db';
+import {
+  APP_ROLE,
+  schedulerRepo,
+  storesRepo,
+  transaction,
+  withOrgPrincipal,
+  type SchedulerFailure,
+  type Tx,
+} from '@shareat/db';
 import { runDepreciationAsSystem } from '../fixed-assets/depreciate';
 import { runAmortisationAsSystem } from '../prepaid';
 import { runOrderWastageBackstop } from '../wastage/orders';
@@ -311,17 +319,18 @@ async function runSweepForOrg(
  * Closes DEF-132 (nothing ever called `drainOutbox`/`ingestEvents` against real Firestore) and
  * DEF-134 (nothing ever computed a fresh day's `attendance_days` row) with one job.
  *
- * ## ⚠️ The RLS-principal switch, and why it lives HERE rather than being imported
+ * ## ✅ The RLS-principal switch now comes from `@shareat/db` — T-231 slice 2, DEF-211
  *
- * Every existing request-serving code path in `apps/erp` applies row-level security through
- * `withOrgPrincipal` (`apps/erp/src/app/expenses/lib.ts`) — `set local role` + `set_config`
- * inside one Drizzle transaction. **That function is unreachable from this file**: this is
- * `packages/domain`, and bible §8 rule 13 (`tests/unit/app-boundaries.test.ts`) forbids a package
- * importing from an app. So this is a small package-local copy of the same three statements,
- * built from the same `@shareat/db` primitives (`APP_ROLE`, `transaction`) the app helper and the
- * integration test suites' own local `asOrg` helpers already use — this is the third independent
- * copy of an identical five-line idiom, which might be worth centralising in `@shareat/db`
- * someday; not this task's scope.
+ * This file used to carry its own copy, because the app's helper lives in `apps/erp` and bible §8
+ * rule 13 forbids a package importing from an app. Its own comment called it *"the third
+ * independent copy of an identical five-line idiom, which might be worth centralising in
+ * `@shareat/db` someday"*. Someday arrived: `withOrgPrincipal` is exported from `@shareat/db`,
+ * one parameterised round trip instead of three, and this file imports it like everyone else.
+ *
+ * ⛔ **`asSystem` below is NOT the same helper and must not be folded into it.** It sets
+ * `app.principal_kind` to `'system'`, not `'staff'`. Nothing reads `app_principal_kind()` today —
+ * no policy references it — so the difference is currently inert, which is exactly why it would be
+ * easy to erase by accident. It states an intent the code should keep stating.
  *
  * ## ⚠️ Two lanes, two different relationships to "per org"
  *
@@ -343,14 +352,6 @@ async function runSweepForOrg(
  * should be org-scoped, which is exactly what would let `ingestEvents`'s `app_current_org()` call
  * write a quarantine row with no org at all — a NOT NULL violation, not a quiet bug).
  */
-async function withOrgPrincipal<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
-  return transaction(async (tx) => {
-    await tx.execute(sql.raw(`set local role ${APP_ROLE}`));
-    await tx.execute(sql`select set_config('app.principal_kind', 'staff', true)`);
-    await tx.execute(sql`select set_config('app.org_id', ${orgId}, true)`);
-    return fn(tx);
-  });
-}
 
 export interface RelayResult {
   outcomes: JobOutcome[];

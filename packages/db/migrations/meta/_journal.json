@@ -820,6 +820,13 @@
       "when": 1797564707084,
       "tag": "0133_t230_sales_channel_admin",
       "breakpoints": true
+    },
+    {
+      "idx": 134,
+      "version": "7",
+      "when": 1797651107084,
+      "tag": "0134_t229_expense_category_admin",
+      "breakpoints": true
     }
   ]
 }

@@ -8,9 +8,9 @@
  * first statement, not repeated here.
  */
 import { revalidatePath } from 'next/cache';
-import { transaction } from '@shareat/db';
 import { quantity, recordReturn, refundSupplierCredit, voidReturn } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
+import { withOrgPrincipal } from '../../expenses/lib';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -29,7 +29,7 @@ export async function recordReturnAction(fd: FormData): Promise<void> {
   const qty = str(fd, 'quantity');
   const reason = str(fd, 'reason');
 
-  const result = await transaction((tx) =>
+  const result = await withOrgPrincipal(actor.orgId, (tx) =>
     recordReturn(tx, {
       storeId,
       supplierId,
@@ -50,7 +50,7 @@ export async function voidReturnAction(fd: FormData): Promise<void> {
   const returnId = str(fd, 'returnId');
   const reason = str(fd, 'reason');
 
-  const result = await transaction((tx) => voidReturn(tx, actor, returnId, reason));
+  const result = await withOrgPrincipal(actor.orgId, (tx) => voidReturn(tx, actor, returnId, reason));
   if (!result.ok) throw new Error(result.reason ?? 'void refused');
 
   revalidatePath('/inventory/returns');
@@ -63,7 +63,7 @@ export async function refundCreditAction(fd: FormData): Promise<void> {
   const moneyAccountId = str(fd, 'moneyAccountId');
   const amount = str(fd, 'amount');
 
-  const result = await transaction((tx) =>
+  const result = await withOrgPrincipal(actor.orgId, (tx) =>
     refundSupplierCredit(tx, {
       storeId,
       supplierId,

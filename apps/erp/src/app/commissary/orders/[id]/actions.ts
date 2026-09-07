@@ -15,7 +15,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { eq } from 'drizzle-orm';
 import { authorize, type Actor } from '@shareat/auth';
-import { lowStockRepo, schema, transaction, type Tx } from '@shareat/db';
+import { lowStockRepo, schema, type Tx } from '@shareat/db';
 import { SHORTAGE_REASONS, type ShortageReason } from '@shareat/db/schema';
 import {
   acceptOrder,
@@ -69,7 +69,7 @@ export async function postMessageAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
   const body = typeof fd.get('body') === 'string' ? String(fd.get('body')) : '';
 
-  const result = await transaction(async (tx) => {
+  const result = await withOrgPrincipal(actor.orgId, async (tx) => {
     const parties = await lowStockRepo.orderParties(tx, orderId);
     if (!parties) return { ok: false as const, reason: 'that order does not exist' };
 

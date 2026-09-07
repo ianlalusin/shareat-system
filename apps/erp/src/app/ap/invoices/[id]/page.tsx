@@ -1,10 +1,11 @@
 import { notFound } from 'next/navigation';
-import { transaction, expensesRepo, apRepo } from '@shareat/db';
+import { expensesRepo, apRepo } from '@shareat/db';
 import { peso } from '../../../../lib/format';
 import { requireSession } from '../../../../lib/session';
 import { verifyInvoiceAction, voidInvoiceAction, setInvoiceLinesAction } from '../../actions';
 import { recordExpenseForInvoiceAction } from '../../../expenses/actions';
 import { getInvoice, getSupplier, listCategoriesGrouped, listMoneyAccountsForPicker, itemPickerFor, invoiceLines, INVOICE_LINE_ROWS } from '../../lib';
+import { withOrgPrincipal } from '../../../expenses/lib';
 
 export const metadata = { title: 'Supplier invoice — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -32,8 +33,8 @@ export default async function InvoiceDetailPage({
   const supplier = await getSupplier(orgId, invoice.supplierId);
 
   const [capacity, linkedExpenses, categories, wallets] = await Promise.all([
-    transaction((tx) => apRepo.capacityOf(tx, orgId, id)),
-    transaction(async (tx) => {
+    withOrgPrincipal(orgId, (tx) => apRepo.capacityOf(tx, orgId, id)),
+    withOrgPrincipal(orgId, async (tx) => {
       const all = await expensesRepo.listExpenses(tx, { orgId, limit: 500 });
       return all.filter((e) => e.supplierInvoiceId === id);
     }),
@@ -348,8 +349,11 @@ return (
               <Field label="Category">
                 <select name="categoryId" required defaultValue="" className={INPUT}>
                   <option value="" disabled>Select…</option>
+                  {/* ⭐ T-229 slice 2 — active only: this select adds a NEW line. The same
+                      `categories` list still labels the EXISTING lines above, retired ones
+                      included. */}
                   {groups.map((g) => {
-                    const rows = categories.filter((c) => c.group === g);
+                    const rows = categories.filter((c) => c.group === g && c.isActive);
                     if (rows.length === 0) return null;
                     return (
                       <optgroup key={g} label={g}>

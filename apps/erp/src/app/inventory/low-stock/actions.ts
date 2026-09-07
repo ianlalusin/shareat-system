@@ -9,8 +9,9 @@
  */
 import { revalidatePath } from 'next/cache';
 import { authorize } from '@shareat/auth';
-import { lowStockRepo, transaction } from '@shareat/db';
+import { lowStockRepo } from '@shareat/db';
 import { requireActor } from '../../../lib/session';
+import { withOrgPrincipal } from '../../expenses/lib';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -23,7 +24,7 @@ export async function setThresholdAction(fd: FormData): Promise<void> {
   const itemId = str(fd, 'itemId');
   const raw = str(fd, 'threshold');
 
-  await transaction(async (tx) => {
+  await withOrgPrincipal(actor.orgId, async (tx) => {
     // ⭐ Store-scoped, staff and up. The person who notices the shelf is empty is the person on
     // the floor, and an unset threshold is INVISIBLE — the item just never appears on this list —
     // so friction here has no counter-pressure.

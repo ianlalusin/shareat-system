@@ -5,7 +5,7 @@
  * `withOrgPrincipal` and the store list are imported from the expenses screens rather than
  * duplicated — two copies of the RLS-principal wrapper is two places to get wrong.
  */
-import { fixedAssetsRepo, transaction, type AssetCategory } from '@shareat/db';
+import { fixedAssetsRepo, type AssetCategory } from '@shareat/db';
 import { money, subtract } from '@shareat/core/money';
 import { withOrgPrincipal } from '../expenses/lib';
 
@@ -84,7 +84,7 @@ export async function getAsset(orgId: string, id: string) {
 /** The org's policy, for display. Never used to decide anything — the domain reads it again
  *  inside the transaction that needs it, because a policy read is a refusal point (spec §8). */
 export async function readPolicyForDisplay(orgId: string) {
-  return transaction((tx) => fixedAssetsRepo.findPolicy(tx, orgId));
+  return withOrgPrincipal(orgId, (tx) => fixedAssetsRepo.findPolicy(tx, orgId));
 }
 
 export const CATEGORY_LABEL: Record<string, string> = {

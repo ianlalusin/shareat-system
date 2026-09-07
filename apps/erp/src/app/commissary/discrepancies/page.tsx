@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { asc, eq } from 'drizzle-orm';
-import { lowStockRepo, schema, transaction } from '@shareat/db';
+import { lowStockRepo, schema } from '@shareat/db';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { listStores } from '../../inventory/lib';
 import { deferDiscrepancyAction, resolveDiscrepancyAction } from './actions';
 import { requireSession } from '../../../lib/session';
+import { withOrgPrincipal } from '../../expenses/lib';
 
 export const metadata = { title: 'Transit shortfalls — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -37,7 +38,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
     );
   }
 
-  const { rows, people } = await transaction(async (tx) => {
+  const { rows, people } = await withOrgPrincipal(actor.orgId, async (tx) => {
     const [list, persons] = await Promise.all([
       lowStockRepo.discrepancyList(tx, actor.orgId, storeId, includeResolved),
       tx

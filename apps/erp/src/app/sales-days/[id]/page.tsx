@@ -1,9 +1,10 @@
 import { notFound } from 'next/navigation';
-import { transaction, salesDaysRepo, journalRepo } from '@shareat/db';
+import { salesDaysRepo, journalRepo } from '@shareat/db';
 import { formatMoney, money } from '@shareat/core/money';
 import { listStores, listActingPersons } from '../lib';
 import { requireSession } from '../../../lib/session';
 import { submitSalesDayAction, verifySalesDayAction, voidSalesDayAction } from '../actions';
+import { withOrgPrincipal } from '../../expenses/lib';
 
 export const metadata = { title: 'Sales day — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -26,11 +27,11 @@ export default async function SalesDayDetailPage({
   const { actor } = await requireSession(`/sales-days/${id}`);
   const orgId = actor.orgId;
 
-  const day = await transaction((tx) => salesDaysRepo.getById(tx, orgId, id));
+  const day = await withOrgPrincipal(orgId, (tx) => salesDaysRepo.getById(tx, orgId, id));
   if (!day) notFound();
 
   const [channels, stores, persons] = await Promise.all([
-    transaction((tx) => salesDaysRepo.getChannelsForDay(tx, day.id)),
+    withOrgPrincipal(orgId, (tx) => salesDaysRepo.getChannelsForDay(tx, day.id)),
     listStores(orgId),
     listActingPersons(orgId),
   ]);
@@ -39,7 +40,7 @@ export default async function SalesDayDetailPage({
   // entries stand, so hiding them on void would make the page contradict its own void copy.
   const entryId = day.journalEntryId;
   const { lines, reversalId, reversalLines } = entryId
-    ? await transaction(async (tx) => {
+    ? await withOrgPrincipal(orgId, async (tx) => {
         const original = await journalRepo.findLinesForEntryWithAccountCodes(tx, entryId);
         const reversal = await journalRepo.findReversalOfEntry(tx, orgId, entryId);
         return {

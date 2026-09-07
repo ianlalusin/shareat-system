@@ -1,9 +1,10 @@
 import { notFound } from 'next/navigation';
-import { transaction, expensesRepo, journalRepo } from '@shareat/db';
+import { expensesRepo, journalRepo } from '@shareat/db';
 import { formatMoney, money } from '@shareat/core/money';
 import { listStores, listActingPersons, listCategoriesGrouped } from '../lib';
 import { requireSession } from '../../../lib/session';
 import { approveExpenseAction, voidExpenseAction, updateDraftAction, deleteDraftAction } from '../actions';
+import { withOrgPrincipal } from '../lib';
 
 // Derived from the repo function rather than re-declared — the table renders exactly what
 // that reader returns, so the two cannot drift.
@@ -41,11 +42,11 @@ export default async function ExpenseDetailPage({
   const { actor } = await requireSession(`/expenses/${id}`);
   const orgId = actor.orgId;
 
-  const expense = await transaction((tx) => expensesRepo.getExpenseById(tx, orgId, id));
+  const expense = await withOrgPrincipal(orgId, (tx) => expensesRepo.getExpenseById(tx, orgId, id));
   if (!expense) notFound();
 
   const [payments, stores, persons, categories] = await Promise.all([
-    transaction((tx) => expensesRepo.getPaymentsForExpense(tx, expense.id)),
+    withOrgPrincipal(orgId, (tx) => expensesRepo.getPaymentsForExpense(tx, expense.id)),
     listStores(orgId),
     listActingPersons(orgId),
     listCategoriesGrouped(orgId),
@@ -62,7 +63,7 @@ export default async function ExpenseDetailPage({
   // teach the reader that voiding erases something.
   const entryId = expense.journalEntryId;
   const { lines, reversalId, reversalLines } = entryId
-    ? await transaction(async (tx) => {
+    ? await withOrgPrincipal(orgId, async (tx) => {
         const original = await journalRepo.findLinesForEntryWithAccountCodes(tx, entryId);
         const reversal = await journalRepo.findReversalOfEntry(tx, orgId, entryId);
         return {
@@ -205,11 +206,17 @@ export default async function ExpenseDetailPage({
                 defaultValue={expense.categoryId}
                 className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
               >
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.group} — {c.category}
-                  </option>
-                ))}
+                {/* ⭐ T-229 slice 2 — retired categories are hidden UNLESS this expense already
+                    carries one. Filtering them out unconditionally would silently re-point the
+                    expense at whatever option happened to be first when the form was saved. */}
+                {categories
+                  .filter((c) => c.isActive || c.id === expense.categoryId)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.group} — {c.category}
+                      {c.isActive ? '' : ' (retired)'}
+                    </option>
+                  ))}
               </select>
             </label>
             <label className="flex flex-col gap-1">

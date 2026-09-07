@@ -10,9 +10,9 @@ import {
   schema,
   stockLayersRepo,
   stockLedgerRepo,
-  transaction,
   type Tx,
 } from '@shareat/db';
+import { withOrgPrincipal } from '../expenses/lib';
 
 export { listStores } from '../expenses/lib';
 export type { StoreOption } from '../expenses/lib';
@@ -48,7 +48,7 @@ export interface StockSummary {
  * shown as its own figure and reconciles against the open transit shortfalls instead.
  */
 export async function stockSummary(orgId: string, storeId: string): Promise<StockSummary> {
-  return transaction(async (tx) => {
+  return withOrgPrincipal(orgId, async (tx) => {
     const [byLoc, valued, accounts] = await Promise.all([
       stockLedgerRepo.onHandByStore(tx, storeId),
       stockLayersRepo.valuation(tx, storeId),

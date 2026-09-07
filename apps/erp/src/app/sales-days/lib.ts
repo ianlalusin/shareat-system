@@ -10,7 +10,8 @@
  * Those helpers are imported rather than duplicated: two copies of an auth stand-in is two places
  * to forget when the real bridge lands.
  */
-import { transaction, salesDaysRepo } from '@shareat/db';
+import { salesDaysRepo } from '@shareat/db';
+import { withOrgPrincipal } from '../expenses/lib';
 
 export {
   listOrgs,
@@ -38,5 +39,5 @@ export interface ChannelOption {
  *  editing an old sales day that names a since-retired channel has to keep working. Offering a
  *  retired channel for a NEW day is the thing that would make "retire" mean nothing. */
 export async function listChannels(orgId: string, storeId: string): Promise<ChannelOption[]> {
-  return transaction((tx) => salesDaysRepo.listChannels(tx, orgId, storeId, { activeOnly: true }));
+  return withOrgPrincipal(orgId, (tx) => salesDaysRepo.listChannels(tx, orgId, storeId, { activeOnly: true }));
 }

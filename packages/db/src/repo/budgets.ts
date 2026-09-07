@@ -81,7 +81,7 @@ export async function listForStorePeriod(
     select b.id, b.org_id, b.store_id, b.category_id, b.period_key,
            b.amount::text as amount, b.auto_reissue, b.reissue_interval,
            b.reissued_from_id, b.last_reset_at,
-           c."group" as category_group, c.category, c.sub_category, c.account_code,
+           c."group" as category_group, c.category, c.account_code,
            coalesce((
              select sum(e.total_amount)
              from expenses e
@@ -95,7 +95,7 @@ export async function listForStorePeriod(
     from expense_budgets b
     join expense_categories c on c.id = b.category_id
     where b.org_id = ${orgId} and b.store_id = ${storeId} and b.period_key = ${periodKey}
-    order by c."group", c.category, c.sub_category nulls first
+    order by c."group", c.category
   `)) as unknown as Record<string, unknown>[];
 
   return rows.map((r) => {
@@ -113,7 +113,9 @@ export async function listForStorePeriod(
       reissuedFromId: r.reissued_from_id ? String(r.reissued_from_id) : null,
       lastResetAt: r.last_reset_at ? new Date(String(r.last_reset_at)) : null,
       categoryGroup: String(r.category_group),
-      categoryLabel: r.sub_category ? `${String(r.category)} — ${String(r.sub_category)}` : String(r.category),
+      // ⚠️ Was `"Category — Sub"`. `sub_category` was dropped in 0134 (T-229 slice 2) — NULL on
+      // every row it ever had, so this label never once rendered its second half.
+      categoryLabel: String(r.category),
       accountCode: r.account_code ? String(r.account_code) : null,
       consumed: consumed.toFixed(2),
       // ⚠️ Remaining may be NEGATIVE and is deliberately not floored. `cashPayments` in v1's
@@ -274,7 +276,7 @@ export async function categoriesWithoutBudget(
   periodKey: string,
 ): Promise<{ id: string; label: string; group: string }[]> {
   const rows = (await tx.execute(sql`
-    select c.id, c."group", c.category, c.sub_category
+    select c.id, c."group", c.category
     from expense_categories c
     where c.org_id = ${orgId}
       and not exists (
@@ -282,11 +284,11 @@ export async function categoriesWithoutBudget(
         where b.org_id = c.org_id and b.category_id = c.id
           and b.store_id = ${storeId} and b.period_key = ${periodKey}
       )
-    order by c."group", c.category, c.sub_category nulls first
+    order by c."group", c.category
   `)) as unknown as Record<string, string>[];
   return rows.map((r) => ({
     id: String(r.id),
     group: String(r.group),
-    label: r.sub_category ? `${String(r.category)} — ${String(r.sub_category)}` : String(r.category),
+    label: String(r.category),
   }));
 }

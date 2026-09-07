@@ -177,7 +177,6 @@ export interface MapRow {
   expenseCategoryId: string | null;
   expenseGroup: string | null;
   expenseCategory: string | null;
-  expenseSubCategory: string | null;
   createdAt: Date;
 }
 
@@ -193,7 +192,7 @@ export async function listMap(
            m.branch_item_id as "branchItemId", bi.name as "branchItemName", bi.base_unit as "branchItemUnit",
            m.is_ledger_only as "isLedgerOnly",
            m.expense_category_id as "expenseCategoryId", ec."group" as "expenseGroup",
-           ec.category as "expenseCategory", ec.sub_category as "expenseSubCategory",
+           ec.category as "expenseCategory",
            m.created_at as "createdAt"
     from commissary_item_map m
     join items ci on ci.id = m.commissary_item_id

@@ -15,8 +15,7 @@
  * swapping a dropdown for a real session was a boundary change and not a rewrite.
  */
 import { asc, and, eq, isNull } from 'drizzle-orm';
-import { sql as dsql } from 'drizzle-orm';
-import { moneyAccountsRepo, getDb, schema, transaction, expensesRepo, journalRepo, APP_ROLE, type Tx } from '@shareat/db';
+import { moneyAccountsRepo, getDb, schema, expensesRepo, journalRepo, withOrgPrincipal } from '@shareat/db';
 
 /**
  * How many payment rows the expense form offers.
@@ -60,6 +59,10 @@ export interface CategoryOption {
   group: 'OPEX' | 'COGS' | 'CAPEX' | 'PERSONAL';
   category: string;
   accountCode: string | null;
+  /** ⭐ T-229 slice 2. A retired category stays on everything already recorded in it and stops
+   *  being offered for anything new — so a screen that RENDERS history needs it and a screen that
+   *  OFFERS a choice must not. */
+  isActive: boolean;
 }
 
 export async function listOrgs(): Promise<OrgOption[]> {
@@ -113,8 +116,21 @@ export async function listActivePersons(orgId: string): Promise<Omit<PersonOptio
     .orderBy(asc(schema.persons.displayName));
 }
 
+/**
+ * **Every** category, retired ones included.
+ *
+ * ⚠️ **This is the HISTORY list, not a picker.** An expense recorded against a category that was
+ * later retired must still render its own category's name, and `/expenses`' filter must still be
+ * able to filter by it. Use `listActiveCategoriesGrouped` for anything offering a NEW choice —
+ * the same picker-vs-validator split T-230 drew for sales channels.
+ */
 export async function listCategoriesGrouped(orgId: string): Promise<CategoryOption[]> {
-  return transaction((tx) => expensesRepo.listCategories(tx, orgId));
+  return withOrgPrincipal(orgId, (tx) => expensesRepo.listCategories(tx, orgId));
+}
+
+/** ⭐ T-229 slice 2 — the PICKER list. Retired categories are not offered for new records. */
+export async function listActiveCategoriesGrouped(orgId: string): Promise<CategoryOption[]> {
+  return withOrgPrincipal(orgId, (tx) => expensesRepo.listCategories(tx, orgId, { activeOnly: true }));
 }
 
 export async function categoryLabel(orgId: string, categoryId: string): Promise<string> {
@@ -124,21 +140,18 @@ export async function categoryLabel(orgId: string, categoryId: string): Promise<
 }
 
 /**
- * Runs `fn` inside one Drizzle transaction with the RLS 'staff' principal applied for
- * `orgId` — mirrors `packages/auth/tests/integration/authorize.test.ts`'s `asPerson`
- * exactly, so every mutation this app makes runs under the SAME real RLS every other
- * caller does (bible row 112), never the unrestricted owner connection. This is
- * apps/erp's first production use of the principal — every screen before this one only
- * ever READ, off the owner connection, and never needed it.
+ * ⭐ **The RLS principal — one definition, in `@shareat/db`** (T-231 slice 2, DEF-211).
+ *
+ * Re-exported here rather than moved, because **89 files reach it through this module**. Keeping
+ * the name and the path stable is what let the deduplication be one line instead of eighty-nine.
+ *
+ * ⚠️ The version this replaces was one of THREE copies of the same five statements (here, the
+ * scheduler, and 68 test helpers), which existed because the canonical `withPrincipal` is typed
+ * for postgres.js while this app speaks Drizzle. That mismatch is why DEF-209 was filed against
+ * the wrong evidence: a grep for the canonical name found two files and concluded RLS had no
+ * production callers. It had 310.
  */
-export async function withOrgPrincipal<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
-  return transaction(async (tx) => {
-    await tx.execute(dsql.raw(`set local role ${APP_ROLE}`));
-    await tx.execute(dsql`select set_config('app.principal_kind', 'staff', true)`);
-    await tx.execute(dsql`select set_config('app.org_id', ${orgId}, true)`);
-    return fn(tx);
-  });
-}
+export { withOrgPrincipal } from '@shareat/db';
 
 export { journalRepo };
 

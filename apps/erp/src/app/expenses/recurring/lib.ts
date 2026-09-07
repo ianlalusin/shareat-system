@@ -4,7 +4,7 @@
  * ⛔ Reads only, under `withOrgPrincipal`, and none of them calls a domain function (DEF-189).
  */
 import { moneyAccountsRepo, recurringExpensesRepo } from '@shareat/db';
-import { listCategoriesGrouped, withOrgPrincipal } from '../lib';
+import { listActiveCategoriesGrouped, withOrgPrincipal } from '../lib';
 
 export { peso } from '../../../lib/format';
 export { listStores, listCategoriesGrouped, withOrgPrincipal } from '../lib';
@@ -21,7 +21,7 @@ export async function accountsFor(orgId: string, storeId: string) {
 }
 
 export async function categories(orgId: string) {
-  return listCategoriesGrouped(orgId);
+  return listActiveCategoriesGrouped(orgId);
 }
 
 export function today(): string {

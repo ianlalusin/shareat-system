@@ -18,6 +18,10 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 }
 
 import { APP_ROLE, RLS_REGISTRY } from '../../src/rls/registry';
+// T-231 — relative import: the barrel line is the orchestrator's to apply at integration.
+import { withOrgPrincipal } from '../../src/rls/principal';
+import { transaction } from '../../src/client';
+import { sql as dsql } from 'drizzle-orm';
 import { getTableColumns, getTableName, is } from 'drizzle-orm';
 import { PgTable } from 'drizzle-orm/pg-core';
 import * as accessSchema from '../../schema/access';
@@ -448,5 +452,71 @@ describe('T-221 — every person-keyed access table uses the via_person form', (
             'in BOTH USING and WITH CHECK. See migration 0129 for the shape, and DEF-183 for why the\n' +
             'two forms are not interchangeable even though both end in `= app_current_org()`.',
     ).toEqual([]);
+  });
+});
+
+/**
+ * T-231 slice 2 / DEF-211 — the ONE Drizzle-shaped principal helper.
+ *
+ * ⭐ Imported by RELATIVE PATH on purpose: the barrel line in `packages/db/src/index.ts` is the
+ * orchestrator's to apply at integration (that file is another lane's this cycle), so these
+ * assertions must not depend on it existing yet.
+ *
+ * ⚠️ These run against the LANE database via `transaction()`, which reads `DATABASE_URL` —
+ * `it.mjs` points both that and `TEST_DATABASE_URL` at the same lane DB, so the helper and the
+ * probes below are looking at one database.
+ */
+describe('T-231 — withOrgPrincipal: one round trip, and it does not outlive its transaction', () => {
+  it('arms RLS — inside it, the principal sees only its own org', async () => {
+    const seen = await withOrgPrincipal(orgA, async (tx) => {
+      const rows = await tx.execute(
+        dsql`select current_user as who, (select count(*)::int from stores) as visible`,
+      );
+      return (Array.isArray(rows) ? rows : (rows as { rows: unknown[] }).rows)[0] as {
+        who: string;
+        visible: number;
+      };
+    });
+    expect(seen.who, 'the helper must switch role, or every policy is bypassed').toBe(APP_ROLE);
+    // Org A owns 2 of the 3 stores the fixture seeds; org B's third must be invisible.
+    expect(seen.visible).toBe(2);
+  });
+
+  it('a cross-org INSERT under it is REFUSED with 42501 — not a cast error, not a silent pass', async () => {
+    // ⛔ 22P02 (invalid uuid) would mean the GUC never took and the policy is comparing garbage;
+    // a pass would mean WITH CHECK is missing. Only 42501 proves the policy itself refused.
+    const err = await withOrgPrincipal(orgA, async (tx) => {
+      try {
+        await tx.execute(
+          dsql`insert into stores (org_id, code, name) values (${orgB}, 'T231X', 'Cross-org')`,
+        );
+        return null;
+      } catch (e) {
+        return e as { code?: string; cause?: { code?: string } };
+      }
+    }).catch((e: { code?: string; cause?: { code?: string } }) => e);
+    const code = err?.code ?? err?.cause?.code;
+    expect(code, 'a cross-org write must be refused by the POLICY').toBe('42501');
+  });
+
+  it('⭐ the principal does not survive onto the next transaction on the same pooled connection', async () => {
+    // This is the assertion that matters most, and it is why every setting is transaction-scoped.
+    // A session-scoped SET would serve the NEXT request under the PREVIOUS user's identity —
+    // silent, intermittent, and exactly the cross-tenant leak RLS exists to prevent.
+    await withOrgPrincipal(orgA, async (tx) => {
+      await tx.execute(dsql`select 1`);
+    });
+
+    const after = await transaction(async (tx) => {
+      const rows = await tx.execute(
+        dsql`select current_user as who, app_current_org() is null as org_is_null`,
+      );
+      return (Array.isArray(rows) ? rows : (rows as { rows: unknown[] }).rows)[0] as {
+        who: string;
+        org_is_null: boolean;
+      };
+    });
+    expect(after.who, 'the role leaked out of its transaction').not.toBe(APP_ROLE);
+    expect(after.org_is_null, 'app.org_id leaked onto the next transaction').toBe(true);
   });
 });

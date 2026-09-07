@@ -1,4 +1,4 @@
-import { listStores, listCategoriesGrouped, listMoneyAccountsForPicker, PAYMENT_ROWS } from '../lib';
+import { listStores, listActiveCategoriesGrouped, listMoneyAccountsForPicker, PAYMENT_ROWS } from '../lib';
 import { listOpenInvoicesForPicker, peso } from '../../ap/lib';
 import { requireSession } from '../../../lib/session';
 import { createExpenseAction } from '../actions';
@@ -23,7 +23,7 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
 
   const [storeRows, categories, wallets, invoices] = await Promise.all([
     listStores(orgId),
-    listCategoriesGrouped(orgId),
+    listActiveCategoriesGrouped(orgId),
     listMoneyAccountsForPicker(orgId),
     listOpenInvoicesForPicker(orgId),
   ]);

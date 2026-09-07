@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
-import { schema, transaction } from '@shareat/db';
+import { schema } from '@shareat/db';
 import { listStores } from '../lib';
 import {
   createTransferAction,
@@ -10,6 +10,7 @@ import {
 } from './actions';
 import { NewTransferForm } from './NewTransferForm';
 import { requireSession } from '../../../lib/session';
+import { withOrgPrincipal } from '../../expenses/lib';
 
 export const metadata = { title: 'Stock transfers — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -33,7 +34,7 @@ export default async function TransfersPage({ searchParams }: { searchParams: Pr
     );
   }
 
-  const { locations, items, open } = await transaction(async (tx) => {
+  const { locations, items, open } = await withOrgPrincipal(actor.orgId, async (tx) => {
     const locs = await tx
       .select({ id: schema.stockLocations.id, name: schema.stockLocations.name, code: schema.stockLocations.code })
       .from(schema.stockLocations)

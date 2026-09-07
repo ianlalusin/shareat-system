@@ -1,7 +1,7 @@
-import { transaction, expensesRepo } from '@shareat/db';
+import { expensesRepo } from '@shareat/db';
 import { formatMoney, money } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
-import { listStores, listCategoriesGrouped } from './lib';
+import { listStores, listCategoriesGrouped, withOrgPrincipal } from './lib';
 import { requireSession } from '../../lib/session';
 
 export const metadata = { title: 'Expenses — Shareat System' };
@@ -33,7 +33,7 @@ export default async function ExpensesListPage({ searchParams }: { searchParams:
   const categoryLabelById = new Map(categories.map((c) => [c.id, `${c.group} — ${c.category}`]));
   const storeById = new Map(storeRows.map((s) => [s.id, s]));
 
-  const expenses = await transaction((tx) =>
+  const expenses = await withOrgPrincipal(orgId, (tx) =>
     expensesRepo.listExpenses(tx, { orgId, storeId, status, limit: 100 }),
   );
 
