@@ -31,3 +31,6 @@ export {
 } from './sessions';
 export type { SignInResult, ResolvedSession } from './sessions';
 export { hashPin, verifyPin, pinLookupHash, isValidPinFormat, newSessionToken, sessionTokenHash } from './credentials';
+/** T-232 §2.4 — the first-run setup identity's signature. Credential crypto stays in this package;
+ *  `apps/erp/src/lib/session.ts` owns the cookie, never the key. */
+export { signSetupIdentity, setupIdentitySignatureMatches } from './credentials';

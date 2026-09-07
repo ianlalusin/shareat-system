@@ -13,7 +13,7 @@
  * the only lifecycle this project offers anywhere with history behind it (T-160 for rooms, T-222
  * for stores), and an org has more history behind it than either.
  */
-import { eq } from 'drizzle-orm';
+import { eq, sql as dsql } from 'drizzle-orm';
 import type postgres from 'postgres';
 import type { Tx } from '../client';
 import { organizations } from '../../schema/organizations';
@@ -180,4 +180,47 @@ export async function setIdentity(
       updatedAt: new Date(),
     })
     .where(eq(organizations.id, orgId));
+}
+
+// -----------------------------------------------------------------------------------------
+// T-232 slice 2 — first-run setup. Both callers are `bootstrapOrganization`; nothing else.
+// -----------------------------------------------------------------------------------------
+
+/**
+ * ⛔ **Serialises first run.** Two concurrent `/setup` submissions with DIFFERENT org codes would
+ * both pass `anyOrganizationExists` and both insert — `organizations.code` is unique, which stops a
+ * duplicate CODE, not a second organisation.
+ *
+ * The usual answer here is to lock the parent row, and there is none: on an empty database every
+ * table is the empty set, and `employment.ts:131-132` already wrote that lesson down — *"a store's
+ * first hire has no employment rows to lock, and `for update` over an empty set locks nothing at
+ * all."* So: one advisory lock on a fixed key, taken before the check.
+ *
+ * ⚠️ **Transaction-scoped** (`_xact_`), so it is released at COMMIT or ROLLBACK and cannot outlive
+ * the request on a pooled connection — the same property `SET LOCAL` gives the RLS principal, and
+ * for the same reason.
+ */
+export async function lockFirstRun(tx: Tx): Promise<void> {
+  // A fixed, arbitrary key. It names this one critical section and nothing else.
+  await tx.execute(dsql`select pg_advisory_xact_lock(232002)`);
+}
+
+/**
+ * Whether this database holds **any** organization at all — the precondition first-run setup is
+ * gated on.
+ *
+ * ⛔ **A cross-org read with no principal, which this repo has ruled on once already.**
+ * `apps/erp/src/app/expenses/lib.ts:62-66` (T-231 slice 3 / DEF-214) deleted `listOrgs()` for being
+ * exactly that, and set the condition for one coming back: *"an explicit system-principal read WITH
+ * a caller."* This is that — explicit, two named callers, and it returns a **boolean**, never org
+ * rows, so it cannot become a cross-org listing by a later "small" change.
+ *
+ * ⚠️ `organizations` carries FORCE ROW LEVEL SECURITY (migration 0011:114-118), so under a role
+ * that does not bypass RLS this returns `false` on a populated database — and the INSERT that
+ * follows is then refused by the same policy's WITH CHECK. The failure direction is a refusal,
+ * never a second organisation.
+ */
+export async function anyOrganizationExists(tx: Tx): Promise<boolean> {
+  const [row] = await tx.select({ id: organizations.id }).from(organizations).limit(1);
+  return row !== undefined;
 }

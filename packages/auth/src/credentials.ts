@@ -47,7 +47,7 @@ const SALT_BYTES = 16;
  * keeps them apart, and it is cheaper and less error-prone than a second environment variable
  * somebody will forget to set — which is exactly how DEF-062's secret came to be unset.
  */
-function derivedKey(label: 'pin-lookup' | 'session-token'): string {
+function derivedKey(label: 'pin-lookup' | 'session-token' | 'setup-identity'): string {
   return createHmac('sha256', env().SESSION_SECRET).update(`shareat:${label}:v1`).digest('hex');
 }
 
@@ -121,6 +121,47 @@ export function newSessionToken(): string {
  */
 export function sessionTokenHash(token: string): string {
   return createHmac('sha256', derivedKey('session-token')).update(token).digest('hex');
+}
+
+// -------------------------------------------------------------------------------------
+// The first-run setup identity
+// -------------------------------------------------------------------------------------
+
+/**
+ * Signs the setup-identity payload that carries a **verified** Firebase uid from `/sign-in` to
+ * `/setup`. T-232 §2.4.
+ *
+ * ⭐ **It lives here, not in `apps/erp`, for one reason: the key.** A bare
+ * `createHmac('sha256', SESSION_SECRET)` in the app layer would sign with the same key that
+ * produces session-token hashes, and two things signed with one key can be used as each other.
+ * `derivedKey('setup-identity')` is the domain separation this module's header already argues for
+ * — *"One secret, several purposes, and they must not be interchangeable."*
+ *
+ * ⚠️ **This proves origin, not authority.** What it signs is a name Firebase already vouched for;
+ * what may be DONE with that name is decided by `bootstrapOrganization`'s zero-organization
+ * refusal, which is a database fact and cannot be forged at all. A signature is the wrong place
+ * to put a permission.
+ *
+ * The caller passes the already-encoded payload segment rather than an object, so the bytes that
+ * are signed are exactly the bytes that are read back — no re-serialisation between the two, and
+ * therefore no way for a key ordering or a JSON escape to change the message under the signature.
+ */
+export function signSetupIdentity(encodedPayload: string): string {
+  return createHmac('sha256', derivedKey('setup-identity')).update(encodedPayload).digest('base64url');
+}
+
+/**
+ * Constant-time verification of {@link signSetupIdentity}.
+ *
+ * ⚠️ Returns false rather than throwing for a malformed signature: the caller answers absent,
+ * expired, malformed and tampered with the same `null`, and an exception here would make one of
+ * the four loud for no reason a user could act on.
+ */
+export function setupIdentitySignatureMatches(encodedPayload: string, signature: string): boolean {
+  const expected = Buffer.from(signSetupIdentity(encodedPayload), 'base64url');
+  const actual = Buffer.from(signature, 'base64url');
+  if (actual.length !== expected.length || actual.length === 0) return false;
+  return timingSafeEqual(actual, expected);
 }
 
 /** Constant-time equality for two hex digests of equal length. */

@@ -38,10 +38,30 @@
  * it is why a `system` principal must never be reachable from a request handler."* The effect is
  * identical; the call is simply not made, here or anywhere else in the codebase.
  */
-import { organizationsRepo, personsRepo, accessRepo, type OrganizationRow, type Tx } from '@shareat/db';
+import {
+  organizationsRepo,
+  personsRepo,
+  accessRepo,
+  sessionsRepo,
+  type OrganizationRow,
+  type Tx,
+} from '@shareat/db';
 // ⭐ T-229 slice 4 — the FIRST gated function in this module. Everything above it runs before a
 // principal exists (bootstrap), which is why the import was not needed until now.
-import { authorize, type Actor } from '@shareat/auth';
+import {
+  authorize,
+  isValidPinFormat,
+  setPin,
+  CAPABILITIES,
+  CAPABILITY_MATRIX,
+  type Actor,
+  type Capability,
+} from '@shareat/auth';
+// ⚠️ T-232 slice 2. `stores/service.ts` imports `normaliseBranchCode` from THIS file, so this
+// edge closes a cycle. It is safe only because everything crossing it in both directions is a
+// hoisted `function` declaration — ⛔ never move `createStore` or `normaliseBranchCode` behind a
+// module-scope `const`, which would be a TDZ error at import time rather than a type error.
+import { createStore } from '../stores/service';
 
 export interface CreateOrganizationInput {
   /** ⚠️ Unique across all organizations and permanent in practice — it is the stable handle. */
@@ -116,11 +136,42 @@ export interface CreateFirstAdminInput {
   /** ⚠️ A real person's real name. `persons.display_name` is what the ledger attributes the
    *  organization's first entries to — this is not a service account. */
   readonly displayName: string;
+  /**
+   * ⭐ **T-232 slice 2, decision 3 as the database permits it.** Defaults to `true`: the first
+   * person of an organization is its owner and receives the four capabilities `super_admin` holds
+   * and `admin` does not, as explicit grant rows.
+   *
+   * Pass `false` only to make a PLAIN admin — which exists so a test can prove the four grants are
+   * doing the work rather than the matrix (`first-run-setup.test.ts` case 5, the non-zero control).
+   */
+  readonly withSuperAdminCapabilities?: boolean;
 }
 
 export interface CreateFirstAdminResult {
   readonly personId: string;
+  /** The capabilities granted beyond the `admin` role. Empty when `withSuperAdminCapabilities`
+   *  is false. Reported, never silent — the CLI prints it. */
+  readonly grantedCapabilities: readonly Capability[];
 }
+
+/**
+ * ⭐ **Exactly the capabilities `super_admin` holds that `admin` does not — DERIVED, never listed.**
+ *
+ * The same discipline, and the same reason, as `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER`: *"computed
+ * from the matrix above so the two can never silently drift apart."* Today it is four —
+ * `approve_item`, `post_journal_entry`, `cross_org_access`, `view_franchise_sales`.
+ *
+ * ⛔ **Why this exists at all.** Decision 3 asked for the first person to hold BOTH an `admin` and
+ * a `super_admin` role row. The database refuses: `person_roles_active_person_org_unique`
+ * (`migrations/0014_access_roles_and_grants.sql:56`) allows **at most one active role per
+ * (person, org)**, and `authorize` resolves exactly one. Because no capability is
+ * `admin: true, super_admin: false`, `admin` + this set authorizes **precisely** what `super_admin`
+ * authorizes — an equivalence, not a downgrade, and `first-run-setup.test.ts` case 4 proves it
+ * capability by capability.
+ */
+export const SUPER_ADMIN_ONLY_CAPABILITIES: readonly Capability[] = CAPABILITIES.filter(
+  (c) => CAPABILITY_MATRIX[c].super_admin && !CAPABILITY_MATRIX[c].admin,
+);
 
 /**
  * The first admin of an organization — the **base case** of the authority chain.
@@ -166,7 +217,140 @@ export async function createFirstAdmin(
     grantedBy: null,
   });
 
-  return { personId: person.id };
+  // ⭐ The owner's four extra capabilities, as real rows. `granted_by` is NULL for the same reason
+  // the role's is: there is nobody above the first person, and a fabricated grantor would be worse
+  // than an absent one because it reads as evidence.
+  const grantedCapabilities =
+    input.withSuperAdminCapabilities === false ? [] : SUPER_ADMIN_ONLY_CAPABILITIES;
+  for (const capability of grantedCapabilities) {
+    await accessRepo.grantCapability(tx, {
+      personId: person.id,
+      grantName: capability,
+      grantedBy: null,
+    });
+  }
+
+  return { personId: person.id, grantedCapabilities };
+}
+
+// -----------------------------------------------------------------------------------------
+// T-232 slice 2 — the one function first-run setup and the CLI both call
+// -----------------------------------------------------------------------------------------
+
+export interface BootstrapOrganizationInput {
+  /** ⚠️ Unique across all organizations and permanent in practice. */
+  readonly code: string;
+  readonly name: string;
+  /** The first person's REAL name — `persons.display_name` is ledger attribution. */
+  readonly adminDisplayName: string;
+  readonly storeCode: string;
+  readonly storeName: string;
+  /** Six digits. Validated before anything is written. */
+  readonly pin: string;
+  /**
+   * The **verified** Firebase uid, when this is the `/setup` screen rather than the CLI.
+   *
+   * ⛔ Verified by the CALLER — this module never takes an unverified assertion, the same posture
+   * `signInWithFirebase` states: *"a login is not an introduction."*
+   */
+  readonly firebaseUid?: string | null;
+}
+
+export interface BootstrapOrganizationResult
+  extends CreateOrganizationResult,
+    CreateFirstAdminResult {
+  readonly storeId: string;
+  readonly locationId: string;
+  readonly scopedAdminIds: readonly string[];
+  readonly pinCredentialId: string;
+  readonly firebaseCredentialId: string | null;
+}
+
+/**
+ * ⭐ **Standing up an organization — the ONE function `scripts/bootstrap-org.ts` and `/setup` both
+ * call, so the CLI and the screen cannot drift.** T-232 slice 2.
+ *
+ * ⛔ **It takes no `Actor`, and that is not an oversight** — this module's header already argues
+ * it: there is no principal before the organization exists, *"not 'does not yet', but cannot. Do
+ * not 'fix' this by adding one."* The gate is the caller. The CLI is unreachable from a request
+ * handler; `/setup` is gated on a verified Firebase identity with no credential row, plus the
+ * zero-organization refusal below.
+ *
+ * ⚠️ **Everything happens in the CALLER's transaction.** A bootstrap that half-succeeds leaves an
+ * organization nobody can sign into *and* no way to re-run, because `createFirstAdmin` would refuse
+ * the retry. `first-run-setup.test.ts` case 2 proves the rollback with an injected failure.
+ */
+export async function bootstrapOrganization(
+  tx: Tx,
+  input: BootstrapOrganizationInput,
+): Promise<BootstrapOrganizationResult> {
+  // 1. Serialise first run BEFORE reading, or two concurrent callers both read "no organizations"
+  //    and both write one. There is nothing else to lock on an empty database.
+  await organizationsRepo.lockFirstRun(tx);
+
+  // 2. ⛔ First run happens once, ever.
+  if (await organizationsRepo.anyOrganizationExists(tx)) {
+    throw new Error(
+      'bootstrapOrganization: this system already has an organization, so first-run setup is ' +
+        'closed. Add people through /admin/users and stores through /admin/stores.',
+    );
+  }
+
+  // 3. ⛔ The PIN is validated BEFORE anything is written. The CLI learned this one already:
+  //    finding out after creating an organization is a bad time to learn it — and here it is worse,
+  //    because a half-run would leave setup permanently closed.
+  if (!isValidPinFormat(input.pin)) {
+    throw new Error('bootstrapOrganization: the PIN must be exactly 6 digits.');
+  }
+
+  // 4. The organization, its chart of accounts and its expense categories.
+  const org = await createOrganization(tx, { code: input.code, name: input.name });
+
+  // 5. The first person: the `admin` role and the owner's four capabilities, both `granted_by` NULL.
+  const admin = await createFirstAdmin(tx, {
+    orgId: org.orgId,
+    displayName: input.adminDisplayName,
+  });
+
+  // 6. The first store, through T-222's tested path — which also runs CAPABILITY-MATRIX §C.2's
+  //    fan-out (the `person_store_scope` row) and creates the default room. ⭐ This is why the first
+  //    person holds `admin` and not `super_admin`: the fan-out grants scope to ADMIN roles only, so
+  //    a super_admin would end up scoped to no store and land nowhere (DEF-200's shape).
+  const store = await createStore(
+    tx,
+    { personId: admin.personId, orgId: org.orgId },
+    { code: input.storeCode, name: input.storeName },
+  );
+
+  // 7. The PIN — possible only now, because it is hashed per store.
+  const pinCredential = await setPin(tx, {
+    personId: admin.personId,
+    storeId: store.storeId,
+    pin: input.pin,
+  });
+
+  // 8. The browser credential, when there is one. ⚠️ `person_credentials_shape_check` refuses a
+  //    `firebase` row carrying a local secret, and `person_credentials_external_id_unique` refuses
+  //    a uid already linked — neither can fire here (zero orgs means zero persons means zero
+  //    credentials), which is why they are left to the database rather than re-checked here.
+  const firebaseUid = input.firebaseUid?.trim();
+  const firebaseCredential = firebaseUid
+    ? await sessionsRepo.insertCredential(tx, {
+        personId: admin.personId,
+        kind: 'firebase',
+        externalId: firebaseUid,
+      })
+    : null;
+
+  return {
+    ...org,
+    ...admin,
+    storeId: store.storeId,
+    locationId: store.locationId,
+    scopedAdminIds: store.scopedAdminIds,
+    pinCredentialId: pinCredential.credentialId,
+    firebaseCredentialId: firebaseCredential?.id ?? null,
+  };
 }
 
 
