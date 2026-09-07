@@ -13,7 +13,30 @@
 
 ---
 
-## ⚠️ Status as of 2026-09-06 — the app is LIVE, the DEPLOY WORKFLOW is not
+## ✅ Status as of 2026-09-06 (evening) — the deploy pipeline WORKS, four timers are ARMED, and production holds ZERO organizations
+
+Verified on the box by `ianla-14` with Ian, not inferred:
+
+- `/srv` has group-write. The `Deploy` workflow's symlink swap works and **a deploy SUCCEEDED** —
+  `/srv/shareat -> /srv/shareat-releases/20260906123624`. Production runs the `main` of that push,
+  including T-214's `finding-observation`.
+- **All four systemd timers are installed and armed** with populated NEXT/LEFT.
+  `shareat-finding-observation.timer` fires daily at 17:30 UTC (01:30 Manila).
+- The DO Postgres password was **rotated** (it had leaked into a terminal — DEF-196). The new
+  credential is live and proven: the finding-observation job connects.
+- `/srv/shareat-shared/.env.local` was rebuilt: BOM removed, `APP_TIMEZONE` restored to
+  `Asia/Manila` (it had been silently corrupted — DEF-203). See *Traps on the box* below.
+
+⛔ **Production has ZERO organizations.** `shareat-finding-observation` exits 1 with *"no orgs were
+processed — nothing to observe?"* against a live, migrated database, and will do so nightly until one
+exists. **That failure is correct; do not soften it.** T-228 (`bootstrap-org`) is the fix, and **Ian
+runs it against production himself** (`IAN-SETUP-CHECKLIST.md` §4b).
+
+⚠️ Commits after that deploy (T-215, T-216's template half, T-226, T-227) are **not yet pushed**, so
+they are not deployed. Pushing `main` deploys, and applies migrations `0131` and `0132` to production.
+T-215's `budget-reissue` job also has **no unit file yet** — the fifth timer, still to write.
+
+## Status as of 2026-09-06 (midday) — SUPERSEDED by the section above, kept for the record
 
 `https://erp2.shareat.net/` returns **HTTP 200**. But the `Deploy` workflow has **never completed**:
 29 runs `skipped`, 1 `failure`, 0 success. The live deployment was made another way (`9139f29`).
@@ -92,9 +115,16 @@ the `*.service`/`*.timer` files that live **beside** it, so **the directory trav
 
 ```sh
 # From the repo on a machine that can reach the droplet:
+ssh root@<DROPLET_IP> 'rm -rf /root/shareat-ops'     # DEF-194: scp -r into an EXISTING dir nests
 scp -r docs/ops root@<DROPLET_IP>:/root/shareat-ops
 ssh root@<DROPLET_IP> 'bash /root/shareat-ops/provision.sh'
 ```
+
+⛔ **The `rm -rf` line is not optional — it is DEF-194's actual root cause.** On 2026-09-06 the
+corrected `scp -r` was run against a `/root/shareat-ops` left over from 4 Sep; `scp -r` into an
+existing directory **nests** (`/root/shareat-ops/ops/`) rather than merges, so `provision.sh` ran the
+two-day-old copy, reported success, fixed nothing in `/srv`, and installed 7 of 9 units. A stale copy
+of a provisioning script is more dangerous than none, because it succeeds.
 
 ⚠️ **Omit the domain argument once the site is already live.** Passing it rewrites
 `/etc/caddy/Caddyfile` and reloads Caddy on a working site for no benefit; omitting it still creates
@@ -132,6 +162,15 @@ journalctl -u shareat-attendance-sweep.service -n 50    # repeat per unit
 
 ⚠️ **`systemctl enable` without `--now` arms it for the next boot and not for today.** That single
 missing flag is the shape of every failure in the table at the top of this file.
+
+## ⚠️ Traps on the box — each has bitten once; recorded so it bites nobody twice
+
+| Trap | What it looks like | Rule |
+|---|---|---|
+| **`scp -r` into a directory that already exists NESTS** (DEF-194) | The upload lands in `/root/shareat-ops/ops/`; `bash /root/shareat-ops/provision.sh` runs the **old** copy, which succeeds and prints nothing wrong. Cost an hour on 2026-09-06 as two "unrelated" symptoms | `rm -rf` the destination first (the block above does), or name one that cannot pre-exist |
+| **UTF-8 BOM in `.env.local`** (DEF-196) | `. .env.local` fails with `line 1: <U+FEFF>DATABASE_URL=...: No such file or directory` — and **echoes the whole line, password included** | Never write that file from a Windows editor or `Set-Content`; check with `head -c3 .env.local \| xxd`. Treat the output of anything that sources it as sensitive |
+| **`cat >>` onto a file whose last line has no trailing newline glues two settings into one** (DEF-203) | `APP_TIMEZONE=Asia/ManilaDATABASE_URL=postgresql://…` as one 184-character line. `cut -d= -f1` still prints `APP_TIMEZONE`; `cat -n \| cut -c1-30` hides the tail; only `grep -c sslmode` returning 2 disagreed — believe the disagreement | Build the file in a **staging copy** under `/root`, verify with `grep -c ^KEY` per key plus a value fragment, then `cp` over the live file. `printf '\n' >>` before any append. `cat -n`, never `nl`, when cross-referencing `grep -n` |
+| **DigitalOcean's connection-string panel CACHES after a password reset** | Keeps showing the OLD password until a hard refresh; produced a real `auth_failed` against production on 2026-09-06 | **Users & Databases** is authoritative; hard-refresh before copying anything |
 
 ## ⭐ How you find out it stopped — without another cron
 
