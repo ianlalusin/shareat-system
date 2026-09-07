@@ -233,6 +233,32 @@ export async function listRecent(tx: Tx, orgId: string, storeId: string, limit =
     .limit(limit)) as unknown as OrderWastageRow[];
 }
 
+/**
+ * ⭐ T-229 slice 3 (DEF-206) — what an unset Monitor is costing RIGHT NOW: unresolved TRACKED
+ * wastages at this store that nobody is answering for.
+ *
+ * ⚠️ **Ownerless means "no allocation row", not "no Monitor"** — an explicit allocation at
+ * creation counts as owned even with no Monitor configured, and that is the honest question: at
+ * the 15-day backstop these are the rows that fall to the third tier, *store absorbs, net zero*.
+ *
+ * ⭐ Derived on read, never a stored counter — bible §4.2 rule 7 (§13 row 173: a
+ * separately-accumulated counter is forbidden even when it is called a cache).
+ */
+export async function ownerlessTrackedWastages(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+): Promise<{ count: number; amount: string }> {
+  const [row] = (await tx.execute(sql`
+    select count(*)::int as n, coalesce(sum(w.amount), 0)::text as total
+      from order_wastages w
+     where w.org_id = ${orgId} and w.store_id = ${storeId}
+       and w.type_mode = 'tracked' and w.status <> 'resolved'
+       and not exists (select 1 from order_wastage_allocations a where a.wastage_id = w.id)
+  `)) as unknown as Record<string, unknown>[];
+  return { count: Number(row?.n ?? 0), amount: Number(row?.total ?? 0).toFixed(2) };
+}
+
 /** The store's configured Wastage Monitor, if any — invariant 2's default owner. */
 export async function wastageMonitorFor(tx: Tx, orgId: string, storeId: string): Promise<string | null> {
   const [row] = await tx

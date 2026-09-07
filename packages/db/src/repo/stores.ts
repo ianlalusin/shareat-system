@@ -173,6 +173,46 @@ export async function updateStore(tx: Tx, orgId: string, id: string, patch: Upda
     .where(and(eq(stores.orgId, orgId), eq(stores.id, id)));
 }
 
+/**
+ * ⭐ T-229 slice 3. The store's Monitor WITH the person's name — the screen needs to show who it
+ * is, not a uuid, and `/wastage` needs to name them when it explains where a loss will land.
+ */
+export async function wastageMonitorWithName(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+): Promise<{ personId: string; displayName: string; isActive: boolean } | null> {
+  const [row] = (await tx.execute(sql`
+    select p.id, p.display_name, p.is_active
+      from stores s join persons p on p.id = s.wastage_monitor_person_id
+     where s.org_id = ${orgId} and s.id = ${storeId}
+  `)) as unknown as Record<string, unknown>[];
+  if (!row) return null;
+  return {
+    personId: String(row.id),
+    displayName: String(row.display_name),
+    isActive: Boolean(row.is_active),
+  };
+}
+
+/**
+ * ⭐ T-229 slice 3 (DEF-206) — the first writer this column has ever had outside a test's raw
+ * `UPDATE`. `null` CLEARS it, and that is a real value: the schema calls an unassigned Monitor
+ * *"the last rung of the backstop's own fallback order"*, so a Monitor who leaves must be
+ * removable. ⛔ No business rule here — who may be Monitor is `stores/service.ts`'s call.
+ */
+export async function setWastageMonitor(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+  personId: string | null,
+): Promise<void> {
+  await tx
+    .update(stores)
+    .set({ wastageMonitorPersonId: personId, updatedAt: sql`now()` })
+    .where(and(eq(stores.orgId, orgId), eq(stores.id, storeId)));
+}
+
 export async function setActive(tx: Tx, orgId: string, id: string, isActive: boolean): Promise<void> {
   await tx
     .update(stores)

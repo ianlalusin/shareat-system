@@ -38,6 +38,8 @@
  */
 import {
   accessRepo,
+  orderWastageRepo,
+  personsRepo,
   stockLocationsRepo,
   storesRepo,
   type StoreRow,
@@ -174,6 +176,92 @@ export async function updateStoreDetails(
 ): Promise<void> {
   await authorize(tx, actor, CAPABILITY, {});
   await storesRepo.updateStore(tx, actor.orgId, storeId, patch);
+}
+
+// -----------------------------------------------------------------------------------------
+// The Wastage Monitor — T-229 slice 3, DEF-206
+// -----------------------------------------------------------------------------------------
+
+/**
+ * ⚠️ **NOT this file's `CAPABILITY`, and the difference is deliberate.** Every other function here
+ * is `manage_stores` — admin-only, because opening and closing a branch is an owner's act. Naming
+ * who answers for a wasted order is store configuration, the same bar as the channel's own wastage
+ * policy that T-230 put beside it, and **a manager holds it**. Stated as its own constant so the
+ * gate cannot be copied from the function above by accident.
+ */
+const MONITOR_CAPABILITY = 'manage_store_settings' as const;
+
+/**
+ * ⭐ **DEF-206.** `stores.wastage_monitor_person_id` had **zero writers** — the only assignment
+ * anywhere was a raw `UPDATE` inside T-178's own test file. Meanwhile `/wastage` instructed people
+ * to *"set the Monitor under Settings"*, a surface that did not exist, and
+ * `packages/db/src/cutover/classification.ts` **clears** the column at cutover recording that it
+ * is *"cleared and re-assigned at cutover"* — with no path to re-assign it. This function is that
+ * path, and it is what makes both sentences true.
+ *
+ * ⛔ **The consequence of leaving it unset is silent and costs money.** `recordOrderWastage`'s
+ * invariant 2 seeds the Monitor only *"if monitor"*, so with none set every tracked wastage is
+ * created ownerless and falls to the 15-day backstop's third tier — *store absorbs, net zero*.
+ * Nothing is recovered and nothing errors.
+ *
+ * ⭐ **`null` CLEARS it, and must keep doing so.** The column is nullable on purpose (schema:
+ * *"an unassigned Monitor is not a failure — it is the last rung of the backstop's own fallback
+ * order"*), so a Monitor who leaves the company must be removable. A screen that could only ever
+ * SET one would make a wrong assignment permanent.
+ *
+ * ⚠️ **Store scope is deliberately NOT required of the Monitor.** The pool is everyone active in
+ * the organisation, matching `listActivePersons`' own stated reason: who money can be charged to
+ * is WIDER than who can act in the ERP, and a scope filter would exclude exactly the people who
+ * never sign in here.
+ */
+export async function setWastageMonitor(
+  tx: Tx,
+  actor: Actor,
+  input: { storeId: string; personId: string | null },
+): Promise<void> {
+  await authorize(tx, actor, MONITOR_CAPABILITY, { storeId: input.storeId });
+
+  const store = await storesRepo.getById(tx, actor.orgId, input.storeId);
+  if (!store) throw new Error('setWastageMonitor: that store does not exist in this organisation.');
+
+  if (input.personId !== null) {
+    // ⚠️ Org-scoped, so one organisation cannot name another's person as its Monitor — the FK
+    // alone would allow it, because `persons.id` carries no org in the reference.
+    const person = await personsRepo.getPersonById(tx, actor.orgId, input.personId);
+    if (!person) throw new Error('setWastageMonitor: that person does not exist in this organisation.');
+    if (!person.isActive) {
+      throw new Error(
+        `setWastageMonitor: ${person.displayName} is no longer active, so wastages would be ` +
+          'charged to somebody who has left.',
+      );
+    }
+  }
+
+  await storesRepo.setWastageMonitor(tx, actor.orgId, input.storeId, input.personId);
+}
+
+/** The store's Monitor with their name, or `null`. Read-only; the gate belongs to the write. */
+export async function wastageMonitorOf(
+  tx: Tx,
+  actor: Actor,
+  storeId: string,
+): Promise<{ personId: string; displayName: string; isActive: boolean } | null> {
+  return storesRepo.wastageMonitorWithName(tx, actor.orgId, storeId);
+}
+
+/**
+ * ⭐ What an unset Monitor is costing right now — unresolved TRACKED wastages with nobody
+ * answering for them. Derived on read, never stored (bible §4.2 rule 7).
+ *
+ * ⚠️ Setting a Monitor does **not** retro-own these: an allocation is an attribution, and
+ * back-filling one would assert a decision nobody made. The screen says so in words.
+ */
+export async function ownerlessTrackedWastages(
+  tx: Tx,
+  actor: Actor,
+  storeId: string,
+): Promise<{ count: number; amount: string }> {
+  return orderWastageRepo.ownerlessTrackedWastages(tx, actor.orgId, storeId);
 }
 
 /** ⛔ Deactivate, never delete — a store carries journal entries, attendance and stock. */

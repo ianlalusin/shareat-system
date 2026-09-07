@@ -63,7 +63,7 @@ behind it clears on the next detector run.
 |---|---|---|---|---|
 | **1** ✅ | ⭐ **The `/settings` hub + map a category to an account** — DEF-193's remedy | ⛔ **none** | ⛔ **none** | — **BUILT 2026-09-07** |
 | **2** | Create / rename / retire a category, `is_system`, the normalised unique index | ✅ one | none | slice 1 |
-| **3** | ⭐ **Assign the store's Wastage Monitor** — one field, discovery §8.5 | ⛔ none | none | slice 1 |
+| **3** ✅ | ⭐ **Assign the store's Wastage Monitor** — DEF-206 | ⛔ **none** | ⛔ **none** | — **BUILT 2026-09-07** |
 | **4** | Store & organization identity — legal name, TIN, tax type, address | ✅ one | ⚠️ open q. 5 | T-228 landing (discovery §9) |
 | ~~**5**~~ | ~~Order-wastage mode moves onto the sales channel; the form stops asking~~ | — | — | ⛔ **MOVED OUT 2026-09-07 → T-230** |
 
@@ -141,7 +141,38 @@ header comment says so, so nobody tidies it back into a data table.
 lane)*, `packages/db/src/repo/expenses.ts`, `packages/domain/src/expenses/categories.ts`,
 `apps/erp/src/app/settings/expense-categories/{page,actions}.tsx`, the integration test.
 
-### Slice 3 — the Wastage Monitor (no migration; `stores.wastage_monitor_person_id` already exists)
+### Slice 3 — the Wastage Monitor ✅ **BUILT 2026-09-07** (no migration)
+
+> **As built: `/settings/wastage-monitor`, its own route — NOT a panel on `/wastage`.** The scope
+> line below said *"decide by where the person already is"* and leaned toward `/wastage`, because
+> that is the screen that reports the problem. ⛔ **Reading the capability grid overrules that:
+> `record_order_wastage` is `staff: true`.** `/wastage` is an operational screen used by the people
+> who record their own losses, so a `manage_store_settings` form there would sit beside the button a
+> staffer presses to log their own wastage — the wrong adjacency for a control about who gets
+> charged. `/wastage` links here and now NAMES the current Monitor (or says nobody is named and what
+> that costs); the `/settings` hub carries a card.
+>
+> ⭐ **The screen is not a bare person-picker.** It shows the unresolved TRACKED wastages at that
+> store with **no owner at all**, count and peso — derived on read, never stored (bible §4.2 rule 7).
+> A picker with no number gives a manager no reason to care; the number is DEF-206's harm, stated.
+>
+> ⚠️ **And it says plainly that naming a Monitor does NOT retro-own what is already open.** An
+> allocation is an attribution, and back-filling one would assert a decision nobody made — so the
+> count deliberately does not drop when you save, and a number that stubbornly does not move reads
+> as a broken button unless the screen says why. Test 8 pins this.
+>
+> ⚠️ **Store scope is deliberately NOT required of the Monitor.** The pool is everyone active in the
+> org, per `listActivePersons`' own stated reason — who money can be charged to is a WIDER pool than
+> who can act in the ERP, and a scope filter would exclude exactly the people who never sign in.
+>
+> ⚠️ **`setWastageMonitor` lives in `stores/service.ts` as specced, but with its own capability
+> constant.** That file's `const CAPABILITY = 'manage_stores'` is admin-only; this one is
+> `MONITOR_CAPABILITY = 'manage_store_settings'`, stated separately so the gate cannot be copied
+> from the function above by accident.
+>
+> ⚠️ **One rename, found in self-review:** the new store-repo read was first called
+> `wastageMonitorFor`, colliding with `orderWastageRepo.wastageMonitorFor` (id-only, the hot path
+> `recordOrderWastage` uses). Renamed to `wastageMonitorWithName`; T-178's read is untouched.
 
 **Create** `apps/erp/src/app/settings/wastage-monitor/{page,actions,lib}.tsx`, or a section on the
 existing `/settings` hub — ⚠️ **decide by where the person already is.** `/wastage` is the screen

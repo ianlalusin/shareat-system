@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { orderWastageRepo, salesDaysRepo, schema } from '@shareat/db';
+import { orderWastageRepo, salesDaysRepo, schema, storesRepo } from '@shareat/db';
 import { listPostedSettlementsForStore, matchWastagesToSettlement, type SettleableOrderWastage } from '@shareat/domain';
 import { inArray } from 'drizzle-orm';
 import { toBusinessDate } from '@shareat/core/datetime';
@@ -34,11 +34,14 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
     );
   }
 
-  const { open, channels, recent } = await withOrgPrincipal(actor.orgId, async (tx) => ({
+  const { open, channels, recent, monitor } = await withOrgPrincipal(actor.orgId, async (tx) => ({
     open: await orderWastageRepo.listOpen(tx, actor.orgId, storeId),
     // ⭐ ACTIVE only — a retired channel must not be offered for a NEW wastage. T-230 shipped the
     // first writer `is_active` has ever had, so before it this distinction could not bite.
     channels: await salesDaysRepo.listChannels(tx, actor.orgId, storeId, { activeOnly: true }),
+    // ⭐ T-229 slice 3 — named, not assumed. This screen used to instruct people to "set the
+    // Monitor under Settings" without knowing, or saying, whether one was set.
+    monitor: await storesRepo.wastageMonitorWithName(tx, actor.orgId, storeId),
     recent: await orderWastageRepo.listRecent(tx, actor.orgId, storeId, 20),
   }));
   const resolvedHistory = recent.filter((w) => w.status === 'resolved');
@@ -168,12 +171,33 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
               </select>
             </label>
           </div>
+          {/* ⭐ T-229 slice 3 — this used to say "set the Monitor under Settings", pointing at a
+              screen that did not exist, and it never said whether one WAS set. Now it names them,
+              or says plainly that nobody is named and what that costs. */}
           <p className="text-xs text-neutral-500 dark:text-neutral-500">
-            On a <strong>reviewed</strong> channel this seeds the store&apos;s Wastage Monitor as
-            the responsible party, then waits for a decision. ⚠️ If no Monitor is set, the wastage
-            is created ownerless and the 15-day backstop lets the store absorb it — nothing is
-            recovered and nothing errors. A <code>charged</code> disposition needs an allocation,
-            which this quick form does not offer; record it and use the detail page.{' '}
+            On a <strong>reviewed</strong> channel this waits for a decision, and is created in the
+            name of{' '}
+            {monitor ? (
+              <>
+                this store&apos;s Wastage Monitor, <strong>{monitor.displayName}</strong>
+                {!monitor.isActive && <> ⚠️ (no longer active)</>}
+              </>
+            ) : (
+              <strong>nobody — no Monitor is named at this store</strong>
+            )}
+            .{' '}
+            {!monitor && (
+              <>
+                ⚠️ It will be created ownerless, and after 15 days the store absorbs it: nothing is
+                recovered and nothing errors.{' '}
+              </>
+            )}
+            A <code>charged</code> disposition needs an allocation, which this quick form does not
+            offer; record it and use the detail page.{' '}
+            <a href="/settings/wastage-monitor" className="underline underline-offset-2">
+              {monitor ? 'Change the Monitor' : 'Name a Monitor'}
+            </a>{' '}
+            ·{' '}
             <a href="/settings/sales-channels" className="underline underline-offset-2">
               Change a channel&apos;s wastage policy
             </a>

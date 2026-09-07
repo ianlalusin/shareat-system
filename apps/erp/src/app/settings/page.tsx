@@ -72,6 +72,11 @@ export default async function SettingsPage() {
           description="How each branch sells — walk-in and the delivery platforms. Sets whether a channel’s money reaches the till that day or is owed to us until the platform settles, and whether a wasted order through it gets reviewed or is decided on the spot."
         />
         <SettingsCard
+          href="/settings/wastage-monitor"
+          title="Wastage Monitor"
+          description="Who answers for a wasted or refunded order at each branch. With nobody named, a reviewed wastage is created ownerless and the store absorbs it after 15 days — silently, and nothing is recovered."
+        />
+        <SettingsCard
           href="/settings/attendance"
           title="Attendance & payroll"
           description="Shift hours and allowed start times, late policy, night differential and overtime, holiday multipliers, and the pay period — effective from a chosen day, never rewriting a day already computed."

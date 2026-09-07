@@ -67,14 +67,33 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'franchise is an organization.',
   },
   stores: {
-    // ⭐ T-178: keep_shell, not plain keep. Every other column is configuration and survives
-    // untouched (the branch list itself). `wastage_monitor_person_id` alone is cleared — the task
-    // spec's own instruction (§11) — because who held that pilot-era responsibility is an
-    // assignment to re-decide for production, the same treatment a reconciliation anchor gets,
-    // not a fact about the store itself.
-    class: 'keep_shell',
-    reason: 'Configuration — the branch list. wastage_monitor_person_id is cleared and re-assigned at cutover.',
-    clearColumns: ['wastage_monitor_person_id'],
+    // ⭐ **PLAIN KEEP. Every column survives, `wastage_monitor_person_id` included** — Ian,
+    // 2026-09-07, stating the rule the cutover follows: *"the cutover wipes transactional data, not
+    // stores and store settings"* (bible §13 row 182).
+    //
+    // ⛔ **This REVERSES T-178's carve-out**, which made the table `keep_shell` and nulled
+    // `wastage_monitor_person_id` on the reasoning that who held that pilot-era job is an
+    // assignment to re-decide for production — grouping it with the reconciliation anchor on
+    // `customers`. **The analogy does not hold.** That anchor is cleared because it ATTESTS a
+    // verification the purge invalidates; the Monitor attests nothing, it is a forward-looking
+    // assignment, and a store setting of exactly the same kind as `remittance_cadence` and
+    // `unremitted_ceiling`, both of which survive.
+    //
+    // ⚠️ **What the carve-out actually did, which is why it went:** it put every branch into the
+    // no-Monitor state on cutover morning. With none set, `recordOrderWastage`'s invariant-2 seed
+    // silently does nothing, every tracked wastage is created ownerless, and the 15-day backstop
+    // falls to *store absorbs, net zero* — nothing recovered, nothing errored. That is DEF-206
+    // re-created fleet-wide at the one moment nobody is watching for it.
+    //
+    // ⭐ Changing who holds the job for production is now an ORDINARY EDIT on
+    // `/settings/wastage-monitor` (T-229 slice 3 — `setWastageMonitor`, gated
+    // `manage_store_settings`), which is the honest way to re-decide an assignment: deliberately,
+    // by a named person, not by a purge blanking a field and hoping somebody notices.
+    class: 'keep',
+    reason:
+      'Configuration — the branch list and every setting on it, wastage_monitor_person_id ' +
+      'included. Ian 2026-09-07: the cutover wipes transactional data, not store settings. ' +
+      'Re-deciding the Monitor for production is an edit on /settings/wastage-monitor.',
   },
   persons: {
     class: 'keep',
