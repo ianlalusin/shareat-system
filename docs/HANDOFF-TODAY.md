@@ -25,6 +25,19 @@ real PIN (attributed on the ledger's first entries), and **only the FIRST store 
 SharEat Malvar (and Banay-Banay/Davao if wanted) come afterward through `/admin/stores`, which is
 that screen's first real production smoketest. The PIN prints once and is not recoverable.
 
+## Gates (wrap-up, 2026-09-07)
+
+- **typecheck** exit 0 · **unit** 1058 passed / 0 failed / 1 skipped (64 files) · **build** exit 0
+  (9008 free, dev server stopped).
+- **Full integration:** CI is the authoritative gate and it **passed on `d72c9be`** (the current
+  tip, which includes T-228) — a fresh-checkout run of the whole suite + build. T-228's own CI run
+  (`dad2053`) was cancelled by the `d72c9be` push seconds later, so `d72c9be`'s green is what covers
+  it. Locally, T-228's two mandatory gates re-ran green (chart-of-accounts 77/77 plain-client,
+  organizations 12/12 in a Drizzle tx), and lane A's full project run was 2489/2489 on its lane DB.
+  ⚠️ The full local suite is **memory-bound on this machine** — run it chunked via `it.mjs`, as lane
+  A did (13 chunks of 8 files), never as one `npm run test:integration` here.
+- This wrap-up's roadmap + bible-row-180 commit re-runs CI on push; `toc-freshness` verified locally (4/4).
+
 ## What shipped today (all pushed; CI green on each)
 
 | Ref | What | Where |
