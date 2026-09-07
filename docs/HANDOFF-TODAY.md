@@ -1,163 +1,154 @@
-# Handoff — 2026-09-07 (orchestrated multi-lane session)
+# Handoff — 2026-09-07 (evening) — for the NEXT ORCHESTRATOR
+
+> **You are taking over as the ORCHESTRATOR of a running four-lane team.** The worker sessions are
+> ALIVE on this machine and parked at clean stopping points — **re-adopt them, do not respawn.**
+> Only the orchestrator session was cleared, on purpose: at every milestone the orchestrator wraps
+> up, rewrites this file as the next orchestrator's prompt, and hands over, so no session carries a
+> long context (Ian, 2026-09-07 — recorded in `CLAUDE.md` § "Orchestrated sessions hand over").
+> **Do the same when you cross the next milestone.**
 
 ## Where things stand
 
-⭐ **A three-session orchestration shipped two tasks and closed the pilot's biggest blocker.** One
-session led (the orchestrator); two Opus worker lanes built T-228 and T-229 in the shared tree,
-coordinated by `SendMessage`, with the orchestrator reviewing every diff and doing every commit and
-push. `main` is at `dad2053` and **the tree is clean** — nothing is half-built, both workers are
-parked at task-complete boundaries.
+`main` is at `ea4569d`, pushed. CI green and deployed through `6a6e03c`. **Today shipped eleven
+commits across four lanes**: T-230 (sales channels + per-channel wastage policy), **T-229 complete**
+(settings shelf, category mapping, wastage monitor, category create/rename/retire, org/store
+identity + TIN), **T-231 complete** (the hidden-org-id hole closed, every request path under an RLS
+principal, the `getDb()` door shut), **T-216 complete** (recurring bills draft themselves, never
+auto-pay), the DEF-209 assessment (RLS was never dormant), and the tutorials assessment.
 
-⛔ **THE ONE THING THAT IS IAN'S, AND IT IS THE PILOT ITSELF.** Production now has the
-`bootstrap-org` code but still holds **zero organizations**, and `shareat-finding-observation` exits
-1 nightly until one exists. **Ian runs this himself** (`IAN-SETUP-CHECKLIST.md` §4b — no agent SSH).
-⭐ **T-228's code is already LIVE on production** — its own CI (`dad2053`) was cancelled by the docs
-push, but `d72c9be`'s Deploy succeeded and `d72c9be` contains T-228 (the artifact ships `scripts/`,
-tsx is a runtime dep). So bootstrap-org is runnable now:
+**In flight, committed as WIP: T-232**, Ian's goal for the day — *sign in on production with the v1
+email and password, see the app, set the organisation up from inside*. Lane D built the signed
+setup-cookie seam (12/12 unit). Lane B has the first-run domain function and its tests in
+progress. Neither half is usable yet. **This is item 1.**
 
-```
-npm run bootstrap-org -- --code=SHAREAT_OPC --name="SHAREAT OPC" \
-                         --admin="<Ian's real full name>" \
-                         --store-code=LIPA --store-name="SharEat Lipa" --confirm
-```
+## Gates at `ea4569d`
 
-The write path was de-risked against a throwaway DB (org/102 accounts/38 categories/admin/store/room/scope, atomic, PIN once, exit 0). The runbook is `docs/ops/README.md` §"Standing up an
-organization". ⚠️ Values are Ian's: org code recommended `SHAREAT_OPC`, admin is a real person with a
-real PIN (attributed on the ledger's first entries), and **only the FIRST store is created here** —
-SharEat Malvar (and Banay-Banay/Davao if wanted) come afterward through `/admin/stores`, which is
-that screen's first real production smoketest. The PIN prints once and is not recoverable.
+typecheck clean · unit **66 files, 1077 passed / 1 skipped** · integration **105 files, 2576 passed** (full `npm run test:integration` on `shareat_test` at 0136) · build **exit 0** with 9008 free · lane C's browser sweep of today's routes: **21 routes × 2 viewports, 42/42 HTTP 200, no error boundary, no console error** — 12 pre-existing phone-width overflows traced to ONE unwrapped filter row (DEF-199's stated cause corrected in the register); every route touched by today's commits is overflow-clean; `/ap/invoices/[id]` renders against the pending RECUR invoice the job created.
 
-## Gates (wrap-up, 2026-09-07)
+Lane C's standing audit (its own DB, `shareat_test_qa`, current with `6a6e03c`): **99/99 integration
+files, 2239 tests, 0 failed** — a composite of two runs (chunks 1–9 and 11–13 before 0136 landed,
+chunk 10 re-run after; nothing in 0136 touches the other twelve chunks). The browser half is DONE too (the line above); the audit is complete. Two register rows came out of it: DEF-199's cause corrected (one `flex-wrap` closes twelve overflows) and DEF-220 (the commissary catalogue defaults to a branch).
 
-- **typecheck** exit 0 · **unit** 1058 passed / 0 failed / 1 skipped (64 files) · **build** exit 0
-  (9008 free, dev server stopped).
-- **Full integration:** CI is the authoritative gate and it **passed on `d72c9be`** (the current
-  tip, which includes T-228) — a fresh-checkout run of the whole suite + build. T-228's own CI run
-  (`dad2053`) was cancelled by the `d72c9be` push seconds later, so `d72c9be`'s green is what covers
-  it. Locally, T-228's two mandatory gates re-ran green (chart-of-accounts 77/77 plain-client,
-  organizations 12/12 in a Drizzle tx), and lane A's full project run was 2489/2489 on its lane DB.
-  ⚠️ The full local suite is **memory-bound on this machine** — run it chunked via `it.mjs`, as lane
-  A did (13 chunks of 8 files), never as one `npm run test:integration` here.
-- This wrap-up's roadmap + bible-row-180 commit re-runs CI on push; `toc-freshness` verified locally (4/4).
+## ⭐ The four agent sessions — re-adopt by name (`ListAgents`)
 
-## What shipped today (all pushed; CI green on each)
+| Lane | Session | State | Lane DB | Spec | Next |
+|---|---|---|---|---|---|
+| **B** | `ianla-14` (Opus) | T-232 slice 2: domain core BUILT — `bootstrapOrganization`, the four derived grants in `createFirstAdmin`, `lockFirstRun`/`anyOrganizationExists`; 13/13 new + 446/446 on the suites it touches | `shareat_test_t229` (at 0136) | `docs/tasks/232-…` § "Slice 2 — contract" (APPROVED) | in order: (1) `packages/auth/src/roles.ts:218-226` widening + its test; (2) `apps/erp/src/app/setup/{page,actions,lib}` on lane D's seam; (3) `scripts/bootstrap-org.ts` → `bootstrapOrganization`; (4) `docs/ops/README.md`; READY |
+| **C** | `ianla-87` (QA) | standing audit, non-browser half done | `shareat_test_qa` | none — it verifies | code-review every READY; integration on its DB; the browser sweep only if Ian grants its terminal dev/build permissions |
+| **D** | `ianla-0a` (Opus) | T-232 slice 1: the `SetupIdentity` seam BUILT and contract-tested (12/12, incl. "a bare SESSION_SECRET HMAC does not verify"); nothing else started | `shareat_test_t216b` | `docs/tasks/232-…` slice 1 | in order: `apps/erp/src/lib/firebase-auth-admin.ts` → `sign-in/EmailSignInForm.tsx` → `signInWithEmailAction` + its 3 integration branches → `packages/core/src/env.ts` (make `publicEnv()` stop hard-requiring the storage bucket for sign-in) + `.env.example`; READY |
+| A | `ianla-3a` | **RELEASED**, clean — Ian may have cleared it | `shareat_test_t228` (drop) | — | if the terminal is reopened it is a fresh lane: DEF-218 (test-harness role), the `bible §6.3` citation sweep + guard, the `.filter(type-predicate)` sweep |
 
-| Ref | What | Where |
-|---|---|---|
-| **T-226** | AR clearing (collections, void, write-off, `/customers/[id]`) | live |
-| **T-215** | Expense budgets (the envelope + cap) | live |
-| **T-216** | Recurring-expense TEMPLATES (the job is blocked, deliberately) | live |
-| **T-227** | Caller + nav-reachability guards | live |
-| **T-229 slice 1** | Settings shelf `/settings` + map a category to an account — closes DEF-193's remedy | live (`31afb96`) |
-| **T-228** | `bootstrap-org` — create an org atomically (DEF-195). Ian runs it on prod | **LIVE** (deployed via `d72c9be`) |
-| **Bible v3.7** | §13 row 179 — Ian's completeness + data-recency doctrine | committed |
+⚠️ **Lane C's session cannot run `npm run db:migrate`, `npm run build` or `npm run dev`** — its
+permission classifier refuses them and (correctly) refused its own attempt to add allow rules.
+Until Ian adds allow rules in that terminal, **the orchestrator owns the dev server on 9008, builds,
+the dev-DB migration, and the browser passes**; lane C keeps code-review, typecheck, unit and
+integration on its own DB.
 
-**DEF-204–209 filed** (register §E). DEF-204 (Drizzle strips the shared client's jsonb serializer;
-seeds now bind `()::text::jsonb`) is **fixed** in T-228. DEF-209 (RLS has no production callers — a
-dormant safety net) is the significant one; see below.
+**Protocol the lanes already follow:** first line of every message `[X] STATUS: sentence`, STATUS ∈
+ACK/QUESTION/SPEC/READY/BLOCKED (lane C: VERIFIED/FAILED). Workers never run git, build, dev or
+`npm run test:integration`; integration only via `node ~/.claude/skills/orchestrator/tools/it.mjs
+<lane db> <files>`; a new lane DB via `make-test-dbs.mjs <name>`. You alone stage explicit paths,
+commit with `git commit -F <file>`, push, and edit the bible, register, roadmap, barrels and nav.
+Lanes write specs; you approve; then they build. Ian sometimes instructs a lane directly — accept
+it, and when two lanes' hunks land in one file, commit both slices in one commit that says so.
 
-## Ian's four decisions (2026-09-07) — FORMALIZE INTO BIBLE §13
+## Pick up here — T-232, in this order
 
-Made via one AskUserQuestion; recorded in the register change-log; **the next Opus session should add
-a §13 row** (the TOC-regen ceremony was deferred at the clear point):
+1. **Ian's two actions gate everything** (also on the board): GitHub Secrets
+   `NEXT_PUBLIC_FIREBASE_API_KEY`, `_AUTH_DOMAIN`, `_PROJECT_ID`, `_APP_ID` = v1's values
+   (`ERP-rebuild/src/firebase/config.ts`, project `studio-7300228488-a394e`) **plus
+   `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`** (lane D found `publicEnv()` hard-requires it today; lane
+   D's env.ts change should stop it gating sign-in, but set it anyway); and
+   `FIREBASE_PROJECT_ID=studio-7300228488-a394e` in the droplet's `/srv/shareat-shared/.env.local`.
+   `gh secret list` shows what exists before you assume.
+2. Lane D finishes slice 1; lane B finishes slice 2. Their seam is agreed and built (`SetupIdentity`,
+   cookie `shareat_setup`, 10-min TTL, HMAC under the `setup-identity` label). Each READY → you read
+   the diff, relay to lane C for review + integration, run typecheck/unit/build yourself, then **the
+   one thing only 9008 can prove: a real Firebase email sign-in against v1's project** — export the
+   five `NEXT_PUBLIC_FIREBASE_*` values and `FIREBASE_PROJECT_ID` in your own shell for the dev
+   server (never commit them), sign in with Ian's v1 email on `/sign-in`, land on `/setup`, create an
+   org on `shareat_dev` (its `organizations` table is NOT empty — clear the guard's precondition on
+   a throwaway DB or add a dev-only override lane B specs), land on `/`.
+   Two things the lanes settled between themselves and I ratified: the sign-in refusal for a verified uid with no credential while an org EXISTS reads "This account is not linked to a person. Ask an administrator to link it" (lane D), and the setup refusal when an org exists reads "…first-run setup is closed" (lane B) — two questions, two sentences, keep both. And lane C should look at one thing specifically: `packages/domain/src/organizations/index.ts` now imports `createStore` from `../stores/service`, which imports back — an import cycle that resolves only because both crossings are hoisted function declarations (lane B left a ⛔ comment).
+3. Commit each slice (or both together if their files interleave), push, watch CI + Deploy, then
+   tell Ian: sign in on production. **If it works, that is the milestone: wrap up and hand over.**
 
-1. **T-228 → push to production.** Done.
-2. **DEF-207 → build a sales-channel admin surface** (not seed-at-creation). Lane B's next task.
-3. **Q3 → order-wastage tracked-vs-instant becomes a per-CHANNEL policy**, not a per-record choice.
-   Removes a choice staff have today; closes the skip-the-monitor/dispute-window/backstop hole.
-4. **DEF-209 → schedule a dedicated RLS-enforcement assessment.** Lane A's next task.
+Queued behind T-232 (never beside it): T-231's two sweeps (§6.3 citations with a guard;
+`.map().filter(type predicate)` chains), DEF-218 (a non-superuser test role so a job without a
+principal fails in tests, not in production), DEF-219 (the scheduler runner's `startRun` inside the
+per-org boundary — one runner change), DEF-216 (readiness links, half a day, and step one of the
+tutorials proposal), the T-216 nit (the no-op run prints "ok" without the count), and the tutorials
+feature once Ian answers the question below.
 
-## Queued work — the fresh session re-assigns these to the two lanes
+## Do not decide these alone — they are Ian's
 
-**Lane A — DEF-209 RLS enforcement assessment** (READ-ONLY, no migration, no code). Deliverable
-`docs/discovery/29-rls-enforcement-assessment.md`. Three questions in order: (1) does the app's
-connecting role actually bypass RLS, or does it just never set `app_current_org()`? Prove it live on
-a scratch DB. (2) Is any production org-scoped query missing its `org_id` predicate — i.e. is the net
-load-bearing today? (3) What would routing every `transaction()` through `withPrincipal` cost? Read
-bible §7 and RULES §3.6 first.
+- **Tutorials**: count which walls people hit first (half a day, ranks the pages) or pick the first
+  ten by judgement. `docs/discovery/30-tutorials-assessment.md` §10 recommends counting. Ian's WHAT
+  is in its header: a tappable `?` on every page that needs it, describing the page and how to use
+  the feature.
+- **Arming the recurring-expense timer** on the droplet after the deploy — `docs/ops/*.service` and
+  `.timer` ship in docs, not the artifact (DEF-194). Until then bills draft only by hand.
+- **Ten stale lane DBs** to drop (the permission classifier blocks the orchestrator): the eight on
+  the board plus `shareat_test_t228` and `shareat_test_t216` (superseded by `t216b`).
+- The production role probe is optional now — after T-231 both outcomes are safe.
 
-⭐ **HEAD START — lane A did the read-only reading before it was paused; use this, don't re-derive
-(all citable; the one live PROBE was NOT run, so the conclusion is a HYPOTHESIS):**
-- RLS is fully built, not merely dormant: `0011_row_level_security.sql` creates `app_current_org()`
-  and role **`shareat_app` NOLOGIN** (sessions connect as owner, `SET LOCAL ROLE shareat_app` inside
-  the tx by design). Across migrations: **126 ENABLE, 127 FORCE, 128 CREATE POLICY**; policies carry
-  **no `TO` clause** so they apply to PUBLIC. `rls.test.ts` reads `pg_policies` and passes — the
-  policies genuinely exist and are shaped right.
-- ⚠️ **The paradox that IS the finding:** FORCE removes the owner's exemption, and
-  `app_current_org()` is NULL with no principal, so `org_id = NULL` → a no-principal session should
-  see ZERO rows and everything should break. It doesn't — 2489 tests read rows with no principal set.
-  So **something bypasses FORCE, and the only candidates are: the connecting role is a SUPERUSER, or
-  holds `BYPASSRLS`.** Migration 0011's own comment names this as trap #1 (*"running the app as
-  `postgres` disables every policy while all tests still pass"*). This is SHARPER than my original
-  brief — it is not "no principal set", it is likely "the app runs as a superuser, so RLS is entirely
-  off."
-- ⛔ **The one-line probe that settles Q1** (run on a scratch `_test` DB, not prod/dev):
-  `select current_user, rolsuper, rolbypassrls from pg_roles where rolname = current_user;`
-  A fuller probe (role attrs + ownership + enable/force counts + cross-org read with and without the
-  GUC, all rolled back) was written to lane A's SESSION scratchpad as `rls_probe.ts` — it vanishes on
-  clear, so re-derive from this line; the core is trivial.
-- **Two doc issues the assessment must reconcile / fix:** (a) RULES §6 item 3 *"the database enforces
-  the rules, not the service layer"* is about CHECK/triggers (balance, period, immutability), NOT
-  tenancy — while **bible §7 rule 4** says store scoping is enforced in the REPO layer. The two point
-  different ways on exactly DEF-209's question. (b) **`bible §6.3` does not exist** (§6 is Data
-  conventions, no subsections) yet `packages/db/src/repo/stores.ts` cites it twice and T-222's spec
-  repeats it — a citation that misdirects on this very design question. Worth a register line or a
-  bible fix.
+## Decisions Ian made today, and where each is recorded
 
-**Lane B — "sales channels: admin surface + wastage policy"** (DEF-207 + Q3). One package because
-both touch `sales_channels`. Research → spec (orchestrator approves) → build. **Owns the ONE
-migration this cycle** (a `sales_channels` wastage-mode column, plus whatever the admin CRUD needs).
-Pilot-relevant: DEF-207 is why a bootstrapped store reads "not ready" (no channel writer in prod).
-Then lane B's remaining slices: 2 (category create/rename + the normalised `lower(trim())` index,
-DEF-205 — a migration), 3 (wastage monitor `stores.wastage_monitor_person_id`, DEF-206 — no
-migration), 4 (org/store identity + TIN, DEF-208 — a migration). One migration lane at a time.
+Bible §13 rows **180** (per-channel wastage policy), **181** (the tenancy id never comes from the
+client; RLS is the second layer, never the only one), **182** (the cutover keeps store settings —
+the Monitor survives), **183** (a recurring expense drafts and never auto-pays); T-232's header
+(six decisions; decision 3 superseded by lane B's §2.2 — one active role per person, so `admin`
+plus the four super-admin-only capabilities as grants, an exact equivalence); the roadmap's
+tutorials line (the `?` per page); `CLAUDE.md` (the milestone handover rule). Auto-mode decisions
+the orchestrator took for him, all reversible, are on the status board's "Decided for you" table.
 
-## How to resume the orchestration
+## Traps that have actually bitten today
 
-1. This is the `/orchestrator` pattern — global skill at `~/.claude/skills/orchestrator/`
-   (SKILL.md, `worker-briefing.md`, and `tools/make-test-dbs.mjs` + `tools/it.mjs`). Invoke
-   `/orchestrator shareat system`.
-2. `ListAgents` to find the worker sessions (they were `ianla-3a` = lane A, `ianla-14` = lane B; a
-   fresh clear gives them new names). If they were cleared too, Ian opens fresh terminals and each
-   sends "worker ready" to the orchestrator per the skill's one-liner.
-3. Lane DBs already exist and are migrated: `shareat_test_t228` (lane A), `shareat_test_t229`
-   (lane B). Run integration via `node ~/.claude/skills/orchestrator/tools/it.mjs <db> <files>`,
-   NEVER `npm run test:integration` (that hits shared `shareat_test` and truncates a peer's fixtures).
-4. Orchestrator alone commits (stage explicit paths, never `git add -A`; never `checkout -b` in the
-   shared tree) and pushes. Workers never run git, `build`, or `dev`.
+- **Stale lane DB after a peer's migration** reads as a regression in a suite you never touched
+  (`column … does not exist`). Re-run `make-test-dbs.mjs <lane db>` BEFORE diagnosing. `shareat_dev`
+  is migrated by the orchestrator only once a migration file is FINAL (READY), never mid-build.
+- **`npm run db:generate` is unusable** — its snapshot chain died at 0019. Migrations are
+  hand-written from the schema (0131–0136 say so in their headers); `when` strictly greater than
+  the previous entry's; re-read the journal before appending.
+- **Grep raw `sql` strings for the snake_case name before dropping a column** — typecheck only sees
+  builder references; a drop goes green and fails at runtime (T-229 slice 2).
+- **A sweep that reports a total must first report a known non-zero control** (bible §12, v3.11):
+  heredocs eat escapes, a line-based grep misses a multi-line import, a regex truncates a message.
+- **A job test cannot see a missing RLS principal** — the harness connects as a superuser
+  (DEF-218). Probe by hand until the harness role changes.
+- **A unit test that imports anything from `apps/erp/src/lib/` pays ~4.7 s of module graph before its first assertion** (`@shareat/auth` → `@shareat/db` → the schema barrel) against the unit project's 5 s timeout. Static-import it; keep `vi.resetModules()` out of `beforeEach`. And run the PROJECT gate, not the file, before calling anything green — a file passing alone proved nothing twice today.
+- **Playwright**: the Chrome extension is not connected and the MCP wants Google Chrome. Use the
+  npx-cache harness (memory `reference_playwright_smoketest_harness`); the previous orchestrator's
+  scripts lived in its scratchpad and are gone — the pattern is a clean `goto`, click, then
+  `waitForURL` on `?ok=|?error=`; `require` dotenv/postgres by ABSOLUTE path from the repo's
+  `node_modules`; a `has:` locator is relative to its parent (never prefix it with `form `);
+  "Dev Cashier" (PIN 333333) has been a manager since 5 Sep — staff denial comes from tests.
 
-## Traps / state, live right now
+## The status board — update it at EVERY commit
 
-- ⛔ **`sql.json()` after `getDb()` mis-binds** (DEF-204). Seeds are fixed; any NEW raw `getSql()`
-  query needing jsonb must use `()::text::jsonb`, and a `Date`-typed timestamptz read through a raw
-  client is unswept.
-- ⛔ **Never hand-split the Postgres URL** — the password has an `@`; use `new URL()`. The lane
-  tools do this correctly.
-- ⚠️ Migrations `0131` (budgets) and `0132` (recurring) are on production (applied by the deploys).
-  `TEST_DATABASE_URL` is `shareat_test`; its setup runs NO migrations — re-run
-  `make-test-dbs.mjs shareat_test` after any new migration or its tables are missing at test time.
-- ⚠️ `next-env.d.ts` flip-flops on dev-vs-build; HEAD carries the dev variant, restore it, don't commit the build one.
-- ⚠️ Eight-plus stale lane DBs from earlier sessions (`shareat_test_a/_b/_e2/_lane15/_lane25/...`)
-  plus `_t228`/`_t229` are on the server; drop the ones no longer in use.
-- ⚠️ Two older peers may still be idle (`Dispatch background conversation`, and Remote Control rows) — ignore them; they are not lanes.
+Ian reads **https://claude.ai/code/artifact/b1555e09-a726-492b-a431-7a30791e1d50** instead of chat
+reports. `Artifact action:"read"` it, rebuild the HTML locally, republish with that `url` after
+every commit and every lane state change: Needs-you · Lanes · Phases · Shipped · Flagged ·
+Decided-for-you. Keep every line short. Memory `reference_shareat_system_board_artifact` holds the
+design. **Never create a second board.** `docs/ROADMAP.html` moves at the same moments.
 
 ## The paste-ready prompt
 
 ```
-Read C:\Users\ianla\webapps\shareat-system\docs\HANDOFF-TODAY.md, then docs/RULES.md if you
-haven't this session. You are the ORCHESTRATOR — invoke /orchestrator shareat system.
+You are the ORCHESTRATOR for shareat-system. Read C:\Users\ianla\webapps\shareat-system\docs\HANDOFF-TODAY.md
+in full, then docs/RULES.md. Ask Ian to type /orchestrator shareat system in your terminal (the
+skill is user-invocation only). Four agent sessions are ALIVE on this machine and parked: run
+ListAgents, then re-adopt lane B = ianla-14 (T-232 slice 2), lane C = ianla-87 (QA), lane D =
+ianla-0a (T-232 slice 1) by SendMessage, first line "[X] RE-ADOPT: <one sentence from the handoff's
+table about them>"; lane A = ianla-3a is released. Do not respawn and do not re-brief from
+scratch — their specs, lane DBs and next slices are in the handoff's table.
 
-⛔ FIRST, ONE THING IS IAN'S: production has the bootstrap-org code (T-228, dad2053) but zero
-organizations. Ian runs `npm run bootstrap-org -- --code=SHAREAT_OPC --name="SHAREAT OPC"
---admin="<his name>" --store-code=LIPA --store-name="SharEat Lipa" --confirm` on production
-himself (IAN-SETUP-CHECKLIST §4b). Confirm T-228's deploy landed first (gh run list).
-
-Nothing is half-built; the tree is clean at dad2053. Ian's four decisions from 2026-09-07 are in
-docs/DEFECTS-REGISTER.md's change-log — ADD a bible §13 row for them (run npm run toc after).
-
-Re-adopt or re-brief the two worker lanes (ListAgents). Assign: Lane A = DEF-209 RLS assessment
-(read-only, docs/discovery/29, three questions in the DEF-209 register row). Lane B = sales-channel
-admin surface + Q3 per-channel wastage policy (one package, owns the next migration), then its
-slices 2–4. One migration lane at a time. Orchestrator alone commits and pushes; workers use
-it.mjs on their lane DB (t228/t229), never npm run test:integration.
+The day's goal is T-232: Ian signs in on production with his v1 email and password and sets the
+organisation up from inside. Two things gate it and are Ian's: the Firebase secrets and the
+droplet's FIREBASE_PROJECT_ID (handoff § "Pick up here", item 1). You own the dev server on 9008,
+builds, the dev-DB migration and the browser passes (lane C's session cannot run them); lanes
+never run git, build, dev or npm run test:integration. Stage explicit paths, commit with -F, push,
+and update docs/ROADMAP.html and republish the status board at EVERY commit. When T-232 works on
+production — or any task completes with the tree clean — that is a milestone: run /wrap-up,
+rewrite this file for the next orchestrator, and hand over. Keep your session small.
 ```

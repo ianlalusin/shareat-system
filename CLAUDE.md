@@ -80,6 +80,19 @@ It is his closing ritual for **every** AI agent on this project, and it is not o
 `⛔ THE BUILD IS RED` banner. Losing work is worse than visible red on a `main` nothing deploys
 from.
 
+### ⭐ Orchestrated sessions hand over at every MILESTONE — Ian, 2026-09-07
+
+When one session ORCHESTRATES worker sessions on this tree (the global `/orchestrator` skill), the
+orchestrator is the only session that must stay small. **At every milestone** — a task complete, a
+phase closed, the day's goal reached, or the tree clean with every lane at a task boundary — the
+orchestrator: (1) brings each lane to a clean stopping point (typecheck clean, "WIP: what exists /
+stubbed / next"), commits that WIP visibly, pushes; (2) runs `wrap-up`, rewriting
+`docs/HANDOFF-TODAY.md` **as the next orchestrator's prompt** — naming every live agent session
+(`ListAgents` name, lane, lane DB, spec, next slice); (3) makes `docs/ROADMAP.html` true and
+republishes Ian's status board; (4) hands over. **Worker lanes stay alive and are re-adopted; only
+the orchestrator is cleared.** Goal: low session memory, so each orchestrator works at full speed.
+The roadmap and the board are updated at **every commit**, not only at wrap-up.
+
 **Not to be confused with `/daily-review`**, which is a critic: it reviews a diff for defects, works
 on a branch, and never touches `main`. This one is a closer.
 
