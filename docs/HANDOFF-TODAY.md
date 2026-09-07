@@ -1,251 +1,148 @@
-# Handoff — 2026-09-06 (third wrap-up)
+# Handoff — 2026-09-07 (orchestrated multi-lane session)
 
 ## Where things stand
 
-⭐ **Phase 6 is CLOSED, and CI is green for the first time in this repo's history.** T-214 — the
-responsiveness scorecard — was specced and built today and was the last slice; T-222 shipped store
-creation this morning; **DEF-170 was fixed**, which turned CI green and let the `Deploy` workflow
-run for the very first time.
+⭐ **A three-session orchestration shipped two tasks and closed the pilot's biggest blocker.** One
+session led (the orchestrator); two Opus worker lanes built T-228 and T-229 in the shared tree,
+coordinated by `SendMessage`, with the orchestrator reviewing every diff and doing every commit and
+push. `main` is at `dad2053` and **the tree is clean** — nothing is half-built, both workers are
+parked at task-complete boundaries.
 
-⛔ **One thing is genuinely outstanding and it is Ian's**: that first Deploy failed on a stale
-droplet permission, so the T-214 timer is still not armed. Details in *Pick up here* item 1 — it is
-two commands as root, and no agent can or should do it.
+⛔ **THE ONE THING THAT IS IAN'S, AND IT IS THE PILOT ITSELF.** Production now has the
+`bootstrap-org` code but still holds **zero organizations**, and `shareat-finding-observation` exits
+1 nightly until one exists. **Ian runs this himself** (`IAN-SETUP-CHECKLIST.md` §4b — no agent SSH),
+once T-228's deploy lands:
 
-The next agent is **starting Phase 7**, not finishing Phase 6. Nothing in `docs/tasks/` is
-half-built. `main` is at the sha below and the tree is clean.
+```
+npm run bootstrap-org -- --code=SHAREAT_OPC --name="SHAREAT OPC" \
+                         --admin="<Ian's real full name>" \
+                         --store-code=LIPA --store-name="SharEat Lipa" --confirm
+```
 
-## Gates at `c682e1e`
+The write path was de-risked against a throwaway DB (org/102 accounts/38 categories/admin/store/room/scope, atomic, PIN once, exit 0). The runbook is `docs/ops/README.md` §"Standing up an
+organization". ⚠️ Values are Ian's: org code recommended `SHAREAT_OPC`, admin is a real person with a
+real PIN (attributed on the ledger's first entries), and **only the FIRST store is created here** —
+SharEat Malvar (and Banay-Banay/Davao if wanted) come afterward through `/admin/stores`, which is
+that screen's first real production smoketest. The PIN prints once and is not recoverable.
 
-| Gate | Result |
-|---|---|
-| **typecheck** | exit 0 |
-| **unit** | ✅ **1022 passed · 1 skipped · 0 FAILED — green for the first time.** DEF-170 fixed this session (was 1021 / 1 failed) |
-| **integration** | ✅ **2422/2422 · 96/96 files · exit 0**, against `shareat_test`. ⚠️ Last run at `b1c496c`; every commit since is markdown-only, so it is not re-run per doc edit |
-| **CI on `main`** | ✅ **success** at `d50555a` — the first green CI in this repo's history (`a748e58` was the last failure) |
-| **T-214 alone** | ✅ **24/24**, run twice to prove no cross-run pollution |
-| **build** | ✅ exit 0, dev server stopped first by process enumeration. `/findings/scorecard` present |
-| **smoketest** | ✅ **13/13** on 9008 (T-214) · 0px horizontal overflow at 390px on both findings routes |
-| **the new job, for real** | ✅ `npm run finding-observation` on `shareat_dev`: 5 occurrences opened; **second run opened 0**, proving idempotence; both recorded in `scheduler_runs` |
+## What shipped today (all pushed; CI green on each)
 
-## What happened this session
+| Ref | What | Where |
+|---|---|---|
+| **T-226** | AR clearing (collections, void, write-off, `/customers/[id]`) | live |
+| **T-215** | Expense budgets (the envelope + cap) | live |
+| **T-216** | Recurring-expense TEMPLATES (the job is blocked, deliberately) | live |
+| **T-227** | Caller + nav-reachability guards | live |
+| **T-229 slice 1** | Settings shelf `/settings` + map a category to an account — closes DEF-193's remedy | live (`31afb96`) |
+| **T-228** | `bootstrap-org` — create an org atomically (DEF-195). Ian runs it on prod | pushed (`dad2053`), deploying |
+| **Bible v3.7** | §13 row 179 — Ian's completeness + data-recency doctrine | committed |
 
-### T-222 — store creation (`/admin/stores`), and DEF-189
+**DEF-204–209 filed** (register §E). DEF-204 (Drizzle strips the shared client's jsonb serializer;
+seeds now bind `()::text::jsonb`) is **fixed** in T-228. DEF-209 (RLS has no production callers — a
+dormant safety net) is the significant one; see below.
 
-Shipped earlier today. Until it landed **nothing in the codebase created a store**. The store row,
-its default room and the §C.2 admin fan-out commit in one transaction, proved by an injected
-failure. **DEF-189** was found by the smoketest, not the suite: a manager clicking a store in a list
-they may read got an **HTTP 500** instead of a refusal. The trigger is **calling a domain function
-to satisfy a page read** (domain functions authorize by contract) — not, as it first appears, an
-ungated list beside a gated detail page; `/admin/users` is that shape and is clean.
+## Ian's four decisions (2026-09-07) — FORMALIZE INTO BIBLE §13
 
-### T-214 — the scorecard, and the clock findings do not have
+Made via one AskUserQuestion; recorded in the register change-log; **the next Opus session should add
+a §13 row** (the TOC-regen ceremony was deferred at the clear point):
 
-⭐ **Specifying it established that v1's scorecard cannot be ported at all.** v1's score needs a
-finding's **first-seen** date. A v2 `DetectedFinding` is a pure function of current state, carries no
-timestamp and cannot, and almost no detector can be re-asked *"as of"* a past date. So two thirds of
-the task is building the clock — `finding_occurrences`, an append-only log written by a new **daily**
-`finding_observation` scheduler job — and the score itself is about forty lines.
+1. **T-228 → push to production.** Done.
+2. **DEF-207 → build a sales-channel admin surface** (not seed-at-creation). Lane B's next task.
+3. **Q3 → order-wastage tracked-vs-instant becomes a per-CHANNEL policy**, not a per-record choice.
+   Removes a choice staff have today; closes the skip-the-monitor/dispute-window/backstop hole.
+4. **DEF-209 → schedule a dedicated RLS-enforcement assessment.** Lane A's next task.
 
-⛔ **That log is an OBSERVATION, not finding state.** Nothing in the detection path reads it, asserted
-by deleting every row and re-reading the feed. Bible row 123 stands.
+## Queued work — the fresh session re-assigns these to the two lanes
 
-⭐ **The design decision (bible row 177): score what was FIXED, never what was accepted.** Mapping
-v1's *resolved* onto v2's *acknowledged* re-opens exactly the hole T-135 closed — acknowledging means
-the condition **still holds** and is accepted for 30 days, so a score counting it pays managers to
-accept risk. The action component counts occurrences that **cleared**; acknowledgement is reported
-beside the score with its age, never inside it.
+**Lane A — DEF-209 RLS enforcement assessment** (READ-ONLY, no migration, no code). Deliverable
+`docs/discovery/29-rls-enforcement-assessment.md`. Three questions in order: (1) does the app's
+connecting role actually bypass RLS, or does it just never set `app_current_org()`? Prove it live on
+a scratch DB. (2) Is any production org-scoped query missing its `org_id` predicate — i.e. is the net
+load-bearing today? (3) What would routing every `transaction()` through `withPrincipal` cost? Read
+bible §7 and RULES §3.6 first.
 
-### ⚠️ Three self-inflicted errors, none caught by a test — the real lesson of the day
+⭐ **HEAD START — lane A did the read-only reading before it was paused; use this, don't re-derive
+(all citable; the one live PROBE was NOT run, so the conclusion is a HYPOTHESIS):**
+- RLS is fully built, not merely dormant: `0011_row_level_security.sql` creates `app_current_org()`
+  and role **`shareat_app` NOLOGIN** (sessions connect as owner, `SET LOCAL ROLE shareat_app` inside
+  the tx by design). Across migrations: **126 ENABLE, 127 FORCE, 128 CREATE POLICY**; policies carry
+  **no `TO` clause** so they apply to PUBLIC. `rls.test.ts` reads `pg_policies` and passes — the
+  policies genuinely exist and are shaped right.
+- ⚠️ **The paradox that IS the finding:** FORCE removes the owner's exemption, and
+  `app_current_org()` is NULL with no principal, so `org_id = NULL` → a no-principal session should
+  see ZERO rows and everything should break. It doesn't — 2489 tests read rows with no principal set.
+  So **something bypasses FORCE, and the only candidates are: the connecting role is a SUPERUSER, or
+  holds `BYPASSRLS`.** Migration 0011's own comment names this as trap #1 (*"running the app as
+  `postgres` disables every policy while all tests still pass"*). This is SHARPER than my original
+  brief — it is not "no principal set", it is likely "the app runs as a superuser, so RLS is entirely
+  off."
+- ⛔ **The one-line probe that settles Q1** (run on a scratch `_test` DB, not prod/dev):
+  `select current_user, rolsuper, rolbypassrls from pg_roles where rolname = current_user;`
+  A fuller probe (role attrs + ownership + enable/force counts + cross-org read with and without the
+  GUC, all rolled back) was written to lane A's SESSION scratchpad as `rls_probe.ts` — it vanishes on
+  clear, so re-derive from this line; the core is trivial.
+- **Two doc issues the assessment must reconcile / fix:** (a) RULES §6 item 3 *"the database enforces
+  the rules, not the service layer"* is about CHECK/triggers (balance, period, immutability), NOT
+  tenancy — while **bible §7 rule 4** says store scoping is enforced in the REPO layer. The two point
+  different ways on exactly DEF-209's question. (b) **`bible §6.3` does not exist** (§6 is Data
+  conventions, no subsections) yet `packages/db/src/repo/stores.ts` cites it twice and T-222's spec
+  repeats it — a citation that misdirects on this very design question. Worth a register line or a
+  bible fix.
 
-1. **The first render scored three innocent branches `0`.** Their findings had been raised that
-   morning; `cleared / raised` cannot tell *"ignored"* from *"has not had a chance"*. Findings inside
-   a 14-day grace window are now **pending** — excluded from the denominator, shown in their own
-   column, scoring a dash. **Every test passed both before and after.** Found by looking at the page.
-2. **Four of my own new tests were green only by luck** — their count queries were not scoped by
-   `org_id`, so they passed against an empty table and read `expected '8' to be '2'` on the second
-   run. Fixed, then verified green twice.
-3. ⛔ **A wrong claim reached a pushed document.** This morning's handoff said migration `0129` was
-   on "3 of 9 databases, `shareat_test` missing". It is **4 of 10 and `shareat_test` has it**. The
-   probe built each URL with a string `replace`, and **this project's Postgres password contains an
-   `@`**, so it connected elsewhere and reported confident nonsense. **The tell was visible and I did
-   not read it: a database supposedly missing a migration whose own suite was green.** ⚠️
-   `packages/db/migrate.ts` already carries a comment about that exact `@` (DEF-030).
-4. ⭐ **The sharpest one, and only the FULL suite could catch it.** I applied `0130` to four
-   databases **by hand**. That runs the SQL but does **not** write Drizzle's
-   `drizzle.__drizzle_migrations` journal — so the databases were right and the journal was wrong,
-   the real migrator considered `0130` unapplied, and `journal.test.ts`'s *"re-running the migration
-   is a no-op"* failed with `relation "finding_occurrences" already exists`. ⛔ **A hand-applied
-   migration is not an applied migration.** Fixed by reverting the objects on all four and letting
-   `migrate()` apply and record them (journal 113 → 114 each). My targeted test run was 24/24 and
-   could never have seen it.
+**Lane B — "sales channels: admin surface + wastage policy"** (DEF-207 + Q3). One package because
+both touch `sales_channels`. Research → spec (orchestrator approves) → build. **Owns the ONE
+migration this cycle** (a `sales_channels` wastage-mode column, plus whatever the admin CRUD needs).
+Pilot-relevant: DEF-207 is why a bootstrapped store reads "not ready" (no channel writer in prod).
+Then lane B's remaining slices: 2 (category create/rename + the normalised `lower(trim())` index,
+DEF-205 — a migration), 3 (wastage monitor `stores.wastage_monitor_person_id`, DEF-206 — no
+migration), 4 (org/store identity + TIN, DEF-208 — a migration). One migration lane at a time.
 
-### Where each decision is recorded
+## How to resume the orchestration
 
-| Decision / finding | Recorded in |
-|---|---|
-| Score what was fixed; the observation log is not finding state | `PROJECT_BIBLE.md` **row 177** (`npm run toc` run) |
-| T-222's atomic half + derived checklist | `PROJECT_BIBLE.md` row 176 — **its stale "not yet built" tail corrected** |
-| DEF-189, and the three errors above | `docs/DEFECTS-REGISTER.md` |
-| T-214 as built, incl. the two spec corrections | `docs/tasks/214-manager-responsiveness-scorecard.md` |
-| T-214 done, Phase 6 closed | `docs/plans/phase-6-reporting-and-dashboards.md` Wave 3 |
-| The new daily job, its timer, and how to arm it | `docs/ops/README.md` + `provision.sh` |
-| The URL landmine | Claude memory `reference_postgres_url_string_surgery.md` |
+1. This is the `/orchestrator` pattern — global skill at `~/.claude/skills/orchestrator/`
+   (SKILL.md, `worker-briefing.md`, and `tools/make-test-dbs.mjs` + `tools/it.mjs`). Invoke
+   `/orchestrator shareat system`.
+2. `ListAgents` to find the worker sessions (they were `ianla-3a` = lane A, `ianla-14` = lane B; a
+   fresh clear gives them new names). If they were cleared too, Ian opens fresh terminals and each
+   sends "worker ready" to the orchestrator per the skill's one-liner.
+3. Lane DBs already exist and are migrated: `shareat_test_t228` (lane A), `shareat_test_t229`
+   (lane B). Run integration via `node ~/.claude/skills/orchestrator/tools/it.mjs <db> <files>`,
+   NEVER `npm run test:integration` (that hits shared `shareat_test` and truncates a peer's fixtures).
+4. Orchestrator alone commits (stage explicit paths, never `git add -A`; never `checkout -b` in the
+   shared tree) and pushes. Workers never run git, `build`, or `dev`.
 
-**Roadmap: updated.** T-214 is `t-done`, both phase headers now read **Phase 6 COMPLETE ·
-T-209–T-214, T-218–T-224 all shipped**, and the chip moved `c-active` → `c-done`. HTML verified
-balanced (575/575 divs).
+## Traps / state, live right now
 
-## Pick up here
-
-1. ⛔ **THE TIMER CANNOT BE ARMED YET, AND THE REASON IS BIGGER THAN THE TIMER.** Ian asked for it
-   on 2026-09-06 and it could not be done — established by checking, not assumed:
-   - ⚠️ **CORRECTION — the app IS live.** An earlier version of this file said "nothing has ever
-     been deployed". **Wrong.** `https://erp2.shareat.net/` returns **HTTP 200**. What is true is
-     narrower: the *`Deploy` workflow* has never completed — 29 `skipped`, 1 `failure`, 0 success —
-     and the live deployment was made another way (`9139f29`, *"deployment live: erp2.shareat.net"*).
-     ⛔ **The error was inferring "never deployed" from "the workflow never ran" without checking
-     the site**, which is the same shape as the `0129` mistake above: an indirect signal trusted
-     over a direct one that took ten seconds to check.
-   - ✅ **CI is now green** (DEF-170 fixed, item 3) and `Deploy` **ran for the first time**. It got
-     as far as **Ship the artifact**, proving the droplet, the deploy key and the `shareat` user all
-     work, then failed on:
-     ```
-     ln: failed to create symbolic link '/srv/shareat.new': Permission denied
-     ```
-     ⭐ **`provision.sh` already fixes exactly this** (`chgrp shareat /srv; chmod g+w /srv`, added
-     in `9139f29` with a comment quoting this very error as *"found the hard way on a live deploy"*).
-     So the repo is correct and **the droplet is stale** — it was provisioned before that fix.
-   - ⚠️ **Production migrations DID apply** in that failed run (*"Migrations applied in 288ms"*
-     against the DO managed Postgres), so **the production schema is now AHEAD of the running code**,
-     including `0130`. That is safe here and only because `0130` is purely additive — two new tables
-     and a widened CHECK constraint — so the older running code neither reads nor writes them
-     (bible §15.5, expand/contract). ⛔ Do not assume the next migration is as forgiving.
-   - **No agent or human holds standing SSH**, by Ian's own decision (`IAN-SETUP-CHECKLIST.md` §4b):
-     deploys run from GitHub Actions with a key in Secrets. ⛔ Do not seek a way round this.
-   - `DEPLOY_HOST` / `DEPLOY_SSH_KEY` **do** exist in Secrets (set 2026-09-04), so the credential
-     half is done. Only a green CI is missing.
-
-   **What is actually left, and both steps need root ON THE DROPLET — Ian's, not an agent's:**
-
-   ⛔ **CORRECTED 2026-09-06 — DEF-194.** An earlier version of this block read
-   `sudo bash /srv/shareat/docs/ops/provision.sh`. **That path does not exist on the droplet**:
-   `.github/workflows/deploy.yml:82` ships `apps/erp/.next`, `packages`, `scripts`, `node_modules`
-   and the two manifests — **no `docs/`**, ever. It also does not say the step happens over SSH,
-   and Ian ran it in a Windows shell (*"Sudo is disabled on this machine"*). `provision.sh`'s own
-   header carries the right form and the reason: it installs the `*.service`/`*.timer` files that
-   live **beside** it, so the whole directory travels, not just the script.
-
-   ```powershell
-   # 1. From the repo on Ian's machine — ship docs/ops to the droplet, then provision.
-   #    Idempotent. Fixes /srv's group-write (which unblocks the Deploy workflow) and INSTALLS
-   #    the unit files, which is the ONLY way they reach the box.
-   cd C:\Users\ianla\webapps\shareat-system
-   scp -r docs\ops root@159.223.46.224:/root/shareat-ops
-   ssh root@159.223.46.224 "bash /root/shareat-ops/provision.sh"
-   ```
-
-   ⚠️ **Omit the domain argument, deliberately.** Passing `erp2.shareat.net` rewrites
-   `/etc/caddy/Caddyfile` and reloads Caddy on a site that is live and working, for no benefit.
-   Omitting it skips the Caddy block entirely and still does both things the deploy needs.
-
-   ```sh
-   # 2. Arm the timer — on the droplet (ssh root@159.223.46.224).
-   systemctl enable --now shareat-finding-observation.timer
-   systemctl list-timers          # NEXT and LEFT must be populated for all FOUR timers
-   systemctl start shareat-finding-observation.service   # prove it runs once, now
-   journalctl -u shareat-finding-observation.service -n 50
-   ```
-
-   ⚠️ `provision.sh`'s own closing message lists only three timers plus `shareat-erp` — the
-   fourth, `finding-observation`, is new from T-214 and is why step 2 enables it by name.
-   ⚠️ Step 1 is not optional and is easy to miss: **`provision.sh` is the only thing that installs
-   unit files**, so without it `systemctl enable` in step 2 fails with "Unit not found".
-   ⚠️ **A skipped day cannot be reconstructed** — the detectors read live state, so every day
-   between now and arming is permanently absent from the record.
-   ⚠️ Ian *can* bypass CI with a manual `workflow_dispatch` (the job allows it), but that ships a
-   red build to production and is his call alone — no agent should trigger it.
-2. **Phase 7 planning.** Phase 6 is closed; there is no half-built work to inherit. `docs/ROADMAP.html`
-   and `docs/CAPABILITY-GAPS.md` are the inputs.
-3. ✅ **DEF-170 — FIXED this session, which is what unblocked everything above.** It was CI's only
-   failure, `deploy.yml` is gated on CI, and so every `Deploy` run in the repo's history read
-   `skipped`. ⭐ **The engine was never touched** (`git diff` on `compute-day.ts` is empty) — both
-   causes were in the golden master's *triage*: two specimens had two known causes each and every
-   class carried a strict single-field signature, and `lipa-0359` was the mirror of class D, which
-   only ever covered one direction. ⚠️ **One thing there is still Ian's**, and it is in the
-   pay-movement list rather than hidden: `lipa-0359` claims **8h where v1 paid 9h** — a staffer who
-   punched in 20 minutes early on Lipa's stale grid (DEF-087) now gets 5h as a half day plus **3h
-   of PENDING overtime awaiting a manager**, by Ian's own `shortShiftHalfDayOt` rule. Nothing is
-   taken from them; it needs an approval that v1 did not.
-
-## Do not decide these alone — they are Ian's
-
-1. **T-214 Q1 — is a per-STORE score acceptable?** A cleared finding has no actor, so per-person
-   attribution is not missing but *meaningless*. Built as per-store with managers listed beside it.
-2. **T-214 Q2 — should acknowledgement ever be scored, even negatively?** Currently reported only.
-   Recommendation: leave it, until there is real data — there are still **0 acknowledgements ever**.
-3. **T-214 Q3 — does the view log get scored later?** Built and shown, not scored.
-4. **T-222 Q2 — should `deactivateStore` refuse with an open sales day or unremitted cash?** Still
-   **not implemented**; it deactivates unconditionally.
-5. **Should `manage_stores` stay in the admin-less manager elevation?** In an org with no admin a
-   manager can open a branch. It was **inherited from the matrix, not chosen**.
-6. **T-221's composite FK** proposal — open from an earlier session.
-
-## Traps that have actually bitten — live in this area right now
-
-- ⛔ **Never hand-split the Postgres URL.** The password contains an `@`; a string `replace` connects
-  somewhere else silently. Use `new URL()` and set `.pathname`. This produced a wrong claim in a
-  pushed handoff today.
-- ⛔ **`TEST_DATABASE_URL` is `shareat_test`, not a lane DB**, and `tests/integration/setup.ts` runs
-  **no migrations**. A new migration must be applied to it by hand or every new table is missing at
-  test time. Migration `0129` is on `shareat_dev`, `shareat_test`, `_e2`, `_lane25`; **missing** on
-  `_lane15`, `_a`, `_b`, `_202`, `_203`, `_204`. `0130` is on `shareat_dev`, `shareat_test`, `_e2`,
-  `_lane25`.
-- ⛔ **Never run two `vitest --project integration` processes at once** — they share `shareat_test`
-  and truncate each other's tables. It surfaces as `PostgresError: deadlock detected` in fixture
-  setup and looks like a code bug.
-- ⛔ **Never hand-apply a migration.** Running the SQL yourself leaves the database right and
-  Drizzle's `drizzle.__drizzle_migrations` journal wrong, and the divergence is invisible to every
-  test except `journal.test.ts`'s migrator re-run. Use `migrate()` (or `npm run db:migrate` with
-  `DATABASE_URL` pointed at the target), which applies **and records**.
-- ⛔ **Backticks inside a double-quoted shell string are COMMAND SUBSTITUTION, and it bit three
-  times today.** Two code spans silently vanished from a `PROJECT_BIBLE.md` row (`createLocation`
-  and `manage_locations` became empty), and the third attempt **actually executed `chgrp` and
-  `chmod /srv` on this machine** before failing harmlessly — prose containing a shell command will
-  run it. Use the Edit/Write tools or a quoted heredoc for any prose with backticks; never inline
-  `python -c "..."` or `-m` with a message.
-- ⚠️ **`next-env.d.ts` flip-flops** between `./.next/dev/types/` and `./.next/types/` depending on
-  whether `dev` or `build` ran last. HEAD carries the **dev** variant; restore it, don't commit it.
-- ⚠️ **`pgrep -f vitest` in Git Bash cannot see Windows command lines.** Use
-  `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*shareat-system*' }`.
-- ⚠️ **`shareat_dev` still has ZERO `store_item_thresholds` rows**, so the low-stock features
-  (T-223/224) cannot be exercised on dev data.
+- ⛔ **`sql.json()` after `getDb()` mis-binds** (DEF-204). Seeds are fixed; any NEW raw `getSql()`
+  query needing jsonb must use `()::text::jsonb`, and a `Date`-typed timestamptz read through a raw
+  client is unswept.
+- ⛔ **Never hand-split the Postgres URL** — the password has an `@`; use `new URL()`. The lane
+  tools do this correctly.
+- ⚠️ Migrations `0131` (budgets) and `0132` (recurring) are on production (applied by the deploys).
+  `TEST_DATABASE_URL` is `shareat_test`; its setup runs NO migrations — re-run
+  `make-test-dbs.mjs shareat_test` after any new migration or its tables are missing at test time.
+- ⚠️ `next-env.d.ts` flip-flops on dev-vs-build; HEAD carries the dev variant, restore it, don't commit the build one.
+- ⚠️ Eight-plus stale lane DBs from earlier sessions (`shareat_test_a/_b/_e2/_lane15/_lane25/...`)
+  plus `_t228`/`_t229` are on the server; drop the ones no longer in use.
+- ⚠️ Two older peers may still be idle (`Dispatch background conversation`, and Remote Control rows) — ignore them; they are not lanes.
 
 ## The paste-ready prompt
 
 ```
 Read C:\Users\ianla\webapps\shareat-system\docs\HANDOFF-TODAY.md, then docs/RULES.md if you
-haven't this session. Check ListAgents first — this tree is shared and a peer may be mid-task.
+haven't this session. You are the ORCHESTRATOR — invoke /orchestrator shareat system.
 
-Phase 6 is CLOSED (T-214 shipped, DEF-170 fixed, CI green for the first time). Nothing is
-half-built. You are starting Phase 7 — read docs/ROADMAP.html and docs/CAPABILITY-GAPS.md and
-ask Ian which slice he wants before writing a spec.
+⛔ FIRST, ONE THING IS IAN'S: production has the bootstrap-org code (T-228, dad2053) but zero
+organizations. Ian runs `npm run bootstrap-org -- --code=SHAREAT_OPC --name="SHAREAT OPC"
+--admin="<his name>" --store-code=LIPA --store-name="SharEat Lipa" --confirm` on production
+himself (IAN-SETUP-CHECKLIST §4b). Confirm T-228's deploy landed first (gh run list).
 
-⛔ ONE THING IS OUTSTANDING AND IT IS IAN'S, NOT YOURS. The Deploy workflow now runs (CI is
-green) but FAILS at the release symlink: "ln: failed to create symbolic link
-'/srv/shareat.new': Permission denied". provision.sh already fixes it; the droplet is stale.
-Ian must run, as root on the droplet:
-    sudo bash docs/ops/provision.sh              # fixes /srv, installs the T-214 units
-    sudo systemctl enable --now shareat-finding-observation.timer
-Until then every Deploy keeps failing the same way — that is expected, not a new bug — and
-T-214's findings clock never starts. Do NOT try to SSH: there is deliberately no agent access
-(IAN-SETUP-CHECKLIST §4b).
+Nothing is half-built; the tree is clean at dad2053. Ian's four decisions from 2026-09-07 are in
+docs/DEFECTS-REGISTER.md's change-log — ADD a bible §13 row for them (run npm run toc after).
 
-⚠️ The app IS live at https://erp2.shareat.net (HTTP 200) even though the Deploy workflow has
-never completed. Do not infer either fact from the other.
-
-Before test:integration, confirm your DB has migrations 0129 AND 0130 — TEST_DATABASE_URL is
-shareat_test (not a lane) and the setup runs no migrations. Never hand-apply a migration; use
-migrate(), or Drizzle's journal goes out of sync and journal.test.ts fails. Never run two
-integration suites at once; they share that DB and deadlock. Before npm run build, confirm 9008
-is free by process enumeration, not pgrep.
+Re-adopt or re-brief the two worker lanes (ListAgents). Assign: Lane A = DEF-209 RLS assessment
+(read-only, docs/discovery/29, three questions in the DEF-209 register row). Lane B = sales-channel
+admin surface + Q3 per-channel wastage policy (one package, owns the next migration), then its
+slices 2–4. One migration lane at a time. Orchestrator alone commits and pushes; workers use
+it.mjs on their lane DB (t228/t229), never npm run test:integration.
 ```
