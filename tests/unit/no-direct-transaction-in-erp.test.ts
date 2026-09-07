@@ -4,7 +4,10 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * **T-231 slice 2 / DEF-209 — no request path opens a transaction without a principal.**
+ * **T-231 — no apps/erp request path reaches the database without an RLS principal.**
+ *
+ * Slice 2 (DEF-209) closed the `transaction()` door; slice 3 (DEF-215) closed `getDb()`, the
+ * second one, which `listOrgs()` had been reading every organisation through (DEF-214).
  *
  * ## What this is actually protecting
  *
@@ -76,22 +79,48 @@ function trackedErpFiles(): string[] {
     .filter((f) => !f.includes('/tests/'));
 }
 
+/** Comments describe the hazard; they do not commit it. `reports/lib.ts` names `getDb()` twice in
+ *  prose explaining why reports stopped using it, and a scanner that counted those would report a
+ *  file that is already fixed. */
+function stripComments(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/[^\n]*$/gm, '');
+}
+
 /**
- * Does this file pull in the raw `transaction` helper, by import or by re-export?
+ * Does this file reach a raw, unprincipalled database handle — by import, re-export, or call?
  *
- * Deliberately module-agnostic: the defect is reaching the unprincipalled helper at all, and
- * `reports/lib.ts` proved it can be reached without naming `@shareat/db`.
+ * ⭐ **Two doors, not one.** `transaction()` opens one as the owner; `getDb()` hands back the same
+ * connection with no transaction at all. T-231 slice 2 closed the first and left the second, and
+ * `listOrgs()` was sitting behind it reading every organisation in the system (DEF-214, DEF-215).
+ * A guard that watched only `transaction` would have gone green over that.
+ *
+ * Deliberately module-agnostic: the defect is reaching either helper, and `reports/lib.ts` proved
+ * one can be reached without ever naming `@shareat/db`.
  */
-function reachesRawTransaction(content: string): string[] {
+const RAW_HANDLES = ['transaction', 'getDb'] as const;
+
+function reachesRawHandle(content: string): string[] {
   const how: string[] = [];
+  const code = stripComments(content);
+
   const named = /\b(?:import|export)\s*\{([^}]*)\}\s*from\s*['"][^'"]+['"]/gs;
-  for (const m of content.matchAll(named)) {
-    if (/(^|[,\s])transaction(\s+as\s+\w+)?\s*(,|$)/.test(m[1]!)) how.push('imports it');
+  for (const m of code.matchAll(named)) {
+    for (const h of RAW_HANDLES) {
+      if (new RegExp(String.raw`(^|[,\s])${h}(\s+as\s+\w+)?\s*(,|$)`).test(m[1]!)) {
+        how.push(`imports ${h}`);
+      }
+    }
   }
   // `export { transaction };` — a local re-export, no `from` clause.
   const bare = /\bexport\s*\{([^}]*)\}\s*;/g;
-  for (const m of content.matchAll(bare)) {
-    if (/(^|[,\s])transaction\s*(,|$)/.test(m[1]!)) how.push('re-exports it');
+  for (const m of code.matchAll(bare)) {
+    for (const h of RAW_HANDLES) {
+      if (new RegExp(String.raw`(^|[,\s])${h}\s*(,|$)`).test(m[1]!)) how.push(`re-exports ${h}`);
+    }
+  }
+  // A call needs no import when the handle is re-exported through a neighbouring lib.
+  for (const h of RAW_HANDLES) {
+    if (new RegExp(String.raw`(^|[^A-Za-z0-9_.'"\`])${h}\s*\(`).test(code)) how.push(`calls ${h}()`);
   }
   return [...new Set(how)];
 }
@@ -111,7 +140,7 @@ describe('T-231 — no apps/erp request path opens a transaction without an RLS 
     }
   });
 
-  it('no file reaches the raw transaction helper outside the pre-auth allowlist', () => {
+  it('no file reaches a raw database handle outside the pre-auth allowlist', () => {
     const offenders: string[] = [];
 
     for (const rel of trackedErpFiles()) {
@@ -122,7 +151,7 @@ describe('T-231 — no apps/erp request path opens a transaction without an RLS 
       } catch {
         continue; // tracked but absent (sparse checkout)
       }
-      const how = reachesRawTransaction(content);
+      const how = reachesRawHandle(content);
       if (how.length > 0) offenders.push(`${rel} — ${how.join(' and ')}`);
     }
 

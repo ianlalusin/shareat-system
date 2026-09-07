@@ -681,12 +681,11 @@ export async function runFindingObservation(
       // ⚠️ ONE transaction per org, unlike month-end's per-item transactions. The whole point is a
       // consistent daily snapshot: observing half the detectors and closing occurrences against the
       // other half would invent clears that never happened.
-      const result = await transaction(async (tx) => {
-        await tx.execute(sql.raw(`set local role ${APP_ROLE}`));
-        await tx.execute(sql`select set_config('app.principal_kind', 'system', true)`);
-        await tx.execute(sql`select set_config('app.org_id', ${org.id}, true)`);
-        return recordFindingObservations(tx, org.id, new Date(nowMs));
-      });
+      // ⭐ T-231 slice 3: this was an inline copy of `asSystem`'s three statements, four lines
+      // from `asSystem` itself. Same helper, same principal kind, one definition now.
+      const result = await asSystem(org.id, (tx) =>
+        recordFindingObservations(tx, org.id, new Date(nowMs)),
+      );
 
       await transaction((tx) =>
         schedulerRepo.finishRun(tx, runId, {

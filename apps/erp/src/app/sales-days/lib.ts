@@ -14,13 +14,12 @@ import { salesDaysRepo } from '@shareat/db';
 import { withOrgPrincipal } from '../expenses/lib';
 
 export {
-  listOrgs,
   listStores,
   listActingPersons,
   withOrgPrincipal,
   listMoneyAccountsForPicker,
 } from '../expenses/lib';
-export type { OrgOption, StoreOption, PersonOption } from '../expenses/lib';
+export type { StoreOption, PersonOption } from '../expenses/lib';
 
 export interface ChannelOption {
   id: string;

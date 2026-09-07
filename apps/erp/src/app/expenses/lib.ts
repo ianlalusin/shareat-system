@@ -15,7 +15,7 @@
  * swapping a dropdown for a real session was a boundary change and not a rewrite.
  */
 import { asc, and, eq, isNull } from 'drizzle-orm';
-import { moneyAccountsRepo, getDb, schema, expensesRepo, journalRepo, withOrgPrincipal } from '@shareat/db';
+import { moneyAccountsRepo, schema, expensesRepo, journalRepo, withOrgPrincipal } from '@shareat/db';
 
 /**
  * How many payment rows the expense form offers.
@@ -35,12 +35,6 @@ import { moneyAccountsRepo, getDb, schema, expensesRepo, journalRepo, withOrgPri
  */
 export const PAYMENT_ROW_COUNT = 8;
 export const PAYMENT_ROWS = Array.from({ length: PAYMENT_ROW_COUNT }, (_, i) => i + 1);
-
-export interface OrgOption {
-  id: string;
-  name: string;
-  code: string;
-}
 
 export interface StoreOption {
   id: string;
@@ -65,37 +59,36 @@ export interface CategoryOption {
   isActive: boolean;
 }
 
-export async function listOrgs(): Promise<OrgOption[]> {
-  const db = getDb();
-  return db
-    .select({ id: schema.organizations.id, name: schema.organizations.name, code: schema.organizations.code })
-    .from(schema.organizations)
-    .where(eq(schema.organizations.isActive, true))
-    .orderBy(asc(schema.organizations.name));
-}
+/* ⛔ `listOrgs()` was deleted here — T-231 slice 3, DEF-214 (Ian's call as capability holder).
+ * It selected EVERY active organisation off the owner connection, with no principal and no
+ * caller: nothing in any `.tsx` rendered it, and `sales-days/lib.ts` only re-exported it onward.
+ * A single-organisation product has no business exporting a cross-org read. If a platform-level
+ * screen ever needs one it comes back as an explicit system-principal read WITH a caller. */
 
 export async function listStores(orgId: string): Promise<StoreOption[]> {
-  const db = getDb();
-  return db
-    .select({ id: schema.stores.id, name: schema.stores.name, code: schema.stores.code })
-    .from(schema.stores)
-    .where(eq(schema.stores.orgId, orgId))
-    .orderBy(asc(schema.stores.name));
+  return withOrgPrincipal(orgId, (tx) =>
+    tx
+      .select({ id: schema.stores.id, name: schema.stores.name, code: schema.stores.code })
+      .from(schema.stores)
+      .where(eq(schema.stores.orgId, orgId))
+      .orderBy(asc(schema.stores.name)),
+  );
 }
 
 /** Everyone in the org who currently holds an active role — the pool "acting as" picks
  *  from. See this file's top comment: this is a stand-in for a real signed-in session. */
 export async function listActingPersons(orgId: string): Promise<PersonOption[]> {
-  const db = getDb();
-  const rows = await db
-    .select({ id: schema.persons.id, displayName: schema.persons.displayName, role: schema.personRoles.role })
+  const rows = await withOrgPrincipal(orgId, (tx) =>
+    tx
+      .select({ id: schema.persons.id, displayName: schema.persons.displayName, role: schema.personRoles.role })
     .from(schema.persons)
     .innerJoin(
       schema.personRoles,
       and(eq(schema.personRoles.personId, schema.persons.id), isNull(schema.personRoles.revokedAt)),
     )
-    .where(and(eq(schema.persons.orgId, orgId), eq(schema.persons.isActive, true)))
-    .orderBy(asc(schema.persons.displayName));
+      .where(and(eq(schema.persons.orgId, orgId), eq(schema.persons.isActive, true)))
+      .orderBy(asc(schema.persons.displayName)),
+  );
   return rows;
 }
 
@@ -108,12 +101,13 @@ export async function listActingPersons(orgId: string): Promise<PersonOption[]> 
  * the mis-attribution the party on `1120` exists to prevent.
  */
 export async function listActivePersons(orgId: string): Promise<Omit<PersonOption, 'role'>[]> {
-  const db = getDb();
-  return db
-    .select({ id: schema.persons.id, displayName: schema.persons.displayName })
-    .from(schema.persons)
-    .where(and(eq(schema.persons.orgId, orgId), eq(schema.persons.isActive, true)))
-    .orderBy(asc(schema.persons.displayName));
+  return withOrgPrincipal(orgId, (tx) =>
+    tx
+      .select({ id: schema.persons.id, displayName: schema.persons.displayName })
+      .from(schema.persons)
+      .where(and(eq(schema.persons.orgId, orgId), eq(schema.persons.isActive, true)))
+      .orderBy(asc(schema.persons.displayName)),
+  );
 }
 
 /**

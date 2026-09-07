@@ -1,9 +1,10 @@
 # T-231 — The tenancy id never comes from the client (DEF-210), and the principal becomes one helper (DEF-211)
 
-> **Status**: 🟢 **APPROVED 2026-09-07 (orchestrator ianla-60) — SLICE 1 BUILDING.** One redline,
-> **R1**, applied throughout and marked where it lands: slice 2 waits for T-230 as well as slice 1,
-> so the guard needs no dated exemption. Findings (a)-(d) and all three open-question assumptions
-> accepted as written. Slice 1 is a defect fix and does not wait on Ian.
+> **Status**: ✅ **SLICES 1-3 COMPLETE.** Slice 1 committed `7487d91` (DEF-210), slice 2 committed
+> `5f37ed3` (DEF-209 gap + DEF-211, in one commit with T-229 slice 2 — see that commit for why a
+> split would have been broken at one SHA). Slice 3 done, awaiting commit: DEF-214 + DEF-215.
+> Redline **R1** applied throughout. Findings (a)-(d) and all three open-question assumptions
+> accepted as written.
 >
 > Discovery: **`docs/discovery/29-rls-enforcement-assessment.md`** — every number here comes from it.
 > Defects closed: **DEF-210** (slice 1), **DEF-211** (slice 2). Amends nothing in the bible; bible
@@ -86,7 +87,28 @@ Two observable outcomes:
 | # | What | Waits on | Migration |
 |---|---|---|---|
 | **1** | **Close DEF-210** — the org comes from the session, and a guard says so | Nothing. Defect fix; does not wait on Ian | None |
-| **2** | **One Drizzle-shaped `withOrgPrincipal` (DEF-211) + the 34 paths + the guard** | ⛔ **BOTH slice 1 AND T-230 committed** (orchestrator R1), orchestrator says go, and one barrel line the orchestrator applies | None |
+| **2** | **One Drizzle-shaped `withOrgPrincipal` (DEF-211) + the 35 paths + the guard** | ⛔ **BOTH slice 1 AND T-230 committed** (orchestrator R1), orchestrator says go, and one barrel line the orchestrator applies | None |
+| **3** | ⭐ **The SECOND door — `getDb` (DEF-215), `listOrgs` deleted (DEF-214), and the scheduler's inline `asSystem` copy** | Slice 2 committed | None |
+
+### Slice 3 — added 2026-09-07 after slice 2 surfaced the second door
+
+Slice 2's guard watched `transaction()` and went green while `getDb()` — the same owner connection
+without even a transaction — stayed open in `expenses/lib.ts`. ⭐ **A guard that closes one of two
+doors reads exactly like a guard that closes the problem.** Four items:
+
+1. **Widen the guard to `getDb`**, same allowlist, same >50-file control. Watched to fail first:
+   **1 offender, `app/expenses/lib.ts` — imports getDb and calls getDb()**.
+   ⚠️ It strips comments before matching calls, or `reports/lib.ts` — which names `getDb()` twice
+   in prose explaining why reports stopped using it — would be reported as an offender for being
+   *documented*.
+2. **`listStores`, `listActingPersons`, `listActivePersons`** run under `withOrgPrincipal`. Their
+   `where org_id = …` clauses stay: bible §15.11, no layer may be the only one.
+3. ⛔ **`listOrgs()` DELETED** (DEF-214, Ian's call as capability holder) — a cross-org read off the
+   owner connection with **no caller**; `sales-days/lib.ts` only re-exported it onward. Its
+   `OrgOption` type went with it, having existed only to type it. A tombstone comment says where it
+   went and what would bring it back (an explicit system-principal read, with a caller).
+4. **`scheduler/index.ts:685`** — an inline copy of `asSystem`'s body, four lines from `asSystem`.
+   ⛔ NOT folded into `withOrgPrincipal`: it declares `principal_kind = 'system'`.
 
 ⚠️ **Slice 1 and slice 2 touch three of the same files** (`inventory/returns/actions.ts`,
 `inventory/transfers/actions.ts`, `trade/returns/actions.ts`). Slice 1 changes where the org comes
@@ -496,6 +518,21 @@ it does **not** change what this task does, so slice 1 must not wait for it.
 - All 20 pages smoketested on 9008 and **rendering the same rows as before the change**.
 - The barrel line is handed to the orchestrator verbatim, not applied by this lane.
 - Same gates as slice 1.
+
+**Slice 3**
+- The widened guard was watched failing with **1 offender** (`app/expenses/lib.ts` — imports getDb
+  and calls getDb()), then passes with the same three pre-auth entries and no new exemption.
+- `grep -rn "getDb" apps/erp/src` returns only prose in `reports/lib.ts` explaining the hazard.
+- `listOrgs`, its `sales-days/lib.ts` re-export and the `OrgOption` type are gone; nothing in
+  `apps` or `packages` references them. (⚠️ `schedulerRepo.listOrgsToRun` is a DIFFERENT function —
+  the scheduler's deliberate system-principal lookup that must see every org before scoping,
+  documented at `scheduler/index.ts:348`. Not a target.)
+- Exactly three principal-idiom sites remain in source, one per distinct helper:
+  `principal.ts:46` (`applyPrincipal`, postgres.js), `principal.ts:114` (`withOrgPrincipal`,
+  Drizzle), `scheduler/index.ts:725` (`asSystem`).
+- ⚠️ **The guard scans `apps/erp` only.** `packages/domain`'s scheduler legitimately opens
+  unprincipalled transactions to resolve which orgs to run before any org is known — widening the
+  guard there would forbid something correct.
 
 **Both**
 - Report ends with a `FOR IAN` block (RULES §2, §3.5).
