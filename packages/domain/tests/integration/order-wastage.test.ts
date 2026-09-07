@@ -158,7 +158,7 @@ describe('T-178 test 1 — ⭐ no stock moves, whatever the disposition', () => 
     await raiseReceivable(f, '500.00');
     const rec = await asOrg(f.orgId, (tx) =>
       recordOrderWastage(tx, f.manager, {
-        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda', typeMode: 'tracked',
+        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda',
         amount: '100.00', reason: 'remade order', openedOn: '2026-01-10',
         allocations: [{ personId: f.staffAId, percent: '100.00' }],
       }),
@@ -174,7 +174,7 @@ describe('T-178 test 1 — ⭐ no stock moves, whatever the disposition', () => 
       await raiseReceivable(f, '80.00', '2026-01-12');
       const rec2 = await asOrg(f.orgId, (tx) =>
         recordOrderWastage(tx, f.manager, {
-          storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda', typeMode: 'tracked',
+          storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda',
           amount: '80.00', reason: 'refund', openedOn: '2026-01-12',
           allocations: [{ personId: f.staffAId, percent: '100.00' }],
         }),
@@ -205,7 +205,7 @@ describe('T-178 test 2 — a tracked wastage with no allocation gets the Monitor
     await setMonitor(f, f.monitorId);
     const rec = await asOrg(f.orgId, (tx) =>
       recordOrderWastage(tx, f.manager, {
-        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda', typeMode: 'tracked',
+        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda',
         amount: '75.00', reason: 'no allocation given', openedOn: '2026-01-10',
       }),
     );
@@ -219,7 +219,7 @@ describe('T-178 test 2 — a tracked wastage with no allocation gets the Monitor
     const f = await fixture('nomonitor');
     const rec = await asOrg(f.orgId, (tx) =>
       recordOrderWastage(tx, f.manager, {
-        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda', typeMode: 'tracked',
+        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda',
         amount: '75.00', reason: 'no monitor either', openedOn: '2026-01-10',
       }),
     );
@@ -238,7 +238,7 @@ describe('T-178 test 3 — allocation percentages sum to exactly 100', () => {
     await expect(
       asOrg(f.orgId, (tx) =>
         recordOrderWastage(tx, f.manager, {
-          storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda', typeMode: 'tracked',
+          storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda',
           amount: '100.00', reason: 'bad split', openedOn: '2026-01-10',
           allocations: [
             { personId: f.staffAId, percent: '60.00' },
@@ -253,7 +253,7 @@ describe('T-178 test 3 — allocation percentages sum to exactly 100', () => {
     const f = await fixture('sum60-40');
     const rec = await asOrg(f.orgId, (tx) =>
       recordOrderWastage(tx, f.manager, {
-        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda', typeMode: 'tracked',
+        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda',
         amount: '100.00', reason: 'good split', openedOn: '2026-01-10',
         allocations: [
           { personId: f.staffAId, percent: '60.00' },
@@ -276,7 +276,7 @@ describe('T-178 test 4 — ⭐ the backstop fires at 15 days for a DISPUTED reco
     await raiseReceivable(f, '200.00');
     const rec = await asOrg(f.orgId, (tx) =>
       recordOrderWastage(tx, f.manager, {
-        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda', typeMode: 'tracked',
+        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda',
         amount: '150.00', reason: 'disputed order', openedOn: '2026-01-10',
       }),
     );
@@ -306,7 +306,7 @@ describe('T-178 test 5 — the backstop fallback order: allocated split -> Monit
   async function backdatedTracked(f: Fixture, amount: string, allocations?: { personId: string; percent: string }[]) {
     const rec = await asOrg(f.orgId, (tx) =>
       recordOrderWastage(tx, f.manager, {
-        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda', typeMode: 'tracked',
+        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda',
         amount, reason: 'backstop tier test', openedOn: '2026-01-10', allocations,
       }),
     );
@@ -366,7 +366,7 @@ describe('T-178 test 6 — the postings: absorbed / charged (split) / platform_p
     await raiseReceivable(f, '300.00');
     const rec = await asOrg(f.orgId, (tx) =>
       recordOrderWastage(tx, f.manager, {
-        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda', typeMode: 'tracked',
+        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda',
         amount: '300.00', reason: 'absorbed test', openedOn: '2026-01-10',
       }),
     );
@@ -385,7 +385,7 @@ describe('T-178 test 6 — the postings: absorbed / charged (split) / platform_p
     await raiseReceivable(f, '100.00');
     const rec = await asOrg(f.orgId, (tx) =>
       recordOrderWastage(tx, f.manager, {
-        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda', typeMode: 'tracked',
+        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda',
         amount: '100.00', reason: 'split charge', openedOn: '2026-01-10',
         allocations: [
           { personId: f.staffAId, percent: '60.00' },
@@ -418,7 +418,7 @@ describe('T-178 test 6 — the postings: absorbed / charged (split) / platform_p
     await raiseReceivable(f, '50.00');
     const rec = await asOrg(f.orgId, (tx) =>
       recordOrderWastage(tx, f.manager, {
-        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda', typeMode: 'tracked',
+        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda',
         amount: '50.00', reason: 'platform actually paid', openedOn: '2026-01-10',
       }),
     );
@@ -441,7 +441,7 @@ describe('T-178 test 7 — a settlement match proposes and posts nothing until a
     await raiseReceivable(f, '400.00');
     const rec = await asOrg(f.orgId, (tx) =>
       recordOrderWastage(tx, f.manager, {
-        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda', typeMode: 'tracked',
+        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda',
         amount: '80.00', reason: 'maybe paid', openedOn: '2026-01-10',
       }),
     );
@@ -457,7 +457,7 @@ describe('T-178 test 7 — a settlement match proposes and posts nothing until a
 
     const settlements = await asOrg(f.orgId, (tx) => listPostedSettlementsForStore(tx, f.manager, { storeId: f.storeId }));
     const wastages: SettleableOrderWastage[] = [
-      { wastageId: rec.id, storeId: f.storeId, channel: 'Foodpanda', businessDate: '2026-01-10', amount: '80.00', orderRef: null, status: 'open' },
+      { wastageId: rec.id, storeId: f.storeId, channelId: f.channelId, channel: 'Foodpanda', businessDate: '2026-01-10', amount: '80.00', orderRef: null, status: 'open' },
     ];
     const candidates = matchWastagesToSettlement(wastages, settlements);
     expect(candidates).toHaveLength(1);
@@ -482,7 +482,7 @@ describe('T-178 test 8 — end to end: settlement clears 1220, the wastage adds 
     await raiseReceivable(f, '1000.00');
     const rec = await asOrg(f.orgId, (tx) =>
       recordOrderWastage(tx, f.manager, {
-        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda', typeMode: 'tracked',
+        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda',
         amount: '150.00', reason: 'refunded, platform ate it', openedOn: '2026-01-10',
       }),
     );
@@ -531,7 +531,7 @@ describe('T-178 test 9 — charge refused with Phase 5 absent; backstop degrades
     await raiseReceivable(f, '20.00');
     const rec = await asOrg(f.orgId, (tx) =>
       recordOrderWastage(tx, f.manager, {
-        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda', typeMode: 'tracked',
+        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda',
         amount: '20.00', reason: 'try to charge', openedOn: '2026-01-10',
         allocations: [{ personId: f.staffAId, percent: '100.00' }],
       }),
@@ -559,7 +559,7 @@ describe('T-178 test 10 — reversing an auto-charge: 30-day window', () => {
   async function autoResolve(f: Fixture, amount: string, openedAt: string) {
     const rec = await asOrg(f.orgId, (tx) =>
       recordOrderWastage(tx, f.manager, {
-        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda', typeMode: 'tracked',
+        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda',
         amount, reason: 'reversal test', openedOn: '2026-01-10',
       }),
     );
@@ -620,7 +620,7 @@ describe('T-178 test 11 — the backstop is idempotent: a second run the same da
     await raiseReceivable(f, '30.00');
     const rec = await asOrg(f.orgId, (tx) =>
       recordOrderWastage(tx, f.manager, {
-        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda', typeMode: 'tracked',
+        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda',
         amount: '30.00', reason: 'run twice', openedOn: '2026-01-10',
       }),
     );
@@ -650,7 +650,7 @@ describe('T-178 test 12 — a backstop posting into a closed period is refused, 
     await raiseReceivable(f, '40.00');
     const rec = await asOrg(f.orgId, (tx) =>
       recordOrderWastage(tx, f.manager, {
-        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda', typeMode: 'tracked',
+        storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda',
         amount: '40.00', reason: 'lands in a closed period', openedOn: '2026-01-10',
       }),
     );

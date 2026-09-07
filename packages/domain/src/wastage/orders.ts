@@ -116,6 +116,9 @@ function splitByPercent(amount: Money, allocations: AllocationInput[]): Money[] 
 interface PostDispositionParams {
   orgId: string;
   storeId: string;
+  /** ⭐ T-230 — the party is found BY ID. A rename must not strand an open wastage. */
+  channelId: string;
+  /** The name as recorded, for the memo only. */
   channel: string;
   amount: string;
   disposition: 'absorbed' | 'charged';
@@ -135,11 +138,11 @@ interface PostDispositionParams {
  * of the same shape. `platform_paid` never reaches this function — it posts nothing (§6).
  */
 async function postDisposition(trx: Tx, p: PostDispositionParams): Promise<{ journalEntryId: string }> {
-  const channelRow = await orderWastageRepo.findChannelByName(trx, p.orgId, p.storeId, p.channel);
+  const channelRow = await orderWastageRepo.channelById(trx, p.orgId, p.channelId);
   if (!channelRow) {
     throw new Error(
-      `order wastage: no '${p.channel}' channel is configured for this store — configure it in ` +
-        'sales-day channels before posting a wastage against it (there is nowhere to book the 1220 leg).',
+      `order wastage: the '${p.channel}' channel this wastage was recorded against no longer ` +
+        'exists — there is nowhere to book the 1220 leg.',
     );
   }
 
@@ -197,9 +200,17 @@ async function postDisposition(trx: Tx, p: PostDispositionParams): Promise<{ jou
 export interface RecordOrderWastageInput {
   storeId: string;
   salesDayId: string;
+  /** The channel's NAME as picked on the form. Resolved to a real `sales_channels` row here, at
+   *  creation — which is what supplies `channel_id` AND the wastage policy below. */
   channel: string;
   orderRef?: string | null;
-  typeMode: 'instant' | 'tracked';
+  // ⛔ `typeMode` IS DELETED, and its absence is the feature. Bible §13 row 180, Ian 2026-09-07:
+  //    the CHANNEL carries the policy and the person recording a loss no longer picks it. While
+  //    this field existed, a staffer could mark their own Foodpanda wastage `instant` +
+  //    `absorbed` and skip the Wastage Monitor, the 48-hour dispute window and the 15-day
+  //    auto-charge backstop in a single click — the control was optional to the person it
+  //    controls. ⚠️ Do not re-add it "for tests": `sales_channels.wastage_type_mode` is where a
+  //    test says what the policy is, because that is where a store says it.
   amount: string;
   reason: string;
   /** Business date the posting (instant) or the eventual resolution dates against. */
@@ -207,8 +218,14 @@ export interface RecordOrderWastageInput {
   /** Tracked: an optional explicit seed, overriding the Monitor default (invariant 2). Instant +
    *  `charged`: required. Ignored for instant `absorbed`/`platform_paid`. */
   allocations?: AllocationInput[];
-  /** Required exactly when `typeMode === 'instant'`; forbidden for `tracked` (§3 — a tracked
-   *  wastage awaits a human's disposition decision). */
+  /**
+   * Required exactly when the RESOLVED CHANNEL's policy is `instant`; refused when it is
+   * `tracked` (§3 — a tracked wastage awaits a human's disposition decision).
+   *
+   * ⭐ The recorder still states this, and that is not a hole. A disposition is a FACT about what
+   * happened to the money; the mode is the POLICY about whether that fact may be decided on the
+   * spot. Row 180 moved the policy, not the fact.
+   */
   disposition?: 'platform_paid' | 'absorbed' | 'charged';
 }
 
@@ -233,11 +250,39 @@ export async function recordOrderWastage(
       await authorize(trx, actor, 'charge_staff_for_wastage', { storeId: input.storeId });
     }
 
-    if (input.typeMode === 'instant' && !input.disposition) {
-      throw new Error('recordOrderWastage: an instant wastage must be recorded with its disposition already decided.');
+    // ⭐ T-230 — the channel is resolved HERE, at creation, and this one move does three things:
+    // it supplies the `channel_id` pointer, it derives the wastage policy (bible §13 row 180), and
+    // it refuses a channel name nothing configured at the moment somebody types it rather than
+    // days later when a human tries to resolve the row.
+    const channelRow = await orderWastageRepo.findChannelByName(trx, actor.orgId, input.storeId, input.channel);
+    if (!channelRow) {
+      throw new Error(
+        `recordOrderWastage: no '${input.channel}' channel is configured for this store — ` +
+          'add it under Settings › Sales channels before recording a wastage against it.',
+      );
     }
-    if (input.typeMode === 'tracked' && input.disposition) {
-      throw new Error('recordOrderWastage: a tracked wastage awaits a disposition decision — do not supply one at creation.');
+    if (!channelRow.isActive) {
+      throw new Error(
+        `recordOrderWastage: '${channelRow.name}' is no longer an active channel at this store, ` +
+          'so a new wastage cannot be recorded against it.',
+      );
+    }
+
+    // ⭐ DERIVED, never supplied — bible §13 row 180.
+    const typeMode = channelRow.wastageTypeMode;
+
+    if (typeMode === 'instant' && !input.disposition) {
+      throw new Error(
+        `recordOrderWastage: '${channelRow.name}' is an instant channel, so this wastage must be ` +
+          'recorded with its disposition already decided.',
+      );
+    }
+    if (typeMode === 'tracked' && input.disposition) {
+      throw new Error(
+        `recordOrderWastage: '${channelRow.name}' is a tracked channel — a tracked wastage awaits ` +
+          'a disposition decision and does not take one at creation. Change the wastage policy on ' +
+          'that channel under Settings › Sales channels if it should be decided on the spot.',
+      );
     }
     const reason = input.reason.trim();
     if (!reason) throw new Error('recordOrderWastage: say why this wastage happened.');
@@ -250,9 +295,13 @@ export async function recordOrderWastage(
       orgId: actor.orgId,
       storeId: input.storeId,
       salesDayId: input.salesDayId,
-      channel: input.channel,
+      channelId: channelRow.id,
+      // ⭐ The channel's OWN name, not the string the caller typed — `findChannelByName` matches
+      // case- and whitespace-insensitively, so this is what normalises "  foodpanda " to the name
+      // the memo will show.
+      channel: channelRow.name,
       orderRef: input.orderRef ?? null,
-      typeMode: input.typeMode,
+      typeMode,
       amount: input.amount,
       reason,
       createdBy: actor.personId,
@@ -263,7 +312,7 @@ export async function recordOrderWastage(
     // exception the backstop's own third fallback tier exists for — not created "ownerless" by
     // omission, just left for that tier to resolve at day 15.
     let allocations = input.allocations ?? [];
-    if (input.typeMode === 'tracked' && allocations.length === 0) {
+    if (typeMode === 'tracked' && allocations.length === 0) {
       const monitor = await orderWastageRepo.wastageMonitorFor(trx, actor.orgId, input.storeId);
       if (monitor) allocations = [{ personId: monitor, percent: '100.00' }];
     }
@@ -271,13 +320,14 @@ export async function recordOrderWastage(
       await orderWastageRepo.replaceAllocations(trx, id, allocations);
     }
 
-    if (input.typeMode === 'instant') {
+    if (typeMode === 'instant') {
       let journalEntryId: string | null = null;
       if (input.disposition !== 'platform_paid') {
         const posted = await postDisposition(trx, {
           orgId: actor.orgId,
           storeId: input.storeId,
-          channel: input.channel,
+          channelId: channelRow.id,
+          channel: channelRow.name,
           amount: input.amount,
           disposition: input.disposition as 'absorbed' | 'charged',
           allocations,
@@ -394,6 +444,7 @@ export async function resolveOrderWastage(
       const posted = await postDisposition(trx, {
         orgId: actor.orgId,
         storeId: row.storeId,
+        channelId: row.channelId,
         channel: row.channel,
         amount: row.amount,
         disposition: input.disposition,
@@ -554,6 +605,7 @@ export async function runOrderWastageBackstop(
       const posted = await postDisposition(trx, {
         orgId,
         storeId: row.storeId,
+        channelId: row.channelId,
         channel: row.channel,
         amount: row.amount,
         disposition,

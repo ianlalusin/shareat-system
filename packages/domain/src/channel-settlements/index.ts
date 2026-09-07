@@ -602,8 +602,9 @@ export async function voidChannelSettlement(
 export interface PostedSettlementSummary {
   settlementId: string;
   storeId: string;
-  /** The channel's NAME, not its id — order_wastages.channel is free text matched by name (see
-   *  that schema file's own comment on why there is no channel_id FK there). */
+  /** ⭐ T-230 — the id is what `settlement-match` keys on, so a rename cannot lose a match. */
+  channelId: string;
+  /** The channel's name, for display in the proposal's rationale sentence. */
   channel: string;
   businessDate: string;
   grossAmount: string;
@@ -615,7 +616,7 @@ export interface PostedSettlementSummary {
 }
 
 function toSummary(row: {
-  id: string; storeId: string; channelName: string; businessDate: string;
+  id: string; storeId: string; channelId: string; channelName: string; businessDate: string;
   grossAmount: string; outstandingCleared: string; netDeposited: string;
   commission: string; marketing: string; platformFee: string; vatOnFees: string;
   withholdingTax: string; penalty: string; variance: string; settlementGain: string;
@@ -623,6 +624,7 @@ function toSummary(row: {
   return {
     settlementId: row.id,
     storeId: row.storeId,
+    channelId: row.channelId,
     channel: row.channelName,
     businessDate: row.businessDate,
     grossAmount: row.grossAmount,

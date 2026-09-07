@@ -17,6 +17,12 @@
  * `open`, with a responsible party already seeded (invariant 2), and awaits a human decision —
  * disputed, resolved by hand, matched against a settlement, or closed by the 15-day backstop.
  *
+ * ⭐ **T-230 / bible §13 row 180: the CHANNEL decides which of the two this is, not the person
+ * recording the loss.** `type_mode` is copied from `sales_channels.wastage_type_mode` at creation
+ * and is not something a caller may state. Before T-230 the recorder chose it on the form, which
+ * meant a staffer could mark their own loss `instant` + `absorbed` and skip the monitor, the
+ * 48-hour dispute window and the 15-day auto-charge backstop in one click.
+ *
  * ## `1220` is the credit in every case that posts (§6)
  *
  * The order was recognised as revenue with a channel receivable behind it (T-123); a wastage
@@ -29,10 +35,15 @@ import { channelSettlements } from './channel-settlements';
 import { journalEntries } from './journal';
 import { organizations } from './organizations';
 import { persons } from './persons';
-import { salesDays } from './sales-days';
+import { salesChannels, salesDays, SALES_CHANNEL_WASTAGE_MODES } from './sales-days';
 import { stores } from './stores';
 
-export const ORDER_WASTAGE_TYPE_MODES = ['instant', 'tracked'] as const;
+/**
+ * ⭐ T-230 — **derived from the channel's own policy column, never restated.** Bible §13 row 180
+ * makes `sales_channels.wastage_type_mode` the source of this value; a second literal list here
+ * is a second source of truth that would drift the first time one of them gained a member.
+ */
+export const ORDER_WASTAGE_TYPE_MODES = SALES_CHANNEL_WASTAGE_MODES;
 export type OrderWastageTypeMode = (typeof ORDER_WASTAGE_TYPE_MODES)[number];
 
 export const ORDER_WASTAGE_STATUSES = ['open', 'disputed', 'resolved'] as const;
@@ -63,15 +74,30 @@ export const orderWastages = pgTable(
       .notNull()
       .references(() => salesDays.id, { onDelete: 'restrict' }),
     /**
-     * ⚠️ Free text, not a FK — `grab | foodpanda | dine_in | ...`, per the contract. Resolved to
-     * a real `sales_channels` row (by org+store+name) at POSTING time only, because that is the
-     * one moment a party is actually needed for the `1220` leg — see `wastage/orders.ts`'s
-     * `resolveChannelParty`. A store with no matching channel configured is refused there, by
-     * name, rather than silently posting without a party (which the DB would refuse anyway).
+     * ⭐ T-230. **The pointer.** Resolved at CREATION — which is possible only because T-230 has to
+     * resolve the channel there anyway, to derive `type_mode` from the channel's policy (bible §13
+     * row 180). Before T-230 this was a by-name lookup deferred to posting time, and a rename
+     * stranded every open wastage: the row could not be resolved by a human or by the 15-day
+     * backstop, because `findChannelByName` no longer matched.
+     *
+     * ⛔ `on delete restrict` — a channel with wastages against it is deactivated, never deleted.
+     */
+    channelId: uuid('channel_id')
+      .notNull()
+      .references(() => salesChannels.id, { onDelete: 'restrict' }),
+    /**
+     * ⚠️ The channel's name **as recorded**, and not redundant beside `channel_id`: it is what the
+     * posted memo says and what a person reading history expects to see. ⛔ **Display and memo
+     * only.** Never re-read to find the channel, and never updated after creation — renaming a
+     * channel must not retroactively change what a posted memo claims. `channel_id` answers
+     * *which channel*; this answers *what it was called at the time*.
      */
     channel: text('channel').notNull(),
     /** The platform's own order id. Null for a dine-in remake, which has none. */
     orderRef: text('order_ref'),
+    /** ⭐ DERIVED from `sales_channels.wastage_type_mode` at creation — T-230, bible §13 row 180.
+     *  Copied onto the row rather than joined, so a later change of channel policy cannot rewrite
+     *  what an already-open wastage was created under. */
     typeMode: text('type_mode', { enum: ORDER_WASTAGE_TYPE_MODES }).notNull(),
     amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
     reason: text('reason').notNull(),

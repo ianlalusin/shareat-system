@@ -16,6 +16,8 @@ export interface OrderWastageRow {
   readonly orgId: string;
   readonly storeId: string;
   readonly salesDayId: string;
+  /** ⭐ T-230 — the pointer. `channel` below is the name AS RECORDED, for memo and display. */
+  readonly channelId: string;
   readonly channel: string;
   readonly orderRef: string | null;
   readonly typeMode: 'instant' | 'tracked';
@@ -44,6 +46,7 @@ const COLUMNS = {
   orgId: orderWastages.orgId,
   storeId: orderWastages.storeId,
   salesDayId: orderWastages.salesDayId,
+  channelId: orderWastages.channelId,
   channel: orderWastages.channel,
   orderRef: orderWastages.orderRef,
   typeMode: orderWastages.typeMode,
@@ -64,6 +67,7 @@ export interface CreateOrderWastageInput {
   readonly orgId: string;
   readonly storeId: string;
   readonly salesDayId: string;
+  readonly channelId: string;
   readonly channel: string;
   readonly orderRef: string | null;
   readonly typeMode: 'instant' | 'tracked';
@@ -85,6 +89,7 @@ export async function create(tx: Tx, input: CreateOrderWastageInput): Promise<{ 
       orgId: input.orgId,
       storeId: input.storeId,
       salesDayId: input.salesDayId,
+      channelId: input.channelId,
       channel: input.channel,
       orderRef: input.orderRef,
       typeMode: input.typeMode,
@@ -238,22 +243,66 @@ export async function wastageMonitorFor(tx: Tx, orgId: string, storeId: string):
 }
 
 /**
- * A real `sales_channels` row for this store, resolved by NAME (case-insensitive) — the party the
- * `1220` leg needs. §6: "1220 is the credit in every case" a wastage posts against, and 1220 is a
- * `requires_party` control account, so a wastage against a channel this store never configured
- * has nowhere to post and is refused by name rather than silently.
+ * A real `sales_channels` row for this store, resolved by NAME (case-insensitive).
+ *
+ * ⭐ **T-230: this runs at CREATION, and only there.** It turns what the recorder picked into a
+ * `channel_id`, and carries back the two facts creation needs — whether the channel is still
+ * active, and the wastage policy the row's `type_mode` is derived from (bible §13 row 180). The
+ * posting path uses `channelById`; nothing looks a channel up by name after the row exists.
+ *
+ * ⛔ **It does NOT filter on `is_active`, deliberately.** A wastage opened before a channel was
+ * retired must still post — the `1220` leg needs that channel as its party whatever its current
+ * status. Refusing a NEW wastage against a retired channel is the domain's call, at creation.
  */
+export interface WastageChannelRow {
+  readonly id: string;
+  readonly name: string;
+  readonly isActive: boolean;
+  readonly wastageTypeMode: 'tracked' | 'instant';
+}
+
 export async function findChannelByName(
   tx: Tx,
   orgId: string,
   storeId: string,
   channel: string,
-): Promise<{ id: string } | null> {
+): Promise<WastageChannelRow | null> {
   const [row] = (await tx.execute(sql`
-    select id from sales_channels
-    where org_id = ${orgId} and store_id = ${storeId} and lower(name) = lower(${channel})
+    select id, name, is_active, wastage_type_mode from sales_channels
+    where org_id = ${orgId} and store_id = ${storeId}
+      and lower(trim(name)) = lower(trim(${channel}))
     limit 1
-  `)) as unknown as { id: string }[];
-  return row ? { id: row.id } : null;
+  `)) as unknown as Record<string, unknown>[];
+  if (!row) return null;
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    isActive: Boolean(row.is_active),
+    wastageTypeMode: String(row.wastage_type_mode) as 'tracked' | 'instant',
+  };
+}
+
+/**
+ * ⭐ T-230. The posting path's resolution — **by id**, so a rename cannot strand an open wastage.
+ * Before T-230 `postDisposition` re-looked-up by name at posting time, which meant renaming a
+ * channel left every open wastage against it unresolvable by a human AND by the 15-day backstop.
+ */
+export async function channelById(
+  tx: Tx,
+  orgId: string,
+  channelId: string,
+): Promise<WastageChannelRow | null> {
+  const [row] = (await tx.execute(sql`
+    select id, name, is_active, wastage_type_mode from sales_channels
+    where org_id = ${orgId} and id = ${channelId}
+    limit 1
+  `)) as unknown as Record<string, unknown>[];
+  if (!row) return null;
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    isActive: Boolean(row.is_active),
+    wastageTypeMode: String(row.wastage_type_mode) as 'tracked' | 'instant',
+  };
 }
 

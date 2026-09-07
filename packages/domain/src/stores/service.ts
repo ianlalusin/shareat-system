@@ -263,8 +263,11 @@ export async function storeReadiness(
       kind: 'manual',
       blocking: true,
       detail: channels > 0
-        ? `${channels} channel(s).`
-        : 'Without one a sales day has nowhere to land, and an unresolvable channel blocks rather than silently defaulting (DEF-059).',
+        ? `${channels} active channel(s).`
+        : // ⭐ T-230 names the remedy. Until then this check reported a blocking condition with no
+          // screen anywhere that could clear it (DEF-207) — a checklist item nobody could tick.
+          'Without one a sales day has nowhere to land, and an unresolvable channel blocks rather ' +
+            'than silently defaulting (DEF-059). Add one under Settings › Sales channels.',
     },
     {
       key: 'signIn',

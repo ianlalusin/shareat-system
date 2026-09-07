@@ -55,6 +55,17 @@ import { moneyAccounts } from './money-accounts';
 // sales_channels — per-store configuration. v1's Store.salesChannels[], as rows.
 // -------------------------------------------------------------------------------------
 
+/**
+ * ⭐ T-230 / bible §13 row 180. Whether a wastage recorded against this channel enters the charge
+ * lifecycle. **The CHANNEL decides, not the person recording the loss** — `order_wastages.type_mode`
+ * is derived from this column and is no longer something a caller may state.
+ *
+ * ⚠️ This is the ONE declaration of the set. `ORDER_WASTAGE_TYPE_MODES` in `order-wastage.ts` is
+ * derived from it rather than restated, so the policy and the record it produces cannot drift.
+ */
+export const SALES_CHANNEL_WASTAGE_MODES = ['tracked', 'instant'] as const;
+export type SalesChannelWastageMode = (typeof SALES_CHANNEL_WASTAGE_MODES)[number];
+
 export const salesChannels = pgTable(
   'sales_channels',
   {
@@ -106,18 +117,44 @@ export const salesChannels = pgTable(
      * account the leg hits if that posture ever changes.
      */
     taxTreatment: text('tax_treatment', { enum: ['expense', 'creditable'] as const }).notNull().default('expense'),
+    /**
+     * ⭐ T-230, bible §13 row 180 — tracked-vs-instant is a per-channel POLICY, not a per-record
+     * choice. `tracked` gets a Wastage Monitor, a 48-hour dispute window and the 15-day
+     * auto-charge backstop; `instant` books the disposition in the same call.
+     *
+     * ⚠️ **NOT NULL with a default, unlike `is_remitted_daily` immediately above — and the
+     * difference is the point.** There is no safe value for remittance behaviour, so that column
+     * refuses to have one. There IS a safe value here: `tracked` keeps every control, `instant`
+     * removes them, and a default that silently disables a control would be the wrong default.
+     */
+    wastageTypeMode: text('wastage_type_mode', { enum: SALES_CHANNEL_WASTAGE_MODES })
+      .notNull()
+      .default('tracked'),
     isActive: boolean('is_active').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
   (t) => [
-    uniqueIndex('sales_channels_org_id_store_id_name_unique').on(t.orgId, t.storeId, t.name),
+    // NOTE: uniqueness is `(org_id, store_id, lower(trim(name)))` — case- and whitespace-
+    // INSENSITIVE, bible §4.4 rule 3, DEF-205. That is an expression index Drizzle's builder
+    // cannot express; it is hand-added in migration 0133, exactly as `positions`
+    // (`employment.ts:126-134`) already documents for its own identity rule.
+    // ⛔ Do NOT restore a `uniqueIndex(...)` line here. The builder can only express the
+    // case-SENSITIVE version, and `db:generate` would then "fix" the drift by dropping the
+    // correct index and recreating the broken one (DEF-073's shape).
+    // ⚠️ It spans ACTIVE AND INACTIVE rows on purpose: `findChannelByName` resolves with `limit 1`
+    // and no ordering, so two rows sharing a name — one retired, one live — would make which
+    // receivable a wastage posts against a matter of which row Postgres happened to return.
     index('sales_channels_org_id_store_id_idx').on(t.orgId, t.storeId),
     // A non-remitted channel MUST name where its receivable goes. DEF-059 is what happens when a
     // channel's wiring is allowed to be absent: the money is silently lost rather than refused.
     check(
       'sales_channels_non_remitted_needs_receivable_check',
       sql`${t.isRemittedDaily} = true or ${t.receivableAccountCode} is not null`,
+    ),
+    check(
+      'sales_channels_wastage_type_mode_check',
+      sql`${t.wastageTypeMode} in ('tracked', 'instant')`,
     ),
   ],
 );

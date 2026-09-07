@@ -67,6 +67,11 @@ export default async function SettingsPage() {
           description="Which account each kind of spend debits. A category with no account mapped blocks posting rather than guessing, so an unmapped one holds up every draft in it."
         />
         <SettingsCard
+          href="/settings/sales-channels"
+          title="Sales channels"
+          description="How each branch sells — walk-in and the delivery platforms. Sets whether a channel’s money reaches the till that day or is owed to us until the platform settles, and whether a wasted order through it gets reviewed or is decided on the spot."
+        />
+        <SettingsCard
           href="/settings/attendance"
           title="Attendance & payroll"
           description="Shift hours and allowed start times, late policy, night differential and overtime, holiday multipliers, and the pay period — effective from a chosen day, never rewriting a day already computed."

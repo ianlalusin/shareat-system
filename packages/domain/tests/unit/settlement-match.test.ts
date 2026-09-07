@@ -13,6 +13,8 @@ import type { PostedSettlementSummary } from '../../src/channel-settlements';
 function wastage(over: Partial<SettleableOrderWastage> & { wastageId: string }): SettleableOrderWastage {
   return {
     storeId: 'store-1',
+    // ⭐ T-230 — the MATCH KEY. `channel` below is the name as recorded, for the rationale only.
+    channelId: 'chan-foodpanda',
     channel: 'Foodpanda',
     businessDate: '2026-09-01',
     amount: '250.00',
@@ -25,6 +27,7 @@ function wastage(over: Partial<SettleableOrderWastage> & { wastageId: string }):
 function settlement(over: Partial<PostedSettlementSummary> & { settlementId: string }): PostedSettlementSummary {
   return {
     storeId: 'store-1',
+    channelId: 'chan-foodpanda',
     channel: 'Foodpanda',
     businessDate: '2026-09-01',
     grossAmount: '8000.00',
@@ -54,10 +57,33 @@ describe('matchWastagesToSettlement — proposes only, at channel-day granularit
     expect(candidates[0]!.rationale).toContain('gross');
   });
 
-  it('channel name matching is case-insensitive — the settlement and the wastage need not agree on case', () => {
-    const w = wastage({ wastageId: 'w1', channel: 'foodpanda' });
-    const s = settlement({ settlementId: 's1', channel: 'Foodpanda' });
+  it('⭐ T-230 — a RENAMED channel still matches: the key is the id, not the name', () => {
+    // The wastage was recorded when the channel was called "Foodpanda"; the channel has since
+    // been renamed, so the settlement summary reports the new name against the same id.
+    // ⛔ Under the old name-based key this proposed nothing, and a MISSING proposal is invisible —
+    // nobody sees a settlement that was never suggested.
+    const w = wastage({ wastageId: 'w1', channel: 'Foodpanda' });
+    const s = settlement({ settlementId: 's1', channel: 'Foodpanda PH' });
     expect(matchWastagesToSettlement([w], [s])).toHaveLength(1);
+  });
+
+  it('⛔ a wastage with no channelId THROWS rather than silently proposing nothing', () => {
+    // ⭐ Found in review: `/wastage`'s list page built these literals without `channelId` and
+    // typecheck stayed clean, because a `w is SettleableOrderWastage` type predicate on the filter
+    // ASSERTED the shape instead of checking it. At runtime the key became
+    // `store|undefined|date`, so the page silently stopped proposing settlement matches forever —
+    // the "a missing proposal is invisible" failure this module's own comment warns about,
+    // reintroduced one layer up. A loud throw at the call site is the only defence a pure
+    // function has.
+    const w = wastage({ wastageId: 'w1', channelId: undefined as unknown as string });
+    const s = settlement({ settlementId: 's1' });
+    expect(() => matchWastagesToSettlement([w], [s])).toThrow(/wastage w1.*channelId/i);
+  });
+
+  it('⛔ a settlement with no channelId throws too — the other side of the same key', () => {
+    const w = wastage({ wastageId: 'w1' });
+    const s = settlement({ settlementId: 's1', channelId: undefined as unknown as string });
+    expect(() => matchWastagesToSettlement([w], [s])).toThrow(/settlement s1.*channelId/i);
   });
 
   it('a different business date proposes nothing', () => {
@@ -66,9 +92,9 @@ describe('matchWastagesToSettlement — proposes only, at channel-day granularit
     expect(matchWastagesToSettlement([w], [s])).toHaveLength(0);
   });
 
-  it('a different channel proposes nothing', () => {
-    const w = wastage({ wastageId: 'w1', channel: 'Grab' });
-    const s = settlement({ settlementId: 's1', channel: 'Foodpanda' });
+  it('a different channel proposes nothing — ⚠️ even when the two share a NAME', () => {
+    const w = wastage({ wastageId: 'w1', channelId: 'chan-grab', channel: 'Foodpanda' });
+    const s = settlement({ settlementId: 's1', channelId: 'chan-foodpanda', channel: 'Foodpanda' });
     expect(matchWastagesToSettlement([w], [s])).toHaveLength(0);
   });
 

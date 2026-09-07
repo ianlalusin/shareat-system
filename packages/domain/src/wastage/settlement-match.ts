@@ -27,6 +27,9 @@ import type { PostedSettlementSummary } from '../channel-settlements';
 export interface SettleableOrderWastage {
   wastageId: string;
   storeId: string;
+  /** ⭐ T-230 — the match key. See the matcher's own note on why it is not the name. */
+  channelId: string;
+  /** Display only, in the rationale sentence. */
   channel: string;
   /** The channel-day this wastage's `sales_day_id` resolves to. */
   businessDate: string;
@@ -55,14 +58,42 @@ export function matchWastagesToSettlement(
   wastages: SettleableOrderWastage[],
   settlements: PostedSettlementSummary[],
 ): SettlementMatchCandidate[] {
+  // ⭐ T-230 — keyed on the channel ID, not its name. Renaming a channel used to silently stop
+  // matching open wastages to the settlement that covers them: the wastage kept the old name, the
+  // settlement summary reported the new one, and the proposal simply never appeared. A missing
+  // proposal is invisible, which is the worst shape a defect can take here.
+  // ⛔ A missing key is REFUSED, loudly, and this guard is not defensive padding — it is the
+  // remedy for a defect this module already suffered once. `/wastage`'s list page built these
+  // literals without `channelId` and typecheck stayed CLEAN, because a
+  // `(w): w is SettleableOrderWastage` type predicate on the caller's `.filter()` asserted the
+  // shape instead of checking it. The key silently became `store|undefined|date`, so the page
+  // stopped proposing matches for good — and a proposal that never appears is invisible: nobody
+  // can notice a settlement they were never shown. A pure function's only defence is to refuse.
+  for (const s of settlements) {
+    if (!s.channelId) {
+      throw new Error(
+        `matchWastagesToSettlement: settlement ${s.settlementId} arrived with no channelId. ` +
+          'Matching is keyed on the channel id, so this would silently propose nothing rather than fail.',
+      );
+    }
+  }
+  for (const w of wastages) {
+    if (!w.channelId) {
+      throw new Error(
+        `matchWastagesToSettlement: wastage ${w.wastageId} arrived with no channelId. ` +
+          'Matching is keyed on the channel id, so this would silently propose nothing rather than fail.',
+      );
+    }
+  }
+
   const byKey = new Map<string, PostedSettlementSummary>();
   for (const s of settlements) {
-    byKey.set(`${s.storeId}|${s.channel.toLowerCase()}|${s.businessDate}`, s);
+    byKey.set(`${s.storeId}|${s.channelId}|${s.businessDate}`, s);
   }
 
   const candidates: SettlementMatchCandidate[] = [];
   for (const w of wastages) {
-    const settlement = byKey.get(`${w.storeId}|${w.channel.toLowerCase()}|${w.businessDate}`);
+    const settlement = byKey.get(`${w.storeId}|${w.channelId}|${w.businessDate}`);
     if (!settlement) continue;
     candidates.push({
       wastageId: w.wastageId,

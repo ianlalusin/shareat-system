@@ -106,3 +106,8 @@ export * from './recurring-expenses';
 // T-228 — standing up an organization: the one flow with no Actor, because there is no principal
 // before the org exists. Its only caller is scripts/bootstrap-org.ts.
 export * from './organizations';
+
+// T-230 — sales-channel administration (DEF-207) and the per-channel wastage policy (bible §13
+// row 180). ⚠️ Separate from `stores/service` on purpose: that module is `manage_stores`
+// (admin-only), this one is `manage_store_settings` (manager ✅).
+export * from './sales-channels';

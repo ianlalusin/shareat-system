@@ -36,7 +36,9 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
 
   const { open, channels, recent } = await withOrgPrincipal(actor.orgId, async (tx) => ({
     open: await orderWastageRepo.listOpen(tx, actor.orgId, storeId),
-    channels: await salesDaysRepo.listChannels(tx, actor.orgId, storeId),
+    // ⭐ ACTIVE only — a retired channel must not be offered for a NEW wastage. T-230 shipped the
+    // first writer `is_active` has ever had, so before it this distinction could not bite.
+    channels: await salesDaysRepo.listChannels(tx, actor.orgId, storeId, { activeOnly: true }),
     recent: await orderWastageRepo.listRecent(tx, actor.orgId, storeId, 20),
   }));
   const resolvedHistory = recent.filter((w) => w.status === 'resolved');
@@ -58,16 +60,24 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
       settlements: await listPostedSettlementsForStore(tx, actor, { storeId }),
     };
   });
+  // ⚠️ **The map's return type is annotated, and the filter carries NO type predicate.** That is
+  // the whole guard, and it was learned the hard way: this literal was missing `channelId` and
+  // typecheck stayed clean, because a `(w): w is SettleableOrderWastage` predicate on the filter
+  // ASSERTED the shape rather than checking it. The matcher then keyed on `store|undefined|date`
+  // and this page proposed no settlement match ever again — silently, because a proposal that
+  // never renders is one nobody can miss. Annotating the map makes an incomplete literal a
+  // COMPILE error; TS 5.5+ infers the narrowing predicate for `w !== null` on its own, so nothing
+  // is lost by removing it.
   const wastagesForMatch: SettleableOrderWastage[] = trackedOpen
-    .map((w) => {
+    .map((w): SettleableOrderWastage | null => {
       const businessDate = businessDates.get(w.salesDayId);
       if (!businessDate) return null;
       return {
-        wastageId: w.id, storeId: w.storeId, channel: w.channel, businessDate,
+        wastageId: w.id, storeId: w.storeId, channelId: w.channelId, channel: w.channel, businessDate,
         amount: w.amount, orderRef: w.orderRef, status: w.status as 'open' | 'disputed',
       };
     })
-    .filter((w): w is SettleableOrderWastage => w !== null);
+    .filter((w) => w !== null);
   const matches = matchWastagesToSettlement(wastagesForMatch, settlements);
 
   return (
@@ -104,12 +114,22 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
         <form action={recordOrderWastageAction} className="mt-3 space-y-3 text-sm">
           <input type="hidden" name="storeId" value={storeId} />
           <div className="grid gap-3 sm:grid-cols-3">
+            {/* ⭐ T-230 — a SELECT of configured channels, not free text with a datalist hint.
+                Two reasons, and the first is the whole task: the channel now carries the wastage
+                policy (bible §13 row 180), so `recordOrderWastage` must resolve a REAL channel at
+                creation to derive it. The second is a defect this closes on the way past — a typed
+                name nothing matched used to create a tracked wastage that no human and no backstop
+                could ever resolve, and it only surfaced days later at posting time. */}
             <label className="flex flex-col gap-1">
               <span className="text-neutral-600 dark:text-neutral-400">Channel</span>
-              <input name="channel" list="channels" required placeholder="Foodpanda, Grab, dine_in..." className="rounded-md border border-neutral-300 px-2 py-2 dark:border-neutral-700 dark:bg-neutral-950" />
-              <datalist id="channels">
-                {channels.map((c) => <option key={c.id} value={c.name} />)}
-              </datalist>
+              <select name="channel" required defaultValue="" className="rounded-md border border-neutral-300 px-2 py-2 dark:border-neutral-700 dark:bg-neutral-950">
+                <option value="" disabled>Choose a channel…</option>
+                {channels.map((c) => (
+                  <option key={c.id} value={c.name}>
+                    {c.name} — {c.wastageTypeMode === 'tracked' ? 'reviewed' : 'decided on the spot'}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="flex flex-col gap-1">
               <span className="text-neutral-600 dark:text-neutral-400">Business date</span>
@@ -128,24 +148,36 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
               <input name="reason" required className="rounded-md border border-neutral-300 px-2 py-2 dark:border-neutral-700 dark:bg-neutral-950" />
             </label>
           </div>
-          <div className="flex flex-wrap items-center gap-4">
-            <label className="flex items-center gap-2">
-              <input type="radio" name="typeMode" value="tracked" defaultChecked /> Tracked — awaits a disposition decision
+          {/* ⛔ THE TWO MODE RADIOS ARE GONE — bible §13 row 180, Ian 2026-09-07. They let the
+              person recording a loss mark it `instant` + `absorbed` and skip the Wastage Monitor,
+              the 48-hour dispute window and the 15-day auto-charge backstop in one click: the
+              control was optional to the person it controls. The CHANNEL carries the policy now,
+              and the channel dropdown above says which policy each one has.
+              ⚠️ The DISPOSITION stays, because it is a different kind of thing — a fact about what
+              happened to the money, not a decision about whether that fact may be made on the
+              spot. It is required on an instant channel and refused on a tracked one. */}
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex flex-col gap-1">
+              <span className="text-neutral-600 dark:text-neutral-400">
+                Disposition <span className="text-neutral-400">— only for a decided-on-the-spot channel</span>
+              </span>
+              <select name="disposition" defaultValue="" className="rounded-md border border-neutral-300 px-2 py-2 dark:border-neutral-700 dark:bg-neutral-900">
+                <option value="">(reviewed channel — leave blank)</option>
+                <option value="platform_paid">Platform paid — posts nothing</option>
+                <option value="absorbed">Store absorbs — Dr 5300</option>
+              </select>
             </label>
-            <label className="flex items-center gap-2">
-              <input type="radio" name="typeMode" value="instant" /> Instant — decide now:
-            </label>
-            <select name="disposition" defaultValue="" className="rounded-md border border-neutral-300 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900">
-              <option value="">(tracked — leave blank)</option>
-              <option value="platform_paid">Platform paid — posts nothing</option>
-              <option value="absorbed">Store absorbs — Dr 5300</option>
-            </select>
           </div>
           <p className="text-xs text-neutral-500 dark:text-neutral-500">
-            A tracked wastage seeds this store&apos;s Wastage Monitor as the responsible party if
-            none is named here — set the Monitor under Settings. A `charged` instant disposition
-            needs an allocation, which this quick form does not offer; use the detail page after
-            recording it tracked instead.
+            On a <strong>reviewed</strong> channel this seeds the store&apos;s Wastage Monitor as
+            the responsible party, then waits for a decision. ⚠️ If no Monitor is set, the wastage
+            is created ownerless and the 15-day backstop lets the store absorb it — nothing is
+            recovered and nothing errors. A <code>charged</code> disposition needs an allocation,
+            which this quick form does not offer; record it and use the detail page.{' '}
+            <a href="/settings/sales-channels" className="underline underline-offset-2">
+              Change a channel&apos;s wastage policy
+            </a>
+            .
           </p>
           <button type="submit" className="rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200">Save</button>
         </form>

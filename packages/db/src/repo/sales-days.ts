@@ -100,9 +100,30 @@ export interface SalesChannelRow {
   isRemittedDaily: boolean;
   receivableAccountCode: string | null;
   isActive: boolean;
+  /** ⭐ T-230, bible §13 row 180 — the channel's wastage policy. */
+  wastageTypeMode: 'tracked' | 'instant';
+  destinationMoneyAccountId: string | null;
+  taxTreatment: string;
 }
 
-export async function listChannels(tx: Tx, orgId: string, storeId: string): Promise<SalesChannelRow[]> {
+/**
+ * Every channel configured for this store.
+ *
+ * ⚠️ **`activeOnly` defaults to FALSE, and that default is load-bearing.** `writeChannels`
+ * (`domain/sales-days/create.ts`) validates a submitted channel against this list, and EDITING an
+ * old sales day that names a since-retired channel has to keep working. A PICKER offering a new
+ * choice passes `activeOnly: true`; a validator does not. T-230 shipped the first writer
+ * `is_active` has ever had, so before it the distinction could not bite.
+ */
+export async function listChannels(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+  opts: { activeOnly?: boolean } = {},
+): Promise<SalesChannelRow[]> {
+  const where = opts.activeOnly
+    ? and(eq(salesChannels.orgId, orgId), eq(salesChannels.storeId, storeId), eq(salesChannels.isActive, true))
+    : and(eq(salesChannels.orgId, orgId), eq(salesChannels.storeId, storeId));
   return tx
     .select({
       id: salesChannels.id,
@@ -110,10 +131,161 @@ export async function listChannels(tx: Tx, orgId: string, storeId: string): Prom
       isRemittedDaily: salesChannels.isRemittedDaily,
       receivableAccountCode: salesChannels.receivableAccountCode,
       isActive: salesChannels.isActive,
+      wastageTypeMode: salesChannels.wastageTypeMode,
+      destinationMoneyAccountId: salesChannels.destinationMoneyAccountId,
+      taxTreatment: salesChannels.taxTreatment,
     })
     .from(salesChannels)
-    .where(and(eq(salesChannels.orgId, orgId), eq(salesChannels.storeId, storeId)))
+    .where(where)
     .orderBy(asc(salesChannels.name));
+}
+
+// -------------------------------------------------------------------------------------
+// Channel writes — T-230 (DEF-207). ⛔ No business rule lives here: eligibility of an account,
+// who may write, and what a missing remittance flag means are all
+// `packages/domain/src/sales-channels/index.ts`'s call.
+// -------------------------------------------------------------------------------------
+
+export interface InsertSalesChannelInput {
+  orgId: string;
+  storeId: string;
+  name: string;
+  isRemittedDaily: boolean;
+  receivableAccountCode: string | null;
+  wastageTypeMode: 'tracked' | 'instant';
+}
+
+export async function insertChannel(tx: Tx, input: InsertSalesChannelInput): Promise<{ id: string }> {
+  const [row] = await tx
+    .insert(salesChannels)
+    .values({
+      orgId: input.orgId,
+      storeId: input.storeId,
+      name: input.name,
+      isRemittedDaily: input.isRemittedDaily,
+      receivableAccountCode: input.receivableAccountCode,
+      wastageTypeMode: input.wastageTypeMode,
+    })
+    .returning({ id: salesChannels.id });
+  return row!;
+}
+
+/** One channel, by id, scoped to the org. `storeId` comes back so the domain can gate on the
+ *  channel's OWN store rather than one the caller supplied. */
+export async function channelById(tx: Tx, orgId: string, channelId: string): Promise<(SalesChannelRow & { storeId: string }) | null> {
+  const [row] = await tx
+    .select({
+      id: salesChannels.id,
+      storeId: salesChannels.storeId,
+      name: salesChannels.name,
+      isRemittedDaily: salesChannels.isRemittedDaily,
+      receivableAccountCode: salesChannels.receivableAccountCode,
+      isActive: salesChannels.isActive,
+      wastageTypeMode: salesChannels.wastageTypeMode,
+      destinationMoneyAccountId: salesChannels.destinationMoneyAccountId,
+      taxTreatment: salesChannels.taxTreatment,
+    })
+    .from(salesChannels)
+    .where(and(eq(salesChannels.orgId, orgId), eq(salesChannels.id, channelId)))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * The name-collision pre-read, normalised the same way the unique index is.
+ * ⚠️ It exists ONLY to word the refusal — the index is the authority, and a caller that skips this
+ * (or races another transaction) is still refused by the database.
+ */
+export async function channelByNormalisedName(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+  name: string,
+): Promise<{ id: string; name: string } | null> {
+  const [row] = (await tx.execute(sql`
+    select id, name from sales_channels
+     where org_id = ${orgId} and store_id = ${storeId}
+       and lower(trim(name)) = lower(trim(${name}))
+     limit 1
+  `)) as unknown as Record<string, unknown>[];
+  return row ? { id: String(row.id), name: String(row.name) } : null;
+}
+
+/**
+ * The eligibility facts a channel's `receivable_account_code` is judged on — T-230 invariant 4.
+ * ⛔ Judgement itself is the domain's; this only reports what the account IS.
+ *
+ * ⚠️ `requires_party` is here and not obvious. `sales-days/routing.ts` debits this account with
+ * `party_type = 'channel'`, and T-118's trigger refuses a party on an account that does not want
+ * one — so an account with `requires_party = false` produces a channel that configures cleanly and
+ * then blocks every sales day it appears on.
+ */
+export async function receivableAccountFor(
+  tx: Tx,
+  orgId: string,
+  code: string,
+): Promise<{ code: string; name: string; isPostable: boolean; requiresParty: boolean; status: string } | null> {
+  const [row] = (await tx.execute(sql`
+    select code, name, is_postable, requires_party, status from accounts
+     where org_id = ${orgId} and code = ${code} limit 1
+  `)) as unknown as Record<string, unknown>[];
+  if (!row) return null;
+  return {
+    code: String(row.code),
+    name: String(row.name),
+    isPostable: Boolean(row.is_postable),
+    requiresParty: Boolean(row.requires_party),
+    status: String(row.status),
+  };
+}
+
+/** The receivable picker's list — postable, active, and party-bearing (invariant 4). */
+export async function receivableAccountOptions(tx: Tx, orgId: string): Promise<{ code: string; name: string }[]> {
+  const rows = (await tx.execute(sql`
+    select code, name from accounts
+     where org_id = ${orgId} and is_postable and requires_party and status = 'active'
+     order by code
+  `)) as unknown as Record<string, unknown>[];
+  return rows.map((r) => ({ code: String(r.code), name: String(r.name) }));
+}
+
+export interface UpdateSalesChannelRow {
+  name: string;
+  isRemittedDaily: boolean;
+  receivableAccountCode: string | null;
+  wastageTypeMode: 'tracked' | 'instant';
+}
+
+/** ⛔ Does not touch `is_active`, `destination_money_account_id` or `tax_treatment` — T-230
+ *  invariants 8 and 9. Retiring a channel and correcting one is not the same act. */
+export async function updateChannel(
+  tx: Tx,
+  orgId: string,
+  channelId: string,
+  patch: UpdateSalesChannelRow,
+): Promise<void> {
+  await tx
+    .update(salesChannels)
+    .set({
+      name: patch.name,
+      isRemittedDaily: patch.isRemittedDaily,
+      receivableAccountCode: patch.receivableAccountCode,
+      wastageTypeMode: patch.wastageTypeMode,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(salesChannels.orgId, orgId), eq(salesChannels.id, channelId)));
+}
+
+export async function setChannelActive(
+  tx: Tx,
+  orgId: string,
+  channelId: string,
+  isActive: boolean,
+): Promise<void> {
+  await tx
+    .update(salesChannels)
+    .set({ isActive, updatedAt: new Date() })
+    .where(and(eq(salesChannels.orgId, orgId), eq(salesChannels.id, channelId)));
 }
 
 // -------------------------------------------------------------------------------------

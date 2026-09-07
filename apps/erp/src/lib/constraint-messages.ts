@@ -51,6 +51,18 @@ export const CONSTRAINT_MESSAGES: Record<string, string> = {
   store_attendance_config_time_mode_check: 'Time mode must be "open" or "fixed".',
   store_attendance_config_late_policy_check:
     'Late policy must be "record_only", "charge_per_minute", or "infraction".',
+
+  // T-230 — sales channels. ⚠️ The unique INDEX is listed here too: `errorMessage` substring-matches
+  // the raw driver error, and Postgres names the index in a unique violation exactly as it names a
+  // constraint in a check violation.
+  sales_channels_non_remitted_needs_receivable_check:
+    'A channel that settles later needs a receivable account — without one its sales would have ' +
+    'nowhere to land and the money would be silently lost rather than refused.',
+  sales_channels_wastage_type_mode_check:
+    'A channel’s wastage policy must be either "reviewed" or "decided on the spot".',
+  sales_channels_org_id_store_id_name_unique:
+    'This store already has a sales channel with that name. Names are compared ignoring case and ' +
+    'spacing, so "Foodpanda" and "foodpanda " would be the same channel twice.',
 };
 
 /** Strips a leading `SomeErrorClass: ` prefix so a thrown message reads as one plain sentence. */

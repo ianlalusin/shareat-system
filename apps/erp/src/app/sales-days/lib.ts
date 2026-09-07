@@ -31,7 +31,12 @@ export interface ChannelOption {
 
 /** A store's configured sales channels. **The `isRemittedDaily` flag is the one that matters** —
  *  it decides whether a channel's money reaches the till, and therefore whether it is part of
- *  expected remittance at all (bible row 128). Shown on the form for exactly that reason. */
+ *  expected remittance at all (bible row 128). Shown on the form for exactly that reason.
+ *
+ *  ⭐ **T-230: ACTIVE only, and this is a PICKER, not a validator.** `writeChannels`
+ *  (`domain/sales-days/create.ts`) deliberately validates against the UNFILTERED list, because
+ *  editing an old sales day that names a since-retired channel has to keep working. Offering a
+ *  retired channel for a NEW day is the thing that would make "retire" mean nothing. */
 export async function listChannels(orgId: string, storeId: string): Promise<ChannelOption[]> {
-  return transaction((tx) => salesDaysRepo.listChannels(tx, orgId, storeId));
+  return transaction((tx) => salesDaysRepo.listChannels(tx, orgId, storeId, { activeOnly: true }));
 }

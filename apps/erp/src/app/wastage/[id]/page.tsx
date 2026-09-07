@@ -63,7 +63,8 @@ export default async function WastageDetailPage({
       ? matchWastagesToSettlement(
           [
             {
-              wastageId: row.id, storeId: row.storeId, channel: row.channel, businessDate,
+              wastageId: row.id, storeId: row.storeId, channelId: row.channelId, channel: row.channel,
+              businessDate,
               amount: row.amount, orderRef: row.orderRef, status: row.status as 'open' | 'disputed',
             } satisfies SettleableOrderWastage,
           ],

@@ -81,7 +81,9 @@ export async function recordOrderWastageAction(fd: FormData): Promise<void> {
   const storeId = str(fd, 'storeId');
   const channel = str(fd, 'channel');
   const businessDate = str(fd, 'businessDate') || toBusinessDate();
-  const typeMode = str(fd, 'typeMode') as 'instant' | 'tracked';
+  // ⛔ No `typeMode` is read, and the form no longer offers one — bible §13 row 180. The CHANNEL
+  // carries the policy; `recordOrderWastage` derives it. Reading one here would be re-opening the
+  // hole from the other end.
   const disposition = (str(fd, 'disposition') || undefined) as OrderWastageDisposition | undefined;
   const personIds = strs(fd, 'personId');
   const percents = strs(fd, 'percent');
@@ -103,7 +105,6 @@ export async function recordOrderWastageAction(fd: FormData): Promise<void> {
         salesDayId: salesDay.id,
         channel,
         orderRef: str(fd, 'orderRef') || null,
-        typeMode,
         amount: str(fd, 'amount'),
         reason: str(fd, 'reason'),
         openedOn: businessDate,
