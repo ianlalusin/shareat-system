@@ -1,13 +1,17 @@
 # T-216 — Recurring-expense automation
 
-> **Status**: 🟡 **HALF BUILT 2026-09-06 — the template ships, the JOB does not, and the job is
-> the half that is blocked.**
+> **Status**: 🟡 **HALF BUILT 2026-09-06 — the template ships. The JOB is specified but not built:
+> see [Part 2](#part-2--the-job-half-spec-written-2026-09-07-lane-d-ianla-0a) at the foot of this
+> file, which is the live half of this task.**
 >
-> ⛔ **Open question 2 is unanswered and it must be answered before the job is built.** §3 argues
-> that v2 should **draft** where v1 **auto-pays**, and the spec says so itself: *"say no and it
-> changes the shape of the job, not just a flag — worth answering before build rather than after."*
-> That is exactly why the job is not here. Building it against the wrong answer means rewriting it;
-> registering a job nothing runs is DEF-044's shape, a cron claimed in data and absent in fact.
+> ✅ **Open question 2 was answered by Ian on 6–7 Sep: v2 DRAFTS, never auto-pays.** §3 argued that
+> v2 should draft where v1 auto-pays, and warned that *"say no and it changes the shape of the job,
+> not just a flag."* The answer is yes, so §3 stands in full and the job's shape is settled.
+>
+> ⚠️ **Everything below this banner is the 2026-09-06 record, kept as written.** Two things in it
+> are now known to be wrong and are corrected in Part 2, not here: **§3 reason 4's receipt-gate
+> argument** (T-130 relocated that gate onto the invoice) and **the Scope line saying the job
+> "calls `createExpense` unchanged"** (it cannot — three NOT NULL columns a cron cannot supply).
 >
 > **What shipped** — everything identical under either answer: `recurring_expenses` (migration
 > `0132`, applied AND recorded on both databases), the recurrence arithmetic ported from v1 with
@@ -355,3 +359,288 @@ due date said back on save (*"Template saved. First due 2026-10-05."*); pause; 0
 - [ ] Unit files in `docs/ops/` **and the handoff names the arming step as Ian's**
 - [ ] Live-smoketested on 9008, 0px overflow at 390px
 - [ ] `npm run build` exit 0 with the dev server stopped
+
+---
+
+# Part 2 — the JOB half. Spec written 2026-09-07 (lane D, `ianla-0a`).
+
+> **Status**: 🟢 **UNBLOCKED, spec only — no code, no migration file yet.** Open question 2 was
+> answered by Ian on 6–7 Sep: **v2 DRAFTS, never auto-pays.** Everything §3 argues stands.
+>
+> ⛔ **But §3's own mechanism does not survive contact with T-130, and that is what this part fixes.**
+> The original spec says the job "calls `createExpense` unchanged" with `status: 'draft'`. It cannot.
+> Verified at source, not inferred:
+>
+> | What the job needs | What the code requires | Where |
+> |---|---|---|
+> | to create an expense | `supplier_invoice_id` **NOT NULL**, gated twice in code + the `expenses_check_invoice_open_for_recording` trigger | `schema/expenses.ts`, `expenses/create.ts:113-121` |
+> | " | `supplier_id` **NOT NULL**, refused unless it equals `invoice.supplierId` | `expenses/create.ts:141-147` |
+> | " | `created_by` **NOT NULL** to `persons`; `Actor.personId` is not optional and no system actor exists | `schema/expenses.ts`, `packages/auth` |
+> | the draft dated on the due date | `businessDate` is **ignored**, always forced from `supplierInvoices.invoiceDate` | `expenses/create.ts:60-64, 155` |
+> | one payment | `payments[]` required, at least one, each with a `method` the template does not carry | `expenses/create.ts:100-102` |
+>
+> ⭐ `createExpense` is the **only** caller of `expensesRepo.insertExpense` in the tree. There is no
+> second path in and no supplier-less door.
+>
+> ⚠️ **§3 reason 4 is stale and is corrected below.** It argues drafting is safe because *"the
+> receipt gate cannot be satisfied by a machine"*. T-130 **relocated** that gate to
+> `supplier_invoices.receiptFileId`, checked at verification — and made the invoice mandatory at
+> **draft** time, not at post time. The safety argument is now stronger, not weaker, and it is
+> restated in §J2.
+>
+> **Resolution — Option A, decided by the orchestrator on 2026-09-07:** the template names a
+> supplier, and the job creates a **pending** supplier invoice and then the draft expense against
+> it. `recordInvoice` writes **no journal entry** (verified: no `postEntry` in its body), so the job
+> still moves no money and touches no ledger.
+
+## J1. Goal
+
+On the morning a fixed bill is due, its supplier invoice and its draft expense already exist,
+pre-filled from the template — so the only thing left for a person is to attach the real bill,
+correct the amount, and post it. Nothing is forgotten; nothing moves money unattended.
+
+## J2. The safety argument, restated for Option A
+
+1. **The machine creates the placeholder; the human supplies the evidence.** The invoice is
+   `pending` and carries no `receiptFileId`. `approveExpense` still requires `verified`, and
+   verification still requires the photo. ⭐ The gate holds exactly where T-130 put it — the job
+   cannot reach past it, and it never had to.
+2. **Nothing posts.** `recordInvoice` writes no journal entry; a `draft` expense writes none. The
+   ledger is untouched until a person presses approve.
+3. ⭐ **The job cannot do what its author could not.** It acts **as the template's creator**
+   through the ordinary `recordInvoice` / `createExpense` domain functions, with their ordinary
+   `authorize` gates — no bypass, no system principal. A creator who has since lost store scope, or
+   the capability, produces a loud per-template failure instead of a silent privileged write. This
+   is T-216 §8's rule (*"the automation must not become a way to pre-authorise spending"*) enforced
+   rather than merely stated.
+   ⚠️ Free, not costly: `manage_recurring_expenses` is manager-and-above, and `create_expense` /
+   `record_supplier_invoice` are both staff-and-above — anyone who could create a template already
+   holds both.
+4. **The amount is still a guess, and still gets read by a human.** Unchanged from §3 reason 2.
+
+## J3. Scope — the exact files
+
+**Create**
+- `packages/db/schema/recurring-expense-drafts.ts` — the new table (§J5.2)
+- `packages/domain/src/recurring-expenses/job.ts` — `runRecurringExpenses`
+- `scripts/recurring-expense-draft.ts` — the CLI, `scripts/budget-reissue.ts`'s pattern
+- `docs/ops/shareat-recurring-expense-draft.service` + `.timer`
+- `packages/db/migrations/0136_t216_recurring_expense_job.sql` — ⛔ **not written until the
+  orchestrator says GO**; the DDL is §J5 below
+
+**Modify**
+- `packages/db/schema/recurring-expenses.ts` — add `supplier_id`
+- `packages/db/schema/scheduler.ts` — `recurring_expenses` into `SCHEDULER_JOBS`, **and repair the
+  `scheduler_runs_job_check` list, which omits `budget_reissue`** (DEF-217)
+- `packages/db/src/repo/recurring-expenses.ts` — the drafts-table reads and writes
+- `packages/db/src/cutover/classification.ts` + `packages/db/src/rls/registry.ts` — ⚠️ **required**:
+  the build refuses a new table that is in neither
+- `packages/domain/src/scheduler/index.ts` — `recurring_expenses` in `JobOutcome['job']`
+- `apps/erp/src/app/expenses/recurring/page.tsx` + `lib.ts` — the banner changes; the supplier
+  column and the unset-supplier warning
+- `packages/domain/tests/integration/recurring-expenses-job.test.ts` — new file, the job cases
+- `package.json` — the `recurring-expense-draft` script line
+- `docs/ops/README.md` — the job's row and its arming step
+- this document
+
+**Barrel lines are written verbatim in the READY report and applied by the orchestrator**, never
+edited here: `packages/db/src/index.ts`, `packages/db/schema/index.ts`,
+`packages/domain/src/index.ts`.
+
+## J4. Contract — the job
+
+```ts
+export async function runRecurringExpenses(
+  options: { orgId?: string; trigger?: 'cron' | 'manual'; nowMs?: number } = {},
+): Promise<SweepResult>;   // the same shape runBudgetReissue and runFindingObservation return
+```
+
+Daily. `period` is the Manila `YYYY-MM` the run happened **in** — the
+`scheduler_runs_period_shape_check` convention every daily job here already uses, never a period
+being closed. One `scheduler_runs` row per org per run, **including a run that drafts nothing**;
+non-zero exit on failure.
+
+For each org, for each `recurringExpensesRepo.listDue(tx, orgId, manilaToday())` — active,
+`next_due_date <= today`, oldest first — **in its own transaction**
+(`reference_postgres_batch_needs_savepoint`: one DB error aborts the transaction it happened in,
+and a shared one would take the run's own `scheduler_runs` write down with it):
+
+1. **Refuse, loudly, if the template cannot produce a draft.** No `supplier_id`, or no `created_by`,
+   gives a `SchedulerFailure` naming the template and the missing field, and the run continues.
+   ⚠️ Not `skipped`: a template that can never draft is a configuration fault, and `skipped` is
+   where faults go to die quietly.
+2. `recordInvoice` as the template's creator: `supplierId`, `storeId`, `invoiceDate` = **the due
+   date**, `totalAmount` = `default_amount`, `invoiceNo` = `RECUR-<template id>-<due date>`, and
+   `notes` naming the template. Status defaults to `pending`.
+3. `createExpense` as the same actor, against that invoice: the template's `categoryId`, one
+   payment (§J5.3), and `particulars` reading `"<template name> — drafted by the recurring-expense
+   job for <due date>"`. `businessDate` is forced from the invoice, which is the due date, so the
+   draft lands on the day it was due.
+4. `insertDraftRecord` — the row that makes invariant 2 true.
+5. `stampDrafted` — `last_drafted_expense_id`, `last_drafted_at`, and `next_due_date` advanced by
+   `nextDueDate(dueDate, interval, anchorDay)`. ⛔ **Same transaction as 2 to 4**, per that repo
+   function's own comment: a draft whose cursor did not advance drafts again tomorrow, for ever.
+6. ⛔ **Catch up, never run away.** One draft per run per template, for the **oldest** missed date,
+   advancing exactly one interval. A template three months overdue converges over three daily runs.
+   Ported in spirit from v1's *"never pre-create"*.
+
+## J5. Contract — the DDL (migration 0136, held for GO)
+
+### J5.1 `recurring_expenses.supplier_id` — nullable, and refused at draft time
+
+```sql
+ALTER TABLE "recurring_expenses"
+  ADD COLUMN "supplier_id" uuid REFERENCES "suppliers"("id") ON DELETE RESTRICT;
+CREATE INDEX "recurring_expenses_supplier_idx" ON "recurring_expenses" ("supplier_id");
+```
+
+⚠️ **Nullable, deliberately.** Existing templates have no supplier and a `NOT NULL` would refuse
+the migration. The rule lives where it can be *reported* instead: the job refuses such a template
+per §J4.1, and `/expenses/recurring` shows which ones are unset — the same insist-on-screen shape
+T-229 used for the TIN. **A newly created template must name one**, enforced in
+`createRecurringTemplate`.
+
+### J5.2 `recurring_expense_drafts` — idempotency as a database FACT
+
+⛔ **Keying idempotency off the invoice number does not hold.** `supplier_invoices.invoice_no` is
+documented in its own schema as *"read by the warn-only duplicate check, **never a unique
+constraint**"* — verified, there is no unique index on it, so a duplicate `RECUR-...` number would
+be created silently.
+
+⚠️ And the period is not the key either: a **weekly** template has four or five due dates inside one
+`YYYY-MM`, so a `<YYYY-MM>` key would draft a weekly bill once a month.
+
+```sql
+CREATE TABLE "recurring_expense_drafts" (
+  "id"                    uuid PRIMARY KEY DEFAULT uuidv7(),
+  "org_id"                uuid NOT NULL REFERENCES "organizations"("id") ON DELETE RESTRICT,
+  "recurring_expense_id"  uuid NOT NULL REFERENCES "recurring_expenses"("id") ON DELETE CASCADE,
+  "due_date"              date NOT NULL,
+  "expense_id"            uuid REFERENCES "expenses"("id") ON DELETE SET NULL,
+  "supplier_invoice_id"   uuid REFERENCES "supplier_invoices"("id") ON DELETE SET NULL,
+  "created_at"            timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX "recurring_expense_drafts_once_idx"
+  ON "recurring_expense_drafts" ("recurring_expense_id", "due_date");
+```
+
+⭐ **The unique index is the invariant**, not the cursor. The cursor already stops the ordinary
+second run; this stops the ones the cursor cannot see — two job processes racing, or a cursor moved
+backwards by a template edit. `insertDraftRecord` is `ON CONFLICT DO NOTHING`; a zero-row return
+means someone else already drafted that date, and the template is skipped without an error. Same
+idiom as `budgetsRepo.insertReissued`.
+
+⚠️ **Both document FKs are `ON DELETE SET NULL`** for 0132's reason: this table is reached from a
+KEEP table but points at PURGE ones, and a `restrict` would let it block the 1 January purge.
+
+**Cutover class `purge`** — it is provenance *about expenses*, and when the expenses go it has
+nothing left to describe. **RLS `org_column`.**
+
+### J5.3 The payment method — derived, no new column
+
+The template already carries everything needed; `default_payment_method` is not required.
+
+| `default_money_account_id` | `instrument` | method | why |
+|---|---|---|---|
+| null | — | `credit` | The bill exists and is owed; which account settles it is a later, separate act. This is the ordinary shape of a landlord's invoice |
+| set | `cash` | `cash` | |
+| set | `ewallet` or `bank` | `online`, carrying `moneyAccountId` | `routeExpense` requires the wallet for `online`, and we have it |
+
+⚠️ The human editing the draft can change this before posting; nothing here is final.
+
+### J5.4 `scheduler_runs_job_check` — all nine, and DEF-217 closed
+
+```sql
+ALTER TABLE "scheduler_runs" DROP CONSTRAINT "scheduler_runs_job_check";
+ALTER TABLE "scheduler_runs" ADD CONSTRAINT "scheduler_runs_job_check"
+  CHECK ("job" IN ('depreciation','amortisation','attendance_sweep','mirror_publish','inbox_relay',
+                   'order_wastage_backstop','finding_observation','budget_reissue','recurring_expenses'));
+```
+
+⛔ **`budget_reissue` is in the live constraint (0131) but missing from `schema/scheduler.ts`'s own
+`check()` list** — nine jobs in `SCHEDULER_JOBS`, eight in the check. Inert today, because
+migrations build the database and the schema file does not; dangerous tomorrow, because the next
+widening migration is written by copying that list. **DEF-217.** Both are corrected here.
+
+⚠️ Hand-written from the schema, never `db:generate` — its snapshot chain has been dead since 0019
+(0133's header). `when` strictly greater than 0135's `1797737507084`.
+
+## J6. Invariants
+
+1. The job never posts. No `postEntry`, no journal entry, no ledger row — asserted by counting
+   `journal_entries` before and after.
+2. A template drafts **at most once per due date**, enforced by
+   `recurring_expense_drafts_once_idx`, not by the cursor alone.
+3. The cursor advances exactly once per draft created, in the **same transaction** as the invoice,
+   the expense and the drafts row.
+4. An overdue template drafts **once**, for the oldest missed date, and advances one interval.
+5. A template with no supplier, or no creator, drafts nothing and appears in the run's `failures`
+   with the missing field named.
+6. The job holds no privilege of its own: every write happens under the template creator's
+   `authorize`, store-scoped (§J2.3).
+7. A drafted expense is indistinguishable from a hand-drafted one to `approveExpense` — and
+   therefore still cannot post until its invoice is `verified`.
+8. A due date inside a **locked period still drafts.** ⛔ **This redlines the orchestrator's
+   instruction, deliberately.** §3 reason 5 and the original test 9 both say the draft is created
+   and simply cannot post; the *"pending record and alert, create nothing"* row in the v1-lessons
+   table describes v1's **auto-pay** guard, which §3 retires. Verified in code: there is **no period
+   guard on either create path** — a grep for `assertPeriodOpen|periodLock|fiscal_period` across
+   `domain/src/expenses` and `domain/src/ap` returns nothing, and the lock lives at `postEntry`.
+   Creating a draft in a closed month is therefore both harmless and unrefusable, and a job that
+   refused it would leave the bill invisible until someone reopened the month.
+9. One `scheduler_runs` row per org per run, including a run that drafts nothing.
+
+## J7. Tests — written first, each failing for its own reason
+
+`packages/domain/tests/integration/recurring-expenses-job.test.ts`, on `shareat_test_t216`.
+
+| # | Case | Fails first because |
+|---|---|---|
+| 1 | A due template drafts one `pending` invoice and one `draft` expense; the `journal_entries` count is unchanged | `runRecurringExpenses` does not exist |
+| 2 | The expense's `business_date` equals the **due date** | the invoice date is what carries it |
+| 3 | The cursor advances by exactly one interval | nothing stamps it |
+| 4 | Running twice in one day drafts once — and a second run with the cursor **moved back by hand** still drafts once | the unique index does not exist yet |
+| 5 | A template overdue by three periods drafts once and advances one interval | catch-up not implemented |
+| 6 | A paused template drafts nothing | the job does not filter on status |
+| 7 | A template with `supplier_id` null drafts nothing and is reported in `failures`, named | no refusal path |
+| 8 | The drafted expense **cannot** be approved while the invoice is `pending`; verify the invoice and it posts, and only then does the ledger move | nothing to approve |
+| 9 | A due date in a **closed period** still drafts; the draft refuses to post until the period opens (§J6.8) | nothing to draft |
+| 10 | A no-op run still writes one `scheduler_runs` row per org | the job is not registered |
+| 11 | Each derivation in §J5.3 produces its method; a null account yields `credit` | no derivation exists |
+| 12 | `scheduler_runs` accepts all nine job names and refuses a tenth | the CHECK is not widened |
+
+Plus `npm run recurring-expense-draft` twice against `shareat_dev`, the second run a proven no-op
+with the count printed, never a bare "ok".
+
+**Smoketest for the QA lane (`ianla-87`), on 9008 at 390x844:** create a template with a supplier,
+due today, then run the job. `/ap` shows a `pending` invoice named `RECUR-...`; `/expenses` shows
+the draft; approving it is **refused** while the invoice is pending; verify the invoice with a
+photo; post the expense; the ledger moves; `/expenses/recurring` shows next period's due date and
+the old "the job does not exist" banner is gone. A template with no supplier shows the warning and
+is named in the job's output. 0px overflow at 390px.
+
+## J8. Out of scope
+
+- **True auto-pay.** §3, unchanged.
+- **Marking the drafted expense on `/expenses` and linking back to its template** (the original §7's
+  second half). `apps/erp/src/app/expenses/**` is not in this lane; the join is available from
+  `recurring_expense_drafts` whenever it is picked up.
+- **The stale-draft detector** (open question 1) — still a follow-up.
+- **Backfilling `supplier_id` on existing templates.** They are refused and reported until a human
+  sets one.
+- Anything owned by lane B or lane C.
+
+## J9. Done when
+
+- [ ] The job drafts a pending invoice and a draft expense for each due template, in one transaction
+- [ ] The cursor advances only on success; two runs in a day draft once; a hand-moved cursor still drafts once
+- [ ] A three-period-overdue template drafts once and converges over three runs
+- [ ] A supplier-less or creator-less template is refused and named in `failures`
+- [ ] The draft cannot post until the invoice is verified; the ledger is untouched until it does
+- [ ] A closed period does not stop the draft (§J6.8)
+- [ ] `scheduler_runs_job_check` admits all nine; `schema/scheduler.ts`'s list matches (DEF-217)
+- [ ] Twelve integration tests green on `shareat_test_t216`, written first and seen to fail
+- [ ] `npm run recurring-expense-draft` twice on `shareat_dev`, the second run a proven no-op
+- [ ] Unit files in `docs/ops/` **and the handoff names the arming step as Ian's**
+- [ ] Smoketested on 9008 by the QA lane, 0px overflow at 390px
+- [ ] `npm run build` exit 0 with the dev server stopped (QA lane)

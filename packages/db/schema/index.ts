@@ -109,3 +109,6 @@ export * from './expense-budgets';
 
 // T-216 — recurring-expense TEMPLATES. ⛔ No system/payroll rows, ever: read the header.
 export * from './recurring-expenses';
+// T-216 Part 2 — what each template has already drafted. ⭐ The UNIQUE (template, due date) index
+// here is the job's idempotency rule; the cursor alone cannot be it.
+export * from './recurring-expense-drafts';

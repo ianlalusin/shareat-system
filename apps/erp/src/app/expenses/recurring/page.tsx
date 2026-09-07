@@ -12,6 +12,8 @@ import {
   WEEKDAYS,
   accountsFor,
   anchorLabel,
+  periodsBehind,
+  suppliersFor,
   categories,
   listStores,
   listTemplates,
@@ -25,14 +27,16 @@ export const dynamic = 'force-dynamic';
 /**
  * T-216 — the fixed bills that should not depend on somebody remembering them.
  *
- * ⚠️ **The job that acts on these templates is NOT built**, and this screen says so out loud
- * rather than implying otherwise. Whether a due template DRAFTS an expense for a person to confirm
- * or AUTO-PAYS it on a cron is an open decision for Ian, and it changes the job's shape rather than
- * a flag — so the template ships (identical either way) and the automation waits.
+ * ⭐ **The job is built** (T-216 Part 2). Ian answered the open question on 6-7 Sep 2026: a due
+ * template DRAFTS, it never auto-pays. Every morning the job records a PENDING supplier invoice and
+ * a DRAFT expense for each due template, and stops — nothing reaches the ledger until a person
+ * attaches the real bill, verifies the invoice and approves the expense.
  *
- * ⭐ Saying it on the screen is the whole point. A feature that quietly does nothing is the defect
- * class this project keeps hitting (DEF-190 and the eight before it); a feature that *tells you* it
- * does nothing yet is a plan with a visible next step.
+ * ⚠️ **The banner this screen used to carry said the job did not exist**, and it was right at the
+ * time. What replaces it is the remaining honest caveat, not silence: a template with NO SUPPLIER
+ * cannot draft, and the screen names those templates rather than letting them fail nightly in a log
+ * nobody reads. A feature that quietly does nothing is the defect class this project keeps hitting
+ * (DEF-190 and the eight before it).
  */
 interface SearchParams {
   store?: string;
@@ -51,11 +55,19 @@ export default async function RecurringExpensesPage({
 
   const stores = await listStores(orgId);
   const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : (stores[0]?.id ?? '');
-  const [templates, cats, accounts] = storeId
-    ? await Promise.all([listTemplates(orgId, storeId), categories(orgId), accountsFor(orgId, storeId)])
-    : [[], [], []];
+  const [templates, cats, accounts, suppliers] = storeId
+    ? await Promise.all([
+        listTemplates(orgId, storeId),
+        categories(orgId),
+        accountsFor(orgId, storeId),
+        suppliersFor(orgId),
+      ])
+    : [[], [], [], []];
 
   const now = today();
+  // ⛔ The job refuses these, loudly, every night. Saying so here is the difference between a
+  // configuration fault somebody can fix and a bill that quietly stopped being drafted.
+  const unsetSupplier = templates.filter((t) => t.status === 'active' && !t.supplierId);
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
@@ -70,16 +82,32 @@ export default async function RecurringExpensesPage({
         </p>
       </div>
 
-      {/* ⛔ The honest banner. This is a template register with no automation behind it yet, and
-          leaving that unsaid is how a feature comes to be believed in. */}
-      <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
-        <strong className="font-medium">Nothing happens automatically yet.</strong> These templates
-        are recorded and nothing acts on them: the daily job is not built, because whether a due
-        template should <em>draft an expense for someone to confirm</em> or <em>pay itself</em> is a
-        decision Ian has not made, and it changes the job rather than a setting. Set them up now —
-        the templates are the same under either answer — but keep recording these bills the way you
-        do today until the job ships.
-      </div>
+      {/* ⛔ The banner that said "the job is not built" is gone because the job is built. What
+          stays is the one thing that still silently does nothing: a template with no supplier. It
+          is named here rather than failing nightly into a log nobody opens (T-229's TIN shape). */}
+      {/* ⚠️ A workflow consequence, not a bug, and worth saying before somebody hits it: the job
+          logs the invoice as the template's creator, and `verifyInvoice` refuses whoever logged an
+          invoice ("verification is a second pair of eyes"). Keeping that control is deliberate — a
+          system actor would have made every recurring invoice self-verifiable by anyone. */}
+      <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        A bill drafted from a template must be verified by someone other than the person who set the
+        template up — the job logs the invoice in their name.
+      </p>
+
+      {unsetSupplier.length > 0 && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+          <strong className="font-medium">
+            {unsetSupplier.length === 1
+              ? '1 template cannot draft yet.'
+              : `${unsetSupplier.length} templates cannot draft yet.`}
+          </strong>{' '}
+          A bill has to name who it comes from — the landlord, the utility, the ISP — because the
+          job records an invoice against them on the due date. Until then these are recorded
+          intentions and the nightly run refuses them by name:{' '}
+          <strong>{unsetSupplier.map((t) => t.name).join(', ')}</strong>. Edit each one and choose a
+          supplier.
+        </div>
+      )}
 
       {sp.error && (
         <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
@@ -148,6 +176,20 @@ export default async function RecurringExpensesPage({
                       <p className="text-xs text-neutral-500 dark:text-neutral-400">
                         next due <strong>{t.nextDueDate}</strong>
                         {overdue && <span className="ml-1 text-amber-700 dark:text-amber-400">· due now</span>}
+                        {/* ⭐ The job catches up ONE period per nightly run, deliberately — three
+                            drafts on one morning is noise. Saying how far behind a template is
+                            stops a normal catch-up being read as a stuck job. */}
+                        {periodsBehind(t.interval, t.anchorDay, t.nextDueDate, now) > 1 && (
+                          <span className="ml-1 text-amber-700 dark:text-amber-400">
+                            · {periodsBehind(t.interval, t.anchorDay, t.nextDueDate, now)} periods behind,
+                            catching up one per night
+                          </span>
+                        )}
+                        {!t.supplierId && (
+                          <span className="ml-1 text-amber-700 dark:text-amber-400">
+                            · no supplier, so it cannot draft
+                          </span>
+                        )}
                         {t.status === 'paused' && <span className="ml-1">· paused</span>}
                         {t.tillIsDeliberate && (
                           // ⚠️ Called out on the row, because it is the one setting v1 built a whole
@@ -180,6 +222,7 @@ export default async function RecurringExpensesPage({
                             templateId={t.id}
                             cats={cats}
                             accounts={accounts}
+                            suppliers={suppliers}
                             defaults={t}
                             submitLabel="Save changes"
                           />
@@ -231,6 +274,7 @@ export default async function RecurringExpensesPage({
               storeId={storeId}
               cats={cats}
               accounts={accounts}
+              suppliers={suppliers}
               submitLabel="Add template"
             />
           </section>
@@ -250,6 +294,7 @@ interface TemplateDefaults {
   categoryId: string;
   defaultAmount: string;
   defaultMoneyAccountId: string | null;
+  supplierId: string | null;
   interval: string;
   anchorDay: number;
   tillIsDeliberate: boolean;
@@ -261,6 +306,7 @@ function TemplateForm({
   templateId,
   cats,
   accounts,
+  suppliers,
   defaults,
   submitLabel,
 }: {
@@ -269,6 +315,7 @@ function TemplateForm({
   templateId?: string;
   cats: { id: string; category: string; group: string; accountCode: string | null }[];
   accounts: { id: string; name: string; custodian: string }[];
+  suppliers: { id: string; name: string }[];
   defaults?: TemplateDefaults;
   submitLabel: string;
 }) {
@@ -280,6 +327,21 @@ function TemplateForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Name" hint="What a person calls it — “Lipa branch rent”.">
           <input name="name" required defaultValue={defaults?.name ?? ''} className={`${INPUT} w-full`} />
+        </Field>
+        <Field
+          label="Supplier"
+          hint="Who the bill comes from. The job records an invoice against them on the due date, so a template without one cannot draft."
+        >
+          <select name="supplierId" required defaultValue={defaults?.supplierId ?? ''} className={`${INPUT} w-full`}>
+            <option value="" disabled>
+              Choose…
+            </option>
+            {suppliers.map((sup) => (
+              <option key={sup.id} value={sup.id}>
+                {sup.name}
+              </option>
+            ))}
+          </select>
         </Field>
         <Field label="Category">
           <select name="categoryId" required defaultValue={defaults?.categoryId ?? ''} className={`${INPUT} w-full`}>

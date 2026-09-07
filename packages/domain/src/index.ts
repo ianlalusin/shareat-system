@@ -99,8 +99,10 @@ export * from './stores/service';
 // T-215 — expense budgets: the envelope, its cap, and the reissue schedule. Nothing posts.
 export * from './budgets';
 
-// T-216 — recurring-expense templates. ⚠️ The JOB is not built: whether a due template drafts
-// or auto-pays is Ian's open decision, and it changes the job's shape rather than a flag.
+// T-216 — recurring-expense templates AND the daily drafting job (Part 2). ⛔ It DRAFTS and never
+// auto-pays — Ian, 6-7 Sep 2026: a pending supplier invoice and a draft expense, and nothing on the
+// ledger until a person attaches the real bill and approves. The job holds no privilege of its own;
+// it acts as the template's creator through the ordinary gates.
 export * from './recurring-expenses';
 
 // T-228 — standing up an organization: the one flow with no Actor, because there is no principal

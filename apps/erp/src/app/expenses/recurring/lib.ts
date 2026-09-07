@@ -3,8 +3,9 @@
  *
  * ⛔ Reads only, under `withOrgPrincipal`, and none of them calls a domain function (DEF-189).
  */
-import { moneyAccountsRepo, recurringExpensesRepo } from '@shareat/db';
+import { apRepo, moneyAccountsRepo, recurringExpensesRepo } from '@shareat/db';
 import { listActiveCategoriesGrouped, withOrgPrincipal } from '../lib';
+import { nextDueDate, type RecurrenceInterval } from '@shareat/domain';
 
 export { peso } from '../../../lib/format';
 export { listStores, listCategoriesGrouped, withOrgPrincipal } from '../lib';
@@ -18,6 +19,11 @@ export async function listTemplates(orgId: string, storeId?: string) {
 
 export async function accountsFor(orgId: string, storeId: string) {
   return withOrgPrincipal(orgId, (tx) => moneyAccountsRepo.listMoneyAccounts(tx, orgId, { storeId }));
+}
+
+/** Active suppliers only — a template may not name one the business has stopped buying from. */
+export async function suppliersFor(orgId: string) {
+  return withOrgPrincipal(orgId, (tx) => apRepo.listSuppliers(tx, orgId));
 }
 
 export async function categories(orgId: string) {
@@ -52,4 +58,26 @@ export function anchorLabel(interval: string, anchorDay: number): string {
   // ⚠️ 29/30/31 clamp rather than being refused, so the label says so — otherwise a template
   // anchored on the 31st looks broken every February to whoever reads the list.
   return anchorDay >= 29 ? `${anchorDay}${suffix} (or the month end)` : `${anchorDay}${suffix}`;
+}
+
+/**
+ * How many due dates a template has missed, counting the one it is sitting on.
+ *
+ * ⭐ Exists so a normal catch-up is not read as a stuck job. The job drafts ONE period per nightly
+ * run (v1's "never pre-create" in mirror image), so a template three months overdue takes three
+ * nights — correct behaviour that looks identical to a broken cursor unless the screen says which
+ * it is.
+ *
+ * ⚠️ Capped at 24 hops for the same reason `runBudgetReissue` caps its loop: beyond two years the
+ * data is wrong, and a page that spins counting to infinity is worse than an approximate number.
+ */
+export function periodsBehind(interval: string, anchorDay: number, nextDue: string, today: string): number {
+  if (nextDue > today) return 0;
+  let cursor = nextDue;
+  let n = 0;
+  while (cursor <= today && n < 24) {
+    cursor = nextDueDate(cursor, interval as RecurrenceInterval, anchorDay);
+    n += 1;
+  }
+  return n;
 }

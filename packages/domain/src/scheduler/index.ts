@@ -62,7 +62,9 @@ export interface JobOutcome {
     | 'inbox_relay'
     | 'order_wastage_backstop'
     | 'finding_observation'
-    | 'budget_reissue';
+    | 'budget_reissue'
+    /** T-216 Part 2 — the daily recurring-expense drafting job. It drafts; it never pays. */
+    | 'recurring_expenses';
   period: string;
   posted: number;
   skipped: number;

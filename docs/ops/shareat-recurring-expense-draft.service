@@ -1,0 +1,36 @@
+# T-216 Part 2 — the daily recurring-expense drafting run. INSTALL INSTRUCTIONS: docs/ops/README.md
+#
+# ⛔ IT DRAFTS. IT NEVER PAYS. v1 auto-pays a due recurring expense on a cron — posts the expense
+# and moves real cash. Ian, 6–7 Sep 2026: v2 does not. This creates a PENDING supplier invoice and a
+# DRAFT expense and stops. Nothing reaches the ledger until a person has read the real bill,
+# attached it, verified the invoice and approved the expense.
+#
+# ⭐ It acts as each template's CREATOR through the ordinary authorization gates, not as a system
+# principal — so the automation can never do what the person who set it up could not. A creator who
+# has since lost store scope produces a loud per-template failure, which is the right failure.
+#
+# ⚠️ What it does NOT need: a receipt. The machine has none, and `verifyInvoice` refuses an invoice
+# without one — which is the gate working, not a problem to solve here.
+
+[Unit]
+Description=Shareat — draft today's due recurring expenses (T-216)
+After=network-online.target
+Wants=network-online.target
+# No After=postgresql.service — the database is DO Managed Postgres, off-box (ADR-002 §1).
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/shareat
+ExecStart=/usr/bin/npm run recurring-expense-draft
+User=shareat
+Group=shareat
+
+# ⚠️ NEVER build here. This is a small droplet; a build OOMs it. This unit runs an already-installed
+# tree shipped by CI — bible §2.10.
+Environment=NODE_ENV=production
+
+# ⭐ The exit code is load-bearing: non-zero when anything failed, so the host's mailer speaks up.
+# ⛔ A template with no supplier prints here as a named failure. It is the commonest one, it is a
+# configuration fault rather than a bug, and the fix is one field on /expenses/recurring.
+StandardOutput=append:/var/log/shareat/recurring-expense-draft.log
+StandardError=append:/var/log/shareat/recurring-expense-draft.log

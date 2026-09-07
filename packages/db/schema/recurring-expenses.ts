@@ -53,6 +53,7 @@ import { moneyAccounts } from './money-accounts';
 import { organizations } from './organizations';
 import { persons } from './persons';
 import { stores } from './stores';
+import { suppliers } from './suppliers';
 
 export const RECURRING_INTERVALS = ['weekly', 'bi_weekly', 'monthly', 'quarterly', 'annually'] as const;
 export type RecurringInterval = (typeof RECURRING_INTERVALS)[number];
@@ -69,6 +70,24 @@ export const recurringExpenses = pgTable(
     /** What a person calls it — "Lipa branch rent". */
     name: text('name').notNull(),
     categoryId: uuid('category_id').notNull().references(() => expenseCategories.id, { onDelete: 'restrict' }),
+    /**
+     * ⛔ **The column that makes drafting possible at all** — T-216 Part 2 (§J5.1).
+     *
+     * The original spec assumed the job could call `createExpense` "unchanged". It cannot:
+     * `expenses.supplier_id` and `expenses.supplier_invoice_id` are both NOT NULL, gated inside
+     * `createExpense` and backstopped by the `expenses_check_invoice_open_for_recording` trigger,
+     * and `createExpense` is the **only** caller of `insertExpense` in the tree. A machine with no
+     * supplier cannot record an expense. So the template names one and the job records the pending
+     * invoice against it — which is also the accounting-correct shape: a recurring bill comes FROM
+     * somebody (the landlord, the utility), and that party is what the AP side needs.
+     *
+     * ⚠️ **Nullable, deliberately.** Templates created before this column existed have no supplier
+     * and a NOT NULL would refuse the migration. The rule lives where it can be *reported* instead:
+     * the job refuses such a template and names it in the run's failures, and `/expenses/recurring`
+     * says which ones are unset — the same insist-on-screen shape T-229 used for the TIN. A newly
+     * created template must name one (`createRecurringTemplate`).
+     */
+    supplierId: uuid('supplier_id').references(() => suppliers.id, { onDelete: 'restrict' }),
     /** ⚠️ A DEFAULT, not the amount. The drafted expense is edited against the real bill. */
     defaultAmount: numeric('default_amount', { precision: 14, scale: 2 }).notNull(),
     defaultMoneyAccountId: uuid('default_money_account_id').references(() => moneyAccounts.id, {
@@ -106,6 +125,7 @@ export const recurringExpenses = pgTable(
     /** The job's query: everything active and due, for one org. */
     index('recurring_expenses_due_idx').on(t.orgId, t.status, t.nextDueDate),
     index('recurring_expenses_store_idx').on(t.storeId, t.status),
+    index('recurring_expenses_supplier_idx').on(t.supplierId),
     check('recurring_expenses_amount_check', sql`${t.defaultAmount} > 0`),
     /**
      * ⭐ ONE check, BOTH families — the anchor must be in range **for its own interval**.

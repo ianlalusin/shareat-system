@@ -35,6 +35,7 @@
     "firestore-relay": "tsx scripts/firestore-relay.ts",
     "finding-observation": "tsx scripts/finding-observation.ts",
     "budget-reissue": "tsx scripts/budget-reissue.ts",
+    "recurring-expense-draft": "tsx scripts/recurring-expense-draft.ts",
     "bootstrap-org": "tsx scripts/bootstrap-org.ts"
   },
   "dependencies": {

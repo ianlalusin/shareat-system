@@ -71,6 +71,21 @@ export const SCHEDULER_JOBS = [
    * reissue processor can't run away."*
    */
   'budget_reissue',
+  /**
+   * `recurring_expenses` — T-216 Part 2, DAILY. Drafts the fixed bills that are due, so a branch
+   * that forgets rent does not pay it late and off-book.
+   *
+   * ⛔ **It drafts; it never pays.** Ian, 6-7 Sep 2026, against v1's auto-pay: the job records a
+   * PENDING supplier invoice and a DRAFT expense and stops. Nothing reaches the ledger until a
+   * person has read the real bill, attached it, verified the invoice and approved the expense.
+   * Three of the five hardening rounds v1 needed exist only because a machine could move money
+   * unattended.
+   *
+   * ⚠️ It acts as the TEMPLATE'S CREATOR through the ordinary `recordInvoice`/`createExpense`
+   * gates, not as a system principal — so the automation can never do what the person who set it
+   * up could not.
+   */
+  'recurring_expenses',
 ] as const;
 export type SchedulerJob = (typeof SCHEDULER_JOBS)[number];
 
@@ -125,7 +140,12 @@ export const schedulerRuns = pgTable(
 
     check(
       'scheduler_runs_job_check',
-      sql`${t.job} in ('depreciation', 'amortisation', 'attendance_sweep', 'mirror_publish', 'inbox_relay', 'order_wastage_backstop', 'finding_observation')`,
+      // ⛔ DEF-217: this list read seven names while `SCHEDULER_JOBS` above held nine, because
+      // `budget_reissue` (0131) was added to the live constraint and never here. Inert — migrations
+      // build the database and this file does not — but the NEXT widening migration is written by
+      // copying this list, and copying the short one would silently drop a job from the constraint
+      // and break it at its next run. Both are corrected together in 0136; keep them together.
+      sql`${t.job} in ('depreciation', 'amortisation', 'attendance_sweep', 'mirror_publish', 'inbox_relay', 'order_wastage_backstop', 'finding_observation', 'budget_reissue', 'recurring_expenses')`,
     ),
     check('scheduler_runs_outcome_check', sql`${t.outcome} in ('ok', 'partial', 'failed')`),
     check('scheduler_runs_period_shape_check', sql`${t.period} ~ '^[0-9]{4}-[0-9]{2}$'`),

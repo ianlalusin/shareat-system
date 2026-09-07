@@ -23,6 +23,14 @@ export interface CreateRecurringTemplateInput {
   storeId: string;
   name: string;
   categoryId: string;
+  /**
+   * The party the bill comes from - the landlord, the utility, the ISP.
+   *
+   * REQUIRED on a new template, though the COLUMN is nullable so the migration could land on rows
+   * that predate it. The job cannot draft without it: `expenses.supplier_id` and
+   * `expenses.supplier_invoice_id` are both NOT NULL, and `createExpense` is the only path in.
+   */
+  supplierId: string;
   defaultAmount: string;
   defaultMoneyAccountId?: string | null;
   interval: RecurringInterval;
@@ -92,6 +100,14 @@ export async function createRecurringTemplate(
       );
     }
 
+    if (!input.supplierId) {
+      throw new Error(
+        'name the supplier this bill comes from - the landlord, the utility, the ISP. The job ' +
+          'records a pending invoice against them on the due date, and an expense cannot exist ' +
+          'without one.',
+      );
+    }
+
     const deliberate = input.tillIsDeliberate === true;
     const isTill = await checkAccount(trx, actor.orgId, input.storeId, input.defaultMoneyAccountId, deliberate);
 
@@ -104,6 +120,7 @@ export async function createRecurringTemplate(
       storeId: input.storeId,
       name,
       categoryId: input.categoryId,
+      supplierId: input.supplierId,
       defaultAmount: Number(input.defaultAmount).toFixed(2),
       defaultMoneyAccountId: input.defaultMoneyAccountId ?? null,
       // ⚠️ Recorded ONLY when it is actually true of this account, so the flag never claims a
@@ -124,6 +141,7 @@ export interface UpdateRecurringTemplateInput {
   templateId: string;
   name?: string;
   categoryId?: string;
+  supplierId?: string;
   defaultAmount?: string;
   defaultMoneyAccountId?: string | null;
   interval?: RecurringInterval;
@@ -168,6 +186,9 @@ export async function updateRecurringTemplate(
     await recurringExpensesRepo.updateTemplate(trx, actor.orgId, input.templateId, {
       ...(input.name !== undefined ? { name: input.name.trim() } : {}),
       ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
+      // The one way an existing supplier-less template gets fixed. Clearing it is not offered:
+      // a template with no supplier cannot draft, and silently disabling one is DEF-190's shape.
+      ...(input.supplierId ? { supplierId: input.supplierId } : {}),
       ...(input.defaultAmount !== undefined ? { defaultAmount: Number(input.defaultAmount).toFixed(2) } : {}),
       ...(input.defaultMoneyAccountId !== undefined ? { defaultMoneyAccountId: accountId } : {}),
       tillIsDeliberate: isTill && deliberate,
@@ -236,3 +257,4 @@ export async function deleteRecurringTemplate(
 }
 
 export * from './recurrence';
+export * from './job';

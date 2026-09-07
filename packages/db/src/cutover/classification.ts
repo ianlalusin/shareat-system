@@ -932,6 +932,17 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     class: 'purge',
     reason: 'Child of order_wastages (ON DELETE CASCADE); purges with its parent for the same reason.',
   },
+  recurring_expense_drafts: {
+    class: 'purge',
+    reason:
+      'PROVENANCE ABOUT EXPENSES, not configuration — one row per (template, due date) saying ' +
+      'which invoice and which expense that date produced. Every document it points at is class ' +
+      'PURGE, so after 1 January it would describe nothing: a table of pointers to rows that no ' +
+      'longer exist. ⚠️ Its parent `recurring_expenses` is KEEP and that is not a contradiction — ' +
+      'the template is the standing fact ("Lipa pays rent on the 5th"), this is the log of what it ' +
+      'did in 2026. ⛔ Both document FKs are ON DELETE SET NULL for the reason 0132 records: a row reached ' +
+      'from a KEEP table must never be able to BLOCK the purge of a PURGE one.',
+  },
   recurring_expenses: {
     class: 'keep',
     reason:

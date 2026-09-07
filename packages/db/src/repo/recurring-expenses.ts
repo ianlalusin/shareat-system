@@ -11,6 +11,7 @@ import {
   type RecurringInterval,
   type RecurringStatus,
 } from '../../schema/recurring-expenses';
+import { recurringExpenseDrafts } from '../../schema/recurring-expense-drafts';
 
 export interface RecurringExpenseRow {
   id: string;
@@ -18,6 +19,8 @@ export interface RecurringExpenseRow {
   storeId: string;
   name: string;
   categoryId: string;
+  /** ⚠️ Nullable: templates predate the column. The JOB refuses one that is null and says so. */
+  supplierId: string | null;
   defaultAmount: string;
   defaultMoneyAccountId: string | null;
   tillIsDeliberate: boolean;
@@ -81,6 +84,7 @@ export async function insertTemplate(
     storeId: string;
     name: string;
     categoryId: string;
+    supplierId: string | null;
     defaultAmount: string;
     defaultMoneyAccountId: string | null;
     tillIsDeliberate: boolean;
@@ -101,6 +105,7 @@ export async function updateTemplate(
   values: Partial<{
     name: string;
     categoryId: string;
+    supplierId: string | null;
     defaultAmount: string;
     defaultMoneyAccountId: string | null;
     tillIsDeliberate: boolean;
@@ -147,4 +152,49 @@ export async function stampDrafted(
       updatedAt: sql`now()`,
     })
     .where(and(eq(recurringExpenses.id, id), eq(recurringExpenses.orgId, orgId)));
+}
+
+// =====================================================================================
+// T-216 Part 2 — `recurring_expense_drafts`, the job's idempotency key.
+
+/**
+ * Claim (template, due date) before drafting anything.
+ *
+ * ⭐ **This is the invariant, not the cursor.** `next_due_date` stops the ordinary second run of
+ * the day, because the first run advanced it. It cannot stop two job processes reading the same
+ * cursor before either writes, or a cursor moved backwards by an edit. The UNIQUE index can, and
+ * `ON CONFLICT DO NOTHING` turns the race into a no-op rather than an error.
+ *
+ * ⛔ **Returns `undefined` when the row already existed** — that is the "somebody already drafted
+ * this date" signal and the caller must skip the template, not throw. Same shape as
+ * `budgetsRepo.insertReissued`.
+ *
+ * ⚠️ Call it FIRST, before the invoice and the expense. Claiming after creating them would leave
+ * the documents behind when the claim loses the race.
+ */
+export async function claimDraft(
+  tx: Tx,
+  input: { orgId: string; recurringExpenseId: string; dueDate: string },
+): Promise<{ id: string } | undefined> {
+  const [row] = await tx
+    .insert(recurringExpenseDrafts)
+    .values(input)
+    .onConflictDoNothing({
+      target: [recurringExpenseDrafts.recurringExpenseId, recurringExpenseDrafts.dueDate],
+    })
+    .returning({ id: recurringExpenseDrafts.id });
+  return row;
+}
+
+/** Fill in what the claim produced, in the same transaction that created them. */
+export async function attachDraftDocuments(
+  tx: Tx,
+  orgId: string,
+  draftId: string,
+  input: { expenseId: string; supplierInvoiceId: string },
+): Promise<void> {
+  await tx
+    .update(recurringExpenseDrafts)
+    .set({ expenseId: input.expenseId, supplierInvoiceId: input.supplierInvoiceId })
+    .where(and(eq(recurringExpenseDrafts.id, draftId), eq(recurringExpenseDrafts.orgId, orgId)));
 }

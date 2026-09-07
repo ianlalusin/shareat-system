@@ -70,6 +70,11 @@ async function fixture(hint: string) {
   const [category] = await sql<{ id: string }[]>`
     insert into expense_categories (org_id, "group", category, account_code)
     values (${orgId}, 'OPEX', ${uid('cat')}, '6200') returning id`;
+  // T-216 Part 2: a template names the party the bill comes from. The JOB cannot draft without it
+  // (`expenses.supplier_id` is NOT NULL), so `createRecurringTemplate` requires it.
+  const [supplier] = await sql<{ id: string }[]>`
+    insert into suppliers (org_id, name, created_by) values (${orgId}, ${`Landlord ${hint}`}, ${managerId})
+    returning id`;
   // ⭐ Every store is born with five money accounts (bible row 156) — the till and the office safe
   // are both already there, which is what makes the till rule testable without inventing fixtures.
   const [till] = await sql<{ id: string }[]>`
@@ -79,7 +84,7 @@ async function fixture(hint: string) {
   const [otherStoreOffice] = await sql<{ id: string }[]>`
     select id from money_accounts where store_id = ${other!.id} and custodian = 'office' limit 1`;
   return {
-    orgId, storeId, otherStoreId: other!.id, categoryId: category!.id,
+    orgId, storeId, otherStoreId: other!.id, categoryId: category!.id, supplierId: supplier!.id,
     tillId: till!.id, officeId: office!.id, otherStoreAccountId: otherStoreOffice!.id,
     manager: actor(orgId, managerId), staff: actor(orgId, staffId),
   };
@@ -90,6 +95,7 @@ const base = (f: Fixture) => ({
   storeId: f.storeId,
   name: 'Lipa branch rent',
   categoryId: f.categoryId,
+  supplierId: f.supplierId,
   defaultAmount: '25000.00',
   interval: 'monthly' as const,
   anchorDay: 5,

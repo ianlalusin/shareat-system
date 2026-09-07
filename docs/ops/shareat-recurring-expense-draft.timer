@@ -1,0 +1,27 @@
+# T-216 Part 2 — DAILY, early morning Manila.
+#
+# ⭐ Why daily. A due date is a DAY, and the whole promise is that the bill is on the screen on the
+# morning it is due. A weekly run would make a bill due on Tuesday appear on Sunday — six days late
+# for a payment somebody may have needed to make on the day.
+#
+# ⚠️ 02:00 Manila, after `shareat-finding-observation` at 01:30, so a draft created this morning is
+# not counted by the observation run as if it had existed all of yesterday.
+#
+# ⭐ Catching up is CHEAP here and does not double-bill. A template three months overdue drafts
+# ONCE per run, for the oldest missed date, and converges over three consecutive runs — v1's own
+# restraint ("never pre-create") in mirror image. The unique index on (template, due date) is what
+# makes a re-run safe rather than the timer's punctuality.
+
+[Unit]
+Description=Shareat — daily recurring-expense drafting (T-216)
+
+[Timer]
+OnCalendar=*-*-* 02:00:00 Asia/Manila
+# ⚠️ Catch up after a reboot or an outage rather than skipping silently. A skipped day means a bill
+# nobody was reminded about — which is the exact forgetting this module exists to prevent, and
+# DEF-044's shape when it goes unnoticed.
+Persistent=true
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target
