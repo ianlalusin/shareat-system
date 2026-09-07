@@ -252,7 +252,7 @@ describe('T-170 — the uninvoiced case: no credit arises', () => {
 
     const res = await asOrg(f.orgId, (tx) =>
       recordReturn(tx, {
-        orgId: f.orgId, storeId: f.storeId, supplierId: f.supplierId, deliveryId,
+        storeId: f.storeId, supplierId: f.supplierId, deliveryId,
         returnedOn: '2026-01-06', reason: 'damaged',
         lines: [{ itemId: f.itemId, itemKind: 'raw_material', locationId: f.locationId, quantity: quantity('10.000'), deliveryLineId }],
         actor: f.staff,
@@ -278,7 +278,7 @@ describe('T-170 — the invoiced case: a real credit', () => {
 
     const res = await asOrg(f.orgId, (tx) =>
       recordReturn(tx, {
-        orgId: f.orgId, storeId: f.storeId, supplierId: f.supplierId, deliveryId,
+        storeId: f.storeId, supplierId: f.supplierId, deliveryId,
         returnedOn: '2026-01-06', reason: 'wrong item',
         lines: [{ itemId: f.itemId, itemKind: 'raw_material', locationId: f.locationId, quantity: quantity('10.000'), deliveryLineId }],
         actor: f.staff,
@@ -327,7 +327,7 @@ describe('T-170 — the invoiced case: a real credit', () => {
 
     const res = await asOrg(f.orgId, (tx) =>
       recordReturn(tx, {
-        orgId: f.orgId, storeId: f.storeId, supplierId: f.supplierId, deliveryId: d!.id,
+        storeId: f.storeId, supplierId: f.supplierId, deliveryId: d!.id,
         returnedOn: '2026-01-06', reason: 'mixed batch',
         lines: [
           { itemId: f.itemId, itemKind: 'raw_material', locationId: f.locationId, quantity: quantity('5.000'), deliveryLineId: dl1!.id },
@@ -360,7 +360,7 @@ describe('T-170 — the caps and the no-override guard', () => {
     const { deliveryId, deliveryLineId } = await receiveOne(f, '30.000', '100.0000', '2026-01-05');
     const res = await asOrg(f.orgId, (tx) =>
       recordReturn(tx, {
-        orgId: f.orgId, storeId: f.storeId, supplierId: f.supplierId, deliveryId,
+        storeId: f.storeId, supplierId: f.supplierId, deliveryId,
         returnedOn: '2026-01-06', reason: 'over-return',
         lines: [{ itemId: f.itemId, itemKind: 'raw_material', locationId: f.locationId, quantity: quantity('31.000'), deliveryLineId }],
         actor: f.staff,
@@ -379,7 +379,7 @@ describe('T-170 — the caps and the no-override guard', () => {
 
     const res = await asOrg(f.orgId, (tx) =>
       recordReturn(tx, {
-        orgId: f.orgId, storeId: f.storeId, supplierId: f.supplierId, deliveryId: null,
+        storeId: f.storeId, supplierId: f.supplierId, deliveryId: null,
         returnedOn: '2026-01-06', reason: 'more than is on the shelf',
         lines: [{ itemId: f.itemId, itemKind: 'raw_material', locationId: f.locationId, quantity: quantity('11.000'), deliveryLineId: null }],
         actor: f.manager,
@@ -402,7 +402,7 @@ describe('T-170 — the relieved cost, not the delivery cost', () => {
     // exhausted by a large earlier return, proving the return takes what is ACTUALLY there.
     const drain = await asOrg(f.orgId, (tx) =>
       recordReturn(tx, {
-        orgId: f.orgId, storeId: f.storeId, supplierId: f.supplierId, deliveryId: first.deliveryId,
+        storeId: f.storeId, supplierId: f.supplierId, deliveryId: first.deliveryId,
         returnedOn: '2026-01-02', reason: 'drain the cheap layer',
         lines: [{ itemId: f.itemId, itemKind: 'raw_material', locationId: f.locationId, quantity: quantity('10.000'), deliveryLineId: first.deliveryLineId }],
         actor: f.staff,
@@ -414,7 +414,7 @@ describe('T-170 — the relieved cost, not the delivery cost', () => {
     // whatever FIFO gives it) must cost ₱120/kg, not the ₱100 the FIRST delivery would suggest.
     const second = await asOrg(f.orgId, (tx) =>
       recordReturn(tx, {
-        orgId: f.orgId, storeId: f.storeId, supplierId: f.supplierId, deliveryId: null,
+        storeId: f.storeId, supplierId: f.supplierId, deliveryId: null,
         returnedOn: '2026-01-06', reason: 'from the remaining lot',
         lines: [{ itemId: f.itemId, itemKind: 'raw_material', locationId: f.locationId, quantity: quantity('5.000'), deliveryLineId: null }],
         actor: f.staff,
@@ -435,7 +435,7 @@ describe('T-170 — the credit is spendable', () => {
     await markInvoiced(f, layerId);
     const res = await asOrg(f.orgId, (tx) =>
       recordReturn(tx, {
-        orgId: f.orgId, storeId: f.storeId, supplierId: f.supplierId, deliveryId,
+        storeId: f.storeId, supplierId: f.supplierId, deliveryId,
         returnedOn: '2026-01-06', reason: 'credit setup',
         lines: [{ itemId: f.itemId, itemKind: 'raw_material', locationId: f.locationId, quantity: quantity('10.000'), deliveryLineId }],
         actor: f.staff,
@@ -521,7 +521,7 @@ describe('T-170 — the credit is spendable', () => {
 
     const res = await asOrg(f.orgId, (tx) =>
       refundSupplierCredit(tx, {
-        orgId: f.orgId, storeId: f.storeId, supplierId: f.supplierId,
+        storeId: f.storeId, supplierId: f.supplierId,
         moneyAccountId: f.moneyAccountId, amount: '1000.00', businessDate: '2026-02-02', actor: f.manager,
       }),
     );
@@ -540,7 +540,7 @@ describe('T-170 — void reverses everything, together', () => {
 
     const res = await asOrg(f.orgId, (tx) =>
       recordReturn(tx, {
-        orgId: f.orgId, storeId: f.storeId, supplierId: f.supplierId, deliveryId,
+        storeId: f.storeId, supplierId: f.supplierId, deliveryId,
         returnedOn: '2026-01-06', reason: 'to void',
         lines: [{ itemId: f.itemId, itemKind: 'raw_material', locationId: f.locationId, quantity: quantity('10.000'), deliveryLineId }],
         actor: f.staff,
@@ -571,7 +571,7 @@ describe('T-170 — void reverses everything, together', () => {
 
     const res = await asOrg(f.orgId, (tx) =>
       recordReturn(tx, {
-        orgId: f.orgId, storeId: f.storeId, supplierId: f.supplierId, deliveryId,
+        storeId: f.storeId, supplierId: f.supplierId, deliveryId,
         returnedOn: '2026-01-06', reason: 'to spend then void',
         lines: [{ itemId: f.itemId, itemKind: 'raw_material', locationId: f.locationId, quantity: quantity('10.000'), deliveryLineId }],
         actor: f.staff,
@@ -582,7 +582,7 @@ describe('T-170 — void reverses everything, together', () => {
     // Spend HALF the credit via a refund, leaving less than this return contributed.
     await asOrg(f.orgId, (tx) =>
       refundSupplierCredit(tx, {
-        orgId: f.orgId, storeId: f.storeId, supplierId: f.supplierId,
+        storeId: f.storeId, supplierId: f.supplierId,
         moneyAccountId: f.moneyAccountId, amount: '600.00', businessDate: '2026-01-07', actor: f.manager,
       }),
     );
@@ -603,7 +603,7 @@ describe('T-170 — the period lock and the exit gate', () => {
     await expect(
       asOrg(f.orgId, (tx) =>
         recordReturn(tx, {
-          orgId: f.orgId, storeId: f.storeId, supplierId: f.supplierId, deliveryId,
+          storeId: f.storeId, supplierId: f.supplierId, deliveryId,
           returnedOn: '2026-01-06', reason: 'closed period',
           lines: [{ itemId: f.itemId, itemKind: 'raw_material', locationId: f.locationId, quantity: quantity('5.000'), deliveryLineId }],
           actor: f.staff,
@@ -618,7 +618,7 @@ describe('T-170 — the period lock and the exit gate', () => {
 
     const res = await asOrg(f.orgId, (tx) =>
       recordReturn(tx, {
-        orgId: f.orgId, storeId: f.storeId, supplierId: f.otherSupplierId, deliveryId,
+        storeId: f.storeId, supplierId: f.otherSupplierId, deliveryId,
         returnedOn: '2026-01-06', reason: 'wrong supplier',
         lines: [{ itemId: f.itemId, itemKind: 'raw_material', locationId: f.locationId, quantity: quantity('5.000'), deliveryLineId }],
         actor: f.staff,
@@ -632,7 +632,7 @@ describe('T-170 — the period lock and the exit gate', () => {
     const { deliveryId, deliveryLineId } = await receiveOne(f, '30.000', '100.0000', '2026-01-05');
     await asOrg(f.orgId, (tx) =>
       recordReturn(tx, {
-        orgId: f.orgId, storeId: f.storeId, supplierId: f.supplierId, deliveryId,
+        storeId: f.storeId, supplierId: f.supplierId, deliveryId,
         returnedOn: '2026-01-06', reason: 'gate check',
         lines: [{ itemId: f.itemId, itemKind: 'raw_material', locationId: f.locationId, quantity: quantity('10.000'), deliveryLineId }],
         actor: f.staff,
@@ -653,7 +653,7 @@ describe('T-170 — the period lock and the exit gate', () => {
 
     const res = await asOrg(f.orgId, (tx) =>
       recordReturn(tx, {
-        orgId: f.orgId, storeId: f.storeId, supplierId: f.supplierId, deliveryId,
+        storeId: f.storeId, supplierId: f.supplierId, deliveryId,
         returnedOn: '2026-01-06', reason: 'cross-store',
         lines: [{ itemId: f.itemId, itemKind: 'raw_material', locationId: f.otherStoreLocationId, quantity: quantity('5.000'), deliveryLineId: null }],
         actor: f.manager,
@@ -671,12 +671,130 @@ describe('T-170 — returnableQuantity', () => {
 
     await asOrg(f.orgId, (tx) =>
       recordReturn(tx, {
-        orgId: f.orgId, storeId: f.storeId, supplierId: f.supplierId, deliveryId,
+        storeId: f.storeId, supplierId: f.supplierId, deliveryId,
         returnedOn: '2026-01-06', reason: 'partial',
         lines: [{ itemId: f.itemId, itemKind: 'raw_material', locationId: f.locationId, quantity: quantity('10.000'), deliveryLineId }],
         actor: f.staff,
       }),
     );
     expect(await asOrg(f.orgId, (tx) => returnableQuantity(tx, deliveryLineId))).toBe('20.000');
+  });
+});
+
+/**
+ * T-231 slice 1 / DEF-210 — the organisation is the ACTOR's, never the caller's.
+ *
+ * ⛔ **These run under a PLAIN `transaction()`, not `asOrg`, and that is the whole point.**
+ * `apps/erp/src/app/inventory/returns/actions.ts:33` opens a plain transaction — no principal, so
+ * the connection is the owner and RLS is bypassed. Wrapping these in `asOrg` would prove only that
+ * RLS refuses the write (SQLSTATE 42501) — true, and NOT what production does today. The defect is
+ * reproduced on the path the app actually takes.
+ *
+ * ⚠️ **The victim org is seeded with real books**, because that is the live case: Padre Garcia is
+ * a going concern with a chart of accounts and an open period. An unseeded victim makes the attack
+ * fail with *"no fiscal period covers…"*, which looks like a guard and is only a missing fixture.
+ */
+describe('T-231 / DEF-210 — a supplier return is stamped with the actor’s org', () => {
+  /** A second organisation with books of its own — the franchise next door. */
+  async function victimOrg(): Promise<string> {
+    const [org] = await sql<{ id: string }[]>`
+      insert into organizations (name, code) values (${'Victim ' + uid('v')}, ${uid('vic')}) returning id`;
+    await seedChartOfAccounts(sql, org!.id);
+    await seedExpenseCategories(sql, org!.id);
+    await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status)
+              values (${org!.id}, '2020-01-01', '2035-12-31', 'open')`;
+    return org!.id;
+  }
+
+  it('recordReturn ignores a caller-supplied organisation', async () => {
+    const f = await fixture();
+    const { deliveryId, deliveryLineId } = await receiveOne(f, '10.000', '100.00', '2026-01-05');
+    const victimOrgId = await victimOrg();
+
+    const res = await transaction((tx) =>
+      recordReturn(tx, {
+        // @ts-expect-error T-231/DEF-210 — the field is GONE. Supplying another org's id
+        // must not compile; if someone re-adds it this directive goes unused and the build fails.
+        orgId: victimOrgId,
+        storeId: f.storeId, // the actor's OWN store, so authorize() axis 2 passes
+        supplierId: f.supplierId,
+        deliveryId,
+        returnedOn: '2026-01-06',
+        reason: 'damaged',
+        lines: [
+          {
+            itemId: f.itemId,
+            itemKind: 'raw_material',
+            locationId: f.locationId,
+            quantity: quantity('10.000'),
+            deliveryLineId,
+          },
+        ],
+        actor: f.staff,
+      }),
+    );
+    expect(res.ok, res.ok ? '' : `recordReturn refused: ${res.reason}`).toBe(true);
+    if (!res.ok) return;
+
+    const [row] = await sql<{ org_id: string }[]>`
+      select org_id from supplier_returns where id = ${res.returnId}`;
+    expect(row!.org_id, 'the return landed in the org the CALLER named, not the actor’s').toBe(f.orgId);
+
+    const [entry] = await sql<{ org_id: string }[]>`
+      select e.org_id from journal_entries e
+      join supplier_returns r on r.journal_entry_id = e.id where r.id = ${res.returnId}`;
+    expect(entry?.org_id, 'the posting landed in another organisation’s books').toBe(f.orgId);
+  });
+
+  it('refundSupplierCredit reads the credit from the actor’s books, not a supplied org’s', async () => {
+    const f = await fixture();
+    // A real 1000.00 supplier credit in the ACTOR's books. `invoicedReturnCredit` is scoped to
+    // another describe, so the three steps are inlined: an UNINVOICED return posts no credit at
+    // all (Dr 2120 / Cr inventory), and a refund with nothing to draw down proves nothing.
+    const { deliveryId, deliveryLineId, layerId } = await receiveOne(f, '30.000', '100.0000', '2026-01-05');
+    await markInvoiced(f, layerId);
+    await asOrg(f.orgId, (tx) =>
+      recordReturn(tx, {
+        storeId: f.storeId,
+        supplierId: f.supplierId,
+        deliveryId,
+        returnedOn: '2026-01-06',
+        reason: 'wrong item',
+        lines: [
+          {
+            itemId: f.itemId,
+            itemKind: 'raw_material',
+            locationId: f.locationId,
+            quantity: quantity('10.000'),
+            deliveryLineId,
+          },
+        ],
+        actor: f.staff,
+      }),
+    );
+    const victimOrgId = await victimOrg();
+
+    // ⭐ Pre-fix this was refused — `advancesPositionOf(tx, input.orgId, …)` looked in the VICTIM's
+    // books, found nothing, and reported "only 0.00 of credit is available". That refusal was the
+    // cross-org READ made visible: the function was asking the wrong organisation's ledger.
+    const res = await transaction((tx) =>
+      refundSupplierCredit(tx, {
+        // @ts-expect-error T-231/DEF-210 — the field is GONE. Supplying another org's id
+        // must not compile; if someone re-adds it this directive goes unused and the build fails.
+        orgId: victimOrgId,
+        storeId: f.storeId,
+        supplierId: f.supplierId,
+        moneyAccountId: f.moneyAccountId,
+        amount: '250.00',
+        businessDate: '2026-02-02',
+        actor: f.manager, // `apply_supplier_credit` is manager-and-up
+      }),
+    );
+    expect(res.ok, res.ok ? '' : `refund refused — it read the wrong org’s ledger: ${res.reason}`).toBe(true);
+    if (!res.ok) return;
+
+    const [entry] = await sql<{ org_id: string }[]>`
+      select org_id from journal_entries where id = ${res.entryId}`;
+    expect(entry!.org_id, 'the refund posted into another organisation’s books').toBe(f.orgId);
   });
 });

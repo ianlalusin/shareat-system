@@ -6,13 +6,11 @@ import { TwoWayPicker, type PickerOption } from '../../../components/two-way-pic
 
 export function NewTransferForm({
   action,
-  orgId,
   storeId,
   locations,
   items,
 }: {
   action: (fd: FormData) => void | Promise<void>;
-  orgId: string;
   storeId: string;
   locations: readonly PickerOption[];
   items: readonly { id: string; name: string }[];
@@ -23,7 +21,6 @@ export function NewTransferForm({
 
   return (
     <form action={action} className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-      <input type="hidden" name="orgId" value={orgId} />
       <input type="hidden" name="storeId" value={storeId} />
 
       <TwoWayPicker

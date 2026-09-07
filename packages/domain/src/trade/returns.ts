@@ -126,7 +126,7 @@ export interface RecordCustomerReturnLineInput {
 }
 
 export interface RecordCustomerReturnInput {
-  readonly orgId: string;
+  /** ⛔ NO `orgId`. T-231/DEF-210: derived from `actor` at the entry point. */
   readonly tradeOrderId: string;
   readonly returnedOn: string;
   readonly reason: string;
@@ -155,10 +155,18 @@ interface PreparedLine {
   readonly saleable: boolean;
 }
 
+/**
+ * ⛔ Internal only. The org is DERIVED from the actor at the entry point (T-231/DEF-210) and then
+ * threaded to the two posting helpers unchanged — which is why they keep an `orgId` and the public
+ * input does not. A caller must not be able to name a tenant; these helpers are not callable.
+ */
+type ScopedReturnInput = RecordCustomerReturnInput & { readonly orgId: string };
+
 export async function recordCustomerReturn(
   tx: Tx | null,
-  input: RecordCustomerReturnInput,
+  publicInput: RecordCustomerReturnInput,
 ): Promise<RecordCustomerReturnOutcome> {
+  const input: ScopedReturnInput = { ...publicInput, orgId: publicInput.actor.orgId };
   const run = async (trx: Tx): Promise<RecordCustomerReturnOutcome> => {
     const order = await tradeRepo.getOrderById(trx, input.orgId, input.tradeOrderId);
     if (!order) return { ok: false, reason: `trade order ${input.tradeOrderId} does not exist.` };
@@ -222,7 +230,7 @@ export async function recordCustomerReturn(
 
 async function recordExternalReturn(
   tx: Tx,
-  input: RecordCustomerReturnInput,
+  input: ScopedReturnInput,
   order: TradeOrderRow,
   customer: CustomerRow,
   prepared: readonly PreparedLine[],
@@ -377,7 +385,7 @@ async function recordExternalReturn(
 
 async function recordInternalReturn(
   tx: Tx,
-  input: RecordCustomerReturnInput,
+  input: ScopedReturnInput,
   order: TradeOrderRow,
   customer: CustomerRow,
   prepared: readonly PreparedLine[],
@@ -620,15 +628,17 @@ export interface ApplyCreditOutcome {
 export async function applyCredit(
   tx: Tx | null,
   actor: Actor,
-  input: { orgId: string; tradeOrderId: string; amount: string; collectionDate: string; moneyAccountId: string },
+  /** ⛔ NO `orgId` — T-231/DEF-210. It comes from `actor`. */
+  input: { tradeOrderId: string; amount: string; collectionDate: string; moneyAccountId: string },
 ): Promise<ApplyCreditOutcome> {
   const run = async (trx: Tx): Promise<ApplyCreditOutcome> => {
-    const order = await tradeRepo.getOrderById(trx, input.orgId, input.tradeOrderId);
+    const orgId = actor.orgId;
+    const order = await tradeRepo.getOrderById(trx, orgId, input.tradeOrderId);
     if (!order) return { ok: false, reason: `trade order ${input.tradeOrderId} does not exist.` };
     if (!order.arChargeId) return { ok: false, reason: 'this order has no receivable to apply credit against.' };
     await authorize(trx, actor, 'apply_customer_credit', { storeId: order.storeId });
 
-    const outstanding = Number(await arRepo.outstandingForCharge(trx, input.orgId, order.arChargeId));
+    const outstanding = Number(await arRepo.outstandingForCharge(trx, orgId, order.arChargeId));
     const amount = Number(input.amount);
     if (amount <= 0) return { ok: false, reason: 'the amount must be greater than zero.' };
     if (amount > outstanding + 0.005) {

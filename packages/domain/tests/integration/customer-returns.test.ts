@@ -193,7 +193,7 @@ describe('external return — §3, the full posting', () => {
 
     const res = await asOrg(f.orgId, (tx) =>
       recordCustomerReturn(tx, {
-        orgId: f.orgId, tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'Wrong item shipped.',
+        tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'Wrong item shipped.',
         lines: [{ tradeOrderLineId: s.lineId, quantity: '10' }], actor: f.manager,
       }),
     );
@@ -227,7 +227,7 @@ describe('external return — §3, the full posting', () => {
 
     const res = await asOrg(f.orgId, (tx) =>
       recordCustomerReturn(tx, {
-        orgId: f.orgId, tradeOrderId: s.orderId, returnedOn: '2026-01-16', reason: 'Not needed.',
+        tradeOrderId: s.orderId, returnedOn: '2026-01-16', reason: 'Not needed.',
         lines: [{ tradeOrderLineId: s.lineId, quantity: '5' }], actor: f.manager,
       }),
     );
@@ -255,7 +255,7 @@ describe('external return — §3, the full posting', () => {
     // Sale consumed 5@100 + 3@200 = 500+600 = 1100.
 
     const first = await asOrg(f.orgId, (tx) =>
-      recordCustomerReturn(tx, { orgId: f.orgId, tradeOrderId: order.orderId, returnedOn: '2026-01-15', reason: 'Partial 1.', lines: [{ tradeOrderLineId: lineId, quantity: '2' }], actor: f.manager }),
+      recordCustomerReturn(tx, { tradeOrderId: order.orderId, returnedOn: '2026-01-15', reason: 'Partial 1.', lines: [{ tradeOrderLineId: lineId, quantity: '2' }], actor: f.manager }),
     );
     expect(first.ok).toBe(true);
     if (!first.ok) return;
@@ -264,7 +264,7 @@ describe('external return — §3, the full posting', () => {
     expect(legs1[0]!.debit).toBe('400.00'); // 2 @ 200
 
     const second = await asOrg(f.orgId, (tx) =>
-      recordCustomerReturn(tx, { orgId: f.orgId, tradeOrderId: order.orderId, returnedOn: '2026-01-15', reason: 'Partial 2.', lines: [{ tradeOrderLineId: lineId, quantity: '6' }], actor: f.manager }),
+      recordCustomerReturn(tx, { tradeOrderId: order.orderId, returnedOn: '2026-01-15', reason: 'Partial 2.', lines: [{ tradeOrderLineId: lineId, quantity: '6' }], actor: f.manager }),
     );
     expect(second.ok).toBe(true);
     if (!second.ok) return;
@@ -277,7 +277,7 @@ describe('external return — §3, the full posting', () => {
     const f = await fixture('fifoposition');
     const s = await aSale(f, { qty: '3', rate: '500', stockQty: '10', unitCost: '90' });
     await asOrg(f.orgId, (tx) =>
-      recordCustomerReturn(tx, { orgId: f.orgId, tradeOrderId: s.orderId, returnedOn: '2026-01-11', reason: 'Return.', lines: [{ tradeOrderLineId: s.lineId, quantity: '3' }], actor: f.manager }),
+      recordCustomerReturn(tx, { tradeOrderId: s.orderId, returnedOn: '2026-01-11', reason: 'Return.', lines: [{ tradeOrderLineId: s.lineId, quantity: '3' }], actor: f.manager }),
     );
     // A NEW, more expensive lot arrives after the return.
     await stock(f, f.storeId, f.locationId, s.itemId, '10', '500.0000');
@@ -303,7 +303,7 @@ describe('settlement — §3\'s table and invariant 9\'s split', () => {
     const f = await fixture('unpaid');
     const s = await aSale(f, { qty: '2', rate: '500' });
     const res = await asOrg(f.orgId, (tx) =>
-      recordCustomerReturn(tx, { orgId: f.orgId, tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'Return.', lines: [{ tradeOrderLineId: s.lineId, quantity: '1' }], actor: f.manager }),
+      recordCustomerReturn(tx, { tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'Return.', lines: [{ tradeOrderLineId: s.lineId, quantity: '1' }], actor: f.manager }),
     );
     expect(res.ok && res.settlement).toBe('reduce_ar');
   });
@@ -319,7 +319,7 @@ describe('settlement — §3\'s table and invariant 9\'s split', () => {
       }),
     ));
     const res = await asOrg(f.orgId, (tx) =>
-      recordCustomerReturn(tx, { orgId: f.orgId, tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'Return.', lines: [{ tradeOrderLineId: s.lineId, quantity: '1' }], actor: f.manager }),
+      recordCustomerReturn(tx, { tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'Return.', lines: [{ tradeOrderLineId: s.lineId, quantity: '1' }], actor: f.manager }),
     );
     expect(res.ok).toBe(true);
     if (!res.ok) return;
@@ -340,7 +340,7 @@ describe('settlement — §3\'s table and invariant 9\'s split', () => {
     ));
     // Return the whole thing — 2000. Only 1000 is still outstanding.
     const res = await asOrg(f.orgId, (tx) =>
-      recordCustomerReturn(tx, { orgId: f.orgId, tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'Full return.', lines: [{ tradeOrderLineId: s.lineId, quantity: '4' }], actor: f.manager }),
+      recordCustomerReturn(tx, { tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'Full return.', lines: [{ tradeOrderLineId: s.lineId, quantity: '4' }], actor: f.manager }),
     );
     expect(res.ok).toBe(true);
     if (!res.ok) return;
@@ -357,7 +357,7 @@ describe('settlement — §3\'s table and invariant 9\'s split', () => {
     const s = await aSale(f, { qty: '2', rate: '500' });
     const res = await asOrg(f.orgId, (tx) =>
       recordCustomerReturn(tx, {
-        orgId: f.orgId, tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'Refund requested.',
+        tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'Refund requested.',
         lines: [{ tradeOrderLineId: s.lineId, quantity: '1' }], refund: true, moneyAccountId: f.cashAccountId,
         actor: f.manager,
       }),
@@ -383,7 +383,7 @@ describe('the credit is spendable — Ian\'s actual requirement', () => {
       }),
     ));
     await asOrg(f.orgId, (tx) =>
-      recordCustomerReturn(tx, { orgId: f.orgId, tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'Return.', lines: [{ tradeOrderLineId: s.lineId, quantity: '2' }], actor: f.manager }),
+      recordCustomerReturn(tx, { tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'Return.', lines: [{ tradeOrderLineId: s.lineId, quantity: '2' }], actor: f.manager }),
     );
     const before = await asOrg(f.orgId, (tx) => customerCreditBalance(tx, f.orgId, s.customerId));
     expect(before).toBe('1000.00');
@@ -394,7 +394,7 @@ describe('the credit is spendable — Ian\'s actual requirement', () => {
     await sql`update ar_charges set customer_id = ${s.customerId} where id = ${s2.arChargeId}`;
 
     const applied = await asOrg(f.orgId, (tx) =>
-      applyCredit(tx, f.manager, { orgId: f.orgId, tradeOrderId: s2.orderId, amount: '600.00', collectionDate: '2026-01-20', moneyAccountId: f.cashAccountId }),
+      applyCredit(tx, f.manager, { tradeOrderId: s2.orderId, amount: '600.00', collectionDate: '2026-01-20', moneyAccountId: f.cashAccountId }),
     );
     expect(applied.ok).toBe(true);
 
@@ -406,7 +406,7 @@ describe('the credit is spendable — Ian\'s actual requirement', () => {
     const f = await fixture('overspend');
     const s = await aSale(f, { qty: '1', rate: '500' });
     await expect(
-      asOrg(f.orgId, (tx) => applyCredit(tx, f.manager, { orgId: f.orgId, tradeOrderId: s.orderId, amount: '999999.00', collectionDate: '2026-01-20', moneyAccountId: f.cashAccountId })),
+      asOrg(f.orgId, (tx) => applyCredit(tx, f.manager, { tradeOrderId: s.orderId, amount: '999999.00', collectionDate: '2026-01-20', moneyAccountId: f.cashAccountId })),
     ).resolves.toMatchObject({ ok: false });
   });
 });
@@ -417,7 +417,7 @@ describe('unsaleable goods — §5, two events', () => {
     const s = await aSale(f, { qty: '3', rate: '500', stockQty: '10', unitCost: '90' });
     const res = await asOrg(f.orgId, (tx) =>
       recordCustomerReturn(tx, {
-        orgId: f.orgId, tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'Damaged.',
+        tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'Damaged.',
         lines: [{ tradeOrderLineId: s.lineId, quantity: '3', saleable: false }], actor: f.manager,
       }),
     );
@@ -460,7 +460,7 @@ describe('internal — §4, T-173 backwards', () => {
     const t = await transferAndReceive(f, { qty: '10', rate: '100' });
 
     const res = await asOrg(f.orgId, (tx) =>
-      recordCustomerReturn(tx, { orgId: f.orgId, tradeOrderId: t.orderId, returnedOn: '2026-01-15', reason: 'Overstocked.', lines: [{ tradeOrderLineId: t.lineId, quantity: '4' }], actor: f.manager }),
+      recordCustomerReturn(tx, { tradeOrderId: t.orderId, returnedOn: '2026-01-15', reason: 'Overstocked.', lines: [{ tradeOrderLineId: t.lineId, quantity: '4' }], actor: f.manager }),
     );
     expect(res.ok).toBe(true);
     if (!res.ok) return;
@@ -490,7 +490,7 @@ describe('caps and refusals', () => {
     const f = await fixture('overreturn');
     const s = await aSale(f, { qty: '2', rate: '500' });
     const res = await asOrg(f.orgId, (tx) =>
-      recordCustomerReturn(tx, { orgId: f.orgId, tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'x', lines: [{ tradeOrderLineId: s.lineId, quantity: '3' }], actor: f.manager }),
+      recordCustomerReturn(tx, { tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'x', lines: [{ tradeOrderLineId: s.lineId, quantity: '3' }], actor: f.manager }),
     );
     expect(res.ok).toBe(false);
   });
@@ -501,7 +501,7 @@ describe('caps and refusals', () => {
     const cap1 = await asOrg(f.orgId, (tx) => customerReturnableQuantity(tx, f.orgId, s.lineId));
     expect(cap1).toBe('5.000');
     await asOrg(f.orgId, (tx) =>
-      recordCustomerReturn(tx, { orgId: f.orgId, tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'x', lines: [{ tradeOrderLineId: s.lineId, quantity: '2' }], actor: f.manager }),
+      recordCustomerReturn(tx, { tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'x', lines: [{ tradeOrderLineId: s.lineId, quantity: '2' }], actor: f.manager }),
     );
     const cap2 = await asOrg(f.orgId, (tx) => customerReturnableQuantity(tx, f.orgId, s.lineId));
     expect(cap2).toBe('3.000');
@@ -514,7 +514,7 @@ describe('void', () => {
     const s = await aSale(f, { qty: '3', rate: '500', stockQty: '20', unitCost: '90' });
     const before = await balances(f.orgId);
     const res = await asOrg(f.orgId, (tx) =>
-      recordCustomerReturn(tx, { orgId: f.orgId, tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'Wrong item.', lines: [{ tradeOrderLineId: s.lineId, quantity: '3' }], actor: f.manager }),
+      recordCustomerReturn(tx, { tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'Wrong item.', lines: [{ tradeOrderLineId: s.lineId, quantity: '3' }], actor: f.manager }),
     );
     expect(res.ok).toBe(true);
     if (!res.ok) return;
@@ -541,7 +541,7 @@ describe('void', () => {
       }),
     ));
     const res = await asOrg(f.orgId, (tx) =>
-      recordCustomerReturn(tx, { orgId: f.orgId, tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'x', lines: [{ tradeOrderLineId: s.lineId, quantity: '2' }], actor: f.manager }),
+      recordCustomerReturn(tx, { tradeOrderId: s.orderId, returnedOn: '2026-01-15', reason: 'x', lines: [{ tradeOrderLineId: s.lineId, quantity: '2' }], actor: f.manager }),
     );
     expect(res.ok).toBe(true);
     if (!res.ok) return;
@@ -549,9 +549,105 @@ describe('void', () => {
     const s2 = await aSale(f, { qty: '1', rate: '900', stockQty: '5' });
     await sql`update trade_orders set customer_id = ${s.customerId} where id = ${s2.orderId}`;
     await sql`update ar_charges set customer_id = ${s.customerId} where id = ${s2.arChargeId}`;
-    await asOrg(f.orgId, (tx) => applyCredit(tx, f.manager, { orgId: f.orgId, tradeOrderId: s2.orderId, amount: '900.00', collectionDate: '2026-01-20', moneyAccountId: f.cashAccountId }));
+    await asOrg(f.orgId, (tx) => applyCredit(tx, f.manager, { tradeOrderId: s2.orderId, amount: '900.00', collectionDate: '2026-01-20', moneyAccountId: f.cashAccountId }));
 
     const voided = await asOrg(f.orgId, (tx) => voidCustomerReturn(tx, f.manager, res.returnId, 'Too late.'));
     expect(voided.ok).toBe(false);
+  });
+});
+
+/**
+ * T-231 slice 1 / DEF-210 — the organisation is the ACTOR's, never the caller's.
+ *
+ * ⛔ Plain `transaction()`, not `asOrg`: `apps/erp/src/app/trade/returns/actions.ts:31` and `:66`
+ * open one with no principal, so RLS is bypassed. Under a principal these are refused with
+ * SQLSTATE 42501 — which is true, and is not what production does today.
+ *
+ * ⚠️ Both entry points reach the victim's ledger through `tradeRepo.getOrderById(tx, input.orgId,
+ * …)`, so pre-fix they refuse with *"trade order … does not exist"* — the order is real, it is
+ * simply being looked up in the wrong organisation. That refusal IS the cross-org read.
+ */
+describe('T-231 / DEF-210 — a customer return is stamped with the actor’s org', () => {
+  it('recordCustomerReturn reads the order from the actor’s org, not a supplied one', async () => {
+    const f = await fixture('def210-return');
+    const s = await aSale(f);
+
+    const [victim] = await sql<{ id: string }[]>`
+      insert into organizations (name, code) values (${'Victim ' + uid('v')}, ${uid('vic')}) returning id`;
+    await seedChartOfAccounts(sql, victim!.id);
+    await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status)
+              values (${victim!.id}, '2020-01-01', '2035-12-31', 'open')`;
+
+    const res = await transaction((tx) =>
+      recordCustomerReturn(tx, {
+        // @ts-expect-error T-231/DEF-210 — the field is GONE. Supplying another org's id
+        // must not compile; if someone re-adds it this directive goes unused and the build fails.
+        orgId: victim!.id,
+        tradeOrderId: s.orderId,
+        returnedOn: '2026-01-15',
+        reason: 'Wrong item shipped.',
+        lines: [{ tradeOrderLineId: s.lineId, quantity: '10' }],
+        actor: f.manager,
+      }),
+    );
+    expect(res.ok, res.ok ? '' : `refused — it read the wrong org’s ledger: ${res.reason}`).toBe(true);
+    if (!res.ok) return;
+
+    const [row] = await sql<{ org_id: string }[]>`
+      select org_id from customer_returns where id = ${res.returnId}`;
+    expect(row!.org_id, 'the return landed in the org the CALLER named').toBe(f.orgId);
+  });
+
+  it('applyCredit posts the collection under the actor’s org', async () => {
+    const f = await fixture('def210-credit');
+    const s = await aSale(f, { qty: '2', rate: '500' });
+
+    // ⚠️ A return only becomes SPENDABLE store credit once the AR is fully collected — otherwise
+    // it settles as `reduce_ar` and there is nothing for applyCredit to draw down. Same
+    // precondition as test 7 above; without it this test fails on the fixture, not the defect.
+    await asOrg(f.orgId, (tx) =>
+      import('@shareat/domain').then((m) =>
+        m.recordCollection(tx, f.manager, {
+          storeId: f.storeId,
+          customerId: s.customerId,
+          collectionDate: '2026-01-12',
+          amount: '1000.00',
+          moneyAccountId: f.cashAccountId,
+          allocations: [{ chargeId: s.arChargeId, amountApplied: '1000.00' }],
+        }),
+      ),
+    );
+    await asOrg(f.orgId, (tx) =>
+      recordCustomerReturn(tx, {
+        tradeOrderId: s.orderId,
+        returnedOn: '2026-01-15',
+        reason: 'Return.',
+        lines: [{ tradeOrderLineId: s.lineId, quantity: '2' }],
+        actor: f.manager,
+      }),
+    );
+
+    const s2 = await aSale(f, { qty: '1', rate: '600', stockQty: '5' });
+    await sql`update trade_orders set customer_id = ${s.customerId} where id = ${s2.orderId}`;
+    await sql`update ar_charges set customer_id = ${s.customerId} where id = ${s2.arChargeId}`;
+
+    const [victim] = await sql<{ id: string }[]>`
+      insert into organizations (name, code) values (${'Victim ' + uid('v')}, ${uid('vic')}) returning id`;
+    await seedChartOfAccounts(sql, victim!.id);
+    await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status)
+              values (${victim!.id}, '2020-01-01', '2035-12-31', 'open')`;
+
+    const res = await transaction((tx) =>
+      applyCredit(tx, f.manager, {
+        // @ts-expect-error T-231/DEF-210 — the field is GONE. Supplying another org's id
+        // must not compile; if someone re-adds it this directive goes unused and the build fails.
+        orgId: victim!.id,
+        tradeOrderId: s2.orderId,
+        amount: '600.00',
+        collectionDate: '2026-01-20',
+        moneyAccountId: f.cashAccountId,
+      }),
+    );
+    expect(res.ok, res.ok ? '' : `refused — it read the wrong org’s ledger: ${res.reason}`).toBe(true);
   });
 });

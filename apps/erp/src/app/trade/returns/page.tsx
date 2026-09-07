@@ -183,7 +183,6 @@ export default async function CustomerReturnsPage({ searchParams }: { searchPara
                 <td className="py-2 pr-4 text-right tabular-nums">{l.cap}</td>
                 <td className="py-2">
                   <form action={recordReturnAction} className="flex flex-wrap items-center gap-2">
-                    <input type="hidden" name="orgId" value={actor.orgId} />
                     <input type="hidden" name="tradeOrderId" value={l.order_id} />
                     <input type="hidden" name="tradeOrderLineId" value={l.line_id} />
                     <input

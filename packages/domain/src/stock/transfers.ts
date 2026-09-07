@@ -29,7 +29,8 @@ export interface TransferLineInput {
 }
 
 export interface CreateTransferInput {
-  readonly orgId: string;
+  /** ⛔ NO `orgId`. T-231/DEF-210: derived from `actor`. A hidden form field carried this value
+   *  until 2026-09-07, and the browser owned it. */
   readonly storeId: string;
   readonly fromLocationId: string;
   readonly toLocationId: string;
@@ -87,11 +88,14 @@ async function checkSufficiency(
  */
 export async function transferNow(tx: Tx, input: CreateTransferInput): Promise<TransferOutcome> {
   await authorize(tx, input.actor, 'transfer_stock', { storeId: input.storeId });
+  // ⭐ `authorize` has just proven this store belongs to the actor's org, so deriving the org from
+  // the actor is the only reading that can be self-consistent (T-231/DEF-210).
+  const orgId = input.actor.orgId;
 
   const validation = validateTransferRequest(input);
   if (!validation.ok) return validation;
 
-  const period = await assertPeriodOpen(tx, input.orgId);
+  const period = await assertPeriodOpen(tx, orgId);
   if (!period.ok) return period;
 
   const sufficiency = await checkSufficiency(tx, input.storeId, input.fromLocationId, input.lines);
@@ -105,7 +109,7 @@ export async function transferNow(tx: Tx, input: CreateTransferInput): Promise<T
   // MOMENT status says `received`; there is no valid intermediate row a two-step create-then-
   // update could pass through.
   const { id: transferId } = await stockTransfersRepo.createTransfer(tx, {
-    orgId: input.orgId,
+    orgId,
     storeId: input.storeId,
     fromLocationId: input.fromLocationId,
     toLocationId: input.toLocationId,
@@ -124,7 +128,7 @@ export async function transferNow(tx: Tx, input: CreateTransferInput): Promise<T
 
   for (const line of lines) {
     const outMovement = await stockLedgerRepo.insertMovement(tx, {
-      orgId: input.orgId,
+      orgId,
       storeId: input.storeId,
       locationId: input.fromLocationId,
       itemId: line.itemId,
@@ -138,7 +142,7 @@ export async function transferNow(tx: Tx, input: CreateTransferInput): Promise<T
     await stockTransfersRepo.setLineOutMovement(tx, line.id, outMovement.id);
 
     const inMovement = await stockLedgerRepo.insertMovement(tx, {
-      orgId: input.orgId,
+      orgId,
       storeId: input.storeId,
       locationId: input.toLocationId,
       itemId: line.itemId,
@@ -158,12 +162,13 @@ export async function transferNow(tx: Tx, input: CreateTransferInput): Promise<T
 /** For goods that genuinely spend time in a truck. Nothing moves until `dispatch`. */
 export async function saveDraft(tx: Tx, input: CreateTransferInput): Promise<TransferOutcome> {
   await authorize(tx, input.actor, 'transfer_stock', { storeId: input.storeId });
+  const orgId = input.actor.orgId; // T-231/DEF-210 — see transferNow.
 
   const validation = validateTransferRequest(input);
   if (!validation.ok) return validation;
 
   const { id: transferId } = await stockTransfersRepo.createTransfer(tx, {
-    orgId: input.orgId,
+    orgId,
     storeId: input.storeId,
     fromLocationId: input.fromLocationId,
     toLocationId: input.toLocationId,

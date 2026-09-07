@@ -19,7 +19,6 @@ function str(fd: FormData, key: string): string {
 
 export async function recordReturnAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/trade/returns');
-  const orgId = str(fd, 'orgId');
   const tradeOrderId = str(fd, 'tradeOrderId');
   const tradeOrderLineId = str(fd, 'tradeOrderLineId');
   const qty = str(fd, 'quantity');
@@ -30,7 +29,6 @@ export async function recordReturnAction(fd: FormData): Promise<void> {
 
   const result = await transaction((tx) =>
     recordCustomerReturn(tx, {
-      orgId,
       tradeOrderId,
       returnedOn: new Date().toISOString().slice(0, 10),
       reason,
@@ -58,14 +56,12 @@ export async function voidReturnAction(fd: FormData): Promise<void> {
 
 export async function applyCreditAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/trade/returns');
-  const orgId = str(fd, 'orgId');
   const tradeOrderId = str(fd, 'tradeOrderId');
   const moneyAccountId = str(fd, 'moneyAccountId');
   const amount = str(fd, 'amount');
 
   const result = await transaction((tx) =>
     applyCredit(tx, actor, {
-      orgId,
       tradeOrderId,
       amount,
       collectionDate: new Date().toISOString().slice(0, 10),

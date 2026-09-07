@@ -124,7 +124,6 @@ export default async function TransfersPage({ searchParams }: { searchParams: Pr
           <h2 className="text-sm font-medium">New transfer</h2>
           <NewTransferForm
             action={createTransferAction}
-            orgId={actor.orgId}
             storeId={storeId}
             locations={locations.map((l) => ({ id: l.id, label: l.name }))}
             items={items}

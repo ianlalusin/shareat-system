@@ -154,7 +154,6 @@ describe('T-167 — transferNow: one step, posts nothing', () => {
 
     const res = await asOrg(f.orgId, (tx) =>
       transferNow(tx, {
-        orgId: f.orgId,
         storeId: f.storeId,
         fromLocationId: f.roomA,
         toLocationId: f.roomB,
@@ -182,7 +181,6 @@ describe('T-167 — transferNow: one step, posts nothing', () => {
     await seedOnHand(f, f.roomA, '10.000');
     const res = await asOrg(f.orgId, (tx) =>
       transferNow(tx, {
-        orgId: f.orgId,
         storeId: f.storeId,
         fromLocationId: f.roomA,
         toLocationId: f.roomB,
@@ -206,7 +204,6 @@ describe('T-167 — transferNow: one step, posts nothing', () => {
     await seedOnHand(f, f.roomA, '10.000');
     const res = await asOrg(f.orgId, (tx) =>
       transferNow(tx, {
-        orgId: f.orgId,
         storeId: f.storeId,
         fromLocationId: f.roomA,
         toLocationId: f.roomB,
@@ -248,7 +245,6 @@ describe('T-167 — two-step: dispatch reserves, receive resolves', () => {
     await seedOnHand(f, f.roomA, '10.000');
     const draft = await asOrg(f.orgId, (tx) =>
       saveDraft(tx, {
-        orgId: f.orgId,
         storeId: f.storeId,
         fromLocationId: f.roomA,
         toLocationId: f.roomB,
@@ -278,7 +274,7 @@ describe('T-167 — two-step: dispatch reserves, receive resolves', () => {
     await seedOnHand(f, f.roomA, '10.000');
     const draft = await asOrg(f.orgId, (tx) =>
       saveDraft(tx, {
-        orgId: f.orgId, storeId: f.storeId, fromLocationId: f.roomA, toLocationId: f.roomB,
+        storeId: f.storeId, fromLocationId: f.roomA, toLocationId: f.roomB,
         lines: [{ itemId: f.itemA, quantity: quantity('4.000') }], actor: f.staff,
       }),
     );
@@ -307,7 +303,7 @@ describe('T-167 — two-step: dispatch reserves, receive resolves', () => {
     await seedOnHand(f, f.roomA, '10.000');
     const draft = await asOrg(f.orgId, (tx) =>
       saveDraft(tx, {
-        orgId: f.orgId, storeId: f.storeId, fromLocationId: f.roomA, toLocationId: f.roomB,
+        storeId: f.storeId, fromLocationId: f.roomA, toLocationId: f.roomB,
         lines: [{ itemId: f.itemA, quantity: quantity('4.000') }], actor: f.staff,
       }),
     );
@@ -335,7 +331,7 @@ describe('T-167 — two-step: dispatch reserves, receive resolves', () => {
     await expect(
       asOrg(f.orgId, (tx) =>
         transferNow(tx, {
-          orgId: f.orgId, storeId: f.storeId, fromLocationId: f.roomA, toLocationId: f.roomB,
+          storeId: f.storeId, fromLocationId: f.roomA, toLocationId: f.roomB,
           lines: [{ itemId: f.itemA, quantity: quantity('1.000') }], actor: f.staff,
         }),
       ),
@@ -348,7 +344,7 @@ describe('T-167 — two-step: dispatch reserves, receive resolves', () => {
     await seedOnHand(f, f.roomA, '10.000');
     const draft = await asOrg(f.orgId, (tx) =>
       saveDraft(tx, {
-        orgId: f.orgId, storeId: f.storeId, fromLocationId: f.roomA, toLocationId: f.roomB,
+        storeId: f.storeId, fromLocationId: f.roomA, toLocationId: f.roomB,
         lines: [{ itemId: f.itemA, quantity: quantity('1.000') }], actor: f.staff,
       }),
     );
@@ -373,7 +369,7 @@ describe('T-167 — the stuck-transfer report', () => {
 
     const old = await asOrg(f.orgId, (tx) =>
       saveDraft(tx, {
-        orgId: f.orgId, storeId: f.storeId, fromLocationId: f.roomA, toLocationId: f.roomB,
+        storeId: f.storeId, fromLocationId: f.roomA, toLocationId: f.roomB,
         lines: [{ itemId: f.itemA, quantity: quantity('1.000') }], actor: f.staff,
       }),
     );
@@ -383,7 +379,7 @@ describe('T-167 — the stuck-transfer report', () => {
 
     const recent = await asOrg(f.orgId, (tx) =>
       saveDraft(tx, {
-        orgId: f.orgId, storeId: f.storeId, fromLocationId: f.roomA, toLocationId: f.roomB,
+        storeId: f.storeId, fromLocationId: f.roomA, toLocationId: f.roomB,
         lines: [{ itemId: f.itemA, quantity: quantity('1.000') }], actor: f.staff,
       }),
     );
@@ -403,11 +399,89 @@ describe('T-167 — cross-store is refused at the database', () => {
     await expect(
       asOrg(f.orgId, (tx) =>
         transferNow(tx, {
-          orgId: f.orgId, storeId: f.storeId, fromLocationId: f.roomA, toLocationId: f.otherStoreRoom,
+          storeId: f.storeId, fromLocationId: f.roomA, toLocationId: f.otherStoreRoom,
           lines: [{ itemId: f.itemA, quantity: quantity('1.000') }], actor: f.staff,
         }),
       ),
     ).rejects.toThrow();
     expect(await onHand(f.itemA, f.roomA)).toBe('10.000');
+  });
+});
+
+/**
+ * T-231 slice 1 / DEF-210 — the organisation is the ACTOR's, never the caller's.
+ *
+ * ⛔ Plain `transaction()`, not `asOrg`: `apps/erp/src/app/inventory/transfers/actions.ts:49`
+ * opens one with no principal, so RLS is bypassed and nothing but this test is watching. Under a
+ * principal the write is refused with SQLSTATE 42501 — true, and not what production does today.
+ *
+ * ⭐ This is the sharpest of the three, because the attack needs **nothing the victim owns**: the
+ * store, the room and the item are all the attacker's own. Only the org id is borrowed, and it is
+ * a hidden field in the page (`NewTransferForm.tsx:26`).
+ */
+describe('T-231 / DEF-210 — a stock transfer is stamped with the actor’s org', () => {
+  it('transferNow ignores a caller-supplied organisation', async () => {
+    const f = await fixture();
+    await seedOnHand(f, f.roomA, '10.000');
+
+    const [victim] = await sql<{ id: string }[]>`
+      insert into organizations (name, code) values (${'Victim ' + uid('v')}, ${uid('vic')}) returning id`;
+    await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status)
+              values (${victim!.id}, '2020-01-01', '2035-12-31', 'open')`;
+
+    const res = await transaction((tx) =>
+      transferNow(tx, {
+        // @ts-expect-error T-231/DEF-210 — the field is GONE. Supplying another org's id
+        // must not compile; if someone re-adds it this directive goes unused and the build fails.
+        orgId: victim!.id,
+        storeId: f.storeId, // the actor's OWN store — authorize() axis 2 passes
+        fromLocationId: f.roomA,
+        toLocationId: f.roomB,
+        lines: [{ itemId: f.itemA, quantity: quantity('5.000') }],
+        actor: f.staff,
+      }),
+    );
+    expect(res.ok, res.ok ? '' : `transferNow refused: ${res.reason}`).toBe(true);
+    if (!res.ok) return;
+
+    const [row] = await sql<{ org_id: string }[]>`
+      select org_id from stock_transfers where id = ${res.transferId}`;
+    expect(row!.org_id, 'the transfer landed in the org the CALLER named').toBe(f.orgId);
+
+    const moves = await sql<{ org_id: string }[]>`
+      select m.org_id from stock_movements m
+      join stock_transfer_lines l on l.out_movement_id = m.id or l.in_movement_id = m.id
+      where l.transfer_id = ${res.transferId}`;
+    expect(moves.length, 'a transfer writes two movements').toBe(2);
+    for (const m of moves) {
+      expect(m.org_id, 'a stock movement landed in another organisation’s ledger').toBe(f.orgId);
+    }
+  });
+
+  it('saveDraft ignores a caller-supplied organisation', async () => {
+    const f = await fixture();
+    await seedOnHand(f, f.roomA, '10.000');
+
+    const [victim] = await sql<{ id: string }[]>`
+      insert into organizations (name, code) values (${'Victim ' + uid('v')}, ${uid('vic')}) returning id`;
+
+    const res = await transaction((tx) =>
+      saveDraft(tx, {
+        // @ts-expect-error T-231/DEF-210 — the field is GONE. Supplying another org's id
+        // must not compile; if someone re-adds it this directive goes unused and the build fails.
+        orgId: victim!.id,
+        storeId: f.storeId,
+        fromLocationId: f.roomA,
+        toLocationId: f.roomB,
+        lines: [{ itemId: f.itemA, quantity: quantity('5.000') }],
+        actor: f.staff,
+      }),
+    );
+    expect(res.ok, res.ok ? '' : `saveDraft refused: ${res.reason}`).toBe(true);
+    if (!res.ok) return;
+
+    const [row] = await sql<{ org_id: string }[]>`
+      select org_id from stock_transfers where id = ${res.transferId}`;
+    expect(row!.org_id, 'the draft landed in the org the CALLER named').toBe(f.orgId);
   });
 });

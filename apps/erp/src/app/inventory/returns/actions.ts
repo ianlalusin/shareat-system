@@ -19,7 +19,6 @@ function str(fd: FormData, key: string): string {
 
 export async function recordReturnAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/inventory/returns');
-  const orgId = str(fd, 'orgId');
   const storeId = str(fd, 'storeId');
   const supplierId = str(fd, 'supplierId');
   const deliveryId = str(fd, 'deliveryId') || null;
@@ -32,7 +31,6 @@ export async function recordReturnAction(fd: FormData): Promise<void> {
 
   const result = await transaction((tx) =>
     recordReturn(tx, {
-      orgId,
       storeId,
       supplierId,
       deliveryId,
@@ -60,7 +58,6 @@ export async function voidReturnAction(fd: FormData): Promise<void> {
 
 export async function refundCreditAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/inventory/returns');
-  const orgId = str(fd, 'orgId');
   const storeId = str(fd, 'storeId');
   const supplierId = str(fd, 'supplierId');
   const moneyAccountId = str(fd, 'moneyAccountId');
@@ -68,7 +65,6 @@ export async function refundCreditAction(fd: FormData): Promise<void> {
 
   const result = await transaction((tx) =>
     refundSupplierCredit(tx, {
-      orgId,
       storeId,
       supplierId,
       moneyAccountId,

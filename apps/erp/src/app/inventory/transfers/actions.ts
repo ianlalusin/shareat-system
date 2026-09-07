@@ -27,7 +27,6 @@ function str(fd: FormData, key: string): string {
 
 export async function createTransferAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/inventory/transfers');
-  const orgId = str(fd, 'orgId');
   const storeId = str(fd, 'storeId');
   const fromLocationId = str(fd, 'fromLocationId');
   const toLocationId = str(fd, 'toLocationId');
@@ -37,7 +36,6 @@ export async function createTransferAction(fd: FormData): Promise<void> {
   const note = str(fd, 'note');
 
   const input = {
-    orgId,
     storeId,
     fromLocationId,
     toLocationId,

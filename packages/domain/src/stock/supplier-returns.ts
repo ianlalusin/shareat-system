@@ -47,7 +47,8 @@ export interface ReturnLineInput {
 }
 
 export interface RecordReturnInput {
-  readonly orgId: string;
+  /** ⛔ NO `orgId`. T-231/DEF-210: the organisation is derived from `actor`, never supplied —
+   *  a caller that can name a tenant can name someone else's. */
   readonly storeId: string;
   readonly supplierId: string;
   readonly deliveryId: string | null;
@@ -74,6 +75,9 @@ async function deriveLineCreditBasis(
 
 export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<RecordReturnOutcome> {
   await authorize(tx, input.actor, 'record_supplier_return', { storeId: input.storeId });
+  // ⭐ The org comes from the session-resolved actor. `authorize` above has just proven the store
+  // belongs to THIS org, so the two can no longer disagree (T-231/DEF-210).
+  const orgId = input.actor.orgId;
 
   if (input.lines.length === 0) {
     return { ok: false, reason: 'a return with no lines returns nothing' };
@@ -151,7 +155,7 @@ export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<Re
   for (let i = 0; i < input.lines.length; i++) {
     const line = input.lines[i]!;
     const result = await consume(tx, {
-      orgId: input.orgId,
+      orgId,
       storeId: input.storeId,
       locationId: line.locationId,
       itemId: line.itemId,
@@ -219,7 +223,7 @@ export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<Re
     compare(totalGrni, ZERO) === 0 ? 'supplier_advance' : compare(totalAdvance, ZERO) === 0 ? 'grni' : 'mixed';
 
   const posted = await postEntry(tx, {
-    orgId: input.orgId,
+    orgId,
     entryDate: input.returnedOn,
     sourceType: 'supplier_return',
     sourceId: returnId,
@@ -231,7 +235,7 @@ export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<Re
 
   await supplierReturnsRepo.createReturn(tx, {
     id: returnId,
-    orgId: input.orgId,
+    orgId,
     storeId: input.storeId,
     supplierId: input.supplierId,
     deliveryId: input.deliveryId,
@@ -335,7 +339,7 @@ export async function supplierCreditBalance(tx: Tx, orgId: string, supplierId: s
 }
 
 export interface RefundCreditInput {
-  readonly orgId: string;
+  /** ⛔ NO `orgId` — see `RecordReturnInput`. T-231/DEF-210. */
   readonly storeId: string;
   readonly supplierId: string;
   readonly moneyAccountId: string;
@@ -359,23 +363,24 @@ export type RefundCreditOutcome =
  */
 export async function refundSupplierCredit(tx: Tx, input: RefundCreditInput): Promise<RefundCreditOutcome> {
   await authorize(tx, input.actor, 'apply_supplier_credit', { storeId: input.storeId });
+  const orgId = input.actor.orgId; // T-231/DEF-210 — see recordReturn.
 
   const amount = money(input.amount);
   if (compare(amount, ZERO) <= 0) {
     return { ok: false, reason: 'a refund must be for a positive amount' };
   }
-  const balance = money(await apRepo.advancesPositionOf(tx, input.orgId, input.supplierId));
+  const balance = money(await apRepo.advancesPositionOf(tx, orgId, input.supplierId));
   if (compare(amount, balance) > 0) {
     return { ok: false, reason: `only ${balance} of credit is available — ${amount} does not fit` };
   }
 
-  const supplier = await apRepo.getSupplierById(tx, input.orgId, input.supplierId);
+  const supplier = await apRepo.getSupplierById(tx, orgId, input.supplierId);
   const supplierName = supplier?.name ?? input.supplierId;
-  const account = await moneyAccountsRepo.getById(tx, input.orgId, input.moneyAccountId);
+  const account = await moneyAccountsRepo.getById(tx, orgId, input.moneyAccountId);
   if (!account) return { ok: false, reason: `money account ${input.moneyAccountId} does not exist` };
 
   const posted = await postEntry(tx, {
-    orgId: input.orgId,
+    orgId,
     entryDate: input.businessDate,
     sourceType: 'supplier_credit_refund',
     sourceId: input.supplierId,

@@ -146,7 +146,6 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
               <li key={supplierId} className="flex items-center justify-between gap-3 py-1">
                 <span>{supplierName.get(supplierId) ?? supplierId}: ₱{balance}</span>
                 <form action={refundCreditAction} className="flex items-center gap-2">
-                  <input type="hidden" name="orgId" value={actor.orgId} />
                   <input type="hidden" name="storeId" value={storeId} />
                   <input type="hidden" name="supplierId" value={supplierId} />
                   <input type="hidden" name="moneyAccountId" value={moneyAccountId ?? ''} />
@@ -199,7 +198,6 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
                 <td className="py-2 pr-4 text-right tabular-nums">{l.returnable}</td>
                 <td className="py-2">
                   <form action={recordReturnAction} className="flex flex-wrap items-center gap-2">
-                    <input type="hidden" name="orgId" value={actor.orgId} />
                     <input type="hidden" name="storeId" value={storeId} />
                     <input type="hidden" name="supplierId" value={l.supplier_id} />
                     <input type="hidden" name="deliveryId" value={l.delivery_id} />
