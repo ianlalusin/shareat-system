@@ -67,6 +67,11 @@ export default async function SettingsPage() {
           description="Which account each kind of spend debits. A category with no account mapped blocks posting rather than guessing, so an unmapped one holds up every draft in it."
         />
         <SettingsCard
+          href="/settings/organization"
+          title="Organisation"
+          description="The registered name, TIN and tax type the books are kept under — what a document printed from this system should carry. Each branch’s own address and TIN branch code live on its store."
+        />
+        <SettingsCard
           href="/settings/sales-channels"
           title="Sales channels"
           description="How each branch sells — walk-in and the delivery platforms. Sets whether a channel’s money reaches the till that day or is owed to us until the platform settles, and whether a wasted order through it gets reviewed or is decided on the spot."
@@ -115,10 +120,6 @@ export default async function SettingsPage() {
             <strong>The staff-advance ceiling.</strong> Deliberately not a form yet: four different
             things put a staff member into debt and none of them checks a limit, so a box here
             would look like a control without being one.
-          </li>
-          <li>
-            <strong>Business name, TIN and registered address.</strong> Not editable anywhere yet —
-            the fields do not exist in this system.
           </li>
         </ul>
       </div>

@@ -102,11 +102,27 @@ export const stores = pgTable(
      */
     wastageMonitorPersonId: uuid('wastage_monitor_person_id').references(() => persons.id, { onDelete: 'restrict' }),
 
+    /**
+     * ⭐ T-229 slice 4 / DEF-208 — what this branch carries against the ORGANISATION's single TIN
+     * (`organizations.tin`). ⚠️ The TIN itself is deliberately NOT duplicated here the way v1 had
+     * it: one number copied onto seven store rows is seven places for it to be wrong, and discovery
+     * 23 §1 already recorded that failure for `taxType` duplicated across ERP and POS.
+     */
+    tinBranchCode: text('tin_branch_code'),
+    /** The trading address that prints on a document. */
+    address: text('address'),
+    /** ⚠️ ONE number. v1 carried four (`email`, `phone`, `contactNo`, `telephone`) — a form that
+     *  grew, not a requirement (discovery 28 §5.5). */
+    contactNumber: text('contact_number'),
+
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
   (t) => [
     uniqueIndex('stores_org_id_code_unique').on(t.orgId, t.code),
+    /** ⭐ T-229 slice 4 R1 — digits only; the domain strips dashes and spaces first. Same reasoning
+     *  as `organizations_tin_format_check`, and deliberately no rule tying it to the org's TIN. */
+    check('stores_tin_branch_code_format_check', sql`${t.tinBranchCode} is null or ${t.tinBranchCode} ~ '^[0-9]{3,5}$'`),
     check(
       'stores_remittance_cadence_check',
       sql`${t.remittanceCadence} in ('daily', 'every_3_days', 'weekly', 'monthly')`,

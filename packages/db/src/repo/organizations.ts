@@ -133,3 +133,51 @@ export async function seedReferenceData(tx: Tx, orgId: string): Promise<Referenc
     categoriesSeeded: categories.categoriesInserted,
   };
 }
+
+// -----------------------------------------------------------------------------------------
+// T-229 slice 4 — the organisation's registered identity. **DEF-208.**
+// ⛔ No business rule here: who may write it, and what shape a TIN is, are
+// `packages/domain/src/organizations/index.ts`'s call. The DATABASE's CHECKs are the authority
+// on format (RULES §6 item 3, bible §15.11).
+// -----------------------------------------------------------------------------------------
+
+export interface OrganizationIdentityRow {
+  name: string;
+  code: string;
+  legalName: string | null;
+  tin: string | null;
+  taxType: 'vat' | 'non_vat' | null;
+}
+
+export async function identityOf(tx: Tx, orgId: string): Promise<OrganizationIdentityRow | undefined> {
+  const [row] = await tx
+    .select({
+      name: organizations.name,
+      code: organizations.code,
+      legalName: organizations.legalName,
+      tin: organizations.tin,
+      taxType: organizations.taxType,
+    })
+    .from(organizations)
+    .where(eq(organizations.id, orgId))
+    .limit(1);
+  return row as OrganizationIdentityRow | undefined;
+}
+
+/** ⭐ All three fields every time — the screen owns them as a set, so an absent one is a CLEAR,
+ *  never "leave alone". That is what makes a wrong TIN removable. */
+export async function setIdentity(
+  tx: Tx,
+  orgId: string,
+  input: { legalName: string | null; tin: string | null; taxType: 'vat' | 'non_vat' | null },
+): Promise<void> {
+  await tx
+    .update(organizations)
+    .set({
+      legalName: input.legalName,
+      tin: input.tin,
+      taxType: input.taxType,
+      updatedAt: new Date(),
+    })
+    .where(eq(organizations.id, orgId));
+}

@@ -39,6 +39,9 @@
  * identical; the call is simply not made, here or anywhere else in the codebase.
  */
 import { organizationsRepo, personsRepo, accessRepo, type OrganizationRow, type Tx } from '@shareat/db';
+// ⭐ T-229 slice 4 — the FIRST gated function in this module. Everything above it runs before a
+// principal exists (bootstrap), which is why the import was not needed until now.
+import { authorize, type Actor } from '@shareat/auth';
 
 export interface CreateOrganizationInput {
   /** ⚠️ Unique across all organizations and permanent in practice — it is the stable handle. */
@@ -164,4 +167,111 @@ export async function createFirstAdmin(
   });
 
   return { personId: person.id };
+}
+
+
+// -----------------------------------------------------------------------------------------
+// T-229 slice 4 — the organisation's registered identity. **DEF-208.**
+//
+// ⛔ **A REPLATFORM LOSS, not a missing screen.** v1 records `legalName`, `tin` and `taxType` on
+// every store (`admin/stores/store-editor.tsx:56-70`); v2 carried none of them across. The
+// placement is CORRECTED on the way back in: in PH a corporation holds ONE TIN and each branch
+// carries a code against it (`stores.tin_branch_code`), so duplicating the number onto every store
+// the way v1 did is N places for it to be wrong.
+//
+// ⚠️ **Nothing here is a compliance feature.** Bible §13 row 75: a management ledger, never a
+// statutory filing basis, and nothing may be labelled or exported as BIR-ready. `tax_type` computes
+// nothing; the fields exist so a document can print the right identity.
+// -----------------------------------------------------------------------------------------
+
+/** Org-scoped, admin ✅, manager ✗. ⚠️ The noun reads oddly for legal identity; the BAR is exactly
+ *  right — the matrix's own words for this row are "the technical residue". T-229 open question 5,
+ *  answered 2026-09-07: reuse it rather than mint `manage_organization` for a better name. */
+const IDENTITY_CAPABILITY = 'manage_chart_of_accounts' as const;
+
+export interface OrganizationIdentity {
+  readonly legalName: string | null;
+  readonly tin: string | null;
+  readonly taxType: 'vat' | 'non_vat' | null;
+}
+
+/**
+ * ⭐ **Normalises a typed identifier to digits.** A person may type `123-456-789` or
+ * `123 456 789`; the column stores one canonical shape so two spellings of one number cannot read
+ * as two numbers.
+ *
+ * ⛔ **Format only — no checksum, and no rule tying a branch code to its TIN.** A format check
+ * catches a typo; a checksum starts to look like validating a registration, which is the compliance
+ * posture bible §13 row 75 refuses. If a legitimate PH form is ever refused here, WIDEN the pattern
+ * with the source recorded — never drop the check. The DATABASE holds the same rule and is the
+ * authority (RULES §6 item 3, bible §15.11).
+ */
+function normaliseDigits(raw: string | null, field: string, min: number, max: number): string | null {
+  if (raw === null) return null;
+  const stripped = raw.replace(/[\s-]/g, '');
+  if (stripped === '') return null;
+  if (!new RegExp(`^[0-9]{${min},${max}}$`).test(stripped)) {
+    throw new Error(
+      `${field} must be ${min === max ? String(min) : `${min}-${max}`} digits — dashes and spaces ` +
+        `are fine and are removed, but "${raw}" is not a number of that length.`,
+    );
+  }
+  return stripped;
+}
+
+/** Trim, and treat a blank as "not stated" rather than an empty string (DEF-087's shape). */
+function blankToNull(raw: string | null): string | null {
+  if (raw === null) return null;
+  const t = raw.trim();
+  return t === '' ? null : t;
+}
+
+/**
+ * ⭐ **The org is the ACTOR's, never a parameter.** There is deliberately no `orgId` argument: a
+ * function that took one would be the shape DEF-210 exists to close.
+ *
+ * ⚠️ All three fields are written every call — the screen owns them as a set, so omitting one
+ * CLEARS it. That is what makes a wrong TIN removable, which matters more here than anywhere: an
+ * identifier that cannot be corrected is worse than one that was never set.
+ */
+export async function setOrganizationIdentity(
+  tx: Tx,
+  actor: Actor,
+  input: OrganizationIdentity,
+): Promise<void> {
+  await authorize(tx, actor, IDENTITY_CAPABILITY, {});
+
+  if (input.taxType !== null && input.taxType !== 'vat' && input.taxType !== 'non_vat') {
+    throw new Error("setOrganizationIdentity: tax type must be 'vat', 'non_vat', or not stated.");
+  }
+
+  await organizationsRepo.setIdentity(tx, actor.orgId, {
+    legalName: blankToNull(input.legalName),
+    tin: normaliseDigits(input.tin, 'A TIN', 9, 12),
+    taxType: input.taxType,
+  });
+}
+
+/**
+ * The screen's read. ⚠️ **Ungated**, matching every other settings surface in this app: the gate
+ * belongs to the WRITE, and hiding a screen is presentation, not a control (DEF-051).
+ */
+export async function organizationIdentity(
+  tx: Tx,
+  actor: Actor,
+): Promise<OrganizationIdentity & { name: string; code: string }> {
+  const row = await organizationsRepo.identityOf(tx, actor.orgId);
+  if (!row) throw new Error('organizationIdentity: this organization does not exist.');
+  return {
+    name: row.name,
+    code: row.code,
+    legalName: row.legalName,
+    tin: row.tin,
+    taxType: row.taxType,
+  };
+}
+
+/** ⭐ Exported for the store screen, which normalises a branch code the same way. */
+export function normaliseBranchCode(raw: string | null): string | null {
+  return normaliseDigits(raw, 'A branch code', 3, 5);
 }

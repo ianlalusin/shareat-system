@@ -1,6 +1,6 @@
 # T-229 — Reference-data administration: the settings shelf
 
-> **Status**: 🟢 **SLICE 1 BUILT 2026-09-07** — `/settings` hub + `/settings/expense-categories`,
+> **Status**: 🟢 **ALL FOUR SLICES BUILT 2026-09-07** (slice 5 moved to T-230). Slice 1: — `/settings` hub + `/settings/expense-categories`,
 > `setCategoryAccount`, four repo functions, **8 integration tests green on `shareat_test_t229`**.
 > ⛔ **DEF-193 is closed by test 7**, which was watched to fail on the live condition first: the
 > detector returned one finding, the mapping was made, the detector returned none.
@@ -64,7 +64,7 @@ behind it clears on the next detector run.
 | **1** ✅ | ⭐ **The `/settings` hub + map a category to an account** — DEF-193's remedy | ⛔ **none** | ⛔ **none** | — **BUILT 2026-09-07** |
 | **2** ✅ | Create / rename / retire a category, `is_system`/`is_active`, the normalised unique index — **DEF-205** | ✅ **0134** | ⛔ none | — **BUILT 2026-09-07** |
 | **3** ✅ | ⭐ **Assign the store's Wastage Monitor** — DEF-206 | ⛔ **none** | ⛔ **none** | — **BUILT 2026-09-07** |
-| **4** | Store & organization identity — legal name, TIN, tax type, address | ✅ one | ⚠️ open q. 5 | T-228 landing (discovery §9) |
+| **4** ✅ | Store & organization identity — legal name, TIN, tax type, address — **DEF-208** | ✅ **0135** | ⛔ none (Q5 → reuse `manage_chart_of_accounts`) | — **BUILT 2026-09-07** |
 | ~~**5**~~ | ~~Order-wastage mode moves onto the sales channel; the form stops asking~~ | — | — | ⛔ **MOVED OUT 2026-09-07 → T-230** |
 
 ⛔ **Slice 5 is no longer this task's.** Ian answered open question 3 on 2026-09-07 (bible §13 row
@@ -214,13 +214,212 @@ and a new integration test.
 ⛔ **`packages/db/src/cutover/classification.ts:71-77` clears this column at cutover and says it is
 *"re-assigned at cutover"* — that sentence only becomes true when this slice ships.**
 
-### Slice 4 — organization and store identity
+### Slice 4 — organization and store identity — **DEF-208** · ✅ **BUILT 2026-09-07**
 
-**Create** `packages/db/migrations/XXXX_org_and_store_identity.sql`,
-`apps/erp/src/app/settings/organization/{page,actions,lib}.tsx`.
-**Modify** `packages/db/schema/{organizations,stores}.ts` *(orchestrator)*,
-`packages/db/src/repo/stores.ts`, `packages/domain/src/stores/service.ts`,
-`apps/erp/src/app/admin/stores/[id]/page.tsx`.
+**Create** `packages/db/migrations/0135_t229_org_and_store_identity.sql` (⚠️ hand-written from the
+schema files per DEF-073 / DEF-121, as 0131-0134 were),
+`apps/erp/src/app/settings/organization/{page.tsx,actions.ts,lib.ts}`.
+**Modify** `packages/db/schema/{organizations,stores}.ts` *(this lane owns them directly this
+cycle)*, `packages/db/src/repo/{organizations,stores}.ts`,
+`packages/domain/src/{organizations/index.ts,stores/service.ts}`,
+`apps/erp/src/app/settings/page.tsx` (one hub card),
+`apps/erp/src/app/admin/stores/[id]/page.tsx` (an identity block),
+`packages/domain/tests/integration/{organizations,stores}.test.ts`.
+
+⛔ **NOT touched:** `scripts/bootstrap-org.ts`, `packages/auth/src/capabilities.ts`,
+`docs/decisions/CAPABILITY-MATRIX.md` — see the TIN decision and the capability note below for why
+neither needs to change.
+
+---
+
+#### 4.1 What goes where — ⭐ v1's placement is CORRECTED, not copied
+
+v1 puts `legalName`, `tin`, `taxType` on **every store** (`store-editor.tsx:56-70`) because v1 has
+no organization entity to put them on. Copying that shape would put the same TIN on seven rows —
+seven places for it to be wrong, and exactly the class of failure discovery 23 §1 already recorded
+for `taxType` duplicated across ERP and POS (*"the receipt the customer holds and the books
+disagree about VAT"*).
+
+| Table | Column | Type | Why here |
+|---|---|---|---|
+| `organizations` | `legal_name` | `text` null | The registered name the books are kept under. The existing `name` stays the everyday trading name — they differ, and a form that conflates them is how the wrong one reaches a document |
+| `organizations` | `tin` | `text` null | ⭐ In PH a corporation holds **one** TIN. It belongs to the entity, not to each branch |
+| `organizations` | `tax_type` | `text` null, enum `vat` \| `non_vat` | One registration, one answer |
+| `stores` | `tin_branch_code` | `text` null | ⭐ What a branch actually carries against the org's TIN (the `00001` tail). This is the honest PH model and the reason the TIN itself does not need duplicating |
+| `stores` | `address` | `text` null | The trading address that prints on a document |
+| `stores` | `contact_number` | `text` null | ⚠️ **One**, not v1's four (`email`, `phone`, `contactNo`, `telephone`). Four phone fields is a form that grew, not a requirement |
+
+⛔ **Deliberately NOT carried:** v1's store `logoPath` (not a books concern; nothing in v2 renders
+one) and its `status` enum `active/inactive/under_construction/closed` — v2 has `is_active` plus
+T-222's **derived** readiness, and *under construction* is a readiness state, not a stored label
+somebody must remember to change (`service.ts:219-230`).
+
+⚠️ **`tax_type` computes NOTHING and must not start to.** There is no VAT engine in v2 (bible §13
+row 75), so this column is descriptive — it exists so a document can print the right registration,
+exactly the posture T-230 took for `sales_channels.tax_treatment`. A future VAT feature is a task
+with its own spec, not an inference from this column existing.
+
+---
+
+#### 4.2 ⭐ The TIN decision — nullable column, and the reasoning is the point
+
+The lane brief says *"TIN is statutory: it is not optional in the model, but whether it is required
+at creation versus editable later is your design call."* **Decision: the column is NULLABLE and the
+SCREEN is what insists.** Three reasons, in order of weight:
+
+1. ⛔ **Bible §13 row 75 forbids the posture a `NOT NULL` would assert.** This is a *management
+   ledger, never a statutory filing basis*, and nothing may be labelled or exported as BIR-ready. A
+   `NOT NULL tin` says "this system cannot represent a business without a TIN" — a compliance claim
+   the bible explicitly disclaims. Invariant 9 of this spec already says a TIN is not a compliance
+   feature.
+2. ⛔ **`NOT NULL` makes the organization un-creatable before somebody looks the number up.**
+   `createOrganization` is `bootstrap-org.ts`'s first step and everything else depends on the org
+   existing — the chart of accounts, the categories, the first admin, the first store. Blocking
+   that on a registration lookup inverts the order of a real setup day.
+3. ⚠️ **Measured blast radius: 111 sites** `insert into organizations` directly (`grep -rn "insert
+   into organizations" packages scripts | wc -l`), essentially every integration fixture in the
+   repo, plus `bootstrap-org.ts`'s CLI. A `NOT NULL` with no default breaks all of them at once,
+   for a field none of them is testing.
+
+⛔ **INVARIANT: `storeReadiness` must never block on organisation identity.** Readiness gates
+*trading at a branch*; a missing org TIN does not stop a sales day being recorded correctly, and a
+blocking check there would make every store un-ready for a field that belongs to the entity, not the
+branch. (Orchestrator, 2026-09-07: agreed and to be stated here.)
+
+**What "not optional" means instead, and it is not weaker:** the `/settings/organization` screen
+opens with an explicit **incomplete-identity banner** naming exactly which of the three is unset and
+what it costs — the same pattern slice 3 used for the unset Wastage Monitor, which is the shape this
+project already trusts: *a gap that says what it costs beats a constraint that stops the wrong
+thing.* ⛔ **What it must NOT become** is a `storeReadiness` blocking check: readiness gates
+*trading at a branch*, and a missing org TIN does not stop a sales day from being recorded
+correctly.
+
+---
+
+#### 4.3 Contract
+
+```ts
+// packages/domain/src/organizations/index.ts — ⭐ NEW function, beside createOrganization
+export interface OrganizationIdentity {
+  readonly legalName: string | null;
+  readonly tin: string | null;
+  readonly taxType: 'vat' | 'non_vat' | null;
+}
+export async function setOrganizationIdentity(
+  tx: Tx, actor: Actor, input: OrganizationIdentity,
+): Promise<void>;
+export async function organizationIdentity(tx: Tx, actor: Actor): Promise<OrganizationIdentity & { name: string; code: string }>;
+```
+
+1. `await authorize(tx, actor, 'manage_chart_of_accounts', {})` — org-scoped, admin ✅, manager ✗.
+   ⚠️ **Q5, taken on the recommended answer 2026-09-07.** The name reads oddly for legal identity;
+   the *bar* is exactly right (the matrix's own words: *"the technical residue"*), and one new row
+   would buy nothing but a better noun. ⛔ No matrix row, no `capabilities.ts` edit.
+2. ⭐ **The org is `actor.orgId`, never an input.** There is no `orgId` parameter and there must not
+   be: an org-identity function that takes the org id from the caller is the DEF-210 shape lane A is
+   closing across 34 paths this cycle.
+3. Each field trims; `''` becomes `null` (DEF-087's shape — a blank form field means "not stated",
+   never the empty string).
+4. `tax_type` is refused unless `vat`, `non_vat` or null — **and the database refuses it too**
+   (CHECK), which is the authority (RULES §6 item 3, bible §15.11).
+
+```ts
+// packages/domain/src/stores/service.ts — the EXISTING function, widened
+export async function updateStoreDetails(
+  tx: Tx, actor: Actor, storeId: string,
+  patch: { name?: string; timezone?: string;
+           address?: string | null; contactNumber?: string | null; tinBranchCode?: string | null },
+): Promise<void>;
+```
+
+⭐ **Widened, not duplicated.** It already authorises `manage_stores` (admin ✅, manager ✗), which
+discovery §5.6 argues is the right bar for a trading name and address: *"a manager who could edit
+the trading name and address on the store's own documents is a wider grant than a manager needs."*
+⛔ **Not `manage_store_settings`** — that is the manager-level gate slice 3 and T-230 use for
+operational configuration, and identity is not operational configuration.
+
+⚠️ **`patch` is `Partial`, so an absent key means "leave alone" while an explicit `null` CLEARS.**
+The three new fields are nullable, so the distinction has to survive the form: the screen submits
+every field it owns on every save, and the action converts `''` to `null`.
+
+---
+
+#### 4.4 The migration — 0135
+
+```sql
+ALTER TABLE "organizations" ADD COLUMN "legal_name" text;
+ALTER TABLE "organizations" ADD COLUMN "tin" text;
+ALTER TABLE "organizations" ADD COLUMN "tax_type" text;
+ALTER TABLE "organizations" ADD CONSTRAINT "organizations_tax_type_check"
+  CHECK ("tax_type" IS NULL OR "tax_type" IN ('vat', 'non_vat'));
+-- ⭐ R1 (orchestrator, 2026-09-07). A wrong number that LOOKS set is worse than an empty field,
+--    and a TIN with a typo is exactly the wrong-number case. Digits only, stored normalised.
+ALTER TABLE "organizations" ADD CONSTRAINT "organizations_tin_format_check"
+  CHECK ("tin" IS NULL OR "tin" ~ '^[0-9]{9,12}$');
+ALTER TABLE "stores" ADD COLUMN "tin_branch_code" text;
+ALTER TABLE "stores" ADD CONSTRAINT "stores_tin_branch_code_format_check"
+  CHECK ("tin_branch_code" IS NULL OR "tin_branch_code" ~ '^[0-9]{3,5}$');
+ALTER TABLE "stores" ADD COLUMN "address" text;
+ALTER TABLE "stores" ADD COLUMN "contact_number" text;
+```
+
+⭐ **R1 — the format rule, and how far it deliberately does NOT go.** The domain strips dashes and
+spaces before writing, so a person may type `123-456-789` and the row stores `123456789`; anything
+else is refused with a sentence, and by the database if the domain is bypassed. ⛔ **Nothing
+stricter**: no checksum, no cross-field rule tying the branch code to the TIN. A format check
+catches a typo; a checksum would start to look like validation of a registration, which is the
+compliance posture §4.2 refuses. ⚠️ If a legitimate PH form is ever refused by these patterns, the
+fix is to WIDEN the pattern with the source recorded — never to drop the check.
+
+⚠️ **No backfill, and none is possible.** v1's values live in Firestore and there is no ETL path for
+them — DEF-208 is a *replatform loss*, so the remedy is a surface someone types the real values
+into, not a migration that invents them. ⛔ **Do not seed a placeholder TIN**; a wrong number that
+looks set is worse than an empty field that says it is empty.
+⚠️ `idx: 135`, `when` strictly greater than 0134's `1797651107084`.
+
+---
+
+#### 4.5 T-228 interaction — ⭐ resolved by the nullable decision, and that is a reason for it
+
+Discovery §5.7 flagged this as a sequencing decision. **It dissolves:** every new column is
+nullable with no default, so `createOrganization`'s `{code, name}` input, `bootstrap-org.ts`'s CLI
+flags and `organizationsRepo.insertOrganization` are all **unchanged and untouched**. A bootstrapped
+org simply has no identity yet, and the screen is where it gets one. ⛔ Adding optional identity
+params to `createOrganization` was considered and rejected: it would put a second writer on three
+columns the screen already owns (bible §4.2 rule 8), for a value nobody has at `bootstrap` time.
+
+---
+
+#### 4.6 Tests — written first, each watched to fail
+
+`packages/domain/tests/integration/organizations.test.ts` (extended) and `stores.test.ts`:
+
+| # | Case | Proves |
+|---|---|---|
+| 1 | An admin sets legal name, TIN and tax type; re-read returns all three | The happy path |
+| 2 | A **manager** is refused with `AuthorizationError`; a staff member likewise | The ✗ half — a capability with no denial test is a checkbox |
+| 3 | ⭐ Clearing to `null` is allowed and reads back `null` | The field must be correctable; a wrong TIN unremovable is worse than an empty one |
+| 4 | `tax_type = 'VAT'` (wrong case) and `'sales'` are refused **by the database** (CHECK), asserted by a raw insert bypassing the domain | RULES §6 item 3 — the DB is the authority, proved by executing it |
+| 4b | ⭐ **R1 formats:** `123-456-789` is accepted and stored as `123456789`; `12345678` (8 digits) and `12A456789` are refused by the domain **and** by a raw insert; the same two halves for `tin_branch_code` (`00001` accepted, `12` and `abcde` refused) | R1, both the normalisation and the DB backstop |
+| 5 | ⭐ Cross-org: the identity read and write act on `actor.orgId` only; an actor in org B cannot read or change org A's identity | Contract 2 — no `orgId` parameter exists to abuse |
+| 6 | `updateStoreDetails` sets address, contact and branch code; `name`/`timezone` untouched when absent from the patch | The Partial semantics |
+| 7 | A **manager** is refused on `updateStoreDetails` | `manage_stores`, not `manage_store_settings` |
+| 8 | ⭐ **`createOrganization` still works with `{code, name}` alone, and the new columns read `null`** | §4.5 — T-228's path is genuinely untouched. ⛔ This is the test that fails loudly if anyone later makes a column `NOT NULL` |
+
+#### 4.7 Smoketest on 9008 (orchestrator or QA lane)
+
+`/settings/organization` renders, shows the incomplete banner when TIN is unset, saves all three,
+the banner clears, and the page does not scroll sideways at 390×844 · a manager is refused at the
+write with a readable sentence · `/admin/stores/[id]` shows and saves the identity block · the org
+name in the header is unaffected (trading name vs legal name stay distinct).
+
+#### 4.8 Done when
+
+Columns + CHECK shipped in 0135 · both domain functions gated and tested · the two screens ·
+8 integration tests green on `shareat_test_t229` · typecheck + `npm test` green with real numbers ·
+⛔ **DEF-208's register row updated by the orchestrator, not this lane**, and its disposition
+sentence *"TIN is statutory, so it is not optional"* amended to record the nullable decision and
+§4.2's reasoning.
 
 ### ~~Slice 5 — order-wastage mode onto the channel~~ → **T-230**
 
@@ -234,7 +433,8 @@ Contract, Invariants or Tests refers to slice 5 any longer.
 `docs/decisions/CAPABILITY-MATRIX.md` · `packages/auth/src/capabilities.ts` ·
 `apps/erp/src/components/nav.tsx` · anything under `ERP-rebuild` · anything T-228 owns
 (`scripts/bootstrap-org.ts`, `packages/domain/src/organizations/`,
-`packages/db/src/repo/organizations.ts`).
+`packages/db/src/repo/organizations.ts`) — ⚠️ **except in slice 4**, which owns the last two by its
+own scope list; this global line predates slice 4 and was reconciled at its commit (lane C, 2026-09-07).
 
 ---
 

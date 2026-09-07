@@ -99,6 +99,11 @@ export interface StoreRow {
   /** ⚠️ Decimal string or null — null is legal ONLY with a daily cadence, and the database is
    *  what enforces that pairing (`stores_pooling_requires_ceiling_check`). */
   readonly unremittedCeiling: string | null;
+  /** ⭐ T-229 slice 4 / DEF-208 — branch-level identity. The registered name, TIN and tax type
+   *  belong to the ORGANISATION; a branch carries only its code against that TIN. */
+  readonly tinBranchCode: string | null;
+  readonly address: string | null;
+  readonly contactNumber: string | null;
 }
 
 const STORE_COLUMNS = {
@@ -110,6 +115,9 @@ const STORE_COLUMNS = {
   stockModel: stores.stockModel,
   remittanceCadence: stores.remittanceCadence,
   unremittedCeiling: stores.unremittedCeiling,
+  tinBranchCode: stores.tinBranchCode,
+  address: stores.address,
+  contactNumber: stores.contactNumber,
 } as const;
 
 /** Every store in the org, active first then by code — the `/admin/stores` list. */
@@ -160,6 +168,10 @@ export async function insertStore(tx: Tx, input: InsertStoreInput): Promise<{ id
 export interface UpdateStorePatch {
   readonly name?: string;
   readonly timezone?: string;
+  /** ⭐ T-229 slice 4 / DEF-208. `null` clears; an absent key leaves the column alone. */
+  readonly address?: string | null;
+  readonly contactNumber?: string | null;
+  readonly tinBranchCode?: string | null;
 }
 
 /**

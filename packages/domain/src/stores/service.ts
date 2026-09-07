@@ -46,6 +46,7 @@ import {
   type Tx,
 } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
+import { normaliseBranchCode } from '../organizations';
 
 const CAPABILITY = 'manage_stores' as const;
 
@@ -168,14 +169,36 @@ async function createDefaultRoom(
   return id;
 }
 
+/**
+ * ⭐ **T-229 slice 4 widened this rather than adding a second function** — it already authorises
+ * `manage_stores` (admin ✅, manager ✗), which is the right bar for a trading address: a manager
+ * who could edit the name and address printed on the store's own documents is a wider grant than a
+ * manager needs. ⛔ Deliberately NOT `manage_store_settings`, the manager-level gate slice 3 and
+ * T-230 use for operational configuration — identity is not operational configuration.
+ *
+ * ⚠️ **`patch` is Partial: an absent key means "leave alone", an explicit `null` CLEARS.** The
+ * screen submits every field it owns on every save, so the distinction survives the form.
+ */
 export async function updateStoreDetails(
   tx: Tx,
   actor: Actor,
   storeId: string,
-  patch: { name?: string; timezone?: string },
+  patch: {
+    name?: string;
+    timezone?: string;
+    address?: string | null;
+    contactNumber?: string | null;
+    tinBranchCode?: string | null;
+  },
 ): Promise<void> {
   await authorize(tx, actor, CAPABILITY, {});
-  await storesRepo.updateStore(tx, actor.orgId, storeId, patch);
+  // ⭐ Normalised the same way the org's TIN is, and refused with the same sentence — the database
+  //   holds the identical rule as `stores_tin_branch_code_format_check` and is the authority.
+  const normalised =
+    patch.tinBranchCode === undefined
+      ? patch
+      : { ...patch, tinBranchCode: normaliseBranchCode(patch.tinBranchCode) };
+  await storesRepo.updateStore(tx, actor.orgId, storeId, normalised);
 }
 
 // -----------------------------------------------------------------------------------------

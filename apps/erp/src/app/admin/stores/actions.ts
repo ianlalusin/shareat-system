@@ -92,6 +92,12 @@ export async function updateStoreAction(fd: FormData): Promise<void> {
       updateStoreDetails(tx, actor, storeId, {
         name: str(fd, 'name'),
         timezone: str(fd, 'timezone') || undefined,
+        // ⭐ T-229 slice 4 / DEF-208. `''` means "not stated" and CLEARS the column — never the
+        // empty string (DEF-087's shape). The form submits all three on every save, so an absent
+        // value is a real choice rather than a key that happened not to be sent.
+        address: str(fd, 'address') || null,
+        contactNumber: str(fd, 'contactNumber') || null,
+        tinBranchCode: str(fd, 'tinBranchCode') || null,
       }),
     );
   } catch (err) {

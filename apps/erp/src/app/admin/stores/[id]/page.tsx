@@ -155,9 +155,38 @@ export default async function StoreDetailPage({
               <input name="timezone" defaultValue={store.timezone}
                 className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
             </label>
+            {/* ⭐ T-229 slice 4 / DEF-208 — what a document printed for THIS BRANCH carries. The
+                registered name, the TIN and the tax type belong to the organisation and are set
+                once, on /settings/organization: in PH a corporation holds one TIN and each branch
+                carries a code against it, so duplicating the number per store (as v1 did) is one
+                number in N places to go wrong. */}
+            <label className="block text-sm">
+              <span className="block text-neutral-600 dark:text-neutral-400">Trading address</span>
+              <textarea name="address" defaultValue={store.address ?? ''} rows={2}
+                className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
+            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block text-sm">
+                <span className="block text-neutral-600 dark:text-neutral-400">Contact number</span>
+                <input name="contactNumber" defaultValue={store.contactNumber ?? ''}
+                  className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
+              </label>
+              <label className="block text-sm">
+                <span className="block text-neutral-600 dark:text-neutral-400">
+                  TIN branch code <span className="text-neutral-400">— digits, e.g. 00001</span>
+                </span>
+                <input name="tinBranchCode" defaultValue={store.tinBranchCode ?? ''} inputMode="numeric"
+                  className="mt-1 w-full rounded border border-neutral-300 p-2 tabular-nums dark:border-neutral-700 dark:bg-neutral-900" />
+              </label>
+            </div>
             <p className="text-xs text-neutral-500">
               ⛔ The code (<code>{store.code}</code>) is not editable. Rename freely — the code is the
-              stable handle other records refer to.
+              stable handle other records refer to. The registered name and TIN are the
+              organisation&apos;s —{' '}
+              <Link href="/settings/organization" className="underline underline-offset-2">
+                set them once
+              </Link>
+              .
             </p>
             <button type="submit"
               className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900">
