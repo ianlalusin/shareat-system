@@ -10,8 +10,10 @@ parked at task-complete boundaries.
 
 ⛔ **THE ONE THING THAT IS IAN'S, AND IT IS THE PILOT ITSELF.** Production now has the
 `bootstrap-org` code but still holds **zero organizations**, and `shareat-finding-observation` exits
-1 nightly until one exists. **Ian runs this himself** (`IAN-SETUP-CHECKLIST.md` §4b — no agent SSH),
-once T-228's deploy lands:
+1 nightly until one exists. **Ian runs this himself** (`IAN-SETUP-CHECKLIST.md` §4b — no agent SSH).
+⭐ **T-228's code is already LIVE on production** — its own CI (`dad2053`) was cancelled by the docs
+push, but `d72c9be`'s Deploy succeeded and `d72c9be` contains T-228 (the artifact ships `scripts/`,
+tsx is a runtime dep). So bootstrap-org is runnable now:
 
 ```
 npm run bootstrap-org -- --code=SHAREAT_OPC --name="SHAREAT OPC" \
@@ -47,7 +49,7 @@ that screen's first real production smoketest. The PIN prints once and is not re
 | **T-216** | Recurring-expense TEMPLATES (the job is blocked, deliberately) | live |
 | **T-227** | Caller + nav-reachability guards | live |
 | **T-229 slice 1** | Settings shelf `/settings` + map a category to an account — closes DEF-193's remedy | live (`31afb96`) |
-| **T-228** | `bootstrap-org` — create an org atomically (DEF-195). Ian runs it on prod | pushed (`dad2053`), deploying |
+| **T-228** | `bootstrap-org` — create an org atomically (DEF-195). Ian runs it on prod | **LIVE** (deployed via `d72c9be`) |
 | **Bible v3.7** | §13 row 179 — Ian's completeness + data-recency doctrine | committed |
 
 **DEF-204–209 filed** (register §E). DEF-204 (Drizzle strips the shared client's jsonb serializer;
