@@ -80,6 +80,139 @@ export async function getCategoryById(
   return row as ExpenseCategoryRow | undefined;
 }
 
+// -----------------------------------------------------------------------------------------
+// T-229 slice 1 — the category ADMIN surface. Until this, `packages/db/seed/expense-categories.ts`
+// was the only writer `expense_categories` had ever had, while T-213's `expenseCategoryUnpostable`
+// reported drafts stuck behind an unmapped category and told the reader to map one. **DEF-193.**
+// -----------------------------------------------------------------------------------------
+
+/** One row of the admin screen: the category, the account it resolves to, and what it is blocking. */
+export interface ExpenseCategoryAdminRow {
+  id: string;
+  group: 'OPEX' | 'COGS' | 'CAPEX' | 'PERSONAL';
+  category: string;
+  accountCode: string | null;
+  /** The mapped account's name, resolved for display. Null when unmapped. */
+  accountName: string | null;
+  /** How many DRAFT expenses this category's missing mapping is holding up. */
+  blockedDraftCount: number;
+}
+
+/**
+ * Every category for the org, **unmapped first** — they are the only actionable rows — then by
+ * group and name.
+ *
+ * ⚠️ **`blockedDraftCount` is deliberately NOT the detector's population.**
+ * `findingsRepo.expenseCategoryUnpostable` applies a 3-day materiality threshold before it raises
+ * a finding; this count applies none, because the two answer different questions. The detector
+ * asks *"has this been stuck long enough to be worth an alert?"*; this screen asks *"what is stuck
+ * behind this mapping right now?"* — and a draft created this morning is just as blocked as one
+ * from last week. Reporting only the aged ones here would understate the consequence at the exact
+ * moment somebody is deciding whether to act.
+ *
+ * ⛔ Derived on read, never a stored counter — bible §4.2 rule 7 (§13 row 173: *"a
+ * separately-accumulated counter is forbidden even when it is called a cache"*).
+ */
+export async function listCategoriesForAdmin(
+  tx: Tx,
+  orgId: string,
+): Promise<ExpenseCategoryAdminRow[]> {
+  // `group` is a reserved word — every reference must be quoted, the same trap
+  // `packages/db/seed/expense-categories.ts` documents in its own INSERT.
+  const rows = (await tx.execute(sql`
+    select ec.id::text                as id,
+           ec."group"                 as "group",
+           ec.category                as category,
+           ec.account_code            as account_code,
+           a.name                     as account_name,
+           case when ec.account_code is null then (
+             select count(*)::int from expenses e
+              where e.org_id = ec.org_id and e.category_id = ec.id and e.status = 'draft'
+           ) else 0 end               as blocked_draft_count
+      from expense_categories ec
+      left join accounts a on a.org_id = ec.org_id and a.code = ec.account_code
+     where ec.org_id = ${orgId}
+     order by (ec.account_code is not null) asc, ec."group" asc, ec.category asc
+  `)) as unknown as Record<string, unknown>[];
+
+  return rows.map((r) => ({
+    id: String(r.id),
+    group: String(r.group) as ExpenseCategoryAdminRow['group'],
+    category: String(r.category),
+    accountCode: r.account_code === null || r.account_code === undefined ? null : String(r.account_code),
+    accountName: r.account_name === null || r.account_name === undefined ? null : String(r.account_name),
+    blockedDraftCount: Number(r.blocked_draft_count ?? 0),
+  }));
+}
+
+/**
+ * Whether an account code exists for this org and what state it is in. Same shape and same job as
+ * `liabilitiesRepo.accountKind` — the domain layer decides what is eligible; this only reports.
+ */
+export async function accountForMapping(
+  tx: Tx,
+  orgId: string,
+  code: string,
+): Promise<{ code: string; name: string; isPostable: boolean; status: string } | undefined> {
+  const [row] = (await tx.execute(sql`
+    select code, name, is_postable, status from accounts
+     where org_id = ${orgId} and code = ${code} limit 1
+  `)) as unknown as Record<string, unknown>[];
+  if (!row) return undefined;
+  return {
+    code: String(row.code),
+    name: String(row.name),
+    isPostable: Boolean(row.is_postable ?? row.isPostable),
+    status: String(row.status),
+  };
+}
+
+/**
+ * The accounts a category may be mapped TO — postable and active only, mirroring
+ * `liabilitiesRepo.chargeableAccounts`. ⚠️ Not filtered by type: a v2 category legitimately maps
+ * to `1400 Other Prepaid` and `1510 Capital Expenditure` as well as to 5xxx/6xxx, and PERSONAL
+ * maps to `3200 Owner's drawings` — `packages/db/seed/expense-categories.ts` seeds all four
+ * shapes, and `packages/domain/src/expenses/routing.ts` posts whatever the category resolved to
+ * without special-casing the group.
+ *
+ * ⚠️ **Excluding `type = 'income'` was considered and NOT done.** Debiting a revenue account from
+ * an expense category would be a real mis-posting, but every legitimate mapping already spans
+ * asset, equity and expense, so a type filter would be one exception away from hiding an account
+ * somebody needs — and the picker shows `code · name` to an admin who holds
+ * `manage_chart_of_accounts`. If this ever bites, the fix is a domain-layer refusal with a named
+ * reason, not a silently shorter list.
+ */
+export async function mappableAccounts(
+  tx: Tx,
+  orgId: string,
+): Promise<{ code: string; name: string }[]> {
+  const rows = (await tx.execute(sql`
+    select code, name from accounts
+     where org_id = ${orgId} and is_postable and status = 'active'
+     order by code
+  `)) as unknown as Record<string, string>[];
+  return rows.map((r) => ({ code: String(r.code), name: String(r.name) }));
+}
+
+/**
+ * Set or CLEAR a category's account mapping. ⭐ `null` is a real value, not "leave alone":
+ * `account_code` is nullable on purpose (schema comment, invariant 7) so that an unmapped category
+ * blocks posting rather than defaulting to `6900`, and a wrong mapping must therefore be
+ * removable. No business rule here — eligibility is
+ * `packages/domain/src/expenses/categories.ts`'s call.
+ */
+export async function setCategoryAccountCode(
+  tx: Tx,
+  orgId: string,
+  categoryId: string,
+  accountCode: string | null,
+): Promise<void> {
+  await tx
+    .update(expenseCategories)
+    .set({ accountCode, updatedAt: new Date() })
+    .where(and(eq(expenseCategories.id, categoryId), eq(expenseCategories.orgId, orgId)));
+}
+
 export async function listCategories(tx: Tx, orgId: string): Promise<ExpenseCategoryRow[]> {
   const rows = await tx
     .select({

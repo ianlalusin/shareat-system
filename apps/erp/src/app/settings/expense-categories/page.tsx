@@ -1,0 +1,179 @@
+import { requireSession } from '../../../lib/session';
+import { setCategoryAccountAction } from './actions';
+import { categoriesForAdmin, mappableAccounts } from './lib';
+
+export const metadata = { title: 'Expense categories — Shareat System' };
+export const dynamic = 'force-dynamic';
+
+interface SearchParams {
+  ok?: string;
+  error?: string;
+}
+
+/**
+ * `/settings/expense-categories`. T-229 slice 1 — **DEF-193's remedy.**
+ *
+ * ⭐ The screen exists because a detector had nowhere to send anyone. T-213's
+ * `expenseCategoryUnpostable` reports a draft expense stuck behind a category with no mapped
+ * account and ends *"cannot post until one is"* — and until today the only writer
+ * `expense_categories` had ever had was its seed file, so the instruction named an action nobody
+ * could take.
+ *
+ * ⭐ **Unmapped rows sort first and say what they are holding up.** A list ordered by name would
+ * bury the two rows that need a decision among thirty-eight that do not.
+ *
+ * ⛔ **Mapping only — no create, no rename, no retire.** Those wait for slice 2's migration,
+ * because `unique (org_id, category)` is case- and whitespace-sensitive today and bible §4.4
+ * rule 3 wants `lower(trim(...))`. Shipping creation first would re-open the duplicated-Rent
+ * defect that rule exists to close.
+ */
+export default async function ExpenseCategoriesSettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const sp = await searchParams;
+  const { actor } = await requireSession('/settings/expense-categories');
+
+  const [categories, accounts] = await Promise.all([
+    categoriesForAdmin(actor.orgId),
+    mappableAccounts(actor.orgId),
+  ]);
+
+  const unmapped = categories.filter((c) => c.accountCode === null);
+  const blockedTotal = unmapped.reduce((n, c) => n + c.blockedDraftCount, 0);
+
+  return (
+    <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+      <div>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          <a href="/settings" className="underline">
+            Settings
+          </a>{' '}
+          / Expense categories
+        </p>
+        <h1 className="text-2xl font-semibold">Expense categories</h1>
+        <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
+          Which account each kind of spend debits. A category with{' '}
+          <strong>no account mapped blocks posting</strong> rather than guessing — nothing here
+          ever falls back to a catch-all account, so an unmapped category is a decision waiting,
+          not a default.
+        </p>
+      </div>
+
+      {sp.error && <Banner tone="error">{sp.error}</Banner>}
+      {sp.ok && <Banner tone="ok">{sp.ok}</Banner>}
+
+      <p className="rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
+        {unmapped.length === 0 ? (
+          <>
+            All {categories.length} categories are mapped. Nothing is blocked on this screen.
+          </>
+        ) : (
+          <>
+            <strong>
+              {unmapped.length} of {categories.length}
+            </strong>{' '}
+            {unmapped.length === 1 ? 'category has' : 'categories have'} no account, holding up{' '}
+            <strong>{blockedTotal}</strong> draft {blockedTotal === 1 ? 'expense' : 'expenses'}.
+            They are listed first.
+          </>
+        )}
+      </p>
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-neutral-200 text-left dark:border-neutral-800">
+              <th className="py-2 pr-3 font-medium">Category</th>
+              <th className="py-2 pr-3 font-medium">Group</th>
+              <th className="py-2 pr-3 font-medium">Blocking</th>
+              <th className="py-2 font-medium">Posts to</th>
+            </tr>
+          </thead>
+          <tbody>
+            {categories.map((c) => {
+              const isUnmapped = c.accountCode === null;
+              return (
+                <tr
+                  key={c.id}
+                  className={`border-b border-neutral-100 align-middle dark:border-neutral-900 ${
+                    isUnmapped ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''
+                  }`}
+                >
+                  <td className="py-2 pr-3">
+                    {c.category}
+                    {isUnmapped && (
+                      <span className="ml-2 rounded bg-amber-200 px-1.5 py-0.5 text-[11px] font-medium text-amber-900 dark:bg-amber-900 dark:text-amber-100">
+                        unmapped
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-2 pr-3 text-neutral-500 dark:text-neutral-400">{c.group}</td>
+                  <td className="py-2 pr-3 text-neutral-500 dark:text-neutral-400">
+                    {c.blockedDraftCount === 0 ? (
+                      '—'
+                    ) : (
+                      <span className="font-medium text-amber-800 dark:text-amber-300">
+                        {c.blockedDraftCount} draft{c.blockedDraftCount === 1 ? '' : 's'}
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-2">
+                    <form action={setCategoryAccountAction} className="flex flex-wrap items-center gap-2">
+                      <input type="hidden" name="categoryId" value={c.id} />
+                      <input type="hidden" name="categoryLabel" value={c.category} />
+                      <select
+                        name="accountCode"
+                        defaultValue={c.accountCode ?? ''}
+                        className={`${FIELD} max-w-[22rem]`}
+                        aria-label={`Account for ${c.category}`}
+                      >
+                        {/* ⭐ A real choice, not a placeholder: picking it CLEARS the mapping.
+                            `account_code` is nullable on purpose so a wrong mapping is
+                            removable — a wrong account posts silently, an absent one refuses. */}
+                        <option value="">— none (blocks posting) —</option>
+                        {accounts.map((a) => (
+                          <option key={a.code} value={a.code}>
+                            {a.code} · {a.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button type="submit" className={BTN}>
+                        Save
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="text-xs text-neutral-500 dark:text-neutral-400">
+        Adding, renaming and retiring a category are not here yet — they need a database change
+        that makes <code>Rent</code> and <code>rent&nbsp;</code> the same name, so that a manual
+        add cannot collide with a seeded row. Until then this list is the 38 seeded categories.
+        Stuck drafts appear on{' '}
+        <a href="/findings" className="underline">
+          /findings
+        </a>{' '}
+        once they are three days old.
+      </p>
+    </main>
+  );
+}
+
+function Banner({ tone, children }: { tone: 'error' | 'ok'; children: React.ReactNode }) {
+  const cls =
+    tone === 'error'
+      ? 'border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300'
+      : 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
+  return <div className={`rounded-lg border p-4 text-sm ${cls}`}>{children}</div>;
+}
+
+const FIELD =
+  'rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+const BTN =
+  'rounded border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900';

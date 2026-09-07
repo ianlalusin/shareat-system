@@ -145,13 +145,12 @@ const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
       // ⭐ DEF-181 — this shipped with T-201 linked from nowhere, reachable only by typing the URL.
       // Exactly the failure this file's own header comment describes, re-created three routes later.
       //
-      // ⚠️ DEF-192 — the fix over-corrected: it also added `{ href: '/settings' }`, and there is no
-      // `app/settings/page.tsx`, only `settings/attendance/`. So the entry that was meant to end a
-      // 404-by-omission introduced a 404-by-commission, and both directions went unchecked for six
-      // days. Dropped rather than backed by a hub page listing exactly one child — a screen that
-      // exists to satisfy a link is not a screen. When a second settings surface lands, a hub earns
-      // its place. T-227's guard now fails the build on either direction.
-      { href: '/settings/attendance', label: 'Attendance settings' },
+      // DEF-192 / T-227: `/settings` was dropped when attendance was its only child — a hub listing
+      // exactly one child is a screen that exists to satisfy a link. T-229 landed the second surface
+      // (`/settings/expense-categories`) and a real `app/settings/page.tsx`, so the hub now earns its
+      // place and links to both children; `nav-route-reachability` resolves `/settings/attendance`
+      // transitively through it, which is why the direct entry is no longer needed here.
+      { href: '/settings', label: 'Settings' },
     ],
   },
 ];
