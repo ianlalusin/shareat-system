@@ -1,6 +1,18 @@
 # T-228 — Standing up an organization (`npm run bootstrap-org`)
 
-> **Status**: 📝 **SPECIFIED 2026-09-06, not built.** Ian asked to seed **SHAREAT OPC** with
+> **Status**: ✅ **BUILT 2026-09-07.** Ships as `scripts/bootstrap-org.ts`,
+> `packages/domain/src/organizations/index.ts` (`createOrganization`, `createFirstAdmin`) and
+> `packages/db/src/repo/organizations.ts`. Gates: typecheck exit 0 · 12 integration tests green on
+> an isolated lane DB · the existing `chart-of-accounts.test.ts` 77/77 still green.
+>
+> ⚠️ **Four corrections to this spec were reported rather than worked around** (RULES §3.4a) — the
+> dated block at the end of this file, and the header of `packages/db/src/repo/organizations.ts`.
+> The largest, **DEF-204**, made Contract §1 unimplementable as written.
+>
+> ⛔ **Ian runs it against production himself.** It has not been run against production or
+> `shareat_dev` by an agent; the dry run is the only thing exercised outside the test databases.
+>
+> *(Original spec status, 2026-09-06:)* Ian asked to seed **SHAREAT OPC** with
 > **SharEat Lipa** and **SharEat Malvar** for the Oct–Dec pilot, and it turned out there is no way
 > to do it.
 >
@@ -10,6 +22,8 @@
 > and `scripts/dev-seed.ts:68` does not create one either — it **selects** the first active org and
 > throws if there is none. That script's own header says so in passing without noticing:
 > *"migrations create 93 accounts and (via whatever put them there) an org and its stores."*
+> ⚠️ Quoted verbatim, and **its number is stale too** — the chart is 102 accounts since T-123. Left
+> as written because it is a quotation; `scripts/dev-seed.ts:4` is out of this task's scope.
 > **Whatever put them there was a person typing SQL.**
 >
 > ⭐ **This is DEF-189 one level up.** Until T-222 shipped on 2026-09-06 nothing created a *store*
@@ -78,8 +92,9 @@ terminal is what makes the second one safe.
 - `packages/domain/tests/integration/organizations.test.ts`
 
 **Modify**
-- `packages/db/schema/index.ts`, `packages/db/src/repo/index.ts`,
-  `packages/domain/src/index.ts` (barrels)
+- `packages/db/src/index.ts` and `packages/domain/src/index.ts` (barrels) — ⚠️ **corrected
+  2026-09-07:** `packages/db/src/repo/index.ts` does not exist, and `packages/db/schema/index.ts:17`
+  already exports `./organizations`, so neither is touched
 - `package.json` — one script entry
 - `docs/ops/README.md` — how to run it against production
 
@@ -110,7 +125,7 @@ request handler."* That is the same posture T-140's scheduler jobs already run u
    then translate the error into a sentence a human can act on.
 2. Insert the organization.
 3. `seedChartOfAccounts(tx, orgId)` and `seedExpenseCategories(tx, orgId)`.
-   ⛔ **Both are per-org and both are mandatory.** An org without its 93 accounts cannot post
+   ⛔ **Both are per-org and both are mandatory.** An org without its 102 accounts cannot post
    anything, and the symptom is `postEntry` refusing with *"unknown account code"* — which is the
    engine working correctly and is baffling if you assume the chart is global. It is not: every
    seeded row carries `org_id`.
@@ -201,13 +216,16 @@ executable behind it.
 
 Integration, `packages/domain/tests/integration/organizations.test.ts`:
 
-1. `createOrganization` inserts the org and seeds 93 accounts and 39 categories, all carrying the
-   new `org_id`.
+1. `createOrganization` inserts the org and seeds the whole chart and every expense category, all
+   carrying the new `org_id`. ⚠️ **Corrected 2026-09-07: 102 accounts and 38 categories, not
+   93/39** — see the corrections block at the end of this file. The tests assert against
+   `CHART_OF_ACCOUNTS.length` / `EXPENSE_CATEGORY_SEED.length`, never a literal.
 2. A duplicate `code` is refused by the database and surfaced as a readable error.
 3. `createFirstAdmin` creates person + role with `granted_by` NULL.
 4. `createFirstAdmin` **refuses** when a `person_roles` row already exists for that org.
 5. ⭐ **The whole chain end to end**: org → admin → `createStore` as that admin → `setPin` →
-   `signIn` with store + PIN returns a session for that person. This is the test that proves the
+   `signInWithPin` with store + PIN returns a session for that person. ⚠️ **Corrected 2026-09-07:
+   the export is `signInWithPin`; there is no `signIn`.** This is the test that proves the
    chicken-and-egg is actually broken, and it is the one worth writing first.
 6. An injected failure at step 4 rolls back the organization entirely (invariant 6).
 7. The new org's chart is independent — seeding a second org does not touch the first's accounts.
@@ -240,5 +258,90 @@ Ian.
 - [ ] `docs/ops/README.md` documents the production invocation and that the PIN is shown once
 - [ ] `npm run build` exit 0 with the dev server stopped
 - [ ] **Ian runs it against production himself** — this script writes to the live database, and
-      RULES §4b's principle (no standing credentials through an agent) covers this as surely as it
-      covers provisioning
+      `docs/IAN-SETUP-CHECKLIST.md` §4b's principle (no standing credentials through an agent)
+      covers this as surely as it covers provisioning — ⚠️ **corrected 2026-09-07: `docs/RULES.md`
+      has no §4b**
+
+
+---
+
+## Corrections to this spec — 2026-09-07, reported not worked around (RULES §3.4a)
+
+Four things in the spec above were wrong. Each is corrected in place and recorded here, because a
+planner's spec is a hypothesis and silently patching around a defect destroys the evidence it was
+wrong.
+
+### 1. ⛔ `seedChartOfAccounts(tx, orgId)` could not work — DEF-204, and it is not a T-228 bug
+
+Contract §1 says `createOrganization(tx, …)` calls `seedChartOfAccounts(tx, orgId)`. It cannot: the
+seeds take a **postgres.js** client (`chart-of-accounts.ts:459`) and `Tx` is a **Drizzle**
+transaction. All ~100 existing callers pass a raw client outside any transaction.
+
+The bridge is the postgres.js client behind the Drizzle handle — the same one Drizzle uses for its
+own savepoints — but the seeds then threw *"The 'string' argument must be of type string… Received
+an instance of Array"*. **Cause: `drizzle-orm/postgres-js/driver.js:17-22` mutates the shared
+client's options on construction**, replacing the jsonb serializer (and the timestamp
+parsers/serializers) with an identity function. So once `getDb()` has run in a process, `sql.json()`
+on that client silently stops serialising.
+
+Both obvious spellings work in exactly one world, verified against real Postgres:
+
+| binding | plain client | inside a Drizzle tx |
+|---|---|---|
+| `sql.json(payload)` | OK | **throws** |
+| `${json}::jsonb` | **throws** 22023 *"non-array"* | OK |
+| `cast(${json} as jsonb)` | **throws** 22023 — identical to `::jsonb` | OK |
+| `(${json})::text::jsonb` | **OK** | **OK** |
+
+postgres.js infers the parameter type from the **first** adjacent cast token, so `::text` tags it
+text — a type neither client rewrites — and Postgres does the text→jsonb conversion. The two seed
+files now use that form, with the reasoning in `seedChartOfAccounts`' header. ⚠️ The previous comment
+there asserted the opposite; it was right about the plain client and silent about the other one.
+
+⭐ **This had already bitten someone**: `tests/invariants/accounting-equation.test.ts:55` avoids
+`getSql()` with the comment *"which `sql.json()`'s parameter wrapper does not round-trip through
+cleanly"* — the symptom recorded, the cause not found.
+
+### 2. The seed counts were stale — 102 accounts and 38 categories, not 93 and 39
+
+93 is the pre-T-123 figure; `packages/db/tests/integration/chart-of-accounts.test.ts:338` already
+pins 102 (7 headers + 95 leaves). Categories are 38 (COGS 9, OPEX 27, PERSONAL 1, CAPEX 1). The
+tests assert against the seed arrays' `.length`, so they cannot go stale again the next time the
+chart grows. `scripts/dev-seed.ts:4` carries the same stale number in a comment — out of scope here,
+left alone.
+
+### 3. Two of the three barrels in Scope needed no change
+
+`packages/db/src/repo/index.ts` does not exist — the db barrel is `packages/db/src/index.ts` — and
+`packages/db/schema/index.ts:17` already exports `./organizations`.
+
+### 4. Smaller: two names that do not exist
+
+`signIn` is `signInWithPin` (`packages/auth/src/sessions.ts:63`), and **`docs/RULES.md` has no
+§4b** — the §4b that carries "no standing credentials through an agent" is in
+`docs/IAN-SETUP-CHECKLIST.md`.
+
+## Deviations from the spec's letter, and why
+
+- **`createOrganization` calls `organizationsRepo.seedReferenceData(tx, orgId)`**, not the two seed
+  functions directly. The reach through the Drizzle handle is driver knowledge, so it lives in
+  `packages/db` next to the `Tx` type rather than in a service (bible §4.3). It is one documented
+  function with a test behind it, and it reuses the existing seeds exactly as Contract §1 requires —
+  there is still no second seeding path.
+- **`createFirstAdmin` composes `personsRepo.insertPerson` + `accessRepo.insertRole`** rather than
+  writing raw SQL. §4.3: repositories are the only place SQL is written. `dev-seed.ts`'s raw inserts
+  are a script, not a precedent for `packages/domain`.
+- **`orgHasAnyRole` is new, in the organizations repo.** Contract §2 refuses on *any* `person_roles`
+  row; `accessRepo.hasActiveAdmin` only sees *active admin* rows, which would let the back door open
+  again after a demotion. Two tests cover the difference (a revoked role, and a staff-only org).
+- **`databaseNameOf` is copied into the script, not imported.** The spec says to reuse
+  `dev-seed.ts`'s copy, but it is not exported and `dev-seed.ts` is explicitly out of scope; copying
+  five pure lines with attribution beat editing a file the spec told me not to touch.
+
+## Still open
+
+- **Ian's three questions** (org code, the first admin's real name, which stores) are unanswered by
+  design — built to the spec's recommendations, and the real values are typed at the production run.
+- **Not run against production or `shareat_dev`.** Only the dry run and the test databases.
+- **Not smoketested on 9008.** Per the spec, this task's smoketest *is* the production run, which is
+  Ian's.

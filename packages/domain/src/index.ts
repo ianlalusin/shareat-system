@@ -102,3 +102,7 @@ export * from './budgets';
 // T-216 — recurring-expense templates. ⚠️ The JOB is not built: whether a due template drafts
 // or auto-pays is Ian's open decision, and it changes the job's shape rather than a flag.
 export * from './recurring-expenses';
+
+// T-228 — standing up an organization: the one flow with no Actor, because there is no principal
+// before the org exists. Its only caller is scripts/bootstrap-org.ts.
+export * from './organizations';

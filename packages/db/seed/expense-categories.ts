@@ -134,10 +134,15 @@ export async function seedExpenseCategories(
   // a valid column reference there). Found here because this function had never actually
   // been called against real Postgres before: packages/db/tests/expense-categories-seed.test.ts
   // is a unit test that only checks the plain EXPENSE_CATEGORY_SEED array, never this SQL.
+  //
+  // ⛔ The payload is bound as TEXT and cast in SQL — `(${json})::text::jsonb` — for the reason
+  // set out at length in `seedChartOfAccounts` (T-228, DEF-204): `sql.json()` throws inside a
+  // Drizzle transaction and a single `::jsonb` cast throws on a plain client, so neither works
+  // in both worlds and this function is called from both. Keep the two casts.
   const rows = await sql<{ id: string }[]>`
     insert into expense_categories (org_id, "group", category, account_code)
     select ${orgId}::uuid, v."group", v.category, v.account_code
-    from jsonb_to_recordset(${sql.json(payload)})
+    from jsonb_to_recordset((${JSON.stringify(payload)})::text::jsonb)
       as v("group" text, category text, account_code text)
     on conflict (org_id, category) do nothing
     returning expense_categories.id

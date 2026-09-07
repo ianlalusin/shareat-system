@@ -464,11 +464,33 @@ export async function seedChartOfAccounts(sql: postgres.Sql, orgId: string): Pro
   // for a direct `insert into t ${sql(array)}` — it cannot be used as a joinable table
   // expression inside `from ... as v(...)`, which the leaf phase needs (it joins back to
   // the header rows). `jsonb_to_recordset` does the same "array of rows in, one bind
-  // parameter" job and works uniformly as a FROM-clause source for both phases. It must
-  // be bound via `sql.json(...)`, not a pre-stringified string cast with `::jsonb` — the
-  // latter reaches Postgres double-encoded (a jsonb STRING holding JSON text, which
-  // `jsonb_to_recordset` correctly refuses as "not an array") — confirmed against the
-  // real local Postgres while writing this.
+  // parameter" job and works uniformly as a FROM-clause source for both phases.
+  //
+  // ⛔ **The payload is bound as TEXT and cast in SQL — `(${json})::text::jsonb` — and both
+  // halves of that are load-bearing** (T-228, DEF-204). This function must work against two
+  // different kinds of client, and the two obvious forms each work against exactly one:
+  //
+  //   - `sql.json(payload)` works on a plain `postgres()` client and THROWS inside a Drizzle
+  //     transaction, because `drizzle-orm/postgres-js`'s `construct()` overwrites the shared
+  //     client's serializers on construction — `client.options.serializers["114"]` and
+  //     `["3802"]` become an identity function (driver.js:17-22), so the array reaches the
+  //     wire unserialised: *"The 'string' argument must be of type string... Received an
+  //     instance of Array"*.
+  //   - `${json}::jsonb`, and equally `cast(${json} as jsonb)`, is the mirror image: fine
+  //     inside a Drizzle transaction, and on a plain client postgres.js reads the adjacent
+  //     cast as a type hint, tags the parameter jsonb and re-stringifies it, so Postgres gets
+  //     a jsonb STRING holding JSON text and refuses it — *"cannot call jsonb_to_recordset on
+  //     a non-array"* (22023). This is what the previous version of this comment described,
+  //     and it was right about the plain client and silent about the other one.
+  //
+  // ⭐ `::text::jsonb` is serializer-INDEPENDENT: the first adjacent cast is what postgres.js
+  // infers from, so the parameter is tagged text (whose serializer neither client touches) and
+  // the text->jsonb conversion happens in Postgres. Verified against real Postgres in all four
+  // combinations — do not "simplify" it back to either single-cast form.
+  //
+  // ⚠️ T-228 is the first caller that needs the Drizzle-transaction half: creating an
+  // organization seeds its chart inside the SAME transaction as the org row, so a partly
+  // built organization cannot exist.
   const headerPayload = headers.map((h) => ({
     code: h.code,
     name: h.name,
@@ -482,7 +504,7 @@ export async function seedChartOfAccounts(sql: postgres.Sql, orgId: string): Pro
   const headerRows = await sql<{ id: string }[]>`
     insert into accounts (org_id, code, name, type, normal_balance, parent_id, is_postable, is_system, legacy_code, status, requires_party)
     select ${orgId}::uuid, v.code, v.name, v.type, v.normal_balance, null, false, true, v.legacy_code, v.status, v.requires_party
-    from jsonb_to_recordset(${sql.json(headerPayload)})
+    from jsonb_to_recordset((${JSON.stringify(headerPayload)})::text::jsonb)
       as v(code text, name text, type text, normal_balance text, legacy_code text, status text, requires_party boolean)
     on conflict (org_id, code) do nothing
     returning accounts.id
@@ -502,7 +524,7 @@ export async function seedChartOfAccounts(sql: postgres.Sql, orgId: string): Pro
   const leafRows = await sql<{ id: string }[]>`
     insert into accounts (org_id, code, name, type, normal_balance, parent_id, is_postable, is_system, legacy_code, status, requires_party)
     select ${orgId}::uuid, v.code, v.name, v.type, v.normal_balance, p.id, true, true, v.legacy_code, v.status, v.requires_party
-    from jsonb_to_recordset(${sql.json(leafPayload)})
+    from jsonb_to_recordset((${JSON.stringify(leafPayload)})::text::jsonb)
       as v(code text, name text, type text, normal_balance text, parent_code text, legacy_code text, status text, requires_party boolean)
     join accounts p on p.org_id = ${orgId}::uuid and p.code = v.parent_code
     on conflict (org_id, code) do nothing

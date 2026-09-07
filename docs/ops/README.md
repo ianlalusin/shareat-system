@@ -99,6 +99,62 @@ Plus a fifth unit that is not a scheduled job but the app itself: **`shareat-erp
 shipping the code is not the finish line, installing and arming the timer is. `docs/tasks/205-first-production-deployment.md`
 covers the deployment that finally gives these something to run against.
 
+## ⭐ Standing up an organization on production — `npm run bootstrap-org` (T-228)
+
+⛔ **This is the one command here that is NOT a job, must NOT be given a systemd unit, and is run
+by a person — Ian — not by an agent.** Everything else on this page is a timer. This is a one-shot
+that writes to the live database and prints a live credential once.
+
+**Why it exists:** nothing in this codebase had ever created an organization (DEF-195). Production
+is live and migrated and held **zero** organizations, which is why
+`shareat-finding-observation.service` exits 1 nightly with *"no orgs were processed"*. That failure
+is correct; this is the fix.
+
+### The invocation
+
+```sh
+# On the droplet, from /srv/shareat, with the app's own .env.local in place.
+# ⚠️ DRY RUN FIRST — without --confirm it prints the plan and writes nothing.
+npm run bootstrap-org -- --code=SHAREAT_OPC --name="SHAREAT OPC"                          --admin="<the person's real full name>"                          --store-code=LIPA --store-name="SharEat Lipa"
+
+# Then, once the printed plan says what you expect, exactly the same line plus --confirm:
+npm run bootstrap-org -- --code=SHAREAT_OPC --name="SHAREAT OPC"                          --admin="<the person's real full name>"                          --store-code=LIPA --store-name="SharEat Lipa" --confirm
+```
+
+| Guard | Behaviour |
+|---|---|
+| **No defaults** | Every argument except `--pin` is required. There is no `SHAREAT_OPC` fallback in the code — the example above is documentation, not a default |
+| **`--confirm` required** | Without it: prints the plan, writes nothing, exits 0. The dry run is the default |
+| **Duplicate code** | Refused, exits 1, writes nothing. A second run is a no-op, not a second org |
+| ⛔ **NOT guarded on database name** | The inverse of `dev-seed.ts`, deliberately. `dev-seed` refuses anything but `*_dev` because it must never reach production; this one is *for* production |
+| **One transaction** | Org, chart of accounts, expense categories, first admin, first store, its default room, that admin's store scope, and the PIN. All of it, or none of it |
+
+### ⚠️ The PIN is shown ONCE
+
+The script prints the PIN to **stdout, exactly once**, and only its hash is stored — it is not
+recoverable, by anyone, from anywhere. Supply your own with `--pin=NNNNNN` or let it generate one
+(`crypto.randomInt`, six digits).
+
+⛔ **This is why it must never be given a systemd unit.** Every `*.service` on this page redirects
+stdout to `/var/log/shareat/*.log`; under a unit, that credential would be written to a log file and
+would stay there. Run it by hand, read the PIN, sign in, change it from the app.
+
+### What it deliberately does NOT do
+
+- **No second store.** It creates exactly one, because one is what `setPin` requires. **SharEat
+  Malvar and the rest are created afterwards through `/admin/stores`** — the supported path, and a
+  real production smoketest of T-222 on its first day.
+- **No sales channels, no items, no opening balances.** `/cutover` (T-134) owns opening balances;
+  the rest are ordinary screens. ⚠️ A store with no sales channel has nowhere for a sales day to
+  land — the store's readiness checklist says so, and that is the next thing to do after signing in.
+- **No `super_admin`.** `admin` is what `manage_stores` and `manage_users` need, and it is also what
+  `createStore`'s scope fan-out grants against — a `super_admin` first admin would end up with no
+  store scope row and nowhere to land. Item approval (T-148) is a later, deliberate `/admin/users`
+  action.
+
+⭐ **Ian runs this himself.** `docs/IAN-SETUP-CHECKLIST.md` §4b's principle — no standing production
+credentials through an agent — covers this as surely as it covers provisioning.
+
 ## ⛔ FIRST — getting `docs/ops` onto the droplet, because the pipeline never ships it
 
 **DEF-194, 2026-09-06.** This section used to open *"after `docs/ops/provision.sh` has run once"*
