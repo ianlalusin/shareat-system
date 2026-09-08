@@ -34,9 +34,9 @@ Opus subagent per READY — ~180k tokens each, and each found something real).
 | Lane | Session · model | State | Lane DB | Natural next slice |
 |---|---|---|---|---|
 | **B** | `ianla-3a` · Opus | T-232 slice 2 COMMITTED; parked clean | `shareat_test_t229` | **DEF-222**: one environment-gated formatter for the pre-session surfaces (`/sign-in` both paths, `/setup`), generalising `emailSignInMessage` + `setupErrorMessage`; two call sites, one test |
-| **C** | `ianla-87` · Sonnet | QA; standing audit + per-READY gates on its own DB; parked | `shareat_test_qa` | code-review every READY; integration on its DB; the browser sweep only if Ian grants its terminal dev/build permissions (still not granted) |
+| **C** | `ianla-87` · Sonnet | QA; parked. ⚠️ Ian may have CLEARED this terminal — if `ListAgents` shows it but it does not ACK a RE-ADOPT with context, re-brief it cold (it verifies; no spec) | `shareat_test_qa` | code-review every READY; integration on its DB; the browser sweep only if Ian grants its terminal dev/build permissions (still not granted) |
 | **D** | `ianla-0a` · Opus | T-232 slice 1 COMMITTED; parked clean | `shareat_test_t216b` | **DEF-224** (its seam): a migration making `person_credentials_external_id_unique` partial on `revoked_at is null`; `/admin/users` link/unlink for a Firebase credential, unlink ending that person's sessions — **the migration lane** |
-| **E** | `ianla-60` · Sonnet | T-233 COMMITTED; parked clean | `shareat_test_def219` | **DEF-226** first (the 15-day order-wastage backstop has NO caller — a script in the shape of `finding-observation.ts`, a `package.json` line, a systemd pair in `docs/ops`), then DEF-225 and DEF-227 in the same file |
+| **E** | `ianla-60` · Sonnet | T-233 COMMITTED; parked clean. ⚠️ Ian may have CLEARED this terminal — re-brief cold from DEF-226 if so | `shareat_test_def219` | **DEF-226** first (the 15-day order-wastage backstop has NO caller — a script in the shape of `finding-observation.ts`, a `package.json` line, a systemd pair in `docs/ops`), then DEF-225 and DEF-227 in the same file |
 
 Re-adopt each with a first line `[X] RE-ADOPT: <one sentence from this table>`; they know the
 protocol. **Name the model in every briefing** (bible row 184) and put terminals Ian must switch in
