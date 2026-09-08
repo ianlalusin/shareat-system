@@ -16,7 +16,13 @@
  */
 import { redirect } from 'next/navigation';
 import { accessRepo } from '@shareat/db';
-import { assignRoleAsActor, authorize, CAPABILITIES, type Capability, type Role } from '@shareat/auth';
+import {
+  assignRoleAsActor,
+  authorize,
+  grantCapabilityAsActor,
+  type Capability,
+  type Role,
+} from '@shareat/auth';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 
@@ -31,6 +37,11 @@ function errorMessage(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
   if (/may not change their own role/.test(raw)) {
     return 'You cannot change your own role. Ask another admin — this is what stops one mis-click locking the org out.';
+  }
+  // DEF-223. ⚠️ The sentence names the RISK, which is the opposite of the one above: changing your
+  // own role can lock the org out, granting yourself a capability lifts you out of the chain.
+  if (/may not grant themselves a capability/.test(raw)) {
+    return 'You cannot give yourself a capability. Ask another admin — otherwise anyone holding this screen could widen their own authority, and nobody would have approved it.';
   }
   if (/requires super_admin/.test(raw)) {
     return 'Only a super-admin can appoint an admin. An admin may appoint managers and staff (bible row 116).';
@@ -123,16 +134,20 @@ export async function setCapabilityGrantAction(formData: FormData): Promise<void
 
   try {
     await withOrgPrincipal(actor.orgId, async (tx) => {
-      await authorize(tx, actor, 'grant_capability', {});
       if (granted) {
-        // Never trust a capability name off a form into a row that `authorize()` will later
-        // compare against — an unknown string would sit in person_grants forever, matching
-        // nothing and looking like a granted permission on this very screen.
-        if (!CAPABILITIES.includes(capability)) {
-          throw new Error(`'${capability}' is not a known capability.`);
-        }
-        await accessRepo.grantCapability(tx, { personId, grantName: capability, grantedBy: actor.personId });
+        // ⭐ DEF-223 — the GRANT goes through `grantCapabilityAsActor`, which owns the
+        // `authorize()` call, the self-check and the capability-name check. It used to be written
+        // here, with no self-check at all: an admin could grant capabilities to themselves, and
+        // once T-232 §2.2 taught `assignRoleAsActor` to accept `admin` + the super_admin-only
+        // grants, that self-grant became a route to appointing admins. Moved into `packages/auth`
+        // for the reason this file's header already gives about role assignment — a rule in one
+        // route file is a rule the next route file misses.
+        await grantCapabilityAsActor(tx, actor, { personId, capability });
       } else {
+        // ⚠️ The revoke branch keeps its own `authorize()` and is deliberately NOT self-checked:
+        // revoking your own grant NARROWS your authority, so it cannot escalate, and refusing it
+        // would stop someone dropping a capability they no longer want to hold.
+        await authorize(tx, actor, 'grant_capability', {});
         await accessRepo.revokeGrantById(tx, grantId);
       }
     });

@@ -64,10 +64,15 @@ const PRE_AUTH_PATHS: readonly string[] = [
   'apps/erp/src/app/sign-in/actions.ts', // signInWithPin / signOut — the org is the OUTPUT
   'apps/erp/src/app/sign-in/page.tsx', // the store picker, rendered to a visitor with no session
   'apps/erp/src/lib/session.ts', // resolveActor — it is what produces the actor
+  'apps/erp/src/app/setup/actions.ts', // first-run setup (T-232): the org is not known yet, and cannot be — it is what this action CREATES; bible row 185 names the exception
+  'apps/erp/src/app/setup/lib.ts', // the zero-organisation read the first-run page renders from; no org exists to be the principal
 ];
 
 function trackedErpFiles(): string[] {
-  const out = execFileSync('git', ['ls-files', '-z', 'apps/erp/src'], {
+  // ⚠️ `--cached --others --exclude-standard`: tracked AND untracked-but-not-ignored, the same
+  // enumeration nav-route-reachability uses. Tracked-only meant a lane's new pre-auth file made the
+  // exemption check cry wolf until it was staged, and a new offender was invisible until then too.
+  const out = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard', 'apps/erp/src'], {
     cwd: repoRoot,
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,

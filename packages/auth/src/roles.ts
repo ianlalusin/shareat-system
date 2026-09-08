@@ -25,9 +25,15 @@
  * insert sequence for a role change) and calls the repo to write it.
  */
 import { accessRepo, personsRepo, type Tx } from '@shareat/db';
-import { ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER, type Capability } from './capabilities';
+import {
+  CAPABILITIES,
+  ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER,
+  SUPER_ADMIN_ONLY_CAPABILITIES,
+  type Capability,
+} from './capabilities';
 import type { Role } from './capabilities';
 import { authorize, AuthorizationError, type Actor } from './authorize';
+
 
 export interface AssignRoleInput {
   readonly personId: string;
@@ -141,6 +147,48 @@ export interface AssignRoleAsActorInput {
 }
 
 /**
+ * ⭐ **May this actor appoint an `admin` or a `super_admin`?** — §C.1's authority chain, asked as
+ * *"is this actor capability-equivalent to a super-admin?"* rather than *"is this actor's role
+ * spelled `super_admin`?"*
+ *
+ * ⛔ **Why it was widened (T-232 §2.2).** The organisation's first person cannot hold a
+ * `super_admin` role row: the database allows one active role per (person, org), and the role has
+ * to be `admin` because `createStore`'s §C.2 fan-out grants store scope to admins only. So they
+ * hold `admin` plus `SUPER_ADMIN_ONLY_CAPABILITIES` as grant rows — an exact equivalence that
+ * `authorize` already honours (`matrixAllows || personHasActiveGrant`), but which a role-literal
+ * check could not see. The owner of a brand-new organisation could not appoint a second admin.
+ *
+ * ## The two conditions, and why the second is narrower than it looks
+ *
+ * 1. The `super_admin` role — unchanged, and still the ordinary path.
+ * 2. The `admin` role **and an active grant for every member of the derived set**.
+ *
+ * ⚠️ **The role must be `admin` on branch 2, not merely "any role".** A manager appointed into an
+ * org with no active admin receives `manage_users` among `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER`,
+ * so a manager genuinely reaches this check — and `manager` + this delta is **not** super_admin:
+ * manager lacks most of what admin holds. Only `admin` + the delta is the equivalence.
+ *
+ * ⚠️ **`every` over an empty set is TRUE.** If the matrix ever held no super_admin-only
+ * capability, branch 2 would silently admit every admin — exactly the lateral move bible row 116
+ * forbids, arriving with no code change and no error. The empty set therefore refuses, and
+ * `roles.test.ts` asserts the set is non-empty so the day it empties is a red test, not a hole.
+ */
+async function holdsSuperAdminAuthority(
+  tx: Tx,
+  actor: Actor,
+  actorRole: string | undefined,
+): Promise<boolean> {
+  if (actorRole === 'super_admin') return true;
+  if (actorRole !== 'admin') return false;
+  if (SUPER_ADMIN_ONLY_CAPABILITIES.length === 0) return false;
+
+  for (const capability of SUPER_ADMIN_ONLY_CAPABILITIES) {
+    if (!(await accessRepo.personHasActiveGrant(tx, actor.personId, capability))) return false;
+  }
+  return true;
+}
+
+/**
  * ⭐ **The gated entry point for changing anyone's role — what a screen, a script or any
  * future app calls.** `assignRole` above is the primitive that performs the write;
  * everything that decides whether the write is ALLOWED lives here, in one place, so a second
@@ -169,8 +217,12 @@ export interface AssignRoleAsActorInput {
  *    `org_id`, never the person's, so without this a role could be assigned to another org's
  *    person and Postgres would allow it. Proved by test, not inferred.
  * 4. **§C.1, the authority chain** — assigning `admin` or `super_admin` additionally
- *    requires the actor to BE a `super_admin`. This is the lateral move bible row 116
- *    forbids and the one `manage_users` cannot express.
+ *    requires the actor to hold a super-admin's AUTHORITY: the `super_admin` role, or the
+ *    `admin` role plus an active grant for every capability `super_admin` holds and `admin`
+ *    does not (`holdsSuperAdminAuthority`, T-232 §2.2 — an organisation's first person cannot
+ *    hold a `super_admin` role row, so a role-literal check locked the owner out of appointing
+ *    a second admin). This is the lateral move bible row 116 forbids and the one `manage_users`
+ *    cannot express.
  * 5. **Last admin** — an org must not be left with zero admins. Checked against the target's
  *    CURRENT role: only a demotion *away from* `admin` can trigger it.
  *
@@ -217,9 +269,11 @@ export async function assignRoleAsActor(
 
   if (input.role === 'admin' || input.role === 'super_admin') {
     const actorRole = await accessRepo.activeRoleForPerson(tx, actor.personId, actor.orgId);
-    if (actorRole?.role !== 'super_admin') {
+    if (!(await holdsSuperAdminAuthority(tx, actor, actorRole?.role))) {
       throw new AuthorizationError(
-        `assignRoleAsActor: assigning '${input.role}' requires super_admin (bible row 116 — only a super-admin appoints an admin); actor holds '${actorRole?.role ?? 'no role'}'`,
+        `assignRoleAsActor: assigning '${input.role}' requires super_admin — the role itself, or an ` +
+          `admin holding every capability super_admin has and admin does not (bible row 116 — only ` +
+          `a super-admin appoints an admin); actor holds '${actorRole?.role ?? 'no role'}'`,
         'manage_users',
       );
     }
@@ -240,6 +294,84 @@ export async function assignRoleAsActor(
     personId: input.personId,
     orgId: actor.orgId,
     role: input.role,
+    grantedBy: actor.personId,
+  });
+}
+
+export interface GrantCapabilityAsActorInput {
+  readonly personId: string;
+  readonly capability: Capability;
+}
+
+/**
+ * ⭐ **The gated entry point for granting a capability — DEF-223.** The sibling of
+ * `assignRoleAsActor`, carrying the same rule about the other half of the same screen.
+ *
+ * ## ⛔ What was wrong, and why the widening made it urgent
+ *
+ * `grant_capability` is matrix-true for `admin`, and `/admin/users`' server action wrote
+ * `person_grants` straight from the form with **no self-check** — so an admin could grant
+ * capabilities to *themselves*. That already let a rogue admin take every POWER a `super_admin`
+ * has; `authorize` honours a grant exactly as it honours the matrix.
+ *
+ * ⚠️ What it could not do was mint the role NAME — until T-232 §2.2 widened
+ * `assignRoleAsActor` to accept `admin` plus `SUPER_ADMIN_ONLY_CAPABILITIES`. Self-grant those
+ * four and that check now passes too, so the same admin could appoint further admins and
+ * super_admins. Bible row 116's chain was hollow on the capability axis and would have gone
+ * hollow on the role axis with it.
+ *
+ * ⭐ **Closed at the source, not by narrowing the widened check.** The missing self-check is the
+ * defect; the widening is correct and stays as it is. The alternative — demanding the grants carry
+ * `granted_by IS NULL`, so only `createFirstAdmin`'s base case counts — was considered and
+ * rejected as fragile: re-granting one of the four through `/admin/users` for any ordinary reason
+ * would silently cost the owner the ability to appoint admins, with no error anywhere.
+ *
+ * ## The three checks, in order
+ *
+ * 1. **`authorize(grant_capability)`** — may this actor grant at all? (org-scoped; matrix-true for
+ *    super_admin and admin only.)
+ * 2. **Self** — nobody widens their own authority. Word for word the reasoning
+ *    `assignRoleAsActor` gives for roles: *"ask another admin, so a mistake here cannot lock the
+ *    org out."* Here the risk runs the other way — not a lock-out but a lift-out — and the answer
+ *    is the same one: a second person.
+ * 3. **A real capability** — the screen casts a form string to `Capability`, which is a promise the
+ *    browser never made. An unknown name would sit in `person_grants` forever, matching nothing in
+ *    `authorize` and reading as a granted permission on the very screen that wrote it.
+ *
+ * ⚠️ **Revoking is deliberately NOT gated this way and stays where it is.** Revoking your own
+ * grant is self-*demotion*: it narrows authority, so it cannot escalate, and refusing it would
+ * stop someone dropping a capability they no longer want to hold.
+ *
+ * ⚠️ **A cross-org target is left to the database, unlike `assignRoleAsActor`'s explicit check.**
+ * That check exists because `person_roles` carries its own `org_id` and its policy compares that,
+ * so Postgres allows a row naming this org and another org's person (DEF-183). `person_grants`
+ * derives its org THROUGH the person (`person_..._via_person`, with an explicit `WITH CHECK`), so
+ * the same write is refused by the policy. One layer here is the database's, and it is the right
+ * one; a second would be a second source of truth for a rule the schema already holds.
+ */
+export async function grantCapabilityAsActor(
+  tx: Tx,
+  actor: Actor,
+  input: GrantCapabilityAsActorInput,
+): Promise<void> {
+  await authorize(tx, actor, 'grant_capability', {});
+
+  if (actor.personId === input.personId) {
+    throw new AuthorizationError(
+      'grantCapabilityAsActor: an actor may not grant themselves a capability — ask another admin, so nobody can widen their own authority',
+      'grant_capability',
+    );
+  }
+
+  if (!CAPABILITIES.includes(input.capability)) {
+    throw new Error(`grantCapabilityAsActor: '${input.capability}' is not a known capability.`);
+  }
+
+  // ⛔ `granted_by` is the ACTOR, never null. The base case of the authority chain is
+  // `createFirstAdmin` and nowhere else; every row after it names who is answerable for it.
+  await accessRepo.grantCapability(tx, {
+    personId: input.personId,
+    grantName: input.capability,
     grantedBy: actor.personId,
   });
 }

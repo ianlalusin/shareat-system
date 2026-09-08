@@ -39,7 +39,18 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 }
 
 import { accessRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
-import { assignRole, assignRoleAsActor, AuthorizationError, type Actor, type Role } from '@shareat/auth';
+import {
+  assignRole,
+  assignRoleAsActor,
+  AuthorizationError,
+  CAPABILITIES,
+  CAPABILITY_MATRIX,
+  ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER,
+  grantCapabilityAsActor,
+  type Actor,
+  type Capability,
+  type Role,
+} from '@shareat/auth';
 
 const sql = postgres(url, { max: 5 });
 
@@ -303,5 +314,268 @@ describe('assignRoleAsActor — lockout guards', () => {
     await asPerson(org, (tx) => assignRoleAsActor(tx, actorOf(superAdmin, org), { personId: demoted, role: 'manager' }));
 
     expect(await scopeRowsFor(demoted)).toEqual([s1]);
+  });
+});
+
+// -----------------------------------------------------------------------------------------
+// T-232 slice 2 §2.2's residual consequence — the role-literal check, widened to a capability
+// -----------------------------------------------------------------------------------------
+
+/**
+ * ⭐ **Why this exists.** T-232's first admin cannot hold two role rows —
+ * `person_roles_active_person_org_unique` allows exactly one active role per (person, org) — so
+ * `createFirstAdmin` gives them the `admin` role **plus** the capabilities `super_admin` holds and
+ * `admin` does not, as explicit `person_grants` rows. That is an exact capability equivalence (no
+ * capability is `admin: true, super_admin: false`), and `authorize` honours it directly.
+ *
+ * ⛔ **But `assignRoleAsActor` gated on the role LITERAL, so a grant row could not satisfy it** —
+ * the owner of a brand-new organisation could appoint managers and staff and could not appoint a
+ * second admin. §2.2 named that as the one residual consequence; this is the fix and its tests.
+ *
+ * ⚠️ **The set is DERIVED here, independently of the production constant**, from `CAPABILITIES`
+ * and `CAPABILITY_MATRIX` — the same discipline `first-run-setup.test.ts` uses. A test that
+ * imported `roles.ts`'s own list would agree with it by construction and prove nothing.
+ */
+const SUPER_ADMIN_ONLY: readonly Capability[] = CAPABILITIES.filter(
+  (c) => CAPABILITY_MATRIX[c].super_admin && !CAPABILITY_MATRIX[c].admin,
+);
+
+describe('assignRoleAsActor — an admin with super_admin-equivalent grants (T-232 §2.2)', () => {
+  /** Direct SQL, for the same reason `insertRoleRaw` is: the fixture persona gets exactly these
+   *  rows and no grant-time side effects. `granted_by` NULL is the shape `createFirstAdmin` writes. */
+  async function grantRaw(personId: string, capabilities: readonly Capability[]): Promise<void> {
+    for (const capability of capabilities) {
+      await sql`insert into person_grants (person_id, grant_name) values (${personId}, ${capability})`;
+    }
+  }
+
+  it('the derived set is non-empty — without this, "holds every one" is vacuously true', () => {
+    // ⛔ `every()` over an empty array is TRUE. If the matrix ever lost its super_admin-only
+    // capabilities, the widened check would silently admit every admin and every assertion below
+    // would still pass. This is the sweep's non-zero control.
+    expect(SUPER_ADMIN_ONLY.length).toBeGreaterThan(0);
+    for (const capability of SUPER_ADMIN_ONLY) {
+      expect(CAPABILITY_MATRIX[capability].super_admin).toBe(true);
+      expect(CAPABILITY_MATRIX[capability].admin).toBe(false);
+    }
+  });
+
+  it('ALLOWS an admin holding every super_admin-only capability to appoint a second admin', async () => {
+    const org = await insertOrg('t232-owner');
+    const store = await insertStore(org, 's1');
+    // Exactly the shape `createFirstAdmin` writes: the `admin` role, plus the grants, granted_by NULL.
+    const owner = await insertPerson(org, 'First Admin');
+    await insertRoleRaw(owner, org, 'admin');
+    await grantRaw(owner, SUPER_ADMIN_ONLY);
+    const target = await insertPerson(org, 'Second Admin');
+
+    const result = await asPerson(org, (tx) =>
+      assignRoleAsActor(tx, actorOf(owner, org), { personId: target, role: 'admin' }),
+    );
+
+    const row = await asPerson(org, (tx) => accessRepo.activeRoleForPerson(tx, target, org));
+    expect(row?.role).toBe('admin');
+    expect(row?.grantedBy).toBe(owner);
+    // And §C.2's fan-out still runs for the admin they just appointed.
+    expect(result.materialisedStoreIds).toEqual([store]);
+  });
+
+  it('ALLOWS that same admin to appoint a super_admin', async () => {
+    const org = await insertOrg('t232-super');
+    const owner = await insertPerson(org, 'First Admin');
+    await insertRoleRaw(owner, org, 'admin');
+    await grantRaw(owner, SUPER_ADMIN_ONLY);
+    const target = await insertPerson(org, 'New Super');
+
+    await asPerson(org, (tx) =>
+      assignRoleAsActor(tx, actorOf(owner, org), { personId: target, role: 'super_admin' }),
+    );
+
+    const row = await asPerson(org, (tx) => accessRepo.activeRoleForPerson(tx, target, org));
+    expect(row?.role).toBe('super_admin');
+  });
+
+  it('⛔ REFUSES an admin holding all but ONE of them — every, not any', async () => {
+    const org = await insertOrg('t232-partial');
+    const owner = await insertPerson(org, 'Nearly');
+    await insertRoleRaw(owner, org, 'admin');
+    await grantRaw(owner, SUPER_ADMIN_ONLY.slice(1));
+    const target = await insertPerson(org, 'Would-be Admin');
+
+    await expect(
+      asPerson(org, (tx) => assignRoleAsActor(tx, actorOf(owner, org), { personId: target, role: 'admin' })),
+    ).rejects.toThrow(AuthorizationError);
+
+    const row = await asPerson(org, (tx) => accessRepo.activeRoleForPerson(tx, target, org));
+    expect(row).toBeUndefined();
+  });
+
+  it('⛔ REFUSES an admin whose grants were REVOKED — active rows only', async () => {
+    const org = await insertOrg('t232-revoked');
+    const owner = await insertPerson(org, 'Former Owner');
+    await insertRoleRaw(owner, org, 'admin');
+    await grantRaw(owner, SUPER_ADMIN_ONLY);
+    await sql`update person_grants set revoked_at = now() where person_id = ${owner}`;
+    const target = await insertPerson(org, 'Would-be Admin');
+
+    await expect(
+      asPerson(org, (tx) => assignRoleAsActor(tx, actorOf(owner, org), { personId: target, role: 'admin' })),
+    ).rejects.toThrow(AuthorizationError);
+  });
+
+  it('⛔ REFUSES a MANAGER holding all of them — the equivalence is admin + the delta, nothing else', async () => {
+    // ⚠️ A manager appointed into an org with no active admin already receives `manage_users` as an
+    // elevated grant, so a manager really can reach this check. `manager` + this delta is NOT
+    // super_admin — manager lacks most of what admin holds — so it must not appoint one.
+    const org = await insertOrg('t232-manager');
+    const manager = await insertPerson(org, 'Elevated Manager');
+    await insertRoleRaw(manager, org, 'manager');
+    await grantRaw(manager, [...ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER, ...SUPER_ADMIN_ONLY]);
+    const target = await insertPerson(org, 'Would-be Admin');
+
+    await expect(
+      asPerson(org, (tx) => assignRoleAsActor(tx, actorOf(manager, org), { personId: target, role: 'admin' })),
+    ).rejects.toThrow(AuthorizationError);
+
+    const row = await asPerson(org, (tx) => accessRepo.activeRoleForPerson(tx, target, org));
+    expect(row).toBeUndefined();
+  });
+
+  it('leaves the ordinary refusal untouched — a PLAIN admin still may not appoint an admin', async () => {
+    const org = await insertOrg('t232-plain');
+    const admin = await insertPerson(org, 'Plain Admin');
+    await insertRoleRaw(admin, org, 'admin');
+    const target = await insertPerson(org, 'Would-be Admin');
+
+    await expect(
+      asPerson(org, (tx) => assignRoleAsActor(tx, actorOf(admin, org), { personId: target, role: 'admin' })),
+    ).rejects.toThrow(/requires super_admin/);
+  });
+});
+
+// -----------------------------------------------------------------------------------------
+// DEF-223 — nobody grants themselves a capability
+// -----------------------------------------------------------------------------------------
+
+/**
+ * ⛔ **The hole this closes, and why it only became urgent today.**
+ *
+ * `grant_capability` is matrix-true for `admin`, and
+ * `apps/erp/src/app/admin/users/actions.ts` wrote `person_grants` rows straight from the form with
+ * **no self-check** — so an admin could grant capabilities to themselves. That already let a rogue
+ * admin take every POWER a `super_admin` has.
+ *
+ * ⚠️ What it could not do was mint the role NAME — until T-232 §2.2 widened
+ * `assignRoleAsActor` to accept `admin` + the super_admin-only grants. Self-grant those four and
+ * the widened check passes, so the same admin can now appoint further admins and super_admins:
+ * bible row 116's chain, hollow on the capability axis, would have gone hollow on the role axis
+ * too. The escalation is closed **at its source** rather than by narrowing the widened check,
+ * because the missing self-check is the actual defect and the widening is not.
+ *
+ * ⭐ The rule already existed one function away — `assignRoleAsActor`: *"an actor may not change
+ * their own role — ask another admin, so a mistake here cannot lock the org out."* This is the
+ * same rule about the other half of the same screen.
+ */
+describe('grantCapabilityAsActor — nobody grants themselves a capability (DEF-223)', () => {
+  const grantsFor = async (personId: string): Promise<string[]> => {
+    const rows = await sql<{ grant_name: string }[]>`
+      select grant_name from person_grants where person_id = ${personId} and revoked_at is null
+      order by grant_name`;
+    return rows.map((r) => r.grant_name);
+  };
+
+  it('⛔ REFUSES an admin granting a capability to THEMSELVES — the escalation, closed', async () => {
+    const org = await insertOrg('def223-self');
+    const admin = await insertPerson(org, 'Self-serving Admin');
+    await insertRoleRaw(admin, org, 'admin');
+
+    await expect(
+      asPerson(org, (tx) =>
+        grantCapabilityAsActor(tx, actorOf(admin, org), { personId: admin, capability: 'post_journal_entry' }),
+      ),
+    ).rejects.toThrow(AuthorizationError);
+
+    // ⭐ The row must not exist. A refusal that still wrote would be the defect with a message.
+    expect(await grantsFor(admin)).toEqual([]);
+  });
+
+  it('⛔ and so the self-grant route to appointing an admin is closed end to end', async () => {
+    // ⚠️ This is the *chain*, not a second copy of the test above: refused the grant, therefore
+    // refused the appointment. Without the first refusal this admin would now pass
+    // `assignRoleAsActor`'s widened check, which is exactly what made the missing self-check
+    // urgent rather than merely untidy.
+    const org = await insertOrg('def223-chain');
+    const admin = await insertPerson(org, 'Would-be Super');
+    await insertRoleRaw(admin, org, 'admin');
+    const target = await insertPerson(org, 'Would-be Admin');
+
+    for (const capability of SUPER_ADMIN_ONLY) {
+      await expect(
+        asPerson(org, (tx) =>
+          grantCapabilityAsActor(tx, actorOf(admin, org), { personId: admin, capability }),
+        ),
+      ).rejects.toThrow(AuthorizationError);
+    }
+
+    await expect(
+      asPerson(org, (tx) => assignRoleAsActor(tx, actorOf(admin, org), { personId: target, role: 'admin' })),
+    ).rejects.toThrow(/requires super_admin/);
+  });
+
+  it('ALLOWS granting to somebody ELSE, and records who granted it', async () => {
+    const org = await insertOrg('def223-other');
+    const admin = await insertPerson(org, 'Granting Admin');
+    await insertRoleRaw(admin, org, 'admin');
+    const target = await insertPerson(org, 'Recipient');
+    await insertRoleRaw(target, org, 'manager');
+
+    await asPerson(org, (tx) =>
+      grantCapabilityAsActor(tx, actorOf(admin, org), { personId: target, capability: 'post_journal_entry' }),
+    );
+
+    expect(await grantsFor(target)).toEqual(['post_journal_entry']);
+    // ⛔ `granted_by` is the ACTOR, never null — the authority chain is only a base case at
+    // `createFirstAdmin`, and every row after it names who is answerable for it.
+    const [row] = await sql<{ granted_by: string | null }[]>`
+      select granted_by from person_grants where person_id = ${target}`;
+    expect(row!.granted_by).toBe(admin);
+  });
+
+  it('⛔ REFUSES a manager outright — the authorize() gate is still the first check', async () => {
+    // The non-zero control for the two ALLOW paths: without it, this suite would pass against a
+    // function that had lost its `authorize` call and kept only the self-check.
+    const org = await insertOrg('def223-manager');
+    const manager = await insertPerson(org, 'Manager');
+    await insertRoleRaw(manager, org, 'manager');
+    const target = await insertPerson(org, 'Target');
+
+    await expect(
+      asPerson(org, (tx) =>
+        grantCapabilityAsActor(tx, actorOf(manager, org), { personId: target, capability: 'approve_item' }),
+      ),
+    ).rejects.toThrow(AuthorizationError);
+
+    expect(await grantsFor(target)).toEqual([]);
+  });
+
+  it('⛔ REFUSES a capability name that is not a real capability', async () => {
+    // ⚠️ The screen casts a form string to `Capability`, so the type is a promise the browser did
+    // not make. An unknown name would sit in `person_grants` forever, matching nothing in
+    // `authorize` and reading as a granted permission on the very screen that wrote it.
+    const org = await insertOrg('def223-bogus');
+    const admin = await insertPerson(org, 'Admin');
+    await insertRoleRaw(admin, org, 'admin');
+    const target = await insertPerson(org, 'Target');
+
+    await expect(
+      asPerson(org, (tx) =>
+        grantCapabilityAsActor(tx, actorOf(admin, org), {
+          personId: target,
+          capability: 'become_god' as Capability,
+        }),
+      ),
+    ).rejects.toThrow(/not a known capability/i);
+
+    expect(await grantsFor(target)).toEqual([]);
   });
 });

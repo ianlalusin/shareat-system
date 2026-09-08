@@ -102,7 +102,7 @@ lane D's T-216 files · anything under `ERP-rebuild` (read v1's `login-form.tsx`
 
 ## Slice 2 — contract
 
-> **Status**: 📝 **SPEC — lane B, 2026-09-07. Written before any code. Awaiting APPROVED.**
+> **Status**: ✅ **APPROVED 2026-09-07 (orchestrator) with `packages/auth/src/roles.ts` added to scope; BUILT 2026-09-08 (lane B, re-briefed from this text after the original lane's terminal was cleared).** Two deviations approved on build and recorded inline below (§2.4 "single-use" item 1 and §2.5 steps 2/6: the cookie clears on success only; §2.9: the `roles.ts` widening was taken, and the self-grant hole it exposed is DEF-223, closed in the same slice). See "Slice 2 — as built" at the end.
 >
 > ⛔ **Decision 3 as written cannot be built: the database refuses the second role row.** §2.1 is
 > the report (RULES §3.4a — *"report a spec defect; never silently work around it"*). §2.2 is the
@@ -207,7 +207,12 @@ refused with *"assigning 'admin' requires super_admin"*.
 - **Proposed follow-up, NOT in this slice** (it touches `roles.ts`, in neither lane's scope): widen
   that check to *"holds the `super_admin` role **or** an active grant for every capability
   `super_admin` holds that `admin` does not"*, i.e. the same derived set. One condition, one test.
-  Logged for the orchestrator to schedule; slice 2 does not touch `roles.ts`.
+  ~~Logged for the orchestrator to schedule; slice 2 does not touch `roles.ts`.~~ **Taken on
+  approval:** the orchestrator added `roles.ts` to scope; built as `holdsSuperAdminAuthority`
+  (super_admin role, OR admin role plus an active grant for every member of the derived set; an
+  empty set is false; a manager holding the set is refused). ⚠️ The widening exposed that
+  `/admin/users`' grant action had no self-check — an admin could self-grant the four and then
+  appoint admins — closed in the same slice by `grantCapabilityAsActor` (DEF-223).
 
 **If the orchestrator prefers the role-literal check widened INSIDE this slice, say so on approval
 and add `packages/auth/src/roles.ts` to scope** — it is ~6 lines and one test. I have left it out
@@ -397,7 +402,12 @@ permits exactly this (*"a short-lived signed cookie **or** server-side one-time 
 
 #### How single-use is enforced — and what actually guarantees it
 
-1. `/setup/actions.ts` calls `clearSetupIdentityCookie()` **before** opening the transaction.
+1. ~~`/setup/actions.ts` calls `clearSetupIdentityCookie()` **before** opening the transaction.~~
+   **Amended on build (orchestrator, 2026-09-08, on lane B's argument):** the cookie is cleared on
+   the **success path only**, after the transaction commits and before the session cookie is set.
+   Clearing first bought nothing — a replay is refused by the database either way (item 2) — and
+   cost a full re-sign-in for a mistyped PIN. On failure the cookie stays and the same 10-minute
+   window is re-submitted.
 2. ⭐ **The guarantee is the database, not the cookie.** A cookie can be copied; a replay reaches
    `bootstrapOrganization`, which takes the advisory lock and refuses because an organization now
    exists. **The token can only ever create the first organisation, and there is only ever one.**
@@ -443,7 +453,8 @@ copied from `sign-in/page.tsx:79-90` (phone portrait is the canvas).
 **`actions.ts`** — `createFirstRunAction(formData)`, `'use server'`:
 
 1. `readSetupIdentity()` → null → the §2.4 refusal. **The control, re-checked here.**
-2. `clearSetupIdentityCookie()`.
+2. ~~`clearSetupIdentityCookie()`.~~ **Amended on build:** the cookie is cleared in step 4, after the
+   first transaction commits (§2.4 "single-use", item 1).
 3. `transaction((tx) => bootstrapOrganization(tx, {...}))` — a plain transaction, no principal,
    §2.3.2. Fields read from the form; **the uid is read from the cookie, never from the form**
    (`tests/unit/no-client-supplied-actor.test.ts` is repo-wide law).
@@ -452,8 +463,10 @@ copied from `sign-in/page.tsx:79-90` (phone portrait is the canvas).
 5. `redirect('/')`.
 6. On failure: `redirect('/setup?error=' + errorMessage(err))` using
    `apps/erp/src/lib/constraint-messages.ts`, exactly as `settings/organization/actions.ts` does.
-   The cookie is already cleared, so a failed attempt sends Ian back through sign-in — correct: the
-   transaction rolled back, the system is still un-set-up, and slice 1 will hand him a fresh token.
+   ~~The cookie is already cleared, so a failed attempt sends Ian back through sign-in.~~ **Amended on
+   build:** the cookie is kept on failure, so a typo re-submits the same form inside the same
+   window; the transaction rolled back and the system is still un-set-up. When the window lapses,
+   the page's own refusal sends him through sign-in for a fresh token.
 
 **⚠️ Deviation from decision 4, raised once and then built (RULES §4 / bible §0.4).** Decision 4
 says the PIN is *"printed once on the success screen, the same rule as the CLI."* **The screen asks
@@ -535,7 +548,10 @@ roadmap, the defects register, the PIN sign-in path, or lane E's and lane D's fi
 ### 2.9 Out of scope
 
 Linking a Firebase account to a person once an org exists (that is `/admin/users`, a follow-up —
-decision 5). Widening `roles.ts:218` (§2.2, proposed, not taken). A second store, sales channels,
+decision 5). ~~Widening `roles.ts:218` (§2.2, proposed, not taken).~~ **Taken on approval** (the
+orchestrator added `packages/auth/src/roles.ts` to scope, 2026-09-07); built as
+`holdsSuperAdminAuthority`, with the self-grant hole it exposed in `/admin/users` closed by
+`grantCapabilityAsActor` in the same slice (DEF-223). A second store, sales channels,
 items, opening balances (`/cutover` owns those). Password reset, email verification, or anything
 about the Firebase account itself — that is v1's project and v1's console. Rate-limiting `/setup`
 (it is closed after one success and gated by a verified identity before that).
@@ -569,3 +585,197 @@ takes a uid string, and the integration tests pass one. The *verification* of th
   one. Choose it before you start. You can change it later from `/staff`.
 - **Nothing new for you to set up for slice 2.** The three GitHub Secrets in the block above are
   slice 1's; this slice needs nothing from you until the screen is live.
+
+---
+
+## Slice 1 — as built (lane D, 2026-09-08)
+
+> **Status**: ✅ **BUILT, and reviewed once.** typecheck clean · unit 1096 passed / 1 skipped, one
+> red that is an uncommitted-tree artifact (§1.6) · 5 integration cases green on the lane database.
+> **Not** built: the `next build` and the live Firebase sign-in on 9008 — the orchestrator reserved
+> both. §1.6 is the review delta.
+
+### 1.1 The path, file by file
+
+| File | What it does |
+|---|---|
+| `apps/erp/src/lib/firebase-auth-admin.ts` **(new)** | `verifyFirebaseIdToken(idToken)` → `{ uid, email, displayName }`. Its own `firebase-admin` app named `'shareat-auth'`, `projectId` only, **no credential** — decision 2 |
+| `apps/erp/src/app/sign-in/EmailSignInForm.tsx` **(new)** | Client. `signInWithEmailAndPassword` → `getIdToken()` → posts the **token** to the action. `inMemoryPersistence`, so Firebase leaves no second durable credential in the browser |
+| `apps/erp/src/app/sign-in/lib.ts` **(new)** | `resolveVerifiedSignIn(tx, uid)` → `signed-in` \| `first-run` \| `not-linked`, and `NOT_LINKED_MESSAGE` |
+| `apps/erp/src/app/sign-in/actions.ts` | `signInWithEmailAction` — the side effects only: session cookie, or setup-identity cookie + `/setup`, or the sentence |
+| `apps/erp/src/app/sign-in/page.tsx` | The email form beside the PIN form, under an `or` divider |
+| `packages/core/src/env.ts` | `publicEnv()`: **three required, two optional** — §1.3 |
+| `.env.example` | Which Firebase values email sign-in needs, and where each is actually set |
+| `tests/integration/email-sign-in.test.ts` **(new)** | The three branches, plus two negative controls and the pinned sentence |
+| `tests/unit/env.test.ts` | `publicEnv`'s new shape, with its own non-zero control |
+
+**The ratified refusal, verbatim and pinned by a test:** *"This account is not linked to a person.
+Ask an administrator to link it"*.
+
+### 1.2 ⭐ Three decisions taken while building, each a deviation worth reading
+
+1. **`sign-in/lib.ts` exists because a `'use server'` module cannot be tested.** Every export of one
+   is a public endpoint, and exercising the action needs a request, a cookie store and a redirect.
+   So the *decision* lives in a plain module over a `tx` — the per-directory `lib.ts` habit this
+   codebase already has — and the action keeps the parts a test could only assert against a mock.
+   ⚠️ It takes a `tx` and never opens one, so it does **not** become a fourth entry in
+   `tests/unit/no-direct-transaction-in-erp.test.ts`' pre-auth allowlist.
+2. **Errors that are not authentication failures are no longer echoed to the visitor in
+   production** (email path only; the PIN path is untouched, decision 6). A missing
+   `FIREBASE_PROJECT_ID` or a database that is down went to `?error=` in full. `/sign-in` is
+   unauthenticated, and `api/health/route.ts` already ruled on this exact question: detail outside
+   production, one sentence inside it, the reason logged either way.
+3. **`publicEnv()` was already dead code — slice 1 gave it its first caller**, so its contract was
+   decided here rather than inherited. §1.3.
+
+### 1.3 `publicEnv()` — three required, two optional, and the split is identity vs everything else
+
+`signInWithEmailAndPassword` reads an api key, an auth domain and a project id. That is the whole
+list. So those three stay hard-required and a blank one fails loudly at the form; and
+`NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` + `NEXT_PUBLIC_FIREBASE_APP_ID` became optional, because
+**neither is on this path and one of them belongs to a different project** (storage is
+`shareat-hub-v2`; identity is v1's — decision 1). A blank bucket naming another project's default
+bucket must not be able to hide the owner's sign-in form.
+
+⚠️ **Not a §7 rule 9 relaxation**: nothing is defaulted and no insecure value is substituted. Absent
+stays absent, and a consumer that needs one of the two demands it at its own call site.
+⚠️ The APP_ID half goes one step beyond what the orchestrator asked for (which named the bucket
+only) and is called out here for that reason: it is one fewer secret that can silently hide the form,
+and Firebase Auth never reads it (`terminal/firebase.ts` already treats it as absent-able).
+
+### 1.4 ⚠️ Two findings that outlive this slice
+
+- **`apps/erp/tests/integration/**` matches NO vitest include glob.** The integration project takes
+  `tests/integration/**`, `tests/invariants/**` and `packages/**/tests/integration/**` only — so an
+  app-level integration test placed the obvious way would never have run, and would have been
+  credited. This slice's test lives at `tests/integration/email-sign-in.test.ts` for that reason.
+  It is the DEF-081 shape again, one directory over.
+- **`organizationsRepo.anyOrganizationExists` now has a third caller** (`sign-in/lib.ts`), and its
+  header says *"Both callers are `bootstrapOrganization`; nothing else."* The read still satisfies
+  DEF-214's condition — explicit, a named caller, a boolean and never org rows — but the comment is
+  now stale by one. Lane B owns that file.
+
+### 1.5 The tests, and what each is a control for
+
+| # | Case | Why it cannot be vacuous |
+|---|---|---|
+| 1 | A linked uid → `signed-in`, and `resolveActor` on the returned token yields that person, that org, `credentialKind: 'firebase'`, `storeId: null` | It asserts the token *works*, not that a branch was taken |
+| 2 | An unknown uid on an **empty** database → `first-run`, nothing written | — |
+| 3 | An unknown uid once an org exists **with no Firebase credential anywhere** (the CLI path) → `not-linked` | Same input as case 2, opposite outcome: the branch turns on the organisation, not on the credential |
+| 4 | An unknown uid alongside an already-linked one → `not-linked` | The lived shape — Ian is set up, somebody else's account arrives |
+| 5 | `NOT_LINKED_MESSAGE` is the ratified wording | A paraphrase at a call site fails |
+
+⚠️ **Stated plainly: these were written after the code, not before it.** The handoff ordered the
+files and the seam was already built; the tests are executed evidence, not a TDD claim.
+
+### 1.6 The review delta (second read, 2026-09-08)
+
+| # | Finding | What changed |
+|---|---|---|
+| 1 | ⛔ **Open redirect, pre-existing.** `page.tsx` accepted `next=//evil.com` (`startsWith('/')` is true of a protocol-relative URL); `actions.ts`' `safeNext` blocked `//` but not `/\evil.com` — **a URL parser reads a backslash as a slash** | `safeNext` moved to `sign-in/lib.ts`, tightened to *"a `/`, then a character that is neither `/` nor `\`"*, and now used by **both** callers. It could not simply be exported from `actions.ts`: every export of a `'use server'` module is a public endpoint and must be async. `apps/erp/tests/sign-in-safe-next.test.ts` — **red first**, on `/\evil.com` returned unchanged |
+| 2 | The unavailable-config notice rendered `publicEnv()`'s full zod issue list on an unauthenticated page | The list shows **outside production only**; production gets one sentence and a pointer to `.env.example`. ⚠️ Deviation: the reviewer's wording said *"the reason is in the server log"* — there is no server log on that path, because the check deliberately lives in the CLIENT component (a `NEXT_PUBLIC_*` value is only *guaranteed* inlined into the browser bundle, so that is the one place the check cannot be wrong about what the browser will get). Claiming a log that does not exist would be worse than naming none |
+| 3 | `busy` was released only by the Firebase-side catch, so an action redirect back to `/sign-in?error=…` — same segment, a soft navigation, no remount — left the button disabled and reading "Signing in…" until a reload | `finally { setBusy(false) }` around the action call, plus a `catch` that shows a sentence when the action itself fails. ⛔ A `NEXT_REDIRECT` digest is **re-thrown**, never reported — turning a working navigation into "something went wrong" would be a new bug in place of the old one |
+| 4 | `env.test.ts` covered a BLANK api key but never an ABSENT one | The absent case added. Blank and absent are different inputs — an unset GitHub Secret arrives absent, an empty `.env.local` line arrives blank — and this file exists for that distinction |
+| 5 | `terminal/firebase.ts` used `??` for the storage bucket, so the now-legal `''` flowed through instead of falling back | `??` → `\|\|`. ⭐ **And the same one line below it, `NEXT_PUBLIC_FIREBASE_APP_ID`** — §1.3 made that optional too, so it has the identical defect from the identical cause. The two identity values above stay `??`, because `publicEnv()` still hard-requires them |
+| 6 | `verifyFirebaseIdToken` had never executed in any test | `apps/erp/tests/firebase-auth-admin.test.ts` — an empty token → the no-token sentence; a malformed one → `AuthenticationError` matching *"could not be verified"*, with the token absent from the message. No network: both refusals happen before Google's keys would be fetched. ⭐ It also proves decision 2's other half by execution — `initializeApp({ projectId }, …)` with **no credential** really does construct, or these cases would fail with a plain `Error` |
+| 7 | `session.ts`' `clearSetupIdentityCookie` docstring said `/setup` clears the cookie *before* opening its transaction; slice 2 now clears it after the commit, success path only | The sentence made true, with the reason: a failed attempt keeps the window so a mistyped PIN is re-submitted rather than costing a trip back through Firebase sign-in — and nothing is given away, because the rollback leaves the system un-set-up |
+
+### 1.7 ⚠️ The unit gate's one red is an uncommitted-tree artifact, not a defect
+
+`tests/unit/no-direct-transaction-in-erp.test.ts` → *"every pre-auth exemption still matches a real
+file"*. Slice 2 added `apps/erp/src/app/setup/{actions,lib}.ts` to `PRE_AUTH_PATHS`, and that check
+reads `git ls-files` — **tracked** files only. Both exist on disk and neither is committed yet, so the
+guard reads them as stale entries. It clears the moment they are staged.
+
+⭐ Worth a small fix in that guard by whoever owns it next: it cannot tell *"this exemption is stale"*
+from *"this file is not committed yet"*, and every future lane that adds a pre-auth path will hit the
+same red — a guard that cries wolf during normal work is a guard somebody eventually deletes.
+
+✅ **Fixed the same hour (orchestrator):** the guard now enumerates with
+`git ls-files --cached --others --exclude-standard`, the same call `nav-route-reachability` makes, so
+an untracked pre-auth file satisfies the exemption check and an untracked offender is caught before
+it is staged. 3/3 with `setup/` untracked.
+
+### FOR IAN — slice 1
+
+- **Five values, and they are set in two different places.** The three `NEXT_PUBLIC_*` ones are
+  inlined at BUILD time from **GitHub Secrets** (`deploy.yml` passes exactly them to `npm run
+  build`), so changing one needs a rebuild, not a restart:
+  `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`,
+  `NEXT_PUBLIC_FIREBASE_PROJECT_ID` — all from `ERP-rebuild/src/firebase/config.ts`.
+  `FIREBASE_PROJECT_ID=studio-7300228488-a394e` goes in the droplet's
+  `/srv/shareat-shared/.env.local`, read at RUNTIME. ⛔ It must equal
+  `NEXT_PUBLIC_FIREBASE_PROJECT_ID`: if the browser signs in against one project and the server
+  verifies against another, every correct password is rejected as unverifiable.
+- **`NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` and `NEXT_PUBLIC_FIREBASE_APP_ID` no longer matter for
+  signing in.** Leave them as they are.
+- **No service account is needed to sign anybody in.** Verification uses Google's public keys. The
+  service-account key on the droplet is for storage, and it is not on this path.
+- **⚠️ On an empty production database, the FIRST person who signs in becomes the owner.** That is
+  decision 5 working as designed — a verified account with no person, and zero organisations, is
+  handed a 10-minute token for `/setup`. Any account in v1's Firebase project qualifies. So create
+  the organisation yourself before the URL is shared, and the door closes for good the moment it
+  exists.
+- **For the 9008 smoketest**, the same three `NEXT_PUBLIC_*` values plus `FIREBASE_PROJECT_ID` must
+  be in the repo's `.env.local` — they are blank there today, and with them blank the form replaces
+  itself with *"Email sign-in is not configured on this server"* and the PIN form keeps working.
+  *(Orchestrator: they were exported in-process to the dev server from v1's public client config,
+  never written to the repo; the browser pass ran against a throwaway migrated database.)*
+
+---
+
+## Slice 2 — as built (lane B, 2026-09-08; written by the orchestrator from lane B's READY)
+
+**Deviation 1 — the setup cookie clears on SUCCESS only.** §2.4 item 1 cleared it before the
+transaction. The spec's own argument is that the guarantee is the database, so clearing first bought
+nothing — and it cost the whole 10-minute window to a mistyped PIN. Now cleared after the commit and
+before the session cookie; a failure leaves it and the same form is re-submitted. Approved 2026-09-08.
+
+**Deviation 2 — `roles.ts` widened inside this slice.** §2.2 proposed it as a follow-up. Taken on
+approval: `holdsSuperAdminAuthority` accepts the `super_admin` role OR the `admin` role plus an active
+grant for every member of `SUPER_ADMIN_ONLY_CAPABILITIES`. The second branch requires the role
+`admin` specifically (an adminless manager holds `manage_users` and would otherwise reach the check;
+manager + the delta is not super_admin). An empty derived set returns false rather than admitting
+everyone. Eight cases, the two ALLOW cases watched red first.
+
+**DEF-223, found and closed in-slice.** `grant_capability` is admin-true and `/admin/users` had no
+self-check, so an admin could grant capabilities to themselves — that already conceded every
+super-admin POWER; the widening would have added the role NAME. New gated entry point
+`grantCapabilityAsActor` (authorize → self-check → known-capability check → write with `granted_by`
+= actor); the action's grant branch calls it. Revoking your own grant stays allowed: it only narrows.
+Five cases including the chain (all four self-grants refused, therefore the appointment still refused)
+and a manager as the non-zero control.
+
+**After the commit point, a failure redirects to `/sign-in`, not `/setup`** (lane C's review): once
+the organisation exists and the cookie is cleared, `/setup` would only re-refuse with "window has
+closed". `setupFailureRedirect(organisationCreated, message)` is a pure function in `setup/lib.ts`, six
+cases, one asserting the sentence never says "window has closed".
+
+**Raw errors are masked on the public screen in production** (both reviewers): `setupErrorMessage`
+keeps `AuthenticationError`/`AuthorizationError`, every mapped constraint sentence and every plain
+sentence with no SQLSTATE (all of `bootstrapOrganization`'s), and masks the rest in production while
+logging them. `isUnmappedInfrastructureError` is pure and executed — mutation-tested after the fact,
+which found one untested guard and produced the one test lane B would not otherwise have written.
+
+**A blank `firebaseUid` is refused before anything is written** — it used to be skipped, so the
+organisation committed with no credential and `signInWithFirebase` failed after the point of no
+return. Absent still means the CLI path. Four cases, red first.
+
+**Double-submit guard on `/setup`**: `SubmitButton.tsx`, a fourth file in `setup/` (sanctioned). Not
+`useFormStatus` — this app is on react-dom 18.3.1 and the hook does not exist; the button listens for
+the form's `submit` event so it can only ever eat the second attempt.
+
+**CLI dry run** reads `anyOrganizationExists`, not only `getOrgByCode` — since T-232 the binding rule
+is first-run-happens-once. **Cycle break**: `normaliseDigits`/`normaliseBranchCode` moved to the leaf
+`organizations/identifiers.ts`; `normaliseBranchCode` re-exported so no caller changed. **The pinned
+set**: `super-admin-capability-set.test.ts` asserts the four members with a backfill instruction in
+its failure message; the constant lives in `capabilities.ts` (moved on review — its home in
+`roles.ts` cost the whole `@shareat/db` graph on import: 1.94 s through the barrel, 2.03 s
+deep-importing `roles.ts`, **70 ms** from `capabilities.ts`, which imports nothing. ⭐ In this repo an
+import cost is decided by which FILE a constant lives in, not by which path you import it through —
+the "under 3 s, keep it" rule would have kept it in the wrong place). `createFirstAdmin`'s docstring
+says the equivalence holds at creation time.
+
+**Not verified by lane B and stated as such:** the build, the browser pass (both the orchestrator's,
+green), anything needing Firebase or the droplet, the advisory lock under real concurrency,
+`SubmitButton` disabling in a real browser.

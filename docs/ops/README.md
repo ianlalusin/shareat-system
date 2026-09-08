@@ -105,18 +105,60 @@ Plus a fifth unit that is not a scheduled job but the app itself: **`shareat-erp
 shipping the code is not the finish line, installing and arming the timer is. `docs/tasks/205-first-production-deployment.md`
 covers the deployment that finally gives these something to run against.
 
-## ⭐ Standing up an organization on production — `npm run bootstrap-org` (T-228)
+## ⭐ Standing up an organization on production (T-228, T-232)
 
-⛔ **This is the one command here that is NOT a job, must NOT be given a systemd unit, and is run
-by a person — Ian — not by an agent.** Everything else on this page is a timer. This is a one-shot
-that writes to the live database and prints a live credential once.
-
-**Why it exists:** nothing in this codebase had ever created an organization (DEF-195). Production
-is live and migrated and held **zero** organizations, which is why
+**Why this exists at all:** nothing in this codebase had ever created an organization (DEF-195).
+Production is live and migrated and held **zero** organizations, which is why
 `shareat-finding-observation.service` exits 1 nightly with *"no orgs were processed"*. That failure
 is correct; this is the fix.
 
-### The invocation
+⭐ **There are two paths, and they are the same transaction.** Both call one function,
+`bootstrapOrganization` (`packages/domain/src/organizations/index.ts`), so the screen and the
+command cannot drift — a step added to first-run setup is added to both, or to neither.
+
+| | Path | When |
+|---|---|---|
+| **1. Primary** | **`/setup`, in a browser** | Normally. Sign in with your email and password; the screen appears because no organisation exists |
+| **2. Fallback** | `npm run bootstrap-org` on the droplet | No Firebase identity yet, no browser that can reach the site, or a recovery |
+
+⛔ **Neither is a job.** Everything else on this page is a timer; these are one-shots that write to
+the live database, run by a person — Ian — not by an agent.
+
+### ⭐ Path 1 — `/setup`, the first-run screen (T-232)
+
+1. Open the site and sign in at **`/sign-in`** with the email and password you use in v1.
+2. That account has no person in this system and there is no organisation yet, so you land on
+   **`/setup`** instead of being refused. The window is **10 minutes**; after that, sign in again.
+3. Fill in the organisation code and name, **your real name**, the first store's code and name, and
+   **choose a 6-digit PIN**.
+4. Submit. The organisation, its chart of accounts and expense categories, your person, your
+   role and the owner capabilities, the first store, its default room, your store scope, your PIN
+   and the link to your email account all land in **one transaction** — or none of them do. Then
+   you are signed in, on `/`.
+
+⚠️ **You type the PIN; it is never shown back to you.** Unlike the command, the screen does not
+generate one — echoing a live credential into a web page puts it in the browser cache, the
+back-button history and any screenshot. Choose it before you start. You can change it later from
+`/staff`.
+
+⚠️ **If the submit is refused** (a duplicate code, a five-digit PIN, a blank name) nothing is
+written, the system is still un-set-up, and you can simply correct the form and submit again —
+your 10-minute window is still open. Only a successful run consumes it.
+
+⛔ **`/setup` closes forever the moment an organisation exists**, from the page, from the action and
+from the database, independently. Revisiting it afterwards says *"This system is already set up."*
+People are added from `/admin/users` after that, and stores from `/admin/stores`.
+
+⚠️ **It needs the Firebase identity settings to be right**, because there is no way onto the screen
+without verifying a real ID token — see T-232's `FOR IAN` block for the exact GitHub Secrets and the
+droplet's `FIREBASE_PROJECT_ID`. If sign-in itself cannot work, use path 2.
+
+### Path 2 — `npm run bootstrap-org`, the fallback
+
+⛔ **Must NOT be given a systemd unit** — it prints a live credential once, and every `*.service`
+on this page redirects stdout to a log file.
+
+#### The invocation
 
 ```sh
 # On the droplet, from /srv/shareat, with the app's own .env.local in place.
@@ -130,12 +172,12 @@ npm run bootstrap-org -- --code=SHAREAT_OPC --name="SHAREAT OPC"                
 | Guard | Behaviour |
 |---|---|
 | **No defaults** | Every argument except `--pin` is required. There is no `SHAREAT_OPC` fallback in the code — the example above is documentation, not a default |
-| **`--confirm` required** | Without it: prints the plan, writes nothing, exits 0. The dry run is the default |
-| **Duplicate code** | Refused, exits 1, writes nothing. A second run is a no-op, not a second org |
+| **`--confirm` required** | Without it: prints the plan and writes nothing. The dry run is the default. ⚠️ It exits **0** only when the run would be allowed; if an organisation already exists the refusal comes first and it exits **1**, with or without `--confirm` |
+| **Any existing organization** | Refused, exits 1, writes nothing. ⚠️ Since T-232 this is stricter than a duplicate *code*: first run happens **once**, so a second organisation under a brand-new code is refused too. The dry run asks the same question, so a plan that prints clean will not then fail on `--confirm` |
 | ⛔ **NOT guarded on database name** | The inverse of `dev-seed.ts`, deliberately. `dev-seed` refuses anything but `*_dev` because it must never reach production; this one is *for* production |
-| **One transaction** | Org, chart of accounts, expense categories, first admin, first store, its default room, that admin's store scope, and the PIN. All of it, or none of it |
+| **One transaction** | Org, chart of accounts, expense categories, first admin **and the owner's extra capabilities**, first store, its default room, that admin's store scope, and the PIN. All of it, or none of it |
 
-### ⚠️ The PIN is shown ONCE
+#### ⚠️ The PIN is shown ONCE
 
 The script prints the PIN to **stdout, exactly once**, and only its hash is stored — it is not
 recoverable, by anyone, from anywhere. Supply your own with `--pin=NNNNNN` or let it generate one
@@ -145,7 +187,7 @@ recoverable, by anyone, from anywhere. Supply your own with `--pin=NNNNNN` or le
 stdout to `/var/log/shareat/*.log`; under a unit, that credential would be written to a log file and
 would stay there. Run it by hand, read the PIN, sign in, change it from the app.
 
-### What it deliberately does NOT do
+### What first-run setup deliberately does NOT do — either path
 
 - **No second store.** It creates exactly one, because one is what `setPin` requires. **SharEat
   Malvar and the rest are created afterwards through `/admin/stores`** — the supported path, and a
@@ -153,13 +195,26 @@ would stay there. Run it by hand, read the PIN, sign in, change it from the app.
 - **No sales channels, no items, no opening balances.** `/cutover` (T-134) owns opening balances;
   the rest are ordinary screens. ⚠️ A store with no sales channel has nowhere for a sales day to
   land — the store's readiness checklist says so, and that is the next thing to do after signing in.
-- **No `super_admin`.** `admin` is what `manage_stores` and `manage_users` need, and it is also what
-  `createStore`'s scope fan-out grants against — a `super_admin` first admin would end up with no
-  store scope row and nowhere to land. Item approval (T-148) is a later, deliberate `/admin/users`
-  action.
+- **No `super_admin` ROLE — but the same powers.** The first person gets the `admin` role, because
+  `createStore`'s scope fan-out grants against admins and a `super_admin` first admin would end up
+  scoped to no store and land nowhere. ⭐ **T-232 adds the rest as explicit grant rows:** the
+  capabilities `super_admin` holds and `admin` does not (`approve_item`, `post_journal_entry`,
+  `cross_org_access`, `view_franchise_sales`), `granted_by` NULL, in the same transaction. The
+  command prints them under `owner capabilities`. So item approval (T-148) works on day one, and
+  the equivalence is exact — a test asserts it capability by capability.
+- ⭐ **The owner CAN appoint a second `admin` or `super_admin`** from `/admin/users`, and it is
+  worth knowing why that needed saying. The check read the actor's role NAME, which a grant row can
+  never satisfy, so the owner — who holds `admin` plus the grants — was refused. T-232 widened it to
+  accept the `super_admin` role **or** the `admin` role plus every one of those capabilities.
+  Managers and staff were never affected.
+- ⛔ **Nobody may grant a capability to THEMSELVES** (DEF-223, closed in T-232). `grant_capability`
+  is an admin capability, and `/admin/users` had no self-check — so any admin could widen their own
+  authority, and once the check above accepted grants, could then appoint further admins with it.
+  Granting to somebody else is unaffected; so is REVOKING your own, which only ever narrows.
 
 ⭐ **Ian runs this himself.** `docs/IAN-SETUP-CHECKLIST.md` §4b's principle — no standing production
-credentials through an agent — covers this as surely as it covers provisioning.
+credentials through an agent — covers this as surely as it covers provisioning, and it is the same
+reason `/setup` asks *him* to type the PIN rather than an agent supplying one.
 
 ## ⛔ FIRST — getting `docs/ops` onto the droplet, because the pipeline never ships it
 

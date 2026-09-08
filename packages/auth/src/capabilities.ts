@@ -777,3 +777,41 @@ export const CONDITIONAL_CAPABILITIES: ReadonlySet<Capability> = new Set<Capabil
 export const ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER: readonly Capability[] = CAPABILITIES.filter(
   (c) => CAPABILITY_MATRIX[c].admin && !CAPABILITY_MATRIX[c].manager,
 );
+
+/**
+ * ⭐ **Exactly the capabilities `super_admin` holds that `admin` does not — DERIVED, never
+ * listed.** Today it is four: `approve_item`, `post_journal_entry`, `cross_org_access`,
+ * `view_franchise_sales`.
+ *
+ * Same discipline and same reason as `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER` above: computed from
+ * the matrix so the two can never silently drift apart. Its sibling — that one is the delta
+ * `admin` has over `manager`; this one is the delta `super_admin` has over `admin`.
+ *
+ * ## What depends on it
+ *
+ * T-232 §2.2. The first person of an organization cannot hold two role rows —
+ * `person_roles_active_person_org_unique` allows at most one active role per (person, org) — so
+ * `createFirstAdmin` gives them the `admin` role **plus these capabilities as explicit
+ * `person_grants` rows**. Because no capability is `admin: true, super_admin: false`, that is an
+ * exact equivalence rather than a downgrade, and `assignRoleAsActor` accepts it in place of the
+ * `super_admin` role literal.
+ *
+ * ⛔ **One definition, imported everywhere — `packages/domain` must never re-derive it.** If the
+ * set `createFirstAdmin` GRANTS ever stopped matching the set `assignRoleAsActor` DEMANDS, the
+ * organisation's first admin would quietly lose the ability to appoint a second one, with no error
+ * raised anywhere.
+ *
+ * ⚠️ **The grants are MATERIALISED once, at creation.** The set is always current; the rows are
+ * not. Adding a fifth member leaves every existing owner silently without it, and removing one
+ * leaves a stale grant — a live authority nobody decided to give. So a change here is a data
+ * migration, not an edit: write the backfill (and the revocation) for existing `person_grants`
+ * first. `packages/auth/tests/super-admin-capability-set.test.ts` pins the set so that day arrives
+ * as a failing test with those instructions attached.
+ *
+ * ⭐ It lives HERE rather than in `roles.ts` for a measured reason: `roles.ts` imports
+ * `@shareat/db`, so a test that only wanted this constant paid ~2 s of schema import to read it.
+ * This file imports nothing at all.
+ */
+export const SUPER_ADMIN_ONLY_CAPABILITIES: readonly Capability[] = CAPABILITIES.filter(
+  (c) => CAPABILITY_MATRIX[c].super_admin && !CAPABILITY_MATRIX[c].admin,
+);

@@ -346,3 +346,60 @@ describe('T-232 cases 7 and 8 — refusals leave the database untouched', () => 
     expect(await countOf('organizations')).toBe(0);
   });
 });
+
+// -------------------------------------------------------------------------------------
+// Case 9 — a uid that is present but blank. Found by the Opus review, 2026-09-08.
+// -------------------------------------------------------------------------------------
+
+describe('T-232 case 9 — ⛔ a blank firebaseUid is refused, never silently skipped', () => {
+  it('refuses BEFORE anything is written, rather than committing an org with no credential', async () => {
+    // ⛔ The defect: `input.firebaseUid?.trim()` made `'   '` falsy, so the credential step was
+    // skipped and the organisation committed anyway. `/setup` would then call `signInWithFirebase`
+    // with that uid, find no credential row, and fail — AFTER the point of no return, with the
+    // organisation created and first-run setup closed forever. The one path with no retry.
+    //
+    // ⚠️ It is refused beside the PIN check, for the same stated reason: finding out after
+    // creating an organization is a bad time to learn it.
+    await expect(
+      transaction((tx) =>
+        bootstrapOrganization(tx, { ...INPUT, code: uid('BLANKUID'), firebaseUid: '   ' }),
+      ),
+    ).rejects.toThrow(/firebase/i);
+
+    expect(await countOf('organizations')).toBe(0);
+    expect(await countOf('persons')).toBe(0);
+    expect(await countOf('person_credentials')).toBe(0);
+  });
+
+  it('refuses an empty string too — the same value, spelled differently', async () => {
+    await expect(
+      transaction((tx) => bootstrapOrganization(tx, { ...INPUT, code: uid('EMPTYUID'), firebaseUid: '' })),
+    ).rejects.toThrow(/firebase/i);
+
+    expect(await countOf('organizations')).toBe(0);
+  });
+
+  it('⭐ but null and undefined still mean "the CLI path" and are allowed', async () => {
+    // The non-zero control for the two refusals above: absent is a legitimate, tested case, and a
+    // check that refused it would break `scripts/bootstrap-org.ts` outright.
+    const explicitNull = await transaction((tx) =>
+      bootstrapOrganization(tx, { ...INPUT, code: uid('NULLUID'), firebaseUid: null }),
+    );
+    expect(explicitNull.firebaseCredentialId).toBeNull();
+    expect(explicitNull.personId).toBeTruthy();
+  });
+
+  it('⭐ and a uid with surrounding whitespace is TRIMMED, not refused — it names a real account', async () => {
+    const bare = uid('padded');
+    const result = await transaction((tx) =>
+      bootstrapOrganization(tx, { ...INPUT, code: uid('PADUID'), firebaseUid: `  ${bare}  ` }),
+    );
+
+    expect(result.firebaseCredentialId).toBeTruthy();
+    // ⛔ Stored trimmed, so `signInWithFirebase` — which is handed the raw verified uid — matches it.
+    const credential = await transaction((tx) =>
+      sessionsRepo.findActiveCredentialByExternalId(tx, bare),
+    );
+    expect(credential?.personId).toBe(result.personId);
+  });
+});

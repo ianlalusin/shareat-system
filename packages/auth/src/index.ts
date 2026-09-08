@@ -9,13 +9,14 @@ export {
   CAPABILITY_MATRIX,
   CONDITIONAL_CAPABILITIES,
   ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER,
+  SUPER_ADMIN_ONLY_CAPABILITIES,
 } from './capabilities';
 export type { Role, Capability, CapabilityScope } from './capabilities';
 
 export { authorize, AuthorizationError } from './authorize';
 export type { Actor, AuthorizeContext } from './authorize';
 
-export { assignRole, assignRoleAsActor, elevateManager } from './roles';
+export { assignRole, assignRoleAsActor, elevateManager, grantCapabilityAsActor } from './roles';
 export type { AssignRoleInput, AssignRoleAsActorInput, AssignRoleResult } from './roles';
 
 export {

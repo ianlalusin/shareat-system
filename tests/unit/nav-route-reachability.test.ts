@@ -155,6 +155,11 @@ const UNLINKED_BY_DESIGN: Record<string, string> = {
   '/sign-in':
     'Reached by redirect when there is no session. `nav.tsx` renders nothing without one, so a ' +
     'nav entry pointing here could never be shown to anybody who needed it.',
+  '/setup':
+    'The first-run screen. Reached only by redirect from /sign-in, carrying a verified Firebase ' +
+    'identity, and only while zero organizations exist. `nav.tsx` renders from the session, and ' +
+    'there is no session here, nor any person for one to belong to, so a nav entry could never ' +
+    'be shown to the one person who needs it. It refuses itself the moment an org exists.',
 };
 
 describe('T-227 — nav and routes agree, in both directions', () => {

@@ -46,7 +46,9 @@ import {
   type Tx,
 } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
-import { normaliseBranchCode } from '../organizations';
+// ⭐ The LEAF module, not `../organizations` — `organizations/index.ts` imports `createStore` from
+// this file, so importing its barrel back would close an import cycle. See `identifiers.ts`.
+import { normaliseBranchCode } from '../organizations/identifiers';
 
 const CAPABILITY = 'manage_stores' as const;
 

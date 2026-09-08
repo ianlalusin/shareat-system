@@ -183,7 +183,16 @@ export async function setIdentity(
 }
 
 // -----------------------------------------------------------------------------------------
-// T-232 slice 2 — first-run setup. Both callers are `bootstrapOrganization`; nothing else.
+// T-232 — first-run setup.
+//
+// `lockFirstRun` has exactly one caller, `bootstrapOrganization`, and should keep exactly one:
+// it is that function's critical section, not a general-purpose lock.
+//
+// `anyOrganizationExists` has three, all asking the same question at a different distance:
+// `bootstrapOrganization` (the control), `apps/erp/src/app/sign-in/lib.ts` (slice 1's three-way
+// decision — session, /setup, or refusal), and `apps/erp/src/app/setup/lib.ts` (the screen's own
+// presentation check). ⚠️ Only the first is a gate; the other two buy a sentence a person can act
+// on. Adding a fourth is fine; adding one that treats the answer as authorization is not.
 // -----------------------------------------------------------------------------------------
 
 /**
@@ -212,10 +221,11 @@ export async function lockFirstRun(tx: Tx): Promise<void> {
  * ⛔ **A cross-org read with no principal, which this repo has ruled on once already.**
  * `apps/erp/src/app/expenses/lib.ts:62-66` (T-231 slice 3 / DEF-214) deleted `listOrgs()` for being
  * exactly that, and set the condition for one coming back: *"an explicit system-principal read WITH
- * a caller."* This is that — explicit, two named callers, and it returns a **boolean**, never org
- * rows, so it cannot become a cross-org listing by a later "small" change.
+ * a caller."* This is that — explicit, with the three named callers listed in this section's
+ * header, and it returns a **boolean**, never org rows, so it cannot become a cross-org listing by
+ * a later "small" change.
  *
- * ⚠️ `organizations` carries FORCE ROW LEVEL SECURITY (migration 0011:114-118), so under a role
+ * ⚠️ `organizations` carries FORCE ROW LEVEL SECURITY (migration 0011:115-118), so under a role
  * that does not bypass RLS this returns `false` on a populated database — and the INSERT that
  * follows is then refused by the same policy's WITH CHECK. The failure direction is a refusal,
  * never a second organisation.

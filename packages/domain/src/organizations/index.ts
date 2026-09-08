@@ -52,16 +52,20 @@ import {
   authorize,
   isValidPinFormat,
   setPin,
-  CAPABILITIES,
-  CAPABILITY_MATRIX,
+  SUPER_ADMIN_ONLY_CAPABILITIES,
   type Actor,
   type Capability,
 } from '@shareat/auth';
-// ⚠️ T-232 slice 2. `stores/service.ts` imports `normaliseBranchCode` from THIS file, so this
-// edge closes a cycle. It is safe only because everything crossing it in both directions is a
-// hoisted `function` declaration — ⛔ never move `createStore` or `normaliseBranchCode` behind a
-// module-scope `const`, which would be a TDZ error at import time rather than a type error.
 import { createStore } from '../stores/service';
+// ⭐ The two pure identifier helpers used to live in THIS file, and `stores/service.ts` imported
+// one of them back — an import cycle that resolved only because every symbol crossing it was a
+// hoisted `function` declaration. They now live in a leaf module both sides import, so a future
+// module-scope `const` in either file cannot become a TDZ crash at boot. `identifiers.ts` says why.
+import { normaliseDigits, normaliseBranchCode } from './identifiers';
+
+/** ⭐ Re-exported so no caller changed when the cycle was broken — the store screen and
+ *  `setOrganizationIdentity` both normalise a branch code the same way. */
+export { normaliseBranchCode };
 
 export interface CreateOrganizationInput {
   /** ⚠️ Unique across all organizations and permanent in practice — it is the stable handle. */
@@ -155,25 +159,6 @@ export interface CreateFirstAdminResult {
 }
 
 /**
- * ⭐ **Exactly the capabilities `super_admin` holds that `admin` does not — DERIVED, never listed.**
- *
- * The same discipline, and the same reason, as `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER`: *"computed
- * from the matrix above so the two can never silently drift apart."* Today it is four —
- * `approve_item`, `post_journal_entry`, `cross_org_access`, `view_franchise_sales`.
- *
- * ⛔ **Why this exists at all.** Decision 3 asked for the first person to hold BOTH an `admin` and
- * a `super_admin` role row. The database refuses: `person_roles_active_person_org_unique`
- * (`migrations/0014_access_roles_and_grants.sql:56`) allows **at most one active role per
- * (person, org)**, and `authorize` resolves exactly one. Because no capability is
- * `admin: true, super_admin: false`, `admin` + this set authorizes **precisely** what `super_admin`
- * authorizes — an equivalence, not a downgrade, and `first-run-setup.test.ts` case 4 proves it
- * capability by capability.
- */
-export const SUPER_ADMIN_ONLY_CAPABILITIES: readonly Capability[] = CAPABILITIES.filter(
-  (c) => CAPABILITY_MATRIX[c].super_admin && !CAPABILITY_MATRIX[c].admin,
-);
-
-/**
  * The first admin of an organization — the **base case** of the authority chain.
  *
  * ⭐ **`granted_by` is NULL, and that is correct rather than a shortcut.** `scripts/dev-seed.ts:106`
@@ -188,6 +173,19 @@ export const SUPER_ADMIN_ONLY_CAPABILITIES: readonly Capability[] = CAPABILITIES
  *
  * ⛔ It does **not** write `person_store_scope` — `createStore`'s §C.2 fan-out does that, and the
  * bootstrap is just another caller of it.
+ *
+ * ## ⚠️ The super_admin equivalence holds AT CREATION TIME, and a matrix change needs a backfill
+ *
+ * `SUPER_ADMIN_ONLY_CAPABILITIES` is derived from the matrix, so it is always current — but the
+ * grants it produces are **materialised rows written once**. Add a fifth capability that
+ * `super_admin` holds and `admin` does not, and every owner created before that day silently
+ * lacks it: no error, no red test, just a refusal on a screen months later. Removing one leaves a
+ * stale grant behind, which is worse — a live authority nobody decided to give.
+ *
+ * ⛔ **So a change to that set is a data migration, not an edit.** Write the backfill (and the
+ * revocation, for a removal) for existing `person_grants` BEFORE changing the matrix.
+ * `packages/auth/tests/super-admin-capability-set.test.ts` pins the set to exactly its four
+ * members so that day arrives as a failing test with those instructions attached.
  */
 export async function createFirstAdmin(
   tx: Tx,
@@ -303,6 +301,23 @@ export async function bootstrapOrganization(
     throw new Error('bootstrapOrganization: the PIN must be exactly 6 digits.');
   }
 
+  // 3b. ⛔ A uid that is PRESENT but blank, refused here for the same reason and in the same place.
+  //     `input.firebaseUid?.trim()` treats `'   '` as absent, so step 8 would skip the credential
+  //     and the organisation would commit without one — and `/setup` would then call
+  //     `signInWithFirebase` with that uid, find nothing, and fail AFTER the point of no return,
+  //     with first-run setup closed forever. That is the single path in this function with no
+  //     retry, so the blank is a refusal and never a default.
+  //
+  //     ⚠️ Absent (`undefined`/`null`) still means the CLI path and is legitimate. The distinction
+  //     is "did the caller claim to have a verified identity?", not "is the string truthy?"
+  if (input.firebaseUid !== undefined && input.firebaseUid !== null && input.firebaseUid.trim() === '') {
+    throw new Error(
+      'bootstrapOrganization: a firebase uid was supplied but is blank. Pass the verified uid, ' +
+        'or omit it entirely for the CLI path — a blank one would create an organization nobody ' +
+        'can sign into with an email.',
+    );
+  }
+
   // 4. The organization, its chart of accounts and its expense categories.
   const org = await createOrganization(tx, { code: input.code, name: input.name });
 
@@ -379,30 +394,6 @@ export interface OrganizationIdentity {
   readonly taxType: 'vat' | 'non_vat' | null;
 }
 
-/**
- * ⭐ **Normalises a typed identifier to digits.** A person may type `123-456-789` or
- * `123 456 789`; the column stores one canonical shape so two spellings of one number cannot read
- * as two numbers.
- *
- * ⛔ **Format only — no checksum, and no rule tying a branch code to its TIN.** A format check
- * catches a typo; a checksum starts to look like validating a registration, which is the compliance
- * posture bible §13 row 75 refuses. If a legitimate PH form is ever refused here, WIDEN the pattern
- * with the source recorded — never drop the check. The DATABASE holds the same rule and is the
- * authority (RULES §6 item 3, bible §15.11).
- */
-function normaliseDigits(raw: string | null, field: string, min: number, max: number): string | null {
-  if (raw === null) return null;
-  const stripped = raw.replace(/[\s-]/g, '');
-  if (stripped === '') return null;
-  if (!new RegExp(`^[0-9]{${min},${max}}$`).test(stripped)) {
-    throw new Error(
-      `${field} must be ${min === max ? String(min) : `${min}-${max}`} digits — dashes and spaces ` +
-        `are fine and are removed, but "${raw}" is not a number of that length.`,
-    );
-  }
-  return stripped;
-}
-
 /** Trim, and treat a blank as "not stated" rather than an empty string (DEF-087's shape). */
 function blankToNull(raw: string | null): string | null {
   if (raw === null) return null;
@@ -453,9 +444,4 @@ export async function organizationIdentity(
     tin: row.tin,
     taxType: row.taxType,
   };
-}
-
-/** ⭐ Exported for the store screen, which normalises a branch code the same way. */
-export function normaliseBranchCode(raw: string | null): string | null {
-  return normaliseDigits(raw, 'A branch code', 3, 5);
 }
