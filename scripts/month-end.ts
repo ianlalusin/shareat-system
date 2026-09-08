@@ -41,10 +41,12 @@ async function main(): Promise<number> {
 
   for (const o of result.outcomes) {
     const head = `  ${o.orgName} · ${o.job}`;
-    if (o.error) {
-      console.error(`${head}: FAILED OUTRIGHT — ${o.error}`);
-      continue;
-    }
+    if (o.error) console.error(`${head}: FAILED OUTRIGHT — ${o.error}`);
+    // ⚠️ Printed unconditionally, error or not — T-233 guard C can leave `o.error` set with the
+    // work already committed (`finishRun` itself refused), so these counts can be real even on a
+    // FAILED OUTRIGHT line; skipping this line on error would read as "nothing happened" for a run
+    // that actually posted something (`finding-observation.ts`/`budget-reissue.ts`/
+    // `recurring-expense-draft.ts` are the siblings that already get this right, DEF-225).
     console.log(
       `${head}: posted ${o.posted}, skipped ${o.skipped}, failed ${o.failed}`,
     );
@@ -62,7 +64,16 @@ async function main(): Promise<number> {
     console.error('           will pick up whatever is fixed.');
     return 1;
   }
-  console.log('month-end: finished cleanly.');
+  if (result.outcomes.length === 0) {
+    // ⛔ Not a success. An empty run means no orgs were found, which is a configuration problem
+    // wearing the costume of a quiet night (DEF-225).
+    console.error('month-end: no orgs were processed — nothing to close?');
+    return 1;
+  }
+  // ⚠️ Counts, never a bare "done" (bible §15.6) — DEF-225: this line used to be a bare
+  // "finished cleanly" with no numbers at all.
+  const posted = result.outcomes.reduce((sum, o) => sum + o.posted, 0);
+  console.log(`month-end: ok — posted ${posted} · ${result.outcomes.length} outcomes`);
   return 0;
 }
 

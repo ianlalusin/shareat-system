@@ -39,10 +39,11 @@ async function main(): Promise<number> {
 
   for (const o of result.outcomes) {
     const head = `  ${o.orgName} · ${o.job}`;
-    if (o.error) {
-      console.error(`${head}: FAILED OUTRIGHT — ${o.error}`);
-      continue;
-    }
+    if (o.error) console.error(`${head}: FAILED OUTRIGHT — ${o.error}`);
+    // ⚠️ Printed unconditionally, error or not — T-233 guard C can leave `o.error` set with the
+    // work already committed, so these counts can be real even on a FAILED OUTRIGHT line
+    // (`finding-observation.ts`/`budget-reissue.ts`/`recurring-expense-draft.ts` already get this
+    // right, DEF-225).
     console.log(`${head}: closed ${o.posted}, still open ${o.skipped}, failed ${o.failed}`);
     for (const f of o.failures) console.error(`      ⛔ ${f.subjectName}: ${f.reason}`);
   }
@@ -51,6 +52,16 @@ async function main(): Promise<number> {
     console.error('attendance-sweep: finished WITH FAILURES — see above.');
     return 1;
   }
+  if (result.outcomes.length === 0) {
+    // ⛔ Not a success. An empty run means no orgs were found, which is a configuration problem
+    // wearing the costume of a quiet hour (DEF-225).
+    console.error('attendance-sweep: no orgs were processed — nothing to sweep?');
+    return 1;
+  }
+  // ⚠️ Counts, never a bare silent 0-exit (bible §15.6) — DEF-225: this script used to print
+  // nothing at all on success.
+  const closed = result.outcomes.reduce((sum, o) => sum + o.posted, 0);
+  console.log(`attendance-sweep: ok — closed ${closed} · ${result.outcomes.length} orgs`);
   return 0;
 }
 

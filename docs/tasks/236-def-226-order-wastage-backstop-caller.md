@@ -9,6 +9,11 @@
 > fixed — see the guard's own header comment (BLOCKER 1/2) and the script/README/provision.sh
 > diffs. The cadence decision from the SPEC round was separately confirmed correct by the
 > orchestrator, reading task 178 §11 in full: it names no cadence at all.
+> **Slice 2**: GO received; built. Two notes from the Opus re-check, recorded here rather than as
+> code (see "Slice 2 notes" below): the caller-exists guard's population is declaration-shaped
+> (now stated as a limit in the guard's own header — `export const runX = async` or a re-export
+> would escape it, currently a real-but-empty gap); T-216's recurring-expense units are still
+> missing from `provision.sh`'s install loop — filed as **DEF-231**, not this task's to fix.
 
 ---
 
@@ -352,15 +357,27 @@ node ~/.claude/skills/orchestrator/tools/it.mjs shareat_test_def219 <the affecte
       `posted 0, skipped 0, failed 0` per org and `order-wastage-backstop: ok — closed 0 · 1 orgs`,
       writing one `scheduler_runs` row (`job='order_wastage_backstop'`, `trigger='manual'`,
       `period='2026-09'`, finished).
-- [ ] Self-reviewed line by line.
-- [ ] ⛔ Not done by me: commit, bible, roadmap, register disposition, board, arming the timer.
-      Described in the READY for the orchestrator.
+- [x] Self-reviewed line by line.
+- [x] ⛔ Not done by me: commit, bible, roadmap, register disposition, board, arming the timer.
+      Described in the READY for the orchestrator. (Slice 1 landed on `main` as `807ce1b`.)
 
 **Slice 2** (after slice 1 READY and re-approved to proceed):
-- [ ] `month-end.ts`, `attendance-sweep.ts`, `firestore-relay.ts` each print counts + carry the
-      zero-org guard.
-- [ ] `runInboxRelayJobs`'s pre-loop `orgIdsForStoreIds` read no longer rejects the whole
+- [x] `month-end.ts`, `attendance-sweep.ts`, `firestore-relay.ts` each print counts + carry the
+      zero-org guard, in the shape of the three T-233-fixed siblings — including the guard-C-aware
+      error branch (counts print unconditionally, no `continue`), the same fix round 1's review
+      applied to `order-wastage-backstop.ts`.
+- [x] `runInboxRelayJobs`'s pre-loop `orgIdsForStoreIds` read no longer rejects the whole
       `Promise.all`/loop on failure — wrapped the way `runJobForOrg` wraps `startRun`, one outcome
-      per org (or one synthetic outcome) on refusal.
-- [ ] Existing integration tests for `runFirestoreRelay` stay green unmodified; one new test proves
-      DEF-227's fix.
+      per org via the existing `failedInboxRun` helper on refusal. `scheduler/index.ts` diff is
+      exactly this one try/catch, 16 lines, nothing else in the file touched.
+- [x] Existing integration tests for `runFirestoreRelay` stay green unmodified (3 of 4 in the
+      file); one new test proves DEF-227's fix — watched RED first against the real defect (a
+      malformed-UUID `storeId`, no migration needed: `PostgresError: invalid input syntax for type
+      uuid: "not-a-valid-uuid"`, an uncaught rejection), then GREEN after the fix. `scheduler.test.ts`
+      (20 tests) and `recurring-expenses-job.test.ts` re-run clean for regression, since both
+      exercise the same file.
+- [x] Both Opus re-check notes recorded — the guard's declaration-shaped limit in its own header
+      comment, and DEF-231 (provision.sh's missing recurring-expense-draft lines) named as not this
+      task's.
+- [x] `npx tsc --noEmit` clean; `npm test` (full unit project) green — 73 files, 1138 passed, 1
+      pre-existing skip, real output in the READY.

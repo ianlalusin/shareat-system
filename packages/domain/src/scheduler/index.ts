@@ -482,9 +482,19 @@ async function runInboxRelayJobs(
   }
 
   const storeIds = [...new Set(events.map(eventStoreId).filter((s): s is string => s !== undefined))];
-  const orgByStore = storeIds.length
-    ? await transaction((tx) => storesRepo.orgIdsForStoreIds(tx, storeIds))
-    : new Map<string, string>();
+  let orgByStore: Map<string, string>;
+  try {
+    orgByStore = storeIds.length
+      ? await transaction((tx) => storesRepo.orgIdsForStoreIds(tx, storeIds))
+      : new Map<string, string>();
+  } catch (err) {
+    // Same shape as the `readUnprocessed` failure above (DEF-227): the org-resolution read blew up
+    // before any org's inbox_relay could be attempted, so every org named in this run still gets a
+    // row saying so — DEF-044's rule, and the reason this can't be allowed to reject the whole
+    // `Promise.all`/loop the way it used to.
+    const message = err instanceof Error ? err.message : String(err);
+    return Promise.all(orgs.map((org) => failedInboxRun(org, period, trigger, message)));
+  }
 
   // §3 step 3: a storeId matching no known store is left un-stamped and excluded from EVERY
   // group — it is simply never pushed anywhere below, so it is retried next run by construction.

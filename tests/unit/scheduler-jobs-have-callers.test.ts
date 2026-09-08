@@ -90,6 +90,13 @@ function paramsFrom(src: string, openParenIndex: number): string {
  * ⚠️ Deliberately NOT a line number: `codeOnly()` strips block comments (including the multi-line
  * doc comment above most of these functions), which shifts the stripped source's line count below
  * the real file's. Reporting a computed line here would be confidently wrong.
+ *
+ * ⚠️ **This guard's population is DECLARATION-shaped, and that is a stated limit, not an oversight**
+ * (Opus re-check, T-236 slice 2): the regex matches `export (async )?function run<Name>(`.
+ * `export const runX = async (...) => {}` and a re-export of a job under a new name would both
+ * escape it silently. Every job entry in this file is a `function` declaration today, so the gap is
+ * real but currently empty — if a future job entry is ever written as a const/arrow or re-exported,
+ * widen this regex first, the way T-227's own guard widens on the next thing it misses.
  */
 function jobEntryExports(): Map<string, string> {
   const found = new Map<string, string>();

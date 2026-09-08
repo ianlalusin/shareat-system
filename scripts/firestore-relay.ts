@@ -52,10 +52,12 @@ async function main(): Promise<number> {
 
   for (const o of result.outcomes) {
     const head = `  ${o.orgName} · ${o.job}`;
-    if (o.error) {
-      console.error(`${head}: FAILED OUTRIGHT — ${o.error}`);
-      continue;
-    }
+    if (o.error) console.error(`${head}: FAILED OUTRIGHT — ${o.error}`);
+    // ⚠️ Printed unconditionally, error or not — T-233 guard C can leave `o.error` set with the
+    // work already committed, so these counts can be real even on a FAILED OUTRIGHT line
+    // (`finding-observation.ts`/`budget-reissue.ts`/`recurring-expense-draft.ts` already get this
+    // right, DEF-225). Also DEF-227's shape: a refused pre-loop org-resolution read now reaches
+    // this same per-org error line instead of rejecting the whole run.
     console.log(`${head}: posted ${o.posted}, skipped ${o.skipped}, failed ${o.failed}`);
     for (const f of o.failures) console.error(`      ⛔ ${f.subjectName}: ${f.reason}`);
     if (o.adjudicationFailures?.length) {
@@ -69,6 +71,26 @@ async function main(): Promise<number> {
     console.error('firestore-relay: finished WITH FAILURES — see above.');
     return 1;
   }
+  if (result.outcomes.length === 0) {
+    // ⛔ Not a success. An empty run means no orgs were found, which is a configuration problem
+    // wearing the costume of a quiet run (DEF-225).
+    console.error('firestore-relay: no orgs were processed — nothing to relay?');
+    return 1;
+  }
+  // ⚠️ Counts, never a bare silent 0-exit (bible §15.6) — DEF-225: this script used to print
+  // nothing at all on success. ⛔ Split by job, not summed into one number: `posted` means mirror
+  // docs published for `mirror_publish` and inbox punches ingested for `inbox_relay` — two
+  // different units, and a single combined total would hide, e.g., a healthy mirror covering for a
+  // stalled inbox.
+  const mirrorPosted = result.outcomes
+    .filter((o) => o.job === 'mirror_publish')
+    .reduce((sum, o) => sum + o.posted, 0);
+  const inboxPosted = result.outcomes
+    .filter((o) => o.job === 'inbox_relay')
+    .reduce((sum, o) => sum + o.posted, 0);
+  console.log(
+    `firestore-relay: ok — mirror ${mirrorPosted} · inbox ${inboxPosted} · ${result.outcomes.length} outcomes`,
+  );
   return 0;
 }
 

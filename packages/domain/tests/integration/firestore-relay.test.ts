@@ -253,3 +253,67 @@ describe('T-204 — runFirestoreRelay: inbox_relay resolves events to their org 
     void firstMirror;
   });
 });
+
+describe('T-204 / DEF-227 — a failed org-resolution read must not reject the whole relay', () => {
+  /**
+   * ⛔ DEF-227: `runInboxRelayJobs`'s pre-loop `storesRepo.orgIdsForStoreIds` read (resolving every
+   * event's `storeId` to an org BEFORE any per-org work starts) was awaited outside any try — the
+   * last "one failure kills the whole run" shape T-233 left in this file, identical to the
+   * `driver.readUnprocessed` failure one block above it, which already IS wrapped.
+   *
+   * ⭐ No migration, no test-local trigger needed: `stores.id` is `uuid`, and a malformed storeId on
+   * an inbox event reaches `inArray(stores.id, [...])` with client-side validation, so Postgres
+   * itself refuses it — "invalid input syntax for type uuid" — a naturally-occurring failure shape,
+   * not a synthetic one. ⚠️ Deliberately UNSCOPED (no `options.orgId`), matching DEF-227's real
+   * shape: the read is one global lookup before the org loop, so every org in this lane's database
+   * must be observed to get a row from ONE call — the same reason the idempotency test above this
+   * one also calls unscoped.
+   */
+  it('a malformed storeId does not reject the relay, and every org still gets an inbox_relay row', async () => {
+    const a = await fixture('def227-a');
+    const b = await fixture('def227-b');
+
+    const { driver: mirror } = fakeMirrorDriver();
+    const { driver: inbox } = fakeInboxDriver([
+      { docId: uid('doc'), data: inboxEvent('not-a-valid-uuid') },
+    ]);
+
+    // The assertion to watch fail before the fix: today this call REJECTS.
+    const result = await runFirestoreRelay({ mirror, inbox }, { trigger: 'manual' });
+
+    expect(result.hadFailures).toBe(true);
+
+    const inboxOutcomeFor = (orgId: string) =>
+      result.outcomes.find((o) => o.orgId === orgId && o.job === 'inbox_relay');
+    const aInbox = inboxOutcomeFor(a.orgId);
+    const bInbox = inboxOutcomeFor(b.orgId);
+    expect(aInbox).toBeDefined();
+    expect(bInbox).toBeDefined();
+    expect(aInbox!.error).toMatch(/uuid/i);
+    expect(bInbox!.error).toMatch(/uuid/i);
+    expect(aInbox!.posted).toBe(0);
+    expect(bInbox!.posted).toBe(0);
+
+    // ⭐ Lane A (mirror_publish) already ran, per-org, BEFORE Lane B's pre-loop read — its outcomes
+    // must survive too. Before the fix they did not, because the whole promise rejected and the
+    // caller never received the `outcomes` array at all, mirror_publish rows included.
+    const mirrorOutcomeFor = (orgId: string) =>
+      result.outcomes.find((o) => o.orgId === orgId && o.job === 'mirror_publish');
+    expect(mirrorOutcomeFor(a.orgId)).toBeDefined();
+    expect(mirrorOutcomeFor(b.orgId)).toBeDefined();
+
+    // DEF-044's rule still applies: a run row exists per org per job, including this failed one —
+    // `failRun` recorded it, the same as the `readUnprocessed` failure path one block above.
+    // ⚠️ Asserting row COUNT alone would also pass a row that was merely started and never closed —
+    // this must prove `failRun` actually ran, not just `startRun`: outcome = 'failed' AND
+    // finished_at is set (a started-but-abandoned row has neither).
+    const runs = await sql<{ org_id: string; outcome: string; finished_at: Date | null }[]>`
+      select org_id, outcome, finished_at from scheduler_runs
+      where org_id in (${a.orgId}, ${b.orgId}) and job = 'inbox_relay'`;
+    expect(runs).toHaveLength(2);
+    for (const run of runs) {
+      expect(run.outcome).toBe('failed');
+      expect(run.finished_at).not.toBeNull();
+    }
+  });
+});
