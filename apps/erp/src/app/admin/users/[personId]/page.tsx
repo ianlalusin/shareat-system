@@ -268,9 +268,23 @@ export default async function UserAccessPage({
                     </span>
                   </span>
                   {c.kind === 'firebase' && (
-                    <form action={unlinkCredentialAction}>
+                    // ⭐ T-239 / DEF-229 — a revocation records why. Same shape as the revoke form
+                    //    on `/staff/[employmentId]/credentials`, so the two read as one system.
+                    // ⚠️ `flex-wrap` is load-bearing: this sits inside a row that already wraps, and
+                    //    on a phone in portrait the input has to drop under the account rather than
+                    //    squeeze the uid beside it to nothing.
+                    <form
+                      action={unlinkCredentialAction}
+                      className="flex flex-wrap items-center gap-2"
+                    >
                       <input type="hidden" name="personId" value={personId} />
                       <input type="hidden" name="credentialId" value={c.id} />
+                      <input
+                        name="reason"
+                        required
+                        placeholder="Reason to unlink"
+                        className={`${INPUT} w-44`}
+                      />
                       <button type="submit" className={LINK_BTN}>
                         Unlink
                       </button>

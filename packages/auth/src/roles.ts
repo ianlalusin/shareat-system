@@ -242,6 +242,55 @@ function isAdministrative(role: string | undefined | null): boolean {
   return role === 'admin' || role === 'super_admin';
 }
 
+/**
+ * ⭐ **Seniority — T-242 / DEF-234.** Ian's rule, 2026-09-08: *an actor may not remove or demote a
+ * role SENIOR to their own; a peer may.* An admin may demote an admin; only a super-admin may
+ * demote a super-admin.
+ *
+ * ⛔ **NOT "the authority to unmake a role is the authority to make it."** That mnemonic was in the
+ * register row and it is wrong: making an `admin` requires super-admin authority (row 116), so built
+ * literally it forbids admin-demotes-admin — which is the *junior-only* option Ian explicitly
+ * rejected, on the grounds that *"two admins and no super_admin would mean neither could ever remove
+ * the other."* Both cannot be true. `roles.test.ts`' case 2 is the standing guard: it fails the
+ * moment somebody "simplifies" the rank check in `assignRoleAsActor` into a reuse of
+ * `holdsSuperAdminAuthority`.
+ *
+ * ⚠️ **Not derived from `CAPABILITY_MATRIX`, on purpose** — the same reasoning `isAdministrative`
+ * gives above. This is a chain of command, not a count of capabilities: two roles could hold
+ * identical capability sets and still stand in a senior/junior relationship, and a matrix-derived
+ * ladder would silently reorder the chain the next time a capability moved.
+ */
+const ROLE_RANK: Readonly<Record<Role, number>> = {
+  staff: 0,
+  manager: 1,
+  admin: 2,
+  super_admin: 3,
+};
+
+/**
+ * The actor's rank for the purpose above.
+ *
+ * ⛔ **Super-admin AUTHORITY, not the `super_admin` literal** — the distinction T-232 §2.2 had to
+ * teach the appointment check, and for the identical reason. An organisation's first person cannot
+ * hold a `super_admin` role row (`person_roles_active_person_org_unique` allows one active role per
+ * person+org, and the role must be `admin` for §C.2's store fan-out), so they hold `admin` plus
+ * every `SUPER_ADMIN_ONLY_CAPABILITIES` grant. A ladder reading only the role literal would refuse
+ * that owner the removal of a super-admin **they themselves appointed**, and the symptom would
+ * surface months later on a screen with nothing pointing back here.
+ *
+ * ⚠️ **No active role at all ranks BELOW staff (-1), not equal to it** — standing in a chain of
+ * command comes from holding a place in it. ⛔ **Defence in depth, not a live path, and the
+ * difference was measured rather than assumed:** `authorize` refuses an actor with no active role
+ * outright (*"has no active role in org"*), so nobody roleless reaches this line through
+ * `assignRoleAsActor` today — `roles.test.ts` case 10 asserts that it is `authorize` doing the
+ * refusing. The -1 is here so that if the capability layer ever admits a bare grant-holder with no
+ * role, the answer is "may not unmake anybody" rather than an unranked `undefined` comparison.
+ */
+async function actorRank(tx: Tx, actor: Actor, actorRole: Role | undefined): Promise<number> {
+  if (await holdsSuperAdminAuthority(tx, actor, actorRole)) return ROLE_RANK.super_admin;
+  return actorRole === undefined ? -1 : ROLE_RANK[actorRole];
+}
+
 export async function assignRoleAsActor(
   tx: Tx,
   actor: Actor,
@@ -293,13 +342,74 @@ export async function assignRoleAsActor(
     );
   }
 
+  /**
+   * ⭐ **Both authority checks and the lockout guard read these, so they are read ONCE — T-242.**
+   * The lockout guard's `targetRole` used to be fetched further down; it moved up here so check 5b
+   * can use the same value. A second `activeRoleForPerson` call would be a second read of a value
+   * the guard's decision depends on, inside the very transaction `lockOrgAccess` exists to protect.
+   */
+  const actorRole = await accessRepo.activeRoleForPerson(tx, actor.personId, actor.orgId);
+  const targetRole = await accessRepo.activeRoleForPerson(tx, input.personId, actor.orgId);
+
   if (input.role === 'admin' || input.role === 'super_admin') {
-    const actorRole = await accessRepo.activeRoleForPerson(tx, actor.personId, actor.orgId);
     if (!(await holdsSuperAdminAuthority(tx, actor, actorRole?.role))) {
       throw new AuthorizationError(
         `assignRoleAsActor: assigning '${input.role}' requires super_admin — the role itself, or an ` +
           `admin holding every capability super_admin has and admin does not (bible row 116 — only ` +
           `a super-admin appoints an admin); actor holds '${actorRole?.role ?? 'no role'}'`,
+        'manage_users',
+      );
+    }
+  }
+
+  /**
+   * ⛔ **The other direction — T-242, closing DEF-234.** The check above gates *making* a role; until
+   * this one, nothing gated *unmaking* one. `assignRoleAsActor(actor = an admin, { personId: the
+   * super_admin, role: 'staff' })` passed every check in this function, so removal was the first
+   * move of a promotion: strip the super-admin above you and — since T-232 §2.2 let an admin holding
+   * the four grants appoint admins — you are unopposed. Bible row 116 gates appointment and was
+   * silent on removal; **Ian's answer, 2026-09-08, is peer removal**: you may unmake an equal, never
+   * someone senior.
+   *
+   * ⚠️ **It binds on the role being REMOVED, not the one being granted — that asymmetry was the
+   * whole defect.** So it reads `targetRole`, and it does nothing when there is none: a person with
+   * no active role is being *appointed*, and nothing is being unmade.
+   *
+   * ⚠️ **A ladder, not a check for a super_admin target**, and the difference is a second live door.
+   * `manage_users` is `{admin: true, manager: false}`, so it sits inside
+   * `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER`, which `assignRole` applies automatically to a manager
+   * appointed while `hasActiveAdmin` is false — and `hasActiveAdmin` matches the literal `'admin'`,
+   * so a **super_admin-only organisation counts as adminless**. Nothing revokes those grants when an
+   * admin arrives later, so that manager could demote an admin: a junior removing a senior with no
+   * admin actor anywhere in the story. Reproduced through this function before the fix (`roles.test.ts`
+   * case 5). A narrow super_admin-target check would have closed the register's case and left it open.
+   *
+   * ⭐ **Before the lockout guard below, deliberately.** Both can be true at once — an ordinary admin
+   * demoting an org's only super-admin violates rank AND would leave nobody able to manage users.
+   * The lockout sentence would send them to appoint another admin, which is real work that does not
+   * help, and then refuse again: a wrong-first-refusal is a loop, and this file has already learned
+   * that once (T-238 had to make `/only active admin/` name both halves for the same reason).
+   * Authority questions before state questions — the same ordering the self check states above.
+   */
+  if (targetRole) {
+    // ⚠️ When the assignment is an appointment to admin/super_admin AND the target already holds a
+    //    role, `holdsSuperAdminAuthority` runs twice — once above, once inside `actorRank`. Seen and
+    //    left alone: it is a handful of indexed reads on the rarest path here (appointing someone
+    //    who already has a role), and caching it would put a stale-by-construction variable in the
+    //    middle of the one function where every read must be the locked transaction's own.
+    const rankOfActor = await actorRank(tx, actor, actorRole?.role);
+    if (rankOfActor < ROLE_RANK[targetRole.role]) {
+      // ⛔ The phrase `requires super_admin` must NEVER appear here. `apps/erp/src/app/admin/users/
+      //    actions.ts` matches it and answers with "Only a super-admin can APPOINT an admin" — a
+      //    sentence about appointment, in reply to a removal. Green build, green tests, wrong
+      //    sentence (the DEF-177 shape). `roles.test.ts` case 6 asserts the absence.
+      throw new AuthorizationError(
+        `assignRoleAsActor: refusing to change this person's role — they hold ` +
+          `'${targetRole.role}', which outranks you. This change needs somebody who is at least a ` +
+          `'${targetRole.role}' themselves (the role, or an admin holding every capability ` +
+          `super_admin has and admin does not). If nobody in this organisation holds ` +
+          `'${targetRole.role}' any more, only the system owner can make it; you hold ` +
+          `'${actorRole?.role ?? 'no role'}'`,
         'manage_users',
       );
     }
@@ -328,7 +438,8 @@ export async function assignRoleAsActor(
    * still reached zero administrators. **A lock can order two checks; it cannot make an absent check
    * fire.**
    */
-  const targetRole = await accessRepo.activeRoleForPerson(tx, input.personId, actor.orgId);
+  // ⚠️ `targetRole` is read once, above the rank check — T-242. Re-reading it here would be a second
+  //    read of the value this guard's decision rests on, inside the transaction the lock protects.
   if (isAdministrative(targetRole?.role) && !isAdministrative(input.role)) {
     const anotherWayIn = await accessRepo.hasOtherActiveAdminWhoCanSignIn(
       tx,

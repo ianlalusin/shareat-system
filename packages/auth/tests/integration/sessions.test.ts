@@ -30,6 +30,7 @@ import {
   signOut,
   endShift,
   setPin,
+  PIN_SUPERSEDED_REASON,
   AuthenticationError,
   hashPin,
   verifyPin,
@@ -259,10 +260,47 @@ describe('changing a credential invalidates what it minted', () => {
     const { credentialId } = await asOrg(f.orgId, (tx) =>
       setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '151515' }),
     );
-    await asOrg(f.orgId, (tx) => sessionsRepo.revokeCredential(tx, credentialId, f.otherPersonId));
+    await asOrg(f.orgId, (tx) =>
+      sessionsRepo.revokeCredential(tx, {
+        id: credentialId,
+        by: f.otherPersonId,
+        reason: 'Retired by a supervisor.',
+      }),
+    );
     await expect(
       asOrg(f.orgId, (tx) => signInWithPin(tx, { storeId: f.storeId, pin: '151515' })),
     ).rejects.toThrow(AuthenticationError);
+  });
+
+  /**
+   * ⛔ **T-239 / DEF-229 — the case a verbatim copy of the attendance CHECK would have broken.**
+   *
+   * `attendance_credentials_revoke_check` binds all three columns together: a revoked row there
+   * must name a person. On THIS table `revoked_by` is NULL by construction on the supersede path —
+   * `setPin` sits below the domain and has no `Actor` to name, and inventing one would record that
+   * the staffer revoked their own PIN when an administrator re-issued it (`repo/sessions.ts`).
+   *
+   * So the reason pairs with the TIMESTAMP, not with the person. If that is ever "tidied" into the
+   * sibling's three-column shape, every PIN re-issue starts throwing and this case is what says so.
+   */
+  it('⭐ a superseded PIN is revoked with the system sentence and NO principal', async () => {
+    const f = await setup('supersede-reason');
+    const first = await asOrg(f.orgId, (tx) =>
+      setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '191919' }),
+    );
+    // The re-issue. This is the write that the wrong constraint shape would refuse outright.
+    await asOrg(f.orgId, (tx) =>
+      setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '202020' }),
+    );
+
+    const [row] = await sql<
+      { revoked_by: string | null; revoke_reason: string | null; revoked_at: Date | null }[]
+    >`select revoked_by, revoke_reason, revoked_at from person_credentials where id = ${first.credentialId}`;
+    expect(row!.revoked_at).not.toBeNull();
+    expect(row!.revoked_by).toBeNull(); // ⭐ no principal, by construction — not an oversight
+    // ⚠️ The exported constant, not a copy of the sentence: a duplicated literal here would go on
+    //    passing after somebody edited only one of the two.
+    expect(row!.revoke_reason).toBe(PIN_SUPERSEDED_REASON);
   });
 });
 
@@ -282,7 +320,13 @@ describe('listLiveForPerson — T-217 / DEF-174', () => {
     expect(live).toHaveLength(1);
     expect(live[0]).toMatchObject({ personId: f.personId, kind: 'pin', storeId: f.storeId });
 
-    await asOrg(f.orgId, (tx) => sessionsRepo.revokeCredential(tx, credentialId, f.otherPersonId));
+    await asOrg(f.orgId, (tx) =>
+      sessionsRepo.revokeCredential(tx, {
+        id: credentialId,
+        by: f.otherPersonId,
+        reason: 'Retired by a supervisor.',
+      }),
+    );
     const afterRevoke = await asOrg(f.orgId, (tx) => sessionsRepo.listLiveForPerson(tx, f.personId));
     expect(afterRevoke).toEqual([]);
   });

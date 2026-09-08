@@ -101,6 +101,12 @@ export interface UnlinkCredentialInput {
    *  ending another person's sessions. */
   readonly personId: string;
   readonly credentialId: string;
+  /**
+   * ⭐ **Why — T-239 / DEF-229.** Trimmed and refused blank below, and refused again by the table's
+   * own `person_credentials_revoke_check`, because the service layer must not be the only defence
+   * for a rule the database can hold (bible §15.11).
+   */
+  readonly reason: string;
 }
 
 export interface UnlinkCredentialResult {
@@ -175,6 +181,17 @@ export async function unlinkCredential(
   await requirePersonInOrg(tx, actor, input.personId);
 
   /**
+   * ⭐ T-239 / DEF-229 — checked BEFORE the advisory lock below. A request that cannot succeed has
+   * no business serialising every other unlink in the organisation while it fails.
+   */
+  const reason = input.reason.trim();
+  if (!reason) {
+    throw new Error(
+      'Unlinking a sign-in account needs a reason — a revoked credential nobody can explain is not an audit trail.',
+    );
+  }
+
+  /**
    * ⛔ **Taken BEFORE the guard reads, because the guard is a read-then-write.** Two administrators
    * unlinking each other's last credential at the same moment would each see *"someone else can
    * still get in"* under READ COMMITTED, and both would commit — leaving nobody. There is no single
@@ -196,7 +213,7 @@ export async function unlinkCredential(
 
   await refuseIfLastWayIn(tx, actor, input.personId, live.length);
 
-  await sessionsRepo.revokeCredential(tx, target.id, actor.personId);
+  await sessionsRepo.revokeCredential(tx, { id: target.id, by: actor.personId, reason });
   const sessionsEnded = await sessionsRepo.endAllForPerson(tx, input.personId, 'revoked');
 
   return { credentialId: target.id, kind: target.kind, sessionsEnded };

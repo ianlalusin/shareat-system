@@ -213,7 +213,24 @@ export async function revokeActiveRole(tx: Tx, personId: string, orgId: string):
 
 /** Revokes a specific role row by id. Throws if it does not exist or is already revoked —
  * a caller revoking a role should know which one, and a silent no-op here would hide a
- * bug (revoking the wrong id, or double-revoking) that matters for an authority chain. */
+ * bug (revoking the wrong id, or double-revoking) that matters for an authority chain.
+ *
+ * ⛔ **ZERO CALLERS as of T-242, and if you are about to write the first one, read this.**
+ *
+ * The rule that removing a role requires **rank** — Ian, 2026-09-08, DEF-234: *you may unmake an
+ * equal, never someone senior* — lives in `assignRoleAsActor` (`packages/auth/src/roles.ts`), the
+ * one gated entry point. **It does not apply here.** This function is the ungated primitive, exactly
+ * as `assignRole` is, so a "remove this person's role entirely" feature wired straight to it would
+ * hand any holder of `manage_users` the power to strip a super-admin — the whole of DEF-234,
+ * reopened through a door the fix never covered.
+ *
+ * ⭐ Bring the new path through `assignRoleAsActor` instead, so it inherits the rank check, the
+ * self check, the org check and the last-administrator guard rather than re-deriving them. If it
+ * genuinely cannot, the rank rule has to be lifted somewhere both can reach, and that is a task with
+ * a spec, not a line in a caller.
+ *
+ * ⚠️ Nothing will warn you: neither caller-existence guard covers `packages/db/src/repo/*`
+ * (reported by lane C, T-238), so this comment is the only thing standing where a test would be. */
 export async function revokeRoleById(tx: Tx, roleId: string): Promise<void> {
   const updated = await tx
     .update(personRoles)

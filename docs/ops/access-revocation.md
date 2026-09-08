@@ -65,6 +65,22 @@ Appoint a second admin (or super-admin) first, or give that person a PIN from `/
   like it closes stays exactly as wide. Unlink is the control; this page is its documentation.
 - **A shorter browser session.** That is a change to every office user's day for a case that now has
   a direct control. If session policy is revisited, it is revisited on its own merits.
-- **A reason recorded against the revocation.** `person_credentials` records *who* unlinked and
-  *when*, but has no `revoke_reason` column (`attendance_credentials` requires one; this table has
-  never had one). Logged as **DEF-229**.
+
+*(The missing revoke reason used to be listed here. It is done — see below.)*
+
+## The reason, and why it is required — T-239 / DEF-229
+
+Unlinking asks for a short reason, the same way revoking a staff badge on
+`/staff/[employmentId]/credentials` already does. It is not optional and it is not only a
+front-end rule: `person_credentials_revoke_check` refuses a revoked row that carries no reason, so a
+future code path cannot quietly skip it (bible §15.11 — the service layer must not be the only
+defence for a rule the database can hold).
+
+- **Write what you would want to read in six months.** *"Left the company"*, *"account compromised —
+  reported by the branch manager"*, *"wrong uid pasted"*. Blank and whitespace-only are refused.
+- **A PIN retired by a re-issue records itself.** When an administrator issues a new PIN, the old one
+  is revoked with *"Superseded by a newly issued PIN for this store."* and **no person named** —
+  there is no principal at that layer, and naming the staffer would claim they revoked their own
+  credential when somebody else re-issued it. An absent attribution is honest; a fabricated one reads
+  as evidence.
+- **Who and when are still recorded.** The reason is a third question, not a replacement.

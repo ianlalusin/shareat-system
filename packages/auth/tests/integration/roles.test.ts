@@ -366,13 +366,22 @@ describe('T-238 — the lockout guard asks whether anyone is LEFT who can manage
     // ⛔ Before T-238 the branch read `targetRole?.role === 'admin'`, so a super_admin target skipped
     // the guard completely — no lock could have helped, because there was no check to serialise.
     //
-    // ⚠️ The actor here holds `admin` and NO credential. That is an odd state on purpose: it is the
-    // only way, in one transaction, to reach "the target is the last administrator who can sign in"
-    // while somebody still has the authority to issue the demotion. The guard is about the state,
-    // not about how the state was reached.
+    // ⚠️ The actor holds NO credential. That is an odd state on purpose: it is the only way, in one
+    // transaction, to reach "the target is the last administrator who can sign in" while somebody
+    // still has the authority to issue the demotion. The guard is about the state, not about how
+    // the state was reached.
+    //
+    // ⭐ **T-242 changed the actor's ROLE here, from `admin` to `super_admin`, and the reason
+    // matters.** DEF-234 added a rank check that runs BEFORE this guard, so an *admin* actor is now
+    // refused for outranking — a different, more specific refusal — and this case would have stopped
+    // exercising the thing it was written for. Its subject is the LOCKOUT GUARD covering a
+    // `super_admin` TARGET (before T-238 the branch read `targetRole?.role === 'admin'` and skipped
+    // it entirely), so the actor becomes a peer: rank passes, and the guard is once again the thing
+    // that fires. ⛔ The assertion is unchanged. `DEF-234 — removal requires rank` case 7 is the
+    // case that now owns the admin-actor version of this fixture, and it asserts the rank message.
     const org = await insertOrg('t238-superadmin-target');
-    const actorAdmin = await insertPerson(org, 'Admin With No Way In');
-    await insertRoleRaw(actorAdmin, org, 'admin');
+    const actorAdmin = await insertPerson(org, 'Super Admin With No Way In');
+    await insertRoleRaw(actorAdmin, org, 'super_admin');
     const onlySuper = await insertPerson(org, 'Only Super');
     await insertRoleRaw(onlySuper, org, 'super_admin');
     await giveCredential(onlySuper);
@@ -772,5 +781,312 @@ describe('grantCapabilityAsActor — nobody grants themselves a capability (DEF-
     ).rejects.toThrow(/not a known capability/i);
 
     expect(await grantsFor(target)).toEqual([]);
+  });
+});
+
+// =========================================================================================
+// T-242 / DEF-234 — removing a role requires RANK, not only granting one
+// =========================================================================================
+
+/**
+ * ⭐ **Ian's rule, 2026-09-08: peer removal.** *An actor may not remove or demote a role SENIOR to
+ * their own; a peer may.* An admin may demote an admin; only a super-admin may demote a super-admin.
+ *
+ * ⛔ **The rule is NOT "the authority to unmake a role is the authority to make it."** That mnemonic
+ * was in the register row and it is wrong: making an `admin` requires super-admin authority (row
+ * 116), so built literally it would forbid admin-demotes-admin — which is the junior-only option Ian
+ * explicitly rejected, on the argument that *"two admins and no super_admin would mean neither could
+ * ever remove the other."* He cannot have chosen both. **Case 2 below is what fails if somebody
+ * rebuilds the slogan by "simplifying" the ladder into `holdsSuperAdminAuthority`.**
+ *
+ * ## ⛔ Why a rank ladder rather than a check for a super_admin target
+ *
+ * A narrow *"is the target a super_admin?"* patch closes the case the register describes and leaves
+ * a second door wide open — case 5. `manage_users` is `{admin: true, manager: false}`, so it sits
+ * inside `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER`, which `assignRole` applies automatically to any
+ * manager appointed while `hasActiveAdmin` is false — and `hasActiveAdmin` matches the literal
+ * `'admin'`, so a **super_admin-only organisation counts as adminless**. Those grants are never
+ * revoked when an admin arrives. A junior can then remove a senior with no admin actor anywhere in
+ * the story. Rank closes it because a `manager` is rank 1 and an `admin` is rank 2.
+ */
+describe('DEF-234 — removal requires rank', () => {
+  /** Direct SQL, same reasoning as `insertRoleRaw`: exactly these rows, no grant-time side effects. */
+  async function grantRawHere(personId: string, capabilities: readonly Capability[]): Promise<void> {
+    for (const capability of capabilities) {
+      await sql`insert into person_grants (person_id, grant_name) values (${personId}, ${capability})`;
+    }
+  }
+
+  /** Two spare administrators who can sign in, so T-238's lockout guard is never the thing that
+   *  fires. ⛔ Load-bearing: without them a rank case would pass for the lockout's reason. */
+  async function padWithAdmins(orgId: string, howMany = 2): Promise<void> {
+    for (let i = 0; i < howMany; i++) {
+      const spare = await insertPerson(orgId, `Spare Admin ${i}`);
+      await insertRoleRaw(spare, orgId, 'admin');
+      await giveCredential(spare);
+    }
+  }
+
+  const roleOf = (personId: string, orgId: string) =>
+    asPerson(orgId, (tx) => accessRepo.activeRoleForPerson(tx, personId, orgId));
+
+  it('⛔ case 1: an ADMIN may not demote a SUPER_ADMIN, even with other admins standing', async () => {
+    // ⚠️ The spare admins are the point. Remove them and T-238's guard refuses first, and this case
+    // would go green while proving nothing about rank.
+    const org = await insertOrg('d234-admin-v-super');
+    const actor = await insertPerson(org, 'Ordinary Admin');
+    await insertRoleRaw(actor, org, 'admin');
+    await giveCredential(actor);
+    const target = await insertPerson(org, 'The Super Admin');
+    await insertRoleRaw(target, org, 'super_admin');
+    await giveCredential(target);
+    await padWithAdmins(org);
+
+    await expect(
+      asPerson(org, (tx) => assignRoleAsActor(tx, actorOf(actor, org), { personId: target, role: 'staff' })),
+    ).rejects.toThrow(AuthorizationError);
+
+    expect((await roleOf(target, org))?.role).toBe('super_admin');
+  });
+
+  it('⭐ case 2: an ADMIN MAY demote a peer ADMIN — the rule is peer removal, not the slogan', async () => {
+    // ⛔ THE case that fails if 5b is "simplified" into holdsSuperAdminAuthority. Under the slogan
+    // this refuses; under Ian's rule it succeeds, and Ian's rule is the one that was chosen.
+    const org = await insertOrg('d234-admin-v-admin');
+    const actor = await insertPerson(org, 'Admin One');
+    await insertRoleRaw(actor, org, 'admin');
+    await giveCredential(actor);
+    const target = await insertPerson(org, 'Admin Two');
+    await insertRoleRaw(target, org, 'admin');
+    await giveCredential(target);
+    await padWithAdmins(org);
+
+    await asPerson(org, (tx) =>
+      assignRoleAsActor(tx, actorOf(actor, org), { personId: target, role: 'manager' }),
+    );
+    expect((await roleOf(target, org))?.role).toBe('manager');
+  });
+
+  it('⭐ case 3: a SUPER_ADMIN may demote a SUPER_ADMIN — peer removal, upward', async () => {
+    const org = await insertOrg('d234-super-v-super');
+    const actor = await insertPerson(org, 'Super One');
+    await insertRoleRaw(actor, org, 'super_admin');
+    await giveCredential(actor);
+    const target = await insertPerson(org, 'Super Two');
+    await insertRoleRaw(target, org, 'super_admin');
+    await giveCredential(target);
+    await padWithAdmins(org);
+
+    await asPerson(org, (tx) =>
+      assignRoleAsActor(tx, actorOf(actor, org), { personId: target, role: 'staff' }),
+    );
+    expect((await roleOf(target, org))?.role).toBe('staff');
+  });
+
+  it('⭐ case 4: an ADMIN + every super_admin-only grant MAY demote a SUPER_ADMIN', async () => {
+    /**
+     * ⛔ The new organisation's owner. `createFirstAdmin` cannot give them a `super_admin` role row
+     * (one active role per person+org), so they hold `admin` plus the four grants — an exact
+     * capability equivalence T-232 §2.2 already taught the APPOINTMENT check to accept.
+     *
+     * ⚠️ A rank ladder built from the role literal alone would refuse this, and the owner would be
+     * locked out of removing a super-admin they themselves appointed. The symptom would arrive
+     * months later, on a screen, with nothing pointing here.
+     */
+    const org = await insertOrg('d234-owner-v-super');
+    const owner = await insertPerson(org, 'Org Owner');
+    await insertRoleRaw(owner, org, 'admin');
+    await grantRawHere(owner, SUPER_ADMIN_ONLY);
+    await giveCredential(owner);
+    const target = await insertPerson(org, 'Appointed Super');
+    await insertRoleRaw(target, org, 'super_admin');
+    await giveCredential(target);
+    await padWithAdmins(org);
+
+    await asPerson(org, (tx) =>
+      assignRoleAsActor(tx, actorOf(owner, org), { personId: target, role: 'manager' }),
+    );
+    expect((await roleOf(target, org))?.role).toBe('manager');
+  });
+
+  it('⛔ case 5: a MANAGER holding manage_users by grant may not demote an ADMIN — but may demote STAFF', async () => {
+    /**
+     * ⭐ **The second door, and the reason this is a ladder rather than a super_admin check.**
+     *
+     * Built the way it actually happens rather than by hand-granting: the org's only administrator
+     * holds `super_admin`, so `hasActiveAdmin` — which matches the literal `'admin'` — is FALSE, and
+     * `assignRole` hands the incoming manager every capability admin has and manager does not.
+     * `manage_users` is one of them. Nothing revokes it when an admin is appointed afterwards.
+     *
+     * ⚠️ The elevation is asserted rather than assumed: if `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER`
+     * ever stopped containing `manage_users`, this test would otherwise quietly stop testing
+     * anything — passing because the manager was refused at `authorize` instead of at the ladder.
+     */
+    expect(ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER).toContain('manage_users' as Capability);
+
+    const org = await insertOrg('d234-manager-v-admin');
+    const superAdmin = await insertPerson(org, 'Only Super');
+    await insertRoleRaw(superAdmin, org, 'super_admin');
+    await giveCredential(superAdmin);
+
+    // Step 1: appointed while the org is "adminless" in `hasActiveAdmin`'s literal sense.
+    const manager = await insertPerson(org, 'Elevated Manager');
+    const elevated = await asPerson(org, (tx) =>
+      assignRole(tx, { personId: manager, orgId: org, role: 'manager', grantedBy: null }),
+    );
+    expect(elevated.elevatedGrants).toContain('manage_users' as Capability);
+
+    // Step 2: an admin arrives afterwards. The manager keeps the grant.
+    const admin = await insertPerson(org, 'Later Admin');
+    await insertRoleRaw(admin, org, 'admin');
+    await giveCredential(admin);
+    await padWithAdmins(org);
+
+    // Step 3: junior reaching for senior — refused by rank, not by `authorize`.
+    await expect(
+      asPerson(org, (tx) => assignRoleAsActor(tx, actorOf(manager, org), { personId: admin, role: 'staff' })),
+    ).rejects.toThrow(AuthorizationError);
+    expect((await roleOf(admin, org))?.role).toBe('admin');
+
+    // ⭐ The other half: the elevation still WORKS for what it was for. A ladder that broke this
+    //    would have replaced an authority gap with an authority outage.
+    const junior = await insertPerson(org, 'A Staffer');
+    await insertRoleRaw(junior, org, 'staff');
+    await asPerson(org, (tx) =>
+      assignRoleAsActor(tx, actorOf(manager, org), { personId: junior, role: 'manager' }),
+    );
+    expect((await roleOf(junior, org))?.role).toBe('manager');
+  });
+
+  it('⛔ case 6: the refusal names who CAN, and never says "requires super_admin"', async () => {
+    /**
+     * ⛔ A string contract with `apps/erp/src/app/admin/users/actions.ts`. That file matches
+     * `/requires super_admin/` and returns *"Only a super-admin can APPOINT an admin"* — so a
+     * removal refusal carrying that phrase would answer the wrong question on the screen, with a
+     * green build and green tests. The DEF-177 shape. This assertion is the only thing that catches
+     * it, which is why it asserts the ABSENCE as well as the presence.
+     */
+    const org = await insertOrg('d234-message');
+    const actor = await insertPerson(org, 'Ordinary Admin');
+    await insertRoleRaw(actor, org, 'admin');
+    await giveCredential(actor);
+    const target = await insertPerson(org, 'The Super Admin');
+    await insertRoleRaw(target, org, 'super_admin');
+    await giveCredential(target);
+    await padWithAdmins(org);
+
+    const refusal = await asPerson(org, (tx) =>
+      assignRoleAsActor(tx, actorOf(actor, org), { personId: target, role: 'staff' }),
+    ).then(
+      () => null,
+      (e: unknown) => e as Error,
+    );
+
+    // ⛔ First: it was refused at all. Without this the assertions below would read `undefined`
+    //    against a call that quietly SUCCEEDED, and `undefined` matches nothing — a green test over
+    //    the exact defect. Same shape as the NULL-blind CHECK in T-239.
+    expect(refusal, 'the demotion was not refused at all').not.toBeNull();
+    const message = refusal!.message;
+
+    expect(message).toMatch(/outranks you/);
+    expect(message).not.toMatch(/requires super_admin/);
+    // It has to say who CAN, or the person reading it has no next step.
+    expect(message).toMatch(/system owner/);
+  });
+
+  it('⭐ case 7: when BOTH guards would fire, the RANK refusal comes back — not the lockout one', async () => {
+    /**
+     * ⛔ The ordering, asserted through the call. An admin demoting the org's only super-admin
+     * violates rank AND would leave nobody able to manage users. The lockout sentence would send
+     * them to appoint another admin — real work that does not help, followed by a second refusal.
+     * A wrong-first-refusal is a loop, and this file has already learned that once (T-238's
+     * `/only active admin/` sentence had to name both halves for the same reason).
+     */
+    const org = await insertOrg('d234-order');
+    const actor = await insertPerson(org, 'Admin With No Way In');
+    await insertRoleRaw(actor, org, 'admin'); // deliberately NO credential
+    const onlySuper = await insertPerson(org, 'Only Super');
+    await insertRoleRaw(onlySuper, org, 'super_admin');
+    await giveCredential(onlySuper);
+
+    await expect(
+      asPerson(org, (tx) => assignRoleAsActor(tx, actorOf(actor, org), { personId: onlySuper, role: 'staff' })),
+    ).rejects.toThrow(/outranks you/);
+
+    expect((await roleOf(onlySuper, org))?.role).toBe('super_admin');
+  });
+
+  it('case 8: T-238 unbroken — a SUPER_ADMIN demoting the last administrator is still refused', async () => {
+    // Rank passes (peer), so the lockout guard is what has to fire. If 5b ever swallowed this case,
+    // an org could be left with nobody able to manage users.
+    const org = await insertOrg('d234-lockout-intact');
+    const actor = await insertPerson(org, 'Super Actor');
+    await insertRoleRaw(actor, org, 'super_admin'); // no credential: not another way in
+    const onlyAdmin = await insertPerson(org, 'Only Admin Who Can Sign In');
+    await insertRoleRaw(onlyAdmin, org, 'admin');
+    await giveCredential(onlyAdmin);
+
+    await expect(
+      asPerson(org, (tx) => assignRoleAsActor(tx, actorOf(actor, org), { personId: onlyAdmin, role: 'manager' })),
+    ).rejects.toThrow(/only active admin who can sign in/);
+
+    expect((await roleOf(onlyAdmin, org))?.role).toBe('admin');
+  });
+
+  it('case 9: self-demotion is still refused by the SELF check, with the self check message', async () => {
+    // ⚠️ Proves 5b did not quietly take over a case that was already covered. A super_admin stepping
+    // down needs a peer — and if there is none, that is the system owner. Same dependency Ian
+    // accepted for removal, arriving from the other side.
+    const org = await insertOrg('d234-self');
+    const actor = await insertPerson(org, 'Super Stepping Down');
+    await insertRoleRaw(actor, org, 'super_admin');
+    await giveCredential(actor);
+    await padWithAdmins(org);
+
+    await expect(
+      asPerson(org, (tx) => assignRoleAsActor(tx, actorOf(actor, org), { personId: actor, role: 'staff' })),
+    ).rejects.toThrow(/may not change their own role/);
+
+    expect((await roleOf(actor, org))?.role).toBe('super_admin');
+  });
+  it('⭐ case 10: a roleless actor is stopped by authorize, and appointing a roleless PERSON still works', async () => {
+    /**
+     * ⚠️ **Beyond the nine cases in the spec — added in self-review, and it corrected the
+     * implementation's own comment.** `actorRank` returns **-1** for an actor with no active role,
+     * and the comment there originally claimed somebody could reach it that way holding
+     * `manage_users` as a bare grant. **They cannot**, and this case is how that was established:
+     * `authorize` refuses a roleless actor outright, before rank is ever consulted. The -1 is
+     * defence in depth, not a live path — and a comment claiming otherwise is the DEF-175 shape,
+     * a doc describing something the code does not do.
+     *
+     * ⭐ The second half is the live one, and it is the boundary of the whole rule: appointing a
+     * person who holds NO role must still work. Nothing is being unmade, so the rank check must not
+     * fire at all — a ladder that refused this would have turned a removal rule into an appointment
+     * rule and broken every first appointment in an organisation.
+     */
+    const org = await insertOrg('d234-roleless');
+    const roleless = await insertPerson(org, 'Granted But Unranked');
+    await grantRawHere(roleless, ['manage_users' as Capability]);
+    await giveCredential(roleless);
+    const staffer = await insertPerson(org, 'A Staffer');
+    await insertRoleRaw(staffer, org, 'staff');
+    await padWithAdmins(org);
+
+    // ⛔ `authorize`, not the ladder — asserted by the sentence, so that if the capability layer
+    //    ever starts admitting a bare grant-holder this case says so instead of quietly passing.
+    await expect(
+      asPerson(org, (tx) => assignRoleAsActor(tx, actorOf(roleless, org), { personId: staffer, role: 'manager' })),
+    ).rejects.toThrow(/has no active role in org/);
+    expect((await roleOf(staffer, org))?.role).toBe('staff');
+
+    // ⭐ And an ordinary admin may still appoint somebody who holds nothing at all.
+    const appointer = await insertPerson(org, 'Ordinary Admin');
+    await insertRoleRaw(appointer, org, 'admin');
+    await giveCredential(appointer);
+    const newcomer = await insertPerson(org, 'Newcomer With No Role');
+    await asPerson(org, (tx) =>
+      assignRoleAsActor(tx, actorOf(appointer, org), { personId: newcomer, role: 'staff' }),
+    );
+    expect((await roleOf(newcomer, org))?.role).toBe('staff');
   });
 });

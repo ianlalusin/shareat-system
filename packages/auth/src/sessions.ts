@@ -249,6 +249,15 @@ export async function endShift(
 // -------------------------------------------------------------------------------------
 
 /**
+ * ⭐ T-239 / DEF-229 — the reason a SUPERSEDE writes, since there is no human to attribute it to.
+ *
+ * Exported so the assertion in `sessions.test.ts` matches the sentence the code writes rather than
+ * a copy of it: a test carrying its own duplicate of this string would go on passing after somebody
+ * changed one of the two.
+ */
+export const PIN_SUPERSEDED_REASON = 'Superseded by a newly issued PIN for this store.';
+
+/**
  * Sets a person's PIN for a store.
  *
  * ⚠️ **Retires the PIN it replaces, and ends their live sessions at that store.** Both halves, or
@@ -294,7 +303,14 @@ export async function setPin(
       (c) => c.kind === 'pin',
     );
     for (const previous of livePins) {
-      await sessionsRepo.revokeCredential(trx, previous.id, null);
+      await sessionsRepo.revokeCredential(trx, {
+        id: previous.id,
+        by: null,
+        // ⭐ T-239 / DEF-229 — no principal to name, so it names the ACT. `enrolFingerprint` does
+        //    the same one table over. A revocation nobody can explain is not an audit trail, and
+        //    "the system did it, for this reason" is a better record than a fabricated person.
+        reason: PIN_SUPERSEDED_REASON,
+      });
     }
 
     const { id } = await sessionsRepo.insertCredential(trx, {

@@ -45,6 +45,20 @@ function errorMessage(err: unknown): string {
   if (/may not grant themselves a capability/.test(raw)) {
     return 'You cannot give yourself a capability. Ask another admin — otherwise anyone holding this screen could widen their own authority, and nobody would have approved it.';
   }
+  // ⛔ T-242 / DEF-234 — BEFORE the appointment case below, and the order is not cosmetic. Both
+  // sentences are about super-admins and a reader skimming would merge them, but one answers
+  // "why can't I APPOINT this person" and the other "why can't I REMOVE that person". Getting them
+  // the wrong way round is a refusal that sends someone off to do work that cannot help.
+  // ⚠️ The `/outranks you/` match is the contract with `assignRoleAsActor`'s message, which
+  // deliberately avoids the phrase `requires super_admin` for exactly this reason (DEF-177's shape);
+  // `roles.test.ts` case 6 asserts both halves of that.
+  if (/outranks you/.test(raw)) {
+    return (
+      'You cannot change the role of somebody senior to you. An admin may change an admin, a ' +
+      'manager or a staff member; only a super-admin may change a super-admin. If this ' +
+      'organisation has no super-admin left, ask the system owner.'
+    );
+  }
   if (/requires super_admin/.test(raw)) {
     return 'Only a super-admin can appoint an admin. An admin may appoint managers and staff (bible row 116).';
   }
@@ -216,11 +230,14 @@ export async function unlinkCredentialAction(formData: FormData): Promise<void> 
   const actor = await requireActor('/admin/users');
   const personId = str(formData, 'personId');
   const credentialId = str(formData, 'credentialId');
+  // T-239 / DEF-229. Trimmed and refused by the domain, so this screen and `/staff`'s revoke form
+  // cannot drift apart on what counts as blank.
+  const reason = str(formData, 'reason');
 
   let ended = 0;
   try {
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
-      unlinkCredential(tx, actor, { personId, credentialId }),
+      unlinkCredential(tx, actor, { personId, credentialId, reason }),
     );
     ended = result.sessionsEnded;
 

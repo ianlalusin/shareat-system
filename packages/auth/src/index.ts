@@ -31,6 +31,8 @@ export {
   setPin,
   PIN_SESSION_TTL_MS,
   BROWSER_SESSION_TTL_MS,
+  /** T-239 / DEF-229 — exported so a test asserts the sentence the code writes, not a copy. */
+  PIN_SUPERSEDED_REASON,
 } from './sessions';
 export type { SignInResult, ResolvedSession } from './sessions';
 export { hashPin, verifyPin, pinLookupHash, isValidPinFormat, newSessionToken, sessionTokenHash } from './credentials';

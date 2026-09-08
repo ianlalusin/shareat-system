@@ -848,6 +848,13 @@
       "when": 1797910307084,
       "tag": "0137_def224_def228_credential_live_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 138,
+      "version": "7",
+      "when": 1797996707084,
+      "tag": "0138_def229_credential_revoke_reason",
+      "breakpoints": true
     }
   ]
 }

@@ -84,6 +84,18 @@ export const personCredentials = pgTable(
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
     revokedBy: uuid('revoked_by').references(() => persons.id, { onDelete: 'restrict' }),
 
+    /**
+     * ⭐ **Why, added by T-239 / DEF-229.** The table recorded *who* and *when* and never *why* —
+     * an audit gap on the table that authorises everything. `attendance_credentials` has required a
+     * reason since T-185; this one never had the column at all.
+     *
+     * ⚠️ **Human-typed on the unlink path, a fixed sentence on the supersede path.** `setPin` has no
+     * `Actor`, so it names the act instead of a person: *"Superseded by a newly issued PIN for this
+     * store."* — exactly what `enrolFingerprint` does one table over. Neither is ever NULL once
+     * `revoked_at` is set.
+     */
+    revokeReason: text('revoke_reason'),
+
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
@@ -139,6 +151,33 @@ export const personCredentials = pgTable(
            and ${t.secretHash} is null and ${t.lookupHash} is null)
         or (${t.kind} = 'biometric' and ${t.storeId} is not null)
       `,
+    ),
+
+    /**
+     * ⛔ **A revocation with no reason is not an audit trail — T-239 / DEF-229.**
+     *
+     * ⚠️ **NOT the shape `attendance_credentials_revoke_check` uses, and the difference is
+     * deliberate.** That one binds all three columns, so a revoked row must name a person. Here
+     * `revokedBy` is legitimately NULL: `setPin` retires the PIN it replaces and has no principal to
+     * name (see `repo/sessions.ts`' `revokeCredential`). Binding the reason to `revokedBy` would
+     * refuse every PIN re-issue. **The reason pairs with the TIMESTAMP.** *When* and *why* are
+     * always answerable; *who* only when there was a human.
+     *
+     * ⛔ The `is not null` in the second branch is NOT redundant with `btrim(…) <> ''`. A CHECK
+     * passes when its expression is TRUE **or NULL**, and `btrim(null) <> ''` is NULL — so without
+     * it a revoked row with a NULL reason is accepted and this constraint is decorative. It refuses
+     * a *blank* reason while waving through a *missing* one, which is precisely backwards.
+     * `credentials-admin.test.ts`' raw-SQL control exists to keep that from being re-introduced.
+     *
+     * ⚠️ Stricter than the sibling on purpose: `attendance_credentials` accepts `''` and trims only
+     * in its domain layer — the service as the sole defence for the rule, which is the shape bible
+     * §15.11 warns about. Logged in the register rather than left as a silent divergence.
+     */
+    check(
+      'person_credentials_revoke_check',
+      sql`(${t.revokedAt} is null and ${t.revokeReason} is null)
+          or (${t.revokedAt} is not null and ${t.revokeReason} is not null
+              and btrim(${t.revokeReason}) <> '')`,
     ),
   ],
 );

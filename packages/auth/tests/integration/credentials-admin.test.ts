@@ -52,6 +52,10 @@ const sql = postgres(url, { max: 5 });
 let seq = 0;
 const uid = (p: string) => `${p}-${Date.now()}-${++seq}`;
 
+/** T-239 / DEF-229 — every unlink carries a reason now. The cases that are ABOUT the reason spell
+ *  out their own; the rest take this one, so a required argument never reads as a case's subject. */
+const REASON = 'They have left the company.';
+
 interface Fixture {
   orgId: string;
   storeId: string;
@@ -159,7 +163,7 @@ describe('DEF-224 — a uid that was unlinked can be linked again', () => {
       linkFirebaseCredential(tx, f.admin, { personId: f.personId, uid: externalId }),
     );
     await asOrg(f.orgId, (tx) =>
-      unlinkCredential(tx, f.admin, { personId: f.personId, credentialId: first.credentialId }),
+      unlinkCredential(tx, f.admin, { personId: f.personId, credentialId: first.credentialId, reason: REASON }),
     );
 
     // ⛔ This is the line that raised 23505 before migration 0137.
@@ -210,7 +214,7 @@ describe('unlinkCredential — the row and the sessions, together', () => {
     expect(await asOrg(f.orgId, (tx) => resolveActor(tx, session.token))).toBeTruthy();
 
     const result = await asOrg(f.orgId, (tx) =>
-      unlinkCredential(tx, f.admin, { personId: f.personId, credentialId }),
+      unlinkCredential(tx, f.admin, { personId: f.personId, credentialId, reason: REASON }),
     );
 
     expect(result.sessionsEnded).toBe(1);
@@ -237,7 +241,7 @@ describe('unlinkCredential — the row and the sessions, together', () => {
     await expect(
       asOrg(f.orgId, (tx) =>
         // The admin's own id, someone else's credential: a hand-crafted POST's shape.
-        unlinkCredential(tx, f.admin, { personId: f.adminId, credentialId }),
+        unlinkCredential(tx, f.admin, { personId: f.adminId, credentialId, reason: REASON }),
       ),
     ).rejects.toThrow(/not linked to this person/);
     expect(await liveCredentialCount(f.personId)).toBe(1);
@@ -256,14 +260,14 @@ describe('unlinkCredential — the row and the sessions, together', () => {
     );
     await expect(
       asOrg(f.orgId, (tx) =>
-        unlinkCredential(tx, f.manager, { personId: f.personId, credentialId }),
+        unlinkCredential(tx, f.manager, { personId: f.personId, credentialId, reason: REASON }),
       ),
     ).rejects.toThrow(AuthorizationError);
 
     // The non-zero control: the same call from an admin succeeds, so the refusals above are the
     // capability and not a broken fixture.
     await expect(
-      asOrg(f.orgId, (tx) => unlinkCredential(tx, f.admin, { personId: f.personId, credentialId })),
+      asOrg(f.orgId, (tx) => unlinkCredential(tx, f.admin, { personId: f.personId, credentialId, reason: REASON })),
     ).resolves.toMatchObject({ kind: 'firebase' });
   });
 
@@ -281,7 +285,7 @@ describe('unlinkCredential — the row and the sessions, together', () => {
     await asOrg(f.orgId, (tx) => signInWithFirebase(tx, { verifiedUid: externalId }));
 
     const result = await asOrg(f.orgId, (tx) =>
-      unlinkCredential(tx, f.admin, { personId: f.adminId, credentialId }),
+      unlinkCredential(tx, f.admin, { personId: f.adminId, credentialId, reason: REASON }),
     );
     expect(result.sessionsEnded).toBe(1);
   });
@@ -295,7 +299,7 @@ describe('⛔ case 6 — the last way into an organisation', () => {
     );
 
     await expect(
-      asOrg(f.orgId, (tx) => unlinkCredential(tx, f.admin, { personId: f.adminId, credentialId })),
+      asOrg(f.orgId, (tx) => unlinkCredential(tx, f.admin, { personId: f.adminId, credentialId, reason: REASON })),
     ).rejects.toThrow(/last way into this organisation/);
     expect(await liveCredentialCount(f.adminId)).toBe(1);
 
@@ -304,7 +308,7 @@ describe('⛔ case 6 — the last way into an organisation', () => {
     // roles allowed exactly this, and this very case is what proved it (Opus second read, T-237).
     await mkRole(f.orgId, f.personId, 'admin');
     await expect(
-      asOrg(f.orgId, (tx) => unlinkCredential(tx, f.admin, { personId: f.adminId, credentialId })),
+      asOrg(f.orgId, (tx) => unlinkCredential(tx, f.admin, { personId: f.adminId, credentialId, reason: REASON })),
     ).rejects.toThrow(/last way into this organisation/);
     expect(await liveCredentialCount(f.adminId)).toBe(1);
 
@@ -312,7 +316,7 @@ describe('⛔ case 6 — the last way into an organisation', () => {
     // the role alone must not unblock it, and the role plus a credential must.
     await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '654321' }));
     await expect(
-      asOrg(f.orgId, (tx) => unlinkCredential(tx, f.admin, { personId: f.adminId, credentialId })),
+      asOrg(f.orgId, (tx) => unlinkCredential(tx, f.admin, { personId: f.adminId, credentialId, reason: REASON })),
     ).resolves.toMatchObject({ kind: 'firebase' });
   });
 
@@ -328,7 +332,7 @@ describe('⛔ case 6 — the last way into an organisation', () => {
     );
 
     await expect(
-      asOrg(f.orgId, (tx) => unlinkCredential(tx, f.admin, { personId: f.adminId, credentialId })),
+      asOrg(f.orgId, (tx) => unlinkCredential(tx, f.admin, { personId: f.adminId, credentialId, reason: REASON })),
     ).resolves.toMatchObject({ kind: 'firebase' });
   });
 
@@ -339,7 +343,7 @@ describe('⛔ case 6 — the last way into an organisation', () => {
     );
     // Their last credential, and nobody is locked out of anything by removing it.
     await expect(
-      asOrg(f.orgId, (tx) => unlinkCredential(tx, f.admin, { personId: f.personId, credentialId })),
+      asOrg(f.orgId, (tx) => unlinkCredential(tx, f.admin, { personId: f.personId, credentialId, reason: REASON })),
     ).resolves.toMatchObject({ sessionsEnded: 0 });
   });
 });
@@ -370,7 +374,7 @@ describe('⛔ tenancy — another org’s person is refused by THIS layer, not o
       values (${other.personId}, 'firebase', ${uid('other-uid')}) returning id`;
     await expect(
       asOrg(f.orgId, (tx) =>
-        unlinkCredential(tx, f.admin, { personId: other.personId, credentialId: cred!.id }),
+        unlinkCredential(tx, f.admin, { personId: other.personId, credentialId: cred!.id, reason: REASON }),
       ),
     ).rejects.toThrow(/does not exist in org/);
 
@@ -460,7 +464,7 @@ describe('the lockout guard is serialised for the organisation', () => {
 
     await asOrg(f.orgId, async (tx) => {
       expect(await advisoryLocks(tx)).toBe(0);
-      await unlinkCredential(tx, f.admin, { personId: f.personId, credentialId });
+      await unlinkCredential(tx, f.admin, { personId: f.personId, credentialId, reason: REASON });
       expect(await advisoryLocks(tx)).toBeGreaterThan(0);
     });
   });
@@ -519,5 +523,107 @@ describe('DEF-228 — re-issuing a PIN retires the one it replaces', () => {
     await expect(
       asOrg(f.orgId, (tx) => setPin(tx, { personId: f.adminId, storeId: f.storeId, pin: '456789' })),
     ).rejects.toThrow(/already in use at this store/);
+  });
+});
+
+// =========================================================================================
+// T-239 / DEF-229 — a revocation records WHY
+// =========================================================================================
+
+/**
+ * ⛔ **Case 3 below is the one that matters, and it is the one an ordinary suite would not have.**
+ *
+ * Every other case here writes rows through code that supplies a reason, so all of them pass
+ * against a constraint that does nothing at all. Only a raw-SQL write proves the DATABASE refuses
+ * a revocation with no reason — which is the whole point of putting the rule in a CHECK rather
+ * than in the service layer (bible §15.11: no layer may be the only one for a given risk).
+ *
+ * ⚠️ The naive spelling of that CHECK — `revoked_at is not null and btrim(revoke_reason) <> ''` —
+ * ACCEPTS a NULL reason, because a CHECK passes when its expression evaluates to NULL rather than
+ * TRUE. Spec §2a, proven on this database before the constraint was written. Case 3 is what makes
+ * the difference falsifiable; without it the migration could ship a no-op and stay green.
+ */
+describe('DEF-229 — a revocation records why', () => {
+  /** Revoked directly by raw SQL, bypassing every service: the constraint is the only thing left. */
+  const forceRevoke = async (credentialId: string, reason: string | null) =>
+    sql`update person_credentials
+           set revoked_at = now(), revoked_by = null, revoke_reason = ${reason}
+         where id = ${credentialId}`;
+
+  it('⭐ stores the administrator’s reason against the row, trimmed', async () => {
+    const f = await setup('why-stored');
+    const { credentialId } = await asOrg(f.orgId, (tx) =>
+      linkFirebaseCredential(tx, f.admin, { personId: f.personId, uid: uid('fb-why') }),
+    );
+
+    await asOrg(f.orgId, (tx) =>
+      unlinkCredential(tx, f.admin, {
+        personId: f.personId,
+        credentialId,
+        reason: '  Account compromised — reported by the branch manager.  ',
+      }),
+    );
+
+    const [row] = await sql<{ revoke_reason: string; revoked_by: string | null }[]>`
+      select revoke_reason, revoked_by from person_credentials where id = ${credentialId}`;
+    expect(row!.revoke_reason).toBe('Account compromised — reported by the branch manager.');
+    // ⭐ And the human is still recorded — this task added a third question, it did not replace one.
+    expect(row!.revoked_by).toBe(f.adminId);
+  });
+
+  it('⛔ refuses a blank reason, and the credential is STILL LIVE afterwards', async () => {
+    // The second half is the real assertion: it proves the refusal happened BEFORE the write,
+    // rather than after a revocation that then rolled back for some unrelated reason.
+    const f = await setup('why-blank');
+    const { credentialId } = await asOrg(f.orgId, (tx) =>
+      linkFirebaseCredential(tx, f.admin, { personId: f.personId, uid: uid('fb-blank') }),
+    );
+
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        unlinkCredential(tx, f.admin, { personId: f.personId, credentialId, reason: '   ' }),
+      ),
+    ).rejects.toThrow(/needs a reason/);
+    expect(await liveCredentialCount(f.personId)).toBe(1);
+  });
+
+  it('⛔ THE CONTROL: the DATABASE refuses a revoked row whose reason is NULL', async () => {
+    // Raw SQL, no service in the way. If this passes, `person_credentials_revoke_check` is either
+    // absent or NULL-blind, and every other case in this file would still be green.
+    const f = await setup('why-db');
+    const { credentialId } = await asOrg(f.orgId, (tx) =>
+      linkFirebaseCredential(tx, f.admin, { personId: f.personId, uid: uid('fb-db') }),
+    );
+
+    await expect(forceRevoke(credentialId, null)).rejects.toThrow(
+      /person_credentials_revoke_check/,
+    );
+    // ⚠️ And the blank case too — the clause this table has that its sibling does not (spec §5).
+    await expect(forceRevoke(credentialId, '   ')).rejects.toThrow(
+      /person_credentials_revoke_check/,
+    );
+    expect(await liveCredentialCount(f.personId)).toBe(1);
+  });
+
+  it('a LIVE row still has a NULL reason — the constraint did not become “every row needs one”', async () => {
+    const f = await setup('why-live');
+    const { credentialId } = await asOrg(f.orgId, (tx) =>
+      linkFirebaseCredential(tx, f.admin, { personId: f.personId, uid: uid('fb-live') }),
+    );
+    const [row] = await sql<{ revoke_reason: string | null }[]>`
+      select revoke_reason from person_credentials where id = ${credentialId}`;
+    expect(row!.revoke_reason).toBeNull();
+  });
+
+  it('⛔ and a reason without a revocation is refused too — the pair is symmetric', async () => {
+    // Otherwise a half-written row ("we meant to revoke this") reads as a live credential that
+    // somebody has already explained away.
+    const f = await setup('why-sym');
+    const { credentialId } = await asOrg(f.orgId, (tx) =>
+      linkFirebaseCredential(tx, f.admin, { personId: f.personId, uid: uid('fb-sym') }),
+    );
+    await expect(
+      sql`update person_credentials set revoke_reason = 'Changed my mind.' where id = ${credentialId}`,
+    ).rejects.toThrow(/person_credentials_revoke_check/);
   });
 });
