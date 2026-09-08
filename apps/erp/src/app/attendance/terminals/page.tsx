@@ -4,6 +4,7 @@ import { isReady, listStores, terminalsForStore, type ClockTerminalRow } from '.
 import { ProvisionForm } from './ProvisionForm';
 import { RepairButton } from './RepairButton';
 import { Page } from '@/components/shell/Page';
+import { FilterRow } from '@/components/FilterRow';
 
 export const metadata = { title: 'Clock terminals — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -16,8 +17,6 @@ interface SearchParams {
 
 const SELECT =
   'rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-const BTN_SM =
-  'rounded border border-neutral-300 px-3 py-1 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900';
 
 function fmt(d: Date | null): string {
   if (!d) return '—';
@@ -95,7 +94,7 @@ export default async function TerminalsPage({
         </div>
       )}
 
-      <form method="get" className="flex flex-wrap items-end gap-3 gap-y-2">
+      <FilterRow>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
           <select name="store" defaultValue={storeId} className={SELECT}>
@@ -106,10 +105,7 @@ export default async function TerminalsPage({
             ))}
           </select>
         </label>
-        <button type="submit" className={BTN_SM}>
-          Show
-        </button>
-      </form>
+      </FilterRow>
 
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Provision a new terminal</h2>

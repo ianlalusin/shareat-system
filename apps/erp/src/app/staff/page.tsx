@@ -3,6 +3,7 @@ import { requireSession } from '../../lib/session';
 import { upsertStorePositionAction } from './actions';
 import { listStores, positionsForStore, rosterForStore } from './lib';
 import { Page } from '@/components/shell/Page';
+import { FilterRow } from '@/components/FilterRow';
 
 export const metadata = { title: 'Staff — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -17,8 +18,6 @@ const INPUT =
   'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 const BTN =
   'rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
-const BTN_SM =
-  'rounded-md border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900';
 
 export default async function StaffPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
@@ -67,7 +66,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
         </div>
       )}
 
-      <form method="get" className="flex flex-wrap items-end gap-3 gap-y-2">
+      <FilterRow>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
           <select name="store" defaultValue={storeId} className={INPUT}>
@@ -78,10 +77,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
             ))}
           </select>
         </label>
-        <button type="submit" className={BTN_SM}>
-          Show
-        </button>
-      </form>
+      </FilterRow>
 
       <section className="space-y-3">
         {roster.length === 0 ? (

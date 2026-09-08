@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { listStores, stockSummary } from './lib';
 import { requireSession } from '../../lib/session';
 import { Page } from '@/components/shell/Page';
+import { FilterRow } from '@/components/FilterRow';
 
 export const metadata = { title: 'Stock on hand — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -67,7 +68,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         On-hand is a query over every movement ever recorded — there is no balance column to drift.
       </p>
 
-      <form method="get" className="mt-6 flex flex-wrap items-end gap-3 gap-y-2">
+      <FilterRow className="mt-6">
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
           <select
@@ -82,13 +83,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
             ))}
           </select>
         </label>
-        <button
-          type="submit"
-          className="rounded-md border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
-        >
-          Show
-        </button>
-      </form>
+      </FilterRow>
 
       {/*
         ⭐ **Bible invariant 6's inventory arm, on a screen.** It asks that the control accounts

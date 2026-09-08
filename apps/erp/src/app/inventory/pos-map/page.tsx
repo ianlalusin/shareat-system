@@ -3,6 +3,7 @@ import { requireSession } from '../../../lib/session';
 import { upsertPosItemMapAction, decideMapRequestAction } from './actions';
 import { listStores, posMapScreenData } from './lib';
 import { Page } from '@/components/shell/Page';
+import { FilterRow } from '@/components/FilterRow';
 
 export const metadata = { title: 'POS item mapping — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -66,7 +67,7 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
         </div>
       )}
 
-      <form method="get" className="flex flex-wrap items-end gap-3 gap-y-2">
+      <FilterRow>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
           <select name="store" defaultValue={storeId} className={INPUT}>
@@ -77,10 +78,7 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
             ))}
           </select>
         </label>
-        <button type="submit" className={BTN_SM}>
-          Show
-        </button>
-      </form>
+      </FilterRow>
 
       {openRequests.length > 0 && (
         <section className="rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">

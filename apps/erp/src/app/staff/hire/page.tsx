@@ -4,6 +4,7 @@ import { requireSession } from '../../../lib/session';
 import { hireAction } from '../actions';
 import { listStores, positionsForStore, searchPersonsFor } from '../lib';
 import { Page } from '@/components/shell/Page';
+import { FilterRow } from '@/components/FilterRow';
 
 export const metadata = { title: 'Hire — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -18,8 +19,6 @@ const INPUT =
   'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 const BTN =
   'rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
-const BTN_SM =
-  'rounded-md border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900';
 
 /** ⭐ v1/T-154 name no canonical "just hired" default among the seven statuses. `probationary` is
  *  what T-154's own test fixture already hires with, and reads as "not yet regular" — chosen and
@@ -71,7 +70,7 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
         </div>
       )}
 
-      <form method="get" className="flex flex-wrap items-end gap-3">
+      <FilterRow submitLabel="Search">
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
           <select name="store" defaultValue={storeId} className={INPUT}>
@@ -86,10 +85,7 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
           <span className="block text-neutral-600 dark:text-neutral-400">Find a person</span>
           <input name="q" defaultValue={query} placeholder="Maria" className={`${INPUT} w-56`} />
         </label>
-        <button type="submit" className={BTN_SM}>
-          Search
-        </button>
-      </form>
+      </FilterRow>
 
       {query && (
         <p className="text-xs text-neutral-500 dark:text-neutral-400">

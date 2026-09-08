@@ -6,6 +6,7 @@ import { setThresholdAction } from './actions';
 import { requireSession } from '../../../lib/session';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
+import { FilterRow } from '@/components/FilterRow';
 
 export const metadata = { title: 'Low stock — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -64,7 +65,7 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
         low-stock alert is indistinguishable from a real one.
       </p>
 
-      <form method="get" className="mt-6 flex flex-wrap items-end gap-3 gap-y-2">
+      <FilterRow className="mt-6">
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
           <select
@@ -79,13 +80,7 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
             ))}
           </select>
         </label>
-        <button
-          type="submit"
-          className="rounded-md border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
-        >
-          Show
-        </button>
-      </form>
+      </FilterRow>
 
       <h2 className="mt-8 text-lg font-medium">At or below threshold</h2>
       {low.length === 0 ? (

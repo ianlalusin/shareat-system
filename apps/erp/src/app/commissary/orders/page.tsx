@@ -13,6 +13,7 @@ import {
 } from './lib';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
+import { FilterRow } from '@/components/FilterRow';
 
 export const metadata = { title: 'Branch orders — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -67,7 +68,7 @@ export default async function BranchOrdersPage({ searchParams }: { searchParams:
         </p>
       </div>
 
-      <form method="get" className="flex flex-wrap items-end gap-3 gap-y-2">
+      <FilterRow>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
           <select name="store" defaultValue={storeId} className={`mt-1 ${INPUT}`}>
@@ -78,13 +79,7 @@ export default async function BranchOrdersPage({ searchParams }: { searchParams:
             ))}
           </select>
         </label>
-        <button
-          type="submit"
-          className="rounded-md border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
-        >
-          Show
-        </button>
-      </form>
+      </FilterRow>
 
       {sp.error && (
         <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-300">

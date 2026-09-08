@@ -3,6 +3,7 @@ import { requireSession } from '../../../lib/session';
 import { buildPlanAction, finalizeSectionAction, requestMapFromPullAction } from './actions';
 import { findLivePull, listOperatingLocationsForStore, listSalesDaysForStore, listStores, pullView, type PullLineView } from './lib';
 import { Page } from '@/components/shell/Page';
+import { FilterRow } from '@/components/FilterRow';
 
 export const metadata = { title: 'Daily POS usage pull — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -188,7 +189,7 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
         </div>
       )}
 
-      <form method="get" className="flex flex-wrap items-end gap-3">
+      <FilterRow>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
           <select name="store" defaultValue={storeId} className={INPUT}>
@@ -209,10 +210,7 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
             ))}
           </select>
         </label>
-        <button type="submit" className={BTN_SM}>
-          Show
-        </button>
-      </form>
+      </FilterRow>
 
       {!salesDayId ? (
         <p className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">

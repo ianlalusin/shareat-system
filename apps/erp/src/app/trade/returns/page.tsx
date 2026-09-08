@@ -7,6 +7,7 @@ import { recordReturnAction, voidReturnAction } from './actions';
 import { requireSession } from '../../../lib/session';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
+import { FilterRow } from '@/components/FilterRow';
 
 export const metadata = { title: 'Customer returns — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -121,7 +122,7 @@ export default async function CustomerReturnsPage({ searchParams }: { searchPara
         choice.
       </p>
 
-      <form method="get" className="mt-6 flex flex-wrap items-end gap-3 gap-y-2">
+      <FilterRow className="mt-6">
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
           <select
@@ -136,10 +137,7 @@ export default async function CustomerReturnsPage({ searchParams }: { searchPara
             ))}
           </select>
         </label>
-        <button type="submit" className="rounded-md border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900">
-          Show
-        </button>
-      </form>
+      </FilterRow>
 
       {credits.size > 0 && (
         <section className="mt-8 rounded-lg border border-amber-400 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-950">

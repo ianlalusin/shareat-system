@@ -4,6 +4,7 @@ import { createOrderAction } from './actions';
 import { NewOrderForm } from './NewOrderForm';
 import { STATUS_LABEL, listStores, orderFormData, orderRegister, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
+import { FilterRow } from '@/components/FilterRow';
 
 export const metadata = { title: 'Trade orders — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -58,7 +59,7 @@ export default async function TradeOrdersPage({ searchParams }: { searchParams: 
         </div>
       )}
 
-      <form method="get" className="flex flex-wrap items-end gap-3 gap-y-2">
+      <FilterRow>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
           <select
@@ -73,13 +74,7 @@ export default async function TradeOrdersPage({ searchParams }: { searchParams: 
             ))}
           </select>
         </label>
-        <button
-          type="submit"
-          className="rounded-md border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
-        >
-          Show
-        </button>
-      </form>
+      </FilterRow>
 
       {/*
         ⭐ BOTH directions in one list, deliberately — every order this store is on, as the seller

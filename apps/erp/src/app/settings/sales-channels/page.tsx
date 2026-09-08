@@ -7,6 +7,7 @@ import {
 } from './actions';
 import { channelsForStore, moneyAccountNames, receivableOptions, type SalesChannelAdminRow } from './lib';
 import { Page } from '@/components/shell/Page';
+import { FilterRow } from '@/components/FilterRow';
 
 export const metadata = { title: 'Sales channels — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -90,7 +91,7 @@ export default async function SalesChannelsSettingsPage({
         </p>
       </div>
 
-      <form method="get" className="flex flex-wrap items-end gap-3">
+      <FilterRow>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
           <select name="store" defaultValue={storeId} className={`${FIELD} mt-1`}>
@@ -101,10 +102,7 @@ export default async function SalesChannelsSettingsPage({
             ))}
           </select>
         </label>
-        <button type="submit" className={BTN}>
-          Show
-        </button>
-      </form>
+      </FilterRow>
 
       {sp.error && <Banner tone="error">{sp.error}</Banner>}
       {sp.ok && <Banner tone="ok">{sp.ok}</Banner>}

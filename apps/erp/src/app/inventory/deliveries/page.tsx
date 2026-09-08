@@ -6,6 +6,7 @@ import { createDeliveryAction } from './actions';
 import { deliveryFormData, deliveryRegister, listStores } from './lib';
 import { NewDeliveryForm } from './NewDeliveryForm';
 import { Page } from '@/components/shell/Page';
+import { FilterRow } from '@/components/FilterRow';
 
 export const metadata = { title: 'Deliveries — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -19,8 +20,6 @@ interface SearchParams {
 
 const INPUT =
   'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
-const BTN_SM =
-  'rounded-md border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900';
 
 const KIND_LABEL: Record<string, string> = { supplier: 'Supplier', purchase: 'Cash purchase', commissary: 'Commissary' };
 const STATUS_LABEL: Record<string, string> = { draft: 'Draft', received: 'Received', void: 'Void' };
@@ -82,7 +81,7 @@ export default async function DeliveriesPage({ searchParams }: { searchParams: P
         </div>
       )}
 
-      <form method="get" className="flex flex-wrap items-end gap-3 gap-y-2">
+      <FilterRow>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
           <select name="store" defaultValue={storeId} className={`mt-1 ${INPUT}`}>
@@ -93,10 +92,7 @@ export default async function DeliveriesPage({ searchParams }: { searchParams: P
             ))}
           </select>
         </label>
-        <button type="submit" className={BTN_SM}>
-          Show
-        </button>
-      </form>
+      </FilterRow>
 
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="text-sm font-medium">New delivery</h2>

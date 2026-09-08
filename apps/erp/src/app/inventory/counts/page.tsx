@@ -3,6 +3,7 @@ import { countsRegister, listStores } from './lib';
 import { openCountSessionAction } from './actions';
 import { requireSession } from '../../../lib/session';
 import { Page } from '@/components/shell/Page';
+import { FilterRow } from '@/components/FilterRow';
 
 export const metadata = { title: 'Physical counts — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -70,7 +71,7 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
         </div>
       )}
 
-      <form method="get" className="flex flex-wrap items-end gap-3 gap-y-2">
+      <FilterRow>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
           <select
@@ -85,10 +86,7 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
             ))}
           </select>
         </label>
-        <button type="submit" className="rounded-md border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900">
-          Show
-        </button>
-      </form>
+      </FilterRow>
 
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Open a count</h2>

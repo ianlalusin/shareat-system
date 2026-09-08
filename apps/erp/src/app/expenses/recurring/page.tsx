@@ -21,6 +21,7 @@ import {
   today,
 } from './lib';
 import { Page } from '@/components/shell/Page';
+import { FilterRow } from '@/components/FilterRow';
 
 export const metadata = { title: 'Recurring expenses — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -127,7 +128,7 @@ export default async function RecurringExpensesPage({
         </p>
       ) : (
         <>
-          <form method="get" className="flex flex-wrap items-end gap-3">
+          <FilterRow>
             <label className="flex flex-col gap-1">
               <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Store</span>
               <select name="store" defaultValue={storeId} className={INPUT}>
@@ -138,10 +139,7 @@ export default async function RecurringExpensesPage({
                 ))}
               </select>
             </label>
-            <button type="submit" className={BTN}>
-              Show
-            </button>
-          </form>
+          </FilterRow>
 
           <section className="space-y-2">
             <h2 className="font-medium">Templates</h2>

@@ -3,6 +3,7 @@ import { requireSession } from '../../../lib/session';
 import { removeMapAction, upsertLinkAction, upsertMapAction, upsertOfferingAction } from './actions';
 import { EXPENSE_GROUPS, catalogueData, listCategoriesGrouped, listStores, mapData, peso } from './lib';
 import { Page } from '@/components/shell/Page';
+import { FilterRow } from '@/components/FilterRow';
 
 export const metadata = { title: 'Commissary catalogue — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -71,7 +72,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
         </div>
       )}
 
-      <form method="get" className="flex flex-wrap items-end gap-3 gap-y-2">
+      <FilterRow>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Commissary</span>
           <select name="commissary" defaultValue={commissaryStoreId} className={INPUT}>
@@ -82,10 +83,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
             ))}
           </select>
         </label>
-        <button type="submit" className={BTN_SM}>
-          Show
-        </button>
-      </form>
+      </FilterRow>
 
       {/* ---- Links ---------------------------------------------------------------------- */}
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
@@ -245,7 +243,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
           unit — nothing here guesses a conversion.
         </p>
 
-        <form method="get" className="flex flex-wrap items-end gap-3 gap-y-2">
+        <FilterRow>
           <input type="hidden" name="commissary" value={commissaryStoreId} />
           <label className="text-sm">
             <span className="block text-neutral-600 dark:text-neutral-400">Branch</span>
@@ -260,10 +258,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
               ))}
             </select>
           </label>
-          <button type="submit" className={BTN_SM}>
-            Show
-          </button>
-        </form>
+        </FilterRow>
 
         {!branchStoreId || !mapSection ? (
           <p className="text-sm text-neutral-600 dark:text-neutral-400">Pick a branch above to map its items.</p>

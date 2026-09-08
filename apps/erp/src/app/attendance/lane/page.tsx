@@ -5,6 +5,7 @@ import { requireSession } from '../../../lib/session';
 import { discardEventAction, retryEventAction } from './actions';
 import { ago, listStores, loadHealth, loadQuarantine, rawJson, when } from './lib';
 import { Page } from '@/components/shell/Page';
+import { FilterRow } from '@/components/FilterRow';
 
 export const metadata = { title: 'The clock lane — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -73,7 +74,7 @@ export default async function LanePage({
 
       {/* ── Store picker. A GET form, so the URL stays shareable. ────────────────────── */}
       {stores.length > 1 && (
-        <form method="get" className="flex flex-wrap items-center gap-2">
+        <FilterRow>
           <label htmlFor="store" className="text-sm text-neutral-600 dark:text-neutral-400">
             Store
           </label>
@@ -89,13 +90,7 @@ export default async function LanePage({
               </option>
             ))}
           </select>
-          <button
-            type="submit"
-            className="rounded border border-neutral-300 px-4 py-2.5 text-sm font-medium dark:border-neutral-700"
-          >
-            Show
-          </button>
-        </form>
+        </FilterRow>
       )}
 
       {sp.error && (

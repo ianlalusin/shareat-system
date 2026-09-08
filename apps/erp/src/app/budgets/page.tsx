@@ -13,6 +13,7 @@ import {
   peso,
 } from './lib';
 import { Page } from '@/components/shell/Page';
+import { FilterRow } from '@/components/FilterRow';
 
 export const metadata = { title: 'Budgets — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -88,7 +89,7 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
       ) : (
         <>
           <section className="flex flex-wrap items-end gap-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-            <form method="get" className="flex flex-wrap items-end gap-3">
+            <FilterRow>
               <label className="flex flex-col gap-1">
                 <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Store</span>
                 <select name="store" defaultValue={storeId} className={INPUT}>
@@ -109,13 +110,7 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
                   ))}
                 </select>
               </label>
-              <button
-                type="submit"
-                className="rounded border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-              >
-                Show
-              </button>
-            </form>
+            </FilterRow>
             <div className="ml-auto text-right text-sm">
               <p className="text-xs text-neutral-500 dark:text-neutral-400">Capped this period</p>
               <p className="text-lg font-semibold tabular-nums">{peso(totalCapped.toFixed(2))}</p>
