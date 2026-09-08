@@ -91,11 +91,14 @@ domain argument to also set up Caddy + automatic TLS on 80/443 (no traefik confl
 | **Finding observation (T-214)** | `npm run finding-observation` | **Daily, 01:30 Manila** | ⭐ It is the CLOCK, not a report. A finding is a pure function of current state and carries no timestamp, so a skipped day **cannot be reconstructed afterwards** — the detectors read live state and cannot be asked "as of" yesterday. Every age on the responsiveness scorecard is measured from what this job saw, so a silent skip permanently understates how long something went unfixed. Daily, not weekly, because the speed component is scored against a 14-day horizon and a weekly run cannot tell 3 days from 9 |
 | **Recurring-expense drafting (T-216)** | `npm run recurring-expense-draft` | **Daily, 02:00 Manila** | A due date is a DAY, and the promise is that the bill is on screen on the morning it is due; a weekly run would surface a Tuesday bill on Sunday. ⛔ **It DRAFTS, it never pays** — a pending supplier invoice plus a draft expense, and nothing reaches the ledger until a person attaches the real bill, verifies the invoice and approves the expense. ⚠️ Runs at 02:00, after finding-observation at 01:30, so this morning's draft is not counted against yesterday |
 | **Firestore sync relay (T-204)** | `npm run firestore-relay` | Every 2 minutes | No wall-clock anchor — punches and mirror writes are useful as soon as possible, but a late run breaks nothing (idempotent, Firestore durable in the meantime). Closes DEF-132 (nothing ever ran either lane against real Firestore) and DEF-134 (nothing ever computed a fresh day's `attendance_days` row) |
+| **Order-wastage backstop (T-178 / DEF-226)** | `npm run order-wastage-backstop` | **Daily, 02:30 Manila** | The 15-day clock has no per-store wall-clock component, unlike attendance_sweep's hourly cadence — polling hourly would buy nothing. Runs after finding-observation (01:30) and recurring-expense-draft (02:00) so the three do not contend. ⛔ Shipped with NO caller at all until this task — `runOrderWastageBackstopSweep` (`scheduler/index.ts:585`) existed and nothing called it, the DEF-186 shape a second time |
 
-⚠️ **`budget-reissue` (T-215) and `recurring-expense-draft` (T-216) have unit files in this
-directory and are NOT YET ARMED** — nothing installs them until `provision.sh` is re-run from a
-fresh copy of `docs/ops`, per the section above. That is now **five** jobs that have shipped
-unarmed; the count is the point.
+⚠️ **`recurring-expense-draft` (T-216) and `order-wastage-backstop` (T-178 / DEF-226) have unit
+files in this directory and are NOT YET ARMED** — nothing installs them until `provision.sh` is
+re-run from a fresh copy of `docs/ops`, per the section above. **`budget-reissue` (T-215) has no
+unit file in this directory at all** — still to write, per the 2026-09-06 status section above;
+its absence here is not the same thing as being armed. That is two jobs with a unit file waiting
+to be armed, plus one with no unit file yet — the count is the point, not any one number of it.
 
 Plus a fifth unit that is not a scheduled job but the app itself: **`shareat-erp.service`**
 (`next start -p 9008`, long-running, `Restart=always`) — installed and enabled the same way, by

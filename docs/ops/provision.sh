@@ -89,7 +89,8 @@ for f in shareat-erp.service \
          shareat-firestore-relay.service shareat-firestore-relay.timer \
          shareat-attendance-sweep.service shareat-attendance-sweep.timer \
          shareat-month-end.service shareat-month-end.timer \
-         shareat-finding-observation.service shareat-finding-observation.timer; do
+         shareat-finding-observation.service shareat-finding-observation.timer \
+         shareat-order-wastage-backstop.service shareat-order-wastage-backstop.timer; do
   install -m 644 "$UNIT_DIR/$f" "/etc/systemd/system/$f"
 done
 systemctl daemon-reload

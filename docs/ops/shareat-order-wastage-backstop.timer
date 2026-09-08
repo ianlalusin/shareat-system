@@ -1,0 +1,26 @@
+# T-178 / DEF-226 — DAILY, not hourly, and not the same reason attendance_sweep is hourly.
+#
+# ⭐ Why daily. The 15-day threshold has no per-store wall-clock component — unlike
+# attendance_sweep, whose hourly cadence exists because the cut-off is a wall-clock hour PER STORE
+# and a daily timer cannot serve two stores on different hours. A 15-day clock has enormous slack
+# by comparison; polling hourly buys nothing a daily run does not, at 24x the writes for the same
+# outcome. `scheduler/index.ts`'s "hourly-shaped like attendance_sweep" comment is about what
+# `period` records (the month the run happened IN, never a period being closed), not a cadence
+# instruction — task 178 §11 names no cadence at all, only that the job be registered through
+# T-140's scheduler rather than a new cron path.
+#
+# ⚠️ 02:30 Manila is after finding-observation (01:30) and recurring-expense-draft (02:00), so this
+# run does not contend with either for the same window.
+
+[Unit]
+Description=Shareat — 15-day order-wastage auto-charge backstop, daily (T-178 / DEF-226)
+
+[Timer]
+OnCalendar=*-*-* 02:30:00 Asia/Manila
+# ⚠️ Catch up after a reboot or an outage rather than skipping silently — same reasoning as
+# finding-observation's timer, and the same defect behind it (DEF-044).
+Persistent=true
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target
