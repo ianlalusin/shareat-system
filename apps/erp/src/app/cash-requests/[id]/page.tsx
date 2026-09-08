@@ -11,6 +11,7 @@ import {
   peso,
   today,
 } from '../lib';
+import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Cash request — Shareat System' };
@@ -73,26 +74,33 @@ export default async function CashRequestPage({
         </div>
       )}
 
-      {/* ── The float ────────────────────────────────────────────────────────────────── */}
-      <section className="space-y-3">
-        <div className="grid gap-3 sm:grid-cols-5">
-          <Figure label="Released" value={peso(req.float.released)} />
-          <Figure label="Spent" value={peso(req.float.spent)} />
-          <Figure label="Returned" value={peso(req.float.returned)} />
-          <Figure label="Short" value={peso(req.float.short)} />
-          <Figure label="Still out" value={peso(req.float.outstanding)} emphasis />
-        </div>
-        <p className="text-xs text-neutral-500 dark:text-neutral-500">
-          ⭐ <strong>Still out</strong> is the balance of <code>1120</code> for this request. The
-          other four are the same balance broken up by what happened to the money — which is why
-          they cannot disagree with it.{' '}
-          {req.isSettled && req.float.released !== '0.00' && (
-            <>
-              It has reached <strong>zero</strong>, so the request is closed.
-            </>
-          )}
-        </p>
-      </section>
+      <DetailLayout
+        summary={
+          /* ── The float ──────────────────────────────────────────────────────────────── */
+          <section className="space-y-3">
+            {/* ⚠️ `min-[1440px]:grid-cols-1`: `sm` is a VIEWPORT query, so without it these FIVE
+                tiles stay five-across inside a 320px rail — 58px each, the worst of the six.
+                T-240 §3.5. */}
+            <div className="grid gap-3 sm:grid-cols-5 min-[1440px]:grid-cols-1">
+              <Figure label="Released" value={peso(req.float.released)} />
+              <Figure label="Spent" value={peso(req.float.spent)} />
+              <Figure label="Returned" value={peso(req.float.returned)} />
+              <Figure label="Short" value={peso(req.float.short)} />
+              <Figure label="Still out" value={peso(req.float.outstanding)} emphasis />
+            </div>
+            <p className="text-xs text-neutral-500 dark:text-neutral-500">
+              ⭐ <strong>Still out</strong> is the balance of <code>1120</code> for this request. The
+              other four are the same balance broken up by what happened to the money — which is why
+              they cannot disagree with it.{' '}
+              {req.isSettled && req.float.released !== '0.00' && (
+                <>
+                  It has reached <strong>zero</strong>, so the request is closed.
+                </>
+              )}
+            </p>
+          </section>
+        }
+      >
 
       {/* ── Decide ───────────────────────────────────────────────────────────────────── */}
       {canDecide && (
@@ -311,6 +319,7 @@ export default async function CashRequestPage({
           {req.notes && <Row label="Notes" value={req.notes} />}
         </dl>
       </section>
+      </DetailLayout>
     </Page>
   );
 }

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { requireSession } from '../../../lib/session';
 import { disburseLoanAction, recordPaymentAction, reverseEntryAction } from '../actions';
 import { METHOD_LABEL, STATUS_LABEL, getDetail, moneyAccounts, peso, today } from '../lib';
+import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Loan — Shareat System' };
@@ -55,20 +56,29 @@ export default async function LoanPage({
         </div>
       )}
 
-      {/* ── The figures ──────────────────────────────────────────────────────────────── */}
-      <div className="grid gap-3 sm:grid-cols-4">
-        <Figure label="Agreed" value={peso(loan.principalAmount)} />
-        <Figure label="Drawn" value={peso(loan.position.disbursed)} />
-        <Figure label="Principal repaid" value={peso(loan.position.principalPaid)} />
-        <Figure label="Outstanding" value={peso(loan.position.outstanding)} emphasis />
-      </div>
-      {/* ⛔ v1 stored all four of these on the loan row and they drifted so far that both live Grab
-          loans were unusable. Here they are one query over the ledger. */}
-      <p className="text-xs text-neutral-400 dark:text-neutral-600">
-        Interest paid to date: <strong>{peso(loan.position.interestPaid)}</strong>. Every figure is
-        summed from the ledger on load, never stored — so none of them can disagree with the books.
-      </p>
-
+      <DetailLayout
+        summary={
+          /* ── The figures ────────────────────────────────────────────────────────────── */
+          <section className="space-y-3">
+            {/* ⚠️ `min-[1440px]:grid-cols-1`: `sm` is a VIEWPORT query, so without it these four
+                tiles stay four-across inside a 320px rail — 74px each, nothing overflowing, every
+                DOM assertion green. T-240 §3.5. */}
+            <div className="grid gap-3 sm:grid-cols-4 min-[1440px]:grid-cols-1">
+              <Figure label="Agreed" value={peso(loan.principalAmount)} />
+              <Figure label="Drawn" value={peso(loan.position.disbursed)} />
+              <Figure label="Principal repaid" value={peso(loan.position.principalPaid)} />
+              <Figure label="Outstanding" value={peso(loan.position.outstanding)} emphasis />
+            </div>
+            {/* ⛔ v1 stored all four of these on the loan row and they drifted so far that both live
+                Grab loans were unusable. Here they are one query over the ledger. */}
+            <p className="text-xs text-neutral-400 dark:text-neutral-600">
+              Interest paid to date: <strong>{peso(loan.position.interestPaid)}</strong>. Every
+              figure is summed from the ledger on load, never stored — so none of them can disagree
+              with the books.
+            </p>
+          </section>
+        }
+      >
       {/* ── Draw it ──────────────────────────────────────────────────────────────────── */}
       {undrawn > 0.005 && accounts.length > 0 && (
         <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
@@ -245,6 +255,7 @@ export default async function LoanPage({
           </p>
         </section>
       )}
+      </DetailLayout>
     </Page>
   );
 }

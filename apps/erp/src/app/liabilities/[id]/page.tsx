@@ -12,6 +12,7 @@ import {
   peso,
   today,
 } from '../lib';
+import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Liability — Shareat System' };
@@ -71,22 +72,27 @@ export default async function LiabilityPage({
         </div>
       )}
 
-      <section className="space-y-3">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Figure label="Charged" value={peso(liability.position.charged)} />
-          <Figure label="Paid" value={peso(liability.position.paid)} />
-          <Figure label="Outstanding" value={peso(liability.position.outstanding)} emphasis />
-        </div>
-        <p className="text-xs text-neutral-500 dark:text-neutral-500">
-          ⭐ <strong>Outstanding</strong> is the balance of <code>2500</code> for this obligation.
-          Charged and paid are the same balance split by what happened — which is why they cannot
-          disagree with it, and why nothing here is stored.
-          {outstanding <= 0.005 && liability.position.charged !== '0.00' && (
-            <> It has reached <strong>zero</strong>, so this is settled.</>
-          )}
-        </p>
-      </section>
-
+      <DetailLayout
+        summary={
+          <section className="space-y-3">
+            {/* ⚠️ `min-[1440px]:grid-cols-1`: `sm` is a VIEWPORT query, so without it these tiles
+                stay three-across inside a 320px rail. T-240 §3.5. */}
+            <div className="grid gap-3 sm:grid-cols-3 min-[1440px]:grid-cols-1">
+              <Figure label="Charged" value={peso(liability.position.charged)} />
+              <Figure label="Paid" value={peso(liability.position.paid)} />
+              <Figure label="Outstanding" value={peso(liability.position.outstanding)} emphasis />
+            </div>
+            <p className="text-xs text-neutral-500 dark:text-neutral-500">
+              ⭐ <strong>Outstanding</strong> is the balance of <code>2500</code> for this
+              obligation. Charged and paid are the same balance split by what happened — which is
+              why they cannot disagree with it, and why nothing here is stored.
+              {outstanding <= 0.005 && liability.position.charged !== '0.00' && (
+                <> It has reached <strong>zero</strong>, so this is settled.</>
+              )}
+            </p>
+          </section>
+        }
+      >
       <div className="grid gap-4 sm:grid-cols-2">
         <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <div>
@@ -269,6 +275,7 @@ export default async function LiabilityPage({
           </form>
         </section>
       )}
+      </DetailLayout>
     </Page>
   );
 }

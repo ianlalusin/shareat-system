@@ -16,6 +16,7 @@ import {
   peso,
   today,
 } from '../lib';
+import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Owner — Shareat System' };
@@ -76,29 +77,34 @@ export default async function OwnerPage({
         </div>
       )}
 
-      {/* ── The position ─────────────────────────────────────────────────────────────── */}
-      <section className="space-y-3">
-        <div className="grid gap-3 sm:grid-cols-4">
-          <Figure label="Contributed" value={peso(owner.position.contributed)} />
-          <Figure label="Drawn" value={peso(owner.position.drawn)} />
-          <Figure label="Net equity" value={peso(owner.position.net)} emphasis />
-          <Figure label="Still owes us" value={peso(owner.position.receivable)} />
-        </div>
-        <p className="text-xs text-neutral-500 dark:text-neutral-500">
-          ⭐ <strong>Net</strong> is contributed minus drawn — arithmetic on the two figures beside
-          it, never a stored third number.{' '}
-          <strong>Still owes us</strong> is separate on purpose: a personal expense the business
-          expects back has not reduced equity, and it is not part of net.
-          {owner.aged && (
-            <>
-              {' '}
-              ⚠️ Oldest unsettled charge {owner.aged.oldestOn} —{' '}
-              <strong>{owner.aged.daysOutstanding} days</strong>.
-            </>
-          )}
-        </p>
-      </section>
-
+      <DetailLayout
+        summary={
+          /* ── The position ───────────────────────────────────────────────────────────── */
+          <section className="space-y-3">
+            {/* ⚠️ `min-[1440px]:grid-cols-1`: `sm` is a VIEWPORT query, so without it these four
+                tiles stay four-across inside a 320px rail. T-240 §3.5. */}
+            <div className="grid gap-3 sm:grid-cols-4 min-[1440px]:grid-cols-1">
+              <Figure label="Contributed" value={peso(owner.position.contributed)} />
+              <Figure label="Drawn" value={peso(owner.position.drawn)} />
+              <Figure label="Net equity" value={peso(owner.position.net)} emphasis />
+              <Figure label="Still owes us" value={peso(owner.position.receivable)} />
+            </div>
+            <p className="text-xs text-neutral-500 dark:text-neutral-500">
+              ⭐ <strong>Net</strong> is contributed minus drawn — arithmetic on the two figures
+              beside it, never a stored third number.{' '}
+              <strong>Still owes us</strong> is separate on purpose: a personal expense the business
+              expects back has not reduced equity, and it is not part of net.
+              {owner.aged && (
+                <>
+                  {' '}
+                  ⚠️ Oldest unsettled charge {owner.aged.oldestOn} —{' '}
+                  <strong>{owner.aged.daysOutstanding} days</strong>.
+                </>
+              )}
+            </p>
+          </section>
+        }
+      >
       {/* ── Settle what is owed ──────────────────────────────────────────────────────── */}
       {owes > 0 && (
         <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
@@ -339,6 +345,7 @@ export default async function OwnerPage({
           </div>
         )}
       </section>
+      </DetailLayout>
     </Page>
   );
 }

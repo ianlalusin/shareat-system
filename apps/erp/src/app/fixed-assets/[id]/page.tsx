@@ -7,6 +7,7 @@ import { requireSession } from '../../../lib/session';
 import { disposeAssetAction, updateTermsAction } from '../actions';
 import { CATEGORY_LABEL, INTERVAL_LABEL, getAsset, listStores } from '../lib';
 import { StatusBadge } from '../page';
+import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 
 export const dynamic = 'force-dynamic';
@@ -104,22 +105,35 @@ export default async function AssetDetailPage({
         </div>
       )}
 
-      {/* ⭐ Three figures, and only ONE of them is stored. */}
-      <section className="grid gap-4 sm:grid-cols-3">
-        <Figure label="Cost" value={formatMoney(cost)} note="Stored on the asset" />
-        <Figure
-          label="Accumulated depreciation"
-          value={formatMoney(money(accumulated))}
-          note="⭐ Derived — summed from the ledger, never stored"
-        />
-        <Figure
-          label="Book value"
-          value={formatMoney(bookValue)}
-          note="⭐ Derived — cost less accumulated"
-        />
-      </section>
-
-      <div className="grid gap-6 lg:grid-cols-2">
+      <DetailLayout
+        summary={
+          /* ⭐ Three figures, and only ONE of them is stored. */
+          /* ⚠️ `min-[1440px]:grid-cols-1`: `sm` is a VIEWPORT query, so without it these tiles stay
+             three-across inside a 320px rail. T-240 §3.5. */
+          <section className="grid gap-4 sm:grid-cols-3 min-[1440px]:grid-cols-1">
+            <Figure label="Cost" value={formatMoney(cost)} note="Stored on the asset" />
+            <Figure
+              label="Accumulated depreciation"
+              value={formatMoney(money(accumulated))}
+              note="⭐ Derived — summed from the ledger, never stored"
+            />
+            <Figure
+              label="Book value"
+              value={formatMoney(bookValue)}
+              note="⭐ Derived — cost less accumulated"
+            />
+          </section>
+        }
+      >
+      {/*
+        ⚠️ `min-[1440px]:grid-cols-1` HERE TOO, and this one is not in the summary — it is the same
+        viewport-vs-container trap one level further in, and it is the only page of the six that has
+        it. The rail takes 344px off the record column, so at 1440 these two columns are 376px each,
+        their sections 344px inside, and the `sm:grid-cols-2` field pairs below fall to **164px** —
+        readable in a screenshot only. Dropping back to one column at exactly the width the rail
+        appears puts them back at ~372px. Amendment to T-240 §3.5, reported not silently made.
+      */}
+      <div className="grid gap-6 lg:grid-cols-2 min-[1440px]:grid-cols-1">
         <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="font-medium">Depreciation terms</h2>
           {isActive ? (
@@ -276,6 +290,7 @@ export default async function AssetDetailPage({
           )}
         </section>
       </div>
+      </DetailLayout>
     </Page>
   );
 }

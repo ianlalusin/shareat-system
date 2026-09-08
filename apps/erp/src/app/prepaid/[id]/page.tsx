@@ -8,6 +8,7 @@ import {
   writeOffAction,
 } from '../actions';
 import { CATEGORY_LABEL, STATUS_LABEL, getDetail, peso, thisPeriod } from '../lib';
+import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Prepaid item — Shareat System' };
@@ -58,20 +59,27 @@ export default async function PrepaidItemPage({
         </div>
       )}
 
-      {/* ── The three figures ────────────────────────────────────────────────────────── */}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Figure label="Cost" value={peso(item.totalCost)} />
-        <Figure label="Released so far" value={peso(item.amortised)} />
-        <Figure label="Still unused" value={peso(item.remaining)} emphasis />
-      </div>
-      {/* ⛔ None of these is a column. "Released" is summed from the ledger and "still unused" is
-          cost minus that — so they cannot drift from the books, which is exactly what v1's stored
-          amortizedToDate / remainingBookValue pair did. */}
-      <p className="text-xs text-neutral-400 dark:text-neutral-600">
-        Released and still-unused are summed from the ledger on load, never stored — so they cannot
-        disagree with the books they describe.
-      </p>
-
+      <DetailLayout
+        summary={
+          /* ── The three figures ──────────────────────────────────────────────────────── */
+          <section className="space-y-3">
+            {/* ⚠️ `min-[1440px]:grid-cols-1`: `sm` is a VIEWPORT query, so without it these tiles
+                stay three-across inside a 320px rail. T-240 §3.5. */}
+            <div className="grid gap-3 sm:grid-cols-3 min-[1440px]:grid-cols-1">
+              <Figure label="Cost" value={peso(item.totalCost)} />
+              <Figure label="Released so far" value={peso(item.amortised)} />
+              <Figure label="Still unused" value={peso(item.remaining)} emphasis />
+            </div>
+            {/* ⛔ None of these is a column. "Released" is summed from the ledger and "still unused"
+                is cost minus that — so they cannot drift from the books, which is exactly what v1's
+                stored amortizedToDate / remainingBookValue pair did. */}
+            <p className="text-xs text-neutral-400 dark:text-neutral-600">
+              Released and still-unused are summed from the ledger on load, never stored — so they
+              cannot disagree with the books they describe.
+            </p>
+          </section>
+        }
+      >
       {/* ── The review, when the term was guessed ────────────────────────────────────── */}
       {item.needsReview && active && (
         <section className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
@@ -290,6 +298,7 @@ export default async function PrepaidItemPage({
           {item.writeOffReason}
         </div>
       )}
+      </DetailLayout>
     </Page>
   );
 }
