@@ -1,6 +1,8 @@
 import { transaction, schema } from '@shareat/db';
 import { asc, eq } from 'drizzle-orm';
 import { signInAction } from './actions';
+import { safeNext } from './lib';
+import { EmailSignInForm } from './EmailSignInForm';
 import { currentSession } from '../../lib/session';
 import { redirect } from 'next/navigation';
 
@@ -19,13 +21,27 @@ interface SearchParams {
  *
  * ⚠️ The store list is public here by necessity — you must pick one before you can prove anything.
  * That is fine: a store's existence is not a secret, and the PIN is scoped to it.
+ *
+ * ## T-232 — the email form beside it, and why both belong on one page
+ *
+ * The two forms are for two different situations, not two tastes. A PIN is scoped to **one store**
+ * and is what a shared tablet at a counter should ever hold. An email and password belong to **one
+ * person on one machine** — the owner and the office — and carry a session seven days long rather
+ * than twelve hours. Decision 6: the PIN path is untouched, and it keeps working even when the
+ * email form cannot be configured (it says so in place rather than throwing this page away).
+ *
+ * ⭐ On a genuinely empty database this page has no stores to offer, so the email form is the only
+ * door — which is exactly the first-run case T-232 exists for: sign in, then create the
+ * organisation from inside.
  */
 export default async function SignInPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
 
   // Already signed in? Nothing to do here.
+  // ⚠️ `safeNext` and not an inline check: this line accepted `next=//evil.com` until T-232's review
+  // found it, because `startsWith('/')` is true of a protocol-relative URL. One rule, one place.
   const existing = await currentSession();
-  if (existing) redirect(sp.next && sp.next.startsWith('/') ? sp.next : '/sales-days');
+  if (existing) redirect(safeNext(sp.next ?? ''));
 
   const stores = await transaction((tx) =>
     tx
@@ -42,7 +58,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
         <div>
           <h1 className="text-2xl font-semibold">Sign in</h1>
           <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-            Enter your 6-digit PIN for this store.
+            A store and a 6-digit PIN at a terminal — or your own email and password.
           </p>
         </div>
 
@@ -98,6 +114,18 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
             </button>
           </form>
         )}
+
+        {/* T-232 — the same page, a different credential. See the header for why both live here. */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-800" />
+            <span className="text-xs font-medium uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
+              or
+            </span>
+            <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-800" />
+          </div>
+          <EmailSignInForm next={sp.next ?? ''} />
+        </div>
 
         {isDev && (
           // ⚠️ DEVELOPMENT ONLY, and gated on NODE_ENV so it cannot reach production. Printing a

@@ -55,8 +55,15 @@ function firebaseConfig() {
     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? 'emulator',
     authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?? `${projectId}.firebaseapp.com`,
     projectId,
-    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ?? `${projectId}.appspot.com`,
-    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID ?? 'emulator',
+    // ⚠️ `||` and not `??` for these two, and the difference is not style. T-232 made both OPTIONAL
+    // in `publicEnv()` — Firebase Auth reads neither, and the bucket names a different project's
+    // default bucket — so a deployment may now legitimately carry them as the EMPTY STRING. `??`
+    // only replaces `null`/`undefined`, so `''` would flow straight through and this app would
+    // initialise with a blank bucket and a blank app id instead of falling back. `projectId` above
+    // is already guarded by the throw, and the two identity values stay `??` because `publicEnv()`
+    // still hard-requires them.
+    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || `${projectId}.appspot.com`,
+    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || 'emulator',
   };
 }
 

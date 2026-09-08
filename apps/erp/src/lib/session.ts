@@ -214,8 +214,16 @@ export async function readSetupIdentity(): Promise<SetupIdentity | null> {
 }
 
 /**
- * ⚠️ Hygiene, not the control. `/setup`'s action clears this before opening its transaction, but
- * what actually stops a replay is `bootstrapOrganization` refusing once an organization exists.
+ * ⚠️ **Hygiene, not the control.** `/setup`'s action clears this **after its transaction commits, on
+ * the success path only** (amended 2026-09-08; §2.4 originally said "before"). A failed attempt — a
+ * PIN the database refuses, an organisation code already taken — deliberately KEEPS the window, so a
+ * typo is re-submitted rather than costing Ian a trip back through Firebase sign-in. Nothing is given
+ * away by that: the transaction rolled back, so the system is still un-set-up and the cookie still
+ * unlocks nothing but that one screen.
+ *
+ * ⛔ What actually stops a replay is `bootstrapOrganization` refusing, under an advisory lock, once
+ * an organization exists — §2.4: *the guarantee is the database, not the cookie.* Clearing it earlier
+ * looked stricter and bought nothing, because a copied cookie is not a threat a deletion can address.
  */
 export async function clearSetupIdentityCookie(): Promise<void> {
   (await cookies()).delete(SETUP_COOKIE);

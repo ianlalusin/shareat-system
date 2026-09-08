@@ -101,3 +101,61 @@ describe('env — the non-negotiable secrets never relax', () => {
     await expect(loadEnv()).rejects.toThrow(/SESSION_SECRET/);
   });
 });
+
+/**
+ * T-232 slice 1 — `publicEnv()`'s first caller is the email sign-in form, and it must not be
+ * blocked by a value Firebase Auth never reads.
+ *
+ * ⭐ The pair matters more than either test alone: the second is the non-zero control for the first.
+ * Without it, "a blank storage bucket is accepted" would also pass against a schema that had gone
+ * fully optional and would sign a person in against a project with no api key at all.
+ */
+async function loadPublicEnv() {
+  const mod = await import('@shareat/core/env');
+  return mod.publicEnv();
+}
+
+describe('publicEnv — identity is required, storage and analytics are not', () => {
+  const IDENTITY = {
+    NEXT_PUBLIC_FIREBASE_API_KEY: 'AIza-test',
+    NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: 'studio-test.firebaseapp.com',
+    NEXT_PUBLIC_FIREBASE_PROJECT_ID: 'studio-test',
+  };
+
+  it('accepts a BLANK storage bucket and app id — a different project, and no path here reads them', async () => {
+    // ⚠️ This is what `.env.local` and an unset GitHub Secret both actually produce: '', not absent.
+    Object.assign(E(), IDENTITY, {
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: '',
+      NEXT_PUBLIC_FIREBASE_APP_ID: '   ',
+    });
+    const cfg = await loadPublicEnv();
+    expect(cfg.NEXT_PUBLIC_FIREBASE_PROJECT_ID).toBe('studio-test');
+    expect(cfg.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET).toBeUndefined();
+    expect(cfg.NEXT_PUBLIC_FIREBASE_APP_ID).toBeUndefined();
+  });
+
+  it('⛔ still REFUSES a blank api key — the sign-in form must fail loudly, not sign in against nothing', async () => {
+    Object.assign(E(), IDENTITY, { NEXT_PUBLIC_FIREBASE_API_KEY: '' });
+    await expect(loadPublicEnv()).rejects.toThrow(/NEXT_PUBLIC_FIREBASE_API_KEY/);
+  });
+
+  it('⛔ and REFUSES an ABSENT api key — the distinction this file exists for', async () => {
+    // ⚠️ Blank and absent are different inputs and this schema treats them differently by design:
+    // `.min(1)` catches '' while `.optional()` would have waved it through. An unset GitHub Secret
+    // arrives absent; an empty line in .env.local arrives blank. Both must be refused here, and only
+    // asserting one of them leaves half the guard untested.
+    Object.assign(E(), IDENTITY);
+    delete E().NEXT_PUBLIC_FIREBASE_API_KEY;
+    await expect(loadPublicEnv()).rejects.toThrow(/NEXT_PUBLIC_FIREBASE_API_KEY/);
+  });
+
+  it('⛔ still REFUSES a missing auth domain or project id', async () => {
+    Object.assign(E(), IDENTITY);
+    delete E().NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
+    await expect(loadPublicEnv()).rejects.toThrow(/NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN/);
+
+    Object.assign(E(), IDENTITY);
+    delete E().NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+    await expect(loadPublicEnv()).rejects.toThrow(/NEXT_PUBLIC_FIREBASE_PROJECT_ID/);
+  });
+});

@@ -182,12 +182,32 @@ export function env(): ServerEnv {
   return cached;
 }
 
+/**
+ * ⭐ **Three required, two optional, and the split is IDENTITY versus everything else** — T-232
+ * slice 1, which gave this function its first caller (`sign-in/EmailSignInForm.tsx`).
+ *
+ * `signInWithEmailAndPassword` needs an api key, an auth domain and a project id. That is the whole
+ * list; Firebase Auth never reads the other two.
+ *
+ * ⛔ So the other two must not be able to hide the sign-in form, and one of them **belongs to a
+ * different project**: identity is v1's Firebase project and storage is `shareat-hub-v2`
+ * (T-232 decision 1, `.env.example`). A blank storage bucket describing another project's default
+ * bucket is not a reason to refuse a person their own books — it is a reason for whatever wants a
+ * bucket to fail, and nothing on this path wants one. `NEXT_PUBLIC_FIREBASE_APP_ID` is optional for
+ * the same reason: it identifies the app to Analytics and Installations, neither of which is on any
+ * path here (`terminal/firebase.ts` already treats it as absent-able, defaulting it to `'emulator'`).
+ *
+ * ⚠️ **This is not a §7 rule 9 fallback.** Nothing is defaulted and no insecure value is
+ * substituted: absent stays absent, and a consumer that genuinely needs one of the two must demand
+ * it at its own call site. The three that identity depends on stay hard-required, so a build with a
+ * blank api key fails loudly at the form rather than silently signing in against nothing.
+ */
 const publicSchema = z.object({
   NEXT_PUBLIC_FIREBASE_API_KEY: z.string().trim().min(1),
   NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: z.string().trim().min(1),
   NEXT_PUBLIC_FIREBASE_PROJECT_ID: z.string().trim().min(1),
-  NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: z.string().trim().min(1),
-  NEXT_PUBLIC_FIREBASE_APP_ID: z.string().trim().min(1),
+  NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: blankAsAbsent(),
+  NEXT_PUBLIC_FIREBASE_APP_ID: blankAsAbsent(),
 });
 
 export type PublicEnv = z.infer<typeof publicSchema>;
