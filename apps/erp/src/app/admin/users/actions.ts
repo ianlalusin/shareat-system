@@ -48,8 +48,17 @@ function errorMessage(err: unknown): string {
   if (/requires super_admin/.test(raw)) {
     return 'Only a super-admin can appoint an admin. An admin may appoint managers and staff (bible row 116).';
   }
+  // ⚠️ T-238 widened the rule behind this sentence: the guard now counts only administrators who
+  // hold a live credential, so "appoint a second admin" alone can send someone round the same loop —
+  // they appoint one, retry, and are refused again because the new admin has no way to sign in.
+  // The sentence names both halves for that reason. ⛔ The `/only active admin/` match is the
+  // contract with `assignRoleAsActor`'s message: extending around that phrase is safe, removing it
+  // drops the mapping with a green build (the DEF-177 shape).
   if (/only active admin/.test(raw)) {
-    return "This is the org's only active admin. Appoint a second admin first — otherwise nobody is left who can manage users.";
+    return (
+      "This is the org's only active admin who can sign in. Appoint another admin or super-admin " +
+      'and give them a PIN or an email account first — otherwise nobody is left who can manage users.'
+    );
   }
   // DEF-183 — only reachable by a crafted POST, since the screen never offers another org's
   // person. Mapped anyway: a refusal a user cannot act on is worse than no refusal at all.

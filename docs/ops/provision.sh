@@ -85,13 +85,16 @@ visudo -cf "$SUDOERS_FILE"
 
 # --- 5. Install the systemd units ----------------------------------------------------------
 UNIT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-for f in shareat-erp.service \
-         shareat-firestore-relay.service shareat-firestore-relay.timer \
-         shareat-attendance-sweep.service shareat-attendance-sweep.timer \
-         shareat-month-end.service shareat-month-end.timer \
-         shareat-finding-observation.service shareat-finding-observation.timer \
-         shareat-order-wastage-backstop.service shareat-order-wastage-backstop.timer; do
-  install -m 644 "$UNIT_DIR/$f" "/etc/systemd/system/$f"
+# ⛔ A GLOB, not a list — DEF-231. This was eleven hand-written filenames while THIRTEEN unit files
+# shipped, so T-216's recurring-expense-draft pair had been sitting in this directory unarmed, and
+# README's promise that re-running this installs a shipped unit was false for it. The same drift
+# DEF-194 recorded one task earlier. A list has to be edited by whoever adds a unit; a glob cannot be
+# forgotten. ⚠️ shareat-erp.service matches too — the web unit is installed by the same line.
+for f in "$UNIT_DIR"/shareat-*.service "$UNIT_DIR"/shareat-*.timer; do
+  # An unmatched glob stays literal in sh, so without this a directory with no timers would try to
+  # install a path containing '*' — a failure that reads as a missing file rather than as "none".
+  [ -e "$f" ] || continue
+  install -m 644 "$f" "/etc/systemd/system/$(basename "$f")"
 done
 systemctl daemon-reload
 

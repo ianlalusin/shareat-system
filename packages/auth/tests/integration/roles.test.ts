@@ -91,6 +91,18 @@ async function insertRoleRaw(personId: string, orgId: string, role: Role): Promi
   await sql`insert into person_roles (person_id, org_id, role) values (${personId}, ${orgId}, ${role})`;
 }
 
+/**
+ * A live `firebase` credential — the cheapest way to say "this person can sign in".
+ *
+ * ⭐ T-238: the lockout guard counts administrators who can ACTUALLY GET IN, not role rows, so a
+ * fixture that grants a role and stops has not created another administrator in the sense the guard
+ * means. Two tests below were written under the old rule and had to gain this line.
+ */
+async function giveCredential(personId: string): Promise<void> {
+  await sql`insert into person_credentials (person_id, kind, external_id)
+            values (${personId}, 'firebase', ${uid('cred')})`;
+}
+
 async function scopeRowsFor(personId: string): Promise<string[]> {
   const rows = await sql<{ store_id: string }[]>`select store_id from person_store_scope where person_id = ${personId} order by store_id`;
   return rows.map((r) => r.store_id);
@@ -269,7 +281,11 @@ describe('assignRoleAsActor — lockout guards', () => {
     expect(row?.role).toBe('admin');
   });
 
-  it('REFUSES demoting the org\'s only active admin', async () => {
+  it('REFUSES demoting the last administrator who can SIGN IN — a credential-less role row is not another way in', async () => {
+    // ⭐ T-238. This passed before too, and for the wrong reason: the guard counted only the literal
+    // role 'admin', so the super_admin was invisible to it. Now the super_admin IS counted, and the
+    // refusal rests on their holding no credential — the next test is this fixture plus one
+    // credential, and it is ALLOWED.
     const org = await insertOrg('guard-last');
     const superAdmin = await insertPerson(org, 'Super');
     await insertRoleRaw(superAdmin, org, 'super_admin');
@@ -292,6 +308,10 @@ describe('assignRoleAsActor — lockout guards', () => {
     await insertRoleRaw(adminOne, org, 'admin');
     const adminTwo = await insertPerson(org, 'Admin Two');
     await insertRoleRaw(adminTwo, org, 'admin');
+    // ⚠️ T-238 — this line is the expectation flipping into view. "A second admin still holds the
+    // role" is no longer enough: the guard asks whether anybody can still sign in AND manage users,
+    // and a role row with no credential answers no.
+    await giveCredential(adminTwo);
 
     await asPerson(org, (tx) => assignRoleAsActor(tx, actorOf(superAdmin, org), { personId: adminOne, role: 'manager' }));
 
@@ -306,6 +326,7 @@ describe('assignRoleAsActor — lockout guards', () => {
     await insertRoleRaw(superAdmin, org, 'super_admin');
     const keeper = await insertPerson(org, 'Keeper Admin');
     await insertRoleRaw(keeper, org, 'admin');
+    await giveCredential(keeper); // T-238 — the keeper must be able to sign in, or they are not a keeper
     const demoted = await insertPerson(org, 'Demoted');
 
     await asPerson(org, (tx) => assignRoleAsActor(tx, actorOf(superAdmin, org), { personId: demoted, role: 'admin' }));
@@ -314,6 +335,180 @@ describe('assignRoleAsActor — lockout guards', () => {
     await asPerson(org, (tx) => assignRoleAsActor(tx, actorOf(superAdmin, org), { personId: demoted, role: 'manager' }));
 
     expect(await scopeRowsFor(demoted)).toEqual([s1]);
+  });
+});
+
+// -----------------------------------------------------------------------------------------
+// T-238 — DEF-232 and the two holes DEF-232 did not know about
+// -----------------------------------------------------------------------------------------
+
+describe('T-238 — the lockout guard asks whether anyone is LEFT who can manage users', () => {
+  it('⭐ ALLOWS demoting the last admin when a super_admin who can sign in remains — was a false refusal', async () => {
+    // ⛔ Before T-238 this was REFUSED: `hasOtherActiveAdmin` counted the literal role 'admin', so an
+    // organisation that still held a super_admin — matrix-true for `manage_users` — was told it
+    // would be left with nobody able to manage users. It would not have been.
+    const org = await insertOrg('t238-false-refusal');
+    const superAdmin = await insertPerson(org, 'Super');
+    await insertRoleRaw(superAdmin, org, 'super_admin');
+    await giveCredential(superAdmin);
+    const onlyAdmin = await insertPerson(org, 'Only Admin');
+    await insertRoleRaw(onlyAdmin, org, 'admin');
+
+    await asPerson(org, (tx) =>
+      assignRoleAsActor(tx, actorOf(superAdmin, org), { personId: onlyAdmin, role: 'manager' }),
+    );
+
+    const row = await asPerson(org, (tx) => accessRepo.activeRoleForPerson(tx, onlyAdmin, org));
+    expect(row?.role).toBe('manager');
+  });
+
+  it('⛔ REFUSES demoting a SUPER_ADMIN when nobody able to sign in is left — was unguarded entirely', async () => {
+    // ⛔ Before T-238 the branch read `targetRole?.role === 'admin'`, so a super_admin target skipped
+    // the guard completely — no lock could have helped, because there was no check to serialise.
+    //
+    // ⚠️ The actor here holds `admin` and NO credential. That is an odd state on purpose: it is the
+    // only way, in one transaction, to reach "the target is the last administrator who can sign in"
+    // while somebody still has the authority to issue the demotion. The guard is about the state,
+    // not about how the state was reached.
+    const org = await insertOrg('t238-superadmin-target');
+    const actorAdmin = await insertPerson(org, 'Admin With No Way In');
+    await insertRoleRaw(actorAdmin, org, 'admin');
+    const onlySuper = await insertPerson(org, 'Only Super');
+    await insertRoleRaw(onlySuper, org, 'super_admin');
+    await giveCredential(onlySuper);
+
+    await expect(
+      asPerson(org, (tx) =>
+        assignRoleAsActor(tx, actorOf(actorAdmin, org), { personId: onlySuper, role: 'staff' }),
+      ),
+    ).rejects.toThrow(/only active admin who can sign in/);
+
+    const row = await asPerson(org, (tx) => accessRepo.activeRoleForPerson(tx, onlySuper, org));
+    expect(row?.role).toBe('super_admin');
+  });
+
+  it('⭐ two administrators demoting EACH OTHER at once: exactly one succeeds, and the org keeps an administrator', async () => {
+    /**
+     * DEF-232's end state, asserted. Whichever transaction wins is fine: exactly one succeeds, and —
+     * the invariant that actually matters — somebody who can manage users is still standing.
+     *
+     * ⛔ **Stated honestly: this is NOT the lock's proof, and it was checked.** With
+     * `lockOrgAccess` commented out, this case still passed: the two transactions are fast enough
+     * that they usually do not overlap at all, so the defect it describes does not reproduce on
+     * demand. Making it reproduce would mean interleaving the two transactions' statements by hand,
+     * which stops testing `assignRoleAsActor` and starts testing hand-written SQL.
+     *
+     * ⭐ **The lock's proof is the next test**, which fails with the lock removed. This one is the
+     * invariant that must hold however the two interleave — worth having, and worth not overclaiming.
+     */
+    const org = await insertOrg('t238-race');
+    const first = await insertPerson(org, 'Admin One');
+    await insertRoleRaw(first, org, 'admin');
+    await giveCredential(first);
+    const second = await insertPerson(org, 'Admin Two');
+    await insertRoleRaw(second, org, 'admin');
+    await giveCredential(second);
+
+    const results = await Promise.allSettled([
+      asPerson(org, (tx) => assignRoleAsActor(tx, actorOf(first, org), { personId: second, role: 'staff' })),
+      asPerson(org, (tx) => assignRoleAsActor(tx, actorOf(second, org), { personId: first, role: 'staff' })),
+    ]);
+
+    const fulfilled = results.filter((r) => r.status === 'fulfilled');
+    const rejected = results.filter((r) => r.status === 'rejected');
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+
+    /**
+     * ⭐ **WHICH refusal is worth reading, and it is not the one I expected.** The loser is refused
+     * by `authorize` — not by the lockout guard — because the winner's commit removed the loser's
+     * own admin role before its transaction got the lock, so by the time it runs it no longer holds
+     * `manage_users` at all. That is the serialisation working, one layer earlier than the guard: an
+     * actor demoted a moment ago cannot demote anybody.
+     *
+     * ⚠️ The assertion is therefore on the CLASS, not on a sentence. Pinning the guard's wording here
+     * would have pinned an outcome that depends on which transaction won the lock.
+     */
+    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(AuthorizationError);
+
+    const roles = await Promise.all([
+      asPerson(org, (tx) => accessRepo.activeRoleForPerson(tx, first, org)),
+      asPerson(org, (tx) => accessRepo.activeRoleForPerson(tx, second, org)),
+    ]);
+    expect(roles.filter((r) => r?.role === 'admin')).toHaveLength(1);
+  });
+
+  /**
+   * ⭐ **Pinned rather than reasoned.** `isAdministrative` on BOTH halves means a move between the
+   * two administrative roles never enters the guard at all — the organisation is not losing an
+   * administrator, so there is nothing to protect. That was verified by reading during review, and a
+   * behaviour verified by reading is verified once.
+   *
+   * ⛔ **What these two cases actually catch**: the next person who "simplifies" the condition to
+   * something like `targetRole?.role !== input.role`. That version enters the branch on a promotion,
+   * finds no OTHER administrator who can sign in, and refuses — a false refusal on every
+   * admin↔super_admin change, with a green suite behind it. Which is the exact shape this task
+   * exists to close.
+   *
+   * ⚠️ Both fixtures give the ACTOR the administrative role and NO credential, deliberately: it is
+   * what makes the target the only administrator who can sign in, so a wrongly-written condition has
+   * something to trip over. The fixture is a state, not a story.
+   */
+  it('⭐ an admin → super_admin change never trips the lockout guard — the org is not losing an administrator', async () => {
+    const org = await insertOrg('t238-promote');
+    const actorSuper = await insertPerson(org, 'Super Without A Way In');
+    await insertRoleRaw(actorSuper, org, 'super_admin');
+    const onlyWayIn = await insertPerson(org, 'The Only Administrator Who Can Sign In');
+    await insertRoleRaw(onlyWayIn, org, 'admin');
+    await giveCredential(onlyWayIn);
+
+    await asPerson(org, (tx) =>
+      assignRoleAsActor(tx, actorOf(actorSuper, org), { personId: onlyWayIn, role: 'super_admin' }),
+    );
+
+    const row = await asPerson(org, (tx) => accessRepo.activeRoleForPerson(tx, onlyWayIn, org));
+    expect(row?.role).toBe('super_admin');
+  });
+
+  it('⭐ and a super_admin → admin change does not either — the same rule, the other direction', async () => {
+    const org = await insertOrg('t238-demote-sideways');
+    const actorSuper = await insertPerson(org, 'Super Without A Way In');
+    await insertRoleRaw(actorSuper, org, 'super_admin');
+    const onlyWayIn = await insertPerson(org, 'The Only Administrator Who Can Sign In');
+    await insertRoleRaw(onlyWayIn, org, 'super_admin');
+    await giveCredential(onlyWayIn);
+
+    await asPerson(org, (tx) =>
+      assignRoleAsActor(tx, actorOf(actorSuper, org), { personId: onlyWayIn, role: 'admin' }),
+    );
+
+    const row = await asPerson(org, (tx) => accessRepo.activeRoleForPerson(tx, onlyWayIn, org));
+    expect(row?.role).toBe('admin');
+  });
+
+  it('⭐ assignRoleAsActor really TAKES the org lock — asserted through the call, not through the helper', async () => {
+    // ⚠️ The before check is the control: a connection already holding an advisory lock would
+    // satisfy the after check no matter what the call did. Same shape T-237 ended up with, after a
+    // first version there proved the helper and claimed the caller.
+    const org = await insertOrg('t238-lock');
+    const superAdmin = await insertPerson(org, 'Super');
+    await insertRoleRaw(superAdmin, org, 'super_admin');
+    await giveCredential(superAdmin);
+    const target = await insertPerson(org, 'Target');
+
+    const advisoryLocks = async (tx: Tx): Promise<number> => {
+      const rows = await tx.execute(
+        dsql`select count(*)::int as n from pg_locks
+             where locktype = 'advisory' and pid = pg_backend_pid()`,
+      );
+      return Number((rows as unknown as { n: number }[])[0]!.n);
+    };
+
+    await asPerson(org, async (tx) => {
+      expect(await advisoryLocks(tx)).toBe(0);
+      await assignRoleAsActor(tx, actorOf(superAdmin, org), { personId: target, role: 'staff' });
+      expect(await advisoryLocks(tx)).toBeGreaterThan(0);
+    });
   });
 });
 

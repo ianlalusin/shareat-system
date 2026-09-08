@@ -95,7 +95,12 @@ domain argument to also set up Caddy + automatic TLS on 80/443 (no traefik confl
 
 ⚠️ **`recurring-expense-draft` (T-216) and `order-wastage-backstop` (T-178 / DEF-226) have unit
 files in this directory and are NOT YET ARMED** — nothing installs them until `provision.sh` is
-re-run from a fresh copy of `docs/ops`, per the section above. **`budget-reissue` (T-215) has no
+re-run from a fresh copy of `docs/ops`, per the section above. ⭐ **That sentence is true again as of
+T-238 (DEF-231): the install step is now a glob over `shareat-*.{service,timer}`, not a hand-written
+list.** It had been a list of eleven filenames while thirteen units shipped, so re-running
+`provision.sh` installed nothing at all for `recurring-expense-draft` — the promise this line makes
+was false for the very job it names. A unit file dropped in this directory is now armed by the next
+provision run with nobody remembering to edit a list. **`budget-reissue` (T-215) has no
 unit file in this directory at all** — still to write, per the 2026-09-06 status section above;
 its absence here is not the same thing as being armed. That is two jobs with a unit file waiting
 to be armed, plus one with no unit file yet — the count is the point, not any one number of it.

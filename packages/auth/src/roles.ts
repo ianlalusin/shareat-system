@@ -232,12 +232,38 @@ async function holdsSuperAdminAuthority(
  * The screen states this where it lists the scope. Revisit if it bites twice (T-219's own
  * Open questions).
  */
+/**
+ * The two roles `manage_users` is matrix-true for — the ones whose disappearance leaves an
+ * organisation unable to manage its own people. ⚠️ Not derived from `CAPABILITY_MATRIX` on purpose:
+ * this is the set of roles that can ADMINISTER, and reading it out of the matrix at runtime would
+ * make a future capability edit silently redefine what a lockout is.
+ */
+function isAdministrative(role: string | undefined | null): boolean {
+  return role === 'admin' || role === 'super_admin';
+}
+
 export async function assignRoleAsActor(
   tx: Tx,
   actor: Actor,
   input: AssignRoleAsActorInput,
 ): Promise<AssignRoleResult> {
   await authorize(tx, actor, 'manage_users', {});
+
+  /**
+   * ⛔ **T-238 / DEF-232 — taken before ANY of the reads below.** The lockout guard at the end of
+   * this function is a read-then-write: two administrators demoting each other at the same instant
+   * each read *"the other one is still an admin"*, both pass, and the organisation ends with none.
+   * Sequentially it is safe, because the self-demotion check below means nobody can be their own
+   * second half — so concurrency is the only way in.
+   *
+   * ⚠️ Placed here rather than immediately before the guard on purpose: the whole transaction's view
+   * of the access tables belongs inside the critical section, not merely its last read.
+   *
+   * The lock is transaction-scoped and keyed on the org, so two organisations never wait on each
+   * other — `accessRepo.lockOrgAccess`, the helper T-237 built for the identical race in
+   * `unlinkCredential`.
+   */
+  await accessRepo.lockOrgAccess(tx, actor.orgId);
 
   if (actor.personId === input.personId) {
     throw new AuthorizationError(
@@ -279,12 +305,44 @@ export async function assignRoleAsActor(
     }
   }
 
+  /**
+   * ⛔ **The lockout guard — T-238, closing DEF-232 and two holes DEF-232 did not know about.**
+   *
+   * It asks one question: *after this write, is anybody left who can manage users?* Three things had
+   * to change before it actually asked that.
+   *
+   * ⚠️ **1. `super_admin` counts, on both sides.** `manage_users` is matrix-true for `super_admin`
+   * and `admin` (`capabilities.ts`), but this guard named the literal `'admin'` twice — so demoting
+   * the last `admin` in an org that still held a super_admin was **refused** (a false refusal: that
+   * org could still manage users), while demoting a **super_admin** ran no guard at all.
+   *
+   * ⚠️ **2. It counts administrators who can SIGN IN**, not role rows. An administrator with no live
+   * credential cannot manage users in any sense a person would recognise, so counting them was a lie
+   * the guard told about itself. T-237's `unlinkCredential` guard protects *the last way IN* and this
+   * one protects *the last authority* — different things to protect, identical in what they count,
+   * because both reduce to **a person with the authority who can actually get in**.
+   *
+   * ⚠️ **3. The advisory lock above is what makes any of it hold under concurrency** — and it is not
+   * sufficient on its own, which is the correction this task makes to DEF-232's own remedy: with the
+   * guard skipping super_admin targets, two super_admins demoting each other serialised perfectly and
+   * still reached zero administrators. **A lock can order two checks; it cannot make an absent check
+   * fire.**
+   */
   const targetRole = await accessRepo.activeRoleForPerson(tx, input.personId, actor.orgId);
-  if (targetRole?.role === 'admin' && input.role !== 'admin') {
-    const anotherAdmin = await accessRepo.hasOtherActiveAdmin(tx, actor.orgId, input.personId);
-    if (!anotherAdmin) {
+  if (isAdministrative(targetRole?.role) && !isAdministrative(input.role)) {
+    const anotherWayIn = await accessRepo.hasOtherActiveAdminWhoCanSignIn(
+      tx,
+      actor.orgId,
+      input.personId,
+    );
+    if (!anotherWayIn) {
+      // ⚠️ The phrase "only active admin" is load-bearing: `apps/erp/src/app/admin/users/actions.ts`
+      // matches it to turn this into a sentence on the screen. Extending around it is safe; removing
+      // it would drop the mapping with a green build and green tests (the DEF-177 shape).
       throw new AuthorizationError(
-        "assignRoleAsActor: refusing to demote this org's only active admin — appoint a second admin first, or the org is left with nobody able to manage users",
+        "assignRoleAsActor: refusing to demote this org's only active admin who can sign in — " +
+          'appoint another admin or super_admin who holds a credential first, or the org is left ' +
+          'with nobody able to manage users',
         'manage_users',
       );
     }
