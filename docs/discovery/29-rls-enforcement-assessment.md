@@ -241,6 +241,69 @@ I did not re-run the suite (lane discipline forbids `npm run test:integration`);
 is quoted from `docs/HANDOFF-TODAY.md` unverified. The *structure* above is read from the files
 and is independent of that number.
 
+### 3.4a The census, re-counted at `0e41ae1` (2026-09-08 evening, lane C, read-only)
+
+**107 integration files. 73 switch to a non-superuser principal. 34 do not.** Counted against the
+integration project's actual globs in `vitest.config.mts` (`tests/integration/**`,
+`tests/invariants/**`, `packages/**/tests/integration/**/*.test.ts`), not against a directory walk.
+
+Delta from lane A's 68 of 99: the tree grew 8 files and the switchers grew 5, so **one net new file
+joined the non-switching set** — the drift this row predicted, now measured rather than assumed.
+
+Of the 73: **70** use a file-local `asOrg(orgId, fn)`, **3** a file-local `asPerson(orgId, fn)`
+(`packages/auth/tests/integration/{authorize,roles}.test.ts`, `packages/db/tests/integration/persons.test.ts`
+— verified *called*, 35/51/6 call sites, not merely defined). Both spell the identical idiom by
+hand: `set local role <APP_ROLE>` then `set_config('app.principal_kind', …)` + `set_config('app.org_id', …)`.
+That every one of them is a private copy is DEF-211, and it is why this number can drift at all.
+
+⚠️ **Two false positives were excluded deliberately**, and a sweep that greps for `set_config` alone
+will count them: `packages/domain/tests/integration/count-sessions.test.ts` and
+`.../reverse-entry.test.ts` both call `set_config` — for `app.bypass_count_freeze` and
+`app.reversal_posting`, unrelated GUCs that switch no principal.
+
+**The 34 that do NOT switch** — the working list for whoever takes DEF-218, so the count is not
+re-derived a third time:
+
+```
+packages/db/tests/integration/chart-of-accounts.test.ts
+packages/db/tests/integration/cutover-purge.test.ts
+packages/db/tests/integration/journal.test.ts
+packages/db/tests/integration/reports.test.ts
+packages/domain/tests/integration/balance-sheet.test.ts
+packages/domain/tests/integration/cash-flow.test.ts
+packages/domain/tests/integration/commissary-discrepancy.test.ts
+packages/domain/tests/integration/commissary-transfer.test.ts
+packages/domain/tests/integration/consumption-posting.test.ts
+packages/domain/tests/integration/count-sessions.test.ts
+packages/domain/tests/integration/first-run-setup.test.ts
+packages/domain/tests/integration/legacy-adapter.test.ts
+packages/domain/tests/integration/low-stock.test.ts
+packages/domain/tests/integration/organizations.test.ts
+packages/domain/tests/integration/post-entry-party.test.ts
+packages/domain/tests/integration/post-entry.test.ts
+packages/domain/tests/integration/receipt-posting.test.ts
+packages/domain/tests/integration/receive-delivery.test.ts
+packages/domain/tests/integration/reports.test.ts
+packages/domain/tests/integration/reverse-entry.test.ts
+packages/domain/tests/integration/scheduler.test.ts
+packages/domain/tests/integration/stock-layers.test.ts
+packages/domain/tests/integration/stock-usage.test.ts
+packages/domain/tests/integration/store-comparison.test.ts
+packages/domain/tests/integration/stores.test.ts
+packages/etl-firestore/tests/integration/capture.test.ts
+packages/etl/tests/integration/etl-run.test.ts
+packages/etl/tests/integration/replay.test.ts
+tests/integration/commissary-kpis.test.ts
+tests/integration/core-schema.test.ts
+tests/integration/database.test.ts
+tests/integration/email-sign-in.test.ts
+tests/integration/posting-patterns.test.ts
+tests/invariants/accounting-equation.test.ts
+```
+
+⭐ `packages/domain/tests/integration/scheduler.test.ts` is in that list. DEF-218 claims "including
+every job suite"; this is the first time that clause has been **confirmed** rather than repeated.
+
 ---
 
 ## 4. Q2 — is the net load-bearing today?
