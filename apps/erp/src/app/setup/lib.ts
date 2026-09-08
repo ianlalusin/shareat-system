@@ -14,9 +14,7 @@
  * duplicate-code pre-check: *"the UNIQUE constraint remains the actual guarantee."*
  */
 import { transaction, organizationsRepo } from '@shareat/db';
-import { AuthenticationError, AuthorizationError } from '@shareat/auth';
 import type { SetupIdentity } from '../../lib/session';
-import { CONSTRAINT_MESSAGES } from '../../lib/constraint-messages';
 
 /**
  * Whether this system has been set up at all.
@@ -89,43 +87,4 @@ export function setupFailureRedirect(organisationCreated: boolean, reason: strin
 function endWithStop(reason: string): string {
   const trimmed = reason.trim();
   return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
-}
-
-/** Every sentence `constraint-messages.ts` is willing to show a person. A message that IS one of
- *  these was written for this purpose and is safe wherever it appears. */
-const WRITTEN_FOR_A_PERSON: ReadonlySet<string> = new Set(Object.values(CONSTRAINT_MESSAGES));
-
-/**
- * ⛔ **Is this a raw infrastructure failure that must not be shown to an unauthenticated
- * visitor?** `/setup` is reached with no session at all, and its refusals travel **in the URL** —
- * so a bare driver error would put a table name, a column, or a connection detail into a query
- * string, a browser history and any proxy log, for someone who has proved nothing but that they
- * hold a Firebase account.
- *
- * ⚠️ **It masks narrowly, and the narrowness is the point.** Three kinds of message are written
- * for a person and stay verbatim, because replacing them would make the screen useless:
- *
- * | Kept | Example |
- * |---|---|
- * | `AuthenticationError` / `AuthorizationError` | the ratified refusals |
- * | A mapped constraint sentence | *"A channel that settles later needs a receivable account…"* |
- * | `bootstrapOrganization`'s own plain-`Error` sentences | *"the PIN must be exactly 6 digits."* |
- *
- * What is left is the case this exists for: an error carrying a **five-character Postgres code**
- * (`23505`, `42P01`, `08006`) that no constraint sentence matched, so `errorMessage` handed back
- * the driver's own words. ⭐ The same posture, and the same production gate, as `/sign-in`'s
- * `emailSignInMessage` and `api/health/route.ts` — *"this endpoint is unauthenticated; in
- * production it must not describe which variables are unset."*
- *
- * ⚠️ Pure, so both branches are executed by a test. The LOGGING and the `NODE_ENV` decision belong
- * to the action; this only answers the question.
- */
-export function isUnmappedInfrastructureError(err: unknown, message: string): boolean {
-  if (err instanceof AuthenticationError || err instanceof AuthorizationError) return false;
-  if (WRITTEN_FOR_A_PERSON.has(message)) return false;
-
-  // postgres.js puts SQLSTATE on `code`; it is always five characters. A domain `Error` has none,
-  // which is what makes this a discriminator rather than a guess.
-  const code = (err as { code?: unknown } | null)?.code;
-  return typeof code === 'string' && code.length === 5;
 }

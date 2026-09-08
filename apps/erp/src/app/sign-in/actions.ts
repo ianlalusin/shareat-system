@@ -15,7 +15,6 @@
 import { redirect } from 'next/navigation';
 import { signInWithPin, signOut, AuthenticationError } from '@shareat/auth';
 import { transaction } from '@shareat/db';
-import { logger } from '@shareat/core/logger';
 import {
   setSessionCookie,
   clearSessionCookie,
@@ -24,6 +23,8 @@ import {
 } from '../../lib/session';
 import { verifyFirebaseIdToken } from '../../lib/firebase-auth-admin';
 import { NOT_LINKED_MESSAGE, resolveVerifiedSignIn, safeNext } from './lib';
+// ⭐ T-235 / DEF-222 — the one environment gate both pre-session screens share.
+import { preSessionMessage, SIGN_IN_POLICY } from '../../lib/pre-session-message';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -42,9 +43,15 @@ export async function signInAction(formData: FormData): Promise<void> {
     await setSessionCookie(result.token, result.expiresAt);
     redirectTo = next;
   } catch (err) {
-    // ⚠️ The message is whatever the domain said, and the domain says the SAME thing for a wrong
-    // PIN and an unknown one. Nothing is added here that would distinguish them.
-    const message = err instanceof Error ? err.message : 'Sign-in failed.';
+    // ⚠️ A wrong PIN and an unknown one still say the SAME thing — `signInWithPin` decides that,
+    // and nothing here distinguishes them.
+    //
+    // ⭐ T-235 / DEF-222: what changed is everything that is NOT an `AuthenticationError`. This
+    // catch used to put `err.message` straight into the URL of an unauthenticated page with no
+    // production gate, and — worse, and unrecorded until T-235 — no log line at all, so an
+    // infrastructure failure on the path every store terminal uses was simultaneously leaked to
+    // the browser and absent from the server log.
+    const message = preSessionMessage(err, SIGN_IN_POLICY);
     redirect(`/sign-in?next=${encodeURIComponent(next)}&error=${encodeURIComponent(message)}`);
   }
   redirect(redirectTo);
@@ -91,31 +98,10 @@ export async function signInWithEmailAction(formData: FormData): Promise<void> {
       throw new AuthenticationError(NOT_LINKED_MESSAGE);
     }
   } catch (err) {
-    const message = emailSignInMessage(err);
+    const message = preSessionMessage(err, SIGN_IN_POLICY);
     redirect(`/sign-in?next=${encodeURIComponent(next)}&error=${encodeURIComponent(message)}`);
   }
   redirect(redirectTo);
-}
-
-/**
- * What the visitor is told when email sign-in fails.
- *
- * ⚠️ **An `AuthenticationError` is already written for a person** — the flat "could not be verified"
- * sentence, or the ratified not-linked one. Anything else is a *server* problem: a missing
- * `FIREBASE_PROJECT_ID`, a database that is down, a bug. Those are named in full outside production
- * and reduced to one sentence inside it, with the reason logged either way — the rule
- * `api/health/route.ts` already states: *"this endpoint is unauthenticated; in production it must
- * not describe which variables are unset."* `/sign-in` is the same kind of surface.
- */
-function emailSignInMessage(err: unknown): string {
-  if (err instanceof AuthenticationError) return err.message;
-
-  logger.error(
-    { err: err instanceof Error ? err.message : String(err) },
-    'email sign-in failed for a reason that is not an authentication failure',
-  );
-  if (process.env.NODE_ENV !== 'production' && err instanceof Error) return err.message;
-  return 'Sign-in failed. Something on the server is wrong — the reason is in the server log.';
 }
 
 export async function signOutAction(): Promise<void> {

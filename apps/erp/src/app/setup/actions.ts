@@ -36,9 +36,12 @@ import {
   clearSetupIdentityCookie,
   setSessionCookie,
 } from '../../lib/session';
-import { logger } from '@shareat/core/logger';
 import { errorMessage } from '../../lib/constraint-messages';
-import { isUnmappedInfrastructureError, setupFailureRedirect } from './lib';
+// ⭐ T-235 / DEF-222 — the one environment gate both pre-session screens share. `errorMessage`
+// runs FIRST, so a mapped constraint sentence is already in hand when the policy is asked
+// about it; that pairing is why `preSessionMessage` takes the error AND the message.
+import { preSessionMessage, SETUP_POLICY } from '../../lib/pre-session-message';
+import { setupFailureRedirect } from './lib';
 
 /** ⚠️ Ratified wording — §2.4. Absent, expired, malformed and tampered all say this one thing,
  *  because they all need the same action from the person reading it. */
@@ -47,37 +50,6 @@ const WINDOW_CLOSED = 'Your setup window has closed. Sign in again to continue.'
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-/**
- * What a visitor is told when first-run setup fails.
- *
- * ⛔ **`/setup` is unauthenticated and its refusals travel in the URL**, so a raw driver error
- * would put a table name, a column or a connection host into a query string, a browser history and
- * any proxy log — shown to someone who has proved nothing but that they hold a Firebase account.
- * Same rule, same production gate, as `/sign-in`'s `emailSignInMessage` and
- * `api/health/route.ts`: *"this endpoint is unauthenticated; in production it must not describe
- * which variables are unset."*
- *
- * ⚠️ **It masks narrowly.** Everything written for a person survives verbatim — the ratified
- * refusals, every sentence `constraint-messages.ts` maps, and `bootstrapOrganization`'s own
- * ("the PIN must be exactly 6 digits", "…first-run setup is closed"). Masking those would leave
- * Ian on a screen that says "Setup failed" with no idea which of six fields is wrong.
- *
- * ⭐ The reason is logged either way, and named in full outside production.
- * `isUnmappedInfrastructureError` is pure and lives in `./lib` so both branches are executed by
- * `apps/erp/tests/setup-failure-redirect.test.ts`. DEF-222 will generalise this later.
- */
-function setupErrorMessage(err: unknown): string {
-  const message = errorMessage(err);
-  if (!isUnmappedInfrastructureError(err, message)) return message;
-
-  logger.error(
-    { err: err instanceof Error ? err.message : String(err) },
-    'first-run setup failed for a reason that is not a refusal written for a person',
-  );
-  if (process.env.NODE_ENV !== 'production') return message;
-  return 'Setup failed. The reason is in the server log.';
 }
 
 export async function createFirstRunAction(formData: FormData): Promise<void> {
@@ -140,7 +112,8 @@ export async function createFirstRunAction(formData: FormData): Promise<void> {
     // sign-in failed. Sending him to `/setup` here would be actively wrong — the page would find
     // no cookie and answer "your setup window has closed", which is false and would bury the real
     // reason. He goes to `/sign-in`, told what happened, where his own credential now works.
-    redirect(setupFailureRedirect(organisationCreated, setupErrorMessage(err)));
+    const message = preSessionMessage(err, SETUP_POLICY, errorMessage(err));
+    redirect(setupFailureRedirect(organisationCreated, message));
   }
 
   // ⚠️ OUTSIDE the try, because `redirect()` works by throwing: called inside, its NEXT_REDIRECT

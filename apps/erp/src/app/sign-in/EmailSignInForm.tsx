@@ -143,7 +143,8 @@ export function EmailSignInForm({ next }: { next: string }) {
          * unauthenticated page, and naming which secrets a server is missing tells a stranger more
          * about the deployment than it tells the operator, who has the log and the workflow. Same
          * rule `api/health/route.ts` states for the same reason, and the same one
-         * `emailSignInMessage` applies on the server side of this form.
+         * `preSessionMessage` + `SIGN_IN_POLICY` (`src/lib/pre-session-message.ts`) applies on the
+         * server side of this form. T-235 replaced `emailSignInMessage` with those two.
          */}
         {process.env.NODE_ENV !== 'production' ? (
           <pre className="mt-2 overflow-x-auto whitespace-pre-wrap font-mono">{configError}</pre>
