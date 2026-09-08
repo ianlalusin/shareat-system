@@ -51,12 +51,19 @@ function errorMessage(err: unknown): string {
   }
   if (/must be exactly 6 digits/.test(raw)) return raw;
   if (/already in use at this store/.test(raw)) return raw;
-  // DEF-177: `setPin`'s own pre-check only refuses a PIN already taken by a DIFFERENT person —
-  // re-entering the SAME person's own current PIN reaches the DB's unique index instead, which
-  // raises this raw Postgres message. Mapped here, at the presentation edge, without touching
-  // `setPin` itself (out of this task's Scope; see docs/DEFECTS-REGISTER.md DEF-177).
+  // ⭐ **DEF-177 was fixed at the source by T-237 (DEF-228), and this mapping outlived its original
+  // case.** It used to mean *"that is already this person's own PIN"*: `setPin`'s pre-check refused
+  // only a PIN held by a DIFFERENT person, so re-entering your own reached the unique index and
+  // raised a raw Postgres message. `setPin` now retires the person's own live PIN for that store
+  // BEFORE inserting the new one, and the index is partial on `revoked_at is null`, so re-issuing
+  // the same six digits succeeds — this branch can no longer be the same person's PIN.
+  //
+  // ⚠️ **Kept, because one path still reaches it**: two administrators issuing the same digits, to
+  // two different people, at the same store, in the same moment — the pre-check reads before either
+  // insert, so both pass it and the index refuses the second. Rare, real, and the sentence now says
+  // what actually happened instead of describing a case that can no longer occur.
   if (/person_credentials_lookup_hash_unique/.test(raw)) {
-    return "That's already this person's current PIN — nothing changed. Pick a different PIN to re-issue.";
+    return 'That PIN was just taken at this store — try another.';
   }
   if (/may not 'manage_store_settings'/.test(raw)) {
     return 'Only a manager or admin scoped to this store can add a position.';

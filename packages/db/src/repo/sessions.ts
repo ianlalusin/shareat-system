@@ -131,9 +131,19 @@ export async function insertCredential(tx: Tx, input: InsertCredentialInput): Pr
   return row!;
 }
 
-/** Revocation is a timestamp, never a delete — a credential that once existed is part of the
- *  audit trail for everything it authorised. */
-export async function revokeCredential(tx: Tx, id: string, revokedBy: string): Promise<void> {
+/**
+ * Revocation is a timestamp, never a delete — a credential that once existed is part of the
+ * audit trail for everything it authorised.
+ *
+ * ⚠️ **`revokedBy` accepts `null`, and that is a choice — T-237 / DEF-228.** `setPin` retires the
+ * PIN it replaces and has no `Actor` to name: it sits below the domain beside `signInWithPin`, and
+ * the administrator who clicked "issue PIN" stops at the action. NULL there means *"no principal, by
+ * construction"* — the same meaning `person_roles.granted_by` NULL carries for an organisation's
+ * first admin. ⛔ The alternative, naming the person themselves, would record that the staffer
+ * revoked their own credential when an administrator re-issued it, and a fabricated attribution is
+ * worse than an absent one because it reads as evidence.
+ */
+export async function revokeCredential(tx: Tx, id: string, revokedBy: string | null): Promise<void> {
   const updated = await tx
     .update(personCredentials)
     .set({ revokedAt: sql`now()`, revokedBy, updatedAt: sql`now()` })

@@ -14,8 +14,10 @@
  * Every function takes a `Tx`, never the base connection (same convention as
  * `repo/journal.ts`) — so a caller cannot write outside a transaction by accident.
  */
-import { and, eq, isNull, ne, sql } from 'drizzle-orm';
+import { and, eq, exists, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { personGrants, personRoles, personStoreScope } from '../../schema/access';
+// ⚠️ The one table outside the access axis this file touches — see `hasOtherActiveAdminWhoCanSignIn`.
+import { personCredentials } from '../../schema/sessions';
 import { stores } from '../../schema/stores';
 import type { Tx } from '../client';
 
@@ -77,17 +79,102 @@ export async function hasActiveAdmin(tx: Tx, orgId: string): Promise<boolean> {
  * depends on Ian personally — so an org that does this to itself is not self-recoverable.
  */
 export async function hasOtherActiveAdmin(tx: Tx, orgId: string, excludePersonId: string): Promise<boolean> {
+  return otherActiveRoleExists(tx, orgId, excludePersonId, ['admin']);
+}
+
+/**
+ * ⭐ **Is there another way INTO this organisation?** — T-237 §5.4's lockout guard.
+ *
+ * Not *"is there another admin row"*: **another person who holds an administrative role AND holds a
+ * live credential to sign in with.** The distinction is the whole function.
+ *
+ * ⛔ **The version without the credential half was wrong, and its own test proved it while passing.**
+ * A role row is an authority nobody can exercise if that person cannot sign in: granting `admin` to
+ * a credential-less person satisfied *"someone else is an admin"*, unblocked the unlink, and left an
+ * organisation with **zero live credentials** — which is exactly the droplet-shell recovery this
+ * guard exists to prevent. Found by the Opus second read of T-237; recorded there as a defect in the
+ * spec's own §5.4 condition, not in its implementation.
+ *
+ * ⛔ **Why this is a second function and not a widening of `hasOtherActiveAdmin`.** That one belongs
+ * to T-219's role-demotion guard, which asks *"will anyone still be able to `manage_users` after this
+ * demotion?"* — a question about authority, where a credential is irrelevant. Changing what it counts
+ * from inside another task would move a rule under a caller that never asked for it.
+ *
+ * ⚠️ Two filters differ from that one, and both are deliberate: it counts `super_admin` as well as
+ * `admin` (every other admin-counting helper here matches the literal `'admin'`, which for the
+ * fan-out is load-bearing — T-232 §2.2 — and for a lockout guard would be a false refusal on every
+ * super_admin-only org); and it requires a live credential.
+ *
+ * ⚠️ **It is the one function in this file that reads outside the access axis.** `person_credentials`
+ * belongs to the sessions tables, but *"can this person sign in"* is not answerable from
+ * `person_roles` alone, and answering it in TypeScript would mean a second query and a race between
+ * them.
+ */
+export async function hasOtherActiveAdminWhoCanSignIn(
+  tx: Tx,
+  orgId: string,
+  excludePersonId: string,
+): Promise<boolean> {
+  return otherActiveRoleExists(tx, orgId, excludePersonId, ['admin', 'super_admin'], true);
+}
+
+/**
+ * ⛔ **Serialises the lockout guard for one organisation** — T-237, the read-then-write race.
+ *
+ * `hasOtherActiveAdminWhoCanSignIn` reads and `revokeCredential` writes, and under READ COMMITTED two
+ * administrators unlinking each other's last credential at the same moment each see *"someone else
+ * can still get in"* and both commit. There is no single row to lock — the answer is derived from two
+ * tables — so this takes an advisory lock, the same **approach** as `organizationsRepo.lockFirstRun`
+ * (`repo/organizations.ts:214`) and for the same reason: that one also had no parent row to lock.
+ *
+ * ⚠️ The KEY differs, and deliberately: `lockFirstRun` uses a fixed constant, because first run is one
+ * critical section for the whole database. This one is keyed on the **org id**, so two organisations
+ * never wait on each other.
+ *
+ * ⚠️ Transaction-scoped (`_xact_`), so it is released at COMMIT or ROLLBACK and cannot outlive the
+ * request on a pooled connection.
+ */
+export async function lockOrgAccess(tx: Tx, orgId: string): Promise<void> {
+  // `hashtext` maps the uuid to the bigint the advisory-lock API takes. Collisions between two orgs
+  // are possible in principle and harmless in practice: the cost is that two unrelated unlinks
+  // serialise, which is a moment of waiting, never a wrong answer.
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${orgId}))`);
+}
+
+/** The shared shape, so the exports above cannot drift apart unnoticed: the next person to touch
+ *  one of them has to read the other. */
+async function otherActiveRoleExists(
+  tx: Tx,
+  orgId: string,
+  excludePersonId: string,
+  roles: readonly RoleName[],
+  mustBeAbleToSignIn = false,
+): Promise<boolean> {
+  const filters = [
+    eq(personRoles.orgId, orgId),
+    inArray(personRoles.role, [...roles]),
+    isNull(personRoles.revokedAt),
+    ne(personRoles.personId, excludePersonId),
+  ];
+  if (mustBeAbleToSignIn) {
+    filters.push(
+      exists(
+        tx
+          .select({ one: sql`1` })
+          .from(personCredentials)
+          .where(
+            and(
+              eq(personCredentials.personId, personRoles.personId),
+              isNull(personCredentials.revokedAt),
+            ),
+          ),
+      ),
+    );
+  }
   const [row] = await tx
     .select({ id: personRoles.id })
     .from(personRoles)
-    .where(
-      and(
-        eq(personRoles.orgId, orgId),
-        eq(personRoles.role, 'admin'),
-        isNull(personRoles.revokedAt),
-        ne(personRoles.personId, excludePersonId),
-      ),
-    )
+    .where(and(...filters))
     .limit(1);
   return row !== undefined;
 }

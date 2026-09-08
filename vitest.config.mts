@@ -16,6 +16,11 @@ const alias = {
   '@shareat/db/client': `${root}packages/db/src/client.ts`,
   '@shareat/db': `${root}packages/db/src/index.ts`,
   '@shareat/domain': `${root}packages/domain/src/index.ts`,
+  // ⚠️ The subpath goes BEFORE the bare name: these are exact-match aliases applied in order, and
+  // T-237's `@shareat/auth/errors` leaf (the error classes without `@shareat/db` behind them) is
+  // otherwise left to node resolution, which does not read this workspace's `exports` map here.
+  // Same reason `@shareat/core/env` and `@shareat/db/schema` are listed above.
+  '@shareat/auth/errors': `${root}packages/auth/src/errors.ts`,
   '@shareat/auth': `${root}packages/auth/src/index.ts`,
   '@shareat/etl/run': `${root}packages/etl/src/run.ts`,
   '@shareat/etl/capture': `${root}packages/etl/src/capture.ts`,

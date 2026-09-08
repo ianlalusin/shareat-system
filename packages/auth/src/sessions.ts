@@ -15,6 +15,7 @@
 import type { Tx } from '@shareat/db';
 import { sessionsRepo, transaction } from '@shareat/db';
 import type { Actor } from './authorize';
+import { AuthenticationError } from './errors';
 import {
   hashPin,
   hashesMatch,
@@ -31,12 +32,9 @@ export const PIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 /** A browser session belongs to one person on one machine, so it can be longer. */
 export const BROWSER_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-export class AuthenticationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'AuthenticationError';
-  }
-}
+/** ⚠️ Re-exported, not declared: it moved to the dependency-free `./errors` leaf so a unit test can
+ *  import it without pulling `@shareat/db` through this file. Every existing importer is unchanged. */
+export { AuthenticationError };
 
 export interface SignInResult {
   /** ⚠️ Returned ONCE and never stored. Only its hash reaches the database. */
@@ -253,9 +251,9 @@ export async function endShift(
 /**
  * Sets a person's PIN for a store.
  *
- * ⚠️ **Ends their live sessions at that store** — a changed credential must not leave sessions
- * minted under the old one standing, or "I changed my PIN" does not mean what the person thinks
- * it means.
+ * ⚠️ **Retires the PIN it replaces, and ends their live sessions at that store.** Both halves, or
+ * *"I changed my PIN"* does not mean what the person thinks it means — and until T-237 only the
+ * second half was true (**DEF-228**: the old credential stayed live and kept signing them in).
  */
 export async function setPin(
   tx: Tx | null,
@@ -273,6 +271,32 @@ export async function setPin(
     if (taken && taken.personId !== input.personId) {
       throw new AuthenticationError('That PIN is already in use at this store. Please choose another.');
     }
+
+    /**
+     * ⛔ **DEF-228 — retire the PIN this one replaces, BEFORE writing the new row.** Until T-237 this
+     * function inserted a new credential and ended the person's SESSIONS ('superseded' below)
+     * without ever revoking the old CREDENTIAL — so the previous PIN went on signing that person in
+     * forever. The word "superseded" on the line below is what made it read correct.
+     *
+     * ⚠️ **Per store, and only `pin`.** A person may hold a live PIN at more than one store — the
+     * lookup key is store-scoped by construction (`pinLookupHash(storeId, pin)`) precisely so the
+     * same six digits at two stores are two different credentials — so re-issuing at one store must
+     * leave the other alone. And a biometric credential for this store is a different credential
+     * family (T-185): a new PIN does not retire a fingerprint.
+     *
+     * ⭐ A loop, not a single revoke, because rows written before this fix may already have left more
+     * than one live PIN behind: the first re-issue after this ships cleans them up.
+     *
+     * ⚠️ `revokedBy` is NULL here deliberately — there is no principal at this layer to name, and
+     * `revokeCredential`'s own comment says why naming the person instead would be worse.
+     */
+    const livePins = (await sessionsRepo.listLiveForPerson(trx, input.personId, input.storeId)).filter(
+      (c) => c.kind === 'pin',
+    );
+    for (const previous of livePins) {
+      await sessionsRepo.revokeCredential(trx, previous.id, null);
+    }
+
     const { id } = await sessionsRepo.insertCredential(trx, {
       personId: input.personId,
       kind: 'pin',

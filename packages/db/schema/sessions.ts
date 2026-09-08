@@ -88,10 +88,38 @@ export const personCredentials = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
   (t) => [
-    /** A store's lookup hashes must be unique, or a PIN check is ambiguous — and an ambiguous
-     *  credential check that picks the first match is how the wrong person gets attributed. */
-    uniqueIndex('person_credentials_lookup_hash_unique').on(t.lookupHash),
-    uniqueIndex('person_credentials_external_id_unique').on(t.externalId),
+    /**
+     * A store's lookup hashes must be unique, or a PIN check is ambiguous — and an ambiguous
+     * credential check that picks the first match is how the wrong person gets attributed.
+     *
+     * ⭐ **PARTIAL, on `revoked_at is null` — T-237, DEF-224 and DEF-228.** Both of these were plain
+     * indexes over the whole table until then, which made revocation a **one-way door**: the row
+     * kept its uid or its lookup hash forever, so the same Firebase account could never be linked
+     * again after an unlink, and the same six digits could never be re-issued after a PIN was
+     * retired. `attendance_credentials` had already learned this and says why
+     * (`attendance-credentials.ts:110`): *"a revoked card id may be reissued, which is what makes
+     * revocation reversible in practice."*
+     *
+     * ⚠️ **Uniqueness among LIVE rows is unchanged, and that is the point.** Two live rows still
+     * collide — one uid signs in as exactly one person, one PIN is exactly one credential in a
+     * store. Only the history stops competing with the present.
+     *
+     * ⚠️ **The names deliberately did NOT change to `_live_unique`.**
+     * `apps/erp/src/app/staff/actions.ts:58` matches `person_credentials_lookup_hash_unique` as a
+     * literal in a regex over the raw driver error (DEF-177), and a rename would have silently
+     * dropped that sentence back to a raw `23505` on a screen an owner uses. Renaming a thing other
+     * code matches by name is not a tidy-up.
+     *
+     * ⛔ The `is not null` half of each predicate is not redundant: `external_id` is NULL on every
+     * `pin` row and `lookup_hash` is NULL on every `firebase` row, so without it each index would
+     * carry the whole table's revoked rows for no reason.
+     */
+    uniqueIndex('person_credentials_lookup_hash_unique')
+      .on(t.lookupHash)
+      .where(sql`${t.revokedAt} is null and ${t.lookupHash} is not null`),
+    uniqueIndex('person_credentials_external_id_unique')
+      .on(t.externalId)
+      .where(sql`${t.revokedAt} is null and ${t.externalId} is not null`),
     index('person_credentials_person_id_idx').on(t.personId),
     index('person_credentials_store_id_kind_idx').on(t.storeId, t.kind),
 

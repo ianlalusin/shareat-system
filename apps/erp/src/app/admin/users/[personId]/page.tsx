@@ -1,7 +1,13 @@
 import { notFound } from 'next/navigation';
 import { ROLES } from '@shareat/auth';
 import { requireSession } from '../../../../lib/session';
-import { assignRoleAction, setCapabilityGrantAction, setStoreScopeAction } from '../actions';
+import {
+  assignRoleAction,
+  linkFirebaseAction,
+  setCapabilityGrantAction,
+  setStoreScopeAction,
+  unlinkCredentialAction,
+} from '../actions';
 import { grantableCapabilitiesFor, userDetail } from '../lib';
 
 export const metadata = { title: 'User access — Shareat System' };
@@ -29,7 +35,7 @@ export default async function UserAccessPage({
   const detail = await userDetail(actor.orgId, personId);
   if (!detail) notFound();
 
-  const { person, stores, grants } = detail;
+  const { person, stores, grants, credentials } = detail;
   const isSelf = actor.personId === personId;
   const activeGrants = grants.filter((g) => g.revokedAt === null);
   const revokedGrants = grants.filter((g) => g.revokedAt !== null);
@@ -209,6 +215,88 @@ export default async function UserAccessPage({
             </ul>
           </details>
         )}
+      </section>
+
+      {/**
+        * T-237 / DEF-224 — the ways this person can sign in.
+        *
+        * ⭐ Live credentials only. A revoked one is a dead uid or a dead lookup hash: unlike a
+        * revoked grant, which records authority somebody once held, there is no decision anyone
+        * makes from it, and it would sit on this screen forever.
+        */}
+      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <div>
+          <h2 className="font-medium">Sign-in accounts</h2>
+          <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+            How this person gets in. Unlinking signs them out everywhere, including terminals, and
+            the account can be linked again later.
+          </p>
+        </div>
+
+        {credentials.length === 0 ? (
+          <p className="text-sm text-neutral-500 dark:text-neutral-400">
+            This person has no way to sign in. Link an email account below, or issue a PIN from{' '}
+            <a href="/staff" className="underline underline-offset-2">
+              Staff
+            </a>
+            .
+          </p>
+        ) : (
+          <ul className="space-y-2 text-sm">
+            {credentials.map((c) => {
+              const store = c.storeId ? stores.find((s) => s.id === c.storeId) : undefined;
+              return (
+                <li
+                  key={c.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-neutral-200 px-3 py-2 dark:border-neutral-800"
+                >
+                  <span className="min-w-0">
+                    <span className="font-medium">
+                      {c.kind === 'firebase'
+                        ? 'Email account'
+                        : c.kind === 'pin'
+                          ? `PIN${store ? ` — ${store.name}` : ''}`
+                          : `Fingerprint${store ? ` — ${store.name}` : ''}`}
+                    </span>
+                    <span className="block break-all text-xs text-neutral-500 dark:text-neutral-400">
+                      {/* ⚠️ A uid is a name, not a secret — showing it is what lets an administrator
+                          tell two accounts apart. A PIN's hashes are never on this page. */}
+                      {c.externalId ? <span className="font-mono">{c.externalId}</span> : null}
+                      {c.externalId ? ' · ' : ''}
+                      added {c.createdAt.toLocaleDateString('en-PH', MANILA)}
+                    </span>
+                  </span>
+                  {c.kind === 'firebase' && (
+                    <form action={unlinkCredentialAction}>
+                      <input type="hidden" name="personId" value={personId} />
+                      <input type="hidden" name="credentialId" value={c.id} />
+                      <button type="submit" className={LINK_BTN}>
+                        Unlink
+                      </button>
+                    </form>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
+        <form action={linkFirebaseAction} className="flex flex-wrap items-end gap-2">
+          <input type="hidden" name="personId" value={personId} />
+          <label className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
+              Link an email account
+            </span>
+            <input name="uid" required placeholder="Firebase uid" className={`${INPUT} font-mono`} />
+          </label>
+          <button type="submit" className={BTN}>
+            Link
+          </button>
+        </form>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          From the Firebase console — this is not an email address. The person signs in with their
+          own email and password; this only says which person that account is.
+        </p>
       </section>
     </main>
   );

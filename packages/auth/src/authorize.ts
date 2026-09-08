@@ -36,16 +36,11 @@
  */
 import { accessRepo, type Tx } from '@shareat/db';
 import { CAPABILITY_MATRIX, CAPABILITY_SCOPE, type Capability, type Role } from './capabilities';
+import { AuthorizationError } from './errors';
 
-export class AuthorizationError extends Error {
-  readonly capability: Capability;
-
-  constructor(message: string, capability: Capability) {
-    super(message);
-    this.name = 'AuthorizationError';
-    this.capability = capability;
-  }
-}
+/** ⚠️ Re-exported, not declared: it moved to the dependency-free `./errors` leaf so a unit test can
+ *  import it without pulling `@shareat/db` through this file. Every existing importer is unchanged. */
+export { AuthorizationError };
 
 /** Who is acting, and in which org's context — resolved server-side from a verified
  * session (bible §7.1: "no server action ever accepts an actor identity as a parameter"

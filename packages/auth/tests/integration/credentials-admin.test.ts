@@ -1,0 +1,523 @@
+/**
+ * T-237 — a Firebase credential's lifecycle, against real PostgreSQL.
+ * `docs/tasks/237-def-224-firebase-credential-lifecycle.md` §8. Closes **DEF-224** and **DEF-228**.
+ *
+ * ## ⭐ Case 1 is the defect, executed
+ *
+ * Link a uid, unlink it, link **the same uid again**. Before migration `0137` that third step
+ * raised `23505` — the unique index covered revoked rows — which is what made T-232's own sentence,
+ * *"ask an administrator to link it"*, advice nobody could follow.
+ *
+ * ## ⛔ Case 2 is its boundary, and it passes both before and after
+ *
+ * Two **live** rows for one uid are still refused. It is here so that a later widening — one
+ * Firebase account across two organisations — cannot happen silently: `findActiveCredentialByExternalId`
+ * ends `const [row] = …` with no `ORDER BY`, on the sign-in path's owner connection where RLS does
+ * not apply, so two live rows would sign a franchise owner into an arbitrary org on different days.
+ *
+ * ## ⛔ Case 8 PASSED before slice C, and that is the point
+ *
+ * `setPin` used to insert a new credential and end only the SESSIONS, so the previous PIN went on
+ * signing that person in forever (DEF-228). Case 8 asserts the old PIN is refused; it is the
+ * security assertion of this task, not a regression test for something that already worked.
+ */
+import { config } from 'dotenv';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import postgres from 'postgres';
+import { sql as dsql } from 'drizzle-orm';
+
+config({ path: '.env.local' });
+
+const url = process.env.TEST_DATABASE_URL;
+if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
+if (!/shareat_test|_test(\?|$)/.test(url)) {
+  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} — name must contain "_test".`);
+}
+
+import { closeDb, transaction, APP_ROLE, sessionsRepo, type Tx } from '@shareat/db';
+import {
+  linkFirebaseCredential,
+  unlinkCredential,
+  signInWithFirebase,
+  signInWithPin,
+  setPin,
+  resolveActor,
+  AuthenticationError,
+  AuthorizationError,
+  type Actor,
+} from '@shareat/auth';
+
+const sql = postgres(url, { max: 5 });
+
+let seq = 0;
+const uid = (p: string) => `${p}-${Date.now()}-${++seq}`;
+
+interface Fixture {
+  orgId: string;
+  storeId: string;
+  storeId2: string;
+  /** Holds `admin` — the actor for every gated call below. */
+  adminId: string;
+  admin: Actor;
+  /** An ordinary person with no role: the target of most link/unlink calls. */
+  personId: string;
+  /** Holds `manager` — the negative control for the gate. */
+  managerId: string;
+  manager: Actor;
+}
+
+async function setup(hint: string): Promise<Fixture> {
+  const code = uid(`c-${hint}`);
+  const [org] = await sql<{ id: string }[]>`
+    insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
+  const orgId = org!.id;
+  const mkStore = async (h: string) => {
+    const [r] = await sql<{ id: string }[]>`
+      insert into stores (org_id, code, name) values (${orgId}, ${uid(h)}, ${`Store ${h}`}) returning id`;
+    return r!.id;
+  };
+  const mkPerson = async (n: string) => {
+    const [r] = await sql<{ id: string }[]>`
+      insert into persons (org_id, display_name) values (${orgId}, ${n}) returning id`;
+    return r!.id;
+  };
+  const adminId = await mkPerson(`${hint} Admin`);
+  const managerId = await mkPerson(`${hint} Manager`);
+  await mkRole(orgId, adminId, 'admin');
+  await mkRole(orgId, managerId, 'manager');
+
+  return {
+    orgId,
+    storeId: await mkStore(`${hint}-s1`),
+    storeId2: await mkStore(`${hint}-s2`),
+    adminId,
+    admin: { personId: adminId, orgId },
+    personId: await mkPerson(`${hint} Staffer`),
+    managerId,
+    manager: { personId: managerId, orgId },
+  };
+}
+
+/** `granted_by` NULL, as `createFirstAdmin` writes it — there is no grantor in a fixture. */
+async function mkRole(orgId: string, personId: string, role: string): Promise<void> {
+  await sql`
+    insert into person_roles (org_id, person_id, role, granted_by)
+    values (${orgId}, ${personId}, ${role}, null)`;
+}
+
+/**
+ * A SECOND organisation with one person — the fixture every tenancy case needs.
+ *
+ * ⚠️ There is no way to build this from `setup()`: the whole point is a person the acting org's
+ * principal can never legitimately see, so it has to be created outside that org.
+ */
+async function otherOrgPerson(hint: string): Promise<{ orgId: string; personId: string }> {
+  const code = uid(`other-${hint}`);
+  const [org] = await sql<{ id: string }[]>`
+    insert into organizations (name, code) values (${`Other ${code}`}, ${code}) returning id`;
+  const [person] = await sql<{ id: string }[]>`
+    insert into persons (org_id, display_name) values (${org!.id}, 'Someone Else') returning id`;
+  return { orgId: org!.id, personId: person!.id };
+}
+
+/** Runs under the real RLS principal, exactly as a request would. */
+async function asOrg<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return transaction(async (tx) => {
+    await tx.execute(dsql.raw(`set local role ${APP_ROLE}`));
+    await tx.execute(dsql`select set_config('app.principal_kind', 'staff', true)`);
+    await tx.execute(dsql`select set_config('app.org_id', ${orgId}, true)`);
+    return fn(tx);
+  });
+}
+
+const liveCredentialCount = async (personId: string): Promise<number> => {
+  const [row] = await sql<{ n: number }[]>`
+    select count(*)::int n from person_credentials
+    where person_id = ${personId} and revoked_at is null`;
+  return row!.n;
+};
+
+beforeAll(async () => {
+  await sql`truncate table sessions, person_credentials restart identity cascade`;
+});
+
+afterAll(async () => {
+  await closeDb();
+  await sql.end({ timeout: 5 });
+});
+
+// =========================================================================================
+// DEF-224 — the index
+// =========================================================================================
+
+describe('DEF-224 — a uid that was unlinked can be linked again', () => {
+  it('⭐ case 1: link → unlink → link the SAME uid, and sign-in resolves to the NEW row', async () => {
+    const f = await setup('relink');
+    const externalId = uid('firebase');
+
+    const first = await asOrg(f.orgId, (tx) =>
+      linkFirebaseCredential(tx, f.admin, { personId: f.personId, uid: externalId }),
+    );
+    await asOrg(f.orgId, (tx) =>
+      unlinkCredential(tx, f.admin, { personId: f.personId, credentialId: first.credentialId }),
+    );
+
+    // ⛔ This is the line that raised 23505 before migration 0137.
+    const second = await asOrg(f.orgId, (tx) =>
+      linkFirebaseCredential(tx, f.admin, { personId: f.personId, uid: externalId }),
+    );
+    expect(second.credentialId).not.toBe(first.credentialId);
+
+    // And the uid resolves to the LIVE row, not the revoked one — the partial index is also the
+    // index this lookup wants.
+    const found = await asOrg(f.orgId, (tx) =>
+      sessionsRepo.findActiveCredentialByExternalId(tx, externalId),
+    );
+    expect(found?.id).toBe(second.credentialId);
+    expect(await liveCredentialCount(f.personId)).toBe(1);
+  });
+
+  it('⛔ case 2: two LIVE rows for one uid are still refused', async () => {
+    // Passes before and after 0137. It is here so that opening one Firebase account to a second
+    // organisation cannot happen quietly: the sign-in lookup takes one row with no ORDER BY.
+    const f = await setup('dupe');
+    const externalId = uid('firebase');
+    await asOrg(f.orgId, (tx) =>
+      linkFirebaseCredential(tx, f.admin, { personId: f.personId, uid: externalId }),
+    );
+
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        linkFirebaseCredential(tx, f.admin, { personId: f.adminId, uid: externalId }),
+      ),
+    ).rejects.toThrow(/person_credentials_external_id_unique|duplicate key/);
+  });
+});
+
+// =========================================================================================
+// Unlinking
+// =========================================================================================
+
+describe('unlinkCredential — the row and the sessions, together', () => {
+  it('⭐ case 3 + 4: revokes the credential, ends the live sessions, and says how many', async () => {
+    const f = await setup('unlink');
+    const externalId = uid('firebase');
+    const { credentialId } = await asOrg(f.orgId, (tx) =>
+      linkFirebaseCredential(tx, f.admin, { personId: f.personId, uid: externalId }),
+    );
+
+    const session = await asOrg(f.orgId, (tx) => signInWithFirebase(tx, { verifiedUid: externalId }));
+    expect(await asOrg(f.orgId, (tx) => resolveActor(tx, session.token))).toBeTruthy();
+
+    const result = await asOrg(f.orgId, (tx) =>
+      unlinkCredential(tx, f.admin, { personId: f.personId, credentialId }),
+    );
+
+    expect(result.sessionsEnded).toBe(1);
+    expect(result.kind).toBe('firebase');
+    expect(await liveCredentialCount(f.personId)).toBe(0);
+
+    // ⭐ The session is really dead, asserted through the function every page calls.
+    await expect(asOrg(f.orgId, (tx) => resolveActor(tx, session.token))).rejects.toThrow(
+      AuthenticationError,
+    );
+
+    // ⭐ Case 4 — `'revoked'` has been in SessionEndReason since T-138 with no writer. This is it.
+    const [row] = await sql<{ ended_reason: string }[]>`
+      select ended_reason from sessions where id = ${session.sessionId}`;
+    expect(row!.ended_reason).toBe('revoked');
+  });
+
+  it('case 3b: the credential must belong to the person named — a mismatched pair is refused', async () => {
+    const f = await setup('mismatch');
+    const { credentialId } = await asOrg(f.orgId, (tx) =>
+      linkFirebaseCredential(tx, f.admin, { personId: f.personId, uid: uid('firebase') }),
+    );
+
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        // The admin's own id, someone else's credential: a hand-crafted POST's shape.
+        unlinkCredential(tx, f.admin, { personId: f.adminId, credentialId }),
+      ),
+    ).rejects.toThrow(/not linked to this person/);
+    expect(await liveCredentialCount(f.personId)).toBe(1);
+  });
+
+  it('⛔ case 5: a manager is refused both link and unlink; an admin is allowed', async () => {
+    const f = await setup('gate');
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        linkFirebaseCredential(tx, f.manager, { personId: f.personId, uid: uid('firebase') }),
+      ),
+    ).rejects.toThrow(AuthorizationError);
+
+    const { credentialId } = await asOrg(f.orgId, (tx) =>
+      linkFirebaseCredential(tx, f.admin, { personId: f.personId, uid: uid('firebase') }),
+    );
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        unlinkCredential(tx, f.manager, { personId: f.personId, credentialId }),
+      ),
+    ).rejects.toThrow(AuthorizationError);
+
+    // The non-zero control: the same call from an admin succeeds, so the refusals above are the
+    // capability and not a broken fixture.
+    await expect(
+      asOrg(f.orgId, (tx) => unlinkCredential(tx, f.admin, { personId: f.personId, credentialId })),
+    ).resolves.toMatchObject({ kind: 'firebase' });
+  });
+
+  it('⭐ case 7: unlinking your OWN credential is allowed, and signs you out', async () => {
+    const f = await setup('self');
+    // A second admin WHO CAN SIGN IN, so the lockout guard is not what is being tested here.
+    // ⚠️ The role alone is not enough, and that is not a fixture detail — it is the guard's whole
+    // point since the Opus second read. This line failed the moment the guard was corrected.
+    await mkRole(f.orgId, f.personId, 'admin');
+    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '098765' }));
+    const externalId = uid('firebase');
+    const { credentialId } = await asOrg(f.orgId, (tx) =>
+      linkFirebaseCredential(tx, f.admin, { personId: f.adminId, uid: externalId }),
+    );
+    await asOrg(f.orgId, (tx) => signInWithFirebase(tx, { verifiedUid: externalId }));
+
+    const result = await asOrg(f.orgId, (tx) =>
+      unlinkCredential(tx, f.admin, { personId: f.adminId, credentialId }),
+    );
+    expect(result.sessionsEnded).toBe(1);
+  });
+});
+
+describe('⛔ case 6 — the last way into an organisation', () => {
+  it('refuses the only admin’s last credential, and allows it once a second admin exists', async () => {
+    const f = await setup('lockout');
+    const { credentialId } = await asOrg(f.orgId, (tx) =>
+      linkFirebaseCredential(tx, f.admin, { personId: f.adminId, uid: uid('firebase') }),
+    );
+
+    await expect(
+      asOrg(f.orgId, (tx) => unlinkCredential(tx, f.admin, { personId: f.adminId, credentialId })),
+    ).rejects.toThrow(/last way into this organisation/);
+    expect(await liveCredentialCount(f.adminId)).toBe(1);
+
+    // ⛔ A second admin ROW is not another way in. This person cannot sign in, so the organisation
+    // would still be left with zero live credentials — the version of this guard that only counted
+    // roles allowed exactly this, and this very case is what proved it (Opus second read, T-237).
+    await mkRole(f.orgId, f.personId, 'admin');
+    await expect(
+      asOrg(f.orgId, (tx) => unlinkCredential(tx, f.admin, { personId: f.adminId, credentialId })),
+    ).rejects.toThrow(/last way into this organisation/);
+    expect(await liveCredentialCount(f.adminId)).toBe(1);
+
+    // ⭐ Give that admin a way to sign in, and the same call goes through. The pair is the point:
+    // the role alone must not unblock it, and the role plus a credential must.
+    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '654321' }));
+    await expect(
+      asOrg(f.orgId, (tx) => unlinkCredential(tx, f.admin, { personId: f.adminId, credentialId })),
+    ).resolves.toMatchObject({ kind: 'firebase' });
+  });
+
+  it('⭐ counts a SUPER_ADMIN as another way in — the reason hasOtherActiveAdminWhoCanSignIn exists', async () => {
+    // Every other admin-counting helper in `accessRepo` filters the literal role 'admin', so a
+    // super_admin-only organisation would be refused its own unlink for no reason at all.
+    const f = await setup('superadmin');
+    await mkRole(f.orgId, f.personId, 'super_admin');
+    // …and that super_admin must be able to sign in, or they are not a way in either.
+    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '135790' }));
+    const { credentialId } = await asOrg(f.orgId, (tx) =>
+      linkFirebaseCredential(tx, f.admin, { personId: f.adminId, uid: uid('firebase') }),
+    );
+
+    await expect(
+      asOrg(f.orgId, (tx) => unlinkCredential(tx, f.admin, { personId: f.adminId, credentialId })),
+    ).resolves.toMatchObject({ kind: 'firebase' });
+  });
+
+  it('does not fire for a person who is not an administrator at all', async () => {
+    const f = await setup('nonadmin');
+    const { credentialId } = await asOrg(f.orgId, (tx) =>
+      linkFirebaseCredential(tx, f.admin, { personId: f.personId, uid: uid('firebase') }),
+    );
+    // Their last credential, and nobody is locked out of anything by removing it.
+    await expect(
+      asOrg(f.orgId, (tx) => unlinkCredential(tx, f.admin, { personId: f.personId, credentialId })),
+    ).resolves.toMatchObject({ sessionsEnded: 0 });
+  });
+});
+
+// =========================================================================================
+// Tenancy, input, and the lock — the Opus second read's should-fixes
+// =========================================================================================
+
+describe('⛔ tenancy — another org’s person is refused by THIS layer, not only by RLS', () => {
+  it('link and unlink both refuse, with the domain’s sentence rather than a 42501', async () => {
+    const f = await setup('crossorg');
+    const other = await otherOrgPerson('link');
+
+    // ⚠️ The assertion is as much about WHICH refusal as about the refusal: bible §15.11 / DEF-210
+    // says no layer may be the only layer, and RLS's own message ("new row violates row-level
+    // security policy") is one a person cannot act on. `/does not exist in org/` is the wording
+    // `/admin/users` already maps to "That person is not part of this organisation."
+    const linking = asOrg(f.orgId, (tx) =>
+      linkFirebaseCredential(tx, f.admin, { personId: other.personId, uid: uid('firebase') }),
+    );
+    await expect(linking).rejects.toThrow(AuthorizationError);
+    await expect(linking).rejects.toThrow(/does not exist in org/);
+    await expect(linking).rejects.not.toThrow(/row-level security|42501/);
+
+    // The same for unlink, against a credential that really exists in the other org.
+    const [cred] = await sql<{ id: string }[]>`
+      insert into person_credentials (person_id, kind, external_id)
+      values (${other.personId}, 'firebase', ${uid('other-uid')}) returning id`;
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        unlinkCredential(tx, f.admin, { personId: other.personId, credentialId: cred!.id }),
+      ),
+    ).rejects.toThrow(/does not exist in org/);
+
+    // ⭐ And it is still there: a refused unlink must not have revoked anything.
+    const [still] = await sql<{ n: number }[]>`
+      select count(*)::int n from person_credentials where id = ${cred!.id} and revoked_at is null`;
+    expect(still!.n).toBe(1);
+  });
+
+  it('⭐ case 5b: one uid live in TWO ORGANISATIONS is refused — §2.3’s real boundary', async () => {
+    // The same-org case above proves one uid is one person. This is the case §2.3 actually argues
+    // about, and the one `/admin/users`' "already linked to somebody" sentence exists for: the index
+    // is global, so the second org's link is refused by the database, not by a tenancy check.
+    const f = await setup('crossuid');
+    const other = await otherOrgPerson('uid');
+    const shared = uid('firebase-shared');
+
+    await asOrg(f.orgId, (tx) =>
+      linkFirebaseCredential(tx, f.admin, { personId: f.personId, uid: shared }),
+    );
+
+    await expect(
+      sql`insert into person_credentials (person_id, kind, external_id)
+          values (${other.personId}, 'firebase', ${shared})`,
+    ).rejects.toThrow(/person_credentials_external_id_unique|duplicate key/);
+  });
+});
+
+describe('the uid is validated for shape, since it cannot be validated for truth', () => {
+  const link = (f: Awaited<ReturnType<typeof setup>>, value: string) =>
+    asOrg(f.orgId, (tx) => linkFirebaseCredential(tx, f.admin, { personId: f.personId, uid: value }));
+
+  it('⛔ refuses an email address — §5.3 enforced, not merely printed under the field', async () => {
+    const f = await setup('uidmail');
+    await expect(link(f, 'ian@shareat.net')).rejects.toThrow(/looks like an email address/);
+  });
+
+  it('⛔ refuses whitespace inside, and a blank value', async () => {
+    const f = await setup('uidspace');
+    await expect(link(f, 'abc def')).rejects.toThrow(/contains no spaces/);
+    await expect(link(f, '   ')).rejects.toThrow(/Paste the Firebase uid/);
+  });
+
+  it('⛔ refuses one longer than a Firebase uid can be, before the btree does it rudely', async () => {
+    // Past ~2.7 KB the index raises "index row size exceeds maximum" — a raw Postgres error on an
+    // admin screen, for what is always a paste accident.
+    const f = await setup('uidlong');
+    await expect(link(f, 'x'.repeat(129))).rejects.toThrow(/too long to be a Firebase uid/);
+  });
+
+  it('✅ and accepts a real-shaped uid, trimmed — the control', async () => {
+    const f = await setup('uidok');
+    const value = uid('AbCd0123');
+    const { credentialId } = await link(f, `  ${value}  `);
+    const found = await asOrg(f.orgId, (tx) => sessionsRepo.findActiveCredentialByExternalId(tx, value));
+    expect(found?.id).toBe(credentialId);
+  });
+});
+
+describe('the lockout guard is serialised for the organisation', () => {
+  it('⭐ UNLINKCREDENTIAL takes the advisory lock — driven through the call, not through the helper', async () => {
+    /**
+     * ⚠️ **The first version of this test called `accessRepo.lockOrgAccess` directly**, which proved
+     * the helper locks and said nothing about whether `unlinkCredential` calls it — while its title
+     * claimed the second. A guard that proves something other than its name is worse than none,
+     * because it is credited. So the lock is taken by the real call here, and the assertion is made
+     * inside the same transaction, where a transaction-scoped lock is still held.
+     *
+     * ⭐ The BEFORE check is the control. Without it, a connection that already held an advisory lock
+     * from anything else would satisfy the after check no matter what `unlinkCredential` did.
+     *
+     * The race itself is not simulated — two concurrent transactions in one test is a flake waiting
+     * to happen. What is ruled out is the failure mode a comment cannot: a lock nobody takes.
+     */
+    const f = await setup('lock');
+    const { credentialId } = await asOrg(f.orgId, (tx) =>
+      linkFirebaseCredential(tx, f.admin, { personId: f.personId, uid: uid('firebase') }),
+    );
+
+    const advisoryLocks = async (tx: Tx): Promise<number> => {
+      const rows = await tx.execute(
+        dsql`select count(*)::int as n from pg_locks
+             where locktype = 'advisory' and pid = pg_backend_pid()`,
+      );
+      return Number((rows as unknown as { n: number }[])[0]!.n);
+    };
+
+    await asOrg(f.orgId, async (tx) => {
+      expect(await advisoryLocks(tx)).toBe(0);
+      await unlinkCredential(tx, f.admin, { personId: f.personId, credentialId });
+      expect(await advisoryLocks(tx)).toBeGreaterThan(0);
+    });
+  });
+});
+
+// =========================================================================================
+// DEF-228 — the PIN half
+// =========================================================================================
+
+describe('DEF-228 — re-issuing a PIN retires the one it replaces', () => {
+  it('⛔ case 8: the OLD PIN no longer signs in — the security assertion of this task', async () => {
+    const f = await setup('oldpin');
+    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '111111' }));
+    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '222222' }));
+
+    // Before T-237 this signed in happily: the old credential was never revoked, only the sessions
+    // minted under it were ended.
+    await expect(
+      asOrg(f.orgId, (tx) => signInWithPin(tx, { storeId: f.storeId, pin: '111111' })),
+    ).rejects.toThrow(AuthenticationError);
+
+    const newSession = await asOrg(f.orgId, (tx) =>
+      signInWithPin(tx, { storeId: f.storeId, pin: '222222' }),
+    );
+    expect(newSession.personId).toBe(f.personId);
+    expect(await liveCredentialCount(f.personId)).toBe(1);
+  });
+
+  it('⭐ case 9: the SAME six digits can be re-issued, and another store’s PIN is untouched', async () => {
+    const f = await setup('samepin');
+    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '345678' }));
+    // A live PIN at a SECOND store — the lookup key is store-scoped, so these are two credentials.
+    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId2, pin: '345678' }));
+
+    // ⛔ This raised a raw 23505 before 0137 (DEF-177 mapped the message at the presentation edge
+    // rather than fixing the cause).
+    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '345678' }));
+
+    // One live PIN per store, and the second store's still signs in.
+    expect(await liveCredentialCount(f.personId)).toBe(2);
+    const atStore2 = await asOrg(f.orgId, (tx) =>
+      signInWithPin(tx, { storeId: f.storeId2, pin: '345678' }),
+    );
+    expect(atStore2.personId).toBe(f.personId);
+    const atStore1 = await asOrg(f.orgId, (tx) =>
+      signInWithPin(tx, { storeId: f.storeId, pin: '345678' }),
+    );
+    expect(atStore1.personId).toBe(f.personId);
+  });
+
+  it('a PIN belonging to ANOTHER person is still refused with its own sentence', async () => {
+    // The pre-check that already existed, unchanged — and the control proving the revoke-first step
+    // did not turn "somebody else's PIN" into a silent takeover.
+    const f = await setup('taken');
+    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '456789' }));
+    await expect(
+      asOrg(f.orgId, (tx) => setPin(tx, { personId: f.adminId, storeId: f.storeId, pin: '456789' })),
+    ).rejects.toThrow(/already in use at this store/);
+  });
+});

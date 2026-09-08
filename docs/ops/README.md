@@ -219,6 +219,12 @@ would stay there. Run it by hand, read the PIN, sign in, change it from the app.
 credentials through an agent — covers this as surely as it covers provisioning, and it is the same
 reason `/setup` asks *him* to type the PIN rather than an agent supplying one.
 
+## Cutting off someone's access (T-237)
+
+- [Cutting off someone's access](./access-revocation.md) — unlink on `/admin/users`, and why
+  disabling the account in Firebase is not enough: v2 checks the Firebase token only at sign-in,
+  and the session it mints then lives up to seven days. Unlink ends those sessions at once.
+
 ## ⛔ FIRST — getting `docs/ops` onto the droplet, because the pipeline never ships it
 
 **DEF-194, 2026-09-06.** This section used to open *"after `docs/ops/provision.sh` has run once"*

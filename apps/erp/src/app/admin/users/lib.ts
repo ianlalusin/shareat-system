@@ -6,7 +6,7 @@
  * runs through `packages/auth`'s own `authorize()` call via the actions file. That asymmetry is
  * deliberate and matches every other admin screen here (`/staff`, `/attendance/terminals`).
  */
-import { accessRepo, personsRepo, type GrantRow, type PersonWithAccessRow } from '@shareat/db';
+import { accessRepo, personsRepo, sessionsRepo, type GrantRow, type PersonWithAccessRow } from '@shareat/db';
 import { CAPABILITIES, CAPABILITY_MATRIX, type Capability, type Role } from '@shareat/auth';
 import { listStores, withOrgPrincipal, type StoreOption } from '../../expenses/lib';
 
@@ -25,6 +25,27 @@ export interface UserDetail {
   /** Active and revoked both — invariant 11 requires a revoked grant to stay queryable with
    *  its revocation date, and the screen is where that promise is kept. */
   grants: GrantRow[];
+  /**
+   * T-237 — the ways this person can sign in, LIVE ones only.
+   *
+   * ⚠️ Revoked credentials are deliberately NOT listed, unlike the grants above. A revoked grant is
+   * a statement about authority somebody once held and is worth reading back; a revoked credential
+   * is a dead lookup hash or a dead uid, and listing it would put a person's former Firebase uid on
+   * a screen forever for no decision anyone makes from it.
+   */
+  credentials: SignInCredential[];
+}
+
+/** One way in, as the screen needs it. ⛔ No `secretHash` and no `lookupHash` — the row carries
+ *  them and nothing on a page has any use for either. */
+export interface SignInCredential {
+  id: string;
+  kind: 'pin' | 'firebase' | 'biometric';
+  storeId: string | null;
+  /** The Firebase uid, for a `firebase` row. It is a name, not a secret — `verifyIdToken` is what
+   *  makes it mean anything — so showing it is what lets an administrator tell two accounts apart. */
+  externalId: string | null;
+  createdAt: Date;
 }
 
 export async function userDetail(orgId: string, personId: string): Promise<UserDetail | null> {
@@ -34,9 +55,10 @@ export async function userDetail(orgId: string, personId: string): Promise<UserD
     const person = rows.find((r) => r.id === personId);
     if (!person) return null;
 
-    const [scopedIds, grants] = await Promise.all([
+    const [scopedIds, grants, credentials] = await Promise.all([
       accessRepo.storeIdsForPerson(tx, personId),
       accessRepo.grantsForPerson(tx, personId),
+      sessionsRepo.listLiveForPerson(tx, personId),
     ]);
     const held = new Set(scopedIds);
 
@@ -44,6 +66,13 @@ export async function userDetail(orgId: string, personId: string): Promise<UserD
       person,
       stores: stores.map((s) => ({ ...s, inScope: held.has(s.id) })),
       grants: grants.sort((a, b) => a.grantName.localeCompare(b.grantName)),
+      credentials: credentials.map((c) => ({
+        id: c.id,
+        kind: c.kind,
+        storeId: c.storeId,
+        externalId: c.externalId,
+        createdAt: c.createdAt,
+      })),
     };
   });
 }

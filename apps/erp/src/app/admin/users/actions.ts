@@ -20,11 +20,13 @@ import {
   assignRoleAsActor,
   authorize,
   grantCapabilityAsActor,
+  linkFirebaseCredential,
+  unlinkCredential,
   type Capability,
   type Role,
 } from '@shareat/auth';
 import { withOrgPrincipal } from './lib';
-import { requireActor } from '../../../lib/session';
+import { clearSessionCookie, requireActor } from '../../../lib/session';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -55,10 +57,25 @@ function errorMessage(err: unknown): string {
     return 'That person is not part of this organisation.';
   }
   if (/may not 'manage_users'/.test(raw)) {
-    return 'Only an admin or super-admin can change roles.';
+    // ⚠️ Names both things this capability gates on this screen. T-237 added the second, and a
+    // refusal that describes the wrong action is a refusal nobody can act on.
+    return 'Only an admin or super-admin can change roles or sign-in accounts.';
   }
   if (/may not 'grant_capability'/.test(raw)) {
     return 'Only an admin or super-admin can grant or revoke a capability.';
+  }
+  // T-237 — the unique index is GLOBAL, not per-organisation, so this also fires when the uid is
+  // live in another org. ⛔ The sentence stays vague on purpose: naming the person, or even the
+  // organisation, would disclose another franchise's staff to an administrator who cannot see them.
+  if (/person_credentials_external_id_unique/.test(raw)) {
+    return 'That Firebase account is already linked to somebody. Unlink it there first, then link it here.';
+  }
+  // ⚠️ BEFORE the grant case below, which matches the same tail. `revokeCredential` and
+  // `revokeGrantById` both say "does not exist or is already revoked", and telling someone their
+  // GRANT was revoked when they unlinked an ACCOUNT sends them to the wrong part of the screen.
+  // Only reachable in a race: `unlinkCredential` checks the credential is live before revoking it.
+  if (/^revokeCredential:/.test(raw)) {
+    return 'That sign-in account was already unlinked — reload the page to see the current state.';
   }
   if (/does not exist or is already revoked/.test(raw)) {
     return 'That grant was already revoked — reload the page to see the current state.';
@@ -155,4 +172,62 @@ export async function setCapabilityGrantAction(formData: FormData): Promise<void
     backToUser(personId, { error: errorMessage(err) });
   }
   backToUser(personId, { ok: granted ? `Granted ${capability}.` : 'Grant revoked.' });
+}
+
+/**
+ * T-237 / DEF-224 — link a Firebase account to this person.
+ *
+ * ⛔ The form supplies a **uid**, which is a target's credential, never an actor: the actor is the
+ * session's, as everywhere else on this screen. The gate and every rule live in
+ * `linkFirebaseCredential`; this is the adapter.
+ */
+export async function linkFirebaseAction(formData: FormData): Promise<void> {
+  const actor = await requireActor('/admin/users');
+  const personId = str(formData, 'personId');
+  const uid = str(formData, 'uid');
+
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      linkFirebaseCredential(tx, actor, { personId, uid }),
+    );
+  } catch (err) {
+    backToUser(personId, { error: errorMessage(err) });
+  }
+  backToUser(personId, { ok: 'Email account linked. They can sign in with it now.' });
+}
+
+/**
+ * T-237 / DEF-224 — unlink a credential and end that person's sessions.
+ *
+ * ⭐ The count comes back from the domain and is REPORTED, never assumed: "signed out of 2
+ * sessions" is the difference between a revocation somebody can trust and one they have to go and
+ * check. Bible §15.6.
+ */
+export async function unlinkCredentialAction(formData: FormData): Promise<void> {
+  const actor = await requireActor('/admin/users');
+  const personId = str(formData, 'personId');
+  const credentialId = str(formData, 'credentialId');
+
+  let ended = 0;
+  try {
+    const result = await withOrgPrincipal(actor.orgId, (tx) =>
+      unlinkCredential(tx, actor, { personId, credentialId }),
+    );
+    ended = result.sessionsEnded;
+
+    // ⭐ Unlinking your own credential ended your own session server-side, so the cookie in this
+    // browser is now a dead token. Clearing it makes the next page load a clean redirect to
+    // `/sign-in` instead of one that resolves nothing and then redirects anyway — and it is the
+    // same discipline `signOutAction` follows: the browser forgetting is not the session ending, so
+    // this line is hygiene AFTER the real revocation, never instead of it.
+    if (actor.personId === personId) await clearSessionCookie();
+  } catch (err) {
+    backToUser(personId, { error: errorMessage(err) });
+  }
+  backToUser(personId, {
+    ok:
+      ended === 0
+        ? 'Unlinked. They had no live session to end.'
+        : `Unlinked, and signed out of ${ended} live session${ended === 1 ? '' : 's'}.`,
+  });
 }

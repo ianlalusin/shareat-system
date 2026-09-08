@@ -346,8 +346,10 @@ export async function bootstrapOrganization(
 
   // 8. The browser credential, when there is one. ⚠️ `person_credentials_shape_check` refuses a
   //    `firebase` row carrying a local secret, and `person_credentials_external_id_unique` refuses
-  //    a uid already linked — neither can fire here (zero orgs means zero persons means zero
-  //    credentials), which is why they are left to the database rather than re-checked here.
+  //    a uid already linked **and still live** — since T-237 that index is partial on
+  //    `revoked_at is null`, so an unlinked uid may be linked again (DEF-224). Neither can fire
+  //    here (zero orgs means zero persons means zero credentials), which is why they are left to
+  //    the database rather than re-checked here.
   const firebaseUid = input.firebaseUid?.trim();
   const firebaseCredential = firebaseUid
     ? await sessionsRepo.insertCredential(tx, {
