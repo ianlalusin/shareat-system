@@ -93,6 +93,11 @@ republishes Ian's status board; (4) hands over. **Worker lanes stay alive and ar
 the orchestrator is cleared.** Goal: low session memory, so each orchestrator works at full speed.
 The roadmap and the board are updated at **every commit**, not only at wrap-up.
 
+**Lanes run on Sonnet unless the slice is planning, a spec, or review — Ian, 2026-09-08 (bible
+§3.1a, row 184).** The briefing names the model. A session cannot switch itself, so the board's
+"Needs you" lists the terminals for Ian to `/model sonnet`, and a lane keeps working through the
+switch. Every subagent a lane dispatches for Sonnet-able work passes `model: "sonnet"` regardless.
+
 **Not to be confused with `/daily-review`**, which is a critic: it reviews a diff for defects, works
 on a branch, and never touches `main`. This one is a closer.
 

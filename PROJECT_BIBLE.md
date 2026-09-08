@@ -27,73 +27,73 @@
 - ` 494–531  ` 2. Non-negotiables
 - ` 532–533  ` 3. Execution model — how work gets done
   - ` 534–543  ` 3.1 The division of labour
-  - ` 544–571  ` 3.1a Which model, and why — Ian, 2026-08-23
-  - ` 572–583  ` 3.2 The work loop
-  - ` 584–596  ` 3.3 Task spec format (docs/tasks/NNN-<slug>.md)
-  - ` 597–614  ` 3.4 Subagent rules
-  - ` 615–636  ` 3.4a Report a spec defect; never work around it silently
-  - ` 637–644  ` 3.5 Reporting to Ian
-  - ` 645–662  ` 3.6 Research before planning — Ian, 2026-08-23
-  - ` 663–670  ` When it applies
-  - ` 671–689  ` Four guards, or this degrades into delay
-- ` 690–691  ` 4. Architecture — the relational core
-  - ` 692–708  ` 4.1 Stack
-  - ` 709–750  ` 4.2 Schema principles
-  - ` 751–771  ` 4.3 Application layering
-  - ` 772–801  ` 4.4 Reference data and seeds — how the duplicate-Rent problem dies
-- ` 802–806  ` 5. Architecture — the Firebase hot lane
-  - ` 807–839  ` 5.1 The two-lane contract
-  - ` 840–868  ` 5.2 What v1 actually does offline — and why v2 changes it
-  - ` 869–919  ` 5.3 The hot set — closed list
-  - ` 920–921  ` 5.4 Offline write-back rules
-  - ` 922–932  ` 5.3 Offline write-back rules
-- ` 933–934  ` 6. Data conventions
-  - ` 935–942  ` Money
-  - ` 943–953  ` Dates & time
-  - ` 954–959  ` Identifiers
-  - ` 960–964  ` Naming
-  - ` 965–970  ` Nulls
-- ` 971–1016 ` 7. Security model
-  - `1017–1047 ` 7.1 Identity — the v1 mess, and the v2 rule
-- `1048–1049 ` 8. Repo & environment
-  - `1050–1084 ` Layout
-  - `1085–1094 ` Ports — reserved, never shared
-  - `1095–1125` Build discipline — two rules, both absolute
-  - `1126–1136` Git
-- `1137–1153` 9. Definition of done
-  - `1154–1161` Parity gate
-- `1162–1196` 10. Phase plan
-- `1197–1213` 11. Migration & ETL rules
-- `1214–1278` 12. Inherited landmines — do not repeat these
-- `1279–1469` 13. Decision log
-- `1470–1489` 14. Amendment protocol
-- `1490–1494` 15. Engineering standards — the industry practices this project follows
-  - `1495–1500` 15.1 Build order: walking skeleton first
-  - `1501–1512` 15.2 Golden-master testing — the most important practice here
-  - `1513–1521` 15.3 Strangler Fig, not big-bang cutover
-  - `1522–1526` 15.4 No dual-write
-  - `1527–1531` 15.5 Expand/contract migrations
-  - `1532–1540` 15.6 Observability from day zero, not later
-  - `1541–1545` 15.7 CI gates
-  - `1546–1550` 15.8 Backups and a tested restore
-  - `1551–1555` 15.9 Twelve-Factor config
-  - `1556–1563` 15.10 Append-only ledgers — but not event sourcing
-  - `1564–1568` 15.11 Defence in depth
-  - `1569–1597` 15.12 Skills are lenses, not assurance
-  - `1598–1604` 15.13 Reconciliation is a permanent feature
-- `1605–1609` 16. The accounting spine
-  - `1610–1641` 16.0 What we are actually fixing — the diagnosis
-  - `1642–1685` 16.1 The ten invariants — non-negotiable
-  - `1686–1700` 16.2 The oracle: how "correct" is tested
-  - `1701–1722` 16.3 The model — header + lines, not legs
-  - `1723–1742` 16.4 Deliberately simpler than ERPNext
-  - `1743–1809` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1810–1834` 16.6 What v1 already gets right — preserve the intent
-  - `1835–1856` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1857–1871` 16.8 What v1's accounting already gets right
-  - `1872–1915` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1916–1966` 16.10 Posting patterns — one canonical pattern per business event
-  - `1967–1998` 16.11 Inventory's accounting integration
+  - ` 544–579  ` 3.1a Which model, and why — Ian, 2026-08-23
+  - ` 580–591  ` 3.2 The work loop
+  - ` 592–604  ` 3.3 Task spec format (docs/tasks/NNN-<slug>.md)
+  - ` 605–622  ` 3.4 Subagent rules
+  - ` 623–644  ` 3.4a Report a spec defect; never work around it silently
+  - ` 645–652  ` 3.5 Reporting to Ian
+  - ` 653–670  ` 3.6 Research before planning — Ian, 2026-08-23
+  - ` 671–678  ` When it applies
+  - ` 679–697  ` Four guards, or this degrades into delay
+- ` 698–699  ` 4. Architecture — the relational core
+  - ` 700–716  ` 4.1 Stack
+  - ` 717–758  ` 4.2 Schema principles
+  - ` 759–779  ` 4.3 Application layering
+  - ` 780–809  ` 4.4 Reference data and seeds — how the duplicate-Rent problem dies
+- ` 810–814  ` 5. Architecture — the Firebase hot lane
+  - ` 815–847  ` 5.1 The two-lane contract
+  - ` 848–876  ` 5.2 What v1 actually does offline — and why v2 changes it
+  - ` 877–927  ` 5.3 The hot set — closed list
+  - ` 928–929  ` 5.4 Offline write-back rules
+  - ` 930–940  ` 5.3 Offline write-back rules
+- ` 941–942  ` 6. Data conventions
+  - ` 943–950  ` Money
+  - ` 951–961  ` Dates & time
+  - ` 962–967  ` Identifiers
+  - ` 968–972  ` Naming
+  - ` 973–978  ` Nulls
+- ` 979–1024 ` 7. Security model
+  - `1025–1055 ` 7.1 Identity — the v1 mess, and the v2 rule
+- `1056–1057 ` 8. Repo & environment
+  - `1058–1092 ` Layout
+  - `1093–1102` Ports — reserved, never shared
+  - `1103–1133` Build discipline — two rules, both absolute
+  - `1134–1144` Git
+- `1145–1161` 9. Definition of done
+  - `1162–1169` Parity gate
+- `1170–1204` 10. Phase plan
+- `1205–1221` 11. Migration & ETL rules
+- `1222–1286` 12. Inherited landmines — do not repeat these
+- `1287–1479` 13. Decision log
+- `1480–1499` 14. Amendment protocol
+- `1500–1504` 15. Engineering standards — the industry practices this project follows
+  - `1505–1510` 15.1 Build order: walking skeleton first
+  - `1511–1522` 15.2 Golden-master testing — the most important practice here
+  - `1523–1531` 15.3 Strangler Fig, not big-bang cutover
+  - `1532–1536` 15.4 No dual-write
+  - `1537–1541` 15.5 Expand/contract migrations
+  - `1542–1550` 15.6 Observability from day zero, not later
+  - `1551–1555` 15.7 CI gates
+  - `1556–1560` 15.8 Backups and a tested restore
+  - `1561–1565` 15.9 Twelve-Factor config
+  - `1566–1573` 15.10 Append-only ledgers — but not event sourcing
+  - `1574–1578` 15.11 Defence in depth
+  - `1579–1607` 15.12 Skills are lenses, not assurance
+  - `1608–1614` 15.13 Reconciliation is a permanent feature
+- `1615–1619` 16. The accounting spine
+  - `1620–1651` 16.0 What we are actually fixing — the diagnosis
+  - `1652–1695` 16.1 The ten invariants — non-negotiable
+  - `1696–1710` 16.2 The oracle: how "correct" is tested
+  - `1711–1732` 16.3 The model — header + lines, not legs
+  - `1733–1752` 16.4 Deliberately simpler than ERPNext
+  - `1753–1819` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1820–1844` 16.6 What v1 already gets right — preserve the intent
+  - `1845–1866` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1867–1881` 16.8 What v1's accounting already gets right
+  - `1882–1925` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1926–1976` 16.10 Posting patterns — one canonical pattern per business event
+  - `1977–2008` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -565,6 +565,14 @@ mechanical reading is a decision not being made.
 
 **Invocation:** the Agent tool's `model` parameter — `"sonnet"`, `"opus"`, `"fable"`. A
 subagent prompt is always self-contained (§3.4) regardless of which model runs it.
+
+**⭐ Whole lane terminals, not only subagents — *Ian, 2026-09-08* (§13 row 184):** *"use Sonnet
+whenever the work can be done by Sonnet."* A worker session executing an approved spec, writing
+tests or running a sweep runs on **Sonnet**; a session planning, writing a spec or reviewing runs
+on Opus; **the orchestrator names the model in every briefing.** A session cannot change its own
+model — only Ian can, with `/model` in that terminal — so the orchestrator lists the terminals to
+switch on the status board, and every subagent a lane dispatches for Sonnet-able work passes
+`model: "sonnet"` whatever the terminal itself runs on. The escalation bar above is unchanged.
 
 **Rule: no Sonnet agent starts without a written task spec from Opus.**
 **Rule: no Opus plan is written without discovery evidence to back it.**
@@ -1464,6 +1472,8 @@ just a patch.**
 | 181 | 2026-09-07 | ⭐ **RLS IS ENFORCED AND ALWAYS WAS — the failure was in how we looked for it. THE TENANCY ID NEVER COMES FROM THE CLIENT, and RLS is the second layer behind the repository filter, never the only one and never absent.** | DEF-209 claimed RLS had zero production callers; the assessment (`docs/discovery/29-rls-enforcement-assessment.md`) found **310** — the canonical `withPrincipal` is typed for postgres.js and the app uses Drizzle, so the idiom is copied under another name (DEF-211). Proved live on a lane DB: the connecting role is superuser + `BYPASSRLS`, **and `SET LOCAL ROLE shareat_app` fully re-arms RLS** — zero rows with no principal, own-org only with one, cross-org write refused 42501. **68 of 99 integration files exercise the policies on every CI run.** ⛔ **The real defect it uncovered (DEF-210): 5 server actions read `orgId` out of `FormData`, on the 3 files that never take a principal** — the same shape as DEF-064, on writes. ⭐ **The generalisable half:** we had a structural guard for a client-supplied *person* (`no-client-supplied-actor.test.ts`) and none for a client-supplied *org*, though row 112 calls the org the more consequential of the two. **A guard that names one half of an identity is not a guard** — T-231 adds the other half. ⚠️ **And a method lesson worth more than the finding — it bit TWICE in one afternoon, both times invisibly.** A heredoc ate a script's regex escapes so it reported *"0 functions touch an org-scoped table"* and exited 0; a registry parser then silently dropped 5 of 125 entries and published two wrong totals that self-review caught. **A sweep that reports a total must first be made to report a known non-zero control** — neither bug was visible in its output, and both were one line away from being caught. Same family as the CRLF `.*$` landmine (§12): a guard that scans nothing is indistinguishable from a guard that finds nothing. ⚠️ Also settled here: RULES §6 item 3 (*the database enforces the rules*) is about CHECK/triggers and bible §7 rule 4 (*store scoping in the repository layer*) is about tenancy; **§15.11 governs both** — no layer may be the only one for a given risk. And **`bible §6.3` does not exist** (34 citations across code and docs point at it) — the correct citation is RULES §6 item 3, bible home §15.11; a sweep with a guard test is queued behind T-230 | Yes — DEF-209 amended, DEF-210 and DEF-211 filed; RULES §6 item 3 and bible §7 rule 4 each gained the reconciling sentence; T-231 (Option C, ~2 days, no migration) specified by lane A; Ian to confirm sequencing against `bootstrap-org` and run the production role probe (discovery 29 §7) |
 | 182 | 2026-09-07 | ⭐ **THE CUTOVER WIPES TRANSACTIONAL DATA, NOT STORES AND STORE SETTINGS — the Wastage Monitor survives cutover like every other setting.** T-178's carve-out (`stores` as `keep_shell` with `wastage_monitor_person_id` cleared, "re-assigned at cutover") is reversed: `stores` is `keep` | Ian, 2026-09-07, challenging T-229 slice 3's FOR IAN line that the cutover "wipes this setting on every store". ⛔ **The carve-out was the only column on `stores` the purge touched**, and its justification — *who held that pilot-era responsibility is an assignment to re-decide for production* — grouped the Monitor with `customers`' reconciliation anchor, which IS cleared because it attests a verification the purge invalidates. The Monitor attests nothing; it is a forward-looking assignment, the same shape as the remittance cadence or the unremitted ceiling, both of which survive. ⚠️ **Blanking it would have recreated DEF-206 fleet-wide on cutover morning**: every branch in the no-Monitor state, every tracked wastage created ownerless, the 15-day backstop letting each store absorb it — silently, at the one moment nobody is watching. Changing the person for production is an ordinary ten-second edit on `/settings/wastage-monitor`, not a reason for the cutover to blank the field. Found because slice 3 made the field EDITABLE at all; the cutover policy was a separate question it exposed rather than created | Yes — `packages/db/src/cutover/classification.ts` (`stores` → `keep`, no `clearColumns`), the purge statement that nulled the column removed, T-178's done-when line superseded by this row; DEF-206's disposition records it |
 | 183 | 2026-09-07 | ⭐ **A RECURRING EXPENSE DRAFTS ITSELF AND NEVER AUTO-PAYS — the job creates a pending supplier invoice and a draft expense, attributed to whoever set up the template, and nothing reaches the ledger until a person attaches the real bill, a SECOND person verifies it, and someone approves.** | Ian, 6–7 Sep 2026, answering T-216's open question 2; the shape decided by the orchestrator on 2026-09-07 when lane D found the expense path refuses a machine three times (no invoice, no supplier, no human creator). ⛔ **Rejected: a per-org system person** for `created_by` — a `persons` row that is not a human leaks into every people picker, payroll and attendance, and would have made every recurring invoice self-verifiable. ⛔ **Rejected: relaxing the expense path** (nullable `created_by`, a supplier-less branch) — weakening an audit column for every caller to serve one. ⭐ **Kept: the job acts as the template's creator THROUGH `recordInvoice` and `createExpense` with their ordinary `authorize` gates**, so the automation can never do what its author could not (T-216 §8 enforced, not stated); the consequence — the author cannot verify the invoice the job logged in their name — is segregation of duties working, and the screen says so. Idempotency is a database fact: `recurring_expense_drafts` unique on (template, due date), not the cursor. A due date in a locked period STILL drafts (the lock lives at posting); an overdue template catches up one period per run and the screen says "N periods behind". | Yes — migration 0136 (`supplier_id` on templates, the drafts table, the job in `scheduler_runs_job_check`), the job, the timer pair in `docs/ops`; T-216 complete. ⚠️ Arming the timer on the droplet is Ian's (DEF-194: `docs/ops` does not ship) |
+| 184 | 2026-09-08 | ⭐ **SONNET WHEREVER THE WORK CAN BE DONE BY SONNET — a lane terminal executing an approved spec runs on Sonnet; Opus is for planning, specs and review; the orchestrator names the model in every briefing and lists the terminals to switch on the status board** | Ian, 2026-09-08, seeing four lanes on Opus while three of them executed approved specs: *"tell agents to use sonnet whenever the work can be done by sonnet… and make that a standing rule."* §3.1a already said it for subagents; this extends it to whole worker sessions. ⚠️ A session cannot switch itself — `/model` is Ian's keystroke in that terminal — so the rule is applied by the orchestrator naming the model in the briefing and by Ian switching; a lane keeps working through the switch. ⛔ The escalation bar is unchanged: "it was hard" is not a reason to move a lane up | Yes — §3.1a amended, RULES §2's model row, `CLAUDE.md`'s orchestration section, the global orchestrator skill's briefing template gains a MODEL line |
+| 185 | 2026-09-08 | ⭐ **FIRST-RUN SETUP IS THE ONE REQUEST PATH THAT OPENS AN OWNER-ROLE TRANSACTION WITHOUT A PRINCIPAL — deliberately, because there is no principal before the first organisation exists** | Orchestrator, 2026-09-08, recording lane C's finding F1 on T-232's WIP. `packages/db/src/rls/principal.ts:38` says an owner-role transaction must never exist inside a request handler; `/setup`'s action must open one, because under `shareat_app` the zero-organisation read returns zero rows on ANY database and the INSERT is refused by `WITH CHECK` — the screen can only ever work with the CLI's database posture (T-232 §2.3.2). What replaces the principal: a signed cookie carrying a uid `verifyIdToken` vouched for, a transaction-scoped advisory lock, and the zero-organisation refusal; the failure direction under a non-bypassing role is a refused INSERT, never a second organisation. ⛔ **Not a precedent.** Any other request path wanting owner role is DEF-215's door reopening; this one closes forever after the first organisation, so on every production request after day one the path is dead | Yes — the exception is named at `principal.ts` and in T-232; reversing it means a first-run token table and a principal minted before any organisation exists, which §7.1 rules out |
 | 178 | 2026-09-06 | ⭐ **PERMITTED UNDERTIME CREDITS THE TIME ACTUALLY WORKED, NEVER THE FULL SHIFT — permission excuses the ABSENCE, it does not pay for the missing time** — so a manager who accepts that a short day was authorised approves the PENDING OVERTIME, and does not flip the day to a full one | Ian, 2026-09-06, closing T-225 §4. ⛔ **The rejected option is the one v1 effectively implemented**, which is why this needed deciding rather than defaulting: v1 paid the full requirement on a day it could not adjudicate, and across the golden corpus it **paid more than the person was physically present in 58 of 346 sessions**. Adopting that would have been inheriting a defect wearing the costume of a policy. ⚠️ **The arithmetic that makes the choice concrete**, from `payroll/compute.ts` — pay is in DAY UNITS (`unitsFor()` returns 0.5 or 1), the hourly equivalent is `dailyRate ÷ requiredHoursPerShift`, and overtime pays `× overtimeMultiplier`. For `lipa-0359` (8h worked of a 9h requirement, 1.25 multiplier) against a daily rate **D**: approving the pending OT pays **0.92 D for 89% of the hours** — proportionate; overriding the half day pays **1.00 D for 8 hours** — not. ⭐ **And the third row is the one that made T-225 urgent at all: if nobody acts, pending overtime pays NOTHING, so the day settles at 0.50 D for eight hours of work.** | ✅ **Shipped 2026-09-06 as GUIDANCE, not as new pay code.** Both actions already existed and neither changed; what was missing was that the person holding the mouse had no way to know which one was correct. The flagged day now names the right action **and names the wrong one explicitly**, on the screen where the choice is made. ⚠️ **A decision recorded only in a task doc is a decision nobody at the point of action ever reads** — the same failure as DEF-180 (an ADR decided and never written into the function) in a different costume: here it would have been decided and never written into the *screen*. |
 
 

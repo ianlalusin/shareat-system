@@ -36,7 +36,7 @@
 | Rule | § |
 |---|---|
 | **Research → plan → spec → implement.** A new phase, module, or any data shape expensive to undo gets a **bounded research pass first**, producing a document under `docs/discovery/`. Research **informs; it never decides** — the target is the midpoint (§1.1), so the output must name what we are **not** adopting and why | §3.6 · row 96 |
-| **Pick the model for the task.** **Sonnet** = the default for delegated work (code reading, discovery, executing a spec, tests). **Opus** = planning, architecture, specs, review. **Fable** = *only* a bug that survived a deliberate Opus pass, or genuinely intricate data-shape design. *"It was hard" is not the escalation bar* — and do not spend Opus on what Sonnet does well | §3.1a · row 93 |
+| **Pick the model for the task.** **Sonnet** = the default for delegated work (code reading, discovery, executing a spec, tests). **Opus** = planning, architecture, specs, review. **Fable** = *only* a bug that survived a deliberate Opus pass, or genuinely intricate data-shape design. *"It was hard" is not the escalation bar* — and do not spend Opus on what Sonnet does well. ⭐ **Whole lane terminals too (Ian, 2026-09-08):** a worker executing an approved spec runs on Sonnet; the orchestrator names the model in the briefing; a session cannot switch itself, so Ian types `/model` and the board lists which terminals | §3.1a · rows 93, 184 |
 | **A spec names the exact files you may touch.** Stay inside it. If you must go outside, say so explicitly in your report | §3.3 |
 | **Tests before implementation**, and confirm they fail *for the right reason* first. A test that only ever passed proves nothing | §3.2 · §9 |
 | **Integration tests run against real Postgres, never a mock** | §9.3 |
