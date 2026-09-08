@@ -65,35 +65,35 @@
 - `1170–1204` 10. Phase plan
 - `1205–1221` 11. Migration & ETL rules
 - `1222–1286` 12. Inherited landmines — do not repeat these
-- `1287–1479` 13. Decision log
-- `1480–1499` 14. Amendment protocol
-- `1500–1504` 15. Engineering standards — the industry practices this project follows
-  - `1505–1510` 15.1 Build order: walking skeleton first
-  - `1511–1522` 15.2 Golden-master testing — the most important practice here
-  - `1523–1531` 15.3 Strangler Fig, not big-bang cutover
-  - `1532–1536` 15.4 No dual-write
-  - `1537–1541` 15.5 Expand/contract migrations
-  - `1542–1550` 15.6 Observability from day zero, not later
-  - `1551–1555` 15.7 CI gates
-  - `1556–1560` 15.8 Backups and a tested restore
-  - `1561–1565` 15.9 Twelve-Factor config
-  - `1566–1573` 15.10 Append-only ledgers — but not event sourcing
-  - `1574–1578` 15.11 Defence in depth
-  - `1579–1607` 15.12 Skills are lenses, not assurance
-  - `1608–1614` 15.13 Reconciliation is a permanent feature
-- `1615–1619` 16. The accounting spine
-  - `1620–1651` 16.0 What we are actually fixing — the diagnosis
-  - `1652–1695` 16.1 The ten invariants — non-negotiable
-  - `1696–1710` 16.2 The oracle: how "correct" is tested
-  - `1711–1732` 16.3 The model — header + lines, not legs
-  - `1733–1752` 16.4 Deliberately simpler than ERPNext
-  - `1753–1819` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1820–1844` 16.6 What v1 already gets right — preserve the intent
-  - `1845–1866` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1867–1881` 16.8 What v1's accounting already gets right
-  - `1882–1925` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1926–1976` 16.10 Posting patterns — one canonical pattern per business event
-  - `1977–2008` 16.11 Inventory's accounting integration
+- `1287–1480` 13. Decision log
+- `1481–1500` 14. Amendment protocol
+- `1501–1505` 15. Engineering standards — the industry practices this project follows
+  - `1506–1511` 15.1 Build order: walking skeleton first
+  - `1512–1523` 15.2 Golden-master testing — the most important practice here
+  - `1524–1532` 15.3 Strangler Fig, not big-bang cutover
+  - `1533–1537` 15.4 No dual-write
+  - `1538–1542` 15.5 Expand/contract migrations
+  - `1543–1551` 15.6 Observability from day zero, not later
+  - `1552–1556` 15.7 CI gates
+  - `1557–1561` 15.8 Backups and a tested restore
+  - `1562–1566` 15.9 Twelve-Factor config
+  - `1567–1574` 15.10 Append-only ledgers — but not event sourcing
+  - `1575–1579` 15.11 Defence in depth
+  - `1580–1608` 15.12 Skills are lenses, not assurance
+  - `1609–1615` 15.13 Reconciliation is a permanent feature
+- `1616–1620` 16. The accounting spine
+  - `1621–1652` 16.0 What we are actually fixing — the diagnosis
+  - `1653–1696` 16.1 The ten invariants — non-negotiable
+  - `1697–1711` 16.2 The oracle: how "correct" is tested
+  - `1712–1733` 16.3 The model — header + lines, not legs
+  - `1734–1753` 16.4 Deliberately simpler than ERPNext
+  - `1754–1820` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1821–1845` 16.6 What v1 already gets right — preserve the intent
+  - `1846–1867` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1868–1882` 16.8 What v1's accounting already gets right
+  - `1883–1926` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1927–1977` 16.10 Posting patterns — one canonical pattern per business event
+  - `1978–2009` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1474,6 +1474,7 @@ just a patch.**
 | 183 | 2026-09-07 | ⭐ **A RECURRING EXPENSE DRAFTS ITSELF AND NEVER AUTO-PAYS — the job creates a pending supplier invoice and a draft expense, attributed to whoever set up the template, and nothing reaches the ledger until a person attaches the real bill, a SECOND person verifies it, and someone approves.** | Ian, 6–7 Sep 2026, answering T-216's open question 2; the shape decided by the orchestrator on 2026-09-07 when lane D found the expense path refuses a machine three times (no invoice, no supplier, no human creator). ⛔ **Rejected: a per-org system person** for `created_by` — a `persons` row that is not a human leaks into every people picker, payroll and attendance, and would have made every recurring invoice self-verifiable. ⛔ **Rejected: relaxing the expense path** (nullable `created_by`, a supplier-less branch) — weakening an audit column for every caller to serve one. ⭐ **Kept: the job acts as the template's creator THROUGH `recordInvoice` and `createExpense` with their ordinary `authorize` gates**, so the automation can never do what its author could not (T-216 §8 enforced, not stated); the consequence — the author cannot verify the invoice the job logged in their name — is segregation of duties working, and the screen says so. Idempotency is a database fact: `recurring_expense_drafts` unique on (template, due date), not the cursor. A due date in a locked period STILL drafts (the lock lives at posting); an overdue template catches up one period per run and the screen says "N periods behind". | Yes — migration 0136 (`supplier_id` on templates, the drafts table, the job in `scheduler_runs_job_check`), the job, the timer pair in `docs/ops`; T-216 complete. ⚠️ Arming the timer on the droplet is Ian's (DEF-194: `docs/ops` does not ship) |
 | 184 | 2026-09-08 | ⭐ **SONNET WHEREVER THE WORK CAN BE DONE BY SONNET — a lane terminal executing an approved spec runs on Sonnet; Opus is for planning, specs and review; the orchestrator names the model in every briefing and lists the terminals to switch on the status board** | Ian, 2026-09-08, seeing four lanes on Opus while three of them executed approved specs: *"tell agents to use sonnet whenever the work can be done by sonnet… and make that a standing rule."* §3.1a already said it for subagents; this extends it to whole worker sessions. ⚠️ A session cannot switch itself — `/model` is Ian's keystroke in that terminal — so the rule is applied by the orchestrator naming the model in the briefing and by Ian switching; a lane keeps working through the switch. ⛔ The escalation bar is unchanged: "it was hard" is not a reason to move a lane up | Yes — §3.1a amended, RULES §2's model row, `CLAUDE.md`'s orchestration section, the global orchestrator skill's briefing template gains a MODEL line |
 | 185 | 2026-09-08 | ⭐ **FIRST-RUN SETUP IS THE ONE REQUEST PATH THAT OPENS AN OWNER-ROLE TRANSACTION WITHOUT A PRINCIPAL — deliberately, because there is no principal before the first organisation exists** | Orchestrator, 2026-09-08, recording lane C's finding F1 on T-232's WIP. `packages/db/src/rls/principal.ts:38` says an owner-role transaction must never exist inside a request handler; `/setup`'s action must open one, because under `shareat_app` the zero-organisation read returns zero rows on ANY database and the INSERT is refused by `WITH CHECK` — the screen can only ever work with the CLI's database posture (T-232 §2.3.2). What replaces the principal: a signed cookie carrying a uid `verifyIdToken` vouched for, a transaction-scoped advisory lock, and the zero-organisation refusal; the failure direction under a non-bypassing role is a refused INSERT, never a second organisation. ⛔ **Not a precedent.** Any other request path wanting owner role is DEF-215's door reopening; this one closes forever after the first organisation, so on every production request after day one the path is dead | Yes — the exception is named at `principal.ts` and in T-232; reversing it means a first-run token table and a principal minted before any organisation exists, which §7.1 rules out |
+| 186 | 2026-09-08 | ⭐ **AN ACTOR MAY NOT REMOVE OR DEMOTE A ROLE SENIOR TO THEIR OWN. A PEER MAY.** An `admin` may demote another `admin`; only a `super_admin` may demote a `super_admin`. Ranks are `staff` 0, `manager` 1, `admin` 2, `super_admin` 3, and the comparison uses **effective** rank — it reuses `holdsSuperAdminAuthority`, so an organisation's owner (who holds `admin` plus the four grants and cannot hold a `super_admin` row at all) can still remove a `super_admin` they appointed. ⛔ **The mnemonic "the authority to UNMAKE a role is the authority to MAKE it" is NOT this rule and must not be written down as if it were.** Appointing an `admin` requires super-admin authority (row 116), so built literally the slogan would forbid an `admin` from demoting a peer `admin` — which is the "junior only" option Ian explicitly rejected. The sentence is the rule; the slogan contradicts it, and a memorable line that contradicts the rule beneath it is worse than none, because it is the line the next person reaches for | **Ian's decision, 2026-09-08**, asked as DEF-234 and answered "peer removal, and that case is mine". The defect: the super-admin-authority check at `packages/auth/src/roles.ts:269` fired only when the **new** role was `admin`/`super_admin`, so appointing an administrator was gated and *unmaking* one was not — removing the person above you was the first move of a promotion. **His reason for rejecting "junior only":** two admins and no super_admin would mean neither could ever remove the other, turning one rare dependency into a routine one. ⛔ **The consequence he accepted out loud:** with the last `super_admin` gone, only Ian can remove them — a **third** action depending on him personally, where row 116 records two as accepted. Self-demotion needs no exception here: check 3 already refuses every self role change, so a `super_admin` stepping down needs a peer, and with none that is Ian again — the same dependency arriving from the other side. Built as T-242, which also closed a door the register never named: `manage_users` is inside `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER` and `hasActiveAdmin` matches the literal `'admin'`, so a super_admin-only organisation counts as adminless, a manager appointed then keeps that power for ever, and could later demote an admin — junior removing senior with no admin actor anywhere in the story. Reproduced through the real path before it was closed, not argued from greps | Yes, but only by choosing one of the two options Ian rejected: "junior only" (no peer removal, every administrator removal escalates to him) or leaving the hole open. The rank ladder itself is one constant and one comparison |
 | 178 | 2026-09-06 | ⭐ **PERMITTED UNDERTIME CREDITS THE TIME ACTUALLY WORKED, NEVER THE FULL SHIFT — permission excuses the ABSENCE, it does not pay for the missing time** — so a manager who accepts that a short day was authorised approves the PENDING OVERTIME, and does not flip the day to a full one | Ian, 2026-09-06, closing T-225 §4. ⛔ **The rejected option is the one v1 effectively implemented**, which is why this needed deciding rather than defaulting: v1 paid the full requirement on a day it could not adjudicate, and across the golden corpus it **paid more than the person was physically present in 58 of 346 sessions**. Adopting that would have been inheriting a defect wearing the costume of a policy. ⚠️ **The arithmetic that makes the choice concrete**, from `payroll/compute.ts` — pay is in DAY UNITS (`unitsFor()` returns 0.5 or 1), the hourly equivalent is `dailyRate ÷ requiredHoursPerShift`, and overtime pays `× overtimeMultiplier`. For `lipa-0359` (8h worked of a 9h requirement, 1.25 multiplier) against a daily rate **D**: approving the pending OT pays **0.92 D for 89% of the hours** — proportionate; overriding the half day pays **1.00 D for 8 hours** — not. ⭐ **And the third row is the one that made T-225 urgent at all: if nobody acts, pending overtime pays NOTHING, so the day settles at 0.50 D for eight hours of work.** | ✅ **Shipped 2026-09-06 as GUIDANCE, not as new pay code.** Both actions already existed and neither changed; what was missing was that the person holding the mouse had no way to know which one was correct. The flagged day now names the right action **and names the wrong one explicitly**, on the screen where the choice is made. ⚠️ **A decision recorded only in a task doc is a decision nobody at the point of action ever reads** — the same failure as DEF-180 (an ADR decided and never written into the function) in a different costume: here it would have been decided and never written into the *screen*. |
 
 
