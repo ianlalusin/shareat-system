@@ -95,6 +95,97 @@ export interface MonthEndResult {
   hadFailures: boolean;
 }
 
+/** What a job's body reports back. The helper turns this into a `JobOutcome` and a run row. */
+interface JobWork {
+  posted: number;
+  skipped: number;
+  failures: SchedulerFailure[];
+  detail?: string;
+  adjudicationFailures?: { clientPunchId: string; detail: string }[];
+}
+
+/**
+ * ⭐ T-233 — DEF-219: the seam every one of the ten `startRun` placements now calls, instead of
+ * copying `startRun`/`try`/`finishRun`/`catch`/`failRun` identically nine (now ten) times.
+ *
+ * **It never throws.** Every path returns a `JobOutcome`. That single property is what makes "no
+ * org after the first is skipped" true — the loops above depend on it, not on this function being
+ * careful in any one caller.
+ */
+export async function runJobForOrg(
+  org: { id: string; name: string },
+  job: JobOutcome['job'],
+  period: string,
+  trigger: 'cron' | 'manual',
+  work: () => Promise<JobWork>,
+): Promise<JobOutcome> {
+  const base = { orgId: org.id, orgName: org.name, job, period };
+
+  // Guard A — `startRun` refused. No run row exists and none can be written, so the failure lives
+  // only on the in-memory outcome. The prefix is load-bearing: "the run failed" and "the run was
+  // never opened" are different facts with different fixes, and there is no row to carry a flag.
+  let runId: string;
+  try {
+    runId = await transaction((tx) => schedulerRepo.startRun(tx, { orgId: org.id, job, period, trigger }));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      ...base,
+      posted: 0,
+      skipped: 0,
+      failed: 0,
+      failures: [],
+      error: `could not open a scheduler run row — ${message}`,
+    };
+  }
+
+  // Guard B — `work()` threw. The row exists; best-effort `failRun`, its own failure swallowed and
+  // appended rather than left to escape and reject this org's outcome.
+  let result: JobWork;
+  try {
+    result = await work();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const note = await closeFailedRun(runId, message);
+    return { ...base, posted: 0, skipped: 0, failed: 0, failures: [], error: message + note };
+  }
+
+  // Guard C — `finishRun` threw, after the work committed. The outcome keeps the REAL counts and
+  // adds the error: reporting `posted: 0` here would be the exact lie `runDepreciationJob`'s own
+  // comment rails against, wearing its other face. The row is left unfinished for `unfinishedRuns`.
+  try {
+    await transaction((tx) =>
+      schedulerRepo.finishRun(tx, runId, {
+        postedCount: result.posted,
+        skippedCount: result.skipped,
+        failures: result.failures,
+      }),
+    );
+    return { ...base, ...result, failed: result.failures.length };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      ...base,
+      ...result,
+      failed: result.failures.length,
+      error: `could not close the scheduler run row — ${message}`,
+    };
+  }
+}
+
+/** Best-effort `failRun`; if it also fails, the row stays `finished_at IS NULL` — which
+ *  `unfinishedRuns` already reports as "started and never reported back", so the swallow loses
+ *  nothing. */
+async function closeFailedRun(runId: string, message: string): Promise<string> {
+  try {
+    await transaction((tx) => schedulerRepo.failRun(tx, runId, message));
+    return '';
+  } catch (err) {
+    const note = err instanceof Error ? err.message : String(err);
+    return ` (and the run row could not be closed: ${note})`;
+  }
+}
+
 /**
  * The last COMPLETED month, as `YYYY-MM`.
  *
@@ -140,12 +231,7 @@ async function runDepreciationJob(
   period: string,
   trigger: 'cron' | 'manual',
 ): Promise<JobOutcome> {
-  const runId = await transaction((tx) =>
-    schedulerRepo.startRun(tx, { orgId: org.id, job: 'depreciation', period, trigger }),
-  );
-  const base = { orgId: org.id, orgName: org.name, job: 'depreciation' as const, period };
-
-  try {
+  return runJobForOrg(org, 'depreciation', period, trigger, async () => {
     // `through` is the last day of the period — the runner takes a date, not a period.
     const result = await runDepreciationAsSystem(org.id, { through: endOfPeriod(period) });
     const failures: SchedulerFailure[] = result.failed.map((f) => ({
@@ -164,25 +250,8 @@ async function runDepreciationJob(
     // it twice and counting the ledger, which is the only way it shows.
     const created = result.posted.filter((p) => p.created).length;
     const alreadyThere = result.posted.length - created;
-    await transaction((tx) =>
-      schedulerRepo.finishRun(tx, runId, {
-        postedCount: created,
-        skippedCount: result.skipped + alreadyThere,
-        failures,
-      }),
-    );
-    return {
-      ...base,
-      posted: created,
-      skipped: result.skipped + alreadyThere,
-      failed: failures.length,
-      failures,
-    };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    await transaction((tx) => schedulerRepo.failRun(tx, runId, message));
-    return { ...base, posted: 0, skipped: 0, failed: 0, failures: [], error: message };
-  }
+    return { posted: created, skipped: result.skipped + alreadyThere, failures };
+  });
 }
 
 async function runAmortisationJob(
@@ -190,31 +259,15 @@ async function runAmortisationJob(
   period: string,
   trigger: 'cron' | 'manual',
 ): Promise<JobOutcome> {
-  const runId = await transaction((tx) =>
-    schedulerRepo.startRun(tx, { orgId: org.id, job: 'amortisation', period, trigger }),
-  );
-  const base = { orgId: org.id, orgName: org.name, job: 'amortisation' as const, period };
-
-  try {
+  return runJobForOrg(org, 'amortisation', period, trigger, async () => {
     const result = await runAmortisationAsSystem(org.id, period);
     const failures: SchedulerFailure[] = result.failed.map((f) => ({
       subjectId: f.itemId,
       subjectName: f.itemName,
       reason: f.error,
     }));
-    await transaction((tx) =>
-      schedulerRepo.finishRun(tx, runId, {
-        postedCount: result.posted.length,
-        skippedCount: result.skipped,
-        failures,
-      }),
-    );
-    return { ...base, posted: result.posted.length, skipped: result.skipped, failed: failures.length, failures };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    await transaction((tx) => schedulerRepo.failRun(tx, runId, message));
-    return { ...base, posted: 0, skipped: 0, failed: 0, failures: [], error: message };
-  }
+    return { posted: result.posted.length, skipped: result.skipped, failures };
+  });
 }
 
 /** Last day of a `YYYY-MM`, as `YYYY-MM-DD`. Day 0 of the next month, so February needs no table. */
@@ -264,12 +317,7 @@ async function runSweepForOrg(
   trigger: 'cron' | 'manual',
   nowMs: number,
 ): Promise<JobOutcome> {
-  const runId = await transaction((tx) =>
-    schedulerRepo.startRun(tx, { orgId: org.id, job: 'attendance_sweep', period, trigger }),
-  );
-  const base = { orgId: org.id, orgName: org.name, job: 'attendance_sweep' as const, period };
-
-  try {
+  return runJobForOrg(org, 'attendance_sweep', period, trigger, async () => {
     const stores = await transaction((tx) =>
       tx.execute(
         sql`select s.id::text as "id" from stores s
@@ -299,19 +347,8 @@ async function runSweepForOrg(
       }
     }
 
-    await transaction((tx) =>
-      schedulerRepo.finishRun(tx, runId, {
-        postedCount: swept,
-        skippedCount: leftOpen,
-        failures,
-      }),
-    );
-    return { ...base, posted: swept, skipped: leftOpen, failed: failures.length, failures };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    await transaction((tx) => schedulerRepo.failRun(tx, runId, message));
-    return { ...base, posted: 0, skipped: 0, failed: 0, failures: [], error: message };
-  }
+    return { posted: swept, skipped: leftOpen, failures };
+  });
 }
 
 // =====================================================================================
@@ -392,12 +429,7 @@ async function runMirrorPublishJob(
   driver: MirrorDriver,
   limit: number,
 ): Promise<JobOutcome> {
-  const runId = await transaction((tx) =>
-    schedulerRepo.startRun(tx, { orgId: org.id, job: 'mirror_publish', period, trigger }),
-  );
-  const base = { orgId: org.id, orgName: org.name, job: 'mirror_publish' as const, period };
-
-  try {
+  return runJobForOrg(org, 'mirror_publish', period, trigger, async () => {
     const report = await withOrgPrincipal(org.id, (tx) => drainOutbox(tx, driver, { limit }));
 
     // ⚠️ `DrainReport.failed` is a COUNT, not a list — the per-row detail already lives on
@@ -411,19 +443,8 @@ async function runMirrorPublishJob(
       reason: `An outbox row failed to publish (see mirror_outbox.last_error) — failure ${i + 1} of ${report.failed}.`,
     }));
 
-    await transaction((tx) =>
-      schedulerRepo.finishRun(tx, runId, {
-        postedCount: report.published,
-        skippedCount: report.skipped,
-        failures,
-      }),
-    );
-    return { ...base, posted: report.published, skipped: report.skipped, failed: report.failed, failures };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    await transaction((tx) => schedulerRepo.failRun(tx, runId, message));
-    return { ...base, posted: 0, skipped: 0, failed: 0, failures: [], error: message };
-  }
+    return { posted: report.published, skipped: report.skipped, failures };
+  });
 }
 
 type InboxDoc = { docId: string; data: unknown };
@@ -489,21 +510,11 @@ async function failedInboxRun(
   trigger: 'cron' | 'manual',
   message: string,
 ): Promise<JobOutcome> {
-  const runId = await transaction((tx) =>
-    schedulerRepo.startRun(tx, { orgId: org.id, job: 'inbox_relay', period, trigger }),
-  );
-  await transaction((tx) => schedulerRepo.failRun(tx, runId, message));
-  return {
-    orgId: org.id,
-    orgName: org.name,
-    job: 'inbox_relay',
-    period,
-    posted: 0,
-    skipped: 0,
-    failed: 0,
-    failures: [],
-    error: message,
-  };
+  // The inbox read failed before any org could be attempted, so every org still gets a row saying
+  // so (DEF-044). Expressed through the same helper so this path cannot drift from the other nine
+  // — a rejecting `work` is exactly "open the row, then fail it". ⭐ This also fixes finding 2 for
+  // free: because the helper never throws, the `Promise.all` at the call site can no longer reject.
+  return runJobForOrg(org, 'inbox_relay', period, trigger, () => Promise.reject(new Error(message)));
 }
 
 async function runInboxRelayForOrg(
@@ -513,12 +524,7 @@ async function runInboxRelayForOrg(
   driver: InboxDriver,
   events: InboxDoc[],
 ): Promise<JobOutcome> {
-  const runId = await transaction((tx) =>
-    schedulerRepo.startRun(tx, { orgId: org.id, job: 'inbox_relay', period, trigger }),
-  );
-  const base = { orgId: org.id, orgName: org.name, job: 'inbox_relay' as const, period };
-
-  try {
+  return runJobForOrg(org, 'inbox_relay', period, trigger, async () => {
     const report = await withOrgPrincipal(org.id, (tx) => ingestEvents(tx, events.map((e) => e.data)));
 
     // §3 step 5: EVERY event handed to `ingestEvents` gets exactly one outcome — ingested,
@@ -529,6 +535,10 @@ async function runInboxRelayForOrg(
     // devices's redelivery loop crowd a busy inbox's `limit` out on its own — nothing about
     // Firestore's `processedAt` flag is what would let that decision be reversed later; that
     // lives on `inbox_quarantine.resolved_at`/`resolution` in Postgres, untouched by this stamp.
+    //
+    // ⭐ A `markProcessed` write failure below is caught by the same guard as an `ingestEvents`
+    // failure outright — safe to let fail this org's run: whatever `ingestEvents` decided already
+    // committed in Postgres, and every one of those outcomes is idempotent on replay.
     for (const doc of events) {
       const clientPunchId = eventClientPunchId(doc);
       const punchId = (clientPunchId && report.processed[clientPunchId]) || null;
@@ -545,33 +555,13 @@ async function runInboxRelayForOrg(
       }
     }
 
-    await transaction((tx) =>
-      schedulerRepo.finishRun(tx, runId, {
-        postedCount: report.ingested,
-        skippedCount: report.alreadyProcessed + report.refusedDiscarded,
-        failures,
-      }),
-    );
     return {
-      ...base,
       posted: report.ingested,
       skipped: report.alreadyProcessed + report.refusedDiscarded,
-      failed: report.quarantined,
       failures,
       adjudicationFailures: report.adjudicationFailures.length ? report.adjudicationFailures : undefined,
     };
-  } catch (err) {
-    // ⭐ Covers both an `ingestEvents` failure outright AND a `markProcessed` write failure. The
-    // latter is safe to let fail this org's run: whatever `ingestEvents` decided already committed
-    // in Postgres (its own transaction returned before this loop starts), and every one of those
-    // outcomes is idempotent on replay — a re-delivered already-ingested punch is a no-op, a
-    // re-delivered quarantine upsert just bumps `attempts`. Retrying the whole org next run is the
-    // safe, simple choice; a Firestore write outage is worth surfacing loudly (`error`, non-zero
-    // exit), not swallowed per-event.
-    const message = err instanceof Error ? err.message : String(err);
-    await transaction((tx) => schedulerRepo.failRun(tx, runId, message));
-    return { ...base, posted: 0, skipped: 0, failed: 0, failures: [], error: message };
-  }
+  });
 }
 
 // =====================================================================================
@@ -613,12 +603,7 @@ async function runOrderWastageBackstopForOrg(
   trigger: 'cron' | 'manual',
   nowMs: number,
 ): Promise<JobOutcome> {
-  const runId = await transaction((tx) =>
-    schedulerRepo.startRun(tx, { orgId: org.id, job: 'order_wastage_backstop', period, trigger }),
-  );
-  const base = { orgId: org.id, orgName: org.name, job: 'order_wastage_backstop' as const, period };
-
-  try {
+  return runJobForOrg(org, 'order_wastage_backstop', period, trigger, async () => {
     // ⚠️ One transaction for the WHOLE org's due wastages, not one per row — invariant 11's
     // period-lock refusal and invariant 12's idempotency both flow through the shared `postEntry`
     // called inside; a single wastage whose channel is unconfigured is caught per-row inside
@@ -631,19 +616,8 @@ async function runOrderWastageBackstopForOrg(
       subjectName: `order wastage ${f.wastageId}`,
       reason: f.reason,
     }));
-    await transaction((tx) =>
-      schedulerRepo.finishRun(tx, runId, {
-        postedCount: result.outcomes.length,
-        skippedCount: 0,
-        failures,
-      }),
-    );
-    return { ...base, posted: result.outcomes.length, skipped: 0, failed: failures.length, failures };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    await transaction((tx) => schedulerRepo.failRun(tx, runId, message));
-    return { ...base, posted: 0, skipped: 0, failed: 0, failures: [], error: message };
-  }
+    return { posted: result.outcomes.length, skipped: 0, failures };
+  });
 }
 
 /**
@@ -674,41 +648,24 @@ export async function runFindingObservation(
 
   // ⛔ One org at a time, and one org failing must never stop the next — T-140 rule 1.
   for (const org of orgs) {
-    const runId = await transaction((tx) =>
-      schedulerRepo.startRun(tx, { orgId: org.id, job: 'finding_observation', period, trigger }),
-    );
-    const base = { orgId: org.id, orgName: org.name, job: 'finding_observation' as const, period };
-
-    try {
-      // ⚠️ ONE transaction per org, unlike month-end's per-item transactions. The whole point is a
-      // consistent daily snapshot: observing half the detectors and closing occurrences against the
-      // other half would invent clears that never happened.
-      // ⭐ T-231 slice 3: this was an inline copy of `asSystem`'s three statements, four lines
-      // from `asSystem` itself. Same helper, same principal kind, one definition now.
-      const result = await asSystem(org.id, (tx) =>
-        recordFindingObservations(tx, org.id, new Date(nowMs)),
-      );
-
-      await transaction((tx) =>
-        schedulerRepo.finishRun(tx, runId, {
-          postedCount: result.opened,
-          skippedCount: result.observed - result.opened,
+    outcomes.push(
+      await runJobForOrg(org, 'finding_observation', period, trigger, async () => {
+        // ⚠️ ONE transaction per org, unlike month-end's per-item transactions. The whole point is
+        // a consistent daily snapshot: observing half the detectors and closing occurrences
+        // against the other half would invent clears that never happened.
+        // ⭐ T-231 slice 3: this was an inline copy of `asSystem`'s three statements, four lines
+        // from `asSystem` itself. Same helper, same principal kind, one definition now.
+        const result = await asSystem(org.id, (tx) =>
+          recordFindingObservations(tx, org.id, new Date(nowMs)),
+        );
+        return {
+          posted: result.opened,
+          skipped: result.observed - result.opened,
           failures: [],
-        }),
-      );
-      outcomes.push({
-        ...base,
-        posted: result.opened,
-        skipped: result.observed - result.opened,
-        failed: 0,
-        failures: [],
-        detail: `asked ${result.periodsAsked.join(', ')} · observed ${result.observed} · opened ${result.opened} · closed ${result.closed}`,
-      });
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      await transaction((tx) => schedulerRepo.failRun(tx, runId, message));
-      outcomes.push({ ...base, posted: 0, skipped: 0, failed: 0, failures: [], error: message });
-    }
+          detail: `asked ${result.periodsAsked.join(', ')} · observed ${result.observed} · opened ${result.opened} · closed ${result.closed}`,
+        };
+      }),
+    );
   }
 
   return { outcomes, hadFailures: outcomes.some((o) => o.failed > 0 || o.error) };
@@ -777,118 +734,108 @@ export async function runBudgetReissue(
   const outcomes: JobOutcome[] = [];
 
   for (const org of orgs) {
-    const runId = await transaction((tx) =>
-      schedulerRepo.startRun(tx, { orgId: org.id, job: 'budget_reissue', period, trigger }),
-    );
-    const base = { orgId: org.id, orgName: org.name, job: 'budget_reissue' as const, period };
-    const failures: SchedulerFailure[] = [];
-    let created = 0;
-    let reset = 0;
-    let skipped = 0;
+    outcomes.push(
+      await runJobForOrg(org, 'budget_reissue', period, trigger, async () => {
+        const failures: SchedulerFailure[] = [];
+        let created = 0;
+        let reset = 0;
+        let skipped = 0;
 
-    try {
-      const budgets = await asSystem(org.id, (tx) => budgetsRepo.listAutoReissuing(tx, org.id));
+        const budgets = await asSystem(org.id, (tx) => budgetsRepo.listAutoReissuing(tx, org.id));
 
-      // ⭐ Only the NEWEST period per (store, category) is a candidate. Without this an old row
-      // keeps re-proposing a period that already exists — harmless because of the unique index,
-      // and it would still mean the job's counters said "skipped" for ever while nobody noticed
-      // the chain had stopped advancing. `listAutoReissuing` orders period_key desc, so the first
-      // one seen for a key is the newest.
-      const newest = new Map<string, (typeof budgets)[number]>();
-      for (const b of budgets) {
-        const key = `${b.storeId}:${b.categoryId}`;
-        if (!newest.has(key)) newest.set(key, b);
-      }
+        // ⭐ Only the NEWEST period per (store, category) is a candidate. Without this an old row
+        // keeps re-proposing a period that already exists — harmless because of the unique index,
+        // and it would still mean the job's counters said "skipped" for ever while nobody noticed
+        // the chain had stopped advancing. `listAutoReissuing` orders period_key desc, so the
+        // first one seen for a key is the newest.
+        const newest = new Map<string, (typeof budgets)[number]>();
+        for (const b of budgets) {
+          const key = `${b.storeId}:${b.categoryId}`;
+          if (!newest.has(key)) newest.set(key, b);
+        }
 
-      for (const b of newest.values()) {
-        try {
-          const interval = b.reissueInterval;
-          // Unreachable while `expense_budgets_reissue_interval_check` holds; kept because a
-          // narrowing that relies on a database constraint should still be explicit in code.
-          if (interval === null) {
-            skipped += 1;
-            continue;
-          }
-
-          const windowDays = resetWindowDays(interval);
-          if (windowDays !== null) {
-            // ---- RESET family: move the window, create nothing. --------------------------
-            const startedAt =
-              b.lastResetAt ?? new Date(`${b.periodKey.slice(0, 4)}-${b.periodKey.slice(4, 6)}-01T00:00:00Z`);
-            const elapsedDays = Math.floor((now.getTime() - startedAt.getTime()) / 86_400_000);
-            if (elapsedDays < windowDays) {
+        for (const b of newest.values()) {
+          try {
+            const interval = b.reissueInterval;
+            // Unreachable while `expense_budgets_reissue_interval_check` holds; kept because a
+            // narrowing that relies on a database constraint should still be explicit in code.
+            if (interval === null) {
               skipped += 1;
               continue;
             }
-            // ⚠️ Advance by WHOLE windows from where the last one started, never to "now". Stamping
-            // `now` would let the window drift by however late the job ran, so a daily cap would
-            // slowly become a 25-hour one and a reader comparing two stores would see neither.
-            const hops = Math.floor(elapsedDays / windowDays);
-            const advanced = new Date(startedAt.getTime() + hops * windowDays * 86_400_000);
-            await asSystem(org.id, (tx) => budgetsRepo.stampReset(tx, org.id, b.id, advanced));
-            reset += 1;
-            continue;
-          }
 
-          // ---- PERIOD family: create the next row, once it has arrived. -------------------
-          let from = b;
-          let key = nextPeriodKey(b.periodKey, interval);
-          let hops = 0;
-          let madeAny = false;
-          while (key !== null && key <= currentPeriodKey && hops < 24) {
-            const row = await asSystem(org.id, (tx) =>
-              budgetsRepo.insertReissued(tx, {
-                orgId: org.id,
-                storeId: from.storeId,
-                categoryId: from.categoryId,
-                periodKey: key!,
-                amount: from.amount,
-                autoReissue: from.autoReissue,
-                reissueInterval: from.reissueInterval,
-                reissuedFromId: from.id,
-                createdBy: null,
-              }),
-            );
-            if (row) {
-              created += 1;
-              madeAny = true;
-              from = { ...from, id: row.id, periodKey: key };
-            } else {
-              // Already there — a second run today, or a hand-set cap for that period. Either way
-              // the chain continues from it rather than stopping.
-              from = { ...from, periodKey: key };
+            const windowDays = resetWindowDays(interval);
+            if (windowDays !== null) {
+              // ---- RESET family: move the window, create nothing. ------------------------
+              const startedAt =
+                b.lastResetAt ?? new Date(`${b.periodKey.slice(0, 4)}-${b.periodKey.slice(4, 6)}-01T00:00:00Z`);
+              const elapsedDays = Math.floor((now.getTime() - startedAt.getTime()) / 86_400_000);
+              if (elapsedDays < windowDays) {
+                skipped += 1;
+                continue;
+              }
+              // ⚠️ Advance by WHOLE windows from where the last one started, never to "now".
+              // Stamping `now` would let the window drift by however late the job ran, so a daily
+              // cap would slowly become a 25-hour one and a reader comparing two stores would see
+              // neither.
+              const hops = Math.floor(elapsedDays / windowDays);
+              const advanced = new Date(startedAt.getTime() + hops * windowDays * 86_400_000);
+              await asSystem(org.id, (tx) => budgetsRepo.stampReset(tx, org.id, b.id, advanced));
+              reset += 1;
+              continue;
             }
-            key = nextPeriodKey(key, interval);
-            hops += 1;
-          }
-          if (!madeAny) skipped += 1;
-        } catch (e) {
-          failures.push({
-            subjectId: b.id,
-            // ⚠️ The store and category, not the uuid — a failure line nobody can act on without
-            // a database session is a failure line nobody acts on.
-            subjectName: `store ${b.storeId} · category ${b.categoryId} · ${b.periodKey}`,
-            reason: e instanceof Error ? e.message : String(e),
-          });
-        }
-      }
 
-      await transaction((tx) =>
-        schedulerRepo.finishRun(tx, runId, { postedCount: created, skippedCount: skipped, failures }),
-      );
-      outcomes.push({
-        ...base,
-        posted: created,
-        skipped,
-        failed: failures.length,
-        failures,
-        detail: `budgets ${newest.size} · created ${created} · windows moved ${reset} · nothing due ${skipped}`,
-      });
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      await transaction((tx) => schedulerRepo.failRun(tx, runId, message));
-      outcomes.push({ ...base, posted: 0, skipped: 0, failed: 0, failures: [], error: message });
-    }
+            // ---- PERIOD family: create the next row, once it has arrived. -----------------
+            let from = b;
+            let key = nextPeriodKey(b.periodKey, interval);
+            let hops = 0;
+            let madeAny = false;
+            while (key !== null && key <= currentPeriodKey && hops < 24) {
+              const row = await asSystem(org.id, (tx) =>
+                budgetsRepo.insertReissued(tx, {
+                  orgId: org.id,
+                  storeId: from.storeId,
+                  categoryId: from.categoryId,
+                  periodKey: key!,
+                  amount: from.amount,
+                  autoReissue: from.autoReissue,
+                  reissueInterval: from.reissueInterval,
+                  reissuedFromId: from.id,
+                  createdBy: null,
+                }),
+              );
+              if (row) {
+                created += 1;
+                madeAny = true;
+                from = { ...from, id: row.id, periodKey: key };
+              } else {
+                // Already there — a second run today, or a hand-set cap for that period. Either
+                // way the chain continues from it rather than stopping.
+                from = { ...from, periodKey: key };
+              }
+              key = nextPeriodKey(key, interval);
+              hops += 1;
+            }
+            if (!madeAny) skipped += 1;
+          } catch (e) {
+            failures.push({
+              subjectId: b.id,
+              // ⚠️ The store and category, not the uuid — a failure line nobody can act on
+              // without a database session is a failure line nobody acts on.
+              subjectName: `store ${b.storeId} · category ${b.categoryId} · ${b.periodKey}`,
+              reason: e instanceof Error ? e.message : String(e),
+            });
+          }
+        }
+
+        return {
+          posted: created,
+          skipped,
+          failures,
+          detail: `budgets ${newest.size} · created ${created} · windows moved ${reset} · nothing due ${skipped}`,
+        };
+      }),
+    );
   }
 
   return { outcomes, hadFailures: outcomes.some((o) => o.failed > 0 || o.error) };

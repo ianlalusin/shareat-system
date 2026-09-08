@@ -45,6 +45,10 @@ async function main(): Promise<number> {
     const head = `  ${o.orgName}`;
     if (o.error) {
       console.error(`${head}: FAILED OUTRIGHT — ${o.error}`);
+      // ⭐ T-233 guard C can keep the REAL posted/skipped even when only the run's own
+      // bookkeeping failed — print them, or an operator reads "FAILED OUTRIGHT" for a run that
+      // actually opened something.
+      console.log(`${head}: ${o.detail ?? `opened ${o.posted}`}`);
       continue;
     }
     // ⚠️ The periods list is the line worth reading: it is the evidence that a month still carrying
@@ -63,7 +67,10 @@ async function main(): Promise<number> {
     console.error('finding-observation: no orgs were processed — nothing to observe?');
     return 1;
   }
-  console.log('finding-observation: ok');
+  // ⚠️ Counts, never a bare "done" (bible §15.6) — the same rule the per-org lines above already
+  // follow, applied to the script's own summary line.
+  const opened = result.outcomes.reduce((sum, o) => sum + o.posted, 0);
+  console.log(`finding-observation: ok — opened ${opened} · ${result.outcomes.length} orgs`);
   return 0;
 }
 

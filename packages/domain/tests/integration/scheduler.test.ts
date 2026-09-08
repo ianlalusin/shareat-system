@@ -21,7 +21,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, schedulerRepo, transaction } from '@shareat/db';
-import { lastCompletedPeriod, runMonthEnd } from '@shareat/domain';
+import { lastCompletedPeriod, runFindingObservation, runMonthEnd } from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
 
@@ -63,6 +63,45 @@ async function runsFor(orgId: string) {
   return transaction((tx) => schedulerRepo.recentRuns(tx, orgId, 50));
 }
 
+/**
+ * T-233 — DEF-219: test-local DDL, never a migration. Refuses every INSERT or UPDATE on the named
+ * table for one org id, so a real write is refused exactly like a schema or outage fault would
+ * refuse it. `t233_`-prefixed by the orchestrator's approval condition.
+ *
+ * ⚠️ The function is shared across every trigger this file creates (they can nest — T3 refuses a
+ * write on TWO tables at once) so only the TRIGGER is dropped in this helper's own `finally`; the
+ * function itself is dropped once, in this file's `afterAll`, after every trigger referencing it
+ * is long gone. Dropping it per-call would fail with "other objects depend on it" the moment two
+ * of these are nested. Belt-and-braces: the `afterAll` drops every trigger name too, in case a
+ * killed run skipped this `finally` and left the lane DB armed for the next test.
+ */
+async function withRefusalTrigger(
+  table: string,
+  event: 'insert' | 'update',
+  brokenOrgId: string,
+  fn: () => Promise<void>,
+): Promise<void> {
+  const trigger = `t233_refuse_${table}_${event}`;
+  await sql.unsafe(`
+    create or replace function t233_refuse_run() returns trigger as $$
+    begin raise exception 'T233: refused'; end $$ language plpgsql;
+  `);
+  // ⭐ Idempotent, unlike `create or replace function` above: a killed run (Ctrl-C, a timeout)
+  // skips both this helper's `finally` and the file's `afterAll`, so the NEXT run's bare `create
+  // trigger` would die on "already exists" BEFORE its own `try` — one confusing red run whose own
+  // `finally` then never fires either.
+  await sql.unsafe(`drop trigger if exists ${trigger} on ${table}`);
+  await sql.unsafe(`
+    create trigger ${trigger} before ${event} on ${table}
+      for each row when (new.org_id = '${brokenOrgId}'::uuid) execute function t233_refuse_run();
+  `);
+  try {
+    await fn();
+  } finally {
+    await sql.unsafe(`drop trigger if exists ${trigger} on ${table}`);
+  }
+}
+
 beforeAll(async () => {
   await sql`
     truncate table
@@ -76,6 +115,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // Belt and braces (approval condition 1): a killed test's own `finally` might never have run.
+  await sql.unsafe(`drop trigger if exists t233_refuse_scheduler_runs_insert on scheduler_runs`);
+  await sql.unsafe(`drop trigger if exists t233_refuse_scheduler_runs_update on scheduler_runs`);
+  await sql.unsafe(`drop trigger if exists t233_refuse_finding_occurrences_insert on finding_occurrences`);
+  await sql.unsafe(`drop function if exists t233_refuse_run()`);
   await closeDb();
   await sql.end({ timeout: 5 });
 });
@@ -180,6 +224,123 @@ describe('⛔ a failure is recorded, with its reason, and does not stop the run'
       if (r.outcome === 'ok') expect(r.failedCount).toBe(0);
       if (r.failedCount > 0) expect(r.outcome).not.toBe('ok');
     }
+  });
+});
+
+describe('⭐ T-233 — DEF-219: startRun inside the per-org boundary', () => {
+  it('T1 — one org\'s first write is refused; the next org still runs', async () => {
+    const broken = await orgWithAsset('t233-t1-broken', { withPeriod: true });
+    const healthy = await orgWithAsset('t233-t1-healthy', { withPeriod: true });
+    const [brokenOrg] = await sql<{ name: string }[]>`select name from organizations where id = ${broken.orgId}`;
+
+    await withRefusalTrigger('scheduler_runs', 'insert', broken.orgId, async () => {
+      const result = await runMonthEnd({ period: '2026-01' });
+
+      // ⭐ Before the fix this REJECTS — that is the failure to watch.
+      const brokenOutcomes = result.outcomes.filter((o) => o.orgId === broken.orgId);
+      expect(brokenOutcomes).toHaveLength(2); // depreciation + amortisation
+      for (const o of brokenOutcomes) {
+        expect(o.error).toMatch(/could not open/);
+        expect(o.error).toMatch(/T233: refused/);
+        expect(o.posted).toBe(0);
+        expect(o.orgName).toBe(brokenOrg!.name);
+      }
+
+      // The healthy org still did its real work.
+      const healthyDep = result.outcomes.find(
+        (o) => o.orgId === healthy.orgId && o.job === 'depreciation',
+      )!;
+      expect(healthyDep.posted).toBe(1);
+
+      expect(result.hadFailures).toBe(true);
+    });
+
+    const brokenRuns = await runsFor(broken.orgId);
+    expect(brokenRuns).toHaveLength(0);
+    const healthyRuns = await runsFor(healthy.orgId);
+    expect(healthyRuns).toHaveLength(2);
+    expect(healthyRuns.every((r) => r.finishedAt !== null)).toBe(true);
+  });
+
+  it('T2 — every org\'s first write refused, nothing is skipped', async () => {
+    // A malformed period trips `scheduler_runs_period_shape_check` for every org — no trigger
+    // needed. This is the shape of the real DEF-219 finding: `scheduler_runs_job_check` refusing
+    // `recurring_expenses` before 0136 widened it.
+    const orgsBefore = await transaction((tx) => schedulerRepo.listOrgsToRun(tx));
+    const [runsBefore] = await sql<{ n: number }[]>`select count(*)::int as n from scheduler_runs`;
+
+    const result = await runMonthEnd({ period: '2026-1' });
+
+    expect(result.outcomes).toHaveLength(orgsBefore.length * 2);
+    for (const o of result.outcomes) {
+      expect(o.error).toMatch(/could not open/);
+      expect(o.posted).toBe(0);
+    }
+    expect(result.hadFailures).toBe(true);
+
+    const [runsAfter] = await sql<{ n: number }[]>`select count(*)::int as n from scheduler_runs`;
+    expect(runsAfter!.n).toBe(runsBefore!.n);
+  });
+
+  it('T3 — the failure is recorded per org, and failRun\'s own failure does not escape', async () => {
+    // ⚠️ Every business job's real WORK is internally hardened per-item (T-233's own finding 3's
+    // premise: `reference_postgres_batch_needs_savepoint`), so a business-rule fault like "no
+    // fiscal period" is CAUGHT into `failures` rather than thrown — proven by the existing
+    // "missing-fiscal-period" test above landing on `dep.failures[0]`, never `dep.error`. Guard B
+    // needs a `work()` that genuinely rejects, and `runFindingObservation`'s closure has no
+    // per-item catch of its own around `recordFindingObservations` — so a refused write INSIDE it
+    // propagates uncaught, which is exactly Guard B's contract.
+    const broken = await orgWithAsset('t233-t3', { withPeriod: true });
+    // `lastCompletedPeriod` of this clock is '2026-01' — the org's one active asset has nothing
+    // booked for it yet, so `periodicPostingsMissed` fires `depreciationNotBooked:2026-01` and
+    // `observeFinding` actually attempts its INSERT into `finding_occurrences`.
+    const nowMs = Date.parse('2026-02-15T00:00:00Z');
+
+    // Two refusals nested: the org's INSERT into `finding_occurrences` (so `work()` itself
+    // throws) AND the org's `failRun` UPDATE on `scheduler_runs` (so recording the failure ALSO
+    // fails) — together proving failRun's own refusal is appended, not left to escape.
+    await withRefusalTrigger('scheduler_runs', 'update', broken.orgId, async () => {
+      await withRefusalTrigger('finding_occurrences', 'insert', broken.orgId, async () => {
+        const result = await runFindingObservation({ orgId: broken.orgId, nowMs });
+        const outcome = result.outcomes[0]!;
+        expect(outcome.error).toMatch(/T233: refused/);
+        // ⭐ failRun's own refusal is appended, not left to escape and reject the run.
+        expect(outcome.error).toMatch(/could not be closed/);
+        expect(outcome.posted).toBe(0);
+      });
+    });
+
+    const rows = await sql<{ finished_at: Date | null }[]>`
+      select finished_at from scheduler_runs where org_id = ${broken.orgId} and job = 'finding_observation'`;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.finished_at).toBeNull();
+
+    const unfinished = await transaction((tx) => schedulerRepo.unfinishedRuns(tx, broken.orgId));
+    expect(unfinished.some((r) => r.job === 'finding_observation')).toBe(true);
+  });
+
+  it('T3b — guard C: finishRun refused after the work succeeded keeps the REAL posted count', async () => {
+    const healthy = await orgWithAsset('t233-t3b', { withPeriod: true });
+
+    await withRefusalTrigger('scheduler_runs', 'update', healthy.orgId, async () => {
+      const result = await runMonthEnd({ period: '2026-01', orgId: healthy.orgId });
+      const dep = result.outcomes.find((o) => o.job === 'depreciation')!;
+      // ⭐ The answer to the steer: reporting 0 here would be the exact lie
+      // `runDepreciationJob`'s own comment rails against, wearing its other face.
+      expect(dep.posted).toBe(1);
+      expect(dep.error).toMatch(/T233: refused/);
+    });
+
+    const rows = await sql<{ finished_at: Date | null }[]>`
+      select finished_at from scheduler_runs where org_id = ${healthy.orgId} and job = 'depreciation'`;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.finished_at).toBeNull();
+
+    // The work really did commit — the ledger has the entry regardless of the bookkeeping failure.
+    const [entries] = await sql<{ n: number }[]>`
+      select count(*)::int as n from journal_entries
+      where org_id = ${healthy.orgId} and source_type = 'depreciation'`;
+    expect(entries!.n).toBe(1);
   });
 });
 

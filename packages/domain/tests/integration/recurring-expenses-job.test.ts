@@ -132,7 +132,37 @@ async function counts(orgId: string) {
   return row!;
 }
 
+/**
+ * T-233 — DEF-219: same test-local trigger lever as `scheduler.test.ts`'s T1, applied here because
+ * `job.ts` carries its own copy of the runner pattern (finding 1) rather than sharing it. Dropped
+ * in this helper's own `finally` AND, belt-and-braces, in this file's `afterAll`.
+ */
+async function withInsertRefusalTrigger(brokenOrgId: string, fn: () => Promise<void>): Promise<void> {
+  await sql.unsafe(`
+    create or replace function t233_refuse_run() returns trigger as $$
+    begin raise exception 'T233: refused'; end $$ language plpgsql;
+  `);
+  // ⭐ Idempotent, unlike `create or replace function` above: a killed run (Ctrl-C, a timeout)
+  // skips both this helper's `finally` and the file's `afterAll`, so the NEXT run's bare `create
+  // trigger` would die on "already exists" BEFORE its own `try` — one confusing red run whose own
+  // `finally` then never fires either.
+  await sql.unsafe(`drop trigger if exists t233_refuse_insert on scheduler_runs`);
+  await sql.unsafe(`
+    create trigger t233_refuse_insert before insert on scheduler_runs
+      for each row when (new.org_id = '${brokenOrgId}'::uuid) execute function t233_refuse_run();
+  `);
+  try {
+    await fn();
+  } finally {
+    await sql.unsafe(`drop trigger if exists t233_refuse_insert on scheduler_runs`);
+    await sql.unsafe(`drop function if exists t233_refuse_run()`);
+  }
+}
+
 afterAll(async () => {
+  // Belt and braces (approval condition 1): a killed test's own `finally` might never have run.
+  await sql.unsafe(`drop trigger if exists t233_refuse_insert on scheduler_runs`);
+  await sql.unsafe(`drop function if exists t233_refuse_run()`);
   await closeDb();
   await sql.end({ timeout: 5 });
 });
@@ -442,6 +472,37 @@ describe('the run records itself, and the payment it derives', () => {
       select count(*)::int as n from recurring_expense_drafts
        where recurring_expense_id = ${id} and due_date = '2099-01-02'`;
     expect(row!.n).toBe(1);
+  });
+
+  it('T5 — T-233/DEF-219: one org\'s first write is refused; a second org still drafts', async () => {
+    // `job.ts` carries its own copy of the runner pattern (finding 1), so it needs the same
+    // per-org-boundary proof as `scheduler.test.ts`'s T1 — a single sweep across multiple orgs
+    // where the first org's `startRun` is refused and the next org is not skipped.
+    const broken = await fixture('t233-broken');
+    const healthy = await fixture('t233-healthy');
+    await dueTemplate(broken);
+    await dueTemplate(healthy);
+
+    await withInsertRefusalTrigger(broken.orgId, async () => {
+      // ⚠️ No `orgId` — a real sweep, which is the only way to exercise "the next org still runs".
+      const result = await runRecurringExpenses({ nowMs: NOW, trigger: 'cron' });
+
+      const brokenOutcome = result.outcomes.find((o) => o.orgId === broken.orgId)!;
+      expect(brokenOutcome.error).toMatch(/could not open/);
+      expect(brokenOutcome.error).toMatch(/T233: refused/);
+      expect(brokenOutcome.posted).toBe(0);
+
+      const healthyOutcome = result.outcomes.find((o) => o.orgId === healthy.orgId)!;
+      expect(healthyOutcome.posted).toBe(1);
+      expect(healthyOutcome.error).toBeUndefined();
+    });
+
+    expect((await counts(broken.orgId)).e).toBe(0);
+    expect((await counts(healthy.orgId)).e).toBe(1);
+
+    const [runs] = await sql<{ n: number }[]>`
+      select count(*)::int as n from scheduler_runs where org_id = ${broken.orgId}`;
+    expect(runs!.n).toBe(0);
   });
 
   it('12 — scheduler_runs admits all nine job names and refuses a tenth', async () => {

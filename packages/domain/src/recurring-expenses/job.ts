@@ -55,7 +55,7 @@ import {
 import type { Actor } from '@shareat/auth';
 import { createExpense } from '../expenses';
 import { recordInvoice } from '../ap';
-import type { JobOutcome } from '../scheduler';
+import { runJobForOrg, type JobOutcome } from '../scheduler';
 import { nextDueDate } from './recurrence';
 import type { ExpensePaymentMethod } from '../expenses/routing';
 
@@ -102,154 +102,143 @@ export async function runRecurringExpenses(
   const outcomes: JobOutcome[] = [];
 
   for (const org of orgs) {
-    const runId = await transaction((tx) =>
-      schedulerRepo.startRun(tx, { orgId: org.id, job: 'recurring_expenses', period, trigger }),
-    );
-    const base = { orgId: org.id, orgName: org.name, job: 'recurring_expenses' as const, period };
-    const failures: SchedulerFailure[] = [];
-    let drafted = 0;
-    let skipped = 0;
+    outcomes.push(
+      await runJobForOrg(org, 'recurring_expenses', period, trigger, async () => {
+        const failures: SchedulerFailure[] = [];
+        let drafted = 0;
+        let skipped = 0;
 
-    try {
-      // ⛔ `withOrgPrincipal`, NOT a bare `transaction`. Every table this job touches is
-      // `org_column`-scoped with FORCE ROW LEVEL SECURITY, and a transaction that never sets
-      // `app.org_id` sees nothing and may write nothing under the app's own role.
-      //
-      // ⚠️ THIS IS INVISIBLE TO THE INTEGRATION TESTS. They connect as `postgres`, which is
-      // `rolsuper` and `rolbypassrls`, so every policy is bypassed and a bare `transaction` passes
-      // there and fails only in production. Found in self-review, not by a gate.
-      const due = await withOrgPrincipal(org.id, (tx) => recurringExpensesRepo.listDue(tx, org.id, today));
+        // ⛔ `withOrgPrincipal`, NOT a bare `transaction`. Every table this job touches is
+        // `org_column`-scoped with FORCE ROW LEVEL SECURITY, and a transaction that never sets
+        // `app.org_id` sees nothing and may write nothing under the app's own role.
+        //
+        // ⚠️ THIS IS INVISIBLE TO THE INTEGRATION TESTS. They connect as `postgres`, which is
+        // `rolsuper` and `rolbypassrls`, so every policy is bypassed and a bare `transaction`
+        // passes there and fails only in production. Found in self-review, not by a gate.
+        const due = await withOrgPrincipal(org.id, (tx) => recurringExpensesRepo.listDue(tx, org.id, today));
 
-      for (const template of due) {
-        // ⛔ ONE TRANSACTION PER TEMPLATE, and `reference_postgres_batch_needs_savepoint` is the
-        // reason: one DB error aborts the transaction it happened in, so a shared transaction
-        // would take this run's own `scheduler_runs` write down with it and the failure would
-        // leave no trace at all — DEF-044 wearing its quietest mask.
-        try {
-          // A template that cannot draft is a CONFIGURATION FAULT, not a no-op. ⚠️ Reported as a
-          // failure rather than counted as `skipped`, because `skipped` is where faults go to die
-          // quietly: "skipped 4" on a healthy morning and "skipped 4" on a morning when four bills
-          // silently stopped being drafted must not be the same line.
-          if (!template.supplierId) {
+        for (const template of due) {
+          // ⛔ ONE TRANSACTION PER TEMPLATE, and `reference_postgres_batch_needs_savepoint` is the
+          // reason: one DB error aborts the transaction it happened in, so a shared transaction
+          // would take this run's own `scheduler_runs` write down with it and the failure would
+          // leave no trace at all — DEF-044 wearing its quietest mask.
+          try {
+            // A template that cannot draft is a CONFIGURATION FAULT, not a no-op. ⚠️ Reported as a
+            // failure rather than counted as `skipped`, because `skipped` is where faults go to die
+            // quietly: "skipped 4" on a healthy morning and "skipped 4" on a morning when four bills
+            // silently stopped being drafted must not be the same line.
+            if (!template.supplierId) {
+              failures.push({
+                subjectId: template.id,
+                subjectName: template.name,
+                reason:
+                  'no supplier — the job records a pending invoice on the due date and an expense ' +
+                  'cannot exist without one. Set the supplier on /expenses/recurring.',
+              });
+              continue;
+            }
+            if (!template.createdBy) {
+              failures.push({
+                subjectId: template.id,
+                subjectName: template.name,
+                reason:
+                  'no creator on the template — the job acts as the person who set it up, so there ' +
+                  'is nobody for it to act as. Recreate the template.',
+              });
+              continue;
+            }
+
+            const dueDate = template.nextDueDate;
+            const actor: Actor = { personId: template.createdBy, orgId: org.id };
+
+            const result = await withOrgPrincipal(org.id, async (tx) => {
+              // ⭐ CLAIM FIRST. The cursor stops the ordinary second run of the day; this stops the
+              // ones it cannot see — two processes racing, or a cursor moved backwards by an edit.
+              // Claiming after creating the documents would strand them when the claim loses.
+              const claim = await recurringExpensesRepo.claimDraft(tx, {
+                orgId: org.id,
+                recurringExpenseId: template.id,
+                dueDate,
+              });
+              if (!claim) return null;
+
+              const invoice = await recordInvoice(tx, actor, {
+                storeId: template.storeId,
+                supplierId: template.supplierId!,
+                // ⭐ The due date, and it is what carries onto the expense: `createExpense` forces
+                // `businessDate` from the invoice, so the draft lands on the day it was due.
+                invoiceDate: dueDate,
+                totalAmount: template.defaultAmount,
+                invoiceNo: `RECUR-${template.id}-${dueDate}`,
+                notes: `Recurring: ${template.name}. Drafted by the recurring-expense job; the real bill replaces this.`,
+              });
+
+              const account = template.defaultMoneyAccountId
+                ? await moneyAccountsRepo.getById(tx, org.id, template.defaultMoneyAccountId)
+                : null;
+              const payment = paymentForAccount(
+                account ? (account.instrument as 'cash' | 'ewallet' | 'bank') : null,
+                template.defaultMoneyAccountId,
+              );
+
+              const expense = await createExpense(tx, actor, {
+                storeId: template.storeId,
+                businessDate: dueDate, // ignored by createExpense; the invoice date wins
+                categoryId: template.categoryId,
+                supplierId: template.supplierId!,
+                supplierInvoiceId: invoice.id,
+                particulars: `${template.name} — drafted by the recurring-expense job for ${dueDate}`,
+                payments: [
+                  {
+                    method: payment.method,
+                    amount: template.defaultAmount,
+                    moneyAccountId: payment.moneyAccountId,
+                  },
+                ],
+              });
+
+              await recurringExpensesRepo.attachDraftDocuments(tx, org.id, claim.id, {
+                expenseId: expense.id,
+                supplierInvoiceId: invoice.id,
+              });
+
+              // ⛔ SAME TRANSACTION as the documents above. A draft whose cursor did not advance
+              // drafts again tomorrow, and every tomorrow after that.
+              // ⭐ ONE interval, from the DUE date rather than from today: a template three months
+              // overdue drafts once and converges over three daily runs. Three drafts on one morning
+              // is noise; v1's own restraint was "never pre-create", and this is its mirror.
+              await recurringExpensesRepo.stampDrafted(tx, org.id, template.id, {
+                expenseId: expense.id,
+                nextDueDate: nextDueDate(dueDate, template.interval, template.anchorDay),
+                at: new Date(nowMs),
+              });
+              return expense.id;
+            });
+
+            if (result === null) skipped += 1;
+            else drafted += 1;
+          } catch (e) {
             failures.push({
               subjectId: template.id,
+              // The name, not the uuid — a failure line nobody can act on without a database
+              // session is a failure line nobody acts on.
               subjectName: template.name,
-              reason:
-                'no supplier — the job records a pending invoice on the due date and an expense ' +
-                'cannot exist without one. Set the supplier on /expenses/recurring.',
+              reason: e instanceof Error ? e.message : String(e),
             });
-            continue;
           }
-          if (!template.createdBy) {
-            failures.push({
-              subjectId: template.id,
-              subjectName: template.name,
-              reason:
-                'no creator on the template — the job acts as the person who set it up, so there ' +
-                'is nobody for it to act as. Recreate the template.',
-            });
-            continue;
-          }
-
-          const dueDate = template.nextDueDate;
-          const actor: Actor = { personId: template.createdBy, orgId: org.id };
-
-          const result = await withOrgPrincipal(org.id, async (tx) => {
-            // ⭐ CLAIM FIRST. The cursor stops the ordinary second run of the day; this stops the
-            // ones it cannot see — two processes racing, or a cursor moved backwards by an edit.
-            // Claiming after creating the documents would strand them when the claim loses.
-            const claim = await recurringExpensesRepo.claimDraft(tx, {
-              orgId: org.id,
-              recurringExpenseId: template.id,
-              dueDate,
-            });
-            if (!claim) return null;
-
-            const invoice = await recordInvoice(tx, actor, {
-              storeId: template.storeId,
-              supplierId: template.supplierId!,
-              // ⭐ The due date, and it is what carries onto the expense: `createExpense` forces
-              // `businessDate` from the invoice, so the draft lands on the day it was due.
-              invoiceDate: dueDate,
-              totalAmount: template.defaultAmount,
-              invoiceNo: `RECUR-${template.id}-${dueDate}`,
-              notes: `Recurring: ${template.name}. Drafted by the recurring-expense job; the real bill replaces this.`,
-            });
-
-            const account = template.defaultMoneyAccountId
-              ? await moneyAccountsRepo.getById(tx, org.id, template.defaultMoneyAccountId)
-              : null;
-            const payment = paymentForAccount(
-              account ? (account.instrument as 'cash' | 'ewallet' | 'bank') : null,
-              template.defaultMoneyAccountId,
-            );
-
-            const expense = await createExpense(tx, actor, {
-              storeId: template.storeId,
-              businessDate: dueDate, // ignored by createExpense; the invoice date wins
-              categoryId: template.categoryId,
-              supplierId: template.supplierId!,
-              supplierInvoiceId: invoice.id,
-              particulars: `${template.name} — drafted by the recurring-expense job for ${dueDate}`,
-              payments: [
-                {
-                  method: payment.method,
-                  amount: template.defaultAmount,
-                  moneyAccountId: payment.moneyAccountId,
-                },
-              ],
-            });
-
-            await recurringExpensesRepo.attachDraftDocuments(tx, org.id, claim.id, {
-              expenseId: expense.id,
-              supplierInvoiceId: invoice.id,
-            });
-
-            // ⛔ SAME TRANSACTION as the documents above. A draft whose cursor did not advance
-            // drafts again tomorrow, and every tomorrow after that.
-            // ⭐ ONE interval, from the DUE date rather than from today: a template three months
-            // overdue drafts once and converges over three daily runs. Three drafts on one morning
-            // is noise; v1's own restraint was "never pre-create", and this is its mirror.
-            await recurringExpensesRepo.stampDrafted(tx, org.id, template.id, {
-              expenseId: expense.id,
-              nextDueDate: nextDueDate(dueDate, template.interval, template.anchorDay),
-              at: new Date(nowMs),
-            });
-            return expense.id;
-          });
-
-          if (result === null) skipped += 1;
-          else drafted += 1;
-        } catch (e) {
-          failures.push({
-            subjectId: template.id,
-            // The name, not the uuid — a failure line nobody can act on without a database
-            // session is a failure line nobody acts on.
-            subjectName: template.name,
-            reason: e instanceof Error ? e.message : String(e),
-          });
         }
-      }
 
-      await transaction((tx) =>
-        schedulerRepo.finishRun(tx, runId, { postedCount: drafted, skippedCount: skipped, failures }),
-      );
-      outcomes.push({
-        ...base,
-        posted: drafted,
-        skipped,
-        failed: failures.length,
-        failures,
-        // ⚠️ Counts, never a bare "done" (bible §15.6). "drafted 0" on a run that saw 12 due
-        // templates is a fault; "drafted 0" on a run that saw none is a quiet morning, and the two
-        // are indistinguishable without the first number.
-        detail: `due ${due.length} · drafted ${drafted} · already drafted ${skipped} · refused ${failures.length}`,
-      });
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      await transaction((tx) => schedulerRepo.failRun(tx, runId, message));
-      outcomes.push({ ...base, posted: 0, skipped: 0, failed: 0, failures: [], error: message });
-    }
+        return {
+          posted: drafted,
+          skipped,
+          failures,
+          // ⚠️ Counts, never a bare "done" (bible §15.6). "drafted 0" on a run that saw 12 due
+          // templates is a fault; "drafted 0" on a run that saw none is a quiet morning, and the
+          // two are indistinguishable without the first number.
+          detail: `due ${due.length} · drafted ${drafted} · already drafted ${skipped} · refused ${failures.length}`,
+        };
+      }),
+    );
   }
 
   return { outcomes, hadFailures: outcomes.some((o) => o.failed > 0 || o.error) };

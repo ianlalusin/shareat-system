@@ -50,6 +50,10 @@ async function main(): Promise<number> {
     const head = `  ${o.orgName}`;
     if (o.error) {
       console.error(`${head}: FAILED OUTRIGHT — ${o.error}`);
+      // ⭐ T-233 guard C can keep the REAL posted/skipped even when only the run's own
+      // bookkeeping failed — print them, or an operator reads "FAILED OUTRIGHT" for a run that
+      // actually drafted.
+      console.log(`${head}: ${o.detail ?? `drafted ${o.posted}`}`);
       continue;
     }
     // ⚠️ Counts, never a bare "done" (bible §15.6). "drafted 0" on a run that saw 12 due templates
@@ -71,7 +75,13 @@ async function main(): Promise<number> {
     console.error('recurring-expense-draft: no orgs were processed — nothing to draft?');
     return 1;
   }
-  console.log('recurring-expense-draft: ok');
+  // ⚠️ Counts, never a bare "done" (bible §15.6) — the same rule the per-org lines above already
+  // follow, applied to the script's own summary line.
+  const drafted = result.outcomes.reduce((sum, o) => sum + o.posted, 0);
+  const alreadyDrafted = result.outcomes.reduce((sum, o) => sum + o.skipped, 0);
+  console.log(
+    `recurring-expense-draft: ok — drafted ${drafted} · already drafted ${alreadyDrafted} · ${result.outcomes.length} orgs`,
+  );
   return 0;
 }
 
