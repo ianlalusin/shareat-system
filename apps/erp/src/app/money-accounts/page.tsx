@@ -13,6 +13,7 @@ import {
   listAll,
   listStores,
 } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Money accounts — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -37,7 +38,7 @@ export default async function MoneyAccountsPage({
   const retired = accounts.filter((a) => !a.isActive);
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Money accounts</h1>
         <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
@@ -259,7 +260,7 @@ export default async function MoneyAccountsPage({
           </button>
         </form>
       </section>
-    </main>
+    </Page>
   );
 }
 

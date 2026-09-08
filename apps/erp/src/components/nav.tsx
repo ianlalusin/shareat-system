@@ -1,8 +1,10 @@
-import Link from 'next/link';
-import { currentSession } from '../lib/session';
+import type { GroupIconKey } from './shell/icons';
 
 /**
- * The app's navigation — and until now there wasn't one.
+ * The app's navigation link data — read by `AppShell`/`SidebarNav` (T-234) to render the sidebar,
+ * and by `tests/unit/nav-route-reachability.test.ts` (T-227), which text-scans this file for
+ * `href: '...'` literals. **Keep every href in that exact single-quoted shape** — the guard does
+ * not parse TypeScript, it greps this file's source.
  *
  * ⚠️ **Twenty-seven routes existed and not one was linked from anywhere.** `app/page.tsx` was
  * still the Phase 0 scaffold, so every screen shipped since T-122 has been reachable only by
@@ -10,11 +12,16 @@ import { currentSession } from '../lib/session';
  * page nobody can navigate to, which is the same failure shape as ERP-rebuild's Tailwind content
  * globs (a real file in an unlisted directory is indistinguishable from a passing one).
  *
- * ⭐ Rendered from the SESSION, so signing out hides it — and the sign-in page never shows it.
+ * ⭐ T-234 slice 1: this file used to also render the top bar (`export async function Nav()`,
+ * reading the session itself). That render is gone — `AppShell.tsx` reads the session now and
+ * decides whether to render a shell at all, and `SidebarNav.tsx` renders these links. This file is
+ * data only, on purpose: a data module has no reason to be a Server Component, an async function,
+ * or anything a test needs a running session to import.
  */
-const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
+export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string; label: string }[] }[] = [
   {
     label: 'Daily',
+    icon: 'daily',
     links: [
       // T-211 — `/` used to be the Phase 0 scaffold; it's the dashboard now, so it earns a nav
       // entry of its own rather than relying solely on the "Shareat" logo link.
@@ -58,6 +65,7 @@ const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
   },
   {
     label: 'Inventory',
+    icon: 'inventory',
     links: [
       { href: '/inventory', label: 'Stock on hand' },
       // ⭐ DEF-135 — the whole physical stock lifecycle (rooms, receiving, usage, counting) had a
@@ -82,6 +90,7 @@ const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
   },
   {
     label: 'Money',
+    icon: 'money',
     links: [
       { href: '/money-accounts', label: 'Accounts' },
       { href: '/money-transfers', label: 'Transfers' },
@@ -94,6 +103,7 @@ const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
   },
   {
     label: 'Trade',
+    icon: 'trade',
     links: [
       // ⚠️ `/ap/invoices` has no page — only `[id]`. It pointed here as a 404 until 2026-08-30
       // (DEF-107). `/ap` lists pending invoices already; a dedicated register is T-188 §7's
@@ -110,6 +120,7 @@ const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
   },
   {
     label: 'Reports',
+    icon: 'reports',
     links: [
       // ⭐ First in Reports on purpose: it answers "can this period close at all" before the
       // statements that assume it can. DEF-084 — this feed had no screen until 2026-08-30.
@@ -132,6 +143,7 @@ const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
   },
   {
     label: 'Setup',
+    icon: 'setup',
     links: [
       // ⭐ T-219 / DEF-167 — role assignment, store scope and capability grants were fully built
       // and tested with no screen at all, so a hired person could sign in (T-217) and then be
@@ -154,41 +166,3 @@ const GROUPS: { label: string; links: { href: string; label: string }[] }[] = [
     ],
   },
 ];
-
-export async function Nav() {
-  const session = await currentSession();
-  if (!session) return null;
-
-  return (
-    <nav className="border-b border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
-      <div className="mx-auto max-w-6xl px-4 py-3">
-        <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
-          <Link href="/" className="text-sm font-semibold tracking-tight">
-            Shareat
-          </Link>
-          {/* ⚠️ DEF-149 — each group carries `flex-wrap` too, not only the row above. A group was
-              an unwrappable row, so at 390px the Inventory group alone ran 237px past the viewport
-              and EVERY route in the app scrolled sideways. Phone portrait is the canvas; measured
-              on four routes before and after. */}
-          {GROUPS.map((group) => (
-            <div key={group.label} className="flex flex-wrap items-baseline gap-2">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-neutral-400">
-                {group.label}
-              </span>
-              {group.links.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="text-sm text-neutral-600 underline-offset-4 hover:text-neutral-900 hover:underline dark:text-neutral-400 dark:hover:text-neutral-100"
-                >
-                  {link.label}
-                </Link>
-              ))}
-            </div>
-          ))}
-          <span className="ml-auto text-xs text-neutral-500">Signed in</span>
-        </div>
-      </div>
-    </nav>
-  );
-}

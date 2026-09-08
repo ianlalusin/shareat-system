@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { getCountSessionDetail, type SheetLine } from '../lib';
 import { advanceCountAction, cancelCountAction, commitCountAction, recordCountAction } from '../actions';
 import { requireSession } from '../../../../lib/session';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Count sheet — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -99,7 +100,7 @@ export default async function CountSessionPage({
   const rows = [...detail.sheet, ...detail.extras];
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <Link href={`/inventory/counts?store=${detail.storeId}`} className="text-sm underline underline-offset-4">
           ← Physical counts
@@ -264,6 +265,6 @@ export default async function CountSessionPage({
           </Link>
         </p>
       )}
-    </main>
+    </Page>
   );
 }

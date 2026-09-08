@@ -5,6 +5,7 @@ import { toBusinessDate } from '@shareat/core/datetime';
 import { EmptyState } from '@/components/reports/EmptyState';
 import { CsvExportLink } from '@/components/reports/CsvExportLink';
 import { StoreComparisonTable, type StoreComparisonColumn } from '@/components/reports/StoreComparisonTable';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Store Comparison — Shareat System' };
 
@@ -69,7 +70,7 @@ export default async function StoreComparisonPage({
   }));
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-8">
+    <Page density="wide">
       <div>
         <h1 className="text-2xl font-semibold">Store Comparison</h1>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
@@ -129,6 +130,6 @@ export default async function StoreComparisonPage({
       ) : (
         <EmptyState message="No stores selected." />
       )}
-    </main>
+    </Page>
   );
 }

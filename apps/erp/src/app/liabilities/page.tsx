@@ -3,6 +3,7 @@ import { LIABILITY_CATEGORIES } from '@shareat/db/schema';
 import { requireSession } from '../../lib/session';
 import { createLiabilityAction } from './actions';
 import { CATEGORY_LABEL, listRegister, listStores, peso, today } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Liabilities — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -28,7 +29,7 @@ export default async function LiabilitiesPage({
   const owed = rows.reduce((sum, r) => sum + Number(r.position.outstanding), 0);
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Liabilities</h1>
         <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
@@ -184,7 +185,7 @@ export default async function LiabilitiesPage({
           </button>
         </form>
       </section>
-    </main>
+    </Page>
   );
 }
 

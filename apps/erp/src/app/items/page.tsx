@@ -7,6 +7,7 @@ import {
   requestItemAction,
 } from './actions';
 import { listItems, pendingRequests, duplicateCandidates, soldAsLabel } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Items — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -32,7 +33,7 @@ export default async function ItemsPage({
   ]);
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Items</h1>
         <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
@@ -135,11 +136,11 @@ export default async function ItemsPage({
                   </p>
                 )}
                 <div className="mt-2 flex flex-wrap items-end gap-2">
-                  <form action={approveItemRequestAction} className="flex items-end gap-2">
+                  <form action={approveItemRequestAction} className="flex flex-wrap items-end gap-2 gap-y-2">
                     <input type="hidden" name="requestId" value={r.id} />
                     <button type="submit" className={BTN}>Approve</button>
                   </form>
-                  <form action={rejectItemRequestAction} className="flex items-end gap-2">
+                  <form action={rejectItemRequestAction} className="flex flex-wrap items-end gap-2 gap-y-2">
                     <input type="hidden" name="requestId" value={r.id} />
                     <input name="note" required placeholder="Why not?" className={INPUT} />
                     <button type="submit" className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950">
@@ -275,6 +276,6 @@ export default async function ItemsPage({
           </div>
         </form>
       </section>
-    </main>
+    </Page>
   );
 }

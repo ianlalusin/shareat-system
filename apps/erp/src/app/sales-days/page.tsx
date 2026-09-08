@@ -4,6 +4,7 @@ import { toBusinessDate } from '@shareat/core/datetime';
 import { listStores } from './lib';
 import { requireSession } from '../../lib/session';
 import { withOrgPrincipal } from '../expenses/lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Sales days — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -51,7 +52,7 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
     .sort((a, b) => a.businessDate.localeCompare(b.businessDate))[0];
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-8">
+    <Page density="table">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Sales days</h1>
@@ -159,7 +160,7 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
       <p className="text-xs text-neutral-400 dark:text-neutral-600">
         {toBusinessDate()} today (Asia/Manila)
       </p>
-    </main>
+    </Page>
   );
 }
 

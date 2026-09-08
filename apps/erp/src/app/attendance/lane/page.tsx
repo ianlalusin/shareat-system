@@ -4,6 +4,7 @@ import { LANE_HEALTH } from '@shareat/domain';
 import { requireSession } from '../../../lib/session';
 import { discardEventAction, retryEventAction } from './actions';
 import { ago, listStores, loadHealth, loadQuarantine, rawJson, when } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'The clock lane — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -45,12 +46,12 @@ export default async function LanePage({
 
   if (!storeId) {
     return (
-      <main className="mx-auto max-w-4xl p-4 sm:p-8">
+      <Page density="table" className="">
         <h1 className="text-2xl font-semibold">The clock lane</h1>
         <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
           There are no stores yet, so there is no lane to watch.
         </p>
-      </main>
+      </Page>
     );
   }
 
@@ -61,7 +62,7 @@ export default async function LanePage({
   const now = health.observedAt;
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">The clock lane</h1>
         <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
@@ -206,7 +207,7 @@ export default async function LanePage({
         </Link>{' '}
         · Read at {when(now)}
       </p>
-    </main>
+    </Page>
   );
 }
 

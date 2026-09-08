@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import { Nav } from '../components/nav';
+import { AppShell } from '../components/shell/AppShell';
 
 export const metadata: Metadata = {
   title: 'Shareat System',
@@ -13,8 +13,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         {/* ⚠️ Reads the session, so every page under it is dynamic. That is already true of every
             screen in this app — each one calls `requireSession` — so nothing was static to lose. */}
-        <Nav />
-        {children}
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

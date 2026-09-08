@@ -9,3 +9,85 @@
 body {
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
+
+/*
+ * T-234 slice 1 — the sidebar's width, as a CSS variable rather than a Tailwind arbitrary value.
+ *
+ * The width has to be right in the FIRST server-rendered paint, before any JS runs, or the "no
+ * flash, no layout shift" invariant (§2.4.4) is broken. A variable keyed only on the
+ * `data-sidebar-state` attribute `AppShell`/`Sidebar.tsx` already compute server-side (from the
+ * cookie) does that without any client-side width detection: `auto` (no cookie yet) falls back to
+ * each breakpoint's own default below; `expanded`/`collapsed` — set once the user has ever
+ * toggled — override both breakpoints identically, which is what makes one cookie value correct
+ * on a tablet AND a laptop.
+ */
+[data-sidebar-state] .shell-sidebar {
+  width: 4rem; /* the icon rail, the shared default below 1280px */
+}
+@media (min-width: 1280px) {
+  [data-sidebar-state="auto"] .shell-sidebar {
+    width: 16rem; /* laptop's own default: expanded (§2.3) */
+  }
+}
+[data-sidebar-state="expanded"] .shell-sidebar {
+  width: 16rem;
+}
+[data-sidebar-state="collapsed"] .shell-sidebar {
+  width: 4rem;
+}
+/* Below 1280, "expanded" only means the tablet's rail button pulled the full list out — it still
+   reads as a rail otherwise, so nothing here needs a tablet-specific override; toggling to
+   `expanded` sets 16rem at every width ≥768 per the rule above. */
+
+/* Labels and the group-collapse footer text are wasted horizontal space at 4rem — hide them by
+   width, not by a second JS state, so a stale flag can never disagree with the actual box. */
+[data-sidebar-state="collapsed"] .shell-sidebar-expanded-only {
+  display: none;
+}
+@media (min-width: 768px) and (max-width: 1279px) {
+  [data-sidebar-state="auto"] .shell-sidebar-expanded-only {
+    display: none;
+  }
+}
+[data-sidebar-state="collapsed"] .shell-sidebar-collapse-icon {
+  transform: rotate(180deg);
+}
+@media (min-width: 768px) and (max-width: 1279px) {
+  /* Tablet's own default IS the rail (§2.3) even with no cookie yet — the icon has to agree with
+     what's actually on screen, not just with an explicit `collapsed` the user hasn't set. */
+  [data-sidebar-state="auto"] .shell-sidebar-collapse-icon {
+    transform: rotate(180deg);
+  }
+}
+
+/* The inverse of `.shell-sidebar-expanded-only` — content that only makes sense ON the rail (the
+   Wordmark's single-letter fallback, the "Signed in" dot). Hidden by default; the same three
+   selectors as `.shell-sidebar-expanded-only` above, just swapped, so the two classes can never
+   independently drift out of agreement about which width band is "the rail". */
+.shell-sidebar-collapsed-only {
+  display: none;
+}
+[data-sidebar-state="collapsed"] .shell-sidebar-collapsed-only {
+  display: inline-flex;
+}
+@media (min-width: 768px) and (max-width: 1279px) {
+  [data-sidebar-state="auto"] .shell-sidebar-collapsed-only {
+    display: inline-flex;
+  }
+}
+
+/*
+ * Touch targets — 44px under a coarse pointer (a finger), 36px under a fine one (a mouse/trackpad
+ * pen), never hover-only (memory `feedback_design_for_apk_tablet_phone`: phone and tablet are the
+ * canvas). Tailwind 3.4 has no built-in `pointer-coarse:`/`pointer-fine:` variant (checked against
+ * the installed package — only `pointer-events-*` utilities exist), so this is plain CSS rather
+ * than a fabricated utility class.
+ */
+.shell-nav-row {
+  min-height: 36px;
+}
+@media (pointer: coarse) {
+  .shell-nav-row {
+    min-height: 44px;
+  }
+}

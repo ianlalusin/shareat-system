@@ -2,6 +2,7 @@ import { getPosDayReconciliation, fetchPosSalesLive } from '@shareat/domain';
 import { reportScope, runReport } from '../lib';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { PosReconciliationCard } from '@/components/reports/PosReconciliationCard';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'POS Reconciliation — Shareat System' };
 
@@ -42,7 +43,7 @@ export default async function PosReconciliationPage({
     : null;
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6 p-8">
+    <Page density="wide">
       <div>
         <h1 className="text-2xl font-semibold">POS Reconciliation</h1>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
@@ -87,6 +88,6 @@ export default async function PosReconciliationPage({
       ) : (
         <p className="text-sm text-neutral-500">No store available to report on.</p>
       )}
-    </main>
+    </Page>
   );
 }

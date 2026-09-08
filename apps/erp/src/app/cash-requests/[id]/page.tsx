@@ -11,6 +11,7 @@ import {
   peso,
   today,
 } from '../lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Cash request — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -49,7 +50,7 @@ export default async function CashRequestPage({
   const canCancel = req.status === 'requested' || req.status === 'approved';
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <Link href="/cash-requests" className="text-sm underline underline-offset-2">
           ← Cash requests
@@ -310,7 +311,7 @@ export default async function CashRequestPage({
           {req.notes && <Row label="Notes" value={req.notes} />}
         </dl>
       </section>
-    </main>
+    </Page>
   );
 }
 

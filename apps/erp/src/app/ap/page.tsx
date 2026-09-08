@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requireSession } from '../../lib/session';
 import { createSupplierAction, recordInvoiceAction } from './actions';
 import { listSuppliersWithPosition, listInvoices, listStores, peso, today } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Accounts payable — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -24,7 +25,7 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
   const supplierName = new Map(suppliers.map((s) => [s.id, s.name]));
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Accounts payable</h1>
         <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
@@ -169,7 +170,7 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
           </form>
         </section>
       </div>
-    </main>
+    </Page>
   );
 }
 

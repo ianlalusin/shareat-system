@@ -5,6 +5,7 @@ import { peso } from '../../../lib/format';
 import { createDeliveryAction } from './actions';
 import { deliveryFormData, deliveryRegister, listStores } from './lib';
 import { NewDeliveryForm } from './NewDeliveryForm';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Deliveries — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -37,10 +38,10 @@ export default async function DeliveriesPage({ searchParams }: { searchParams: P
 
   if (!storeId) {
     return (
-      <main className="mx-auto max-w-5xl p-4 sm:p-8">
+      <Page density="table" className="">
         <h1 className="text-2xl font-semibold">Deliveries</h1>
         <p className="mt-4 text-sm text-neutral-600">This organisation has no stores yet.</p>
-      </main>
+      </Page>
     );
   }
 
@@ -50,7 +51,7 @@ export default async function DeliveriesPage({ searchParams }: { searchParams: P
   ]);
 
   return (
-    <main className="mx-auto max-w-5xl space-y-8 p-4 sm:p-8">
+    <Page density="table" className="space-y-8">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Deliveries</h1>
@@ -81,7 +82,7 @@ export default async function DeliveriesPage({ searchParams }: { searchParams: P
         </div>
       )}
 
-      <form method="get" className="flex items-end gap-3">
+      <form method="get" className="flex flex-wrap items-end gap-3 gap-y-2">
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
           <select name="store" defaultValue={storeId} className={`mt-1 ${INPUT}`}>
@@ -150,6 +151,6 @@ export default async function DeliveriesPage({ searchParams }: { searchParams: P
           </div>
         )}
       </section>
-    </main>
+    </Page>
   );
 }

@@ -3,6 +3,7 @@ import { formatMoney, money } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { listStores, listCategoriesGrouped, withOrgPrincipal } from './lib';
 import { requireSession } from '../../lib/session';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Expenses — Shareat System' };
 
@@ -42,7 +43,7 @@ export default async function ExpensesListPage({ searchParams }: { searchParams:
   const carry = qs.toString();
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-8">
+    <Page density="table">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Expenses</h1>
@@ -144,7 +145,7 @@ export default async function ExpensesListPage({ searchParams }: { searchParams:
       <p className="text-xs text-neutral-400 dark:text-neutral-600">
         {toBusinessDate()} today (Asia/Manila)
       </p>
-    </main>
+    </Page>
   );
 }
 

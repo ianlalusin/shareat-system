@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { requireSession } from '../../../lib/session';
 import { disburseLoanAction, recordPaymentAction, reverseEntryAction } from '../actions';
 import { METHOD_LABEL, STATUS_LABEL, getDetail, moneyAccounts, peso, today } from '../lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Loan — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -31,7 +32,7 @@ export default async function LoanPage({
   const owes = Number(loan.position.outstanding) > 0;
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <Link href="/loans" className="text-sm underline underline-offset-2">
           ← Loans
@@ -244,7 +245,7 @@ export default async function LoanPage({
           </p>
         </section>
       )}
-    </main>
+    </Page>
   );
 }
 

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { requireSession } from '../../../lib/session';
 import { scorecardFor, scorecardRange } from '../lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Responsiveness scorecard — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -26,7 +27,7 @@ export default async function ScorecardPage() {
   const num = (v: number | null) => (v == null ? '—' : String(v));
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
+    <Page density="wide">
       <div>
         <Link href="/findings" className="text-sm underline underline-offset-2">
           ← Findings
@@ -168,6 +169,6 @@ export default async function ScorecardPage() {
           ageing acceptance is a smell.
         </p>
       </div>
-    </main>
+    </Page>
   );
 }

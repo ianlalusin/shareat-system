@@ -21,6 +21,7 @@ import {
   storesWithOpenItems,
   today,
 } from '../lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Customer — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -95,7 +96,7 @@ export default async function CustomerDetailPage({
   const storeName = (id: string) => storeOptions.find((s) => s.storeId === id)?.storeName ?? '—';
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <Link
@@ -511,7 +512,7 @@ export default async function CustomerDetailPage({
         There is no stored balance to recompute, repair or reconcile &mdash; which is why the three
         buttons v1 needed for exactly that are not here.
       </p>
-    </main>
+    </Page>
   );
 }
 

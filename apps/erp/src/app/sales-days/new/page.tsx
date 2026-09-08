@@ -3,6 +3,7 @@ import { toBusinessDate } from '@shareat/core/datetime';
 import { listStores, listChannels, listMoneyAccountsForPicker } from '../lib';
 import { requireSession } from '../../../lib/session';
 import { createSalesDayAction } from '../actions';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'New sales day — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -32,7 +33,7 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
   if (storeId) carry.set('store', storeId);
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-8">
+    <Page density="table">
       <div>
         <a
           href={`/sales-days?${carry.toString()}`}
@@ -234,7 +235,7 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
           Save draft
         </button>
       </form>
-    </main>
+    </Page>
   );
 }
 

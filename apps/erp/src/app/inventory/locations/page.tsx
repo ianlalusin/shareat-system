@@ -10,6 +10,7 @@ import {
   updateLocationAction,
 } from './actions';
 import { listStores, locationsPageData } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Stock locations — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -42,26 +43,26 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
 
   if (!storeId) {
     return (
-      <main className="mx-auto max-w-5xl p-8">
+      <Page density="table" className="">
         <h1 className="text-2xl font-semibold">Stock locations</h1>
         <p className="mt-4 text-sm text-neutral-600">This organisation has no stores yet.</p>
-      </main>
+      </Page>
     );
   }
 
   const data = await locationsPageData(actor.orgId, storeId);
   if (!data) {
     return (
-      <main className="mx-auto max-w-5xl p-8">
+      <Page density="table" className="">
         <h1 className="text-2xl font-semibold">Stock locations</h1>
         <p className="mt-4 text-sm text-neutral-600">That store could not be found.</p>
-      </main>
+      </Page>
     );
   }
   const { stockModel, locations, types } = data;
 
   return (
-    <main className="mx-auto max-w-5xl space-y-8 p-4 sm:p-8">
+    <Page density="table" className="space-y-8">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Stock locations</h1>
@@ -86,7 +87,7 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
         </div>
       )}
 
-      <form method="get" className="flex items-end gap-3">
+      <form method="get" className="flex flex-wrap items-end gap-3 gap-y-2">
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
           <select name="store" defaultValue={storeId} className={INPUT}>
@@ -271,6 +272,6 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
           </form>
         </section>
       )}
-    </main>
+    </Page>
   );
 }

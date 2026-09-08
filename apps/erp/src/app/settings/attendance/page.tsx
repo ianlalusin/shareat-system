@@ -2,6 +2,7 @@ import { requireSession } from '../../../lib/session';
 import { addShiftDays, toShiftDay } from '@shareat/domain';
 import { updateAttendanceConfigAction } from './actions';
 import { liveConfigFor, listStores } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Attendance & payroll settings — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -33,10 +34,10 @@ export default async function AttendanceSettingsPage({
   const storeId = sp.store || stores[0]?.id;
   if (!storeId) {
     return (
-      <main className="mx-auto max-w-4xl space-y-4 p-4 sm:p-8">
+      <Page density="form" className="space-y-4">
         <h1 className="text-2xl font-semibold">Attendance & payroll settings</h1>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">No store is set up yet.</p>
-      </main>
+      </Page>
     );
   }
 
@@ -44,7 +45,7 @@ export default async function AttendanceSettingsPage({
   const defaultEffectiveFrom = addShiftDays(toShiftDay(), 1);
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+    <Page density="form">
       <div>
         <h1 className="text-2xl font-semibold">Attendance & payroll settings</h1>
         <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
@@ -236,7 +237,7 @@ export default async function AttendanceSettingsPage({
           </button>
         </form>
       )}
-    </main>
+    </Page>
   );
 }
 

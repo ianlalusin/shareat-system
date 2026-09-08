@@ -16,6 +16,7 @@ import {
   peso,
   today,
 } from '../lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Owner — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -49,7 +50,7 @@ export default async function OwnerPage({
   const owes = Number(owner.position.receivable);
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <Link href="/owners" className="text-sm underline underline-offset-2">
           ← Owners
@@ -338,7 +339,7 @@ export default async function OwnerPage({
           </div>
         )}
       </section>
-    </main>
+    </Page>
   );
 }
 

@@ -6,6 +6,7 @@ import { verifyInvoiceAction, voidInvoiceAction, setInvoiceLinesAction } from '.
 import { recordExpenseForInvoiceAction } from '../../../expenses/actions';
 import { getInvoice, getSupplier, listCategoriesGrouped, listMoneyAccountsForPicker, itemPickerFor, invoiceLines, INVOICE_LINE_ROWS } from '../../lib';
 import { withOrgPrincipal } from '../../../expenses/lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Supplier invoice — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -59,7 +60,7 @@ export default async function InvoiceDetailPage({
   const existingLines = await invoiceLines(orgId, invoice.id);
 
 return (
-    <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div className="flex items-start justify-between gap-4">
         <div>
           <a href="/ap" className="text-sm text-neutral-500 underline hover:no-underline dark:text-neutral-400">
@@ -397,7 +398,7 @@ return (
       )}
 
       {invoice.status !== 'voided' && (
-        <form action={voidInvoiceAction} className="flex items-end gap-3 rounded-lg border border-red-200 p-4 text-sm dark:border-red-900">
+        <form action={voidInvoiceAction} className="flex flex-wrap items-end gap-3 rounded-lg border border-red-200 p-4 text-sm dark:border-red-900 gap-y-2">
           <input type="hidden" name="invoiceId" value={invoice.id} />
           <Field label="Void reason">
             <input name="reason" required className={INPUT} />
@@ -407,7 +408,7 @@ return (
           </button>
         </form>
       )}
-    </main>
+    </Page>
   );
 }
 

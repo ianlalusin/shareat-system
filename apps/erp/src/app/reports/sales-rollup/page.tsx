@@ -13,6 +13,7 @@ import {
   SalesReconciliationIndicator,
   type SalesPeriodRow,
 } from '@/components/reports/SalesRollupTable';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Sales Rollup — Shareat System' };
 
@@ -65,7 +66,7 @@ export default async function SalesRollupPage({
   const hasAnyActivity = periods.length > 0;
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-8">
+    <Page density="wide">
       <div>
         <h1 className="text-2xl font-semibold">Sales Rollup</h1>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
@@ -143,6 +144,6 @@ export default async function SalesRollupPage({
       ) : (
         <EmptyState message={`No verified sales days for ${fromDate} to ${toDate}.`} />
       )}
-    </main>
+    </Page>
   );
 }

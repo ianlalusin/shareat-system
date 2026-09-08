@@ -4,6 +4,7 @@ import { toBusinessDate } from '@shareat/core/datetime';
 import { requireSession } from '../../../lib/session';
 import { endEmploymentAction, issuePinAction, setPositionsAction } from '../actions';
 import { employmentDetail, livePinFor, positionsForStore } from '../lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Employment — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -35,7 +36,7 @@ export default async function EmploymentDetailPage({
   const primaryId = detail.positions.find((p) => p.isPrimary)?.positionId;
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6 p-4 sm:p-8">
+    <Page density="form">
       <div>
         <a href="/staff" className="text-sm text-neutral-500 underline underline-offset-2 dark:text-neutral-400">
           ← Staff
@@ -214,6 +215,6 @@ export default async function EmploymentDetailPage({
           </form>
         )}
       </section>
-    </main>
+    </Page>
   );
 }

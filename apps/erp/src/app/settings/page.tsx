@@ -1,4 +1,5 @@
 import { requireSession } from '../../lib/session';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Settings — Shareat System' };
 // Reads the session cookie, so it can never be statically rendered — declared rather than left to
@@ -47,7 +48,7 @@ export default async function SettingsPage() {
   await requireSession('/settings');
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+    <Page density="form">
       <div>
         <h1 className="text-2xl font-semibold">Settings</h1>
         <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
@@ -123,7 +124,7 @@ export default async function SettingsPage() {
           </li>
         </ul>
       </div>
-    </main>
+    </Page>
   );
 }
 

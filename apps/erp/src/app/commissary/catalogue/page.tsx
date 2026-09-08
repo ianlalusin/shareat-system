@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requireSession } from '../../../lib/session';
 import { removeMapAction, upsertLinkAction, upsertMapAction, upsertOfferingAction } from './actions';
 import { EXPENSE_GROUPS, catalogueData, listCategoriesGrouped, listStores, mapData, peso } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Commissary catalogue — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -29,10 +30,10 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
 
   if (!commissaryStoreId) {
     return (
-      <main className="mx-auto max-w-5xl p-8">
+      <Page density="table" className="">
         <h1 className="text-2xl font-semibold">Commissary catalogue</h1>
         <p className="mt-4 text-sm text-neutral-600">This organisation has no stores yet.</p>
-      </main>
+      </Page>
     );
   }
 
@@ -48,7 +49,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
   const mapSection = branchStoreId ? await mapData(actor.orgId, commissaryStoreId, branchStoreId) : undefined;
 
   return (
-    <main className="mx-auto max-w-5xl space-y-8 p-4 sm:p-8">
+    <Page density="table" className="space-y-8">
       <div>
         <h1 className="text-2xl font-semibold">Commissary catalogue</h1>
         <p className="mt-1 max-w-3xl text-sm text-neutral-600 dark:text-neutral-400">
@@ -70,7 +71,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
         </div>
       )}
 
-      <form method="get" className="flex items-end gap-3">
+      <form method="get" className="flex flex-wrap items-end gap-3 gap-y-2">
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Commissary</span>
           <select name="commissary" defaultValue={commissaryStoreId} className={INPUT}>
@@ -244,7 +245,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
           unit — nothing here guesses a conversion.
         </p>
 
-        <form method="get" className="flex items-end gap-3">
+        <form method="get" className="flex flex-wrap items-end gap-3 gap-y-2">
           <input type="hidden" name="commissary" value={commissaryStoreId} />
           <label className="text-sm">
             <span className="block text-neutral-600 dark:text-neutral-400">Branch</span>
@@ -380,6 +381,6 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
           </>
         )}
       </section>
-    </main>
+    </Page>
   );
 }

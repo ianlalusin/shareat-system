@@ -3,6 +3,7 @@ import { INTEREST_METHODS, PAYMENT_FREQUENCIES, RATE_PERIODS } from '@shareat/db
 import { requireSession } from '../../lib/session';
 import { createLoanAction } from './actions';
 import { METHOD_LABEL, STATUS_LABEL, listRegister, listStores, peso, today } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Loans — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -27,7 +28,7 @@ export default async function LoansPage({
     .reduce((sum, l) => sum + Number(l.position.outstanding), 0);
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Loans</h1>
         <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
@@ -210,7 +211,7 @@ export default async function LoansPage({
           </button>
         </form>
       </section>
-    </main>
+    </Page>
   );
 }
 

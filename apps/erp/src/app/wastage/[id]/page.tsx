@@ -13,6 +13,7 @@ import {
   resolveOrderWastageAction,
   reverseAutoChargeAction,
 } from '../actions';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Order wastage — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -78,7 +79,7 @@ export default async function WastageDetailPage({
     (Date.now() - row.resolvedAt.getTime()) / 86_400_000 <= 30;
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6 p-4 sm:p-8">
+    <Page density="form">
       <div>
         <Link href={`/wastage?store=${row.storeId}`} className="text-sm underline underline-offset-4">
           ← Order wastage
@@ -196,6 +197,6 @@ export default async function WastageDetailPage({
           )}
         </section>
       )}
-    </main>
+    </Page>
   );
 }

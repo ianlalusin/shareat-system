@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requireSession } from '../../../lib/session';
 import { buildPlanAction, finalizeSectionAction, requestMapFromPullAction } from './actions';
 import { findLivePull, listOperatingLocationsForStore, listSalesDaysForStore, listStores, pullView, type PullLineView } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Daily POS usage pull — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -141,10 +142,10 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
 
   if (!storeId) {
     return (
-      <main className="mx-auto max-w-5xl p-8">
+      <Page density="table" className="">
         <h1 className="text-2xl font-semibold">Daily POS usage pull</h1>
         <p className="mt-4 text-sm text-neutral-600">This organisation has no stores yet.</p>
-      </main>
+      </Page>
     );
   }
 
@@ -162,7 +163,7 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
   const pull = pullId ? await pullView(actor.orgId, pullId) : null;
 
   return (
-    <main className="mx-auto max-w-5xl space-y-8 p-4 sm:p-8">
+    <Page density="table" className="space-y-8">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Daily POS usage pull</h1>
@@ -283,6 +284,6 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
           />
         </>
       )}
-    </main>
+    </Page>
   );
 }

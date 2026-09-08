@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requireSession } from '../../../lib/session';
 import { listStoresForAdmin } from './lib';
 import { createStoreAction } from './actions';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Stores — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -28,7 +29,7 @@ export default async function StoresPage({
   const stores = await listStoresForAdmin(actor.orgId);
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Stores</h1>
         <p className="text-sm text-neutral-500 dark:text-neutral-400">
@@ -148,6 +149,6 @@ export default async function StoresPage({
           </div>
         </form>
       </section>
-    </main>
+    </Page>
   );
 }

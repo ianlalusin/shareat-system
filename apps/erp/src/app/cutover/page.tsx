@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requireSession } from '../../lib/session';
 import { attestStepAction } from './actions';
 import { PHASE_TITLE, kindLabel, listStores, loadGaps, loadProgress, peso } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'The conversion — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -34,7 +35,7 @@ export default async function CutoverPage({
   const balanced = Math.abs(residual) < 0.005;
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+    <Page density="form">
       <div>
         <h1 className="text-2xl font-semibold">The 31 December conversion</h1>
         <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
@@ -294,6 +295,6 @@ export default async function CutoverPage({
           </div>
         </section>
       ))}
-    </main>
+    </Page>
   );
 }

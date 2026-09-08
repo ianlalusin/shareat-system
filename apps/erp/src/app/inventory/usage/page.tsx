@@ -5,6 +5,7 @@ import { requireSession } from '../../../lib/session';
 import { saveUsageDraftAction } from './actions';
 import { listStores, usageScreenData } from './lib';
 import { NewUsageForm } from './NewUsageForm';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Usage & wastage — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -36,17 +37,17 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
 
   if (!storeId) {
     return (
-      <main className="mx-auto max-w-5xl p-8">
+      <Page density="table" className="">
         <h1 className="text-2xl font-semibold">Usage &amp; wastage</h1>
         <p className="mt-4 text-sm text-neutral-600">This organisation has no stores yet.</p>
-      </main>
+      </Page>
     );
   }
 
   const { locations, departments, items, records } = await usageScreenData(actor.orgId, storeId);
 
   return (
-    <main className="mx-auto max-w-5xl space-y-8 p-4 sm:p-8">
+    <Page density="table" className="space-y-8">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Usage &amp; wastage</h1>
@@ -71,7 +72,7 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
         </div>
       )}
 
-      <form method="get" className="flex items-end gap-3">
+      <form method="get" className="flex flex-wrap items-end gap-3 gap-y-2">
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
           <select name="store" defaultValue={storeId} className={INPUT}>
@@ -152,6 +153,6 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
           </div>
         )}
       </section>
-    </main>
+    </Page>
   );
 }

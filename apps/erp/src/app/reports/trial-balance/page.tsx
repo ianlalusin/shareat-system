@@ -7,6 +7,7 @@ import { ReportFilters } from '@/components/reports/ReportFilters';
 import { TieIndicator } from '@/components/reports/TieIndicator';
 import { TrialBalanceTable } from '@/components/reports/TrialBalanceTable';
 import { CsvExportLink } from '@/components/reports/CsvExportLink';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Trial Balance — Shareat System' };
 
@@ -58,7 +59,7 @@ export default async function TrialBalancePage({
   );
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-8">
+    <Page density="wide">
       <div>
         <h1 className="text-2xl font-semibold">Trial Balance</h1>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
@@ -107,6 +108,6 @@ export default async function TrialBalancePage({
           includeYearClose={includeYearClose}
         />
       )}
-    </main>
+    </Page>
   );
 }

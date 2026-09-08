@@ -6,6 +6,7 @@ import { listStores } from '../../inventory/lib';
 import { deferDiscrepancyAction, resolveDiscrepancyAction } from './actions';
 import { requireSession } from '../../../lib/session';
 import { withOrgPrincipal } from '../../expenses/lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Transit shortfalls — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -31,10 +32,10 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
 
   if (!storeId) {
     return (
-      <main className="mx-auto max-w-5xl p-8">
+      <Page density="table" className="">
         <h1 className="text-2xl font-semibold">Transit shortfalls</h1>
         <p className="mt-4 text-sm text-neutral-600">This organisation has no stores yet.</p>
-      </main>
+      </Page>
     );
   }
 
@@ -58,7 +59,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
   const today = toBusinessDate();
 
   return (
-    <main className="mx-auto max-w-5xl p-8">
+    <Page density="table" className="">
       <h1 className="text-2xl font-semibold">Transit shortfalls</h1>
       <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
         Goods that left this store and did not arrive. They sit in <strong>1340</strong> at cost —
@@ -230,6 +231,6 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
           ))}
         </div>
       )}
-    </main>
+    </Page>
   );
 }

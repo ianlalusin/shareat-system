@@ -12,6 +12,7 @@ import {
   periodOptions,
   peso,
 } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Budgets — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -52,7 +53,7 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
   const totalSpent = budgets.reduce((t, b) => t + Number(b.consumed), 0);
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Budgets</h1>
         <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
@@ -239,7 +240,7 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
           </section>
         </>
       )}
-    </main>
+    </Page>
   );
 }
 

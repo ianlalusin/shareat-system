@@ -3,6 +3,7 @@ import { requireSession } from '../../../lib/session';
 import { getItem, itemPrices, peso, sellabilityByStore, soldAsLabel } from '../lib';
 import { whoSells } from '../../ap/lib';
 import { clearStoreSellabilityAction, setStoreSellabilityAction, updateItemFlagsAction } from '../actions';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Item — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -51,7 +52,7 @@ export default async function ItemDetailPage({
   ] as const;
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <a href="/items" className="text-sm text-neutral-500 underline underline-offset-2 dark:text-neutral-400">
           ← Items
@@ -298,6 +299,6 @@ export default async function ItemDetailPage({
           </section>
         </>
       )}
-    </main>
+    </Page>
   );
 }

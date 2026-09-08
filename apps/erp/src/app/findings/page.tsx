@@ -9,6 +9,7 @@ import {
   noteFindingView,
   selectablePeriods,
 } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Findings — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -40,7 +41,7 @@ export default async function FindingsPage({
   const soft = rows.filter((f) => f.severity === 'soft');
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h1 className="text-2xl font-semibold">Findings</h1>
@@ -141,7 +142,7 @@ export default async function FindingsPage({
           tone="soft"
         />
       )}
-    </main>
+    </Page>
   );
 }
 

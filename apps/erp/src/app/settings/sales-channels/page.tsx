@@ -6,6 +6,7 @@ import {
   updateSalesChannelAction,
 } from './actions';
 import { channelsForStore, moneyAccountNames, receivableOptions, type SalesChannelAdminRow } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Sales channels — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -53,7 +54,7 @@ export default async function SalesChannelsSettingsPage({
 
   if (!storeId) {
     return (
-      <main className="mx-auto max-w-4xl space-y-4 p-4 sm:p-8">
+      <Page density="form" className="space-y-4">
         <Crumb />
         <h1 className="text-2xl font-semibold">Sales channels</h1>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
@@ -63,7 +64,7 @@ export default async function SalesChannelsSettingsPage({
           </a>{' '}
           first — a channel belongs to a branch.
         </p>
-      </main>
+      </Page>
     );
   }
 
@@ -77,7 +78,7 @@ export default async function SalesChannelsSettingsPage({
   const retired = channels.filter((c) => !c.isActive);
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+    <Page density="form">
       <div>
         <Crumb />
         <h1 className="text-2xl font-semibold">Sales channels</h1>
@@ -167,7 +168,7 @@ export default async function SalesChannelsSettingsPage({
         channel — there is no creditable-tax account to claim it against, because this ledger is a
         management record and never a filing basis.
       </p>
-    </main>
+    </Page>
   );
 }
 

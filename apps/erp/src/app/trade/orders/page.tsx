@@ -3,6 +3,7 @@ import { requireSession } from '../../../lib/session';
 import { createOrderAction } from './actions';
 import { NewOrderForm } from './NewOrderForm';
 import { STATUS_LABEL, listStores, orderFormData, orderRegister, peso, today } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Trade orders — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -21,10 +22,10 @@ export default async function TradeOrdersPage({ searchParams }: { searchParams: 
 
   if (!storeId) {
     return (
-      <main className="mx-auto max-w-5xl p-8">
+      <Page density="table" className="">
         <h1 className="text-2xl font-semibold">Trade orders</h1>
         <p className="mt-4 text-sm text-neutral-600">This organisation has no stores yet.</p>
-      </main>
+      </Page>
     );
   }
 
@@ -32,7 +33,7 @@ export default async function TradeOrdersPage({ searchParams }: { searchParams: 
   const storeName = new Map(stores.map((s) => [s.id, s.name]));
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <h1 className="text-2xl font-semibold">Trade orders</h1>
         <Link href="/trade/returns" className="text-sm underline underline-offset-4">
@@ -57,7 +58,7 @@ export default async function TradeOrdersPage({ searchParams }: { searchParams: 
         </div>
       )}
 
-      <form method="get" className="flex items-end gap-3">
+      <form method="get" className="flex flex-wrap items-end gap-3 gap-y-2">
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
           <select
@@ -150,6 +151,6 @@ export default async function TradeOrdersPage({ searchParams }: { searchParams: 
           today={today()}
         />
       </section>
-    </main>
+    </Page>
   );
 }

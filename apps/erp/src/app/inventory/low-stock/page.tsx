@@ -5,6 +5,7 @@ import { listStores } from '../lib';
 import { setThresholdAction } from './actions';
 import { requireSession } from '../../../lib/session';
 import { withOrgPrincipal } from '../../expenses/lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Low stock — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -21,10 +22,10 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
 
   if (!storeId) {
     return (
-      <main className="mx-auto max-w-5xl p-8">
+      <Page density="table" className="">
         <h1 className="text-2xl font-semibold">Low stock</h1>
         <p className="mt-4 text-sm text-neutral-600">This organisation has no stores yet.</p>
-      </main>
+      </Page>
     );
   }
 
@@ -51,7 +52,7 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
   const thresholdByItem = new Map(thresholds.map((t) => [t.itemId, t.threshold]));
 
   return (
-    <main className="mx-auto max-w-5xl p-8">
+    <Page density="table" className="">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <h1 className="text-2xl font-semibold">Low stock</h1>
         <Link href="/inventory" className="text-sm underline underline-offset-4">
@@ -63,7 +64,7 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
         low-stock alert is indistinguishable from a real one.
       </p>
 
-      <form method="get" className="mt-6 flex items-end gap-3">
+      <form method="get" className="mt-6 flex flex-wrap items-end gap-3 gap-y-2">
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
           <select
@@ -187,6 +188,6 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
           ))}
         </tbody>
       </table>
-    </main>
+    </Page>
   );
 }

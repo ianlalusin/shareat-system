@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requireSession } from '../../../lib/session';
 import { recordCountAction } from '../actions';
 import { countedValueFor, listStores, loadCountSheet, peso } from '../lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Opening count — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -23,12 +24,12 @@ export default async function CountPage({
   const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;
   if (!storeId) {
     return (
-      <main className="mx-auto max-w-3xl p-4 sm:p-8">
+      <Page density="form" className="">
         <h1 className="text-2xl font-semibold">Opening count</h1>
         <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
           There are no stores to count yet.
         </p>
-      </main>
+      </Page>
     );
   }
 
@@ -40,7 +41,7 @@ export default async function CountPage({
   const missing = rows.filter((r) => r.quantity === null);
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6 p-4 sm:p-8">
+    <Page density="form">
       <div>
         <Link
           href="/cutover"
@@ -175,6 +176,6 @@ export default async function CountPage({
           There are no active items to count. Import the item master first.
         </p>
       )}
-    </main>
+    </Page>
   );
 }

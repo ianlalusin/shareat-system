@@ -7,6 +7,7 @@ import { peso } from '../../lib/format';
 import { requireSession } from '../../lib/session';
 import { listStores, withOrgPrincipal } from '../expenses/lib';
 import { recordOrderWastageAction } from './actions';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Order wastage — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -27,10 +28,10 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
 
   if (!storeId) {
     return (
-      <main className="mx-auto max-w-5xl p-4 sm:p-8">
+      <Page density="table" className="">
         <h1 className="text-2xl font-semibold">Order wastage</h1>
         <p className="mt-4 text-sm text-neutral-600">This organisation has no stores yet.</p>
-      </main>
+      </Page>
     );
   }
 
@@ -84,7 +85,7 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
   const matches = matchWastagesToSettlement(wastagesForMatch, settlements);
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Order wastage</h1>
         <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
@@ -93,7 +94,7 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
         </p>
       </div>
 
-      <form method="get" className="flex items-end gap-3">
+      <form method="get" className="flex flex-wrap items-end gap-3 gap-y-2">
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
           <select name="store" defaultValue={storeId} className="mt-1 rounded-md border border-neutral-300 px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950">
@@ -294,6 +295,6 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
           </div>
         </section>
       )}
-    </main>
+    </Page>
   );
 }

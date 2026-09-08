@@ -4,6 +4,7 @@ import { requireSession } from '../../../../lib/session';
 import { setPriceAction } from '../../actions';
 import { getListDetail, peso } from '../../lib';
 import { listItems } from '../../../items/lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Price list — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -31,7 +32,7 @@ export default async function PriceListPage({
   if (!list) notFound();
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <Link href="/customers/price-lists" className="text-sm underline underline-offset-2">
           ← Price lists
@@ -130,7 +131,7 @@ export default async function PriceListPage({
           </button>
         </form>
       </section>
-    </main>
+    </Page>
   );
 }
 

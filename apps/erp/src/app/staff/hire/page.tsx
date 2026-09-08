@@ -3,6 +3,7 @@ import { toBusinessDate } from '@shareat/core/datetime';
 import { requireSession } from '../../../lib/session';
 import { hireAction } from '../actions';
 import { listStores, positionsForStore, searchPersonsFor } from '../lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Hire — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -37,10 +38,10 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
 
   if (!storeId) {
     return (
-      <main className="mx-auto max-w-3xl p-8">
+      <Page density="form" className="">
         <h1 className="text-2xl font-semibold">Hire</h1>
         <p className="mt-4 text-sm text-neutral-600">This organisation has no stores yet.</p>
-      </main>
+      </Page>
     );
   }
 
@@ -51,7 +52,7 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
   ]);
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6 p-4 sm:p-8">
+    <Page density="form">
       <div>
         <a href="/staff" className="text-sm text-neutral-500 underline underline-offset-2 dark:text-neutral-400">
           ← Staff
@@ -174,6 +175,6 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
           Hire
         </button>
       </form>
-    </main>
+    </Page>
   );
 }

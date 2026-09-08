@@ -1,5 +1,6 @@
 import { requireSession } from '../../../lib/session';
 import { listUsers } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Users and roles — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -18,7 +19,7 @@ export default async function UsersPage() {
   const roleless = users.filter((u) => u.role === null).length;
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Users and roles</h1>
         <p className="text-sm text-neutral-500 dark:text-neutral-400">
@@ -94,6 +95,6 @@ export default async function UsersPage() {
         Only a super-admin can appoint an admin (bible row 116). Nobody can change their own role,
         and the org&rsquo;s last admin cannot be demoted.
       </p>
-    </main>
+    </Page>
   );
 }

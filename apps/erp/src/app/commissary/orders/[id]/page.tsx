@@ -19,6 +19,7 @@ import {
   withdrawOrderAction,
 } from './actions';
 import { BRANCH_ORDER_STAGE_LABEL, actorStoreIds, orderView, peso, today, type OrderView } from '../lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Branch order — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -73,7 +74,7 @@ export default async function BranchOrderPage({
   const goods = lines.filter((l) => l.approval === 'not_required' || l.approval === 'approved');
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <Link href={`/commissary/orders?store=${branchSide ? branch.id : commissary.id}`} className="text-sm underline underline-offset-4">
           ← Branch orders
@@ -415,7 +416,7 @@ export default async function BranchOrderPage({
       {goods.length === 0 && lines.length > 0 && (
         <p className="text-xs text-amber-700 dark:text-amber-400">Nothing on this order counts yet.</p>
       )}
-    </main>
+    </Page>
   );
 }
 

@@ -13,6 +13,7 @@ import {
   loadPostableAccounts,
   peso,
 } from '../lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Opening balances — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -42,7 +43,7 @@ export default async function OpeningPage({
   const storeName = (id: string | null) => stores.find((s) => s.id === id)?.name ?? '—';
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+    <Page density="form">
       <div>
         <Link
           href="/cutover"
@@ -274,6 +275,6 @@ export default async function OpeningPage({
           </p>
         )}
       </section>
-    </main>
+    </Page>
   );
 }

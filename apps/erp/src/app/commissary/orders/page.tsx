@@ -12,6 +12,7 @@ import {
   type CommissaryChoice,
 } from './lib';
 import { withOrgPrincipal } from '../../expenses/lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Branch orders — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -39,10 +40,10 @@ export default async function BranchOrdersPage({ searchParams }: { searchParams:
 
   if (!storeId) {
     return (
-      <main className="mx-auto max-w-5xl p-4 sm:p-8">
+      <Page density="table" className="">
         <h1 className="text-2xl font-semibold">Branch orders</h1>
         <p className="mt-4 text-sm text-neutral-600">This organisation has no stores yet.</p>
-      </main>
+      </Page>
     );
   }
 
@@ -53,7 +54,7 @@ export default async function BranchOrdersPage({ searchParams }: { searchParams:
   const store = stores.find((s) => s.id === storeId)!;
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Branch orders</h1>
         {/*
@@ -66,7 +67,7 @@ export default async function BranchOrdersPage({ searchParams }: { searchParams:
         </p>
       </div>
 
-      <form method="get" className="flex items-end gap-3">
+      <form method="get" className="flex flex-wrap items-end gap-3 gap-y-2">
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
           <select name="store" defaultValue={storeId} className={`mt-1 ${INPUT}`}>
@@ -173,7 +174,7 @@ export default async function BranchOrdersPage({ searchParams }: { searchParams:
           </table>
         </div>
       )}
-    </main>
+    </Page>
   );
 }
 

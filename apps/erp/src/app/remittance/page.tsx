@@ -20,6 +20,7 @@ import {
   storeCashPolicy,
   today,
 } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Remittance — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -43,10 +44,10 @@ export default async function RemittancePage({
 
   if (!storeId) {
     return (
-      <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
+      <Page density="table">
         <h1 className="text-2xl font-semibold">Remittance</h1>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">No stores yet.</p>
-      </main>
+      </Page>
     );
   }
 
@@ -67,7 +68,7 @@ export default async function RemittancePage({
   const heldBack = owing.filter((d) => !d.remittable);
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Remittance</h1>
         <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
@@ -199,7 +200,7 @@ export default async function RemittancePage({
 
       {/* ── Store picker ─────────────────────────────────────────────────────────────── */}
       {stores.length > 1 && (
-        <form className="flex items-end gap-2">
+        <form className="flex flex-wrap items-end gap-2 gap-y-2">
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Store</span>
             <select name="store" defaultValue={storeId} className={INPUT}>
@@ -490,7 +491,7 @@ export default async function RemittancePage({
           </p>
         </section>
       )}
-    </main>
+    </Page>
   );
 }
 

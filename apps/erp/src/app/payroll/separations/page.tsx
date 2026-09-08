@@ -2,6 +2,7 @@ import { requireSession } from '../../../lib/session';
 import { SEPARATION_CAUSES } from '@shareat/db/schema';
 import { postSeparationAction, voidSeparationAction } from './actions';
 import { cashAccountsFor, listStores, peso, preview, separationsFor, worklistFor } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Separations — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -42,10 +43,10 @@ export default async function SeparationsPage({
   const storeId = sp.store || stores[0]?.id;
   if (!storeId) {
     return (
-      <main className="mx-auto max-w-5xl space-y-4 p-4 sm:p-8">
+      <Page density="table" className="space-y-4">
         <h1 className="text-2xl font-semibold">Separations</h1>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">No store is set up yet.</p>
-      </main>
+      </Page>
     );
   }
 
@@ -62,7 +63,7 @@ export default async function SeparationsPage({
     : null;
 
   return (
-    <main className="mx-auto max-w-6xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Separations</h1>
         <p className="max-w-3xl text-sm text-neutral-600 dark:text-neutral-400">
@@ -230,7 +231,7 @@ export default async function SeparationsPage({
           ))
         )}
       </section>
-    </main>
+    </Page>
   );
 }
 

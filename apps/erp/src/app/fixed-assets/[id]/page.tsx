@@ -7,6 +7,7 @@ import { requireSession } from '../../../lib/session';
 import { disposeAssetAction, updateTermsAction } from '../actions';
 import { CATEGORY_LABEL, INTERVAL_LABEL, getAsset, listStores } from '../lib';
 import { StatusBadge } from '../page';
+import { Page } from '@/components/shell/Page';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,7 +57,7 @@ export default async function AssetDetailPage({
   const postedSet = new Set(periods);
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <a href={`/fixed-assets?${carry.toString()}`} className="text-sm underline hover:no-underline">
@@ -275,7 +276,7 @@ export default async function AssetDetailPage({
           )}
         </section>
       </div>
-    </main>
+    </Page>
   );
 }
 

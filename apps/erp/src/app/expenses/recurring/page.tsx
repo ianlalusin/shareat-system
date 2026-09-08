@@ -20,6 +20,7 @@ import {
   peso,
   today,
 } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Recurring expenses — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -70,7 +71,7 @@ export default async function RecurringExpensesPage({
   const unsetSupplier = templates.filter((t) => t.status === 'active' && !t.supplierId);
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <Link href="/expenses" className="text-sm text-neutral-500 underline hover:no-underline dark:text-neutral-400">
           ← Expenses
@@ -280,7 +281,7 @@ export default async function RecurringExpensesPage({
           </section>
         </>
       )}
-    </main>
+    </Page>
   );
 }
 

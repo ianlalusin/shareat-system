@@ -5,6 +5,7 @@ import { requireSession } from '../../../../lib/session';
 import { peso } from '../../../../lib/format';
 import { receiveDeliveryAction } from '../actions';
 import { deliveryDetail } from '../lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Delivery — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -51,7 +52,7 @@ export default async function DeliveryPage({
   const goods = doc.lines.reduce((n, l) => n + Number(l.orderedQuantity) * Number(l.unitCost), 0);
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <Link href={`/inventory/deliveries?store=${doc.storeId}`} className="text-sm underline underline-offset-4">
           ← Deliveries
@@ -217,6 +218,6 @@ export default async function DeliveryPage({
       <Link href={`/inventory?store=${doc.storeId}`} className="inline-block text-sm underline underline-offset-4">
         View stock on hand →
       </Link>
-    </main>
+    </Page>
   );
 }

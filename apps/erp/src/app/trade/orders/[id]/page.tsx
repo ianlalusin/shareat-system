@@ -5,6 +5,7 @@ import { requireSession } from '../../../../lib/session';
 import { dispatchOrderAction, receiveOrderAction, voidOrderAction } from '../actions';
 import { STATUS_LABEL, orderDetail, peso, today } from '../lib';
 import { TREATMENT_LABEL, TREATMENT_TONE } from '../../../customers/lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Trade order — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -55,7 +56,7 @@ export default async function TradeOrderPage({
   const fees = Number(order.deliveryFee) + Number(order.otherFees);
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <Link href={`/trade/orders?store=${order.storeId}`} className="text-sm underline underline-offset-4">
           ← Trade orders
@@ -277,6 +278,6 @@ export default async function TradeOrderPage({
           )}
         </form>
       )}
-    </main>
+    </Page>
   );
 }

@@ -13,6 +13,7 @@ import {
   peso,
   today,
 } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Customers — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -41,7 +42,7 @@ export default async function CustomersPage({
   const listById = new Map(priceLists.map((l) => [l.id, l]));
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Customers</h1>
         <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
@@ -233,7 +234,7 @@ export default async function CustomersPage({
           </button>
         </form>
       </section>
-    </main>
+    </Page>
   );
 }
 

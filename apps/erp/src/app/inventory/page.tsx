@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { listStores, stockSummary } from './lib';
 import { requireSession } from '../../lib/session';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Stock on hand — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -20,10 +21,10 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
   const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;
   if (!storeId) {
     return (
-      <main className="mx-auto max-w-5xl p-8">
+      <Page density="table" className="">
         <h1 className="text-2xl font-semibold">Stock on hand</h1>
         <p className="mt-4 text-sm text-neutral-600">This organisation has no stores yet.</p>
-      </main>
+      </Page>
     );
   }
 
@@ -32,7 +33,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
   const ties = drift === '0.00' || drift === '-0.00';
 
   return (
-    <main className="mx-auto max-w-5xl p-8">
+    <Page density="table" className="">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <h1 className="text-2xl font-semibold">Stock on hand</h1>
         {/* ⭐ DEF-135 (2026-09-03): rooms, deliveries, usage and counts each had a tested engine
@@ -66,7 +67,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         On-hand is a query over every movement ever recorded — there is no balance column to drift.
       </p>
 
-      <form method="get" className="mt-6 flex items-end gap-3">
+      <form method="get" className="mt-6 flex flex-wrap items-end gap-3 gap-y-2">
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
           <select
@@ -177,6 +178,6 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
           </tbody>
         </table>
       )}
-    </main>
+    </Page>
   );
 }

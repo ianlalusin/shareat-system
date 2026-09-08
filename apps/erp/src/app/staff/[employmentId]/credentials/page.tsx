@@ -6,6 +6,7 @@ import { listCredentials, MAX_TEMPLATES, type CredentialSummary } from '@shareat
 import { requireSession } from '../../../../lib/session';
 import { listStores, withOrgPrincipal } from '../../../expenses/lib';
 import { enrolCardAction, enrolFingerprintAction, revokeCredentialAction } from './actions';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Credentials — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -68,7 +69,7 @@ export default async function CredentialsPage({
   const storeName = stores.find((s) => s.id === employment.storeId)?.name ?? employment.storeId;
 
   return (
-    <main className="mx-auto max-w-2xl space-y-6 p-4 sm:p-8">
+    <Page density="form">
       <div>
         <Link
           href={`/staff/${employmentId}`}
@@ -174,6 +175,6 @@ export default async function CredentialsPage({
           </button>
         </form>
       </section>
-    </main>
+    </Page>
   );
 }

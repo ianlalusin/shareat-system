@@ -5,6 +5,7 @@ import { listStores, listActingPersons } from '../lib';
 import { requireSession } from '../../../lib/session';
 import { submitSalesDayAction, verifySalesDayAction, voidSalesDayAction } from '../actions';
 import { withOrgPrincipal } from '../../expenses/lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Sales day — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -73,7 +74,7 @@ export default async function SalesDayDetailPage({
   );
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-8">
+    <Page density="table">
       <div className="flex items-start justify-between gap-4">
         <div>
           <a
@@ -270,7 +271,7 @@ export default async function SalesDayDetailPage({
           </div>
         </form>
       )}
-    </main>
+    </Page>
   );
 }
 

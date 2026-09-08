@@ -1,6 +1,7 @@
 import { requireSession } from '../../../lib/session';
 import { setOrganizationIdentityAction } from './actions';
 import { identityView } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Organisation — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -51,7 +52,7 @@ export default async function OrganizationSettingsPage({
   ].filter((x): x is string => x !== null);
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6 p-4 sm:p-8">
+    <Page density="form">
       <div>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
           <a href="/settings" className="underline">
@@ -134,7 +135,7 @@ export default async function OrganizationSettingsPage({
         Recording a tax type here changes nothing that is calculated — no VAT is computed from it —
         and nothing produced by this system should be treated as a BIR submission.
       </p>
-    </main>
+    </Page>
   );
 }
 

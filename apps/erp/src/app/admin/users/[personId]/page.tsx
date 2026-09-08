@@ -9,6 +9,7 @@ import {
   unlinkCredentialAction,
 } from '../actions';
 import { grantableCapabilitiesFor, userDetail } from '../lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'User access — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -44,7 +45,7 @@ export default async function UserAccessPage({
   const scopedCount = stores.filter((s) => s.inScope).length;
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6 p-4 sm:p-8">
+    <Page density="form">
       <div>
         <a href="/admin/users" className="text-sm text-neutral-500 underline underline-offset-2 dark:text-neutral-400">
           ← Users and roles
@@ -298,6 +299,6 @@ export default async function UserAccessPage({
           own email and password; this only says which person that account is.
         </p>
       </section>
-    </main>
+    </Page>
   );
 }

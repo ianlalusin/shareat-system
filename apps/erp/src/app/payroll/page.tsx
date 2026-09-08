@@ -14,6 +14,7 @@ import {
   runsFor,
   slipsFor,
 } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Payroll — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -46,10 +47,10 @@ export default async function PayrollPage({
   const storeId = sp.store || stores[0]?.id;
   if (!storeId) {
     return (
-      <main className="mx-auto max-w-5xl space-y-4 p-4 sm:p-8">
+      <Page density="table" className="space-y-4">
         <h1 className="text-2xl font-semibold">Payroll</h1>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">No store is set up yet.</p>
-      </main>
+      </Page>
     );
   }
 
@@ -75,7 +76,7 @@ export default async function PayrollPage({
   const latestSlips = latest ? await slipsFor(actor.orgId, latest.id) : [];
 
   return (
-    <main className="mx-auto max-w-6xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h1 className="text-2xl font-semibold">Payroll</h1>
@@ -444,7 +445,7 @@ export default async function PayrollPage({
           ))
         )}
       </section>
-    </main>
+    </Page>
   );
 }
 

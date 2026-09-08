@@ -12,6 +12,7 @@ import {
   voidDayAction,
 } from './actions';
 import { isBlockingAnomaly } from '@shareat/domain';
+import { Page } from '@/components/shell/Page';
 
 /**
  * Plain-language names for the engine's anomaly codes.
@@ -77,7 +78,7 @@ export default async function AttendanceDayPage({
   const locked = lockedReason !== null;
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div className="space-y-1">
         <Link href="/attendance" className="text-sm underline underline-offset-2">
           ← Attendance review
@@ -119,7 +120,7 @@ export default async function AttendanceDayPage({
           <VerifyVoid day={day} locked={locked} />
         </div>
       </div>
-    </main>
+    </Page>
   );
 }
 

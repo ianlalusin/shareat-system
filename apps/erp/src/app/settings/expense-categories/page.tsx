@@ -6,6 +6,7 @@ import {
   setCategoryActiveAction,
 } from './actions';
 import { categoriesForAdmin, mappableAccounts } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Expense categories — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -49,7 +50,7 @@ export default async function ExpenseCategoriesSettingsPage({
   const blockedTotal = unmapped.reduce((n, c) => n + c.blockedDraftCount, 0);
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
           <a href="/settings" className="underline">
@@ -246,7 +247,7 @@ export default async function ExpenseCategoriesSettingsPage({
         </a>{' '}
         once they are three days old.
       </p>
-    </main>
+    </Page>
   );
 }
 

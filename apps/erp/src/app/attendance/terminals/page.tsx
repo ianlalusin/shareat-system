@@ -3,6 +3,7 @@ import { mintTerminalTokenAction, provisionTerminalAction, revokeTerminalAction 
 import { isReady, listStores, terminalsForStore, type ClockTerminalRow } from './lib';
 import { ProvisionForm } from './ProvisionForm';
 import { RepairButton } from './RepairButton';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Clock terminals — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -60,19 +61,19 @@ export default async function TerminalsPage({
 
   if (!storeId) {
     return (
-      <main className="mx-auto max-w-4xl p-8">
+      <Page density="table" className="">
         <h1 className="text-2xl font-semibold">Clock terminals</h1>
         <p className="mt-4 text-sm text-neutral-600 dark:text-neutral-400">
           This organisation has no stores yet.
         </p>
-      </main>
+      </Page>
     );
   }
 
   const terminals = await terminalsForStore(actor.orgId, actor, storeId);
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Clock terminals</h1>
         <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
@@ -94,7 +95,7 @@ export default async function TerminalsPage({
         </div>
       )}
 
-      <form method="get" className="flex items-end gap-3">
+      <form method="get" className="flex flex-wrap items-end gap-3 gap-y-2">
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
           <select name="store" defaultValue={storeId} className={SELECT}>
@@ -195,6 +196,6 @@ export default async function TerminalsPage({
           revive it; its history stays intact under its own id.
         </p>
       </section>
-    </main>
+    </Page>
   );
 }

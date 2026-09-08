@@ -1,6 +1,7 @@
 import { requireSession } from '../../../lib/session';
 import { setWastageMonitorAction } from './actions';
 import { listActivePersons, listStores, monitorView } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Wastage Monitor — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -49,13 +50,13 @@ export default async function WastageMonitorSettingsPage({
 
   if (!storeId) {
     return (
-      <main className="mx-auto max-w-3xl space-y-4 p-4 sm:p-8">
+      <Page density="form" className="space-y-4">
         <Crumb />
         <h1 className="text-2xl font-semibold">Wastage Monitor</h1>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
           This organisation has no stores yet. A Monitor belongs to a branch.
         </p>
-      </main>
+      </Page>
     );
   }
 
@@ -65,7 +66,7 @@ export default async function WastageMonitorSettingsPage({
   ]);
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6 p-4 sm:p-8">
+    <Page density="form">
       <div>
         <Crumb />
         <h1 className="text-2xl font-semibold">Wastage Monitor</h1>
@@ -178,7 +179,7 @@ export default async function WastageMonitorSettingsPage({
         </a>
         .
       </p>
-    </main>
+    </Page>
   );
 }
 

@@ -5,6 +5,7 @@ import { editSupplierAction, recordPaymentAction } from '../../actions';
 import { getSupplier, getPosition, listOpenItems, listInvoices, moneyAccountsFor, storesWithOpenItems, today } from '../../lib';
 import { SUPPLIER_CLASSIFICATIONS, SUPPLIER_STATUSES, SUPPLIER_VAT_STATUSES } from '@shareat/db';
 import { CLASSIFICATION_LABEL, VAT_STATUS_LABEL } from '../../lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Supplier — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -50,7 +51,7 @@ export default async function SupplierDetailPage({
   const wallets = storeId ? await moneyAccountsFor(orgId, storeId) : [];
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div className="flex items-start justify-between gap-4">
         <div>
           <a href="/ap/suppliers" className="text-sm text-neutral-500 underline hover:no-underline dark:text-neutral-400">
@@ -274,7 +275,7 @@ export default async function SupplierDetailPage({
           </form>
         </section>
       )}
-    </main>
+    </Page>
   );
 }
 

@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/reports/EmptyState';
 import { AgingFilters } from '@/components/reports/AgingFilters';
 import { ArAgingTable, ArAgingReconciliationIndicator, type ArAgingTableRow } from '@/components/reports/ArAgingTable';
 import { CsvExportLink } from '@/components/reports/CsvExportLink';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'AR Aging — Shareat System' };
 
@@ -54,7 +55,7 @@ export default async function ArAgingPage({
   }));
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-8">
+    <Page density="wide">
       <div>
         <h1 className="text-2xl font-semibold">AR Aging</h1>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
@@ -97,6 +98,6 @@ export default async function ArAgingPage({
       ) : (
         <EmptyState message={`No open receivables as of ${asOfDate}.`} />
       )}
-    </main>
+    </Page>
   );
 }

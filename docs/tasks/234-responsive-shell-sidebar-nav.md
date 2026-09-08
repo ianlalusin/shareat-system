@@ -193,8 +193,19 @@ top-level wrapper — a sweep replacing `mx-auto max-w-*` (and its padding) with
 > say it does — it names the *pattern*. The real surface is **22 `page.tsx` files** each carrying an
 > inline `<form method="get" className="flex items-end gap-3">`; none of the 12 overflowing routes
 > imports anything from `components/`. Scope is therefore widened by exactly this much: **the sweep
-> adds `flex-wrap` and `gap-y-2` to those 22 inline rows**, listed in the lane's READY, and the "no
-> content change" rule reads *"top-level wrappers, plus DEF-199's inline filter rows"*. ⛔ Extracting
+> adds `flex-wrap` and `gap-y-2` to those inline rows**, listed in the lane's READY, and the "no
+> content change" rule reads *"top-level wrappers, plus DEF-199's inline filter rows"*.
+>
+> ⚠️ **AS BUILT, counted from the pre-sweep source rather than from the file list** — because "22
+> rows" was the count of FILES and the edit is not uniform within them. Of the **25 `<form
+> method="get">` filter rows** in the app, **18 were unwrapped and were fixed**; the other **7
+> already carried `flex-wrap`** and were left untouched. **A further 7 edits in the same 6 files
+> were not filter rows at all** — six POST action rows (`/ap/invoices/[id]` void, `/items` approve
+> and reject, `/inventory/production/[id]` void, `/prepaid/[id]` amortise, `/remittance`'s store
+> picker) and one non-`<form>` `<div>` on `/inventory/pos-map`. **Ruled in deliberately** (2026-09-08):
+> same overflow shape, same screens, same files, nothing moved. **25 rows changed in total.**
+> ⛔ Recorded this precisely because an accurate count of a slightly wider edit is fine, and an
+> inaccurate count of a narrow one is how the next person is misled. ⛔ Extracting
 > a real `<FilterRow>` component and migrating 22 pages to it is the right end state and is NOT this
 > slice — a component migration riding inside a mechanical sweep is how a sweep becomes a regression
 > hunt. DEF-199 carries a line saying the component is still owed.

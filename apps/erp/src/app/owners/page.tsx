@@ -9,6 +9,7 @@ import {
   listStores,
   peso,
 } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Owners — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -39,7 +40,7 @@ export default async function OwnersPage({
   const stale = owners.filter((o) => o.aged && o.aged.daysOutstanding >= AGED_DAYS);
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Owners</h1>
         <p className="max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
@@ -220,7 +221,7 @@ export default async function OwnersPage({
           </button>
         </form>
       </section>
-    </main>
+    </Page>
   );
 }
 

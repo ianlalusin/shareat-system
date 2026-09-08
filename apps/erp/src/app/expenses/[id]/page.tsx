@@ -5,6 +5,7 @@ import { listStores, listActingPersons, listCategoriesGrouped } from '../lib';
 import { requireSession } from '../../../lib/session';
 import { approveExpenseAction, voidExpenseAction, updateDraftAction, deleteDraftAction } from '../actions';
 import { withOrgPrincipal } from '../lib';
+import { Page } from '@/components/shell/Page';
 
 // Derived from the repo function rather than re-declared — the table renders exactly what
 // that reader returns, so the two cannot drift.
@@ -100,7 +101,7 @@ export default async function ExpenseDetailPage({
   );
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-8">
+    <Page density="table">
       <div className="flex items-start justify-between gap-4">
         <div>
           <a href={`/expenses?${carry}`} className="text-sm text-neutral-500 underline hover:no-underline dark:text-neutral-400">
@@ -308,7 +309,7 @@ export default async function ExpenseDetailPage({
           </div>
         </form>
       )}
-    </main>
+    </Page>
   );
 }
 

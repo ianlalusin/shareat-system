@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { requireSession } from '../../../../lib/session';
 import { deleteUsageDraftAction, postUsageAction, voidUsageAction } from '../actions';
 import { usageRecordDetail } from '../lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Usage record — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -40,7 +41,7 @@ export default async function UsageRecordPage({
   const canVoid = record.status === 'posted';
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <Link href={`/inventory/usage?store=${record.storeId}`} className="text-sm underline underline-offset-4">
           ← Usage &amp; wastage
@@ -158,6 +159,6 @@ export default async function UsageRecordPage({
       <Link href={`/inventory?store=${record.storeId}`} className="inline-block text-sm underline underline-offset-4">
         View stock on hand →
       </Link>
-    </main>
+    </Page>
   );
 }

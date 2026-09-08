@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requireSession } from '../../../lib/session';
 import { createPriceListAction } from '../actions';
 import { listLists } from '../lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Price lists — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -21,7 +22,7 @@ export default async function PriceListsPage({
   const lists = await listLists(actor.orgId);
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <Link href="/customers" className="text-sm underline underline-offset-2">
           ← Customers
@@ -89,7 +90,7 @@ export default async function PriceListsPage({
           </button>
         </form>
       </section>
-    </main>
+    </Page>
   );
 }
 

@@ -9,6 +9,7 @@ import {
   loadRoster,
 } from './lib';
 import type { QueuedDay, ReviewDayRow } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Attendance review — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -51,10 +52,10 @@ export default async function AttendanceReviewPage({
   const storeId = sp.store || stores[0]?.id;
   if (!storeId) {
     return (
-      <main className="mx-auto max-w-5xl space-y-4 p-4 sm:p-8">
+      <Page density="table" className="space-y-4">
         <h1 className="text-2xl font-semibold">Attendance review</h1>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">No store is set up yet.</p>
-      </main>
+      </Page>
     );
   }
 
@@ -72,7 +73,7 @@ export default async function AttendanceReviewPage({
     'rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900';
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Attendance review</h1>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
@@ -158,7 +159,7 @@ export default async function AttendanceReviewPage({
           </div>
         )}
       </section>
-    </main>
+    </Page>
   );
 }
 

@@ -6,6 +6,7 @@ import { IncomeStatementTable } from '@/components/reports/IncomeStatementTable'
 import { ReportBasis } from '@/components/reports/ReportBasis';
 import { ReportFilters } from '@/components/reports/ReportFilters';
 import { CsvExportLink } from '@/components/reports/CsvExportLink';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Income Statement — Shareat System' };
 
@@ -58,7 +59,7 @@ export default async function IncomeStatementPage({
     result.otherIncomeExpenseLines.length > 0;
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-8">
+    <Page density="wide">
       <div>
         <h1 className="text-2xl font-semibold">Income Statement</h1>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
@@ -113,6 +114,6 @@ export default async function IncomeStatementPage({
       ) : (
         <EmptyState message={`No entries for ${fromDate} to ${toDate}.`} />
       )}
-    </main>
+    </Page>
   );
 }

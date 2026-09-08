@@ -8,6 +8,7 @@ import {
   writeOffAction,
 } from '../actions';
 import { CATEGORY_LABEL, STATUS_LABEL, getDetail, peso, thisPeriod } from '../lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Prepaid item — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -34,7 +35,7 @@ export default async function PrepaidItemPage({
   const active = item.status === 'active';
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <Link href="/prepaid" className="text-sm underline underline-offset-2">
           ← Prepaid expenses
@@ -130,7 +131,7 @@ export default async function PrepaidItemPage({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-medium">Schedule</h2>
           {active && (
-            <form action={amortiseAction} className="flex items-end gap-2">
+            <form action={amortiseAction} className="flex flex-wrap items-end gap-2 gap-y-2">
               <input type="hidden" name="prepaidItemId" value={item.id} />
               <label className="flex flex-col gap-1">
                 <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">
@@ -289,7 +290,7 @@ export default async function PrepaidItemPage({
           {item.writeOffReason}
         </div>
       )}
-    </main>
+    </Page>
   );
 }
 

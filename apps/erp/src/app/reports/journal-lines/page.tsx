@@ -3,6 +3,7 @@ import { add, money } from '@shareat/core/money';
 import { reportScope, runReport } from '../lib';
 import { EmptyState } from '@/components/reports/EmptyState';
 import { JournalLinesTable, type JournalLineRow } from '@/components/reports/JournalLinesTable';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Journal Lines — Shareat System' };
 
@@ -36,10 +37,10 @@ export default async function JournalLinesPage({
 
   if (!sp.account || !sp.from || !sp.to) {
     return (
-      <main className="mx-auto max-w-4xl space-y-6 p-8">
+      <Page density="wide">
         <h1 className="text-2xl font-semibold">Journal Lines</h1>
         <EmptyState message="Reached from an account row on another report — no account or date range was given." />
-      </main>
+      </Page>
     );
   }
 
@@ -76,7 +77,7 @@ export default async function JournalLinesPage({
   const totalCredit = add(...lines.map((l) => l.credit));
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-8">
+    <Page density="wide">
       <div>
         <h1 className="text-2xl font-semibold">
           Journal Lines{sp.code ? ` — ${sp.code}` : ''} {sp.name ?? ''}
@@ -102,6 +103,6 @@ export default async function JournalLinesPage({
       ) : (
         <EmptyState message={`No entries on this account for ${sp.from} to ${sp.to}.`} />
       )}
-    </main>
+    </Page>
   );
 }

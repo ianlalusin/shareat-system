@@ -6,6 +6,7 @@ import { ReportBasis } from '@/components/reports/ReportBasis';
 import { ReportFilters } from '@/components/reports/ReportFilters';
 import { CsvExportLink } from '@/components/reports/CsvExportLink';
 import { CashFlowTable, CashFlowReconciliationIndicator } from '@/components/reports/CashFlowTable';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Cash Flow — Shareat System' };
 
@@ -52,7 +53,7 @@ export default async function CashFlowPage({
     result.operatingLines.length > 0 || result.investingLines.length > 0 || result.financingLines.length > 0 || result.netIncome !== '0.00';
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-8">
+    <Page density="wide">
       <div>
         <h1 className="text-2xl font-semibold">Cash Flow</h1>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
@@ -107,6 +108,6 @@ export default async function CashFlowPage({
       ) : (
         <EmptyState message={`No entries for ${fromDate} to ${toDate}.`} />
       )}
-    </main>
+    </Page>
   );
 }

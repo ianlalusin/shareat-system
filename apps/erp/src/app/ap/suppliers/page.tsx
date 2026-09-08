@@ -8,6 +8,7 @@ import {
   peso,
   VAT_STATUS_LABEL,
 } from '../lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Suppliers — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -44,7 +45,7 @@ export default async function SuppliersPage({
   const inactiveCount = all.filter((s) => s.status !== 'active').length;
 
   return (
-    <main className="mx-auto max-w-6xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <h1 className="text-2xl font-semibold">Suppliers</h1>
         <p className="max-w-3xl text-sm text-neutral-600 dark:text-neutral-400">
@@ -150,7 +151,7 @@ export default async function SuppliersPage({
           </table>
         </div>
       )}
-    </main>
+    </Page>
   );
 }
 

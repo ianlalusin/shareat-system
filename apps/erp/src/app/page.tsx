@@ -8,6 +8,7 @@ import { SalesChannelTable } from '@/components/reports/SalesRollupTable';
 import { EmptyState } from '@/components/reports/EmptyState';
 import { Tile } from '@/components/dashboard/Tile';
 import { RangeForm } from '@/components/dashboard/RangeForm';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Dashboard — Shareat System' };
 
@@ -134,7 +135,7 @@ export default async function DashboardPage({
       : '');
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
+    <Page density="wide">
       <div>
         <h1 className="text-2xl font-semibold">Dashboard</h1>
         <p className="mt-1 max-w-2xl text-sm text-neutral-600 dark:text-neutral-400">
@@ -239,6 +240,6 @@ export default async function DashboardPage({
           <EmptyState message={`No sales ${fromDate} to ${toDate}.`} />
         )}
       </section>
-    </main>
+    </Page>
   );
 }

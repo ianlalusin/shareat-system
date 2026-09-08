@@ -4,6 +4,7 @@ import { toBusinessDate } from '@shareat/core/datetime';
 import { requireSession } from '../../../lib/session';
 import { createAssetAction } from '../actions';
 import { CATEGORY_LABEL, INTERVAL_LABEL, listStores, readPolicyForDisplay } from '../lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Add asset — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -25,7 +26,7 @@ export default async function NewAssetPage({
   const today = toBusinessDate();
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6 p-4 sm:p-8">
+    <Page density="form">
       <div>
         <h1 className="text-2xl font-semibold">Add asset</h1>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
@@ -145,7 +146,7 @@ export default async function NewAssetPage({
           </a>
         </div>
       </form>
-    </main>
+    </Page>
   );
 }
 

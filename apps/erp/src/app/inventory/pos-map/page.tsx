@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requireSession } from '../../../lib/session';
 import { upsertPosItemMapAction, decideMapRequestAction } from './actions';
 import { listStores, posMapScreenData } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'POS item mapping — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -28,10 +29,10 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
 
   if (!storeId) {
     return (
-      <main className="mx-auto max-w-5xl p-8">
+      <Page density="table" className="">
         <h1 className="text-2xl font-semibold">POS item mapping</h1>
         <p className="mt-4 text-sm text-neutral-600">This organisation has no stores yet.</p>
-      </main>
+      </Page>
     );
   }
 
@@ -39,7 +40,7 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
   const openRequests = requests.filter((r) => r.status === 'requested');
 
   return (
-    <main className="mx-auto max-w-5xl space-y-8 p-4 sm:p-8">
+    <Page density="table" className="space-y-8">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">POS item mapping</h1>
@@ -65,7 +66,7 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
         </div>
       )}
 
-      <form method="get" className="flex items-end gap-3">
+      <form method="get" className="flex flex-wrap items-end gap-3 gap-y-2">
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
           <select name="store" defaultValue={storeId} className={INPUT}>
@@ -166,7 +167,7 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
             <input type="checkbox" name="confirmShared" value="true" />
             <span>Confirm sharing this stock item across POS items</span>
           </label>
-          <div className="flex items-end">
+          <div className="flex flex-wrap items-end gap-y-2">
             <button type="submit" className={BTN_SM}>
               Save mapping
             </button>
@@ -215,6 +216,6 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
           </table>
         </div>
       </section>
-    </main>
+    </Page>
   );
 }

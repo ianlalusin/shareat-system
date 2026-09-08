@@ -12,6 +12,7 @@ import {
   peso,
   today,
 } from '../lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Liability — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -44,7 +45,7 @@ export default async function LiabilityPage({
   const outstanding = Number(liability.position.outstanding);
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div>
         <Link href="/liabilities" className="text-sm underline underline-offset-2">
           ← Liabilities
@@ -268,7 +269,7 @@ export default async function LiabilityPage({
           </form>
         </section>
       )}
-    </main>
+    </Page>
   );
 }
 

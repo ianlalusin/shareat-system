@@ -7,6 +7,7 @@ import { ReportBasis } from '@/components/reports/ReportBasis';
 import { BalanceSheetFilters } from '@/components/reports/BalanceSheetFilters';
 import { BalanceSheetTable, BalanceSheetTieIndicator } from '@/components/reports/BalanceSheetTable';
 import { CsvExportLink } from '@/components/reports/CsvExportLink';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Balance Sheet — Shareat System' };
 
@@ -47,7 +48,7 @@ export default async function BalanceSheetPage({
   const hasAnyActivity = result.assetLines.length > 0 || result.liabilityLines.length > 0 || result.equityLines.length > 0;
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-8">
+    <Page density="wide">
       <div>
         <h1 className="text-2xl font-semibold">Balance Sheet</h1>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
@@ -102,6 +103,6 @@ export default async function BalanceSheetPage({
       ) : (
         <EmptyState message={`No entries as of ${asOfDate}.`} />
       )}
-    </main>
+    </Page>
   );
 }

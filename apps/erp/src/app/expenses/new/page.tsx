@@ -5,6 +5,7 @@ import { createExpenseAction } from '../actions';
 import { budgetsRepo } from '@shareat/db';
 import { withOrgPrincipal } from '../lib';
 import { BudgetHint } from './BudgetHint';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'New expense — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -40,7 +41,7 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
   const groups: Array<'COGS' | 'OPEX' | 'PERSONAL' | 'CAPEX'> = ['COGS', 'OPEX', 'PERSONAL', 'CAPEX'];
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6 p-8">
+    <Page density="form">
       <div>
         <h1 className="text-2xl font-semibold">New expense</h1>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
@@ -250,6 +251,6 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
           </button>
         </form>
       )}
-    </main>
+    </Page>
   );
 }

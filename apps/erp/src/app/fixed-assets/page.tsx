@@ -12,6 +12,7 @@ import {
   listStores,
   readPolicyForDisplay,
 } from './lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Fixed assets — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -57,7 +58,7 @@ export default async function FixedAssetsPage({
   const totalBook = rows.reduce((a, r) => a + Number(r.bookValue), 0);
 
   return (
-    <main className="mx-auto max-w-6xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Fixed assets</h1>
@@ -278,7 +279,7 @@ export default async function FixedAssetsPage({
         {policy ? formatMoney(money(policy.capitalizationThreshold)) : '₱5,000.00 (default — no policy set)'}.
         Categories: {ASSET_CATEGORIES.length}.
       </p>
-    </main>
+    </Page>
   );
 }
 

@@ -6,6 +6,7 @@ import { peso } from '../../lib/format';
 import { listStores, withOrgPrincipal } from '../expenses/lib';
 import { requireSession } from '../../lib/session';
 import { recordStatutoryDiscountAction, voidStatutoryDiscountAction } from './actions';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'SC/PWD register — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -54,7 +55,7 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
   const carry = { storeId: storeId ?? '', from, to };
 
   return (
-    <main className="mx-auto max-w-6xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">Senior citizen / PWD register</h1>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
@@ -277,6 +278,6 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
           </div>
         </form>
       </section>
-    </main>
+    </Page>
   );
 }

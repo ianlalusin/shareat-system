@@ -7,6 +7,7 @@ import {
   reactivateStoreAction,
   updateStoreAction,
 } from '../actions';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Store — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -40,7 +41,7 @@ export default async function StoreDetailPage({
   // T-222 smoketest is what caught it. A refusal is a sentence, never a stack trace.
   if (!readiness) {
     return (
-      <main className="mx-auto max-w-2xl space-y-4 p-4 sm:p-8">
+      <Page density="form" className="space-y-4">
         <Link href="/admin/stores" className="text-sm underline underline-offset-2">
           ← Stores
         </Link>
@@ -51,14 +52,14 @@ export default async function StoreDetailPage({
           Only an admin or super-admin can open or close a branch. You can see this store in the
           list, but its readiness checklist and settings are not yours to read or change.
         </p>
-      </main>
+      </Page>
     );
   }
 
   const blocking = readiness.filter((c) => !c.ok && c.blocking);
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
+    <Page density="form">
       <div>
         <Link href="/admin/stores" className="text-sm underline underline-offset-2">
           ← Stores
@@ -212,6 +213,6 @@ export default async function StoreDetailPage({
           </form>
         </section>
       </div>
-    </main>
+    </Page>
   );
 }

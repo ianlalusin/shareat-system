@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { requireSession } from '../../../../lib/session';
 import { postProductionAction, voidProductionAction } from '../actions';
 import { productionRecordDetail } from '../lib';
+import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Production record — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -40,7 +41,7 @@ export default async function ProductionRecordPage({
   const warnings = Array.isArray(record.softWarnings) ? (record.softWarnings as string[]) : [];
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+    <Page density="table">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">{KIND_LABEL[record.kind] ?? record.kind}</h1>
@@ -96,7 +97,7 @@ export default async function ProductionRecordPage({
           </form>
         )}
         {record.status === 'posted' && (
-          <form action={voidProductionAction} className="flex items-end gap-2">
+          <form action={voidProductionAction} className="flex flex-wrap items-end gap-2 gap-y-2">
             <input type="hidden" name="recordId" value={record.id} />
             <label className="text-sm">
               <span className="block text-neutral-600 dark:text-neutral-400">Void reason</span>
@@ -108,7 +109,7 @@ export default async function ProductionRecordPage({
           </form>
         )}
       </section>
-    </main>
+    </Page>
   );
 }
 
