@@ -15,7 +15,8 @@ CI: Ian signs in on production with his v1 email and password, and — because n
 with his password is the one step nobody else can take; it is the milestone, and it was still his to
 do when this was written. **T-233 shipped** (DEF-219: the scheduler's per-org seam is total, ten
 jobs). Four commits today: `09a2b44` docs, `4ecc08b` T-233, `da55176` T-232 slice 1, `4093bb1`
-T-232 slice 2. Tree clean.
+T-232 slice 2; then the handoff commits and **T-234's spec** (the responsive shell Ian asked for
+at the end of the session — item 3 below). Tree clean.
 
 ## Gates at `4093bb1`
 
@@ -69,7 +70,16 @@ write specs; you approve; then they build. Two lanes' hunks in one file → one 
 2. Re-adopt the four lanes with the slices in the table. DEF-226 is the most consequential open
    defect (tracked wastage never auto-charges); DEF-224 is the migration lane — give out no other
    migration slot while D holds it.
-3. Queued behind those: DEF-218 (the harness must connect as a non-superuser, non-BYPASSRLS role —
+3. **T-234 — the responsive shell, specced and waiting for lanes** (`docs/tasks/234-responsive-shell-
+   sidebar-nav.md`, written by this orchestrator at Ian's request on 2026-09-08, his WHAT in the
+   header). Two slices, disjoint files: slice 1 the three-state sidebar (drawer / rail / full,
+   cookie-persisted, POS's shadcn sidebar as the visual benchmark, hand-rolled, no new dependency);
+   slice 2 one `<Page density>` container for every route, two-column detail pages at ≥ 1280,
+   DEF-199's filter row, and a page-container guard. Both execute a written spec → Sonnet lanes;
+   recommended: slice 1 → lane E after DEF-226 (or a fresh lane), slice 2 → lane B after DEF-222.
+   The lane reads the spec and reports defects as QUESTION before building; you own the two guards.
+   Ian asked for this explicitly; sequence it right after the defects in the table, before DEF-218.
+4. Queued behind those: DEF-218 (the harness must connect as a non-superuser, non-BYPASSRLS role —
    touches every job suite's fixture path, so alone on the tree), DEF-216 + the tutorials question,
    DEF-221 (a guard that a `*.test.ts` under any `tests/integration/` the config does not include
    fails), DEF-220, DEF-199's one `flex-wrap`, T-231's two sweeps.
