@@ -58,42 +58,42 @@
 - `1056–1057 ` 8. Repo & environment
   - `1058–1092 ` Layout
   - `1093–1102` Ports — reserved, never shared
-  - `1103–1133` Build discipline — two rules, both absolute
-  - `1134–1144` Git
-- `1145–1161` 9. Definition of done
-  - `1162–1169` Parity gate
-- `1170–1204` 10. Phase plan
-- `1205–1221` 11. Migration & ETL rules
-- `1222–1286` 12. Inherited landmines — do not repeat these
-- `1287–1480` 13. Decision log
-- `1481–1500` 14. Amendment protocol
-- `1501–1505` 15. Engineering standards — the industry practices this project follows
-  - `1506–1511` 15.1 Build order: walking skeleton first
-  - `1512–1523` 15.2 Golden-master testing — the most important practice here
-  - `1524–1532` 15.3 Strangler Fig, not big-bang cutover
-  - `1533–1537` 15.4 No dual-write
-  - `1538–1542` 15.5 Expand/contract migrations
-  - `1543–1551` 15.6 Observability from day zero, not later
-  - `1552–1556` 15.7 CI gates
-  - `1557–1561` 15.8 Backups and a tested restore
-  - `1562–1566` 15.9 Twelve-Factor config
-  - `1567–1574` 15.10 Append-only ledgers — but not event sourcing
-  - `1575–1579` 15.11 Defence in depth
-  - `1580–1608` 15.12 Skills are lenses, not assurance
-  - `1609–1615` 15.13 Reconciliation is a permanent feature
-- `1616–1620` 16. The accounting spine
-  - `1621–1652` 16.0 What we are actually fixing — the diagnosis
-  - `1653–1696` 16.1 The ten invariants — non-negotiable
-  - `1697–1711` 16.2 The oracle: how "correct" is tested
-  - `1712–1733` 16.3 The model — header + lines, not legs
-  - `1734–1753` 16.4 Deliberately simpler than ERPNext
-  - `1754–1820` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1821–1845` 16.6 What v1 already gets right — preserve the intent
-  - `1846–1867` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1868–1882` 16.8 What v1's accounting already gets right
-  - `1883–1926` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1927–1977` 16.10 Posting patterns — one canonical pattern per business event
-  - `1978–2009` 16.11 Inventory's accounting integration
+  - `1103–1147` Build discipline — two rules, both absolute
+  - `1148–1158` Git
+- `1159–1175` 9. Definition of done
+  - `1176–1183` Parity gate
+- `1184–1218` 10. Phase plan
+- `1219–1235` 11. Migration & ETL rules
+- `1236–1300` 12. Inherited landmines — do not repeat these
+- `1301–1495` 13. Decision log
+- `1496–1515` 14. Amendment protocol
+- `1516–1520` 15. Engineering standards — the industry practices this project follows
+  - `1521–1526` 15.1 Build order: walking skeleton first
+  - `1527–1538` 15.2 Golden-master testing — the most important practice here
+  - `1539–1547` 15.3 Strangler Fig, not big-bang cutover
+  - `1548–1552` 15.4 No dual-write
+  - `1553–1557` 15.5 Expand/contract migrations
+  - `1558–1566` 15.6 Observability from day zero, not later
+  - `1567–1571` 15.7 CI gates
+  - `1572–1576` 15.8 Backups and a tested restore
+  - `1577–1581` 15.9 Twelve-Factor config
+  - `1582–1589` 15.10 Append-only ledgers — but not event sourcing
+  - `1590–1594` 15.11 Defence in depth
+  - `1595–1623` 15.12 Skills are lenses, not assurance
+  - `1624–1630` 15.13 Reconciliation is a permanent feature
+- `1631–1635` 16. The accounting spine
+  - `1636–1667` 16.0 What we are actually fixing — the diagnosis
+  - `1668–1711` 16.1 The ten invariants — non-negotiable
+  - `1712–1726` 16.2 The oracle: how "correct" is tested
+  - `1727–1748` 16.3 The model — header + lines, not legs
+  - `1749–1768` 16.4 Deliberately simpler than ERPNext
+  - `1769–1835` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1836–1860` 16.6 What v1 already gets right — preserve the intent
+  - `1861–1882` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1883–1897` 16.8 What v1's accounting already gets right
+  - `1898–1941` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1942–1992` 16.10 Posting patterns — one canonical pattern per business event
+  - `1993–2024` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1104,7 +1104,21 @@ Never pass a different `-p`. Never start a second server on a port you don't own
 
 #### 🚫 RULE 1 — NEVER BUILD ON THE PRODUCTION DROPLET
 
-**No `next build`, no compile, no bundling step of any kind on `159.223.78.207`.**
+**No `next build`, no compile, no bundling step of any kind on EITHER droplet — and the two are
+not the same machine (DEF-238, corrected 2026-09-08).**
+
+| Host | What it is |
+|---|---|
+| **`159.223.46.224`** | ⭐ **OUR production droplet.** `erp2.shareat.net`, the `shareat-erp` systemd service, `/srv/shareat-shared/.env.local`, the target `DEPLOY_HOST` holds |
+| `159.223.78.207` | The **OLD SHARED** droplet — ERPNext and the POS archive DB. Shareat System has never run there; `/srv` is empty on it |
+
+⚠️ **Why this correction is in the bible rather than a footnote.** Until 2026-09-08 this rule named
+only `159.223.78.207` and called it "the production droplet", and every other document copied that.
+The failure is symmetric and both halves happened or nearly happened on the same evening: a
+diagnosis of a production sign-in failure went to the wrong box and found an empty `/srv`, and an
+engineer obeying the rule exactly as written had been told nothing whatsoever about
+`159.223.46.224` — so building on the real production host was consistent with the whole corpus.
+**Name the machine AND its role every time.** An IP with no role attached is what produced this.
 
 The droplet is **4 GB RAM** and runs **the application and (option A) the database on the
 same box**. Next.js builds are memory-hungry and routinely peak past what is free on a
@@ -1475,6 +1489,7 @@ just a patch.**
 | 184 | 2026-09-08 | ⭐ **SONNET WHEREVER THE WORK CAN BE DONE BY SONNET — a lane terminal executing an approved spec runs on Sonnet; Opus is for planning, specs and review; the orchestrator names the model in every briefing and lists the terminals to switch on the status board** | Ian, 2026-09-08, seeing four lanes on Opus while three of them executed approved specs: *"tell agents to use sonnet whenever the work can be done by sonnet… and make that a standing rule."* §3.1a already said it for subagents; this extends it to whole worker sessions. ⚠️ A session cannot switch itself — `/model` is Ian's keystroke in that terminal — so the rule is applied by the orchestrator naming the model in the briefing and by Ian switching; a lane keeps working through the switch. ⛔ The escalation bar is unchanged: "it was hard" is not a reason to move a lane up | Yes — §3.1a amended, RULES §2's model row, `CLAUDE.md`'s orchestration section, the global orchestrator skill's briefing template gains a MODEL line |
 | 185 | 2026-09-08 | ⭐ **FIRST-RUN SETUP IS THE ONE REQUEST PATH THAT OPENS AN OWNER-ROLE TRANSACTION WITHOUT A PRINCIPAL — deliberately, because there is no principal before the first organisation exists** | Orchestrator, 2026-09-08, recording lane C's finding F1 on T-232's WIP. `packages/db/src/rls/principal.ts:38` says an owner-role transaction must never exist inside a request handler; `/setup`'s action must open one, because under `shareat_app` the zero-organisation read returns zero rows on ANY database and the INSERT is refused by `WITH CHECK` — the screen can only ever work with the CLI's database posture (T-232 §2.3.2). What replaces the principal: a signed cookie carrying a uid `verifyIdToken` vouched for, a transaction-scoped advisory lock, and the zero-organisation refusal; the failure direction under a non-bypassing role is a refused INSERT, never a second organisation. ⛔ **Not a precedent.** Any other request path wanting owner role is DEF-215's door reopening; this one closes forever after the first organisation, so on every production request after day one the path is dead | Yes — the exception is named at `principal.ts` and in T-232; reversing it means a first-run token table and a principal minted before any organisation exists, which §7.1 rules out |
 | 186 | 2026-09-08 | ⭐ **AN ACTOR MAY NOT REMOVE OR DEMOTE A ROLE SENIOR TO THEIR OWN. A PEER MAY.** An `admin` may demote another `admin`; only a `super_admin` may demote a `super_admin`. Ranks are `staff` 0, `manager` 1, `admin` 2, `super_admin` 3, and the comparison uses **effective** rank — it reuses `holdsSuperAdminAuthority`, so an organisation's owner (who holds `admin` plus the four grants and cannot hold a `super_admin` row at all) can still remove a `super_admin` they appointed. ⛔ **The mnemonic "the authority to UNMAKE a role is the authority to MAKE it" is NOT this rule and must not be written down as if it were.** Appointing an `admin` requires super-admin authority (row 116), so built literally the slogan would forbid an `admin` from demoting a peer `admin` — which is the "junior only" option Ian explicitly rejected. The sentence is the rule; the slogan contradicts it, and a memorable line that contradicts the rule beneath it is worse than none, because it is the line the next person reaches for | **Ian's decision, 2026-09-08**, asked as DEF-234 and answered "peer removal, and that case is mine". The defect: the super-admin-authority check at `packages/auth/src/roles.ts:269` fired only when the **new** role was `admin`/`super_admin`, so appointing an administrator was gated and *unmaking* one was not — removing the person above you was the first move of a promotion. **His reason for rejecting "junior only":** two admins and no super_admin would mean neither could ever remove the other, turning one rare dependency into a routine one. ⛔ **The consequence he accepted out loud:** with the last `super_admin` gone, only Ian can remove them — a **third** action depending on him personally, where row 116 records two as accepted. Self-demotion needs no exception here: check 3 already refuses every self role change, so a `super_admin` stepping down needs a peer, and with none that is Ian again — the same dependency arriving from the other side. Built as T-242, which also closed a door the register never named: `manage_users` is inside `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER` and `hasActiveAdmin` matches the literal `'admin'`, so a super_admin-only organisation counts as adminless, a manager appointed then keeps that power for ever, and could later demote an admin — junior removing senior with no admin actor anywhere in the story. Reproduced through the real path before it was closed, not argued from greps | Yes, but only by choosing one of the two options Ian rejected: "junior only" (no peer removal, every administrator removal escalates to him) or leaving the hole open. The rank ladder itself is one constant and one comparison |
+| 187 | 2026-09-09 | ⭐ **A WORKER SESSION IS CLEARED ONLY AFTER ITS OWN TERMINAL SAYS SO — the orchestrator sends each lane a "SAFE TO CLEAR" notice, in that lane's terminal, when clearing it costs nothing.** The notice states *why* it is safe, not merely that it is: nothing in flight · no uncommitted work of that lane's own in the shared tree · no lane state that exists only in the session · its lane database survives and is re-attachable by name · the commit its work landed in. A lane with none of those clear is told plainly that it is **not** safe yet, and what has to happen first | **Ian's directive, 2026-09-09**, given while clearing four lanes to re-spin them. The problem it solves: from outside a terminal, "idle" and "safe to clear" look identical, and they are not the same thing. On the night this was given, three lanes were genuinely free and the fourth — lane D — held two finished, fully-verified tasks that existed **only as uncommitted changes in the shared tree**; clearing it would have destroyed nothing, but clearing it *before* the orchestrator committed would have thrown away the only session that could explain them. The lane is the only party that knows its own state, so the lane is where the notice belongs — and putting it in that terminal means Ian reads it where he is standing rather than correlating a chat message to a window. ⭐ **Corollary, same conversation:** because lanes are now cleared and re-spun rather than re-adopted, `docs/HANDOFF-TODAY.md` is written for a **cold** start — it must brief a session that has never seen this project, not remind one that has. Ian is moving the lane terminals to **`opusplan`**, which selects Opus in plan mode and Sonnet otherwise; the lane protocol should therefore have specs written **in plan mode**, so the model follows the work automatically and row 184 stops depending on anyone noticing a banner | The notice costs one message per lane at a milestone. Dropping it means going back to guessing from the outside, which is what row 187 exists to stop |
 | 178 | 2026-09-06 | ⭐ **PERMITTED UNDERTIME CREDITS THE TIME ACTUALLY WORKED, NEVER THE FULL SHIFT — permission excuses the ABSENCE, it does not pay for the missing time** — so a manager who accepts that a short day was authorised approves the PENDING OVERTIME, and does not flip the day to a full one | Ian, 2026-09-06, closing T-225 §4. ⛔ **The rejected option is the one v1 effectively implemented**, which is why this needed deciding rather than defaulting: v1 paid the full requirement on a day it could not adjudicate, and across the golden corpus it **paid more than the person was physically present in 58 of 346 sessions**. Adopting that would have been inheriting a defect wearing the costume of a policy. ⚠️ **The arithmetic that makes the choice concrete**, from `payroll/compute.ts` — pay is in DAY UNITS (`unitsFor()` returns 0.5 or 1), the hourly equivalent is `dailyRate ÷ requiredHoursPerShift`, and overtime pays `× overtimeMultiplier`. For `lipa-0359` (8h worked of a 9h requirement, 1.25 multiplier) against a daily rate **D**: approving the pending OT pays **0.92 D for 89% of the hours** — proportionate; overriding the half day pays **1.00 D for 8 hours** — not. ⭐ **And the third row is the one that made T-225 urgent at all: if nobody acts, pending overtime pays NOTHING, so the day settles at 0.50 D for eight hours of work.** | ✅ **Shipped 2026-09-06 as GUIDANCE, not as new pay code.** Both actions already existed and neither changed; what was missing was that the person holding the mouse had no way to know which one was correct. The flagged day now names the right action **and names the wrong one explicitly**, on the screen where the choice is made. ⚠️ **A decision recorded only in a task doc is a decision nobody at the point of action ever reads** — the same failure as DEF-180 (an ADR decided and never written into the function) in a different costume: here it would have been decided and never written into the *screen*. |
 
 

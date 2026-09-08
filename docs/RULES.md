@@ -24,7 +24,7 @@
 | 8 | **No implementation without a written task spec** in `docs/tasks/` | §2.7 · §3 |
 | 9 | **Every schema change is a migration.** An applied migration is **never edited** — write a new one | §2.8 |
 | 10 | **Stop the dev server before `npm run build`** — the build clobbers the `.next` it is serving | §2.9 |
-| 11 | 🚫 **NEVER BUILD ON THE PRODUCTION DROPLET** (`159.223.78.207`). 4 GB RAM; a build OOMs it and takes Postgres down. Builds run in CI | §2.10 |
+| 11 | 🚫 **NEVER BUILD ON EITHER DROPLET — and know which is which (DEF-238).** **`159.223.46.224` is OUR production host**: `erp2.shareat.net`, the `shareat-erp` service, `/srv/shareat-shared/.env.local`. **`159.223.78.207` is the OLD SHARED droplet** (ERPNext + the POS archive DB) — this project has never run there; `/srv` is empty on it. Both are small boxes and a build OOMs either. **Builds run in CI; the server receives a finished artifact.** ⚠️ Until 2026-09-08 this rule named only the old droplet and called it "the production droplet", which sent people to the wrong machine *and* said nothing about the real one | §2.10 |
 | 12 | **Port 9008 is ERPv2's alone**; 5435 for local Postgres. Never pass a different `-p` | §2.11 |
 | 13 | **An app may never import from another app.** Apps depend on `packages/`; packages never depend on apps. *Enforced by `tests/unit/app-boundaries.test.ts`* | §8 · ADR-004 |
 | 14 | **Only the Opus planner amends the bible.** An implementer reports a needed amendment and stops. **A spec that lists the bible in its Scope is a defect in the spec** | §14 · row 86 |

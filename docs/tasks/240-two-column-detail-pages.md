@@ -306,6 +306,17 @@ done-condition and not a nicety.
 1. **Below 1440 px, every one of the six pages is byte-identical in rendered order and visually
    unchanged.** The summary stays first, the content follows, spacing is the same. Proven at 390 /
    768 / 1280.
+   > ⛔ **AMENDED 2026-09-09 (orchestrator), because as written this was FALSE for two of the six
+   > and a task doc is read later as authority.** §3.6 of this same document explicitly wraps
+   > `loans` and `prepaid`'s figures-plus-caption in `<section className="space-y-3">`, to match the
+   > three pages that already had that wrapper. On those two the figures and their caption were
+   > previously *siblings* under `Page`'s own `space-y-6`, so the gap between them tightens from
+   > **24 px to 12 px at every width, phones included**. Two clauses of one approved spec
+   > contradicted each other and this is the clause that was wrong. **No code change:** it is
+   > cosmetic, it changes no order and no landmark, and it makes five pages consistent instead of
+   > three. `cash-requests`, `liabilities` and `owners` already had the section; `fixed-assets` has
+   > no caption. Found by the Opus second read, confirmed by lane B, and recorded in `4c1d765`'s
+   > commit message — which is where anyone tracing the spacing would land anyway.
 2. `document.documentElement.scrollWidth − clientWidth === 0` on all six routes at 390 / 768 / 1280
    / 1440 / 1536 — the T-234 standard, extended to the two widths this task introduces.
 3. **No table gains a horizontal scroll it did not have.** At 1440 the left column is 776 px and the

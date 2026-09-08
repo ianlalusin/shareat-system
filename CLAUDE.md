@@ -94,9 +94,26 @@ the orchestrator is cleared.** Goal: low session memory, so each orchestrator wo
 The roadmap and the board are updated at **every commit**, not only at wrap-up.
 
 **Lanes run on Sonnet unless the slice is planning, a spec, or review — Ian, 2026-09-08 (bible
-§3.1a, row 184).** The briefing names the model. A session cannot switch itself, so the board's
-"Needs you" lists the terminals for Ian to `/model sonnet`, and a lane keeps working through the
-switch. Every subagent a lane dispatches for Sonnet-able work passes `model: "sonnet"` regardless.
+§3.1a, row 184).** Every subagent a lane dispatches for Sonnet-able work passes `model: "sonnet"`
+regardless.
+
+⭐ **As of 2026-09-09 all four lane terminals run `opusplan`, and that changes the mechanism.**
+`opusplan` selects Opus **in plan mode** and Sonnet otherwise, so row 184 is now automatic — nobody
+types `/model` and no banner is needed. ⛔ **The catch, and it is load-bearing: a spec written as
+ordinary work gets SONNET.** Specs are where Opus has repeatedly earned its cost on this project
+(one lane caught that a proposed bible mnemonic contradicted the rule beneath it *while
+specifying*; another named three green-but-broken traps before writing a line). **So the briefing
+must tell the lane to write its spec IN PLAN MODE and exit plan mode to build.** A lane that
+specs outside plan mode has silently downgraded the most valuable half of its work.
+
+⭐ **Say when a lane is SAFE TO CLEAR, in that lane's own terminal — Ian, 2026-09-09 (bible row
+187).** From outside, "idle" and "safe to clear" look identical and are not the same thing. At a
+milestone the orchestrator sends each lane a notice stating *why* it is safe: nothing in flight ·
+no uncommitted work of its own in the shared tree · no lane state that lives only in the session ·
+its lane database survives and is re-attachable by name · the commit its work landed in. A lane
+that is **not** safe is told so plainly, with what must happen first. Because lanes are now cleared
+and re-spun rather than re-adopted, **`docs/HANDOFF-TODAY.md` is written for a COLD start** — it
+briefs a session that has never seen this project, not one being reminded.
 
 **Not to be confused with `/daily-review`**, which is a critic: it reviews a diff for defects, works
 on a branch, and never touches `main`. This one is a closer.
@@ -113,7 +130,12 @@ on a branch, and never touches `main`. This one is a closer.
 - **Opus plans, Sonnet codes.** No implementation without a written task spec in
   `docs/tasks/`.
 - **Port 9008** for the dev server, **5435** for local Postgres. Nothing else.
-- 🚫 **NEVER BUILD ON THE PRODUCTION DROPLET** (`159.223.78.207`). No `next build`, no
+- 🚫 **NEVER BUILD ON EITHER DROPLET, AND KNOW WHICH IS WHICH (DEF-238).** Our production host is
+  **`159.223.46.224`** — `erp2.shareat.net`, the `shareat-erp` service. The old *shared* droplet is
+  **`159.223.78.207`** (ERPNext + the POS archive DB); this project has never run there and `/srv`
+  is empty on it. Until 2026-09-08 every document here called the old box "the production droplet"
+  and named the real one nowhere, which is both how a diagnosis went to the wrong machine and how
+  someone could build on the right one in good conscience. No `next build`, no
   compile step, ever. It has 4 GB RAM and runs the app; a build OOMs the box. **Builds run
   in CI; the server receives a finished artifact only.** Build once, deploy many.
 - **Locally, stop the dev server before `npm run build`** — the build clobbers the `.next`
