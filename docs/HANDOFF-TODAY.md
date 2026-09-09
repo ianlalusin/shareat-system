@@ -18,13 +18,19 @@ pushed; nothing is uncommitted.
 - **unit** → **82 files, 1185 passed / 1 skipped, exit 0**
 - **build** → **exit 0**, 9008 free (route table lists `ƒ Proxy (Middleware)`, which is how you know
   T-246's proxy actually registered rather than merely existing as a file)
-- **integration** → ⚠️ **the full suite was still running when this was written.** Not a failure and
-  not a skip — stated precisely because it matters. Every suite touched today passed on the shared
-  database in targeted runs (468 across T-243+T-244, 22 for T-245, 455 for T-248 on its lane DB).
-  The full run is slow here (`fileParallelism: false`) and the previous orchestrator had it
-  **OS-killed for memory pressure**, which is not the same as failed. **CI (`ci.yml:68`) runs it
-  against real Postgres and is the backstop.** If you need a local number, close the lane terminals
-  first and expect it to want most of the machine.
+- **integration** → ⛔ **THE LOCAL FULL RUN STALLED AND WAS ABANDONED. There is no local number.**
+  Stated bluntly because a vague gate line is how a red gets buried. It ran ~40 minutes, produced a
+  12.8 MB log containing **only Postgres truncate NOTICEs and not one test-progress marker**, then
+  the log size froze while 33 node processes stayed alive. I stopped it. **This is not a reported
+  failure — it is an absence of evidence**, and it is the *second* session running: the previous
+  orchestrator had the same suite **OS-killed for memory pressure**.
+  - **What IS known:** every suite touched today passed in targeted runs on the **shared** database
+    — 468 across T-243+T-244, 22 for T-245 — plus 455 for T-248 on its lane DB.
+  - **CI (`ci.yml:68`) runs the same command against real Postgres and is the backstop.** ⚠️ Check
+    the run for `68ccdaa` before trusting a green tree; do not assume it.
+  - ⭐ **Worth treating as a defect rather than an inconvenience** — a suite nobody can run locally
+    stops being a gate and becomes a formality. Two sessions have now failed to complete it. If it
+    stalls for you too, file it rather than working around it a third time.
 - ⚠️ **Before any integration run: `node ~/.claude/skills/orchestrator/tools/make-test-dbs.mjs
   shareat_test`.** Migration head moved twice today (0139, 0140) and a stale DB fails as a missing
   column, which reads like a code bug.
