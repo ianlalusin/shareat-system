@@ -141,11 +141,21 @@ if [ ! -s /srv/shareat-shared/.env.local ]; then
 fi
 if [ -L /srv/shareat ] && [ -s /srv/shareat-shared/.env.local ]; then
   echo "  - A deploy has already landed and .env.local is filled in — nothing further needed here."
-  echo "    If the timers aren't enabled yet:"
+  echo "    If the timers aren't enabled yet, run these — the list is DERIVED from the units just"
+  echo "    installed, never hand-written (DEF-240):"
+  # ⛔ DEF-240. This was a hand-written list of five while SIX timers shipped, so T-216's
+  # recurring-expense-draft and T-178's order-wastage-backstop were installed by the glob above and
+  # then omitted from the only instruction telling anyone to arm them. Exactly DEF-231's defect,
+  # one line further down: the *install* loop was globbed and this list was not, so re-running the
+  # script and following its own output still left two timers dead. A list has to be edited by
+  # whoever adds a unit; a glob cannot be forgotten.
+  # ⚠️ Only `shareat-erp.service` is enabled directly — every other *.service is started by its
+  # matching *.timer, so enabling those too would run each job once at boot for no reason.
   echo "      systemctl enable --now shareat-erp.service"
-  echo "      systemctl enable --now shareat-firestore-relay.timer"
-  echo "      systemctl enable --now shareat-attendance-sweep.timer"
-  echo "      systemctl enable --now shareat-month-end.timer"
-  echo "      systemctl enable --now shareat-finding-observation.timer"
+  for f in "$UNIT_DIR"/shareat-*.timer; do
+    [ -e "$f" ] || continue
+    echo "      systemctl enable --now $(basename "$f")"
+  done
   echo "    Then verify each is actually armed — 'systemctl list-timers' — per docs/ops/README.md."
+  echo "    ⚠️ 'installed' is not 'armed': this script INSTALLS every unit and enables NONE of them."
 fi
