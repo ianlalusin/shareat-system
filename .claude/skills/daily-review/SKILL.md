@@ -122,7 +122,8 @@ this range's diff unless the diff demonstrably caused them, and **auto-fix (§5)
 is skipped entirely this run** — fixing on top of a red baseline makes "the fix
 went green" unprovable.
 
-Never touch port 9008's running server or the production droplet.
+Never touch port 9008's running server, or either droplet — `159.223.46.224` (our production
+host, `erp2.shareat.net`) or `159.223.78.207` (the old shared box). DEF-238.
 
 ## 3. Review the diff as a system
 

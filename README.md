@@ -66,8 +66,10 @@ npm run build                  # stop the dev server first
 ## Non-negotiables
 
 1. **`ERP-rebuild` is READ-ONLY.** Live production, owned by someone else. Never modify it.
-2. 🚫 **Never build on the production droplet.** Builds run in CI; the server receives a
-   finished artifact only. Build once, deploy many.
+2. 🚫 **Never build on EITHER droplet — and know which is which (DEF-238).** `159.223.46.224`
+   is **our production host** (`erp2.shareat.net`); `159.223.78.207` is the **old shared** box
+   (ERPNext + the POS archive DB), which this project has never run on. Builds run in CI; the
+   server receives a finished artifact only. Build once, deploy many.
 3. **Port 9008** for dev, **5435** for local Postgres. Nothing else.
 4. **Money is never a float.** `numeric` in the database, integer centavos in code.
 5. **No client-side-only authorization.** Every gate exists server-side.

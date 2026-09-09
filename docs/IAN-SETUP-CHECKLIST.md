@@ -97,7 +97,8 @@ If it says `command not found`, add the install's `bin` folder to PATH
 ## ☐ TASK 3 — Tell me what's on the droplet (~5 min)
 
 Before we plan its second life, I need to know what's already there. SSH in
-(`ssh root@159.223.78.207`) and run:
+(`ssh root@159.223.78.207` — the **old shared** droplet running ERPNext and the POS archive DB,
+**not** our production host `159.223.46.224`; DEF-238) and run:
 
 ```bash
 systemctl list-units --type=service --state=running --no-pager | head -40

@@ -72,8 +72,13 @@ opening it. Read them as *requirements*, not as design (bible section 1.2b).
    every recursive search.
 3. **An app may never import from another app.** Apps depend on `packages/`; packages never
    depend on apps. Breaking this silently rebuilds the coupling ADR-003 deleted.
-4. **Never build on the production droplet** (`159.223.78.207`). It has 4 GB RAM and runs the
-   app; a build OOMs the box. Builds run in CI.
+4. 🚫 **Never build on EITHER droplet — and know which is which (DEF-238).**
+   **`159.223.46.224` is OUR production host** (`erp2.shareat.net`, the `shareat-erp` service,
+   `/srv/shareat-shared/.env.local`). **`159.223.78.207` is the OLD SHARED droplet** (ERPNext +
+   the POS archive DB) — this project has never run there and `/srv` is empty on it. Both are
+   4 GB boxes and a build OOMs either. **Builds run in CI; the server receives a finished
+   artifact.** Name the machine *and* its role every time: an IP with no role attached is what
+   sent a live diagnosis to the wrong box on 2026-09-08.
 5. **Locally, stop the dev server before `npm run build`** — the build clobbers the `.next`
    the dev server is serving, producing unstyled pages and phantom errors.
 

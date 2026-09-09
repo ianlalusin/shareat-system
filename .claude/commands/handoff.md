@@ -28,5 +28,7 @@ Do not start writing feature code until steps 1–4 are done and reported.
 
 Three rules you must never break:
 - `ERP-rebuild` is read-only; it is live production owned by someone else.
-- Never run a build on the production droplet (`159.223.78.207`) — builds run in CI.
+- Never run a build on EITHER droplet (DEF-238): `159.223.46.224` is **our production host**
+  (`erp2.shareat.net`), `159.223.78.207` is the **old shared** box this project has never run on.
+  Builds run in CI.
 - Port 9008 for dev, 5435 for Postgres. Nothing else.

@@ -47,8 +47,8 @@ missing or stale:
 - Never amend an applied migration. `npm run build` only when
   `netstat -ano | grep -E ":9008.*LISTEN"` shows port 9008 free; otherwise
   report "build: skipped — dev server live on 9008". Never touch the running
-  dev server, port 5435's data destructively, or the production droplet
-  (159.223.78.207).
+  dev server, port 5435's data destructively, or EITHER droplet — 159.223.46.224
+  (our production host) or 159.223.78.207 (the old shared box). DEF-238.
 - Verify, do not claim: report the real output of `npm run typecheck`,
   `npm test`, `npm run test:integration` (and the build when it ran). Blocked
   beats falsely clean.

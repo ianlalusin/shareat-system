@@ -39,7 +39,7 @@ pushed back on cost and supplied real specs, which changed the analysis.
 
 | Asset | Spec |
 |---|---|
-| **SharEat-Droplet** | SGP1 (Singapore) · **4 GB RAM · 80 GB disk** · `159.223.78.207` · ~$20/mo, already paid |
+| **SharEat-Droplet** — ⚠️ the **OLD SHARED** box, *not* our production host (DEF-238) | SGP1 (Singapore) · **4 GB RAM · 80 GB disk** · `159.223.78.207` · ~$20/mo, already paid. Runs ERPNext + the POS archive DB. Shareat System has **never** run here; see the amendment below — production is `159.223.46.224` |
 | **Spaces bucket** | `shareat-erp-backups` · SGP1 · 544 items / 1.74 GiB · **already in active use** |
 
 Two facts this changes:
@@ -273,7 +273,7 @@ offload it then load my new project to my DO?"*
 | Phase | What happens | Where | Cost |
 |---|---|---|---|
 | **Now → cutover** | Build and test Shareat System entirely | Local machine — Postgres 5435, app on 9008 (§4) | $0, zero risk to the live droplet |
-| **At cutover** | Retire the Frappe/ERPNext stack, reclaim the droplet, deploy Shareat System onto it | The existing SharEat-Droplet (`159.223.78.207`) | Reuses hardware already paid for |
+| **At cutover** | ⛔ **SUPERSEDED — this is not what happened.** The plan was to retire the Frappe/ERPNext stack, reclaim the old box and deploy onto it | ~~The existing SharEat-Droplet (`159.223.78.207`)~~ → in fact a **new, dedicated** droplet, `shareat-system-prod` (**`159.223.46.224`**), see the amendment below | Reuses hardware already paid for |
 
 **Confirmed live on the droplet 2026-09-04** (read-only check, nothing changed): 2 vCPU / 3.8 GB
 RAM, 1.8 GB used / ~2 GB free / 392 MB already in swap; 77 GB disk, 20 GB used. 11

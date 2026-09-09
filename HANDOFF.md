@@ -31,8 +31,13 @@ and the landmines that must never be repeated.
 
 1. **`ERP-rebuild` is READ-ONLY.** It is live, it is owned by someone else. Never modify
    it, never branch it, never run `git` in it. Read it for reference only.
-2. **NEVER BUILD ON THE PRODUCTION DROPLET.** No `next build`, no compile step, on
-   `159.223.78.207`. It has 4 GB RAM and runs the app; a build OOMs it. Builds run in CI.
+2. 🚫 **NEVER BUILD ON EITHER DROPLET — AND KNOW WHICH IS WHICH (DEF-238).** No `next build`,
+   no compile step, on **`159.223.46.224`** (⭐ **our production host** — `erp2.shareat.net`, the
+   `shareat-erp` service) or on **`159.223.78.207`** (the **old shared** droplet — ERPNext + the
+   POS archive DB; this project has never run there). Both have 4 GB RAM; a build OOMs either.
+   Builds run in CI. ⚠️ Until 2026-09-08 this rule named only the old box and called it "the
+   production droplet", so obeying it as written told you nothing about the machine that
+   actually serves the app.
 3. **Never touch `webapps\inactive projects`** if it exists on this machine. Retired work.
 
 ---
