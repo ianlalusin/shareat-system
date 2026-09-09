@@ -42,6 +42,7 @@ import {
   authorize,
   assignRole,
   elevateManager,
+  grantCapabilityAsActor,
   AuthorizationError,
   CAPABILITIES,
   CAPABILITY_MATRIX,
@@ -757,6 +758,85 @@ describe('T-248 — DEF-237: elevated grants are revoked when an administrator a
     const secondAdmin = await insertPerson(org, 'Second Admin');
     const second = await asPerson(org, (tx) => assignRole(tx, { personId: secondAdmin, orgId: org, role: 'admin', grantedBy: firstAdmin }));
     expect(second.revokedElevatedGrants).toEqual([]);
+  });
+
+  it("⭐ case 12 (lane D follow-up): a hand-grant of a capability already held via elevation is not left sweepable", async () => {
+    // The hole: `grantCapability`'s idempotent branch used to return an already-active row
+    // untouched, so a deliberate hand-grant of a capability the target already held as
+    // 'elevation' left the row tagged 'elevation' — swept on the next admin arrival exactly
+    // as if nobody had ever granted it deliberately. Reachable because `grant_capability`
+    // itself is `{ admin: true, manager: false }`, so BOTH managers below hold it purely
+    // through the adminless-org fallback, and `grantCapabilityAsActor`'s self-check allows
+    // M1 to grant M2 (never M1 to grant themselves).
+    const org = await insertOrg('t248-idempotent-upgrade');
+    const m1 = await insertPerson(org, 'Elevated Manager One');
+    const elevated1 = await asPerson(org, (tx) => assignRole(tx, { personId: m1, orgId: org, role: 'manager', grantedBy: null }));
+    expect(elevated1.elevatedGrants).toContain('grant_capability' as Capability);
+
+    const m2 = await insertPerson(org, 'Elevated Manager Two');
+    const elevated2 = await asPerson(org, (tx) => assignRole(tx, { personId: m2, orgId: org, role: 'manager', grantedBy: null }));
+    expect(elevated2.elevatedGrants).toContain('manage_users' as Capability);
+
+    const [before] = await sql<{ grant_source: string | null }[]>`
+      select grant_source from person_grants where person_id = ${m2} and grant_name = 'manage_users'
+    `;
+    expect(before!.grant_source).toBe('elevation');
+
+    // M1 deliberately hand-grants M2 the SAME capability M2 already holds via elevation.
+    await asPerson(org, (tx) =>
+      grantCapabilityAsActor(tx, { personId: m1, orgId: org }, { personId: m2, capability: 'manage_users' }),
+    );
+
+    const [after] = await sql<{ grant_source: string | null; revoked_at: Date | null }[]>`
+      select grant_source, revoked_at from person_grants where person_id = ${m2} and grant_name = 'manage_users'
+    `;
+    // ⛔ The whole point: a deliberate act by an authorised actor is new evidence, and must
+    // move this row OUT of the sweepable set — never leave it silently tagged 'elevation'.
+    expect(after!.grant_source).toBe('grant');
+    expect(after!.revoked_at).toBeNull();
+
+    const admin = await insertPerson(org, 'New Admin');
+    await asPerson(org, (tx) => assignRole(tx, { personId: admin, orgId: org, role: 'admin', grantedBy: null }));
+
+    const [survived] = await sql<{ revoked_at: Date | null }[]>`
+      select revoked_at from person_grants where person_id = ${m2} and grant_name = 'manage_users'
+    `;
+    expect(survived!.revoked_at).toBeNull();
+  });
+
+  it('⭐ case 13 (lane D follow-up): the admin-arrival sweep is scoped to the arriving org by its OWN query, not merely masked by RLS', async () => {
+    // Finding #2 of the read-only review: every other T-248 case builds ONE org and runs
+    // under `asPerson`, so RLS's own org scoping (the `person_..._via_person` policy, keyed
+    // on `app.org_id`) would mask a regression in `revokeElevationGrantsForOrg`'s own
+    // `exists(...)` correlation — the test would still pass even if the application-code
+    // correlation were dropped, because RLS would independently refuse the cross-org write.
+    // Bible §15.11: no layer may be the only one for a given risk. Running with NO org
+    // principal — the base connection role, no `set local role shareat_app`, no
+    // `app.org_id` — removes that backstop, so this proves the application code's OWN
+    // scoping, not merely that RLS happens to cover for it.
+    const orgA = await insertOrg('t248-scope-a');
+    const orgB = await insertOrg('t248-scope-b');
+    const managerA = await insertPerson(orgA, 'Org A Elevated Manager');
+    const managerB = await insertPerson(orgB, 'Org B Elevated Manager');
+    await asPerson(orgA, (tx) => assignRole(tx, { personId: managerA, orgId: orgA, role: 'manager', grantedBy: null }));
+    await asPerson(orgB, (tx) => assignRole(tx, { personId: managerB, orgId: orgB, role: 'manager', grantedBy: null }));
+
+    const revoked = await transaction((tx) =>
+      accessRepo.revokeElevationGrantsForOrg(tx, orgA, 'case 13 — org-scoping proof'),
+    );
+
+    expect(revoked.every((g) => g.personId === managerA)).toBe(true);
+    expect(revoked.some((g) => g.personId === managerB)).toBe(false);
+
+    const [rowA] = await sql<{ revoked_at: Date | null }[]>`
+      select revoked_at from person_grants where person_id = ${managerA} and grant_name = 'manage_users'
+    `;
+    const [rowB] = await sql<{ revoked_at: Date | null; grant_source: string | null }[]>`
+      select revoked_at, grant_source from person_grants where person_id = ${managerB} and grant_name = 'manage_users'
+    `;
+    expect(rowA!.revoked_at).not.toBeNull();
+    expect(rowB!.revoked_at).toBeNull();
+    expect(rowB!.grant_source).toBe('elevation');
   });
 
   it('⚠️ the CHECK constraint refuses a revoked row with a NULL or blank reason — proven raw, not inherited from T-239', async () => {

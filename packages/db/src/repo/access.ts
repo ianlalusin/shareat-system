@@ -385,24 +385,65 @@ export interface GrantRow {
  */
 export type GrantSource = 'elevation' | 'owner' | 'grant';
 
+/**
+ * ⭐ **T-248 follow-up — lane D's read-only review, finding #1, confirmed real by the
+ * orchestrator.** Ranks how eligible a `grantSource` is for the admin-arrival sweep: lower
+ * is MORE eligible. `grantCapability`'s idempotent branch below may only ever move a stored
+ * `grantSource` DOWN this list (more evidence, less sweepable), **never up** — that one
+ * invariant is the whole safety argument for not turning the branch into a plain overwrite.
+ *
+ * `null` (a row written before migration 0140, provenance unknown) ranks alongside
+ * `'elevation'`: the sweep's `WHERE grant_source = 'elevation'` already excludes it either
+ * way, but a later deliberate `'grant'`/`'owner'` call IS real evidence over "unknown
+ * origin," so it still upgrades — the direction stays downward on this rank, only the
+ * starting point differs from `'elevation'`.
+ */
+const GRANT_SOURCE_RANK: Readonly<Record<'elevation' | 'owner' | 'grant', number>> = {
+  elevation: 0,
+  grant: 1,
+  owner: 1,
+};
+
+function grantSourceRank(source: GrantSource | null): number {
+  return source === null ? 0 : GRANT_SOURCE_RANK[source];
+}
+
 /** Grants one capability. Idempotent against an ALREADY-ACTIVE identical grant (the
  * partial unique index would otherwise reject a second "elevate this manager" call); a
  * previously revoked grant is a distinct row, and re-granting inserts a new one rather
  * than reviving the old — the old row's revocation date stays intact and queryable.
  *
- * ⚠️ On the idempotent (already-active) branch, `grantSource` is NOT re-written even if the
- * caller passes a different one — the existing row's provenance is the true one; a second call
- * with a different reason is not evidence the first was wrong. */
+ * ⭐ **T-248 follow-up.** On the idempotent (already-active) branch, `grantSource` is
+ * re-written ONLY when the incoming source outranks the stored one on `GRANT_SOURCE_RANK`
+ * (strictly less sweepable) — e.g. stored `'elevation'`, incoming `'grant'`: a deliberate
+ * hand-grant of a capability the target already held via the auto-elevation fallback is
+ * real new evidence and must not be left tagged as still-sweepable. The reverse, and every
+ * same-rank call, is UNCHANGED from before: the existing row's provenance stands, because a
+ * second call is not evidence the first was wrong.
+ *
+ * ⛔ **Why this had to change, concretely.** `grant_capability` is itself
+ * `{ admin: true, manager: false }`, so an auto-elevated manager holds it — meaning one
+ * elevated manager can `grantCapabilityAsActor` a capability to ANOTHER elevated manager who
+ * already holds it as `'elevation'`. Before this fix, that hand-grant vanished into the
+ * idempotent branch leaving `grantSource` at `'elevation'`, and the next admin arrival swept
+ * it exactly as if the deliberate act had never happened — the precise guarantee T-248
+ * exists to provide, not holding. */
 export async function grantCapability(
   tx: Tx,
   input: { personId: string; grantName: string; grantedBy: string | null; grantSource: GrantSource },
 ): Promise<{ id: string }> {
   const [existing] = await tx
-    .select({ id: personGrants.id })
+    .select({ id: personGrants.id, grantSource: personGrants.grantSource })
     .from(personGrants)
     .where(and(eq(personGrants.personId, input.personId), eq(personGrants.grantName, input.grantName), isNull(personGrants.revokedAt)))
     .limit(1);
-  if (existing) return existing;
+  if (existing) {
+    const existingSource = existing.grantSource as GrantSource | null;
+    if (grantSourceRank(input.grantSource) > grantSourceRank(existingSource)) {
+      await tx.update(personGrants).set({ grantSource: input.grantSource }).where(eq(personGrants.id, existing.id));
+    }
+    return { id: existing.id };
+  }
 
   const [row] = await tx
     .insert(personGrants)

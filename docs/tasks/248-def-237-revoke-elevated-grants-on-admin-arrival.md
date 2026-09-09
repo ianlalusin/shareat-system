@@ -301,6 +301,59 @@ decision than the one Ian made.
 - **Any change to `assignRoleAsActor`'s authority checks, the rank ladder, or the lockout
   guard.** Untouched — this task only adds a side effect after a role write already succeeded.
 
+## 10. Lane D follow-up — the read-only review, and what it changed
+
+Lane D reviewed commit `ae8262e` cold, read-only, per the orchestrator's brief. Five findings;
+two became real changes here, three were ruled on without a code change.
+
+**Fix 1 — built.** `grantCapability`'s idempotent (already-active) branch never re-wrote
+`grantSource`, and `grant_capability` is itself `{ admin: true, manager: false }` — inside
+`ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER` — so an auto-elevated manager holds it. That opened an
+end-to-end path the task's own Goal line rules out: adminless org, managers M1 and M2 both
+auto-elevated (both hold `grant_capability` as `'elevation'`), M1 deliberately hand-grants M2 a
+capability M2 already held as `'elevation'` (`grantCapabilityAsActor`'s self-check allows this —
+it only refuses granting to yourself), the idempotent branch kept the stale `'elevation'` tag,
+and the next admin arrival swept a grant an administrator-authorised actor had just deliberately
+made. `packages/db/src/repo/access.ts` now ranks `grantSource` by how eligible it is for the
+sweep (`elevation`/`NULL` = 0, `grant`/`owner` = 1) and re-tags the existing row on the idempotent
+branch **only when the incoming source strictly outranks the stored one** — a monotone upgrade,
+never a downgrade, so finding #3 (the general "idempotent doesn't rewrite" behaviour is correct
+for everything else) stays true. `NULL → 'grant'`/`'owner'` upgrades too: a deliberate act today
+is real evidence over "predates tracking," and the direction is still downward on the rank.
+
+**Fix 2 — proven, not changed.** `revokeElevationGrantsForOrg`'s org-scoping was already correct
+(explicit `exists(...)` correlation through `persons`), but every existing T-248 test ran one org
+at a time under RLS, so a regression to an uncorrelated subquery would have passed unnoticed — RLS
+would have refused the cross-org write on the application code's behalf, masking the bug. Case 13
+runs with **no org principal** (the base connection role, no `set local role shareat_app`, no
+`app.org_id`) so RLS is not in play, proving the application code's own correlation. Verified the
+test actually catches a regression: temporarily replaced the correlated `exists(...)` with an
+uncorrelated one, watched case 13 fail (and only case 13 — 415/416 still passed), reverted, all
+457 green again. `git diff` confirmed clean before committing — no trace of the temporary break.
+
+**Tests added** (`packages/auth/tests/integration/authorize.test.ts`, inside the existing T-248
+`describe` block): case 12 (the hand-grant-on-idempotent-branch hole, red before Fix 1 / green
+after) and case 13 (the two-org scoping proof, red against a deliberately uncorrelated subquery /
+green against the real one).
+
+**Finding #3 (ruled — no change).** `roles.ts:149-155`'s claim that the unconditional sweep
+"cleans up a stray elevation grant on the appointee's own person" is real but reachable only
+through the ungated `assignRole` (CLI/seed) — not through `assignRoleAsActor`, since promoting an
+already-elevated manager to admin needs an actor with super-admin authority, which means the org
+already had one, so the sweep would have fired earlier. Comment softened to say so; no test added
+for a path `assignRoleAsActor` cannot reach.
+
+**Finding #4 (ruled — orchestrator's to fix).** Only two of the three message extras in
+`apps/erp/src/app/admin/users/actions.ts` can ever co-fire (`elevatedGrants` needs
+`role==='manager'`; the other two need admin/super_admin), confirmed in the browser: *"Role
+updated, and granted store scope for 4 store(s), and revoked 1 temporary grant(s) from 1
+manager(s), now that this org has an administrator."* Grammatical as written. `actions.ts` is
+outside this lane's scope — the orchestrator owns the comment fix there.
+
+**Finding #5 (ruled — register, not this task).** `grantsForPerson` (`access.ts`) selects neither
+`grantSource` nor `revokeReason`, so `/admin/users` cannot show a person why a grant is gone. Real
+gap, logged by the orchestrator alongside the §6 reason-field follow-up — not built here.
+
 ## Done when
 
 Migration applies cleanly on a lane database, verified against `pg_constraint`/`information_schema`
