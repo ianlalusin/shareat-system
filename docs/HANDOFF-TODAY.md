@@ -1,179 +1,171 @@
-# Handoff — 2026-09-09 — for the NEXT ORCHESTRATOR
+# Handoff — 2026-09-09 (evening) — for the NEXT ORCHESTRATOR
 
-> **You are taking over as the ORCHESTRATOR of a four-lane team, and this time the lanes are COLD.**
-> All four worker terminals have been cleared and re-spun on `opusplan`. They remember nothing —
-> **brief them from scratch**, do not "re-adopt" them. That is a change from every previous handoff
-> and it is deliberate (bible row 187).
->
-> Ian invokes `/orchestrator shareat system` in your terminal himself; the skill is user-invocation
-> only — run the role from this file until he does.
-
-## ⭐ The milestone was reached: production sign-in WORKS
-
-Ian signed in on **https://erp2.shareat.net** with his real v1 email and password, created the
-organisation from `/setup`, and is inside the app. That had been item 1 for two days. The window in
-which any account in v1's Firebase project could have claimed the organisation is now closed.
-
-It failed first, and the diagnosis is worth carrying because none of it was in the code:
-
-| Fault | What was wrong |
-|---|---|
-| `NEXT_PUBLIC_FIREBASE_API_KEY` | **The GitHub secret had never been created.** A missing secret interpolates to `""`, `next build` inlines the empty string, the artifact ships and the workflow goes green |
-| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` / `_PROJECT_ID` | Pointed at **`shareat-hub-v2`** — the POS/storage project — instead of the identity project `studio-7300228488-a394e`. Every correct password would have come back unverifiable |
-| the project id's value | Carried a **trailing newline** from a paste into the GitHub web form |
-| the droplet's `FIREBASE_PROJECT_ID` | Also `shareat-hub-v2`. The browser and the server must name the same project |
-
-All four are fixed and **verified by reading the deployed JS chunk back**, not by trusting the green
-tick. That habit is the point: `curl` the bundle and grep for the inlined values.
-
-## ⛔ Read this before you brief anybody — two rules changed today
-
-**1. All four lanes run `opusplan`.** It selects Opus **in plan mode** and Sonnet otherwise, so bible
-row 184 is now automatic and nobody types `/model` any more. ⛔ **But a spec written as ordinary work
-gets SONNET.** Specs are where Opus has repeatedly paid for itself here — one lane caught that a
-proposed bible mnemonic contradicted the rule beneath it *while specifying*; another named three
-green-but-broken traps before writing a line. **Your briefing must tell the lane to write its spec IN
-PLAN MODE and exit plan mode to build.** A lane that specs outside plan mode has silently downgraded
-the most valuable half of its work.
-
-**2. Say when a lane is SAFE TO CLEAR, in that lane's own terminal** (bible row 187, Ian's directive).
-From outside, "idle" and "safe to clear" look identical and are not the same thing. State *why* it is
-safe: nothing in flight · no uncommitted work of its own in the shared tree · no lane state that
-lives only in the session · its lane DB survives and is re-attachable by name · the commit its work
-landed in. Last night three lanes were free and the fourth held two finished, fully-verified tasks
-that existed **only as uncommitted changes in the shared tree**.
+> **You are taking over as ORCHESTRATOR of a four-lane team, and the lanes are COLD.**
+> Brief them from scratch — do not "re-adopt" them (bible row 187). Ian invokes
+> `/orchestrator shareat system` in your terminal himself; the skill is user-invocation only.
+> Run the role from this file until he does.
 
 ## Where things stand
 
-`main` is at **`5116c66`** plus this wrap-up commit, pushed, **tree clean, every lane cleared**.
-Production is live and running `c598517`.
+**Six tasks shipped today** (T-243, T-244, T-245, T-246, T-247, T-249) and **one is parked as
+committed WIP** (T-248). Production is live and unchanged. **Both droplet timers are finally armed
+AND proven working** — that item had been open on Ian's board since 7 Sep. `main` is green and
+pushed; nothing is uncommitted.
 
-Six commits since the previous handoff. **Four tasks shipped — T-239, T-240, T-241, T-242** — one
-defect decided by Ian and written into the bible, and four defects filed (DEF-235, DEF-236, DEF-237,
-DEF-238).
+## Gates at `f61bd7f`
 
-## Gates
+- **typecheck** `--incremental false` → **exit 0**
+- **unit** → **82 files, 1185 passed / 1 skipped, exit 0**
+- **build** → **exit 0**, 9008 free (route table lists `ƒ Proxy (Middleware)`, which is how you know
+  T-246's proxy actually registered rather than merely existing as a file)
+- **integration** → ⚠️ **the full suite was still running when this was written.** Not a failure and
+  not a skip — stated precisely because it matters. Every suite touched today passed on the shared
+  database in targeted runs (468 across T-243+T-244, 22 for T-245, 455 for T-248 on its lane DB).
+  The full run is slow here (`fileParallelism: false`) and the previous orchestrator had it
+  **OS-killed for memory pressure**, which is not the same as failed. **CI (`ci.yml:68`) runs it
+  against real Postgres and is the backstop.** If you need a local number, close the lane terminals
+  first and expect it to want most of the machine.
+- ⚠️ **Before any integration run: `node ~/.claude/skills/orchestrator/tools/make-test-dbs.mjs
+  shareat_test`.** Migration head moved twice today (0139, 0140) and a stale DB fails as a missing
+  column, which reads like a code bug.
 
-typecheck **exit 0** (⚠️ use `--incremental false` — a stale `tsconfig.tsbuildinfo` on this shared
-tree reports phantom errors on a file a peer lane is mid-edit; it cost two lanes a false "the tree is
-not committable" report yesterday) · unit **77 files, 1163 passed / 1 skipped** · build **exit 0**
-with 9008 free · integration **green in CI on `5116c66`** — ⚠️ stated precisely because it matters:
-the local `npm run test:integration` was **killed by the OS for memory pressure**, not failed, so
-there is no local number for it. `ci.yml:68` runs the same `npm run test:integration` against real
-Postgres and the run for `5116c66` completed `success`, as did typecheck, unit and build. If you need
-a local full run, expect it to want most of the machine — close the lane terminals first · browser:
-**77/78**
-(T-240, six routes × 1280/1440/1536 on seeded records), **150/150** (T-241, 25 routes × 390/1280),
-**10/10** (T-239, `/admin/users/[personId]` × 390/1280). `shareat_dev` is at **0138**.
+## What happened, by theme
 
-## ⭐ The four agent sessions — CLEARED, brief them cold (`ListAgents`)
+**Two defects that were invisible by construction.** T-247 found that a test placed in the obvious
+directory matched no vitest glob — it never ran and was counted as passing. Proven by planting a
+guaranteed-failing file and watching *every suite stay green with it in the tree*. T-245 built the
+counter for the ~130 order-of-operations refusals the app throws and never recorded, which is Ian's
+"count first" ruling made real.
 
-| Lane | Session · model | State | Lane DB | Suggested next slice |
-|---|---|---|---|---|
-| **B** | `ianla-3a` · opusplan | Cleared. Shipped T-240 | `shareat_test_t229` | Open. It has no memory of the 101-page sweep any more — that context is gone, so do not ask for it |
-| **C** | `ianla-87` · opusplan | Cleared. The QA lane | `shareat_test_qa` (0138) | Gates + a line-by-line read on every READY. Brief the full QA protocol; it will not remember it |
-| **D** | `ianla-0a` · opusplan | Cleared. Shipped T-239 + T-242. **The migration lane** | `shareat_test_t216b` (0138) | The migration slot is **free** |
-| **E** | `ianla-60` · opusplan | Cleared. Shipped T-241 | `shareat_test_def219` | Open |
+**Two screens fixed on the device staff actually use.** T-246 stopped the ERP navigation rendering
+on the wall-mounted clock kiosk. T-249 doubled the size of small tap targets — landing at 32px, not
+the 44px designed, because 44px was *measured* to make adjacent customer rows overlap so a tap in
+the gap opened the wrong customer's record.
 
-**Protocol the lanes follow** (they must be told, they no longer know it): first line
-`[X] STATUS: sentence`, STATUS ∈ ACK/QUESTION/SPEC/READY/BLOCKED (lane C: VERIFIED/FAILED). Workers
-never run git, build, dev or `npm run test:integration`; integration only via
-`node ~/.claude/skills/orchestrator/tools/it.mjs <lane db> <files>`; a new lane DB via
-`make-test-dbs.mjs <name>` **run from the repo root**. **You alone** stage explicit paths, commit with
-`git commit -F <file>`, push, run the dev server and the browser, and edit the bible, register,
-roadmap and board. Lanes write specs (in plan mode); you approve; then they build.
+**Authority.** T-244 fixed a super-admin-run organisation being treated as leaderless. T-248 (WIP)
+adds the provenance column its successor needs.
+
+**Ian's decisions this session, and where each is recorded:**
+
+| Decision | Recorded in |
+|---|---|
+| Revoke elevated grants when an admin arrives (Option 1) | **bible §13 row 188** — with the rejected alternative named so it is not re-proposed |
+| Drop the 18 stale databases | done; board item closed |
+| Arm the timers "later, when all is done" | done and proven; board item closed |
+| ⚠️ Row 188's "no migration" claim was **the planner's error** | corrected inline in row 188 |
 
 ## Pick up here, in this order
 
-1. **Two systemd timers still need arming on the droplet** — the recurring-expense drafting job
-   (T-216) and the order-wastage backstop (T-236, daily 02:30 Manila). Ian's call, made and not yet
-   executed: copy `docs/ops` fresh, **delete the old copy first** (DEF-194: an `scp -r` into an
-   existing path NESTS and you then run a stale script), then `provision.sh`. Its install loop is a
-   glob as of T-238, so it installs all thirteen units. ⚠️ **`159.223.46.224`, not `.78.207`** — see
-   DEF-238.
-2. **Eighteen stale databases to drop** — Ian said drop all eighteen; the classifier blocks the
-   orchestrator from `DROP DATABASE`, so it is his keystroke. Keep `shareat_dev`, `shareat_test`, and
-   the four lane DBs. ⚠️ One of the eighteen, `shareat_test_setup2`, **was** a harness default; that
-   default has been removed (`smoke-t232.mjs` now demands `SMOKE_DB`), so dropping it is safe.
-3. **Tutorials — Ian decided: COUNT FIRST.** Rank the pages by the walls people actually hit, half a
-   day, before a single tutorial is written. **DEF-216** (the store-readiness checklist that lost
-   v1's `href`/`doc` links) is step one either way. His reasoning is on the roadmap.
-4. **DEF-218** — the harness must connect as a non-superuser, non-BYPASSRLS role. It touches every
-   job suite's fixture path, so it runs **alone on the tree**. ⭐ The census is already measured and
-   listed: `docs/discovery/29` §3.4a names all **34** suites that do not switch principal (of 107).
-   Do not recount it a third time.
-5. Then the queue: **DEF-237** (a manager elevated while an org had no admin keeps those powers for
-   ever — a real lifecycle decision, not a patch), **DEF-221**, **DEF-230**, **DEF-233**, **DEF-220**,
-   the rest of **DEF-238**'s doc sweep, and T-231's two sweeps.
+1. **Finish T-248** — it is committed WIP at `ae8262e`, not shipped. Outstanding: the lane's
+   line-by-line diff self-review, and **the browser pass, which is yours** (`/admin/users`,
+   appointing a manager). ⛔ Read **bible row 188** before touching it; the shape is Ian's and settled.
+   ⚠️ `/staff/hire` needs a job **position** defined or it silently refuses — that blocked the
+   T-244 browser pass and will block this one the same way.
+2. **DEF-218** — the test harness connects as a superuser that bypasses RLS, so any job or policy is
+   untested by construction. **It runs alone on the tree** (34 suites). The census is measured and
+   listed in `docs/discovery/29` §3.4a and was re-verified unchanged at `5fc6d70` — **do not recount
+   it a third time.**
+3. **DEF-243** — five more undersized tap targets, already located. Apply T-249's `ACTION_LINK`.
+   Then **DEF-244**, which is the real one: those customer rows are too short to host a 44px target
+   at all, and fixing that is a layout decision.
+4. Then the queue: **DEF-220** (one-line default), **DEF-230**, T-231's two sweeps.
 
 ## Do not decide these alone — they are Ian's
 
-- **DEF-237's shape.** Revoke the elevated grants when an organisation gains an active administrator,
-  or mark them conditional at grant time and have `authorize` ignore them once the condition lapses.
-  Rank already makes it non-escalating, so there is time to ask rather than patch.
-- **Anything that adds a third thing depending on Ian personally.** Bible rows 116 and 186 record
-  three now; he accepted the third knowingly. A fourth is a decision, not an implementation detail.
+- **DEF-242 — `npm run db:generate` is broken for everyone.** 13 snapshots against a 123-entry
+  journal; it fails with a *false rename question about `expense_categories`* before reaching your
+  table. Hand-authored SQL has quietly become the convention without anyone deciding it. **Repair
+  the generator, or write the convention down?** It governs every future schema change here.
+- **DEF-241 — month-end is the only timer with no timezone**, so it runs 10:00 Manila, mid-working
+  day, while every sibling is deliberately staggered into the small hours. Possibly intentional
+  ("someone is awake when it fails"); nothing records it.
+- **DEF-237's residue** — grants written before `grant_source` existed stay NULL and out of scope
+  forever. Accepted deliberately; worth Ian knowing it is permanent.
 
-## Traps that have actually bitten — the last two days
+## Traps that bit TODAY
 
-- ⛔ **A missing GitHub secret is an EMPTY STRING, and the deploy goes green.** DEF-235. Verify a
-  deployment by reading the shipped bundle, not the workflow's tick.
-- ⛔ **`sed`'s `&` in a replacement means "the whole match".** A `&ndash;` in replacement text
-  expanded and corrupted a roadmap line this session. Use the file tool for prose; if you must use
-  `sed`, check `git diff --stat` afterwards and confirm the line count is what you intended.
-- ⛔ **A harness that defaults its database silently checks the wrong one.** `smoke-t232.mjs` defaulted
-  `SMOKE_DB` to `shareat_test_setup2` while the browser drove whatever the dev server pointed at, so
-  a person id read from the wrong database opened a 404 that read exactly like a regression in the
-  page under test. Fixed to fail loudly. **Measure a blocker before forwarding it** — that one nearly
-  sent a lane to repair working code.
-- ⛔ **A CHECK constraint passes when its expression is NULL.** The natural spelling of a non-blank
-  clause accepts the exact row it exists to forbid. Always add the explicit `IS NOT NULL` term and a
-  raw-SQL control that goes red without it (T-239 §10 case 3 is the model).
-- ⭐ **Tailwind breakpoints are VIEWPORT queries and this app has no container-query plugin.** ANY
-  responsive grid moved into a narrow container — rail, drawer, split pane, modal — keeps its
-  N-across layout while every automated gate stays green. And do the arithmetic for the **whole
-  narrowed column**, not just the block that moved: that is what caught a nested grid whose fields
-  would have fallen to 164px one level in.
-- ⭐ **A page is not a unit of work — a wrapper is, a form is, a row is.** The filter-row population
-  was wrong twice (22 files → 26 rows across 25 files; one page carries two).
-- **Nothing exists in any database until you make it.** Six detail-page modules were empty
-  everywhere, so T-240's screenshots were impossible until one record per module was seeded through
-  the domain's own creators. `/attendance/lane`'s filter row needs a **second store** to render at
-  all (`{stores.length > 1}`).
-- **A stale `tsconfig.tsbuildinfo`** reports phantom errors on a peer's mid-edit file. `--incremental
-  false` before believing a red.
-- **The classifier blocks** `gh secret set`, `DROP DATABASE`, ssh to the droplet, and editing a live
-  auth guard to test the pre-fix behaviour. **Say what was blocked; never route it through a lane.**
-  When QA hit the last one it stopped and traced the code path instead, which was a better proof.
-- **`npm run build` rewrites `apps/erp/next-env.d.ts`**; after a build,
-  `git checkout -- apps/erp/next-env.d.ts` rather than committing the flip.
+- ⛔ **A brief is a hypothesis.** Four of six tasks found theirs wrong — including two claims the
+  orchestrator wrote (bible row 188's "no migration", DEF-239's population count, which was out by
+  more than half). **Read the source, not the register row.**
+- ⛔ **An exact-string grep finds only what matches the string you wrote down.** DEF-239 counted 4
+  by literal; searching for the *shape* found 9. Count the shape, not the spelling.
+- ⛔ **`provision.sh` INSTALLS every unit and ENABLES none** — and its own printed list was
+  hand-written and short by two. Fixed (DEF-240), but the shape recurs: **a fix that globs the
+  machinery and leaves the neighbouring human instruction hand-maintained has moved the defect.**
+- ⛔ **A write inside a transaction that is about to abort is rolled back with it.** T-245 round 1
+  would have recorded nothing, forever, with nothing red. Use `withOrgPrincipal` for an independent
+  transaction — and note it takes a *second connection*, so awaiting it inside an open transaction
+  is a deadlock shape if the outer one holds a conflicting lock.
+- ⛔ **A CHECK constraint passes when its expression is NULL.** Always the explicit `IS NOT NULL`
+  term plus a raw-SQL control that goes red without it.
+- ⚠️ **`middleware.ts` is deprecated in Next 16** (installed: **16.3.2**) and renamed `proxy.ts`; the
+  header must be `NextResponse.next({ request: { headers } })` or it leaks to the client while
+  looking correct. **Read `node_modules/next/dist/docs/`, not your training data.**
+- ⚠️ **Nothing exists in a database until you make it.** Every store was already "ready", so T-243's
+  new links would have rendered on no screen; `t240` had zero customers; all 38 expense categories
+  are system rows so the Rename button does not exist. Seed, then look.
+- ⚠️ **Sign-in is store-scoped.** Pick the store by name (`Smoke Store (SMK)`), never index 0 — a
+  store you just created has no credentials and fails with *"that PIN is not valid for this store"*.
+- ⚠️ `npm run build` rewrites `apps/erp/next-env.d.ts`; `git checkout --` it afterwards.
+- ⚠️ Stale `tsconfig.tsbuildinfo` on a shared tree reports phantom errors on a peer's mid-edit file.
+  Use `--incremental false` before believing a red.
 
-## The status board — update it at EVERY commit
+## The four lanes — CLEARED, brief them cold
 
-Ian reads **https://claude.ai/code/artifact/b1555e09-a726-492b-a431-7a30791e1d50** instead of chat
-reports. `Artifact action:"read"` it, rebuild the HTML locally, republish with that `url` after every
-commit and every lane state change. **Never create a second board.** `docs/ROADMAP.html` moves at the
-same moments.
+Lanes **rename themselves per task**, so match on the `[ref]` from `ListAgents`, not the name.
+
+| Lane | ref | Last shipped | Lane DB | Suggested next |
+|---|---|---|---|---|
+| **B** | `242a5b` | T-243, T-246, T-249 | `shareat_test_t229` | DEF-243 + DEF-244 (its own findings) |
+| **C** | `f32df4` | QA — no code | `shareat_test_qa` | QA. ⚠️ at 0139, re-migrate |
+| **D** | `8b22c7` | T-244, T-247; **T-248 WIP** | `shareat_test_t216b` | Finish T-248 |
+| **E** | `815ab6` | T-245 | `shareat_test_def219` | Open — DEF-218 wants a lane alone |
+
+**Protocol they must be told** (they will not remember): first line `[X] STATUS: sentence`, STATUS ∈
+ACK/QUESTION/SPEC/READY/BLOCKED (lane C: VERIFIED/FAILED). Workers never run git, build, dev, or
+`npm run test:integration`; integration only via
+`node ~/.claude/skills/orchestrator/tools/it.mjs <lane db> <files>`. **You alone** stage explicit
+paths, commit with `-F`, push, run the dev server and browser, and edit the bible, registers,
+roadmap and board. ⭐ **Tell each lane to write its spec IN PLAN MODE and exit plan mode to build** —
+`opusplan` gives Opus only in plan mode, so a spec written as ordinary work silently runs on Sonnet.
+⚠️ **Exiting plan mode raises a prompt in that lane's terminal**, roughly one per task — tell Ian, he
+will not otherwise know why three lanes have stalled.
+
+## Databases
+
+`shareat_dev` · `shareat_test` · four lane DBs · **`shareat_test_t240`** — the browser-pass database:
+seeded stores and **PIN `246810`** on `Smoke Store (SMK)`. **Do not drop it.** Head is **0140**.
+
+## The status board
+
+Ian reads **https://claude.ai/code/artifact/b1555e09-a726-492b-a431-7a30791e1d50** rather than chat.
+`Artifact action:"read"` it, edit, republish with that `url` at **every commit**. **Never make a
+second one.** `docs/ROADMAP.html` moves at the same moments — ⚠️ today T-246 was updated on the board
+and *not* the roadmap, and read as in-flight after shipping. Do both.
 
 ## The paste-ready prompt
 
 ```
-You are the ORCHESTRATOR for shareat-system. Read C:\Users\ianla\webapps\shareat-system\docs\HANDOFF-TODAY.md
-in full, then docs/RULES.md. Ask Ian to type /orchestrator shareat system in your terminal (the skill
-is user-invocation only). Four worker terminals exist and are ALL CLEARED and running opusplan:
-lane B = ianla-3a, lane C = ianla-87 (QA), lane D = ianla-0a (the migration lane), lane E = ianla-60.
-Run ListAgents, then BRIEF THEM COLD — they remember nothing, so do not re-adopt and do not assume
-any context. Every briefing must tell the lane to write its spec IN PLAN MODE and exit plan mode to
-build: opusplan gives Opus only in plan mode, so a spec written as ordinary work silently runs on
-Sonnet (bible rows 184, 187).
+You are the ORCHESTRATOR for shareat-system. Read
+C:\Users\ianla\webapps\shareat-system\docs\HANDOFF-TODAY.md in full, then docs/RULES.md, then
+PROJECT_BIBLE.md §13 row 188. Ask Ian to type /orchestrator shareat system in your terminal (the
+skill is user-invocation only). Four worker terminals exist and are ALL CLEARED on opusplan —
+run ListAgents and match them by [ref], not name, since lanes rename themselves: B=242a5b,
+C=f32df4 (QA), D=8b22c7, E=815ab6. BRIEF THEM COLD; they remember nothing. Every briefing must
+say: write the spec IN PLAN MODE, exit plan mode to build — and warn Ian that each of those
+raises a prompt in that lane's terminal or the lanes stall silently.
 
-Ian's production sign-in WORKS and the organisation exists — that milestone is closed. You own the
-dev server on 9008, builds, migrations, git and the browser passes; lanes never run git, build, dev
-or npm run test:integration. Stage explicit paths, commit with -F, push, and update docs/ROADMAP.html
-and republish the status board at EVERY commit. Every READY gets lane C's gates on its DB and an Opus
-second read — measure any blocker before forwarding it. Tell a lane in its own terminal when it is
-SAFE TO CLEAR, and say why. Pick up at "Pick up here": the two droplet timers and eighteen stale
-databases are Ian's keystrokes, then DEF-216/tutorials-counting, then DEF-218 alone on the tree.
-When a task completes with the tree clean, that is a milestone: run /wrap-up, rewrite this file, and
-hand over. Keep your session small.
+You own the dev server on 9008, builds, migrations, git and every browser pass; lanes never run
+git, build, dev or npm run test:integration. Stage explicit paths, commit with -F, push, and
+update BOTH docs/ROADMAP.html and the status board at EVERY commit. Re-run every gate yourself
+rather than accepting a lane's numbers, on the shared database rather than the lane's own.
+
+⛔ Treat every register row and task stub as a HYPOTHESIS: four of six tasks yesterday found
+their brief wrong, two of them written by the orchestrator. When a lane says "this specific
+thing is not proven", that is the most valuable sentence it can send — act on it.
+
+Pick up at "Pick up here": finish T-248 (committed WIP at ae8262e, needs a diff self-review and
+your browser pass), then DEF-218 alone on the tree. DEF-242 and DEF-241 are Ian's calls, not
+yours. When a task completes with the tree clean, that is a milestone: run /wrap-up, rewrite this
+file, and hand over. Keep your session small.
 ```
