@@ -8,6 +8,7 @@ import {
   updateStoreAction,
 } from '../actions';
 import { Page } from '@/components/shell/Page';
+import { ACTION_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Store — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -116,7 +117,7 @@ export default async function StoreDetailPage({
                         slice 3 each hand-wired for their own check. `remedy` is absent for a check
                         (`adminScope`) that no single screen clears. */}
                     {!c.ok && c.remedy && (
-                      <Link href={c.remedy.href} className="text-xs underline underline-offset-2">
+                      <Link href={c.remedy.href} className={ACTION_LINK}>
                         {c.remedy.label}
                       </Link>
                     )}

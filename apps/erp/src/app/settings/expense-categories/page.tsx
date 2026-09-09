@@ -7,6 +7,7 @@ import {
 } from './actions';
 import { categoriesForAdmin, mappableAccounts } from './lib';
 import { Page } from '@/components/shell/Page';
+import { ACTION_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Expense categories — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -124,7 +125,7 @@ export default async function ExpenseCategoriesSettingsPage({
                           aria-label={`Name of ${c.category}`}
                           className={`${FIELD} w-44 py-1`}
                         />
-                        <button type="submit" className="text-xs underline underline-offset-2">
+                        <button type="submit" className={ACTION_LINK}>
                           Rename
                         </button>
                       </form>

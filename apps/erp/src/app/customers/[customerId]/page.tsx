@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { ACTION_LINK } from '@/components/action-link';
 import { requireSession } from '../../../lib/session';
 import {
   recordCollectionAction,
@@ -333,7 +334,7 @@ export default async function CustomerDetailPage({
                         {c.journalEntryId && (
                           <Link
                             href={`/reports/journal-lines?entry=${c.journalEntryId}`}
-                            className="ml-2 text-xs underline underline-offset-2"
+                            className={`ml-2 ${ACTION_LINK}`}
                           >
                             entry
                           </Link>
@@ -452,7 +453,7 @@ export default async function CustomerDetailPage({
                       {c.journalEntryId && (
                         <Link
                           href={`/reports/journal-lines?entry=${c.journalEntryId}`}
-                          className="ml-2 text-xs underline underline-offset-2"
+                          className={`ml-2 ${ACTION_LINK}`}
                         >
                           entry
                         </Link>
