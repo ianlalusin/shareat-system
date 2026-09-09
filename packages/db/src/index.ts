@@ -140,6 +140,9 @@ export * as arRepo from './repo/ar';
 export * as tradeRepo from './repo/trade';
 export * as channelSettlementsRepo from './repo/channel-settlements';
 export * as findingsRepo from './repo/findings';
+// T-245 — the prerequisite-refusal counter. docs/tasks/245-prerequisite-refusal-counter.md.
+export * as prerequisiteRefusalsRepo from './repo/prerequisite-refusals';
+export type { RefusalCount } from './repo/prerequisite-refusals';
 export * as cutoverRepo from './repo/cutover';
 export * as statutoryDiscountsRepo from './repo/statutory-discounts';
 export type {

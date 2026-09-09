@@ -631,6 +631,13 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'T-214. Which named person opened the findings screen on which day. Individually ' +
       'attributable staff behaviour, and the raw material for "nobody has looked at this since".',
   },
+  prerequisite_refusals: {
+    scope: 'org_column',
+    reason:
+      'T-245. How often an org\'s staff hit an order-of-operations wall, and where. Operational ' +
+      'detail about how a business actually uses the system, which a competitor or franchisee ' +
+      'should not read any more than the findings it sits beside.',
+  },
   channel_settlements: {
     scope: 'org_column',
     reason:

@@ -125,6 +125,11 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       // ⭐ First in Reports on purpose: it answers "can this period close at all" before the
       // statements that assume it can. DEF-084 — this feed had no screen until 2026-08-30.
       { href: '/findings', label: 'Findings' },
+      // ⭐ T-245. Beside Findings on purpose, not under Setup, despite the /admin/ path: it is a
+      // count you READ, the same shape as Findings, not a thing you administer. Answers "which
+      // order-of-operations walls do people actually hit" — the number Ian's "count first" ruling
+      // (roadmap, 8 Sep) requires before any tutorial is written.
+      { href: '/admin/prerequisite-refusals', label: 'Prerequisite walls' },
       { href: '/reports/trial-balance', label: 'Trial balance' },
       { href: '/reports/income-statement', label: 'Income statement' },
       { href: '/reports/balance-sheet', label: 'Balance sheet' },

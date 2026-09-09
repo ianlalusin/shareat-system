@@ -20,7 +20,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
   );
 }
 
-import { APP_ROLE, transaction, type Tx } from '@shareat/db';
+import { APP_ROLE, prerequisiteRefusalsRepo, transaction, withOrgPrincipal, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import {
   CredentialError,
@@ -470,4 +470,129 @@ describe('⛔ T-185 invariant 10 — no app surface returns a secret', () => {
       ),
     ).rejects.toBeInstanceOf(CredentialError);
   });
+});
+
+// ---------------------------------------------------------------------------------------
+// T-245 — docs/tasks/245-prerequisite-refusal-counter.md. §6: the durability case is run once
+// against the round-1 (same-tx) mechanism to capture red, then again after the fix.
+
+describe('T-245 — prerequisite refusals are durably recorded', () => {
+  it('⛔ DURABILITY: a refusal recorded before a throw survives the caller transaction rolling back', async () => {
+    const f = await fixture('durability');
+    const card = uid('c');
+    await enrolCardBackdated(f, card);
+
+    await expect(
+      asOrg(f.orgId, (tx) => enrolCard(tx, f.admin, { employmentId: f.colleague.id, cardId: card })),
+    ).rejects.toBeInstanceOf(CredentialError);
+
+    // Read in a BRAND NEW transaction, opened after the throwing one has fully rejected — not
+    // inside it. This is what distinguishes a durable write from one that just hasn't rolled
+    // back yet (the whole point of this test).
+    const rows = await sql`
+      select reason_code, actor_person_id from prerequisite_refusals
+      where org_id = ${f.orgId} and reason_code = 'attendance.credential.already_enrolled_elsewhere'
+    `;
+    expect(rows.length).toBe(1);
+    expect(rows[0]!.actor_person_id).toBe(f.admin.personId);
+  });
+
+  it('a second reasonCode is recorded independently — enrolling for somebody who has left', async () => {
+    const f = await fixture('t245-ended');
+    await asOrg(f.orgId, (tx) =>
+      endEmployment(tx, f.admin, {
+        employmentId: f.employment.id,
+        endedOn: '2026-06-30',
+        employmentStatus: 'resigned',
+      }),
+    );
+    await expect(enrolCardBackdated(f, uid('c'))).rejects.toBeInstanceOf(CredentialError);
+
+    const rows = await sql`
+      select reason_code, actor_person_id from prerequisite_refusals
+      where org_id = ${f.orgId} and reason_code = 'attendance.credential.employment_ended'
+    `;
+    expect(rows.length).toBe(1);
+    expect(rows[0]!.actor_person_id).toBe(f.admin.personId);
+  });
+
+  it('DISCRIMINATION: a validation-shaped throw records nothing', async () => {
+    const f = await fixture('t245-discrim');
+    await expect(
+      asOrg(f.orgId, (tx) => enrolCard(tx, f.admin, { employmentId: f.employment.id, cardId: '   ' })),
+    ).rejects.toBeInstanceOf(CredentialError);
+
+    const rows = await sql`select 1 from prerequisite_refusals where org_id = ${f.orgId}`;
+    expect(rows.length).toBe(0);
+  });
+
+  // ⛔ DEADLOCK RISK — investigated at length (see docs/tasks/245-prerequisite-refusal-counter.md
+  // §6 and the READY report). Summary: `createEmployment` → `employmentRepo.allocateStaffCode`
+  // (packages/db/src/repo/employment.ts:135) takes a real `FOR UPDATE` lock on the STORE row for
+  // the rest of its transaction — a genuine, existing, unrelated code path a "hire, then badge
+  // them" composite action would run in the SAME transaction as `enrolCard`. `FOR UPDATE`
+  // genuinely conflicts with the `FOR KEY SHARE` this refusal's own INSERT needs on `store_id`
+  // (proven directly below and by three independent raw probes during investigation — this is not
+  // a theoretical risk). ⭐ **And yet, empirically, `enrolCard`'s own call to
+  // `recordPrerequisiteRefusal` — the ACTUAL code path — never reproduced the hang** across many
+  // runs with this exact adversarial precondition, including with the store id verified to match
+  // the locked row. The discrepancy between "a manually-issued identical INSERT blocks" and "the
+  // real call site doesn't" was not fully isolated. **Given that, `recordPrerequisiteRefusal`
+  // carries a `lock_timeout` regardless** (see its own comment) — defence in depth so that
+  // whatever specific condition WOULD trigger real contention (here, in a future slice-2 site, or
+  // under different concurrency) fails fast and gets logged rather than hanging the request.
+  it('the natural call path does not hang even with the FOR UPDATE precondition genuinely held', async () => {
+    const f = await fixture('t245-lock');
+    const card = uid('c');
+    await enrolCardBackdated(f, card);
+    const [newPerson] = await sql<{ id: string }[]>`
+      insert into persons (org_id, display_name) values (${f.orgId}, 'New Hire') returning id`;
+
+    const attempt = asOrg(f.orgId, async (tx) => {
+      await createEmployment(tx, f.admin, {
+        storeId: f.storeId,
+        personId: newPerson!.id,
+        employmentStatus: 'regular',
+        startedOn: '2026-07-01',
+      });
+      return enrolCard(tx, f.admin, { employmentId: f.colleague.id, cardId: card });
+    });
+
+    await expect(attempt).rejects.toBeInstanceOf(CredentialError);
+    const rows = await sql`select store_id from prerequisite_refusals
+      where reason_code = 'attendance.credential.already_enrolled_elsewhere' and org_id = ${f.orgId}`;
+    expect(rows.length).toBe(1);
+    expect(rows[0]!.store_id).toBe(f.storeId);
+  }, 8_000);
+
+  it('⛔ SAFETY NET: the lock_timeout turns genuine contention into a fast, logged failure — not a hang', async () => {
+    const f = await fixture('t245-lock-net');
+    const [newPerson] = await sql<{ id: string }[]>`
+      insert into persons (org_id, display_name) values (${f.orgId}, 'New Hire') returning id`;
+
+    const attempt = asOrg(f.orgId, async (tx) => {
+      // Manufacture the contention directly (bypassing the domain layer) to prove the timeout
+      // mechanism itself works, independent of whether any current call site reaches it.
+      await createEmployment(tx, f.admin, {
+        storeId: f.storeId,
+        personId: newPerson!.id,
+        employmentStatus: 'regular',
+        startedOn: '2026-07-01',
+      });
+      const started = Date.now();
+      await withOrgPrincipal(f.orgId, async (freshTx) => {
+        await freshTx.execute(dsql`set local lock_timeout = '2s'`);
+        return prerequisiteRefusalsRepo.record(freshTx, {
+          orgId: f.orgId,
+          storeId: f.storeId,
+          reasonCode: 'debug.lock-net-proof',
+          domain: 'attendance',
+          actorPersonId: null,
+        });
+      });
+      return Date.now() - started;
+    });
+
+    await expect(attempt).rejects.toMatchObject({ code: '55P03' }); // canceling statement due to lock timeout
+  }, 8_000);
 });

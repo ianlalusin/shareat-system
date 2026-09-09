@@ -25,19 +25,69 @@
  * secret itself.
  */
 import { randomBytes } from 'node:crypto';
+import { sql } from 'drizzle-orm';
 import { authorize, type Actor } from '@shareat/auth';
 import {
   attendanceCredentialsRepo,
   employmentRepo,
+  prerequisiteRefusalsRepo,
+  withOrgPrincipal,
   type AttendanceCredentialRow,
   type Tx,
 } from '@shareat/db';
 import type { CredentialKind } from '@shareat/db/schema';
+import { logger } from '@shareat/core/logger';
 
 export class CredentialError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'CredentialError';
+  }
+}
+
+/**
+ * T-245 — records a prerequisite-shaped refusal on an INDEPENDENT transaction, never the
+ * throwing caller's own `tx`. docs/tasks/245-prerequisite-refusal-counter.md §3.
+ *
+ * ⛔ **Why not just `prerequisiteRefusalsRepo.record(tx, …)` on the caller's `tx`:** proved wrong
+ * empirically, not merely reasoned about. The caller's transaction is about to abort on the
+ * `throw` right after this call — Drizzle rolls the whole transaction back, taking a same-tx
+ * INSERT with it (silent data loss). Worse, at a site where the refusal was DETECTED by a failed
+ * SQL statement (a unique-constraint violation, as at `enrolCard`'s catch block below), the tx is
+ * already in Postgres's own aborted state by the time this runs — a same-tx write there doesn't
+ * even get a chance to execute; postgres.js rejects it with the ORIGINAL failing statement's error
+ * instead, which silently replaces the domain's `CredentialError` with a raw `PostgresError` at
+ * the caller. Both failure modes were reproduced against this exact call site before this fix.
+ *
+ * `withOrgPrincipal` opens that independent transaction on a fresh pooled connection — the
+ * existing, single blessed way an application or a job opens one under an org's principal
+ * (`packages/db/src/rls/principal.ts`), already used the same way from
+ * `packages/domain/src/scheduler/index.ts`. Its cost, accepted deliberately: the row commits even
+ * if the caller's transaction later aborts for a reason unrelated to this refusal — correct here,
+ * because a refusal is a real event a person hit, independent of what happens afterward.
+ *
+ * Recording must never become a NEW way for the real refusal to fail or change shape — a failure
+ * here is logged and swallowed (bible §15.6: never `catch {}`), never rethrown in place of the
+ * `CredentialError` the caller is about to throw regardless.
+ */
+async function recordPrerequisiteRefusal(input: {
+  orgId: string;
+  storeId: string | null;
+  reasonCode: string;
+  actorPersonId: string | null;
+}): Promise<void> {
+  try {
+    await withOrgPrincipal(input.orgId, async (freshTx) => {
+      // ⚠️ Defence in depth against the FK-lock contention class the orchestrator flagged: the
+      // caller's transaction may hold a lock (e.g. a FOR UPDATE via `allocateStaffCode`) that
+      // conflicts with this INSERT's own FK-check lock on the same org/store/person row. Bounded
+      // so a genuine conflict fails fast and gets logged rather than hanging the request
+      // indefinitely — the caught error below still lets the real refusal throw regardless.
+      await freshTx.execute(sql`set local lock_timeout = '2s'`);
+      return prerequisiteRefusalsRepo.record(freshTx, { ...input, domain: 'attendance' });
+    });
+  } catch (err) {
+    logger.error({ err, reasonCode: input.reasonCode }, 'failed to record prerequisite refusal');
   }
 }
 
@@ -87,7 +137,9 @@ export async function enrolCard(
   actor: Actor,
   input: { employmentId: string; cardId: string },
 ): Promise<AttendanceCredentialRow> {
-  const employment = await requireOpenEmployment(tx, input.employmentId);
+  const employment = await requireOpenEmployment(tx, input.employmentId, {
+    actorPersonId: actor.personId,
+  });
   await authorize(tx, actor, 'manage_attendance', { storeId: employment.storeId });
 
   const cardId = input.cardId.trim();
@@ -107,6 +159,14 @@ export async function enrolCard(
     // live cards with one id makes "who punched?" unanswerable, and a check that picks the first
     // match is how the wrong person gets paid.
     if (String(error).includes('attendance_credentials_card_live_unique')) {
+      // T-245 — recorded on an INDEPENDENT transaction; see recordPrerequisiteRefusal's own
+      // comment for why this cannot be `prerequisiteRefusalsRepo.record(tx, …)` on this same `tx`.
+      await recordPrerequisiteRefusal({
+        orgId: employment.orgId,
+        storeId: employment.storeId,
+        actorPersonId: actor.personId,
+        reasonCode: 'attendance.credential.already_enrolled_elsewhere',
+      });
       throw new CredentialError(
         'That card is already enrolled to somebody at this organisation. Revoke it there first — ' +
           'a card id belongs to one person at a time.',
@@ -129,7 +189,9 @@ export async function enrolFingerprint(
   actor: Actor,
   input: { employmentId: string; templates: string[] },
 ): Promise<AttendanceCredentialRow> {
-  const employment = await requireOpenEmployment(tx, input.employmentId);
+  const employment = await requireOpenEmployment(tx, input.employmentId, {
+    actorPersonId: actor.personId,
+  });
   await authorize(tx, actor, 'manage_attendance', { storeId: employment.storeId });
 
   const templates = input.templates.map((t) => t.trim()).filter(Boolean);
@@ -225,11 +287,18 @@ export async function listCredentials(
 async function requireOpenEmployment(
   tx: Tx,
   employmentId: string,
-  options: { allowEnded?: boolean } = {},
+  options: { allowEnded?: boolean; actorPersonId?: string } = {},
 ) {
   const employment = await employmentRepo.getEmployment(tx, employmentId);
   if (!employment) throw new CredentialError(`No employment ${employmentId}.`);
   if (!options.allowEnded && employment.endedOn !== null) {
+    // T-245 — recorded on an INDEPENDENT transaction; see recordPrerequisiteRefusal.
+    await recordPrerequisiteRefusal({
+      orgId: employment.orgId,
+      storeId: employment.storeId,
+      actorPersonId: options.actorPersonId ?? null,
+      reasonCode: 'attendance.credential.employment_ended',
+    });
     throw new CredentialError(
       'That employment has ended. Enrolling a badge for somebody who has left is exactly the ' +
         'credential that punches unnoticed.',

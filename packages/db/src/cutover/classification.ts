@@ -910,6 +910,17 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'Views of a screen about a ledger the cutover replaces. Carrying them forward would make ' +
       '"last looked at" refer to books that no longer exist.',
   },
+  prerequisite_refusals: {
+    // T-245. Purge, same reasoning as finding_occurrences: this is pilot-period telemetry about
+    // how often anyone hit an order-of-operations wall in the PRE-cutover system. The January
+    // cutover replaces the workflow state these refusals were measuring against, so keeping them
+    // would count walls against data that no longer exists and mis-prioritise whatever tutorial
+    // work the counter is meant to rank.
+    class: 'purge',
+    reason:
+      'Pilot-period telemetry about walls hit in the pre-cutover system. Keeping it would count ' +
+      'refusals against workflow state the cutover replaces.',
+  },
   channel_settlements: {
     // Purge, like every other posting document. A settlement clears a receivable the opening
     // balance replaces, so keeping it would leave it pointing at a sales day that no longer
