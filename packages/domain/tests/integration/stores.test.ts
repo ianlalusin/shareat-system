@@ -197,6 +197,66 @@ describe('T-222 invariant 7 — readiness is DERIVED, never stored', () => {
   });
 });
 
+describe('T-243 — readiness checks carry their own remedy link (DEF-216)', () => {
+  it('room → /inventory/locations, this store preselected', async () => {
+    const { storeId } = await make(adminA);
+    const store = await transaction((tx) => storesRepo.getById(tx, orgA, storeId));
+    const checks = await transaction((tx) => storeReadiness(tx, adminA, store!));
+    expect(checks.find((c) => c.key === 'room')!.remedy).toEqual({
+      href: `/inventory/locations?store=${storeId}`,
+      label: 'Add a stock room →',
+    });
+  });
+
+  it('salesChannel → /settings/sales-channels, this store preselected', async () => {
+    const { storeId } = await make(adminA);
+    const store = await transaction((tx) => storesRepo.getById(tx, orgA, storeId));
+    const checks = await transaction((tx) => storeReadiness(tx, adminA, store!));
+    expect(checks.find((c) => c.key === 'salesChannel')!.remedy).toEqual({
+      href: `/settings/sales-channels?store=${storeId}`,
+      label: 'Add a sales channel →',
+    });
+  });
+
+  it('signIn → /staff, no store param (⚠️ /staff takes none today — out of scope to add one)', async () => {
+    const { storeId } = await make(adminA);
+    const store = await transaction((tx) => storesRepo.getById(tx, orgA, storeId));
+    const checks = await transaction((tx) => storeReadiness(tx, adminA, store!));
+    expect(checks.find((c) => c.key === 'signIn')!.remedy).toEqual({
+      href: '/staff',
+      label: 'Issue a PIN from Staff →',
+    });
+  });
+
+  it('⭐ adminScope carries NO remedy — cleared by Reactivate on this page, not a link to itself', async () => {
+    // Negative case, deliberately: without it, three positives could pass with a remedy on all four.
+    const { storeId } = await make(adminA);
+    const store = await transaction((tx) => storesRepo.getById(tx, orgA, storeId));
+    const checks = await transaction((tx) => storeReadiness(tx, adminA, store!));
+    expect(checks.find((c) => c.key === 'adminScope')!.remedy).toBeUndefined();
+  });
+
+  it('⛔ stays DERIVED — no readiness/href/remedy column ever lands on `stores`', async () => {
+    const { storeId } = await make(adminA);
+    await sql`
+      insert into sales_channels (org_id, store_id, name, is_active, is_remitted_daily)
+      values (${orgA}, ${storeId}, 'Walk-in', true, true)`;
+
+    // Non-zero control FIRST — a query returning 0 for everything is indistinguishable from a
+    // broken query (reference_sweep_needs_nonzero_control, bible §13 row 181).
+    const control = await sql<{ n: string }[]>`
+      select count(*)::text n from information_schema.columns
+      where table_name = 'stores' and column_name = 'code'`;
+    expect(control[0]!.n).toBe('1');
+
+    const drift = await sql<{ n: string }[]>`
+      select count(*)::text n from information_schema.columns
+      where table_name = 'stores'
+        and (column_name ilike '%readiness%' or column_name ilike '%href%' or column_name ilike '%remedy%')`;
+    expect(drift[0]!.n).toBe('0');
+  });
+});
+
 describe('T-222 invariants 8 and 9 — deactivate never deletes; reactivate re-fans', () => {
   it('deactivate keeps the row and its history', async () => {
     const { storeId } = await make(adminA);

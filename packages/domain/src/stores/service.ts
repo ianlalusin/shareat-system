@@ -311,6 +311,13 @@ export async function reactivateStore(
 // Readiness — ⛔ DERIVED, never stored
 // -----------------------------------------------------------------------------------------
 
+/** Where a person goes to clear a check, and what the link says. ⛔ Built per request beside the
+ *  predicate it belongs to — never a column, never cached (bible §4.2 rule 7, §13 row 176). */
+export interface ReadinessRemedy {
+  readonly href: string;
+  readonly label: string;
+}
+
 export interface ReadinessCheck {
   readonly key: string;
   readonly label: string;
@@ -320,7 +327,27 @@ export interface ReadinessCheck {
   /** Blocks real use of the store until satisfied. */
   readonly blocking: boolean;
   readonly detail: string;
+  /**
+   * ⭐ T-243 / DEF-216. Absent when no single screen clears it — `adminScope`'s remedy is the
+   * Reactivate button already on this same page, not a link to itself. Meant to be rendered only
+   * while `ok` is false.
+   */
+  readonly remedy?: ReadinessRemedy;
 }
+
+/**
+ * The one place a readiness remedy ROUTE is written. Exported as plain string literals — never
+ * imported into a module that needs a database — so `apps/erp/tests/readiness-remedy-routes.test.ts`
+ * can check every one resolves to a real screen without touching Postgres.
+ *
+ * ⛔ `adminScope` deliberately has no entry: it is cleared by the Reactivate button on this same
+ * page, not by navigating anywhere.
+ */
+export const READINESS_REMEDY_ROUTE = {
+  room: '/inventory/locations',
+  salesChannel: '/settings/sales-channels',
+  signIn: '/staff',
+} as const;
 
 /**
  * ⭐ **Computed on read from the live tables. Nothing about readiness is persisted, and that is
@@ -355,6 +382,10 @@ export async function storeReadiness(
       detail: rooms.length > 0
         ? `${rooms.length} active room(s).`
         : 'A store with no rooms holds no stock at all.',
+      remedy: {
+        href: `${READINESS_REMEDY_ROUTE.room}?store=${store.id}`,
+        label: 'Add a stock room →',
+      },
     },
     {
       key: 'adminScope',
@@ -381,6 +412,10 @@ export async function storeReadiness(
           // screen anywhere that could clear it (DEF-207) — a checklist item nobody could tick.
           'Without one a sales day has nowhere to land, and an unresolvable channel blocks rather ' +
             'than silently defaulting (DEF-059). Add one under Settings › Sales channels.',
+      remedy: {
+        href: `${READINESS_REMEDY_ROUTE.salesChannel}?store=${store.id}`,
+        label: 'Add a sales channel →',
+      },
     },
     {
       key: 'signIn',
@@ -395,6 +430,9 @@ export async function storeReadiness(
       detail: credentials > 0
         ? `${credentials} active credential(s).`
         : 'No one can sign in at this store yet. Issue a PIN from Staff — ⛔ store creation deliberately does not auto-issue one, because a generated default PIN ends up in a screenshot.',
+      // ⚠️ No `?store=` — `/staff` takes no store param today; adding one is a behaviour change and
+      // is out of scope for T-243.
+      remedy: { href: READINESS_REMEDY_ROUTE.signIn, label: 'Issue a PIN from Staff →' },
     },
   ];
 }

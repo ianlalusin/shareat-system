@@ -112,23 +112,12 @@ export default async function StoreDetailPage({
                       </span>
                     </div>
                     <div className="text-neutral-600 dark:text-neutral-400">{c.detail}</div>
-                    {c.key === 'salesChannel' && !c.ok && (
-                      // ⭐ T-230 / DEF-207. This row was blocking with no remedy anywhere in the
-                      // product — `sales_channels` had no production writer at all. The link goes
-                      // to `/settings` and not to a panel here because channels are
-                      // `manage_store_settings` (manager ✅) while this page is admin-only.
-                      <Link
-                        href={`/settings/sales-channels?store=${store.id}`}
-                        className="text-xs underline underline-offset-2"
-                      >
-                        Add a sales channel →
-                      </Link>
-                    )}
-                    {c.key === 'signIn' && !c.ok && (
-                      // ⚠️ Links to T-217's gated issuance path, never to a new ungated caller —
-                      // `setPin` has no `authorize()` of its own.
-                      <Link href="/staff" className="text-xs underline underline-offset-2">
-                        Issue a PIN from Staff →
+                    {/* ⭐ T-243 / DEF-216 — one generic renderer replaces what T-230 and T-229
+                        slice 3 each hand-wired for their own check. `remedy` is absent for a check
+                        (`adminScope`) that no single screen clears. */}
+                    {!c.ok && c.remedy && (
+                      <Link href={c.remedy.href} className="text-xs underline underline-offset-2">
+                        {c.remedy.label}
                       </Link>
                     )}
                   </div>
