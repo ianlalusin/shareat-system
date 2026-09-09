@@ -378,11 +378,15 @@ export async function assignRoleAsActor(
    * ⚠️ **A ladder, not a check for a super_admin target**, and the difference is a second live door.
    * `manage_users` is `{admin: true, manager: false}`, so it sits inside
    * `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER`, which `assignRole` applies automatically to a manager
-   * appointed while `hasActiveAdmin` is false — and `hasActiveAdmin` matches the literal `'admin'`,
-   * so a **super_admin-only organisation counts as adminless**. Nothing revokes those grants when an
-   * admin arrives later, so that manager could demote an admin: a junior removing a senior with no
-   * admin actor anywhere in the story. Reproduced through this function before the fix (`roles.test.ts`
-   * case 5). A narrow super_admin-target check would have closed the register's case and left it open.
+   * appointed while `hasActiveAdmin` is false. **Until T-244 (DEF-237), `hasActiveAdmin` matched the
+   * literal `'admin'`, so a super_admin-only organisation counted as adminless** and nothing revoked
+   * those grants when an admin arrived later — a junior could demote an admin with no admin actor
+   * anywhere in the story. Reproduced through this function before either fix (`roles.test.ts` case
+   * 5). T-244 closed the literal-match bug at its source (`access.ts`'s `hasActiveAdmin`); the ladder
+   * here is independent, deliberately-redundant protection — it refuses a `manage_users`-holding
+   * manager regardless of *how* they hold it, automatic elevation or an explicit hand-grant alike. A
+   * narrow super_admin-target check would have closed only the register's case and left this one open
+   * even after T-244.
    *
    * ⭐ **Before the lockout guard below, deliberately.** Both can be true at once — an ordinary admin
    * demoting an org's only super-admin violates rank AND would leave nobody able to manage users.

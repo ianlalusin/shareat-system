@@ -804,10 +804,15 @@ describe('grantCapabilityAsActor — nobody grants themselves a capability (DEF-
  * A narrow *"is the target a super_admin?"* patch closes the case the register describes and leaves
  * a second door wide open — case 5. `manage_users` is `{admin: true, manager: false}`, so it sits
  * inside `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER`, which `assignRole` applies automatically to any
- * manager appointed while `hasActiveAdmin` is false — and `hasActiveAdmin` matches the literal
- * `'admin'`, so a **super_admin-only organisation counts as adminless**. Those grants are never
- * revoked when an admin arrives. A junior can then remove a senior with no admin actor anywhere in
- * the story. Rank closes it because a `manager` is rank 1 and an `admin` is rank 2.
+ * manager appointed while `hasActiveAdmin` is false. **Until T-244 (DEF-237), `hasActiveAdmin`
+ * matched the literal `'admin'`, so a super_admin-only organisation counted as adminless** and
+ * those grants were never revoked when an admin arrived — a junior could remove a senior with no
+ * admin actor anywhere in the story. T-244 closed the literal-match bug, so that automatic route no
+ * longer produces this manager; case 5 below constructs the same starting condition by direct
+ * grant instead, because the rank ladder must hold regardless of HOW a manager came to hold
+ * `manage_users` — automatic elevation (closed) or an explicit hand-grant (still real, e.g.
+ * `elevateManager`'s bible-row-116 path) are the same case to this rule. Rank closes it either way,
+ * because a `manager` is rank 1 and an `admin` is rank 2.
  */
 describe('DEF-234 — removal requires rank', () => {
   /** Direct SQL, same reasoning as `insertRoleRaw`: exactly these rows, no grant-time side effects. */
@@ -913,14 +918,23 @@ describe('DEF-234 — removal requires rank', () => {
     /**
      * ⭐ **The second door, and the reason this is a ladder rather than a super_admin check.**
      *
-     * Built the way it actually happens rather than by hand-granting: the org's only administrator
-     * holds `super_admin`, so `hasActiveAdmin` — which matches the literal `'admin'` — is FALSE, and
-     * `assignRole` hands the incoming manager every capability admin has and manager does not.
-     * `manage_users` is one of them. Nothing revokes it when an admin is appointed afterwards.
+     * ⛔ **Before T-244**, this state arose automatically: a super_admin-only org's
+     * `hasActiveAdmin` read FALSE (the literal-`'admin'` bug, DEF-237), so `assignRole` elevated
+     * the next manager with the whole admin-not-manager delta, `manage_users` included. T-244
+     * closed that at the source, so a manager appointed into a super_admin-only org today receives
+     * no such grant — proven directly in `authorize.test.ts`'s DEF-237 case.
      *
-     * ⚠️ The elevation is asserted rather than assumed: if `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER`
-     * ever stopped containing `manage_users`, this test would otherwise quietly stop testing
-     * anything — passing because the manager was refused at `authorize` instead of at the ladder.
+     * The case still has to exist here: the rank ladder must refuse a manager holding
+     * `manage_users` from demoting an admin **regardless of how they came to hold it** —
+     * automatically (closed) or by an explicit hand-grant (still real, e.g. `elevateManager`'s
+     * bible-row-116 "explicit tick" path). So the grant is constructed directly, the same
+     * technique case 4 above already uses for the owner's four super-admin-only grants, rather
+     * than through the now-closed automatic route.
+     *
+     * ⚠️ The precondition is asserted, not inferred from the refusal below — the same shape of
+     * mistake T-244 itself is fixing one layer up: if `grantRawHere` silently no-op'd or the
+     * capability string were wrong, the demotion would still be refused (by `authorize`, for
+     * holding no capability at all) and this case would pass while testing nothing about rank.
      */
     expect(ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER).toContain('manage_users' as Capability);
 
@@ -929,20 +943,20 @@ describe('DEF-234 — removal requires rank', () => {
     await insertRoleRaw(superAdmin, org, 'super_admin');
     await giveCredential(superAdmin);
 
-    // Step 1: appointed while the org is "adminless" in `hasActiveAdmin`'s literal sense.
     const manager = await insertPerson(org, 'Elevated Manager');
-    const elevated = await asPerson(org, (tx) =>
-      assignRole(tx, { personId: manager, orgId: org, role: 'manager', grantedBy: null }),
-    );
-    expect(elevated.elevatedGrants).toContain('manage_users' as Capability);
+    await insertRoleRaw(manager, org, 'manager');
+    await grantRawHere(manager, ['manage_users' as Capability]);
+    expect(
+      await asPerson(org, (tx) => accessRepo.personHasActiveGrant(tx, manager, 'manage_users')),
+    ).toBe(true);
 
-    // Step 2: an admin arrives afterwards. The manager keeps the grant.
+    // An admin arrives afterwards. The manager keeps the (directly-granted) capability.
     const admin = await insertPerson(org, 'Later Admin');
     await insertRoleRaw(admin, org, 'admin');
     await giveCredential(admin);
     await padWithAdmins(org);
 
-    // Step 3: junior reaching for senior — refused by rank, not by `authorize`.
+    // Junior reaching for senior — refused by rank, not by `authorize`.
     await expect(
       asPerson(org, (tx) => assignRoleAsActor(tx, actorOf(manager, org), { personId: admin, role: 'staff' })),
     ).rejects.toThrow(AuthorizationError);

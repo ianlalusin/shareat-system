@@ -58,13 +58,28 @@ export async function activeRoleForPerson(
   return row as ActiveRoleRow | undefined;
 }
 
-/** Whether this org currently has an ACTIVE admin. Drives the grant-time fallback (bible
- * row 115): a manager appointed while this is false receives the elevated grants then. */
+/** Whether this org currently has an ACTIVE ADMINISTRATOR — role `'admin'` OR `'super_admin'`.
+ * Drives the grant-time fallback (bible row 115): a manager appointed while this is false
+ * receives the elevated grants then.
+ *
+ * ⛔ **DEF-237.** Until T-244 this matched the literal `'admin'` only, so an organisation run
+ * solely by a `super_admin` read as adminless and the next manager appointed there was elevated
+ * as if nobody were in charge. `role IN ('admin', 'super_admin')` is the fix — mirroring
+ * `isAdministrative()` in `packages/auth/src/roles.ts`, which asks the identical question one
+ * layer up. Its one production caller is `assignRole` (`roles.ts:97`); every other admin-counting
+ * helper in this file (`hasOtherActiveAdmin`, `hasOtherActiveAdminWhoCanSignIn`) asks a different
+ * question and is untouched by this fix. */
 export async function hasActiveAdmin(tx: Tx, orgId: string): Promise<boolean> {
   const [row] = await tx
     .select({ id: personRoles.id })
     .from(personRoles)
-    .where(and(eq(personRoles.orgId, orgId), eq(personRoles.role, 'admin'), isNull(personRoles.revokedAt)))
+    .where(
+      and(
+        eq(personRoles.orgId, orgId),
+        inArray(personRoles.role, ['admin', 'super_admin']),
+        isNull(personRoles.revokedAt),
+      ),
+    )
     .limit(1);
   return row !== undefined;
 }

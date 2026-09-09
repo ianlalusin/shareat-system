@@ -487,6 +487,27 @@ describe('invariants 9-11 — the grant-time fallback (bible rows 115-116)', () 
     await expect(asPerson(org, (tx) => authorize(tx, actor, 'manage_users', {}))).rejects.toThrow(AuthorizationError);
   });
 
+  it('DEF-237 — a manager appointed in an org whose only administrator is a super_admin receives NO elevated grants', async () => {
+    // ⛔ Before T-244, `hasActiveAdmin` matched the literal role 'admin' only, so an org run
+    // solely by a super_admin read as "adminless" and the next manager appointed there was
+    // elevated as if the org had nobody in charge. Sibling to the test above, which proves the
+    // 'admin' case; this proves the 'super_admin' case DEF-237 names.
+    const org = await insertOrg('fallback-9c-super-admin-only');
+    const superAdmin = await insertPerson(org, 'Only Super Admin');
+    await insertRoleRaw(superAdmin, org, 'super_admin');
+
+    expect(await asPerson(org, (tx) => accessRepo.hasActiveAdmin(tx, org))).toBe(true);
+
+    const person = await insertPerson(org, 'Ordinary Manager');
+    const result = await asPerson(org, (tx) =>
+      assignRole(tx, { personId: person, orgId: org, role: 'manager', grantedBy: superAdmin }),
+    );
+    expect(result.elevatedGrants).toEqual([]);
+
+    const actor: Actor = { personId: person, orgId: org };
+    await expect(asPerson(org, (tx) => authorize(tx, actor, 'manage_users', {}))).rejects.toThrow(AuthorizationError);
+  });
+
   it('invariant 10 — removing the org\'s admin leaves an already-elevated manager\'s grants UNCHANGED', async () => {
     const org = await insertOrg('fallback-10');
     const admin = await insertPerson(org, 'Admin');
