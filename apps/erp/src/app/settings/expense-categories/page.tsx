@@ -151,7 +151,7 @@ export default async function ExpenseCategoriesSettingsPage({
                       <input type="hidden" name="isActive" value={c.isActive ? 'false' : 'true'} />
                       <button
                         type="submit"
-                        className="text-xs text-neutral-500 underline underline-offset-2 hover:text-neutral-800 dark:hover:text-neutral-200"
+                        className={`${ACTION_LINK} text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200`}
                       >
                         {c.isActive ? 'Retire' : 'Reinstate'}
                       </button>

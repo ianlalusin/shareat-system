@@ -8,6 +8,7 @@ import {
 import { channelsForStore, moneyAccountNames, receivableOptions, type SalesChannelAdminRow } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
+import { ACTION_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Sales channels — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -238,7 +239,7 @@ function ChannelCard({
         <input type="hidden" name="isActive" value="false" />
         <button
           type="submit"
-          className="text-xs text-neutral-500 underline underline-offset-2 hover:text-neutral-800 dark:hover:text-neutral-200"
+          className={`${ACTION_LINK} text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200`}
         >
           Retire this channel
         </button>

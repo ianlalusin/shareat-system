@@ -3,6 +3,7 @@ import { requireSession } from '../../../lib/session';
 import { recordCountAction } from '../actions';
 import { countedValueFor, listStores, loadCountSheet, peso } from '../lib';
 import { Page } from '@/components/shell/Page';
+import { ACTION_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Opening count — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -45,7 +46,7 @@ export default async function CountPage({
       <div>
         <Link
           href="/cutover"
-          className="text-xs text-neutral-500 underline underline-offset-2 dark:text-neutral-500"
+          className={`${ACTION_LINK} text-neutral-500 dark:text-neutral-500`}
         >
           ← Back to the conversion
         </Link>

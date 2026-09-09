@@ -7,6 +7,7 @@ import { requireSession } from '../../../../lib/session';
 import { listStores, withOrgPrincipal } from '../../../expenses/lib';
 import { enrolCardAction, enrolFingerprintAction, revokeCredentialAction } from './actions';
 import { Page } from '@/components/shell/Page';
+import { ACTION_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Credentials — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -73,7 +74,7 @@ export default async function CredentialsPage({
       <div>
         <Link
           href={`/staff/${employmentId}`}
-          className="text-xs text-neutral-500 underline underline-offset-4 hover:no-underline"
+          className={`${ACTION_LINK} text-neutral-500 underline-offset-4 hover:no-underline`}
         >
           ← Back to employment
         </Link>
