@@ -103,7 +103,10 @@ describe('personsRepo.listWithAccessForOrg', () => {
     await sql`insert into person_roles (person_id, org_id, role) values (${person}, ${org}, 'manager')`;
     await sql`insert into person_store_scope (person_id, store_id) values (${person}, ${s1}), (${person}, ${s2})`;
     await sql`insert into person_grants (person_id, grant_name) values (${person}, 'close_period')`;
-    await sql`insert into person_grants (person_id, grant_name, revoked_at) values (${person}, 'manage_users', now())`;
+    // T-248 / DEF-237, migration 0140: `person_grants_revoke_check` refuses a revoked row with no
+    // reason, so this fixture must state one. It is a revoked row purely so the count below has
+    // something to exclude — the reason says exactly that rather than inventing a story.
+    await sql`insert into person_grants (person_id, grant_name, revoked_at, revoke_reason) values (${person}, 'manage_users', now(), 'fixture — a revoked grant the active count must exclude')`;
 
     const rows = await asPerson(org, (tx) => personsRepo.listWithAccessForOrg(tx, org));
 
