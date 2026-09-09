@@ -136,6 +136,27 @@ export const personGrants = pgTable(
     grantedBy: uuid('granted_by').references(() => persons.id, { onDelete: 'restrict' }),
     grantedAt: timestamp('granted_at', { withTimezone: true }).notNull().defaultNow(),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    /**
+     * T-248 / DEF-237, migration 0140. WHERE this row came from — `'elevation'` (the automatic
+     * grant-time fallback, bible row 115, OR `elevateManager`'s manual "explicit tick", bible
+     * row 116 — the same reason to exist, so the same eligibility to lapse), `'owner'`
+     * (`createFirstAdmin`'s founding-person equivalence grant — never eligible, that person
+     * already holds `admin` themselves), or `'grant'` (an ordinary deliberate hand-grant via
+     * `grantCapabilityAsActor`).
+     *
+     * ⛔ NULL for every row written before this column existed, deliberately, not backfilled by
+     * inference — see the migration's own comment. NULL is never `'elevation'`, so it is simply
+     * never eligible for T-248's revocation; no special-case exclusion needed anywhere that reads
+     * this column.
+     */
+    grantSource: text('grant_source'),
+    /**
+     * WHY this grant was revoked — T-248 / DEF-237, migration 0140, the same shape as
+     * `person_credentials.revokeReason` (`schema/sessions.ts`, T-239 / DEF-229). Pairs with
+     * `revokedAt`; this table has never carried a `revokedBy` (unlike `person_credentials`) and
+     * this migration does not add one — a WHO column is its own decision, not folded in here.
+     */
+    revokeReason: text('revoke_reason'),
   },
   (t) => [
     index('person_grants_person_id_idx').on(t.personId),
@@ -145,5 +166,15 @@ export const personGrants = pgTable(
     uniqueIndex('person_grants_active_person_grant_unique')
       .on(t.personId, t.grantName)
       .where(sql`${t.revokedAt} is null`),
+    check('person_grants_source_check', sql`${t.grantSource} is null or ${t.grantSource} in ('elevation', 'owner', 'grant')`),
+    // ⛔ NULL-BLIND TRAP, avoided on purpose (DEF-229's own lesson, T-239): a CHECK passes when
+    // its expression is NULL, so the naive `revoked_at is not null and btrim(revoke_reason) <> ''`
+    // admits a revoked row with a MISSING reason. The explicit `is not null` term is load-bearing.
+    check(
+      'person_grants_revoke_check',
+      sql`(${t.revokedAt} is null and ${t.revokeReason} is null)
+          or (${t.revokedAt} is not null and ${t.revokeReason} is not null
+              and btrim(${t.revokeReason}) <> '')`,
+    ),
   ],
 );

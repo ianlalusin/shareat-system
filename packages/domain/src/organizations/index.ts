@@ -218,6 +218,16 @@ export async function createFirstAdmin(
   // ⭐ The owner's four extra capabilities, as real rows. `granted_by` is NULL for the same reason
   // the role's is: there is nobody above the first person, and a fabricated grantor would be worse
   // than an absent one because it reads as evidence.
+  //
+  // ⭐ T-248 / DEF-237 — `grantSource: 'owner'`, never `'elevation'`. This grant is never eligible
+  // for the admin-arrival revocation: its holder already holds `admin` themselves (inserted just
+  // above), so there is no later "an administrator arrived" event relative to their own grant —
+  // they ARE the administrator from the moment of bootstrap.
+  //
+  // Not wired to call the revocation itself, deliberately: `orgHasAnyRole`'s refusal above means
+  // this function only ever runs on an org with ZERO role history, so no manager could ever have
+  // been elevated here yet — a revocation call on this path would be untested dead code, never
+  // exercising its own "found something" branch.
   const grantedCapabilities =
     input.withSuperAdminCapabilities === false ? [] : SUPER_ADMIN_ONLY_CAPABILITIES;
   for (const capability of grantedCapabilities) {
@@ -225,6 +235,7 @@ export async function createFirstAdmin(
       personId: person.id,
       grantName: capability,
       grantedBy: null,
+      grantSource: 'owner',
     });
   }
 

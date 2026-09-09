@@ -555,7 +555,7 @@ describe('invariants 9-11 — the grant-time fallback (bible rows 115-116)', () 
     const actorBefore: Actor = { personId: person, orgId: org };
     await expect(asPerson(org, (tx) => authorize(tx, actorBefore, 'manage_users', {}))).resolves.toBeUndefined();
 
-    await asPerson(org, (tx) => accessRepo.revokeGrantById(tx, row!.id));
+    await asPerson(org, (tx) => accessRepo.revokeGrantById(tx, row!.id, 'invariant 11 test — no longer needed'));
 
     const actorAfter: Actor = { personId: person, orgId: org };
     await expect(asPerson(org, (tx) => authorize(tx, actorAfter, 'manage_users', {}))).rejects.toThrow(AuthorizationError);
@@ -571,12 +571,12 @@ describe('invariants 9-11 — the grant-time fallback (bible rows 115-116)', () 
     const person = await insertPerson(org, 'Manager');
     await insertRoleRaw(person, org, 'manager');
     const { id: firstGrantId } = await asPerson(org, (tx) =>
-      accessRepo.grantCapability(tx, { personId: person, grantName: 'manage_price_lists', grantedBy: null }),
+      accessRepo.grantCapability(tx, { personId: person, grantName: 'manage_price_lists', grantedBy: null, grantSource: 'grant' }),
     );
-    await asPerson(org, (tx) => accessRepo.revokeGrantById(tx, firstGrantId));
+    await asPerson(org, (tx) => accessRepo.revokeGrantById(tx, firstGrantId, 're-grant test — no longer needed'));
 
     const { id: secondGrantId } = await asPerson(org, (tx) =>
-      accessRepo.grantCapability(tx, { personId: person, grantName: 'manage_price_lists', grantedBy: null }),
+      accessRepo.grantCapability(tx, { personId: person, grantName: 'manage_price_lists', grantedBy: null, grantSource: 'grant' }),
     );
     expect(secondGrantId).not.toBe(firstGrantId);
 
@@ -586,6 +586,194 @@ describe('invariants 9-11 — the grant-time fallback (bible rows 115-116)', () 
     expect(rows).toHaveLength(2);
     expect(rows[0]!.revoked_at).not.toBeNull(); // the original, still queryable
     expect(rows[1]!.revoked_at).toBeNull(); // the new one, active
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// T-248 / DEF-237, bible row 188 — "the elevation is a stand-in for a missing administrator,
+// and it ends when the administrator arrives." Each test builds its own fresh org, same
+// convention as the grant-time-fallback block above.
+//
+// ⛔ Cases 4 and 6 below are the ones that matter more than the rest: a hand-granted capability
+// and a NULL-source (pre-existing) row must each survive an arrival UNTOUCHED. If either is
+// swept, this task has done the exact harm it exists to prevent, and it would look like success
+// — every other assertion in this file would still be green. Both were watched failing against
+// a deliberately naive revocation (matching by grant_name membership in
+// ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER instead of by grant_source) before the real,
+// source-filtered query was restored — see the READY report for the captured red.
+// ---------------------------------------------------------------------------------------
+
+describe('T-248 — DEF-237: elevated grants are revoked when an administrator arrives', () => {
+  /** Raw SQL, bypassing every service — the constraint is the only thing left, same technique
+   *  `credentials-admin.test.ts`'s `forceRevoke` uses for `person_credentials_revoke_check`. */
+  const forceRevoke = (grantId: string, reason: string | null) =>
+    sql`update person_grants set revoked_at = now(), revoke_reason = ${reason} where id = ${grantId}`;
+
+  it('⛔ case 1: a manager auto-elevated in an adminless org loses those grants the moment an ADMIN arrives', async () => {
+    const org = await insertOrg('t248-elevation-admin');
+    const manager = await insertPerson(org, 'Elevated Manager');
+    const elevated = await asPerson(org, (tx) => assignRole(tx, { personId: manager, orgId: org, role: 'manager', grantedBy: null }));
+    expect(elevated.elevatedGrants).toContain('manage_users' as Capability);
+
+    const [before] = await sql<{ grant_source: string | null; revoked_at: Date | null }[]>`
+      select grant_source, revoked_at from person_grants where person_id = ${manager} and grant_name = 'manage_users'
+    `;
+    expect(before!.grant_source).toBe('elevation');
+    expect(before!.revoked_at).toBeNull();
+
+    const admin = await insertPerson(org, 'New Admin');
+    const result = await asPerson(org, (tx) => assignRole(tx, { personId: admin, orgId: org, role: 'admin', grantedBy: null }));
+
+    expect(result.revokedElevatedGrants.map((g) => g.grantName).sort()).toEqual([...ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER].sort());
+    expect(result.revokedElevatedGrants.every((g) => g.personId === manager)).toBe(true);
+
+    const rows = await sql<{ grant_name: string; revoked_at: Date | null; revoke_reason: string | null }[]>`
+      select grant_name, revoked_at, revoke_reason from person_grants where person_id = ${manager}
+    `;
+    expect(rows.every((r) => r.revoked_at !== null)).toBe(true);
+    expect(rows.every((r) => r.revoke_reason?.includes('DEF-237'))).toBe(true);
+
+    const actor: Actor = { personId: manager, orgId: org };
+    await expect(asPerson(org, (tx) => authorize(tx, actor, 'manage_users', {}))).rejects.toThrow(AuthorizationError);
+  });
+
+  it('⭐ case 2: a SUPER_ADMIN arrival triggers it too', async () => {
+    const org = await insertOrg('t248-elevation-super');
+    const manager = await insertPerson(org, 'Elevated Manager');
+    await asPerson(org, (tx) => assignRole(tx, { personId: manager, orgId: org, role: 'manager', grantedBy: null }));
+
+    const superAdmin = await insertPerson(org, 'New Super');
+    const result = await asPerson(org, (tx) => assignRole(tx, { personId: superAdmin, orgId: org, role: 'super_admin', grantedBy: null }));
+
+    expect(result.revokedElevatedGrants.length).toBeGreaterThan(0);
+    const [row] = await sql<{ revoked_at: Date | null }[]>`
+      select revoked_at from person_grants where person_id = ${manager} and grant_name = 'manage_users'
+    `;
+    expect(row!.revoked_at).not.toBeNull();
+  });
+
+  it('case 3: an arrival in an org with NO elevated managers is a no-op', async () => {
+    const org = await insertOrg('t248-no-elevation');
+    const staff = await insertPerson(org, 'Ordinary Staff');
+    await asPerson(org, (tx) => assignRole(tx, { personId: staff, orgId: org, role: 'staff', grantedBy: null }));
+
+    const admin = await insertPerson(org, 'First Admin');
+    const result = await asPerson(org, (tx) => assignRole(tx, { personId: admin, orgId: org, role: 'admin', grantedBy: null }));
+
+    expect(result.revokedElevatedGrants).toEqual([]);
+  });
+
+  it('⛔ case 4: a HAND-GRANTED capability survives an arrival untouched — the trap', async () => {
+    const org = await insertOrg('t248-hand-grant-survives');
+    const manager = await insertPerson(org, 'Trusted Manager');
+    // ⚠️ Raw role insert, NOT `assignRole` — this org is adminless, so `assignRole` would
+    // auto-elevate the manager first and this test would be granting a capability the manager
+    // already held (as `'elevation'`), never actually constructing the hand-grant it means to test.
+    await insertRoleRaw(manager, org, 'manager');
+    const grantor = await insertPerson(org, 'Grantor');
+    await asPerson(org, (tx) =>
+      accessRepo.grantCapability(tx, { personId: manager, grantName: 'manage_users', grantedBy: grantor, grantSource: 'grant' }),
+    );
+
+    const admin = await insertPerson(org, 'New Admin');
+    const result = await asPerson(org, (tx) => assignRole(tx, { personId: admin, orgId: org, role: 'admin', grantedBy: null }));
+
+    expect(result.revokedElevatedGrants).toEqual([]);
+    const [row] = await sql<{ revoked_at: Date | null; grant_source: string | null }[]>`
+      select revoked_at, grant_source from person_grants where person_id = ${manager} and grant_name = 'manage_users'
+    `;
+    expect(row!.grant_source).toBe('grant');
+    expect(row!.revoked_at).toBeNull();
+
+    const actor: Actor = { personId: manager, orgId: org };
+    await expect(asPerson(org, (tx) => authorize(tx, actor, 'manage_users', {}))).resolves.toBeUndefined();
+  });
+
+  it('case 5: an OWNER-source grant (createFirstAdmin\'s equivalence) is never eligible', async () => {
+    const org = await insertOrg('t248-owner-untouched');
+    const owner = await insertPerson(org, 'Org Owner');
+    await asPerson(org, (tx) => assignRole(tx, { personId: owner, orgId: org, role: 'admin', grantedBy: null }));
+    await asPerson(org, (tx) =>
+      accessRepo.grantCapability(tx, { personId: owner, grantName: 'post_journal_entry', grantedBy: null, grantSource: 'owner' }),
+    );
+
+    // A second admin arrives later — a real arrival, even though the org already had one.
+    const secondAdmin = await insertPerson(org, 'Second Admin');
+    const result = await asPerson(org, (tx) => assignRole(tx, { personId: secondAdmin, orgId: org, role: 'admin', grantedBy: owner }));
+
+    expect(result.revokedElevatedGrants).toEqual([]);
+    const [row] = await sql<{ revoked_at: Date | null }[]>`
+      select revoked_at from person_grants where person_id = ${owner} and grant_name = 'post_journal_entry'
+    `;
+    expect(row!.revoked_at).toBeNull();
+  });
+
+  it('⛔ case 6: a NULL-source (pre-existing) grant survives an arrival untouched — the backfill decision, at the mechanism level', async () => {
+    const org = await insertOrg('t248-null-source-survives');
+    const manager = await insertPerson(org, 'Legacy-Elevated Manager');
+    // ⚠️ Raw role insert, NOT `assignRole` — same reason as case 4: this org is adminless, and
+    // `assignRole` would auto-elevate the manager (with the real 'elevation' source) before the
+    // raw insert below ever runs, colliding with the partial unique index on a second active row.
+    await insertRoleRaw(manager, org, 'manager');
+    // Simulates a row written before this migration existed: same grant, source deliberately NULL.
+    await sql`insert into person_grants (person_id, grant_name, granted_by, grant_source) values (${manager}, 'manage_users', null, null)`;
+
+    const admin = await insertPerson(org, 'New Admin');
+    const result = await asPerson(org, (tx) => assignRole(tx, { personId: admin, orgId: org, role: 'admin', grantedBy: null }));
+
+    expect(result.revokedElevatedGrants).toEqual([]);
+    const [row] = await sql<{ revoked_at: Date | null }[]>`
+      select revoked_at from person_grants where person_id = ${manager} and grant_name = 'manage_users' and grant_source is null
+    `;
+    expect(row!.revoked_at).toBeNull();
+  });
+
+  it('⭐ case 7: elevateManager\'s grants are revoked identically to the automatic path', async () => {
+    const org = await insertOrg('t248-elevate-manager');
+    const manager = await insertPerson(org, 'Manually Re-elevated Manager');
+    await asPerson(org, (tx) => assignRole(tx, { personId: manager, orgId: org, role: 'manager', grantedBy: null }));
+    await asPerson(org, (tx) => elevateManager(tx, { personId: manager, grantedBy: null }));
+
+    const [before] = await sql<{ grant_source: string | null }[]>`
+      select grant_source from person_grants where person_id = ${manager} and grant_name = 'manage_users'
+    `;
+    expect(before!.grant_source).toBe('elevation');
+
+    const admin = await insertPerson(org, 'New Admin');
+    const result = await asPerson(org, (tx) => assignRole(tx, { personId: admin, orgId: org, role: 'admin', grantedBy: null }));
+
+    expect(result.revokedElevatedGrants.some((g) => g.personId === manager && g.grantName === 'manage_users')).toBe(true);
+  });
+
+  it('case 8: a repeat arrival (a second admin appointed later) is idempotent', async () => {
+    const org = await insertOrg('t248-idempotent');
+    const manager = await insertPerson(org, 'Elevated Manager');
+    await asPerson(org, (tx) => assignRole(tx, { personId: manager, orgId: org, role: 'manager', grantedBy: null }));
+
+    const firstAdmin = await insertPerson(org, 'First Admin');
+    const first = await asPerson(org, (tx) => assignRole(tx, { personId: firstAdmin, orgId: org, role: 'admin', grantedBy: null }));
+    expect(first.revokedElevatedGrants.length).toBeGreaterThan(0);
+
+    const secondAdmin = await insertPerson(org, 'Second Admin');
+    const second = await asPerson(org, (tx) => assignRole(tx, { personId: secondAdmin, orgId: org, role: 'admin', grantedBy: firstAdmin }));
+    expect(second.revokedElevatedGrants).toEqual([]);
+  });
+
+  it('⚠️ the CHECK constraint refuses a revoked row with a NULL or blank reason — proven raw, not inherited from T-239', async () => {
+    const org = await insertOrg('t248-check-constraint');
+    const person = await insertPerson(org, 'Grant Holder');
+    const { id: grantId } = await asPerson(org, (tx) =>
+      accessRepo.grantCapability(tx, { personId: person, grantName: 'manage_price_lists', grantedBy: null, grantSource: 'grant' }),
+    );
+
+    // ⛔ The null-blind trap: a CHECK passes when its expression is NULL, so the naive spelling
+    // `revoked_at is not null and btrim(revoke_reason) <> ''` would ACCEPT this row. This is the
+    // control that proves the actual constraint's explicit `is not null` term is doing the work.
+    await expect(forceRevoke(grantId, null)).rejects.toThrow(/person_grants_revoke_check/);
+    await expect(forceRevoke(grantId, '   ')).rejects.toThrow(/person_grants_revoke_check/);
+
+    const [row] = await sql<{ revoked_at: Date | null }[]>`select revoked_at from person_grants where id = ${grantId}`;
+    expect(row!.revoked_at).toBeNull(); // both attempts rolled back — still live
   });
 });
 

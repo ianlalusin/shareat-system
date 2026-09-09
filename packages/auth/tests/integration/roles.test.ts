@@ -619,7 +619,8 @@ describe('assignRoleAsActor — an admin with super_admin-equivalent grants (T-2
     const owner = await insertPerson(org, 'Former Owner');
     await insertRoleRaw(owner, org, 'admin');
     await grantRaw(owner, SUPER_ADMIN_ONLY);
-    await sql`update person_grants set revoked_at = now() where person_id = ${owner}`;
+    // T-248 / DEF-237, migration 0140 — every revocation now states why.
+    await sql`update person_grants set revoked_at = now(), revoke_reason = 'test teardown' where person_id = ${owner}`;
     const target = await insertPerson(org, 'Would-be Admin');
 
     await expect(

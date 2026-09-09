@@ -69,6 +69,13 @@ export interface AssignRoleResult {
    * in every other case, and empty for an admin re-appointed in an org with no active
    * stores. */
   readonly materialisedStoreIds: readonly string[];
+  /** ⭐ T-248 / DEF-237. Non-empty only when this call just appointed an ADMIN or SUPER_ADMIN —
+   * every `'elevation'`-sourced `person_grants` row this organisation held, now revoked, because
+   * the grant-time fallback they stood in for (bible row 115) no longer has anything to stand in
+   * for (bible row 188). A hand-granted or owner-equivalence grant is never in this list — see
+   * `accessRepo.revokeElevationGrantsForOrg`. Empty in every other case, including an
+   * admin/super_admin appointment into an org with no elevated managers to clean up. */
+  readonly revokedElevatedGrants: readonly { personId: string; grantName: string }[];
 }
 
 /**
@@ -101,6 +108,7 @@ export async function assignRole(tx: Tx, input: AssignRoleInput): Promise<Assign
           personId: input.personId,
           grantName: capability,
           grantedBy: input.grantedBy,
+          grantSource: 'elevation',
         });
       }
       elevatedGrants = ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER;
@@ -138,7 +146,24 @@ export async function assignRole(tx: Tx, input: AssignRoleInput): Promise<Assign
     materialisedStoreIds = storeIds;
   }
 
-  return { roleId: id, elevatedGrants, materialisedStoreIds };
+  // ⭐ T-248 / DEF-237, bible row 188 — "the elevation is a stand-in for a missing administrator,
+  // and it ends when the administrator arrives." Fires unconditionally on every admin/super_admin
+  // appointment, not only a detected 0→1 transition: a sweep that matches nothing costs one query
+  // and changes nothing, and the unconditional form also cleans up a stray elevation grant on the
+  // APPOINTEE's own person (a manager elevated earlier, now being made admin themselves) with no
+  // special case. Matches ONLY `grant_source = 'elevation'` — a hand-grant or the founding owner's
+  // equivalence grant is never touched (task spec §2-3).
+  let revokedElevatedGrants: readonly { personId: string; grantName: string }[] = [];
+  if (input.role === 'admin' || input.role === 'super_admin') {
+    revokedElevatedGrants = await accessRepo.revokeElevationGrantsForOrg(
+      tx,
+      input.orgId,
+      'Automatically revoked — this organisation gained an active administrator, so the ' +
+        'grant-time fallback that created this row no longer applies (bible row 188, DEF-237).',
+    );
+  }
+
+  return { roleId: id, elevatedGrants, materialisedStoreIds, revokedElevatedGrants };
 }
 
 export interface AssignRoleAsActorInput {
@@ -546,6 +571,9 @@ export async function grantCapabilityAsActor(
     personId: input.personId,
     grantName: input.capability,
     grantedBy: actor.personId,
+    // T-248 / DEF-237 — an ordinary deliberate hand-grant, never eligible for the
+    // admin-arrival revocation (`revokeElevationGrantsForOrg` matches only `'elevation'`).
+    grantSource: 'grant',
   });
 }
 
@@ -557,6 +585,13 @@ export async function grantCapabilityAsActor(
  * because that admin is gone and nobody re-ran an appointment. The caller (a super-admin
  * console action) is responsible for calling `authorize()` for `manage_users` or an
  * equivalent break-glass capability first — this function performs the write only.
+ *
+ * ⭐ T-248 / DEF-237 — `grantSource: 'elevation'`, the SAME source `assignRole`'s automatic path
+ * writes. This function grants the identical set for the identical reason (a stand-in for a
+ * missing administrator, bible row 116), differing only in who triggers it and when — so it
+ * lapses the same way, the moment the org gains an administrator. Tagged now, while this
+ * function has zero production callers, so it cannot become a second silent gap the day a
+ * console action finally calls it.
  */
 export async function elevateManager(
   tx: Tx,
@@ -567,6 +602,7 @@ export async function elevateManager(
       personId: input.personId,
       grantName: capability,
       grantedBy: input.grantedBy,
+      grantSource: 'elevation',
     });
   }
   return ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER;

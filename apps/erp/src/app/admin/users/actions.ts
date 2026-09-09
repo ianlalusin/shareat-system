@@ -122,16 +122,25 @@ export async function assignRoleAction(formData: FormData): Promise<void> {
   let message = 'Role updated.';
   try {
     const result = await withOrgPrincipal(actor.orgId, (tx) => assignRoleAsActor(tx, actor, { personId, role }));
-    // Say what else the write did, rather than letting a materialisation or an elevation be
-    // invisible — both are real rows this person now holds (§C.2 and §B.1).
+    // Say what else the write did, rather than letting a materialisation, an elevation or a
+    // revocation be invisible — all three are real rows this person's org now holds differently
+    // (§C.2, §B.1, and T-248 / DEF-237). Each clause names its own verb so the sentence stays
+    // correct however many of the three fire together.
     const extras: string[] = [];
     if (result.materialisedStoreIds.length > 0) {
-      extras.push(`store scope for ${result.materialisedStoreIds.length} store(s)`);
+      extras.push(`granted store scope for ${result.materialisedStoreIds.length} store(s)`);
     }
     if (result.elevatedGrants.length > 0) {
-      extras.push(`${result.elevatedGrants.length} elevated capability grant(s), because this org has no admin`);
+      extras.push(`granted ${result.elevatedGrants.length} elevated capability grant(s), because this org has no admin`);
     }
-    message = extras.length > 0 ? `Role updated, and granted ${extras.join(' and ')}.` : message;
+    if (result.revokedElevatedGrants.length > 0) {
+      const affected = new Set(result.revokedElevatedGrants.map((g) => g.personId)).size;
+      extras.push(
+        `revoked ${result.revokedElevatedGrants.length} temporary grant(s) from ${affected} ` +
+          `manager(s), now that this org has an administrator`,
+      );
+    }
+    message = extras.length > 0 ? `Role updated, and ${extras.join(', and ')}.` : message;
   } catch (err) {
     backToUser(personId, { error: errorMessage(err) });
   }
@@ -188,7 +197,15 @@ export async function setCapabilityGrantAction(formData: FormData): Promise<void
         // revoking your own grant NARROWS your authority, so it cannot escalate, and refusing it
         // would stop someone dropping a capability they no longer want to hold.
         await authorize(tx, actor, 'grant_capability', {});
-        await accessRepo.revokeGrantById(tx, grantId);
+        // T-248 / DEF-237, migration 0140 — every revocation now states why. This screen has no
+        // free-text reason field, so the sentence is fixed and honest rather than fabricated: it
+        // says exactly what is known (a manual revoke, through this screen) and nothing more. A
+        // real reason input is a follow-up finding, not built here (flagged in the task spec §6).
+        await accessRepo.revokeGrantById(
+          tx,
+          grantId,
+          'Revoked via /admin/users. No reason was captured on this screen — DEF-237 follow-up.',
+        );
       }
     });
   } catch (err) {

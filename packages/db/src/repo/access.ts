@@ -16,8 +16,12 @@
  */
 import { and, eq, exists, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { personGrants, personRoles, personStoreScope } from '../../schema/access';
-// ⚠️ The one table outside the access axis this file touches — see `hasOtherActiveAdminWhoCanSignIn`.
+// ⚠️ Tables outside the access axis this file touches: `personCredentials` for
+// `hasOtherActiveAdminWhoCanSignIn`, `persons` for `revokeElevationGrantsForOrg`'s org scoping
+// (`person_grants` carries no `org_id` of its own — same reason its RLS policy derives org
+// through the person it names).
 import { personCredentials } from '../../schema/sessions';
+import { persons } from '../../schema/persons';
 import { stores } from '../../schema/stores';
 import type { Tx } from '../client';
 
@@ -369,13 +373,29 @@ export interface GrantRow {
   revokedAt: Date | null;
 }
 
+/**
+ * WHERE a `person_grants` row came from — T-248 / DEF-237, migration 0140.
+ *
+ * `'elevation'` — the automatic grant-time fallback (`assignRole`, bible row 115) OR
+ * `elevateManager`'s manual "explicit tick" re-elevation (bible row 116): the same reason to
+ * exist, so the same eligibility to lapse when the org gains an administrator.
+ * `'owner'` — `createFirstAdmin`'s founding-person equivalence grant. Never eligible for that
+ * revocation: the holder already holds `admin` themselves.
+ * `'grant'` — an ordinary, deliberate hand-grant (`grantCapabilityAsActor`). Never eligible.
+ */
+export type GrantSource = 'elevation' | 'owner' | 'grant';
+
 /** Grants one capability. Idempotent against an ALREADY-ACTIVE identical grant (the
  * partial unique index would otherwise reject a second "elevate this manager" call); a
  * previously revoked grant is a distinct row, and re-granting inserts a new one rather
- * than reviving the old — the old row's revocation date stays intact and queryable. */
+ * than reviving the old — the old row's revocation date stays intact and queryable.
+ *
+ * ⚠️ On the idempotent (already-active) branch, `grantSource` is NOT re-written even if the
+ * caller passes a different one — the existing row's provenance is the true one; a second call
+ * with a different reason is not evidence the first was wrong. */
 export async function grantCapability(
   tx: Tx,
-  input: { personId: string; grantName: string; grantedBy: string | null },
+  input: { personId: string; grantName: string; grantedBy: string | null; grantSource: GrantSource },
 ): Promise<{ id: string }> {
   const [existing] = await tx
     .select({ id: personGrants.id })
@@ -386,23 +406,68 @@ export async function grantCapability(
 
   const [row] = await tx
     .insert(personGrants)
-    .values({ personId: input.personId, grantName: input.grantName, grantedBy: input.grantedBy })
+    .values({
+      personId: input.personId,
+      grantName: input.grantName,
+      grantedBy: input.grantedBy,
+      grantSource: input.grantSource,
+    })
     .returning({ id: personGrants.id });
   if (!row) throw new Error('grantCapability: insert returned no row');
   return row;
 }
 
 /** Revokes one grant by id. Throws if it does not exist or is already revoked, for the
- * same reason as `revokeRoleById`. */
-export async function revokeGrantById(tx: Tx, grantId: string): Promise<void> {
+ * same reason as `revokeRoleById`. `reason` is required — migration 0140's
+ * `person_grants_revoke_check` refuses a revoked row with a null or blank one. */
+export async function revokeGrantById(tx: Tx, grantId: string, reason: string): Promise<void> {
   const updated = await tx
     .update(personGrants)
-    .set({ revokedAt: sql`now()` })
+    .set({ revokedAt: sql`now()`, revokeReason: reason })
     .where(and(eq(personGrants.id, grantId), isNull(personGrants.revokedAt)))
     .returning({ id: personGrants.id });
   if (updated.length === 0) {
     throw new Error(`revokeGrantById: grant ${grantId} does not exist or is already revoked`);
   }
+}
+
+/**
+ * ⭐ **T-248 / DEF-237 — the revocation itself.** Revokes every ACTIVE `'elevation'`-sourced
+ * grant for every person in `orgId`, called from `assignRole` whenever an `admin` or
+ * `super_admin` is appointed (bible row 188). Returns what it revoked so the caller can report
+ * it rather than let it be an invisible side effect (T-219's own standard for `elevatedGrants`
+ * and `materialisedStoreIds`).
+ *
+ * ⛔ **Matches ONLY `grant_source = 'elevation'`** — never `'owner'`, never `'grant'`, never
+ * `NULL` (a pre-existing row from before this column existed). That is the entire point of
+ * recording provenance at grant time instead of guessing it at revocation time.
+ *
+ * ⚠️ **Org-scoped explicitly, not left to RLS alone** (bible §7 rule 4, §15.11 — no layer may be
+ * the only one for a given risk). `person_grants` carries no `org_id` of its own — the same
+ * reason `person_..._via_person` is this table's RLS policy — so this joins through `persons`.
+ *
+ * ⚠️ **Unconditional on which admin/super_admin appointment triggered it**, deliberately: a
+ * sweep matching nothing is a free no-op, so there is no need to first detect a 0→1
+ * "did this org just gain its first administrator" transition — see the task spec §4 for why
+ * that would also miss the case of a previously-elevated manager now being appointed admin
+ * themselves.
+ */
+export async function revokeElevationGrantsForOrg(
+  tx: Tx,
+  orgId: string,
+  reason: string,
+): Promise<{ personId: string; grantName: string }[]> {
+  return tx
+    .update(personGrants)
+    .set({ revokedAt: sql`now()`, revokeReason: reason })
+    .where(
+      and(
+        eq(personGrants.grantSource, 'elevation'),
+        isNull(personGrants.revokedAt),
+        exists(tx.select({ one: sql`1` }).from(persons).where(and(eq(persons.id, personGrants.personId), eq(persons.orgId, orgId)))),
+      ),
+    )
+    .returning({ personId: personGrants.personId, grantName: personGrants.grantName });
 }
 
 export async function personHasActiveGrant(tx: Tx, personId: string, grantName: string): Promise<boolean> {
