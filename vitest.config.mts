@@ -77,6 +77,12 @@ export default defineConfig({
             'tests/integration/**/*.test.ts',
             'tests/invariants/**/*.test.ts',
             'packages/**/tests/integration/**/*.test.ts',
+            // T-247 (DEF-221): apps/erp/tests/integration/** matched no include glob here and
+            // was excluded from the unit project below — a file placed there the obvious way
+            // (mirroring packages/**/tests/integration/** above) was collected by no project and
+            // silently never ran. See tests/unit/integration-glob-guard.test.ts for the durable
+            // guard against the next such directory.
+            'apps/**/tests/integration/**/*.test.ts',
           ],
           exclude: ['**/node_modules/**', '**/.next/**'],
           environment: 'node',
