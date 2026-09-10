@@ -82,6 +82,81 @@ Also check: `packages/domain/tests/integration/finding-occurrences.test.ts:206` 
 asserting *"On 1 October, `lastCompletedPeriod()` is September"* — verify that still holds under
 the fix and correct it if not.
 
+## ⛔ SPEC AMENDMENT, orchestrator, 2026-09-10 (night) — THERE IS A SECOND COPY OF THIS FUNCTION
+
+**The spec above says "two live callers". Re-derived at dispatch, that undercounts, and the missing
+item is not another caller — it is a SECOND INDEPENDENT IMPLEMENTATION of the same function, with
+the same name, computing the same concept, in the app layer.**
+
+`apps/erp/src/app/findings/lib.ts:22` defines its own `lastCompletedPeriod(now)` with its own body
+(`Date.UTC(...)` + `setUTCMonth(-1)`), and `:29` defines `selectablePeriods(now)` on the same raw-UTC
+idiom. It is not a re-export. Its live callers:
+
+| Consumer | Uses |
+|---|---|
+| `apps/erp/src/app/findings/page.tsx:32` | app copy — the month the findings page opens on |
+| `apps/erp/src/app/page.tsx:50` | app copy — the dashboard's findings tile |
+
+So the full population, re-derived rather than reasoned:
+
+| Implementation | Live callers |
+|---|---|
+| `packages/domain/src/scheduler/index.ts:196` | `runMonthEnd` (`scheduler/index.ts:222`), `runFindingObservation` (`findings/index.ts:276`), **and `scripts/month-end.ts:32`** — the CLI the systemd unit actually invokes, which computes the period itself rather than letting `runMonthEnd` default |
+| `apps/erp/src/app/findings/lib.ts:22` | `findings/page.tsx:32`, `page.tsx:50` |
+
+### Why this changes the scope rather than being logged and left
+
+⛔ **Fixing only the domain copy ships a screen that disagrees with the job.** Both copies return
+identical values today (verified across eight instants), so the two are consistent-and-wrong. Fix one
+and, for the 00:00–08:00 Manila window on the 1st of each month, **the job records August while the
+findings page and the dashboard show July.** That window is not rare — it is every month, and it is
+exactly when someone looks to see whether month-end ran.
+
+⛔ **And the app copy is independently defective right now.** It has the same defect for the same
+eight hours a month, on screen, for every user — before any change to the domain function.
+
+### The trap inside the widened scope — measured, so the lane does not have to find it the hard way
+
+`selectablePeriods` must move **in the same change** as the app's `lastCompletedPeriod`. The page does
+`sp.period && periods.includes(sp.period) ? sp.period : lastCompletedPeriod()`. Fix the default without
+fixing the list and, at `2026-08-31T23:59Z`, the default becomes `2026-08` while the list still offers
+`2026-07` downward — **the page opens on a month it rejects**, which is the precise thing
+`findings-page-lib.test.ts:36` exists to prevent. ⚠️ **That test will not catch it**: its instant is
+20:00 Manila, where both idioms agree.
+
+### Two of the spec's own open questions, answered by measurement — do not re-litigate them
+
+1. ⭐ **`finding-occurrences.test.ts:206` needs NO change.** Its `NOW` is `2026-10-05T00:00:00Z` =
+   **2026-10-05 08:00 Manila**, same month either way, so `lastCompletedPeriod()` is `2026-09` before
+   and after. The comment's claim *"On 1 October, `lastCompletedPeriod()` is September"* still holds.
+   Verify it yourself; do not take this on trust — but it is not expected to move.
+2. ⭐ **All three instants in `apps/erp/tests/findings-page-lib.test.ts` are unchanged by the fix**
+   (`2026-08-30T12:00Z` → 20:00 Manila, `2026-08-01T00:00:01Z` → 08:00 Manila, `2027-01-15T00:00Z` →
+   08:00 Manila). ⛔ **Which means the existing app tests cannot detect this defect at all.** Fixing the
+   app copy therefore costs zero test churn — and a green suite there proves nothing until you **add a
+   boundary case inside the 00:00–08:00 Manila window on the 1st**.
+
+⚠️ A useful extra case the spec does not list: `2026-12-31T17:00:00Z` = **2027-01-01 01:00 Manila**.
+The current function returns `2026-11` — wrong by **two** months, not one, because it crosses the year
+as well. A Manila-derived version returns `2026-12`.
+
+### Amended scope — this replaces the Scope list below
+
+- `packages/domain/src/scheduler/index.ts` — the function only.
+- `packages/domain/tests/integration/scheduler.test.ts` — the assertions above.
+- `packages/domain/tests/integration/finding-occurrences.test.ts` — only if the fix changes it (it is
+  not expected to; say so either way).
+- **`apps/erp/src/app/findings/lib.ts`** — `lastCompletedPeriod` and `selectablePeriods`, together.
+  ⭐ **Prefer deleting the duplicate over fixing it twice**: re-export the domain function (`@shareat/domain`
+  is already a dependency of the app, and this direction is the sanctioned one — RULES rule 13) and derive
+  `selectablePeriods` from it. Two copies of one rule is what produced this defect.
+- **`apps/erp/tests/findings-page-lib.test.ts`** — add the boundary case; keep the three existing
+  instants, which should stay green untouched.
+- A unit test is welcome if you can express the boundary cases without a database.
+
+⚠️ **Still out of scope, unchanged:** moving the timer, `fiscal_periods`/T-264, and any other date idiom
+— log a third one, do not fix it here.
+
 ## Scope
 
 - `packages/domain/src/scheduler/index.ts` — the function only.

@@ -412,7 +412,7 @@
     </p>
     <div class="masthead-meta">
       <span>As at <b>10 September 2026</b></span>
-      <span>Now in <b>Phase 7 &middot; T-261 + T-262 BOTH SHIPPED <code>e619893</code> &middot; all gates green, tree clean &middot; bible row 192 ratified &middot; 6 Ian decisions recorded &middot; T-263/T-264 specced from them</b></span>
+      <span>Now in <b>Phase 7 &middot; T-263 DISPATCHED (lane B, Sonnet) &middot; T-261 + T-262 shipped <code>e619893</code> &middot; tree clean &middot; bible row 192 ratified</b> &mdash; &starf; <b>T-263&rsquo;s scope was WIDENED at dispatch:</b> the spec said &ldquo;two live callers&rdquo;, but re-deriving found a <b>second independent implementation</b> of <code>lastCompletedPeriod()</code> in the app layer (<code>apps/erp/src/app/findings/lib.ts:22</code>) feeding the findings page and the dashboard. Fixing only the domain copy would have made the screen disagree with the job for the 00:00&ndash;08:00 Manila window on the 1st of every month.</span>
       <span>Gates <b>typecheck &middot; 1030 unit + 1 skipped + 0 failed &middot; 2422 integration (96/96 files, at <code>b1c496c</code>) &middot; build</b> &mdash; &starf; <b>CI is green, for the first time in this repo&rsquo;s history.</b> DEF-170 was not merely &ldquo;known red&rdquo;: it was CI&rsquo;s <b>only</b> failure, <code>deploy.yml</code> is gated on CI, and so every <code>Deploy</code> run ever recorded here read <code>skipped</code>. Fixing it on 6 Sep let the deploy workflow run at all.</span>
     </div>
   </header>
