@@ -1,6 +1,17 @@
 # T-260 — DEF-272: a sub-centavo amount defeats every `> 0` money guard
 
-> **Status: RESERVED by the orchestrator, 2026-09-10.** Number reserved so no peer takes it.
+> **Status: SHIPPED `ccac49d`, 2026-09-10 — lane E (Sonnet 5).** 19 sites across 13 files behind
+> one shared `parseMoneyInput()`. All gates re-run by the orchestrator on the SHARED database:
+> typecheck 0 · unit 93 files/1290 · integration 110 files/2706, 0 failed · build 0 · browser
+> **14/14** (`smoke-t260.mjs`) · caller census clean. ⭐ **THE BROWSER PASS WAS RED TWICE AND BOTH
+> REDS WERE THE PROBE NEVER REACHING THE SERVER** — first the form's own `min="0.01"` (an unfixed
+> build would have gone green identically), then `removeAttribute('step')`, which falls back to
+> step's HTML default of `1` rather than disabling it. A refusal is not evidence until you know
+> which layer produced it. ⚠️ **DEF-278 filed from that, and it qualifies this row's severity:**
+> the client floor is not uniform — 17 of 26 money inputs exclude a sub-centavo value, 9 permit
+> one — so "reachable today on cash requests" was overstated for the create form. The fix stands
+> (RULES rule 7). `money-accounts:232` was found, classified and deliberately NOT fixed → DEF-277.
+> ⭐ ORIGINAL STATUS: RESERVED by the orchestrator, 2026-09-10. Number reserved so no peer takes it.
 > Nothing built. ⭐ **This spec CORRECTS its own defect row in two places — read "What DEF-272 got
 > wrong" before doing anything, because the remedy the register proposes is narrower than the
 > correct fix and would leave a quieter version of the same defect behind.**
