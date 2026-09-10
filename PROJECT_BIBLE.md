@@ -65,35 +65,35 @@
 - `1186–1220` 10. Phase plan
 - `1221–1237` 11. Migration & ETL rules
 - `1238–1302` 12. Inherited landmines — do not repeat these
-- `1303–1501` 13. Decision log
-- `1502–1521` 14. Amendment protocol
-- `1522–1526` 15. Engineering standards — the industry practices this project follows
-  - `1527–1532` 15.1 Build order: walking skeleton first
-  - `1533–1544` 15.2 Golden-master testing — the most important practice here
-  - `1545–1553` 15.3 Strangler Fig, not big-bang cutover
-  - `1554–1558` 15.4 No dual-write
-  - `1559–1567` 15.5 Expand/contract migrations
-  - `1568–1576` 15.6 Observability from day zero, not later
-  - `1577–1581` 15.7 CI gates
-  - `1582–1586` 15.8 Backups and a tested restore
-  - `1587–1591` 15.9 Twelve-Factor config
-  - `1592–1599` 15.10 Append-only ledgers — but not event sourcing
-  - `1600–1604` 15.11 Defence in depth
-  - `1605–1633` 15.12 Skills are lenses, not assurance
-  - `1634–1640` 15.13 Reconciliation is a permanent feature
-- `1641–1645` 16. The accounting spine
-  - `1646–1677` 16.0 What we are actually fixing — the diagnosis
-  - `1678–1721` 16.1 The ten invariants — non-negotiable
-  - `1722–1736` 16.2 The oracle: how "correct" is tested
-  - `1737–1758` 16.3 The model — header + lines, not legs
-  - `1759–1778` 16.4 Deliberately simpler than ERPNext
-  - `1779–1845` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1846–1870` 16.6 What v1 already gets right — preserve the intent
-  - `1871–1892` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1893–1907` 16.8 What v1's accounting already gets right
-  - `1908–1951` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1952–2002` 16.10 Posting patterns — one canonical pattern per business event
-  - `2003–2034` 16.11 Inventory's accounting integration
+- `1303–1502` 13. Decision log
+- `1503–1522` 14. Amendment protocol
+- `1523–1527` 15. Engineering standards — the industry practices this project follows
+  - `1528–1533` 15.1 Build order: walking skeleton first
+  - `1534–1545` 15.2 Golden-master testing — the most important practice here
+  - `1546–1554` 15.3 Strangler Fig, not big-bang cutover
+  - `1555–1559` 15.4 No dual-write
+  - `1560–1568` 15.5 Expand/contract migrations
+  - `1569–1577` 15.6 Observability from day zero, not later
+  - `1578–1582` 15.7 CI gates
+  - `1583–1587` 15.8 Backups and a tested restore
+  - `1588–1592` 15.9 Twelve-Factor config
+  - `1593–1600` 15.10 Append-only ledgers — but not event sourcing
+  - `1601–1605` 15.11 Defence in depth
+  - `1606–1634` 15.12 Skills are lenses, not assurance
+  - `1635–1641` 15.13 Reconciliation is a permanent feature
+- `1642–1646` 16. The accounting spine
+  - `1647–1678` 16.0 What we are actually fixing — the diagnosis
+  - `1679–1722` 16.1 The ten invariants — non-negotiable
+  - `1723–1737` 16.2 The oracle: how "correct" is tested
+  - `1738–1759` 16.3 The model — header + lines, not legs
+  - `1760–1779` 16.4 Deliberately simpler than ERPNext
+  - `1780–1846` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1847–1871` 16.6 What v1 already gets right — preserve the intent
+  - `1872–1893` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1894–1908` 16.8 What v1's accounting already gets right
+  - `1909–1952` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1953–2003` 16.10 Posting patterns — one canonical pattern per business event
+  - `2004–2035` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1497,6 +1497,7 @@ just a patch.**
 | 178 | 2026-09-06 | ⭐ **PERMITTED UNDERTIME CREDITS THE TIME ACTUALLY WORKED, NEVER THE FULL SHIFT — permission excuses the ABSENCE, it does not pay for the missing time** — so a manager who accepts that a short day was authorised approves the PENDING OVERTIME, and does not flip the day to a full one | Ian, 2026-09-06, closing T-225 §4. ⛔ **The rejected option is the one v1 effectively implemented**, which is why this needed deciding rather than defaulting: v1 paid the full requirement on a day it could not adjudicate, and across the golden corpus it **paid more than the person was physically present in 58 of 346 sessions**. Adopting that would have been inheriting a defect wearing the costume of a policy. ⚠️ **The arithmetic that makes the choice concrete**, from `payroll/compute.ts` — pay is in DAY UNITS (`unitsFor()` returns 0.5 or 1), the hourly equivalent is `dailyRate ÷ requiredHoursPerShift`, and overtime pays `× overtimeMultiplier`. For `lipa-0359` (8h worked of a 9h requirement, 1.25 multiplier) against a daily rate **D**: approving the pending OT pays **0.92 D for 89% of the hours** — proportionate; overriding the half day pays **1.00 D for 8 hours** — not. ⭐ **And the third row is the one that made T-225 urgent at all: if nobody acts, pending overtime pays NOTHING, so the day settles at 0.50 D for eight hours of work.** | ✅ **Shipped 2026-09-06 as GUIDANCE, not as new pay code.** Both actions already existed and neither changed; what was missing was that the person holding the mouse had no way to know which one was correct. The flagged day now names the right action **and names the wrong one explicitly**, on the screen where the choice is made. ⚠️ **A decision recorded only in a task doc is a decision nobody at the point of action ever reads** — the same failure as DEF-180 (an ADR decided and never written into the function) in a different costume: here it would have been decided and never written into the *screen*. |
 | 190 | 2026-09-10 | ⭐ **THE CLOCK TERMINAL IS A DOWNLOADED ANDROID APK WITH A FINGERPRINT READER ON AN OTG DONGLE — BIOMETRIC IN AND OUT, THE WAY v1 DOES IT — AND PAIRING IS CONFIRMED BY A MANAGER ON SCREEN, NOT BY THE DEVICE.** One or two tablets per store. The APK is compiled by GitHub and installed on the tablet; the fingerprint dongle connects over OTG and is the punch-in/punch-out method. | **Ian's decision, 2026-09-10**, given while deciding DEF-260 from the roadmap walkthrough: *“since its only 1 to 2 tablet per store i call 1. but let it be clear that the way we handles and i like it to be handle is we download the apk (github usually compiles this) we use fingerprint with otg dongle and use that as biometric in and out. like v1 does.”* ⭐ **This was nowhere in the project.** Nothing in `docs/`, `apps/` or `packages/` names an APK build, an OTG dongle, or a fingerprint capture path — the only hits for *apk/fingerprint/biometric/otg* are ADR-002's Google sign-in aside, ADR-003's *“offline is needed for POS selling and the ERP biometric clock only”*, and enrolment code. ⛔ **And it contradicts a stated premise of shipped work:** T-203's fingerprint enrolment is labelled on screen as NOT a working capture flow, accepting only pasted template text, justified in DEF-133's disposition with the words *“no capture device exists in this stack”*. **The OTG dongle is that capture device.** So enrolment-by-paste is a stand-in, not the design, and the real capture + verify path is an unowned gap (`CAPABILITY-GAPS.md`, added the same day). ⭐ **What already fits, and it is most of it:** `apps/erp/src/app/clock/page.tsx` (T-184) is already client-only and offline-capable by construction — it signs in with `signInWithCustomToken` and reads/writes Firestore via the client SDK, never a Server Action, enforced by `apps/erp/tests/clock-route-is-client-only.test.ts` rather than promised in prose (§5.2). An APK wrapping that page inherits the offline guarantee unchanged. ⚠️ **The pairing half is what DEF-260 exposed:** `activateTerminal` has zero production callers and is the only writer of `activated_at`, so every terminal reads *“not yet paired”* for ever — and DEF-133's own disposition already recorded that the device-side round trip (a real device signing in with the minted token) was **never verified**, needing an emulator or a real device. The orphan is therefore the unfinished half of a designed flow, not a stray function. ⭐ **Ian chose the manager-confirms option deliberately and gave the reason: at one or two tablets per store, a human confirming beats building a device-announce route.** ⚠️ Punching does not depend on activation — the ingestor gates only on `revoked_at` — so today's failure is a permanent status lie on a screen and a permanent false `never_paired` health alarm, not lost time. | Yes, in one direction only: the device-announce route (DEF-260 option 2) can be built later and would supersede the manual confirmation without invalidating it. ⛔ The APK + OTG fingerprint model itself is Ian's WHAT (§0.1) and is not the orchestrator's to revisit; what it changes is that **fingerprint CAPTURE and VERIFY is now a known, owned requirement rather than a “future reader integration”**, and T-203's paste-only enrolment is explicitly an interim |
 | 191 | 2026-09-10 | ⭐ **MIGRATIONS ARE HAND-AUTHORED FROM `schema/`; `npm run db:generate` IS RETIRED AND FAILS CLOSED.** `drizzle-kit generate` cannot serve this journal: it stamps `when` with the wall clock, and the one-day-per-index grid (DEF-091, `migration-journal.test.ts`) keeps the head months ahead of any clock — 0140 is dated 2026-12-25 — so every generated entry would sort below the head and be **silently skipped** by the migrator (DEF-039). No drizzle-kit option controls `when`, and the head advances a day per migration, so the clock never catches up. Every table here also needs what the generator cannot emit (RLS on all 127 tables, 122 policies, expression indexes, EXCLUDEs, 45 triggers), and the snapshot chain broke within the first 20 migrations while the tool still worked and stayed broken for 104 more. The convention lanes were already following is written down with its guards in **ADR-012 §5** and `packages/db/migrations/README.md`; the command itself now says why | **Ian, 2026-09-10** — *"document this well … so it won't be rediscovered as it was before your work … on bible see where it fits"*, ratifying the dedicated DEF-242 agent's answer to his own question *"repair the generator, or write the convention down?"* ⭐ **The feared failure was MEASURED and did not exist:** a snapshot regenerated from today's `schema/` was compared object by object against a database built from zero by all 124 migrations — **0 real disagreements** across 127 tables, 1,636 columns, 518 FKs, 312 indexes, 356 checks, 4 views (ADR-012 §3). So the repair was rejected for the journal reason, not the snapshot one — a repaired baseline would turn a tool that refuses into one that writes an unappliable entry on every use, which is worse than today. ⛔ Rejected, not to be re-proposed without new facts: a wrapper that rewrites `when` after generate (bespoke, hides DEF-039), and a read-only diff aid kept fresh by a ratchet (ADR-012 §6b names the conditions to revisit). This is DEF-073 → DEF-121 → DEF-242, the same discovery three times, which is why the knowledge now lives where the next person stands: the command's output, the migrations folder's README, the journal test's header, RULES rule 9, CLAUDE.md's router | Only by a drizzle-kit that can stamp `when` onto the grid — none exists — or by abandoning the grid, which DEF-091 forbids while lanes run in parallel |
+| 192 | 2026-09-10 | ⭐ **ROW 189'S CLAUSE *"which is exactly where there is frequently no TS guard either"* IS NARROWED. The unmapped constraint set is GUARDED — the reason those constraints are reachable at all is not an ABSENT guard but a guard that DISAGREES WITH THE CHECK AT THE SUB-CENTAVO BOUNDARY.** ⛔ **A correction to one clause of a rationale, NOT a reversal of the ruling.** Row 189 stands in full and is unchanged: sanitise the fallback first so nothing can ever render driver text, then instrument it and let measured hit counts decide which constraints earn a hand-written sentence. The sanitised fallback remains the floor precisely because it needs no maintenance. What is corrected is the expected YIELD of the counting programme, and therefore what a hit means when one arrives | **DEF-275, ratified by Ian 2026-09-10** (raised by lane C during T-255, reported-and-stopped under RULES rule 14 rather than self-amended). ⭐ **Verified at source by the orchestrator before amending, not adopted from the register row** — all four constraints DEF-246 chose as its own motivating examples carry a TypeScript guard that fires first: `createCashRequest` (`cash-requests/index.ts:52`), `disburseLoan` (`loans/index.ts:91`), `recordPayment` (`ap/index.ts:702`), and `createMoneyTransfer` (`money-transfers/index.ts:103` for distinct-accounts, with the amount pair at `:155`). ⚠️ **The register's own citation needed correcting on the way and this is where it is recorded:** `money-transfers/index.ts:103` is the distinct-accounts check and contains no amount at all — the amount guard is `:155` and it covers TWO fields, `amountOut` and `amountIn`. A one-line grep cannot find that shape, because the comparison is on a variable rather than an inline `Number(...)`; it was found by T-260's committed shape scanner. ⭐ **The facts moved again between DEF-275 being filed and this row being written, which is why this row claims more than DEF-275 did: T-260 has since routed all four through `parseMoneyInput()`** (`packages/domain/src/shared/money-input.ts`), so the sub-centavo path that made them reachable is CLOSED. The expected hit count on precisely DEF-246's four named examples is now approximately zero, and a counting programme aimed at them would have measured a silence it had itself created. ⛔ **Row 189's double-signal rule is UNCHANGED and still outranks message quality** — a counted hit still means no server-side validation refused first, and follow-up work is still ranked by missing guards. What changes is that the population able to produce a hit is smaller and better-guarded than row 189 assumed, so a hit is RARER AND MORE INFORMATIVE, not less. ⚠️ Live input to T-261, which is deciding where the counter should record at all | Yes — documentation accuracy only. No code is implied either way and no part of row 189's plan changes. ⛔ **What may NOT be re-derived from this row:** it is not licence to skip the sanitised fallback, nor to reorder into map-first-sanitise-later, which is the option Ian explicitly rejected and which re-buys the drift — every future migration adds a constraint and nothing forces a matching line |
 
 
 ## 14. Amendment protocol
