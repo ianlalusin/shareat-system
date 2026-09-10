@@ -1,8 +1,13 @@
 # T-256 — DEF-247: show *why* a capability is gone
 
-> **Status: SPEC — awaiting APPROVED. Lane E, 2026-09-10.** Written outside plan mode (this
-> terminal is fixed-Sonnet); flagged to the orchestrator as bible row 184's deliberate
-> compromise, not an oversight. Nothing below is built.
+> **Status: SHIPPED `0a984eb`, 2026-09-10 — lane E.** ⚠️ **This header said "SPEC — awaiting
+> APPROVED … nothing below is built" until the evening of 2026-09-10, while the work had been on
+> `main` for hours — and `docs/ROADMAP.html` carried the same lie in its own entry.** Corrected by
+> the next orchestrator, which had no reason to doubt either and checked anyway. The wrap-up commit
+> that claimed to fix three stale spec headers missed this one in both places at once. ⭐ **A
+> shipped task whose spec still reads "nothing is built" is how the same work gets done twice.**
+> ORIGINAL STATUS: written outside plan mode (this terminal is fixed-Sonnet); flagged to the
+> orchestrator as bible row 184's deliberate compromise, not an oversight.
 
 T-248 (migration `0140`) added `grant_source` and `revoke_reason` to `person_grants`, and
 `/admin/users` can display neither: `accessRepo.grantsForPerson`
