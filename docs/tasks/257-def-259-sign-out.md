@@ -1,6 +1,10 @@
 # T-257 — DEF-259: give the ERP a way to sign out
 
-> **Status: RESERVED by the orchestrator, 2026-09-10. Unassigned. ⭐ IAN'S CALL, 10 Sep:
+> **Status: SHIPPED `d162380`, 2026-09-10 — lane B (Sonnet 5), gates and browser pass re-run by
+> the orchestrator (29/29 at 390 and 1280, real user clicks). ⚠️ The browser pass found the control
+> BELOW THE FOLD at 1280×800 and it was sent back; the sidebar footer is now pinned. See
+> "Placement decision" below. Follow-up logged, not built: DEF-271 (no surface names WHO is signed
+> in). ⭐ ORIGINAL STATUS, kept for the record: RESERVED by the orchestrator, 2026-09-10. IAN'S CALL, 10 Sep:
 > FIX THIS NEXT — top of the queue.** Number reserved so no peer takes it. Nothing below is built.
 
 There is no sign-out control anywhere in the ERP. `signOutAction`

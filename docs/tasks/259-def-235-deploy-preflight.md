@@ -1,6 +1,12 @@
 # T-259 — DEF-235: a preflight that fails closed on an empty or whitespace-padded secret
 
-> **Status: RESERVED by the orchestrator, 2026-09-10. Unassigned. ⭐ IAN'S DECISION, 10 Sep:
+> **Status: SHIPPED `ccef651`, 2026-09-10 — lane E (Sonnet 5). All eight cases re-run by the
+> orchestrator: absent/empty/trailing-newline/trailing-space/leading-space/padded-optional exit 1;
+> clean and unset-optional exit 0. ⛔ THIS SPEC CONTAINED A DEFECT — its instruction to reuse
+> env.ts's notion of "required" would have built a guard blind to the padded case, because every
+> schema entry trims before validating. Resolved by deriving the LIST from the schema but computing
+> the verdict on the RAW value before any parse. Server-side half filed as DEF-267. ⭐ ORIGINAL
+> STATUS: RESERVED by the orchestrator, 2026-09-10. IAN'S DECISION, 10 Sep:
 > yes — add the preflight, fail closed.** Number reserved so no peer takes it. Nothing built.
 
 ## The failure this exists to stop, which has already happened once

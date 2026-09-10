@@ -1,6 +1,10 @@
 # T-258 — DEF-244: make the whole row the tap target
 
-> **Status: RESERVED by the orchestrator, 2026-09-10. Unassigned. ⭐ IAN'S DECISION, 10 Sep:
+> **Status: SHIPPED `eba3c15`, 2026-09-10 — lane D (Sonnet 5), browser-verified by the orchestrator
+> at 390 and 1280: 3 rows, all ≥44px, all position:relative, gaps of 0, no boundary probe resolving
+> to a non-adjacent row. See "Resolved and built" at the foot of this file. DEF-270 fixed here;
+> DEF-269 (the guard blind spot that hid it) filed and deliberately NOT fixed here. ⭐ ORIGINAL
+> STATUS: RESERVED by the orchestrator, 2026-09-10. IAN'S DECISION, 10 Sep:
 > the WHOLE ROW becomes tappable** — not a taller row with a small link inside it.
 > Number reserved so no peer takes it. Nothing below is built.
 

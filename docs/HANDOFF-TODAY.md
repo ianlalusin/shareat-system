@@ -1,221 +1,226 @@
-# Handoff — 2026-09-10 — for the NEXT ORCHESTRATOR
+# Handoff — 2026-09-10 (afternoon) — for the NEXT ORCHESTRATOR
 
-> **The tree is CLEAN, all gates are GREEN, and every lane is idle.** Nothing is half-built.
-> Ian invokes `/orchestrator shareat system` in your terminal himself; the skill is
-> user-invocation only. Run the role from this file until he does.
+> **The tree is CLEAN, every gate is GREEN, `main` is pushed, and all four lanes are idle and
+> cleared.** Nothing is half-built. Ian invokes `/orchestrator shareat system` in your terminal
+> himself; the skill is user-invocation only. Run the role from this file until he does.
 
 ## Where things stand
 
-**Five tasks shipped** (T-251a, T-252, T-253, T-254, T-256) and **thirteen defects filed**
-(DEF-251…263). Production is live and unchanged. `main` is green and pushed.
+**Four tasks shipped this afternoon** (T-257, T-255, T-258, T-259) on top of the morning's five, and
+**ten defects filed** (DEF-267…276). `main` is at `b0991a4` and pushed. Production is unchanged.
 
-⭐ **Ian cleared his entire decision backlog today.** Ten decisions, all recorded — see the table
-below. Two carried items that had sat for three days (DEF-241, DEF-242) are closed or handed off.
-**There is no queue of unanswered questions waiting for him**, which has not been true for a week.
+⭐ **T-257 is done, which was Ian's explicit next: you can sign out of the ERP.** The control is on
+all three shell surfaces and the *server* session provably ends.
 
-## Gates
+## Gates at `b0991a4`
 
 All run by the orchestrator on the **shared** database, not a lane's:
 
 - **typecheck** `--incremental false` → **exit 0**
-- **unit** → **87 files, 1244 passed / 1 skipped, exit 0** (re-run after `f3c63bd`)
-- **integration** → **109 files, 2674 passed, 0 failed, exit 0** — 1391s (~23 min) on `shareat_test`
-- **build** → **exit 0**, 9008 free, route table lists `ƒ Proxy (Middleware)`
-- **browser** → T-253 **10/10** at 390 **and** 1280 (`smoke-t253.mjs`)
+- **unit** → **91 files, 1280 passed / 1 skipped, exit 0**
+- **integration** → **110 files, 2676 passed, 0 failed, exit 0** — 1490s (~25 min) on `shareat_test`
+- **build** → **exit 0**, dev server stopped, route table lists `ƒ Proxy (Middleware)`,
+  `apps/erp/next-env.d.ts` restored afterwards
+- **browser** → **29/29 at 390 AND 1280** (`smoke-t257-t258.mjs`, new), with a **real user click**
+  asserted rather than a scripted bypass
+- **caller census** → clean; baseline regenerated with `--names`, 111 → 110 names
 
-⚠️ Code gates were run at `0a984eb`; every commit after it is docs, ops config or the bible, so
-they still hold. **Re-run them anyway before your first commit** — that is the standing rule and it
-costs ten minutes.
-
-⭐ **Run the integration suite with `--reporter=verbose`.** It takes ~23 minutes and the default
-reporter prints *nothing* for that entire time, which is how a healthy run got killed for looking
-dead two sessions ago (DEF-245). Verbose makes progress visible. The one-line `package.json` change
-to make that the default is **still not done** and is still worth doing.
+⚠️ The bible TOC was checked with `npm run toc` — already correct, `bf83740` had run it.
+**PROJECT_BIBLE.md was not amended by me** (rule 14); DEF-275 proposes a narrowing and is Ian's.
 
 ## Pick up here, in this order
 
-1. **T-257 — DEF-259: there is no way to sign out of the ERP.** ⭐ **Ian's explicit call: this is
-   next.** `signOutAction` is complete and correct and *nothing calls it*; a sweep for every
-   spelling of sign-out across every `.tsx` returns zero. Sign-in is store-scoped and sessions are
-   server-side, so a shared machine cannot be handed over. **The hard part is already written** —
-   this is a control in the shell plus a placement decision. Spec is at
-   `docs/tasks/257-def-259-sign-out.md`.
-2. **T-259 — DEF-235: the deploy preflight.** A deploy shipped an empty required secret and
-   reported success; the only signal was a person unable to sign in. ⚠️ The
-   **trailing-whitespace** case is the one that will bite — an emptiness check alone does not close
-   it. `docs/tasks/259-def-235-deploy-preflight.md`.
-3. **T-255 — DEF-257: the ~38 private `errorMessage` copies.** Sequenced deliberately after T-252
-   so there is one correct implementation to converge on. ⛔ **Delete the copies; do not sanitise
-   each in place** — 38 hand-maintained copies is *how* the drift happened.
-4. Then: **T-258** (DEF-244, whole-row tap targets — Ian decided the shape, the spec must resolve
-   rows needing a second action first), **DEF-260** (terminal pairing, per bible row 190),
-   **DEF-251/252** (the sweep's silent skip and `leftOpen: 0`), **DEF-253/254/255**, **DEF-261/262**.
+1. **DEF-272 — a sub-centavo amount defeats every `> 0` guard in the money domain.** ⭐ The most
+   valuable open item. `Number('0.004') > 0` passes the guard, Postgres rounds to `0.00`, the CHECK
+   refuses, raw driver text lands on the person moving money. Reachable today on cash requests,
+   loans, AP payments and money transfers. ⚠️ **State the severity as the row does: the database
+   REFUSES the row, so nothing wrong is stored and no money is mis-recorded.** The fix is one shared
+   check rejecting anything that rounds to zero *at the column's scale* — not four hand-written ones,
+   since four hand-copied guards is the shape T-255 just deleted. Needs a task number.
+2. **DEF-274 — wire the hit counter into the money screens.** Row 189 defers its next decision to
+   measured hit counts, and the counter is wired into 19 call sites across payroll and settings with
+   **zero money screens**. Left alone, the first report says the money screens are quiet, which is
+   the opposite of what DEF-272 just proved. ⭐ T-255 gave all 42 screens one shared entry point, so
+   this is the cheapest it will ever be. ⚠️ Not trivial: `orgId`/`storeId`/`actorPersonId` must be in
+   scope at ~100 catch blocks, with an `await` inside `catch`.
+3. **DEF-269 — re-census touch targets with a matcher that resolves inherited text size.**
+   `action-link-sweep.test.ts` matches `text-xs` with a bare `underline` **inside one `className`**,
+   so any control inheriting its text size from an ancestor is invisible to it. DEF-239's census may
+   have undercounted app-wide. ⛔ Until then, that guard's green is evidence about the shapes it can
+   see and nothing more. Decide whether a text-scanning guard can do this at all, or whether the
+   assertion must move to rendered output.
+4. Then: **DEF-260** (terminal pairing — a MANAGER confirms on screen, per bible row 190),
+   **DEF-251/252**, **DEF-253/254/255**, **DEF-261/262**, **DEF-273** (pick one sentence per
+   constraint — sequence *after* DEF-274 so the choice is informed), **DEF-267** (the server-side
+   half of the padding blind spot).
 
-## Ian's decisions today — all ten, and where each is recorded
+## What happened this session, by theme
 
-| Decision | Recorded in |
-|---|---|
-| **DEF-259 — sign-out is next, top of the queue** | `docs/tasks/257-*.md`, DEF-259 |
-| **DEF-260 — a MANAGER confirms terminal pairing on screen**, not a device-announce route; his reason: 1–2 tablets per store | **bible §13 row 190**, DEF-260 |
-| ⭐ **The clock terminal is a downloaded Android APK (GitHub-compiled) with a fingerprint reader on an OTG dongle — biometric in/out, as v1 does** | **bible §13 row 190** + `CAPABILITY-GAPS.md` |
-| **DEF-241 — the month-end timezone was an oversight**; moved to 03:00 Asia/Manila | `docs/ops/shareat-month-end.timer`, DEF-241 |
-| **Bible row 185 — add the implementation pointer**; substance unchanged | **bible §13 row 185** |
-| **DEF-263 — downgrade to a note about the name clash**; `packages/etl` is Phase 8 machinery, not dead | DEF-263 |
-| **DEF-256 — short-shift half-day OT stays ON**, re-confirmed with the fix pending | DEF-256 |
-| **DEF-244 — the WHOLE ROW becomes the tap target** | `docs/tasks/258-*.md`, DEF-244 |
-| **DEF-235 — add the preflight, fail closed**; post-deploy smoke check deliberately deferred | `docs/tasks/259-*.md`, DEF-235 |
-| **DEF-242 — ANSWERED AND SHIPPED by Ian's own agent at `f3c63bd`: DOCUMENT, do not repair; `db:generate` retired** | **ADR-012** · DEF-242 · ⚠️ **it proposes bible row 191 — Ian to ratify** |
+**The browser pass earned its place, twice.** Lane B named one thing it could not verify without a
+running app; that was the one thing that was wrong — the sign-out control sat at y=925 in an 800px
+viewport, 125px below the fold, reachable only by scrolling a sidebar that does not advertise it
+scrolls. Sent back; the footer is now pinned (`min-h-0` is load-bearing — a flex item's default
+`min-height: auto` would have made `overflow-y-auto` inert).
+
+**A spec defect was caught before a line was written.** T-259's instruction to reuse `env.ts`'s
+notion of "required" would have built a preflight blind to the padded case, because every schema
+entry `.trim()`s before validating. Resolved by deriving the *list* from the schema but computing the
+verdict on the **raw** value before any parse.
+
+**A lane went a third way and was right.** T-255's judgement call was framed as "migrate each
+screen's sentences or drop them"; lane C found only ~29 of ~94 branches could ever live in a
+constraint map, and that migrating them would have **widened an unauthenticated allowlist** —
+`pre-session-message.ts` builds `WRITTEN_FOR_A_PERSON` from `CONSTRAINT_MESSAGES`, which gates what
+may appear in the URL of the unauthenticated `/setup` page.
+
+**Decisions recorded:** no new Ian decisions this session — his backlog was cleared this morning.
+DEF-275 is the only item proposing a bible change and it is **reported and stopped** for him.
 
 ## Do not decide these alone — they are Ian's
 
-- ⛔ **The fingerprint capture gap is the big one, and it is now fully mapped.** v1's clock is a
-  **Capacitor APK** whose fingerprint reader is a **custom Android plugin over the ZKTeco ZKFinger
-  SDK** (`ERP-rebuild/src/lib/biometric/fingerprint.ts:3-6`) — APK-only, a browser cannot talk to a
-  USB sensor. **That is why T-203 concluded "no capture device exists in this stack" and shipped
-  paste-only enrolment: the conclusion was right for the stack it was looking at, and the stack was
-  the wrong one.** Every v1 file is named in `CAPABILITY-GAPS.md` so a port is guided. ⚠️ It is
-  **multi-week** — four punch methods, a native plugin, an offline queue and a re-arm state machine.
-  **Ian has not been asked about face recognition, which v1 also has.**
-- ⭐ **RATIFY BIBLE ROW 191 — DEF-242 is answered and shipped, and its row is proposed but NOT
-  written** (rule 14: only the planner amends the bible). Ian's own agent shipped `f3c63bd` +
-  **ADR-012**: `npm run db:generate` is **retired**, fails closed with its reasons, and
-  hand-authored SQL is now the written convention. ⭐ **It found the real blocker, and it was not
-  the one anyone feared.** The feared problem — a regenerated snapshot silently disagreeing with
-  what 124 hand-written migrations built — **does not exist**: measured, **0 real disagreements**
-  across 127 tables, 1,636 columns, 518 FKs, 312 indexes, 356 checks. ⛔ **The unfixable half is
-  the journal clock.** drizzle-kit stamps every entry with `+new Date()`, while this journal sits
-  on DEF-091's deliberate one-day-per-index grid where **90 of 124 entries are in the future and
-  head 0140 is dated 2026-12-25** — so a generated entry sorts ~106 days BELOW the head and is
-  **silently skipped** (DEF-039's trap, already sprung here once). No option controls `when`, and
-  the head advances faster than the clock. Plus RLS on all 127 tables and 122 policies that
-  `generate` cannot emit at all. **Verified by the orchestrator after it landed:** typecheck 0,
-  unit 87 files / 1244 passed.
-- **DEF-237's residue** — grants written before `grant_source` existed stay NULL for ever.
-  Accepted; permanent.
-- **DEF-258's triage** — 47 same-digit dark-mode overrides across 28 files. ⛔ Not all are defects
-  and the row says so; triage before touching, and **do not bulk-replace on a regex**.
+- ⭐ **DEF-275 — one clause of bible §13 row 189 is unsupported by its own examples.** Row 189 says
+  the unmapped set is "exactly where there is frequently no TS guard either"; all four of DEF-246's
+  named examples **do** have one. ⛔ Not a reversal — sanitise-first-then-count stands, and DEF-272
+  gives a sharper reason those constraints are reachable. If Ian agrees, row 189 wants a superseding
+  row narrowing that clause and citing DEF-272.
+- **The fingerprint capture gap** — multi-week, mapped in `CAPABILITY-GAPS.md`. ⚠️ Ian has still
+  **not been asked about face recognition**, which v1 also has.
+- **DEF-237's residue** — grants written before `grant_source` existed stay NULL for ever. Permanent.
+- **DEF-258's triage** — 47 same-digit dark-mode overrides across 28 files. ⛔ Not all are defects;
+  triage before touching, and do not bulk-replace on a regex.
 
 ## Two things Ian must do himself
 
-1. ⚠️ **Apply the month-end timer on the droplet.** `docs/ops` does not ship (DEF-194), so the
-   server still runs the old **unzoned** unit — month-end will next fire 10:00 Manila.
-   Verify with `systemctl list-timers`: NEXT should read **19:00 UTC on the 30th/31st**, not 02:00
-   UTC on the 1st.
-2. The paste-ready DEF-242 prompt was handed to him in chat this session; it is not in a file.
+1. ⚠️ **Apply the month-end timer on the droplet.** `docs/ops` does not ship (DEF-194). Verify with
+   `systemctl list-timers`: NEXT should read **19:00 UTC on the 30th/31st**, not 02:00 UTC on the 1st.
+   **This is the only item left on his board.**
+2. ⚠️ **A lane ran a system-wide `taskkill /F /IM python.exe`** and killed two processes it did not
+   intend to. Nothing of the orchestrator's was Python. Some MCP tooling here runs on Python — if
+   anything misbehaves, restart it. Disclosed unprompted by the lane, against its own work.
 
-## Traps that bit TODAY
+## Traps that bit TODAY — every one of these caught a real mistake
 
-- ⛔ **A brief is a hypothesis, and today it was wrong FIVE times** — including the handoff's own
-  first line ("four worker terminals exist"; none did) and DEF-249's own count. **Read the source,
-  not the register row.**
-- ⛔ **A tested function with no production caller is not a feature, it is a claim.** A lane
-  proposed shipping a counter no caller invoked; that is DEF-226/227/249's exact shape. It was
-  refused and 8 real callers were wired instead. **Check every new export has a caller before you
-  commit it** — `node scripts/production-caller-census.mjs` now does this mechanically.
-- ⛔ **A census is a MEASUREMENT, never a verdict.** The orchestrator filed DEF-263 against
-  `packages/etl` — which is Phase 8 cutover machinery whose zero callers are *expected* — after
-  recording the lane's own warning that most zero-caller exports are built ahead of their screens.
-- ⛔ **A guard that can emit a wrong list is one someone will believe.** The census was wrong twice
-  and **both times printed a complete, plausible list rather than an error**. Its control is now
-  built in and fails closed. Same family: three sweeps on this project have reported nothing as
-  success.
-- ⛔ **An injection you have not proven landed tells you nothing.** A lane's first attempt to prove
-  its own control worked used `sed`, the escaping silently did not apply, and the run looked like
-  the control failing. It only knew because it diffed the patched file first.
-- ⚠️ **Barrels are the orchestrator's, and the pause is the point.** One lane asked before adding a
-  barrel line — and that pause caught that exporting all four new functions would open a route the
-  guard cannot match. Another lane added its barrel line itself; the line was fine, but nobody
-  looked.
-- ⚠️ **A lane running `npm run dev` on 9008 during your `npm run build` corrupts the `.next` you
-  are serving.** One lane did run the dev server; no collision occurred, but two builds ran that day.
-- ⚠️ **`npm run build` rewrites `apps/erp/next-env.d.ts`**; `git checkout --` it afterwards.
-- ⚠️ **Sign-in is store-scoped — pick the store BY NAME.** For the T-253 pass, sign in at **Lipa**
-  (a branch) on `shareat_dev` deliberately: it is the store the defect used to select wrongly.
-- ⚠️ **`shareat_test_t240` has NO commissary at all** — the commissary defect only reproduces on
-  `shareat_dev`, where `Smoketest Commissary` holds the only outgoing link.
-- ⚠️ **A bible row means `npm run toc`.** Two rows were added today; both were followed by it.
-- ⚠️ **Backticks in a Bash double-quoted string are command substitution**, and a long heredoc can
-  exceed the command-length limit outright. **Write a script file with the Write tool and run it** —
-  that is what worked today, repeatedly, after shell quoting failed twice.
+- ⛔ **A MEASUREMENT IS PLAUSIBLE AND WRONG MORE OFTEN THAN IT IS ABSENT.** The orchestrator got
+  three wrong in one session, and each was caught only by re-checking: (a) a file count reported from
+  a **string match that included comments** — the exact error it had just warned two lanes about;
+  (b) a "428.5px row gap" measured **across two different tables** with a heading between them, which
+  nearly sent a lane chasing a phantom; (c) a padded-secret test whose **injection silently never
+  landed** (`$(printf '%s\n' …)` strips trailing newlines), making a *working* guard read as broken.
+- ⛔ **PROVE THE INJECTION BEFORE YOU BELIEVE EITHER OUTCOME.** A failed injection and a failed
+  control are indistinguishable from an exit code alone. Assert it with a byte count or a hexdump.
+- ⛔ **WRITE THE CENSUS AS THE GUARD.** A hand census counts spellings; a guard whose assertion is
+  **zero** cannot be fooled by a naming convention. That is how lane C found 4 copies its own
+  name-based count had missed.
+- ⛔ **STARVATION HERE LOOKS LIKE A RED TEST, NOT A CRASH (DEF-268).** The integration suite was
+  OOM-killed with four lanes active and reported two tests as FAILED with durations of **468,095ms
+  and 2,830,560ms** — 7.8 and 47 minutes for tests that take under two seconds. Re-run alone the same
+  file passes 14/14 in 25 seconds. **Check durations before believing any integration failure taken
+  while lanes were live.** Do not run the suite with lanes active.
+- ⚠️ **THREE LANES ON ONE TREE MEANS A TEST RUN IS A PHOTOGRAPH, NOT A FACT.** Two lanes reported
+  contradictory results for the same file; both were honest — one sampled the tree while the other
+  was still editing. Gate on the settled tree. A red result naming a file outside your task is a
+  timestamp.
+- ⚠️ **A BARREL IS ANY NAME REACHING A PACKAGE'S PUBLIC SURFACE**, not just a line in an `index.ts`.
+  `packages/core/src/index.ts` is `export * from './env'`, so a new export in `env.ts` publishes
+  itself with no barrel edit. A lane spotted that the stated rule under-described the risk; the rule
+  is now the broader one.
+- ⚠️ **`resize_window` in the Chrome tooling does not change the page viewport here** — it stayed
+  1536 regardless, so the <768 breakpoint is unreachable that way. Use the Playwright harness in
+  `~/.claude/skills/orchestrator/tools/` (it launches a pinned chromium; `npx playwright install` is
+  NOT needed and Playwright's own `chrome` channel is absent).
+- ⚠️ **A PRODUCTION BUILD CANNOT BE SMOKE-TESTED LOCALLY.** `npm start` refuses to boot without
+  production Firebase credentials (`FIREBASE_PROJECT_ID: is required in production` — env.ts's
+  fail-closed contract, working as designed). So every local browser pass is a **dev-mode** pass, and
+  Next's `<nextjs-portal>` dev indicator permanently occupies the bottom-left — which is where the
+  pinned sidebar footer now lives (DEF-276, verified dev-only: zero hits in the production chunks).
+- ⚠️ **`/F` in Git Bash becomes `F:/`.** `taskkill //F` or use PowerShell `Stop-Process -Id <pid>`.
+  Kill by PID, never by image name — four sessions share this machine.
+- ⚠️ **A browser probe that reports SKIPPED can look like a clean pass.** The first customer by sort
+  order has no journal-entry rows; the smoke script now pins the one customer holding both row shapes.
+- ⚠️ **`git add` stages whole files, so a shared file cannot be split across task commits.**
+  `DEFECTS-REGISTER.md` carried rows from four tasks and got its own docs commit rather than being
+  attached arbitrarily to one.
+- ⚠️ **A doc comment quoting a regex that ends in the two characters closing a block comment
+  truncates the file.** Describe the spellings; do not quote them.
+- ⚠️ **Three files in this tree use CRLF** (`attendance/lane/actions.ts`, `inventory/usage/actions.ts`,
+  `statutory-discounts/actions.ts`) and a sweep matching on a line ending silently skips them.
 
-## The four lanes — ALL IDLE, all SAFE TO CLEAR
+## The four lanes — ALL IDLE, all SAFE TO CLEAR (all four notified with reasons)
 
 Lanes **rename themselves per task**, so match on the `[ref]` from `ListAgents`, not the name.
-All four were sent a SAFE TO CLEAR notice with reasons (bible row 187).
+⭐ **All four existed and were idle at handoff — the previous handoff claimed none did.**
 
-| Lane | ref | Shipped today | Lane DB |
-|---|---|---|---|
-| **B** | `6b575a` | T-253 | `shareat_test_t229` |
-| **C** | `523c43` | QA — DEF-249 traced, the census, 11 findings | `shareat_test_qa` |
-| **D** | `074c83` | T-252 | `shareat_test_t216b` |
-| **E** | `505d06` | T-251a, T-254, T-256 | `shareat_test_def219` |
+| Lane | ref | Model | Shipped today | Lane DB |
+|---|---|---|---|---|
+| **B** | `6b575a` | Sonnet 5 | T-253, then **T-257** | `shareat_test_t229` |
+| **C** | `523c43` | **Opus 5, xhigh** | DEF-249 trace, census, then **T-255** | `shareat_test_qa` |
+| **D** | `074c83` | Sonnet 5 | T-252, then **T-258** | `shareat_test_t216b` |
+| **E** | `505d06` | Sonnet 5 | T-251a/254/256, then **T-259** | `shareat_test_def219` |
 
-⭐ **Assign by MODEL, not by lane history — it worked, and Ian asked for it.** Probe each terminal
-first (*"reply with MODEL / CONFIGURED / PLANMODE"*). A task whose spec already exists is pure
-execution and belongs on a **fixed-Sonnet** terminal, where row 184 makes Sonnet *correct*, not a
-compromise. A trace or a judgement call belongs on a **fixed-Opus** one. Only `opusplan` terminals
-need plan mode — **that dropped Ian's approval prompts from eight to four.**
-
-⚠️ **Tell each `opusplan` lane: write the spec IN PLAN MODE, exit plan mode to build** — and warn
-Ian, because **each raises a prompt in that lane's terminal** or the lane stalls silently.
+⭐ **Assign by MODEL, and probe first — it worked again.** A task whose spec already exists is
+execution and belongs on Sonnet, where row 184 makes it *correct*, not a compromise; the day's real
+judgement call went to the Opus lane and it repaid that by going a third way nobody had listed.
+⭐ **Nobody was `opusplan` and nobody was in plan mode, so Ian answered ZERO approval prompts.**
 
 **Protocol they must be told** (they will not remember): first line `[X] STATUS: sentence`,
-STATUS ∈ ACK/QUESTION/SPEC/READY/BLOCKED (lane C: VERIFIED/FAILED). Workers never run git, build,
-dev, or `npm run test:integration`; integration only via
+STATUS ∈ ACK/QUESTION/SPEC/READY/BLOCKED. Workers never run git, build, dev, or
+`npm run test:integration`; integration only via
 `node ~/.claude/skills/orchestrator/tools/it.mjs <lane db> <files>`. **You alone** stage explicit
 paths, commit with `-F`, push, run the dev server and browser, and edit the bible, registers,
-roadmap and board.
+roadmap and board. ⭐ **Ask each lane for its exact path list before committing** — lane C's
+44-path list made a precise stage trivial with three lanes editing one tree.
 
 ## Databases
 
-`shareat_dev` · `shareat_test` · four lane DBs · **`shareat_test_t240`** — the browser-pass
-database: PIN `246810` on `Smoke Store (SMK)`. **Do not drop it.** Head is **0140** and every
-database was verified at **124/124** today.
-`shareat_dev` signs in as **Dev Admin, PIN `111111`**.
+`shareat_dev` · `shareat_test` · four lane DBs · **`shareat_test_t240`** — PIN `246810` on
+`Smoke Store (SMK)`. **Do not drop it.** `shareat_dev` signs in as **Dev Admin, PIN `111111`**.
+⚠️ Sign-in is store-scoped — **pick the store BY NAME**, never index 0.
+⚠️ For T-258's rows, `shareat_dev`'s only customer with BOTH row shapes is **`Smoketest Wholesale
+Buyer`** (1 charge, 2 collections) — pinned in the smoke script for that reason.
 
 Browser scripts in the orchestrator tools folder: `smoke-t248.mjs`, `smoke-t250.mjs`,
-**`smoke-t253.mjs`** (new — carries sign-in-by-name and a negative control).
-
-⭐ **New in the repo: `scripts/production-caller-census.mjs`** with `docs/production-caller-baseline.txt`
-(111 names). Run it at a phase boundary and diff the names. Regenerate the baseline with `--names`;
-**never hand-edit it.**
+`smoke-t253.mjs`, **`smoke-t257-t258.mjs`** (new — carries the viewport-relative discipline, a
+real-click-vs-bypass assertion, per-`tbody` row grouping, and the `NEXTJS-PORTAL` exception).
 
 ## The status board
 
 Ian reads **https://claude.ai/code/artifact/b1555e09-a726-492b-a431-7a30791e1d50** rather than chat.
 `Artifact action:"read"` it, edit, republish with that `url` at **every commit**. **Never make a
-second one.** `docs/ROADMAP.html` moves at the same moments — do both.
+second one.** `docs/ROADMAP.html` moves at the same moments — do both. ⭐ Edit both with an
+**anchored script that refuses unless each anchor matches exactly once**; a board edit that silently
+no-ops is worse than one that fails loudly, because Ian reads the board and not the chat.
 
 ## The paste-ready prompt
 
 ```
 You are the ORCHESTRATOR for shareat-system. Read
 C:\Users\ianla\webapps\shareat-system\docs\HANDOFF-TODAY.md in full, then docs/RULES.md, then
-PROJECT_BIBLE.md §13 rows 185, 188, 189 and 190. Ask Ian to type /orchestrator shareat system
+PROJECT_BIBLE.md §13 rows 184, 189, 190 and 191. Ask Ian to type /orchestrator shareat system
 in your terminal (the skill is user-invocation only).
 
-The tree is CLEAN and all gates were green at handoff. No lane terminals exist — ask Ian to
-open them, then run ListAgents and match by [ref], not name. ⭐ PROBE EACH TERMINAL FOR ITS
-MODEL BEFORE ASSIGNING: a task whose spec already exists is pure execution and belongs on a
-fixed-Sonnet terminal; a trace or judgement call belongs on fixed-Opus; only opusplan lanes
-need plan mode. Tell every opusplan lane to write its spec IN PLAN MODE and exit plan mode to
-build — and warn Ian that each raises a prompt in that lane's terminal or it stalls silently.
+The tree is CLEAN, main is at b0991a4 and pushed, and all gates were green at handoff. Four lane
+terminals existed and were idle — run ListAgents and match by [ref], not name, and PROBE EACH FOR
+ITS MODEL BEFORE ASSIGNING: a task whose spec already exists is execution and belongs on Sonnet;
+a trace or judgement call belongs on Opus. Only opusplan lanes need plan mode — none were, so Ian
+answered zero approval prompts; keep it that way if you can.
 
 You own the dev server on 9008, builds, migrations, git and every browser pass; lanes never run
-git, build, dev or npm run test:integration. Stage explicit paths, commit with -F, push, and
-update BOTH docs/ROADMAP.html and the status board at EVERY commit. Re-run every gate yourself
-on the shared database rather than accepting a lane's numbers. Run integration with
---reporter=verbose; it takes 23 minutes and prints nothing otherwise.
+git, build, dev or npm run test:integration. Ask each lane for its exact path list, stage explicit
+paths, commit with -F, push, and update BOTH docs/ROADMAP.html and the status board at EVERY
+commit. Re-run every gate yourself on the shared database rather than accepting a lane's numbers.
 
-⛔ Treat every register row and task stub as a HYPOTHESIS. Yesterday five briefs were wrong,
-including the handoff's own claim about which terminals existed and DEF-249's own count.
-⛔ Never commit a new export with no production caller — that is DEF-226/227/249's shape;
-scripts/production-caller-census.mjs checks it mechanically.
+⛔ Treat every register row and task stub as a HYPOTHESIS. ⛔ And treat your OWN measurements the
+same way — yesterday the orchestrator got three wrong: a count from a string match, a gap measured
+across two tables, and a test whose injection never landed and made a working guard look broken.
+Prove an injection with a byte count before believing either outcome. Never commit a new export
+with no production caller; scripts/production-caller-census.mjs checks it mechanically.
+⛔ Do not run the integration suite while lanes are active (DEF-268) — starvation here presents as
+a RED TEST with absurd durations, not as a crash.
 
-Pick up at "Pick up here": T-257 (DEF-259, no way to sign out — Ian's explicit next), then
-T-259 (DEF-235 deploy preflight), then T-255 (DEF-257). DEF-242 is DONE (ADR-012, db:generate
-retired); its bible row 191 is PROPOSED, NOT WRITTEN — Ian ratifies, rule 14. The fingerprint
-capture gap is Ian's and is mapped in CAPABILITY-GAPS.md.
+Pick up at "Pick up here": DEF-272 (a sub-centavo amount defeats every > 0 money guard — needs a
+task number), then DEF-274 (the hit counter is wired into zero money screens), then DEF-269 (the
+touch-target guard cannot see inherited text size). DEF-275 proposes narrowing one clause of bible
+row 189 — Ian ratifies, rule 14. The month-end timer on the droplet is the only thing on his board.
 When a task completes with the tree clean, that is a milestone: run the wrap-up ritual
 (.claude/skills/wrap-up/), rewrite this file, and hand over. Keep your session small.
 ```
