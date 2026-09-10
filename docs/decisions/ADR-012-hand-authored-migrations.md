@@ -2,12 +2,12 @@
 
 | | |
 |---|---|
-| **Status** | ⏳ **PROPOSED 2026-09-10 — awaiting Ian.** Built on the orchestrator's brief for DEF-242, which delegated the answer to whichever direction the evidence supported. The command already fails closed and the convention is written down below; **the bible row (§8, proposed text) is the planner's to add — rule 14** |
+| **Status** | ✅ **ACCEPTED 2026-09-10 — Ian, the same day:** *"document this well … so it won't be rediscovered as it was before your work … on bible see where it fits."* Built on the orchestrator's brief for DEF-242, which delegated the answer to whichever direction the evidence supported; ratified by Ian in chat and carried into the bible on his instruction (rule 14, satisfied by the owner himself) |
 | **Raised by** | DEF-242 (2026-09-09), which is DEF-073 (2026-08-27) and DEF-121 (2026-09-01) found a third time |
 | **Forced by** | Ian's question on the board: *"repair the generator, or write the convention down?"* — it governs how every future schema change in this project is written |
 | **Decides for** | Every migration from 0141 on; `packages/db/package.json`'s `db:generate`; whether `migrations/meta/*_snapshot.json` is ever extended |
 | **Does not decide** | The journal's one-day-per-index `when` grid (DEF-091 — kept, and it is the reason this ADR exists) · whether RLS policies should ever be declared in `schema/` (not adopted; §6) · the drizzle-kit version pin |
-| **Bible amendment** | ⏳ Proposed as row 191 in §8 below. Not applied |
+| **Bible amendment** | ✅ **APPLIED 2026-09-10** on Ian's instruction — §13 **row 191**, §2 rule 8, §15.5. §8 below keeps the text as it was proposed; the row as applied carries Ian's words |
 
 ---
 
@@ -193,12 +193,13 @@ standard. *Boring and standard beats clever and bespoke* (bible §0.2).
 - `drizzle-kit` stays installed: `db:studio` uses it and `drizzle.config.ts` now says that is all
   it serves. `db:migrate` never read snapshots (it is `migrate.ts` on drizzle-orm's migrator) and
   is unchanged.
-- DEF-073, DEF-121 and DEF-242 close to this ADR. The trap they each recorded — *the failure
+- DEF-073, DEF-121 and DEF-242 close to this ADR, and `packages/db/migrations/README.md` says
+  all of this at the top of the folder the next person opens to add 0141. The trap they each recorded — *the failure
   surfaces as an unrelated question about another table* — can no longer surface, because the
   command no longer reaches drizzle-kit.
 - What this does **not** fix: `drizzle-kit introspect`/`pushSchema` remain unusable at this
   version pairing (§2.3). Nothing in the repo depends on them.
 
-## 8. Proposed bible row (for the planner — rule 14)
+## 8. Bible row 191 — as proposed (applied 2026-09-10 on Ian's instruction; the live text is `PROJECT_BIBLE.md` §13)
 
 > | 191 | 2026-09-10 | ⭐ **MIGRATIONS ARE HAND-AUTHORED FROM `schema/`; `npm run db:generate` IS RETIRED AND FAILS CLOSED.** `drizzle-kit generate` cannot serve this journal: it stamps `when` with the wall clock, and the one-day-per-index grid (row on DEF-091) keeps the head months ahead of it, so every generated entry would be silently skipped by the migrator (DEF-039). A regenerated snapshot was **measured truthful** — 0 disagreements across 127 tables, 1,636 columns, 518 foreign keys — and rejected anyway, because the journal half cannot be repaired and the snapshot chain has never once been maintained (dead at 0019, 104 migrations ago). The convention lanes were already following is written down with its guards in **ADR-012 §5**; the trap is that the failure surfaced as a question about an unrelated table, which it no longer can | The command says why and points at the checklist | ADR-012 |

@@ -22,7 +22,7 @@
 | 6 | **No money in floats.** `numeric` in the DB, integer centavos in code | §2.5 · §6 |
 | 7 | **No client-side-only authorization.** Every gate exists server-side | §2.6 · §7 |
 | 8 | **No implementation without a written task spec** in `docs/tasks/` | §2.7 · §3 |
-| 9 | **Every schema change is a migration.** An applied migration is **never edited** — write a new one. ⭐ **And it is HAND-AUTHORED** — `npm run db:generate` is retired and fails closed; the checklist is **ADR-012 §5** (DEF-242; bible row proposed, rule 14) | §2.8 · ADR-012 |
+| 9 | **Every schema change is a migration.** An applied migration is **never edited** — write a new one. ⭐ **And it is HAND-AUTHORED** — `npm run db:generate` is retired and fails closed; the checklist is **ADR-012 §5** (DEF-242; bible §13 row 191; `packages/db/migrations/README.md`) | §2.8 · §15.5 · ADR-012 |
 | 10 | **Stop the dev server before `npm run build`** — the build clobbers the `.next` it is serving | §2.9 |
 | 11 | 🚫 **NEVER BUILD ON EITHER DROPLET — and know which is which (DEF-238).** **`159.223.46.224` is OUR production host**: `erp2.shareat.net`, the `shareat-erp` service, `/srv/shareat-shared/.env.local`. **`159.223.78.207` is the OLD SHARED droplet** (ERPNext + the POS archive DB) — this project has never run there; `/srv` is empty on it. Both are small boxes and a build OOMs either. **Builds run in CI; the server receives a finished artifact.** ⚠️ Until 2026-09-08 this rule named only the old droplet and called it "the production droplet", which sent people to the wrong machine *and* said nothing about the real one | §2.10 |
 | 12 | **Port 9008 is ERPv2's alone**; 5435 for local Postgres. Never pass a different `-p` | §2.11 |

@@ -17,6 +17,12 @@ import { fileURLToPath } from 'node:url';
  *
  * A migration that silently does not apply is the purest form of the silent failure this
  * project exists to eliminate — so it is now a test, not a memory. Bible §12.
+ *
+ * ⭐ The same gate is why `drizzle-kit generate` can NEVER write this journal — ADR-012 / DEF-242,
+ * bible row 191. It stamps `when` with the wall clock, while the one-day-per-index grid the third
+ * test enforces keeps the head months ahead of any clock, so a generated entry would be exactly the
+ * silently-skipped migration this file exists to prevent. `npm run db:generate` therefore fails
+ * closed (generate-retired.ts) and migrations are hand-authored: packages/db/migrations/README.md.
  */
 
 const root = join(fileURLToPath(new URL('.', import.meta.url)), '..');
