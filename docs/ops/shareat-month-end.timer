@@ -1,12 +1,27 @@
 # T-205 — MONTHLY, on the 1st. Depreciation and amortisation are per-period; running this more
 # than once a period would double-post, and the job itself must be idempotent per period regardless
 # — this timer just decides when it's asked to check.
+#
+# ⚠️ 03:00 Manila is after order-wastage-backstop (02:30), which is itself after
+# recurring-expense-draft (02:00) and finding-observation (01:30) — so month-end runs last of the
+# four and contends with none of them for the same window.
+#
+# ⛔ THE ZONE IS LOAD-BEARING AND ITS ABSENCE WAS THE DEFECT (DEF-241). Until 2026-09-10 this line
+# read `OnCalendar=*-*-01 02:00:00` with NO zone, and systemd reads an unzoned OnCalendar as UTC —
+# so month-end ran 02:00 UTC = **10:00 Manila**, mid-working-day, on the 1st of every month, while
+# every sibling that cares about wall-clock time pinned Asia/Manila deliberately. Confirmed live on
+# the droplet before the fix: `systemctl list-timers` showed this unit's NEXT as `02:00:00 UTC`
+# while recurring-expense-draft showed `18:00:00 UTC` for its 02:00 Manila slot.
+# ⭐ **Ian ruled it an oversight, not a choice, on 2026-09-10** and moved it to the small hours with
+# its siblings. The tell that it was an oversight: every neighbouring unit explains its slot in a
+# comment and this one had none — in a file family where everyone documents their reasoning,
+# silence was the signal. Never remove `Asia/Manila` from this line.
 
 [Unit]
 Description=Shareat — month-end close, monthly on the 1st
 
 [Timer]
-OnCalendar=*-*-01 02:00:00
+OnCalendar=*-*-01 03:00:00 Asia/Manila
 # ⚠️ Catch up after a reboot or an outage rather than skipping silently. A month-end that quietly
 # skipped because the box was down on the 1st is DEF-044's shape all over again — that defect was
 # exactly this job (v1's depreciation cron) going silent for two months, found by an audit, not a
