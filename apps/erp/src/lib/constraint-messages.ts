@@ -5,7 +5,16 @@
  *
  * ⚠️ Only the WORDING is ours. Re-checking these in TypeScript would be a second source of truth
  * for a rule the database already enforces (bible §3, "the three that catch people out" #3).
+ *
+ * ⛔ **This file is NOT the only place a constraint failure is turned into a sentence** — DEF-257
+ * (T-252, docs/tasks/252-*.md §2): only 9 of the ~48 action files that produce a user-facing
+ * error actually import `errorMessage` from here; `remittance/actions.ts` and `till/actions.ts`
+ * keep their own screen-specific `CONSTRAINT_MESSAGES` and loop; ~38 more define a fully
+ * independent local fallback that never references this file at all. What changes below closes
+ * DEF-246 only for the callers that route through this module.
  */
+import { recordConstraintRefusal } from '@shareat/domain';
+
 export const CONSTRAINT_MESSAGES: Record<string, string> = {
   pay_runs_no_overlapping_posted_period:
     'A posted run already covers part of that period. ⛔ Periods may not overlap — the overlap ' +
@@ -65,11 +74,66 @@ export const CONSTRAINT_MESSAGES: Record<string, string> = {
     'spacing, so "Foodpanda" and "foodpanda " would be the same channel twice.',
 };
 
-/** Strips a leading `SomeErrorClass: ` prefix so a thrown message reads as one plain sentence. */
+/**
+ * Extracts a constraint/index name from raw Postgres driver text — the `constraint "name"` shape
+ * shared by a CHECK violation (`violates check constraint "…"`) and a unique violation
+ * (`violates unique constraint "…"`; this file already relies on constraint/index name parity —
+ * see the T-230 comment above). Returns `null` for anything that doesn't look like a constraint
+ * violation at all, so non-constraint errors are never affected by the fallback below.
+ */
+export function parseConstraintName(raw: string): string | null {
+  return /constraint "([a-zA-Z0-9_]+)"/.exec(raw)?.[1] ?? null;
+}
+
+/**
+ * bible §13 row 189 — the sanitised fallback. A single line, naming the record type in plain
+ * words where the raw text gives one, never the constraint name or the SQL grammar around it.
+ */
+function genericConstraintMessage(raw: string): string {
+  const relation = /relation "([a-zA-Z0-9_]+)"/.exec(raw)?.[1];
+  const noun = relation ? relation.replace(/_/g, ' ') : 'that record';
+  return `That change isn't allowed for ${noun} — please check the values you entered.`;
+}
+
+/**
+ * Strips a leading `SomeErrorClass: ` prefix so a thrown message reads as one plain sentence.
+ *
+ * ⛔ bible §13 row 189 / DEF-246: an UNMAPPED constraint violation used to fall through to this
+ * function's last line unchanged — and the raw Postgres text has no `Ctor: ` prefix to strip, so
+ * it rendered verbatim, SQL grammar and all, to the person moving the money. Now it degrades to a
+ * generic but presentable sentence instead. A MAPPED constraint and a non-constraint error are
+ * both unaffected — see docs/tasks/252-*.md §7 invariants 1 and 3.
+ */
 export function errorMessage(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
   for (const [constraint, message] of Object.entries(CONSTRAINT_MESSAGES)) {
     if (raw.includes(constraint)) return message;
   }
+  const constraintName = parseConstraintName(raw);
+  if (constraintName) return genericConstraintMessage(raw);
   return raw.replace(/^[a-zA-Z][A-Za-z0-9_]*:\s*/, '');
+}
+
+/**
+ * NEW — not called by any existing caller in this task. See docs/tasks/252-*.md §3: `errorMessage`
+ * stays synchronous and pure; this is the separate, explicitly-invoked entry point a caller with
+ * an `orgId` in scope threads in. Re-exported so a caller in `apps/erp` needs only this module's
+ * import line — the mechanism itself lives in `packages/domain/src/shared/constraint-refusals.ts`.
+ */
+export { recordConstraintRefusal };
+
+/**
+ * Records a hit ONLY when `err` is an unmapped constraint violation; a no-op otherwise (already
+ * mapped, or not constraint-shaped at all). Bundles the parse-and-check every wired caller would
+ * otherwise repeat — DEF-242's own lesson is that a pattern hand-copied across callers drifts, so
+ * it lives once here instead of once per caller.
+ */
+export async function recordIfUnmappedConstraint(
+  err: unknown,
+  context: { orgId: string; storeId: string | null; actorPersonId: string | null },
+): Promise<void> {
+  const raw = err instanceof Error ? err.message : String(err);
+  const constraintName = parseConstraintName(raw);
+  if (!constraintName || constraintName in CONSTRAINT_MESSAGES) return;
+  await recordConstraintRefusal({ ...context, constraintName });
 }

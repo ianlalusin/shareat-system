@@ -13,7 +13,7 @@
 import { redirect } from 'next/navigation';
 import { supersedeConfig, parseShiftDay, type ConfigChanges } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
-import { errorMessage } from '../../../lib/constraint-messages';
+import { errorMessage, recordIfUnmappedConstraint } from '../../../lib/constraint-messages';
 import { withOrgPrincipal, parseIntList } from './lib';
 
 function str(fd: FormData, key: string): string {
@@ -115,6 +115,7 @@ export async function updateAttendanceConfigAction(formData: FormData): Promise<
       }),
     );
   } catch (err) {
+    await recordIfUnmappedConstraint(err, { orgId: actor.orgId, storeId: store || null, actorPersonId: actor.personId });
     back(store, { error: errorMessage(err) });
   }
   back(store, { ok: `Saved. The new policy takes effect from ${effectiveFrom}.` });

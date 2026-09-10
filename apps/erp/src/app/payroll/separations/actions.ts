@@ -12,7 +12,7 @@ import { postSeparation, voidSeparation } from '@shareat/domain';
 import type { SeparationCause } from '@shareat/db/schema';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
-import { errorMessage } from '../../../lib/constraint-messages';
+import { errorMessage, recordIfUnmappedConstraint } from '../../../lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -43,6 +43,8 @@ export async function postSeparationAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
+    // T-252 — DEF-246: measures which unmapped constraints are actually hit.
+    await recordIfUnmappedConstraint(err, { orgId: actor.orgId, storeId: store || null, actorPersonId: actor.personId });
     // ⭐ Keeps the form's selection alive on a rejection — a validation error should not also
     // throw away which employment and date were being processed.
     back(store, { employmentId, separationDate, error: errorMessage(err) });
@@ -58,6 +60,7 @@ export async function voidSeparationAction(formData: FormData): Promise<void> {
       voidSeparation(tx, actor, { id: str(formData, 'id'), reason: str(formData, 'reason') }),
     );
   } catch (err) {
+    await recordIfUnmappedConstraint(err, { orgId: actor.orgId, storeId: store || null, actorPersonId: actor.personId });
     back(store, { error: errorMessage(err) });
   }
   back(store, { ok: 'Voided — that employment can be separated again if this was a correction.' });

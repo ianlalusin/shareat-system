@@ -10,7 +10,7 @@ import { redirect } from 'next/navigation';
 import { postPayRun, setPayRate, voidPayRun } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
-import { errorMessage } from '../../lib/constraint-messages';
+import { errorMessage, recordIfUnmappedConstraint } from '../../lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -36,6 +36,9 @@ export async function setPayRateAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
+    // T-252 — DEF-246: measures which unmapped constraints are actually hit, before anyone
+    // writes a hand-crafted sentence for one. Never blocks or changes this redirect.
+    await recordIfUnmappedConstraint(err, { orgId: actor.orgId, storeId: store || null, actorPersonId: actor.personId });
     back({ store, error: errorMessage(err) });
   }
   back({ store, ok: 'Rate recorded. ⚠️ It applies from its effective date — earlier days keep the old rate.' });
@@ -58,6 +61,7 @@ export async function postPayRunAction(formData: FormData): Promise<void> {
       }),
     );
   } catch (err) {
+    await recordIfUnmappedConstraint(err, { orgId: actor.orgId, storeId: store || null, actorPersonId: actor.personId });
     back({ store, start, end, error: errorMessage(err) });
   }
   back({
@@ -75,6 +79,7 @@ export async function voidPayRunAction(formData: FormData): Promise<void> {
       voidPayRun(tx, actor, { runId: str(formData, 'runId'), reason: str(formData, 'reason') }),
     );
   } catch (err) {
+    await recordIfUnmappedConstraint(err, { orgId: actor.orgId, storeId: store || null, actorPersonId: actor.personId });
     back({ store, error: errorMessage(err) });
   }
   back({

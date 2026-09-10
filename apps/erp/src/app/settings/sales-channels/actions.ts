@@ -12,7 +12,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createSalesChannel, setSalesChannelActive, updateSalesChannel } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
-import { errorMessage } from '../../../lib/constraint-messages';
+import { errorMessage, recordIfUnmappedConstraint } from '../../../lib/constraint-messages';
 import { withOrgPrincipal } from './lib';
 
 function str(fd: FormData, key: string): string {
@@ -70,6 +70,7 @@ export async function createSalesChannelAction(fd: FormData): Promise<void> {
       }),
     );
   } catch (err) {
+    await recordIfUnmappedConstraint(err, { orgId: actor.orgId, storeId: storeId || null, actorPersonId: actor.personId });
     back(storeId, { error: errorMessage(err) });
   }
   revalidatePath('/settings/sales-channels');
@@ -92,6 +93,7 @@ export async function updateSalesChannelAction(fd: FormData): Promise<void> {
       }),
     );
   } catch (err) {
+    await recordIfUnmappedConstraint(err, { orgId: actor.orgId, storeId: storeId || null, actorPersonId: actor.personId });
     back(storeId, { error: errorMessage(err) });
   }
   revalidatePath('/settings/sales-channels');
@@ -111,6 +113,7 @@ export async function setSalesChannelActiveAction(fd: FormData): Promise<void> {
       setSalesChannelActive(tx, actor, { channelId: str(fd, 'channelId'), isActive }),
     );
   } catch (err) {
+    await recordIfUnmappedConstraint(err, { orgId: actor.orgId, storeId: storeId || null, actorPersonId: actor.personId });
     back(storeId, { error: errorMessage(err) });
   }
   revalidatePath('/settings/sales-channels');

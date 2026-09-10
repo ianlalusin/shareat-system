@@ -16,7 +16,7 @@ import {
   setCategoryActive,
 } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
-import { errorMessage } from '../../../lib/constraint-messages';
+import { errorMessage, recordIfUnmappedConstraint } from '../../../lib/constraint-messages';
 import { withOrgPrincipal } from './lib';
 
 function str(fd: FormData, key: string): string {
@@ -44,6 +44,7 @@ export async function setCategoryAccountAction(formData: FormData): Promise<void
       setCategoryAccount(tx, actor, { categoryId, accountCode }),
     );
   } catch (err) {
+    await recordIfUnmappedConstraint(err, { orgId: actor.orgId, storeId: null, actorPersonId: actor.personId });
     back({ error: errorMessage(err) });
   }
   back({
@@ -72,6 +73,7 @@ export async function createCategoryAction(formData: FormData): Promise<void> {
       createCategory(tx, actor, { group, category: name, accountCode: raw === '' ? null : raw }),
     );
   } catch (err) {
+    await recordIfUnmappedConstraint(err, { orgId: actor.orgId, storeId: null, actorPersonId: actor.personId });
     back({ error: errorMessage(err) });
   }
   back({
@@ -91,6 +93,7 @@ export async function renameCategoryAction(formData: FormData): Promise<void> {
       renameCategory(tx, actor, { categoryId, category: name }),
     );
   } catch (err) {
+    await recordIfUnmappedConstraint(err, { orgId: actor.orgId, storeId: null, actorPersonId: actor.personId });
     back({ error: errorMessage(err) });
   }
   // ⚠️ Stated plainly: a rename does not touch history, because `expenses.category_id` is an id.
@@ -107,6 +110,7 @@ export async function setCategoryActiveAction(formData: FormData): Promise<void>
       setCategoryActive(tx, actor, { categoryId, isActive }),
     );
   } catch (err) {
+    await recordIfUnmappedConstraint(err, { orgId: actor.orgId, storeId: null, actorPersonId: actor.personId });
     back({ error: errorMessage(err) });
   }
   back({

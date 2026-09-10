@@ -14,7 +14,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { setOrganizationIdentity } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
-import { errorMessage } from '../../../lib/constraint-messages';
+import { errorMessage, recordIfUnmappedConstraint } from '../../../lib/constraint-messages';
 import { withOrgPrincipal } from './lib';
 
 function str(fd: FormData, key: string): string {
@@ -41,6 +41,7 @@ export async function setOrganizationIdentityAction(fd: FormData): Promise<void>
       }),
     );
   } catch (err) {
+    await recordIfUnmappedConstraint(err, { orgId: actor.orgId, storeId: null, actorPersonId: actor.personId });
     back({ error: errorMessage(err) });
   }
   revalidatePath('/settings/organization');
