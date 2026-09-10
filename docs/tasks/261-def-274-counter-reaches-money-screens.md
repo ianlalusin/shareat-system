@@ -922,6 +922,27 @@ domain function, and assert the set equals exactly the seven above — six wrapp
 `recordingRefusalsFor`, plus `setup/actions.ts`'s `signInWithFirebase` allowlisted **by name, with
 the reason in the allowlist comment** (no org exists yet).
 
+> ⛔ **THE DISCRIMINATOR IS PART OF THE ASSERTION, AND THE SENTENCE ABOVE ORIGINALLY OMITTED IT.**
+> Added by the orchestrator 2026-09-10 after the lane that wrote this section reported the gap in
+> its own spec, post-commit. **A naive sweep for `null` as a first argument returns 18 matches, not
+> 7.** The other 11 are React `setState(null)` / `setError(null)` calls in client components. A lane
+> implementing the sentence literally writes a guard that fails on day one and is then loosened
+> until it asserts nothing — which is §B10 check 5's failure mode, arriving in the one place check 5
+> cannot see it.
+>
+> **Discriminate by SHAPE, not by spelling — required, not advisory:** the called identifier must be
+> **imported from `@shareat/domain` or `@shareat/auth`**. Verified against the tree: all 7 signal
+> matches are (`cutover/actions.ts` and `fixed-assets/actions.ts` import from `@shareat/domain`;
+> `setup/actions.ts:33` imports `signInWithFirebase` from `@shareat/auth`), and `setState` never is.
+>
+> ⚠️ **Two weaker filters, recorded so they are not mistaken for the requirement.** Excluding files
+> whose first three lines carry `'use client'` separates the two sets exactly *today* — but a future
+> `null`-first-arg helper in a server file slips straight past it. Requiring a comma after `null`
+> (so `null` is the first of ≥2 arguments) also yields exactly 7 today, because every domain writer
+> takes at least `(tx, actor)` and `setState(null)` takes one argument — but it is still a regex
+> matching punctuation. **Use the import check.** Either weaker filter may be added on top; neither
+> may replace it.
+
 An eighth appearing fails the test, and the failure message must say: *this path bypasses
 `withOrgPrincipal`, so the refusal counter cannot see it — wrap the call in
 `recordingRefusalsFor(actor.orgId, …)`, or add it to the allowlist and say why.* ⚠️ Same CRLF and
