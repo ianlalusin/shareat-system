@@ -422,3 +422,23 @@ record for it.
 
 ⚠️ **Both guards' first run was red, on purpose and on live defects** — DEF-192, DEF-197, and (with
 the exemption map empty) the five AR functions of DEF-190.
+
+---
+
+## Added 2026-09-10 — fingerprint capture, named by Ian while deciding DEF-260
+
+⭐ **The clock terminal is a downloaded Android APK (GitHub-compiled) with a fingerprint reader on an OTG dongle, and that dongle is the punch-in/punch-out method — the way v1 does it.** Ian, 2026-09-10, recorded as **bible §13 row 190**. One or two tablets per store.
+
+**The gap: nothing in this project captures or verifies a fingerprint.**
+
+| Piece | State |
+|---|---|
+| The offline clock page itself | ✅ **Built and already the right shape.** `apps/erp/src/app/clock/page.tsx` (T-184) is client-only and offline-capable by construction, signing in with `signInWithCustomToken` and using the Firestore client SDK — never a Server Action, enforced by a test that fails the build, not by a comment. An APK wrapping it inherits that unchanged |
+| Enrolling a fingerprint | ⚠️ **Interim only.** T-203's enrolment accepts pasted/typed template text and is labelled on screen as NOT a working capture flow. DEF-133's disposition justifies that with *“no capture device exists in this stack”* — **the OTG dongle is that device**, so the justification has now expired |
+| Capturing from the dongle | ⛔ **Does not exist.** No APK build, no OTG integration, no capture path anywhere in `apps/`, `packages/` or `docs/` — a sweep for *apk / fingerprint / biometric / otg* returns only ADR asides and enrolment code |
+| Verifying a scan against a template | ⛔ **Does not exist as a working path.** DEF-224 already records that `person_credentials_shape_check` admits a `biometric` row *“whose verifier does not land until Phase 4”* and that **there is no writer today** |
+| The APK build itself | ⛔ **Unowned.** Ian says GitHub compiles it; no workflow, no repo reference, and `docs/ops` does not ship (DEF-194) |
+
+⚠️ **Why this belongs here and not in the defects register:** nothing is broken. Every piece that exists works. This is a capability the business relies on daily in v1 that **no phase currently owns** — which is exactly what this document is for (RULES §3, the three doors).
+
+⛔ **The sequencing trap, stated so it is not discovered late:** attendance and payroll are already built and tested against *enrolled* credentials. They do not need the dongle to be correct. But **on cutover morning nobody can punch with a finger unless the capture path exists**, and the current enrolment screen cannot produce a real template — only pasted text. Phase assignment is Ian's; the honest reading is that this is a Phase 4 remainder that was closed on paper.
