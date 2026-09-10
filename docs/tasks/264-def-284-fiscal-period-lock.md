@@ -102,16 +102,67 @@ correct and unchanged — only the pointer is wrong.
 
 ## Slice 1 — something must CREATE fiscal periods
 
-**Ship this first and alone. It is not about locking and it fixes a live failure.**
+**Ship this first and alone. It is not about locking, and it is more urgent than this spec first
+said.**
 
-Nothing inserts `fiscal_periods` rows, so depreciation fails today with *"no fiscal period covers
-…"* for any org whose periods were never hand-inserted.
+### ⛔ SEVERITY CORRECTION, orchestrator, 2026-09-11 — THIS IS NOT "DEPRECIATION FAILS"
 
-- Decide and state: are periods generated per org on demand, seeded ahead for a year, or created at
-  org bootstrap? ⚠️ **Say which and why** — this is a data-shape decision that is expensive to undo.
-- ⚠️ Periods are **org-scoped**. Check what `bootstrap-org` does today and whether it should own this.
-- ⚠️ The period must cover the dates depreciation posts to — `endOfPeriod(period)` is the date the
-  runner uses. A period that exists but does not span that date fails identically.
+This spec and DEF-284 both describe the symptom as depreciation failing. **Re-derived at source, the
+blast radius is the entire ledger.**
+
+- `journal_entries.period_id` is **`NOT NULL`** with an FK to `fiscal_periods`
+  (`packages/db/schema/journal.ts:82`).
+- `postEntry` — **the single entry point to the ledger** — resolves the period by date and throws
+  when none covers it (`packages/domain/src/ledger/post-entry.ts:112-116`).
+- The `journal_entries_period_open` trigger (migration `0003:226`) independently raises if the
+  period is missing or not `open`.
+- ⛔ **`scripts/bootstrap-org.ts` contains the string "period" ZERO times.** It seeds the chart of
+  accounts and expense categories, and no fiscal period.
+- ⛔ **Every single `insert into fiscal_periods` in this repository is in a test file or in
+  `scripts/dev-seed-inventory.ts:132`.** There is no production writer of any kind.
+
+**Therefore a freshly bootstrapped production organisation cannot post ANY journal entry — not a
+sale, not an expense, not payroll, not depreciation.** The ledger refuses the first entry it is ever
+offered. Depreciation is merely where this is *visible on a screen*, because that job records and
+displays its own failures; everything else fails at the moment someone tries.
+
+⭐ **And the pilot is the first organisation on production, with cutover on 1 January 2027.** The
+cutover opening entry (`addOpeningFigure`, `cutover/opening.ts:71`) needs a covering period too, and
+ADR-005 dates it `2027-01-01`. **So this is a cutover blocker, not a scheduler bug.**
+
+⚠️ Why it has never been felt: `dev-seed-inventory.ts` hand-inserts periods, and every integration
+test inserts its own. **The one path that has never had them is the one production will use.**
+
+### The data-shape decision — MADE, with the reasoning, per this spec's own instruction
+
+**Periods are CALENDAR MONTHS, created EXPLICITLY, a year at a time — seeded at org bootstrap, with
+an admin action to generate the next year, and a findings check that warns before the runway runs
+out.**
+
+Why each half, and what would have to be true for it to be wrong:
+
+| Option | Verdict |
+|---|---|
+| **Lazily, on demand — `postEntry` creates the month when it finds none** | ⛔ **REJECTED, and it is the trap.** It would make slice 2 and slice 3 pointless: back-dating into January in June would silently *create January as open* and post into it. **An auto-created period is an auto-opened one.** The whole task exists to stop exactly that |
+| **A scheduled job creating next month ahead of time** | ⛔ Rejected as the primary mechanism. If the job fails, the ledger stops accepting entries and the failure is silent — DEF-044's shape, the thing this project keeps being bitten by |
+| **Explicit, a year at a time, seeded at bootstrap** | ✅ **Chosen.** A fresh org works immediately; creation stays a deliberate act, so the control survives |
+| **Plus a runway warning in the findings feed** | ✅ **Chosen, and it is what stops the time bomb.** Seeding a year without it just moves the outage twelve months out. The findings feed already exists and ADR-006 §8 already established the daily-checker pattern — this needs no new machinery |
+
+- **Calendar months**, `starts_on` = the 1st, `ends_on` = the last day. Required by ADR-006 (every
+  period closes on the 15th of the following month) and by `endOfPeriod(period)`, which the
+  depreciation runner uses as its posting date. Adjacent months do not overlap, so the `EXCLUDE
+  USING gist` no-overlap constraint is satisfied, and ADR-006's requirement that two periods may be
+  open at once (December and January coexist until the 15th) still holds.
+- ⚠️ **Seed enough to cover the cutover opening date**, not just "from today" — `addOpeningFigure`
+  posts at `2027-01-01`.
+- ⚠️ **`bootstrap-org.ts` should own the seeding**, because it is the one path a real org travels
+  and it already seeds the chart of accounts. Existing orgs need a backfill; say how.
+- ⚠️ The period must cover the dates depreciation posts to — a period that exists but does not span
+  `endOfPeriod(period)` fails identically.
+
+⛔ **This decision is cheap to reverse ONLY until rows exist.** Once an org has periods with entries
+pointing at them, changing the shape means migrating live FKs. Say so if you disagree, before
+building.
 
 ## Slice 2 — a way to CLOSE one
 
