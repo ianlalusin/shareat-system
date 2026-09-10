@@ -32,6 +32,74 @@ Both roles already exist: `person_roles_role_check` in migration `0014` is
 
 ---
 
+## ⛔ SPEC AMENDMENT, orchestrator, 2026-09-11 — **THIS TASK HAS A RATIFIED ADR AND THE SPEC DOES NOT CITE IT**
+
+**`docs/decisions/ADR-006-period-close.md` — *"Period close: every period closes on the 15th; only
+the year posts an entry"*, ✅ Accepted 2026-08-23, 290 lines, with Ian's own answers to five
+questions recorded in its §7 — is not referenced anywhere in this spec, and not in DEF-284's
+register row either.** Read it before slice 2 or slice 3. It is the governing decision for this
+area and it pre-answers questions this spec leaves open.
+
+### What ADR-006 already settles — do NOT let a lane re-decide these
+
+| This spec's open question | ADR-006's ratified answer |
+|---|---|
+| *"Say what `locked` means here"* (Watch out) | §7.5: `closed` → `locked` is **automatic once the following year's close posts successfully**. `locked` records that a later year now depends on the period. Not a synonym for `closed` |
+| Who may close | §7.4: **admin and manager**, enforced server-side. ⭐ **Already built and consistent** — `close_period` in `packages/auth/src/capabilities.ts:682` is `{super_admin: true, admin: true, manager: true, staff: false}`, and `authorize.ts:138` adds the extra condition that a *manager* must have org-wide store scope. Slice 2 should reuse this untouched |
+| The 15th as the close date | §7.3, decided **2026-08-23**: *"Every period closes on the 15th of the following month."* ⭐ Ian's 2026-09-10 ruling is therefore a **re-affirmation of his own earlier decision, not a new one** — two independent arrivals at the same date, which strengthens it |
+
+### ⛔ AND ONE GENUINE TENSION THAT IS IAN'S TO RESOLVE, NOT A LANE'S — SLICE 3 IS BLOCKED ON IT
+
+**ADR-006 §7.1 and its "Reopening — NOT BUILT" section record Ian deciding *against* an override
+path, in almost the words this task uses to describe one.**
+
+> ADR-006, *Reopening — NOT BUILT*: "The research recommended a guarded reopen path (**admin-only,
+> most-recent-only, mandatory reason**). **Ian decided against it entirely: a closed year is never
+> reopened** (§7.1)." And §7.1: "An error found afterwards is **carried into the following year as a
+> prior-period adjustment** — the mechanism `reverseEntry` already implements. **No reopen path is
+> built, so none can be abused.**"
+
+DEF-284, 2026-09-10: *"a LOCK WITH OVERRIDE, and the override is restricted to `admin` and
+`super_admin` only"* — with, per slice 3, **a typed reason and an audit row**. That is admin-only
+plus a mandatory reason: the shape ADR-006 records as declined.
+
+⚠️ **State the distinction fairly, because it is real and it may be the whole answer:**
+
+- ADR-006 rejected **reopening** — flipping `status` from `closed` back to `open`, which makes the
+  period generally postable again for everyone until someone closes it a second time.
+- Slice 3 proposes a **transaction-local, per-posting exemption** — the period stays `closed`, one
+  authorised entry is let through, and the GUC dies with the transaction.
+
+These are genuinely different mechanisms with different blast radii, and ADR-006 did not evaluate
+the second one. ⛔ **But they aim at the same outcome — an entry landing in a closed period — and
+ADR-006's stated reason for never-reopen was that the prior-period adjustment is *the only* path.
+An override is a second path.** Two ratified decisions cannot both be the rule here.
+
+**⛔ DO NOT BUILD SLICE 3 UNTIL IAN SAYS WHICH GOVERNS.** The three outcomes:
+
+1. **The override supersedes ADR-006's never-reopen stance** — then ADR-006 gets an amendment
+   recording the supersession and why, and slice 3 proceeds as written.
+2. **ADR-006 governs** — then slice 3 is not built at all, and the answer to "I must fix a closed
+   month" stays `reverseEntry` + a prior-period adjustment carried forward, which is already built.
+3. **Both stand, because they are different mechanisms** — then that distinction is written into
+   ADR-006 explicitly, so the next reader cannot conclude either one alone.
+
+⚠️ This is a decision-level conflict between two ratified records, not a spec defect a lane can
+route around. Leaving it unresolved is how a lane faithfully builds the wrong half.
+
+⭐ **Slices 1 and 2 are NOT blocked by this.** Slice 1 (create periods) fixes a live failure and
+touches none of it. Slice 2 (close a period) is ADR-006's own design and is reinforced, not
+contradicted, by it.
+
+### ⚠️ One citation to correct while you are here
+
+This spec and DEF-284 both cite **"bible §6.3"**. There is no §6.3. `docs/RULES.md` §6 item 3 says so
+in terms: *"There is no 'bible §6.3'; a citation to it means this item — bible §15.11."* The rule
+being invoked (the database enforces period rules; a second copy in the service layer drifts) is
+correct and unchanged — only the pointer is wrong.
+
+---
+
 ## Slice 1 — something must CREATE fiscal periods
 
 **Ship this first and alone. It is not about locking and it fixes a live failure.**
