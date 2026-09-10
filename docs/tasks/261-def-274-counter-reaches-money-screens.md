@@ -685,7 +685,7 @@ and not 44, and it is the first thing a reviewer should verify.
 | 5 | `apps/erp/src/app/fixed-assets/actions.ts` | **§B4.1** — wrap 1 null-tx call (line 146) |
 | 6 | `apps/erp/tests/constraint-messages.test.ts` | unit coverage for §B3 |
 | 7 | `apps/erp/tests/withorgprincipal-chokepoint.test.ts` | **new** — the import-graph guard (§B6) **and the null-tx census (§B4.1)** |
-| 8 | `packages/domain/tests/integration/constraint-refusals.test.ts` | **append only** — the three new integration cases (§B7, §B4.1). ⚠️ This is the one permitted touch under `packages/domain/` and it is a **test file**; the package source tree stays untouched |
+| 8 | **`apps/erp/tests/integration/constraint-refusals.test.ts`** | **NEW FILE** — the three new integration cases (§B7, §B4.1). ⛔ **CORRECTED 2026-09-10: this row said `packages/domain/tests/integration/constraint-refusals.test.ts` and that location cannot work.** §B7/§B4.1 test app-layer code — the `withOrgPrincipal` wrapper and `recordingRefusalsFor`, both in `apps/erp/src/app/expenses/lib.ts` — and reaching them from `packages/` is exactly the import `tests/unit/app-boundaries.test.ts` forbids (RULES rule 13). That guard walks **all** of `packages/`, test files included, with no exclusion for `tests/integration/`, and §B7.3 requires it to keep passing untouched. **As originally written, §B7.1 and §B7.3 were mutually exclusive.** ⭐ **Direct repo precedent for the corrected location:** `apps/erp/tests/integration/sign-out-action.test.ts:123,148` already dynamically imports a real app action (`../../src/app/sign-in/actions`) to integration-test it against real Postgres. ⚠️ **This tests the DEPLOYED wrapper rather than a reconstruction of it** — the rejected alternative was to keep the cases in `packages/` and rebuild the wrapper's try/catch/`return await`/rethrow shape inline from legal package imports, which would prove the pattern works without proving the shipped code IS that pattern. Found by the build lane before writing a line |
 
 ⛔ **`apps/erp/src/app/setup/actions.ts` is NOT on this list.** Its `null`-tx call is deliberately
 left alone — see §B4.1 call site 7.
@@ -1024,7 +1024,7 @@ is careful.** A recorder that writes inside the transaction the refusal aborts r
 for ever, with nothing red** — no error, no failing test, just an empty table a year later. You may
 not take it on reasoning that the wrapper avoids this. **Watch it fail first.**
 
-Append to `packages/domain/tests/integration/constraint-refusals.test.ts` (its header already
+Create `apps/erp/tests/integration/constraint-refusals.test.ts` (see §B2 row 8 for why NOT the `packages/domain` file this originally named). Model it on `apps/erp/tests/integration/sign-out-action.test.ts`, which dynamically imports a real app action against real Postgres. ⚠️ The `packages/domain` file already
 documents this red-then-green ritual, and it carries the `asOrg` / `fixture` helpers you need):
 
 - **(a) Immediate CHECK violation.** Through the wrapper, provoke an unmapped CHECK violation;
