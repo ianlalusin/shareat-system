@@ -1,7 +1,8 @@
 # T-254 — DEF-248: the two dead dark-mode classes on the cutover back-links
 
-> **Status: RESERVED by the orchestrator, 2026-09-10. Assigned to lane B, AFTER T-253.**
-> Number reserved so no peer takes it. Nothing below is built.
+> **Status: BUILT 2026-09-10 (lane E, reassigned from lane B by the orchestrator).**
+> Both back-links now say `dark:text-neutral-400`, verified against all four sibling
+> back-links before the edit. Ships as its own commit, per this doc's own rule.
 
 Both `cutover` back-links carry `text-neutral-500 … dark:text-neutral-500`, where the dark variant
 restates the light value, so it can only have been meant to be something else. Every sibling

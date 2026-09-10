@@ -48,7 +48,7 @@ export default async function OpeningPage({
       <div>
         <Link
           href="/cutover"
-          className={`${ACTION_LINK} text-neutral-500 dark:text-neutral-500`}
+          className={`${ACTION_LINK} text-neutral-500 dark:text-neutral-400`}
         >
           ← Back to the conversion
         </Link>
