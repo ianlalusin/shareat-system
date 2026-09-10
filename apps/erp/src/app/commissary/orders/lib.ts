@@ -27,6 +27,7 @@ import {
 } from '@shareat/domain';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { listStores, withOrgPrincipal, type StoreOption } from '../../expenses/lib';
+import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 
 export { peso } from '../../../lib/format';
 export { listStores, withOrgPrincipal, BRANCH_ORDER_STAGE_LABEL, branchOrderStage };
@@ -46,7 +47,7 @@ export function errorMessageOf(err: unknown): string {
   const denied = /may not '([a-z_]+)'/.exec(raw);
   if (denied) return `Your role may not ${denied[1]!.replace(/_/g, ' ')}.`;
   if (/no store scope/.test(raw)) return 'You are not assigned to the store this action belongs to.';
-  return raw.replace(/^[a-z][A-Za-z0-9_]*:\s*/, '');
+  return sharedErrorMessage(err);
 }
 
 /**

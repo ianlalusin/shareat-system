@@ -25,16 +25,13 @@ import {
 import { apRepo } from '@shareat/db';
 import { withOrgPrincipal, PAYMENT_ROW_COUNT } from './lib';
 import { requireActor } from '../../lib/session';
+import { errorMessage } from '@/lib/constraint-messages';
 
 const PAYMENT_METHODS = new Set<string>(['cash', 'online', 'credit', 'reimbursable', 'other', 'ar_collection']);
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
 }
 
 /** Every action ends up back on a page carrying `org`/`store`/`as` (the "acting as"

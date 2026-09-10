@@ -15,6 +15,7 @@ import { createTradeOrder, dispatchTradeOrder, receiveTradeOrder, voidTradeOrder
 import { SHORTAGE_REASONS, type ShortageReason } from '@shareat/db/schema';
 import { peso, withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
+import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -32,7 +33,7 @@ function errorMessage(err: unknown): string {
   if (/may not 'approve_buyer'/.test(raw)) {
     return 'Only a manager or admin scoped to the selling store can create, dispatch, receive or void a trade order.';
   }
-  return raw.replace(/^[a-z][A-Za-z0-9_]*:\s*/, '');
+  return sharedErrorMessage(err);
 }
 
 function back(path: string, params: Record<string, string>): never {

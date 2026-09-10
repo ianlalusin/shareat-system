@@ -21,6 +21,7 @@ import {
 } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
+import { errorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -30,16 +31,6 @@ function str(fd: FormData, key: string): string {
 /** A blank money field is zero, not an error — most settlements use three of the six kinds. */
 function money(fd: FormData, key: string): string {
   return str(fd, key) || '0';
-}
-
-/**
- * The message a person should read. Domain errors are prefixed with the function that threw —
- * right in a log, useless on screen — so a leading camelCase identifier and its colon go, and
- * nothing else: the sentence after it is already written for a human.
- */
-function errorMessage(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err);
-  return raw.replace(/^[a-z][A-Za-z0-9_]*:\s*/, '');
 }
 
 export interface PreviewRequest {

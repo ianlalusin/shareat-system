@@ -27,6 +27,7 @@ import {
 } from '@shareat/auth';
 import { requireRevokeReason, withOrgPrincipal } from './lib';
 import { clearSessionCookie, requireActor } from '../../../lib/session';
+import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -103,7 +104,7 @@ function errorMessage(err: unknown): string {
   if (/does not exist or is already revoked/.test(raw)) {
     return 'That grant was already revoked — reload the page to see the current state.';
   }
-  return raw.replace(/^[a-z][A-Za-z0-9_]*:\s*/, '');
+  return sharedErrorMessage(err);
 }
 
 function backToUser(personId: string, extra: Record<string, string>): never {

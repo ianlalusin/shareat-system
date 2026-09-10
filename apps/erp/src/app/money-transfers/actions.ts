@@ -14,22 +14,11 @@ import { redirect } from 'next/navigation';
 import { createMoneyTransfer, voidMoneyTransfer } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
+import { errorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-/**
- * The message a person should read.
- *
- * ⚠️ Domain errors are prefixed with the function that threw — `createMoneyTransfer: ...` — which
- * is exactly right in a log and useless on screen. Strips a leading camelCase identifier and its
- * colon, and nothing else: the sentence after it is already written for a human.
- */
-function errorMessage(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err);
-  return raw.replace(/^[a-z][A-Za-z0-9_]*:\s*/, '');
 }
 
 export async function createMoneyTransferAction(formData: FormData): Promise<void> {

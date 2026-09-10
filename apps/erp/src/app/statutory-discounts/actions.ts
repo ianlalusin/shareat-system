@@ -15,6 +15,7 @@ import { redirect } from 'next/navigation';
 import { recordStatutoryDiscount, voidStatutoryDiscount } from '@shareat/domain';
 import { withOrgPrincipal } from '../expenses/lib';
 import { requireActor } from '../../lib/session';
+import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -37,7 +38,7 @@ function errorMessage(err: unknown): string {
   if (raw.includes('statutory_discount_records_identity_present_check')) {
     return 'Name, ID number and invoice number are all required — the record satisfies nothing without them.';
   }
-  return raw;
+  return sharedErrorMessage(err);
 }
 
 function backTo(fd: FormData, error?: string): string {

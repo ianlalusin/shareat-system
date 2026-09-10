@@ -14,6 +14,7 @@ import { redirect } from 'next/navigation';
 import { createStore, deactivateStore, reactivateStore, updateStoreDetails } from '@shareat/domain';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { requireActor } from '../../../lib/session';
+import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -44,7 +45,7 @@ function errorMessage(err: unknown): string {
   if (/authorize:/.test(raw)) {
     return 'Only an admin or super-admin can open or close a branch.';
   }
-  return raw;
+  return sharedErrorMessage(err);
 }
 
 function back(path: string, params: Record<string, string>): never {

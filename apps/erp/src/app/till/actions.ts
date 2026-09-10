@@ -16,6 +16,7 @@ import {
 } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
+import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -46,7 +47,7 @@ function errorMessage(err: unknown): string {
   for (const [constraint, message] of Object.entries(CONSTRAINT_MESSAGES)) {
     if (raw.includes(constraint)) return message;
   }
-  return raw.replace(/^[a-zA-Z][A-Za-z0-9_]*:\s*/, '');
+  return sharedErrorMessage(err);
 }
 
 /**

@@ -22,6 +22,7 @@ import {
 } from '@shareat/domain';
 import { requireActor } from '../../lib/session';
 import { withOrgPrincipal } from '../expenses/lib';
+import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -58,7 +59,7 @@ function errorMessageOf(err: unknown): string {
   const denied = /may not '([a-z_]+)'/.exec(raw);
   if (denied) return `Your role may not ${denied[1]!.replace(/_/g, ' ')}.`;
   if (/no store scope/.test(raw)) return 'You are not assigned to the store this action belongs to.';
-  return raw.replace(/^[a-z][A-Za-z0-9_]*:\s*/, '');
+  return sharedErrorMessage(err);
 }
 
 function backToList(storeId: string, error?: string, ok?: string): never {

@@ -13,6 +13,7 @@ import { revalidatePath } from 'next/cache';
 import { enrolCard, enrolFingerprint, revokeCredential } from '@shareat/domain';
 import { withOrgPrincipal } from '../../../expenses/lib';
 import { requireActor } from '../../../../lib/session';
+import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -24,7 +25,7 @@ function errorMessage(err: unknown): string {
   if (/may not 'manage_attendance'/.test(raw)) {
     return 'Only a manager, admin or super-admin scoped to this store may manage credentials here.';
   }
-  return raw.replace(/^[a-z][A-Za-z0-9_]*:\s*/, '');
+  return sharedErrorMessage(err);
 }
 
 function back(employmentId: string, extra: Record<string, string>): never {

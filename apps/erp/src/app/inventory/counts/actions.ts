@@ -27,6 +27,7 @@ import {
 } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
+import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -65,7 +66,7 @@ function errorMessage(err: unknown): string {
   if (/count session .* is already committed/.test(raw)) {
     return 'This count was already committed — a count can only be committed once.';
   }
-  return raw.replace(/^[a-zA-Z][A-Za-z0-9_]*:\s*/, '');
+  return sharedErrorMessage(err);
 }
 
 export async function openCountSessionAction(fd: FormData): Promise<void> {

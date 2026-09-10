@@ -23,6 +23,7 @@ import { toBusinessDate } from '@shareat/core/datetime';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { peso } from '../../../lib/format';
+import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -61,22 +62,16 @@ function errorMessage(err: unknown): string {
   if (/is inactive and cannot be a usage source/.test(raw)) {
     return 'That room is inactive and cannot be a usage source.';
   }
-  if (/is frozen by an active count session/.test(raw)) {
-    return raw.replace(/^[a-zA-Z][A-Za-z0-9_.]*:\s*/, '');
-  }
   if (/a posted usage record is immutable/.test(raw)) {
     return 'That record has already been posted — void it and record a new one, rather than editing it.';
   }
   if (/a voided usage record is terminal/.test(raw)) {
     return 'That record has already been voided and cannot be posted again — record a new one.';
   }
-  if (/only .* is on hand/.test(raw)) {
-    return raw.replace(/^[a-zA-Z][A-Za-z0-9_.]*:\s*/, '');
-  }
-  if (/fiscal period .* is (closed|locked)/.test(raw)) {
-    return raw.replace(/^[a-zA-Z][A-Za-z0-9_.]*:\s*/, '');
-  }
-  return raw.replace(/^[a-zA-Z][A-Za-z0-9_.]*:\s*/, '');
+  // ⚠️ Frozen-room, short-stock ("only … is on hand") and closed-period refusals were listed
+  // here purely to strip their prefix. The shared fallback does precisely that, so all three
+  // fall through to it now — same sentence, one implementation (T-255).
+  return sharedErrorMessage(err);
 }
 
 function back(path: string, params: Record<string, string>): never {

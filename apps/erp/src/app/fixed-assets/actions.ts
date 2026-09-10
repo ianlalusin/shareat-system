@@ -22,14 +22,11 @@ import {
 import { fixedAssetsRepo, type AssetCategory } from '@shareat/db';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
+import { errorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
 }
 
 function carryQs(fd: FormData): string {

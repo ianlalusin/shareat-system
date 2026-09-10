@@ -4,6 +4,7 @@
 import { separationsRepo } from '@shareat/db';
 import { previewSeparation, type SeparationPreview } from '@shareat/domain';
 import { withOrgPrincipal, listStores } from '../lib';
+import { errorMessage } from '@/lib/constraint-messages';
 
 export { peso } from '../../../lib/format';
 export { withOrgPrincipal, listStores };
@@ -27,7 +28,6 @@ export async function preview(
     const p = await withOrgPrincipal(orgId, (tx) => previewSeparation(tx, actor, input));
     return { preview: p, error: null };
   } catch (err) {
-    const raw = err instanceof Error ? err.message : String(err);
-    return { preview: null, error: raw.replace(/^[a-zA-Z][A-Za-z0-9_]*:\s*/, '') };
+    return { preview: null, error: errorMessage(err) };
   }
 }

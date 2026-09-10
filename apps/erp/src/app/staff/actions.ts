@@ -23,6 +23,7 @@ import { authorize, setPin } from '@shareat/auth';
 import { employmentRepo } from '@shareat/db';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
+import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -68,7 +69,7 @@ function errorMessage(err: unknown): string {
   if (/may not 'manage_store_settings'/.test(raw)) {
     return 'Only a manager or admin scoped to this store can add a position.';
   }
-  return raw.replace(/^[a-z][A-Za-z0-9_]*:\s*/, '');
+  return sharedErrorMessage(err);
 }
 
 function backToHire(storeId: string, extra: Record<string, string>): never {

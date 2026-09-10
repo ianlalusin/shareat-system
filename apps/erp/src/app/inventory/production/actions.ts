@@ -16,6 +16,7 @@ import {
 } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
+import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -34,9 +35,10 @@ function errorMessage(err: unknown): string {
   if (/may not 'edit_posted_production'/.test(raw)) return 'Only a manager or admin can edit a posted record.';
   if (/may not 'void_production'/.test(raw)) return 'Only a manager or admin can void a posted record.';
   if (/live slicer payment/.test(raw)) return raw;
-  if (/is frozen by an active count session/.test(raw)) return raw.replace(/^[a-zA-Z][A-Za-z0-9_.]*:\s*/, '');
-  if (/fiscal period .* is (closed|locked)/.test(raw)) return raw.replace(/^[a-zA-Z][A-Za-z0-9_.]*:\s*/, '');
-  return raw.replace(/^[a-zA-Z][A-Za-z0-9_.]*:\s*/, '');
+  // ⚠️ A frozen-room or closed-period refusal was listed here purely to strip its prefix. The
+  // shared fallback does precisely that, so both fall through to it now — same sentence, one
+  // implementation (T-255).
+  return sharedErrorMessage(err);
 }
 
 function back(path: string, params: Record<string, string>): never {

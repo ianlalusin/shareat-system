@@ -23,6 +23,7 @@ import {
 } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
+import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -55,16 +56,16 @@ function errorMessage(err: unknown): string {
   if (/stock_locations_receiving_is_storage_check/.test(raw) || /Receiving room is always a storage room/.test(raw)) {
     return 'The Receiving room must be a storage room, not operating.';
   }
-  if (/holds stock and cannot be deactivated/.test(raw)) {
-    return raw.replace(/^deactivateLocation:\s*/, '');
-  }
   if (/not_blank_check/.test(raw)) {
     return 'A room needs both a code and a name.';
   }
   if (/role_check|purpose_check/.test(raw)) {
     return 'That role or purpose is not recognised.';
   }
-  return raw.replace(/^[a-z][A-Za-z0-9_]*:\s*/, '');
+  // ⚠️ The "holds stock and cannot be deactivated" refusal was listed here to strip its own
+  // `deactivateLocation:` prefix by name. The shared fallback strips any such prefix, so it
+  // falls through to it now — same sentence, one implementation (T-255).
+  return sharedErrorMessage(err);
 }
 
 function back(storeId: string, extra: Record<string, string>): never {

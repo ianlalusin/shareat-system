@@ -21,6 +21,7 @@ import { redirect } from 'next/navigation';
 import { recordAdjustment } from '@shareat/domain';
 import { requireSession } from '../../../lib/session';
 import { withOrgPrincipal } from '../lib';
+import { errorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -57,8 +58,7 @@ async function decide(
       } as Parameters<typeof recordAdjustment>[2]),
     );
   } catch (err) {
-    const raw = err instanceof Error ? err.message : String(err);
-    back(dayId, { error: raw.replace(/^[a-zA-Z][A-Za-z0-9_]*:\s*/, '') });
+    back(dayId, { error: errorMessage(err) });
   }
   back(dayId, { ok });
 }

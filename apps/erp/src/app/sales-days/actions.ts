@@ -16,6 +16,7 @@ import { redirect } from 'next/navigation';
 import { createSalesDay, submitSalesDay, verifySalesDay, voidSalesDay, SalesDayBlockedError } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
+import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -35,7 +36,7 @@ function errorMessage(err: unknown): string {
   if (err instanceof SalesDayBlockedError) {
     return `${err.message} (blocking day: ${err.blockingBusinessDate})`;
   }
-  return err instanceof Error ? err.message : String(err);
+  return sharedErrorMessage(err);
 }
 
 /** Only the FILTER state travels in the URL now. The org and the person come from the session,

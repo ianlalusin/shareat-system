@@ -17,16 +17,11 @@ import {
   removeOpeningFigure,
 } from '@shareat/domain';
 import { requireActor } from '../../lib/session';
+import { errorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-/** Strips the throwing function's name — right for a log, useless on screen. */
-function errorMessage(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err);
-  return raw.replace(/^[a-z][A-Za-z0-9_]*:\s*/, '');
 }
 
 function back(path: string, params: Record<string, string>): never {

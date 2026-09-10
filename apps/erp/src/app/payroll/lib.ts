@@ -10,6 +10,7 @@
 import { payrollRepo, type PayRunRow, type PayslipRow } from '@shareat/db';
 import { derivePeriods, previewPayRun, type PayPeriod, type PayRunPreview } from '@shareat/domain';
 import { withOrgPrincipal } from '../expenses/lib';
+import { errorMessage } from '@/lib/constraint-messages';
 
 export { peso } from '../../lib/format';
 export { listStores, withOrgPrincipal, listActingPersons } from '../expenses/lib';
@@ -27,8 +28,7 @@ export async function preview(
     const p = await withOrgPrincipal(orgId, (tx) => previewPayRun(tx, actor, input));
     return { preview: p, error: null };
   } catch (err) {
-    const raw = err instanceof Error ? err.message : String(err);
-    return { preview: null, error: raw.replace(/^[a-zA-Z][A-Za-z0-9_]*:\s*/, '') };
+    return { preview: null, error: errorMessage(err) };
   }
 }
 

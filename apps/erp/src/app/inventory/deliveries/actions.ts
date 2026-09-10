@@ -20,6 +20,7 @@ import type { ShortageReason } from '@shareat/db/schema';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { peso } from '../../../lib/format';
+import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -90,9 +91,6 @@ function errorMessage(err: unknown): string {
   if (/deliveries_supplier_reference_key/.test(raw)) {
     return 'This supplier and reference number are already recorded on another delivery — check you are not entering the same paper twice.';
   }
-  if (/frozen by an active count session/.test(raw)) {
-    return raw.replace(/^[a-zA-Z][A-Za-z0-9_.]*:\s*/, '');
-  }
   if (/,\s*not draft/.test(raw)) {
     return 'This delivery has already been received (or voided) and cannot be received again.';
   }
@@ -102,10 +100,10 @@ function errorMessage(err: unknown): string {
   if (/no location and the store has no Receiving/.test(raw)) {
     return 'This store has no active room to park an undecided line in — add one under Inventory › Locations first.';
   }
-  if (/fiscal period .* is (closed|locked)/.test(raw)) {
-    return raw.replace(/^[a-zA-Z][A-Za-z0-9_.]*:\s*/, '');
-  }
-  return raw.replace(/^[a-zA-Z][A-Za-z0-9_.]*:\s*/, '');
+  // ⚠️ Frozen-room and closed-period refusals were listed here purely to strip their prefix.
+  // The shared fallback does precisely that, so both fall through to it now — same sentence,
+  // one implementation (T-255).
+  return sharedErrorMessage(err);
 }
 
 function back(path: string, params: Record<string, string>): never {

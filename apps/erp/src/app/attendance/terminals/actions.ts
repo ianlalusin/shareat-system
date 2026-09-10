@@ -22,6 +22,7 @@ import { createFirestoreTerminalDriver } from '@shareat/sync-firestore';
 import { mintTerminalToken, provisionTerminal, revokeTerminal } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
+import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 
 const RETURN_TO = '/attendance/terminals';
 
@@ -38,7 +39,7 @@ function errorMessage(err: unknown): string {
   if (/may not 'manage_attendance'/.test(raw)) {
     return 'Only a manager, admin or super-admin scoped to this store may view its terminals.';
   }
-  return raw.replace(/^[a-z][A-Za-z0-9_]*:\s*/, '');
+  return sharedErrorMessage(err);
 }
 
 function back(storeId: string, extra: Record<string, string>): never {

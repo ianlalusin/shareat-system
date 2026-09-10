@@ -27,6 +27,7 @@ import {
 import type { BaseUnit, ItemKind } from '@shareat/db';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
+import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -63,7 +64,7 @@ function errorMessage(err: unknown): string {
   if (/may not 'manage_items'/.test(raw)) {
     return 'Only a manager or admin can change what an item is bought and sold as.';
   }
-  return raw.replace(/^[a-z][A-Za-z0-9_]*:\s*/, '');
+  return sharedErrorMessage(err);
 }
 
 function back(params: Record<string, string>): never {
