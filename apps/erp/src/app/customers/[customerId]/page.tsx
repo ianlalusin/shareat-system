@@ -318,33 +318,39 @@ export default async function CustomerDetailPage({
                   return (
                     <tr
                       key={c.chargeId}
-                      className={`border-b border-neutral-100 last:border-0 dark:border-neutral-900 ${
+                      // T-258/DEF-244: the row itself is the tap target when there's an entry to view —
+                      // `relative` is the containing block the "entry" link's `after:absolute` stretches
+                      // against. A `<tr>` cannot be wrapped in `<a>` (invalid HTML — `<tr>` only accepts
+                      // `<td>/<th>`), so the stretched-link technique is how a real anchor still ends up
+                      // covering the whole row without breaking table semantics.
+                      className={`relative border-b border-neutral-100 last:border-0 dark:border-neutral-900 ${
                         c.status === 'posted' ? '' : 'opacity-60'
-                      }`}
+                      } ${c.journalEntryId ? 'cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-900/40' : ''}`}
                     >
-                      <td className="px-3 py-2">{c.chargeDate}</td>
-                      <td className={`px-3 py-2 ${overdue ? 'font-medium text-red-700 dark:text-red-400' : ''}`}>
+                      <td className="px-3 py-3">{c.chargeDate}</td>
+                      <td className={`px-3 py-3 ${overdue ? 'font-medium text-red-700 dark:text-red-400' : ''}`}>
                         {c.dueDate ?? '—'}
                         {overdue && <span className="ml-1 text-xs">overdue</span>}
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-3">
                         {c.referenceNo ?? '—'}
                         {/* ⭐ Every figure walks back to the entry that produced it — the thing v1
                             structurally cannot do, because its "entry" was a single leg. */}
                         {c.journalEntryId && (
                           <Link
                             href={`/reports/journal-lines?entry=${c.journalEntryId}`}
-                            className={`ml-2 ${ACTION_LINK}`}
+                            aria-label={`View journal entry — ${c.referenceNo ?? c.chargeDate}, ${peso(c.outstanding)} outstanding`}
+                            className="ml-2 text-xs text-neutral-500 after:absolute after:inset-0 after:content-[''] dark:text-neutral-400"
                           >
                             entry
                           </Link>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(c.totalAmount)}</td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(c.allocatedAmount)}</td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(c.writtenOffAmount)}</td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(c.outstanding)}</td>
-                      <td className="px-3 py-2 text-xs">{c.status}</td>
+                      <td className="px-3 py-3 text-right font-mono tabular-nums">{peso(c.totalAmount)}</td>
+                      <td className="px-3 py-3 text-right font-mono tabular-nums">{peso(c.allocatedAmount)}</td>
+                      <td className="px-3 py-3 text-right font-mono tabular-nums">{peso(c.writtenOffAmount)}</td>
+                      <td className="px-3 py-3 text-right font-mono tabular-nums">{peso(c.outstanding)}</td>
+                      <td className="px-3 py-3 text-xs">{c.status}</td>
                     </tr>
                   );
                 })}
@@ -444,30 +450,35 @@ export default async function CustomerDetailPage({
                 {collections.map((c) => (
                   <tr
                     key={c.collectionId}
-                    className={`border-b border-neutral-100 last:border-0 dark:border-neutral-900 ${
+                    // T-258/DEF-244: same stretched-link technique as the Charges table. This row can
+                    // carry BOTH the entry link and the void form at once (a posted collection with a
+                    // journal entry) — the void form is a real sibling with its own `relative z-10`,
+                    // never nested inside the entry link's anchor, so neither swallows the other.
+                    className={`relative border-b border-neutral-100 last:border-0 dark:border-neutral-900 ${
                       c.status === 'posted' ? '' : 'opacity-60'
-                    }`}
+                    } ${c.journalEntryId ? 'cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-900/40' : ''}`}
                   >
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-3">
                       {c.collectionDate}
                       {c.journalEntryId && (
                         <Link
                           href={`/reports/journal-lines?entry=${c.journalEntryId}`}
-                          className={`ml-2 ${ACTION_LINK}`}
+                          aria-label={`View journal entry — collection ${c.collectionDate}, ${peso(c.amount)}`}
+                          className="ml-2 text-xs text-neutral-500 after:absolute after:inset-0 after:content-[''] dark:text-neutral-400"
                         >
                           entry
                         </Link>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(c.amount)}</td>
-                    <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(c.platformFee)}</td>
-                    <td className="px-3 py-2 text-xs">
+                    <td className="px-3 py-3 text-right font-mono tabular-nums">{peso(c.amount)}</td>
+                    <td className="px-3 py-3 text-right font-mono tabular-nums">{peso(c.platformFee)}</td>
+                    <td className="px-3 py-3 text-xs">
                       {c.moneyAccountName ?? '—'}
                       {c.referenceNo && <div className="text-neutral-400">{c.referenceNo}</div>}
                     </td>
                     {/* ⭐ WHAT it settled, not merely how much came in. A list of amounts cannot
                         answer the only question a disputed payment ever raises. */}
-                    <td className="px-3 py-2 text-xs">
+                    <td className="px-3 py-3 text-xs">
                       {c.allocations.length === 0 ? (
                         <span className="text-neutral-400">—</span>
                       ) : (
@@ -478,10 +489,13 @@ export default async function CustomerDetailPage({
                         ))
                       )}
                     </td>
-                    <td className="px-3 py-2 text-xs">
+                    <td className="px-3 py-3 text-xs">
                       {c.status}
                       {c.status === 'posted' && (
-                        <form action={voidCollectionAction} className="mt-1 flex flex-wrap items-center gap-1">
+                        <form
+                          action={voidCollectionAction}
+                          className="relative z-10 mt-1 flex flex-wrap items-center gap-1"
+                        >
                           <input type="hidden" name="customerId" value={customerId} />
                           <input type="hidden" name="storeId" value={storeId} />
                           <input type="hidden" name="collectionId" value={c.collectionId} />
@@ -492,7 +506,12 @@ export default async function CustomerDetailPage({
                             aria-label="Why is this collection being voided?"
                             className="w-28 rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
                           />
-                          <button type="submit" className="underline underline-offset-2">
+                          {/* T-258 found in passing: this button was the same undersized DEF-239 shape,
+                              missed by DEF-239's census and by action-link-sweep.test.ts's shape guard
+                              because it inherited text-xs from the ancestor <td> rather than carrying it
+                              itself. Orchestrator-approved fix, bundled here since the form is already
+                              being touched for the z-10 escape hatch. */}
+                          <button type="submit" className={ACTION_LINK}>
                             void
                           </button>
                         </form>
