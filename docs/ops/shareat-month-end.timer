@@ -26,8 +26,13 @@
 # installed. The bug was live in git and dead on the droplet.
 # ⭐ **The 15th is immune by construction**, and that is a reason to keep it beyond Ian's own: it
 # sits ~8 hours clear of any month boundary, so the UTC/Manila skew cannot change which month
-# `getUTCMonth()` reports. ⛔ **Do not move this back near the 1st or the 31st without fixing
-# `lastCompletedPeriod()` to be zone-aware first.**
+# `getUTCMonth()` reports.
+# ✅ **THE PREREQUISITE IS NOW MET (T-263, 2026-09-11).** This block previously ended: *“do not move this
+# back near the 1st or the 31st without fixing `lastCompletedPeriod()` to be zone-aware first.”*
+# `lastCompletedPeriod()` now derives the month from `toBusinessDate()` in Asia/Manila, so it is correct at
+# every hour and no hour of the 1st is unsafe any more. ⚠️ **The schedule is UNCHANGED and moving it is
+# Ian's call, not a code question** — the 15th was chosen because channel remittances land up to the second
+# week, which this fix does not touch.
 #
 # ⭐ Ian's ruling, 2026-09-10: *"it must be run every 15th of the next month at 2 am and 3am if 2am
 # fails"* — superseding his own 03:00-on-the-1st call earlier the same day.

@@ -137,8 +137,18 @@ fixing the list and, at `2026-08-31T23:59Z`, the default becomes `2026-08` while
    boundary case inside the 00:00–08:00 Manila window on the 1st**.
 
 ⚠️ A useful extra case the spec does not list: `2026-12-31T17:00:00Z` = **2027-01-01 01:00 Manila**.
-The current function returns `2026-11` — wrong by **two** months, not one, because it crosses the year
-as well. A Manila-derived version returns `2026-12`.
+The current function returns `2026-11`; a Manila-derived version returns `2026-12`.
+
+⛔ **CORRECTION, orchestrator, made after lane B's test comment stated it more precisely than this
+section originally did.** This paragraph first read *"wrong by TWO months, not one, because it crosses
+the year as well"*. **That was wrong and it was mine.** The returned answer `2026-11` is **one** month
+off the correct answer `2026-12` — exactly the same magnitude as the other boundary case, not double it.
+What is actually distinctive about this instant is different and still worth a test: the old function
+**never saw the year turn at all.** It read the current business month as `2026-12` when the true one
+was `2027-01`, so it was two months behind the *current month* while being one month off the *answer*.
+⭐ The lane was briefed with my wrong version, did not adopt it, and wrote the accurate account into the
+committed test comment instead — which is the second time this week a lane corrected the orchestrator's
+arithmetic rather than deferring to it.
 
 ### Amended scope — this replaces the Scope list below
 

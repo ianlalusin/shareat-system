@@ -35,6 +35,7 @@ import { runDepreciationAsSystem } from '../fixed-assets/depreciate';
 import { runAmortisationAsSystem } from '../prepaid';
 import { runOrderWastageBackstop } from '../wastage/orders';
 
+import { toBusinessDate } from '@shareat/core';
 import { sql } from 'drizzle-orm';
 import { sweepStore } from '../attendance/sweep';
 import { drainOutbox, ingestEvents, type InboxDriver, type MirrorDriver } from '../sync';
@@ -192,12 +193,18 @@ async function closeFailedRun(runId: string, message: string): Promise<string> {
  *
  * ⚠️ Not the current month. Running on the 1st is the normal case, and depreciating a month that
  * has not finished would post a charge for days that have not happened.
+ *
+ * ⛔ DEF-283: derived from `toBusinessDate` (Asia/Manila), not raw UTC getters. A job firing at
+ * 03:00 Manila on the 1st is still the last hour of the previous day in UTC, so the raw-UTC idiom
+ * closed the month before the one that had just ended — silently, since the close is idempotent.
+ * `packages/core/src/datetime.ts` is the one sanctioned date module; do not add a second idiom here.
  */
 export function lastCompletedPeriod(today = new Date()): string {
-  const y = today.getUTCFullYear();
-  const m = today.getUTCMonth(); // 0-based, so this is already "last month" as a 1-based number
-  const year = m === 0 ? y - 1 : y;
-  const month = m === 0 ? 12 : m;
+  const [yStr, mStr] = toBusinessDate(today).split('-');
+  const y = Number(yStr);
+  const m = Number(mStr); // 1-based business month in Asia/Manila
+  const year = m === 1 ? y - 1 : y;
+  const month = m === 1 ? 12 : m - 1;
   return `${year}-${String(month).padStart(2, '0')}`;
 }
 

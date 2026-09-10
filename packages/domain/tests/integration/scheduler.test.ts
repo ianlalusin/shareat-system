@@ -345,12 +345,28 @@ describe('⭐ T-233 — DEF-219: startRun inside the per-org boundary', () => {
 });
 
 describe('the default period', () => {
-  it('is the LAST COMPLETED month, never the current one', () => {
+  it('is the LAST COMPLETED month, never the current one — derived in Asia/Manila, not raw UTC', () => {
     // ⚠️ Running on the 1st is the normal case. Depreciating a month that has not finished would
     // post a charge for days that have not happened.
+    // 2026-08-01T02:00:00Z is 2026-08-01 10:00 in Manila — still August, so the last completed
+    // period is July.
     expect(lastCompletedPeriod(new Date('2026-08-01T02:00:00Z'))).toBe('2026-07');
-    expect(lastCompletedPeriod(new Date('2026-08-31T23:59:00Z'))).toBe('2026-07');
+    // ⛔ DEF-283: 2026-08-31T23:59:00Z is 2026-09-01 07:59 in Manila — the business month has
+    // already rolled to September, so the last completed period is August. The raw-UTC idiom saw
+    // this instant as still-August and returned July — a job firing here closed the wrong month.
+    expect(lastCompletedPeriod(new Date('2026-08-31T23:59:00Z'))).toBe('2026-08');
     // And it crosses the year boundary the obvious way.
+    // 2027-01-01T02:00:00Z is 2027-01-01 10:00 in Manila — still January, so the last completed
+    // period is December 2026.
     expect(lastCompletedPeriod(new Date('2027-01-01T02:00:00Z'))).toBe('2026-12');
+  });
+
+  it('⛔ DEF-283: crosses BOTH the day and the year in Manila — raw UTC was two months off true', () => {
+    // 2026-12-31T17:00:00Z is 2027-01-01 01:00 in Manila: the business year has already rolled to
+    // 2027 and the month to January, so the TRUE current month is 2027-01 and the last completed
+    // period is 2026-12. The old raw-UTC function never saw the year turn — it read "current
+    // month" as 2026-12 (a month behind truth) and then subtracted one more, returning 2026-11:
+    // two months before the true current month, though only one month off the correct *answer*.
+    expect(lastCompletedPeriod(new Date('2026-12-31T17:00:00Z'))).toBe('2026-12');
   });
 });

@@ -36,6 +36,17 @@ describe('the period the findings page asks about', () => {
     const now = new Date('2026-08-30T12:00:00Z');
     expect(selectablePeriods(now)).toContain(lastCompletedPeriod(now));
   });
+
+  it('⛔ DEF-283: inside the 00:00–08:00 Manila window on the 1st, the period has already rolled', () => {
+    // 2026-08-31T19:00:00Z is 2026-09-01 03:00 in Manila — the business month is already
+    // September, so the last completed period is August, not July as raw UTC would compute.
+    const instant = new Date('2026-08-31T19:00:00Z');
+    expect(lastCompletedPeriod(instant)).toBe('2026-08');
+    // And the default must still be one of the offered choices, in this window too — the trap
+    // T-263 calls out: fixing the default without fixing the list opens the page on a month it
+    // rejects.
+    expect(selectablePeriods(instant)).toContain(lastCompletedPeriod(instant));
+  });
 });
 
 describe('the order findings appear in', () => {

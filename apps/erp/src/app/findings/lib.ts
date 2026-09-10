@@ -5,7 +5,13 @@
  * the feed asks the ledger its questions each time the page loads, which is why a finding cannot
  * be "resolved" while it is still true.
  */
-import { closeReadiness, listFindings, logFindingView, managerScorecard } from '@shareat/domain';
+import {
+  closeReadiness,
+  lastCompletedPeriod,
+  listFindings,
+  logFindingView,
+  managerScorecard,
+} from '@shareat/domain';
 import { storesRepo } from '@shareat/db';
 import { withOrgPrincipal } from '../expenses/lib';
 
@@ -18,22 +24,36 @@ export { withOrgPrincipal } from '../expenses/lib';
  * ⚠️ **The last COMPLETED month, not the current one.** Asking "did depreciation run for the month
  * we are still in" would fire on the 1st of every month and be wrong for thirty days — the
  * schedule has not missed anything until the month it was for is over.
+ *
+ * ⛔ DEF-283: this used to be a second, independent, raw-UTC implementation of the same idea as
+ * `@shareat/domain`'s `lastCompletedPeriod`. Two copies of one rule is what produced the defect —
+ * re-exported from the sanctioned one instead (bible §8 rule 13: apps depend on packages).
  */
-export function lastCompletedPeriod(now = new Date()): string {
-  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  d.setUTCMonth(d.getUTCMonth() - 1);
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-}
+export { lastCompletedPeriod };
 
-/** Twelve months back from the last completed one — enough to close a late period, not a scroll. */
+/**
+ * Twelve months back from the last completed one — enough to close a late period, not a scroll.
+ *
+ * Derived from `lastCompletedPeriod` by walking the `YYYY-MM` string back one month at a time, so
+ * this never re-derives the business month itself and cannot drift from it — the exact trap DEF-283
+ * describes: fixing the default without fixing this list opens the page on a month it rejects.
+ */
 export function selectablePeriods(now = new Date()): string[] {
   const out: string[] = [];
-  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  let period = lastCompletedPeriod(now);
   for (let i = 0; i < 12; i++) {
-    d.setUTCMonth(d.getUTCMonth() - 1);
-    out.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`);
+    out.push(period);
+    period = previousPeriod(period);
   }
   return out;
+}
+
+/** One month before a `YYYY-MM` period string, rolling the year back at January. */
+function previousPeriod(period: string): string {
+  const [yStr, mStr] = period.split('-');
+  const y = Number(yStr);
+  const m = Number(mStr);
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
 }
 
 /**
