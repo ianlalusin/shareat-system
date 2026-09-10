@@ -90,3 +90,35 @@ export function grantableCapabilitiesFor(role: Role | null): readonly Capability
   if (!role) return CAPABILITIES;
   return CAPABILITIES.filter((c) => !CAPABILITY_MATRIX[c][role]);
 }
+
+/**
+ * T-256 / DEF-247 — `grantSource` in one word an administrator reads without opening the bible.
+ * `null` renders as "not recorded" and ONLY that — never defaulted to any of the three known
+ * values. DEF-237's residue (a row written before migration `0140` existed) is permanent; a
+ * fabricated attribution would be worse than an absent one.
+ */
+export function grantSourceLabel(source: GrantRow['grantSource']): string {
+  switch (source) {
+    case 'elevation':
+      return 'auto-elevated — clears when this org gains an active administrator';
+    case 'owner':
+      return 'owner-equivalent grant';
+    case 'grant':
+      return 'hand-granted';
+    case null:
+      return 'source not recorded';
+  }
+}
+
+/**
+ * T-256 / DEF-247 — mirrors `unlinkCredential`'s own check (`packages/auth/src/credentials-admin.ts`)
+ * so the two revoke forms on this page read as one system. Grant writes are gated in THIS file's
+ * layer, not `packages/auth` — see this module's own actions.ts header for why.
+ */
+export function requireRevokeReason(raw: string): string {
+  const reason = raw.trim();
+  if (!reason) {
+    throw new Error('Revoking a grant needs a reason — a revoked grant nobody can explain is not an audit trail.');
+  }
+  return reason;
+}

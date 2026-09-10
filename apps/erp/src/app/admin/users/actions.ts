@@ -25,7 +25,7 @@ import {
   type Capability,
   type Role,
 } from '@shareat/auth';
-import { withOrgPrincipal } from './lib';
+import { requireRevokeReason, withOrgPrincipal } from './lib';
 import { clearSessionCookie, requireActor } from '../../../lib/session';
 
 function str(fd: FormData, key: string): string {
@@ -197,15 +197,11 @@ export async function setCapabilityGrantAction(formData: FormData): Promise<void
         // revoking your own grant NARROWS your authority, so it cannot escalate, and refusing it
         // would stop someone dropping a capability they no longer want to hold.
         await authorize(tx, actor, 'grant_capability', {});
-        // T-248 / DEF-237, migration 0140 — every revocation now states why. This screen has no
-        // free-text reason field, so the sentence is fixed and honest rather than fabricated: it
-        // says exactly what is known (a manual revoke, through this screen) and nothing more. A
-        // real reason input is a follow-up finding, not built here (flagged in the task spec §6).
-        await accessRepo.revokeGrantById(
-          tx,
-          grantId,
-          'Revoked via /admin/users. No reason was captured on this screen — DEF-237 follow-up.',
-        );
+        // T-256 / DEF-247 — the screen now has a free-text reason field (mirrors
+        // `unlinkCredentialAction`'s form one section up), so the real reason is captured
+        // instead of a fixed, fabricated sentence.
+        const reason = requireRevokeReason(str(formData, 'reason'));
+        await accessRepo.revokeGrantById(tx, grantId, reason);
       }
     });
   } catch (err) {

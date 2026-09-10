@@ -902,3 +902,47 @@ describe('assignRole — revoke-then-insert, full history preserved', () => {
     await expect(asPerson(org, (tx) => authorize(tx, actor, 'record_sale', {}))).rejects.toThrow(AuthorizationError);
   });
 });
+
+// ---------------------------------------------------------------------------------------
+// T-256 / DEF-247 — `grantsForPerson` (the /admin/users read path) surfaces `grant_source` and
+// `revoke_reason`, which it did not select before this task. Two things must be true at once:
+// a real source/reason round-trips unchanged, and a NULL source (DEF-237's permanent residue,
+// same raw-insert idiom `case 6` above uses) round-trips as NULL — never coerced to a string,
+// never guessed from the revoke reason sitting next to it.
+// ---------------------------------------------------------------------------------------
+
+describe('T-256 — DEF-247: grantsForPerson surfaces grant_source and revoke_reason', () => {
+  it('a real grant_source and revoke_reason round-trip, and revoking never touches the stored source', async () => {
+    const org = await insertOrg('t256-round-trip');
+    const person = await insertPerson(org, 'Grant Holder');
+
+    const { id: grantId } = await asPerson(org, (tx) =>
+      accessRepo.grantCapability(tx, { personId: person, grantName: 'post_journal_entry', grantedBy: null, grantSource: 'grant' }),
+    );
+
+    const [active] = await asPerson(org, (tx) => accessRepo.grantsForPerson(tx, person));
+    expect(active).toMatchObject({ id: grantId, grantSource: 'grant', revokeReason: null, revokedAt: null });
+
+    await asPerson(org, (tx) => accessRepo.revokeGrantById(tx, grantId, 'a real reason, typed by an administrator'));
+
+    const [revoked] = await asPerson(org, (tx) => accessRepo.grantsForPerson(tx, person));
+    expect(revoked!.revokedAt).not.toBeNull();
+    expect(revoked!.revokeReason).toBe('a real reason, typed by an administrator');
+    // ⛔ Invariant 1 — a revoke writes revoked_at/revoke_reason and NOTHING else. If this task's
+    // write path ever touched grant_source, this is where it would show.
+    expect(revoked!.grantSource).toBe('grant');
+  });
+
+  it('⛔ a NULL grant_source (pre-existing row, DEF-237 residue) reads back as null, never a guess', async () => {
+    const org = await insertOrg('t256-null-source');
+    const person = await insertPerson(org, 'Legacy Grant Holder');
+    // Same idiom as the T-248 block's case 6 above: simulates a row written before migration
+    // 0140 existed. Not revoked, so revoke_reason is legitimately null too (the constraint only
+    // demands a reason once revoked_at is set).
+    await sql`insert into person_grants (person_id, grant_name, granted_by, grant_source) values (${person}, 'void_sales_day', null, null)`;
+
+    const [row] = await asPerson(org, (tx) => accessRepo.grantsForPerson(tx, person));
+    expect(row!.grantSource).toBeNull();
+    expect(row!.revokeReason).toBeNull();
+  });
+});

@@ -371,6 +371,8 @@ export interface GrantRow {
   grantedBy: string | null;
   grantedAt: Date;
   revokedAt: Date | null;
+  grantSource: GrantSource | null;
+  revokeReason: string | null;
 }
 
 /**
@@ -531,6 +533,8 @@ export async function grantsForPerson(tx: Tx, personId: string): Promise<GrantRo
       grantedBy: personGrants.grantedBy,
       grantedAt: personGrants.grantedAt,
       revokedAt: personGrants.revokedAt,
+      grantSource: personGrants.grantSource,
+      revokeReason: personGrants.revokeReason,
     })
     .from(personGrants)
     .where(eq(personGrants.personId, personId));

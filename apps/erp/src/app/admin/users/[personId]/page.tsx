@@ -8,7 +8,7 @@ import {
   setStoreScopeAction,
   unlinkCredentialAction,
 } from '../actions';
-import { grantableCapabilitiesFor, userDetail } from '../lib';
+import { grantableCapabilitiesFor, grantSourceLabel, userDetail } from '../lib';
 import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'User access — Shareat System' };
@@ -163,12 +163,18 @@ export default async function UserAccessPage({
         ) : (
           <ul className="space-y-2">
             {activeGrants.map((g) => (
-              <li key={g.id} className="flex items-center justify-between gap-3 text-sm">
-                <span className="font-mono text-xs">{g.grantName}</span>
-                <form action={setCapabilityGrantAction}>
+              <li key={g.id} className="flex flex-wrap items-center justify-between gap-3 text-sm">
+                <span>
+                  <span className="font-mono text-xs">{g.grantName}</span>
+                  <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">
+                    {grantSourceLabel(g.grantSource)}
+                  </span>
+                </span>
+                <form action={setCapabilityGrantAction} className="flex items-center gap-2">
                   <input type="hidden" name="personId" value={personId} />
                   <input type="hidden" name="grantId" value={g.id} />
                   <input type="hidden" name="granted" value="false" />
+                  <input name="reason" required placeholder="Reason to revoke" className={`${INPUT} w-40`} />
                   <button type="submit" className={LINK_BTN}>
                     Revoke
                   </button>
@@ -211,6 +217,9 @@ export default async function UserAccessPage({
                 <li key={g.id}>
                   <span className="font-mono">{g.grantName}</span> — revoked{' '}
                   {g.revokedAt?.toLocaleDateString('en-PH', MANILA)}
+                  <span className="block text-neutral-500 dark:text-neutral-400">
+                    {grantSourceLabel(g.grantSource)} · {g.revokeReason}
+                  </span>
                 </li>
               ))}
             </ul>
