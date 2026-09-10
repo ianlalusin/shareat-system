@@ -1,7 +1,7 @@
 # T-261 — DEF-274: the hit counter reaches zero money screens
 
-> **Status: RESERVED by the orchestrator, 2026-09-10.** Number reserved so no peer takes it.
-> Nothing built. ⭐ **THIS TASK OPENS WITH A DECISION, NOT WITH CODE.** DEF-274 is filed as
+> **Status: ✅ SHIPPED 2026-09-10 — `e619893`, pushed.** Decided by lane C (Opus 5), built by lane B (Sonnet 5). typecheck 0 · unit 94 files / 1303 passed · **integration 111 files / 2709 passed / 0 failed** (1367s, shared DB, no starvation) · build 0 · browser 14/14 — every gate re-run by the orchestrator on the shared tree and database. ⭐ **Arm D: one wrapped chokepoint, 12 files, not 163 catch blocks.** ⛔ **Falsifier F8 FIRED during the build** — the `transaction(run)` fallback this spec called test-only is SEVEN LIVE SERVER ACTIONS; six are now wrapped, the seventh (`signInWithFirebase`, no actor, pre-organisation) deliberately is not, and a guard checks it stays that way. ⚠️ **§B9 blind spots ship with it and are real: DEF-279 (the five accounting invariants cannot be named at all) and DEF-280 (eleven catch-less actions). Their silence is absence by construction, not safety.**
+> ⭐ **THIS TASK OPENS WITH A DECISION, NOT WITH CODE.** DEF-274 is filed as
 > mechanical wiring. The orchestrator measured it and it is not — there is a real architectural
 > fork with a hard boundary on one side of it, and picking the wrong arm buys ~175 hand-copied
 > call sites of exactly the shape T-255 just spent a day deleting. **Decide first, in writing,

@@ -1,7 +1,7 @@
 # T-262 — DEF-269: re-census touch targets with a matcher that resolves inherited text size
 
-> **Status: RESERVED by the orchestrator, 2026-09-10.** Number reserved so no peer takes it.
-> Nothing built. ⭐ **THIS TASK OPENS WITH A DECISION, NOT WITH CODE.** DEF-269's remedy is
+> **Status: ✅ SHIPPED 2026-09-10 — `c885b60`, pushed.** Decided by lane D (Opus 5), built by lane B (Sonnet 5). typecheck 0 · unit 94 files / 1303 passed · build 0 · both baseline red-paths planted and observed — every gate re-run by the orchestrator. ⭐ **The guard now measures authored BOX GEOMETRY, not text size:** 1,008 controls → 804 PASS, 151 FAIL across 76 files, 53 UNRESOLVED — and **127 of the 151 carry no small-text class at all**, unreachable by the old matcher at any sophistication. ⭐ Ships GREEN against an itemised accepted baseline (an orchestrator override of this spec’s own §6.9, which contradicted §6.4 one section earlier) — **151 candidates are NOT 151 defects: the rendered pass found 0 standalone of 23 undersized.** ⚠️ **Shrinking that baseline is a separate, unstarted task.**
+> ⭐ **THIS TASK OPENS WITH A DECISION, NOT WITH CODE.** DEF-269's remedy is
 > written as two parts and the second one — *"decide whether a text-scanning guard can do this at
 > all, or whether the assertion has to move to rendered output"* — governs the first. Answer it in
 > writing before a line of the census is written, because the answer decides what the census even

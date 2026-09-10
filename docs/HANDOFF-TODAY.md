@@ -1,228 +1,224 @@
-# Handoff — 2026-09-10 (evening) — for the NEXT ORCHESTRATOR
+# Handoff — 2026-09-10 (night) — for the NEXT ORCHESTRATOR
 
-> **The tree is CLEAN, every gate is GREEN, `main` is at `692c931` and pushed.** Nothing is
-> half-built. Ian invokes `/orchestrator shareat system` in your terminal himself; the skill is
-> user-invocation only. Run the role from this file until he does.
+> **Tree CLEAN, every gate GREEN, `main` pushed. Two tasks shipped this session: T-261 and T-262.**
+> Nothing is half-built. Ian invokes `/orchestrator shareat system` himself; run the role from this
+> file until he does.
 
 ## Where things stand
 
-**T-260 shipped** — the sub-centavo money defect (DEF-272) is fixed across 19 call sites in 13
-files behind one shared `parseMoneyInput()`. **T-261 is specified and unstarted**, waiting on an
-Opus lane. Two defects filed (DEF-277, DEF-278). Production is unchanged.
+**T-261 and T-262 both shipped.** The refusal counter now reaches every money screen, and the
+touch-target guard measures a box height instead of a text size. **T-263 and T-264 are specced and
+unstarted**, both created from decisions Ian made tonight. Production is unchanged — nothing has
+been deployed.
 
-⭐ **The most valuable thing in this session was not the fix. It was that three written-down
-"facts" and two of my own measurements were wrong, and every one was caught only by re-checking.**
+⭐ **The finding of the session: eight counting or classification errors across two documents, and
+every single one was caught by RE-DERIVING a number, never by reasoning about it. Two of them were
+the orchestrator's. Twice the re-check introduced the next error, which only opening the file
+caught.**
 
-## Gates at `692c931`
+## Gates at `daf67b5` (+ the spec-status commit)
 
-Run by the orchestrator on the **shared** database, not a lane's:
+Run by the orchestrator on the **shared** tree and database:
 
 - **typecheck** `--incremental false` → **exit 0**
-- **unit** → **93 files, 1290 passed / 1 skipped, exit 0**
-- **integration** → **110 files, 2706 passed, 0 failed, exit 0** — 1504s on `shareat_test`
+- **unit** → **94 files, 1303 passed / 1 skipped, exit 0**
+- **integration** → **111 files, 2709 passed, 0 failed** — 1367s on `shareat_test`, per-test
+  durations normal, no starvation. All lanes were idle, so DEF-268 did not apply.
 - **build** → **exit 0**, port 9008 free, route table lists `ƒ Proxy (Middleware)`,
   `apps/erp/next-env.d.ts` restored afterwards
-- **browser** → **14/14 at 1280** (`smoke-t260.mjs`, new)
-- **caller census** → `controls: passed`; `parseMoneyInput` in neither `testOnly` nor
-  `noRefsAnywhere`; totals 110, no baseline drift
+- **browser** → **14/14** (`smoke-t260.mjs`, re-run against T-261 specifically) and T-262's own
+  rendered pass at **390 and 1280**
 
-⚠️ **Integration and browser were run at `ccac49d`. The only commit since (`692c931`) touches
-`docs/ROADMAP.html` alone**, so they still hold — stated rather than silently re-claimed.
-⚠️ No bible row was added this session, so `npm run toc` was not needed. **PROJECT_BIBLE.md was
-not amended** (rule 14); DEF-275 is still Ian's.
+⚠️ **Integration and build were run at `e619893`. Every commit since touches only `docs/`** — so
+they still hold; stated rather than silently re-claimed.
+⚠️ **A bible row WAS added this session (row 192), and `npm run toc` was run.** Do not skip it if
+you add another.
 
 ## Pick up here, in this order
 
-1. **T-261 — DEF-274, the hit counter reaches zero money screens.** ⭐ Spec is written
-   (`docs/tasks/261-*.md`) and **opens with a DECISION, not code.** Bible §13 row 189 is Ian's and
-   defers its next decision to *measured hit counts*; the counter is wired into payroll and
-   settings only. ⛔ **A measurement that is blind where the risk is does not merely under-report —
-   it misleads the decision it exists to inform.** ⚠️ The register's numbers are wrong and the
-   difference decides the design: **17** call sites, not 19, and **~175** uncounted across 45
-   files, not "~100". Three arms are written up with the trap on each. **Needs an Opus lane.**
-2. **DEF-269 — re-census touch targets with a matcher that resolves inherited text size.** Also a
-   judgement call, not execution: decide whether a text-scanning guard can do this at all or
-   whether the assertion must move to rendered output. ⛔ Until then that guard's green is evidence
-   about the shapes it can see and nothing more. **Needs an Opus lane.**
-3. **DEF-278 — the client-side money floor is not uniform.** New. 17 of 26 money inputs exclude a
-   sub-centavo value; **9 carry `min="0"` and permit one**, and two of those nine are DEF-277's
-   deliberately-unfixed sites — so on exactly those, neither layer objects and the value is
-   silently rounded. ⚠️ Do not raise any floor without checking whether zero is meaningful on that
-   field; `overdraftLimit` is one where it is.
-4. Then: **DEF-277** (DEF-272's quieter sibling, four sites), **DEF-260** (terminal pairing — Ian
-   decided the design in row 190, so it is execution and belongs on Sonnet), **DEF-273** (sequence
-   *after* T-261), **DEF-267**, **DEF-251/252**, **DEF-253/254/255**, **DEF-261/262**.
+1. **T-263 — DEF-283, the date idiom the bible forbids.** ⭐ **Small change, wide blast radius,
+   and the spec's longest section is about the tests because they encode the defect as correct.**
+   `lastCompletedPeriod()` decides the month in raw UTC and never touches
+   `packages/core/src/datetime.ts`, whose own header says *"there is exactly one date idiom here.
+   Do not add a second."* This is the second. ⛔ Two live callers, not one — findings-observation
+   fires at 01:30 Manila, always the previous UTC day, and asks about the wrong period on the 1st
+   of every month. **Sonnet lane; the decision is already made.**
+2. **T-264 — DEF-284, the lock nobody can arm.** Three slices; **slice 1 is not about locking at
+   all** and fixes a live failure (nothing creates `fiscal_periods`, which is why depreciation
+   fails today with *"no fiscal period covers …"*). Slice 3 must reuse migration `0005`'s
+   transaction-local GUC pattern, not invent one. **Slice 1 is Sonnet; slice 3 wants Opus.**
+3. **DEF-279** — the counter cannot name the five accounting invariants (no `USING CONSTRAINT`).
+   Ian ruled it its own item, sequenced after T-261, which has now shipped. **Needs a migration
+   slot.**
+4. Then: **DEF-280** (11 catch-less server actions), **DEF-281**'s residue (triage the 151-control
+   baseline), **DEF-278**, **DEF-277**, **DEF-260** (execution — Ian decided the design in row 190),
+   **DEF-273**.
 
 ## What happened this session, by theme
 
-**Two register rows were wrong in ways that changed the work.** DEF-272 cited
-`money-transfers/index.ts:103` as an amount guard — that line is the distinct-accounts check and
-has no amount in it; the real guard is `:155` and covers **two** amount fields. And its proposed
-remedy ("reject what rounds to zero at the column's scale") would have **accepted `1.234` and
-silently stored `1.23`**. The codebase already owned the right primitive: `money()` refuses both,
-and `createCashRequest` did not import it at all.
+**Both tasks opened with a decision rather than code, and in both the decision was the value.**
+T-261's lane found a fourth arm nobody listed — wrap one chokepoint instead of hand-editing ~163
+catch blocks — and the orchestrator verified the mechanism was stronger than the lane framed it: 44
+files re-export `withOrgPrincipal`, but they all forward **one binding**, and exactly one app-layer
+line imports it from `@shareat/db`. 12 files, not 45.
 
-**A one-line grep cannot find that set, and I proved it on myself.** My own census missed `:155`
-because the comparison is on a variable rather than an inline `Number(...)`. So the census was
-written **as a guard asserting zero**. It found three sites the spec's table never listed — and
-still missed one (`releaseCashRequest`), which is now stated in the guard's own header alongside
-three other blind-spot classes.
+⛔ **Two defects were caught INSIDE approved specs, and either would have shipped.** F1: `till` and
+`remittance` keep private message maps with zero overlap with the shared 26, so the obvious build
+would have recorded **8 already-friendly constraints as unmapped** — corrupting the first hit report
+exactly where it is read hardest. F8: the `transaction(run)` fallback that both the spec and the
+orchestrator believed was test-only turned out to be **seven live server actions**.
 
-**The lane caught a defect in my spec before it reached sixteen more files.** A Done-when line said
-`0.005` must keep working, contradicting the same spec's argument for `money()`. Ruled and amended:
-**0.005 is refused deliberately** — the database boundary (does it round to zero) and the product
-boundary (can it be stored exactly) are different boundaries, and the product's is stricter on
-purpose. Silently rewriting a typed amount is a quieter version of the defect being fixed.
+⛔ **The orchestrator's own F8 verdict was wrong first and was withdrawn before it was reported.**
+An RLS probe returned "53 rows visible, RLS is not closing that path" — it had measured its own
+`postgres` superuser login (`rolbypassrls = true`), not the policy. Re-measured as `shareat_app`
+with no principal: **0 rows.** The lane's RLS reasoning was right and its conclusion wrong, because
+the policy was never the binding constraint. **The deciding evidence was a grep for null-first-arg
+callers that neither party had run.**
 
-**I overruled one of the lane's own finds, by checking the schema rather than the code.**
-`money-accounts/index.ts:232` looked identical to the others; its CHECK is `>= 0`, not `> 0`, and
-its guard is `< 0` because **zero is a legitimate overdraft limit**. Fixing it would have refused a
-valid entry. Filed as DEF-277 instead.
+**T-262 re-anchored on box geometry after a rendered measurement, and the lane retracted its own
+threshold.** 151 FAIL across 76 files, **127 of them `text-sm` or larger** and unreachable by any
+text-anchored guard. ⭐ **Its falsifier fired TWICE — once catching a real error (three app-shell
+controls flagged as the app's smallest targets when `.shell-nav-row` makes them 36px, 44px on
+touch — the BEST targets we have), once benign (UNRESOLVED 53 vs the spec's 78, where rendered
+measurement proved the SPEC wrong).** Both firings are recorded, deliberately.
 
-**A shipped task's paperwork said it was never built.** T-256 had been on `main` since the morning
-(`0a984eb`) while both `docs/ROADMAP.html` and its own spec header still read "reserved, nothing
-built" — and the previous wrap-up claimed to have fixed three stale spec headers. Both corrected.
+**A spec told a lane to ship a permanently red gate.** §6.9 said "red"; §6.4 one section earlier
+said "encode as an accepted baseline". Overruled in favour of §6.4 — a permanent red in a shared
+tree teaches the next lane to say *"that red is expected"*, and that sentence is how a real
+regression gets waved through.
 
-**Decisions recorded:** no new Ian decisions this session. DEF-275 remains the only item proposing
-a bible change and it is **reported and stopped** for him.
+**Ian's month-end instruction uncovered a silent wrong-month close.** DEF-241's own fix (03:00
+Manila on the 1st) resolves to 19:00 UTC on the **last day of the previous month**, so the job would
+have closed the month **before** the one that just ended, no-opped because it is idempotent, and the
+real month would never have been closed. It never bit because `docs/ops` does not deploy (DEF-194).
 
 ## Do not decide these alone — they are Ian's
 
-- ⭐ **DEF-275 — one clause of bible §13 row 189 is unsupported by its own examples.** Unchanged
-  from this morning. ⛔ Not a reversal — sanitise-first-then-count stands. If Ian agrees, row 189
-  wants a superseding row narrowing that clause and citing DEF-272.
-- **The fingerprint capture gap** — multi-week, in `CAPABILITY-GAPS.md`. ⚠️ Ian has still **not
-  been asked about face recognition**, which v1 also has.
-- **DEF-258's triage** — 47 same-digit dark-mode overrides across 28 files. ⛔ Not all are defects.
-- **DEF-237's residue** — grants written before `grant_source` existed stay NULL for ever.
+- ⛔ **The production DB username in `/srv/shareat-shared/.env.local`.** This single fact decides
+  whether **DEF-282** is real work or closes as verified-safe: six server actions run with no tenant
+  principal. On the test database that role is `postgres`, superuser, `BYPASSRLS`. DEF-250
+  independently reports production as a bypass role. ⚠️ **Not a breach — `authorize()` still runs on
+  all six — a missing defence-in-depth layer (bible §15.11).**
+- **The month-end deploy.** Committed and ready; Ian said *"deploy later"*. The server is still
+  running the 10:00-Manila version.
+- **DEF-284's slice ordering** — he has decided the WHAT (lock + admin/super_admin override, closed
+  on the 15th as a human prompt). Slice sequencing is open.
+- **The fingerprint capture gap**, multi-week, in `CAPABILITY-GAPS.md`. ⚠️ He has still not been
+  asked about face recognition, which v1 also has.
+- **DEF-258's triage** — 47 same-digit dark-mode overrides across 28 files. Not all are defects.
 
-## Three things Ian must do himself
+## Decisions Ian made this session, and where each is recorded
 
-1. ⚠️ **Apply the month-end timer on the droplet.** `docs/ops` does not ship (DEF-194). Verify with
-   `systemctl list-timers`: NEXT should read **19:00 UTC on the 30th/31st**, not 02:00 UTC on the
-   1st. **Carried over from this morning; still the only production item on his board.**
-2. ⛔ **Lane C will not answer.** It sat in `waiting` for about an hour, came unstuck on its own,
-   and has now ignored **two** probes asking only which model it runs. It was never briefed —
-   briefing a window whose model is a guess is how row 184 gets broken quietly. **Both remaining
-   pick-up items need it.**
-3. ⚠️ **A fifth session appeared mid-session that the orchestrator did not start** —
-   `webapps-d8 [8370e0]`, busy. If it is editing this tree it is a writer nobody is tracking.
+| Decision | Recorded in |
+|---|---|
+| DEF-275 ratified — row 189's clause narrowed | **`PROJECT_BIBLE.md` §13 row 192** (`npm run toc` run) |
+| Hit report: ranked constraint NAMES only, context `null` | `docs/tasks/261-*.md` §B header |
+| Checkbox/radio IN SCOPE — assert box geometry | `docs/tasks/262-*.md` §6.1/§6.3 |
+| DEF-278's remedy wording corrected to lane D's line | `DEFECTS-REGISTER.md` DEF-278, `262-*.md` §6.4 |
+| `USING CONSTRAINT` logged as its own item | `DEFECTS-REGISTER.md` **DEF-279** |
+| Month-end: 15th, 02:00 + 03:00 retry | `docs/ops/shareat-month-end*.timer`, **DEF-283** |
+| Depreciation books at month end | `docs/tasks/263-*.md` (spec) |
+| Period lock + override, admin/super_admin only | `DEFECTS-REGISTER.md` **DEF-284**, `docs/tasks/264-*.md` |
 
-## Traps that bit TODAY — every one caught a real mistake
+## Traps that bit TODAY
 
-- ⛔ **A REFUSAL IS NOT EVIDENCE UNTIL YOU KNOW WHICH LAYER PRODUCED IT.** The T-260 browser pass
-  was RED twice and both reds were the probe never reaching the server. (a) The form's own
-  `<input type="number" min="0.01">` makes the **browser** refuse `0.004` — **an unfixed build
-  would have produced an identical green**, and the tell was that the cases meant to SUCCEED also
-  failed. When every case behaves the same you are measuring whether the form submits, not whether
-  the guard works. (b) `removeAttribute('step')` does **not** disable step validation — step falls
-  back to its HTML default of `1`, so the bypass looked applied and had not landed.
-- ⛔ **KILLING THE DEV SERVER LEAVES A TRUNCATED GENERATED TYPES FILE THAT FAILS TYPECHECK, AND IT
-  READS LIKE A SOURCE ERROR.** After `Stop-Process` on the 9008 server, `tsc` failed with
-  `apps/erp/.next/dev/types/routes.d.ts(163,5): error TS1109` — the file was cut mid-declaration.
-  It is gitignored, so the repo is fine and only the local gate is affected. `rm -rf apps/erp/.next`
-  and re-run. **Check the PATH of a typecheck error before believing it is your code.**
-- ⛔ **A LINE-WISE GREP OVER JSX ANSWERS PLAUSIBLY AND WRONGLY.** Counting money inputs with a
-  client floor by `grep -A2` gave "4 of 18"; counting whole `<input>` elements gave **17 of 26**,
-  and then checking the *value* of `min` (not merely its presence) gave the real answer — 9 carry
-  `min="0"`, which permits the very value the floor looks like it excludes. Three passes, three
-  different numbers, and only the last one is true.
-- ⛔ **A SERVER ACTION'S `redirect()` DOES NOT SETTLE BEFORE `networkidle`.** Reading `p.url()`
-  there returns the pre-redirect URL with no query, so every case reported `ok=null error=null`
-  including ones that demonstrably created rows. `Promise.all([waitForURL(...), click()])` is what
-  captures the action's own verdict — which is far more precise than scraping rendered copy.
-- ⚠️ **`git add` stages whole files**, so a shared file cannot be split across task commits, and a
-  lane's in-progress work must be excluded by naming paths explicitly.
-- ⚠️ **`resize_window` in the Chrome tooling does not change the page viewport here.** Use the
-  Playwright harness in `~/.claude/skills/orchestrator/tools/`.
-- ⚠️ **A PRODUCTION BUILD CANNOT BE SMOKE-TESTED LOCALLY** — `npm start` refuses without production
-  Firebase credentials. Every local browser pass is a dev-mode pass (DEF-276).
-- ⛔ **Do not run the integration suite with lanes active (DEF-268)** — starvation presents as a RED
-  TEST with absurd durations, not a crash. Check durations before believing any red taken while
-  lanes were live. This session's run was clean: 1504s, all per-test durations millisecond-level.
-- ⚠️ **`/F` in Git Bash becomes `F:/`.** Kill by PID (`Stop-Process -Id`), never by image name —
-  five sessions share this machine.
-- ⚠️ **Three files in this tree use CRLF** (`attendance/lane/actions.ts`, `inventory/usage/actions.ts`,
-  `statutory-discounts/actions.ts`) — a sweep matching on a line ending silently skips them.
+- ⛔ **A PERMISSION IS NOT EVIDENCE UNTIL YOU KNOW WHICH LAYER PRODUCED IT.** The F8 probe saw 53
+  rows and blamed RLS; it had measured its own superuser login. Same shape as yesterday's red
+  browser pass.
+- ⛔ **A HAND-WRITTEN LIST OF EXAMPLES READS AS A POPULATION AND IS NOT ONE.** "Three CRLF files"
+  were 23. "Four `className` shapes" were five. `README.md`'s enable list named four timers while
+  six shipped. DEF-239's "4 instances" were 9.
+- ⛔ **A COUNT IS WRONG UNTIL RE-DERIVED A SECOND WAY.** 192 `errorMessage` call sites were 173 (19
+  were definitions). A `null`-first-arg sweep returns 18, not 7 — the discriminator is *"imported
+  from `@shareat/domain` or `@shareat/auth`"*, and one orchestrator sweep was right only by accident
+  because its regex happened to require a trailing comma.
+- ⛔ **`grep DEFERRABLE` MISSES `deferrable`.** Both parties' counts were also inflated by SQL
+  comments. Match the thing, not the spelling — and not the case.
+- ⛔ **A SPEC CAN CONTRADICT ITSELF TWO SECTIONS APART** and a lane will faithfully implement the
+  wrong half. §6.9 vs §6.4 (red vs baseline); §B7.1 vs §B7.3 (a test location the boundary guard
+  forbids).
+- ⚠️ **A BRIEFING'S TREE STATE IS A CLAIM WITH A TIMESTAMP.** One went stale in transit and a lane
+  correctly sent BLOCKED. **Re-confirm the baseline at dispatch, never quote the one from when the
+  spec was written** — and a lane cannot verify it, because git is on its NEVER list.
+- ⚠️ **A LANE'S `[ref]` SURVIVES A RESTART AND ITS MEMORY DOES NOT.** "Lane E did T-260" is a fact
+  about a window, not about a mind. Brief every lane as if it knows nothing.
+- ⚠️ **A LANE MAY BE HELD BY ITS OWN AUTHORIZATION GATE**, which looks identical to being stuck.
+  Ask; do not route around it.
+- ⚠️ Killing the dev server leaves a truncated `apps/erp/.next/dev/types/routes.d.ts` that fails
+  typecheck and reads like a source error. `rm -rf apps/erp/.next` first.
+- ⚠️ `/F` in Git Bash becomes `F:/`. Kill by PID, never by image name.
 
 ## The lanes
 
-Lanes **rename themselves per task**, so match on the `[ref]` from `ListAgents`, not the name.
+Lanes rename themselves per task — **match on `[ref]`, never the name.**
 
 | Lane | ref | Model | This session | Lane DB |
 |---|---|---|---|---|
-| **B** | `6b575a` | Sonnet 5 (confirmed) | idle — held deliberately | `shareat_test_t229` |
-| **C** | `523c43` | **UNCONFIRMED** — will not answer | never briefed | `shareat_test_qa` |
-| **D** | `074c83` | Sonnet 5 (confirmed) | idle — held deliberately | `shareat_test_t216b` |
-| **E** | `505d06` | Sonnet 5 (confirmed) | **T-260** | `shareat_test_def219` |
+| **B** | `6b575a` | Sonnet 5 | **built BOTH T-262 and T-261** | `shareat_test_t229` |
+| **C** | `523c43` | **Opus 5** | decided T-261 (Arm D), released | `shareat_test_qa` |
+| **D** | `074c83` | **Opus 5** | decided T-262 (geometry), released | `shareat_test_t216b` |
+| **E** | `505d06` | Sonnet 5 | held by its own user-authorization gate | `shareat_test_def219` |
 
-⭐ **Probe for the model before assigning — it paid off again.** Three answered and were briefed
-or held correctly; the fourth never answered, which is how its stuck state was found at all.
-⚠️ **B and D were held idle on purpose.** Both remaining items are judgement calls, and DEF-268
-means the integration gate cannot run with lanes active — so starting filler work would have
-delayed T-260's gate. That is the stronger reason; say so if Ian asks.
-⭐ **Lane E self-disclosed a hard-limit violation** (one read-only `git diff --stat`) that nobody
-would have found. Read-only, changed nothing, redone without git. The limit stands; the disclosure
-is the culture working.
+⚠️ **C and D are still on Opus and are idle** — Ian's keystroke to `/model sonnet`. Cost, not risk.
+⭐ **Probe every lane for its model before assigning.** The lane last night's handoff said would not
+answer replied on the third try and was Opus all along — which is why T-261 could start at all.
 
-**Protocol lanes must be told** (they will not remember): first line `[X] STATUS: sentence`,
-STATUS ∈ ACK/QUESTION/SPEC/READY/BLOCKED. Workers never run git, build, dev, or
+**Protocol lanes must be told** (they will not remember): first line `[X] STATUS: sentence`, STATUS
+∈ ACK/QUESTION/SPEC/READY/BLOCKED. Workers never run git, build, dev, or
 `npm run test:integration`; integration only via
 `node ~/.claude/skills/orchestrator/tools/it.mjs <lane db> <files>`. **You alone** stage explicit
 paths, commit with `-F`, push, run the dev server and browser, and edit the bible, registers,
-roadmap and board. ⭐ **Ask each lane for its exact path list before committing.**
+roadmap and board.
 
-## Databases
+## Databases and tools
 
 `shareat_dev` · `shareat_test` · four lane DBs · **`shareat_test_t240`** — PIN `246810` on
 `Smoke Store (SMK)`. **Do not drop it.** `shareat_dev` signs in as **Dev Admin, PIN `111111`**.
 ⚠️ Sign-in is store-scoped — **pick the store BY NAME**, never index 0.
 ⚠️ `smoke-t260.mjs` left five cash requests in `shareat_dev` with purposes beginning `T260-`.
 
-Browser scripts in the orchestrator tools folder: `smoke-t248.mjs`, `smoke-t250.mjs`,
-`smoke-t253.mjs`, `smoke-t257-t258.mjs`, **`smoke-t260.mjs`** (new — carries the two-layer
-discipline, the deliberate client-floor bypass with its justification, and the redirect-capture
-pattern).
+Browser scripts in `~/.claude/skills/orchestrator/tools/`: `smoke-t248`, `t250`, `t253`,
+`t257-t258`, `t260`, **`smoke-t262.mjs`** (runs 390 AND 1280 — it hard-coded 390 and reported a
+one-breakpoint result as a fact about the app), **`smoke-t262-verdict.mjs`**, and the three
+**`f8-*.ts`** RLS probes.
 
 ## The status board
 
 Ian reads **https://claude.ai/code/artifact/b1555e09-a726-492b-a431-7a30791e1d50** rather than chat.
 `Artifact action:"read"` it, edit, republish with that `url` at **every commit**. **Never make a
-second one.** `docs/ROADMAP.html` moves at the same moments — do both. ⭐ Edit both with an
-**anchored script that refuses unless each anchor matches exactly once** — it earned that this
-session, refusing a bad anchor rather than silently no-opping.
+second one.** `docs/ROADMAP.html` moves at the same moments — do both, with an **anchored script
+that refuses unless each anchor matches exactly once.** It refused twice today and was right both
+times.
 
 ## The paste-ready prompt
 
 ```
 You are the ORCHESTRATOR for shareat-system. Read
 C:\Users\ianla\webapps\shareat-system\docs\HANDOFF-TODAY.md in full, then docs/RULES.md, then
-PROJECT_BIBLE.md §13 rows 184, 189, 190 and 191. Ask Ian to type /orchestrator shareat system
-in your terminal (the skill is user-invocation only).
+PROJECT_BIBLE.md §13 rows 184, 189, 190, 191 and 192.
 
-The tree is CLEAN, main is at 692c931 and pushed, and all gates were green at handoff. Run
-ListAgents and match lanes by [ref], not name, and PROBE EACH FOR ITS MODEL BEFORE ASSIGNING:
-execution belongs on Sonnet, a trace or judgement call on Opus. ⛔ Lane C (523c43) has ignored
-two probes — do not brief it on a guess; ask Ian. B (6b575a) and D (074c83) are confirmed
-Sonnet and idle.
+Tree is CLEAN, main pushed, all gates green. T-261 and T-262 shipped. Run ListAgents, match lanes
+by [ref] not name, and PROBE EACH FOR ITS MODEL BEFORE ASSIGNING — execution on Sonnet, judgement
+on Opus. Lanes C (523c43) and D (074c83) are idle on Opus and should be switched back to Sonnet.
+Lane E (505d06) is held by its own user-authorization gate — ask Ian, never route around it.
 
 You own the dev server on 9008, builds, migrations, git and every browser pass; lanes never run
 git, build, dev or npm run test:integration. Ask each lane for its exact path list, stage explicit
-paths, commit with -F, push, and update BOTH docs/ROADMAP.html and the status board at EVERY
-commit. Re-run every gate yourself on the shared database rather than accepting a lane's numbers.
+paths, commit with -F, push, and update BOTH docs/ROADMAP.html and the status board at EVERY commit.
+Re-run every gate yourself on the shared database rather than accepting a lane's numbers.
 
-⛔ Treat every register row and task stub as a HYPOTHESIS — two were wrong yesterday in ways that
-changed the work. ⛔ And treat your OWN measurements the same: a line-wise grep over JSX gave
-three different answers before the true one. ⛔ A REFUSAL IS NOT EVIDENCE UNTIL YOU KNOW WHICH
-LAYER PRODUCED IT — yesterday's browser pass was red twice because the probe never reached the
-server, and an unfixed build would have gone green identically. ⛔ Do not run the integration
-suite while lanes are active (DEF-268) — starvation presents as a RED TEST with absurd durations.
+⛔ EIGHT counting errors happened yesterday across two documents and every one was caught by
+RE-DERIVING a number, never by reasoning — two were the orchestrator's, and twice the re-check
+introduced the next error. Treat every register row, task stub, spec section AND YOUR OWN
+MEASUREMENT as a hypothesis. ⛔ A refusal or a permission is not evidence until you know which
+layer produced it. ⛔ A spec can contradict itself two sections apart and a lane will faithfully
+build the wrong half. ⛔ Re-confirm a lane's baseline AT DISPATCH — a briefing's tree state is a
+claim with a timestamp, and a lane cannot check it.
 
-Pick up at "Pick up here": T-261 (DEF-274 — spec written, opens with a DECISION not code, needs
-an Opus lane), then DEF-269 (also judgement), then DEF-278 (the client money floor is not
-uniform). DEF-275 proposes narrowing one clause of bible row 189 — Ian ratifies, rule 14. The
-month-end timer is still the only production item on his board.
+Pick up at "Pick up here": T-263 (DEF-283, the date idiom the bible forbids — Sonnet, decision
+already made), then T-264 (DEF-284, the period lock — slice 1 is Sonnet and fixes a live failure),
+then DEF-279.
 
-When a task completes with the tree clean, that is a milestone: run the wrap-up ritual
-(.claude/skills/wrap-up/), rewrite this file, and hand over. Keep your session small.
+FOR IAN, still open: the production DB username in /srv/shareat-shared/.env.local, which decides
+whether DEF-282 is real work; and the month-end timer deploy, which he has held deliberately.
 ```
