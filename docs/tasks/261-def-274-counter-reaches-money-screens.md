@@ -641,10 +641,16 @@ the refusal, so Ian can decide which constraints are hit often enough to earn a 
 files**, all payroll and settings. **Zero money screens.** So the first report would say the money
 screens are quiet, and that silence would be read as safety. That is the defect (DEF-274).
 
-**What you are building:** not 163 more hand-written calls. Every screen in this app reaches the
-database through one shared function, and all but two files receive it through **a single line of
-code**. You will wrap that one line, delete the 17 hand-written calls, and add a guard that stops
+**What you are building:** not 163 more hand-written calls. Almost every screen in this app reaches
+the database through one shared function, and all but two files receive it through **a single line
+of code**. You will wrap that one line, delete the 17 hand-written calls, and add a guard that stops
 the arrangement drifting.
+
+⛔ **"Almost" is doing real work in that sentence, so read §B4.1 before you start.** Seven
+production paths hand the domain a `null` transaction and let it open its own, so they never pass
+through the shared function at all — five of them on the cutover screens. Six get a small helper;
+the seventh is deliberately left alone. **That section was added after the rest of this spec was
+written, because the lane that wrote it inferred those paths were test-only and was wrong.**
 
 ### §B1 — The mechanism, stated as the fact a reviewer will check
 
@@ -673,11 +679,16 @@ and not 44, and it is the first thing a reviewer should verify.
 | # | Path | Change |
 |---|---|---|
 | 1 | `apps/erp/src/lib/constraint-messages.ts` | add `LOCALLY_MAPPED_CONSTRAINT_NAMES`; `recordIfUnmappedConstraint` consults it (§B3) |
-| 2 | `apps/erp/src/app/expenses/lib.ts` | the wrapper — lines 18 and 148 (§B4) |
+| 2 | `apps/erp/src/app/expenses/lib.ts` | the wrapper — lines 18 and 148 (§B4); **and the `recordingRefusalsFor` helper (§B4.1)** |
 | 3 | the 8 files in §B5 | delete 17 call sites + narrow 8 imports |
-| 4 | `apps/erp/tests/constraint-messages.test.ts` | unit coverage for §B3 |
-| 5 | `apps/erp/tests/withorgprincipal-chokepoint.test.ts` | **new** — the import-graph guard (§B6) |
-| 6 | `packages/domain/tests/integration/constraint-refusals.test.ts` | **append only** — the two new integration cases (§B7). ⚠️ This is the one permitted touch under `packages/domain/` and it is a **test file**; `packages/domain/src/**` stays untouched |
+| 4 | `apps/erp/src/app/cutover/actions.ts` | **§B4.1** — wrap 5 null-tx calls (lines 37, 54, 71, 88, 104) |
+| 5 | `apps/erp/src/app/fixed-assets/actions.ts` | **§B4.1** — wrap 1 null-tx call (line 146) |
+| 6 | `apps/erp/tests/constraint-messages.test.ts` | unit coverage for §B3 |
+| 7 | `apps/erp/tests/withorgprincipal-chokepoint.test.ts` | **new** — the import-graph guard (§B6) **and the null-tx census (§B4.1)** |
+| 8 | `packages/domain/tests/integration/constraint-refusals.test.ts` | **append only** — the three new integration cases (§B7, §B4.1). ⚠️ This is the one permitted touch under `packages/domain/` and it is a **test file**; the package source tree stays untouched |
+
+⛔ **`apps/erp/src/app/setup/actions.ts` is NOT on this list.** Its `null`-tx call is deliberately
+left alone — see §B4.1 call site 7.
 
 ⛔ **Everything else is read-only**, including `PROJECT_BIBLE.md`, `docs/DEFECTS-REGISTER.md`,
 `docs/ROADMAP.html`, `docs/CAPABILITY-GAPS.md`, `docs/HANDOFF-TODAY.md`, every other
@@ -797,10 +808,139 @@ export async function withOrgPrincipal<T>(orgId: string, fn: (tx: Tx) => Promise
 find yourself changing that to a value import, stop**: it would drag `@shareat/domain` into a client
 bundle. You are not asked to change it. Named so you do not "tidy" it.
 
-**§B4.1 — reserved.** If the orchestrator's F8 check finds a production write path that reaches the
-database without `withOrgPrincipal`, the same wrapper shape is applied to `transaction()`
-(`packages/db/src/client.ts:82`) and that instruction lands here as an **insertion**. Nothing else
-in this spec changes. **If §B4.1 is still empty when you start, F8 came back clean — proceed.**
+### §B4.1 — ⛔ F8 FIRED. Seven production paths bypass `withOrgPrincipal`. Cover six of them here.
+
+> **This section was a reserved placeholder and is now filled. It is an insertion: nothing else in
+> this spec changes.** Phase 1 §4 falsifier 1 predicted that if a production write path reached the
+> database without an org principal, Arm D would be blind there. It does, and Arm D is.
+>
+> ⭐ **Phase 1's reasoning was right and its conclusion was wrong, which is worth knowing before you
+> trust anything else in this document.** The RLS argument held up under a proper probe — dropped to
+> the app role with no principal set, `shareat_app` sees **0 rows**, exactly as migration 0011's
+> default-deny predicts. But the policy was never the binding question. The question was *"does
+> anything actually call the bare path?"*, and that is a grep, not a policy argument. **Seven
+> callers do.**
+
+**The population, re-derived independently rather than adopted** (swept for any identifier called
+with `null` or `undefined` as its first argument across `apps/erp/src`; the only other matches in
+the tree are React `setState(null)` calls in client components):
+
+| # | Call site | `actor` in scope? | Recordable |
+|---|---|---|---|
+| 1 | `app/cutover/actions.ts:37` — `attestStep(null, actor, …)` | yes | ✅ |
+| 2 | `app/cutover/actions.ts:54` — `recordOpeningCount(null, actor, …)` | yes | ✅ |
+| 3 | `app/cutover/actions.ts:71` — `addOpeningFigure(null, actor, …)` | yes | ✅ |
+| 4 | `app/cutover/actions.ts:88` — `removeOpeningFigure(null, actor, …)` | yes | ✅ |
+| 5 | `app/cutover/actions.ts:104` — `postOpeningBalances(null, actor)` | yes | ✅ |
+| 6 | `app/fixed-assets/actions.ts:146` — `runDepreciation(null, actor, { through })` | yes | ✅ |
+| 7 | `app/setup/actions.ts:102` — `signInWithFirebase(null, { verifiedUid })` | **no** | ⛔ **uncountable by construction** |
+
+**Six are recordable. The seventh is not, and that is correct rather than a gap.** `setup` runs
+before any organisation exists, so there is no `orgId` to file a row under — the same boundary
+Phase 1 F7 describes for `/setup` and `/sign-in`, and `pre-session-message.ts` is the mechanism that
+covers those paths instead. **Leave call site 7 alone.**
+
+⚠️ **These are the cutover screens.** They are the ones that will be hammered in January, which is
+why this is not a rounding error.
+
+#### ⛔ You are NOT wrapping `transaction()`. Here is why, because the instruction that reached this
+#### spec said otherwise and the reason it changed is load-bearing.
+
+`transaction()` (`packages/db/src/client.ts:82`) is
+`transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T>` — **it takes no `orgId`, and it never
+has.** `prerequisiteRefusalsRepo.record` requires one, because a refusal row is org-scoped. **A
+wrapper at that layer would catch the error and then have nothing to file it under.** That is
+unanswerable, and it is a stronger objection than RULES rule 13 — which also applies, exactly as it
+does to Arm B: `packages/db` may never import `apps/erp`, so a recorder there could not consult
+`CONSTRAINT_MESSAGES` to ask whether the constraint is mapped.
+
+⛔ **And it would re-open the recursion path Arm D closed by construction.**
+`recordConstraintRefusal` calls `withOrgPrincipal`, which calls `transaction`. Wrapping
+`transaction` would make the recorder re-enter its own recorder, turning a structural impossibility
+back into a guard someone has to remember to write and prove. **The design below keeps recursion
+impossible rather than merely prevented.**
+
+#### The change: one app-layer helper, six call sites
+
+Add to `apps/erp/src/app/expenses/lib.ts`, beside the `withOrgPrincipal` wrapper from §B4 — same
+file, same reasoning, same import of `recordIfUnmappedConstraint`:
+
+```ts
+/**
+ * For the handful of callers that hand a domain function `null` and let it open its own
+ * transaction: the refusal never passes through `withOrgPrincipal`, so the wrapper above cannot
+ * see it. Wrap the CALL, not the transaction — `transaction()` takes no orgId and could not file
+ * a row if it caught one. See docs/tasks/261-*.md §B4.1.
+ */
+export async function recordingRefusalsFor<T>(orgId: string, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (err) {
+    await recordIfUnmappedConstraint(err, { orgId, storeId: null, actorPersonId: null });
+    throw err;
+  }
+}
+```
+
+Then at each of the six call sites, wrap the existing call and change nothing else:
+
+```ts
+await recordingRefusalsFor(actor.orgId, () =>
+  attestStep(null, actor, { stepCode, storeId: storeId || null, note: … }),
+);
+```
+
+**Why this shape and not the tempting one.** ⛔ **Do NOT "fix" these by routing them through
+`withOrgPrincipal(actor.orgId, (tx) => attestStep(tx, actor, …))`.** It looks tidier and it would
+reuse the §B4 wrapper for free, but it **changes the RLS posture of six production paths** — they
+currently run with no principal set — and that is a live triage item with Ian, not a side effect a
+counting task gets to cause. **Counting must not change what executes.** If Ian later rules those
+paths should run under a principal, that is its own task and this helper is deleted as part of it.
+
+**Properties, each of which §B10 makes you check:**
+
+- **Rule 13: satisfied.** The helper is app code in the app layer. `CONSTRAINT_MESSAGES` is a legal
+  import there.
+- **Recursion: still impossible by construction.** `recordConstraintRefusal` lives in
+  `packages/domain` and cannot import an app module, so it can never call this helper. Nothing
+  wraps `transaction()`, so the recorder's own `withOrgPrincipal → transaction` path is untouched.
+  **No re-entrancy guard is needed, and you must not add one** — a flag would be a lie about the
+  mechanism and would misbehave under concurrency (there is no `AsyncLocalStorage` in this repo).
+- **The aborting-transaction property: preserved, and for the same reason as §B4.** `await run()`
+  settles before the `catch` is entered; the domain function's own transaction has already rolled
+  back. No `tx` is in scope in the `catch`.
+- ⚠️ **`runDepreciation(null, …)` opens THREE OR MORE transactions internally** (`authorize`, then
+  `loadDepreciable`, then `postPeriodsFor` per asset — `depreciate.ts:202, 233, 243`). The helper
+  wraps the whole call, so whichever one refuses, the error propagates out and is recorded once.
+  A per-transaction wrapper could not have handled that coherently. Do not try to be cleverer.
+
+#### The guard, extending §B6
+
+Add a third assertion to `apps/erp/tests/withorgprincipal-chokepoint.test.ts`: **a census, not a
+prohibition.** Sweep `apps/erp/src` for a call passing `null` as its first argument to an imported
+domain function, and assert the set equals exactly the seven above — six wrapped in
+`recordingRefusalsFor`, plus `setup/actions.ts`'s `signInWithFirebase` allowlisted **by name, with
+the reason in the allowlist comment** (no org exists yet).
+
+An eighth appearing fails the test, and the failure message must say: *this path bypasses
+`withOrgPrincipal`, so the refusal counter cannot see it — wrap the call in
+`recordingRefusalsFor(actor.orgId, …)`, or add it to the allowlist and say why.* ⚠️ Same CRLF and
+case tolerance as §B6.
+
+#### Integration coverage
+
+Add a **case (c)** to the §B7.1 additions: a refusal raised on a `null`-tx path is recorded, with
+`orgId` set and both context fields `null`. This is the direct proof that F8's population is
+covered rather than assumed.
+
+#### ⛔ What this section deliberately does NOT do
+
+The orchestrator's F8 probe surfaced a separate and larger question: those seven paths run under the
+base connection role with no principal set, so they may execute outside RLS in production. **That is
+being taken to Ian as its own triage item with its measurements attached. It is NOT this task.** Do
+not widen T-261 to cover it, do not change how those paths connect, and do not route them through
+`systemTransaction` (`client.ts:143`) even though it exists for something like this need. **If you
+believe you have found something urgent there, report it and stop — do not fix it here.**
 
 ### §B5 — Step 3: delete the 17 hand-wired call sites
 
@@ -828,8 +968,10 @@ All 8 imports have the same shape and become:
 constraints are actually hit…"*). Delete the comment with the call. ⚠️ **Line numbers shift as you
 delete** — work bottom-up within each file, or match on the statement text.
 
-**After the deletion, `recordIfUnmappedConstraint` must have exactly one caller in `apps/erp/src`:**
-the wrapper in `expenses/lib.ts`. Verify by search before you move on.
+**After the deletion, `recordIfUnmappedConstraint` must have exactly TWO callers in
+`apps/erp/src`** — the `withOrgPrincipal` wrapper (§B4) and `recordingRefusalsFor` (§B4.1), both in
+`app/expenses/lib.ts`. Verify by search before you move on. ⚠️ If you have not done §B4.1 yet, you
+will see one; that is expected at this point and must be two by the end.
 
 ### §B6 — Step 4: the guard that stops it drifting
 
@@ -914,7 +1056,7 @@ the person sees the same sentence as before and a row is recorded. ⚠️ **Stop
   them also means promoting a sentence, which §B3 exists to avoid.
 - ⛔ **The package source trees — nothing at all.** Neither `packages/domain/src/` nor
   `packages/db/src/`, at any depth. The single permitted touch under `packages/domain/` is
-  appending to the integration **test** file in §B2 row 6.
+  appending to the integration **test** file in §B2 row 8.
 - ⛔ **Amending `PROJECT_BIBLE.md`.** Row 189 is Ian's and row 192 was ratified today. Report a
   needed amendment and stop (RULES rule 14).
 - ⛔ **The four catch-less action files** — `inventory/low-stock`, `inventory/returns`,
@@ -940,21 +1082,39 @@ as safety would be the same failure DEF-274 exists to prevent, one layer down. T
 it its own item, sequenced after this. **Cite it; do not build it.**
 
 Also, and by construction under every arm: `/setup` and `/sign-in` are uncountable, because no
-`orgId` exists yet on those paths. `pre-session-message.ts` is the mechanism that covers them.
+`orgId` exists yet on those paths. `pre-session-message.ts` is the mechanism that covers them. That
+includes §B4.1's seventh call site.
+
+⚠️ **Third blind spot, bounded and pre-existing: the scheduler.** This task instruments the **app**
+layer. Jobs that run without a request — `runDepreciationAsSystem`
+(`packages/domain/src/fixed-assets/depreciate.ts:217`) and the `systemTransaction` callers in
+`packages/domain/src/scheduler/index.ts` — reach the database by their own routes and their refusals
+stay uncounted. **Not a regression and not widened here**, but say it in the report: a constraint
+that only ever fires on a scheduled run will read as zero, and "zero" must not be read as "never
+happens". Same reasoning as §B9's first paragraph, different population.
 
 ### §B10 — Your falsifier. What would mean you built the wrong thing
 
 State the answer to each in your report. **A "done" with these unanswered is not done.**
 
-1. **Does `recordIfUnmappedConstraint` have exactly one caller in `apps/erp/src` when you finish?**
-   More than one means §B5 is incomplete and some domain double-counts. Search, do not assume.
-2. **Does the red run in §B7.1 produce ZERO ROWS rather than an error?** An error means you built a
+1. **Does `recordIfUnmappedConstraint` have exactly TWO callers in `apps/erp/src` when you finish —
+   the `withOrgPrincipal` wrapper (§B4) and `recordingRefusalsFor` (§B4.1), both in
+   `app/expenses/lib.ts`?** ⚠️ **This check was "exactly one" before F8 fired and that is no longer
+   sufficient.** Three or more means §B5 is incomplete and some domain double-counts; one means you
+   skipped §B4.1 and the cutover screens are still blind. Search, do not assume.
+2. **Are all six §B4.1 call sites wrapped, and is `setup/actions.ts:102` still unwrapped?** Both
+   halves matter. Wrapping the seventh would file a row with no org to file it under.
+3. **Does the red run in §B7.1 produce ZERO ROWS rather than an error?** An error means you built a
    different wrong thing and the test is not watching the bug this task is about.
-3. **Is `WRITTEN_FOR_A_PERSON` the same size before and after?** If it grew, §B3 was done with
+4. **Is `WRITTEN_FOR_A_PERSON` the same size before and after?** If it grew, §B3 was done with
    sentences instead of names and a security allowlist widened as a side effect.
-4. **Does the guard in §B6 fail when you temporarily add a direct `@shareat/db` import to some third
-   file?** If it passes, it is asserting nothing.
-5. **Does one refusal on one money screen still show the person exactly the sentence it showed
+5. **Does the guard in §B6 fail when you temporarily add a direct `@shareat/db` import to some third
+   file — AND does the §B4.1 census fail when you temporarily add an eighth unwrapped `null`-tx
+   call?** If either passes, that guard is asserting nothing.
+6. **Did the RLS posture of the six §B4.1 paths change?** It must not have. If you routed any of
+   them through `withOrgPrincipal` you changed what executes, not just what is counted — revert it
+   and re-read §B4.1.
+7. **Does one refusal on one money screen still show the person exactly the sentence it showed
    before?** If the text changed, the wrapper is altering the product rather than counting it.
 
 ⚠️ **If you hit a spec defect, report it and stop. Do not work around it.** The Phase 1 section
@@ -970,9 +1130,10 @@ with a message explaining *why* · the five §B10 questions answered with real c
 report ends with a `FOR IAN` block. *Reporting done with any of these unmet is itself a defect*
 (RULES §2).
 
-**Expected size:** 3 source files changed (1 wrapper added, 17 call sites and 8 imports deleted, 1
-name-set added), 2 test files changed, 1 test file created. **Net app code shrinks.** If your diff
-is materially bigger than that, stop and say why before continuing.
+**Expected size:** **5 source files** changed — 1 wrapper + 1 helper added, 17 call sites and 8
+imports deleted, 1 name-set added, 6 null-tx calls wrapped (§B4.1) — plus 2 test files changed and
+1 created. **Net app code still shrinks.** If your diff is materially bigger than that, stop and say
+why before continuing.
 
 ### FOR IAN — what Phase 2 will do
 
