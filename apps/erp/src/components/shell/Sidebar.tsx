@@ -21,10 +21,16 @@
  * `aria-current="page"` from the tree along with it — a rail had zero "you are here". `state` is
  * now exposed on the context (not just the derived helper functions) so `SidebarNav` can react to
  * it changing, for its own current-group marker on the rail.
+ *
+ * ⭐ T-257/DEF-259 — both "Signed in" slots (expanded span, collapsed dot) are now the sign-out
+ * control, not a label beside one. `signOutAction` is a Server Action reference; passing it as a
+ * plain `<form>`'s `action` needs no extra client wiring even though this whole file is already
+ * `'use client'`. docs/tasks/257-def-259-sign-out.md, "Placement decision".
  */
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { CloseIcon, CollapseIcon, MenuIcon } from './icons';
+import { signOutAction } from '../../app/sign-in/actions';
+import { CloseIcon, CollapseIcon, MenuIcon, SignOutIcon } from './icons';
 import { FOCUS_RING, writeSidebarStateCookie, type SidebarState } from './sidebar-state';
 import { SidebarNav } from './SidebarNav';
 
@@ -119,7 +125,7 @@ function Wordmark() {
 function PersistentSidebar() {
   const { toggleCollapse, isRailNow, expandFromRail, state } = useSidebarContext();
   return (
-    <div className="shell-sidebar hidden shrink-0 flex-col border-r border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950 md:sticky md:top-0 md:flex md:h-dvh md:overflow-y-auto">
+    <div className="shell-sidebar hidden shrink-0 flex-col border-r border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950 md:sticky md:top-0 md:flex md:h-dvh">
       <Wordmark />
       <button
         type="button"
@@ -130,12 +136,39 @@ function PersistentSidebar() {
         <CollapseIcon className="h-4 w-4 shrink-0 shell-sidebar-collapse-icon" />
         <span className="shell-sidebar-expanded-only text-xs">Collapse</span>
       </button>
-      <div className="flex-1">
+      {/* T-257/DEF-259 browser pass, 1280x800 — the scroll boundary moved IN to here from
+          `.shell-sidebar` itself: at 969px of nav content in an 800px box, a sidebar-level scroll
+          took the sign-out footer below the fold, reachable only by discovering the sidebar
+          scrolls. `min-h-0` is required, not decorative — a flex item's default `min-height: auto`
+          lets it grow to fit content and ignore `flex-1`'s shrink, which is exactly what let the
+          nav push the footer out of the fixed-height column in the first place. */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
         <SidebarNav isRailNow={isRailNow} expandFromRail={expandFromRail} explicitState={state} />
       </div>
-      <div className="shell-nav-row mx-2 mb-2 flex items-center justify-center border-t border-neutral-100 pt-2 text-xs text-neutral-500 dark:border-neutral-900">
-        <span className="shell-sidebar-expanded-only">Signed in</span>
-        <span aria-hidden="true" className="shell-sidebar-collapsed-only h-2 w-2 rounded-full bg-emerald-500" />
+      <div className="mx-2 mb-2 flex items-center justify-center border-t border-neutral-100 pt-2 dark:border-neutral-900">
+        <form action={signOutAction}>
+          <button
+            type="submit"
+            className={`shell-sidebar-expanded-only shell-nav-row rounded-md px-2 text-xs text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-900 dark:hover:text-neutral-100 ${FOCUS_RING}`}
+          >
+            Sign out
+          </button>
+        </form>
+        <form action={signOutAction}>
+          <button
+            type="submit"
+            aria-label="Sign out"
+            // ⚠️ `w-9` (36px) is explicit and deliberate, not left to shrink-to-fit: this button is
+            // `inline-flex` (via `.shell-sidebar-collapsed-only`'s own CSS, not Tailwind's `flex`,
+            // so it does not stretch to the rail's width the way the Collapse button's block-level
+            // `flex` does), and an icon-only inline-flex box with no explicit width hugs its 16px
+            // icon — a ~16px-wide target, not a touch target. 36px matches `.shell-nav-row`'s own
+            // fine-pointer floor (`globals.css:86-88`) rather than an arbitrary number.
+            className={`shell-sidebar-collapsed-only shell-nav-row w-9 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-900 ${FOCUS_RING}`}
+          >
+            <SignOutIcon className="h-4 w-4 shrink-0" />
+          </button>
+        </form>
       </div>
     </div>
   );

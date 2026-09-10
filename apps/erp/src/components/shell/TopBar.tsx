@@ -18,7 +18,13 @@
  * tree had `main` alone — no banner, and correctly no navigation (the nav is behind ☰, exactly as
  * intended). `<header>` at the page's top level is the implicit ARIA `banner` landmark; no
  * `role="banner"` needed alongside it.
+ *
+ * ⭐ T-257/DEF-259 — the "Signed in" slot is now the sign-out control, not a label beside one.
+ * `signOutAction` is a Server Action (`'use server'`), so a plain `<form action={signOutAction}>`
+ * needs no client boundary — this file stays a Server Component, matching prior art already in
+ * this codebase (`app/budgets/page.tsx`). docs/tasks/257-def-259-sign-out.md, "Placement decision".
  */
+import { signOutAction } from '../../app/sign-in/actions';
 import { MenuButton } from './Sidebar';
 
 export function TopBar() {
@@ -28,7 +34,14 @@ export function TopBar() {
       <span className="text-sm font-semibold tracking-tight">Shareat</span>
       {/* The page-title slot — empty until slice 2 wires a real value through. */}
       <span className="flex-1 truncate text-sm text-neutral-500" />
-      <span className="text-xs text-neutral-500">Signed in</span>
+      <form action={signOutAction}>
+        <button
+          type="submit"
+          className="shell-nav-row rounded-md px-2 text-xs text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-900 dark:hover:text-neutral-100"
+        >
+          Sign out
+        </button>
+      </form>
     </header>
   );
 }

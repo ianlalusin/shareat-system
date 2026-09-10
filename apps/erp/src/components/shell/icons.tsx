@@ -75,6 +75,19 @@ export function CollapseIcon(props: IconProps) {
   );
 }
 
+/** T-257/DEF-259 — the rail's icon-only sign-out button, `Sidebar.tsx`'s
+ *  `shell-sidebar-collapsed-only` slot. A door frame (open on the right) with an arrow exiting
+ *  through it — the standard "log out" glyph, hand-drawn in this file's own idiom rather than
+ *  copied, for the same provenance reason as every other icon here. */
+export function SignOutIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M13.5 4.5H6a1.5 1.5 0 0 0-1.5 1.5v12A1.5 1.5 0 0 0 6 19.5h7.5" />
+      <path d="M9.75 12h11.25M17.25 8.25 21 12l-3.75 3.75" />
+    </IconBase>
+  );
+}
+
 /** Daily — sales days, attendance, payroll, expenses: the day-to-day operating group. */
 function DailyIcon(props: IconProps) {
   return (
