@@ -123,10 +123,36 @@ export function errorMessage(err: unknown): string {
 export { recordConstraintRefusal };
 
 /**
+ * Constraint NAMES that a screen-local `CONSTRAINT_MESSAGES` map already covers — `till/actions.ts`
+ * and `remittance/actions.ts` each keep one, and this module cannot see them. Names only, never
+ * sentences: see the ⛔ below `recordIfUnmappedConstraint`.
+ */
+export const LOCALLY_MAPPED_CONSTRAINT_NAMES: ReadonlySet<string> = new Set([
+  // till/actions.ts
+  'till_custody_shifts_one_open_per_store',
+  'till_custody_shifts_prev_unique',
+  'till_custody_shifts_store_date_no_unique',
+  'till_count_lines_shift_moment_account_unique',
+  'till_count_lines_counted_nonnegative_check',
+  // remittance/actions.ts
+  'stores_pooling_requires_ceiling_check',
+  'stores_unremitted_ceiling_positive_check',
+  'stores_remittance_cadence_check',
+]);
+
+/**
  * Records a hit ONLY when `err` is an unmapped constraint violation; a no-op otherwise (already
- * mapped, or not constraint-shaped at all). Bundles the parse-and-check every wired caller would
- * otherwise repeat — DEF-242's own lesson is that a pattern hand-copied across callers drifts, so
- * it lives once here instead of once per caller.
+ * mapped, locally mapped on a screen this module cannot see, or not constraint-shaped at all).
+ * Bundles the parse-and-check every wired caller would otherwise repeat — DEF-242's own lesson is
+ * that a pattern hand-copied across callers drifts, so it lives once here instead of once per
+ * caller.
+ *
+ * ⛔ **Why `LOCALLY_MAPPED_CONSTRAINT_NAMES` holds NAMES, never sentences.**
+ * `pre-session-message.ts:137` builds `WRITTEN_FOR_A_PERSON` as
+ * `new Set(Object.values(CONSTRAINT_MESSAGES))`, which gates what text may appear in the URL of the
+ * unauthenticated `/setup` page. Promoting these 8 sentences into `CONSTRAINT_MESSAGES` would widen
+ * that security allowlist by 8 entries as a side effect of a counting change. Names never reach
+ * `Object.values(...)`, so this cannot happen by construction.
  */
 export async function recordIfUnmappedConstraint(
   err: unknown,
@@ -134,6 +160,8 @@ export async function recordIfUnmappedConstraint(
 ): Promise<void> {
   const raw = err instanceof Error ? err.message : String(err);
   const constraintName = parseConstraintName(raw);
-  if (!constraintName || constraintName in CONSTRAINT_MESSAGES) return;
+  if (!constraintName) return;
+  if (constraintName in CONSTRAINT_MESSAGES) return;
+  if (LOCALLY_MAPPED_CONSTRAINT_NAMES.has(constraintName)) return;
   await recordConstraintRefusal({ ...context, constraintName });
 }

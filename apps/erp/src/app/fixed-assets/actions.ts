@@ -23,6 +23,7 @@ import { fixedAssetsRepo, type AssetCategory } from '@shareat/db';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
+import { recordingRefusalsFor } from '../expenses/lib';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -143,7 +144,7 @@ export async function runDepreciationAction(formData: FormData): Promise<void> {
     if (!/^\d{4}-\d{2}$/.test(through)) {
       throw new Error('Choose a month to run depreciation through.');
     }
-    const result = await runDepreciation(null, actor, { through });
+    const result = await recordingRefusalsFor(actor.orgId, () => runDepreciation(null, actor, { through }));
     const created = result.posted.filter((p) => p.created).length;
     summary = `${created} posted, ${result.posted.length - created} already done, ${result.skipped} not due`;
     if (result.failed.length > 0) {

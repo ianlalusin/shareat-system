@@ -18,6 +18,7 @@ import {
 } from '@shareat/domain';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
+import { recordingRefusalsFor } from '../expenses/lib';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -34,11 +35,13 @@ export async function attestStepAction(formData: FormData): Promise<void> {
   const stepCode = str(formData, 'stepCode');
   const storeId = str(formData, 'storeId');
   try {
-    await attestStep(null, actor, {
-      stepCode,
-      storeId: storeId || null,
-      note: str(formData, 'note') || null,
-    });
+    await recordingRefusalsFor(actor.orgId, () =>
+      attestStep(null, actor, {
+        stepCode,
+        storeId: storeId || null,
+        note: str(formData, 'note') || null,
+      }),
+    );
   } catch (err) {
     back('/cutover', { error: errorMessage(err) });
   }
@@ -51,14 +54,16 @@ export async function recordCountAction(formData: FormData): Promise<void> {
   const quantity = str(formData, 'quantity');
   const unitCost = str(formData, 'unitCost');
   try {
-    await recordOpeningCount(null, actor, {
-      storeId,
-      itemId: str(formData, 'itemId'),
-      // ⭐ An empty box is NOT a zero. The form only submits a row someone actually typed in, so
-      // an item nobody counted stays uncounted and keeps showing as missing.
-      quantity,
-      unitCost: unitCost || null,
-    });
+    await recordingRefusalsFor(actor.orgId, () =>
+      recordOpeningCount(null, actor, {
+        storeId,
+        itemId: str(formData, 'itemId'),
+        // ⭐ An empty box is NOT a zero. The form only submits a row someone actually typed in, so
+        // an item nobody counted stays uncounted and keeps showing as missing.
+        quantity,
+        unitCost: unitCost || null,
+      }),
+    );
   } catch (err) {
     back('/cutover/count', { store: storeId, error: errorMessage(err) });
   }
@@ -68,14 +73,16 @@ export async function recordCountAction(formData: FormData): Promise<void> {
 export async function addOpeningFigureAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   try {
-    await addOpeningFigure(null, actor, {
-      accountCode: str(formData, 'accountCode'),
-      storeId: str(formData, 'storeId'),
-      direction: str(formData, 'direction') === 'credit' ? 'credit' : 'debit',
-      amount: str(formData, 'amount'),
-      entryDate: str(formData, 'entryDate'),
-      memo: str(formData, 'memo') || null,
-    });
+    await recordingRefusalsFor(actor.orgId, () =>
+      addOpeningFigure(null, actor, {
+        accountCode: str(formData, 'accountCode'),
+        storeId: str(formData, 'storeId'),
+        direction: str(formData, 'direction') === 'credit' ? 'credit' : 'debit',
+        amount: str(formData, 'amount'),
+        entryDate: str(formData, 'entryDate'),
+        memo: str(formData, 'memo') || null,
+      }),
+    );
   } catch (err) {
     back('/cutover/opening', { error: errorMessage(err) });
   }
@@ -85,7 +92,9 @@ export async function addOpeningFigureAction(formData: FormData): Promise<void> 
 export async function removeOpeningFigureAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   try {
-    await removeOpeningFigure(null, actor, { entryId: str(formData, 'entryId') });
+    await recordingRefusalsFor(actor.orgId, () =>
+      removeOpeningFigure(null, actor, { entryId: str(formData, 'entryId') }),
+    );
   } catch (err) {
     back('/cutover/opening', { error: errorMessage(err) });
   }
@@ -101,7 +110,7 @@ export async function removeOpeningFigureAction(formData: FormData): Promise<voi
 export async function postOpeningBalancesAction(): Promise<void> {
   const actor = await requireActor();
   try {
-    await postOpeningBalances(null, actor);
+    await recordingRefusalsFor(actor.orgId, () => postOpeningBalances(null, actor));
   } catch (err) {
     back('/cutover/opening', { error: errorMessage(err) });
   }

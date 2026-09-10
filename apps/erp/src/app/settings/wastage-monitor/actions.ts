@@ -12,7 +12,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { setWastageMonitor } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
-import { errorMessage, recordIfUnmappedConstraint } from '../../../lib/constraint-messages';
+import { errorMessage } from '../../../lib/constraint-messages';
 import { withOrgPrincipal } from './lib';
 
 function str(fd: FormData, key: string): string {
@@ -36,7 +36,6 @@ export async function setWastageMonitorAction(fd: FormData): Promise<void> {
   try {
     await withOrgPrincipal(actor.orgId, (tx) => setWastageMonitor(tx, actor, { storeId, personId }));
   } catch (err) {
-    await recordIfUnmappedConstraint(err, { orgId: actor.orgId, storeId: storeId || null, actorPersonId: actor.personId });
     back(storeId, { error: errorMessage(err) });
   }
   revalidatePath('/settings/wastage-monitor');

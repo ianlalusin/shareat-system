@@ -10,7 +10,7 @@ import { redirect } from 'next/navigation';
 import { post13thMonthRun, void13thMonthRun } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
-import { errorMessage, recordIfUnmappedConstraint } from '../../../lib/constraint-messages';
+import { errorMessage } from '../../../lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -36,7 +36,6 @@ export async function post13thMonthRunAction(formData: FormData): Promise<void> 
       }),
     );
   } catch (err) {
-    await recordIfUnmappedConstraint(err, { orgId: actor.orgId, storeId: store || null, actorPersonId: actor.personId });
     back({ store, year, error: errorMessage(err) });
   }
   back({
@@ -56,7 +55,6 @@ export async function void13thMonthRunAction(formData: FormData): Promise<void> 
       void13thMonthRun(tx, actor, { runId: str(formData, 'runId'), reason: str(formData, 'reason') }),
     );
   } catch (err) {
-    await recordIfUnmappedConstraint(err, { orgId: actor.orgId, storeId: store || null, actorPersonId: actor.personId });
     back({ store, year, error: errorMessage(err) });
   }
   back({

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   CONSTRAINT_MESSAGES,
+  LOCALLY_MAPPED_CONSTRAINT_NAMES,
   errorMessage,
   parseConstraintName,
   recordIfUnmappedConstraint,
@@ -133,5 +134,44 @@ describe('recordIfUnmappedConstraint', () => {
       actorPersonId: null,
     });
     expect(recordConstraintRefusal).not.toHaveBeenCalled();
+  });
+
+  // T-261 — DEF-274, §B3/§B7.2. Without this check, switching the counter on would have recorded
+  // the 8 till/remittance constraints below as "unmapped" — they already render a friendly
+  // sentence from a screen-local map this module cannot see.
+  it('does not record a locally-mapped constraint (till/remittance own their own map)', async () => {
+    const { recordConstraintRefusal } = await import('@shareat/domain');
+    vi.mocked(recordConstraintRefusal).mockClear();
+    const [firstLocalName] = LOCALLY_MAPPED_CONSTRAINT_NAMES;
+    const raw = `new row for relation "x" violates check constraint "${firstLocalName}"`;
+    await recordIfUnmappedConstraint(new Error(raw), {
+      orgId: 'org-1',
+      storeId: null,
+      actorPersonId: null,
+    });
+    expect(recordConstraintRefusal).not.toHaveBeenCalled();
+  });
+
+  it('LOCALLY_MAPPED_CONSTRAINT_NAMES has zero overlap with the shared CONSTRAINT_MESSAGES map', () => {
+    const overlap = [...LOCALLY_MAPPED_CONSTRAINT_NAMES].filter((name) => name in CONSTRAINT_MESSAGES);
+    expect(overlap).toEqual([]);
+  });
+});
+
+// T-261 — DEF-274, §B3/§B10 falsifier 4. `pre-session-message.ts`'s `WRITTEN_FOR_A_PERSON` set —
+// which gates what text may appear in the URL of the unauthenticated `/setup` page — is built as
+// `new Set(Object.values(CONSTRAINT_MESSAGES))` and is not itself exported, so this asserts the
+// thing it is derived from instead: `CONSTRAINT_MESSAGES`'s own key count. §B3 adds a SEPARATE
+// export (`LOCALLY_MAPPED_CONSTRAINT_NAMES`) and never touches this object literal, so if this
+// count ever changes, someone widened the security allowlist as a side effect of a counting change.
+describe('§B3 did not widen the /setup security allowlist', () => {
+  it('CONSTRAINT_MESSAGES still has exactly 26 keys — the count WRITTEN_FOR_A_PERSON is built from', () => {
+    expect(Object.keys(CONSTRAINT_MESSAGES).length).toBe(26);
+  });
+
+  it('none of the 8 locally-mapped names were promoted into CONSTRAINT_MESSAGES', () => {
+    for (const name of LOCALLY_MAPPED_CONSTRAINT_NAMES) {
+      expect(CONSTRAINT_MESSAGES).not.toHaveProperty(name);
+    }
   });
 });

@@ -15,7 +15,11 @@
  * swapping a dropdown for a real session was a boundary change and not a rewrite.
  */
 import { asc, and, eq, isNull } from 'drizzle-orm';
-import { moneyAccountsRepo, schema, expensesRepo, journalRepo, withOrgPrincipal } from '@shareat/db';
+import {
+  moneyAccountsRepo, schema, expensesRepo, journalRepo,
+  withOrgPrincipal as dbWithOrgPrincipal, type Tx,
+} from '@shareat/db';
+import { recordIfUnmappedConstraint } from '../../lib/constraint-messages';
 
 /**
  * How many payment rows the expense form offers.
@@ -144,8 +148,35 @@ export async function categoryLabel(orgId: string, categoryId: string): Promise<
  * for postgres.js while this app speaks Drizzle. That mismatch is why DEF-209 was filed against
  * the wrong evidence: a grep for the canonical name found two files and concluded RLS had no
  * production callers. It had 310.
+ *
+ * T-261 / DEF-274, bible §13 row 189 — **this is now also the refusal-counter chokepoint.** Every
+ * screen in the app reaches the database through this one line (directly, or via one of 44
+ * re-export files that forward the binding), so wrapping it here reaches all of them instead of
+ * ~163 hand-written call sites. See `docs/tasks/261-*.md` §B1/§B4.
  */
-export { withOrgPrincipal } from '@shareat/db';
+export async function withOrgPrincipal<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  try {
+    return await dbWithOrgPrincipal(orgId, fn);
+  } catch (err) {
+    await recordIfUnmappedConstraint(err, { orgId, storeId: null, actorPersonId: null });
+    throw err;
+  }
+}
+
+/**
+ * For the handful of callers that hand a domain function `null` and let it open its own
+ * transaction: the refusal never passes through `withOrgPrincipal` above, so that wrapper cannot
+ * see it. Wrap the CALL, not the transaction — `transaction()` (`packages/db/src/client.ts:82`)
+ * takes no `orgId` and could not file a row if it caught one. See `docs/tasks/261-*.md` §B4.1.
+ */
+export async function recordingRefusalsFor<T>(orgId: string, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (err) {
+    await recordIfUnmappedConstraint(err, { orgId, storeId: null, actorPersonId: null });
+    throw err;
+  }
+}
 
 export { journalRepo };
 
