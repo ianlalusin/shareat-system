@@ -272,23 +272,41 @@ four `.service`/`.timer` pairs) via `systemctl daemon-reload`, but does **not** 
 them — there is nothing to point them at until the first deploy lands. After `deploy.yml` has run
 successfully at least once:
 
+⛔ **This list used to be typed out by hand and it had already rotted — corrected 2026-09-10.**
+It named **four** timers while **six** were shipping (`recurring-expense-draft` and
+`order-wastage-backstop` were installed by the glob and then omitted from the only instruction
+telling anyone to arm them), and it said *"all FOUR timers"* below. That is **DEF-240 exactly**, and
+`provision.sh` had already been fixed to derive its list from a glob while this file kept the
+hand-written copy — the same drift-into-the-best-covered-domain shape as DEF-273. **Derive it; never
+retype it.** A glob cannot be forgotten; a list has to be edited by whoever adds a unit.
+
 ```sh
 sudo systemctl enable --now shareat-erp.service
-sudo systemctl enable --now shareat-firestore-relay.timer
-sudo systemctl enable --now shareat-attendance-sweep.timer
-sudo systemctl enable --now shareat-month-end.timer
-sudo systemctl enable --now shareat-finding-observation.timer
+# Every timer, derived — never a typed list:
+for f in /etc/systemd/system/shareat-*.timer; do
+  sudo systemctl enable --now "$(basename "$f")"
+done
 ```
+
+⚠️ **Only `shareat-erp.service` is enabled directly.** Every other `*.service` is started by its
+matching `*.timer`; enabling those too would run each job once at boot for no reason.
 
 **Verify each is actually armed** — this is the step that has historically never been done:
 
 ```sh
-systemctl list-timers   # NEXT and LEFT must be populated for all FOUR timers
-sudo systemctl start shareat-attendance-sweep.service   # run each job once, now
-sudo systemctl start shareat-firestore-relay.service
-sudo systemctl start shareat-month-end.service
-sudo systemctl start shareat-finding-observation.service
-journalctl -u shareat-attendance-sweep.service -n 50    # repeat per unit
+# NEXT and LEFT must be populated for EVERY timer — count the rows against the units installed,
+# do not check them off against a number written in a document.
+systemctl list-timers 'shareat-*'
+
+# Run each job once, now — derived from the units, not typed:
+for f in /etc/systemd/system/shareat-*.timer; do
+  u="$(basename "$f" .timer)"
+  # ⚠️ shareat-month-end-retry.timer deliberately has no service of its own — it points at
+  # shareat-month-end.service via Unit=. Skip any timer with no matching service file.
+  [ -e "/etc/systemd/system/$u.service" ] && sudo systemctl start "$u.service"
+done
+
+journalctl -u shareat-month-end.service -n 50    # repeat per unit
 ```
 
 ⚠️ **`systemctl enable` without `--now` arms it for the next boot and not for today.** That single

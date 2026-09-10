@@ -1,0 +1,43 @@
+# The 03:00 retry Ian asked for on 2026-09-10: *"every 15th of the next month at 2 am and 3am if
+# 2am fails"*.
+#
+# ⭐ THIS IS A SECOND TIMER ON THE SAME SERVICE, NOT A SECOND JOB. `Unit=` below points at
+# `shareat-month-end.service`; without that line systemd would look for a service matching this
+# timer's own name and fail silently at enable time.
+#
+# ⭐ WHY AN UNCONDITIONAL SECOND RUN RATHER THAN AN `OnFailure=` HOOK, and the reasoning is the
+# reason it is safe: the job is **idempotent per period**, verified at source rather than taken
+# from a comment —
+#   * depreciation: `runDepreciation.posted` includes periods already posted and no-opped
+#     (`created: false`); the runner's own comment records that reporting its length made a second
+#     run of a month wrongly claim "posted 2".
+#   * amortisation: `prepaidRepo.postedPeriods` is read first and `already.has(period.period)`
+#     skips; the result type documents *"Empty means everything was already done."*
+# So on a successful 02:00 run this fires, finds every posting present, writes nothing and exits 0.
+#
+# ⚠️ The rejected alternative was `OnFailure=` on the service, which runs ONLY after a failure and
+# is tidier in principle. It was not chosen because it needs a third unit and its retry is
+# "N minutes after the failure" rather than a wall-clock 03:00 — which is not what Ian asked for,
+# and a fixed hour is easier for a human to reason about at 3am than an offset. ⛔ If anyone later
+# makes the job non-idempotent, THIS FILE BECOMES A DOUBLE-POSTING BUG. The idempotency above is
+# not a convenience; it is this timer's precondition.
+#
+# ⚠️ `Persistent=false` deliberately, unlike the 02:00 unit. If the box was down across both slots,
+# the 02:00 timer's own catch-up already runs the job at boot; a second catch-up would add nothing
+# and would run a full pass for no reason.
+#
+# ⛔ The date and zone must stay in step with `shareat-month-end.timer` — see that file's DEF-283
+# note for why the 15th is load-bearing and why moving either unit near a month boundary
+# reintroduces a silent wrong-period close.
+
+[Unit]
+Description=Shareat — month-end close, 03:00 retry (same service, no-op if 02:00 succeeded)
+
+[Timer]
+Unit=shareat-month-end.service
+OnCalendar=*-*-15 03:00:00 Asia/Manila
+Persistent=false
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target

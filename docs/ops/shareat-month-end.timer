@@ -1,31 +1,45 @@
-# T-205 — MONTHLY, on the 1st. Depreciation and amortisation are per-period; running this more
-# than once a period would double-post, and the job itself must be idempotent per period regardless
-# — this timer just decides when it's asked to check.
+# T-205 — MONTHLY, on the 15th, closing the month that ended a fortnight earlier. The job is
+# idempotent per period (verified at source, not assumed: `runDepreciation` no-ops an
+# already-posted period with `created: false`, and amortisation reads `postedPeriods` and skips via
+# `already.has(period)`), so a second run in the same month writes nothing.
 #
-# ⚠️ 03:00 Manila is after order-wastage-backstop (02:30), which is itself after
-# recurring-expense-draft (02:00) and finding-observation (01:30) — so month-end runs last of the
-# four and contends with none of them for the same window.
+# ⚠️ 02:00 Manila is the same window as recurring-expense-draft (02:00) and ahead of
+# order-wastage-backstop (02:30) — but those are 1st-of-month units and this one is the 15th, so
+# they never contend. `shareat-month-end-retry.timer` fires the SAME service again at 03:00 as the
+# retry Ian asked for; on a successful 02:00 run it finds everything posted and does nothing.
 #
-# ⛔ THE ZONE IS LOAD-BEARING AND ITS ABSENCE WAS THE DEFECT (DEF-241). Until 2026-09-10 this line
-# read `OnCalendar=*-*-01 02:00:00` with NO zone, and systemd reads an unzoned OnCalendar as UTC —
-# so month-end ran 02:00 UTC = **10:00 Manila**, mid-working-day, on the 1st of every month, while
-# every sibling that cares about wall-clock time pinned Asia/Manila deliberately. Confirmed live on
-# the droplet before the fix: `systemctl list-timers` showed this unit's NEXT as `02:00:00 UTC`
-# while recurring-expense-draft showed `18:00:00 UTC` for its 02:00 Manila slot.
-# ⭐ **Ian ruled it an oversight, not a choice, on 2026-09-10** and moved it to the small hours with
-# its siblings. The tell that it was an oversight: every neighbouring unit explains its slot in a
-# comment and this one had none — in a file family where everyone documents their reasoning,
-# silence was the signal. Never remove `Asia/Manila` from this line.
+# ⛔ THE ZONE IS LOAD-BEARING AND ITS ABSENCE WAS THE ORIGINAL DEFECT (DEF-241). Until 2026-09-10
+# this line read `OnCalendar=*-*-01 02:00:00` with NO zone, and systemd reads an unzoned OnCalendar
+# as UTC — so month-end ran 02:00 UTC = **10:00 Manila**, mid-working-day, while every sibling that
+# cares about wall-clock time pinned Asia/Manila deliberately. Never remove `Asia/Manila`.
+#
+# ⛔⛔ AND THE FIX FOR DEF-241 INTRODUCED A WORSE, SILENT ONE — THIS IS WHY THE DATE MOVED (DEF-283).
+# `lastCompletedPeriod()` (`packages/domain/src/scheduler/index.ts:196`) derives the period from
+# **UTC**: it takes `getUTCMonth()` and returns the month before it. Pinning the run to 03:00
+# Asia/Manila **on the 1st** puts the firing instant at 19:00 UTC on the LAST DAY OF THE PREVIOUS
+# MONTH — so `getUTCMonth()` still reads the outgoing month and the job would have closed the month
+# BEFORE the one that just ended. Executed, not reasoned: firing for February 2027 at 03:00 Manila
+# on 1 March = 2027-02-28T19:00Z, and `lastCompletedPeriod` returns **2027-01**. February would
+# never have been closed by cron at all — DEF-044's shape exactly, the silent non-execution this
+# whole job exists to prevent.
+# ⭐ It never bit because `docs/ops` does not deploy (DEF-194) and the corrected file was never
+# installed. The bug was live in git and dead on the droplet.
+# ⭐ **The 15th is immune by construction**, and that is a reason to keep it beyond Ian's own: it
+# sits ~8 hours clear of any month boundary, so the UTC/Manila skew cannot change which month
+# `getUTCMonth()` reports. ⛔ **Do not move this back near the 1st or the 31st without fixing
+# `lastCompletedPeriod()` to be zone-aware first.**
+#
+# ⭐ Ian's ruling, 2026-09-10: *"it must be run every 15th of the next month at 2 am and 3am if 2am
+# fails"* — superseding his own 03:00-on-the-1st call earlier the same day.
 
 [Unit]
-Description=Shareat — month-end close, monthly on the 1st
+Description=Shareat — month-end close, monthly on the 15th (closes the previous month)
 
 [Timer]
-OnCalendar=*-*-01 03:00:00 Asia/Manila
+OnCalendar=*-*-15 02:00:00 Asia/Manila
 # ⚠️ Catch up after a reboot or an outage rather than skipping silently. A month-end that quietly
-# skipped because the box was down on the 1st is DEF-044's shape all over again — that defect was
-# exactly this job (v1's depreciation cron) going silent for two months, found by an audit, not a
-# person.
+# skipped because the box was down is DEF-044's shape all over again — that defect was exactly this
+# job (v1's depreciation cron) going silent for two months, found by an audit, not a person.
 Persistent=true
 AccuracySec=5min
 
