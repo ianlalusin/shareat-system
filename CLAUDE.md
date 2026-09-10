@@ -51,7 +51,7 @@ A task-to-document router. **Most work needs two or three of these, not the whol
 | **About to write any code** | `docs/RULES.md` (one page) — then the bible sections it cites for your area |
 | **Naming a field, table or type** | `docs/GLOSSARY.md` — **first, always.** Several v1 names mean the OPPOSITE of what they look like |
 | **Posting anything to the ledger** | `docs/POSTING-PATTERNS.md` — 41 verified examples. **Look it up; do not decide** |
-| **Adding a table** | The build will stop you until you classify it in `packages/db/src/cutover/classification.ts` AND `packages/db/src/rls/registry.ts`. That is the guard working |
+| **Adding a table** | The build will stop you until you classify it in `packages/db/src/cutover/classification.ts` AND `packages/db/src/rls/registry.ts`. That is the guard working. **The migration is hand-authored** — `db:generate` is retired and says so (DEF-242); the checklist is `docs/decisions/ADR-012-hand-authored-migrations.md` §5 |
 | **Adding a capability or a permission** | `docs/decisions/CAPABILITY-MATRIX.md` — and every ✅ needs a test proving the ✗ fires |
 | **Asking “why is it like this?”** | `PROJECT_BIBLE.md` **§13**, the decision log — 164 rows, newest last. Then `docs/decisions/` for the ADRs |
 | **Asking “what does v1 do?”** | `docs/discovery/` — 25 read-only findings. **Read v1 as REQUIREMENTS, never as design** — and follow the four-step method (**§1.2d**): study v1 → write down its GOAL → count the live data → design v2 to beat that goal |

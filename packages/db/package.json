@@ -10,7 +10,7 @@
     "./client": "./src/client.ts"
   },
   "scripts": {
-    "db:generate": "drizzle-kit generate",
+    "db:generate": "tsx generate-retired.ts",
     "db:migrate": "tsx migrate.ts",
     "db:studio": "drizzle-kit studio"
   },
