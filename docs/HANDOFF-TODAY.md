@@ -18,7 +18,7 @@ below. Two carried items that had sat for three days (DEF-241, DEF-242) are clos
 All run by the orchestrator on the **shared** database, not a lane's:
 
 - **typecheck** `--incremental false` → **exit 0**
-- **unit** → **86 files, 1242 passed / 1 skipped, exit 0**
+- **unit** → **87 files, 1244 passed / 1 skipped, exit 0** (re-run after `f3c63bd`)
 - **integration** → **109 files, 2674 passed, 0 failed, exit 0** — 1391s (~23 min) on `shareat_test`
 - **build** → **exit 0**, 9008 free, route table lists `ƒ Proxy (Middleware)`
 - **browser** → T-253 **10/10** at 390 **and** 1280 (`smoke-t253.mjs`)
@@ -64,7 +64,7 @@ to make that the default is **still not done** and is still worth doing.
 | **DEF-256 — short-shift half-day OT stays ON**, re-confirmed with the fix pending | DEF-256 |
 | **DEF-244 — the WHOLE ROW becomes the tap target** | `docs/tasks/258-*.md`, DEF-244 |
 | **DEF-235 — add the preflight, fail closed**; post-deploy smoke check deliberately deferred | `docs/tasks/259-*.md`, DEF-235 |
-| **DEF-242 — Ian is running a dedicated agent on it himself** | DEF-242 · ⚠️ *not* a lane's to pick up |
+| **DEF-242 — ANSWERED AND SHIPPED by Ian's own agent at `f3c63bd`: DOCUMENT, do not repair; `db:generate` retired** | **ADR-012** · DEF-242 · ⚠️ **it proposes bible row 191 — Ian to ratify** |
 
 ## Do not decide these alone — they are Ian's
 
@@ -76,9 +76,20 @@ to make that the default is **still not done** and is still worth doing.
   the wrong one.** Every v1 file is named in `CAPABILITY-GAPS.md` so a port is guided. ⚠️ It is
   **multi-week** — four punch methods, a native plugin, an offline queue and a re-arm state machine.
   **Ian has not been asked about face recognition, which v1 also has.**
-- **DEF-242** — Ian's dedicated agent. Do not start it. ⚠️ Its risk is a regenerated snapshot that
-  *silently disagrees* with what 120 migrations actually did; the generator would then produce
-  confidently wrong migrations instead of refusing, which is worse than today.
+- ⭐ **RATIFY BIBLE ROW 191 — DEF-242 is answered and shipped, and its row is proposed but NOT
+  written** (rule 14: only the planner amends the bible). Ian's own agent shipped `f3c63bd` +
+  **ADR-012**: `npm run db:generate` is **retired**, fails closed with its reasons, and
+  hand-authored SQL is now the written convention. ⭐ **It found the real blocker, and it was not
+  the one anyone feared.** The feared problem — a regenerated snapshot silently disagreeing with
+  what 124 hand-written migrations built — **does not exist**: measured, **0 real disagreements**
+  across 127 tables, 1,636 columns, 518 FKs, 312 indexes, 356 checks. ⛔ **The unfixable half is
+  the journal clock.** drizzle-kit stamps every entry with `+new Date()`, while this journal sits
+  on DEF-091's deliberate one-day-per-index grid where **90 of 124 entries are in the future and
+  head 0140 is dated 2026-12-25** — so a generated entry sorts ~106 days BELOW the head and is
+  **silently skipped** (DEF-039's trap, already sprung here once). No option controls `when`, and
+  the head advances faster than the clock. Plus RLS on all 127 tables and 122 policies that
+  `generate` cannot emit at all. **Verified by the orchestrator after it landed:** typecheck 0,
+  unit 87 files / 1244 passed.
 - **DEF-237's residue** — grants written before `grant_source` existed stay NULL for ever.
   Accepted; permanent.
 - **DEF-258's triage** — 47 same-digit dark-mode overrides across 28 files. ⛔ Not all are defects
@@ -202,8 +213,9 @@ including the handoff's own claim about which terminals existed and DEF-249's ow
 scripts/production-caller-census.mjs checks it mechanically.
 
 Pick up at "Pick up here": T-257 (DEF-259, no way to sign out — Ian's explicit next), then
-T-259 (DEF-235 deploy preflight), then T-255 (DEF-257). DEF-242 is Ian's own agent — do not
-start it. The fingerprint capture gap is Ian's and is mapped in CAPABILITY-GAPS.md.
+T-259 (DEF-235 deploy preflight), then T-255 (DEF-257). DEF-242 is DONE (ADR-012, db:generate
+retired); its bible row 191 is PROPOSED, NOT WRITTEN — Ian ratifies, rule 14. The fingerprint
+capture gap is Ian's and is mapped in CAPABILITY-GAPS.md.
 When a task completes with the tree clean, that is a milestone: run the wrap-up ritual
 (.claude/skills/wrap-up/), rewrite this file, and hand over. Keep your session small.
 ```
