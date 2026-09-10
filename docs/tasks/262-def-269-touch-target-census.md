@@ -644,15 +644,34 @@ Parse with the **TypeScript compiler API** (`typescript` 5.9.3, already a repo d
 `ts.createSourceFile(..., ScriptKind.TSX)`). ⛔ **Do not walk JSX nesting with a regex.** Ancestry
 needs a real AST; a regex doing it would repeat the exact error this task exists to correct.
 
-**Step 1 — resolve the element's `className`.** Handle all four shapes; the current guard handles
+**Step 1 — resolve the element's `className`.** Handle all **five** shapes; the current guard handles
 only the first two and that is one of its two confessed blind spots:
 
 | Shape | How |
 |---|---|
 | `className="..."` | string literal |
-| ``className={`...`}`` | template — concatenate literal spans |
-| `className={SOME_CONST}` | **resolve the constant.** Build a module-level map of `const NAME = '<string>'` across the tree first. **364 interactive controls take their class this way** |
+| ``className={`...`}`` | template — concatenate literal spans, **and resolve `${CONST}` substitutions** |
+| `className={SOME_CONST}` | **resolve the constant.** ⛔ **NOT a module-top-level map — walk the real lexical scope chain upward from the usage site.** **364 interactive controls take their class this way** |
 | `className={cond ? A : B}` | gather every string-ish operand; if any part is unresolvable, the element is UNRESOLVED |
+| `className={CONST + ' literal'}` | **the fifth shape.** Binary `+` concatenation; same fail-closed rule as the conditional — if either operand is unresolvable, UNRESOLVED |
+
+> ⭐ **THE FIFTH SHAPE AND THE SCOPE RULE WERE BOTH FOUND DURING THE BUILD, and this table said
+> "four shapes" until then.** Added 2026-09-10 from the build lane's report.
+>
+> - **`CONST + ' literal'`** — worked instance `app/attendance/[dayId]/page.tsx:253`, plus five more
+>   in the same file. A spec that enumerates shapes is a hand-written list, and **a hand-written list
+>   of examples reads as a population and is not one** — the same failure as DEF-239's "4 instances"
+>   and this spec's own "three CRLF files".
+> - ⛔ **A module-top-level `const` map is not sufficient and the original wording specified one.**
+>   The repo's own existing convention declares `field` / `fieldSelect` / `FIELD` helpers **inside
+>   the component function body** (`app/inventory/deliveries/NewDeliveryForm.tsx:92-93`). Walking the
+>   lexical scope chain instead moved UNRESOLVED from **95 → 59**; adding the fifth shape moved it
+>   **59 → 53**. Those 42 controls are real form fields at 34–40px that the weaker resolver failed by
+>   construction — **adjudicated by rendered measurement, not argument** (§6.10, second firing).
+> - ⚠️ **Ambiguity rule, approved with the fifth shape:** resolve by the importing file's actual
+>   import binding first; fall back to a same-file local only for an unimported name; **if a name is
+>   ambiguous across files, UNRESOLVED rather than guess.** Fail-closed applied to the resolver's own
+>   inputs — the same shape as §6.7's stylesheet invariant.
 
 **Step 2 — resolve the effective font size.** The element's own unconditional `text-<size>` class,
 else walk **authored JSX ancestors** to the nearest one that sets one. ⚠️ A **variant-prefixed**
@@ -725,7 +744,7 @@ stop it. Every interactive control lands in exactly one bucket:
 | **UNRESOLVED** | box not resolvable from source | ⛔ **fail** |
 
 **The four unresolvable classes, named and counted so you can check your implementation against
-mine.** Total **78 of 1,007 interactive controls (8%)**:
+mine.** Total **53 of 1,008 interactive controls (5%)** — ⚠️ **CORRECTED 2026-09-10 from 78/1,007 after the build lane resolved 42 controls this model could not see. The 42 were adjudicated by RENDERED MEASUREMENT, not argument: 27 of them measured across 5 routes at 35–40px, zero below the 24px floor. The old 78 counted 42 perfectly good form fields as unresolvable, because it could not read function-scoped `const`s or `CONST + ' literal'` concatenation. See §6.10.** Confirmed breakdown: 35 checkbox/radio · 10 ancestry-truncated · 4 foreign-component · 3 className-unresolvable · 1 UA-padding. The table below is the SUPERSEDED breakdown, kept as the record:
 
 | Class | n | Why |
 |---|---|---|
@@ -822,8 +841,8 @@ undercounted every previous census.
 
 ## 6.9 Done when
 
-typecheck clean · the new test runs and is **red in a way that names the 151 with their modelled
-heights and the 78 unresolved with their reason** · the two model fixtures in §6.2 step 4 pass as
+typecheck clean · **the unit suite is GREEN** · the new test **encodes the 151 with their modelled
+heights and the 53 unresolved with their reason as an ACCEPTED BASELINE, and fails only on anything outside it** · the two model fixtures in §6.2 step 4 pass as
 assertions · both non-zero controls pass · `TARGET_FILES` untouched · `npm run build` succeeds with
 the dev server stopped · self-reviewed line by line · report ends with a `FOR IAN` block.
 
@@ -850,12 +869,37 @@ app.** Corrected counts after teaching the model to read `globals.css`: **151 FA
 UNRESOLVED** — and note it moved in *both* directions, removing 4 false failures and newly resolving
 4 controls that had been unresolvable. A blind spot costs you accuracy, not just coverage.
 
+> ⭐ **SECOND FIRING — during the BUILD, and this one came back BENIGN. Both firings are recorded,
+> and the benign one matters as much as the real one.**
+>
+> The build lane's resolver returned **UNRESOLVED 53 against this spec's 78** — materially *below*,
+> which falsifier 1 names as the dangerous direction ("you resolved something you should not have").
+> ⭐ **The lane reported it and explicitly did not tune toward 78.** That is the behaviour this
+> falsifier exists to produce.
+>
+> **It was adjudicated by rendered measurement rather than argument**, which is the entire point of
+> §6.5's two layers. The 42 controls that moved were isolated by reverting both resolver fixes
+> in-memory, re-running, and intersecting the two sets — reproducing 95 → 59 → 53 exactly at each
+> stage, so nothing else could have moved unnoticed. All 42 are form `<select>`/`<input>` elements
+> under two copy-pasted repo conventions. **27 of the 42 were then measured in the running app across
+> 5 routes: 35, 36, 38, 39, 40px. Zero below the 24px floor.**
+>
+> ⛔ **So this spec's 78 was the artefact, and the guard was right.** The corrected figure is **53**.
+> ⚠️ **The model under-estimates by 1–5px** (34 modelled vs 35–39 rendered) — the safe direction for a
+> floor check, since it errs toward flagging a borderline control rather than missing one, but it is
+> a known bias and is recorded in the resolver's own header.
+>
+> ⭐ **Why a benign firing is worth as much as a real one: a falsifier that only ever fires on genuine
+> faults teaches people to treat every firing as a verdict.** This one fired, was investigated
+> properly, and the answer was "the spec was wrong." Both outcomes must stay possible or the check
+> stops being a check and becomes a ritual.
+
 **Now: state what would have to be true for YOUR implementation to be wrong**, and check the three
 already known to be load-bearing:
 
-1. **If your UNRESOLVED count differs materially from 78 (8%), one of us has a different opaque-set
+1. **If your UNRESOLVED count differs materially from 53 (5%), one of us has a different opaque-set
    — say which and why.** Higher is not automatically worse; it may mean you were stricter and more
-   honest. But a number much *lower* than 78 means you resolved something you should not have, and
+   honest. But a number much *lower* than 53 means you resolved something you should not have, and
    that is the failure mode this whole task is about.
 2. **If your modelled heights disagree with the two browser fixtures**, the model is wrong and the
    census built on it is worthless — stop and report, do not adjust the fixtures.
@@ -982,8 +1026,8 @@ not a worklist to fix — see §6.4.**
 five `shell-nav-row` controls resolve to 36px and PASS. See the retraction at the head of this
 section.
 
-**Plus 78 UNRESOLVED**, which under this spec also fail: 35 checkbox/radio · 3 UA-sized
-`input`/`select`/`textarea` · 3 foreign components · 37 ancestry-truncated.
+**Plus 53 UNRESOLVED** (superseded figure 78 — see §6.3), which under this spec also fail: 35 checkbox/radio · 1 UA-sized
+`input`/`select`/`textarea` · 4 foreign components · 10 ancestry-truncated · 3 className-unresolvable.
 
 ⚠️ **Two controls in `components/shell/Sidebar.tsx` are in that UNRESOLVED bucket, not the pass
 list** — `:230` (a `<div>` with a handler, no resolvable font size) and `:268` (`<SidebarNav>`, a
