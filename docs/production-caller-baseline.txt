@@ -88,7 +88,6 @@ seedCanonicalPositions
 setCostBasisItem
 setItemPricing
 setTillFloat
-signOutAction
 singleRoomViolation
 sumTender
 summarizeConversions
