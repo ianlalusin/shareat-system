@@ -1,7 +1,17 @@
 import Link from 'next/link';
+import { commissaryCatalogueRepo } from '@shareat/db';
 import { requireSession } from '../../../lib/session';
 import { removeMapAction, upsertLinkAction, upsertMapAction, upsertOfferingAction } from './actions';
-import { EXPENSE_GROUPS, catalogueData, listCategoriesGrouped, listStores, mapData, peso } from './lib';
+import {
+  EXPENSE_GROUPS,
+  catalogueData,
+  listCategoriesGrouped,
+  listStores,
+  mapData,
+  peso,
+  withOrgPrincipal,
+} from './lib';
+import { selectDefaultCommissaryStoreId } from './default-store';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 
@@ -24,16 +34,29 @@ const BTN_SM =
 
 export default async function CommissaryCataloguePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams;
-  const { actor } = await requireSession('/commissary/catalogue');
+  const session = await requireSession('/commissary/catalogue');
+  const { actor } = session;
   const stores = await listStores(actor.orgId);
+
+  // DEF-220: which stores ARE commissaries (hold at least one outgoing commissary_links row,
+  // either status) — the property the default must respect, never a name, code or position.
+  const allLinks = await withOrgPrincipal(actor.orgId, (tx) => commissaryCatalogueRepo.listLinks(tx, actor.orgId));
+  const commissaryStoreIds = new Set(allLinks.map((l) => l.commissaryStoreId));
+
   const commissaryStoreId =
-    sp.commissary && stores.some((s) => s.id === sp.commissary) ? sp.commissary : stores[0]?.id;
+    sp.commissary && stores.some((s) => s.id === sp.commissary)
+      ? sp.commissary
+      : selectDefaultCommissaryStoreId(stores, commissaryStoreIds, session.storeId);
 
   if (!commissaryStoreId) {
     return (
       <Page density="table" className="">
         <h1 className="text-2xl font-semibold">Commissary catalogue</h1>
-        <p className="mt-4 text-sm text-neutral-600">This organisation has no stores yet.</p>
+        <p className="mt-4 text-sm text-neutral-600">
+          {stores.length === 0
+            ? 'This organisation has no stores yet.'
+            : 'No store is set up as a commissary yet. Link a branch to a commissary to get started.'}
+        </p>
       </Page>
     );
   }
