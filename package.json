@@ -16,7 +16,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --project unit",
     "test:watch": "vitest --project unit",
-    "test:integration": "vitest run --project integration",
+    "test:integration": "vitest run --project integration --reporter=verbose",
     "test:all": "vitest run",
     "capture": "tsx scripts/capture.ts",
     "db:generate": "npm run db:generate -w @shareat/db",
@@ -37,7 +37,8 @@
     "order-wastage-backstop": "tsx scripts/order-wastage-backstop.ts",
     "budget-reissue": "tsx scripts/budget-reissue.ts",
     "recurring-expense-draft": "tsx scripts/recurring-expense-draft.ts",
-    "bootstrap-org": "tsx scripts/bootstrap-org.ts"
+    "bootstrap-org": "tsx scripts/bootstrap-org.ts",
+    "deploy-preflight": "tsx scripts/deploy-preflight.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

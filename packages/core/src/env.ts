@@ -224,6 +224,21 @@ const publicSchema = z.object({
 export type PublicEnv = z.infer<typeof publicSchema>;
 
 /**
+ * ⭐ The single source of truth for "which `NEXT_PUBLIC_FIREBASE_*` keys are required" —
+ * derived from `publicSchema` itself via Zod's own `.isOptional()` (T-259/DEF-235), not a
+ * hand-maintained second list. Two lists of required secrets drift, silently; one list that
+ * asks the schema cannot.
+ *
+ * ⛔ **This must be paired with a test pinning its contents** (`env.test.ts`). If the schema
+ * ever changes so every field reports optional, this array silently becomes `[]` and anything
+ * built on top of it (T-259's deploy preflight) checks nothing and exits 0 — the same failure
+ * shape DEF-235 exists to close, one level up.
+ */
+export const REQUIRED_PUBLIC_ENV_KEYS = Object.keys(publicSchema.shape).filter(
+  (key) => !publicSchema.shape[key as keyof typeof publicSchema.shape].isOptional(),
+) as (keyof PublicEnv)[];
+
+/**
  * Browser-safe config. These values are public by design (Firebase client keys are
  * not secrets — access is governed by security rules and server-side authorization).
  * Must be referenced statically so Next.js can inline them at build time.
