@@ -441,4 +441,32 @@ the exemption map empty) the five AR functions of DEF-190.
 
 ⚠️ **Why this belongs here and not in the defects register:** nothing is broken. Every piece that exists works. This is a capability the business relies on daily in v1 that **no phase currently owns** — which is exactly what this document is for (RULES §3, the three doors).
 
+### ⭐ WHERE IT ALREADY EXISTS IN v1 — Ian, 2026-09-10: *“its here https://erp.shareat.net/operation/attendance/time-clock”*
+
+Read at source in `webapps/ERP-rebuild` (READ-ONLY, RULES §1 rule 1) rather than by signing into production. **This is a large, proven subsystem, not a snippet** — v1 is authoritative about WHAT (row 84), so this is a port-and-improve, not a design problem.
+
+**The delivery mechanism, which answers the question v2 could not:**
+
+> `src/lib/biometric/fingerprint.ts:3-6` — *“JS binding for the custom Android Fingerprint **Capacitor** plugin (`FingerprintPlugin.java`), wrapping the **ZKTeco ZKFinger Android SDK**. Mirrors `src/lib/nfc/nfcCard.ts`. **APK-only** — on `Capacitor.isNativePlatform()` and never invoke these in a browser.”*
+
+So the APK is a **Capacitor** wrapper around the Next.js app, and the OTG dongle is reached through a **custom native Android plugin over the ZKTeco SDK** — acquire/release the USB sensor, prompting for USB permission. ⭐ **That is the piece v2 has no equivalent of and cannot invent from the web side**: a browser cannot talk to a USB fingerprint sensor, which is precisely why T-203 concluded *“no capture device exists in this stack”* and shipped paste-only enrolment.
+
+| v1 source | What it holds |
+|---|---|
+| `src/app/operation/attendance/time-clock/page.tsx` (**1,070 lines**) | The terminal screen itself — four punch methods side by side: passcode, NFC, QR, fingerprint, plus face |
+| `src/lib/biometric/fingerprint.ts` | The Capacitor↔ZKTeco binding. USB acquire/release, `isFingerprintAvailable` |
+| `src/lib/biometric/fingerprint-core.ts` (+ test) | `buildFingerprintDbEntries`, `resolveFingerprintMatchToken` — template → **match token** |
+| `src/lib/biometric/fingerprint-arm.ts` (+ test) | `planFingerprintArm` — the re-arm state machine that skips a USB re-open and template re-marshal after each punch |
+| `src/lib/biometric/fingerprint-pool.ts` (+ test) | Which credentials are loaded into the reader: `loggedOutPool`, `soloPool` |
+| `src/lib/biometric/fingerprint-token.ts` (+ test) | Token derivation |
+| `src/lib/offline/credential-cache.ts`, `bundle.ts`, `punch-queue.ts`, `sync-engine.ts`, `offline-clock-device.ts`, `db.ts` | The offline half — cached credential bundle, queued punches, sync |
+| `src/components/attendance/FingerprintWaiting.tsx`, `QrScannerModal.tsx`, `FaceCaptureModal.tsx` | The waiting/capture UI |
+| `clockByPasscodeAction` · `clockByNfcAction` · `clockByFingerprintAction` · `clockByFaceAction` | The four server entry points |
+
+⭐ **A business rule embedded in that screen, worth carrying and easy to miss** (`page.tsx:148-150`): *“Staff (non-admin/manager) on a device with a reader attached clock in by fingerprint ONLY — passcode/NFC/QR are hidden and the reader auto-arms. Admins/managers keep every method.”* A reader hard-fault un-hides the other methods. That is a deliberate anti-buddy-punching control, not a UI preference.
+
+⚠️ **Do NOT port the security holes with it.** A prior review of v1's biometric attendance found the offline bundle leaked templates and tokens, and that a punch trusted the token alone; the bundle-gating and token-rotation halves were fixed in v1, but **nonce binding, liveness and rate limiting were left open**. v2 must not inherit those — bible §1.3: where v1 and correct practice disagree, this is a finding, not a precedent.
+
+⚠️ **Scope reality check before anyone estimates this:** four punch methods, a native plugin, an offline queue and a re-arm state machine is **multi-week**, and ADR-005 already lists *attendance/biometrics/offline* among the multi-week efforts. Face recognition is present in v1 too and is a separate question Ian has not been asked.
+
 ⛔ **The sequencing trap, stated so it is not discovered late:** attendance and payroll are already built and tested against *enrolled* credentials. They do not need the dongle to be correct. But **on cutover morning nobody can punch with a finger unless the capture path exists**, and the current enrolment screen cannot produce a real template — only pasted text. Phase assignment is Ian's; the honest reading is that this is a Phase 4 remainder that was closed on paper.
