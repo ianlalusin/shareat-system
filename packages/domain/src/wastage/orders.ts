@@ -26,6 +26,7 @@
  * and is called out in the task report as a finding for the coordinator to weigh.
  */
 import { add, multiply, subtract, ZERO, money, type Money } from '@shareat/core/money';
+import { parseMoneyInput } from '../shared/money-input';
 import {
   channelSettlementsRepo,
   orderWastageRepo,
@@ -286,9 +287,9 @@ export async function recordOrderWastage(
     }
     const reason = input.reason.trim();
     if (!reason) throw new Error('recordOrderWastage: say why this wastage happened.');
-    // Validates the amount is a well-formed, positive money string — the DB's own CHECK is the
-    // authority; this only turns a malformed string into a clear message before it reaches SQL.
-    const amount = money(input.amount);
+    // DEF-272: was a raw `money()` call — well-formed already, but its TypeError is a developer
+    // message, not a written sentence. `parseMoneyInput` is the shared entry point that fixes that.
+    const amount = parseMoneyInput(input.amount, 'recordOrderWastage: the amount');
     if (Number(amount) <= 0) throw new Error('recordOrderWastage: amount must be greater than zero.');
 
     const { id } = await orderWastageRepo.create(trx, {

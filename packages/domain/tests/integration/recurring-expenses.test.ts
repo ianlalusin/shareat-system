@@ -287,3 +287,27 @@ describe('pause, resume, and the one thing that may not be deleted', () => {
     expect(new Date(`${after!.nextDueDate}T00:00:00Z`).getUTCDay()).toBe(2);
   });
 });
+
+describe('DEF-272 — a sub-centavo amount is refused with a written sentence, not driver text', () => {
+  it('createRecurringTemplate refuses "0.004" for defaultAmount', async () => {
+    const f = await fixture('def272-create');
+    await expect(
+      createRecurringTemplate(null, f.manager, { ...base(f), defaultAmount: '0.004' }),
+    ).rejects.toThrow(/createRecurringTemplate: the default amount.*"0\.004"/);
+  });
+
+  it('an ordinary template still works, and the exact value is stored', async () => {
+    const f = await fixture('def272-happy');
+    const { id } = await createRecurringTemplate(null, f.manager, { ...base(f), defaultAmount: '0.01' });
+    const row = await asOrg(f.orgId, (tx) => recurringExpensesRepo.getById(tx, f.orgId, id));
+    expect(row!.defaultAmount).toBe('0.01');
+  });
+
+  it('updateRecurringTemplate refuses "0.004" for defaultAmount', async () => {
+    const f = await fixture('def272-update');
+    const { id } = await createRecurringTemplate(null, f.manager, base(f));
+    await expect(
+      updateRecurringTemplate(null, f.manager, { templateId: id, defaultAmount: '0.004' }),
+    ).rejects.toThrow(/updateRecurringTemplate: the default amount.*"0\.004"/);
+  });
+});

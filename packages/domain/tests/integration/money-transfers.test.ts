@@ -682,3 +682,42 @@ describe('cross-store -- office to office only (Ian, 2026-08-26; bible row 152)'
     expect(recip!.due_to).toBe(recip!.due_from);
   });
 });
+
+describe('DEF-272 — a sub-centavo amount is refused with a written sentence, not driver text', () => {
+  it('refuses "0.004" for amountOut', async () => {
+    const f = await fixture('def272-out');
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        createMoneyTransfer(tx, f.admin, {
+          fromMoneyAccountId: f.drawer.id, toMoneyAccountId: f.safe.id,
+          amountOut: '0.004', amountIn: '0.004', transferDate: '2026-01-10',
+        }),
+      ),
+    ).rejects.toThrow(/createMoneyTransfer: amountOut.*"0\.004"/);
+  });
+
+  it('refuses "0.004" for amountIn even when amountOut is fine', async () => {
+    const f = await fixture('def272-in');
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        createMoneyTransfer(tx, f.admin, {
+          fromMoneyAccountId: f.drawer.id, toMoneyAccountId: f.safe.id,
+          amountOut: '100.00', amountIn: '0.004', transferDate: '2026-01-10',
+        }),
+      ),
+    ).rejects.toThrow(/createMoneyTransfer: amountIn.*"0\.004"/);
+  });
+
+  it('an ordinary transfer still works, and the exact values reach the legs', async () => {
+    const f = await fixture('def272-happy');
+    const r = await asOrg(f.orgId, (tx) =>
+      createMoneyTransfer(tx, f.admin, {
+        fromMoneyAccountId: f.drawer.id, toMoneyAccountId: f.safe.id,
+        amountOut: '0.01', amountIn: '0.01', transferDate: '2026-01-10',
+      }),
+    );
+    const legs = await legsOf(r.entryId);
+    expect(legs.find((l) => l.debit !== '0.00')!.debit).toBe('0.01');
+    expect(legs.find((l) => l.credit !== '0.00')!.credit).toBe('0.01');
+  });
+});

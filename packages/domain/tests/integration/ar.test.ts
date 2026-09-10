@@ -628,3 +628,24 @@ describe('T-226 — the customer detail registers', () => {
     expect(charges[0]!.outstanding).toBe('3000.00');
   });
 });
+
+describe('DEF-272 — a sub-centavo amount is refused with a written sentence, not driver text', () => {
+  it('recordCharge refuses "0.004" for totalAmount', async () => {
+    const f = await fixture('def272-charge');
+    await expect(charge(f, '0.004')).rejects.toThrow(/recordCharge: the charge amount.*"0\.004"/);
+  });
+
+  it('recordCharge refuses "1.234" too', async () => {
+    const f = await fixture('def272-precision');
+    await expect(charge(f, '1.234')).rejects.toThrow(/"1\.234"/);
+  });
+
+  it('an ordinary charge still works, and the exact value posts on both legs', async () => {
+    const f = await fixture('def272-happy');
+    const { entryId } = await charge(f, '0.01');
+    const [row] = await sql<{ debit: string; credit: string }[]>`
+      select debit::text, credit::text from journal_lines where entry_id = ${entryId} order by debit desc
+    `;
+    expect(row!.debit).toBe('0.01');
+  });
+});

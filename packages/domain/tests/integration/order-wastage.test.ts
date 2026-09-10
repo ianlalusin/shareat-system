@@ -673,3 +673,23 @@ describe('T-178 test 12 — a backstop posting into a closed period is refused, 
 
 // Test 13 (live route on 9008) is deliberately not automated here — the coordinator runs the
 // combined live smoketest after merging both concurrent lanes (see the T-178 task report).
+
+describe('DEF-272 — a sub-centavo amount gets a written sentence, not money()\'s raw TypeError', () => {
+  // ⭐ Not a guard-bypass site: `recordOrderWastage` already called `money(input.amount)` before
+  // this fix, so a sub-centavo amount was already refused — just with a developer-facing
+  // `TypeError`, not a sentence a manager can act on. `parseMoneyInput` is the same shared entry
+  // point as every other site here, so the improvement is in the MESSAGE, not the outcome.
+  it('refuses "0.004" with a written sentence', async () => {
+    const f = await fixture('def272-message');
+    await raiseReceivable(f, '500.00');
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        recordOrderWastage(tx, f.manager, {
+          storeId: f.storeId, salesDayId: f.salesDayId, channel: 'Foodpanda',
+          amount: '0.004', reason: 'test', openedOn: '2026-01-10',
+          allocations: [{ personId: f.staffAId, percent: '100.00' }],
+        }),
+      ),
+    ).rejects.toThrow(/recordOrderWastage: the amount.*"0\.004"/);
+  });
+});

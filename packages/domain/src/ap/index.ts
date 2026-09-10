@@ -47,6 +47,7 @@ import { authorize, type Actor } from '@shareat/auth';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { checkDraw } from '../money-accounts/overdraft';
+import { parseMoneyInput } from '../shared/money-input';
 import { createExpense, type CreateExpensePaymentInput } from '../expenses/create';
 import { approveExpense, type ApproveExpenseResult } from '../expenses/approve';
 import { voidExpense } from '../expenses/void';
@@ -698,7 +699,8 @@ export async function recordPayment(
     const supplier = await apRepo.getSupplierById(trx, actor.orgId, input.supplierId);
     if (!supplier) throw new Error(`recordPayment: supplier ${input.supplierId} does not exist.`);
 
-    const amount = Number(input.amount);
+    const parsedAmount = parseMoneyInput(input.amount, 'recordPayment: the amount');
+    const amount = Number(parsedAmount);
     if (amount <= 0) throw new Error('recordPayment: a payment has to be greater than zero.');
     if (input.allocations.length === 0) {
       throw new Error(
@@ -707,13 +709,23 @@ export async function recordPayment(
       );
     }
 
+    // DEF-272: parsed here, once, so every downstream use — the balance check and the row this
+    // payment writes — sees the same validated value, never the raw form.
+    const allocations = input.allocations.map((a) => ({
+      expenseId: a.expenseId,
+      amountApplied: parseMoneyInput(
+        a.amountApplied,
+        `recordPayment: the allocation for expense ${a.expenseId}`,
+      ),
+    }));
+
     // ⛔ Lock the named expenses BEFORE reading their balances. `openItems` then decide then
     // write is check-then-act: without this, two payments naming the same open item both read it
     // as open and both post, paying the supplier twice. The lock serialises exactly those two.
     await apRepo.lockExpensesForAllocation(
       trx,
       actor.orgId,
-      input.allocations.map((a) => a.expenseId),
+      allocations.map((a) => a.expenseId),
     );
 
     // ⛔ Every allocation must be an OPEN item for THIS supplier AT THIS STORE — validated
@@ -727,7 +739,7 @@ export async function recordPayment(
     const open = await apRepo.openItems(trx, actor.orgId, input.supplierId, input.storeId);
     const byExpense = new Map(open.map((o) => [o.expenseId, o]));
     let allocatedTotal = 0;
-    for (const a of input.allocations) {
+    for (const a of allocations) {
       const item = byExpense.get(a.expenseId);
       if (!item) {
         throw new Error(
@@ -848,7 +860,7 @@ export async function recordPayment(
       storeId: input.storeId,
       supplierId: input.supplierId,
       businessDate: input.businessDate,
-      amount: input.amount,
+      amount: parsedAmount,
       moneyAccountId: input.moneyAccountId,
       cashRequestId: input.cashRequestId ?? null,
       referenceNo: input.referenceNo?.trim() || null,
@@ -869,11 +881,7 @@ export async function recordPayment(
 
     if (result.created) {
       await apRepo.markApPaymentPosted(trx, actor.orgId, paymentId, { journalEntryId: result.entryId });
-      await apRepo.insertApPaymentAllocations(
-        trx,
-        paymentId,
-        input.allocations.map((a) => ({ expenseId: a.expenseId, amountApplied: a.amountApplied })),
-      );
+      await apRepo.insertApPaymentAllocations(trx, paymentId, allocations);
     }
 
     return {

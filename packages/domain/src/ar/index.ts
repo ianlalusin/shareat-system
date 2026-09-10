@@ -12,6 +12,7 @@ import { arRepo, customersRepo, moneyAccountsRepo, transaction, type Tx } from '
 import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
+import { parseMoneyInput } from '../shared/money-input';
 
 export const AR_CONTROL_CODE = arRepo.AR_CONTROL_CODE;
 export const STORE_CREDIT_CODE = arRepo.STORE_CREDIT_CODE;
@@ -58,7 +59,8 @@ export async function recordCharge(
     if (customer.status !== 'active') {
       throw new Error(`recordCharge: ${customer.name} is ${customer.status}, not active.`);
     }
-    if (Number(input.totalAmount) <= 0) {
+    const totalAmount = parseMoneyInput(input.totalAmount, 'recordCharge: the charge amount');
+    if (Number(totalAmount) <= 0) {
       throw new Error('recordCharge: a charge has to be greater than zero.');
     }
 
@@ -70,7 +72,7 @@ export async function recordCharge(
       // ⚠️ Derived from the ledger, never a stored balance — org-wide, because a credit limit is
       // extended to a BUYER, not to a buyer at one branch.
       const { controlBalance } = await arRepo.positionOf(trx, actor.orgId, input.customerId);
-      const after = Number(controlBalance) + Number(input.totalAmount);
+      const after = Number(controlBalance) + Number(totalAmount);
       if (after > Number(customer.creditLimit) + EPSILON) {
         const reason = input.creditOverrideReason?.trim() || '';
         let mayOverride = true;
@@ -83,7 +85,7 @@ export async function recordCharge(
         if (!mayOverride || !reason) {
           throw new Error(
             `recordCharge: ${customer.name} owes ₱${controlBalance} and this charge is ` +
-              `₱${input.totalAmount}, which would take them to ₱${after.toFixed(2)} against a ` +
+              `₱${totalAmount}, which would take them to ₱${after.toFixed(2)} against a ` +
               `limit of ₱${customer.creditLimit}. A manager or admin can charge it anyway by ` +
               'saying why.',
           );
@@ -101,7 +103,7 @@ export async function recordCharge(
       dueDate: input.dueDate ?? null,
       referenceNo: input.referenceNo?.trim() || null,
       notes: input.notes?.trim() || null,
-      totalAmount: input.totalAmount,
+      totalAmount,
       revenueAccountCode: input.revenueAccountCode,
       createdBy: actor.personId,
     });
@@ -118,7 +120,7 @@ export async function recordCharge(
         {
           accountCode: AR_CONTROL_CODE,
           storeId: input.storeId,
-          debit: input.totalAmount,
+          debit: totalAmount,
           partyType: 'customer' as const,
           partyId: input.customerId,
           lineMemo: `Credit sale — ${customer.name}`,
@@ -126,7 +128,7 @@ export async function recordCharge(
         {
           accountCode: input.revenueAccountCode,
           storeId: input.storeId,
-          credit: input.totalAmount,
+          credit: totalAmount,
           lineMemo: `Credit sale — ${customer.name}`,
         },
       ],

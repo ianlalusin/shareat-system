@@ -13,6 +13,7 @@ import { authorize, type Actor } from '@shareat/auth';
 import { journalRepo, loansRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
 import { money, type Money } from '@shareat/core/money';
 import { checkDraw } from '../money-accounts/overdraft';
+import { parseMoneyInput } from '../shared/money-input';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { accruedInterest, splitPayment, type PaymentSplit } from './interest';
@@ -88,7 +89,8 @@ export async function disburseLoan(
     if (!loan) throw new Error(`disburseLoan: loan ${input.loanId} does not exist.`);
     await authorize(trx, actor, 'record_ap_payment', { storeId: loan.storeId });
 
-    if (Number(input.amount) <= 0) {
+    const amount = parseMoneyInput(input.amount, 'disburseLoan: the amount');
+    if (Number(amount) <= 0) {
       throw new Error('disburseLoan: the amount has to be greater than zero.');
     }
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.intoMoneyAccountId);
@@ -98,9 +100,9 @@ export async function disburseLoan(
     // ⛔ A draw beyond the agreement is not a bigger loan — it is a second agreement, and it needs
     // its own terms rather than quietly inflating these.
     const remaining = Number(loan.principalAmount) - Number(position.disbursed);
-    if (Number(input.amount) > remaining + 0.005) {
+    if (Number(amount) > remaining + 0.005) {
       throw new Error(
-        `disburseLoan: ${input.amount} exceeds the ${remaining.toFixed(2)} still undrawn on this ` +
+        `disburseLoan: ${amount} exceeds the ${remaining.toFixed(2)} still undrawn on this ` +
           'agreement. Record a separate loan for anything beyond it.',
       );
     }
@@ -110,17 +112,17 @@ export async function disburseLoan(
       entryDate: input.on,
       sourceType: 'loan_disbursement',
       sourceId: loan.id,
-      idempotencyKey: `loan:${loan.id}:disbursement:${input.on}:${input.amount}`,
+      idempotencyKey: `loan:${loan.id}:disbursement:${input.on}:${amount}`,
       memo: input.memo ?? `Loan disbursement — ${loan.name} (${loan.lenderName})`,
       postedBy: actor.personId,
       lines: [
-        { accountCode: account.glAccountCode, storeId: loan.storeId, debit: input.amount,
+        { accountCode: account.glAccountCode, storeId: loan.storeId, debit: amount,
           ...(account.glAccountCode === '1140'
             ? { partyType: 'money_account' as const, partyId: account.id }
             : {}) },
         // ⭐ The party is THE LOAN, not the lender: a lender can hold two loans, and v1's own data
         // has exactly that.
-        { accountCode: LOAN_LIABILITY_CODE, storeId: loan.storeId, credit: input.amount,
+        { accountCode: LOAN_LIABILITY_CODE, storeId: loan.storeId, credit: amount,
           partyType: 'loan' as const, partyId: loan.id },
       ],
     });
@@ -162,7 +164,8 @@ export async function recordLoanPayment(
     if (!loan) throw new Error(`recordLoanPayment: loan ${input.loanId} does not exist.`);
     await authorize(trx, actor, 'record_ap_payment', { storeId: loan.storeId });
 
-    if (Number(input.amount) <= 0) {
+    const amount = parseMoneyInput(input.amount, 'recordLoanPayment: the amount');
+    if (Number(amount) <= 0) {
       throw new Error('recordLoanPayment: the amount has to be greater than zero.');
     }
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.fromMoneyAccountId);
@@ -186,7 +189,7 @@ export async function recordLoanPayment(
     });
 
     const split = splitPayment({
-      payment: money(input.amount),
+      payment: amount,
       outstanding: money(position.outstanding),
       accrued,
     });
@@ -207,7 +210,7 @@ export async function recordLoanPayment(
       trx,
       actor.orgId,
       account,
-      Number(input.amount),
+      Number(amount),
       'recordLoanPayment',
     );
 
@@ -227,7 +230,7 @@ export async function recordLoanPayment(
       {
         accountCode: account.glAccountCode,
         storeId: loan.storeId,
-        credit: input.amount,
+        credit: amount,
         ...(account.glAccountCode === '1140'
           ? { partyType: 'money_account' as const, partyId: account.id }
           : {}),

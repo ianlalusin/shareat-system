@@ -17,6 +17,7 @@
 import { moneyAccountsRepo, recurringExpensesRepo, transaction, type Tx } from '@shareat/db';
 import type { RecurringInterval } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
+import { parseMoneyInput } from '../shared/money-input';
 import { firstDueDate, isAnchorValid } from './recurrence';
 
 export interface CreateRecurringTemplateInput {
@@ -87,7 +88,8 @@ export async function createRecurringTemplate(
 
     const name = input.name.trim();
     if (!name) throw new Error('give the template a name — "Lipa branch rent", not "expense 3".');
-    if (Number(input.defaultAmount) <= 0) {
+    const defaultAmount = parseMoneyInput(input.defaultAmount, 'createRecurringTemplate: the default amount');
+    if (Number(defaultAmount) <= 0) {
       throw new Error('a default amount has to be greater than zero. ⚠️ It is a DEFAULT — the drafted expense is edited against the real bill.');
     }
     // ⚠️ The database refuses this too; this exists so a person reads a sentence instead of a
@@ -121,7 +123,7 @@ export async function createRecurringTemplate(
       name,
       categoryId: input.categoryId,
       supplierId: input.supplierId,
-      defaultAmount: Number(input.defaultAmount).toFixed(2),
+      defaultAmount,
       defaultMoneyAccountId: input.defaultMoneyAccountId ?? null,
       // ⚠️ Recorded ONLY when it is actually true of this account, so the flag never claims a
       // deliberate choice about an office account nobody had to think about.
@@ -164,7 +166,11 @@ export async function updateRecurringTemplate(
     if (!isAnchorValid(interval, anchorDay)) {
       throw new Error(`anchor ${anchorDay} is out of range for a ${interval} template.`);
     }
-    if (input.defaultAmount !== undefined && Number(input.defaultAmount) <= 0) {
+    const defaultAmount =
+      input.defaultAmount !== undefined
+        ? parseMoneyInput(input.defaultAmount, 'updateRecurringTemplate: the default amount')
+        : undefined;
+    if (defaultAmount !== undefined && Number(defaultAmount) <= 0) {
       throw new Error('a default amount has to be greater than zero.');
     }
 
@@ -189,7 +195,7 @@ export async function updateRecurringTemplate(
       // The one way an existing supplier-less template gets fixed. Clearing it is not offered:
       // a template with no supplier cannot draft, and silently disabling one is DEF-190's shape.
       ...(input.supplierId ? { supplierId: input.supplierId } : {}),
-      ...(input.defaultAmount !== undefined ? { defaultAmount: Number(input.defaultAmount).toFixed(2) } : {}),
+      ...(defaultAmount !== undefined ? { defaultAmount } : {}),
       ...(input.defaultMoneyAccountId !== undefined ? { defaultMoneyAccountId: accountId } : {}),
       tillIsDeliberate: isTill && deliberate,
       ...(input.interval !== undefined ? { interval } : {}),

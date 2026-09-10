@@ -27,6 +27,7 @@ import {
 import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry, type PostEntryLine } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
+import { parseMoneyInput } from '../shared/money-input';
 
 /** Where a fee lands when the transfer costs something. `6870` Bank charges — the account
  *  POSTING-PATTERNS §Transfer's own worked example uses. */
@@ -150,8 +151,10 @@ async function runCreate(
     await authorize(tx, actor, 'transfer_funds', { storeId: to.storeId });
   }
 
-  const out = Number(input.amountOut);
-  const inn = Number(input.amountIn);
+  const amountOut = parseMoneyInput(input.amountOut, 'createMoneyTransfer: amountOut');
+  const amountIn = parseMoneyInput(input.amountIn, 'createMoneyTransfer: amountIn');
+  const out = Number(amountOut);
+  const inn = Number(amountIn);
   if (!(out > 0) || !(inn > 0)) {
     throw new Error('createMoneyTransfer: both amounts must be greater than zero.');
   }
@@ -159,7 +162,7 @@ async function runCreate(
   // enterable here.
   if (inn > out) {
     throw new Error(
-      `createMoneyTransfer: ${input.amountIn} arrived but only ${input.amountOut} left. Money ` +
+      `createMoneyTransfer: ${amountIn} arrived but only ${amountOut} left. Money ` +
         'that arrives without leaving somewhere is income, not a transfer.',
     );
   }
@@ -187,7 +190,7 @@ async function runCreate(
 
   const memo = `Transfer — ${from.name} to ${to.name}`;
   const lines: PostEntryLine[] = [
-    { accountCode: to.glAccountCode, storeId: to.storeId, debit: input.amountIn, ...partyFor(to) },
+    { accountCode: to.glAccountCode, storeId: to.storeId, debit: amountIn, ...partyFor(to) },
     // ⚠️ The fee sits at the SOURCE store, because the source is who paid it — it was deducted
     // from their money, not the recipient's.
     ...(feeAccountCode
@@ -203,7 +206,7 @@ async function runCreate(
     {
       accountCode: from.glAccountCode,
       storeId: from.storeId,
-      credit: input.amountOut,
+      credit: amountOut,
       ...partyFor(from),
     },
   ];
@@ -229,7 +232,7 @@ async function runCreate(
       {
         accountCode: '1250',
         storeId: from.storeId,
-        debit: input.amountIn,
+        debit: amountIn,
         partyType: 'store' as const,
         partyId: toCode,
         lineMemo: `Due from ${toCode} — ${memo}`,
@@ -237,7 +240,7 @@ async function runCreate(
       {
         accountCode: '2150',
         storeId: to.storeId,
-        credit: input.amountIn,
+        credit: amountIn,
         partyType: 'store' as const,
         partyId: fromCode,
         lineMemo: `Due to ${fromCode} — ${memo}`,
@@ -265,8 +268,8 @@ async function runCreate(
     storeId: from.storeId,
     fromMoneyAccountId: from.id,
     toMoneyAccountId: to.id,
-    amountOut: input.amountOut,
-    amountIn: input.amountIn,
+    amountOut,
+    amountIn,
     feeAccountCode,
     transferDate: input.transferDate,
     reference: input.reference?.trim() || null,

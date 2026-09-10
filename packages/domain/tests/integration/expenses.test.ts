@@ -1536,4 +1536,18 @@ describe('⛔ DEF-157 — payReimbursement settles 2130, which nothing previousl
       ),
     ).rejects.toThrow(/has nothing outstanding/);
   });
+
+  it('DEF-272 — refuses "0.004" with a written sentence, not driver text', async () => {
+    const f = await setup('def272-reimb');
+    await fundAccount(f.orgId, f.storeId, '1110', '10000.00', null);
+    await reimbursableExpense(f, '1000.00');
+    await expect(
+      asPerson(f.orgId, (tx) =>
+        payReimbursement(tx, actor(f.orgId, f.managerId), {
+          storeId: f.storeId, employeeId: f.staffId, amount: '0.004',
+          fromMoneyAccountId: f.cashDrawerId, on: '2026-01-16',
+        }),
+      ),
+    ).rejects.toThrow(/payReimbursement: the amount.*"0\.004"/);
+  });
 });

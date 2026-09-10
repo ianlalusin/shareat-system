@@ -37,6 +37,7 @@ import {
   type Tx,
 } from '@shareat/db';
 import { authorize, AuthorizationError, type Actor, type Capability } from '@shareat/auth';
+import { parseMoneyInput } from '../shared/money-input';
 import { recordCharge, voidCharge } from '../ar';
 import { branchPriceFor } from '../items';
 import { postEntry } from '../ledger/post-entry';
@@ -232,7 +233,13 @@ export async function createTradeOrder(
         throw new Error(`createTradeOrder: line ${i + 1} has a quantity of ${draft.quantity}.`);
       }
 
-      const lineTotal = (Number(draft.quantity) * Number(rate)).toFixed(2);
+      // DEF-272: always exactly 2dp already (toFixed above), so this never actually throws on
+      // precision — routed through the shared parser anyway so every money value in the set goes
+      // through the one entry point, not because this particular site was independently exploitable.
+      const lineTotal = parseMoneyInput(
+        (Number(draft.quantity) * Number(rate)).toFixed(2),
+        `createTradeOrder: line ${i + 1}'s total`,
+      );
       if (Number(lineTotal) <= 0) {
         throw new Error(`createTradeOrder: line ${i + 1} comes to zero, so it bills nothing.`);
       }

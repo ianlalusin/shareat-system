@@ -770,3 +770,24 @@ describe('T-174 — an unresolved transit shortfall blocks a new day', () => {
   });
 });
 
+describe('DEF-272 — a sub-centavo tender amount gets a written sentence, not money()\'s raw TypeError', () => {
+  // ⭐ Not a guard-bypass site: `writeTenders` already called `money(t.amount)` before this fix, so
+  // a sub-centavo tender was already refused — just with a developer-facing `TypeError`, not a
+  // sentence someone entering the day's cash breakdown can act on.
+  it('refuses "0.004" for a tender amount with a written sentence', async () => {
+    const f = await setup('def272-tender');
+    const [wallet] = await sql<{ id: string }[]>`
+      insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian)
+      values (${f.orgId}, ${f.storeId}, 'GCash — cashier', 'ewallet', '1140', 'cashier') returning id
+    `;
+    await expect(
+      asPerson(f.orgId, (tx) =>
+        createSalesDay(tx, actor(f.orgId, f.staffId), {
+          ...simpleDay(f.storeId, D1),
+          tenders: [{ moneyAccountId: wallet!.id, amount: '0.004' }],
+        }),
+      ),
+    ).rejects.toThrow(/tenders:.*amount.*"0\.004"/);
+  });
+});
+

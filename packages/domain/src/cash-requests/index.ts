@@ -21,6 +21,7 @@ import { authorize, type Actor } from '@shareat/auth';
 import { cashRequestsRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
 import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry } from '../ledger/post-entry';
+import { parseMoneyInput } from '../shared/money-input';
 
 export const STAFF_FLOAT_CODE = '1120';
 /**
@@ -49,7 +50,8 @@ export async function createCashRequest(
     await authorize(trx, actor, 'create_expense', { storeId: input.storeId });
     const purpose = input.purpose.trim();
     if (!purpose) throw new Error('createCashRequest: say what the money is for.');
-    if (Number(input.amount) <= 0) {
+    const amount = parseMoneyInput(input.amount, 'createCashRequest: the amount');
+    if (Number(amount) <= 0) {
       throw new Error('createCashRequest: the amount has to be greater than zero.');
     }
     return cashRequestsRepo.insertRequest(trx, {
@@ -57,7 +59,7 @@ export async function createCashRequest(
       storeId: input.storeId,
       requestedFor: input.requestedFor,
       purpose,
-      requestedAmount: input.amount,
+      requestedAmount: amount,
       requestedOn: input.on,
       notes: input.notes?.trim() || null,
       createdBy: actor.personId,
@@ -104,14 +106,15 @@ export async function decideCashRequest(
       return;
     }
 
-    if (Number(input.amount) <= 0) {
+    const approvedAmount = parseMoneyInput(input.amount, 'decideCashRequest: the approved amount');
+    if (Number(approvedAmount) <= 0) {
       throw new Error('decideCashRequest: an approved amount has to be greater than zero.');
     }
     // ⚠️ Approving MORE than was asked for is allowed and is not an error — a manager may know the
     // errand costs more. Approving less is the common case.
     await cashRequestsRepo.update(trx, actor.orgId, req.id, {
       status: 'approved',
-      approvedAmount: input.amount,
+      approvedAmount,
       approvedBy: actor.personId,
       decidedOn: on,
     });
@@ -181,11 +184,12 @@ export async function releaseCashRequest(
         `releaseCashRequest: this request is ${req.status} — only an approved one can be released.`,
       );
     }
+    const amount = parseMoneyInput(input.amount, 'releaseCashRequest: the amount');
     // ⛔ The approval is the authority for the amount. Releasing more would make the approval
     // decorative.
-    if (Number(input.amount) > Number(req.approvedAmount ?? 0)) {
+    if (Number(amount) > Number(req.approvedAmount ?? 0)) {
       throw new Error(
-        `releaseCashRequest: ${input.amount} is more than the ${req.approvedAmount} approved.`,
+        `releaseCashRequest: ${amount} is more than the ${req.approvedAmount} approved.`,
       );
     }
 
@@ -220,7 +224,7 @@ export async function releaseCashRequest(
       trx,
       actor.orgId,
       account,
-      Number(input.amount),
+      Number(amount),
       'releaseCashRequest',
     );
 
@@ -239,14 +243,14 @@ export async function releaseCashRequest(
         {
           accountCode: STAFF_FLOAT_CODE,
           storeId: req.storeId,
-          debit: input.amount,
+          debit: amount,
           partyType: 'cash_request' as const,
           partyId: req.id,
         },
         {
           accountCode: account.glAccountCode,
           storeId: req.storeId,
-          credit: input.amount,
+          credit: amount,
           ...(account.glAccountCode === '1140'
             ? { partyType: 'money_account' as const, partyId: account.id }
             : {}),

@@ -691,3 +691,27 @@ describe('invariant 9 — a denial test per capability', () => {
     ).resolves.toBeTruthy();
   });
 });
+
+describe('DEF-272 — a sub-centavo refund amount gets a written sentence, not money()\'s raw TypeError', () => {
+  // ⭐ Not a guard-bypass site: `writeOffPrepaidItem` already called `money(input.refundAmount)`
+  // before this fix, so a sub-centavo refund was already refused — just with a developer-facing
+  // `TypeError`, not a sentence someone processing the write-off can act on.
+  it('refuses "0.004" for refundAmount with a written sentence', async () => {
+    const f = await fixture('def272-refund');
+    const item = await policy(f);
+    await asOrg(f.orgId, (tx) =>
+      amortisePrepaidItem(tx, f.admin, { prepaidItemId: item.id, asOfPeriod: '2026-06' }),
+    );
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        writeOffPrepaidItem(tx, f.admin, {
+          prepaidItemId: item.id,
+          writtenOffOn: '2026-07-10',
+          reason: 'Cancelled',
+          refundAmount: '0.004',
+          refundAccountCode: '1110',
+        }),
+      ),
+    ).rejects.toThrow(/writeOffPrepaidItem: the refund amount.*"0\.004"/);
+  });
+});

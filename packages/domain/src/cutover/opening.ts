@@ -20,6 +20,7 @@
  */
 import { cutoverRepo, journalRepo, transaction, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
+import { parseMoneyInput } from '../shared/money-input';
 
 export const OPENING_EQUITY_CODE = '3900';
 export const OPENING_SOURCE_TYPE = 'opening_balance';
@@ -64,8 +65,8 @@ export async function addOpeningFigure(
           'is the one thing this is built not to allow.',
       );
     }
-    const amount = Number(input.amount);
-    if (!(amount > 0)) throw new Error('addOpeningFigure: an opening figure has to be greater than zero.');
+    const amount = parseMoneyInput(input.amount, 'addOpeningFigure: the amount');
+    if (!(Number(amount) > 0)) throw new Error('addOpeningFigure: an opening figure has to be greater than zero.');
 
     const period = await journalRepo.findPeriodForDate(trx, actor.orgId, input.entryDate);
     if (!period) {
@@ -89,7 +90,7 @@ export async function addOpeningFigure(
       idempotencyKey: `opening:${actor.orgId}:${input.accountCode}:${input.storeId}:${input.partyId ?? ''}`,
     });
 
-    const amountStr = amount.toFixed(2);
+    const amountStr = amount;
     const real = {
       accountCode: input.accountCode,
       storeId: input.storeId,

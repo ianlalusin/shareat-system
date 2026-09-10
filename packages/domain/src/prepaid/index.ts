@@ -27,6 +27,7 @@
 import { authorize, type Actor } from '@shareat/auth';
 import { journalRepo, prepaidRepo, transaction, type PrepaidCategory, type Tx } from '@shareat/db';
 import { money, subtract, type Money } from '@shareat/core/money';
+import { parseMoneyInput } from '../shared/money-input';
 import { buildStraightLine, periodsThroughOf } from '../shared/straight-line';
 import { readPolicyOrRefuse } from '../fixed-assets/policy';
 import { postEntry } from '../ledger/post-entry';
@@ -391,7 +392,9 @@ async function runWriteOff(
     );
   }
 
-  const refunded = money(input.refundAmount ?? '0');
+  // DEF-272: was a raw `money()` call — well-formed already, but its TypeError is a developer
+  // message, not a written sentence. `parseMoneyInput` is the shared entry point that fixes that.
+  const refunded = parseMoneyInput(input.refundAmount ?? '0', 'writeOffPrepaidItem: the refund amount');
   if (Number(refunded) < 0) {
     throw new Error('writeOffPrepaidItem: a refund cannot be negative.');
   }

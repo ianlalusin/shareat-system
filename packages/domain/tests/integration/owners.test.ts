@@ -755,3 +755,33 @@ describe('the refusals', () => {
     ).rejects.toThrow(/greater than zero/);
   });
 });
+
+describe('DEF-272 — a sub-centavo amount is refused with a written sentence, not driver text', () => {
+  it('createOwner refuses "0.004" for drawingLimit — found by the shape scanner, not in the original T-260 known-sites list', async () => {
+    const f = await fixture('def272-limit');
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        createOwner(tx, f.admin, {
+          storeId: f.storeId, personId: f.anaId, drawingLimit: '0.004', drawingLimitPeriod: 'monthly',
+        }),
+      ),
+    ).rejects.toThrow(/createOwner: the drawing limit.*"0\.004"/);
+  });
+
+  it('an ordinary drawing limit still works', async () => {
+    const f = await fixture('def272-limit-happy');
+    const id = await owner(f, { drawingLimit: '0.01', drawingLimitPeriod: 'monthly' });
+    const row = await asOrg(f.orgId, (tx) => ownersRepo.getById(tx, f.orgId, id));
+    expect(row!.drawingLimit).toBe('0.01');
+  });
+
+  it('recordContribution refuses "0.004"', async () => {
+    const f = await fixture('def272-contribution');
+    const id = await owner(f);
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        recordContribution(tx, f.admin, { ownerId: id, amount: '0.004', intoMoneyAccountId: f.till, on: '2026-01-08' }),
+      ),
+    ).rejects.toThrow(/recordContribution: the amount.*"0\.004"/);
+  });
+});

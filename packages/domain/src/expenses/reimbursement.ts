@@ -13,6 +13,7 @@ import { authorize, type Actor } from '@shareat/auth';
 import { expensesRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
 import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry } from '../ledger/post-entry';
+import { parseMoneyInput } from '../shared/money-input';
 import { EXPENSE_FUNDING_ACCOUNTS } from './routing';
 
 export interface PayReimbursementInput {
@@ -41,7 +42,8 @@ export async function payReimbursement(
     // liability, gated the same way every other outgoing payment in this codebase is.
     await authorize(trx, actor, 'record_ap_payment', { storeId: input.storeId });
 
-    if (Number(input.amount) <= 0) {
+    const amount = parseMoneyInput(input.amount, 'payReimbursement: the amount');
+    if (Number(amount) <= 0) {
       throw new Error('payReimbursement: the amount has to be greater than zero.');
     }
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.fromMoneyAccountId);
@@ -51,9 +53,9 @@ export async function payReimbursement(
     if (Number(position.outstanding) <= 0) {
       throw new Error('payReimbursement: this employee has nothing outstanding on 2130.');
     }
-    if (Number(input.amount) > Number(position.outstanding) + 0.005) {
+    if (Number(amount) > Number(position.outstanding) + 0.005) {
       throw new Error(
-        `payReimbursement: ${input.amount} is more than the ${position.outstanding} owed. There is ` +
+        `payReimbursement: ${amount} is more than the ${position.outstanding} owed. There is ` +
           'no account for a reimbursement overpayment to land in — check the amount.',
       );
     }
@@ -62,7 +64,7 @@ export async function payReimbursement(
       trx,
       actor.orgId,
       account,
-      Number(input.amount),
+      Number(amount),
       'payReimbursement',
     );
 
@@ -79,14 +81,14 @@ export async function payReimbursement(
         {
           accountCode: EXPENSE_FUNDING_ACCOUNTS.REIMBURSABLE_TO_EMPLOYEES,
           storeId: input.storeId,
-          debit: input.amount,
+          debit: amount,
           partyType: 'employee',
           partyId: input.employeeId,
         },
         {
           accountCode: account.glAccountCode,
           storeId: input.storeId,
-          credit: input.amount,
+          credit: amount,
           ...(account.glAccountCode === '1140'
             ? { partyType: 'money_account' as const, partyId: account.id }
             : {}),

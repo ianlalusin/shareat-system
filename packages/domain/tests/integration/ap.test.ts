@@ -987,3 +987,32 @@ describe('T-196 — voidInvoice branches on the child\'s status (a defect this t
     expect(original!.status).toBe('reversed');
   });
 });
+
+describe('DEF-272 — a sub-centavo amount is refused with a written sentence, not driver text', () => {
+  it('recordPayment refuses "0.004" for the payment amount itself — reached before the allocations check', async () => {
+    const f = await fixtureWithSupplier('def272-pay');
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        recordPayment(tx, f.manager, {
+          storeId: f.storeId, supplierId: f.supplierId,
+          businessDate: '2026-01-15', amount: '0.004', moneyAccountId: f.drawerId, allocations: [],
+        }),
+      ),
+    ).rejects.toThrow(/recordPayment: the amount.*"0\.004"/);
+  });
+
+  it('recordPayment refuses "0.004" for an ALLOCATION amount too — the per-line sibling of the same defect', async () => {
+    const f = await fixtureWithSupplier('def272-alloc');
+    const invoiceId = await verifiedInvoice(f, '3000.00');
+    const expenseId = (await creditExpense(f, invoiceId, '3000.00')).expenseId;
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        recordPayment(tx, f.manager, {
+          storeId: f.storeId, supplierId: f.supplierId, businessDate: '2026-01-15',
+          amount: '1000.00', moneyAccountId: f.drawerId,
+          allocations: [{ expenseId, amountApplied: '0.004' }],
+        }),
+      ),
+    ).rejects.toThrow(/recordPayment: the allocation for expense.*"0\.004"/);
+  });
+});

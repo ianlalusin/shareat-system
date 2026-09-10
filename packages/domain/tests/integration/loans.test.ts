@@ -380,3 +380,46 @@ describe('⛔ DEF-156 — reverseLoanEntry refuses an entry that is not this loa
     expect((await position(f)).disbursed).toBe('0.00');
   });
 });
+
+describe('DEF-272 — a sub-centavo amount is refused with a written sentence, not driver text', () => {
+  it('disburseLoan refuses "0.004" — a true bypass site (no money() call anywhere in the function before this fix)', async () => {
+    const f = await fixture('def272-disburse');
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        disburseLoan(tx, f.admin, { loanId: f.loanId, amount: '0.004', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
+      ),
+    ).rejects.toThrow(/disburseLoan: the amount.*"0\.004"/);
+  });
+
+  it('disburseLoan refuses "1.234" too', async () => {
+    const f = await fixture('def272-disburse-precision');
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        disburseLoan(tx, f.admin, { loanId: f.loanId, amount: '1.234', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
+      ),
+    ).rejects.toThrow(/"1\.234"/);
+  });
+
+  it('an ordinary disbursement still works, and the exact value reaches the row', async () => {
+    const f = await fixture('def272-disburse-happy');
+    await asOrg(f.orgId, (tx) =>
+      disburseLoan(tx, f.admin, { loanId: f.loanId, amount: '0.01', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
+    );
+    expect((await position(f)).disbursed).toBe('0.01');
+  });
+
+  // ⭐ Before this fix, recordLoanPayment already refused "0.004" — but with money()'s raw
+  // TypeError (`splitPayment({ payment: money(input.amount), ... })` called it unguarded), not a
+  // written sentence. The DB was never at risk here; the message was the defect.
+  it('recordLoanPayment refuses "0.004" with a written sentence, not money()\'s developer-facing TypeError', async () => {
+    const f = await fixture('def272-payment');
+    await asOrg(f.orgId, (tx) =>
+      disburseLoan(tx, f.admin, { loanId: f.loanId, amount: '200000.00', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
+    );
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        recordLoanPayment(tx, f.admin, { loanId: f.loanId, amount: '0.004', fromMoneyAccountId: f.safe, on: '2026-05-12' }),
+      ),
+    ).rejects.toThrow(/recordLoanPayment: the amount.*"0\.004"/);
+  });
+});

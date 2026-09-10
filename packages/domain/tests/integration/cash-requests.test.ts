@@ -518,3 +518,75 @@ describe('⛔ DEF-159 — a second float cannot be released while the first is u
     expect(result.entryId).toBeTruthy();
   });
 });
+
+describe('DEF-272 — a sub-centavo amount is refused with a written sentence, not driver text', () => {
+  it('createCashRequest refuses "0.004" — Number(x)>0 passed it, Postgres would round it to 0.00 and cash_requests_amount_positive_check would refuse the row', async () => {
+    const f = await fixture('def272-create');
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        createCashRequest(tx, f.staff, {
+          storeId: f.storeId, requestedFor: f.staffId, purpose: 'Run', amount: '0.004', on: '2026-01-05',
+        }),
+      ),
+    ).rejects.toThrow(/createCashRequest: the amount.*"0\.004"/);
+  });
+
+  it('createCashRequest refuses "1.234" too — the "quieter" defect DEF-272 also corrects for: three decimal places silently rounded away', async () => {
+    const f = await fixture('def272-precision');
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        createCashRequest(tx, f.staff, {
+          storeId: f.storeId, requestedFor: f.staffId, purpose: 'Run', amount: '1.234', on: '2026-01-05',
+        }),
+      ),
+    ).rejects.toThrow(/"1\.234"/);
+  });
+
+  it('an ordinary amount still works, and the EXACT parsed value is what reaches the row', async () => {
+    const f = await fixture('def272-happy');
+    const req = await asOrg(f.orgId, (tx) =>
+      createCashRequest(tx, f.staff, {
+        storeId: f.storeId, requestedFor: f.staffId, purpose: 'Run', amount: '0.01', on: '2026-01-05',
+      }),
+    );
+    const row = await asOrg(f.orgId, (tx) => cashRequestsRepo.getById(tx, f.orgId, req.id));
+    expect(row!.requestedAmount).toBe('0.01');
+  });
+
+  it('decideCashRequest (approve) refuses "0.004" the same way', async () => {
+    const f = await fixture('def272-approve');
+    const req = await asOrg(f.orgId, (tx) =>
+      createCashRequest(tx, f.staff, {
+        storeId: f.storeId, requestedFor: f.staffId, purpose: 'Run', amount: '500.00', on: '2026-01-05',
+      }),
+    );
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        decideCashRequest(tx, f.manager, { requestId: req.id, decision: 'approve', amount: '0.004' }),
+      ),
+    ).rejects.toThrow(/decideCashRequest: the approved amount.*"0\.004"/);
+  });
+
+  // ⭐ Found by reading releaseCashRequest fully, NOT by the mechanical shape scanner — its guard is
+  // `Number(input.amount) > Number(req.approvedAmount ?? 0)`, a comparison against another value,
+  // not against a literal `0`, so it never matched the scanner's `Number(x) <op> 0` shape at all.
+  // See money-positivity-guard.test.ts's header for this stated as a permanent blind spot.
+  it('releaseCashRequest refuses "0.004" too — would otherwise post a 0.00/0.00 pair and trip journal_lines_exactly_one_side_check', async () => {
+    const f = await fixture('def272-release');
+    const req = await asOrg(f.orgId, (tx) =>
+      createCashRequest(tx, f.staff, {
+        storeId: f.storeId, requestedFor: f.staffId, purpose: 'Run', amount: '500.00', on: '2026-01-05',
+      }),
+    );
+    await asOrg(f.orgId, (tx) =>
+      decideCashRequest(tx, f.manager, { requestId: req.id, decision: 'approve', amount: '500.00' }),
+    );
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        releaseCashRequest(tx, f.manager, {
+          requestId: req.id, amount: '0.004', fromMoneyAccountId: f.till, on: '2026-01-05',
+        }),
+      ),
+    ).rejects.toThrow(/releaseCashRequest: the amount.*"0\.004"/);
+  });
+});

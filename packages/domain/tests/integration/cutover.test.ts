@@ -469,3 +469,46 @@ describe('the opening balances', () => {
     ).rejects.toThrow(/no opening figures to post/);
   });
 });
+
+describe('DEF-272 — a sub-centavo amount is refused with a written sentence, not driver text', () => {
+  const DATE = '2027-01-01';
+
+  // ⭐ Found by the shape scanner, not in the T-260 spec's original known-sites table — and a real
+  // instance: before the fix, "1.234" silently became "1.23" via `.toFixed(2)` on the way into the
+  // journal lines, with nothing refusing it (no `Number(x)<=0` bypass involved at all — the guard
+  // was `!(amount > 0)` on a variable, not a literal comparison the old census could spot).
+  it('addOpeningFigure refuses "0.004"', async () => {
+    const f = await fixture('def272-open');
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        addOpeningFigure(tx, f.admin, {
+          accountCode: '1110', storeId: f.storeId, direction: 'debit', amount: '0.004', entryDate: DATE,
+        }),
+      ),
+    ).rejects.toThrow(/addOpeningFigure: the amount.*"0\.004"/);
+  });
+
+  it('addOpeningFigure refuses "1.234" — previously silently truncated to "1.23" via toFixed(2)', async () => {
+    const f = await fixture('def272-precision');
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        addOpeningFigure(tx, f.admin, {
+          accountCode: '1110', storeId: f.storeId, direction: 'debit', amount: '1.234', entryDate: DATE,
+        }),
+      ),
+    ).rejects.toThrow(/"1\.234"/);
+  });
+
+  it('an ordinary figure still works, and the exact value posts on both legs', async () => {
+    const f = await fixture('def272-happy');
+    const { entryId } = await asOrg(f.orgId, (tx) =>
+      addOpeningFigure(tx, f.admin, {
+        accountCode: '1110', storeId: f.storeId, direction: 'debit', amount: '0.01', entryDate: DATE,
+      }),
+    );
+    const [row] = await sql<{ debit: string }[]>`
+      select debit::text from journal_lines where entry_id = ${entryId} order by debit desc limit 1
+    `;
+    expect(row!.debit).toBe('0.01');
+  });
+});

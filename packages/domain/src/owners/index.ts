@@ -19,6 +19,7 @@ import { authorize, type Actor } from '@shareat/auth';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { checkDraw } from '../money-accounts/overdraft';
+import { parseMoneyInput } from '../shared/money-input';
 
 export const CAPITAL_CODE = '3100';
 export const DRAWINGS_CODE = '3200';
@@ -72,7 +73,10 @@ export async function createOwner(
     // a daily operation — the same reasoning that made renaming a money account admin-only.
     await authorize(trx, actor, 'manage_chart_of_accounts', { storeId: input.storeId });
 
-    const limit = input.drawingLimit ?? null;
+    const limit =
+      input.drawingLimit != null
+        ? parseMoneyInput(input.drawingLimit, 'createOwner: the drawing limit')
+        : null;
     const period = input.drawingLimitPeriod ?? null;
     // ⛔ Half a rule is not a rule — DEF-071 is what the second half looks like in production.
     if ((limit === null) !== (period === null)) {
@@ -116,7 +120,8 @@ export async function recordContribution(
     if (!owner) throw new Error(`recordContribution: owner ${input.ownerId} does not exist.`);
     await authorize(trx, actor, 'transfer_funds', { storeId: owner.storeId });
 
-    if (Number(input.amount) <= 0) {
+    const amount = parseMoneyInput(input.amount, 'recordContribution: the amount');
+    if (Number(amount) <= 0) {
       throw new Error('recordContribution: a contribution has to be greater than zero.');
     }
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.intoMoneyAccountId);
@@ -134,14 +139,14 @@ export async function recordContribution(
       entryDate: input.on,
       sourceType: 'capital_contribution',
       sourceId: owner.id,
-      idempotencyKey: `owner:${owner.id}:contribution:${input.on}:${Number(input.amount).toFixed(2)}`,
+      idempotencyKey: `owner:${owner.id}:contribution:${input.on}:${amount}`,
       memo: input.memo?.trim() || 'Capital contribution',
       postedBy: actor.personId,
       lines: [
         {
           accountCode: account.glAccountCode,
           storeId: owner.storeId,
-          debit: input.amount,
+          debit: amount,
           ...(account.glAccountCode === '1140'
             ? { partyType: 'money_account' as const, partyId: account.id }
             : {}),
@@ -149,7 +154,7 @@ export async function recordContribution(
         {
           accountCode: CAPITAL_CODE,
           storeId: owner.storeId,
-          credit: input.amount,
+          credit: amount,
           partyType: 'owner' as const,
           partyId: owner.id,
         },
