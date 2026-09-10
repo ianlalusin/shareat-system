@@ -50,7 +50,7 @@ config({ path: '.env.local' });
 
 import { isValidPinFormat } from '../packages/auth/src/credentials';
 import { SUPER_ADMIN_ONLY_CAPABILITIES } from '../packages/auth/src/capabilities';
-import { closeDb, transaction } from '../packages/db/src/client';
+import { closeDb, systemTransaction, transaction } from '../packages/db/src/client';
 import * as organizationsRepo from '../packages/db/src/repo/organizations';
 // ⭐ T-232 slice 2 — ONE function, two callers. `/setup` calls exactly this, so the screen and the
 // CLI cannot drift: adding a step to first-run setup is adding it to both, or to neither.
@@ -208,7 +208,7 @@ async function main(): Promise<void> {
   // ⚠️ No `firebaseUid`: the CLI has no verified browser identity to link, and inventing one is
   // the thing `signInWithFirebase` refuses — *"a login is not an introduction."* The person signs
   // in with the PIN below; linking an email account later is `/admin/users`' job.
-  const result = await transaction((tx) =>
+  const result = await systemTransaction((tx) =>
     bootstrapOrganization(tx, {
       code: args.code,
       name: args.name,

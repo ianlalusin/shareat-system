@@ -25,6 +25,7 @@ import {
   APP_ROLE,
   schedulerRepo,
   storesRepo,
+  systemTransaction,
   transaction,
   withOrgPrincipal,
   type SchedulerFailure,
@@ -126,7 +127,7 @@ export async function runJobForOrg(
   // never opened" are different facts with different fixes, and there is no row to carry a flag.
   let runId: string;
   try {
-    runId = await transaction((tx) => schedulerRepo.startRun(tx, { orgId: org.id, job, period, trigger }));
+    runId = await systemTransaction((tx) => schedulerRepo.startRun(tx, { orgId: org.id, job, period, trigger }));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return {
@@ -154,7 +155,7 @@ export async function runJobForOrg(
   // adds the error: reporting `posted: 0` here would be the exact lie `runDepreciationJob`'s own
   // comment rails against, wearing its other face. The row is left unfinished for `unfinishedRuns`.
   try {
-    await transaction((tx) =>
+    await systemTransaction((tx) =>
       schedulerRepo.finishRun(tx, runId, {
         postedCount: result.posted,
         skippedCount: result.skipped,
@@ -178,7 +179,7 @@ export async function runJobForOrg(
  *  nothing. */
 async function closeFailedRun(runId: string, message: string): Promise<string> {
   try {
-    await transaction((tx) => schedulerRepo.failRun(tx, runId, message));
+    await systemTransaction((tx) => schedulerRepo.failRun(tx, runId, message));
     return '';
   } catch (err) {
     const note = err instanceof Error ? err.message : String(err);
@@ -201,6 +202,16 @@ export function lastCompletedPeriod(today = new Date()): string {
 }
 
 /**
+ * The scheduler's one way to enumerate organisations to run a job for. Centralised so
+ * `systemTransaction` has exactly one call site to reach through here, not seven independently
+ * editable ones — DEF-211's "centralise the idiom" instinct, applied to keep Contract 1's closed
+ * caller list actually closed rather than aspirational.
+ */
+export async function listOrgsToRun(orgId?: string) {
+  return systemTransaction((tx) => schedulerRepo.listOrgsToRun(tx, orgId));
+}
+
+/**
  * Runs both jobs for every org, recording each one.
  *
  * ⚠️ **One org failing must never stop the next**, and neither may one asset stop another — the
@@ -211,7 +222,7 @@ export async function runMonthEnd(options: MonthEndOptions = {}): Promise<MonthE
   const period = options.period ?? lastCompletedPeriod();
   const trigger = options.trigger ?? 'cron';
 
-  const orgs = await transaction((tx) => schedulerRepo.listOrgsToRun(tx, options.orgId));
+  const orgs = await listOrgsToRun(options.orgId);
   const outcomes: JobOutcome[] = [];
 
   for (const org of orgs) {
@@ -302,7 +313,7 @@ export async function runAttendanceSweep(
   // next, and there is deliberately no unique key on (org, job, period).
   const period = new Date(nowMs + 8 * 3_600_000).toISOString().slice(0, 7);
 
-  const orgs = await transaction((tx) => schedulerRepo.listOrgsToRun(tx, options.orgId));
+  const orgs = await listOrgsToRun(options.orgId);
   const outcomes: JobOutcome[] = [];
 
   for (const org of orgs) {
@@ -407,7 +418,7 @@ export async function runFirestoreRelay(
   // records the YYYY-MM this run happened IN (PH local, UTC+8), not a period being closed.
   const period = new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 7);
 
-  const orgs = await transaction((tx) => schedulerRepo.listOrgsToRun(tx, options.orgId));
+  const orgs = await listOrgsToRun(options.orgId);
   const outcomes: JobOutcome[] = [];
 
   for (const org of orgs) {
@@ -599,7 +610,7 @@ export async function runOrderWastageBackstopSweep(
   const nowMs = options.nowMs ?? Date.now();
   const period = new Date(nowMs + 8 * 3_600_000).toISOString().slice(0, 7);
 
-  const orgs = await transaction((tx) => schedulerRepo.listOrgsToRun(tx, options.orgId));
+  const orgs = await listOrgsToRun(options.orgId);
   const outcomes: JobOutcome[] = [];
   for (const org of orgs) {
     outcomes.push(await runOrderWastageBackstopForOrg(org, period, trigger, nowMs));
@@ -653,7 +664,7 @@ export async function runFindingObservation(
   const nowMs = options.nowMs ?? Date.now();
   const period = new Date(nowMs + 8 * 3_600_000).toISOString().slice(0, 7);
 
-  const orgs = await transaction((tx) => schedulerRepo.listOrgsToRun(tx, options.orgId));
+  const orgs = await listOrgsToRun(options.orgId);
   const outcomes: JobOutcome[] = [];
 
   // ⛔ One org at a time, and one org failing must never stop the next — T-140 rule 1.
@@ -740,7 +751,7 @@ export async function runBudgetReissue(
   const period = manila.slice(0, 7);
   const currentPeriodKey = period.replace('-', '');
 
-  const orgs = await transaction((tx) => schedulerRepo.listOrgsToRun(tx, options.orgId));
+  const orgs = await listOrgsToRun(options.orgId);
   const outcomes: JobOutcome[] = [];
 
   for (const org of orgs) {

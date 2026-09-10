@@ -52,6 +52,17 @@ const serverSchema = z.object({
   DATABASE_POOL_MAX: z.coerce.number().int().positive().max(100).default(10),
 
   /**
+   * The SYSTEM connection `systemTransaction()` uses (T-251a, bible §13 row 185) — optional,
+   * same postgres:// shape as `DATABASE_URL`. Unset in every environment this task touches (local
+   * dev, CI, every lane DB); `systemTransaction()` falls back to `DATABASE_URL` when absent, so
+   * this variable existing changes nothing until something explicitly sets it.
+   */
+  SYSTEM_DATABASE_URL: blankAsAbsent().refine(
+    (v) => v === undefined || v.startsWith('postgres://') || v.startsWith('postgresql://'),
+    { message: 'must be a postgres:// or postgresql:// connection string' },
+  ),
+
+  /**
    * Firebase Admin credentials — the IdP side of §7.1.
    *
    * REQUIRED IN PRODUCTION, optional in development/test until the auth bridge

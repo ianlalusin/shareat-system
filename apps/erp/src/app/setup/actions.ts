@@ -28,7 +28,7 @@
  * inventing a new one.
  */
 import { redirect } from 'next/navigation';
-import { transaction } from '@shareat/db';
+import { systemTransaction } from '@shareat/db';
 import { bootstrapOrganization } from '@shareat/domain';
 import { signInWithFirebase } from '@shareat/auth';
 import {
@@ -68,7 +68,7 @@ export async function createFirstRunAction(formData: FormData): Promise<void> {
   try {
     // 2. Everything — org, chart, categories, person, role, grants, store, room, store scope,
     //    PIN and the firebase credential — in ONE transaction, or none of it.
-    await transaction((tx) =>
+    await systemTransaction((tx) =>
       bootstrapOrganization(tx, {
         code: str(formData, 'code'),
         name: str(formData, 'name'),

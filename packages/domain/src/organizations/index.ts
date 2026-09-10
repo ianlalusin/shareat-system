@@ -26,17 +26,22 @@
  * `person_roles`, which is keyed by `org_id`, so a gate here could never pass — not "does not yet",
  * but *cannot*. **Do not "fix" this by adding one.**
  *
- * ⭐ **The gate is the runner, not the caller.** `scripts/bootstrap-org.ts` is the only caller and it
- * is not reachable from any request handler — no route imports this module, and nothing here takes
- * an `Actor` that a request could supply.
+ * ⭐ **The gate is the runner, not the caller.** `bootstrapOrganization` takes an already-open `Tx`
+ * from its caller and never opens one itself. Its two callers, `scripts/bootstrap-org.ts` and
+ * `apps/erp/src/app/setup/actions.ts`, are the ones that do, and neither is reachable from any other
+ * request handler.
  *
- * ⚠️ **Stated precisely, because the spec's wording invites a wrong reading.** The script does not
- * *call* `applyPrincipal({ kind: 'system' })`; it opens a plain `transaction()`, which connects as
- * the owner role, for which RLS does not apply. That is the same posture every scheduler script
- * already runs under, and it is what `packages/db/src/rls/principal.ts:38` describes a `system`
- * principal as doing — *"deliberately does nothing: it stays as the connecting (owner) role... and
- * it is why a `system` principal must never be reachable from a request handler."* The effect is
- * identical; the call is simply not made, here or anywhere else in the codebase.
+ * ⚠️ **Stated precisely, because a stale mechanism description outlives the mechanism (DEF-217).**
+ * Both callers open `systemTransaction()` (T-251a, `packages/db/src/client.ts`), not a bare
+ * `transaction()`. With `SYSTEM_DATABASE_URL` unset — every environment this task touches — that is
+ * byte-for-byte the same connection as before: owner role, RLS not applied, nothing here behaves
+ * differently. What changed is that the authority this function runs under now has a name and a
+ * closed, enumerable caller list instead of being wherever someone happened to write `transaction()`.
+ * This is bible §13 row 185's named exception: first-run setup is the one path that opens an
+ * owner-role transaction with no principal, because there is no principal before the first
+ * organisation exists — not a precedent, and closed forever the moment that organisation is created.
+ * `systemTransaction()`'s own doc comment names both callers by name;
+ * `tests/unit/system-transaction-callers.test.ts` fails the build if a third one appears.
  */
 import {
   organizationsRepo,

@@ -1,7 +1,8 @@
 # T-251a — make the "system" principal real: `systemTransaction()`
 
-> **Status: SPEC — orchestrator has pre-approved building this once `[E] SPEC` for the split is
-> sent. Lane E, 2026-09-09.** Written in plan mode. Split off T-251 (DEF-218) after the
+> **Status: ✅ BUILT AND SHIPPED 2026-09-10 (lane E, Sonnet). Gates re-run independently by the
+> orchestrator on the shared database: typecheck 0, unit 83 files/1191 passed, six integration
+> suites 77/77 on `shareat_test`, build 0.** Spec written in plan mode 2026-09-09. Split off T-251 (DEF-218) after the
 > orchestrator agreed the naive harness-role swap would silently break the scheduler and
 > organisation bootstrap. See `docs/tasks/251b-integration-harness-role.md` for the sequel (the
 > actual harness role flip) and the full DEF-218 analysis this task's motivation comes from — not

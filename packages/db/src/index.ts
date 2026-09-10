@@ -12,6 +12,21 @@
  */
 export * as schema from '../schema';
 export { getSql, getDb, closeDb, transaction } from './client';
+/**
+ * `systemTransaction` ONLY, deliberately — not `getSystemSql`/`getSystemDb`/`closeSystemDb`
+ * alongside it, and NOT for symmetry with the line above (T-251a, bible §13 row 185).
+ *
+ * The guard at `tests/unit/system-transaction-callers.test.ts` closes the caller list by
+ * matching `systemTransaction(`. Re-exporting the raw accessors here would open a path to the
+ * same authority that the guard does not match — a hole straight through an import-only guard,
+ * which is exactly the finding T-231 contract 5 recorded. Today that costs nothing because both
+ * connections resolve to `DATABASE_URL`; the moment `SYSTEM_DATABASE_URL` is set (T-251b) it
+ * would be a real privilege bypass with no test watching it.
+ *
+ * Scripts and tests that genuinely need `closeSystemDb` import it from `./client` directly, the
+ * way `scripts/bootstrap-org.ts` already imports `closeDb`/`transaction`.
+ */
+export { systemTransaction } from './client';
 export type { Tx, Executor, Database } from './client';
 /** Asset categories — the const list and its derived union. Exported here rather than reached
  *  through a schema subpath so `packages/domain` has one import surface for the db package. */

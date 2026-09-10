@@ -45,17 +45,15 @@
  * cannot be approved until the period opens, in the one place that already knows how to say so.
  */
 import {
-  schedulerRepo,
   recurringExpensesRepo,
   moneyAccountsRepo,
-  transaction,
   withOrgPrincipal,
   type SchedulerFailure,
 } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { createExpense } from '../expenses';
 import { recordInvoice } from '../ap';
-import { runJobForOrg, type JobOutcome } from '../scheduler';
+import { runJobForOrg, listOrgsToRun, type JobOutcome } from '../scheduler';
 import { nextDueDate } from './recurrence';
 import type { ExpensePaymentMethod } from '../expenses/routing';
 
@@ -98,7 +96,7 @@ export async function runRecurringExpenses(
   // own, so it records the Manila month it RAN in — the same choice every daily job here makes.
   const period = today.slice(0, 7);
 
-  const orgs = await transaction((tx) => schedulerRepo.listOrgsToRun(tx, options.orgId));
+  const orgs = await listOrgsToRun(options.orgId);
   const outcomes: JobOutcome[] = [];
 
   for (const org of orgs) {

@@ -24,6 +24,8 @@ type Sql = ReturnType<typeof postgres>;
 const globalForDb = globalThis as unknown as {
   __shareat_sql?: Sql;
   __shareat_db?: ReturnType<typeof drizzle<typeof schema>>;
+  __shareat_system_sql?: Sql;
+  __shareat_system_db?: ReturnType<typeof drizzle<typeof schema>>;
 };
 
 function createClient(): Sql {
@@ -87,5 +89,66 @@ export async function closeDb(): Promise<void> {
     await globalForDb.__shareat_sql.end({ timeout: 5 });
     globalForDb.__shareat_sql = undefined;
     globalForDb.__shareat_db = undefined;
+  }
+}
+
+function createSystemClient(): Sql {
+  const { SYSTEM_DATABASE_URL, DATABASE_URL, DATABASE_POOL_MAX, NODE_ENV } = env();
+  return postgres(SYSTEM_DATABASE_URL ?? DATABASE_URL, {
+    max: DATABASE_POOL_MAX,
+    idle_timeout: 20,
+    connect_timeout: 10,
+    ssl: NODE_ENV === 'production' ? 'require' : false,
+    onnotice: () => {},
+  });
+}
+
+/** The system connection's raw postgres.js client. Prefer `systemTransaction`. */
+export function getSystemSql(): Sql {
+  if (!globalForDb.__shareat_system_sql) {
+    globalForDb.__shareat_system_sql = createSystemClient();
+  }
+  return globalForDb.__shareat_system_sql;
+}
+
+export function getSystemDb() {
+  if (!globalForDb.__shareat_system_db) {
+    globalForDb.__shareat_system_db = drizzle(getSystemSql(), { schema });
+  }
+  return globalForDb.__shareat_system_db;
+}
+
+/**
+ * Runs `fn` on the SYSTEM connection — bible §13 row 185. Reserved for the enumerable set of
+ * operations that must see or act across every organisation, because no single org's principal
+ * can express them:
+ *
+ *   - `runJobForOrg` / `closeFailedRun` (scheduler bookkeeping — a run row exists before any
+ *     per-org principal is meaningful to it)
+ *   - `listOrgsToRun` (the scheduler must enumerate every org before it can scope to one)
+ *   - `bootstrapOrganization`'s two callers: `scripts/bootstrap-org.ts` and
+ *     `apps/erp/src/app/setup/actions.ts` (row 185's named exception — there is no principal
+ *     before the first organisation exists)
+ *
+ * ⛔ **Not a general escape hatch, and not a precedent for a sixth caller.** If new code thinks
+ * it needs this, that is a design question for whoever is adding it — raise it, don't reach for
+ * this function by analogy. `tests/unit/system-transaction-callers.test.ts` fails the build if
+ * any file outside the closed caller list calls it.
+ *
+ * ⚠️ With `SYSTEM_DATABASE_URL` unset, this is byte-for-byte `transaction()` — same connection,
+ * same credentials. It diverges only where something explicitly sets that variable (the
+ * integration test harness, per `docs/tasks/251-def-218-integration-harness-role.md` — not
+ * production, not local dev, until a separate, later decision says otherwise).
+ */
+export async function systemTransaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return getSystemDb().transaction(fn);
+}
+
+/** Scripts and tests only, mirrors closeDb(). */
+export async function closeSystemDb(): Promise<void> {
+  if (globalForDb.__shareat_system_sql) {
+    await globalForDb.__shareat_system_sql.end({ timeout: 5 });
+    globalForDb.__shareat_system_sql = undefined;
+    globalForDb.__shareat_system_db = undefined;
   }
 }
