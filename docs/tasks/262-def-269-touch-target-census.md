@@ -744,7 +744,7 @@ write your definition down where a reviewer can disagree with it.
 
 ## 6.4 ⛔ 151 CANDIDATES IS NOT 151 DEFECTS. DO NOT FIX THEM.
 
-**Your job is to build the guard, not to fix the 155.** Read this twice before touching a page file.
+**Your job is to build the guard, not to fix the 151.** Read this twice before touching a page file.
 
 The rendered pass (§6.5) measured four pages at 390px and found **23 undersized controls, of which
 23 were inline and 0 were standalone.** WCAG 2.5.8 carries an **inline exception** for a target
@@ -822,8 +822,8 @@ undercounted every previous census.
 
 ## 6.9 Done when
 
-typecheck clean · the new test runs and is **red in a way that names the 155 with their modelled
-heights and the 82 unresolved with their reason** · the two model fixtures in §6.2 step 4 pass as
+typecheck clean · the new test runs and is **red in a way that names the 151 with their modelled
+heights and the 78 unresolved with their reason** · the two model fixtures in §6.2 step 4 pass as
 assertions · both non-zero controls pass · `TARGET_FILES` untouched · `npm run build` succeeds with
 the dev server stopped · self-reviewed line by line · report ends with a `FOR IAN` block.
 
