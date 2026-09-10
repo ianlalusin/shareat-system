@@ -62,6 +62,25 @@ this reason. This is a five-minute design note now and a shipped, self-admitted 
 so it is a **requirement of this ADR**, not an implementation detail: the entry carries a
 distinct `source_type` (e.g. `year_close`), and every reporting view is written knowing it.
 
+### ⚠️ PARTLY SUPERSEDED 2026-09-11 — read this before acting on the section below
+
+**Ian ratified a narrow override on 2026-09-11 (bible §13 row 193, DEF-284, T-264 slice 3):
+`admin` and `super_admin` may post into a CLOSED period through a transaction-local exemption, with
+a typed reason and an audit row.**
+
+⛔ **What that changes, and what it does NOT:**
+
+| | |
+|---|---|
+| **Still true** | **Reopening is not built.** Nothing flips `status` from `closed` back to `open`. The section below stands as written for *reopening* |
+| **Superseded** | The blanket conclusion that there is exactly ONE correction path for a closed period. There are now two: the prior-period adjustment (unchanged, still the default) and the narrow exemption |
+| **Why the change is not a reversal of the reasoning** | This ADR rejected an *admin-only, most-recent-only, mandatory-reason reopen*. The exemption is smaller than that: the period stays closed, one entry passes, and the flag dies with the transaction. ADR-006 never evaluated that option because the one in front of it was broader |
+
+⚠️ **Neither DEF-284 nor `docs/tasks/264-*.md` cited this ADR when they were written.** The conflict
+was found on 2026-09-11 by grepping `fiscal_periods` across the repo. If you are here because you
+are building the override, read bible row 193 first — it carries the constraints (fail-closed GUC,
+role checked by `authorize()` before the flag is set, no TypeScript reimplementation of the trigger).
+
 ### Reopening — NOT BUILT
 
 The research recommended a guarded reopen path (admin-only, most-recent-only, mandatory reason).

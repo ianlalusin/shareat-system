@@ -75,21 +75,51 @@ the second one. ⛔ **But they aim at the same outcome — an entry landing in a
 ADR-006's stated reason for never-reopen was that the prior-period adjustment is *the only* path.
 An override is a second path.** Two ratified decisions cannot both be the rule here.
 
-**⛔ DO NOT BUILD SLICE 3 UNTIL IAN SAYS WHICH GOVERNS.** The three outcomes:
+**✅ RESOLVED BY IAN, 2026-09-11 — SLICE 3 IS UNBLOCKED. The new decision wins.**
 
-1. **The override supersedes ADR-006's never-reopen stance** — then ADR-006 gets an amendment
-   recording the supersession and why, and slice 3 proceeds as written.
-2. **ADR-006 governs** — then slice 3 is not built at all, and the answer to "I must fix a closed
-   month" stays `reverseEntry` + a prior-period adjustment carried forward, which is already built.
-3. **Both stand, because they are different mechanisms** — then that distinction is written into
-   ADR-006 explicitly, so the next reader cannot conclude either one alone.
+> Ian, asked directly whether the August ADR or the September ruling governs:
+> ***“new one wins admin and super admin”***
 
-⚠️ This is a decision-level conflict between two ratified records, not a spec defect a lane can
-route around. Leaving it unresolved is how a lane faithfully builds the wrong half.
+Recorded in **`PROJECT_BIBLE.md` §13 row 193**, and `docs/decisions/ADR-006-period-close.md` now
+carries a supersession note above its *Reopening — NOT BUILT* section so the next reader cannot
+find the old conclusion without the new one.
 
-⭐ **Slices 1 and 2 are NOT blocked by this.** Slice 1 (create periods) fixes a live failure and
-touches none of it. Slice 2 (close a period) is ADR-006's own design and is reinforced, not
-contradicted, by it.
+⛔ **What is superseded is NARROW, and over-reading it is the risk now:**
+
+| | |
+|---|---|
+| **Sanctioned** | A **transaction-local, per-posting exemption** for `admin` and `super_admin`. The period stays `closed`; one authorised entry passes; the flag dies with the transaction |
+| **Still NOT built, and not asked about** | **Reopening** — flipping `status` from `closed` back to `open`. ADR-006's rejection of that stands. Do not build a reopen button, a status-revert action, or an admin screen that sets a closed period back to open |
+| **Unchanged** | The prior-period adjustment via `reverseEntry` remains the DEFAULT correction path. The exemption is the exception, not the new normal |
+| **Unchanged** | Reversals of entries in already-closed periods are legitimate and already handled by migration `0003` lines 202-208. Your override must not disturb or duplicate that path |
+
+### The capability-vs-role question, DECIDED — orchestrator, since it is a HOW
+
+Ian named **roles**; this codebase deliberately expresses these as **capability** questions
+(`sales-days/create.ts:258` says so in terms). Both are satisfiable at once, so:
+
+⭐ **Add a NEW capability — `override_period_lock` — granted to `super_admin` and `admin` only,
+`false` for `manager` and `staff`.** Check that, not the role string.
+
+- It preserves Ian's WHAT exactly: those two roles and no others.
+- It keeps `packages/auth/src/capabilities.ts` the single readable answer to *“who may do what”*,
+  rather than hiding one rule in a role comparison somewhere else.
+- ⛔ **Do NOT reuse `close_period`.** That capability is granted to `manager` too
+  (`capabilities.ts:682`, and ADR-006 §7.4 deliberately gives managers the close). Reusing it would
+  silently hand the override to every manager — exactly the widening Ian did not authorise.
+- ⚠️ A new capability is a schema-adjacent change: it touches the capability list and the matrix,
+  and it may need a migration for existing grants. **Ask me before writing one.**
+
+### Non-negotiables for slice 3, from bible row 193
+
+- ⛔ **Reuse migration `0005`'s transaction-local GUC idiom**, `coalesce(current_setting('app.period_override', true), '') = 'on'`, so an **unset flag reads as NOT exempt** and any bug, crash or forgotten line fails **CLOSED**. Do not invent a second mechanism.
+- ⛔ Set the flag **only after `authorize()` has confirmed the capability** — never from a caller-supplied parameter (bible §7.1, landmine 17).
+- ⛔ **Do not implement the override in TypeScript around the trigger** (RULES §6 item 3 / bible §15.11). The database keeps enforcing the period rule; the app only decides who may raise the flag.
+- ⛔ **Watch it fail first**: an override attempt by a `manager` must be REFUSED by the database, and that refusal must be observed before the exemption is wired — not reasoned about.
+- ⭐ An override without an audit row is a hole with better manners. Record who, which period, which entry, and **why** as a typed reason. Check whether an existing audit table fits before adding one.
+
+⭐ **Slices 1 and 2 were never blocked by this.** Slice 1 fixes a live failure; slice 2 is ADR-006's
+own design and is reinforced, not contradicted, by it.
 
 ### ⚠️ One citation to correct while you are here
 
