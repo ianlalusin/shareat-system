@@ -129,6 +129,10 @@ export async function listFindings(
     // screen of whoever posted; a screen message dies with the request. This is the persisted
     // consequence: below threshold, at a store that CAN order, with nothing on order for it.
     ...(await findingsRepo.lowStockOrderNotProposed(tx, orgId)),
+    // ⭐ T-264 / DEF-284 slice 1 — periods are seeded a year at a time, on purpose (lazy/scheduled
+    // creation are both rejected traps, see the task spec); this is what stops that from becoming
+    // a silent outage twelve months out instead of today's.
+    ...(await findingsRepo.fiscalPeriodRunwayLow(tx, orgId)),
   ];
 
   const acks = await findingsRepo.liveAcknowledgements(tx, orgId);

@@ -286,3 +286,7 @@ export * as recurringExpensesRepo from './repo/recurring-expenses';
 // changing how it reaches the driver.
 export * as organizationsRepo from './repo/organizations';
 export type { OrganizationRow, ReferenceDataSeeded } from './repo/organizations';
+
+// T-264 / DEF-284 slice 1 — the fiscal_periods writer that never existed until now.
+export * as fiscalPeriodsRepo from './repo/fiscal-periods';
+export type { SeedCalendarMonthsInput, SeedCalendarMonthsResult } from './repo/fiscal-periods';

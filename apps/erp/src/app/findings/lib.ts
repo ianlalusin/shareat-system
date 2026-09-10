@@ -95,6 +95,7 @@ export const KIND_LABEL: Record<string, string> = {
   tillFloatOffTarget: 'Till float off its target',
   tillCountVarianceOpen: 'Counted variance on a closed shift',
   itemHasNoThreshold: 'Items with no reorder threshold',
+  fiscalPeriodRunwayLow: 'Fiscal period coverage running low',
 };
 
 /**

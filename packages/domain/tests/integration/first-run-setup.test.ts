@@ -53,7 +53,7 @@ beforeEach(async () => {
   await sql`
     truncate table sessions, person_credentials, person_store_scope, person_grants, person_roles,
       stock_locations, location_types, sales_channels, stores, persons,
-      expense_categories, accounts, organizations
+      fiscal_periods, expense_categories, accounts, organizations
       restart identity cascade`;
 });
 
@@ -67,11 +67,14 @@ const countOf = async (table: string): Promise<number> => {
   return row!.n;
 };
 
-/** The eleven places a first run writes. Case 2 asserts every one of them is zero after a rollback. */
+/** The twelve places a first run writes. Case 2 asserts every one of them is zero after a
+ *  rollback. ⭐ T-264/DEF-284 slice 1 added `fiscal_periods` — a first run was eleven places
+ *  before this task, and did not create a single period; see that task for why. */
 const ALL_TABLES = [
   'organizations',
   'accounts',
   'expense_categories',
+  'fiscal_periods',
   'persons',
   'person_roles',
   'person_grants',
@@ -114,6 +117,26 @@ describe('T-232 case 1 — ⭐ empty database to a signed-in owner', () => {
     expect(result.accountsSeeded).toBe(CHART_OF_ACCOUNTS.length);
     expect(result.categoriesSeeded).toBe(EXPENSE_CATEGORY_SEED.length);
 
+    // ⭐ T-264/DEF-284 slice 1 — the seam this task exists to close. Before it, a fresh org had
+    // zero fiscal periods and `postEntry` refused its very first entry, in every environment
+    // except a test or `dev-seed-inventory.ts`'s hand-rolled row. Proved against real Postgres,
+    // not reasoned about: 12 months, all open, genuinely adjacent with no gap and no overlap —
+    // the exact property the table's inclusive-both-ends EXCLUDE constraint would refuse if the
+    // day-0-of-next-month arithmetic were off by one.
+    expect(result.periodsSeeded).toBe(12);
+    const periods = await sql<{ starts_on: string; ends_on: string; status: string }[]>`
+      select starts_on::text, ends_on::text, status from fiscal_periods
+      where org_id = ${result.orgId} order by starts_on`;
+    expect(periods).toHaveLength(12);
+    expect(periods.every((p) => p.status === 'open')).toBe(true);
+    for (let i = 1; i < periods.length; i++) {
+      const prevEnd = new Date(periods[i - 1]!.ends_on);
+      const nextStart = new Date(periods[i]!.starts_on);
+      // Exactly one day apart — not the same day (would be an overlap the database should have
+      // refused) and not more than one (would be a gap `postEntry` would fall through).
+      expect(nextStart.getTime() - prevEnd.getTime()).toBe(24 * 3_600_000);
+    }
+
     // The person, their role, and the four grants that make them the owner.
     expect(result.personId).toBeTruthy();
     const role = await transaction((tx) => accessRepo.activeRoleForPerson(tx, result.personId, result.orgId));
@@ -152,7 +175,7 @@ describe('T-232 case 1 — ⭐ empty database to a signed-in owner', () => {
 // -------------------------------------------------------------------------------------
 
 describe('T-232 case 2 — ⭐ everything or nothing', () => {
-  it('a failure after the last step leaves NOTHING behind, in all eleven tables', async () => {
+  it('a failure after the last step leaves NOTHING behind, in all twelve tables', async () => {
     // ⛔ The failure is injected AFTER every step has run, which is stronger than failing part-way
     // through — the risk being excluded is a step that quietly ran on its own connection, and such
     // a step would survive this rollback and be counted below. A half-succeeded bootstrap is

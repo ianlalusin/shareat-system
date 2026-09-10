@@ -230,6 +230,75 @@ export async function periodicPostingsMissed(
   return out;
 }
 
+/**
+ * ⭐ T-264 / DEF-284 slice 1 — the mitigation for seeding periods a year at a time instead of
+ * forever: seeding without a warning just moves the outage twelve months out rather than removing
+ * it. Fires when the org's coverage is due to run out soon, or has already run out entirely.
+ *
+ * ⚠️ **Deliberately `soft`, not `hard`, in BOTH cases.** `closeReadiness` blocks the period close on
+ * any `hard` finding (this file, `listFindings`'s caller), and ADR-006 §7's close gates are a
+ * ratified, closed list — "the books do not add up" conditions, not "an admin has an errand." A
+ * short runway is squarely the second: the ledger is right, and something administrative is
+ * coming due. It must never block closing the CURRENT period. The zero-periods case is the same
+ * instrument at its extreme, not a different one — and it needs no `hard` escalation of its own,
+ * because an org with no periods already has every posting refused by `postEntry` itself, which is
+ * louder than any finding.
+ *
+ * ⚠️ `RUNWAY_WARNING_DAYS = 60` (~2 months), not the 15-day close window — this fires once a year,
+ * not once a month, and the cost of missing it is total (every future posting eventually refused),
+ * so the notice period is longer than a routine month-end nudge.
+ */
+const RUNWAY_WARNING_DAYS = 60;
+
+export async function fiscalPeriodRunwayLow(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
+  const [row] = (await tx.execute(sql`
+    select
+      (select max(ends_on) from fiscal_periods where org_id = ${orgId} and status = 'open')::text
+        as latest_end,
+      (select (max(ends_on) - ${MANILA_TODAY})::int from fiscal_periods
+        where org_id = ${orgId} and status = 'open') as days_remaining,
+      (select count(*)::int from fiscal_periods where org_id = ${orgId}) as total_periods
+  `)) as unknown as { latest_end: string | null; days_remaining: number | null; total_periods: number }[];
+
+  if (!row || row.latest_end === null) {
+    // ⚠️ Filtering the coverage question to `status = 'open'` is correct — `postEntry` needs an
+    // OPEN period, so open-only is the right measure of postable runway. But that means this
+    // branch also fires when an org HAS periods and every one of them is closed, which is a
+    // different fact with a different remedy than "no periods exist" — say which one is true
+    // rather than defaulting to the more alarming, possibly false, sentence. ⛔ Never suggest
+    // "reopen" as the fix: ADR-006 §7.1 never builds a reopen path. The remedy in both cases is
+    // the same one this whole detector points at — create (more) periods.
+    const totalPeriods = Number(row?.total_periods ?? 0);
+    const detail =
+      totalPeriods === 0
+        ? 'This organisation has no fiscal periods at all. Every posting is refused until periods ' +
+          'are created — this is more urgent than the finding severity suggests; see DEF-284.'
+        : `This organisation has ${totalPeriods} fiscal period(s), but none of them are open. ` +
+          'Every posting is refused until new periods are created — this is more urgent than the ' +
+          'finding severity suggests; see DEF-284.';
+    return [{
+      kind: 'fiscalPeriodRunwayLow',
+      key: 'fiscalPeriodRunwayLow',
+      storeId: null,
+      severity: 'soft',
+      detail,
+    }];
+  }
+
+  const daysRemaining = Number(row.days_remaining);
+  if (daysRemaining > RUNWAY_WARNING_DAYS) return [];
+
+  return [{
+    kind: 'fiscalPeriodRunwayLow',
+    key: 'fiscalPeriodRunwayLow',
+    storeId: null,
+    severity: 'soft',
+    detail:
+      `Fiscal period coverage runs out on ${row.latest_end} (${daysRemaining} day(s) from today). ` +
+      'Generate the next year of periods before then.',
+  }];
+}
+
 // -------------------------------------------------------------------------------------
 // T-152 — cash that is sitting somewhere it should not be
 // -------------------------------------------------------------------------------------

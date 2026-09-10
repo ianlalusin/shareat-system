@@ -69,6 +69,23 @@ async function fixture(hint: string) {
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 
+/**
+ * T-264 / DEF-284 slice 1 — gives an org enough FORWARD fiscal-period runway that
+ * `fiscalPeriodRunwayLow` (wired into every `listFindings` call from this task onward) stays
+ * quiet, without touching the shared January 2026 period other fixtures and tests post into.
+ * Disjoint from it on purpose — real "today" is long past January, so `daysAgo(5)..daysAhead(400)`
+ * cannot overlap it, the same way `openRecentPeriod` near the T-152 tests below stays disjoint for
+ * its own real-clock detectors.
+ */
+async function openFarFutureCoverage(f: Fixture): Promise<void> {
+  const now = Date.now();
+  const starts = new Date(now - 5 * 86_400_000).toISOString().slice(0, 10);
+  const ends = new Date(now + 400 * 86_400_000).toISOString().slice(0, 10);
+  await sql`
+    insert into fiscal_periods (org_id, starts_on, ends_on, status)
+    values (${f.orgId}, ${starts}, ${ends}, 'open')`;
+}
+
 /** Post a raw pair of legs. Used to MAKE a condition true. */
 async function post(f: Fixture, legs: { code: string; debit?: string; credit?: string; party?: { t: string; id: string } }[], key: string) {
   await asOrg(f.orgId, (tx) =>
@@ -102,6 +119,10 @@ afterAll(async () => {
 describe('a clean ledger reports nothing', () => {
   it('⭐ no findings at all — every detector stays quiet when its condition is absent', async () => {
     const f = await fixture('clean');
+    // T-264/DEF-284 slice 1: without this, `fiscalPeriodRunwayLow` fires for every fixture here
+    // (their only period, January 2026, is long past 60 days' runway by real "today") — genuinely
+    // true of this org's periods, so giving it real coverage is the right fix, not a workaround.
+    await openFarFutureCoverage(f);
     await post(f, [{ code: '6300', debit: '100.00' }, { code: '1110', credit: '100.00' }], uid('k'));
     const result = await feed(f);
     expect(result.findings).toEqual([]);
@@ -734,6 +755,9 @@ describe('T-224 / DEF-186 — lowStockOrderNotProposed: low, able to order, noth
 describe('acknowledgement accepts a risk without pretending it is fixed', () => {
   async function withFinding(hint: string) {
     const f = await fixture(hint);
+    // T-264/DEF-284 slice 1 — see `openFarFutureCoverage`'s own comment: the exact-count
+    // assertions below (`openCount`) would otherwise also count `fiscalPeriodRunwayLow`.
+    await openFarFutureCoverage(f);
     await post(
       f,
       [

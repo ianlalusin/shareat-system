@@ -45,12 +45,14 @@
  */
 import {
   organizationsRepo,
+  fiscalPeriodsRepo,
   personsRepo,
   accessRepo,
   sessionsRepo,
   type OrganizationRow,
   type Tx,
 } from '@shareat/db';
+import { toBusinessDate } from '@shareat/core';
 // ⭐ T-229 slice 4 — the FIRST gated function in this module. Everything above it runs before a
 // principal exists (bootstrap), which is why the import was not needed until now.
 import {
@@ -82,17 +84,48 @@ export interface CreateOrganizationResult {
   readonly orgId: string;
   readonly accountsSeeded: number;
   readonly categoriesSeeded: number;
+  readonly periodsSeeded: number;
 }
 
 /** Postgres unique-violation. */
 const UNIQUE_VIOLATION = '23505';
 
 /**
+ * ⭐ T-264 / DEF-284 slice 1 — the SINGLE definition of "how far ahead a fresh org is seeded."
+ * 12 consecutive calendar months, starting at the org's current business month (Asia/Manila, via
+ * `toBusinessDate` — the sanctioned idiom, not a raw-UTC one). Exported so
+ * `scripts/backfill-fiscal-periods.ts` computes the identical window for an EXISTING org rather
+ * than inventing a second answer to "how far ahead" — the same "one function, every caller" shape
+ * `bootstrapOrganization` already uses for reference-data seeding.
+ *
+ * ⚠️ Deliberately not anchored to the 2027-01-01 cutover date. Any org bootstrapped before then
+ * (the pilot's plan) is covered because 12 months comfortably reaches it from any 2026 start
+ * month; hardcoding the cutover date would make this function need editing again once cutover has
+ * passed, for no benefit — the general rule stays correct on both sides of that date.
+ *
+ * ⛔ **The cliff, named rather than left to be re-derived under pressure:** this rule covers
+ * `2027-01-01` for a bootstrap in any month up to and including `2027-01`, and STOPS covering it
+ * from `2027-02` onward (12 months forward from Feb 2027 reaches only Jan 2028). That is fine — an
+ * org bootstrapped after cutover has its own cutover date, not this one — but it is a real edge,
+ * not an unconditionally-safe window, and the next person to touch this number should see it here
+ * rather than re-deriving it.
+ */
+export function fiscalPeriodSeedWindow(
+  now = new Date(),
+): { startYear: number; startMonth: number; months: number } {
+  const [yStr, mStr] = toBusinessDate(now).split('-');
+  return { startYear: Number(yStr), startMonth: Number(mStr), months: 12 };
+}
+
+/**
  * Creates an organization **and its reference data, in the caller's transaction**.
  *
- * ⛔ An organization always has its chart of accounts and its expense categories, or it does not
- * exist. Both seeds run here, on this transaction, so there is no window in which an org exists
- * that cannot post.
+ * ⛔ An organization always has its chart of accounts, its expense categories, and a year of
+ * fiscal periods to post into — or it does not exist. All three seeds run here, on this
+ * transaction, so there is no window in which an org exists that cannot post. Before T-264/DEF-284
+ * there was no third seed at all: `postEntry` refused the very first entry any fresh org tried to
+ * record, in every environment except a test or `dev-seed-inventory.ts`, both of which wrote their
+ * own period by hand.
  */
 export async function createOrganization(
   tx: Tx,
@@ -133,7 +166,12 @@ export async function createOrganization(
   }
 
   const { accountsSeeded, categoriesSeeded } = await organizationsRepo.seedReferenceData(tx, org.id);
-  return { orgId: org.id, accountsSeeded, categoriesSeeded };
+  const { periodsInserted } = await fiscalPeriodsRepo.seedCalendarMonths(
+    tx,
+    org.id,
+    fiscalPeriodSeedWindow(),
+  );
+  return { orgId: org.id, accountsSeeded, categoriesSeeded, periodsSeeded: periodsInserted };
 }
 
 function isUniqueViolation(err: unknown): boolean {
@@ -334,7 +372,8 @@ export async function bootstrapOrganization(
     );
   }
 
-  // 4. The organization, its chart of accounts and its expense categories.
+  // 4. The organization, its chart of accounts, its expense categories, and a year of fiscal
+  //    periods to post into (T-264/DEF-284 slice 1).
   const org = await createOrganization(tx, { code: input.code, name: input.name });
 
   // 5. The first person: the `admin` role and the owner's four capabilities, both `granted_by` NULL.

@@ -167,6 +167,7 @@ async function main(): Promise<void> {
   console.log(`  organization        : ${args.name}  (code ${args.code})`);
   console.log(`  chart of accounts   : seeded for this org`);
   console.log(`  expense categories  : seeded for this org`);
+  console.log(`  fiscal periods      : 12 calendar months, starting this month`);
   console.log(`  first admin         : ${args.admin}  (role admin, granted_by NULL)`);
   // ⛔ Printed from the DERIVED set, never a hand-typed count — the plan has to describe what will
   // actually be written, and "four" is true only until the matrix changes.
@@ -224,6 +225,7 @@ async function main(): Promise<void> {
   console.log(`  organization id     : ${result.orgId}`);
   console.log(`  accounts seeded     : ${result.accountsSeeded}`);
   console.log(`  categories seeded   : ${result.categoriesSeeded}`);
+  console.log(`  fiscal periods      : ${result.periodsSeeded} (covers the next 12 calendar months)`);
   console.log(`  admin person id     : ${result.personId}`);
   // ⭐ Reported, never silent — these are real authority rows, and a power granted invisibly is
   // indistinguishable from one granted by accident.
