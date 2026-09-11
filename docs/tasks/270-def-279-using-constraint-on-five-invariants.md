@@ -110,6 +110,86 @@ each, and why**.
 - ⛔ Any git write command · `npm run build` · `npm run dev` · `npm run test:integration`.
 - ⛔ Any migration index other than 0142.
 
+---
+
+## ⛔ SPEC CORRECTION 1 — 2026-09-12. Part 2's Contract, built as written, would have changed NOTHING.
+
+⭐ **Lane A verified the mechanism instead of implementing the spec, and stopped before writing a
+line of SQL.** That is bible §3.4a exactly, and it caught a fix that would have applied cleanly,
+looked right, and been inert. **The register's own disposition for DEF-279 was incomplete** — it
+said the fix is `USING CONSTRAINT` on five statements; that is necessary and **not sufficient**.
+
+### The measurement, reproduced independently by the orchestrator
+
+Against `shareat_test_orch` through the same `postgres` driver the app uses:
+
+| | `err.message` | `err.constraint_name` | regex on message |
+|---|---|---|---|
+| `RAISE EXCEPTION 'entry % is unbalanced', 'abc' USING CONSTRAINT = 'journal_entries_balance_check'` | `"entry abc is unbalanced"` | `"journal_entries_balance_check"` | **null** |
+| a real CHECK violation | `...violates check constraint "_probe_chk_v_check"` | `"_probe_chk_v_check"` | matches |
+
+`parseConstraintName` is `/constraint "([a-zA-Z0-9_]+)"/` run against the **message**.
+`USING CONSTRAINT` populates a **separate structured field the parser never reads**. So all five
+would have kept reporting a structural zero.
+
+### ⭐ RULING on point 1 — do BOTH halves, and the parser half is the better half
+
+⛔ Note the second row of that table: `constraint_name` is set for **real** constraint violations
+too. So reading the structured field is not a workaround for our hand-written raises — it is
+**strictly more robust than parsing English prose that PostgreSQL is free to reword.**
+
+1. **The migration still adds `USING CONSTRAINT`** — it is what populates the field.
+2. **`apps/erp/src/lib/constraint-messages.ts` IS NOW IN SCOPE** (it was listed out of scope; the
+   spec's own exception said *"if you conclude otherwise, that is a QUESTION"* — you did, correctly).
+   Add a resolver that takes the error object and **prefers `err.constraint_name`, falling back to
+   `parseConstraintName(raw)`**. Keep `parseConstraintName` exported and unchanged as the fallback.
+   Use it at **both** call sites — `errorMessage` (line ~112) and `recordIfUnmappedConstraint`
+   (line ~169).
+
+⚠️ **Check the user-visible consequence before you finish:** once `errorMessage` can resolve these
+five, any of them present in the message map will start rendering their mapped sentence instead of
+the raw `RAISE` text. Report which of the five are in the map and what a user will now see. If a
+mapped sentence is worse than the raw text, say so — do not quietly accept it.
+
+### ⭐ RULING on point 2 — thread the name as a parameter; do NOT catch-and-re-raise
+
+You proposed catch-and-re-raise at each wrapper and rejected threading the name through the shared
+function's signature. **I am reversing that**, because the reason to reject it has just evaporated:
+
+`journal_check_entry_balance` has exactly **two callers in the world** —
+`journal_entries_trigger_check_balance` and `journal_lines_trigger_check_balance`. Verified two
+ways: `git grep` over the repo (only migration `0003` defines and calls it) and `pg_proc.prosrc`
+against the live database. No application code, no other function. A signature change is therefore
+free, and both callers are already in your migration.
+
+**Contract:** `journal_check_entry_balance(p_entry_id uuid, p_constraint text)`; both raises use
+`USING CONSTRAINT = p_constraint`; each wrapper passes its own trigger's constraint name.
+
+⛔ **Why not catch-and-re-raise**, so this is not relitigated later:
+- `EXCEPTION WHEN OTHERS` also catches deadlocks, serialization failures and statement
+  cancellation, and would relabel them as constraint violations. Narrowing to `WHEN raise_exception`
+  fixes the mislabelling but not the next point.
+- Every PL/pgSQL exception block opens a **subtransaction** on each fire, on the hot path of every
+  journal write.
+- Parameter-threading has neither problem and needs no `SQLERRM`/`SQLSTATE` juggling to preserve the
+  original text, because the original `RAISE` is never replaced.
+
+⭐ Your instinct was sound and your rejected alternative was the right one — what made it look
+expensive was a caller census nobody had run.
+
+### Point 3 — accepted
+
+`docs/discovery/33-def-279-live-trigger-bodies.md` is correct; 30–32 were taken. Good adaptation.
+
+### Amended done-when
+
+- [ ] Migration `0142` adds `USING CONSTRAINT` to all five raise sites, and re-declares
+      `journal_check_entry_balance` with the new second parameter plus both wrappers.
+- [ ] `constraint-messages.ts` prefers `err.constraint_name`, regex retained as fallback.
+- [ ] The two-invariant proof (spec Part 3) now asserts the counter records the **correct** name —
+      in particular that a line-only edit records `journal_lines_balance_check`, **not** the entries one.
+- [ ] The user-visible message consequence reported.
+
 ## Done when
 
 - [ ] `docs/discovery/30-def-279-live-trigger-bodies.md` exists with a per-function verdict.
