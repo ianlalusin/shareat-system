@@ -129,11 +129,27 @@ export function getSystemDb() {
  *   - `bootstrapOrganization`'s two callers: `scripts/bootstrap-org.ts` and
  *     `apps/erp/src/app/setup/actions.ts` (row 185's named exception — there is no principal
  *     before the first organisation exists)
+ *   - the till-event **org resolution** in `runInboxRelayJobs` (row 194 subsystem 1) — the read
+ *     that DISCOVERS which org a store belongs to cannot be scoped to that org; the org is its
+ *     output, not its input
+ *   - `sweepOrphanedFiles` (row 194 subsystem 2, DEF-287) — a cron across every organisation
+ *   - the **bootstrap existence question** `anyOrganizationExists`, in `setup/lib.ts` and
+ *     `sign-in/lib.ts` (**Ian's ruling, 2026-09-12**, T-267) — *"has this system been set up at
+ *     all?"* is asked before any org exists, and it now uses the same door bootstrap's WRITE
+ *     already used. ⚠️ Three sites asked this bare; `bootstrap-org.ts:158` is the third and
+ *     contradicted itself, guarding with an unprincipalled read before a privileged write
  *
- * ⛔ **Not a general escape hatch, and not a precedent for a sixth caller.** If new code thinks
- * it needs this, that is a design question for whoever is adding it — raise it, don't reach for
- * this function by analogy. `tests/unit/system-transaction-callers.test.ts` fails the build if
- * any file outside the closed caller list calls it.
+ * ⛔ **Not a general escape hatch.** The list grows only by a NAMED RULING recorded in the bible,
+ * never by analogy — row 185 closed it at three, row 194 admitted three subsystems after a day of
+ * arming the lock produced them, and 2026-09-12 admitted the bootstrap question. If new code thinks
+ * it needs this, that is a design question for whoever is adding it: raise it, don't reach for this
+ * function because a neighbour did.
+ *
+ * ⚠️ `tests/unit/system-transaction-callers.test.ts` fails the build if any file outside the
+ * closed caller list calls it — and as of **DEF-295** that sentence is finally true. Until
+ * 2026-09-12 it scanned two of the repo's nine source roots, so `packages/etl/src`, `scripts/` and
+ * five others could call this freely with nothing going red. A closed list nothing can see is not
+ * closed.
  *
  * ⚠️ With `SYSTEM_DATABASE_URL` unset, this is byte-for-byte `transaction()` — same connection,
  * same credentials. It diverges only where something explicitly sets that variable (the

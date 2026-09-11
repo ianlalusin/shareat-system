@@ -1,10 +1,10 @@
 /**
  * Server-only reads for `/setup` — T-232 slice 2 §2.5. **No writes live here.**
  *
- * ⚠️ **The zero-organization read runs in a PLAIN transaction, with no principal, and that is
- * deliberate** (§2.3.2). There is no principal to apply: the whole precondition is that no
- * organisation, and therefore no person and no session, exists yet. `bootstrapOrganization` opens
- * the same kind of transaction on the same `DATABASE_URL`, so the screen inherits the CLI's
+ * ⭐ **The zero-organization read runs through `systemTransaction()`, T-267, per Ian's ruling of
+ * 2026-09-12** (bible §13 row 194 addendum). There is no principal to apply: the whole
+ * precondition is that no organisation, and therefore no person and no session, exists yet.
+ * `bootstrapOrganization` opens the same bootstrap door for its write, so the screen inherits its
  * database posture exactly — if `npm run bootstrap-org` can write on production, `/setup` can, and
  * if it cannot, neither can.
  *
@@ -13,7 +13,7 @@
  * advisory lock and refusing once an organization exists. Same posture as `createOrganization`'s
  * duplicate-code pre-check: *"the UNIQUE constraint remains the actual guarantee."*
  */
-import { transaction, organizationsRepo } from '@shareat/db';
+import { systemTransaction, organizationsRepo } from '@shareat/db';
 import type { SetupIdentity } from '../../lib/session';
 
 /**
@@ -25,7 +25,7 @@ import type { SetupIdentity } from '../../lib/session';
  * "small" change, because there is nothing in it to widen.
  */
 export async function systemIsAlreadySetUp(): Promise<boolean> {
-  return transaction((tx) => organizationsRepo.anyOrganizationExists(tx));
+  return systemTransaction((tx) => organizationsRepo.anyOrganizationExists(tx));
 }
 
 /** What the form renders. The uid is deliberately absent — the page never shows it and the action

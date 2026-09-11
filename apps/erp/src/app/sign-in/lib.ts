@@ -24,7 +24,7 @@
  * names as pre-auth confessions — this file must not become a fourth.
  */
 import type { Tx } from '@shareat/db';
-import { organizationsRepo, transaction } from '@shareat/db';
+import { organizationsRepo, systemTransaction } from '@shareat/db';
 import { AuthenticationError, signInWithFirebase } from '@shareat/auth';
 
 /**
@@ -107,15 +107,19 @@ export type VerifiedSignInOutcome =
  *   1. `signInWithFirebase(null, …)` → the AUTH door, opened inside `sessions.ts`. This is the
  *      half that was actually broken: the credential read is org-scoped via `persons`, so under a
  *      non-bypassing role it found nothing and every Firebase sign-in reported "not linked".
- *   2. `anyOrganizationExists` → left on a bare `transaction()`, unchanged and deliberately so.
- *      It is NOT one of the four lookups row 194 admitted to the auth door, and widening the door
- *      to cover it would be exactly the drift row 194 exists to prevent.
+ *   2. `anyOrganizationExists` → now routed through `systemTransaction()`, T-267, per **Ian's
+ *      ruling of 2026-09-12** (bible §13 row 194 addendum). This is a bootstrap question — *"has
+ *      this system been set up at all?"* — asked before any organisation's principal is
+ *      meaningful, and it uses the same bootstrap door `setup/lib.ts` and `bootstrap-org.ts`'s
+ *      write already use. The caller list stays closed and build-enforced; this is not a sixth
+ *      caller admitted by analogy.
  *
- * ⚠️ **Half 2's pre-existing limitation is unchanged, not introduced here** — see the note
- * above: with no principal this can read zero organisations on a populated database, sending a
- * stranger to `/setup` instead of telling them to ask an administrator. `/setup` then refuses
- * loudly on its own `WITH CHECK`. A wrong sentence, never a second organisation. It is recorded
- * rather than fixed because fixing it is a fifth caller-list decision and Ian's to make.
+ * ⭐ **Half 2's pre-existing limitation is now fixed, not merely documented** — the old note here
+ * said a bare `transaction()` could read zero organisations on a populated database with no
+ * principal, sending a stranger to `/setup` instead of telling them to ask an administrator. That
+ * was always a wrong-sentence availability/UX defect, never a leak — `/setup` refused loudly on
+ * its own `WITH CHECK` regardless. Ian's ruling closed it by giving this read the bootstrap door
+ * rather than leaving it unprincipalled.
  */
 export async function resolveVerifiedSignIn(verifiedUid: string): Promise<VerifiedSignInOutcome> {
   try {
@@ -132,6 +136,6 @@ export async function resolveVerifiedSignIn(verifiedUid: string): Promise<Verifi
 
   // ⭐ Zero organizations is the ONLY thing that opens first-run setup. It is not "no person for
   // this email" — an unknown email on a live system is a stranger, and the answer is a sentence.
-  const alreadySetUp = await transaction((tx) => organizationsRepo.anyOrganizationExists(tx));
+  const alreadySetUp = await systemTransaction((tx) => organizationsRepo.anyOrganizationExists(tx));
   return alreadySetUp ? { kind: 'not-linked' } : { kind: 'first-run' };
 }

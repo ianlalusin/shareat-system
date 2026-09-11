@@ -8,7 +8,9 @@ import { describe, expect, it } from 'vitest';
  * row 185). This is the mechanical guard Contract 2 asks for: a behavioural test cannot prove
  * this task worked, because on today's role it changes no observable behaviour at all.
  *
- * **The three files required to call it directly** — resolved per the orchestrator's brief,
+ * **The files required to call it directly.** ⚠️ This was THREE until T-267 (2026-09-12) admitted
+ * three more on two named rulings — see `REQUIRED_CALLERS` below, where each carries its own
+ * authority. It was resolved per the orchestrator's brief,
  * following the FOUR-file reading of Contract 2 rather than padding the count to match Contract
  * 1's doc comment (which enumerates five call SITES — runJobForOrg, closeFailedRun,
  * listOrgsToRun, and bootstrapOrganization's two callers — across three files, not five):
@@ -30,10 +32,53 @@ const REQUIRED_CALLERS = [
   'packages/domain/src/scheduler/index.ts',
   'scripts/bootstrap-org.ts',
   'apps/erp/src/app/setup/actions.ts',
+  // T-267, Ian's ruling of 2026-09-12 (bible §13 row 195): the bootstrap question
+  // "has this system been set up at all?" goes through the same door bootstrap's WRITE
+  // already uses. Not a fifth caller admitted by analogy — a named ruling, recorded.
+  'apps/erp/src/app/setup/lib.ts',
+  'apps/erp/src/app/sign-in/lib.ts',
+  // T-267, bible §13 row 194 subsystem 2 (DEF-287): the orphaned-file sweep is a cron
+  // across every organisation; no single org's principal expresses "all orgs".
+  'packages/domain/src/files/index.ts',
 ] as const;
 
-/** Every file `systemTransaction` must NOT be reachable from without being named a caller above. */
-const SCAN_ROOTS = ['apps', 'packages/domain/src'] as const;
+/**
+ * ⛔ **DEF-295 — this list used to be `['apps', 'packages/domain/src']`, and the assertion below
+ * has always been titled *"no file outside the closed list"*.** It was not: seven of the repo's nine
+ * source roots were unscanned, including `scripts/` — which the guard REQUIRES a caller from
+ * (`scripts/bootstrap-org.ts`) while not policing it — and `packages/etl/src`, the package DEF-289
+ * was about to add six call sites to. A closed list nothing can see is not closed.
+ *
+ * ⚠️ The positive control below (`files.length > 50`) guards bible §13 row 181's *"sweep that
+ * scanned nothing"*. It cannot catch this, because a control on the SIZE of the scanned set says
+ * nothing about whether it is the RIGHT set. That is the whole lesson of DEF-295.
+ *
+ * ⭐ Every source root is now scanned. `DEFINER_FILES` below is the only exemption and it is
+ * structural, not a judgement call.
+ */
+const SCAN_ROOTS = [
+  'apps',
+  'scripts',
+  'packages/auth/src',
+  'packages/core/src',
+  'packages/db/src',
+  'packages/domain/src',
+  'packages/etl/src',
+  'packages/etl-firestore/src',
+  'packages/storage-firebase/src',
+  'packages/sync-firestore/src',
+] as const;
+
+/**
+ * The two files that DEFINE and DELIBERATELY EXPORT `systemTransaction`, exempt because scanning
+ * them would make the guard report its own plumbing as an offender.
+ *
+ * ⚠️ `index.ts` re-exports it on purpose and says why in its own comment: exporting
+ * `systemTransaction` alone, never alongside `getSystemSql`/`getSystemDb`, because a raw accessor
+ * would reach the same authority through a hole this guard's `systemTransaction(` pattern cannot
+ * match. Do not "tidy" either file into the scan.
+ */
+const DEFINER_FILES: readonly string[] = ['packages/db/src/client.ts', 'packages/db/src/index.ts'];
 
 function trackedFiles(): string[] {
   return execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], {
@@ -142,6 +187,7 @@ describe('T-251a — systemTransaction() has a closed, named caller list (bible 
         (f.endsWith('.ts') || f.endsWith('.tsx')) &&
         !f.includes('/tests/') &&
         !f.endsWith('.test.ts') &&
+        !DEFINER_FILES.includes(f) &&
         !(REQUIRED_CALLERS as readonly string[]).includes(f),
     );
 

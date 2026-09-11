@@ -65,9 +65,6 @@ const PRE_AUTH_PATHS: readonly string[] = [
   'apps/erp/src/app/sign-in/actions.ts', // signInWithPin / signOut — the org is the OUTPUT
   'apps/erp/src/app/sign-in/page.tsx', // the store picker, rendered to a visitor with no session
   'apps/erp/src/lib/session.ts', // resolveActor — it is what produces the actor
-  'apps/erp/src/app/setup/actions.ts', // first-run setup (T-232): the org is not known yet, and cannot be — it is what this action CREATES; bible row 185 names the exception
-  'apps/erp/src/app/setup/lib.ts', // the zero-organisation read the first-run page renders from; no org exists to be the principal
-  'apps/erp/src/app/sign-in/lib.ts', // resolveVerifiedSignIn's SECOND half — the identical zero-organisation read as setup/lib.ts above, asked of an unauthenticated visitor. Its FIRST half (signInWithFirebase) now passes null and opens authTransaction instead (DEF-288, bible row 194); this line covers only the org-existence question, which is a bootstrap question and not one of row 194's four auth lookups
 ];
 
 function trackedErpFiles(): string[] {
@@ -145,6 +142,43 @@ describe('T-231 — no apps/erp request path opens a transaction without an RLS 
     for (const path of PRE_AUTH_PATHS) {
       expect(files.includes(path), `exemption "${path}" matches no tracked file`).toBe(true);
     }
+  });
+
+  /**
+   * ⛔ **DEF-296.** The assertion above only checks the exemption names a file that still EXISTS.
+   * It never checked that the file still NEEDS the exemption — and files get fixed far more often
+   * than they get deleted, so that is the likelier staleness by a wide margin.
+   *
+   * ⚠️ **It found THREE dead entries, not the two T-267 created.** `setup/actions.ts` had been
+ * exempt with no raw handle since it was converted to `systemTransaction()` — stale long before
+ * today, and invisible for exactly as long. That is the entry this assertion exists for.
+ *
+ * ⭐ Proven by T-267: routing `setup/lib.ts` and `sign-in/lib.ts` through `systemTransaction()`
+   * removed their only raw-handle use, and this guard stayed green with both exemptions standing.
+   * `systemTransaction(` does not match the `transaction(` pattern — the preceding `m` fails the
+   * boundary class — so nothing fired. Both entries are now removed, and this test is what keeps
+   * the next pair from lingering.
+   *
+   * ⚠️ The list's own comment warns that a stale exemption *"makes the rule look narrower than
+   * it is, and the next person widens it by adding a neighbour."* This is that warning, enforced.
+   */
+  it('⭐ every pre-auth exemption is still NEEDED — a file that no longer reaches a raw handle loses it (DEF-296)', () => {
+    const kept: string[] = [];
+    for (const path of PRE_AUTH_PATHS) {
+      let content: string;
+      try {
+        content = readFileSync(join(repoRoot, path), 'utf8');
+      } catch {
+        continue; // the assertion above already owns "file is missing"
+      }
+      if (reachesRawHandle(content).length === 0) kept.push(path);
+    }
+    expect(
+      kept,
+      kept.length === 0
+        ? ''
+        : `These files are exempted from the raw-handle rule but no longer reach one (${kept.length}): ${kept.join(', ')}.\n\n An exemption that is no longer needed is removed, not kept - it makes the rule look narrower than it is and invites the next neighbour to be added beside it. Delete the entry from PRE_AUTH_PATHS. See DEF-296.`,
+    ).toEqual([]);
   });
 
   it('no file reaches a raw database handle outside the pre-auth allowlist', () => {

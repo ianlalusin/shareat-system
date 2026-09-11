@@ -18,7 +18,7 @@
  */
 import { createHash } from 'node:crypto';
 import { authorize, type Actor } from '@shareat/auth';
-import { filesRepo, transaction, type FilePurpose, type Tx } from '@shareat/db';
+import { filesRepo, systemTransaction, transaction, type FilePurpose, type Tx } from '@shareat/db';
 import { stripImageMetadata } from '@shareat/core/exif';
 import { resolveStorageDriver } from './driver';
 
@@ -201,14 +201,14 @@ export async function sweepOrphanedFiles(
   olderThanHours = 24,
 ): Promise<{ removed: number; failed: { path: string; error: string }[] }> {
   const driver = resolveStorageDriver();
-  const orphans = await transaction((tx) => filesRepo.listOrphans(tx, olderThanHours));
+  const orphans = await systemTransaction((tx) => filesRepo.listOrphans(tx, olderThanHours));
 
   let removed = 0;
   const failed: { path: string; error: string }[] = [];
   for (const o of orphans) {
     try {
       await driver.remove(o.storagePath);
-      await transaction((tx) => filesRepo.deleteFile(tx, o.id));
+      await systemTransaction((tx) => filesRepo.deleteFile(tx, o.id));
       removed += 1;
     } catch (err) {
       // ⚠️ One unreachable object must not stop the sweep — and it must be visible, not swallowed.

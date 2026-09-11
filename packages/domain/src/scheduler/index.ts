@@ -25,7 +25,6 @@ import {
   schedulerRepo,
   storesRepo,
   systemTransaction,
-  transaction,
   withOrgPrincipal,
   withSystemOrgPrincipal,
   type SchedulerFailure,
@@ -505,7 +504,7 @@ async function runInboxRelayJobs(
   let orgByStore: Map<string, string>;
   try {
     orgByStore = storeIds.length
-      ? await transaction((tx) => storesRepo.orgIdsForStoreIds(tx, storeIds))
+      ? await systemTransaction((tx) => storesRepo.orgIdsForStoreIds(tx, storeIds))
       : new Map<string, string>();
   } catch (err) {
     // Same shape as the `readUnprocessed` failure above (DEF-227): the org-resolution read blew up
