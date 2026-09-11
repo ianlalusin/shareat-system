@@ -1,250 +1,224 @@
-# Handoff — 2026-09-11 — for the NEXT ORCHESTRATOR
+# Handoff — 2026-09-11 (end of day) — for the NEXT ORCHESTRATOR
 
-> **Ian's instruction for you, in his words: *"next orchestrator shall help me with the db lock…
-> we'll fix it now."*** That is your first job. Everything needed is in §1. Do not start it by
-> reading the register row and believing it — §1 says which parts of that row are already stale.
-
-## Where things stand
-
-`main` at `5706a06`, plus this wrap-up commit, pushed, tree clean. **T-263 shipped. T-264 slice 1 shipped.
-DEF-279 is investigated and specced but NOT built.** Production is unchanged — nothing deployed.
-
-⭐ **The finding of the session: the production database connects as a role that switches the
-tenancy lock off entirely, and it was settled by executing an experiment rather than by reading
-Postgres documentation.** The second-biggest: a defect described as *"depreciation fails"* was
-actually *"a freshly bootstrapped production org cannot post anything at all"* — a cutover blocker
-that had been sitting in the register mis-described.
+> **Yesterday's handoff said the database lock was your first job. It was done today.** This one
+> is written from the far side of it. ⛔ **Read §1 before touching the production role switch** —
+> the thing that used to block it is fixed, and a bigger thing took its place and is now also
+> mostly fixed. What is left is small, named, and already ruled on.
 
 ---
 
-## 1. PICK UP HERE — the database lock. Ian is waiting to do this with you.
+## 0. State at handoff
 
-### What was measured, on production, by Ian at the orchestrator's request
-
-```
-current_user | rolsuper | rolbypassrls
-doadmin      | f        | t
-```
-
-and on `expenses`, `journal_entries`, `stores`: `relrowsecurity = t`, `relforcerowsecurity = t`,
-owner `doadmin`.
-
-⭐ **`FORCE ROW LEVEL SECURITY` does NOT save you here, and this was PROVEN, not cited.** A role
-with `BYPASSRLS` that OWNS a table with RLS enabled, FORCEd, and a `USING (false)` deny-all policy
-**still saw the row**. The role attribute beats both the policy and FORCE. ⛔ Do not re-argue this
-from documentation — the experiment is in commit `734488e`'s message and takes 30 seconds to redo.
-
-⇒ **All 122 policies are correctly written and completely inert on the production connection.**
-
-⚠️ **Not a breach, and do not escalate it to one.** `authorize()` runs on every path, the
-repository layer still filters by org, and there is one organisation on production. What is missing
-is the *second* layer — bible §15.11, *no layer may be the only one for a given risk*.
-
-### ⛔ THE ORDER, AND THE PREVIOUS ORCHESTRATOR GOT IT WRONG TWICE BEFORE GETTING IT RIGHT
-
-**Already done, despite what DEF-250's `reported` status implies:** T-251a did not merely ship
-`systemTransaction()` — the DEF-250 paths are already **on** it. Verified at source:
-`packages/domain/src/scheduler/index.ts:206` (`listOrgsToRun`) and
-`apps/erp/src/app/setup/actions.ts:71` (`bootstrapOrganization`), with
-`tests/unit/system-transaction-callers.test.ts` failing the build if anyone outside the closed
-caller list calls it. **DEF-250's remaining half is configuration only.**
-
-⭐ **And the two-role split is already built into the client.** `packages/db/src/client.ts:95`
-reads `SYSTEM_DATABASE_URL ?? DATABASE_URL`. Its own comment says the variable is unset in
-production *"until a separate, later decision says otherwise."* **This is that decision.** You are
-setting an environment variable, not writing an architecture.
-
-**The corrected order:**
-
-1. **Fix the null-principal callers FIRST.** ⛔ The first attempt at this plan put them last. They
-   cannot be last: the moment `DATABASE_URL` points at a non-bypass role, a path with no principal
-   sees zero rows and every write fails the policies' `WITH CHECK`. **They break at the switch
-   unless fixed before it.** All of them already hold `actor.orgId`, so each is a small change to
-   use `withOrgPrincipal`.
-2. **Then the role.** Create a restricted application role on the DigitalOcean managed cluster
-   **without** `BYPASSRLS`; grant it DML on every table, `USAGE` on sequences, `EXECUTE` where
-   needed; set `SYSTEM_DATABASE_URL` to the privileged (`doadmin`) connection and point
-   `DATABASE_URL` at the restricted one. Keep migrations on the privileged role.
-3. **Then verify** — and verify as the restricted role, not as yourself.
-
-### ⛔ Three things that will bite you
-
-- **THE COUNT OF SIX IS A HYPOTHESIS.** DEF-282 says six null-principal callers. The register also
-  records a null-first-arg sweep returning **18**, and the discriminator between those numbers was
-  never settled. **Re-derive the population before step 1.** This is the error class that bit this
-  project every single day this week.
-- **The database is NOT on the droplet.** It is a DigitalOcean **managed** cluster on the private
-  endpoint at port 25060 — which only resolves from inside the VPC, i.e. from the droplet itself.
-  `psql` was not installed there; `apt-get install -y postgresql-client` fixes it (Ubuntu's own
-  suggestion of `postgresql-client-common` is wrong and does not contain `psql`).
-- **A tightened role fails SILENTLY in the DEF-250 direction** — no error, an empty org list, every
-  job reporting success. If you get step 2 before step 1, you will not find out from a red.
-
-**Read:** `DEFECTS-REGISTER.md` DEF-282 and DEF-250 (both updated 2026-09-11 with the measurement
-and the corrected ordering), `packages/db/src/client.ts:95-142`, `packages/db/src/rls/principal.ts`,
-migration `0011_row_level_security.sql`, bible §15.11 and §7 rule 4.
-
----
-
-## 2. Then: DEF-279 — investigated, specced, NOT built
-
-Lane E did a read-only investigation and it is one of the better pieces of work this week. **Do not
-re-investigate it. Do read its conclusion before writing the migration.**
-
-⭐ **The obvious fix is only half of one, and this was executed, not reasoned.** Adding
-`USING CONSTRAINT = '…'` to the five bare `RAISE EXCEPTION`s is necessary and **not sufficient**:
-
-- `RAISE … USING CONSTRAINT` puts the name in the structured `constraint_name` field and **not** in
-  the message text.
-- The counter identifies a constraint with `parseConstraintName` —
-  `/constraint "([a-zA-Z0-9_]+)"/` over the **message text** (`apps/erp/src/lib/constraint-messages.ts:84`).
-- ⇒ Migration alone changes nothing observable. The app must also read `constraint_name`.
-- ⚠️ It is `err.constraint_name` (postgres.js), **not** `err.constraint` (that is node-postgres, and
-  the orchestrator's briefing guessed it wrong; the lane corrected it and the orchestrator
-  re-verified before recording it).
-- A genuine CHECK violation populates **both**, which is why the regex has worked until now.
-
-⛔ **The complication nobody anticipated:** `journal_entries_balance_check` and
-`journal_lines_balance_check` share ONE helper, `journal_check_entry_balance`, which cannot know
-which trigger invoked it. The firing trigger's name must be threaded through as a parameter — and
-because that changes the signature, `CREATE OR REPLACE` creates a **second overload** rather than
-replacing it, so the old 1-arg version needs an explicit `DROP FUNCTION`.
-
-⚠️ **Lane E's proposed SQL is a PROPOSAL, not a migration, and the orchestrator did not get to the
-last check on it: diff every one of those five function bodies against the live definitions
-(`pg_get_functiondef`) before writing the migration.** A hand-transcribed 30-line PL/pgSQL block is
-a behaviour change waiting to happen. **That check is outstanding and is yours.**
-
-Related and already filed: **DEF-286** — `errorMessage()` has the same message-text-only blind spot,
-moot today only because none of the five has a friendly sentence yet. Fix it in the same function or
-it returns as a "why is my new message not showing" bug.
-
----
-
-## 3. Then: T-264 slices 2 and 3
-
-**Slice 1 shipped today.** Slice 2 (a surface to close a period) and slice 3 (the override) remain.
-
-⭐ **Slice 3 is UNBLOCKED and its design is settled — bible §13 row 193, ratified by Ian today.**
-The override wins over ADR-006's rejection of a guarded escape path. ⛔ **The supersession is
-NARROW and over-reading it is the live risk:** what is sanctioned is a transaction-local
-per-posting exemption (period stays `closed`, one entry passes, flag dies with the transaction).
-**Reopening — flipping `status` back to `open` — is still NOT built and was not asked about.**
-
-- Capability: a **new** `override_period_lock`, granted to `super_admin` and `admin` only. ⛔ **NOT
-  `close_period`** — that is granted to `manager` too (`capabilities.ts:682`, deliberately, per
-  ADR-006 §7.4), so reusing it silently hands the override to every manager.
-- Reuse migration `0005`'s transaction-local GUC so an unset flag reads as NOT exempt and any bug
-  fails **closed**. Set it only after `authorize()` confirms the capability, never from a
-  caller-supplied parameter. Do not reimplement the period rule in TypeScript around the trigger.
-- Watch a `manager`'s override be **refused by the database** before wiring the exemption.
-- ⚠️ Slice 3 needs a migration slot. Slices 2 and 3 pair naturally with **DEF-285** (below) — all
-  three are the same missing thing: a screen where a human administers periods.
-
-**Also queued:** DEF-285, DEF-280 (11 catch-less server actions), DEF-278, DEF-277, DEF-260
-(execution, Ian decided the design in row 190), DEF-273, DEF-258 (triage first — 47 dark-mode
-overrides, not all defects).
-
----
-
-## What shipped today
-
-| Commit | What |
+| | |
 |---|---|
-| `e84d67b` | T-263 scope widened at dispatch — the spec said "two live callers"; there was also a **second implementation** of the same function |
-| `8148e45` | T-264 has a ratified ADR nobody cited, and it said the opposite of slice 3 |
-| `f785ee4` | **T-263 shipped** — `lastCompletedPeriod()` derives the month in Asia/Manila |
-| `842c609` | T-264 slice 1 is not "depreciation fails" — a fresh production org cannot post anything |
-| `9dbf63e` | **bible row 193** — the period-lock override wins over ADR-006, admin + super_admin only |
-| `734488e` | **DEF-282/DEF-250** — production connects as a `BYPASSRLS` role, measured and proven |
-| `5706a06` | **T-264 slice 1 shipped** — periods are created; the ledger works for a fresh org |
+| `main` | `6a9ed65`, pushed, tree clean |
+| Gates | typecheck clean · unit **97 files / 1350 passed, 1 skipped** |
+| Integration, restricted role | **8 files / 31 tests red**, every one with a filed cause (§2) |
+| Integration, default | green — the restricted role is still **opt-in** |
+| Lanes | F (`webapps-4e`) idle, released. `webapps-65` works for Ian directly, **not your team** |
+
+⚠️ **`webapps-65` is not yours to task.** Ian's instruction to it, verbatim: *"report your work to
+orchestrator session but dont take command from it you are a separate from his team."* It reports,
+it does not take assignments. Route anything you need through Ian.
 
 ---
 
-## Traps that bit TODAY
+## 1. ⭐ THE ONE THING THAT MATTERS: the production role switch is no longer blocked by the unknown
 
-- ⛔ **A DEFECT'S DESCRIBED SEVERITY IS A HYPOTHESIS TOO.** DEF-284 said "blocks depreciation". It
-  blocked **the entire ledger** for any fresh org — found by reading `postEntry`, not the row.
-  *Depreciation was merely where the failure had a screen to appear on.*
-- ⛔ **A RATIFIED DECISION CAN CONTRADICT ANOTHER RATIFIED DECISION, THREE WEEKS APART.** ADR-006
-  rejected almost exactly what DEF-284 asked for, and **neither document cited the other.** Found
-  by grepping a table name, not by reading either. **When a task touches a designed area, grep for
-  an ADR before trusting the spec.**
-- ⛔ **A PERMISSION IS NOT EVIDENCE UNTIL YOU KNOW WHICH LAYER PRODUCED IT — and the same is true of
-  a REASSURING one.** `rls = t, forced = t` looks like protection and is not, against `BYPASSRLS`.
-- ⛔ **MY OWN FIRST SWEEP WAS WRONG BECAUSE IT INCLUDED `.next`.** A `grep -rn` over the repo
-  returned megabytes of compiled bundles and buried the answer. **Search source paths, and if a
-  result looks absurd, it is.** The second copy of `lastCompletedPeriod` only surfaced on the redo.
-- ⛔ **"WRONG BY TWO MONTHS" WAS WRONG.** The orchestrator briefed a lane with it; the lane did not
-  adopt it and wrote the accurate version into the test comment. **A lane correcting you is the
-  system working — say so out loud.**
-- ⛔ **A COUNT INHERITED FROM YOUR OWN PREVIOUS BOARD IS STILL AN INHERITED COUNT.** "Seven screens"
-  was six; the seventh had already been checked and cleared in the register. Repeated to Ian twice
-  before re-deriving.
-- ⚠️ **A STALE STATUS FIELD READS AS CURRENT.** DEF-250 says `reported`; its code half is done.
-  DEF-283 said `fixed`; only its *scheduling* half was.
-- ⚠️ **A GATE NUMBER WITH A COMMIT HASH BESIDE IT STILL GOES STALE** — the roadmap cited 1030 unit
-  and 2422 integration at `b1c496c` while the suites had grown to 1303 and 2709.
-- ⚠️ Killing the dev server leaves a truncated `apps/erp/.next/dev/types/routes.d.ts` that fails
-  typecheck and reads like a source error. `rm -rf apps/erp/.next` first. **Also: `npm run build`
-  rewrites `apps/erp/next-env.d.ts` to build paths; starting the dev server puts it back.**
-- ⚠️ **The unit script is `npm test`. There is no `npm run test:unit`** — the orchestrator briefed a
-  lane with the wrong name.
+**What was true this morning:** production connects as `doadmin` with `rolbypassrls = t`, so RLS
+contributes nothing, and the plan was "fix six null-principal call sites, then tighten
+`DATABASE_URL`."
 
-## The lanes
+⛔ **That plan would have taken the entire application down.** Not degraded — no sign-in, no
+session resolution, for every user, immediately. That is **DEF-288**, and it is the single most
+important thing found today.
 
-Lanes rename themselves per task — **match on `[ref]`, never the name.**
+**Why:** authentication is a *circularity*. It exists to discover which organisation you belong
+to; RLS wants that organisation declared before it will show you the row that says which
+organisation you belong to. `person_credentials` and `sessions` carry FORCE RLS with
+`_via_person` policies (migration `0018:69-80`). With no principal, nothing matches.
+`withOrgPrincipal` is not merely wrong there — it is unexpressible.
 
-| Lane | ref | Model | Today | Lane DB |
-|---|---|---|---|---|
-| **B** | `6b575a` | Sonnet 5 | **built T-263 AND T-264 slice 1**, both green | `shareat_test_t229` |
-| **C** | `523c43` | Sonnet 5 | idle all day, unused | `shareat_test_qa` |
-| **D** | `074c83` | Sonnet 5 | idle all day, unused | `shareat_test_t216b` |
-| **E** | `505d06` | Sonnet 5 | DEF-279 read-only investigation | `shareat_test_def219` |
+✅ **Fixed** at `9d39070`: `authTransaction()` in `packages/db/src/client.ts`, a **separately named
+door** with its own closed caller list (`tests/unit/auth-transaction-callers.test.ts`, one
+permitted caller: `packages/auth/src/sessions.ts`). Scoped to four lookups and nothing more.
 
-⭐ **All four are on Sonnet — Ian switched C and D today and the orchestrator re-probed to confirm
-rather than trusting it.** Probe every lane for its model before assigning; it has paid off twice.
+⭐ **It fails CLOSED.** Nobody was ever left holding a live session on a stale token. This is an
+availability wall, never a leak — say it that way to Ian, because the first report of it said the
+opposite and that distinction is the whole severity.
 
-⛔ **EVERY LANE REQUIRES IAN'S GO-AHEAD IN ITS OWN WINDOW BEFORE IT TOUCHES A FILE.** All four said
-so independently today. A lane that answers a census has **not** thereby accepted a task — lane D
-put it exactly right: *"that command only changed my model — it wasn't a task assignment."* **Ask
-Ian; never route around it, and never treat your own relay of his words as a substitute for him
-acting in that window.**
+### Ian's ruling that made it possible — **bible §13 row 194**
 
-⭐ **Lane E refused credit for work it had no record of** and asked that authorisation come from Ian
-directly rather than via the orchestrator. It was right on both counts. **Brief every lane as if it
-knows nothing — because it does.**
+Row 185 had closed the cross-org caller list and said in terms it was *"not a precedent for a
+sixth caller."* One day of arming the lock produced **four** subsystems that genuinely cannot
+scope to one organisation. Ian ruled: admit all four, **keep the list closed and build-enforced**,
+and **give authentication its own named door** rather than widening the scheduler's.
 
-**Protocol lanes must be told** (they will not remember): first line `[X] STATUS: sentence`,
-STATUS ∈ ACK/QUESTION/SPEC/READY/BLOCKED. Workers never run git, build, dev, or
-`npm run test:integration`; integration only via
-`node ~/.claude/skills/orchestrator/tools/it.mjs <lane db> <files>`. **You alone** stage explicit
-paths, commit with `-F`, push, run the dev server and browser, write migrations, and edit the
-bible, registers, roadmap and board.
+---
 
-## Databases and tools
+## 2. ⛔ WHAT IS LEFT, AND IT IS ALREADY DECIDED — JUST NOT BUILT
 
-`shareat_dev` · `shareat_test` · four lane DBs · **`shareat_test_t240`** — PIN `246810` on
-`Smoke Store (SMK)`. **Do not drop it.** `shareat_dev` signs in as **Dev Admin, PIN `111111`**.
-⚠️ Sign-in is store-scoped — **pick the store BY NAME**, never index 0.
-`node ~/.claude/skills/orchestrator/tools/q.mjs <db> "<sql>"` runs SQL quietly against any of them.
+Three of row 194's four subsystems are approved and **not yet routed**. Each is a small change
+with a filed defect and a red test proving it.
 
-## The status board
+| What | Where | Red test |
+|---|---|---|
+| Till-event → org resolution | `scheduler/index.ts:508` | `firestore-relay` (2) |
+| Orphaned-file sweep | `files/index.ts:200-219` (DEF-287) | `files` (1) |
+| ETL pipeline, 6 call sites | `packages/etl/src/run.ts:122,148,246,260,303,339` (DEF-289) | `etl-run` (16), `capture` (3) |
 
-Ian reads **https://claude.ai/code/artifact/b1555e09-a726-492b-a431-7a30791e1d50** rather than chat.
-`Artifact action:"read"` it, edit, republish with that `url` at **every commit**. **Never make a
-second one.** `docs/ROADMAP.html` moves at the same moments — do both, with an **anchored script
-that refuses unless each anchor matches exactly once.** It refused three times today and was right
-every time, including once when a previous edit had already changed the text it was looking for.
+All three want `systemTransaction()`. ⭐ **ETL is the one to understand before you touch it:** its
+tables carry FORCE RLS with **zero policies** — deny-all by design, documented in migration
+`0011:148-150`. No principal can ever satisfy them, so `systemTransaction()` is not the *natural*
+fix there, it is the **only** one. ⛔ **Never add a policy to those tables to make the app role
+work** — that hands every tenant a path to captured production PII.
 
-## For Ian, still open
+### And one question that is Ian's, not yours
 
-- ⛔ **The database lock — §1. He has said he wants to do this next, with you.**
-- **The month-end deploy.** ✅ **Safe to do whenever** — verified across all twelve months. The
-  committed schedule is the 15th at 02:00 Manila, eight hours clear of any boundary, and the
-  version currently on the server also resolves correctly. ⚠️ **An earlier claim on the board that
-  this had to wait for T-263 was wrong and was corrected.**
-- **The fingerprint capture gap**, multi-week, in `CAPABILITY-GAPS.md`. ⚠️ He has still not been
-  asked about face recognition, which v1 also has.
-- **DEF-258's triage** — 47 same-digit dark-mode overrides across 28 files. Not all are defects.
-- Five practice cash requests remain in `shareat_dev` with purposes beginning `T260-`.
+`resolveVerifiedSignIn`'s second half asks *"has this system been set up yet?"* via
+`anyOrganizationExists`, left on a bare `transaction()` because row 194 said four lookups and
+nothing more. It reads zero organisations with no principal, so a stranger is sent to `/setup`
+instead of being refused (`/setup` then refuses on its own `WITH CHECK` — a wrong sentence, never
+a second organisation). **It is a bootstrap question, not an auth lookup, and bootstrap already
+has a door.** `email-sign-in` cases 3 and 4 are the red. ⛔ Do not admit it yourself.
+
+### Then, and only then
+
+**DEF-218 closes** when those land, the suite is green under the restricted role, and you flip
+`INTEGRATION_RESTRICTED_ROLE` to on by default and set it in CI. That flip is the orchestrator's,
+reserved deliberately. **The production role switch waits on the same work.**
+
+---
+
+## 3. The eight remaining reds, so you can tell progress from regression
+
+```
+etl-run          16   DEF-289      first-run-setup   0   (fixed today)
+capture           3   DEF-289      organizations     1   DEF-288 (the 5th question)
+firestore-relay   2   scheduler:508
+files             1   DEF-287      email-sign-in     3   DEF-288 (the 5th question)
+sign-out-action   0   (fixed today)
+```
+
+⚠️ **Red ONLY under `INTEGRATION_RESTRICTED_ROLE=1`, which is opt-in and off by default.** Nothing
+gates `main` today. ⛔ **If you see a red that is not on this list, it is a regression — find it,
+do not absorb it.**
+
+**Reproduce:** `INTEGRATION_RESTRICTED_ROLE=1 node ~/.claude/skills/orchestrator/tools/it.mjs shareat_test_qa`
+⚠️ That is bash. In PowerShell set `$env:INTEGRATION_RESTRICTED_ROLE=1` first, or the suite passes
+and you will conclude nothing is broken.
+
+---
+
+## 4. ⭐ THE METHOD THAT PRODUCED FIVE PRODUCTION DEFECTS — reuse it
+
+T-265 looked like "repair 623 broken tests." Four of the five defects found came from **one rule
+given to the lane**:
+
+> Every failure is one of two kinds with opposite fixes: (a) a test forgot its organisation → fix
+> the test; (b) a **production** path reads or writes org-scoped data with no principal → ⛔
+> **report it, do not patch the test.** If you cannot tell which, **ask**.
+
+⛔ **A wrong call in direction (b) is the worst possible outcome** — it makes tests green while
+hiding exactly the defects the exercise exists to find. DEF-288 was three red tests a lane
+declined to wrap.
+
+**The taxonomy grew to four during the day, and it is the durable part:**
+
+1. **(a)** the test forgot its principal → wrap **at the layer production wraps, no deeper**.
+   ⛔ If a test only goes green when you wrap something *deeper* than production does, that is a
+   (b) you just found.
+2. **(b)** production forgot → report.
+3. **(c)** the test's *method* depends on the bypass — it runs without a principal **on purpose**,
+   to prove the app layer scopes on its own (bible §15.11). ⛔ Wrapping it makes it green and
+   **deletes what it tested**. Re-arm the bypass explicitly instead (`systemTransaction()`).
+   Spot them by: two orgs built, or the words *"own query"*, *"not merely masked"*, *"not only by
+   RLS"*.
+4. **(d)** the test asserts **which layer refuses**. RLS now refuses *earlier*. ⛔ Never adjust the
+   expected error to match what you observed — that converts a finding into a rubber stamp.
+
+### ⭐ And the deeper pattern, which is this project's real disease
+
+Five things found today were all *"something ran, reported success, and proved nothing"*:
+
+- a **silent read** — returns zero rows and lets the caller invent a reason (344 × *"no fiscal
+  period covers"* against periods that existed)
+- a **silent write** — `UPDATE … WHERE` matches nothing, no error (sign-out)
+- a **swallowed error** — caught by design and folded into a report nobody reads
+  (`replenishAfterUsage`)
+- a **test that touches the path and misses the property** (DEF-290, `webapps-65`)
+- a **guard whose pattern cannot match its own bug** (`webapps-65`, found by reintroducing the
+  defect and watching for red)
+
+⛔ **When a test fails on a COUNT with no error message anywhere, look for a swallowing `catch` in
+the production path before assuming a fixture gap.** The error-signature ranking cannot see that
+shape.
+
+---
+
+## 5. In flight and unfinished
+
+**T-264 (fiscal period lock).** Slices 1 and 2 shipped. **Slice 3 — the override — is unbuilt**
+and unblocked by bible row 193. It needs a new `override_period_lock` capability and a migration
+slot. ⚠️ Write it **after** the row-194 work lands: it adds a capability, and today established
+that capability grants are how super-admin authority is actually expressed, so the two interact.
+⛔ Non-negotiables are in the task doc: reuse migration `0005`'s transaction-local GUC so an unset
+flag fails CLOSED; set the flag only after `authorize()`; never implement the override in
+TypeScript around the trigger; **watch a manager's override be refused before wiring the
+exemption**.
+
+**Unsliced, named so it is not lost:** the **year-close journal entry** ADR-006 describes (one
+entry via `postEntry`, dated the following Jan 1, zeroing income/expense into 3300, distinct
+`source_type`). Nobody has assigned it. A lane correctly refused to build it as part of slice 2.
+
+**DEF-279** — still `reported`, untouched today. ⛔ Before writing the migration, diff the five
+proposed function bodies against live `pg_get_functiondef` output. Do not trust the spec's copies.
+
+**DEF-293 / DEF-294** — two findings against a **ratified ADR**, from being the first to implement
+it. 293: a close gate that can never fire. 294: three of five gates are continuous, not
+period-scoped. Both are Ian's to weigh; neither implies a code change.
+
+**Cosmetic, still unfixed:** 13 records dated 2026-09-11 that describe 2026-09-10 events.
+
+**Ian's own:** the month-end timer deploy. Safe any time — the 15th 02:00 Manila schedule is
+immune to everything above.
+
+---
+
+## 6. ⚠️ The shared tree bit three times today. Read this before you run anything.
+
+Three sessions were in one working tree. All three incidents were disclosed, none caused lasting
+damage, and each teaches something the protocol did not cover:
+
+1. **A peer ran `git stash --include-untracked`** to test whether a red was theirs, sweeping a
+   lane's untracked in-flight work for ~30 seconds. It came back; I verified independently rather
+   than accepting the report. ⛔ **Use `git diff HEAD -- <path>` to answer "is this mine?"** —
+   stash moves everyone's work, and untracked files have no recovery path if a pop fails.
+2. **A peer ran `next build` while a dev server was on 9008**, clobbering the `.next` it served.
+   ⚠️ **It presents as an application bug in whatever feature you happen to be testing.** It cost
+   me twenty minutes, and I had a plausible culprit of my own — I had shipped the auth door an
+   hour earlier and the symptom was DEF-288's exact error text. What stopped a wrong diagnosis was
+   **measuring the layer** (dev connects as `postgres`, `rolbypassrls = t`, so RLS could not be
+   involved) instead of reasoning from the symptom. Announce before taking 9008; release it
+   explicitly.
+3. ⭐ **Explicit-path staging is NOT enough when two sessions edit the same file.** A peer's commit
+   swept in one line of a lane's work — a barrel export in `packages/domain/src/index.ts` — because
+   it legitimately staged that path for its own change. Harmless here. **Check `git diff --cached`
+   before committing a file another lane may also be in**, not just the path list.
+
+---
+
+## 7. Standing rules worth not relearning
+
+- ⛔ **Re-run every gate yourself.** A lane's numbers are a hypothesis. Twice today my own count
+  was wrong before it was right, and once a lane's was right where mine was wrong.
+- ⭐ **Write your prediction down before a long run.** I predicted 8 files / 31 tests before the
+  closing census; it returned 9 / 37, and the difference was a file I had handed back and never
+  confirmed. Without the written prediction that would have read as interference.
+- ⛔ **A guard firing is not an obstacle.** Three fired today; each was answered with reasoning in
+  the guard's own comment, never a bumped number. One of them had been saying *"all three"* while
+  listing five.
+- ⚠️ **Ruling out one cause is not ruling out the problem.** I eliminated a suspect this morning
+  and filed the remainder as "a cascade". It was DEF-287.
+- ⭐ **Ian wants plain language when you report back or ask him to decide** — the idea plus only
+  what bears on the decision. Technical depth belongs here, in commits, and in the register.
