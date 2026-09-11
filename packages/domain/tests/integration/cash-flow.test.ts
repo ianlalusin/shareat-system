@@ -22,11 +22,22 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 }
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
-import { closeDb, getDb } from '@shareat/db';
+import { closeDb, withOrgPrincipal } from '@shareat/db';
 import { getCashFlow, postEntry } from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
-const db = getDb();
+
+/**
+ * Both postEntry and getCashFlow are reached in production only through an API-layer
+ * wrapper that has already called withOrgPrincipal (apps/erp/src/app/reports/cash-flow's
+ * page.tsx and export/route.ts are the pattern for the read side; expenses/lib.ts for the
+ * write side) — neither function establishes a principal itself. Standing in for that
+ * layer here, at the same depth production wraps at, rather than passing `db`/`null`
+ * directly and running as the bare restricted-role connection with no org context.
+ */
+function getCashFlowAsOrg(input: Parameters<typeof getCashFlow>[1]) {
+  return withOrgPrincipal(input.orgId, (tx) => getCashFlow(tx, input));
+}
 
 async function fixture(hint: string) {
   const code = `cashflow-${hint}-${randomUUID()}`;
@@ -43,14 +54,16 @@ async function fixture(hint: string) {
 }
 
 async function post(orgId: string, entryDate: string, sourceType: string, lines: Parameters<typeof postEntry>[1]['lines']) {
-  return postEntry(null, {
-    orgId,
-    entryDate,
-    sourceType,
-    sourceId: randomUUID(),
-    idempotencyKey: randomUUID(),
-    lines,
-  });
+  return withOrgPrincipal(orgId, (tx) =>
+    postEntry(tx, {
+      orgId,
+      entryDate,
+      sourceType,
+      sourceId: randomUUID(),
+      idempotencyKey: randomUUID(),
+      lines,
+    }),
+  );
 }
 
 beforeAll(async () => {
@@ -69,7 +82,7 @@ describe('getCashFlow', () => {
       { accountCode: '4150', credit: '1000.00' },
     ]);
 
-    const result = await getCashFlow(db, { orgId, fromDate: '2026-01-01', toDate: '2026-01-31' });
+    const result = await getCashFlowAsOrg({ orgId, fromDate: '2026-01-01', toDate: '2026-01-31' });
 
     expect(result.reconciles, `netChangeInCash (${result.netChangeInCash}) must equal actualCashChange (${result.actualCashChange})`).toBe(true);
     expect(result.netIncome).toBe('1000.00');
@@ -84,7 +97,7 @@ describe('getCashFlow', () => {
       { accountCode: '4150', credit: '500.00' },
     ]);
 
-    const result = await getCashFlow(db, { orgId, fromDate: '2026-01-01', toDate: '2026-01-31' });
+    const result = await getCashFlowAsOrg({ orgId, fromDate: '2026-01-01', toDate: '2026-01-31' });
 
     expect(result.reconciles).toBe(true);
     expect(result.netIncome).toBe('500.00');
@@ -105,7 +118,7 @@ describe('getCashFlow', () => {
       { accountCode: '1590', credit: '500.00' },
     ]);
 
-    const result = await getCashFlow(db, { orgId, fromDate: '2026-02-01', toDate: '2026-02-28' });
+    const result = await getCashFlowAsOrg({ orgId, fromDate: '2026-02-01', toDate: '2026-02-28' });
 
     expect(result.reconciles).toBe(true);
     expect(result.netIncome).toBe('-500.00');
@@ -124,7 +137,7 @@ describe('getCashFlow', () => {
       { accountCode: '2400', credit: '20000.00', partyType: 'loan', partyId: randomUUID() },
     ]);
 
-    const result = await getCashFlow(db, { orgId, fromDate: '2026-01-01', toDate: '2026-01-31' });
+    const result = await getCashFlowAsOrg({ orgId, fromDate: '2026-01-01', toDate: '2026-01-31' });
 
     expect(result.reconciles).toBe(true);
     expect(result.financing).toBe('20000.00');
@@ -150,7 +163,7 @@ describe('getCashFlow', () => {
       { accountCode: '1110', credit: '15000.00' },
     ]);
 
-    const result = await getCashFlow(db, { orgId, fromDate: '2026-01-01', toDate: '2026-01-31' });
+    const result = await getCashFlowAsOrg({ orgId, fromDate: '2026-01-01', toDate: '2026-01-31' });
 
     expect(result.reconciles).toBe(true);
     const drawingLine = result.financingLines.find((l) => l.accountCode === '3200');
@@ -173,11 +186,11 @@ describe('getCashFlow', () => {
       { accountCode: '3300', credit: '1000.00' },
     ]);
 
-    const withoutYearClose = await getCashFlow(db, { orgId, fromDate: '2026-01-01', toDate: '2026-01-31', includeYearClose: false });
+    const withoutYearClose = await getCashFlowAsOrg({ orgId, fromDate: '2026-01-01', toDate: '2026-01-31', includeYearClose: false });
     expect(withoutYearClose.reconciles, 'excluding the year-close entry must still reconcile').toBe(true);
     expect(withoutYearClose.netIncome).toBe('1000.00');
 
-    const withYearClose = await getCashFlow(db, { orgId, fromDate: '2026-01-01', toDate: '2026-01-31', includeYearClose: true });
+    const withYearClose = await getCashFlowAsOrg({ orgId, fromDate: '2026-01-01', toDate: '2026-01-31', includeYearClose: true });
     expect(withYearClose.reconciles, 'including the year-close entry must still reconcile — no double count').toBe(true);
     // The year-close entry zeroes 4150 back to 0 for the period, so recognised revenue for THIS
     // range becomes 0 once it's included.
@@ -186,7 +199,7 @@ describe('getCashFlow', () => {
 
   it('no activity produces a reconciling zero, not a crash', async () => {
     const orgId = await fixture('empty');
-    const result = await getCashFlow(db, { orgId, fromDate: '2026-01-01', toDate: '2026-01-31' });
+    const result = await getCashFlowAsOrg({ orgId, fromDate: '2026-01-01', toDate: '2026-01-31' });
     expect(result.reconciles).toBe(true);
     expect(result.netChangeInCash).toBe('0.00');
     expect(result.actualCashChange).toBe('0.00');

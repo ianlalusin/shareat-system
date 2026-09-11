@@ -46,6 +46,25 @@ async function asOrg<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
 }
 const actor = (orgId: string, personId: string): Actor => ({ personId, orgId });
 
+/**
+ * Every one of these is reached in production only through an API-layer wrapper that has
+ * already called withOrgPrincipal — none establishes a principal itself. Standing in for
+ * that layer here (via this file's own asOrg, the same pattern), at the same depth
+ * production wraps at, instead of passing `null` and running with no principal at all.
+ */
+function createRecurringTemplateAsOrg(orgId: string, actorArg: Actor, input: Parameters<typeof createRecurringTemplate>[2]) {
+  return asOrg(orgId, (tx) => createRecurringTemplate(tx, actorArg, input));
+}
+function setRecurringTemplateStatusAsOrg(orgId: string, actorArg: Actor, input: Parameters<typeof setRecurringTemplateStatus>[2]) {
+  return asOrg(orgId, (tx) => setRecurringTemplateStatus(tx, actorArg, input));
+}
+function deleteRecurringTemplateAsOrg(orgId: string, actorArg: Actor, input: Parameters<typeof deleteRecurringTemplate>[2]) {
+  return asOrg(orgId, (tx) => deleteRecurringTemplate(tx, actorArg, input));
+}
+function updateRecurringTemplateAsOrg(orgId: string, actorArg: Actor, input: Parameters<typeof updateRecurringTemplate>[2]) {
+  return asOrg(orgId, (tx) => updateRecurringTemplate(tx, actorArg, input));
+}
+
 async function fixture(hint: string) {
   const code = uid(`rec-${hint}`);
   const [org] = await sql<{ id: string }[]>`
@@ -111,7 +130,7 @@ describe('a template, and the cursor it starts on', () => {
     // Getting this wrong makes every new template a month late, silently, and only the person
     // waiting for the bill would ever notice.
     const f = await fixture('cursor');
-    const { nextDueDate } = await createRecurringTemplate(null, f.manager, {
+    const { nextDueDate } = await createRecurringTemplateAsOrg(f.orgId, f.manager, {
       ...base(f), from: '2026-09-03',
     });
     expect(nextDueDate).toBe('2026-09-05');
@@ -119,7 +138,7 @@ describe('a template, and the cursor it starts on', () => {
 
   it('a template created AFTER its anchor rolls to next month', async () => {
     const f = await fixture('cursor2');
-    const { nextDueDate } = await createRecurringTemplate(null, f.manager, {
+    const { nextDueDate } = await createRecurringTemplateAsOrg(f.orgId, f.manager, {
       ...base(f), from: '2026-09-20',
     });
     expect(nextDueDate).toBe('2026-10-05');
@@ -127,7 +146,7 @@ describe('a template, and the cursor it starts on', () => {
 
   it('⚠️ a 31st anchor clamps rather than being refused — "the last day of the month"', async () => {
     const f = await fixture('clamp');
-    const { nextDueDate } = await createRecurringTemplate(null, f.manager, {
+    const { nextDueDate } = await createRecurringTemplateAsOrg(f.orgId, f.manager, {
       ...base(f), anchorDay: 31, from: '2026-02-01',
     });
     expect(nextDueDate).toBe('2026-02-28');
@@ -140,13 +159,13 @@ describe('⛔ the till rule v1 learned the hard way', () => {
     // it with a runtime fallback to office cash; here the bad value cannot be stored at all.
     const f = await fixture('till');
     await expect(
-      createRecurringTemplate(null, f.manager, { ...base(f), defaultMoneyAccountId: f.tillId }),
+      createRecurringTemplateAsOrg(f.orgId, f.manager, { ...base(f), defaultMoneyAccountId: f.tillId }),
     ).rejects.toThrow(/CASHIER account/);
   });
 
   it('accepts the till when the choice is explicit, and RECORDS that it was', async () => {
     const f = await fixture('till-ok');
-    const { id } = await createRecurringTemplate(null, f.manager, {
+    const { id } = await createRecurringTemplateAsOrg(f.orgId, f.manager, {
       ...base(f), defaultMoneyAccountId: f.tillId, tillIsDeliberate: true,
     });
     const row = await asOrg(f.orgId, (tx) => recurringExpensesRepo.getById(tx, f.orgId, id));
@@ -157,7 +176,7 @@ describe('⛔ the till rule v1 learned the hard way', () => {
     // Otherwise the flag would claim a considered decision about an account nobody had to think
     // about, and the one place it means something would stop meaning anything.
     const f = await fixture('till-office');
-    const { id } = await createRecurringTemplate(null, f.manager, {
+    const { id } = await createRecurringTemplateAsOrg(f.orgId, f.manager, {
       ...base(f), defaultMoneyAccountId: f.officeId, tillIsDeliberate: true,
     });
     const row = await asOrg(f.orgId, (tx) => recurringExpensesRepo.getById(tx, f.orgId, id));
@@ -167,7 +186,7 @@ describe('⛔ the till rule v1 learned the hard way', () => {
   it('refuses an account belonging to a DIFFERENT store', async () => {
     const f = await fixture('crossstore');
     await expect(
-      createRecurringTemplate(null, f.manager, { ...base(f), defaultMoneyAccountId: f.otherStoreAccountId }),
+      createRecurringTemplateAsOrg(f.orgId, f.manager, { ...base(f), defaultMoneyAccountId: f.otherStoreAccountId }),
     ).rejects.toThrow(/different store/);
   });
 });
@@ -201,18 +220,18 @@ describe('the database refuses what a service must not be trusted to remember', 
 
   it('⛔ STAFF may not manage a template — the ✗ in the matrix fires', async () => {
     const f = await fixture('denied');
-    await expect(createRecurringTemplate(null, f.staff, base(f))).rejects.toThrow(/manage_recurring_expenses/);
+    await expect(createRecurringTemplateAsOrg(f.orgId, f.staff, base(f))).rejects.toThrow(/manage_recurring_expenses/);
   });
 });
 
 describe('pause, resume, and the one thing that may not be deleted', () => {
   it('pausing and resuming flips the status', async () => {
     const f = await fixture('pause');
-    const { id } = await createRecurringTemplate(null, f.manager, base(f));
-    await setRecurringTemplateStatus(null, f.manager, { templateId: id, status: 'paused' });
+    const { id } = await createRecurringTemplateAsOrg(f.orgId, f.manager, base(f));
+    await setRecurringTemplateStatusAsOrg(f.orgId, f.manager, { templateId: id, status: 'paused' });
     let row = await asOrg(f.orgId, (tx) => recurringExpensesRepo.getById(tx, f.orgId, id));
     expect(row!.status).toBe('paused');
-    await setRecurringTemplateStatus(null, f.manager, { templateId: id, status: 'active' });
+    await setRecurringTemplateStatusAsOrg(f.orgId, f.manager, { templateId: id, status: 'active' });
     row = await asOrg(f.orgId, (tx) => recurringExpensesRepo.getById(tx, f.orgId, id));
     expect(row!.status).toBe('active');
   });
@@ -221,23 +240,23 @@ describe('pause, resume, and the one thing that may not be deleted', () => {
     // Otherwise it wakes with a due date months behind and drafts its way forward — noise on the
     // morning somebody switched it back on, and the opposite of what "resume" means.
     const f = await fixture('stale');
-    const { id } = await createRecurringTemplate(null, f.manager, { ...base(f), from: '2026-01-02' });
+    const { id } = await createRecurringTemplateAsOrg(f.orgId, f.manager, { ...base(f), from: '2026-01-02' });
     await sql`update recurring_expenses set next_due_date = '2026-01-05', status = 'paused' where id = ${id}`;
-    await setRecurringTemplateStatus(null, f.manager, { templateId: id, status: 'active' });
+    await setRecurringTemplateStatusAsOrg(f.orgId, f.manager, { templateId: id, status: 'active' });
     const row = await asOrg(f.orgId, (tx) => recurringExpensesRepo.getById(tx, f.orgId, id));
     expect(row!.nextDueDate > '2026-01-05').toBe(true);
   });
 
   it('a never-used template can be deleted', async () => {
     const f = await fixture('del');
-    const { id } = await createRecurringTemplate(null, f.manager, base(f));
-    await deleteRecurringTemplate(null, f.manager, { templateId: id });
+    const { id } = await createRecurringTemplateAsOrg(f.orgId, f.manager, base(f));
+    await deleteRecurringTemplateAsOrg(f.orgId, f.manager, { templateId: id });
     expect(await asOrg(f.orgId, (tx) => recurringExpensesRepo.getById(tx, f.orgId, id))).toBeUndefined();
   });
 
   it('⛔ one that has already produced an expense is refused — pause it instead', async () => {
     const f = await fixture('delused');
-    const { id } = await createRecurringTemplate(null, f.manager, base(f));
+    const { id } = await createRecurringTemplateAsOrg(f.orgId, f.manager, base(f));
     // Stand in for the job's stamp. ⚠️ A real `expenses` row is needed because the FK is real; the
     // point of the test is the SERVICE's refusal, not how the id got there.
     const [supplier] = await sql<{ id: string }[]>`
@@ -252,7 +271,7 @@ describe('pause, resume, and the one thing that may not be deleted', () => {
               ${inv!.id}, 'from a template', 'draft', ${f.manager.personId}) returning id`;
     await sql`update recurring_expenses set last_drafted_expense_id = ${exp!.id} where id = ${id}`;
 
-    await expect(deleteRecurringTemplate(null, f.manager, { templateId: id })).rejects.toThrow(/pause it instead/);
+    await expect(deleteRecurringTemplateAsOrg(f.orgId, f.manager, { templateId: id })).rejects.toThrow(/pause it instead/);
   });
 
   it('⛔ editing only the NAME leaves the due date alone', async () => {
@@ -261,9 +280,9 @@ describe('pause, resume, and the one thing that may not be deleted', () => {
     // made by an edit that had nothing to do with timing. Found in self-review, and this is the
     // test that keeps it found.
     const f = await fixture('editname');
-    const { id } = await createRecurringTemplate(null, f.manager, { ...base(f), from: '2026-01-02' });
+    const { id } = await createRecurringTemplateAsOrg(f.orgId, f.manager, { ...base(f), from: '2026-01-02' });
     const before = await asOrg(f.orgId, (tx) => recurringExpensesRepo.getById(tx, f.orgId, id));
-    await updateRecurringTemplate(null, f.manager, {
+    await updateRecurringTemplateAsOrg(f.orgId, f.manager, {
       templateId: id,
       name: 'Lipa branch rent (corrected)',
       interval: before!.interval,
@@ -276,9 +295,9 @@ describe('pause, resume, and the one thing that may not be deleted', () => {
 
   it('⚠️ changing the INTERVAL re-derives the cursor — an old due date the new rule could not produce is not kept', async () => {
     const f = await fixture('edit');
-    const { id } = await createRecurringTemplate(null, f.manager, { ...base(f), anchorDay: 30, from: '2026-01-02' });
+    const { id } = await createRecurringTemplateAsOrg(f.orgId, f.manager, { ...base(f), anchorDay: 30, from: '2026-01-02' });
     const before = await asOrg(f.orgId, (tx) => recurringExpensesRepo.getById(tx, f.orgId, id));
-    await updateRecurringTemplate(null, f.manager, { templateId: id, interval: 'weekly', anchorDay: 2 });
+    await updateRecurringTemplateAsOrg(f.orgId, f.manager, { templateId: id, interval: 'weekly', anchorDay: 2 });
     const after = await asOrg(f.orgId, (tx) => recurringExpensesRepo.getById(tx, f.orgId, id));
     expect(after!.interval).toBe('weekly');
     expect(after!.anchorDay).toBe(2);
@@ -292,22 +311,22 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
   it('createRecurringTemplate refuses "0.004" for defaultAmount', async () => {
     const f = await fixture('def272-create');
     await expect(
-      createRecurringTemplate(null, f.manager, { ...base(f), defaultAmount: '0.004' }),
+      createRecurringTemplateAsOrg(f.orgId, f.manager, { ...base(f), defaultAmount: '0.004' }),
     ).rejects.toThrow(/createRecurringTemplate: the default amount.*"0\.004"/);
   });
 
   it('an ordinary template still works, and the exact value is stored', async () => {
     const f = await fixture('def272-happy');
-    const { id } = await createRecurringTemplate(null, f.manager, { ...base(f), defaultAmount: '0.01' });
+    const { id } = await createRecurringTemplateAsOrg(f.orgId, f.manager, { ...base(f), defaultAmount: '0.01' });
     const row = await asOrg(f.orgId, (tx) => recurringExpensesRepo.getById(tx, f.orgId, id));
     expect(row!.defaultAmount).toBe('0.01');
   });
 
   it('updateRecurringTemplate refuses "0.004" for defaultAmount', async () => {
     const f = await fixture('def272-update');
-    const { id } = await createRecurringTemplate(null, f.manager, base(f));
+    const { id } = await createRecurringTemplateAsOrg(f.orgId, f.manager, base(f));
     await expect(
-      updateRecurringTemplate(null, f.manager, { templateId: id, defaultAmount: '0.004' }),
+      updateRecurringTemplateAsOrg(f.orgId, f.manager, { templateId: id, defaultAmount: '0.004' }),
     ).rejects.toThrow(/updateRecurringTemplate: the default amount.*"0\.004"/);
   });
 });

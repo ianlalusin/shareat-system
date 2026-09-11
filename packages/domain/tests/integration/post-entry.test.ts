@@ -39,8 +39,19 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 // spec — the seed helper is a separate concern). packages/db/tests/integration/journal.test.ts
 // reaches this same file the same way, one package closer.
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
-import { closeDb } from '@shareat/db';
+import { closeDb, withOrgPrincipal } from '@shareat/db';
 import { postEntry } from '@shareat/domain';
+
+/**
+ * Every real caller reaches postEntry() through an API-layer wrapper that has already
+ * called withOrgPrincipal (apps/erp/src/app/expenses/lib.ts is the pattern) — postEntry
+ * itself only joins whatever transaction it is handed. Standing in for that layer here,
+ * at the same depth production wraps at, rather than passing `null` and letting postEntry
+ * open a bare, principal-less transaction of its own (a path no production caller takes).
+ */
+function postEntryAsOrg(input: Parameters<typeof postEntry>[1]) {
+  return withOrgPrincipal(input.orgId, (tx) => postEntry(tx, input));
+}
 
 const sql = postgres(url, { max: 5 });
 
@@ -125,7 +136,7 @@ describe('invariant 1 — a balanced two-line entry posts', () => {
   it('comes back status=posted with posted_at set', async () => {
     const { orgId } = await baseFixture('inv1');
     const sourceId = uid('inv1');
-    const result = await postEntry(null, {
+    const result = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'test',
@@ -149,7 +160,7 @@ describe('invariant 1 — a balanced two-line entry posts', () => {
 describe('invariant 2 — a three-line entry (one debit, two credits) that balances, posts', () => {
   it('accepts a 1-debit/2-credit split summing equal', async () => {
     const { orgId } = await baseFixture('inv2');
-    const result = await postEntry(null, {
+    const result = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'test',
@@ -174,7 +185,7 @@ describe('invariant 3 — an unbalanced entry rolls the whole transaction back',
     const sourceId = uid('inv3');
 
     await expect(
-      postEntry(null, {
+      postEntryAsOrg({
         orgId,
         entryDate: '2026-01-15',
         sourceType: 'test',
@@ -197,7 +208,7 @@ describe('invariant 4 — a single-line entry is rejected at COMMIT and leaves n
     const sourceId = uid('inv4');
 
     await expect(
-      postEntry(null, {
+      postEntryAsOrg({
         orgId,
         entryDate: '2026-01-15',
         sourceType: 'test',
@@ -216,7 +227,7 @@ describe('invariant 5 — an unknown accountCode is rejected, naming the code', 
     const { orgId } = await baseFixture('inv5');
 
     const msg = await rejectionMessage(
-      postEntry(null, {
+      postEntryAsOrg({
         orgId,
         entryDate: '2026-01-15',
         sourceType: 'test',
@@ -238,7 +249,7 @@ describe('invariant 6 — a reserved account code is rejected', () => {
     const { orgId } = await baseFixture(`inv6-${code}`);
 
     await expect(
-      postEntry(null, {
+      postEntryAsOrg({
         orgId,
         entryDate: '2026-01-15',
         sourceType: 'test',
@@ -258,7 +269,7 @@ describe('invariant 7 — a header account code is rejected', () => {
     const { orgId } = await baseFixture('inv7');
 
     await expect(
-      postEntry(null, {
+      postEntryAsOrg({
         orgId,
         entryDate: '2026-01-15',
         sourceType: 'test',
@@ -286,7 +297,7 @@ describe('invariant 8 — posting twice with the same key writes one entry', () 
       { accountCode: '1110', credit: '10.00' },
     ];
 
-    const first = await postEntry(null, {
+    const first = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'test',
@@ -294,7 +305,7 @@ describe('invariant 8 — posting twice with the same key writes one entry', () 
       idempotencyKey: key,
       lines,
     });
-    const second = await postEntry(null, {
+    const second = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-16',
       sourceType: 'test',
@@ -320,7 +331,7 @@ describe('invariant 9 — two different keys write two entries', () => {
       { accountCode: '1110', credit: '10.00' },
     ];
 
-    const first = await postEntry(null, {
+    const first = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'test',
@@ -328,7 +339,7 @@ describe('invariant 9 — two different keys write two entries', () => {
       idempotencyKey: uid('inv9-key-a'),
       lines,
     });
-    const second = await postEntry(null, {
+    const second = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'test',
@@ -353,7 +364,7 @@ describe('invariant 10 — concurrent posts with the same key produce exactly on
     ];
 
     const [r1, r2] = await Promise.all([
-      postEntry(null, {
+      postEntryAsOrg({
         orgId,
         entryDate: '2026-01-15',
         sourceType: 'test',
@@ -361,7 +372,7 @@ describe('invariant 10 — concurrent posts with the same key produce exactly on
         idempotencyKey: key,
         lines,
       }),
-      postEntry(null, {
+      postEntryAsOrg({
         orgId,
         entryDate: '2026-01-15',
         sourceType: 'test',
@@ -390,7 +401,7 @@ describe("invariant 11 — an entryDate in a 'closed' period is rejected, naming
     const periodId = await insertPeriod(orgId, '2026-02-01', '2026-02-28', 'closed');
 
     const msg = await rejectionMessage(
-      postEntry(null, {
+      postEntryAsOrg({
         orgId,
         entryDate: '2026-02-15',
         sourceType: 'test',
@@ -415,7 +426,7 @@ describe("invariant 12 — an entryDate in a 'locked' period is rejected", () =>
     const periodId = await insertPeriod(orgId, '2026-03-01', '2026-03-31', 'locked');
 
     const msg = await rejectionMessage(
-      postEntry(null, {
+      postEntryAsOrg({
         orgId,
         entryDate: '2026-03-15',
         sourceType: 'test',
@@ -440,7 +451,7 @@ describe('invariant 13 — an entryDate with no covering period is rejected, nam
     // Deliberately no fiscal_periods row for this org at all.
 
     const msg = await rejectionMessage(
-      postEntry(null, {
+      postEntryAsOrg({
         orgId,
         entryDate: '2026-04-15',
         sourceType: 'test',
@@ -464,7 +475,7 @@ describe('invariant 13 — an entryDate with no covering period is rejected, nam
 describe('invariant 14 — DEF-031 regression: raw SQL cannot INSERT a line onto an already-posted entry', () => {
   it('rejects even a balanced pair, even in a new transaction', async () => {
     const { orgId } = await baseFixture('inv14');
-    const posted = await postEntry(null, {
+    const posted = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'test',
@@ -502,7 +513,7 @@ describe('invariant 14 — DEF-031 regression: raw SQL cannot INSERT a line onto
 describe('invariant 15 — postEntry itself still works after the DEF-031 fix', () => {
   it('the legitimate draft -> lines -> posted sequence still succeeds', async () => {
     const { orgId } = await baseFixture('inv15');
-    const result = await postEntry(null, {
+    const result = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-20',
       sourceType: 'test',
@@ -532,7 +543,7 @@ describe('invariant 16 — an ETL-style historical post succeeds', () => {
     // history into periods that were open at the time, not "today".
     await insertPeriod(orgId, '2020-01-01', '2020-12-31', 'open');
 
-    const result = await postEntry(null, {
+    const result = await postEntryAsOrg({
       orgId,
       entryDate: '2020-03-05',
       sourceType: 'etl',

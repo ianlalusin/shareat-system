@@ -50,8 +50,21 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 }
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
-import { closeDb } from '@shareat/db';
+import { closeDb, withOrgPrincipal } from '@shareat/db';
 import { postEntry, reverseEntry } from '@shareat/domain';
+
+/**
+ * Every real caller reaches postEntry()/reverseEntry() through an API-layer wrapper that
+ * has already called withOrgPrincipal (apps/erp/src/app/expenses/lib.ts is the pattern) —
+ * neither function sets up a principal itself, only joins whatever transaction it is
+ * handed. Standing in for that layer here, at the same depth production wraps at.
+ */
+function postEntryAsOrg(input: Parameters<typeof postEntry>[1]) {
+  return withOrgPrincipal(input.orgId, (tx) => postEntry(tx, input));
+}
+function reverseEntryAsOrg(orgId: string, input: Parameters<typeof reverseEntry>[1]) {
+  return withOrgPrincipal(orgId, (tx) => reverseEntry(tx, input));
+}
 
 const sql = postgres(url, { max: 5 });
 
@@ -106,7 +119,7 @@ afterAll(async () => {
 describe('DEF-049 (regression) — postEntry, once fixed, CAN post a party onto a requires_party account', () => {
   it('a 2110 (AP) line with partyType/partyId now posts and reads back exactly', async () => {
     const { orgId } = await baseFixture('post-1');
-    const result = await postEntry(null, {
+    const result = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'test',
@@ -131,7 +144,7 @@ describe('DEF-049 (regression) — postEntry, once fixed, CAN post a party onto 
 
   it('a line with NO party on an ordinary account is completely unaffected — no regression', async () => {
     const { orgId } = await baseFixture('post-2');
-    const result = await postEntry(null, {
+    const result = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'test',
@@ -156,7 +169,7 @@ describe('DEF-049 (regression) — postEntry, once fixed, CAN post a party onto 
   it('a party on an account that does NOT require one is still rejected — the trigger is untouched', async () => {
     const { orgId } = await baseFixture('post-3');
     await expect(
-      postEntry(null, {
+      postEntryAsOrg({
         orgId,
         entryDate: '2026-01-15',
         sourceType: 'test',
@@ -172,7 +185,7 @@ describe('DEF-049 (regression) — postEntry, once fixed, CAN post a party onto 
 
   it('reverseEntry mirrors the party onto the reversal line — always reversible now holds for control accounts too', async () => {
     const { orgId } = await baseFixture('rev-1');
-    const original = await postEntry(null, {
+    const original = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'test',
@@ -184,7 +197,7 @@ describe('DEF-049 (regression) — postEntry, once fixed, CAN post a party onto 
       ],
     });
 
-    const result = await reverseEntry(null, { entryId: original.entryId, reason: 'DEF-049 regression' });
+    const result = await reverseEntryAsOrg(orgId, { entryId: original.entryId, reason: 'DEF-049 regression' });
     expect(result.created).toBe(true);
 
     const [reversalLine] = await sql<{ debit: string; credit: string; party_type: string; party_id: string }[]>`

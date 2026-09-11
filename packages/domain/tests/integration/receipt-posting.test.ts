@@ -2,7 +2,7 @@ import { config } from 'dotenv';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { money } from '@shareat/core/money';
-import { closeDb, transaction } from '@shareat/db';
+import { closeDb, withOrgPrincipal } from '@shareat/db';
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { postReceiptValue } from '../../src/stock/receipt-posting';
 import { linkInvoiceToReceipt } from '../../src/stock/invoice-link';
@@ -65,7 +65,7 @@ afterAll(async () => {
 
 describe('T-163 — a receipt is never costless', () => {
   it('⭐ posts Dr 1310 / Cr 2120 at the typed landed cost, before any invoice exists', async () => {
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       postReceiptValue(tx, {
         orgId: orgA,
         storeId: storeA,
@@ -85,7 +85,7 @@ describe('T-163 — a receipt is never costless', () => {
   });
 
   it('routes by the item’s kind — a supply lands in 1320, not 1310', async () => {
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       postReceiptValue(tx, {
         orgId: orgA, storeId: storeA, receiptId: crypto.randomUUID(), receivedOn: '2026-08-20',
         lines: [
@@ -101,7 +101,7 @@ describe('T-163 — a receipt is never costless', () => {
   });
 
   it('⛔ an unmapped item kind BLOCKS rather than guessing an account', async () => {
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       postReceiptValue(tx, {
         orgId: orgA, storeId: storeA, receiptId: crypto.randomUUID(), receivedOn: '2026-08-20',
         lines: [{ itemId: crypto.randomUUID(), itemKind: 'spaceship', lineCost: money('1.00') }],
@@ -119,8 +119,8 @@ describe('T-163 — a receipt is never costless', () => {
       orgId: orgA, storeId: storeA, receiptId, receivedOn: '2026-08-20',
       lines: [{ itemId: crypto.randomUUID(), itemKind: 'raw_material', lineCost: money('500.00') }],
     };
-    const first = await transaction((tx) => postReceiptValue(tx, input));
-    const second = await transaction((tx) => postReceiptValue(tx, input));
+    const first = await withOrgPrincipal(orgA, (tx) => postReceiptValue(tx, input));
+    const second = await withOrgPrincipal(orgA, (tx) => postReceiptValue(tx, input));
     expect(first.ok && first.created).toBe(true);
     expect(second.ok && second.created).toBe(false);
     expect((await balances())['1310']).toBe('500.00');
@@ -129,7 +129,7 @@ describe('T-163 — a receipt is never costless', () => {
   it('⛔ refuses a receipt into a CLOSED period', async () => {
     await sql`update fiscal_periods set status = 'closed' where org_id = ${orgA}`;
     await expect(
-      transaction((tx) =>
+      withOrgPrincipal(orgA, (tx) =>
         postReceiptValue(tx, {
           orgId: orgA, storeId: storeA, receiptId: crypto.randomUUID(), receivedOn: '2026-08-20',
           lines: [{ itemId: crypto.randomUUID(), itemKind: 'raw_material', lineCost: money('1.00') }],
@@ -143,7 +143,7 @@ describe('T-163 — the invoice CORRECTS a number that already exists', () => {
   const receiptId = crypto.randomUUID();
 
   async function receive(total: string) {
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       postReceiptValue(tx, {
         orgId: orgA, storeId: storeA, receiptId, receivedOn: '2026-08-20',
         lines: [{ itemId: crypto.randomUUID(), itemKind: 'raw_material', lineCost: money(total) }],
@@ -153,7 +153,7 @@ describe('T-163 — the invoice CORRECTS a number that already exists', () => {
 
   it('⭐ an exact invoice clears 2120 to ZERO and raises the payable', async () => {
     await receive('30000.00');
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       linkInvoiceToReceipt(tx, {
         orgId: orgA, storeId: storeA, receiptId,
         supplierInvoiceId: crypto.randomUUID(), supplierId: supplierA,
@@ -174,7 +174,7 @@ describe('T-163 — the invoice CORRECTS a number that already exists', () => {
 
   it('⭐ Ian’s case: 100 kg at ₱300, 40 consumed, invoice ₱310 — 1310 +600, 5450 +400', async () => {
     await receive('30000.00');
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       linkInvoiceToReceipt(tx, {
         orgId: orgA, storeId: storeA, receiptId,
         supplierInvoiceId: crypto.randomUUID(), supplierId: supplierA,
@@ -200,7 +200,7 @@ describe('T-163 — the invoice CORRECTS a number that already exists', () => {
 
   it('⭐ nothing consumed — the whole variance re-costs inventory and 5450 stays absent', async () => {
     await receive('1000.00');
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       linkInvoiceToReceipt(tx, {
         orgId: orgA, storeId: storeA, receiptId,
         supplierInvoiceId: crypto.randomUUID(), supplierId: supplierA,
@@ -218,7 +218,7 @@ describe('T-163 — the invoice CORRECTS a number that already exists', () => {
 
   it('⭐ everything consumed — the whole variance goes to 5450, and the entry still balances', async () => {
     await receive('1000.00');
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       linkInvoiceToReceipt(tx, {
         orgId: orgA, storeId: storeA, receiptId,
         supplierInvoiceId: crypto.randomUUID(), supplierId: supplierA,
@@ -236,7 +236,7 @@ describe('T-163 — the invoice CORRECTS a number that already exists', () => {
 
   it('a CHEAPER invoice moves both shares the other way', async () => {
     await receive('1000.00');
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       linkInvoiceToReceipt(tx, {
         orgId: orgA, storeId: storeA, receiptId,
         supplierInvoiceId: crypto.randomUUID(), supplierId: supplierA,
@@ -255,7 +255,7 @@ describe('T-163 — the invoice CORRECTS a number that already exists', () => {
 
   it('⭐ a centavo-rounded invoice is NEVER blocked — v1’s judgement, kept', async () => {
     await receive('1000.00');
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       linkInvoiceToReceipt(tx, {
         orgId: orgA, storeId: storeA, receiptId,
         supplierInvoiceId: crypto.randomUUID(), supplierId: supplierA,
@@ -273,7 +273,7 @@ describe('T-163 — the invoice CORRECTS a number that already exists', () => {
 
   it('the payable carries the supplier as its party — 2110 is a control account', async () => {
     await receive('1000.00');
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       linkInvoiceToReceipt(tx, {
         orgId: orgA, storeId: storeA, receiptId,
         supplierInvoiceId: crypto.randomUUID(), supplierId: supplierA,
@@ -292,7 +292,7 @@ describe('T-163 — the invoice CORRECTS a number that already exists', () => {
 
   it('⛔ an invoice for a non-positive amount is refused', async () => {
     await receive('1000.00');
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       linkInvoiceToReceipt(tx, {
         orgId: orgA, storeId: storeA, receiptId,
         supplierInvoiceId: crypto.randomUUID(), supplierId: supplierA,
@@ -307,7 +307,7 @@ describe('T-163 — the invoice CORRECTS a number that already exists', () => {
 
   it('⭐ the trial balance ties after every path', async () => {
     await receive('30000.00');
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       linkInvoiceToReceipt(tx, {
         orgId: orgA, storeId: storeA, receiptId,
         supplierInvoiceId: crypto.randomUUID(), supplierId: supplierA,

@@ -37,8 +37,17 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 // Cross-package relative import, same pattern as packages/domain/tests/integration/post-entry.test.ts:
 // @shareat/db has no "./seed" export — the seed helper is a separate concern from "the repo".
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
-import { closeDb } from '@shareat/db';
+import { closeDb, withOrgPrincipal } from '@shareat/db';
 import { postEntry } from '@shareat/domain';
+
+/**
+ * postEntry is reached in production only through an API-layer wrapper that has already
+ * called withOrgPrincipal — it does not establish a principal itself. Standing in for that
+ * layer here, at the same depth production wraps at.
+ */
+function postEntryAsOrg(input: Parameters<typeof postEntry>[1]) {
+  return withOrgPrincipal(input.orgId, (tx) => postEntry(tx, input));
+}
 import { adaptLegacyLegs, type LegacyLeg, type ResolvedAccount } from '../../src/ledger/legacy-adapter';
 
 const sql = postgres(url, { max: 5 });
@@ -162,7 +171,7 @@ describe('invariant 18 — a balanced two-leg legacy group adapts and posts via 
     expect(adapted.lines).toHaveLength(2);
 
     const sourceId = uid('inv18');
-    const result = await postEntry(null, {
+    const result = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'legacy-migration',
@@ -199,7 +208,7 @@ describe('invariant 19 — a single-leg legacy group adapts to one line, then is
 
     const sourceId = uid('inv19');
     await expect(
-      postEntry(null, {
+      postEntryAsOrg({
         orgId,
         entryDate: '2026-01-15',
         sourceType: 'legacy-migration',

@@ -18,11 +18,25 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 }
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
-import { closeDb, getDb } from '@shareat/db';
+import { closeDb, withOrgPrincipal } from '@shareat/db';
 import { getIncomeStatement, getStorePLComparison, postEntry } from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
-const db = getDb();
+
+/**
+ * Every one of these is reached in production only through an API-layer wrapper that has
+ * already called withOrgPrincipal — none establishes a principal itself. Standing in for
+ * that layer here, at the same depth production wraps at.
+ */
+function postEntryAsOrg(input: Parameters<typeof postEntry>[1]) {
+  return withOrgPrincipal(input.orgId, (tx) => postEntry(tx, input));
+}
+function getStorePLComparisonAsOrg(input: Parameters<typeof getStorePLComparison>[1]) {
+  return withOrgPrincipal(input.orgId, (tx) => getStorePLComparison(tx, input));
+}
+function getIncomeStatementAsOrg(input: Parameters<typeof getIncomeStatement>[1]) {
+  return withOrgPrincipal(input.orgId, (tx) => getIncomeStatement(tx, input));
+}
 
 async function fixture() {
   const code = `storecmp-${randomUUID()}`;
@@ -49,14 +63,14 @@ describe('getStorePLComparison', () => {
   it("each store's figures match calling getIncomeStatement directly for that store alone", async () => {
     const { orgId, storeAId, storeBId } = await fixture();
 
-    await postEntry(null, {
+    await postEntryAsOrg({
       orgId, entryDate: '2026-01-10', sourceType: 'test:store-a-sale', sourceId: randomUUID(), idempotencyKey: randomUUID(),
       lines: [
         { accountCode: '1110', storeId: storeAId, debit: '3000.00' },
         { accountCode: '4150', storeId: storeAId, credit: '3000.00' },
       ],
     });
-    await postEntry(null, {
+    await postEntryAsOrg({
       orgId, entryDate: '2026-01-12', sourceType: 'test:store-b-sale', sourceId: randomUUID(), idempotencyKey: randomUUID(),
       lines: [
         { accountCode: '1110', storeId: storeBId, debit: '900.00' },
@@ -64,13 +78,13 @@ describe('getStorePLComparison', () => {
       ],
     });
 
-    const comparison = await getStorePLComparison(db, {
+    const comparison = await getStorePLComparisonAsOrg({
       orgId, storeIds: [storeAId, storeBId], fromDate: '2026-01-01', toDate: '2026-01-31',
     });
 
     const direct = await Promise.all(
       [storeAId, storeBId].map((storeId) =>
-        getIncomeStatement(db, { orgId, storeId, fromDate: '2026-01-01', toDate: '2026-01-31' }),
+        getIncomeStatementAsOrg({ orgId, storeId, fromDate: '2026-01-01', toDate: '2026-01-31' }),
       ),
     );
 
@@ -82,14 +96,14 @@ describe('getStorePLComparison', () => {
 
   it('omitting a store excludes it without affecting the others', async () => {
     const { orgId, storeAId, storeBId } = await fixture();
-    await postEntry(null, {
+    await postEntryAsOrg({
       orgId, entryDate: '2026-01-10', sourceType: 'test:store-a-sale', sourceId: randomUUID(), idempotencyKey: randomUUID(),
       lines: [
         { accountCode: '1110', storeId: storeAId, debit: '500.00' },
         { accountCode: '4150', storeId: storeAId, credit: '500.00' },
       ],
     });
-    await postEntry(null, {
+    await postEntryAsOrg({
       orgId, entryDate: '2026-01-10', sourceType: 'test:store-b-sale', sourceId: randomUUID(), idempotencyKey: randomUUID(),
       lines: [
         { accountCode: '1110', storeId: storeBId, debit: '700.00' },
@@ -97,7 +111,7 @@ describe('getStorePLComparison', () => {
       ],
     });
 
-    const onlyA = await getStorePLComparison(db, { orgId, storeIds: [storeAId], fromDate: '2026-01-01', toDate: '2026-01-31' });
+    const onlyA = await getStorePLComparisonAsOrg({ orgId, storeIds: [storeAId], fromDate: '2026-01-01', toDate: '2026-01-31' });
 
     expect(onlyA.stores).toHaveLength(1);
     expect(onlyA.stores[0]!.statement.revenue).toBe('500.00');

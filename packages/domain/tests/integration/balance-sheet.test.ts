@@ -26,11 +26,22 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 }
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
-import { closeDb, getDb } from '@shareat/db';
+import { closeDb, withOrgPrincipal } from '@shareat/db';
 import { getBalanceSheet, postEntry } from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
-const db = getDb();
+
+/**
+ * Both postEntry and getBalanceSheet are reached in production only through an API-layer
+ * wrapper that has already called withOrgPrincipal — neither establishes a principal
+ * itself. Standing in for that layer here, at the same depth production wraps at.
+ */
+function postEntryAsOrg(input: Parameters<typeof postEntry>[1]) {
+  return withOrgPrincipal(input.orgId, (tx) => postEntry(tx, input));
+}
+function getBalanceSheetAsOrg(input: Parameters<typeof getBalanceSheet>[1]) {
+  return withOrgPrincipal(input.orgId, (tx) => getBalanceSheet(tx, input));
+}
 
 let orgId: string;
 
@@ -56,7 +67,7 @@ describe('getBalanceSheet', () => {
   it('ties (assets == liabilities + equity) after an ordinary asset/liability/equity-touching posting', async () => {
     // Dr 1110 Cash 10,000 / Cr 3300 Retained earnings 10,000 — an equity-touching posting
     // that needs no party (unlike 3100/3200, which are owner-specific — T-118).
-    await postEntry(null, {
+    await postEntryAsOrg({
       orgId,
       entryDate: '2026-03-01',
       sourceType: 'test:balance-sheet',
@@ -68,7 +79,7 @@ describe('getBalanceSheet', () => {
       ],
     });
 
-    const result = await getBalanceSheet(db, { orgId, asOfDate: '2026-12-31' });
+    const result = await getBalanceSheetAsOrg({ orgId, asOfDate: '2026-12-31' });
 
     expect(result.ties, `assets (${result.assets}) must equal liabilities+equity`).toBe(true);
     expect(result.assets).toBe('10000.00');
@@ -79,7 +90,7 @@ describe('getBalanceSheet', () => {
   it('a debit to 1590 (accumulated depreciation) REDUCES assets, not increases them', async () => {
     // First put an asset on the books, funded by capital, so the equation has something to
     // tie against before depreciation touches it.
-    await postEntry(null, {
+    await postEntryAsOrg({
       orgId,
       entryDate: '2026-04-01',
       sourceType: 'test:balance-sheet',
@@ -91,13 +102,13 @@ describe('getBalanceSheet', () => {
       ],
     });
 
-    const before = await getBalanceSheet(db, { orgId, asOfDate: '2026-04-01' });
+    const before = await getBalanceSheetAsOrg({ orgId, asOfDate: '2026-04-01' });
     const assetsBefore = before.assets;
 
     // The ORDINARY depreciation posting: Dr 6700 Depreciation expense / Cr 1590 Accumulated
     // depreciation. 6700 is type=expense (off this statement); 1590 is type=asset,
     // normal_balance=credit — the contra case.
-    await postEntry(null, {
+    await postEntryAsOrg({
       orgId,
       entryDate: '2026-04-30',
       sourceType: 'test:balance-sheet',
@@ -109,7 +120,7 @@ describe('getBalanceSheet', () => {
       ],
     });
 
-    const after = await getBalanceSheet(db, { orgId, asOfDate: '2026-04-30' });
+    const after = await getBalanceSheetAsOrg({ orgId, asOfDate: '2026-04-30' });
 
     // The regression: a version that signs 1590 by its OWN normal_balance (credit-positive)
     // would show its line as +500.00 and ADD it to gross assets. Signed by TYPE
@@ -123,7 +134,7 @@ describe('getBalanceSheet', () => {
   });
 
   it('excludes an account with zero net activity in range from its section', async () => {
-    const result = await getBalanceSheet(db, { orgId, asOfDate: '2026-01-01' });
+    const result = await getBalanceSheetAsOrg({ orgId, asOfDate: '2026-01-01' });
     // Nothing has been posted as of 2026-01-01 (the fixtures above post from 2026-03-01
     // onward) — every section is empty, and the equation trivially ties at zero.
     expect(result.assetLines).toEqual([]);
@@ -134,8 +145,8 @@ describe('getBalanceSheet', () => {
   });
 
   it('respects storeId and includeYearClose the same way getTrialBalance does', async () => {
-    const withYearClose = await getBalanceSheet(db, { orgId, asOfDate: '2026-12-31', includeYearClose: true });
-    const withoutYearClose = await getBalanceSheet(db, { orgId, asOfDate: '2026-12-31', includeYearClose: false });
+    const withYearClose = await getBalanceSheetAsOrg({ orgId, asOfDate: '2026-12-31', includeYearClose: true });
+    const withoutYearClose = await getBalanceSheetAsOrg({ orgId, asOfDate: '2026-12-31', includeYearClose: false });
     // No year-close entry exists in this fixture set — both must agree, proving the flag is
     // wired through rather than silently ignored (a bug that would only show up once a
     // year-close entry actually exists).

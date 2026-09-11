@@ -2,7 +2,7 @@ import { config } from 'dotenv';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { money } from '@shareat/core/money';
-import { closeDb, transaction } from '@shareat/db';
+import { closeDb, withOrgPrincipal } from '@shareat/db';
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { postConsumption, postCountVariance, postWastage } from '../../src/stock/consumption-posting';
 import { isReservedUsageCategory, WASTAGE_REASONS } from '../../src/stock/wastage-reasons';
@@ -74,7 +74,7 @@ afterAll(async () => {
 
 describe('T-164 — consumption', () => {
   it('⭐ posts Dr 5110 / Cr 1310 at the FIFO cost, as ONE entry across two layers', async () => {
-    const res = await transaction((tx) => postConsumption(tx, { ...base(), cogsCategory: 'meat' }));
+    const res = await withOrgPrincipal(orgA, (tx) => postConsumption(tx, { ...base(), cogsCategory: 'meat' }));
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.cost).toBe(money('1600.00'));
@@ -89,7 +89,7 @@ describe('T-164 — consumption', () => {
   });
 
   it('routes by COGS category — a beverage lands in 5200', async () => {
-    await transaction((tx) => postConsumption(tx, { ...base(), cogsCategory: 'beverage' }));
+    await withOrgPrincipal(orgA, (tx) => postConsumption(tx, { ...base(), cogsCategory: 'beverage' }));
     const b = await balances();
     expect(b['5200']).toBe('1600.00');
     expect(b['5110']).toBeUndefined();
@@ -98,7 +98,7 @@ describe('T-164 — consumption', () => {
   it('⛔ an unknown COGS category BLOCKS rather than falling back to the catch-all', async () => {
     // COA-ALIGNMENT says drive 5100 to zero. Routing the unknown into it would do the opposite,
     // quietly and forever.
-    const res = await transaction((tx) => postConsumption(tx, { ...base(), cogsCategory: 'fireworks' }));
+    const res = await withOrgPrincipal(orgA, (tx) => postConsumption(tx, { ...base(), cogsCategory: 'fireworks' }));
     expect(res.ok).toBe(false);
     if (res.ok) return;
     expect(res.reason).toContain('fireworks');
@@ -107,8 +107,8 @@ describe('T-164 — consumption', () => {
 
   it('is idempotent — a retried post writes one entry', async () => {
     const input = { ...base(), cogsCategory: 'meat' };
-    const first = await transaction((tx) => postConsumption(tx, input));
-    const second = await transaction((tx) => postConsumption(tx, input));
+    const first = await withOrgPrincipal(orgA, (tx) => postConsumption(tx, input));
+    const second = await withOrgPrincipal(orgA, (tx) => postConsumption(tx, input));
     expect(first.ok && first.created).toBe(true);
     expect(second.ok && second.created).toBe(false);
     expect((await balances())['5110']).toBe('1600.00');
@@ -117,7 +117,7 @@ describe('T-164 — consumption', () => {
 
 describe('T-164 — wastage is NOT COGS', () => {
   it('⭐ posts 5300, never a COGS account, even for food', async () => {
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       postWastage(tx, { ...base(), sourceType: 'wastage', reason: 'spoilage' }),
     );
     expect(res.ok).toBe(true);
@@ -132,7 +132,7 @@ describe('T-164 — wastage is NOT COGS', () => {
 
   it('the reason rides the movement, not the journal line — one account for every reason', async () => {
     for (const reason of WASTAGE_REASONS.slice(0, 3)) {
-      await transaction((tx) =>
+      await withOrgPrincipal(orgA, (tx) =>
         postWastage(tx, { ...base(), sourceType: 'wastage', sourceId: crypto.randomUUID(), reason }),
       );
     }
@@ -145,7 +145,7 @@ describe('T-164 — wastage is NOT COGS', () => {
 
 describe('T-164 — count variance is a CORRECTION, not a cost', () => {
   it('⭐ counted SHORT relieves inventory into 5400', async () => {
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       postCountVariance(tx, { ...base(), sourceType: 'count', direction: 'short' }),
     );
     const b = await balances();
@@ -156,7 +156,7 @@ describe('T-164 — count variance is a CORRECTION, not a cost', () => {
   });
 
   it('⭐ counted LONG runs the other way — inventory up, 5400 credited', async () => {
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       postCountVariance(tx, { ...base(), sourceType: 'count', direction: 'long' }),
     );
     const b = await balances();
@@ -167,7 +167,7 @@ describe('T-164 — count variance is a CORRECTION, not a cost', () => {
   it('⛔ an OPENING count is refused, naming 3900 and T-134', async () => {
     // v2 has no December P&L to charge December's shrinkage to, so the opening variance goes to
     // equity. ERPNext enforces the same distinction with its own error class.
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       postCountVariance(tx, { ...base(), sourceType: 'count', direction: 'short', isOpeningCount: true }),
     );
     expect(res.ok).toBe(false);
@@ -187,19 +187,19 @@ describe('T-164 — the period lock, on every one of the three paths', () => {
 
   it('consumption into a closed period is refused', async () => {
     await expect(
-      transaction((tx) => postConsumption(tx, { ...base(), cogsCategory: 'meat' })),
+      withOrgPrincipal(orgA, (tx) => postConsumption(tx, { ...base(), cogsCategory: 'meat' })),
     ).rejects.toThrow(/period/i);
   });
 
   it('wastage into a closed period is refused', async () => {
     await expect(
-      transaction((tx) => postWastage(tx, { ...base(), sourceType: 'wastage', reason: 'spoilage' })),
+      withOrgPrincipal(orgA, (tx) => postWastage(tx, { ...base(), sourceType: 'wastage', reason: 'spoilage' })),
     ).rejects.toThrow(/period/i);
   });
 
   it('a count variance into a closed period is refused', async () => {
     await expect(
-      transaction((tx) => postCountVariance(tx, { ...base(), sourceType: 'count', direction: 'short' })),
+      withOrgPrincipal(orgA, (tx) => postCountVariance(tx, { ...base(), sourceType: 'count', direction: 'short' })),
     ).rejects.toThrow(/period/i);
   });
 });
@@ -227,9 +227,9 @@ describe('T-164 — the ledger holds', () => {
   it('⭐ every 5xxx account used here appears in the P&L without a hand-added scan block', async () => {
     // Invariant 2. v1's income statement is a hand-assembled scan list, so a new account is
     // silently omitted; here the P&L is a query over journal_lines and cannot miss one.
-    await transaction((tx) => postConsumption(tx, { ...base(), cogsCategory: 'meat' }));
-    await transaction((tx) => postWastage(tx, { ...base(), sourceType: 'wastage', sourceId: crypto.randomUUID(), reason: 'spoilage' }));
-    await transaction((tx) => postCountVariance(tx, { ...base(), sourceType: 'count', sourceId: crypto.randomUUID(), direction: 'short' }));
+    await withOrgPrincipal(orgA, (tx) => postConsumption(tx, { ...base(), cogsCategory: 'meat' }));
+    await withOrgPrincipal(orgA, (tx) => postWastage(tx, { ...base(), sourceType: 'wastage', sourceId: crypto.randomUUID(), reason: 'spoilage' }));
+    await withOrgPrincipal(orgA, (tx) => postCountVariance(tx, { ...base(), sourceType: 'count', sourceId: crypto.randomUUID(), direction: 'short' }));
 
     const rows = await sql<{ code: string }[]>`
       select distinct a.code from journal_lines l join accounts a on a.id = l.account_id
@@ -238,9 +238,9 @@ describe('T-164 — the ledger holds', () => {
   });
 
   it('the trial balance ties after all three', async () => {
-    await transaction((tx) => postConsumption(tx, { ...base(), cogsCategory: 'meat' }));
-    await transaction((tx) => postWastage(tx, { ...base(), sourceType: 'wastage', sourceId: crypto.randomUUID(), reason: 'expiry' }));
-    await transaction((tx) => postCountVariance(tx, { ...base(), sourceType: 'count', sourceId: crypto.randomUUID(), direction: 'long' }));
+    await withOrgPrincipal(orgA, (tx) => postConsumption(tx, { ...base(), cogsCategory: 'meat' }));
+    await withOrgPrincipal(orgA, (tx) => postWastage(tx, { ...base(), sourceType: 'wastage', sourceId: crypto.randomUUID(), reason: 'expiry' }));
+    await withOrgPrincipal(orgA, (tx) => postCountVariance(tx, { ...base(), sourceType: 'count', sourceId: crypto.randomUUID(), direction: 'long' }));
 
     const [tb] = await sql<{ net: string }[]>`
       select (sum(debit) - sum(credit))::text as net from journal_lines l

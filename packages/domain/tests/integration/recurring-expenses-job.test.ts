@@ -115,9 +115,9 @@ async function dueTemplate(
   f: Fixture,
   over: Partial<Parameters<typeof createRecurringTemplate>[2]> = {},
 ) {
-  const { id } = await createRecurringTemplate(null, f.manager, {
+  const { id } = await asOrg(f.orgId, (tx) => createRecurringTemplate(tx, f.manager, {
     ...template(f), ...over, from: '2026-09-01',
-  });
+  }));
   return id;
 }
 
@@ -276,7 +276,7 @@ describe('⭐ idempotency — the cursor, and the guard the cursor cannot be', (
   it('6 — a paused template drafts nothing', async () => {
     const f = await fixture('paused');
     const id = await dueTemplate(f);
-    await setRecurringTemplateStatus(null, f.manager, { templateId: id, status: 'paused' });
+    await asOrg(f.orgId, (tx) => setRecurringTemplateStatus(tx, f.manager, { templateId: id, status: 'paused' }));
     await run(f);
     expect((await counts(f.orgId)).e).toBe(0);
   });

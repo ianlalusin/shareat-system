@@ -13,7 +13,7 @@
 import { config } from 'dotenv';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
-import { closeDb, transaction, accessRepo, storesRepo, stockLocationsRepo } from '@shareat/db';
+import { closeDb, withOrgPrincipal, accessRepo, storesRepo, stockLocationsRepo } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import {
   createStore,
@@ -64,7 +64,7 @@ afterAll(async () => {
 });
 
 const make = (actor: Actor, over: Record<string, unknown> = {}) =>
-  transaction((tx) => createStore(tx, actor, { code: uid('ST'), name: 'Branch', ...over } as never));
+  withOrgPrincipal(orgA, (tx) => createStore(tx, actor, { code: uid('ST'), name: 'Branch', ...over } as never));
 
 describe('T-222 invariant 1 — only super_admin and admin may open a branch', () => {
   it('⛔ a MANAGER is refused', async () => {
@@ -88,14 +88,14 @@ describe('T-222 invariant 2 — a created store has exactly one active room', ()
   it('creates its default room in the same transaction', async () => {
     const { storeId, locationId } = await make(adminA);
     expect(locationId).toBeTruthy();
-    const rooms = await transaction((tx) => stockLocationsRepo.listActiveLocations(tx, storeId));
+    const rooms = await withOrgPrincipal(orgA, (tx) => stockLocationsRepo.listActiveLocations(tx, storeId));
     expect(rooms).toHaveLength(1);
   });
 
   it('⚠️ works in an org with NO location_types — otherwise creation is impossible in a fresh org', async () => {
     await sql`delete from location_types where org_id = ${orgA}`;
     const { storeId } = await make(adminA);
-    const rooms = await transaction((tx) => stockLocationsRepo.listActiveLocations(tx, storeId));
+    const rooms = await withOrgPrincipal(orgA, (tx) => stockLocationsRepo.listActiveLocations(tx, storeId));
     expect(rooms).toHaveLength(1);
   });
 });
@@ -107,9 +107,9 @@ describe('T-222 invariant 3 — ⭐ §C.2 second half: every active admin is sco
     const { storeId, scopedAdminIds } = await make(adminA);
 
     expect(scopedAdminIds).toHaveLength(2);
-    const creatorScoped = await transaction((tx) =>
+    const creatorScoped = await withOrgPrincipal(orgA, (tx) =>
       accessRepo.personHasStoreScope(tx, adminA.personId, storeId));
-    const otherScoped = await transaction((tx) =>
+    const otherScoped = await withOrgPrincipal(orgA, (tx) =>
       accessRepo.personHasStoreScope(tx, admin2Id, storeId));
     expect(creatorScoped).toBe(true);
     expect(otherScoped).toBe(true);
@@ -117,7 +117,7 @@ describe('T-222 invariant 3 — ⭐ §C.2 second half: every active admin is sco
 
   it('⛔ does NOT scope a manager or staff member — the fan-out is admins only', async () => {
     const { storeId } = await make(adminA);
-    const mgr = await transaction((tx) =>
+    const mgr = await withOrgPrincipal(orgA, (tx) =>
       accessRepo.personHasStoreScope(tx, managerA.personId, storeId));
     expect(mgr).toBe(false);
   });
@@ -152,7 +152,7 @@ describe('T-222 invariant 6 — ⭐ all-or-nothing, proved by an INJECTED failur
     const before = await sql<{ n: string }[]>`select count(*)::text n from stores where org_id = ${orgA}`;
 
     await expect(
-      transaction(async (tx) => {
+      withOrgPrincipal(orgA, async (tx) => {
         await createStore(tx, adminA, { code, name: 'Doomed' });
         throw new Error('injected failure after createStore, inside the same transaction');
       }),
@@ -174,12 +174,12 @@ describe('T-222 invariant 7 — readiness is DERIVED, never stored', () => {
       insert into sales_channels (org_id, store_id, name, is_active, is_remitted_daily)
       values (${orgA}, ${storeId}, 'Walk-in', true, true) returning id`;
 
-    const store = await transaction((tx) => storesRepo.getById(tx, orgA, storeId));
-    const green = await transaction((tx) => storeReadiness(tx, adminA, store!));
+    const store = await withOrgPrincipal(orgA, (tx) => storesRepo.getById(tx, orgA, storeId));
+    const green = await withOrgPrincipal(orgA, (tx) => storeReadiness(tx, adminA, store!));
     expect(green.find((c) => c.key === 'salesChannel')!.ok).toBe(true);
 
     await sql`delete from sales_channels where id = ${ch!.id}`;
-    const red = await transaction((tx) => storeReadiness(tx, adminA, store!));
+    const red = await withOrgPrincipal(orgA, (tx) => storeReadiness(tx, adminA, store!));
     expect(red.find((c) => c.key === 'salesChannel')!.ok).toBe(false);
   });
 
@@ -188,8 +188,8 @@ describe('T-222 invariant 7 — readiness is DERIVED, never stored', () => {
     // sign-in page happily lists it. "My PIN stopped working" is the least informative possible
     // symptom of a correct system.
     const { storeId } = await make(adminA);
-    const store = await transaction((tx) => storesRepo.getById(tx, orgA, storeId));
-    const checks = await transaction((tx) => storeReadiness(tx, adminA, store!));
+    const store = await withOrgPrincipal(orgA, (tx) => storesRepo.getById(tx, orgA, storeId));
+    const checks = await withOrgPrincipal(orgA, (tx) => storeReadiness(tx, adminA, store!));
     const signIn = checks.find((c) => c.key === 'signIn')!;
     expect(signIn.ok).toBe(false);
     expect(signIn.blocking).toBe(true);
@@ -200,8 +200,8 @@ describe('T-222 invariant 7 — readiness is DERIVED, never stored', () => {
 describe('T-243 — readiness checks carry their own remedy link (DEF-216)', () => {
   it('room → /inventory/locations, this store preselected', async () => {
     const { storeId } = await make(adminA);
-    const store = await transaction((tx) => storesRepo.getById(tx, orgA, storeId));
-    const checks = await transaction((tx) => storeReadiness(tx, adminA, store!));
+    const store = await withOrgPrincipal(orgA, (tx) => storesRepo.getById(tx, orgA, storeId));
+    const checks = await withOrgPrincipal(orgA, (tx) => storeReadiness(tx, adminA, store!));
     expect(checks.find((c) => c.key === 'room')!.remedy).toEqual({
       href: `/inventory/locations?store=${storeId}`,
       label: 'Add a stock room →',
@@ -210,8 +210,8 @@ describe('T-243 — readiness checks carry their own remedy link (DEF-216)', () 
 
   it('salesChannel → /settings/sales-channels, this store preselected', async () => {
     const { storeId } = await make(adminA);
-    const store = await transaction((tx) => storesRepo.getById(tx, orgA, storeId));
-    const checks = await transaction((tx) => storeReadiness(tx, adminA, store!));
+    const store = await withOrgPrincipal(orgA, (tx) => storesRepo.getById(tx, orgA, storeId));
+    const checks = await withOrgPrincipal(orgA, (tx) => storeReadiness(tx, adminA, store!));
     expect(checks.find((c) => c.key === 'salesChannel')!.remedy).toEqual({
       href: `/settings/sales-channels?store=${storeId}`,
       label: 'Add a sales channel →',
@@ -220,8 +220,8 @@ describe('T-243 — readiness checks carry their own remedy link (DEF-216)', () 
 
   it('signIn → /staff, no store param (⚠️ /staff takes none today — out of scope to add one)', async () => {
     const { storeId } = await make(adminA);
-    const store = await transaction((tx) => storesRepo.getById(tx, orgA, storeId));
-    const checks = await transaction((tx) => storeReadiness(tx, adminA, store!));
+    const store = await withOrgPrincipal(orgA, (tx) => storesRepo.getById(tx, orgA, storeId));
+    const checks = await withOrgPrincipal(orgA, (tx) => storeReadiness(tx, adminA, store!));
     expect(checks.find((c) => c.key === 'signIn')!.remedy).toEqual({
       href: '/staff',
       label: 'Issue a PIN from Staff →',
@@ -231,8 +231,8 @@ describe('T-243 — readiness checks carry their own remedy link (DEF-216)', () 
   it('⭐ adminScope carries NO remedy — cleared by Reactivate on this page, not a link to itself', async () => {
     // Negative case, deliberately: without it, three positives could pass with a remedy on all four.
     const { storeId } = await make(adminA);
-    const store = await transaction((tx) => storesRepo.getById(tx, orgA, storeId));
-    const checks = await transaction((tx) => storeReadiness(tx, adminA, store!));
+    const store = await withOrgPrincipal(orgA, (tx) => storesRepo.getById(tx, orgA, storeId));
+    const checks = await withOrgPrincipal(orgA, (tx) => storeReadiness(tx, adminA, store!));
     expect(checks.find((c) => c.key === 'adminScope')!.remedy).toBeUndefined();
   });
 
@@ -260,8 +260,8 @@ describe('T-243 — readiness checks carry their own remedy link (DEF-216)', () 
 describe('T-222 invariants 8 and 9 — deactivate never deletes; reactivate re-fans', () => {
   it('deactivate keeps the row and its history', async () => {
     const { storeId } = await make(adminA);
-    await transaction((tx) => deactivateStore(tx, adminA, storeId));
-    const store = await transaction((tx) => storesRepo.getById(tx, orgA, storeId));
+    await withOrgPrincipal(orgA, (tx) => deactivateStore(tx, adminA, storeId));
+    const store = await withOrgPrincipal(orgA, (tx) => storesRepo.getById(tx, orgA, storeId));
     expect(store).toBeDefined();
     expect(store!.isActive).toBe(false);
   });
@@ -271,16 +271,16 @@ describe('T-222 invariants 8 and 9 — deactivate never deletes; reactivate re-f
     // — 3, not 4, because one store is inactive". So an admin appointed during the gap has no row;
     // bring the store back and it is invisible to them.
     const { storeId } = await make(adminA);
-    await transaction((tx) => deactivateStore(tx, adminA, storeId));
+    await withOrgPrincipal(orgA, (tx) => deactivateStore(tx, adminA, storeId));
 
     const late = await person(orgA, 'Late Admin', 'admin');
-    const beforeReactivate = await transaction((tx) =>
+    const beforeReactivate = await withOrgPrincipal(orgA, (tx) =>
       accessRepo.personHasStoreScope(tx, late.id, storeId));
     expect(beforeReactivate).toBe(false);
 
-    const res = await transaction((tx) => reactivateStore(tx, adminA, storeId));
+    const res = await withOrgPrincipal(orgA, (tx) => reactivateStore(tx, adminA, storeId));
     expect(res.scopedAdminIds).toContain(late.id);
-    const after = await transaction((tx) => accessRepo.personHasStoreScope(tx, late.id, storeId));
+    const after = await withOrgPrincipal(orgA, (tx) => accessRepo.personHasStoreScope(tx, late.id, storeId));
     expect(after).toBe(true);
   });
 });
@@ -290,8 +290,8 @@ describe('T-222 — code is the stable handle', () => {
     // Ian, open question 1: rename freely, but the code is user-facing, appears on documents, and
     // other records refer to it. It is deliberately not in UpdateStorePatch at all.
     const { storeId } = await make(adminA, { code: 'KEEPME' });
-    await transaction((tx) => updateStoreDetails(tx, adminA, storeId, { name: 'Renamed' }));
-    const store = await transaction((tx) => storesRepo.getById(tx, orgA, storeId));
+    await withOrgPrincipal(orgA, (tx) => updateStoreDetails(tx, adminA, storeId, { name: 'Renamed' }));
+    const store = await withOrgPrincipal(orgA, (tx) => storesRepo.getById(tx, orgA, storeId));
     expect(store!.name).toBe('Renamed');
     expect(store!.code).toBe('KEEPME');
   });
@@ -300,7 +300,7 @@ describe('T-222 — code is the stable handle', () => {
 describe('T-222 invariant 10 — a store created in org A is invisible to org B', () => {
   it('getById scoped by org returns nothing for a foreign id', async () => {
     const { storeId } = await make(adminA);
-    const foreign = await transaction((tx) => storesRepo.getById(tx, orgB, storeId));
+    const foreign = await withOrgPrincipal(orgA, (tx) => storesRepo.getById(tx, orgB, storeId));
     expect(foreign).toBeUndefined();
   });
 });

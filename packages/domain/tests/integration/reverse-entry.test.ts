@@ -31,8 +31,20 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 // Cross-package relative import, same pattern post-entry.test.ts already uses to reach
 // the seed helper one package over.
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
-import { closeDb } from '@shareat/db';
+import { closeDb, withOrgPrincipal } from '@shareat/db';
 import { postEntry, reverseEntry } from '@shareat/domain';
+
+/**
+ * Both postEntry and reverseEntry are reached in production only through an API-layer
+ * wrapper that has already called withOrgPrincipal — neither establishes a principal
+ * itself. Standing in for that layer here, at the same depth production wraps at.
+ */
+function postEntryAsOrg(input: Parameters<typeof postEntry>[1]) {
+  return withOrgPrincipal(input.orgId, (tx) => postEntry(tx, input));
+}
+function reverseEntryAsOrg(orgId: string, input: Parameters<typeof reverseEntry>[1]) {
+  return withOrgPrincipal(orgId, (tx) => reverseEntry(tx, input));
+}
 
 const sql = postgres(url, { max: 5 });
 
@@ -209,7 +221,7 @@ describe('invariant 1 — reversing a posted entry creates a new entry with debi
   it('every line is mirrored with debit and credit swapped', async () => {
     const { orgId, periodId } = await baseFixture('inv1');
     const storeId = await insertStore(orgId, 'inv1');
-    const original = await postEntry(null, {
+    const original = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'test',
@@ -221,7 +233,7 @@ describe('invariant 1 — reversing a posted entry creates a new entry with debi
       ],
     });
 
-    const result = await reverseEntry(null, {
+    const result = await reverseEntryAsOrg(orgId, {
       entryId: original.entryId,
       reason: 'test reversal',
     });
@@ -241,7 +253,7 @@ describe('invariant 2 — accounts, store_id, channel_id, and amounts are identi
   it('only debit/credit swap; everything else matches line-for-line', async () => {
     const { orgId, periodId } = await baseFixture('inv2');
     const storeId = await insertStore(orgId, 'inv2');
-    const original = await postEntry(null, {
+    const original = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'test',
@@ -253,7 +265,7 @@ describe('invariant 2 — accounts, store_id, channel_id, and amounts are identi
       ],
     });
 
-    const result = await reverseEntry(null, { entryId: original.entryId, reason: 'wrong store' });
+    const result = await reverseEntryAsOrg(orgId, { entryId: original.entryId, reason: 'wrong store' });
 
     const originalLines = await fetchLines(original.entryId);
     const reversalLines = await fetchLines(result.reversalEntryId);
@@ -269,7 +281,7 @@ describe('invariant 3 — reversal_of_entry_id points at the original; source_ty
   it('carries the linkage and the same source document reference', async () => {
     const { orgId } = await baseFixture('inv3');
     const sourceId = uid('inv3-source');
-    const original = await postEntry(null, {
+    const original = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'expense',
@@ -281,7 +293,7 @@ describe('invariant 3 — reversal_of_entry_id points at the original; source_ty
       ],
     });
 
-    const result = await reverseEntry(null, { entryId: original.entryId, reason: 'duplicate' });
+    const result = await reverseEntryAsOrg(orgId, { entryId: original.entryId, reason: 'duplicate' });
 
     const reversalRow = await fetchEntry(result.reversalEntryId);
     expect(reversalRow.reversal_of_entry_id).toBe(original.entryId);
@@ -293,7 +305,7 @@ describe('invariant 3 — reversal_of_entry_id points at the original; source_ty
 describe("invariant 4 — original transitions to 'reversed'; the reversal is 'posted'", () => {
   it('flips exactly one status each', async () => {
     const { orgId } = await baseFixture('inv4');
-    const original = await postEntry(null, {
+    const original = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'test',
@@ -305,7 +317,7 @@ describe("invariant 4 — original transitions to 'reversed'; the reversal is 'p
       ],
     });
 
-    const result = await reverseEntry(null, { entryId: original.entryId, reason: 'correction' });
+    const result = await reverseEntryAsOrg(orgId, { entryId: original.entryId, reason: 'correction' });
 
     const originalRow = await fetchEntry(original.entryId);
     const reversalRow = await fetchEntry(result.reversalEntryId);
@@ -317,7 +329,7 @@ describe("invariant 4 — original transitions to 'reversed'; the reversal is 'p
 describe('invariant 5 — for every account touched, original + reversal sum to exactly zero', () => {
   it('net debit minus credit across both entries is 0 per account', async () => {
     const { orgId } = await baseFixture('inv5');
-    const original = await postEntry(null, {
+    const original = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'test',
@@ -330,7 +342,7 @@ describe('invariant 5 — for every account touched, original + reversal sum to 
       ],
     });
 
-    const result = await reverseEntry(null, { entryId: original.entryId, reason: 'net to zero' });
+    const result = await reverseEntryAsOrg(orgId, { entryId: original.entryId, reason: 'net to zero' });
 
     const rows = await sql<{ account_code: string; net: string }[]>`
       select a.code as account_code, sum(jl.debit - jl.credit) as net
@@ -349,7 +361,7 @@ describe('invariant 5 — for every account touched, original + reversal sum to 
 describe('invariant 6 — both entries still exist afterwards; nothing deleted or changed on the original', () => {
   it('the original keeps its own lines, amounts, and row', async () => {
     const { orgId } = await baseFixture('inv6');
-    const original = await postEntry(null, {
+    const original = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'test',
@@ -362,7 +374,7 @@ describe('invariant 6 — both entries still exist afterwards; nothing deleted o
     });
     const linesBefore = await fetchLines(original.entryId);
 
-    const result = await reverseEntry(null, { entryId: original.entryId, reason: 'audit' });
+    const result = await reverseEntryAsOrg(orgId, { entryId: original.entryId, reason: 'audit' });
 
     const originalStillThere = await sql`select id from journal_entries where id = ${original.entryId}`;
     const reversalStillThere = await sql`select id from journal_entries where id = ${result.reversalEntryId}`;
@@ -389,7 +401,7 @@ describe('invariant 7 — reversing a draft entry is rejected', () => {
     ]);
 
     const msg = await rejectionMessage(
-      reverseEntry(null, { entryId: draftId, reason: 'oops' }),
+      reverseEntryAsOrg(orgId, { entryId: draftId, reason: 'oops' }),
     );
     expect(msg).toMatch(/draft/i);
   });
@@ -398,7 +410,7 @@ describe('invariant 7 — reversing a draft entry is rejected', () => {
 describe('invariant 8 — reversing an already-reversed entry is rejected, naming the existing reversal', () => {
   it('the second, distinct reversal attempt fails and names the first reversal', async () => {
     const { orgId } = await baseFixture('inv8');
-    const original = await postEntry(null, {
+    const original = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'test',
@@ -409,10 +421,10 @@ describe('invariant 8 — reversing an already-reversed entry is rejected, namin
         { accountCode: '1110', credit: '12.00' },
       ],
     });
-    const firstReversal = await reverseEntry(null, { entryId: original.entryId, reason: 'first' });
+    const firstReversal = await reverseEntryAsOrg(orgId, { entryId: original.entryId, reason: 'first' });
 
     const msg = await rejectionMessage(
-      reverseEntry(null, {
+      reverseEntryAsOrg(orgId, {
         entryId: original.entryId,
         reason: 'second attempt, different key',
         idempotencyKey: uid('inv8-second-key'),
@@ -425,7 +437,7 @@ describe('invariant 8 — reversing an already-reversed entry is rejected, namin
 describe('invariant 9 — reversing a reversal succeeds', () => {
   it('undoing an erroneous reversal is legitimate', async () => {
     const { orgId } = await baseFixture('inv9');
-    const original = await postEntry(null, {
+    const original = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'test',
@@ -436,12 +448,12 @@ describe('invariant 9 — reversing a reversal succeeds', () => {
         { accountCode: '1110', credit: '18.00' },
       ],
     });
-    const firstReversal = await reverseEntry(null, {
+    const firstReversal = await reverseEntryAsOrg(orgId, {
       entryId: original.entryId,
       reason: 'reversed by mistake',
     });
 
-    const secondReversal = await reverseEntry(null, {
+    const secondReversal = await reverseEntryAsOrg(orgId, {
       entryId: firstReversal.reversalEntryId,
       reason: 'undo the erroneous reversal',
     });
@@ -462,7 +474,7 @@ describe('invariant 9 — reversing a reversal succeeds', () => {
 describe('invariant 10 — an empty or whitespace-only reason is rejected', () => {
   it.each(['', '   ', '\t\n'])('rejects reason %j', async (reason) => {
     const { orgId } = await baseFixture('inv10');
-    const original = await postEntry(null, {
+    const original = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'test',
@@ -474,7 +486,7 @@ describe('invariant 10 — an empty or whitespace-only reason is rejected', () =
       ],
     });
 
-    await expect(reverseEntry(null, { entryId: original.entryId, reason })).rejects.toThrow(/reason/i);
+    await expect(reverseEntryAsOrg(orgId, { entryId: original.entryId, reason })).rejects.toThrow(/reason/i);
   });
 });
 
@@ -485,7 +497,7 @@ describe('invariant 10 — an empty or whitespace-only reason is rejected', () =
 describe("invariant 11 — original in an open period, no reversalDate given, posts on the original's date", () => {
   it('defaults reversalDate to the original entry_date, same period', async () => {
     const { orgId, periodId } = await baseFixture('inv11');
-    const original = await postEntry(null, {
+    const original = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-20',
       sourceType: 'test',
@@ -497,7 +509,7 @@ describe("invariant 11 — original in an open period, no reversalDate given, po
       ],
     });
 
-    const result = await reverseEntry(null, { entryId: original.entryId, reason: 'same period' });
+    const result = await reverseEntryAsOrg(orgId, { entryId: original.entryId, reason: 'same period' });
 
     const reversalRow = await fetchEntry(result.reversalEntryId);
     expect(reversalRow.entry_date).toBe('2026-01-20');
@@ -509,7 +521,7 @@ describe("invariant 11 — original in an open period, no reversalDate given, po
 describe("invariant 12 — original's period closed, no reversalDate given -> rejected", () => {
   it('tells the caller to supply a reversalDate', async () => {
     const { orgId, periodId } = await baseFixture('inv12');
-    const original = await postEntry(null, {
+    const original = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'test',
@@ -523,7 +535,7 @@ describe("invariant 12 — original's period closed, no reversalDate given -> re
     await sql`update fiscal_periods set status = 'closed' where id = ${periodId}`;
 
     const msg = await rejectionMessage(
-      reverseEntry(null, { entryId: original.entryId, reason: 'late correction' }),
+      reverseEntryAsOrg(orgId, { entryId: original.entryId, reason: 'late correction' }),
     );
     expect(msg).toMatch(/reversalDate/);
   });
@@ -532,7 +544,7 @@ describe("invariant 12 — original's period closed, no reversalDate given -> re
 describe("invariant 13 — original's period closed, reversalDate in an open period -> posts there, memo prefixed", () => {
   it('the memo is prefixed [prior period]', async () => {
     const { orgId, periodId } = await baseFixture('inv13');
-    const original = await postEntry(null, {
+    const original = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'test',
@@ -546,7 +558,7 @@ describe("invariant 13 — original's period closed, reversalDate in an open per
     await sql`update fiscal_periods set status = 'closed' where id = ${periodId}`;
     const febPeriodId = await insertPeriod(orgId, '2026-02-01', '2026-02-28', 'open');
 
-    const result = await reverseEntry(null, {
+    const result = await reverseEntryAsOrg(orgId, {
       entryId: original.entryId,
       reason: 'late correction',
       reversalDate: '2026-02-10',
@@ -563,7 +575,7 @@ describe("invariant 13 — original's period closed, reversalDate in an open per
 describe('invariant 14 — a reversalDate in a closed period is rejected', () => {
   it('rejects even when explicitly supplied', async () => {
     const { orgId, periodId } = await baseFixture('inv14');
-    const original = await postEntry(null, {
+    const original = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'test',
@@ -577,7 +589,7 @@ describe('invariant 14 — a reversalDate in a closed period is rejected', () =>
     await sql`update fiscal_periods set status = 'closed' where id = ${periodId}`;
 
     await expect(
-      reverseEntry(null, {
+      reverseEntryAsOrg(orgId, {
         entryId: original.entryId,
         reason: 'late correction',
         reversalDate: '2026-01-20', // falls inside the now-closed January period
@@ -593,7 +605,7 @@ describe('invariant 14 — a reversalDate in a closed period is rejected', () =>
 describe('invariant 15 — an entry whose account has since been set reserved is still reversible', () => {
   it('reversal succeeds despite the account no longer being active', async () => {
     const { orgId } = await baseFixture('inv15');
-    const original = await postEntry(null, {
+    const original = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'test',
@@ -606,7 +618,7 @@ describe('invariant 15 — an entry whose account has since been set reserved is
     });
     await setAccountStatus(orgId, '6900', 'reserved');
 
-    const result = await reverseEntry(null, { entryId: original.entryId, reason: 'account reserved since' });
+    const result = await reverseEntryAsOrg(orgId, { entryId: original.entryId, reason: 'account reserved since' });
     expect(result.created).toBe(true);
     const reversalRow = await fetchEntry(result.reversalEntryId);
     expect(reversalRow.status).toBe('posted');
@@ -616,7 +628,7 @@ describe('invariant 15 — an entry whose account has since been set reserved is
 describe('invariant 16 — an entry whose account has since been archived is still reversible', () => {
   it('reversal succeeds despite the account being archived', async () => {
     const { orgId } = await baseFixture('inv16');
-    const original = await postEntry(null, {
+    const original = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'test',
@@ -629,7 +641,7 @@ describe('invariant 16 — an entry whose account has since been archived is sti
     });
     await setAccountStatus(orgId, '1110', 'archived');
 
-    const result = await reverseEntry(null, { entryId: original.entryId, reason: 'account archived since' });
+    const result = await reverseEntryAsOrg(orgId, { entryId: original.entryId, reason: 'account archived since' });
     expect(result.created).toBe(true);
   });
 });
@@ -637,7 +649,7 @@ describe('invariant 16 — an entry whose account has since been archived is sti
 describe('invariant 17 — an ordinary posting to that same non-active account is still rejected', () => {
   it('the §5 exemption does not leak into normal postEntry calls', async () => {
     const { orgId } = await baseFixture('inv17');
-    const original = await postEntry(null, {
+    const original = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'test',
@@ -651,14 +663,14 @@ describe('invariant 17 — an ordinary posting to that same non-active account i
     await setAccountStatus(orgId, '6900', 'archived');
 
     // The reversal succeeds (§5) ...
-    const result = await reverseEntry(null, { entryId: original.entryId, reason: 'account archived since' });
+    const result = await reverseEntryAsOrg(orgId, { entryId: original.entryId, reason: 'account archived since' });
     expect(result.created).toBe(true);
 
     // ... but a brand-new, ordinary postEntry call to the SAME now-archived account, in
     // its own separate transaction, is still rejected exactly as before. This is the
     // proof the exemption is scoped to the one reversal transaction and does not leak.
     await expect(
-      postEntry(null, {
+      postEntryAsOrg({
         orgId,
         entryDate: '2026-01-16',
         sourceType: 'test',
@@ -680,7 +692,7 @@ describe('invariant 17 — an ordinary posting to that same non-active account i
 describe('invariant 18 — reversing twice returns the same reversalEntryId with created:false', () => {
   it('the second call is a safe no-op; balances are unchanged', async () => {
     const { orgId } = await baseFixture('inv18');
-    const original = await postEntry(null, {
+    const original = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'test',
@@ -692,8 +704,8 @@ describe('invariant 18 — reversing twice returns the same reversalEntryId with
       ],
     });
 
-    const first = await reverseEntry(null, { entryId: original.entryId, reason: 'first call' });
-    const second = await reverseEntry(null, { entryId: original.entryId, reason: 'retried call' });
+    const first = await reverseEntryAsOrg(orgId, { entryId: original.entryId, reason: 'first call' });
+    const second = await reverseEntryAsOrg(orgId, { entryId: original.entryId, reason: 'retried call' });
 
     expect(first.created).toBe(true);
     expect(second.created).toBe(false);
@@ -719,7 +731,7 @@ describe('invariant 18 — reversing twice returns the same reversalEntryId with
 describe("invariant 19 — the reversal's own lines are immutable (DEF-031's guarantee holds for reversals too)", () => {
   it('raw SQL cannot INSERT, UPDATE, or DELETE a reversal line', async () => {
     const { orgId } = await baseFixture('inv19');
-    const original = await postEntry(null, {
+    const original = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'test',
@@ -730,7 +742,7 @@ describe("invariant 19 — the reversal's own lines are immutable (DEF-031's gua
         { accountCode: '1110', credit: '22.00' },
       ],
     });
-    const result = await reverseEntry(null, { entryId: original.entryId, reason: 'immutability check' });
+    const result = await reverseEntryAsOrg(orgId, { entryId: original.entryId, reason: 'immutability check' });
 
     const opex = await accountId(orgId, '6900');
     const cash = await accountId(orgId, '1110');
@@ -765,7 +777,7 @@ describe("invariant 19 — the reversal's own lines are immutable (DEF-031's gua
 describe('extra — a REVERSED entry (not just a posted one) keeps its lines immutable', () => {
   it('raw SQL cannot mutate the ORIGINAL entry\'s lines once it has been reversed', async () => {
     const { orgId } = await baseFixture('extra-reversed-immutable');
-    const original = await postEntry(null, {
+    const original = await postEntryAsOrg({
       orgId,
       entryDate: '2026-01-15',
       sourceType: 'test',
@@ -776,7 +788,7 @@ describe('extra — a REVERSED entry (not just a posted one) keeps its lines imm
         { accountCode: '1110', credit: '33.00' },
       ],
     });
-    await reverseEntry(null, { entryId: original.entryId, reason: 'flip to reversed' });
+    await reverseEntryAsOrg(orgId, { entryId: original.entryId, reason: 'flip to reversed' });
 
     const [oneLine] = await sql`select id from journal_lines where entry_id = ${original.entryId} order by line_no limit 1`;
     await expect(

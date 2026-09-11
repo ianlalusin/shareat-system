@@ -156,7 +156,7 @@ async function stockUp(f: Fixture, locationId: string, qty = '10', cost = '100.0
   const [d] = await sql<{ id: string }[]>`
     insert into deliveries (org_id, store_id, kind, delivered_on, proof_file_id, created_by)
     values (${f.orgId}, ${f.storeId}, 'purchase', '2026-08-01', ${f.fileId}, ${f.staff.personId}) returning id`;
-  await transaction((tx) =>
+  await asOrg(f.orgId, (tx) =>
     receiveDelivery(tx, {
       orgId: f.orgId,
       storeId: f.storeId,
@@ -207,7 +207,7 @@ describe('T-169 workflow — opening freezes the room for every OTHER writer', (
 
     const { postUsageRecord } = await import('../../src/stock/usage');
     await expect(
-      transaction((tx) =>
+      asOrg(f.orgId, (tx) =>
         postUsageRecord(tx, {
           orgId: f.orgId,
           storeId: f.storeId,

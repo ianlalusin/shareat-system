@@ -129,9 +129,9 @@ describe('a cap, what has been spent against it, and what is left', () => {
   it('consumption sums POSTED expenses only — a draft is not yet a fact, a void is no longer one', async () => {
     const f = await fixture('consume');
     const cat = await category(f, '6200');
-    await setExpenseBudget(null, f.manager, {
+    await asOrg(f.orgId, (tx) => setExpenseBudget(tx, f.manager, {
       storeId: f.storeId, categoryId: cat, periodKey: '202609', amount: '10000.00',
-    });
+    }));
 
     await expense(f, { categoryId: cat, businessDate: '2026-09-03', amount: '1500.00' });
     await expense(f, { categoryId: cat, businessDate: '2026-09-04', amount: '500.00', status: 'draft' });
@@ -152,12 +152,12 @@ describe('a cap, what has been spent against it, and what is left', () => {
     const f = await fixture('collide');
     const a = await category(f, '6890');
     const b = await category(f, '6890');
-    await setExpenseBudget(null, f.manager, {
+    await asOrg(f.orgId, (tx) => setExpenseBudget(tx, f.manager, {
       storeId: f.storeId, categoryId: a, periodKey: '202609', amount: '5000.00',
-    });
-    await setExpenseBudget(null, f.manager, {
+    }));
+    await asOrg(f.orgId, (tx) => setExpenseBudget(tx, f.manager, {
       storeId: f.storeId, categoryId: b, periodKey: '202609', amount: '5000.00',
-    });
+    }));
 
     await expense(f, { categoryId: a, businessDate: '2026-09-10', amount: '1000.00' });
     await expense(f, { categoryId: b, businessDate: '2026-09-11', amount: '250.00' });
@@ -169,9 +169,9 @@ describe('a cap, what has been spent against it, and what is left', () => {
   it('voiding a posted expense reduces consumption on the next read — because nothing is stored', async () => {
     const f = await fixture('void');
     const cat = await category(f, '6200');
-    await setExpenseBudget(null, f.manager, {
+    await asOrg(f.orgId, (tx) => setExpenseBudget(tx, f.manager, {
       storeId: f.storeId, categoryId: cat, periodKey: '202609', amount: '3000.00',
-    });
+    }));
     const id = await expense(f, { categoryId: cat, businessDate: '2026-09-07', amount: '1200.00' });
     expect((await consumedFor(f, cat, '202609'))!.consumed).toBe('1200.00');
 
@@ -183,9 +183,9 @@ describe('a cap, what has been spent against it, and what is left', () => {
   it('⚠️ remaining goes NEGATIVE rather than flooring at zero — the floor would hide the signal', async () => {
     const f = await fixture('over');
     const cat = await category(f, '6200');
-    await setExpenseBudget(null, f.manager, {
+    await asOrg(f.orgId, (tx) => setExpenseBudget(tx, f.manager, {
       storeId: f.storeId, categoryId: cat, periodKey: '202609', amount: '1000.00',
-    });
+    }));
     await expense(f, { categoryId: cat, businessDate: '2026-09-09', amount: '1750.00' });
     const row = await consumedFor(f, cat, '202609');
     expect(row!.remaining).toBe('-750.00');
@@ -217,12 +217,12 @@ describe('the database refuses what a service must not be trusted to remember', 
   it('⚠️ setting a cap twice EDITS it — the screen must not have to explain a unique violation', async () => {
     const f = await fixture('upsert');
     const cat = await category(f, '6200');
-    await setExpenseBudget(null, f.manager, {
+    await asOrg(f.orgId, (tx) => setExpenseBudget(tx, f.manager, {
       storeId: f.storeId, categoryId: cat, periodKey: '202609', amount: '100.00',
-    });
-    await setExpenseBudget(null, f.manager, {
+    }));
+    await asOrg(f.orgId, (tx) => setExpenseBudget(tx, f.manager, {
       storeId: f.storeId, categoryId: cat, periodKey: '202609', amount: '250.00',
-    });
+    }));
     const rows = await asOrg(f.orgId, (tx) => budgetsRepo.listForStorePeriod(tx, f.orgId, f.storeId, '202609'));
     expect(rows).toHaveLength(1);
     expect(rows[0]!.amount).toBe('250.00');
@@ -234,23 +234,23 @@ describe('the database refuses what a service must not be trusted to remember', 
     const f = await fixture('denied');
     const cat = await category(f, '6200');
     await expect(
-      setExpenseBudget(null, f.staff, {
+      asOrg(f.orgId, (tx) => setExpenseBudget(tx, f.staff, {
         storeId: f.storeId, categoryId: cat, periodKey: '202609', amount: '100.00',
-      }),
+      })),
     ).rejects.toThrow(/manage_expense_budgets/);
   });
 
   it('removing a cap deletes the row — "no cap" and "a cap of zero" are different states', async () => {
     const f = await fixture('remove');
     const cat = await category(f, '6200');
-    const { id } = await setExpenseBudget(null, f.manager, {
+    const { id } = await asOrg(f.orgId, (tx) => setExpenseBudget(tx, f.manager, {
       storeId: f.storeId, categoryId: cat, periodKey: '202609', amount: '0.00',
-    });
+    }));
     // ⚠️ Zero is a real cap and reads as one.
     let rows = await asOrg(f.orgId, (tx) => budgetsRepo.listForStorePeriod(tx, f.orgId, f.storeId, '202609'));
     expect(rows[0]!.amount).toBe('0.00');
 
-    await removeExpenseBudget(null, f.manager, { budgetId: id });
+    await asOrg(f.orgId, (tx) => removeExpenseBudget(tx, f.manager, { budgetId: id }));
     rows = await asOrg(f.orgId, (tx) => budgetsRepo.listForStorePeriod(tx, f.orgId, f.storeId, '202609'));
     expect(rows).toHaveLength(0);
   });
@@ -262,10 +262,10 @@ describe('reissue — the envelope rolls forward without anyone remembering', ()
   it('a monthly budget creates the next period ONCE, and a second run creates nothing', async () => {
     const f = await fixture('monthly');
     const cat = await category(f, '6200');
-    await setExpenseBudget(null, f.manager, {
+    await asOrg(f.orgId, (tx) => setExpenseBudget(tx, f.manager, {
       storeId: f.storeId, categoryId: cat, periodKey: '202609', amount: '4000.00',
       autoReissue: true, reissueInterval: 'monthly',
-    });
+    }));
 
     const first = await runBudgetReissue({ orgId: f.orgId, trigger: 'manual', nowMs: at('2026-10-05T02:00:00Z') });
     expect(first.outcomes[0]!.posted).toBe(1);
@@ -284,10 +284,10 @@ describe('reissue — the envelope rolls forward without anyone remembering', ()
   it('⛔ a period that has NOT ARRIVED is never pre-created — v1’s restraint, ported', async () => {
     const f = await fixture('future');
     const cat = await category(f, '6200');
-    await setExpenseBudget(null, f.manager, {
+    await asOrg(f.orgId, (tx) => setExpenseBudget(tx, f.manager, {
       storeId: f.storeId, categoryId: cat, periodKey: '202609', amount: '4000.00',
       autoReissue: true, reissueInterval: 'monthly',
-    });
+    }));
     // Still September: October has not arrived.
     const run = await runBudgetReissue({ orgId: f.orgId, trigger: 'manual', nowMs: at('2026-09-20T02:00:00Z') });
     expect(run.outcomes[0]!.posted).toBe(0);
@@ -298,10 +298,10 @@ describe('reissue — the envelope rolls forward without anyone remembering', ()
   it('a weekly budget moves its WINDOW, and consumption is then measured from it', async () => {
     const f = await fixture('weekly');
     const cat = await category(f, '6200');
-    await setExpenseBudget(null, f.manager, {
+    await asOrg(f.orgId, (tx) => setExpenseBudget(tx, f.manager, {
       storeId: f.storeId, categoryId: cat, periodKey: '202609', amount: '2000.00',
       autoReissue: true, reissueInterval: 'weekly',
-    });
+    }));
     await expense(f, { categoryId: cat, businessDate: '2026-09-02', amount: '800.00' });
     expect((await consumedFor(f, cat, '202609'))!.consumed).toBe('800.00');
 
@@ -324,10 +324,10 @@ describe('reissue — the envelope rolls forward without anyone remembering', ()
     // nobody has spent against, which is why this is its own test.
     const f = await fixture('crossmonth');
     const cat = await category(f, '6200');
-    await setExpenseBudget(null, f.manager, {
+    await asOrg(f.orgId, (tx) => setExpenseBudget(tx, f.manager, {
       storeId: f.storeId, categoryId: cat, periodKey: '202609', amount: '2000.00',
       autoReissue: true, reissueInterval: 'weekly',
-    });
+    }));
     await runBudgetReissue({ orgId: f.orgId, trigger: 'manual', nowMs: at('2026-10-08T02:00:00Z') });
     await expense(f, { categoryId: cat, businessDate: '2026-10-09', amount: '640.00' });
     const row = await consumedFor(f, cat, '202609');
