@@ -2,7 +2,7 @@ import { config } from 'dotenv';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { money } from '@shareat/core/money';
-import { closeDb, transaction } from '@shareat/db';
+import { closeDb, withOrgPrincipal } from '@shareat/db';
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { receiveDelivery } from '../../src/deliveries/receive';
 import { commitCountSession } from '../../src/stock/count-sessions';
@@ -52,7 +52,7 @@ async function stockUp(qty = '10', cost = '100.0000') {
   const [d] = await sql<{ id: string }[]>`
     insert into deliveries (org_id, store_id, kind, delivered_on, proof_file_id, created_by)
     values (${orgA},${storeA},'purchase','2026-08-01',${fileA},${personA}) returning id`;
-  await transaction((tx) =>
+  await withOrgPrincipal(orgA, (tx) =>
     receiveDelivery(tx, {
       orgId: orgA, storeId: storeA, deliveryId: d!.id, deliveredOn: '2026-08-01',
       locations: locations(), receivedBy: personA,
@@ -107,7 +107,7 @@ describe('T-169 — ⭐ the freeze, enforced once for every writer', () => {
     await stockUp();
     await openSession(kitchen);
     await expect(
-      transaction((tx) =>
+      withOrgPrincipal(orgA, (tx) =>
         postUsageRecord(tx, {
           orgId: orgA, storeId: storeA, locationId: kitchen, recordId: crypto.randomUUID(),
           kind: 'usage', usedOn: '2026-08-20', postedBy: personA,
@@ -126,7 +126,7 @@ describe('T-169 — ⭐ the freeze, enforced once for every writer', () => {
       insert into deliveries (org_id, store_id, kind, delivered_on, proof_file_id, created_by)
       values (${orgA},${storeA},'purchase','2026-08-20',${fileA},${personA}) returning id`;
     await expect(
-      transaction((tx) =>
+      withOrgPrincipal(orgA, (tx) =>
         receiveDelivery(tx, {
           orgId: orgA, storeId: storeA, deliveryId: d!.id, deliveredOn: '2026-08-20',
           locations: locations(), receivedBy: personA,
@@ -207,7 +207,7 @@ describe('T-169 — ⭐ the variance that v1 never posted', () => {
     // freeze refusing its own session's resolving write went unnoticed for five days.
     const sessionId = await openSession(kitchen);
 
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       commitCountSession(tx, {
         orgId: orgA, storeId: storeA, sessionId, countedOn: '2026-08-20', committedBy: personA,
         lines: [{ itemId: itemA, locationId: kitchen, countedQuantity: quantity('8'), inventoryAccount: '1310' }],
@@ -230,7 +230,7 @@ describe('T-169 — ⭐ the variance that v1 never posted', () => {
     await openSession(kitchen);
     const other = await openSession(stockroom);
     await expect(
-      transaction((tx) =>
+      withOrgPrincipal(orgA, (tx) =>
         commitCountSession(tx, {
           orgId: orgA, storeId: storeA, sessionId: other, countedOn: '2026-08-20', committedBy: personA,
           lines: [{ itemId: itemA, locationId: kitchen, countedQuantity: quantity('8'), inventoryAccount: '1310' }],
@@ -244,7 +244,7 @@ describe('T-169 — ⭐ the variance that v1 never posted', () => {
     await stockUp('10', '100.0000');
     const sessionId = await openSession(kitchen); // DEF-142 — same room, see above
 
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       commitCountSession(tx, {
         orgId: orgA, storeId: storeA, sessionId, countedOn: '2026-08-20', committedBy: personA,
         lines: [{ itemId: itemA, locationId: kitchen, countedQuantity: quantity('12'), inventoryAccount: '1310' }],
@@ -264,7 +264,7 @@ describe('T-169 — ⭐ the variance that v1 never posted', () => {
     // A free layer would make every later margin on that item fictional, for as long as the stock
     // lasts. Refusing is the only honest option.
     const sessionId = await openSession(stockroom);
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       commitCountSession(tx, {
         orgId: orgA, storeId: storeA, sessionId, countedOn: '2026-08-20', committedBy: personA,
         lines: [{ itemId: itemA, locationId: kitchen, countedQuantity: quantity('5'), inventoryAccount: '1310' }],
@@ -288,7 +288,7 @@ describe('T-169 — ⭐ the variance that v1 never posted', () => {
     const [d] = await sql<{ id: string }[]>`
       insert into deliveries (org_id, store_id, kind, delivered_on, proof_file_id, created_by)
       values (${orgA},${storeA},'purchase','2026-08-02',${fileA},${personA}) returning id`;
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       receiveDelivery(tx, {
         orgId: orgA, storeId: storeA, deliveryId: d!.id, deliveredOn: '2026-08-02',
         locations: locations(), receivedBy: personA,
@@ -297,7 +297,7 @@ describe('T-169 — ⭐ the variance that v1 never posted', () => {
     );
     const sessionId = await openSession(kitchen);
 
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       commitCountSession(tx, {
         orgId: orgA, storeId: storeA, sessionId, countedOn: '2026-08-20', committedBy: personA,
         lines: [
@@ -323,7 +323,7 @@ describe('T-169 — ⭐ the variance that v1 never posted', () => {
     await sql`update count_sessions set status='closed', closed_at=now(), closed_by=${personA} where id=${stale}`;
     await openSession(kitchen); // a NEW, active freeze on the same room
     await expect(
-      transaction((tx) =>
+      withOrgPrincipal(orgA, (tx) =>
         commitCountSession(tx, {
           orgId: orgA, storeId: storeA, sessionId: stale, countedOn: '2026-08-20', committedBy: personA,
           lines: [{ itemId: itemA, locationId: kitchen, countedQuantity: quantity('8'), inventoryAccount: '1310' }],
@@ -336,7 +336,7 @@ describe('T-169 — ⭐ the variance that v1 never posted', () => {
   it('an exact count posts nothing at all', async () => {
     await stockUp('10', '100.0000');
     const sessionId = await openSession(stockroom);
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       commitCountSession(tx, {
         orgId: orgA, storeId: storeA, sessionId, countedOn: '2026-08-20', committedBy: personA,
         lines: [{ itemId: itemA, locationId: kitchen, countedQuantity: quantity('10'), inventoryAccount: '1310' }],
@@ -353,7 +353,7 @@ describe('T-169 — ⭐ the variance that v1 never posted', () => {
     // T-161 §8: v1's 1e-6 tolerance was a float defence and cannot fire at numeric(14,3).
     await stockUp('10', '100.0000');
     const sessionId = await openSession(stockroom);
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       commitCountSession(tx, {
         orgId: orgA, storeId: storeA, sessionId, countedOn: '2026-08-20', committedBy: personA,
         lines: [{ itemId: itemA, locationId: kitchen, countedQuantity: quantity('9.999'), inventoryAccount: '1310' }],
@@ -367,7 +367,7 @@ describe('T-169 — ⭐ the variance that v1 never posted', () => {
 
   it('⛔ an OPENING count is refused, naming 3900 and T-134', async () => {
     const sessionId = await openSession(stockroom);
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       commitCountSession(tx, {
         orgId: orgA, storeId: storeA, sessionId, countedOn: '2026-08-20', committedBy: personA,
         isOpeningCount: true,
@@ -383,7 +383,7 @@ describe('T-169 — ⭐ the variance that v1 never posted', () => {
   it('⭐ after a count, the exit gate still holds', async () => {
     await stockUp('10', '100.0000');
     const sessionId = await openSession(stockroom);
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       commitCountSession(tx, {
         orgId: orgA, storeId: storeA, sessionId, countedOn: '2026-08-20', committedBy: personA,
         lines: [{ itemId: itemA, locationId: kitchen, countedQuantity: quantity('8'), inventoryAccount: '1310' }],
@@ -402,7 +402,7 @@ describe('T-169 — ⭐ the variance that v1 never posted', () => {
   it('the trial balance ties after a count', async () => {
     await stockUp('10', '100.0000');
     const sessionId = await openSession(stockroom);
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       commitCountSession(tx, {
         orgId: orgA, storeId: storeA, sessionId, countedOn: '2026-08-20', committedBy: personA,
         lines: [{ itemId: itemA, locationId: kitchen, countedQuantity: quantity('12'), inventoryAccount: '1310' }],

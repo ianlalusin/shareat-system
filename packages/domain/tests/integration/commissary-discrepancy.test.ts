@@ -2,7 +2,7 @@ import { config } from 'dotenv';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { money } from '@shareat/core/money';
-import { closeDb, tradeDiscrepanciesRepo, transaction } from '@shareat/db';
+import { closeDb, tradeDiscrepanciesRepo, withOrgPrincipal } from '@shareat/db';
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { receiveDelivery } from '../../src/deliveries/receive';
 import { confirmReceipt, dispatchOrder } from '../../src/commissary/transfer';
@@ -50,21 +50,21 @@ async function shipAndReceive(received: string): Promise<string | null> {
   const [d] = await sql<{ id: string }[]>`
     insert into deliveries (org_id, store_id, kind, delivered_on, proof_file_id, created_by)
     values (${orgA},${commissary},'purchase','2026-08-01',${fileA},${personA}) returning id`;
-  await transaction((tx) =>
+  await withOrgPrincipal(orgA, (tx) =>
     receiveDelivery(tx, {
       orgId: orgA, storeId: commissary, deliveryId: d!.id, deliveredOn: '2026-08-01',
       locations: comLocations(), receivedBy: personA,
       lines: [{ lineId: '1', itemId: itemA, itemKind: 'raw_material', receivedQuantity: quantity('100'), conversionFactor: '1', unitCost: '300.0000', locationId: comKitchen }],
     }),
   );
-  await transaction((tx) =>
+  await withOrgPrincipal(orgA, (tx) =>
     dispatchOrder(tx, {
       orgId: orgA, commissaryStoreId: commissary, orderId, dispatchedOn: '2026-08-20',
       dispatchedBy: personA, onHandByItem: { [itemA]: quantity('100') },
       lines: [{ lineId: '1', itemId: itemA, itemKind: 'raw_material', sourceLocationId: comKitchen, fulfilledQuantity: quantity('100') }],
     }),
   );
-  const res = await transaction((tx) =>
+  const res = await withOrgPrincipal(orgA, (tx) =>
     confirmReceipt(tx, {
       orgId: orgA, commissaryStoreId: commissary, branchStoreId: branch,
       commissaryStoreCode: 'COM', branchStoreCode: 'BR',
@@ -177,7 +177,7 @@ describe('T-174 — the row is raised BY the confirm, never by hand', () => {
 describe('T-174 — the three dispositions, and each is a different account', () => {
   it('⭐ LOSS posts Dr 5300 / Cr 1340 and relieves the transit account exactly', async () => {
     const id = (await shipAndReceive('90'))!;
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       resolveDiscrepancy(tx, {
         orgId: orgA, discrepancyId: id, commissaryStoreId: commissary,
         disposition: 'loss', note: 'spoiled on the road', resolvedOn: '2026-08-22', resolvedBy: personA,
@@ -204,7 +204,7 @@ describe('T-174 — the three dispositions, and each is a different account', ()
 
   it('⭐ CHARGE posts Dr 1230 / Cr 1340 with the person as party', async () => {
     const id = (await shipAndReceive('90'))!;
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       resolveDiscrepancy(tx, {
         orgId: orgA, discrepancyId: id, commissaryStoreId: commissary,
         disposition: 'charge', chargePersonId: personB,
@@ -229,7 +229,7 @@ describe('T-174 — the three dispositions, and each is a different account', ()
 
   it('⛔ a charge with nobody named is refused, and posts nothing', async () => {
     const id = (await shipAndReceive('90'))!;
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       resolveDiscrepancy(tx, {
         orgId: orgA, discrepancyId: id, commissaryStoreId: commissary,
         disposition: 'charge', resolvedOn: '2026-08-22', resolvedBy: personA,
@@ -241,7 +241,7 @@ describe('T-174 — the three dispositions, and each is a different account', ()
 
   it('⛔ a LOSS that names a person is refused — the two dispositions are not interchangeable', async () => {
     const id = (await shipAndReceive('90'))!;
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       resolveDiscrepancy(tx, {
         orgId: orgA, discrepancyId: id, commissaryStoreId: commissary,
         disposition: 'loss', chargePersonId: personB, resolvedOn: '2026-08-22', resolvedBy: personA,
@@ -252,7 +252,7 @@ describe('T-174 — the three dispositions, and each is a different account', ()
 
   it('⭐ AUDIT posts nothing, leaves the value in 1340 — and STAYS OPEN', async () => {
     const id = (await shipAndReceive('90'))!;
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       resolveDiscrepancy(tx, {
         orgId: orgA, discrepancyId: id, commissaryStoreId: commissary,
         disposition: 'audit', note: 'recount tomorrow', resolvedOn: '2026-08-22', resolvedBy: personA,
@@ -273,7 +273,7 @@ describe('T-174 — the three dispositions, and each is a different account', ()
 
   it('LATE RECEIPT closes the row and posts nothing here', async () => {
     const id = (await shipAndReceive('90'))!;
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       resolveDiscrepancy(tx, {
         orgId: orgA, discrepancyId: id, commissaryStoreId: commissary,
         disposition: 'late_receipt', resolvedOn: '2026-08-22', resolvedBy: personA,
@@ -293,7 +293,7 @@ describe('T-174 — the three dispositions, and each is a different account', ()
 describe('T-174 — the rules the database keeps, not the service', () => {
   it('⭐ defer once succeeds; a SECOND defer is refused', async () => {
     const id = (await shipAndReceive('90'))!;
-    const first = await transaction((tx) =>
+    const first = await withOrgPrincipal(orgA, (tx) =>
       deferDiscrepancy(tx, { orgId: orgA, discrepancyId: id, commissaryStoreId: commissary, toDate: '2026-08-25' }),
     );
     expect(first.ok).toBe(true);
@@ -301,7 +301,7 @@ describe('T-174 — the rules the database keeps, not the service', () => {
     // ⛔ v1's rule verbatim, and the whole reason defer is safe to offer: a dispute cannot be
     // pushed down the road indefinitely.
     await expect(
-      transaction((tx) =>
+      withOrgPrincipal(orgA, (tx) =>
         deferDiscrepancy(tx, { orgId: orgA, discrepancyId: id, commissaryStoreId: commissary, toDate: '2026-09-30' }),
       ),
     ).rejects.toThrow(/already deferred/);
@@ -309,7 +309,7 @@ describe('T-174 — the rules the database keeps, not the service', () => {
 
   it('⛔ resolution is TERMINAL — a resolved row is not editable, even by raw SQL', async () => {
     const id = (await shipAndReceive('90'))!;
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       resolveDiscrepancy(tx, {
         orgId: orgA, discrepancyId: id, commissaryStoreId: commissary,
         disposition: 'loss', resolvedOn: '2026-08-22', resolvedBy: personA,
@@ -319,7 +319,7 @@ describe('T-174 — the rules the database keeps, not the service', () => {
       sql`update trade_discrepancies set disposition = 'audit' where id = ${id}`,
     ).rejects.toThrow(/reverse it and resolve again/);
 
-    const second = await transaction((tx) =>
+    const second = await withOrgPrincipal(orgA, (tx) =>
       resolveDiscrepancy(tx, {
         orgId: orgA, discrepancyId: id, commissaryStoreId: commissary,
         disposition: 'charge', chargePersonId: personB, resolvedOn: '2026-08-22', resolvedBy: personA,
@@ -334,7 +334,7 @@ describe('T-174 — the rules the database keeps, not the service', () => {
 
   it('⛔ the BRANCH cannot decide what the difference was', async () => {
     const id = (await shipAndReceive('90'))!;
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       resolveDiscrepancy(tx, {
         orgId: orgA, discrepancyId: id, commissaryStoreId: branch,
         disposition: 'loss', resolvedOn: '2026-08-22', resolvedBy: personA,
@@ -349,61 +349,61 @@ describe('T-174 — the rules the database keeps, not the service', () => {
 describe('T-174 — ⭐ the blocking list, derived every time', () => {
   it('an OPEN one blocks; a resolved one does not', async () => {
     const id = (await shipAndReceive('90'))!;
-    let blocking = await transaction((tx) => tradeDiscrepanciesRepo.blocking(tx, orgA, commissary, '2026-08-22'));
+    let blocking = await withOrgPrincipal(orgA, (tx) => tradeDiscrepanciesRepo.blocking(tx, orgA, commissary, '2026-08-22'));
     expect(blocking).toHaveLength(1);
 
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       resolveDiscrepancy(tx, {
         orgId: orgA, discrepancyId: id, commissaryStoreId: commissary,
         disposition: 'loss', resolvedOn: '2026-08-22', resolvedBy: personA,
       }),
     );
-    blocking = await transaction((tx) => tradeDiscrepanciesRepo.blocking(tx, orgA, commissary, '2026-08-22'));
+    blocking = await withOrgPrincipal(orgA, (tx) => tradeDiscrepanciesRepo.blocking(tx, orgA, commissary, '2026-08-22'));
     expect(blocking).toHaveLength(0);
   });
 
   it('⭐ an AUDITED one still blocks — the decision was to wait, not to finish', async () => {
     const id = (await shipAndReceive('90'))!;
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       resolveDiscrepancy(tx, {
         orgId: orgA, discrepancyId: id, commissaryStoreId: commissary,
         disposition: 'audit', resolvedOn: '2026-08-22', resolvedBy: personA,
       }),
     );
-    const blocking = await transaction((tx) => tradeDiscrepanciesRepo.blocking(tx, orgA, commissary, '2026-08-22'));
+    const blocking = await withOrgPrincipal(orgA, (tx) => tradeDiscrepanciesRepo.blocking(tx, orgA, commissary, '2026-08-22'));
     expect(blocking).toHaveLength(1);
   });
 
   it('⭐ a deferral is a promise, not an exemption: clear until the date, blocking ON it', async () => {
     const id = (await shipAndReceive('90'))!;
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       deferDiscrepancy(tx, { orgId: orgA, discrepancyId: id, commissaryStoreId: commissary, toDate: '2026-08-25' }),
     );
-    const before = await transaction((tx) => tradeDiscrepanciesRepo.blocking(tx, orgA, commissary, '2026-08-24'));
+    const before = await withOrgPrincipal(orgA, (tx) => tradeDiscrepanciesRepo.blocking(tx, orgA, commissary, '2026-08-24'));
     expect(before).toHaveLength(0);
-    const onTheDay = await transaction((tx) => tradeDiscrepanciesRepo.blocking(tx, orgA, commissary, '2026-08-25'));
+    const onTheDay = await withOrgPrincipal(orgA, (tx) => tradeDiscrepanciesRepo.blocking(tx, orgA, commissary, '2026-08-25'));
     expect(onTheDay).toHaveLength(1);
-    const after = await transaction((tx) => tradeDiscrepanciesRepo.blocking(tx, orgA, commissary, '2026-08-26'));
+    const after = await withOrgPrincipal(orgA, (tx) => tradeDiscrepanciesRepo.blocking(tx, orgA, commissary, '2026-08-26'));
     expect(after).toHaveLength(1);
   });
 
   it('⚠️ the BRANCH is not blocked by the commissary’s dispute', async () => {
     await shipAndReceive('90');
-    const atBranch = await transaction((tx) => tradeDiscrepanciesRepo.blocking(tx, orgA, branch, '2026-08-22'));
+    const atBranch = await withOrgPrincipal(orgA, (tx) => tradeDiscrepanciesRepo.blocking(tx, orgA, branch, '2026-08-22'));
     expect(atBranch).toHaveLength(0);
   });
 
   it('⭐ `blocking` and `unresolved` are ONE query’s worth of truth — they cannot disagree', async () => {
     const id = (await shipAndReceive('90'))!;
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       deferDiscrepancy(tx, { orgId: orgA, discrepancyId: id, commissaryStoreId: commissary, toDate: '2026-08-25' }),
     );
     // The screen always shows it; the block only refuses from the promised date. ⚠️ The failure
     // this guards against is the other way round — a block that refuses over something the screen
     // does not list, which leaves a manager with nothing to click.
-    const listed = await transaction((tx) => tradeDiscrepanciesRepo.unresolved(tx, orgA, commissary));
+    const listed = await withOrgPrincipal(orgA, (tx) => tradeDiscrepanciesRepo.unresolved(tx, orgA, commissary));
     expect(listed.map((d) => d.id)).toContain(id);
-    const blocked = await transaction((tx) => tradeDiscrepanciesRepo.blocking(tx, orgA, commissary, '2026-08-25'));
+    const blocked = await withOrgPrincipal(orgA, (tx) => tradeDiscrepanciesRepo.blocking(tx, orgA, commissary, '2026-08-25'));
     expect(blocked.map((d) => d.id)).toEqual(listed.map((d) => d.id));
   });
 });
@@ -445,7 +445,7 @@ describe('T-174 — ⭐ the Phase 3 gate holds on the disposal path', () => {
 
   it('holds after a LOSS — 1340 emptied into 5300, and nothing left over', async () => {
     const id = (await shipAndReceive('90'))!;
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       resolveDiscrepancy(tx, {
         orgId: orgA, discrepancyId: id, commissaryStoreId: commissary,
         disposition: 'loss', resolvedOn: '2026-08-22', resolvedBy: personA,
@@ -456,7 +456,7 @@ describe('T-174 — ⭐ the Phase 3 gate holds on the disposal path', () => {
 
   it('holds after an AUDIT — the value is still IN 1340, and that is the point', async () => {
     const id = (await shipAndReceive('90'))!;
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       resolveDiscrepancy(tx, {
         orgId: orgA, discrepancyId: id, commissaryStoreId: commissary,
         disposition: 'audit', resolvedOn: '2026-08-22', resolvedBy: personA,

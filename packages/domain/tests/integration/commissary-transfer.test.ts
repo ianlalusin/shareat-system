@@ -2,7 +2,7 @@ import { config } from 'dotenv';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { money } from '@shareat/core/money';
-import { closeDb, transaction } from '@shareat/db';
+import { closeDb, withOrgPrincipal } from '@shareat/db';
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../db/seed/expense-categories';
 import { receiveDelivery } from '../../src/deliveries/receive';
@@ -63,7 +63,7 @@ async function stockCommissary(qty = '100', cost = '300.0000') {
   const [d] = await sql<{ id: string }[]>`
     insert into deliveries (org_id, store_id, kind, delivered_on, proof_file_id, created_by)
     values (${orgA},${commissary},'purchase','2026-08-01',${fileA},${personA}) returning id`;
-  await transaction((tx) =>
+  await withOrgPrincipal(orgA, (tx) =>
     receiveDelivery(tx, {
       orgId: orgA, storeId: commissary, deliveryId: d!.id, deliveredOn: '2026-08-01',
       locations: comLocations(), receivedBy: personA,
@@ -122,7 +122,7 @@ afterAll(async () => {
 describe('T-172 — dispatch, and the gate that fails CLOSED', () => {
   it('moves stock off the shelf into 1340, and nothing crosses to the branch', async () => {
     await stockCommissary();
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       dispatchOrder(tx, {
         orgId: orgA, commissaryStoreId: commissary, orderId: crypto.randomUUID(),
         dispatchedOn: '2026-08-20', dispatchedBy: personA,
@@ -145,7 +145,7 @@ describe('T-172 — dispatch, and the gate that fails CLOSED', () => {
 
   it('⛔ refuses more than the commissary holds', async () => {
     await stockCommissary('50');
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       dispatchOrder(tx, {
         orgId: orgA, commissaryStoreId: commissary, orderId: crypto.randomUUID(),
         dispatchedOn: '2026-08-20', dispatchedBy: personA,
@@ -159,7 +159,7 @@ describe('T-172 — dispatch, and the gate that fails CLOSED', () => {
 
   it('⭐ an UNTRACKED item is refused at dispatch — fail CLOSED, so the commissary fixes its data', async () => {
     await stockCommissary();
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       dispatchOrder(tx, {
         orgId: orgA, commissaryStoreId: commissary, orderId: crypto.randomUUID(),
         dispatchedOn: '2026-08-20', dispatchedBy: personA,
@@ -177,7 +177,7 @@ describe('T-173 — ⭐ the one event where both stores move', () => {
   it('Ian’s case: bought at ₱300, transferred at ₱310 — four legs, two stores, one entry', async () => {
     await stockCommissary('100', '300.0000');
     const orderId = crypto.randomUUID();
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       dispatchOrder(tx, {
         orgId: orgA, commissaryStoreId: commissary, orderId, dispatchedOn: '2026-08-20',
         dispatchedBy: personA, onHandByItem: { [itemA]: quantity('100') },
@@ -185,7 +185,7 @@ describe('T-173 — ⭐ the one event where both stores move', () => {
       }),
     );
 
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       confirmReceipt(tx, {
         orgId: orgA, commissaryStoreId: commissary, branchStoreId: branch,
         commissaryStoreCode: 'COM', branchStoreCode: 'BR',
@@ -229,14 +229,14 @@ describe('T-173 — ⭐ the one event where both stores move', () => {
   it('⭐ posts at RECEIVED quantity, and the shortfall STAYS in 1340', async () => {
     await stockCommissary('100', '300.0000');
     const orderId = crypto.randomUUID();
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       dispatchOrder(tx, {
         orgId: orgA, commissaryStoreId: commissary, orderId, dispatchedOn: '2026-08-20',
         dispatchedBy: personA, onHandByItem: { [itemA]: quantity('100') },
         lines: [{ lineId: '1', itemId: itemA, itemKind: 'raw_material', sourceLocationId: comKitchen, fulfilledQuantity: quantity('100') }],
       }),
     );
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       confirmReceipt(tx, {
         orgId: orgA, commissaryStoreId: commissary, branchStoreId: branch,
         commissaryStoreCode: 'COM', branchStoreCode: 'BR',
@@ -267,14 +267,14 @@ describe('T-173 — ⭐ the one event where both stores move', () => {
   it('⚠️ a difference inside 0.005 is NOT a discrepancy — two scales, not a problem', async () => {
     await stockCommissary('100', '300.0000');
     const orderId = crypto.randomUUID();
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       dispatchOrder(tx, {
         orgId: orgA, commissaryStoreId: commissary, orderId, dispatchedOn: '2026-08-20',
         dispatchedBy: personA, onHandByItem: { [itemA]: quantity('100') },
         lines: [{ lineId: '1', itemId: itemA, itemKind: 'raw_material', sourceLocationId: comKitchen, fulfilledQuantity: quantity('100') }],
       }),
     );
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       confirmReceipt(tx, {
         orgId: orgA, commissaryStoreId: commissary, branchStoreId: branch,
         commissaryStoreCode: 'COM', branchStoreCode: 'BR',
@@ -290,14 +290,14 @@ describe('T-173 — ⭐ the one event where both stores move', () => {
   it('⭐ a UNIT MISMATCH flags and skips the balance — the corrupt number never lands', async () => {
     await stockCommissary('100', '300.0000');
     const orderId = crypto.randomUUID();
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       dispatchOrder(tx, {
         orgId: orgA, commissaryStoreId: commissary, orderId, dispatchedOn: '2026-08-20',
         dispatchedBy: personA, onHandByItem: { [itemA]: quantity('100') },
         lines: [{ lineId: '1', itemId: itemA, itemKind: 'raw_material', sourceLocationId: comKitchen, fulfilledQuantity: quantity('100') }],
       }),
     );
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       confirmReceipt(tx, {
         orgId: orgA, commissaryStoreId: commissary, branchStoreId: branch,
         commissaryStoreCode: 'COM', branchStoreCode: 'BR',
@@ -330,14 +330,14 @@ describe('T-173 — ⭐ the one event where both stores move', () => {
   it('⚠️ an UNKNOWN branch unit posts normally — the guard refuses to act on what it cannot check', async () => {
     await stockCommissary('100', '300.0000');
     const orderId = crypto.randomUUID();
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       dispatchOrder(tx, {
         orgId: orgA, commissaryStoreId: commissary, orderId, dispatchedOn: '2026-08-20',
         dispatchedBy: personA, onHandByItem: { [itemA]: quantity('100') },
         lines: [{ lineId: '1', itemId: itemA, itemKind: 'raw_material', sourceLocationId: comKitchen, fulfilledQuantity: quantity('100') }],
       }),
     );
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       confirmReceipt(tx, {
         orgId: orgA, commissaryStoreId: commissary, branchStoreId: branch,
         commissaryStoreCode: 'COM', branchStoreCode: 'BR',
@@ -372,7 +372,7 @@ describe('⭐ a MIXED transfer — two item kinds, two asset accounts, one order
     const [d] = await sql<{ id: string }[]>`
       insert into deliveries (org_id, store_id, kind, delivered_on, proof_file_id, created_by)
       values (${orgA},${commissary},'purchase','2026-08-01',${fileA},${personA}) returning id`;
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       receiveDelivery(tx, {
         orgId: orgA, storeId: commissary, deliveryId: d!.id, deliveredOn: '2026-08-01',
         locations: comLocations(), receivedBy: personA,
@@ -384,7 +384,7 @@ describe('⭐ a MIXED transfer — two item kinds, two asset accounts, one order
     );
 
     const orderId = crypto.randomUUID();
-    const dispatched = await transaction((tx) =>
+    const dispatched = await withOrgPrincipal(orgA, (tx) =>
       dispatchOrder(tx, {
         orgId: orgA, commissaryStoreId: commissary, orderId, dispatchedOn: '2026-08-20',
         dispatchedBy: personA,
@@ -407,7 +407,7 @@ describe('⭐ a MIXED transfer — two item kinds, two asset accounts, one order
       { code: '1340', debit: '31000.00', credit: '0.00' },
     ]);
 
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       confirmReceipt(tx, {
         orgId: orgA, commissaryStoreId: commissary, branchStoreId: branch,
         commissaryStoreCode: 'COM', branchStoreCode: 'BR',
@@ -447,7 +447,7 @@ describe('⭐ a MIXED transfer — two item kinds, two asset accounts, one order
 
   it('⛔ an unmapped item kind blocks BEFORE any stock moves', async () => {
     await stockCommissary();
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       dispatchOrder(tx, {
         orgId: orgA, commissaryStoreId: commissary, orderId: crypto.randomUUID(),
         dispatchedOn: '2026-08-20', dispatchedBy: personA,
@@ -467,14 +467,14 @@ describe('T-173 — the branch’s own delivery record', () => {
   async function dispatchAndReceive(receivedQty: string, unit: string | null = 'kg') {
     await stockCommissary('100', '300.0000');
     const orderId = crypto.randomUUID();
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       dispatchOrder(tx, {
         orgId: orgA, commissaryStoreId: commissary, orderId, dispatchedOn: '2026-08-20',
         dispatchedBy: personA, onHandByItem: { [itemA]: quantity('100') },
         lines: [{ lineId: '1', itemId: itemA, itemKind: 'raw_material', sourceLocationId: comKitchen, fulfilledQuantity: quantity('100') }],
       }),
     );
-    return transaction((tx) =>
+    return withOrgPrincipal(orgA, (tx) =>
       confirmReceipt(tx, {
         orgId: orgA, commissaryStoreId: commissary, branchStoreId: branch,
         commissaryStoreCode: 'COM', branchStoreCode: 'BR',
@@ -538,14 +538,14 @@ describe('T-172/T-173 — the invariants that must survive', () => {
   it('⭐ 1250 equals 2150 across the org — invariant 6’s reciprocal check', async () => {
     await stockCommissary('100', '300.0000');
     const orderId = crypto.randomUUID();
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       dispatchOrder(tx, {
         orgId: orgA, commissaryStoreId: commissary, orderId, dispatchedOn: '2026-08-20',
         dispatchedBy: personA, onHandByItem: { [itemA]: quantity('100') },
         lines: [{ lineId: '1', itemId: itemA, itemKind: 'raw_material', sourceLocationId: comKitchen, fulfilledQuantity: quantity('100') }],
       }),
     );
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       confirmReceipt(tx, {
         orgId: orgA, commissaryStoreId: commissary, branchStoreId: branch,
         commissaryStoreCode: 'COM', branchStoreCode: 'BR',
@@ -562,14 +562,14 @@ describe('T-172/T-173 — the invariants that must survive', () => {
   it('the party on each store line is the OTHER store’s code', async () => {
     await stockCommissary('10', '300.0000');
     const orderId = crypto.randomUUID();
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       dispatchOrder(tx, {
         orgId: orgA, commissaryStoreId: commissary, orderId, dispatchedOn: '2026-08-20',
         dispatchedBy: personA, onHandByItem: { [itemA]: quantity('10') },
         lines: [{ lineId: '1', itemId: itemA, itemKind: 'raw_material', sourceLocationId: comKitchen, fulfilledQuantity: quantity('10') }],
       }),
     );
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       confirmReceipt(tx, {
         orgId: orgA, commissaryStoreId: commissary, branchStoreId: branch,
         commissaryStoreCode: 'COM', branchStoreCode: 'BR',
@@ -587,14 +587,14 @@ describe('T-172/T-173 — the invariants that must survive', () => {
   it('the trial balance ties across both stores', async () => {
     await stockCommissary('100', '300.0000');
     const orderId = crypto.randomUUID();
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       dispatchOrder(tx, {
         orgId: orgA, commissaryStoreId: commissary, orderId, dispatchedOn: '2026-08-20',
         dispatchedBy: personA, onHandByItem: { [itemA]: quantity('100') },
         lines: [{ lineId: '1', itemId: itemA, itemKind: 'raw_material', sourceLocationId: comKitchen, fulfilledQuantity: quantity('100') }],
       }),
     );
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       confirmReceipt(tx, {
         orgId: orgA, commissaryStoreId: commissary, branchStoreId: branch,
         commissaryStoreCode: 'COM', branchStoreCode: 'BR',

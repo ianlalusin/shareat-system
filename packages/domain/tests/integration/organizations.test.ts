@@ -21,12 +21,23 @@
 import { config } from 'dotenv';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
-import { closeDb, transaction, stockLocationsRepo } from '@shareat/db';
+import { closeDb, transaction, systemTransaction, stockLocationsRepo } from '@shareat/db';
 import { setPin, signInWithPin, type Actor } from '@shareat/auth';
 import { CHART_OF_ACCOUNTS } from '../../../db/seed/chart-of-accounts';
 import { EXPENSE_CATEGORY_SEED } from '../../../db/seed/expense-categories';
 import { createStore } from '../../src/stores/service';
 import { createFirstAdmin, createOrganization } from '../../src/organizations';
+
+/**
+ * ⭐ Why `systemTransaction`, not `withOrgPrincipal`, throughout this file: createOrganization and
+ * createFirstAdmin are only ever invoked in production from inside `bootstrapOrganization`
+ * (packages/domain/src/organizations/index.ts:377,380), whose own callers
+ * (apps/erp/src/app/setup/actions.ts, scripts/bootstrap-org.ts) open their transaction with
+ * systemTransaction() — named callers in tests/unit/system-transaction-callers.test.ts's closed
+ * list. There is no org yet to scope a principal to at creation time, so withOrgPrincipal is not
+ * merely wrong here, it is unexpressible. This file (excluded from that guard: it lives under
+ * `tests/` and ends `.test.ts`) mirrors that same production depth.
+ */
 
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
@@ -67,7 +78,7 @@ describe('T-228 case 5 — ⭐ the chicken-and-egg, actually broken', () => {
     // exists before a store; `createStore` authorizes `manage_stores`, so no store exists before an
     // admin; and no admin exists before an org. This test is the proof the order is right.
     const pin = '654321';
-    const made = await transaction(async (tx) => {
+    const made = await systemTransaction(async (tx) => {
       const org = await createOrganization(tx, { code: uid('BOOT'), name: 'Bootstrap Co' });
       const { personId } = await createFirstAdmin(tx, { orgId: org.orgId, displayName: 'First Admin' });
       const actor: Actor = { personId, orgId: org.orgId };
@@ -76,6 +87,10 @@ describe('T-228 case 5 — ⭐ the chicken-and-egg, actually broken', () => {
       return { orgId: org.orgId, personId, storeId: store.storeId };
     });
 
+    // ⚠️ Deliberately the plain, no-principal `transaction()` here, not systemTransaction — this
+    // mirrors apps/erp/src/app/sign-in/actions.ts exactly, which cannot know an org before the PIN
+    // resolves who is signing in. If this ever fails under the restricted role, that is a real
+    // finding about signInWithPin, not a fixture gap to paper over.
     const session = await transaction((tx) =>
       signInWithPin(tx, { storeId: made.storeId, pin }));
 
@@ -87,7 +102,7 @@ describe('T-228 case 5 — ⭐ the chicken-and-egg, actually broken', () => {
   it('⭐ the store carries its default room and the admin\'s scope row — createStore made it, not the bootstrap', async () => {
     // Invariant 7. The bootstrap never writes `person_store_scope` by hand; T-222's §C.2 fan-out
     // does it, and this is what says so out loud rather than trusting the comment.
-    const made = await transaction(async (tx) => {
+    const made = await systemTransaction(async (tx) => {
       const org = await createOrganization(tx, { code: uid('BOOT'), name: 'Bootstrap Co' });
       const { personId } = await createFirstAdmin(tx, { orgId: org.orgId, displayName: 'First Admin' });
       const store = await createStore(tx, { personId, orgId: org.orgId }, { code: 'LIPA', name: 'SharEat Lipa' });
@@ -101,7 +116,7 @@ describe('T-228 case 5 — ⭐ the chicken-and-egg, actually broken', () => {
 
     // Read through the repo rather than hand-rolling the "active" predicate — `stock_locations`
     // carries a `status` enum, not an `is_active` flag, and T-160's repo owns what active means.
-    const rooms = await transaction((tx) => stockLocationsRepo.listActiveLocations(tx, made.storeId));
+    const rooms = await systemTransaction((tx) => stockLocationsRepo.listActiveLocations(tx, made.storeId));
     expect(rooms).toHaveLength(1);
   });
 });
@@ -116,7 +131,7 @@ describe('T-228 case 1 — an org arrives with its chart and its categories', ()
     // categories"; the real figures are 102 and 38, and 93 was already stale before this task —
     // T-123 added 2160 and 4500. A literal here would go stale the next time the chart grows.
     const code = uid('ORG');
-    const result = await transaction((tx) => createOrganization(tx, { code, name: 'Shareat OPC' }));
+    const result = await systemTransaction((tx) => createOrganization(tx, { code, name: 'Shareat OPC' }));
 
     expect(result.accountsSeeded).toBe(CHART_OF_ACCOUNTS.length);
     expect(result.categoriesSeeded).toBe(EXPENSE_CATEGORY_SEED.length);
@@ -131,7 +146,7 @@ describe('T-228 case 1 — an org arrives with its chart and its categories', ()
   it('⚠️ DEF-204 — the seeds really do run inside the Drizzle transaction, with intact values', async () => {
     // `sql.json()` throws on a Drizzle-constructed client and a lone `::jsonb` cast arrives
     // double-encoded on a plain one. If either creeps back into packages/db/seed/*.ts, this fails.
-    const { orgId } = await transaction((tx) => createOrganization(tx, { code: uid('ORG'), name: 'Payload Check' }));
+    const { orgId } = await systemTransaction((tx) => createOrganization(tx, { code: uid('ORG'), name: 'Payload Check' }));
 
     const [bad] = await sql<{ n: number }[]>`
       select count(*)::int n from accounts
@@ -154,17 +169,17 @@ describe('T-228 case 1 — an org arrives with its chart and its categories', ()
 describe('T-228 case 2 — a duplicate code is refused, in a sentence a human can act on', () => {
   it('refuses the second org with the same code and names the code', async () => {
     const code = uid('DUP');
-    await transaction((tx) => createOrganization(tx, { code, name: 'First' }));
+    await systemTransaction((tx) => createOrganization(tx, { code, name: 'First' }));
 
     await expect(
-      transaction((tx) => createOrganization(tx, { code, name: 'Second' })),
+      systemTransaction((tx) => createOrganization(tx, { code, name: 'Second' })),
     ).rejects.toThrow(new RegExp(code));
   });
 
   it('⛔ leaves nothing behind — the refused org has no accounts either', async () => {
     const code = uid('DUP');
-    const first = await transaction((tx) => createOrganization(tx, { code, name: 'First' }));
-    await expect(transaction((tx) => createOrganization(tx, { code, name: 'Second' }))).rejects.toThrow();
+    const first = await systemTransaction((tx) => createOrganization(tx, { code, name: 'First' }));
+    await expect(systemTransaction((tx) => createOrganization(tx, { code, name: 'Second' }))).rejects.toThrow();
 
     const [orgs] = await sql<{ n: number }[]>`select count(*)::int n from organizations where code = ${code}`;
     expect(orgs!.n).toBe(1);
@@ -181,8 +196,8 @@ describe('T-228 case 3 — the first admin is the base case of the authority cha
   it('creates the person and an admin role with granted_by NULL', async () => {
     // ⭐ NULL is correct here, not a shortcut: bible row 116's authority chain has a base case,
     // and there is no grantor before the first admin. `dev-seed.ts:104` states the same rule.
-    const { orgId } = await transaction((tx) => createOrganization(tx, { code: uid('ORG'), name: 'Org' }));
-    const { personId } = await transaction((tx) => createFirstAdmin(tx, { orgId, displayName: 'Ian' }));
+    const { orgId } = await systemTransaction((tx) => createOrganization(tx, { code: uid('ORG'), name: 'Org' }));
+    const { personId } = await systemTransaction((tx) => createFirstAdmin(tx, { orgId, displayName: 'Ian' }));
 
     const [person] = await sql<{ display_name: string; org_id: string }[]>`
       select display_name, org_id from persons where id = ${personId}::uuid`;
@@ -198,11 +213,11 @@ describe('T-228 case 3 — the first admin is the base case of the authority cha
 
 describe('T-228 case 4 — ⛔ it is the FIRST admin, not a back door that mints admins forever', () => {
   it('refuses once the org holds any role, and names the supported path', async () => {
-    const { orgId } = await transaction((tx) => createOrganization(tx, { code: uid('ORG'), name: 'Org' }));
-    await transaction((tx) => createFirstAdmin(tx, { orgId, displayName: 'First' }));
+    const { orgId } = await systemTransaction((tx) => createOrganization(tx, { code: uid('ORG'), name: 'Org' }));
+    await systemTransaction((tx) => createFirstAdmin(tx, { orgId, displayName: 'First' }));
 
     await expect(
-      transaction((tx) => createFirstAdmin(tx, { orgId, displayName: 'Second' })),
+      systemTransaction((tx) => createFirstAdmin(tx, { orgId, displayName: 'Second' })),
     ).rejects.toThrow(/\/admin\/users/);
   });
 
@@ -210,19 +225,19 @@ describe('T-228 case 4 — ⛔ it is the FIRST admin, not a back door that mints
     // ⚠️ `accessRepo.hasActiveAdmin` would say "no admin here" in both of these, and that is the
     // weaker test: after a demotion this function would mint a second first-admin with a NULL
     // grantor, which is exactly the back door the refusal exists to close.
-    const revoked = await transaction((tx) => createOrganization(tx, { code: uid('ORG'), name: 'Revoked' }));
-    const { personId } = await transaction((tx) => createFirstAdmin(tx, { orgId: revoked.orgId, displayName: 'Gone' }));
+    const revoked = await systemTransaction((tx) => createOrganization(tx, { code: uid('ORG'), name: 'Revoked' }));
+    const { personId } = await systemTransaction((tx) => createFirstAdmin(tx, { orgId: revoked.orgId, displayName: 'Gone' }));
     await sql`update person_roles set revoked_at = now() where person_id = ${personId}::uuid`;
     await expect(
-      transaction((tx) => createFirstAdmin(tx, { orgId: revoked.orgId, displayName: 'Second' })),
+      systemTransaction((tx) => createFirstAdmin(tx, { orgId: revoked.orgId, displayName: 'Second' })),
     ).rejects.toThrow(/\/admin\/users/);
 
-    const staffOnly = await transaction((tx) => createOrganization(tx, { code: uid('ORG'), name: 'Staff only' }));
+    const staffOnly = await systemTransaction((tx) => createOrganization(tx, { code: uid('ORG'), name: 'Staff only' }));
     const [p] = await sql<{ id: string }[]>`
       insert into persons (org_id, display_name) values (${staffOnly.orgId}, 'A Cashier') returning id`;
     await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${staffOnly.orgId}, 'staff')`;
     await expect(
-      transaction((tx) => createFirstAdmin(tx, { orgId: staffOnly.orgId, displayName: 'Second' })),
+      systemTransaction((tx) => createFirstAdmin(tx, { orgId: staffOnly.orgId, displayName: 'Second' })),
     ).rejects.toThrow(/\/admin\/users/);
   });
 });
@@ -239,7 +254,7 @@ describe('T-228 case 6 — ⭐ all-or-nothing, proved by an INJECTED failure', (
     const code = uid('ROLL');
 
     await expect(
-      transaction(async (tx) => {
+      systemTransaction(async (tx) => {
         const org = await createOrganization(tx, { code, name: 'Doomed' });
         await createFirstAdmin(tx, { orgId: org.orgId, displayName: 'Doomed Admin' });
         throw new Error('injected failure at the store step, inside the same transaction');
@@ -259,14 +274,14 @@ describe('T-228 case 6 — ⭐ all-or-nothing, proved by an INJECTED failure', (
   it('and the retry then succeeds — the refusal in case 4 does not block a rolled-back attempt', async () => {
     const code = uid('ROLL');
     await expect(
-      transaction(async (tx) => {
+      systemTransaction(async (tx) => {
         const org = await createOrganization(tx, { code, name: 'Doomed' });
         await createFirstAdmin(tx, { orgId: org.orgId, displayName: 'Doomed Admin' });
         throw new Error('injected failure');
       }),
     ).rejects.toThrow();
 
-    const retried = await transaction(async (tx) => {
+    const retried = await systemTransaction(async (tx) => {
       const org = await createOrganization(tx, { code, name: 'Second Attempt' });
       const admin = await createFirstAdmin(tx, { orgId: org.orgId, displayName: 'Real Admin' });
       return { orgId: org.orgId, personId: admin.personId };
@@ -285,8 +300,8 @@ describe('T-228 case 7 — the chart is per-org, and the second org does not tou
     // ⛔ Every seeded row carries org_id. The symptom of assuming otherwise is `postEntry`
     // refusing with "unknown account code", which is the engine working correctly and is
     // baffling if you think the chart is global.
-    const a = await transaction((tx) => createOrganization(tx, { code: uid('A'), name: 'Org A' }));
-    const b = await transaction((tx) => createOrganization(tx, { code: uid('B'), name: 'Org B' }));
+    const a = await systemTransaction((tx) => createOrganization(tx, { code: uid('A'), name: 'Org A' }));
+    const b = await systemTransaction((tx) => createOrganization(tx, { code: uid('B'), name: 'Org B' }));
 
     expect(a.orgId).not.toBe(b.orgId);
     expect(await countFor('accounts', a.orgId)).toBe(CHART_OF_ACCOUNTS.length);

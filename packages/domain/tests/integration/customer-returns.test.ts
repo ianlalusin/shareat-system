@@ -18,7 +18,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../db/seed/expense-categories';
-import { closeDb, itemsRepo, transaction, tradeRepo, APP_ROLE, type Tx } from '@shareat/db';
+import { closeDb, itemsRepo, transaction, systemTransaction, tradeRepo, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import {
   createCustomer,
@@ -559,9 +559,20 @@ describe('void', () => {
 /**
  * T-231 slice 1 / DEF-210 — the organisation is the ACTOR's, never the caller's.
  *
- * ⛔ Plain `transaction()`, not `asOrg`: `apps/erp/src/app/trade/returns/actions.ts:31` and `:66`
- * open one with no principal, so RLS is bypassed. Under a principal these are refused with
- * SQLSTATE 42501 — which is true, and is not what production does today.
+ * ⭐ Deliberately `systemTransaction()`, not `asOrg`: production (`apps/erp/src/app/trade/returns/
+ * actions.ts:30,63`) DOES call these through `withOrgPrincipal(actor.orgId, …)` today — RLS is a
+ * real backstop here in production, not bypassed. These two tests deliberately remove that
+ * backstop anyway, to prove the APPLICATION layer alone (never trusting a caller-supplied orgId,
+ * deriving it from the actor instead) refuses the cross-org read on its own — bible §15.11, no
+ * layer may be the only one for a given risk. `systemTransaction()` re-arms an explicit bypass so
+ * that claim stays provable in both flag states, instead of inheriting whatever the connection
+ * happens to be.
+ *
+ * ⚠️ **This comment used to say the opposite** — that production opened these with no principal at
+ * all, so a bare `transaction()` here merely matched what the app already did. That was true once;
+ * `withOrgPrincipal` was added at both sites since (DEF-175's shape: a comment describing a prior
+ * state as if it were current — caught 2026-09-11 while measuring DEF-218). The claim below
+ * survived that change of premise; it was not written under it.
  *
  * ⚠️ Both entry points reach the victim's ledger through `tradeRepo.getOrderById(tx, input.orgId,
  * …)`, so pre-fix they refuse with *"trade order … does not exist"* — the order is real, it is
@@ -578,7 +589,7 @@ describe('T-231 / DEF-210 — a customer return is stamped with the actor’s or
     await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status)
               values (${victim!.id}, '2020-01-01', '2035-12-31', 'open')`;
 
-    const res = await transaction((tx) =>
+    const res = await systemTransaction((tx) =>
       recordCustomerReturn(tx, {
         // @ts-expect-error T-231/DEF-210 — the field is GONE. Supplying another org's id
         // must not compile; if someone re-adds it this directive goes unused and the build fails.
@@ -637,7 +648,7 @@ describe('T-231 / DEF-210 — a customer return is stamped with the actor’s or
     await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status)
               values (${victim!.id}, '2020-01-01', '2035-12-31', 'open')`;
 
-    const res = await transaction((tx) =>
+    const res = await systemTransaction((tx) =>
       applyCredit(tx, f.manager, {
         // @ts-expect-error T-231/DEF-210 — the field is GONE. Supplying another org's id
         // must not compile; if someone re-adds it this directive goes unused and the build fails.
