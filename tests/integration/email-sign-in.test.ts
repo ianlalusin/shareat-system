@@ -24,7 +24,7 @@
 import { config } from 'dotenv';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
-import { closeDb, transaction } from '@shareat/db';
+import { closeDb, transaction, systemTransaction } from '@shareat/db';
 import { resolveActor, BROWSER_SESSION_TTL_MS } from '@shareat/auth';
 import { bootstrapOrganization } from '@shareat/domain';
 import { NOT_LINKED_MESSAGE, resolveVerifiedSignIn } from '../../apps/erp/src/app/sign-in/lib';
@@ -58,9 +58,14 @@ const countOf = async (table: string): Promise<number> => {
   return row!.n;
 };
 
-/** The first run, exactly as `/setup` will do it — with a verified uid — or as the CLI does it. */
+/**
+ * The first run, exactly as `/setup` will do it — with a verified uid — or as the CLI does it.
+ * ⭐ systemTransaction, not withOrgPrincipal — same reason as organizations.test.ts:
+ * bootstrapOrganization is only ever reached in production via systemTransaction()
+ * (apps/erp/src/app/setup/actions.ts), and there is no org yet to scope a principal to.
+ */
 async function firstRun(firebaseUid: string | null) {
-  return transaction((tx) =>
+  return systemTransaction((tx) =>
     bootstrapOrganization(tx, {
       code: unique('ORG').toUpperCase(),
       name: 'Shareat Test Organisation',

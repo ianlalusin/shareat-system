@@ -22,7 +22,7 @@
 import { config } from 'dotenv';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
-import { closeDb, transaction, accessRepo, sessionsRepo } from '@shareat/db';
+import { closeDb, transaction, systemTransaction, withOrgPrincipal, accessRepo, sessionsRepo } from '@shareat/db';
 import {
   authorize,
   signInWithFirebase,
@@ -108,7 +108,7 @@ describe('T-232 case 1 — ⭐ empty database to a signed-in owner', () => {
   it('creates everything, and the verified uid then signs in and may post and manage stores', async () => {
     const verifiedUid = uid('firebase-uid');
 
-    const result = await transaction((tx) =>
+    const result = await systemTransaction((tx) =>
       bootstrapOrganization(tx, { ...INPUT, code: uid('BOOT'), firebaseUid: verifiedUid }),
     );
 
@@ -139,7 +139,7 @@ describe('T-232 case 1 — ⭐ empty database to a signed-in owner', () => {
 
     // The person, their role, and the four grants that make them the owner.
     expect(result.personId).toBeTruthy();
-    const role = await transaction((tx) => accessRepo.activeRoleForPerson(tx, result.personId, result.orgId));
+    const role = await withOrgPrincipal(result.orgId, (tx) => accessRepo.activeRoleForPerson(tx, result.personId, result.orgId));
     expect(role?.role).toBe('admin');
     expect(role?.grantedBy).toBeNull();
     expect([...result.grantedCapabilities].sort()).toEqual([...SUPER_ADMIN_ONLY].sort());
@@ -148,7 +148,7 @@ describe('T-232 case 1 — ⭐ empty database to a signed-in owner', () => {
     expect(result.storeId).toBeTruthy();
     expect(result.locationId).toBeTruthy();
     expect(result.scopedAdminIds).toEqual([result.personId]);
-    expect(await transaction((tx) => accessRepo.storeIdsForPerson(tx, result.personId))).toEqual([
+    expect(await withOrgPrincipal(result.orgId, (tx) => accessRepo.storeIdsForPerson(tx, result.personId))).toEqual([
       result.storeId,
     ]);
 
@@ -164,9 +164,9 @@ describe('T-232 case 1 — ⭐ empty database to a signed-in owner', () => {
     // ⭐ And that session's actor really is the owner — both halves, asserted.
     const actor: Actor = { personId: result.personId, orgId: result.orgId };
     await expect(
-      transaction((tx) => authorize(tx, actor, 'post_journal_entry', {})),
+      withOrgPrincipal(result.orgId, (tx) => authorize(tx, actor, 'post_journal_entry', {})),
     ).resolves.toBeUndefined();
-    await expect(transaction((tx) => authorize(tx, actor, 'manage_stores', {}))).resolves.toBeUndefined();
+    await expect(withOrgPrincipal(result.orgId, (tx) => authorize(tx, actor, 'manage_stores', {}))).resolves.toBeUndefined();
   });
 });
 
@@ -181,7 +181,7 @@ describe('T-232 case 2 — ⭐ everything or nothing', () => {
     // a step would survive this rollback and be counted below. A half-succeeded bootstrap is
     // unrecoverable: `createFirstAdmin` would refuse the retry, so there would be no second chance.
     await expect(
-      transaction(async (tx) => {
+      systemTransaction(async (tx) => {
         await bootstrapOrganization(tx, { ...INPUT, code: uid('ROLL'), firebaseUid: uid('uid') });
         throw new Error('injected failure, inside the same transaction');
       }),
@@ -194,13 +194,13 @@ describe('T-232 case 2 — ⭐ everything or nothing', () => {
 
   it('and the retry then succeeds — a rolled-back attempt does not close first-run setup', async () => {
     await expect(
-      transaction(async (tx) => {
+      systemTransaction(async (tx) => {
         await bootstrapOrganization(tx, { ...INPUT, code: uid('ROLL') });
         throw new Error('injected failure');
       }),
     ).rejects.toThrow();
 
-    const retried = await transaction((tx) => bootstrapOrganization(tx, { ...INPUT, code: uid('REAL') }));
+    const retried = await systemTransaction((tx) => bootstrapOrganization(tx, { ...INPUT, code: uid('REAL') }));
     expect(retried.personId).toBeTruthy();
   });
 });
@@ -211,10 +211,10 @@ describe('T-232 case 2 — ⭐ everything or nothing', () => {
 
 describe('T-232 case 3 — refuses once ANY organization exists', () => {
   it('refuses even for a completely different org code, which the unique index would not catch', async () => {
-    await transaction((tx) => bootstrapOrganization(tx, { ...INPUT, code: uid('FIRST') }));
+    await systemTransaction((tx) => bootstrapOrganization(tx, { ...INPUT, code: uid('FIRST') }));
 
     await expect(
-      transaction((tx) =>
+      systemTransaction((tx) =>
         bootstrapOrganization(tx, { ...INPUT, code: uid('SECOND'), storeCode: 'MALVAR', pin: '246810' }),
       ),
     ).rejects.toThrow(/already has an organization/i);
@@ -225,10 +225,10 @@ describe('T-232 case 3 — refuses once ANY organization exists', () => {
   });
 
   it('refuses when the existing organization was created by any other route', async () => {
-    await transaction((tx) => createOrganization(tx, { code: uid('BY_HAND'), name: 'Made elsewhere' }));
+    await systemTransaction((tx) => createOrganization(tx, { code: uid('BY_HAND'), name: 'Made elsewhere' }));
 
     await expect(
-      transaction((tx) => bootstrapOrganization(tx, { ...INPUT, code: uid('LATE') })),
+      systemTransaction((tx) => bootstrapOrganization(tx, { ...INPUT, code: uid('LATE') })),
     ).rejects.toThrow(/already has an organization/i);
   });
 });
@@ -239,13 +239,13 @@ describe('T-232 case 3 — refuses once ANY organization exists', () => {
 
 describe('T-232 case 4 — ⭐ admin + four grants authorizes exactly what super_admin does', () => {
   it('holds every capability super_admin holds, checked one by one against the matrix', async () => {
-    const result = await transaction((tx) => bootstrapOrganization(tx, { ...INPUT, code: uid('EQUIV') }));
+    const result = await systemTransaction((tx) => bootstrapOrganization(tx, { ...INPUT, code: uid('EQUIV') }));
     const actor: Actor = { personId: result.personId, orgId: result.orgId };
 
     // The grants are real rows, not an inference.
     for (const capability of SUPER_ADMIN_ONLY) {
       expect(
-        await transaction((tx) => accessRepo.personHasActiveGrant(tx, result.personId, capability)),
+        await withOrgPrincipal(result.orgId, (tx) => accessRepo.personHasActiveGrant(tx, result.personId, capability)),
         `expected an active grant for ${capability}`,
       ).toBe(true);
     }
@@ -256,14 +256,14 @@ describe('T-232 case 4 — ⭐ admin + four grants authorizes exactly what super
     for (const capability of superAdminHolds) {
       const ctx = CAPABILITY_SCOPE[capability] === 'store' ? { storeId: result.storeId } : {};
       await expect(
-        transaction((tx) => authorize(tx, actor, capability, ctx)),
+        withOrgPrincipal(result.orgId, (tx) => authorize(tx, actor, capability, ctx)),
         `expected the first person to hold ${capability}`,
       ).resolves.toBeUndefined();
     }
   });
 
   it('the grants carry granted_by NULL — the base case of the authority chain, not a fabricated grantor', async () => {
-    const result = await transaction((tx) => bootstrapOrganization(tx, { ...INPUT, code: uid('CHAIN') }));
+    const result = await systemTransaction((tx) => bootstrapOrganization(tx, { ...INPUT, code: uid('CHAIN') }));
     const rows = await sql<{ granted_by: string | null }[]>`
       select granted_by from person_grants where person_id = ${result.personId}`;
     expect(rows).toHaveLength(SUPER_ADMIN_ONLY.length);
@@ -276,7 +276,7 @@ describe('T-232 case 5 — ⛔ the non-zero control for case 4', () => {
     // Without this, case 4 would pass just as happily against a matrix that gave `admin`
     // everything — a sweep that cannot fail proves nothing (memory: a sweep needs a non-zero
     // control). This is the same shape of person, minus the four rows.
-    const made = await transaction(async (tx) => {
+    const made = await systemTransaction(async (tx) => {
       const org = await createOrganization(tx, { code: uid('PLAIN'), name: 'Plain Co' });
       const admin = await createFirstAdmin(tx, {
         orgId: org.orgId,
@@ -287,7 +287,7 @@ describe('T-232 case 5 — ⛔ the non-zero control for case 4', () => {
     });
 
     const actor: Actor = { personId: made.personId, orgId: made.orgId };
-    await expect(transaction((tx) => authorize(tx, actor, 'post_journal_entry', {}))).rejects.toThrow(
+    await expect(withOrgPrincipal(made.orgId, (tx) => authorize(tx, actor, 'post_journal_entry', {}))).rejects.toThrow(
       AuthorizationError,
     );
   });
@@ -300,7 +300,7 @@ describe('T-232 case 5 — ⛔ the non-zero control for case 4', () => {
 describe('T-232 case 6 — the CLI calls the same function and still works', () => {
   it('with no firebaseUid: everything except the firebase credential, and signInWithPin still works', async () => {
     const pin = '864209';
-    const result = await transaction((tx) =>
+    const result = await systemTransaction((tx) =>
       bootstrapOrganization(tx, { ...INPUT, code: uid('CLI'), pin }),
     );
 
@@ -319,7 +319,7 @@ describe('T-232 case 6 — the CLI calls the same function and still works', () 
 
   it('links the firebase credential to the FIRST person, with no store and no local secret', async () => {
     const verifiedUid = uid('shape');
-    const result = await transaction((tx) =>
+    const result = await systemTransaction((tx) =>
       bootstrapOrganization(tx, { ...INPUT, code: uid('SHAPE'), firebaseUid: verifiedUid }),
     );
 
@@ -343,11 +343,11 @@ describe('T-232 case 6 — the CLI calls the same function and still works', () 
 describe('T-232 cases 7 and 8 — refusals leave the database untouched', () => {
   it('case 7: a duplicate organization code is refused and writes nothing', async () => {
     const code = uid('DUP');
-    await transaction((tx) => bootstrapOrganization(tx, { ...INPUT, code }));
+    await systemTransaction((tx) => bootstrapOrganization(tx, { ...INPUT, code }));
 
     // ⚠️ Refused by the zero-org guard before the code is even considered — which is the stricter
     // of the two refusals and the one that matters. The code's unique index remains underneath it.
-    await expect(transaction((tx) => bootstrapOrganization(tx, { ...INPUT, code }))).rejects.toThrow();
+    await expect(systemTransaction((tx) => bootstrapOrganization(tx, { ...INPUT, code }))).rejects.toThrow();
     expect(await countOf('organizations')).toBe(1);
   });
 
@@ -355,7 +355,7 @@ describe('T-232 cases 7 and 8 — refusals leave the database untouched', () => 
     // ⛔ The CLI already learned this one: "finding that out after creating an organization is a
     // bad time to learn it." Here it matters more — a half-run leaves setup permanently closed.
     await expect(
-      transaction((tx) => bootstrapOrganization(tx, { ...INPUT, code: uid('BADPIN'), pin: '12345' })),
+      systemTransaction((tx) => bootstrapOrganization(tx, { ...INPUT, code: uid('BADPIN'), pin: '12345' })),
     ).rejects.toThrow(/6 digits/i);
 
     expect(await countOf('organizations')).toBe(0);
@@ -364,7 +364,7 @@ describe('T-232 cases 7 and 8 — refusals leave the database untouched', () => 
 
   it('case 8b: an empty organization name or admin name is refused, and writes nothing', async () => {
     await expect(
-      transaction((tx) => bootstrapOrganization(tx, { ...INPUT, code: uid('BLANK'), adminDisplayName: '  ' })),
+      systemTransaction((tx) => bootstrapOrganization(tx, { ...INPUT, code: uid('BLANK'), adminDisplayName: '  ' })),
     ).rejects.toThrow(/needs a name/i);
     expect(await countOf('organizations')).toBe(0);
   });
@@ -384,7 +384,7 @@ describe('T-232 case 9 — ⛔ a blank firebaseUid is refused, never silently sk
     // ⚠️ It is refused beside the PIN check, for the same stated reason: finding out after
     // creating an organization is a bad time to learn it.
     await expect(
-      transaction((tx) =>
+      systemTransaction((tx) =>
         bootstrapOrganization(tx, { ...INPUT, code: uid('BLANKUID'), firebaseUid: '   ' }),
       ),
     ).rejects.toThrow(/firebase/i);
@@ -396,7 +396,7 @@ describe('T-232 case 9 — ⛔ a blank firebaseUid is refused, never silently sk
 
   it('refuses an empty string too — the same value, spelled differently', async () => {
     await expect(
-      transaction((tx) => bootstrapOrganization(tx, { ...INPUT, code: uid('EMPTYUID'), firebaseUid: '' })),
+      systemTransaction((tx) => bootstrapOrganization(tx, { ...INPUT, code: uid('EMPTYUID'), firebaseUid: '' })),
     ).rejects.toThrow(/firebase/i);
 
     expect(await countOf('organizations')).toBe(0);
@@ -405,7 +405,7 @@ describe('T-232 case 9 — ⛔ a blank firebaseUid is refused, never silently sk
   it('⭐ but null and undefined still mean "the CLI path" and are allowed', async () => {
     // The non-zero control for the two refusals above: absent is a legitimate, tested case, and a
     // check that refused it would break `scripts/bootstrap-org.ts` outright.
-    const explicitNull = await transaction((tx) =>
+    const explicitNull = await systemTransaction((tx) =>
       bootstrapOrganization(tx, { ...INPUT, code: uid('NULLUID'), firebaseUid: null }),
     );
     expect(explicitNull.firebaseCredentialId).toBeNull();
@@ -414,7 +414,7 @@ describe('T-232 case 9 — ⛔ a blank firebaseUid is refused, never silently sk
 
   it('⭐ and a uid with surrounding whitespace is TRIMMED, not refused — it names a real account', async () => {
     const bare = uid('padded');
-    const result = await transaction((tx) =>
+    const result = await systemTransaction((tx) =>
       bootstrapOrganization(tx, { ...INPUT, code: uid('PADUID'), firebaseUid: `  ${bare}  ` }),
     );
 

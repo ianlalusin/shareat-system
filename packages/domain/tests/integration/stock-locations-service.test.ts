@@ -128,7 +128,7 @@ async function putStockIn(f: Fixture, storeId: string, locationId: string, qty: 
   const [d] = await sql<{ id: string }[]>`
     insert into deliveries (org_id, store_id, kind, delivered_on, proof_file_id, created_by)
     values (${f.orgId}, ${storeId}, 'purchase', '2026-08-01', ${f.fileId}, ${f.admin.personId}) returning id`;
-  const res = await transaction((tx) =>
+  const res = await asOrg(f.orgId, (tx) =>
     receiveDelivery(tx, {
       orgId: f.orgId,
       storeId,

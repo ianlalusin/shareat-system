@@ -88,7 +88,7 @@ async function stockUpSlab(qty = '100', cost = '300.0000') {
   const [d] = await sql<{ id: string }[]>`
     insert into deliveries (org_id, store_id, kind, delivered_on, proof_file_id, created_by)
     values (${orgA},${storeA},'purchase','2026-08-01',${fileA},${staffId}) returning id`;
-  const result = await transaction((tx) =>
+  const result = await asOrg(orgA, (tx) =>
     receiveDelivery(tx, {
       orgId: orgA, storeId: storeA, deliveryId: d!.id, deliveredOn: '2026-08-01',
       locations: locations(), receivedBy: staffId,

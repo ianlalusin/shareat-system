@@ -41,7 +41,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 
 import postgres from 'postgres';
 import { add, allocate, equals, fromCentavos, subtract, type Money } from '@shareat/core/money';
-import { closeDb, getDb } from '@shareat/db';
+import { closeDb, withOrgPrincipal } from '@shareat/db';
 import { getTrialBalance, postEntry, type TrialBalanceLine } from '@shareat/domain';
 import {
   CHART_OF_ACCOUNTS,
@@ -54,7 +54,18 @@ import {
 // (e.g. tests/integration/posting-patterns.test.ts) rather than the shared `getSql()` cache,
 // which `sql.json()`'s parameter wrapper does not round-trip through cleanly.
 const sql = postgres(url, { max: 5 });
-const db = getDb();
+
+/**
+ * postEntry and getTrialBalance are both reached in production only through an API-layer
+ * wrapper that has already called withOrgPrincipal — neither establishes a principal itself.
+ * Standing in for that layer here, at the same depth production wraps at.
+ */
+function postEntryAsOrg(input: Parameters<typeof postEntry>[1]) {
+  return withOrgPrincipal(input.orgId, (tx) => postEntry(tx, input));
+}
+function getTrialBalanceAsOrg(input: Parameters<typeof getTrialBalance>[1]) {
+  return withOrgPrincipal(input.orgId, (tx) => getTrialBalance(tx, input));
+}
 
 /**
  * Every postable, non-reserved, party-free leaf account — ~76 of the seed's 96, spanning all
@@ -149,7 +160,7 @@ describe('invariants 9 & 10 — the accounting equation and the trial balance, o
             const debitShares = allocate(total, debitCodes.length);
             const creditShares = allocate(total, creditCodes.length);
 
-            const result = await postEntry(null, {
+            const result = await postEntryAsOrg({
               orgId,
               entryDate: '2026-06-15',
               sourceType: 'test:invariant-property',
@@ -163,7 +174,7 @@ describe('invariants 9 & 10 — the accounting equation and the trial balance, o
             });
             expect(result.created, 'the real postEntry must accept every entry this generator builds').toBe(true);
 
-            const tb = await getTrialBalance(db, {
+            const tb = await getTrialBalanceAsOrg({
               orgId,
               fromDate: '2020-01-01',
               toDate: '2030-12-31',

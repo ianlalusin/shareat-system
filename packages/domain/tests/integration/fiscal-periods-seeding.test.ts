@@ -67,11 +67,11 @@ describe('seedCalendarMonths — idempotency', () => {
     const orgId = await bareOrg('idem');
     const window = fiscalPeriodSeedWindow();
 
-    const first = await transaction((tx) => fiscalPeriodsRepo.seedCalendarMonths(tx, orgId, window));
+    const first = await asOrg(orgId, (tx) => fiscalPeriodsRepo.seedCalendarMonths(tx, orgId, window));
     expect(first.periodsInserted).toBe(12);
     expect(first.periodsSkipped).toBe(0);
 
-    const second = await transaction((tx) => fiscalPeriodsRepo.seedCalendarMonths(tx, orgId, window));
+    const second = await asOrg(orgId, (tx) => fiscalPeriodsRepo.seedCalendarMonths(tx, orgId, window));
     expect(second.periodsInserted).toBe(0);
     expect(second.periodsSkipped).toBe(12);
 
@@ -90,7 +90,7 @@ describe('seedCalendarMonths — the partial-overlap trap the orchestrator prove
       values (${orgId}, '2020-01-01', '2035-12-31', 'open')`;
 
     const window = fiscalPeriodSeedWindow();
-    const result = await transaction((tx) => fiscalPeriodsRepo.seedCalendarMonths(tx, orgId, window));
+    const result = await asOrg(orgId, (tx) => fiscalPeriodsRepo.seedCalendarMonths(tx, orgId, window));
 
     // ⚠️ THE POINT: every one of the 12 candidate months conflicts with the wide period, so
     // `periodsInserted` is 0 — indistinguishable, by that number alone, from "already fully
@@ -100,7 +100,7 @@ describe('seedCalendarMonths — the partial-overlap trap the orchestrator prove
 
     // And the number that actually answers "is this org fine now?" — yes, because the legacy
     // period already reaches 2035, far past any runway threshold.
-    const coverage = await transaction((tx) => fiscalPeriodsRepo.latestPeriodEnd(tx, orgId));
+    const coverage = await asOrg(orgId, (tx) => fiscalPeriodsRepo.latestPeriodEnd(tx, orgId));
     expect(coverage).toBe('2035-12-31');
   });
 });
@@ -108,7 +108,7 @@ describe('seedCalendarMonths — the partial-overlap trap the orchestrator prove
 describe('latestPeriodEnd', () => {
   it('is null for an org with no periods at all', async () => {
     const orgId = await bareOrg('bare');
-    const coverage = await transaction((tx) => fiscalPeriodsRepo.latestPeriodEnd(tx, orgId));
+    const coverage = await asOrg(orgId, (tx) => fiscalPeriodsRepo.latestPeriodEnd(tx, orgId));
     expect(coverage).toBeNull();
   });
 });

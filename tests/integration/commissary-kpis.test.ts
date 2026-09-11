@@ -13,8 +13,7 @@ import { config } from 'dotenv';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { money } from '@shareat/core/money';
-import { closeDb, commissaryKpisRepo, transaction } from '@shareat/db';
-import { getDb } from '@shareat/db/client';
+import { closeDb, commissaryKpisRepo, withOrgPrincipal } from '@shareat/db';
 import { seedChartOfAccounts } from '../../packages/db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../packages/db/seed/expense-categories';
 import { receiveDelivery } from '../../packages/domain/src/deliveries/receive';
@@ -35,8 +34,21 @@ let internalCustomer: string, externalCustomer: string, periodA: string;
 let acct1340: string, acct1310: string;
 let extraBranchSeq = 0;
 
-/** The repo functions take an `Executor` — a drizzle handle, not the raw postgres.js client. */
-const db = () => getDb();
+/**
+ * Every repo read here is reached in production only through an API-layer wrapper that has
+ * already called withOrgPrincipal — passing `db()` directly runs with no principal at all, which
+ * a real request never does. Standing in for that layer here, at the same depth production wraps
+ * at, for each of the three KPI reads this file uses.
+ */
+function receivedInRange(input: Parameters<typeof commissaryKpisRepo.receivedInRange>[1]) {
+  return withOrgPrincipal(orgA, (tx) => commissaryKpisRepo.receivedInRange(tx, input));
+}
+function inFlightOrders(input: Parameters<typeof commissaryKpisRepo.inFlightOrders>[1]) {
+  return withOrgPrincipal(orgA, (tx) => commissaryKpisRepo.inFlightOrders(tx, input));
+}
+function openDisputes(input: Parameters<typeof commissaryKpisRepo.openDisputes>[1]) {
+  return withOrgPrincipal(orgA, (tx) => commissaryKpisRepo.openDisputes(tx, input));
+}
 
 /**
  * ⚠️ `trade_orders_one_open_per_branch_key` (migration `0070`) allows exactly ONE open order per
@@ -71,7 +83,7 @@ async function stockCommissary(qty = '100', cost = '300.0000') {
   const [d] = await sql<{ id: string }[]>`
     insert into deliveries (org_id, store_id, kind, delivered_on, proof_file_id, created_by)
     values (${orgA},${commissary},'purchase','2026-08-01',${fileA},${personA}) returning id`;
-  await transaction((tx) =>
+  await withOrgPrincipal(orgA, (tx) =>
     receiveDelivery(tx, {
       orgId: orgA, storeId: commissary, deliveryId: d!.id, deliveredOn: '2026-08-01',
       locations: comLocations(), receivedBy: personA,
@@ -237,7 +249,7 @@ describe('T-212 — receivedInRange, the figure v1 gets wrong', () => {
     // 100 dispatched at ₱310, 90 signed for.
     await makeOrder({ qty: '100', rate: '310.00', receivedQty: '90' });
 
-    const r = await commissaryKpisRepo.receivedInRange(db(), { orgId: orgA, ...ALL_TIME });
+    const r = await receivedInRange({ orgId: orgA, ...ALL_TIME });
 
     expect(r.goodsReceivedValue).toBe('27900.00'); // 90 × 310
     expect(r.goodsDispatchedValue).toBe('31000.00'); // 100 × 310
@@ -256,7 +268,7 @@ describe('T-212 — receivedInRange, the figure v1 gets wrong', () => {
     await makeOrder({ qty: '10', rate: '200.00', receivedQty: '10' });
     await makeOrder({ qty: '5', rate: '100.00', receivedQty: null }); // no receipt recorded
 
-    const r = await commissaryKpisRepo.receivedInRange(db(), { orgId: orgA, ...ALL_TIME });
+    const r = await receivedInRange({ orgId: orgA, ...ALL_TIME });
     expect(Number(r.goodsDispatchedValue)).toBeCloseTo(
       Number(r.goodsReceivedValue) + Number(r.shortReceivedValue) + Number(r.unrecordedValue), 2,
     );
@@ -268,7 +280,7 @@ describe('T-212 — receivedInRange, the figure v1 gets wrong', () => {
     // stays null. Counting it as a zero receipt invents a shortfall that never happened.
     await makeOrder({ qty: '4', rate: '250.00', receivedQty: null, isLedgerOnly: true });
 
-    const r = await commissaryKpisRepo.receivedInRange(db(), { orgId: orgA, ...ALL_TIME });
+    const r = await receivedInRange({ orgId: orgA, ...ALL_TIME });
     expect(r.shortReceivedValue).toBe('0.00');
     expect(r.unrecordedValue).toBe('1000.00');
     expect(r.goodsReceivedValue).toBe('0.00');
@@ -278,7 +290,7 @@ describe('T-212 — receivedInRange, the figure v1 gets wrong', () => {
     await makeOrder({ customerId: externalCustomer, qty: '2', rate: '180.00', receivedQty: null });
     await makeOrder({ customerId: internalCustomer, qty: '10', rate: '350.00', receivedQty: '10' });
 
-    const r = await commissaryKpisRepo.receivedInRange(db(), { orgId: orgA, ...ALL_TIME });
+    const r = await receivedInRange({ orgId: orgA, ...ALL_TIME });
     expect(r.orderCount).toBe(1);
     expect(r.goodsReceivedValue).toBe('3500.00');
     expect(r.shortReceivedValue).toBe('0.00');
@@ -288,7 +300,7 @@ describe('T-212 — receivedInRange, the figure v1 gets wrong', () => {
   it('fees ride separately and never enter the goods figure', async () => {
     await makeOrder({ qty: '10', rate: '350.00', receivedQty: '10', deliveryFee: '500.00', otherFees: '50.00' });
 
-    const r = await commissaryKpisRepo.receivedInRange(db(), { orgId: orgA, ...ALL_TIME });
+    const r = await receivedInRange({ orgId: orgA, ...ALL_TIME });
     expect(r.goodsReceivedValue).toBe('3500.00');
     expect(r.feesValue).toBe('550.00');
   });
@@ -296,10 +308,10 @@ describe('T-212 — receivedInRange, the figure v1 gets wrong', () => {
   it('the date range filters on the Manila date of received_at', async () => {
     await makeOrder({ qty: '10', rate: '350.00', receivedQty: '10', receivedAt: '2026-08-20T04:00:00Z' });
 
-    const inRange = await commissaryKpisRepo.receivedInRange(db(), {
+    const inRange = await receivedInRange({
       orgId: orgA, fromDate: '2026-08-20', toDate: '2026-08-20',
     });
-    const outOfRange = await commissaryKpisRepo.receivedInRange(db(), {
+    const outOfRange = await receivedInRange({
       orgId: orgA, fromDate: '2026-08-21', toDate: '2026-08-31',
     });
     expect(inRange.orderCount).toBe(1);
@@ -315,7 +327,7 @@ describe('T-212 — inFlightOrders', () => {
     await makeOrder({ status: 'confirmed', acceptedAt: true, readyAt: true }); // ready
     await makeOrder({ status: 'dispatched' });
 
-    const rows = await commissaryKpisRepo.inFlightOrders(db(), { orgId: orgA });
+    const rows = await inFlightOrders({ orgId: orgA });
     expect(rows.map((r) => r.stage)).toEqual(['submitted', 'accepted', 'ready', 'dispatched']);
     expect(rows.every((r) => r.orderCount === 1)).toBe(true);
   });
@@ -325,7 +337,7 @@ describe('T-212 — inFlightOrders', () => {
     await makeOrder({ status: 'received' });
     await makeOrder({ status: 'confirmed' }); // the only in-flight one
 
-    const rows = await commissaryKpisRepo.inFlightOrders(db(), { orgId: orgA });
+    const rows = await inFlightOrders({ orgId: orgA });
     expect(rows).toHaveLength(1);
     expect(rows[0]!.stage).toBe('submitted');
     // ⛔ v1 pre-seeds all eight statuses with zeros; bible §16.9 — a permanently-zero line is noise.
@@ -334,7 +346,7 @@ describe('T-212 — inFlightOrders', () => {
 
   it('excludes external wholesale orders', async () => {
     await makeOrder({ status: 'confirmed', customerId: externalCustomer });
-    const rows = await commissaryKpisRepo.inFlightOrders(db(), { orgId: orgA });
+    const rows = await inFlightOrders({ orgId: orgA });
     expect(rows).toHaveLength(0);
   });
 });
@@ -353,7 +365,7 @@ describe('T-212 — openDisputes, and the AGE that was never on a screen', () =>
   async function realDispute(receivedQty: string): Promise<string> {
     await stockCommissary();
     const { orderId, lineId } = await makeOrder({ qty: '100', rate: '310.00', receivedQty });
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       dispatchOrder(tx, {
         orgId: orgA, commissaryStoreId: commissary, orderId,
         dispatchedOn: '2026-08-20', dispatchedBy: personA,
@@ -361,7 +373,7 @@ describe('T-212 — openDisputes, and the AGE that was never on a screen', () =>
         lines: [{ lineId, itemId: itemA, itemKind: 'raw_material', sourceLocationId: comKitchen, fulfilledQuantity: quantity('100') }],
       }),
     );
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       confirmReceipt(tx, {
         orgId: orgA, commissaryStoreId: commissary, branchStoreId: branch,
         commissaryStoreCode: 'COM', branchStoreCode: 'BR', orderId,
@@ -385,7 +397,7 @@ describe('T-212 — openDisputes, and the AGE that was never on a screen', () =>
     const id = await realDispute('90');
     await ageDispute(id, 20);
 
-    const d = await commissaryKpisRepo.openDisputes(db(), { orgId: orgA });
+    const d = await openDisputes({ orgId: orgA });
     expect(d.count).toBe(1);
     expect(d.oldestAgeDays).toBe(20);
     expect(d.buckets).toEqual({ fresh: 0, ageing: 0, overdue: 1 });
@@ -399,7 +411,7 @@ describe('T-212 — openDisputes, and the AGE that was never on a screen', () =>
     for (const [qty, days] of [['90', 3], ['80', 10], ['70', 20]] as const) {
       await ageDispute(await realDispute(String(qty)), days);
     }
-    const d = await commissaryKpisRepo.openDisputes(db(), { orgId: orgA });
+    const d = await openDisputes({ orgId: orgA });
     expect(d.count).toBe(3);
     expect(d.buckets).toEqual({ fresh: 1, ageing: 1, overdue: 1 });
     expect(d.oldestAgeDays).toBe(20);
@@ -411,7 +423,7 @@ describe('T-212 — openDisputes, and the AGE that was never on a screen', () =>
     await ageDispute(id, 18);
     await sql`update trade_discrepancies set status = 'deferred', deferred_to = '2026-12-31' where id = ${id}`;
 
-    const d = await commissaryKpisRepo.openDisputes(db(), { orgId: orgA });
+    const d = await openDisputes({ orgId: orgA });
     expect(d.count).toBe(1);
     expect(d.deferredCount).toBe(1);
     expect(d.buckets.overdue).toBe(1);
@@ -425,7 +437,7 @@ describe('T-212 — openDisputes, and the AGE that was never on a screen', () =>
       set status='resolved', disposition='loss', resolved_at=now(), resolved_by=${personA}
       where id = ${id}`;
 
-    const d = await commissaryKpisRepo.openDisputes(db(), { orgId: orgA });
+    const d = await openDisputes({ orgId: orgA });
     expect(d.count).toBe(0);
     expect(d.totalValue).toBe('0.00');
     expect(d.rows).toHaveLength(0);
@@ -444,7 +456,7 @@ describe('T-212 — openDisputes, and the AGE that was never on a screen', () =>
     }
     void lineId;
 
-    const d = await commissaryKpisRepo.openDisputes(db(), { orgId: orgA });
+    const d = await openDisputes({ orgId: orgA });
     expect(d.count).toBe(25);
     expect(d.rows).toHaveLength(commissaryKpisRepo.DISPUTE_ROW_CAP);
     expect(d.totalValue).toBe('2500.00'); // ⛔ all 25, not the capped 20
@@ -453,8 +465,8 @@ describe('T-212 — openDisputes, and the AGE that was never on a screen', () =>
   it('scopes to the COMMISSARY store, which is where the stranded value sits', async () => {
     const id = await realDispute('90');
     void id;
-    const mine = await commissaryKpisRepo.openDisputes(db(), { orgId: orgA, storeId: commissary });
-    const theirs = await commissaryKpisRepo.openDisputes(db(), { orgId: orgA, storeId: branch });
+    const mine = await openDisputes({ orgId: orgA, storeId: commissary });
+    const theirs = await openDisputes({ orgId: orgA, storeId: branch });
     expect(mine.count).toBe(1);
     expect(theirs.count).toBe(0); // ⚠️ T-174 invariant 11 — not the branch's dispute to hold
   });

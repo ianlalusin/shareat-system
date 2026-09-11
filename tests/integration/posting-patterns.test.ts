@@ -33,14 +33,32 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 }
 
 import { seedChartOfAccounts } from '../../packages/db/seed/chart-of-accounts';
-import { closeDb, getDb } from '@shareat/db';
+import { closeDb, withOrgPrincipal } from '@shareat/db';
 import { postEntry, reverseEntry } from '@shareat/domain';
 import { getIncomeStatement, getTrialBalance } from '@shareat/domain';
 import { REQUIRES_PARTY_CODES as REQUIRES_PARTY_CODES_FROM_CHART } from '../../packages/db/seed/chart-of-accounts';
 import { WORKED_EXAMPLES, WORKED_EXAMPLE_IDS, type FixtureLine, type WorkedExample } from '../worked-examples/fixtures';
 
 const sql = postgres(url, { max: 5 });
-const db = getDb();
+
+/**
+ * postEntry, reverseEntry, getIncomeStatement and getTrialBalance are all reached in
+ * production only through an API-layer wrapper that has already called withOrgPrincipal —
+ * none of them establishes a principal itself. Standing in for that layer here, at the same
+ * depth production wraps at, rather than passing `null`/the raw db handle directly.
+ */
+function postEntryAsOrg(input: Parameters<typeof postEntry>[1]) {
+  return withOrgPrincipal(input.orgId, (tx) => postEntry(tx, input));
+}
+function reverseEntryAsOrg(orgIdArg: string, input: Parameters<typeof reverseEntry>[1]) {
+  return withOrgPrincipal(orgIdArg, (tx) => reverseEntry(tx, input));
+}
+function getIncomeStatementAsOrg(input: Parameters<typeof getIncomeStatement>[1]) {
+  return withOrgPrincipal(input.orgId, (tx) => getIncomeStatement(tx, input));
+}
+function getTrialBalanceAsOrg(input: Parameters<typeof getTrialBalance>[1]) {
+  return withOrgPrincipal(input.orgId, (tx) => getTrialBalance(tx, input));
+}
 
 // ---------------------------------------------------------------------------------------
 // One shared org for the whole corpus — deliberately, so invariant 7 (the trial balance
@@ -98,7 +116,7 @@ async function postFixtureEntry(
   idempotencyKey: string,
   sourceType: string = fixture.sourceType,
 ): Promise<string> {
-  const result = await postEntry(null, {
+  const result = await postEntryAsOrg({
     orgId,
     entryDate,
     sourceType,
@@ -260,7 +278,7 @@ describe.each(WORKED_EXAMPLES)('$id — $title', (fixture) => {
 
 describe('invariant 7 — the trial balance ties over the whole T-108 corpus', () => {
   it('SUM(debit) = SUM(credit) across every fixture (and every reversal) posted for this org', async () => {
-    const result = await getTrialBalance(db, {
+    const result = await getTrialBalanceAsOrg({
       orgId,
       fromDate: '2020-01-01',
       toDate: '2030-12-31',
@@ -281,7 +299,7 @@ describe('invariant 7 — the trial balance ties over the whole T-108 corpus', (
 
 describe('invariant 8 — contra-revenue reduces revenue, never inflates expense', () => {
   it('the income statement nets 4900/4950 against gross 4100/4150, not against any expense line', async () => {
-    const result = await getIncomeStatement(db, {
+    const result = await getIncomeStatementAsOrg({
       orgId,
       fromDate: '2026-01-01',
       toDate: '2026-12-31',
@@ -369,7 +387,7 @@ describe("invariant 11 — the year-close entry is excluded from a date-range P&
   });
 
   it('a date-range P&L over 2027 EXCLUDES it by default (income statement)', async () => {
-    const result = await getIncomeStatement(db, { orgId, fromDate: '2027-01-01', toDate: '2027-12-31' });
+    const result = await getIncomeStatementAsOrg({ orgId, fromDate: '2027-01-01', toDate: '2027-12-31' });
     // year_close.annual's setup posts 20,000.00 to 4100 within 2027; the close entry itself
     // (dated 2028-01-01) zeroes 4100 back out. If the close entry leaked into this range, net
     // 4100 for 2027 would read 0.00 instead of the setup's own 20,000.00.
@@ -379,14 +397,14 @@ describe("invariant 11 — the year-close entry is excluded from a date-range P&
   });
 
   it('a balance-sheet-as-of on/after 2028-01-01 INCLUDES it by default (trial balance)', async () => {
-    const result = await getTrialBalance(db, { orgId, fromDate: '2020-01-01', toDate: '2028-12-31' });
+    const result = await getTrialBalanceAsOrg({ orgId, fromDate: '2020-01-01', toDate: '2028-12-31' });
     const line3300 = result.lines.find((l) => l.accountCode === '3300');
     expect(line3300, '3300 (Retained earnings) must show the year-close entry by default').toBeDefined();
     expect(line3300!.balance).toBe('12000.00');
   });
 
   it('explicitly excluding year_close from the trial balance drops 3300 back to zero movement', async () => {
-    const result = await getTrialBalance(db, {
+    const result = await getTrialBalanceAsOrg({
       orgId,
       fromDate: '2020-01-01',
       toDate: '2028-12-31',
@@ -410,7 +428,7 @@ describe.each(WORKED_EXAMPLES)('$id — $title (reversal)', (fixture) => {
   it('invariant 4 — reversible, and original + reversal net to exactly zero per account', async () => {
     const entryId = postedEntryIdByFixtureId.get(fixture.id);
     expect(entryId, `${fixture.id}: must already be posted from the earlier pass`).toBeDefined();
-    const result = await reverseEntry(null, { entryId: entryId!, reason: `T-108 reversibility proof: ${fixture.id}` });
+    const result = await reverseEntryAsOrg(orgId, { entryId: entryId!, reason: `T-108 reversibility proof: ${fixture.id}` });
     expect(result.created, `${fixture.id}: reversal must be newly created`).toBe(true);
 
     const reversalLines = await readBackLines(result.reversalEntryId);

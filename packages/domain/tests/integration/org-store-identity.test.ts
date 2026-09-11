@@ -24,7 +24,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
   throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} — name must contain "_test".`);
 }
 
-import { APP_ROLE, closeDb, transaction, type Tx } from '@shareat/db';
+import { APP_ROLE, closeDb, transaction, systemTransaction, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { createOrganization, organizationIdentity, setOrganizationIdentity } from '../../src/organizations';
 import { storeReadiness, updateStoreDetails } from '../../src/stores/service';
@@ -232,7 +232,10 @@ describe('T-229 slice 4 — store identity', () => {
     //    `bootstrap-org.ts`'s first step needs no new flag and no new argument. The day someone
     //    makes one NOT NULL, this test fails and says why.
     const code = uid('boot');
-    const result = await transaction((tx) => createOrganization(tx, { code, name: `Org ${code}` }));
+    // ⭐ systemTransaction, not asOrg — same reason as packages/domain/tests/integration/
+    // organizations.test.ts: createOrganization is only ever reached in production from inside
+    // bootstrapOrganization via systemTransaction(); there is no org yet to scope a principal to.
+    const result = await systemTransaction((tx) => createOrganization(tx, { code, name: `Org ${code}` }));
     expect(result.orgId).toBeTruthy();
     const row = await orgRow(result.orgId);
     expect(row.legal_name).toBeNull();

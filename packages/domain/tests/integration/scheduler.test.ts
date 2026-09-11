@@ -20,7 +20,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 }
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
-import { closeDb, schedulerRepo, transaction } from '@shareat/db';
+import { closeDb, schedulerRepo, systemTransaction, withOrgPrincipal } from '@shareat/db';
 import { lastCompletedPeriod, runFindingObservation, runMonthEnd } from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
@@ -60,7 +60,10 @@ async function orgWithAsset(hint: string, opts: { withPeriod: boolean }) {
 }
 
 async function runsFor(orgId: string) {
-  return transaction((tx) => schedulerRepo.recentRuns(tx, orgId, 50));
+  // ⛔ `withOrgPrincipal`, not a bare `transaction()` — DEF-218. `scheduler_runs` rows are WRITTEN
+  // through `systemTransaction()` (so they land), then read back here; with no principal the read
+  // returns zero rows and no error, and every count assertion below silently becomes 0.
+  return withOrgPrincipal(orgId, (tx) => schedulerRepo.recentRuns(tx, orgId, 50));
 }
 
 /**
@@ -266,7 +269,9 @@ describe('⭐ T-233 — DEF-219: startRun inside the per-org boundary', () => {
     // A malformed period trips `scheduler_runs_period_shape_check` for every org — no trigger
     // needed. This is the shape of the real DEF-219 finding: `scheduler_runs_job_check` refusing
     // `recurring_expenses` before 0136 widened it.
-    const orgsBefore = await transaction((tx) => schedulerRepo.listOrgsToRun(tx));
+    // `listOrgsToRun` enumerates EVERY org, so no principal can express it — production reaches it
+    // through `systemTransaction()` (`scheduler/index.ts:218`) and this wraps at the same layer.
+    const orgsBefore = await systemTransaction((tx) => schedulerRepo.listOrgsToRun(tx));
     const [runsBefore] = await sql<{ n: number }[]>`select count(*)::int as n from scheduler_runs`;
 
     const result = await runMonthEnd({ period: '2026-1' });
@@ -315,7 +320,9 @@ describe('⭐ T-233 — DEF-219: startRun inside the per-org boundary', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.finished_at).toBeNull();
 
-    const unfinished = await transaction((tx) => schedulerRepo.unfinishedRuns(tx, broken.orgId));
+    const unfinished = await withOrgPrincipal(broken.orgId, (tx) =>
+      schedulerRepo.unfinishedRuns(tx, broken.orgId),
+    );
     expect(unfinished.some((r) => r.job === 'finding_observation')).toBe(true);
   });
 

@@ -2,7 +2,7 @@ import { config } from 'dotenv';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
-import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
+import { closeDb, transaction, systemTransaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import {
   dispatch,
@@ -387,7 +387,7 @@ describe('T-167 — the stuck-transfer report', () => {
     await asOrg(f.orgId, (tx) => dispatch(tx, f.staff, recent.transferId));
     await sql`update stock_transfers set dispatched_at = now() - interval '2 days' where id = ${recent.transferId}`;
 
-    const stuck = await transaction((tx) => stuckTransfers(tx, f.storeId, 3));
+    const stuck = await asOrg(f.orgId, (tx) => stuckTransfers(tx, f.storeId, 3));
     expect(stuck.map((t) => t.id)).toEqual([old.transferId]);
   });
 });
@@ -411,9 +411,17 @@ describe('T-167 — cross-store is refused at the database', () => {
 /**
  * T-231 slice 1 / DEF-210 — the organisation is the ACTOR's, never the caller's.
  *
- * ⛔ Plain `transaction()`, not `asOrg`: `apps/erp/src/app/inventory/transfers/actions.ts:49`
- * opens one with no principal, so RLS is bypassed and nothing but this test is watching. Under a
- * principal the write is refused with SQLSTATE 42501 — true, and not what production does today.
+ * ⭐ Deliberately `systemTransaction()`, not `asOrg`: production (`apps/erp/src/app/inventory/
+ * transfers/actions.ts:47`) DOES call these through `withOrgPrincipal(actor.orgId, …)` today — RLS
+ * is a real backstop here, not bypassed. These tests deliberately remove that backstop anyway, to
+ * prove the APPLICATION layer alone (never trusting a caller-supplied orgId) refuses the cross-org
+ * write on its own — bible §15.11, no layer may be the only one for a given risk.
+ * `systemTransaction()` re-arms an explicit bypass so the claim stays provable in both flag states.
+ *
+ * ⚠️ **This comment used to say the opposite** — that production opened these with no principal at
+ * all. That was true once; `withOrgPrincipal` was added at both sites since (DEF-175's shape: a
+ * comment describing a prior state as if it were current — caught 2026-09-11 while measuring
+ * DEF-218). The claim below survived that change of premise; it was not written under it.
  *
  * ⭐ This is the sharpest of the three, because the attack needs **nothing the victim owns**: the
  * store, the room and the item are all the attacker's own. Only the org id is borrowed, and it is
@@ -429,7 +437,7 @@ describe('T-231 / DEF-210 — a stock transfer is stamped with the actor’s org
     await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status)
               values (${victim!.id}, '2020-01-01', '2035-12-31', 'open')`;
 
-    const res = await transaction((tx) =>
+    const res = await systemTransaction((tx) =>
       transferNow(tx, {
         // @ts-expect-error T-231/DEF-210 — the field is GONE. Supplying another org's id
         // must not compile; if someone re-adds it this directive goes unused and the build fails.
@@ -465,7 +473,7 @@ describe('T-231 / DEF-210 — a stock transfer is stamped with the actor’s org
     const [victim] = await sql<{ id: string }[]>`
       insert into organizations (name, code) values (${'Victim ' + uid('v')}, ${uid('vic')}) returning id`;
 
-    const res = await transaction((tx) =>
+    const res = await systemTransaction((tx) =>
       saveDraft(tx, {
         // @ts-expect-error T-231/DEF-210 — the field is GONE. Supplying another org's id
         // must not compile; if someone re-adds it this directive goes unused and the build fails.

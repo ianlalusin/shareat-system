@@ -1,7 +1,7 @@
 import { config } from 'dotenv';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
-import { closeDb, transaction } from '@shareat/db';
+import { closeDb, withOrgPrincipal } from '@shareat/db';
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { receiveDelivery } from '../../src/deliveries/receive';
 import { quantity } from '../../src/stock/quantity';
@@ -130,7 +130,7 @@ describe('T-166 — the photo gate, refused by the database', () => {
 describe('T-166 — receiving is ONE act', () => {
   it('⭐ moves stock, layers the cost, and posts the value — all three, one transaction', async () => {
     const deliveryId = await makeDelivery('purchase');
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       receiveDelivery(tx, {
         orgId: orgA, storeId: storeA, deliveryId, deliveredOn: '2026-08-20',
         locations: locations(), receivedBy: personA,
@@ -161,7 +161,7 @@ describe('T-166 — receiving is ONE act', () => {
 
   it('routes by item kind across lines — raw material to 1310, supplies to 1320', async () => {
     const deliveryId = await makeDelivery('purchase');
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       receiveDelivery(tx, {
         orgId: orgA, storeId: storeA, deliveryId, deliveredOn: '2026-08-20',
         locations: locations(), receivedBy: personA,
@@ -179,7 +179,7 @@ describe('T-166 — receiving is ONE act', () => {
 
   it('⭐ a line with NO location parks in Receiving — it is never guessed into the default room', async () => {
     const deliveryId = await makeDelivery('purchase');
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       receiveDelivery(tx, {
         orgId: orgA, storeId: storeA, deliveryId, deliveredOn: '2026-08-20',
         locations: locations(), receivedBy: personA,
@@ -193,7 +193,7 @@ describe('T-166 — receiving is ONE act', () => {
 
   it('⭐ converts purchase units to base units — a 12-piece case is 12 pieces of stock', async () => {
     const deliveryId = await makeDelivery('purchase');
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       receiveDelivery(tx, {
         orgId: orgA, storeId: storeA, deliveryId, deliveredOn: '2026-08-20',
         locations: locations(), receivedBy: personA,
@@ -217,7 +217,7 @@ describe('T-166 — receiving is ONE act', () => {
 
   it('a line received as ZERO moves no stock and posts nothing for itself', async () => {
     const deliveryId = await makeDelivery('purchase');
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       receiveDelivery(tx, {
         orgId: orgA, storeId: storeA, deliveryId, deliveredOn: '2026-08-20',
         locations: locations(), receivedBy: personA,
@@ -234,7 +234,7 @@ describe('T-166 — receiving is ONE act', () => {
 
   it('⛔ refuses when a line has no location and the store has nowhere to park it', async () => {
     const deliveryId = await makeDelivery('purchase');
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       receiveDelivery(tx, {
         orgId: orgA, storeId: storeA, deliveryId, deliveredOn: '2026-08-20',
         locations: [], receivedBy: personA,
@@ -253,7 +253,7 @@ describe('T-166 — ⭐ all three or none', () => {
     // An unmapped item kind fails at step 3, after steps 1 and 2 have already written rows.
     // v1's cascade would have left them; this must not.
     const deliveryId = await makeDelivery('purchase');
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       receiveDelivery(tx, {
         orgId: orgA, storeId: storeA, deliveryId, deliveredOn: '2026-08-20',
         locations: locations(), receivedBy: personA,
@@ -278,7 +278,7 @@ describe('T-166 — ⭐ all three or none', () => {
     await sql`update fiscal_periods set status = 'closed' where org_id = ${orgA}`;
     const deliveryId = await makeDelivery('purchase');
     await expect(
-      transaction((tx) =>
+      withOrgPrincipal(orgA, (tx) =>
         receiveDelivery(tx, {
           orgId: orgA, storeId: storeA, deliveryId, deliveredOn: '2026-08-20',
           locations: locations(), receivedBy: personA,
@@ -303,8 +303,8 @@ describe('T-166 — ⭐ all three or none', () => {
       orgId: orgA, storeId: storeA, deliveryId, deliveredOn: '2026-08-20',
       locations: locations(), receivedBy: personA, lines: [line],
     };
-    await transaction((tx) => receiveDelivery(tx, input));
-    await expect(transaction((tx) => receiveDelivery(tx, input))).rejects.toThrow(/source_pair_key/);
+    await withOrgPrincipal(orgA, (tx) => receiveDelivery(tx, input));
+    await expect(withOrgPrincipal(orgA, (tx) => receiveDelivery(tx, input))).rejects.toThrow(/source_pair_key/);
     expect(await onHand(itemA, kitchen)).toBe('10.000');
   });
 });

@@ -2,7 +2,7 @@ import { config } from 'dotenv';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { money } from '@shareat/core/money';
-import { closeDb, transaction } from '@shareat/db';
+import { closeDb, withOrgPrincipal } from '@shareat/db';
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { receiveDelivery } from '../../src/deliveries/receive';
 import { postUsageRecord, voidUsageRecord } from '../../src/stock/usage';
@@ -55,7 +55,7 @@ async function stockUp() {
     const [d] = await sql<{ id: string }[]>`
       insert into deliveries (org_id, store_id, kind, delivered_on, proof_file_id, created_by)
       values (${orgA},${storeA},'purchase',${'2026-08-' + day},${fileA},${personA}) returning id`;
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       receiveDelivery(tx, {
         orgId: orgA, storeId: storeA, deliveryId: d!.id, deliveredOn: `2026-08-${day}`,
         locations: locations(), receivedBy: personA,
@@ -112,7 +112,7 @@ describe('T-168 — ⭐ the loop closes', () => {
     expect(await onHand()).toBe('18.000');
     expect((await balances())['1310']).toBe('1960.00'); // 10x100 + 8x120
 
-    const res = await transaction((tx) => postUsageRecord(tx, usageInput()));
+    const res = await withOrgPrincipal(orgA, (tx) => postUsageRecord(tx, usageInput()));
     expect(res.ok).toBe(true);
     if (!res.ok) return;
 
@@ -133,7 +133,7 @@ describe('T-168 — ⭐ the loop closes', () => {
 
   it('⭐ wastage takes the same FIFO cost but lands in 5300, never COGS', async () => {
     await stockUp();
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       postUsageRecord(tx, usageInput({ kind: 'wastage', reason: 'spoilage' })),
     );
     const b = await balances();
@@ -144,7 +144,7 @@ describe('T-168 — ⭐ the loop closes', () => {
 
   it('⛔ using more than exists is refused, and NOTHING is written', async () => {
     await stockUp();
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       postUsageRecord(tx, usageInput({ lines: [{ lineId: '1', itemId: itemA, cogsCategory: 'meat', inventoryAccount: '1310', quantity: quantity('25') }] })),
     );
     expect(res.ok).toBe(false);
@@ -164,7 +164,7 @@ describe('T-168 — a multi-line post is all or nothing (review 2026-09-03)', ()
       insert into items (org_id, code, name, kind, base_unit, created_by)
       values (${orgA},'RICE','Rice','raw_material','kg',${personA}) returning id`;
     await expect(
-      transaction((tx) =>
+      withOrgPrincipal(orgA, (tx) =>
         postUsageRecord(tx, usageInput({
           lines: [
             { lineId: '1', itemId: itemA, cogsCategory: 'meat', inventoryAccount: '1310', quantity: quantity('5') },
@@ -183,7 +183,7 @@ describe('T-168 — a multi-line post is all or nothing (review 2026-09-03)', ()
 describe('T-168 — the reserved category, and the charge that must not vanish', () => {
   it('⭐ a wastage reason of "transfer" is REFUSED, with the reason explained', async () => {
     await stockUp();
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       postUsageRecord(tx, usageInput({ kind: 'wastage', reason: 'transfer' })),
     );
     expect(res.ok).toBe(false);
@@ -204,7 +204,7 @@ describe('T-168 — the reserved category, and the charge that must not vanish',
     // A charge that vanishes is worse than one that fails: the stock still moved, and somebody
     // believes they are being recovered from.
     await stockUp();
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       postUsageRecord(tx, usageInput({ kind: 'wastage', reason: 'spoilage', chargePersonId: personA })),
     );
     expect(res.ok).toBe(false);
@@ -215,7 +215,7 @@ describe('T-168 — the reserved category, and the charge that must not vanish',
 
   it('only a wastage may carry a charge', async () => {
     await stockUp();
-    const res = await transaction((tx) => postUsageRecord(tx, usageInput({ chargePersonId: personA })));
+    const res = await withOrgPrincipal(orgA, (tx) => postUsageRecord(tx, usageInput({ chargePersonId: personA })));
     expect(res.ok).toBe(false);
   });
 });
@@ -288,7 +288,7 @@ describe('T-168 — void gives stock back to the layers it came from', () => {
   it('⭐ restores each layer exactly, not the oldest', async () => {
     await stockUp();
     const input = usageInput();
-    const posted = await transaction((tx) => postUsageRecord(tx, input));
+    const posted = await withOrgPrincipal(orgA, (tx) => postUsageRecord(tx, input));
     expect(posted.ok).toBe(true);
     if (!posted.ok) return;
 
@@ -296,7 +296,7 @@ describe('T-168 — void gives stock back to the layers it came from', () => {
       select id, remaining_quantity from stock_layers order by received_at`;
     expect(before.map((r) => r.remaining_quantity)).toEqual(['0.000', '3.000']);
 
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       voidUsageRecord(tx, {
         orgId: orgA, storeId: storeA, locationId: kitchen, recordId: input.recordId,
         kind: 'usage', voidedOn: '2026-08-21', voidedBy: personA,
@@ -319,13 +319,13 @@ describe('T-168 — void gives stock back to the layers it came from', () => {
     // COGS, and no screen existed to notice.
     await stockUp();
     const input = usageInput({ kind: 'wastage', reason: 'spoilage' });
-    const posted = await transaction((tx) => postUsageRecord(tx, input));
+    const posted = await withOrgPrincipal(orgA, (tx) => postUsageRecord(tx, input));
     expect(posted.ok).toBe(true);
     if (!posted.ok) return;
     expect((await balances())['5300']).toBe('1600.00');
     expect((await balances())['1310']).toBe('360.00');
 
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       voidUsageRecord(tx, {
         orgId: orgA, storeId: storeA, locationId: kitchen, recordId: input.recordId,
         kind: 'wastage', voidedOn: '2026-08-21', voidedBy: personA, reason: 'counted wrong',
@@ -354,7 +354,7 @@ describe('T-168 — void gives stock back to the layers it came from', () => {
   it('⛔ a void carrying a live staff charge is refused while Phase 5 is unbuilt', async () => {
     // v1's ordering rule: the charge is voided FIRST, so a failure never leaves reversed stock
     // beside an un-reversed pay deduction.
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       voidUsageRecord(tx, {
         orgId: orgA, storeId: storeA, locationId: kitchen, recordId: crypto.randomUUID(),
         kind: 'wastage', voidedOn: '2026-08-21', voidedBy: personA,
@@ -371,13 +371,13 @@ describe('T-168 — the period lock and the ledger', () => {
   it('a post into a closed period is refused and nothing survives', async () => {
     await stockUp();
     await sql`update fiscal_periods set status='closed' where org_id = ${orgA}`;
-    await expect(transaction((tx) => postUsageRecord(tx, usageInput()))).rejects.toThrow(/period|closed/i);
+    await expect(withOrgPrincipal(orgA, (tx) => postUsageRecord(tx, usageInput()))).rejects.toThrow(/period|closed/i);
     expect(await onHand()).toBe('18.000');
   });
 
   it('⭐ the trial balance ties after receive + use', async () => {
     await stockUp();
-    await transaction((tx) => postUsageRecord(tx, usageInput()));
+    await withOrgPrincipal(orgA, (tx) => postUsageRecord(tx, usageInput()));
     const [tb] = await sql<{ net: string }[]>`
       select (sum(debit) - sum(credit))::text as net from journal_lines l
       join accounts a on a.id = l.account_id where a.org_id = ${orgA}`;
@@ -386,7 +386,7 @@ describe('T-168 — the period lock and the ledger', () => {
 
   it('⭐ inventory on the books equals the open layers — Phase 3’s exit gate, on a real loop', async () => {
     await stockUp();
-    await transaction((tx) => postUsageRecord(tx, usageInput()));
+    await withOrgPrincipal(orgA, (tx) => postUsageRecord(tx, usageInput()));
     const [gate] = await sql<{ book: string; layers: string }[]>`
       select
         (select (sum(l.debit) - sum(l.credit))::text from journal_lines l

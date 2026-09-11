@@ -2,7 +2,7 @@ import { config } from 'dotenv';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
-import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
+import { closeDb, transaction, systemTransaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import {
   quantity,
@@ -164,7 +164,7 @@ async function receiveOne(
     insert into delivery_lines (delivery_id, line_no, item_id, ordered_quantity, received_quantity, purchase_unit, conversion_factor, unit_cost, location_id)
     values (${deliveryId}, '1', ${f.itemId}, ${qty}, ${qty}, 'kg', '1', ${unitCost}, ${f.locationId}) returning id`;
 
-  const result = await transaction((tx) =>
+  const result = await asOrg(f.orgId, (tx) =>
     receiveDelivery(tx, {
       orgId: f.orgId,
       storeId: f.storeId,
@@ -309,7 +309,7 @@ describe('T-170 — the invoiced case: a real credit', () => {
       insert into delivery_lines (delivery_id, line_no, item_id, ordered_quantity, received_quantity, purchase_unit, conversion_factor, unit_cost, location_id)
       values (${d!.id}, '1', ${f.itemId}, '10.000', '10.000', 'kg', '1', '100.0000', ${f.locationId}),
              (${d!.id}, '2', ${item2!.id}, '10.000', '10.000', 'kg', '1', '80.0000', ${f.locationId})`;
-    const result = await transaction((tx) =>
+    const result = await asOrg(f.orgId, (tx) =>
       receiveDelivery(tx, {
         orgId: f.orgId, storeId: f.storeId, deliveryId: d!.id, deliveredOn: '2026-01-05',
         locations: locations(f), receivedBy: f.staff.personId,
@@ -684,11 +684,18 @@ describe('T-170 — returnableQuantity', () => {
 /**
  * T-231 slice 1 / DEF-210 — the organisation is the ACTOR's, never the caller's.
  *
- * ⛔ **These run under a PLAIN `transaction()`, not `asOrg`, and that is the whole point.**
- * `apps/erp/src/app/inventory/returns/actions.ts:33` opens a plain transaction — no principal, so
- * the connection is the owner and RLS is bypassed. Wrapping these in `asOrg` would prove only that
- * RLS refuses the write (SQLSTATE 42501) — true, and NOT what production does today. The defect is
- * reproduced on the path the app actually takes.
+ * ⭐ **These run under `systemTransaction()`, deliberately re-arming an explicit bypass, not
+ * `asOrg`.** Production (`apps/erp/src/app/inventory/returns/actions.ts:32`) DOES call these
+ * through `withOrgPrincipal(actor.orgId, …)` today — RLS is a real backstop here, not bypassed.
+ * These tests deliberately remove that backstop anyway, to prove the APPLICATION layer alone
+ * (never trusting a caller-supplied orgId) refuses the cross-org write on its own — bible §15.11,
+ * no layer may be the only one for a given risk.
+ *
+ * ⚠️ **This comment used to say the opposite** — that production opened these with no principal at
+ * all, so a plain `transaction()` merely matched what the app already did. That was true once;
+ * `withOrgPrincipal` was added since (DEF-175's shape: a comment describing a prior state as if it
+ * were current — caught 2026-09-11 while measuring DEF-218). The claim below survived that change
+ * of premise; it was not written under it.
  *
  * ⚠️ **The victim org is seeded with real books**, because that is the live case: Padre Garcia is
  * a going concern with a chart of accounts and an open period. An unseeded victim makes the attack
@@ -711,7 +718,7 @@ describe('T-231 / DEF-210 — a supplier return is stamped with the actor’s or
     const { deliveryId, deliveryLineId } = await receiveOne(f, '10.000', '100.00', '2026-01-05');
     const victimOrgId = await victimOrg();
 
-    const res = await transaction((tx) =>
+    const res = await systemTransaction((tx) =>
       recordReturn(tx, {
         // @ts-expect-error T-231/DEF-210 — the field is GONE. Supplying another org's id
         // must not compile; if someone re-adds it this directive goes unused and the build fails.
@@ -777,7 +784,7 @@ describe('T-231 / DEF-210 — a supplier return is stamped with the actor’s or
     // ⭐ Pre-fix this was refused — `advancesPositionOf(tx, input.orgId, …)` looked in the VICTIM's
     // books, found nothing, and reported "only 0.00 of credit is available". That refusal was the
     // cross-org READ made visible: the function was asking the wrong organisation's ledger.
-    const res = await transaction((tx) =>
+    const res = await systemTransaction((tx) =>
       refundSupplierCredit(tx, {
         // @ts-expect-error T-231/DEF-210 — the field is GONE. Supplying another org's id
         // must not compile; if someone re-adds it this directive goes unused and the build fails.
