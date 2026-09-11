@@ -4,7 +4,7 @@
  *
  * Every function here takes a `Tx` (same convention as repo/journal.ts) EXCEPT the two
  * run-lifecycle functions (`startRun`, `finishRun`), which deliberately open and commit
- * their OWN transaction via `transaction()` rather than joining a caller's — see their
+ * their OWN transaction via `systemTransaction()` rather than joining a caller's — see their
  * comments for why that is not a convention violation but the whole point (a run's
  * start/finish must survive even when the work between them rolls back).
  *
@@ -23,7 +23,7 @@
 import { createHash } from 'node:crypto';
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { etlQuarantine, etlReconciliation, etlRuns, etlSourceDocuments } from '../../schema';
-import { transaction, type Tx } from '../client';
+import { systemTransaction, type Tx } from '../client';
 
 // -----------------------------------------------------------------------------------------
 // Canonical JSON + content hash (Contract §2).
@@ -95,7 +95,7 @@ export interface StartRunInput {
  */
 export async function startRun(input: StartRunInput): Promise<{ id: string }> {
   try {
-    return await transaction(async (tx) => {
+    return await systemTransaction(async (tx) => {
       const [row] = await tx
         .insert(etlRuns)
         .values({
@@ -137,7 +137,7 @@ export async function finishRun(
   status: Exclude<EtlRunStatus, 'running'>,
   error?: string | null,
 ): Promise<void> {
-  await transaction(async (tx) => {
+  await systemTransaction(async (tx) => {
     const updated = await tx
       .update(etlRuns)
       .set({ status, finishedAt: sql`now()`, error: error ?? null })

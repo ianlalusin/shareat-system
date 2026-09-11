@@ -40,6 +40,12 @@ const REQUIRED_CALLERS = [
   // T-267, bible §13 row 194 subsystem 2 (DEF-287): the orphaned-file sweep is a cron
   // across every organisation; no single org's principal expresses "all orgs".
   'packages/domain/src/files/index.ts',
+  // T-268, bible §13 row 194 subsystem 3 (DEF-289): the ETL tables carry FORCE RLS
+  // with ZERO policies — deny-all by design (migration 0011:142-160), because they hold
+  // captured production PII. No principal can EVER satisfy them, so this is not the
+  // natural fix here, it is the only one. ⛔ Never add a policy to make the app role work.
+  'packages/etl/src/run.ts',
+  'packages/db/src/repo/etl.ts',
 ] as const;
 
 /**

@@ -23,7 +23,7 @@
  * requires `finishRun`'s own commit to survive independently of whatever the failed
  * work rolled back.
  */
-import { etlRepo, transaction } from '@shareat/db';
+import { etlRepo, systemTransaction } from '@shareat/db';
 import { postEntry } from '@shareat/domain';
 import {
   assertCaptureTallyReconciles,
@@ -119,7 +119,7 @@ async function runCaptureBody(
     for await (const doc of reader.readDocuments(collectionPath)) {
       sourceCount++;
       try {
-        const { inserted } = await transaction((tx) =>
+        const { inserted } = await systemTransaction((tx) =>
           etlRepo.landDocument(tx, {
             runId,
             sourceSystem: reader.sourceSystem,
@@ -145,7 +145,7 @@ async function runCaptureBody(
     // Write BEFORE asserting: the reconciliation row is evidence of what happened, and
     // must survive even when the numbers it records are what fails the run (invariant
     // 18 — persisted and readable after the process exits, including a failed run).
-    await transaction((tx) =>
+    await systemTransaction((tx) =>
       etlRepo.writeReconciliation(tx, {
         runId,
         // capture-mode source_type = the collection path (schema/etl.ts's top comment)
@@ -243,7 +243,7 @@ async function runConversionBody(
 ): Promise<ConversionTally[]> {
   // "Current" landed documents ONLY — never the SourceReader (Contract §6). One short,
   // read-only transaction; the per-document work below opens its own.
-  const docs = await transaction((tx) => etlRepo.findCurrentDocuments(tx, sourceSystem));
+  const docs = await systemTransaction((tx) => etlRepo.findCurrentDocuments(tx, sourceSystem));
 
   const bySourceType = new Map<string, ClassifyOutcome[]>();
   const entriesPostedBySourceType = new Map<string, number>();
@@ -257,7 +257,7 @@ async function runConversionBody(
     bySourceType.set(outcome.sourceType, list);
 
     if (outcome.status === 'converted') {
-      await transaction(async (tx) => {
+      await systemTransaction(async (tx) => {
         if (mode === 'load') {
           for (const entry of outcome.entries) {
             const posted = await postEntry(tx, {
@@ -300,7 +300,7 @@ async function runConversionBody(
         });
       });
     } else if (outcome.status === 'quarantined') {
-      await transaction((tx) =>
+      await systemTransaction((tx) =>
         etlRepo.quarantineDocument(tx, {
           runId,
           sourceSystem,
@@ -336,7 +336,7 @@ async function runConversionBody(
       entriesPostedBySourceType.get(sourceType) ?? 0,
     );
     // Write BEFORE asserting — see runCaptureBody's identical comment.
-    await transaction((tx) =>
+    await systemTransaction((tx) =>
       etlRepo.writeReconciliation(tx, {
         runId,
         sourceType,

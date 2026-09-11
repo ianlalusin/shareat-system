@@ -138,6 +138,14 @@ export function getSystemDb() {
  *     all?"* is asked before any org exists, and it now uses the same door bootstrap's WRITE
  *     already used. ⚠️ Three sites asked this bare; `bootstrap-org.ts:158` is the third and
  *     contradicted itself, guarding with an unprincipalled read before a privileged write
+ *   - the **ETL pipeline** — `packages/etl/src/run.ts` (6 sites) and `repo/etl.ts`'s
+ *     `startRun`/`finishRun` (row 194 subsystem 3, DEF-289). ⚠️ Different in kind from the
+ *     others: `etl_runs`, `etl_source_documents`, `etl_quarantine`, `etl_reconciliation` and
+ *     `audit_log` carry FORCE RLS with **zero policies** (migration `0011:142-160`), so no
+ *     principal can ever satisfy them. Elsewhere on this list a principal is merely *wrong*;
+ *     here it is **unsatisfiable**. ⛔ Never add a policy to those tables to make the app role
+ *     work — they hold captured production PII and a policy that admits the app role admits
+ *     every tenant
  *
  * ⛔ **Not a general escape hatch.** The list grows only by a NAMED RULING recorded in the bible,
  * never by analogy — row 185 closed it at three, row 194 admitted three subsystems after a day of
