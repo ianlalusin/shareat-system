@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { requireSession } from '../../lib/session';
-import { acknowledgeFindingAction } from './actions';
+import { acknowledgeFindingAction, closePeriodAction } from './actions';
 import {
   KIND_LABEL,
   bySeverityThenStatus,
@@ -115,6 +115,26 @@ export default async function FindingsPage({
           }
         />
       </section>
+
+      {/* ⛔ `readiness.ready` here is a HINT, never the authority — `closePeriod` re-checks the
+          capability, the unposted-draft gate, `closeReadiness` and the earlier-period-open rule
+          itself, so a stale page or a second click cannot close a period that is not closeable. */}
+      {readiness.ready && (
+        <form action={closePeriodAction} className="flex items-center gap-3 rounded-lg border border-emerald-300 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-950">
+          <input type="hidden" name="period" value={period} />
+          <div className="flex-1 text-sm text-emerald-900 dark:text-emerald-300">
+            <span className="font-medium">{period} is ready to close.</span> This is a human
+            decision, made once the remittance for the period has actually arrived — never
+            scheduled.
+          </div>
+          <button
+            type="submit"
+            className="rounded border border-emerald-700 bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800"
+          >
+            Close {period}
+          </button>
+        </form>
+      )}
 
       {rows.length === 0 && (
         <p className="rounded-lg border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500 dark:border-neutral-700">

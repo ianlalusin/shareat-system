@@ -8,7 +8,7 @@
  * still counted, ages visibly, and expires after 30 days on its own.
  */
 import { redirect } from 'next/navigation';
-import { acknowledgeFinding } from '@shareat/domain';
+import { acknowledgeFinding, closePeriod } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -38,4 +38,22 @@ export async function acknowledgeFindingAction(formData: FormData): Promise<void
     back({ error: errorMessage(err), period });
   }
   back({ ok: 'Accepted for now — it is still counted, and it will expire.', period });
+}
+
+/**
+ * T-264 / DEF-284 slice 2 — the close action. ⛔ **`ready === true` on this page is a hint, never
+ * the authority.** Every gate — the capability, the unposted-draft check, `closeReadiness`, the
+ * earlier-period-open rule — is re-checked inside `closePeriod` itself, so a stale page or a
+ * button clicked twice cannot close a period that is not actually closeable.
+ */
+export async function closePeriodAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const period = str(formData, 'period');
+
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => closePeriod(tx, actor, { period }));
+  } catch (err) {
+    back({ error: errorMessage(err), period });
+  }
+  back({ ok: `${period} is closed.`, period });
 }

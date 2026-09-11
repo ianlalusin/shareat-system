@@ -7,9 +7,9 @@
  * production organisation could not post a single journal entry. See `docs/tasks/264-*.md`'s
  * "severity correction" for the full trace.
  */
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, gte, lt, lte, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
-import { fiscalPeriods } from '../../schema';
+import { deliveries, expenses, fiscalPeriods } from '../../schema';
 
 /**
  * `[starts_on, ends_on]` for one calendar month, both `YYYY-MM-DD`, both inclusive.
@@ -116,4 +116,115 @@ export async function latestPeriodEnd(tx: Tx, orgId: string): Promise<string | n
     .orderBy(desc(fiscalPeriods.endsOn))
     .limit(1);
   return row?.endsOn ?? null;
+}
+
+/** T-264 / DEF-284 slice 2 — `'YYYY-MM'`, the string every caller (`listFindings`,
+ *  `closeReadiness`, `/findings`) already uses, to this table's own `[starts_on, ends_on]`. */
+function periodBounds(period: string): { startsOn: string; endsOn: string } {
+  const [yStr, mStr] = period.split('-');
+  return monthBounds(Number(yStr), Number(mStr));
+}
+
+/**
+ * Flips `status` `open` -> `closed` and stamps `closed_at`/`closed_by`, all in ONE statement.
+ *
+ * ⭐ **Deliberately an UPDATE ... WHERE status = 'open' ... RETURNING, never a read then a
+ * write.** Two admins pressing close on the same period a moment apart must not both succeed with
+ * different `closed_by` — the `status = 'open'` in the WHERE clause is what makes the second
+ * writer's UPDATE match zero rows instead of racing the first. `null` back means "did not close":
+ * the period does not exist, or was not `open` (already closed/locked) — the caller decides which.
+ */
+export async function closePeriod(
+  tx: Tx,
+  orgId: string,
+  period: string,
+  closedBy: string,
+): Promise<{ periodId: string; closedAt: Date } | null> {
+  const { startsOn, endsOn } = periodBounds(period);
+  const [row] = await tx
+    .update(fiscalPeriods)
+    .set({ status: 'closed', closedAt: sql`now()`, closedBy, updatedAt: sql`now()` })
+    .where(
+      and(
+        eq(fiscalPeriods.orgId, orgId),
+        eq(fiscalPeriods.startsOn, startsOn),
+        eq(fiscalPeriods.endsOn, endsOn),
+        eq(fiscalPeriods.status, 'open'),
+      ),
+    )
+    .returning({ id: fiscalPeriods.id, closedAt: fiscalPeriods.closedAt });
+  return row ? { periodId: row.id, closedAt: row.closedAt! } : null;
+}
+
+/**
+ * Whether any period STARTING BEFORE this one is still `open`, for this org.
+ *
+ * ⭐ ADR-006 §7.4 / the Gates table: periods close in order — December before the January-15th
+ * year close, and no month before the one before it. This is an ORDERING rule on the close
+ * operation itself, not a standing health signal, so it is a gate here, never a `listFindings`
+ * detector (there is nothing to show on a daily screen; it only means anything at the moment
+ * someone tries to close a specific period).
+ */
+export async function hasEarlierOpenPeriod(tx: Tx, orgId: string, period: string): Promise<boolean> {
+  const { startsOn } = periodBounds(period);
+  const [row] = await tx
+    .select({ id: fiscalPeriods.id })
+    .from(fiscalPeriods)
+    .where(and(eq(fiscalPeriods.orgId, orgId), lt(fiscalPeriods.startsOn, startsOn), eq(fiscalPeriods.status, 'open')))
+    .limit(1);
+  return row !== undefined;
+}
+
+export interface UnpostedDraft {
+  readonly kind: 'expense' | 'delivery';
+  readonly id: string;
+  readonly dateOn: string;
+}
+
+/**
+ * Every `expenses` or `deliveries` row still `draft`, dated inside this period.
+ *
+ * ⭐ **Exactly these two tables, not the other eleven with a `'draft'` status in this codebase** —
+ * ADR-006 §8.2 names only these two in concrete terms (Ian: *"cashier can't create expense
+ * receipt... for receipts, reject new entries, and expenses too"*). `sales_days` was considered and
+ * rejected: its statuses are `open | submitted | verified | voided` — no `draft` — and `open` means
+ * "today is still happening", not "someone left work unfinished"; gating on it would refuse to
+ * close a period whenever a sales day was legitimately still in progress.
+ *
+ * ⚠️ `journal_entries.status = 'draft'` is deliberately NOT checked here, even though ADR-006's
+ * Gates table says "no draft entries dated in the period" with no table named. Confirmed against
+ * `repo/journal.ts`: a journal entry is `draft` only WITHIN the transaction that creates it —
+ * `postEntry` either flips it to `posted` or the whole transaction rolls back, so a committed
+ * `journal_entries` row is never observed at rest as `draft`. A gate against it would be a check
+ * that can never fire — worse than no gate, because it would sit in the close checklist looking
+ * verified. See the task report for this written up as a finding against ADR-006 itself.
+ */
+export async function unpostedDraftsInPeriod(tx: Tx, orgId: string, period: string): Promise<UnpostedDraft[]> {
+  const { startsOn, endsOn } = periodBounds(period);
+  const draftExpenses = await tx
+    .select({ id: expenses.id, dateOn: expenses.businessDate })
+    .from(expenses)
+    .where(
+      and(
+        eq(expenses.orgId, orgId),
+        eq(expenses.status, 'draft'),
+        gte(expenses.businessDate, startsOn),
+        lte(expenses.businessDate, endsOn),
+      ),
+    );
+  const draftDeliveries = await tx
+    .select({ id: deliveries.id, dateOn: deliveries.deliveredOn })
+    .from(deliveries)
+    .where(
+      and(
+        eq(deliveries.orgId, orgId),
+        eq(deliveries.status, 'draft'),
+        gte(deliveries.deliveredOn, startsOn),
+        lte(deliveries.deliveredOn, endsOn),
+      ),
+    );
+  return [
+    ...draftExpenses.map((e) => ({ kind: 'expense' as const, id: e.id, dateOn: e.dateOn })),
+    ...draftDeliveries.map((d) => ({ kind: 'delivery' as const, id: d.id, dateOn: d.dateOn })),
+  ];
 }
