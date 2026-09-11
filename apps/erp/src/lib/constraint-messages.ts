@@ -86,6 +86,24 @@ export function parseConstraintName(raw: string): string | null {
 }
 
 /**
+ * ⭐ T-270/DEF-279 — prefers the driver's own structured `constraint_name` field over parsing it
+ * out of the message text. Verified live (`docs/discovery/33-def-279-live-trigger-bodies.md`):
+ * `RAISE EXCEPTION ... USING CONSTRAINT` populates ONLY this field, never the message — a
+ * hand-written raise's constraint name is invisible to `parseConstraintName` alone. A REAL Postgres
+ * constraint violation populates both, so preferring the structured field is strictly more robust
+ * than parsing English prose Postgres is free to reword in any release. `parseConstraintName` stays
+ * the fallback, unchanged, for anything that doesn't expose the field.
+ */
+export function resolveConstraintName(err: unknown): string | null {
+  if (err && typeof err === 'object' && 'constraint_name' in err) {
+    const name = (err as { constraint_name?: unknown }).constraint_name;
+    if (typeof name === 'string' && name.length > 0) return name;
+  }
+  const raw = err instanceof Error ? err.message : String(err);
+  return parseConstraintName(raw);
+}
+
+/**
  * bible §13 row 189 — the sanitised fallback. A single line, naming the record type in plain
  * words where the raw text gives one, never the constraint name or the SQL grammar around it.
  */
@@ -165,8 +183,7 @@ export async function recordIfUnmappedConstraint(
   err: unknown,
   context: { orgId: string; storeId: string | null; actorPersonId: string | null },
 ): Promise<void> {
-  const raw = err instanceof Error ? err.message : String(err);
-  const constraintName = parseConstraintName(raw);
+  const constraintName = resolveConstraintName(err);
   if (!constraintName) return;
   if (constraintName in CONSTRAINT_MESSAGES) return;
   if (LOCALLY_MAPPED_CONSTRAINT_NAMES.has(constraintName)) return;

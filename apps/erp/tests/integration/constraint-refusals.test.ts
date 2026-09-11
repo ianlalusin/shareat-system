@@ -39,6 +39,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 // ⭐ The DB-level helper, deliberately NOT the app's same-named one — see the null-tx case below.
 import { withOrgPrincipal as dbWithOrgPrincipal } from '@shareat/db';
 import { withOrgPrincipal, recordingRefusalsFor } from '../../src/app/expenses/lib';
+import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -179,5 +180,144 @@ describe('T-261 — §B7.1(c) / §B4.1 a refusal on a null-tx path is recorded',
     expect(rows[0]!.domain).toBe('constraint');
     expect(rows[0]!.store_id).toBeNull();
     expect(rows[0]!.actor_person_id).toBeNull();
+  });
+});
+
+/**
+ * T-270 — DEF-279. Before migration 0142 these two constraint triggers raised bare
+ * `RAISE EXCEPTION` text with no `USING CONSTRAINT`, so `recordIfUnmappedConstraint` recorded
+ * NOTHING for either — the exact structural zero DEF-279 exists to close. Run against `HEAD`
+ * (pre-migration) first: both assertions below on `prerequisite_refusals` failed with 0 rows,
+ * confirmed by temporarily reverting migration 0142 and `constraint-messages.ts`'s resolver
+ * (`git diff` saved, reverted via the same non-git-checkout round-trip as T-267/T-269, reapplied).
+ *
+ * ⭐ The assertion that matters most (spec §SPEC CORRECTION 1): `journal_entries_balance_check` and
+ * `journal_lines_balance_check` share ONE underlying function (`journal_check_entry_balance`), so a
+ * naive fix could easily attribute every refusal to whichever trigger the author had in mind, not
+ * whichever one actually fired. The two tests below provoke each trigger SEPARATELY — one by editing
+ * an EXISTING entry's lines only, the other by inserting entry+lines unbalanced together — and each
+ * asserts the OTHER trigger's name is NOT what got recorded.
+ */
+describe('T-270 — DEF-279: the shared balance-check function records the CORRECT trigger name', () => {
+  it('a line-only edit on an EXISTING draft entry records journal_lines_balance_check, never the entries one', async () => {
+    const f = await fixture('t270-lines');
+    await seedChartOfAccounts(sql, f.orgId);
+    const [period] = await sql<{ id: string }[]>`
+      insert into fiscal_periods (org_id, starts_on, ends_on, status)
+      values (${f.orgId}, '2026-01-01', '2026-01-31', 'open') returning id`;
+    const [cash] = await sql<{ id: string }[]>`select id from accounts where org_id = ${f.orgId} and code = '1110'`;
+    const [opex] = await sql<{ id: string }[]>`select id from accounts where org_id = ${f.orgId} and code = '6900'`;
+
+    // A genuinely valid, already-COMMITTED, balanced two-line draft entry — its own transaction,
+    // entry + both lines together, so it exists durably before the app-layer write below ever runs.
+    const entryId = crypto.randomUUID();
+    await sql.begin(async (trx) => {
+      await trx`
+        insert into journal_entries (id, org_id, entry_date, period_id, source_type, source_id, status)
+        values (${entryId}, ${f.orgId}, '2026-01-15', ${period!.id}, 'test', ${uid('src')}, 'draft')`;
+      await trx`insert into journal_lines (entry_id, line_no, account_id, debit, credit) values (${entryId}, 1, ${opex!.id}, '100.00', '0')`;
+      await trx`insert into journal_lines (entry_id, line_no, account_id, debit, credit) values (${entryId}, 2, ${cash!.id}, '0', '100.00')`;
+    });
+
+    // Through the APP-LAYER wrapper: a THIRD line, alone, as its own single autocommitted
+    // statement. No journal_entries row is written in THIS transaction — journal_entries_balance_check
+    // never fires — only journal_lines_balance_check's deferred trigger does, at the end of this
+    // one INSERT's implicit commit.
+    await expect(
+      withOrgPrincipal(f.orgId, (tx) =>
+        tx.execute(dsql`
+          insert into journal_lines (entry_id, line_no, account_id, debit, credit)
+          values (${entryId}, 3, ${opex!.id}, '999.00', '0')
+        `),
+      ),
+    ).rejects.toThrow(/unbalanced/);
+
+    const rows = await sql`
+      select reason_code from prerequisite_refusals where org_id = ${f.orgId} and domain = 'constraint'
+    `;
+    expect(rows.length).toBe(1);
+    expect(rows[0]!.reason_code).toBe('journal_lines_balance_check');
+  });
+
+  it('an unbalanced entry inserted WITH its lines, together, records journal_entries_balance_check', async () => {
+    const f = await fixture('t270-entries');
+    await seedChartOfAccounts(sql, f.orgId);
+    const [period] = await sql<{ id: string }[]>`
+      insert into fiscal_periods (org_id, starts_on, ends_on, status)
+      values (${f.orgId}, '2026-01-01', '2026-01-31', 'open') returning id`;
+    const [cash] = await sql<{ id: string }[]>`select id from accounts where org_id = ${f.orgId} and code = '1110'`;
+    const [opex] = await sql<{ id: string }[]>`select id from accounts where org_id = ${f.orgId} and code = '6900'`;
+    const entryId = crypto.randomUUID();
+
+    // Entry AND its (unbalanced) lines in the SAME transaction as the app-layer wrapper's tx — both
+    // deferred triggers are pending at commit; journal_entries' fires first (queued first, since the
+    // entry row is inserted before its lines, which every legitimate write already requires via the
+    // entry_id FK) and raises before journal_lines' queued event gets a chance to.
+    await expect(
+      withOrgPrincipal(f.orgId, async (tx) => {
+        await tx.execute(dsql`
+          insert into journal_entries (id, org_id, entry_date, period_id, source_type, source_id, status)
+          values (${entryId}, ${f.orgId}, '2026-01-15', ${period!.id}, 'test', ${uid('src')}, 'draft')
+        `);
+        await tx.execute(dsql`
+          insert into journal_lines (entry_id, line_no, account_id, debit, credit)
+          values (${entryId}, 1, ${opex!.id}, '50.00', '0')
+        `);
+        await tx.execute(dsql`
+          insert into journal_lines (entry_id, line_no, account_id, debit, credit)
+          values (${entryId}, 2, ${cash!.id}, '0', '30.00')
+        `);
+      }),
+    ).rejects.toThrow(/unbalanced/);
+
+    const rows = await sql`
+      select reason_code from prerequisite_refusals where org_id = ${f.orgId} and domain = 'constraint'
+    `;
+    expect(rows.length).toBe(1);
+    expect(rows[0]!.reason_code).toBe('journal_entries_balance_check');
+  });
+});
+
+/**
+ * T-270 — DEF-279, the inventory half. `stock_movements_no_negative_on_hand_trg` raised the same
+ * bare, unparseable text; same structural zero, same fix.
+ */
+describe('T-270 — DEF-279: a negative-on-hand refusal is recorded under its own constraint name', () => {
+  it('a movement that would drive on-hand negative is recorded as stock_movements_no_negative_on_hand_trg', async () => {
+    const f = await fixture('t270-stock');
+    const [locType] = await sql<{ id: string }[]>`
+      insert into location_types (org_id, code, name) values (${f.orgId}, ${uid('LT')}, 'Stockroom') returning id`;
+    const [location] = await sql<{ id: string }[]>`
+      insert into stock_locations (org_id, store_id, code, name, type_id, created_by)
+      values (${f.orgId}, ${f.storeId}, ${uid('LOC')}, 'Main', ${locType!.id}, ${f.personId}) returning id`;
+    const [item] = await sql<{ id: string }[]>`
+      insert into items (org_id, code, name, kind, base_unit, created_by)
+      values (${f.orgId}, ${uid('ITEM')}, 'Test Item', 'raw_material', 'kg', ${f.personId}) returning id`;
+
+    // A real receipt first, as the OWNER connection — pure fixture setup, no refusal expected.
+    await sql`
+      insert into stock_movements
+        (org_id, store_id, location_id, item_id, moved_at, quantity, kind, source_type, source_id, created_by)
+      values (${f.orgId}, ${f.storeId}, ${location!.id}, ${item!.id}, '2026-01-20T02:00:00Z', '5',
+              'receipt', 'delivery', ${crypto.randomUUID()}, ${f.personId})
+    `;
+
+    // Through the APP-LAYER wrapper: a usage movement that overdraws it.
+    await expect(
+      withOrgPrincipal(f.orgId, (tx) =>
+        tx.execute(dsql`
+          insert into stock_movements
+            (org_id, store_id, location_id, item_id, moved_at, quantity, kind, source_type, source_id, created_by)
+          values (${f.orgId}, ${f.storeId}, ${location!.id}, ${item!.id}, '2026-01-20T03:00:00Z', '-6',
+                  'usage', 'usage', ${crypto.randomUUID()}, ${f.personId})
+        `),
+      ),
+    ).rejects.toThrow(/negative/);
+
+    const rows = await sql`
+      select reason_code from prerequisite_refusals where org_id = ${f.orgId} and domain = 'constraint'
+    `;
+    expect(rows.length).toBe(1);
+    expect(rows[0]!.reason_code).toBe('stock_movements_no_negative_on_hand_trg');
   });
 });
