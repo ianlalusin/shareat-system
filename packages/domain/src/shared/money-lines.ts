@@ -23,6 +23,15 @@
  * account is asked for; `judgeDraw` decides whether that is allowed.
  */
 import { add, compare, money, ZERO, type Money } from '@shareat/core/money';
+/**
+ * ⭐ Re-exported so a CLIENT component reaches the overdraft verdict through this one pure
+ * subpath (`@shareat/domain/money-lines`) instead of the package barrel.
+ *
+ * ⛔ The barrel re-exports every domain module, several of which import `@shareat/db` — so
+ * `import { judgeDraw } from '@shareat/domain'` in a browser bundle pulls the Postgres driver.
+ * `next build` refuses it, which is how this was found rather than shipped.
+ */
+export { judgeDraw, type DrawVerdict, type DrawableAccount } from '../money-accounts/draw-verdict';
 
 // -------------------------------------------------------------------------------------
 // Direction and methods
@@ -199,7 +208,7 @@ export function tryMoney(raw: string | null | undefined): Money | null {
   }
 }
 
-export function totalOf(lines: readonly MoneyLine[]): Money {
+export function totalOfLines(lines: readonly MoneyLine[]): Money {
   return lines.reduce<Money>((sum, l) => add(sum, tryMoney(l.amount) ?? ZERO), ZERO);
 }
 
@@ -402,7 +411,7 @@ export function validateMoneyLines(input: ValidateMoneyLinesInput): MoneyLineIss
 
   const mustTotal = tryMoney(input.mustTotal);
   if (mustTotal) {
-    const total = totalOf(input.lines);
+    const total = totalOfLines(input.lines);
     if (compare(total, mustTotal) !== 0) {
       issues.push({
         line: null,

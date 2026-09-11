@@ -21,24 +21,16 @@ import {
 } from '@shareat/db';
 import { recordIfUnmappedConstraint } from '../../lib/constraint-messages';
 
-/**
- * How many payment rows the expense form offers.
+/*
+ * ⛔ `PAYMENT_ROW_COUNT` / `PAYMENT_ROWS` were DELETED here — T-266.
  *
- * ⚠️ **A UI limit only — the domain accepts any number of splits** (`createExpense` rejects only
- * an EMPTY payments array). It was 4, which is below what the business actually does: v1's split
- * payments are unbounded (`useFieldArray`, no maximum), and `expense.split.cash-online` is the
- * most common shape in v1's whole dataset. Ian, 2026-08-26: *"it is common in our set up to use
- * more than 1 account, for example an expense paid by partly cash cashier, cash online and office
- * online in one single transaction."*
- *
- * ⭐ Defined ONCE and imported by both the form and the action, because the two reading different
- * numbers is a silent truncation: the form would collect rows the parser never looks at.
- *
- * A proper add-a-row control is the real answer; this raises the ceiling above the real-world
- * shape in the meantime.
+ * They capped the expense form at 8 fixed rows, and the constant's own comment conceded the point:
+ * *"A proper add-a-row control is the real answer; this raises the ceiling above the real-world
+ * shape in the meantime."* `<MoneyLines>` is that control — it posts `lineCount` and the action
+ * reads that, so there is no ceiling to raise and nothing for a form and a parser to disagree
+ * about. ⚠️ A fixed count in two places was a silent-truncation risk by construction: the form
+ * could collect rows the parser never looked at.
  */
-export const PAYMENT_ROW_COUNT = 8;
-export const PAYMENT_ROWS = Array.from({ length: PAYMENT_ROW_COUNT }, (_, i) => i + 1);
 
 export interface StoreOption {
   id: string;

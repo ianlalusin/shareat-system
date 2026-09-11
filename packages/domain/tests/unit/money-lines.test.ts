@@ -10,7 +10,7 @@ import {
   labelOf,
   methodsForDirection,
   sourceKey,
-  totalOf,
+  totalOfLines,
   tryMoney,
   validateMoneyLines,
   type MoneyAccountOption,
@@ -303,8 +303,8 @@ describe('validateMoneyLines', () => {
     })).toEqual([]);
   });
 
-  it('totalOf sums a split, skipping half-typed rows', () => {
-    expect(totalOf([line({ amount: '2000.00' }), line({ amount: '' }), line({ amount: '1500.00' })]))
+  it('totalOfLines sums a split, skipping half-typed rows', () => {
+    expect(totalOfLines([line({ amount: '2000.00' }), line({ amount: '' }), line({ amount: '1500.00' })]))
       .toBe(money('3500.00'));
   });
 });

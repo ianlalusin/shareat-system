@@ -20,10 +20,13 @@ import {
   voidExpense,
   deleteExpenseDraft,
   recordExpenseForInvoice,
+  validateMoneyLines,
   type ExpensePaymentMethod,
+  type MoneyLine,
 } from '@shareat/domain';
 import { apRepo } from '@shareat/db';
-import { withOrgPrincipal, PAYMENT_ROW_COUNT } from './lib';
+import { withOrgPrincipal } from './lib';
+import { loadMoneyLines } from '@/lib/money-lines/load';
 import { requireActor } from '../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 
@@ -109,29 +112,28 @@ async function parseExpenseForm(
   const supplierInvoiceId = str(formData, 'supplierInvoiceId');
   const particulars = str(formData, 'particulars');
 
-  const payments: ParsedExpenseForm['payments'] = [];
-  for (let i = 1; i <= PAYMENT_ROW_COUNT; i++) {
-    const method = str(formData, `method_${i}`);
-    const amount = str(formData, `amount_${i}`);
+  // ⭐ T-266 — `<MoneyLines>` posts a variable number of rows and says how many, replacing the
+  // fixed 8-row grid. `lineAccount_`/`lineRequest_` are the component's HIDDEN resolved ids: the
+  // visible picker holds one combined source key, and the component splits it, so a float carries
+  // both the staff-float account (which resolves the 1120 GL code) and the request (its party).
+  const lineCount = Math.min(Number(str(formData, 'lineCount')) || 0, 50);
+  const lines: MoneyLine[] = [];
+  for (let i = 0; i < lineCount; i++) {
+    const method = str(formData, `lineMethod_${i}`);
+    const amount = str(formData, `lineAmount_${i}`);
     if (!method || !amount) continue;
-    if (!PAYMENT_METHODS.has(method)) continue;
-    const staffId = str(formData, `staffId_${i}`);
-    const cashRequestId = str(formData, `cashRequestId_${i}`);
-    const moneyAccountId = str(formData, `moneyAccountId_${i}`);
-    payments.push({
-      method: method as ExpensePaymentMethod,
+    lines.push({
+      method: method as MoneyLine['method'],
       amount,
-      staffId: staffId || undefined,
-      cashRequestId: cashRequestId || undefined,
-      moneyAccountId: moneyAccountId || undefined,
+      moneyAccountId: str(formData, `lineAccount_${i}`) || null,
+      cashRequestId: str(formData, `lineRequest_${i}`) || null,
+      staffId: str(formData, `lineStaff_${i}`) || null,
+      referenceNo: str(formData, `lineRef_${i}`) || null,
     });
   }
 
   if (!storeId) throw new Error('Choose a store.');
   if (!supplierInvoiceId) throw new Error('Choose a supplier invoice.');
-  if (payments.length === 0) {
-    throw new Error('At least one payment row (method + amount) is required.');
-  }
   if (!supplierId) {
     const invoice = await withOrgPrincipal(actor.orgId, (tx) =>
       apRepo.getSupplierInvoiceById(tx, actor.orgId, supplierInvoiceId),
@@ -139,6 +141,40 @@ async function parseExpenseForm(
     if (!invoice) throw new Error(`Supplier invoice ${supplierInvoiceId} does not exist.`);
     supplierId = invoice.supplierId;
   }
+
+  // ⭐ **THE SAME FUNCTION THE COMPONENT CALLS** — T-266 §1, and the whole architectural point.
+  // v1 kept the offered-methods rule in its editor and the validation rule in a separate
+  // validator, and they drifted: `enabledPaymentMethods` is computed in v1's expense editor and
+  // never passed to the component, so a store that disabled Credit still offers it.
+  //
+  // ⛔ Re-run server-side regardless of what the browser did (RULES rule 7 — no client-side-only
+  // authorization). The sources are re-fetched here rather than trusted from the form, so a
+  // hand-posted payload naming an account at another store, or a drained float, is refused.
+  const { sources } = await loadMoneyLines(actor.orgId, storeId);
+  const supplier = await withOrgPrincipal(actor.orgId, (tx) =>
+    apRepo.getSupplierById(tx, actor.orgId, supplierId),
+  );
+  const issues = validateMoneyLines({
+    direction: 'out',
+    lines,
+    sources,
+    supplierId,
+    supplierName: supplier?.name ?? null,
+    supplierCreditTermsDays: supplier?.creditTermsDays ?? null,
+  });
+  if (issues.length > 0) {
+    // One sentence, the first one — the form shows them all inline; this is the fallback for a
+    // payload that never went through the component.
+    throw new Error(issues[0]!.message);
+  }
+
+  const payments: ParsedExpenseForm['payments'] = lines.map((l) => ({
+    method: l.method as ExpensePaymentMethod,
+    amount: l.amount,
+    staffId: l.staffId || undefined,
+    cashRequestId: l.cashRequestId || undefined,
+    moneyAccountId: l.moneyAccountId || undefined,
+  }));
 
   return { storeId, supplierId, supplierInvoiceId, categoryId, particulars, payments, returnTo, qs };
 }

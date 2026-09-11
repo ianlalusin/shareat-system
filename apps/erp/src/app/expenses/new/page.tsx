@@ -1,4 +1,6 @@
-import { listStores, listActiveCategoriesGrouped, listMoneyAccountsForPicker, PAYMENT_ROWS } from '../lib';
+import { listStores, listActiveCategoriesGrouped } from '../lib';
+import { loadMoneyLines } from '@/lib/money-lines/load';
+import { MoneyLines } from '@/components/money/MoneyLines';
 import { listOpenInvoicesForPicker, peso } from '../../ap/lib';
 import { requireSession } from '../../../lib/session';
 import { createExpenseAction } from '../actions';
@@ -22,13 +24,17 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
   const { actor } = await requireSession('/expenses/new');
   const orgId = actor.orgId;
 
-  const [storeRows, categories, wallets, invoices] = await Promise.all([
+  const [storeRows, categories, invoices] = await Promise.all([
     listStores(orgId),
     listActiveCategoriesGrouped(orgId),
-    listMoneyAccountsForPicker(orgId),
     listOpenInvoicesForPicker(orgId),
   ]);
   const storeId = sp.store && storeRows.some((s) => s.id === sp.store) ? sp.store : (storeRows[0]?.id ?? '');
+
+  // ⭐ T-266 — accounts with their LEDGER balances plus every open float at this store, flattened
+  // into one list. Scoped to the store (DEF-291); the picker used to offer every account in the
+  // org to everyone.
+  const moneyLines = await loadMoneyLines(orgId, storeId);
 
   // T-215 §5 — the caps for THIS store and THIS period, so the person spending sees what is left
   // before they commit. ⚠️ Read only: `manage_expense_budgets` is needed to SET a cap and must not
@@ -161,86 +167,16 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
 
           <div>
             <h2 className="mb-2 text-sm font-medium">
-              Payments — fill in as many rows as needed. A split expense posts as ONE
-              entry with one credit line per row (invariant 2).
+              Payments — add a line for each place the money came from. A split expense posts as
+              ONE entry with one credit line per row (invariant 2).
             </h2>
-            <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-              <table className="w-full min-w-[720px] border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
-                    <th className="px-3 py-2 font-medium">Method</th>
-                    <th className="px-3 py-2 font-medium">Amount</th>
-                    <th className="px-3 py-2 font-medium">Staff (reimbursable)</th>
-                    <th className="px-3 py-2 font-medium">Paid from</th>
-                    <th className="px-3 py-2 font-medium">Cash request (optional)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {PAYMENT_ROWS.map((i) => (
-                    <tr key={i} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
-                      <td className="px-3 py-2">
-                        <select
-                          name={`method_${i}`}
-                          defaultValue=""
-                          className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
-                        >
-                          <option value="">— not used —</option>
-                          <option value="cash">Cash</option>
-                          <option value="online">Online / e-wallet</option>
-                          <option value="credit">Credit (AP)</option>
-                          <option value="reimbursable">Reimbursable (staff paid)</option>
-                          <option value="other">Other (DEF-054 — blocks posting)</option>
-                          <option value="ar_collection">AR collection (DEF-054 — blocks posting)</option>
-                        </select>
-                      </td>
-                      <td className="px-3 py-2">
-                        <input
-                          type="text"
-                          name={`amount_${i}`}
-                          placeholder="0.00"
-                          className="w-28 rounded border border-neutral-300 bg-white px-2 py-1 text-right dark:border-neutral-700 dark:bg-neutral-950"
-                        />
-                      </td>
-                      <td className="px-3 py-2">
-                        <input
-                          type="text"
-                          name={`staffId_${i}`}
-                          placeholder="Staff person id"
-                          className="w-full rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
-                        />
-                      </td>
-                      <td className="px-3 py-2">
-                        {/* ⭐ DEF-058: the account IS the answer. Choosing "Office safe" routes to
-                            1130 and marks it office money; choosing the cashier's GCash routes to
-                            1140 and names the wallet. There is no separate "office drawer" tick,
-                            because the owner belongs to the account and should be derived, never
-                            ticked — a tickbox let a cashier route cash away from their own till. */}
-                        <select
-                          name={`moneyAccountId_${i}`}
-                          defaultValue=""
-                          className="w-full rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
-                        >
-                          <option value="">— choose —</option>
-                          {wallets.map((w) => (
-                            <option key={w.id} value={w.id}>
-                              {w.name} ({w.custodian})
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-3 py-2">
-                        <input
-                          type="text"
-                          name={`cashRequestId_${i}`}
-                          placeholder="cash_request id"
-                          className="w-full rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <MoneyLines
+              direction="out"
+              sources={moneyLines.sources}
+              staff={moneyLines.staff}
+              supplierId={null}
+              supplierCreditTermsDays={null}
+            />
           </div>
 
           <button

@@ -3,6 +3,9 @@
  * transactions (PROJECT_BIBLE.md §4.3). Never imports from `apps/` (bible §8).
  */
 export * from './shared/constraint-refusals';
+/** ⭐ T-266 — the pure money-form rules, imported by BOTH the client component and the server
+ *  action so the two cannot disagree about what a document allows. */
+export * from './shared/money-lines';
 export * from './ledger/post-entry';
 export * from './ledger/reverse-entry';
 export * from './reports/trial-balance';
@@ -37,6 +40,7 @@ export * from './trade';
 export * from './trade/returns';
 export * from './channel-settlements';
 export * from './findings';
+export * from './fiscal-periods';
 export * from './cutover';
 
 // ---- Phase 3, the inventory wave (T-160 to T-173) --------------------------------------------

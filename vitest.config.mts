@@ -15,6 +15,8 @@ const alias = {
   '@shareat/db/schema': `${root}packages/db/schema/index.ts`,
   '@shareat/db/client': `${root}packages/db/src/client.ts`,
   '@shareat/db': `${root}packages/db/src/index.ts`,
+  // ⚠️ Subpath BEFORE the bare name — same ordering rule as `@shareat/auth/errors` below.
+  '@shareat/domain/money-lines': `${root}packages/domain/src/shared/money-lines.ts`,
   '@shareat/domain': `${root}packages/domain/src/index.ts`,
   // ⚠️ The subpath goes BEFORE the bare name: these are exact-match aliases applied in order, and
   // T-237's `@shareat/auth/errors` leaf (the error classes without `@shareat/db` behind them) is

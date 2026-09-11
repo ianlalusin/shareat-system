@@ -66,6 +66,9 @@ export interface SupplierRow {
   bankName: string | null;
   bankAccountName: string | null;
   bankAccountNumber: string | null;
+  /** ⭐ T-266 — NULL means cash-on-delivery, and the money form disables *Credit (AP)* with the
+   *  reason. A number is both the permission and the default due date (`invoice_date + N`). */
+  creditTermsDays: number | null;
   createdBy: string;
   createdAt: Date;
 }
