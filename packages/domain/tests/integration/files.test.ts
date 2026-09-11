@@ -279,6 +279,7 @@ describe('⭐ the orphan sweep — bytes nobody can reach', () => {
 
     const result = await sweepOrphanedFiles(24);
     expect(result.removed).toBe(1);
+    expect(result.claimed).toBe(0);
     expect(result.failed).toEqual([]);
 
     // ⭐ The claimed file survives — it is the evidence behind something.
@@ -298,5 +299,113 @@ describe('⭐ the orphan sweep — bytes nobody can reach', () => {
     );
     const result = await sweepOrphanedFiles(24);
     expect(result.removed).toBe(0);
+    expect(result.claimed).toBe(0);
+  });
+
+  describe('⛔ DEF-298 — the row is the authority; a file claimed mid-sweep keeps BOTH row and bytes', () => {
+    it('a file claimed in the window between an earlier file\'s bytes-removal and its own delete is not swept', async () => {
+      const f = await fixture('race');
+      const early = await asOrg(f.orgId, (tx) =>
+        uploadFile(tx, f.staff, {
+          purpose: 'receipt_photo',
+          storeId: f.storeId,
+          contentType: 'image/jpeg',
+          bytes: photoWithGps(),
+        }),
+      );
+      const late = await asOrg(f.orgId, (tx) =>
+        uploadFile(tx, f.staff, {
+          purpose: 'receipt_photo',
+          storeId: f.storeId,
+          contentType: 'image/jpeg',
+          bytes: photoWithGps(),
+        }),
+      );
+      // `listOrphans` orders by uploaded_at ASC, so `early` is processed first — that ordering is
+      // what makes the injection below land strictly between the batch READ and `late`'s DELETE.
+      await sql`update stored_files set uploaded_at = now() - interval '2 days' where id = ${early.fileId}`;
+      await sql`update stored_files set uploaded_at = now() - interval '2 days' + interval '1 second' where id = ${late.fileId}`;
+
+      // ⭐ The injection: the instant the sweep removes `early`'s bytes (which, under the FIXED
+      // order, only happens after `early`'s row is already gone), something else claims `late` —
+      // simulating another request's `linkFile` landing in the exact window this task closes.
+      // Against the OLD order (remove-then-delete) this same hook fires BEFORE `late`'s own delete
+      // too, which is exactly how this test fails against the current-at-spec-time code (see the
+      // task's own instruction to prove that before trusting the fix).
+      const real = driver;
+      setStorageDriver({
+        ...real,
+        async remove(path: string) {
+          if (path === early.storagePath) {
+            await asOrg(f.orgId, (tx) => filesRepo.linkFile(tx, f.orgId, late.fileId, 'expense:raced-in'));
+          }
+          return real.remove(path);
+        },
+      });
+
+      const result = await sweepOrphanedFiles(24);
+
+      // `early` had nothing claim it — swept clean, row and bytes.
+      expect(driver.files.has(early.storagePath)).toBe(false);
+      // `late` was claimed before ITS delete ran — BOTH the row and the bytes survive.
+      expect(driver.files.has(late.storagePath)).toBe(true);
+      const [lateRow] = await sql<{ linked_to: string | null }[]>`
+        select linked_to from stored_files where id = ${late.fileId}
+      `;
+      expect(lateRow?.linked_to).toBe('expense:raced-in');
+
+      // DEF-297: `removed` counts only what was actually deleted — `late` is not in it.
+      expect(result.removed).toBe(1);
+      expect(result.claimed).toBe(1);
+      expect(result.failed).toEqual([]);
+    });
+  });
+
+  describe('a storage failure lands in failed[] without stopping the sweep or losing the row', () => {
+    it('one unreachable object does not block another, and its already-deleted row is not silently hidden', async () => {
+      const f = await fixture('storage-fail');
+      const unreachable = await asOrg(f.orgId, (tx) =>
+        uploadFile(tx, f.staff, {
+          purpose: 'receipt_photo',
+          storeId: f.storeId,
+          contentType: 'image/jpeg',
+          bytes: photoWithGps(),
+        }),
+      );
+      const fine = await asOrg(f.orgId, (tx) =>
+        uploadFile(tx, f.staff, {
+          purpose: 'receipt_photo',
+          storeId: f.storeId,
+          contentType: 'image/jpeg',
+          bytes: photoWithGps(),
+        }),
+      );
+      await sql`update stored_files set uploaded_at = now() - interval '2 days' where id = ${unreachable.fileId}`;
+      await sql`update stored_files set uploaded_at = now() - interval '2 days' where id = ${fine.fileId}`;
+
+      const real = driver;
+      setStorageDriver({
+        ...real,
+        async remove(path: string) {
+          if (path === unreachable.storagePath) throw new Error('bucket: object locked');
+          return real.remove(path);
+        },
+      });
+
+      const result = await sweepOrphanedFiles(24);
+
+      // The other candidate still got swept — one failure does not stop the loop.
+      expect(driver.files.has(fine.storagePath)).toBe(false);
+      expect(result.removed).toBe(1);
+      expect(result.claimed).toBe(0);
+      expect(result.failed).toEqual([{ path: unreachable.storagePath, error: 'bucket: object locked' }]);
+
+      // ⚠️ The accepted residual, proven rather than asserted in prose: the row-delete runs BEFORE
+      // driver.remove, so it already committed when the remove above threw. The row is gone; only
+      // the bytes are stranded, findable via `failed[].path` — never a live row over dead bytes.
+      const [row] = await sql<{ id: string }[]>`select id from stored_files where id = ${unreachable.fileId}`;
+      expect(row).toBeUndefined();
+      expect(driver.files.has(unreachable.storagePath)).toBe(true);
+    });
   });
 });

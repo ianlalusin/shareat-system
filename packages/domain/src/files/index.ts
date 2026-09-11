@@ -196,24 +196,47 @@ export async function linkFile(
  * A file uploaded for a draft that was never saved is unreachable by construction: nothing points
  * at it, and nothing ever will. ⚠️ Like T-140's runs, this REPORTS what it did — a sweep that
  * deletes quietly is indistinguishable from one that has stopped running.
+ *
+ * ⭐ **T-267/DEF-298 — the row is deleted BEFORE the bytes are removed, deliberately reversed from
+ * the original order.** `listOrphans`'s read can go stale: another request may `linkFile` a
+ * candidate before this loop reaches it. The database row is the only participant that can decide
+ * atomically whether anything still references the file, so it goes first — `deleteFile` now
+ * reports whether it actually matched a row (DEF-297), and the bytes are touched only when it did.
+ * A file claimed in that window keeps BOTH its row and its bytes; it simply is not an orphan.
+ *
+ * ⚠️ **The accepted residual, named rather than hidden:** if the row-delete commits and
+ * `driver.remove` then fails, the row is gone and the bytes are stranded — wasted storage,
+ * detectable and recoverable by a later sweep against the bucket. That is preferred over the
+ * alternative (a live row pointing at deleted bytes, which is silent, unrecoverable data loss) and
+ * is why the transaction is not held open across the `driver.remove` call to "fix" it — that would
+ * trade a benign failure for the worse one this task exists to remove.
  */
 export async function sweepOrphanedFiles(
   olderThanHours = 24,
-): Promise<{ removed: number; failed: { path: string; error: string }[] }> {
+): Promise<{ removed: number; claimed: number; failed: { path: string; error: string }[] }> {
   const driver = resolveStorageDriver();
   const orphans = await systemTransaction((tx) => filesRepo.listOrphans(tx, olderThanHours));
 
   let removed = 0;
+  let claimed = 0;
   const failed: { path: string; error: string }[] = [];
   for (const o of orphans) {
     try {
+      const deleted = await systemTransaction((tx) => filesRepo.deleteFile(tx, o.id));
+      if (!deleted) {
+        // Claimed between the read and this delete — no longer an orphan. Neither removed nor
+        // failed: its bytes are deliberately untouched, and there is nothing to retry.
+        claimed += 1;
+        continue;
+      }
       await driver.remove(o.storagePath);
-      await systemTransaction((tx) => filesRepo.deleteFile(tx, o.id));
       removed += 1;
     } catch (err) {
       // ⚠️ One unreachable object must not stop the sweep — and it must be visible, not swallowed.
+      // ⚠️ If this fires after the row-delete above already committed, the row is gone and these
+      // bytes are the accepted residual described above — findable here by `path`, not silent.
       failed.push({ path: o.storagePath, error: err instanceof Error ? err.message : String(err) });
     }
   }
-  return { removed, failed };
+  return { removed, claimed, failed };
 }

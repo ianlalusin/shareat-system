@@ -155,7 +155,7 @@ async function main(): Promise<void> {
   // first-run-happens-once, so a dry run checking only the code would have reported a clean plan
   // and then been refused on --confirm. `getOrgByCode` is still read, but only to name the
   // existing organisation in the message.
-  const alreadySetUp = await transaction((tx) => organizationsRepo.anyOrganizationExists(tx));
+  const alreadySetUp = await systemTransaction((tx) => organizationsRepo.anyOrganizationExists(tx));
   const sameCode = alreadySetUp
     ? await transaction((tx) => organizationsRepo.getOrgByCode(tx, args.code))
     : undefined;

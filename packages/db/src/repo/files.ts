@@ -97,7 +97,19 @@ export async function listOrphans(
  * A file behind a POSTED expense is the evidence for a journal entry; the FK from
  * `expenses.receipt_file_id` is `ON DELETE restrict`, so the database refuses that deletion rather
  * than trusting this function's caller to remember.
+ *
+ * ⭐ **T-267/DEF-297 — returns whether it deleted a row, deliberately a `boolean` rather than
+ * `updateTerms`'s throw-on-zero-rows convention** (`fixed-assets.ts:305-323`). There the row is
+ * expected to exist; a miss is a bug. Here the sweep's own read (`listOrphans`) can go stale by the
+ * time this runs — another request may `linkFile` the row in between — and that race is a normal,
+ * expected outcome, not an error. The caller (`sweepOrphanedFiles`) needs to tell "deleted" from
+ * "already claimed, leave it alone" without wrapping every delete in a try/catch for a case that
+ * is not exceptional.
  */
-export async function deleteFile(tx: Tx, id: string): Promise<void> {
-  await tx.delete(storedFiles).where(and(eq(storedFiles.id, id), isNull(storedFiles.linkedTo)));
+export async function deleteFile(tx: Tx, id: string): Promise<boolean> {
+  const deleted = await tx
+    .delete(storedFiles)
+    .where(and(eq(storedFiles.id, id), isNull(storedFiles.linkedTo)))
+    .returning({ id: storedFiles.id });
+  return deleted.length > 0;
 }
