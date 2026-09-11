@@ -67,7 +67,9 @@ export async function applyPrincipal(tx: PrincipalSink, principal: Principal): P
  *
  * Prefer this over calling `applyPrincipal` by hand: forgetting the call yields a transaction
  * with no principal, which returns NOTHING from an org-scoped table rather than everything.
- * The mistake is loud, not dangerous — but it is still a mistake worth not making.
+ * ⛔ **The mistake is not dangerous, and it is only LOUD ON WRITES.** A write is refused with
+ * `42501`. A READ returns zero rows and no error, so the caller reports whatever absence means in
+ * its own vocabulary — measured 2026-09-11, DEF-287.
  */
 export async function withPrincipal<T>(
   sql: { begin: <R>(fn: (tx: never) => Promise<R>) => Promise<R> },
@@ -106,7 +108,16 @@ export async function withPrincipal<T>(
  * transaction after this one sees the owner role and a NULL `app_current_org()`.
  *
  * ⚠️ A transaction opened WITHOUT this sees zero org-scoped rows, not everything (migration 0011
- * lines 20-24). Forgetting it breaks a feature loudly; it does not leak.
+ * lines 20-24). It does not leak — but ⛔ **do not read the old claim that it "breaks a feature
+ * loudly": that was true only of writes, and it was the sentence that let DEF-287 ship.**
+ *
+ * A write with no principal is refused with `42501`. A READ returns zero rows and no error, and
+ * the caller then explains the emptiness in its own words — so the symptom is a confident,
+ * WRONG message rather than a permission failure. Measured, not reasoned: with the restricted
+ * role armed, 344 tests failed with *"no fiscal period covers …"* against periods that were
+ * demonstrably present (`docs/tasks/265-def-218-restricted-role-repair.md`). ⭐ **That is the
+ * shape to expect in production the day `DATABASE_URL` stops bypassing RLS: not errors —
+ * nonsense, on screens where the data is plainly there.**
  */
 export async function withOrgPrincipal<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
   return transaction(async (tx) => {

@@ -101,8 +101,33 @@ grep -oE "FAIL +\|integration\| [^ ]+\.test\.ts" <log> | sed 's/.*|integration| 
 is `expected +0 to be 1` on `outcomes.find(x => x.job === 'depreciation')!`. For `dep1` to exist at
 all, `listOrgsToRun` must have returned the org — which only happens through the system connection.
 ⛔ **Had the wiring failed, `outcomes` would be empty and the test would have thrown a TypeError on
-the `!`, not an assertion mismatch.** The zero is a cascade: the depreciation run found nothing to
-post because the rows it needed were invisible.
+the `!`, not an assertion mismatch.**
+
+### ⛔ CORRECTION — the zero is NOT a cascade. It is DEF-287, and here is the line
+
+**This section originally closed "the zero is a cascade: the depreciation run found nothing to post
+because the rows it needed were invisible." The first half of that sentence is wrong and the second
+half is the defect.** Ruling out `systemTransaction()` was correct; treating "not that" as "not
+real" was not. Found 2026-09-11 by the orchestrator re-deriving DEF-282's caller count.
+
+`packages/domain/src/fixed-assets/depreciate.ts:221` — `runDepreciationAsSystem` calls
+`runDepreciationCore(null, …)`, which opens **three or more bare `transaction()`s with no
+principal**: `authorize` (`:202`), `loadDepreciable` (`:233`), `postPeriodsFor` **per asset**
+(`:243`). Under the restricted role `loadDepreciable` sees zero assets, the job posts nothing and
+exits **0**. `packages/domain/src/prepaid/index.ts:526`'s `runAmortisationAsSystem` is the same
+shape (`:530`, `:540`).
+
+⭐ **The name is why nobody caught it:** neither function sets `role`, `app.org_id` or
+`app.principal_kind` anywhere — they are called `…AsSystem` for a principal they never set. The
+same file proves it is an oversight: `scheduler/index.ts:710` has an `asSystem(orgId, fn)` that
+sets all three, `budget_reissue` uses it, `mirror_publish` uses `withOrgPrincipal`.
+
+⛔ **So `scheduler.test.ts` is a type (b) — report it, do NOT make it green.** Patching the
+fixture would hide a month-end cron that silently posts nothing.
+
+⛔ **And do not fix DEF-287 inside T-265.** It needs a per-transaction principal inside two
+loops plus a rename, and `scheduler/index.ts:506`'s cross-org read needs a `systemTransaction()`
+caller-list amendment that is Ian's call. See DEF-287.
 
 ## Done when
 
