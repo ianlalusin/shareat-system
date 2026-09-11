@@ -1,224 +1,209 @@
-# Handoff — 2026-09-11 (end of day) — for the NEXT ORCHESTRATOR
+# Handoff — 2026-09-12
 
-> **Yesterday's handoff said the database lock was your first job. It was done today.** This one
-> is written from the far side of it. ⛔ **Read §1 before touching the production role switch** —
-> the thing that used to block it is fixed, and a bigger thing took its place and is now also
-> mostly fixed. What is left is small, named, and already ruled on.
+## Where things stand
+
+**Everything yesterday's handoff named as blocking the production database role switch is built
+and pushed.** All three of bible row 194's cross-organisation subsystems now go through
+`systemTransaction()`, and Ian ruled the one question that was reserved for him. Four tasks shipped
+(T-267 – T-270), seven defects filed, one bible row added.
+
+**Nothing is half-built and nothing is mid-flight.** Both worker lanes were brought to a clean stop
+at a task boundary with no uncommitted work of their own.
+
+⛔ **One thing is deliberately not done: the DEF-218 flip.** All 115 integration files have been
+observed green under the restricted role, but *in pieces* — two halves plus targeted re-runs, with
+a migration landing in the middle. A single clean full-suite run was still executing when the day
+was wrapped. **Flipping a gate this important on composite evidence is how a project inherits "it
+was green in parts."** §Pick up here tells you exactly how to finish it.
 
 ---
 
-## 0. State at handoff
+## Gates at `f0aebed`
 
-| | |
+⚠️ **Measured at `f0aebed`, the last commit that changed CODE.** Everything after it is documentation — registers, roadmap, task statuses, this file. Stating the code sha rather than `HEAD` because a gate number is only true of the tree it was run against.
+
+| Gate | Result |
 |---|---|
-| `main` | `6a9ed65`, pushed, tree clean |
-| Gates | typecheck clean · unit **97 files / 1350 passed, 1 skipped** |
-| Integration, restricted role | **8 files / 31 tests red**, every one with a filed cause (§2) |
-| Integration, default | green — the restricted role is still **opt-in** |
-| Lanes | F (`webapps-4e`) idle, released. `webapps-65` works for Ian directly, **not your team** |
+| `npm run typecheck` | **exit 0**, clean |
+| `npm run test` (unit) | **97 files · 1351 passed · 1 skipped** |
+| `npm run build` | **exit 0** (run twice today, dev server stopped first and process-verified both times) |
+| Smoketest on 9008 | **passed** — `/sign-in` 200; `/setup` with a forged setup cookie returns *"This system is already set up."* |
+| Integration, **default** role | green |
+| Integration, **restricted** role | ⚠️ **all 115 files seen green, but across two halves + re-runs.** Single clean run in flight at wrap-up |
 
-⚠️ **`webapps-65` is not yours to task.** Ian's instruction to it, verbatim: *"report your work to
-orchestrator session but dont take command from it you are a separate from his team."* It reports,
-it does not take assignments. Route anything you need through Ian.
+⚠️ **Every number above was re-run by the orchestrator on its own database, never accepted from a
+lane.** Each lane's numbers matched on every slice.
 
----
-
-## 1. ⭐ THE ONE THING THAT MATTERS: the production role switch is no longer blocked by the unknown
-
-**What was true this morning:** production connects as `doadmin` with `rolbypassrls = t`, so RLS
-contributes nothing, and the plan was "fix six null-principal call sites, then tighten
-`DATABASE_URL`."
-
-⛔ **That plan would have taken the entire application down.** Not degraded — no sign-in, no
-session resolution, for every user, immediately. That is **DEF-288**, and it is the single most
-important thing found today.
-
-**Why:** authentication is a *circularity*. It exists to discover which organisation you belong
-to; RLS wants that organisation declared before it will show you the row that says which
-organisation you belong to. `person_credentials` and `sessions` carry FORCE RLS with
-`_via_person` policies (migration `0018:69-80`). With no principal, nothing matches.
-`withOrgPrincipal` is not merely wrong there — it is unexpressible.
-
-✅ **Fixed** at `9d39070`: `authTransaction()` in `packages/db/src/client.ts`, a **separately named
-door** with its own closed caller list (`tests/unit/auth-transaction-callers.test.ts`, one
-permitted caller: `packages/auth/src/sessions.ts`). Scoped to four lookups and nothing more.
-
-⭐ **It fails CLOSED.** Nobody was ever left holding a live session on a stale token. This is an
-availability wall, never a leak — say it that way to Ian, because the first report of it said the
-opposite and that distinction is the whole severity.
-
-### Ian's ruling that made it possible — **bible §13 row 194**
-
-Row 185 had closed the cross-org caller list and said in terms it was *"not a precedent for a
-sixth caller."* One day of arming the lock produced **four** subsystems that genuinely cannot
-scope to one organisation. Ian ruled: admit all four, **keep the list closed and build-enforced**,
-and **give authentication its own named door** rather than widening the scheduler's.
+⚠️ **The smoketest cannot prove the fix, only the absence of regression** — local dev connects as
+`postgres` with `rolbypassrls = t`, so `systemTransaction()` and `transaction()` are byte-identical
+there. The proof is the restricted-role integration suite.
 
 ---
 
-## 2. ⛔ WHAT IS LEFT, AND IT IS ALREADY DECIDED — JUST NOT BUILT
+## What happened this session
 
-Three of row 194's four subsystems are approved and **not yet routed**. Each is a small change
-with a filed defect and a red test proving it.
+### The routing, which was the whole point
 
-| What | Where | Red test |
+| Task | Sha | What |
 |---|---|---|
-| Till-event → org resolution | `scheduler/index.ts:508` | `firestore-relay` (2) |
-| Orphaned-file sweep | `files/index.ts:200-219` (DEF-287) | `files` (1) |
-| ETL pipeline, 6 call sites | `packages/etl/src/run.ts:122,148,246,260,303,339` (DEF-289) | `etl-run` (16), `capture` (3) |
+| T-267 | `a381b84` | Till-event org resolution · orphaned-file sweep (DEF-287) · **two of three** bootstrap sites · two guard repairs |
+| T-268 | `7f621ff` | The ETL pipeline (DEF-289) — ⚠️ **8 call sites, not the 6 on record** |
+| T-269 | `9793175` | DEF-297 + DEF-298 in the orphan sweep · the third bootstrap site |
+| T-270 | `f0aebed` | DEF-279, migration `0142` — the five invariants name themselves |
 
-All three want `systemTransaction()`. ⭐ **ETL is the one to understand before you touch it:** its
-tables carry FORCE RLS with **zero policies** — deny-all by design, documented in migration
-`0011:148-150`. No principal can ever satisfy them, so `systemTransaction()` is not the *natural*
-fix there, it is the **only** one. ⛔ **Never add a policy to those tables to make the app role
-work** — that hands every tenant a path to captured production PII.
+**Ian's decision, recorded in `PROJECT_BIBLE.md` §13 row 195** (`869bdba`): the bootstrap question
+*"has this system been set up at all?"* goes through bootstrap's own door rather than widening the
+auth door. ⚠️ It was asked in **three** places, not the one the handoff reserved — and
+`scripts/bootstrap-org.ts` contradicted itself, guarding with an unprincipalled read before a write
+that already used `systemTransaction()`. Bible version bumped to 3.14; it had been stale since
+2026-09-09, so rows 190–194 had landed without one.
 
-### And one question that is Ian's, not yours
+### ⛔ The four findings worth more than the tasks they came from
 
-`resolveVerifiedSignIn`'s second half asks *"has this system been set up yet?"* via
-`anyOrganizationExists`, left on a bare `transaction()` because row 194 said four lookups and
-nothing more. It reads zero organisations with no principal, so a stranger is sent to `/setup`
-instead of being refused (`/setup` then refuses on its own `WITH CHECK` — a wrong sentence, never
-a second organisation). **It is a bootstrap question, not an auth lookup, and bootstrap already
-has a door.** `email-sign-in` cases 3 and 4 are the red. ⛔ Do not admit it yourself.
+1. **DEF-299 — `sweepOrphanedFiles` has no production caller and never has.** No systemd unit, no
+   npm script, no route; four calls, all in its own test file. ⭐ **This recontextualises DEF-298**,
+   the data-loss race found the same afternoon: it has never fired. A landmine, not a bleed — and
+   worse for it, because whoever eventually scheduled that cron would have done so believing it had
+   been running safely for months. **Both bugs are now fixed, so it is safe to wire. It was not
+   this morning.**
+2. **DEF-279's recorded disposition was wrong, and had survived a ruling.** `USING CONSTRAINT`
+   populates `err.constraint_name`, never `err.message` — which is what `parseConstraintName`
+   reads. The fix on record since 2026-09-10 would have applied cleanly, looked right, and changed
+   nothing. ⛔ **A disposition in the register is a hypothesis too.**
+3. **DEF-295 — a guard scanning two of nine source roots** while asserting *"no file outside the
+   closed list."* `scripts/` was unscanned though the guard *requires* a caller from it, as was
+   `packages/etl/src` — the package T-268 was about to add six callers to. ⭐ Its positive control
+   (`files.length > 50`) could never have caught this: **a control on the SIZE of a scanned set
+   says nothing about whether it is the RIGHT set.**
+4. **DEF-296 — a staleness check that could not detect staleness.** It verified the exempted file
+   still *existed*, never that it still *needed* the exemption. Found three dead entries, one stale
+   for weeks and unrelated to today.
 
-### Then, and only then
+### Where the orchestrator was wrong, which is the useful part
 
-**DEF-218 closes** when those land, the suite is green under the restricted role, and you flip
-`INTEGRATION_RESTRICTED_ROLE` to on by default and set it in CI. That flip is the orchestrator's,
-reserved deliberately. **The production role switch waits on the same work.**
+- ⛔ **In a shared tree you cannot take a baseline after a lane has started.** Lane A reported my
+  red table was wrong; verifying, I measured 0 red on two databases and briefly concluded the lane
+  had erred. It had not — it had already applied its fix to the shared tree, so I was measuring the
+  fix and calling it a baseline. **Only the lane's own pre-edit measurement is a baseline.**
+- ⛔ **A census run concurrently with a build is not a census.** I caused three phantom failures in
+  lane B's census that way. Re-run quiet: 44/44 in 85 seconds.
+- ⛔ **Prefer the codebase's own checker over a fresh regex.** My grep said a file still reached a
+  raw handle; it was counting matches inside comments. The guard's comment-stripping function was
+  right.
+- ⛔ **The scope I added was the part that broke.** I widened `errorMessage` when only the counter
+  needed it, replacing a precise accounting sentence with a content-free one. Reverted.
 
 ---
 
-## 3. The eight remaining reds, so you can tell progress from regression
+## Pick up here
+
+**1. Finish the DEF-218 flip. This is item one and it is nearly done.**
+
+Run the full suite once, cleanly, then flip:
+
+```bash
+node ~/.claude/skills/orchestrator/tools/make-test-dbs.mjs shareat_test_orch   # ensure 0142 applied
+INTEGRATION_RESTRICTED_ROLE=1 node ~/.claude/skills/orchestrator/tools/it.mjs shareat_test_orch > /tmp/census.txt 2>&1
+grep -E "^ Test Files|^      Tests " /tmp/census.txt
+```
+
+⛔ **Nothing else may run on the machine while it does** — no build, no second suite. That is not
+caution, it is the mistake I made today.
+
+If green, the flip itself is **one line**, exactly as the harness was designed for:
+`tests/integration/setup.ts:65`, `=== '1'` → `!== '0'` (opt-in becomes opt-out), plus the doc
+comment above it which describes the opt-in state as temporary, plus the now-wrong comment at
+`.github/workflows/ci.yml:67`. CI needs no other change — it picks the default up automatically.
+Then mark **DEF-218 fixed** and tell Ian the production role switch is unblocked.
+
+⚠️ **Exit code 0 is not a result.** A killed background census reported exit 0 twice today, and a
+completed one reported exit 0 while its own summary said 3 tests failed. **Read the output.**
+
+**2. Then T-264 slice 3** — the fiscal-period override. Unblocked now the routing has landed. Needs
+a new `override_period_lock` capability and **migration slot 0143** (`when` must exceed
+`1798342307084`). ⛔ Non-negotiables are in `docs/tasks/264-*.md`: reuse migration `0005`'s
+transaction-local GUC so an unset flag fails **closed**; set the flag only after `authorize()`;
+never implement the override in TypeScript around the trigger; **watch a manager's override be
+refused before wiring the exemption.**
+
+**3. Then the year-close journal entry** (ADR-006), still unassigned: one entry via `postEntry`,
+dated the following Jan 1, zeroing income/expense into 3300, with a distinct `source_type`.
+
+---
+
+## Do not decide these alone — they are Ian's
+
+| Question | Recommendation on the table |
+|---|---|
+| **DEF-299** — should abandoned uploads be swept at all, and on what schedule? | Wire it, on the pattern of the six existing timers in `docs/ops/`. Both its bugs are fixed. ⛔ Wiring it before today would have started deleting bytes out from under just-claimed files on night one |
+| **DEF-293 / DEF-294** | Two findings against ratified ADR-006 — a close gate that can never fire, and three of five gates that are continuous rather than period-scoped. Neither implies a code change. Untouched today |
+| **DEF-301** | The message map matches by raw-text substring, so a key for DEF-279's five would match nothing, silently. Fixing it changes what *every* already-mapped constraint renders — **its own task with a before/after pass**, never a drive-by |
+
+---
+
+## Traps that have actually bitten — live in this area right now
+
+- ⛔ **`git status` can lie about another session's file.** It reported one clean while
+  `git hash-object` already differed from `git rev-parse HEAD:<path>`. **Run
+  `git update-index --refresh` first.** Two reads of the same line seconds apart disagreed because
+  a lane was writing it — use one authoritative command, not two that agree by luck.
+- ⛔ **Never `git stash` in this tree.** It sweeps every session's work, and untracked files have no
+  recovery path. To answer *"is this mine?"* use `git diff HEAD -- <path>`.
+- ⛔ **Never `npm run test:integration`** — it hits the shared database and truncates a peer's
+  fixtures mid-run. Give every lane its own DB (`make-test-dbs.mjs`). No collision all day.
+- ⛔ **Stop the dev server before `npm run build`** and verify by process enumeration, not by
+  intent. A build clobbers the `.next` a dev server is serving and presents as a phantom
+  application bug in whatever you happen to be testing.
+- ⚠️ **In PowerShell, `VAR=1 cmd` does not set the variable.** Use
+  `$env:INTEGRATION_RESTRICTED_ROLE=1` as its own statement, or the suite passes and you conclude
+  nothing is broken.
+- ⛔ **Never add an RLS policy to make the app role work on the ETL tables.** They carry FORCE RLS
+  with zero policies *by design* (`0011:142-160`) and hold captured production PII. A policy that
+  admits the app role admits every tenant.
+- ⭐ **Ask a lane a question, not only for a change.** T-267's invariant 4 asked *"does the sweep's
+  delete actually delete?"* That one sentence produced DEF-297, DEF-298 and DEF-299. None would
+  have been found by a test.
+- ⭐ **Name the expected reds in the briefing.** Both lanes hit guard failures that were correct
+  consequences of correct work; because the briefing predicted them by name, both reported them
+  verbatim instead of "fixing" a shared guard.
+
+---
+
+## Live agent sessions at wrap-up
+
+| Session | Lane | Model | Lane DB | State |
+|---|---|---|---|---|
+| `webapps-4e` | A | Sonnet 5 | `shareat_test_lanea` | **released, idle**, no work in flight. Built T-267, T-269, T-270 |
+| `webapps-65` | B | Sonnet 5 | `shareat_test_laneb` | **released, idle**, no work in flight. Built T-268 |
+| `system32-85` | orchestrator | Opus 5 | `shareat_test_orch` | this session — clear it |
+
+⭐ **`webapps-65` was brought onto the team by Ian today**, reversing yesterday's *"reports to you
+but does not take orders from you."* He pasted the worker line and ran `/model sonnet` himself.
+⛔ **Confirm with Ian before assuming that again** — it was a decision for one day, not a standing
+change.
+
+**Worker lanes stay alive and are re-adopted; only the orchestrator is cleared** (CLAUDE.md, Ian
+2026-09-07).
+
+---
+
+## The paste-ready prompt
 
 ```
-etl-run          16   DEF-289      first-run-setup   0   (fixed today)
-capture           3   DEF-289      organizations     1   DEF-288 (the 5th question)
-firestore-relay   2   scheduler:508
-files             1   DEF-287      email-sign-in     3   DEF-288 (the 5th question)
-sign-out-action   0   (fixed today)
+You are the orchestrator for shareat-system (C:\Users\ianla\webapps\shareat-system), picking up
+from the 2026-09-12 handoff. Run the global /orchestrator skill.
+
+Read in this order: docs/RULES.md, docs/HANDOFF-TODAY.md, PROJECT_BIBLE.md §3/§9/§13 rows 194-195,
+docs/DEFECTS-REGISTER.md section E (DEF-295 to DEF-301 are today's).
+
+Your first job is finishing the DEF-218 flip — §Pick up here has the exact commands and the
+one-line change. Run the full restricted-role suite ONCE on a quiet machine with nothing else
+running, read the OUTPUT rather than the exit code, and only then flip. Do not flip on composite
+evidence.
+
+Two worker sessions are alive and idle and are yours to re-adopt: webapps-4e (lane A,
+shareat_test_lanea) and webapps-65 (lane B, shareat_test_laneb), both Sonnet 5. Confirm with Ian
+before tasking webapps-65 — it joined the team for one day only.
+
+Migration slot 0143 is free; `when` must exceed 1798342307084. Next task T-271, next defect DEF-302.
 ```
-
-⚠️ **Red ONLY under `INTEGRATION_RESTRICTED_ROLE=1`, which is opt-in and off by default.** Nothing
-gates `main` today. ⛔ **If you see a red that is not on this list, it is a regression — find it,
-do not absorb it.**
-
-**Reproduce:** `INTEGRATION_RESTRICTED_ROLE=1 node ~/.claude/skills/orchestrator/tools/it.mjs shareat_test_qa`
-⚠️ That is bash. In PowerShell set `$env:INTEGRATION_RESTRICTED_ROLE=1` first, or the suite passes
-and you will conclude nothing is broken.
-
----
-
-## 4. ⭐ THE METHOD THAT PRODUCED FIVE PRODUCTION DEFECTS — reuse it
-
-T-265 looked like "repair 623 broken tests." Four of the five defects found came from **one rule
-given to the lane**:
-
-> Every failure is one of two kinds with opposite fixes: (a) a test forgot its organisation → fix
-> the test; (b) a **production** path reads or writes org-scoped data with no principal → ⛔
-> **report it, do not patch the test.** If you cannot tell which, **ask**.
-
-⛔ **A wrong call in direction (b) is the worst possible outcome** — it makes tests green while
-hiding exactly the defects the exercise exists to find. DEF-288 was three red tests a lane
-declined to wrap.
-
-**The taxonomy grew to four during the day, and it is the durable part:**
-
-1. **(a)** the test forgot its principal → wrap **at the layer production wraps, no deeper**.
-   ⛔ If a test only goes green when you wrap something *deeper* than production does, that is a
-   (b) you just found.
-2. **(b)** production forgot → report.
-3. **(c)** the test's *method* depends on the bypass — it runs without a principal **on purpose**,
-   to prove the app layer scopes on its own (bible §15.11). ⛔ Wrapping it makes it green and
-   **deletes what it tested**. Re-arm the bypass explicitly instead (`systemTransaction()`).
-   Spot them by: two orgs built, or the words *"own query"*, *"not merely masked"*, *"not only by
-   RLS"*.
-4. **(d)** the test asserts **which layer refuses**. RLS now refuses *earlier*. ⛔ Never adjust the
-   expected error to match what you observed — that converts a finding into a rubber stamp.
-
-### ⭐ And the deeper pattern, which is this project's real disease
-
-Five things found today were all *"something ran, reported success, and proved nothing"*:
-
-- a **silent read** — returns zero rows and lets the caller invent a reason (344 × *"no fiscal
-  period covers"* against periods that existed)
-- a **silent write** — `UPDATE … WHERE` matches nothing, no error (sign-out)
-- a **swallowed error** — caught by design and folded into a report nobody reads
-  (`replenishAfterUsage`)
-- a **test that touches the path and misses the property** (DEF-290, `webapps-65`)
-- a **guard whose pattern cannot match its own bug** (`webapps-65`, found by reintroducing the
-  defect and watching for red)
-
-⛔ **When a test fails on a COUNT with no error message anywhere, look for a swallowing `catch` in
-the production path before assuming a fixture gap.** The error-signature ranking cannot see that
-shape.
-
----
-
-## 5. In flight and unfinished
-
-**T-264 (fiscal period lock).** Slices 1 and 2 shipped. **Slice 3 — the override — is unbuilt**
-and unblocked by bible row 193. It needs a new `override_period_lock` capability and a migration
-slot. ⚠️ Write it **after** the row-194 work lands: it adds a capability, and today established
-that capability grants are how super-admin authority is actually expressed, so the two interact.
-⛔ Non-negotiables are in the task doc: reuse migration `0005`'s transaction-local GUC so an unset
-flag fails CLOSED; set the flag only after `authorize()`; never implement the override in
-TypeScript around the trigger; **watch a manager's override be refused before wiring the
-exemption**.
-
-**Unsliced, named so it is not lost:** the **year-close journal entry** ADR-006 describes (one
-entry via `postEntry`, dated the following Jan 1, zeroing income/expense into 3300, distinct
-`source_type`). Nobody has assigned it. A lane correctly refused to build it as part of slice 2.
-
-**DEF-279** — still `reported`, untouched today. ⛔ Before writing the migration, diff the five
-proposed function bodies against live `pg_get_functiondef` output. Do not trust the spec's copies.
-
-**DEF-293 / DEF-294** — two findings against a **ratified ADR**, from being the first to implement
-it. 293: a close gate that can never fire. 294: three of five gates are continuous, not
-period-scoped. Both are Ian's to weigh; neither implies a code change.
-
-**Cosmetic, still unfixed:** 13 records dated 2026-09-11 that describe 2026-09-10 events.
-
-**Ian's own:** the month-end timer deploy. Safe any time — the 15th 02:00 Manila schedule is
-immune to everything above.
-
----
-
-## 6. ⚠️ The shared tree bit three times today. Read this before you run anything.
-
-Three sessions were in one working tree. All three incidents were disclosed, none caused lasting
-damage, and each teaches something the protocol did not cover:
-
-1. **A peer ran `git stash --include-untracked`** to test whether a red was theirs, sweeping a
-   lane's untracked in-flight work for ~30 seconds. It came back; I verified independently rather
-   than accepting the report. ⛔ **Use `git diff HEAD -- <path>` to answer "is this mine?"** —
-   stash moves everyone's work, and untracked files have no recovery path if a pop fails.
-2. **A peer ran `next build` while a dev server was on 9008**, clobbering the `.next` it served.
-   ⚠️ **It presents as an application bug in whatever feature you happen to be testing.** It cost
-   me twenty minutes, and I had a plausible culprit of my own — I had shipped the auth door an
-   hour earlier and the symptom was DEF-288's exact error text. What stopped a wrong diagnosis was
-   **measuring the layer** (dev connects as `postgres`, `rolbypassrls = t`, so RLS could not be
-   involved) instead of reasoning from the symptom. Announce before taking 9008; release it
-   explicitly.
-3. ⭐ **Explicit-path staging is NOT enough when two sessions edit the same file.** A peer's commit
-   swept in one line of a lane's work — a barrel export in `packages/domain/src/index.ts` — because
-   it legitimately staged that path for its own change. Harmless here. **Check `git diff --cached`
-   before committing a file another lane may also be in**, not just the path list.
-
----
-
-## 7. Standing rules worth not relearning
-
-- ⛔ **Re-run every gate yourself.** A lane's numbers are a hypothesis. Twice today my own count
-  was wrong before it was right, and once a lane's was right where mine was wrong.
-- ⭐ **Write your prediction down before a long run.** I predicted 8 files / 31 tests before the
-  closing census; it returned 9 / 37, and the difference was a file I had handed back and never
-  confirmed. Without the written prediction that would have read as interference.
-- ⛔ **A guard firing is not an obstacle.** Three fired today; each was answered with reasoning in
-  the guard's own comment, never a bumped number. One of them had been saying *"all three"* while
-  listing five.
-- ⚠️ **Ruling out one cause is not ruling out the problem.** I eliminated a suspect this morning
-  and filed the remainder as "a cascade". It was DEF-287.
-- ⭐ **Ian wants plain language when you report back or ask him to decide** — the idea plus only
-  what bears on the decision. Technical depth belongs here, in commits, and in the register.

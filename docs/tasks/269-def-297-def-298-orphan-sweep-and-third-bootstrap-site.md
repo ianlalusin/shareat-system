@@ -1,7 +1,6 @@
 # T-269 — DEF-297 / DEF-298: make the orphan sweep honest, and finish Ian's bootstrap ruling
 
-**Status:** `spec approved` — lane A (`webapps-4e`, Sonnet). Opened 2026-09-12 by orchestrator
-`system32-85`. Reserves task number 269.
+**Status:** `COMPLETE 2026-09-12` — shipped `9793175`, lane A. DEF-297 and DEF-298 fixed, third bootstrap site routed. ⛔ **Read DEF-299 before wiring the sweep**: it has no caller and never has, so DEF-298 had never fired.
 
 > ⭐ **You found both of these.** T-267 asked you one question — *does the sweep's delete actually
 > delete?* — and the answer turned out to be two defects, one of them data loss. This task is

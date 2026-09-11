@@ -1,8 +1,6 @@
 # T-270 — DEF-279: the five deepest accounting invariants become visible to the counter
 
-**Status:** `spec approved` — lane A (`webapps-4e`, Sonnet). Opened 2026-09-12 by orchestrator
-`system32-85`. Reserves task number 270. **Migration slot 0142 allocated to this lane** (the only
-slot outstanding).
+**Status:** `COMPLETE 2026-09-12` — shipped `f0aebed`, lane A. Migration `0142`. ⛔ Spec correction 1 is the important part: the fix on record since 2026-09-10 would have applied cleanly and changed nothing. ⚠️ The orchestrator caused a user-visible regression by widening scope beyond the defect; reverted, and DEF-301 filed for the trap behind it.
 
 > ⛔ **Part 1 is a verification pass and it is NOT optional.** Yesterday's handoff names this task
 > and attaches exactly one non-negotiable to it: *"Before writing the migration, diff the five

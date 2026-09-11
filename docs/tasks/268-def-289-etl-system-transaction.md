@@ -1,7 +1,6 @@
 # T-268 — DEF-289: the ETL pipeline runs on the system connection, because nothing else can reach it
 
-**Status:** `spec approved` — lane B (Sonnet). Opened 2026-09-12 by orchestrator `system32-85`.
-Reserves task number 268.
+**Status:** `COMPLETE 2026-09-12` — shipped `7f621ff`, lane B (`webapps-65`, Sonnet). Eight call sites, not the six on record. ⚠️ Spec corrections 1 and 2 record a stale guard claim and a capture-test path that did not exist.
 
 > ⛔ **Read §1 before you change a single line.** The ETL tables are deny-all by design. There is
 > exactly one correct fix and one very tempting wrong one, and the wrong one hands every tenant a

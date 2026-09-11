@@ -1,7 +1,6 @@
 # T-267 — Route the admitted cross-organisation reads through `systemTransaction()`
 
-**Status:** `spec approved` — lane A (`webapps-4e`, Sonnet). Opened 2026-09-12 by orchestrator
-`system32-85`. Reserves task number 267.
+**Status:** `COMPLETE 2026-09-12` — shipped `a381b84`, lane A (`webapps-4e`, Sonnet). Four call sites routed; DEF-295 and DEF-296 fixed alongside as orchestrator-owned guard repairs. ⚠️ Spec correction 1 records that its red table was copied from the handoff rather than measured, and was wrong.
 
 > ⛔ **This task adds callers to a closed list. It does not widen the list itself.** Two guard
 > files react to this change and **both are orchestrator-owned** — see §Out of scope. The red they
