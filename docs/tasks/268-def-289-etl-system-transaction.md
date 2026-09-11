@@ -35,7 +35,7 @@ row visible. The owner connection is the only thing that can see these tables at
 
 If a test still fails, you may find yourself reasoning: *"the app role can't read `etl_runs`, so
 `etl_runs` needs a policy."* **Never add, weaken, or create a policy on `audit_log`, `etl_runs`,
-`etl_source_documents`, `etl_quarantine` or `etl_reconciliations`.** Those tables hold captured
+`etl_source_documents`, `etl_quarantine` or `etl_reconciliation`.** Those tables hold captured
 production PII from the live business. A policy that makes the app role work is a policy that makes
 **every tenant** able to read it. If you believe a policy is required, that is a **BLOCKED** report
 to `system32-85`, not a migration.
@@ -48,11 +48,37 @@ to `system32-85`, not a migration.
 packages/etl/src/run.ts                         (6 call sites)
 packages/db/src/repo/etl.ts                     (2 call sites — see §3, the handoff missed these)
 packages/etl/tests/integration/etl-run.test.ts
-packages/etl/tests/integration/capture.test.ts
+packages/etl-firestore/tests/integration/capture.test.ts   (VERIFICATION-ONLY — see §2a)
 ```
 
-⚠️ Test file paths are the ones the red is reported under; confirm the real paths with
-`git ls-files | rg "etl.*test"` before assuming. If they differ, say so — do not silently widen.
+### §2a — ⛔ SPEC CORRECTION, 2026-09-12: the capture path in the first draft was WRONG
+
+⭐ **Lane B checked the paths instead of assuming them, and found the file does not exist.** The
+first draft said `packages/etl/tests/integration/capture.test.ts`. There is no such file. It also
+disambiguated three same-named candidates by RUNNING all of them rather than reasoning about names —
+that is the standard, and it is why this was caught before a single edit.
+
+| Candidate | Verdict |
+|---|---|
+| `packages/etl/tests/capture.test.ts` | a **unit** test of `capture.ts`'s sampling job; 22/22 green under the flag — **not it** |
+| `packages/etl/tests/integration/capture.test.ts` | **does not exist** |
+| `packages/etl-firestore/tests/integration/capture.test.ts` | 3 failed, all `new row violates row-level security policy for table "etl_runs"` — **this is the file** |
+
+**Ruling: it is IN SCOPE as VERIFICATION-ONLY.** It must go green, and you may not edit it. Lane B's
+read is accepted — it is a downstream consumer of `runCaptureMode` with no bypassing reads of its
+own, so it should go green on your production change alone. ⛔ If it turns out to need an edit, that
+is a `[B] QUESTION`, not a silent widening.
+
+### ⚠️ AND A FOURTH FILE NEITHER OF US LISTED
+
+`packages/etl/tests/integration/replay.test.ts` sits in the same directory and is in **neither** the
+handoff's red list nor this spec's. It is an integration test of the ETL package you are changing.
+**Add it as a MUST-STAY-GREEN regression check** — run it both ways before and after. It is not
+expected to be red; if it is red before your edit, report that as a finding, because it would mean
+the handoff's census missed a file.
+
+⚠️ Also corrected throughout: the table is `etl_reconciliation` (**singular**) — migration
+`0011:164` and `schema/etl.ts`. The first draft said `etl_reconciliations`.
 
 ---
 
@@ -64,11 +90,11 @@ Yesterday's handoff names `packages/etl/src/run.ts:122,148,246,260,303,339`. Tha
 | # | Site | Writes/reads | Note |
 |---|---|---|---|
 | 1 | `run.ts:122` | `landDocument` → `etl_source_documents` | deny-all |
-| 2 | `run.ts:148` | `writeReconciliation` → `etl_reconciliations` | deny-all |
+| 2 | `run.ts:148` | `writeReconciliation` → `etl_reconciliation` | deny-all |
 | 3 | `run.ts:246` | `findCurrentDocuments` → `etl_source_documents` | deny-all |
 | 4 | `run.ts:260` | `postEntry` **+** `resolveQuarantineForDocument` | ⭐ **mixed — see §4** |
 | 5 | `run.ts:303` | `quarantineDocument` → `etl_quarantine` | deny-all |
-| 6 | `run.ts:339` | `writeReconciliation` → `etl_reconciliations` | deny-all |
+| 6 | `run.ts:339` | `writeReconciliation` → `etl_reconciliation` | deny-all |
 | **7** | **`packages/db/src/repo/etl.ts:98`** | **`startRun` → `etl_runs`** | ⛔ **opens its OWN transaction** |
 | **8** | **`packages/db/src/repo/etl.ts:140`** | **`finishRun` → `etl_runs`** | ⛔ **opens its OWN transaction** |
 
@@ -148,10 +174,11 @@ node C:/Users/ianla/.claude/skills/orchestrator/tools/it.mjs shareat_test_laneb 
 …with the restricted role ON. ⚠️ **PowerShell: `$env:INTEGRATION_RESTRICTED_ROLE=1` first**, or the
 suite passes and you will conclude nothing is broken.
 
-| File | Red tests |
+| File | Expected |
 |---|---|
-| `etl-run` | 16 |
-| `capture` | 3 |
+| `packages/etl/tests/integration/etl-run.test.ts` | **16 red** → green (lane B measured 16 failed / 5 passed of 21) |
+| `packages/etl-firestore/tests/integration/capture.test.ts` | **3 red** → green (measured 3 failed of 3) |
+| `packages/etl/tests/integration/replay.test.ts` | ⚠️ **must stay green** — regression check, not expected red |
 
 Also run both files **without** the flag and confirm they are still green — the default role must
 not regress.
