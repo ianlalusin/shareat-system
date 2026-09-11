@@ -64,8 +64,13 @@ jobs:
 
       # T-251 / DEF-218 Contract 1: the restricted test role, cluster-wide, idempotent.
       # Must run before migrations apply the per-database grants that give it teeth.
-      # INTEGRATION_RESTRICTED_ROLE stays unset here — provisioning the role is harmless
-      # and lands first so arming it later (tests/integration/setup.ts) is a one-line change.
+      #
+      # ⭐ DEF-218 CLOSED 2026-09-12 — the role is now ON BY DEFAULT, so this step is no longer
+      # preparation for a later flip: it is a HARD PREREQUISITE of the integration step below.
+      # tests/integration/setup.ts arms the restricted role unless INTEGRATION_RESTRICTED_ROLE
+      # is explicitly '0', and nothing sets it here. ⛔ Delete or reorder this step and every
+      # integration test fails to connect — loudly, which is the correct direction.
+      # Evidence for the flip: 116 files / 2747 tests / 0 failed, one clean single-invocation run.
       - name: Provision restricted test role
         run: node scripts/provision-test-role.mjs
 

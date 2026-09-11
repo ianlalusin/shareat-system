@@ -39,13 +39,29 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
  * principal is then refused loudly (`42501`) instead of quietly succeeding because the connecting
  * role happened to bypass RLS. That is the whole of DEF-218.
  *
- * ⚠️ **OFF BY DEFAULT, and that is a deliberate, temporary, tracked state — not a permanent
- * escape hatch.** Arming it suite-wide turns every pre-existing unprincipalled path red at once,
- * and this project has already ruled that shipping a permanently red gate is worse than the
- * defect, because it teaches the next person to say "that red is expected". So the flip is opt-in
- * until the red set is measured and repaired, then the default flips and DEF-218 closes.
+ * ⭐ **ON BY DEFAULT as of 2026-09-12 — DEF-218 IS CLOSED.** This was opt-in from T-251 until the
+ * red set it exposed was measured and repaired. It was: 623 red tests across 43 files (T-265) down
+ * to 19, then to zero once bible row 194's three cross-org subsystems and Ian's bootstrap ruling
+ * (row 195) were routed through `systemTransaction()` — T-267, T-268, T-269.
  *
- *     INTEGRATION_RESTRICTED_ROLE=1 npx vitest run --project integration
+ * ⛔ **The evidence for this flip, because a gate this important is not flipped on a hunch:** one
+ * clean full-suite run, single invocation, quiet machine, migration 0142 applied —
+ * **116 files / 2747 tests / 0 failed (1642s), 2026-09-12.** ⚠️ Not a composite of partial runs:
+ * the same suite had already been seen green in two halves plus re-runs, and that was deliberately
+ * judged insufficient, because "it was green in parts" is how a project inherits a belief it never
+ * actually measured.
+ *
+ * ⚠️ **The reason it was opt-in matters and has not changed:** arming this suite-wide turns every
+ * pre-existing unprincipalled path red at once, and shipping a permanently red gate is worse than
+ * the defect — it teaches the next person to say "that red is expected". It is armed now precisely
+ * because there is nothing left for it to turn red.
+ *
+ * To opt OUT for one run — debugging a fixture, bisecting an unrelated failure:
+ *
+ *     INTEGRATION_RESTRICTED_ROLE=0 npx vitest run --project integration
+ *
+ * ⛔ A green run with the flag set to `0` proves nothing about tenancy. If you opt out to get a
+ * suite green, say so out loud; do not let it become the way the suite is run.
  *
  * ⚠️ `SYSTEM_DATABASE_URL` is pointed at the admin connection whenever the flag is on, so
  * `systemTransaction()`'s enumerable cross-org call sites (scheduler bookkeeping, first-run
@@ -62,7 +78,11 @@ export const RESTRICTED_TEST_ROLE = 'shareat_test_runner';
 /** Test-only constant, deliberately not a secret. Keep in step with the provisioning script. */
 export const RESTRICTED_TEST_PASSWORD = 'shareat_test_runner';
 
-if (process.env.INTEGRATION_RESTRICTED_ROLE === '1') {
+// ⭐ Opt-OUT, not opt-in — DEF-218 closed 2026-09-12. Only an explicit '0' disarms it, so a
+// missing or misspelled variable arms the role rather than silently disarming it. That
+// direction is deliberate: the failure mode of this flag must be "too strict", never
+// "quietly not testing tenancy at all".
+if (process.env.INTEGRATION_RESTRICTED_ROLE !== '0') {
   // `new URL()`, never string surgery — a password may legitimately contain `@`.
   const restricted = new URL(url);
   restricted.username = RESTRICTED_TEST_ROLE;

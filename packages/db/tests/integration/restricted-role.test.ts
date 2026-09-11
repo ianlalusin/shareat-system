@@ -6,14 +6,18 @@ import postgres from 'postgres';
  * actually closes the hole DEF-218 names. `docs/tasks/251-def-218-integration-harness-role.md`.
  *
  * ⚠️ **Why this file opens its OWN restricted connection instead of using `transaction()` /
- * `DATABASE_URL`, unlike the spec's own Contract 4 sketch.** `INTEGRATION_RESTRICTED_ROLE` is
- * **off by default** (`tests/integration/setup.ts`) — the flip that arms it suite-wide is
- * deliberately opt-in until the resulting red set is measured and repaired. A control written
- * against `transaction()` would therefore be red the moment it is committed, every run, until
- * someone flips a flag nobody flips by default — exactly the "permanently red gate teaches
- * everyone to ignore red" trap `setup.ts`'s own header warns about. Building the connection here
- * explicitly means these tests are armed and green REGARDLESS of the flag, and they prove the
- * mechanism itself (the role's own grants) rather than today's harness configuration.
+ * `DATABASE_URL`, unlike the spec's own Contract 4 sketch.** When this was written
+ * `INTEGRATION_RESTRICTED_ROLE` was **off by default**, so a control written against
+ * `transaction()` would have been red every run until someone flipped a flag nobody flipped —
+ * exactly the "permanently red gate teaches everyone to ignore red" trap `setup.ts`'s header warns
+ * about.
+ *
+ * ⭐ **That is no longer true: the flag went ON BY DEFAULT on 2026-09-12 and DEF-218 is closed.**
+ * This file is deliberately left as it is anyway, and the reason is better than inertia — building
+ * its own connection explicitly means it proves the MECHANISM (the role's own grants, from the
+ * login role's side of the boundary) rather than today's harness configuration. It would stay green
+ * and meaningful even if someone disarmed the default again, which is exactly what you want from a
+ * control.
  *
  * ⭐ **The asymmetry this file exists to pin down, in executable form:** a forgotten principal
  * makes a WRITE fail loudly (SQLSTATE `42501`) and a READ fail *silently* — zero rows, which

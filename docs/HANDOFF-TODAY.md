@@ -10,11 +10,16 @@ and pushed.** All three of bible row 194's cross-organisation subsystems now go 
 **Nothing is half-built and nothing is mid-flight.** Both worker lanes were brought to a clean stop
 at a task boundary with no uncommitted work of their own.
 
-⛔ **One thing is deliberately not done: the DEF-218 flip.** All 115 integration files have been
-observed green under the restricted role, but *in pieces* — two halves plus targeted re-runs, with
-a migration landing in the middle. A single clean full-suite run was still executing when the day
-was wrapped. **Flipping a gate this important on composite evidence is how a project inherits "it
-was green in parts."** §Pick up here tells you exactly how to finish it.
+⭐ **DEF-218 IS CLOSED. The restricted role is ON BY DEFAULT, and the production database role
+switch is unblocked.** The flip was held back all evening for one reason — all 115 files had been
+seen green only *in pieces*, two halves plus re-runs with a migration landing in between, and
+*"it was green in parts"* is a belief rather than a measurement. The single clean run finished
+after the wrap-up began: **116 files / 2747 tests / 0 failed, one invocation, quiet machine,
+migration 0142 applied.** The flip was then made and **verified three ways** rather than assumed
+(§Gates).
+
+⚠️ **What remains is Ian's, not an engineering step:** actually tightening `DATABASE_URL` on the
+production host. Nothing in the codebase blocks it now.
 
 ---
 
@@ -29,7 +34,8 @@ was green in parts."** §Pick up here tells you exactly how to finish it.
 | `npm run build` | **exit 0** (run twice today, dev server stopped first and process-verified both times) |
 | Smoketest on 9008 | **passed** — `/sign-in` 200; `/setup` with a forged setup cookie returns *"This system is already set up."* |
 | Integration, **default** role | green |
-| Integration, **restricted** role | ⚠️ **all 115 files seen green, but across two halves + re-runs.** Single clean run in flight at wrap-up |
+| Integration, **restricted** role | ⭐ **116 files · 2747 passed · 0 failed** — one clean single invocation, 1642s, quiet machine, `0142` applied |
+| The DEF-218 flip itself | ⭐ **proven, not assumed** — throwaway probe run three ways then deleted: unset → `shareat_test_runner`; `=0` → `postgres`; `=1` → `shareat_test_runner`. Post-flip sample with **no flag at all**: 6 files / 51 passed |
 
 ⚠️ **Every number above was re-run by the orchestrator on its own database, never accepted from a
 lane.** Each lane's numbers matched on every slice.
@@ -97,37 +103,25 @@ that already used `systemTransaction()`. Bible version bumped to 3.14; it had be
 
 ## Pick up here
 
-**1. Finish the DEF-218 flip. This is item one and it is nearly done.**
+⚠️ **The flip is DONE — do not redo it.** `tests/integration/setup.ts` is opt-OUT now. If you need
+a permissive run for debugging, `INTEGRATION_RESTRICTED_ROLE=0`, and ⛔ say out loud that you did:
+a green run with the flag at `0` proves nothing about tenancy.
 
-Run the full suite once, cleanly, then flip:
+**1. T-264 slice 3 — the fiscal-period override.** Unblocked now the routing has landed. Needs a new
+`override_period_lock` capability and **migration slot 0143** (`when` must exceed `1798342307084`).
+⛔ Non-negotiables are in `docs/tasks/264-*.md`: reuse migration `0005`'s transaction-local GUC so
+an unset flag fails **closed**; set the flag only after `authorize()`; never implement the override
+in TypeScript around the trigger; **watch a manager's override be refused before wiring the
+exemption.**
 
-```bash
-node ~/.claude/skills/orchestrator/tools/make-test-dbs.mjs shareat_test_orch   # ensure 0142 applied
-INTEGRATION_RESTRICTED_ROLE=1 node ~/.claude/skills/orchestrator/tools/it.mjs shareat_test_orch > /tmp/census.txt 2>&1
-grep -E "^ Test Files|^      Tests " /tmp/census.txt
-```
+**2. The year-close journal entry** (ADR-006), still unassigned: one entry via `postEntry`, dated
+the following Jan 1, zeroing income/expense into 3300, with a distinct `source_type`.
 
-⛔ **Nothing else may run on the machine while it does** — no build, no second suite. That is not
-caution, it is the mistake I made today.
-
-If green, the flip itself is **one line**, exactly as the harness was designed for:
-`tests/integration/setup.ts:65`, `=== '1'` → `!== '0'` (opt-in becomes opt-out), plus the doc
-comment above it which describes the opt-in state as temporary, plus the now-wrong comment at
-`.github/workflows/ci.yml:67`. CI needs no other change — it picks the default up automatically.
-Then mark **DEF-218 fixed** and tell Ian the production role switch is unblocked.
+**3. DEF-299, once Ian rules** — wiring the orphan sweep to a timer, on the pattern of the six in
+`docs/ops/`. Both its bugs are fixed, so it is safe now; it was not this morning.
 
 ⚠️ **Exit code 0 is not a result.** A killed background census reported exit 0 twice today, and a
 completed one reported exit 0 while its own summary said 3 tests failed. **Read the output.**
-
-**2. Then T-264 slice 3** — the fiscal-period override. Unblocked now the routing has landed. Needs
-a new `override_period_lock` capability and **migration slot 0143** (`when` must exceed
-`1798342307084`). ⛔ Non-negotiables are in `docs/tasks/264-*.md`: reuse migration `0005`'s
-transaction-local GUC so an unset flag fails **closed**; set the flag only after `authorize()`;
-never implement the override in TypeScript around the trigger; **watch a manager's override be
-refused before wiring the exemption.**
-
-**3. Then the year-close journal entry** (ADR-006), still unassigned: one entry via `postEntry`,
-dated the following Jan 1, zeroing income/expense into 3300, with a distinct `source_type`.
 
 ---
 
@@ -196,10 +190,10 @@ from the 2026-09-12 handoff. Run the global /orchestrator skill.
 Read in this order: docs/RULES.md, docs/HANDOFF-TODAY.md, PROJECT_BIBLE.md §3/§9/§13 rows 194-195,
 docs/DEFECTS-REGISTER.md section E (DEF-295 to DEF-301 are today's).
 
-Your first job is finishing the DEF-218 flip — §Pick up here has the exact commands and the
-one-line change. Run the full restricted-role suite ONCE on a quiet machine with nothing else
-running, read the OUTPUT rather than the exit code, and only then flip. Do not flip on composite
-evidence.
+DEF-218 is CLOSED and the restricted role is on by default — do not redo that flip. Your first
+job is T-264 slice 3, the fiscal-period override; §Pick up here has its non-negotiables and its
+migration slot. Tell Ian that tightening DATABASE_URL on the production host is now unblocked and
+is his call, not an engineering step.
 
 Two worker sessions are alive and idle and are yours to re-adopt: webapps-4e (lane A,
 shareat_test_lanea) and webapps-65 (lane B, shareat_test_laneb), both Sonnet 5. Confirm with Ian
