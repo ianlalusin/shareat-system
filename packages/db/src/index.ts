@@ -27,6 +27,19 @@ export { getSql, getDb, closeDb, transaction } from './client';
  * way `scripts/bootstrap-org.ts` already imports `closeDb`/`transaction`.
  */
 export { systemTransaction } from './client';
+/**
+ * `authTransaction` — bible §13 row 194, DEF-288. Same reasoning as the block above applies to
+ * it unchanged: exported alone, never alongside a raw accessor, and closed by its own guard at
+ * `tests/unit/auth-transaction-callers.test.ts`.
+ *
+ * ⛔ **A SEPARATE name from `systemTransaction`, on purpose.** Both resolve to the same privileged
+ * connection, so this buys nothing physically — it buys that *"crosses organisations because it is
+ * a scheduler"* and *"…because it is establishing who you are"* stay two greppable permissions
+ * with two separate closed lists. Row 194 exists because collapsing them is how the second stops
+ * being visible, and row 185 had already shown that one undifferentiated list acquires callers
+ * nobody re-reads.
+ */
+export { authTransaction } from './client';
 export type { Tx, Executor, Database } from './client';
 /** Asset categories — the const list and its derived union. Exported here rather than reached
  *  through a schema subpath so `packages/domain` has one import surface for the db package. */

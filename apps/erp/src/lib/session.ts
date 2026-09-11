@@ -65,7 +65,10 @@ export async function currentSession(): Promise<ResolvedSession | null> {
   const token = await readSessionToken();
   if (!token) return null;
   try {
-    return await transaction((tx) => resolveActor(tx, token));
+    // ⛔ `null`, so `resolveActor` opens its own `authTransaction` — DEF-288, bible row 194.
+    // Handing it a bare `transaction()` here is what made EVERY authenticated request fail
+    // under a non-bypassing role: the session read is org-scoped via `persons`.
+    return await resolveActor(null, token);
   } catch (err) {
     if (err instanceof AuthenticationError) return null;
     throw err;

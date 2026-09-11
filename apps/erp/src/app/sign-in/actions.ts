@@ -39,7 +39,8 @@ export async function signInAction(formData: FormData): Promise<void> {
   let redirectTo: string;
   try {
     if (!storeId) throw new AuthenticationError('Choose a store first.');
-    const result = await transaction((tx) => signInWithPin(tx, { storeId, pin }));
+    // `null` — the credential lookup precedes knowing the org (DEF-288, bible row 194).
+    const result = await signInWithPin(null, { storeId, pin });
     await setSessionCookie(result.token, result.expiresAt);
     redirectTo = next;
   } catch (err) {
@@ -77,7 +78,9 @@ export async function signInWithEmailAction(formData: FormData): Promise<void> {
   let redirectTo: string;
   try {
     const identity = await verifyFirebaseIdToken(idToken);
-    const outcome = await transaction((tx) => resolveVerifiedSignIn(tx, identity.uid));
+    // No transaction here — `resolveVerifiedSignIn` opens the right one for each half of the
+    // question it asks (DEF-288, bible row 194).
+    const outcome = await resolveVerifiedSignIn(identity.uid);
 
     if (outcome.kind === 'signed-in') {
       await setSessionCookie(outcome.token, outcome.expiresAt);
@@ -109,7 +112,9 @@ export async function signOutAction(): Promise<void> {
   if (token) {
     // End the SERVER session first. Clearing only the cookie would leave a live token that a
     // copy of it could still use — the browser forgetting is not the session ending.
-    await transaction((tx) => signOut(tx, token));
+    // `null` — DEF-288. With a bare transaction the session read returned nothing and
+    // sign-out silently did not end the session.
+    await signOut(null, token);
   }
   await clearSessionCookie();
   redirect('/sign-in');

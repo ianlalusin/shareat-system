@@ -144,6 +144,48 @@ export async function systemTransaction<T>(fn: (tx: Tx) => Promise<T>): Promise<
   return getSystemDb().transaction(fn);
 }
 
+/**
+ * ⭐ **The authentication door — bible §13 row 194, DEF-288.** A transaction for the handful of
+ * reads and writes that must happen BEFORE anyone knows which organisation is acting.
+ *
+ * ## Why this exists as its own name rather than a sixth `systemTransaction()` caller
+ *
+ * ⛔ **Authentication is a CIRCULARITY, not an exception granted for convenience.** Signing in is
+ * the act of discovering which organisation you belong to. RLS wants that organisation declared —
+ * `app_current_org()` — before it will show you the row that says which organisation you belong
+ * to. `person_credentials` and `sessions` both carry FORCE RLS with `_via_person` policies
+ * (migration `0018:69-80`) that resolve org through `persons`. With no principal that function
+ * returns NULL, `org_id = NULL` is NULL, and nothing matches. **`withOrgPrincipal` is not merely
+ * wrong on these paths — it is unexpressible.**
+ *
+ * ⚠️ **What that would have cost, measured rather than imagined:** with `DATABASE_URL` tightened
+ * and these paths unfixed, PIN sign-in returns *"that PIN is not valid for this store"*, Firebase
+ * sign-in returns *"not linked to a person"*, EVERY authenticated request returns *"Not signed
+ * in"*, and sign-out silently does nothing. Not degraded — the whole application unusable, at
+ * once. It fails CLOSED, so it is an availability wall and never a leak.
+ *
+ * ## ⛔ The closed list, and it is FOUR lookups — not "the auth package"
+ *
+ *   - `findActiveCredentialByLookupHash`  (PIN sign-in)
+ *   - `findActiveCredentialByExternalId`  (Firebase sign-in)
+ *   - `findLiveByTokenHash`               (every authenticated request, and sign-out's read)
+ *   - `endSession`                        (sign-out's write)
+ *
+ * ⭐ **The moment a session resolves, the actor's organisation is known and everything downstream
+ * goes back through `withOrgPrincipal`.** This door is for the gap before that fact exists, and
+ * `tests/unit/auth-transaction-callers.test.ts` fails the build if any file outside
+ * `packages/auth/src/sessions.ts` calls it.
+ *
+ * ⚠️ It is the same privileged connection `systemTransaction()` uses — deliberately a different
+ * NAME rather than a different socket. Row 194's point is that *"crosses organisations because it
+ * is a scheduler"* and *"…because it is establishing who you are"* are different permissions that
+ * must stay separately greppable; collapsing them into one list is how the second one stops being
+ * visible.
+ */
+export async function authTransaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return getSystemDb().transaction(fn);
+}
+
 /** Scripts and tests only, mirrors closeDb(). */
 export async function closeSystemDb(): Promise<void> {
   if (globalForDb.__shareat_system_sql) {

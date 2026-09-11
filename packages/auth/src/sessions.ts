@@ -13,7 +13,9 @@
  * makes those two controls real**, and neither module changes to benefit.
  */
 import type { Tx } from '@shareat/db';
-import { sessionsRepo, transaction } from '@shareat/db';
+// `transaction` remains for endShift / credential supersede — NOT auth-door work: both take a
+// person already resolved, and no caller passes null, so the fallback is unreached today.
+import { sessionsRepo, authTransaction, transaction } from '@shareat/db';
 import type { Actor } from './authorize';
 import { AuthenticationError } from './errors';
 import {
@@ -63,7 +65,8 @@ export async function signInWithPin(
   input: { storeId: string; pin: string; deviceId?: string },
 ): Promise<SignInResult> {
   if (tx) return runPinSignIn(tx, input);
-  return transaction((trx) => runPinSignIn(trx, input));
+  // DEF-288: the credential lookup precedes knowing the org, so it cannot carry a principal.
+  return authTransaction((trx) => runPinSignIn(trx, input));
 }
 
 const BAD_PIN = 'Sign-in failed: that PIN is not valid for this store.';
@@ -119,7 +122,8 @@ export async function signInWithFirebase(
   input: { verifiedUid: string },
 ): Promise<SignInResult> {
   if (tx) return runFirebaseSignIn(tx, input);
-  return transaction((trx) => runFirebaseSignIn(trx, input));
+  // DEF-288, as above.
+  return authTransaction((trx) => runFirebaseSignIn(trx, input));
 }
 
 async function runFirebaseSignIn(tx: Tx, input: { verifiedUid: string }): Promise<SignInResult> {
@@ -184,7 +188,9 @@ export interface ResolvedSession {
  */
 export async function resolveActor(tx: Tx | null, token: string): Promise<ResolvedSession> {
   if (tx) return runResolve(tx, token);
-  return transaction((trx) => runResolve(trx, token));
+  // DEF-288. This one runs on EVERY authenticated request: without the auth door a tightened
+  // role makes `findLiveByTokenHash` return zero rows and every request reports "Not signed in".
+  return authTransaction((trx) => runResolve(trx, token));
 }
 
 const NO_SESSION = 'Not signed in, or the session has expired. Please sign in again.';
@@ -219,11 +225,17 @@ async function runResolve(tx: Tx, token: string): Promise<ResolvedSession> {
 export async function signOut(tx: Tx | null, token: string): Promise<void> {
   const run = async (trx: Tx) => {
     const live = await sessionsRepo.findLiveByTokenHash(trx, sessionTokenHash(token));
-    if (!live) return; // already gone, or never was
+    // ⛔ "Already gone, or never was" — and until DEF-288 there was a THIRD meaning this
+    // could not tell apart: PRESENT BUT INVISIBLE. Read without a principal, an existing live
+    // session returns zero rows and no error, so this returned here, `ended_at` was never
+    // written, and sign-out reported success having done nothing. The auth door is what keeps
+    // those two cases two rather than three.
+    if (!live) return;
     await sessionsRepo.endSession(trx, live.id, 'signed_out');
   };
   if (tx) return run(tx);
-  return transaction(run);
+  // DEF-288: reads the session by token hash, which is org-scoped via `persons` — same gap.
+  return authTransaction(run);
 }
 
 /**

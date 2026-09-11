@@ -47,15 +47,16 @@ const repoRoot = join(import.meta.dirname, '..', '..');
 
 /**
  * ⛔ **Every entry is a path that reads on the unrestricted owner connection.** It is a confession
- * with a name attached, not a config knob — and all three are the same confession: **the org is
- * not known yet, and cannot be.**
+ * with a name attached, not a config knob — and every one is the same confession: **the org is
+ * not known yet, and cannot be.** ⚠️ This said "all three" while listing five; corrected
+ * 2026-09-11 rather than left to imply the list is smaller than it is.
  *
  * A principal needs an org. Sign-in RESOLVES the org: `sessionsRepo.findActiveCredentialByLookupHash`
  * searches `person_credentials` by a store-scoped hash before any organisation is known, and
  * `resolveActor` is the function that produces the actor everything else derives its principal
  * from. Requiring a principal here is a chicken-and-egg, not an oversight.
  *
- * ⚠️ Adding a fourth entry means claiming some other path also cannot know its org. Almost nothing
+ * ⚠️ Adding an entry means claiming some other path also cannot know its org. Almost nothing
  * qualifies. The test below refuses a stale entry, because an exemption that no longer matches a
  * real file makes the rule look narrower than it is, and the next person widens it by adding a
  * neighbour.
@@ -66,6 +67,7 @@ const PRE_AUTH_PATHS: readonly string[] = [
   'apps/erp/src/lib/session.ts', // resolveActor — it is what produces the actor
   'apps/erp/src/app/setup/actions.ts', // first-run setup (T-232): the org is not known yet, and cannot be — it is what this action CREATES; bible row 185 names the exception
   'apps/erp/src/app/setup/lib.ts', // the zero-organisation read the first-run page renders from; no org exists to be the principal
+  'apps/erp/src/app/sign-in/lib.ts', // resolveVerifiedSignIn's SECOND half — the identical zero-organisation read as setup/lib.ts above, asked of an unauthenticated visitor. Its FIRST half (signInWithFirebase) now passes null and opens authTransaction instead (DEF-288, bible row 194); this line covers only the org-existence question, which is a bootstrap question and not one of row 194's four auth lookups
 ];
 
 function trackedErpFiles(): string[] {

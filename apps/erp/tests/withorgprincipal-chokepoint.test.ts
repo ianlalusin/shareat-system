@@ -127,13 +127,30 @@ const WRAPPED_NULL_TX_SITES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * ⛔ The one null-tx call that must NEVER be wrapped. `setup/actions.ts` runs before any
+ * ⛔ The null-tx calls that must NEVER be wrapped. `setup/actions.ts` runs before any
  * organisation exists — first-run setup precedes every org — so there is no `orgId` to file a
  * refusal row under. Wrapping it would file a row with nothing to file it under.
  * `pre-session-message.ts` is the mechanism that covers `/setup` and `/sign-in` instead (§B9).
+ *
+ * ⭐ **The four authentication calls joined it 2026-09-11 — DEF-288, bible §13 row 194 — and for
+ * the SAME reason, arrived at from the opposite direction.** They pass `null` deliberately so the
+ * entry point opens `authTransaction()` itself: these run BEFORE anyone knows which organisation
+ * is acting, because discovering that is what they are for. `recordingRefusalsFor(actor.orgId, …)`
+ * is unavailable to them in the most literal sense — there is no `actor` yet, and no `orgId` to
+ * file under.
+ *
+ * ⚠️ **They used to open bare `transaction()`s instead, and that is precisely what DEF-288 was:**
+ * with a non-bypassing role, PIN sign-in said *"that PIN is not valid"*, Firebase sign-in said
+ * *"not linked to a person"*, every authenticated request said *"Not signed in"*, and sign-out
+ * silently ended nothing. Passing `null` here is the fix, not a new exemption — the refusal
+ * counter could never see these paths under either shape.
  */
 const ALLOWLISTED_UNWRAPPED_NULL_TX_SITES: ReadonlySet<string> = new Set([
   'app/setup/actions.ts:signInWithFirebase',
+  'app/sign-in/actions.ts:signInWithPin',
+  'app/sign-in/actions.ts:signOut',
+  'app/sign-in/lib.ts:signInWithFirebase',
+  'lib/session.ts:resolveActor',
 ]);
 
 describe('T-261 — every null-tx call bypassing the chokepoint is accounted for (§B4.1)', () => {

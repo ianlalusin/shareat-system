@@ -24,7 +24,7 @@
  * names as pre-auth confessions — this file must not become a fourth.
  */
 import type { Tx } from '@shareat/db';
-import { organizationsRepo } from '@shareat/db';
+import { organizationsRepo, transaction } from '@shareat/db';
 import { AuthenticationError, signInWithFirebase } from '@shareat/auth';
 
 /**
@@ -98,9 +98,28 @@ export type VerifiedSignInOutcome =
  * be refused loudly by the INSERT's own `WITH CHECK`. A wrong sentence, never a second
  * organisation.
  */
-export async function resolveVerifiedSignIn(tx: Tx, verifiedUid: string): Promise<VerifiedSignInOutcome> {
+/**
+ * ⛔ **TWO QUESTIONS, TWO CONNECTIONS — DEF-288, bible row 194.** This used to take one `tx`
+ * and use it for both halves, which meant one bare `transaction()` served an authentication
+ * lookup AND a cross-org existence check. They are different permissions and row 194 says to keep
+ * them separately visible, so each half now opens its own.
+ *
+ *   1. `signInWithFirebase(null, …)` → the AUTH door, opened inside `sessions.ts`. This is the
+ *      half that was actually broken: the credential read is org-scoped via `persons`, so under a
+ *      non-bypassing role it found nothing and every Firebase sign-in reported "not linked".
+ *   2. `anyOrganizationExists` → left on a bare `transaction()`, unchanged and deliberately so.
+ *      It is NOT one of the four lookups row 194 admitted to the auth door, and widening the door
+ *      to cover it would be exactly the drift row 194 exists to prevent.
+ *
+ * ⚠️ **Half 2's pre-existing limitation is unchanged, not introduced here** — see the note
+ * above: with no principal this can read zero organisations on a populated database, sending a
+ * stranger to `/setup` instead of telling them to ask an administrator. `/setup` then refuses
+ * loudly on its own `WITH CHECK`. A wrong sentence, never a second organisation. It is recorded
+ * rather than fixed because fixing it is a fifth caller-list decision and Ian's to make.
+ */
+export async function resolveVerifiedSignIn(verifiedUid: string): Promise<VerifiedSignInOutcome> {
   try {
-    const session = await signInWithFirebase(tx, { verifiedUid });
+    const session = await signInWithFirebase(null, { verifiedUid });
     return {
       kind: 'signed-in',
       token: session.token,
@@ -113,6 +132,6 @@ export async function resolveVerifiedSignIn(tx: Tx, verifiedUid: string): Promis
 
   // ⭐ Zero organizations is the ONLY thing that opens first-run setup. It is not "no person for
   // this email" — an unknown email on a live system is a stranger, and the answer is a sentence.
-  const alreadySetUp = await organizationsRepo.anyOrganizationExists(tx);
+  const alreadySetUp = await transaction((tx) => organizationsRepo.anyOrganizationExists(tx));
   return alreadySetUp ? { kind: 'not-linked' } : { kind: 'first-run' };
 }

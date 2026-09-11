@@ -157,7 +157,10 @@ describe('T-232 case 1 — ⭐ empty database to a signed-in owner', () => {
     expect(result.firebaseCredentialId).toBeTruthy();
 
     // ⭐ The seam slice 1 depends on: the uid it verified now resolves to a person and a session.
-    const session = await transaction((tx) => signInWithFirebase(tx, { verifiedUid }));
+    // DEF-288: `null`, so the auth entry point opens its own `authTransaction` — exactly what
+    // production does now (`sign-in/actions.ts`, `lib/session.ts`). Handing it a bare
+    // `transaction()` here would test a path no caller uses any more.
+    const session = await signInWithFirebase(null, { verifiedUid });
     expect(session.personId).toBe(result.personId);
     expect(session.token).toBeTruthy();
 
@@ -308,12 +311,12 @@ describe('T-232 case 6 — the CLI calls the same function and still works', () 
     expect(result.pinCredentialId).toBeTruthy();
     expect(await countOf('person_credentials')).toBe(1);
 
-    const session = await transaction((tx) => signInWithPin(tx, { storeId: result.storeId, pin }));
+    const session = await signInWithPin(null, { storeId: result.storeId, pin });
     expect(session.personId).toBe(result.personId);
 
     // ⚠️ And nothing minted a Firebase credential by accident — an unknown uid is still refused.
     await expect(
-      transaction((tx) => signInWithFirebase(tx, { verifiedUid: uid('never-linked') })),
+      signInWithFirebase(null, { verifiedUid: uid('never-linked') }),
     ).rejects.toThrow(AuthenticationError);
   });
 
@@ -323,7 +326,10 @@ describe('T-232 case 6 — the CLI calls the same function and still works', () 
       bootstrapOrganization(tx, { ...INPUT, code: uid('SHAPE'), firebaseUid: verifiedUid }),
     );
 
-    const credential = await transaction((tx) =>
+    // systemTransaction, matching bootstrapOrganization's own read two lines up: this verifies
+    // what bootstrap WROTE, on the privileged connection. `person_credentials` is org-scoped via
+    // `persons`, so a bare transaction() reads nothing under a restricted role (DEF-288).
+    const credential = await systemTransaction((tx) =>
       sessionsRepo.findActiveCredentialByExternalId(tx, verifiedUid),
     );
     expect(credential?.personId).toBe(result.personId);
@@ -420,7 +426,10 @@ describe('T-232 case 9 — ⛔ a blank firebaseUid is refused, never silently sk
 
     expect(result.firebaseCredentialId).toBeTruthy();
     // ⛔ Stored trimmed, so `signInWithFirebase` — which is handed the raw verified uid — matches it.
-    const credential = await transaction((tx) =>
+    // systemTransaction, matching bootstrapOrganization's own read two lines up: this verifies
+    // what bootstrap WROTE, on the privileged connection. `person_credentials` is org-scoped via
+    // `persons`, so a bare transaction() reads nothing under a restricted role (DEF-288).
+    const credential = await systemTransaction((tx) =>
       sessionsRepo.findActiveCredentialByExternalId(tx, bare),
     );
     expect(credential?.personId).toBe(result.personId);

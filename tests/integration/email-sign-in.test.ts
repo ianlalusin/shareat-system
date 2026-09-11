@@ -83,7 +83,7 @@ describe('T-232 slice 1 — a verified Firebase identity resolves to one of thre
     const uid = unique('firebase-uid');
     const bootstrapped = await firstRun(uid);
 
-    const outcome = await transaction((tx) => resolveVerifiedSignIn(tx, uid));
+    const outcome = await resolveVerifiedSignIn(uid);
 
     expect(outcome.kind).toBe('signed-in');
     if (outcome.kind !== 'signed-in') return; // narrowing; the assertion above is the check
@@ -91,7 +91,10 @@ describe('T-232 slice 1 — a verified Firebase identity resolves to one of thre
 
     // ⭐ The point of the whole slice: the token is usable. `resolveActor` is what every page calls,
     // so this is "Ian signs in and sees the app" asserted rather than implied.
-    const session = await transaction((tx) => resolveActor(tx, outcome.token));
+    // DEF-288: `null`, so the auth entry point opens its own `authTransaction` — exactly what
+    // production does now (`sign-in/actions.ts`, `lib/session.ts`). Handing it a bare
+    // `transaction()` here would test a path no caller uses any more.
+    const session = await resolveActor(null, outcome.token);
     expect(session.actor.personId).toBe(bootstrapped.personId);
     expect(session.actor.orgId).toBe(bootstrapped.orgId);
     expect(session.credentialKind).toBe('firebase');
@@ -106,7 +109,7 @@ describe('T-232 slice 1 — a verified Firebase identity resolves to one of thre
   });
 
   it('⭐ case 2: an unknown uid on an EMPTY database is first-run, and nothing is written', async () => {
-    const outcome = await transaction((tx) => resolveVerifiedSignIn(tx, unique('stranger')));
+    const outcome = await resolveVerifiedSignIn(unique('stranger'));
 
     expect(outcome).toEqual({ kind: 'first-run' });
     // ⛔ A refused sign-in must not leave a session behind. The decision reads; it never writes.
@@ -120,7 +123,7 @@ describe('T-232 slice 1 — a verified Firebase identity resolves to one of thre
     // must still close, because it turns on the organisation and not on the credential.
     await firstRun(null);
 
-    const outcome = await transaction((tx) => resolveVerifiedSignIn(tx, unique('stranger')));
+    const outcome = await resolveVerifiedSignIn(unique('stranger'));
 
     expect(outcome).toEqual({ kind: 'not-linked' });
     expect(await countOf('sessions')).toBe(0);
@@ -130,7 +133,7 @@ describe('T-232 slice 1 — a verified Firebase identity resolves to one of thre
     // The lived shape: Ian is set up and signed in, and somebody else's Google account arrives.
     await firstRun(unique('firebase-uid'));
 
-    const outcome = await transaction((tx) => resolveVerifiedSignIn(tx, unique('stranger')));
+    const outcome = await resolveVerifiedSignIn(unique('stranger'));
 
     expect(outcome).toEqual({ kind: 'not-linked' });
     expect(await countOf('sessions')).toBe(0);

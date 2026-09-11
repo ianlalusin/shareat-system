@@ -87,12 +87,16 @@ describe('T-228 case 5 — ⭐ the chicken-and-egg, actually broken', () => {
       return { orgId: org.orgId, personId, storeId: store.storeId };
     });
 
-    // ⚠️ Deliberately the plain, no-principal `transaction()` here, not systemTransaction — this
-    // mirrors apps/erp/src/app/sign-in/actions.ts exactly, which cannot know an org before the PIN
-    // resolves who is signing in. If this ever fails under the restricted role, that is a real
-    // finding about signInWithPin, not a fixture gap to paper over.
-    const session = await transaction((tx) =>
-      signInWithPin(tx, { storeId: made.storeId, pin }));
+    // ⭐ This comment previously said: "deliberately the plain, no-principal `transaction()` …
+    // if this ever fails under the restricted role, that is a real finding about signInWithPin,
+    // not a fixture gap to paper over." **It failed, it was a real finding, and it is DEF-288.**
+    // Leaving the note because being right about that in advance is what made it findable.
+    //
+    // `null` now, mirroring `apps/erp/src/app/sign-in/actions.ts` as it always did — what changed
+    // is the production caller: it no longer opens a bare transaction, it passes null and lets
+    // `signInWithPin` open the auth door (bible row 194). The reasoning the old comment gave is
+    // still exactly right: nothing can know the org before the PIN resolves who is signing in.
+    const session = await signInWithPin(null, { storeId: made.storeId, pin });
 
     expect(session.personId).toBe(made.personId);
     expect(session.token).toBeTruthy();
