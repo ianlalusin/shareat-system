@@ -37,7 +37,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
   throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} — the database name must contain "_test".`);
 }
 
-import { accessRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
+import { accessRepo, transaction, systemTransaction, APP_ROLE, type Tx } from '@shareat/db';
 import {
   authorize,
   assignRole,
@@ -821,7 +821,24 @@ describe('T-248 — DEF-237: elevated grants are revoked when an administrator a
     await asPerson(orgA, (tx) => assignRole(tx, { personId: managerA, orgId: orgA, role: 'manager', grantedBy: null }));
     await asPerson(orgB, (tx) => assignRole(tx, { personId: managerB, orgId: orgB, role: 'manager', grantedBy: null }));
 
-    const revoked = await transaction((tx) =>
+    // ⛔ `systemTransaction`, and it MUST stay a bypassing connection — DEF-218, DEF-287.
+    //
+    // This was `transaction()`, which bypassed RLS only because the harness happened to connect
+    // as a superuser. Under `INTEGRATION_RESTRICTED_ROLE=1` that same call has no principal and
+    // sees no rows, so the sweep revokes nothing and the case fails — **not because the scoping
+    // regressed, but because the test lost the very bypass its method depends on.**
+    //
+    // ⚠️ The wrong repair here is `withOrgPrincipal(orgA, …)`. It makes the case pass and
+    // silently destroys it: with RLS scoping the write, the `exists(...)` correlation could be
+    // deleted from `revokeElevationGrantsForOrg` and this test would still be green. That is
+    // precisely the masked test the comment above exists to prevent, which is why the bypass is
+    // re-armed explicitly instead of being inherited from whatever the connection happens to be.
+    //
+    // `systemTransaction()` resolves to `SYSTEM_DATABASE_URL ?? DATABASE_URL`, so it is the
+    // privileged connection with the flag on and unchanged with it off. ⭐ It does NOT widen
+    // `client.ts`'s closed caller list: that guard scans `apps` and `packages/domain/src` for
+    // PRODUCTION authority, and this is a test asserting a property of production code.
+    const revoked = await systemTransaction((tx) =>
       accessRepo.revokeElevationGrantsForOrg(tx, orgA, 'case 13 — org-scoping proof'),
     );
 

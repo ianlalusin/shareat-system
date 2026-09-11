@@ -36,7 +36,8 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
   );
 }
 
-import { transaction } from '@shareat/db';
+// ⭐ The DB-level helper, deliberately NOT the app's same-named one — see the null-tx case below.
+import { withOrgPrincipal as dbWithOrgPrincipal } from '@shareat/db';
 import { withOrgPrincipal, recordingRefusalsFor } from '../../src/app/expenses/lib';
 
 const sql = postgres(url, { max: 5 });
@@ -136,12 +137,32 @@ describe('T-261 — §B7.1(c) / §B4.1 a refusal on a null-tx path is recorded',
   it('recordingRefusalsFor catches a refusal from a call that opens its own transaction, same shape as the six wrapped F8 call sites', async () => {
     const f = await fixture('nulltx');
 
-    // The exact shape §B4.1's six call sites have: a domain function handed `null` opens its OWN
-    // transaction via the raw `transaction()` from @shareat/db — never withOrgPrincipal — so this
-    // reproduces that path without needing a fully-set-up cutover/fixed-assets fixture.
+    // ⭐ WHAT THIS PROVES, and it is narrower than it used to claim: `recordingRefusalsFor` wraps
+    // a CALL rather than a transaction, so it still catches a refusal when the CALLEE opens the
+    // transaction itself and the wrapper never sees it. That is the mechanism, and the callee
+    // below still opens its own transaction.
+    //
+    // ⛔ It used to open that transaction with the raw `transaction()` — no principal — because
+    // it was imitating §B4.1's six null-tx call sites (DEF-282). **That imitation was removed
+    // 2026-09-11 and the reason is worth keeping.** Armed against a non-bypass role, the bare
+    // form never reaches this CHECK at all: RLS refuses the INSERT first, with `new row violates
+    // row-level security policy for table "money_accounts"`. So the old shape stopped testing
+    // refusal-recording and started testing DEF-282 — which is real, is filed, and is measured on
+    // that row using exactly this observation. It is not this test's subject, and the shape it
+    // copied is being deleted by DEF-282's own fix.
+    //
+    // ⚠️ One consequence of that RLS-first refusal is worth knowing, because it bites on the
+    // production switch: an RLS error carries no `constraint "..."` clause, so
+    // `parseConstraintName` (a regex over the message — DEF-286) returns null and NOTHING is
+    // filed. The refusal happens and no row records it.
+    // ⛔ `dbWithOrgPrincipal` — @shareat/db's — and NOT this app's same-named wrapper, which is
+    // itself the refusal-counter chokepoint (`lib.ts:157`) and would file a second row. Using it
+    // here records the refusal TWICE and the count below goes to 2, which is how this was caught.
+    // ⭐ That double-count is worth keeping in mind rather than merely avoiding: it is the proof
+    // that `recordingRefusalsFor` really is the recorder on this path, which is the whole claim.
     await expect(
       recordingRefusalsFor(f.orgId, () =>
-        transaction((tx) =>
+        dbWithOrgPrincipal(f.orgId, (tx) =>
           tx.execute(dsql`
             insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian)
             values (${f.orgId}, ${f.storeId}, '', 'cash', '1100', 'cashier')
