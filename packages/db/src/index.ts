@@ -220,7 +220,7 @@ export type { ItemKind, BaseUnit, PurchaseUnit, ItemStatus } from '../schema/ite
 export { APP_ROLE } from './rls/registry';
 // T-231 / DEF-211 — the ONE Drizzle-shaped principal helper. Replaces the copies in
 // apps/erp/src/app/expenses/lib.ts and packages/domain/src/scheduler/index.ts.
-export { withOrgPrincipal } from './rls/principal';
+export { withOrgPrincipal, withSystemOrgPrincipal } from './rls/principal';
 export * as stockLocationsRepo from './repo/stock-locations';
 // DEF-135 (2026-09-03) — the usage document's and the count session's SQL. Until now the only
 // writers of either table were test fixtures.

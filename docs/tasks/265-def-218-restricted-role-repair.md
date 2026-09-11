@@ -73,7 +73,7 @@ working down the list.
 apps/erp/tests/integration/constraint-refusals.test.ts
 apps/erp/tests/integration/sign-out-action.test.ts
 packages/auth/tests/integration/authorize.test.ts
-packages/db/tests/integration/{organizations,post-entry-party,recurring-expenses}.test.ts
+packages/domain/tests/integration/{organizations,post-entry-party,recurring-expenses}.test.ts
 packages/etl/tests/integration/etl-run.test.ts
 packages/etl-firestore/tests/integration/capture.test.ts
 packages/domain/tests/integration/
@@ -87,6 +87,8 @@ packages/domain/tests/integration/
 tests/integration/{commissary-kpis,email-sign-in,posting-patterns}.test.ts
 tests/invariants/accounting-equation.test.ts
 ```
+
+⚠️ **THREE OF THESE ARE ALREADY OUT OF DATE — DEF-287 was fixed 2026-09-11 while this task was running.** `fixed-assets` and `prepaid` are now **fully green under the restricted role** (61 tests, measured on `shareat_test_qa`), and `scheduler.test.ts` went from 12 failing to 6. ⭐ **The one that proves it:** the assertion this document cited as the cascade — `expect(dep1.posted).toBe(1)`, reported as `expected +0 to be 1` — now passes. Two of the 43 are gone and one is half gone; **re-measure before trusting any count in this file.**
 
 The authoritative list regenerates with:
 

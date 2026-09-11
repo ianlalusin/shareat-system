@@ -25,7 +25,14 @@
  * gap too (`reverseAmortisation`, §7.8).
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { journalRepo, prepaidRepo, transaction, type PrepaidCategory, type Tx } from '@shareat/db';
+import {
+  journalRepo,
+  prepaidRepo,
+  transaction,
+  withSystemOrgPrincipal,
+  type PrepaidCategory,
+  type Tx,
+} from '@shareat/db';
 import { money, subtract, type Money } from '@shareat/core/money';
 import { parseMoneyInput } from '../shared/money-input';
 import { buildStraightLine, periodsThroughOf } from '../shared/straight-line';
@@ -522,12 +529,27 @@ export interface AmortiseAllResult {
  * ⚠️ **Each item gets its OWN transaction**, so one failure — most likely *"no fiscal period
  * covers 2026-06-30"* — cannot roll back the items that succeeded. The register is derived, so a
  * partial run is incomplete, never inconsistent.
+ *
+ * ## ⛔ Every one of those transactions carries its own principal — DEF-287
+ *
+ * Until 2026-09-11 none of them did: this function was named `…AsSystem` and opened bare,
+ * principal-less transactions, so the name promised a database identity it never set. ⚠️ **And
+ * the sentence directly above is the trap in miniature** — it names *"no fiscal period covers"*
+ * as the expected failure, which is also exactly what a principal-less READ produces when the
+ * period is present and simply invisible. A real missing period and a missing principal are
+ * indistinguishable from the message, so the message could never have led anyone here. That
+ * signature accounted for **344** of the 623 failures when the tenancy lock was first armed
+ * (`docs/tasks/265-def-218-restricted-role-repair.md`).
+ *
+ * ⛔ **The principal has to be applied inside each per-item transaction, not once around the
+ * loop** — the per-item isolation the paragraph above describes is exactly what makes an
+ * outer principal unreachable.
  */
 export async function runAmortisationAsSystem(
   orgId: string,
   asOfPeriod: string,
 ): Promise<AmortiseAllResult> {
-  const items = await transaction((trx) =>
+  const items = await withSystemOrgPrincipal(orgId, (trx) =>
     prepaidRepo.listPrepaidItems(trx, orgId, { status: 'active' }),
   );
 
@@ -537,7 +559,7 @@ export async function runAmortisationAsSystem(
 
   for (const item of items) {
     try {
-      const result = await transaction((trx) =>
+      const result = await withSystemOrgPrincipal(orgId, (trx) =>
         amortiseItemCore(trx, orgId, null, { prepaidItemId: item.id, asOfPeriod }),
       );
       if (result.posted.length === 0) skipped += 1;

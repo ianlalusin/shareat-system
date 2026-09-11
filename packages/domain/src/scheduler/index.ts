@@ -22,12 +22,12 @@
  * quietly is **worse than the button**, since nobody is even expecting to press anything.
  */
 import {
-  APP_ROLE,
   schedulerRepo,
   storesRepo,
   systemTransaction,
   transaction,
   withOrgPrincipal,
+  withSystemOrgPrincipal,
   type SchedulerFailure,
   type Tx,
 } from '@shareat/db';
@@ -336,7 +336,9 @@ async function runSweepForOrg(
   nowMs: number,
 ): Promise<JobOutcome> {
   return runJobForOrg(org, 'attendance_sweep', period, trigger, async () => {
-    const stores = await transaction((tx) =>
+    // DEF-287: `asSystem`, not a bare `transaction`. `stores` is org-scoped under FORCE RLS, so
+    // with no principal this returns zero rows and the sweep reports a clean run over nothing.
+    const stores = await asSystem(org.id, (tx) =>
       tx.execute(
         sql`select s.id::text as "id" from stores s
              join store_attendance_config c on c.store_id = s.id and c.superseded_at is null
@@ -353,7 +355,7 @@ async function runSweepForOrg(
     // sweep is incomplete, never inconsistent.
     for (const store of stores as unknown as { id: string }[]) {
       try {
-        const out = await transaction((tx) => sweepStore(tx, { storeId: store.id, nowMs }));
+        const out = await asSystem(org.id, (tx) => sweepStore(tx, { storeId: store.id, nowMs }));
         swept += out.swept.length;
         leftOpen += out.leftOpen;
       } catch (err) {
@@ -636,7 +638,8 @@ async function runOrderWastageBackstopForOrg(
     // period-lock refusal and invariant 12's idempotency both flow through the shared `postEntry`
     // called inside; a single wastage whose channel is unconfigured is caught per-row inside
     // `runOrderWastageBackstop` (`failures`), which does not abort the rest of the batch.
-    const result = await transaction((tx) =>
+    // DEF-287: `asSystem`, not a bare `transaction` — same reasoning as the sweep above.
+    const result = await asSystem(org.id, (tx) =>
       runOrderWastageBackstop(tx, org.id, { now: new Date(nowMs), postedBy: null }),
     );
     const failures: SchedulerFailure[] = result.failures.map((f) => ({
@@ -706,14 +709,19 @@ export async function runFindingObservation(
  * around the whole org: `reference_postgres_batch_needs_savepoint` — one DB error aborts the
  * transaction it happened in, so a single bad budget inside a shared transaction would take the
  * run's own `scheduler_runs` write down with it and the failure would leave no trace at all.
+ *
+ * ⭐ **Now one line — it delegates to `withSystemOrgPrincipal` (DEF-287, DEF-211).** This was the
+ * FOURTH hand-rolled copy of the same three statements, and it was the copy that worked, which is
+ * why it is worth naming what went wrong: the idiom being copyable is what let two other jobs
+ * ship with no principal at all while this one was correct, in the same file. The shared helper
+ * also uses the single-round-trip form (`+0.131 ms/tx` against `+1.421 ms` for the three
+ * statements this used to issue).
+ *
+ * ⚠️ The local name stays. It is used at six call sites here and it reads correctly at all of
+ * them; what changed is that it no longer has its own implementation to drift.
  */
 async function asSystem<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
-  return transaction(async (tx) => {
-    await tx.execute(sql.raw(`set local role ${APP_ROLE}`));
-    await tx.execute(sql`select set_config('app.principal_kind', 'system', true)`);
-    await tx.execute(sql`select set_config('app.org_id', ${orgId}, true)`);
-    return fn(tx);
-  });
+  return withSystemOrgPrincipal(orgId, fn);
 }
 
 /**

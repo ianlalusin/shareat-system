@@ -120,10 +120,53 @@ export async function withPrincipal<T>(
  * nonsense, on screens where the data is plainly there.**
  */
 export async function withOrgPrincipal<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return openAs('staff', orgId, fn);
+}
+
+/**
+ * ⭐ **The same thing for work that no person asked for** — a cron, the month-end runner, a
+ * backstop sweep. T-140, DEF-287.
+ *
+ * Identical to `withOrgPrincipal` in every way that RLS can observe: same role switch, same
+ * `app.org_id`, same transaction scope. The single difference is that `app.principal_kind` reads
+ * `'system'` rather than `'staff'`, so the transaction says truthfully that no human is behind it.
+ *
+ * ## Why this exists as its own name rather than a flag
+ *
+ * ⛔ **DEF-287 happened because two functions were NAMED `…AsSystem` and set no principal at all.**
+ * The word "system" in this codebase had come to mean "no capability check, no person" — which is
+ * a statement about `authorize()`, not about the database — and a reader who grepped for the
+ * system principal found those names and stopped looking. Giving the database-level idea its own
+ * callable name is what makes the two meanings distinguishable by grep.
+ *
+ * ⚠️ **`app_principal_kind()` is read by NO policy today** — migration `0011` defines the function
+ * and nothing references it, verified 2026-09-11. So `'system'` versus `'staff'` currently changes
+ * no row's visibility. It is recorded because it is true, and because the day a policy does want
+ * to distinguish a cron from a person, the callers will already be honest.
+ *
+ * ⛔ **This is NOT `systemTransaction()` and must not be reached for in its place.** That function
+ * escapes the tenant boundary for the enumerable set of operations that must see EVERY org
+ * (`listOrgsToRun`, `bootstrapOrganization`) and its caller list is closed and build-enforced.
+ * This one stays firmly inside one org — it is a tenant-scoped transaction whose actor happens to
+ * be a machine. If you need to cross orgs, you need the other one, and you need to say so out loud.
+ */
+export async function withSystemOrgPrincipal<T>(
+  orgId: string,
+  fn: (tx: Tx) => Promise<T>,
+): Promise<T> {
+  return openAs('system', orgId, fn);
+}
+
+/** The one implementation. See `withOrgPrincipal` above for why it is a single round trip. */
+async function openAs<T>(
+  kind: 'staff' | 'system',
+  orgId: string,
+  fn: (tx: Tx) => Promise<T>,
+): Promise<T> {
   return transaction(async (tx) => {
     await tx.execute(dsql`
       select set_config('role', ${APP_ROLE}, true),
-             set_config('app.principal_kind', 'staff', true),
+             set_config('app.principal_kind', ${kind}, true),
              set_config('app.org_id', ${orgId}, true)`);
     return fn(tx);
   });

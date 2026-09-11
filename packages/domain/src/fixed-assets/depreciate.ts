@@ -27,7 +27,9 @@
  * schedule starts at `acquiredOn`, so a period before acquisition simply is not in it.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { fixedAssetsRepo, transaction, type Tx } from '@shareat/db';
+// ⭐ No `transaction` import, and that is the point of DEF-287: nothing in this file may open a
+// transaction without saying who it is acting as.
+import { fixedAssetsRepo, withOrgPrincipal, withSystemOrgPrincipal, type Tx } from '@shareat/db';
 import { money } from '@shareat/core/money';
 import { postEntry } from '../ledger/post-entry';
 import { periodsThrough, type ScheduleInput } from './schedule';
@@ -89,7 +91,9 @@ export async function depreciateAsset(
   input: { assetId: string; through: string },
 ): Promise<DepreciationPosting[]> {
   if (tx) return runForAsset(tx, actor, input);
-  return transaction((trx) => runForAsset(trx, actor, input));
+  // DEF-287: the no-tx fallback opens its own transaction, so it carries its own principal.
+  // No caller passes null today — this is the shape being correct rather than a live fix.
+  return withOrgPrincipal(actor.orgId, (trx) => runForAsset(trx, actor, input));
 }
 
 async function runForAsset(
@@ -199,9 +203,12 @@ export async function runDepreciation(
   if (tx) {
     await authorize(tx, actor, 'run_depreciation', {});
   } else {
-    await transaction((trx) => authorize(trx, actor, 'run_depreciation', {}));
+    // ⛔ `withOrgPrincipal`, NOT a bare `transaction` — DEF-287. `authorize()` READS `persons` and
+    // the grant tables, which are org-scoped and FORCE RLS. With no principal it sees nobody and
+    // refuses a capability the actor genuinely holds.
+    await withOrgPrincipal(actor.orgId, (trx) => authorize(trx, actor, 'run_depreciation', {}));
   }
-  return runDepreciationCore(tx, actor.orgId, actor.personId, input);
+  return runDepreciationCore(tx, 'staff', actor.orgId, actor.personId, input);
 }
 
 /**
@@ -213,24 +220,52 @@ export async function runDepreciation(
  *
  * `postedBy` is `null`: `journal_entries.posted_by` is nullable, so the ledger records *"posted by
  * no person"* honestly rather than attributing a machine's work to a human who was asleep.
+ *
+ * ## ⛔ "AsSystem" means TWO things, and for months it only meant one — DEF-287
+ *
+ * It means **no capability check and no person** (the paragraphs above), and it means **the
+ * transaction runs under the system principal** (`withSystemOrgPrincipal`, below). Until
+ * 2026-09-11 it only meant the first: this function opened bare, principal-less transactions, so
+ * the name promised a database identity it never set. Nobody caught it because the name read as
+ * if they had.
+ *
+ * ⚠️ **It was inert only by accident** — production connects as a role with `rolbypassrls = t`
+ * (measured, DEF-250/DEF-282), so RLS was contributing nothing to any of these paths. The day
+ * that role is tightened, the unfixed version of this function would have loaded **zero**
+ * depreciable assets, posted nothing, and exited 0 — a silent success indistinguishable from a
+ * genuinely quiet month, which is exactly the signal DEF-240's work exists to make trustworthy.
  */
 export async function runDepreciationAsSystem(
   orgId: string,
   input: RunDepreciationInput,
 ): Promise<RunDepreciationResult> {
-  return runDepreciationCore(null, orgId, null, input);
+  return runDepreciationCore(null, 'system', orgId, null, input);
 }
 
+/**
+ * ⛔ **`kind` is not decoration — it chooses the principal every transaction below opens under,
+ * and getting it wrong is DEF-287.** When `tx` is null this function opens its OWN transactions
+ * from the pool, so a principal applied by some caller further up does not reach them; each one
+ * has to carry its own. `'staff'` for the request path, `'system'` for the scheduled run.
+ *
+ * ⚠️ **One transaction PER ASSET is deliberate** (T-124 §12) — one bad asset must not roll back
+ * the assets that posted cleanly — which is precisely why the principal cannot be applied once
+ * around the loop and forgotten.
+ */
 async function runDepreciationCore(
   tx: Tx | null,
+  kind: 'staff' | 'system',
   orgId: string,
   postedBy: string | null,
   input: RunDepreciationInput,
 ): Promise<RunDepreciationResult> {
   const actor = { orgId, personId: postedBy } as Actor;
+  const openTx = <R,>(fn: (trx: Tx) => Promise<R>): Promise<R> =>
+    kind === 'system' ? withSystemOrgPrincipal(orgId, fn) : withOrgPrincipal(orgId, fn);
+
   const assets = tx
     ? await loadDepreciable(tx, actor, input)
-    : await transaction((trx) => loadDepreciable(trx, actor, input));
+    : await openTx((trx) => loadDepreciable(trx, actor, input));
 
   const posted: DepreciationPosting[] = [];
   const failed: RunDepreciationResult['failed'] = [];
@@ -240,7 +275,7 @@ async function runDepreciationCore(
     try {
       const results = tx
         ? await postPeriodsFor(tx, actor, asset, input.through)
-        : await transaction((trx) => postPeriodsFor(trx, actor, asset, input.through));
+        : await openTx((trx) => postPeriodsFor(trx, actor, asset, input.through));
       if (results.length === 0) skipped += 1;
       posted.push(...results);
     } catch (err) {
@@ -280,7 +315,8 @@ export async function depreciationDrift(
   input: { through: string },
 ): Promise<{ assetId: string; assetName: string; expected: string; actual: string }[]> {
   if (tx) return runDrift(tx, actor, input);
-  return transaction((trx) => runDrift(trx, actor, input));
+  // DEF-287, as above.
+  return withOrgPrincipal(actor.orgId, (trx) => runDrift(trx, actor, input));
 }
 
 async function runDrift(
