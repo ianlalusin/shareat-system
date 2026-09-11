@@ -162,10 +162,15 @@ not regress.
 
 ## 7. Out of scope — describe the change you need and `system32-85` makes it
 
-- ⛔ `tests/unit/system-transaction-callers.test.ts` — the guard. ⚠️ Note carefully: it scans only
-  `apps` and `packages/domain/src`, so **your change will trip nothing at all**. That silence is
-  itself the defect (**DEF-295**) and the orchestrator is fixing the scan in this same cycle. Do not
-  read a green guard as confirmation that your change is admitted.
+- ⛔ `tests/unit/system-transaction-callers.test.ts` — the guard, orchestrator-owned.
+  ⚠️ **SPEC CORRECTION, 2026-09-12:** the first draft of this spec told you your change would
+  *"trip nothing at all"* because the guard scanned only `apps` and `packages/domain/src`. **That is
+  no longer true** — DEF-295 was fixed a few hours after this spec was written and the guard now
+  scans all ten source roots. Your change WILL go red, naming exactly two offenders:
+  `packages/etl/src/run.ts` and `packages/db/src/repo/etl.ts`. **That red is EXPECTED.** Report it
+  verbatim in your READY; the orchestrator adds both to the closed caller list at integration.
+  ⭐ Read it as confirmation the guard can finally see your package — until today it could not,
+  and six new callers to a "closed" list would have landed in silence.
 - ⛔ `packages/db/src/client.ts` — the doc comment naming the closed caller list. Orchestrator's.
 - ⛔ `packages/db/src/index.ts` — the barrel. Orchestrator's.
 - ⛔ Any migration, and **no migration slot is allocated to this lane**. ⛔ Any RLS policy.
@@ -177,7 +182,8 @@ not regress.
 
 - [ ] All **eight** call sites use `systemTransaction()`; `startRun`/`finishRun` still open their own.
 - [ ] `npm run typecheck` clean.
-- [ ] `npm run test` (unit) green — report anything red verbatim.
+- [ ] `npm run test` (unit) — green EXCEPT `system-transaction-callers`, whose 2 expected
+      offenders you report verbatim. Anything else red is a regression.
 - [ ] `etl-run` and `capture` pass with `INTEGRATION_RESTRICTED_ROLE=1` on `shareat_test_laneb`.
 - [ ] Both files still pass **without** the flag.
 - [ ] No policy added, weakened, or created on any table. State this explicitly in your READY.
