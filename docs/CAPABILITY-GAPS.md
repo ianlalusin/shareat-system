@@ -470,3 +470,35 @@ So the APK is a **Capacitor** wrapper around the Next.js app, and the OTG dongle
 ⚠️ **Scope reality check before anyone estimates this:** four punch methods, a native plugin, an offline queue and a re-arm state machine is **multi-week**, and ADR-005 already lists *attendance/biometrics/offline* among the multi-week efforts. Face recognition is present in v1 too and is a separate question Ian has not been asked.
 
 ⛔ **The sequencing trap, stated so it is not discovered late:** attendance and payroll are already built and tested against *enrolled* credentials. They do not need the dongle to be correct. But **on cutover morning nobody can punch with a finger unless the capture path exists**, and the current enrolment screen cannot produce a real template — only pasted text. Phase assignment is Ian's; the honest reading is that this is a Phase 4 remainder that was closed on paper.
+
+---
+
+## Added 2026-09-11 — found by webapps-65 while specifying T-266 (MoneyLines)
+
+### ⚠️ Nothing settles a reimbursable — staff pay out of pocket and no screen can pay them back
+
+`payReimbursement` (`packages/domain/src/expenses/reimbursement.ts`) shipped with **T-208**, closing
+DEF-157, and `reimbursablePayableAgeing` (`packages/db/src/repo/findings.ts`) watches `2130` and
+ages what is owed per employee. Both are real, both are tested.
+
+⛔ **No screen in `apps/erp` calls either.** Measured 2026-09-11: `grep -rln payReimbursement
+apps/erp/src` returns nothing.
+
+So the loop is open at the end: a staff member buys something with their own money, the expense is
+recorded as a `reimbursable` split, `2130` correctly accrues a liability to that named person, a
+detector correctly starts ageing it — **and there is no way to hand them the money back.** The
+ageing finding grows and the only resolution is a manual journal entry, which is exactly the
+"someone will just post a correcting entry" habit v2 exists to remove.
+
+⭐ **This is a GAP, not a defect**, and the distinction is the one §13 row 164 draws: nothing is
+wrong, and nothing is missing from the ledger. A capability the business needs simply has no owner
+in any phase.
+
+⚠️ **Cheaper than it looks, and it should be taken with T-267.** The domain function, the posting
+pattern, the ageing detector and the capability all exist. What is missing is one screen listing
+what is owed per person with a "pay this" action — and T-267 is already migrating ~20 money screens
+onto the shared `MoneyLines` picker, which is the control that screen would need. Building it
+inside that pass costs a fraction of building it alone.
+
+⚠️ **Note for whoever picks it up:** `payReimbursement` draws from a real money account and already
+calls `checkDraw`, so the screen inherits the overdraft rule for free — it does not need its own.

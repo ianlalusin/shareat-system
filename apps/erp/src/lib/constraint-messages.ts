@@ -138,6 +138,13 @@ export const LOCALLY_MAPPED_CONSTRAINT_NAMES: ReadonlySet<string> = new Set([
   'stores_pooling_requires_ceiling_check',
   'stores_unremitted_ceiling_positive_check',
   'stores_remittance_cadence_check',
+  // ⭐ expenses/actions.ts — T-266, migration 0141. Mapped on the screen rather than here for
+  // the reason documented below `recordIfUnmappedConstraint`: neither constraint can be reached
+  // from the unauthenticated `/setup` page, so neither sentence belongs in the allowlist that
+  // gates what text may appear in that page's URL. The count guard in
+  // `apps/erp/tests/constraint-messages.test.ts` caught a first pass that put them there.
+  'suppliers_credit_terms_days_check',
+  'expense_payments_cash_request_id_fkey',
 ]);
 
 /**

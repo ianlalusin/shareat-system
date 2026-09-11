@@ -216,6 +216,9 @@ describe('routeExpense', () => {
   // automatically know who owns the account chosen from the dropdown, so the office drawer
   // checkbox must not exist."* The destination is unchanged; what changed is that the user picks
   // a PLACE instead of ticking a property of one.
+  // ⚠️ The ACCOUNT decides WHERE the credit lands (1120). The REQUEST decides WHOSE float it was.
+  // Those are two different questions and this test used to ask only the first — see the T-266
+  // block at the bottom of this file for why that mattered.
   it('a staff float routes to 1120 — because the ACCOUNT says so, not a cashRequestId', () => {
     const result = routeExpense({
       totalAmount: money('200.00'),
@@ -228,7 +231,6 @@ describe('routeExpense', () => {
           amount: money('200.00'),
           moneyAccountId: 'float-maria',
           moneyAccountGlCode: '1120',
-          // Still carried, now as metadata: WHICH request funded the float, not where it posts.
           cashRequestId: 'cr-9',
         },
       ],
@@ -286,5 +288,116 @@ describe('routeExpense', () => {
       payments: [],
     });
     expect(result.ok).toBe(false);
+  });
+});
+
+/**
+ * ⛔ T-266 / the 1120 party defect — docs/tasks/266-money-lines.md §4.
+ *
+ * `1120` is seeded `requiresParty: true` (packages/db/seed/chart-of-accounts.ts:133) because ONE
+ * staff-float account per store serves MANY holders — the party is the only thing that decomposes
+ * it. `fundingLine` attached a party only for `1140`, so the credit line went in party-less and
+ * `journal_lines_party_requirement` (migration 0007) raised. An expense paid from a staff float
+ * could not post at all.
+ *
+ * ⚠️ **A test already routed a 1120 payment and passed** — "a staff float routes to 1120", above.
+ * It asserted the account code and never the party, so it covered the line without covering the
+ * property that was wrong. That is why this block asserts the party explicitly, on every branch.
+ *
+ * ⛔ The tempting wrong fix is to drop `requiresParty` from 1120. Then `floatPositionOf`'s `spent`
+ * bucket (party_type='cash_request') never sees the spend, `outstanding` never falls, the request
+ * never reaches `liquidated`, and DEF-159's gate refuses that person every future float.
+ */
+describe('routeExpense — the staff-float party (T-266)', () => {
+  const floatPayment = (over: Partial<RoutingPayment> = {}): RoutingPayment => ({
+    method: 'cash',
+    amount: money('1500.00'),
+    moneyAccountId: 'staff-float-lipa',
+    moneyAccountGlCode: '1120',
+    cashRequestId: 'cr-ana-447',
+    ...over,
+  });
+
+  const route = (payments: RoutingPayment[], total = '1500.00') =>
+    routeExpense({
+      totalAmount: money(total),
+      supplierId: null,
+      categoryName: 'Supplies and Stocks',
+      categoryAccountCode: '6500',
+      payments,
+    });
+
+  it('⭐ credits 1120 WITH the cash request as the party — the shape releaseCashRequest already uses', () => {
+    const result = route([floatPayment()]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const credit = result.lines.find((l) => l.side === 'credit')!;
+    expect(credit.accountCode).toBe(EXPENSE_FUNDING_ACCOUNTS.CASH_STAFF);
+    // ⭐ Not 'money_account'. The float's identity is the REQUEST (T-266 §7.2): one staff-float
+    // account per store, so the account cannot decompose itself.
+    expect(credit.partyType).toBe('cash_request');
+    expect(credit.partyId).toBe('cr-ana-447');
+  });
+
+  it('⛔ BLOCKS with a named reason when a staff float names no cash request', () => {
+    const result = route([floatPayment({ cashRequestId: null })]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    // The refusal has to name the float and say why — never reach the database and come back
+    // as `account 1120 requires a party on every line, but none was given`.
+    expect(result.reason).toContain('staff float');
+    expect(result.reason).toContain('liquidated');
+  });
+
+  it('the cashier drawer (1110) still carries NO party — the trigger refuses one there', () => {
+    const result = route([
+      { method: 'cash', amount: money('1500.00'), moneyAccountId: 'drawer', moneyAccountGlCode: '1110' },
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const credit = result.lines.find((l) => l.side === 'credit')!;
+    expect(credit.partyType).toBeUndefined();
+    expect(credit.partyId).toBeUndefined();
+  });
+
+  it('the office safe (1130) still carries NO party either', () => {
+    const result = route([
+      { method: 'cash', amount: money('1500.00'), moneyAccountId: 'safe', moneyAccountGlCode: '1130' },
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const credit = result.lines.find((l) => l.side === 'credit')!;
+    expect(credit.partyType).toBeUndefined();
+  });
+
+  it('a wallet (1140) still carries the MONEY ACCOUNT as its party — unchanged', () => {
+    const result = route([
+      { method: 'online', amount: money('1500.00'), moneyAccountId: 'gcash-1', moneyAccountGlCode: '1140' },
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const credit = result.lines.find((l) => l.side === 'credit')!;
+    expect(credit.partyType).toBe('money_account');
+    expect(credit.partyId).toBe('gcash-1');
+  });
+
+  it('⭐ a split across the office safe and TWO different floats parties each line separately', () => {
+    const result = route(
+      [
+        { method: 'cash', amount: money('2000.00'), moneyAccountId: 'safe', moneyAccountGlCode: '1130' },
+        floatPayment({ amount: money('1500.00'), cashRequestId: 'cr-ana-447' }),
+        floatPayment({ amount: money('380.00'), cashRequestId: 'cr-ben-448' }),
+      ],
+      '3880.00',
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const credits = result.lines.filter((l) => l.side === 'credit');
+    expect(credits).toHaveLength(3);
+    // ⚠️ Two lines on the SAME account and the same GL code, told apart only by the party. This is
+    // the case that makes 1120 a control account rather than a place.
+    expect(credits.map((l) => l.partyId)).toEqual([undefined, 'cr-ana-447', 'cr-ben-448']);
   });
 });

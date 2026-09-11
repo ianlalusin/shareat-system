@@ -73,7 +73,12 @@ export interface RoutingPayment {
   amount: Money;
   /** Reimbursable's party (2130, employee) — required for that method (invariant 3). */
   staffId?: string | null;
-  /** Cash paid from a staff-held float — routes to 1120 instead of 1110. */
+  /**
+   * ⭐ WHICH float this cash came out of — **required** when the resolved account is a staff one
+   * (`1120`), because that account is a control account serving every holder at the store, and
+   * this is its party (T-266 §7.2). ⚠️ Not routing: the ACCOUNT decides the code is `1120`; this
+   * decides whose it was. Both questions, both answered, or the line is refused.
+   */
   cashRequestId?: string | null;
   /** @deprecated ⛔ The 'office' free-text flag, replaced by the money account (DEF-058). Kept on
    *  the type only so an old caller fails to typecheck rather than silently posting to the wrong
@@ -110,7 +115,8 @@ export interface RoutingLine {
   accountCode: string;
   side: RoutingLineSide;
   amount: Money;
-  partyType?: 'supplier' | 'employee' | 'money_account' | 'owner';
+  /** ⚠️ `cash_request` since T-266 — a staff float's holder. See `fundingLine`'s cash branch. */
+  partyType?: 'supplier' | 'employee' | 'money_account' | 'owner' | 'cash_request';
   partyId?: string | null;
   lineMemo?: string | null;
 }
@@ -146,11 +152,46 @@ function fundingLine(
         amount: payment.amount,
         lineMemo: `${payment.method} payment #${index}`,
       };
-      // Only 1140 is ambiguous — one control account for every wallet — so only it needs the
-      // party. 1110/1120/1130 ARE the location, and the trigger refuses a party on them.
+
+      // ⭐ TWO of these four accounts are CONTROL accounts and need a party; two ARE the location
+      // and refuse one. T-266 §7.1 — the parallel is exact:
+      //
+      //     1140  one line, many WALLETS   -> party = which wallet   (money_account)
+      //     1120  one line, many FLOATS    -> party = whose float    (cash_request)
+      //     1110 / 1130  one drawer, one safe — the code IS the place, party refused
+      //
+      // ⛔ This branch used to read `if (glCode === ONLINE)` under a comment asserting
+      // "1110/1120/1130 ARE the location, and the trigger refuses a party on them." True for two
+      // of the three. `1120` is seeded `requiresParty: true`
+      // (packages/db/seed/chart-of-accounts.ts:133) precisely because ONE staff-float account per
+      // store serves many holders — so a party-less credit hit
+      // `journal_lines_party_requirement` (migration 0007) and an expense paid from a staff float
+      // COULD NOT POST AT ALL. Nothing caught it: the form makes you hand-type a cash_request id,
+      // and the one unit test that routed 1120 asserted the account code and never the party.
       if (payment.moneyAccountGlCode === EXPENSE_FUNDING_ACCOUNTS.ONLINE) {
         line.partyType = 'money_account';
         line.partyId = payment.moneyAccountId;
+      } else if (payment.moneyAccountGlCode === EXPENSE_FUNDING_ACCOUNTS.CASH_STAFF) {
+        // ⛔ Refuse here, by name, rather than letting the trigger refuse it in Postgres —
+        // the same discipline the `credit`-without-supplier branch below already applies.
+        //
+        // ⚠️ And the refusal must NOT be "fixed" by dropping 1120's party requirement. Spending
+        // recorded without the request lands in no bucket of `floatPositionOf` — `outstanding`
+        // never falls, the request never reaches `liquidated`, and DEF-159's gate then refuses
+        // that person every future float. See T-266 §4.2.
+        if (!payment.cashRequestId) {
+          return {
+            error:
+              `payment #${index}: this is paid from a staff float, which belongs to a specific ` +
+              'person — name the cash request it draws down, or the float can never be liquidated',
+          };
+        }
+        // ⭐ The party is the REQUEST, not the money account — mirroring `releaseCashRequest`
+        // (packages/domain/src/cash-requests/index.ts), which debits this same account with
+        // exactly this party when the float goes out. Released and spent have to name the same
+        // thing or the float cannot close.
+        line.partyType = 'cash_request';
+        line.partyId = payment.cashRequestId;
       }
       return line;
     }

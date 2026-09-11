@@ -27,6 +27,7 @@ import {
   check,
   date,
   index,
+  integer,
   numeric,
   pgTable,
   text,
@@ -122,6 +123,25 @@ export const suppliers = pgTable(
      * today must never rewrite what last month's receipt was.
      */
     issuesOfficialReceipt: boolean('issues_official_receipt').notNull().default(true),
+
+    /**
+     * ⭐ **Does this supplier extend credit, and on what terms?** T-266 §5, migration 0141.
+     *
+     * `NULL` means **cash on delivery** — the money form offers *Credit (AP)* but disables it and
+     * names the supplier in the reason. A number means credit is accepted, and it is the default
+     * due date: `invoice_date + N days`.
+     *
+     * ⭐ ONE nullable integer answers both *"may we?"* and *"due when?"*, which is why it is not a
+     * boolean beside a days column — those two can disagree (accepts_credit true with null days),
+     * and nothing downstream could tell which was meant.
+     *
+     * ⚠️ **This models something v1 could not ask at all.** v1's `SupplierPlain.paymentOptions`
+     * is a comma-separated free-text list, written by one editor and read by exactly one details
+     * page that prints it — no logic anywhere consults it. v1's only real credit check is *"a
+     * supplier is selected"*. So this is designed, not ported (bible §1.2d): the v1 field is
+     * evidence of the NEED and nothing more.
+     */
+    creditTermsDays: integer('credit_terms_days'),
 
     /**
      * ⚠️ Three COLUMNS, not a child table, and the live data is why: **5 of 129 suppliers have

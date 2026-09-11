@@ -42,6 +42,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+import { cashRequests } from './cash-requests';
 import { journalEntries } from './journal';
 import { organizations } from './organizations';
 import { owners } from './owners';
@@ -229,11 +230,25 @@ export const expensePayments = pgTable(
       onDelete: 'restrict',
     }),
 
-    // Opaque text, not a FK — cash requests are not yet a table in this schema (their own
-    // future task; POSTING-PATTERNS.md's cash_request_release/_return sourceTypes exist
-    // independently of this column). Presence alone routes a cash payment to 1120 instead
-    // of 1110.
-    cashRequestId: text('cash_request_id'),
+    /**
+     * ⭐ WHICH float this cash came out of — **`1120`'s party** (T-266 §4, migration 0141).
+     *
+     * ⚠️ **It used to be opaque `text`**, under a comment saying *"cash requests are not yet a
+     * table in this schema (their own future task)"*. That stopped being true at migration
+     * `0034_t144_cash_requests.sql` and the comment outlived it by six months — a text column
+     * pointing at a `uuid` primary key, where a typo was storable and nothing would object.
+     *
+     * ⛔ **It is no longer metadata.** T-266 makes it load-bearing for posting: `1120` is a
+     * control account serving every float at the store (`chart-of-accounts.ts:133`,
+     * `requiresParty: true`), so this names whose money moved. Without it the credit line has no
+     * party, the trigger refuses the entry, and the expense cannot post at all.
+     *
+     * ⚠️ Still nullable — most payments are not from a float. `routeExpense` requires it only when
+     * the chosen account resolves to `1120`, and refuses by name when it is missing.
+     */
+    cashRequestId: uuid('cash_request_id').references(() => cashRequests.id, {
+      onDelete: 'restrict',
+    }),
   },
   (t) => [
     index('expense_payments_expense_id_idx').on(t.expenseId),

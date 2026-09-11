@@ -25,7 +25,36 @@ import {
 import { apRepo } from '@shareat/db';
 import { withOrgPrincipal, PAYMENT_ROW_COUNT } from './lib';
 import { requireActor } from '../../lib/session';
-import { errorMessage } from '@/lib/constraint-messages';
+import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
+
+/**
+ * ⭐ Screen-local, deliberately — T-266, migration 0141, and the same reasoning `till/actions.ts`
+ * and `remittance/actions.ts` already follow.
+ *
+ * ⛔ These sentences are NOT in the shared `CONSTRAINT_MESSAGES`, because
+ * `pre-session-message.ts` builds `WRITTEN_FOR_A_PERSON` as `new Set(Object.values(...))` of that
+ * map, and that set gates **what text may appear in the URL of the unauthenticated `/setup`
+ * page**. Neither of these constraints can fire on that path — `/setup` creates the first admin,
+ * not suppliers or expense payments — so putting them there would widen a security allowlist for
+ * no reachable benefit. Their NAMES are registered in `LOCALLY_MAPPED_CONSTRAINT_NAMES` so the
+ * unmapped-constraint counter (DEF-246) does not record them as unhandled.
+ */
+const CONSTRAINT_MESSAGES: Record<string, string> = {
+  suppliers_credit_terms_days_check:
+    'Payment terms have to be between 0 and 365 days. Leave it blank if this supplier is ' +
+    'cash-on-delivery — blank is what disables credit on the payment form.',
+  expense_payments_cash_request_id_fkey:
+    'That cash request does not exist. Pick a float from the list rather than typing an id — ' +
+    'the float is what says whose money was spent.',
+};
+
+function errorMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  for (const [constraint, message] of Object.entries(CONSTRAINT_MESSAGES)) {
+    if (raw.includes(constraint)) return message;
+  }
+  return sharedErrorMessage(err);
+}
 
 const PAYMENT_METHODS = new Set<string>(['cash', 'online', 'credit', 'reimbursable', 'other', 'ar_collection']);
 

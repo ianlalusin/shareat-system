@@ -308,6 +308,65 @@ export async function balanceOf(
 }
 
 /**
+ * ⭐ Every account's balance for one store, in ONE statement — T-266 §9.3.
+ *
+ * ⚠️ **This replaces an N+1.** `apps/erp/src/app/ap/lib.ts`'s `moneyAccountsFor` maps `balanceOf`
+ * over every account, one round trip each. That was tolerable for the one screen that showed
+ * balances; T-266 puts a balance on every money picker in the app, so it stops being tolerable.
+ *
+ * ⭐ The shape is `custodianPositions`' (above), not `balanceOf`'s loop — one `GROUP BY` over the
+ * same lines, and the same asymmetry it documents applies here unchanged:
+ *
+ *   - `1140` is ONE control account for every wallet, so a wallet's balance is its own PARTY's
+ *     lines. Two wallets never share a total.
+ *   - `1110`/`1120`/`1130` have no party, so a cash account's balance is its GL code's balance at
+ *     its store. That is exact because `createMoneyAccount` refuses a second cash location per
+ *     custodian per store — which is why that refusal matters beyond tidiness.
+ *
+ * ⛔ **A staff-float account's total here belongs to NOBODY in particular.** It is the sum of
+ * every open float at that store (Ana's ₱1,240 + Ben's ₱380 = ₱1,620). Do not offer that number
+ * as a spendable balance — a float is spent per holder, and `cashRequestsRepo.floatsByRequest`
+ * is what decomposes it (T-266 §7.3).
+ */
+export async function balancesFor(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+): Promise<Map<string, string>> {
+  const rows = await tx.execute(sql`
+    select ma.id::text as account_id,
+      coalesce(sum(jl.debit - jl.credit), 0)::text as balance
+    from ${moneyAccounts} ma
+    left join ${accounts} a
+      on a.code = ma.gl_account_code
+    left join ${journalLines} jl
+      on jl.account_id = a.id
+     and jl.store_id = ma.store_id
+     -- Only 1140 needs the party to tell two places apart; the others ARE the place.
+     and (
+       ma.gl_account_code <> '1140'
+       or (jl.party_type = 'money_account' and jl.party_id = ma.id::text)
+     )
+    left join ${journalEntries} je
+      on je.id = jl.entry_id
+     and je.org_id = ${orgId}
+     and je.status <> 'draft'
+    where ma.org_id = ${orgId}
+      and ma.store_id = ${storeId}
+      -- ⚠️ A line only counts once its entry qualifies. Without this, the left join keeps rows
+      -- whose entry is a draft or another org's and sums them in.
+      and (jl.id is null or je.id is not null)
+    group by ma.id
+  `);
+
+  const out = new Map<string, string>();
+  for (const r of rows as unknown as Record<string, string>[]) {
+    out.set(String(r.account_id ?? r.accountId), Number(r.balance ?? 0).toFixed(2));
+  }
+  return out;
+}
+
+/**
  * ⭐ **UNDEPOSITED FUNDS** — money that has left the sale but not reached the office.
  *
  * Bible row 143. Rows 127 and 131 both assumed this needed **an account of its own**, because v1
