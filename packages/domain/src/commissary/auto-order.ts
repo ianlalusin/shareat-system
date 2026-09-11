@@ -21,7 +21,7 @@
  * what they used even when the ordering subsystem is down.* ⚠️ That is the whole reason the
  * function returns a report instead of throwing, and the reason `postUsageRecord` does not call it.
  */
-import { commissaryRepo, lowStockRepo, transaction, type Tx } from '@shareat/db';
+import { commissaryRepo, lowStockRepo, withOrgPrincipal, type Tx } from '@shareat/db';
 import { lineCost } from '../stock/layers';
 import { quantity, toThousandths, type Quantity } from '../stock/quantity';
 import { resolveBranchRate } from './orders';
@@ -193,13 +193,25 @@ async function resolveRate(
  * ⚠️ It is deliberately NOT called from `postUsageRecord`. That function takes a `tx` it does not
  * own, so it is structurally incapable of running anything after the commit — and wiring it in
  * there would produce exactly the coupling this invariant forbids.
+ *
+ * ## ⛔ `withOrgPrincipal`, not a bare `transaction()` — DEF-287, and the swallow is why it matters
+ *
+ * Because it opens its own transaction it must carry its own principal; a principal set by the
+ * usage post further up committed and went away with it. It ran principal-less until 2026-09-11.
+ *
+ * ⚠️ **This one would never have shown up as an error anywhere.** The `catch` below swallows
+ * every failure ON PURPOSE — correctly, because the cook's usage post is already committed and
+ * must stay that way. So under a tightened role the RLS refusal would have been caught, folded
+ * into `failed`, and auto-ordering would simply have stopped producing draft lines. ⭐ A silent
+ * READ gives a wrong answer and a silent WRITE does nothing; a **deliberately swallowed error**
+ * is the third shape, and it is the quietest of the three.
  */
 export async function replenishAfterUsage(
   input: AutoOrderInput,
 ): Promise<AutoOrderReport & { readonly failed: string | null }> {
   const empty = { orderId: null, created: false, appended: [], skipped: [], notes: [] };
   try {
-    const res = await transaction((tx) => ensureAutoOrderLines(tx, input));
+    const res = await withOrgPrincipal(input.orgId, (tx) => ensureAutoOrderLines(tx, input));
     if (!res.ok) return { ...empty, failed: null, notes: [res.reason] };
     const { ok: _ok, ...report } = res;
     return { ...report, failed: null };

@@ -1,7 +1,7 @@
 import { config } from 'dotenv';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
-import { closeDb, lowStockRepo, transaction } from '@shareat/db';
+import { closeDb, lowStockRepo, withOrgPrincipal } from '@shareat/db';
 import { ensureAutoOrderLines, replenishAfterUsage, suggestFor } from '../../src/commissary/auto-order';
 import { listOrderMessages, postOrderMessage } from '../../src/commissary/messages';
 import { quantity } from '../../src/stock/quantity';
@@ -31,13 +31,13 @@ async function stock(storeId: string, locationId: string, itemId: string, qty: s
 }
 
 async function threshold(storeId: string, itemId: string, value: string): Promise<void> {
-  await transaction((tx) =>
+  await withOrgPrincipal(orgA, (tx) =>
     lowStockRepo.setThreshold(tx, { orgId: orgA, storeId, itemId, threshold: value, setBy: personA }),
   );
 }
 
 const autoOrder = (over: Record<string, unknown> = {}) =>
-  transaction((tx) =>
+  withOrgPrincipal(orgA, (tx) =>
     ensureAutoOrderLines(tx, {
       orgId: orgA, branchStoreId: branch, customerId, orderedOn: '2026-08-25',
       createdBy: personA, ...over,
@@ -105,7 +105,7 @@ describe('T-175 — low stock is a QUERY, not a list somebody maintains', () => 
     await threshold(branch, pork, '20');
     await threshold(branch, sauce, '20');
 
-    const rows = await transaction((tx) => lowStockRepo.lowStock(tx, orgA, branch));
+    const rows = await withOrgPrincipal(orgA, (tx) => lowStockRepo.lowStock(tx, orgA, branch));
     expect(rows.map((r) => r.itemName)).toEqual(['Pork', 'Bulgogi sauce']);
     expect(rows[0]!.shortfall).toBe('15.000');
     expect(rows[1]!.shortfall).toBe('2.000');
@@ -117,7 +117,7 @@ describe('T-175 — low stock is a QUERY, not a list somebody maintains', () => 
     await threshold(branch, pork, '20');
     await threshold(branch, sauce, '20');
 
-    const rows = await transaction((tx) => lowStockRepo.lowStock(tx, orgA, branch));
+    const rows = await withOrgPrincipal(orgA, (tx) => lowStockRepo.lowStock(tx, orgA, branch));
     // ⚠️ "At or below" — v1's comparison, kept. An item sitting exactly on its threshold is the
     // moment to order, not the moment after.
     expect(rows.map((r) => r.itemName)).toEqual(['Bulgogi sauce']);
@@ -134,18 +134,18 @@ describe('T-175 — low stock is a QUERY, not a list somebody maintains', () => 
 
     // 24 kg across two rooms is not low stock. ⛔ A per-room comparison would cry low twice while
     // a shelf next door is full.
-    const rows = await transaction((tx) => lowStockRepo.lowStock(tx, orgA, branch));
+    const rows = await withOrgPrincipal(orgA, (tx) => lowStockRepo.lowStock(tx, orgA, branch));
     expect(rows).toHaveLength(0);
   });
 
   it('⚠️ an item with NO threshold never appears — it is a finding, not a low-stock row', async () => {
     await stock(branch, brKitchen, pork, '0.5');
-    const rows = await transaction((tx) => lowStockRepo.lowStock(tx, orgA, branch));
+    const rows = await withOrgPrincipal(orgA, (tx) => lowStockRepo.lowStock(tx, orgA, branch));
     expect(rows).toHaveLength(0);
 
     // ⭐ This is the replacement for v1's forcing function, which blocked a usage post until
     // somebody filled the setting in. It nags a manager instead of blocking a cook at 11pm.
-    const missing = await transaction((tx) => lowStockRepo.itemsWithoutThreshold(tx, orgA, branch));
+    const missing = await withOrgPrincipal(orgA, (tx) => lowStockRepo.itemsWithoutThreshold(tx, orgA, branch));
     expect(missing.map((m) => m.itemName)).toContain('Pork');
   });
 
@@ -153,7 +153,7 @@ describe('T-175 — low stock is a QUERY, not a list somebody maintains', () => 
     // ⚠️ No movement at all — `stock_movements_quantity_not_zero_check` refuses a zero-quantity
     // row, and rightly: "nothing happened" is not an event. On-hand zero is the ABSENCE of rows.
     await threshold(branch, pork, '0');
-    const rows = await transaction((tx) => lowStockRepo.lowStock(tx, orgA, branch));
+    const rows = await withOrgPrincipal(orgA, (tx) => lowStockRepo.lowStock(tx, orgA, branch));
     expect(rows).toHaveLength(1);
     expect(rows[0]!.shortfall).toBe('0.000');
   });
@@ -281,7 +281,7 @@ describe('T-175 — the order it drafts into', () => {
   });
 
   it('⛔ a store with no commissary link never auto-orders', async () => {
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       ensureAutoOrderLines(tx, {
         orgId: orgA, branchStoreId: commissary, customerId, orderedOn: '2026-08-25', createdBy: personA,
       }),
@@ -304,16 +304,16 @@ describe('T-175 — ⭐ the order thread, and it is append-only', () => {
 
   it('either store can post and read', async () => {
     const orderId = await anOrder();
-    const fromBranch = await transaction((tx) =>
+    const fromBranch = await withOrgPrincipal(orgA, (tx) =>
       postOrderMessage(tx, { orgId: orgA, orderId, body: 'two crates were short', authorId: personA, actorStoreIds: [branch] }),
     );
     expect(fromBranch.ok).toBe(true);
-    const fromCommissary = await transaction((tx) =>
+    const fromCommissary = await withOrgPrincipal(orgA, (tx) =>
       postOrderMessage(tx, { orgId: orgA, orderId, body: 'checking with the driver', authorId: personA, actorStoreIds: [commissary] }),
     );
     expect(fromCommissary.ok).toBe(true);
 
-    const read = await transaction((tx) => listOrderMessages(tx, { orderId, actorStoreIds: [branch] }));
+    const read = await withOrgPrincipal(orgA, (tx) => listOrderMessages(tx, { orderId, actorStoreIds: [branch] }));
     expect(read.ok).toBe(true);
     if (!read.ok) return;
     expect(read.messages.map((m) => m.body)).toEqual(['two crates were short', 'checking with the driver']);
@@ -321,17 +321,17 @@ describe('T-175 — ⭐ the order thread, and it is append-only', () => {
 
   it('⛔ a third store can neither post nor read', async () => {
     const orderId = await anOrder();
-    const posted = await transaction((tx) =>
+    const posted = await withOrgPrincipal(orgA, (tx) =>
       postOrderMessage(tx, { orgId: orgA, orderId, body: 'hello', authorId: personA, actorStoreIds: [other] }),
     );
     expect(posted.ok).toBe(false);
-    const read = await transaction((tx) => listOrderMessages(tx, { orderId, actorStoreIds: [other] }));
+    const read = await withOrgPrincipal(orgA, (tx) => listOrderMessages(tx, { orderId, actorStoreIds: [other] }));
     expect(read.ok).toBe(false);
   });
 
   it('⛔ UPDATE and DELETE raise, in raw SQL', async () => {
     const orderId = await anOrder();
-    await transaction((tx) =>
+    await withOrgPrincipal(orgA, (tx) =>
       postOrderMessage(tx, { orgId: orgA, orderId, body: 'the crate was short', authorId: personA, actorStoreIds: [branch] }),
     );
     // ⚠️ An editable audit trail is not one — and this is the trail of a commercial conversation
@@ -342,7 +342,7 @@ describe('T-175 — ⭐ the order thread, and it is append-only', () => {
 
   it('an empty or whitespace-only message is refused before it reaches the table', async () => {
     const orderId = await anOrder();
-    const res = await transaction((tx) =>
+    const res = await withOrgPrincipal(orgA, (tx) =>
       postOrderMessage(tx, { orgId: orgA, orderId, body: '   ', authorId: personA, actorStoreIds: [branch] }),
     );
     expect(res.ok).toBe(false);
@@ -428,7 +428,7 @@ describe('T-175 — ⭐ invariant 8: the ordering subsystem can fail without cos
 
     // ⚠️ The signal is not lost: the item is still on the low-stock list, and a manager still sees
     // it. What was lost is a convenience, not information.
-    const rows = await transaction((tx) => lowStockRepo.lowStock(tx, orgA, branch));
+    const rows = await withOrgPrincipal(orgA, (tx) => lowStockRepo.lowStock(tx, orgA, branch));
     expect(rows).toHaveLength(1);
   });
 
