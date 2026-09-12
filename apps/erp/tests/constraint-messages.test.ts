@@ -175,3 +175,85 @@ describe('§B3 did not widen the /setup security allowlist', () => {
     }
   });
 });
+
+/**
+ * T-271 part 2 — DEF-301/DEF-279. A CI-enforced pin, not a review-dependent one.
+ *
+ * ⛔ **WHAT THIS PROTECTS, and it has already been broken twice on 2026-09-12 alone:**
+ * `errorMessage` must render a DEF-279 invariant's OWN hand-authored sentence when no
+ * `CONSTRAINT_MESSAGES` key exists for it yet — never `genericConstraintMessage`'s content-free
+ * fallback. It is the property that makes DEF-301's fix (matching on the RESOLVED constraint name)
+ * behaviour-preserving for these five specifically, and it is easy to break by a change that looks
+ * like an improvement: gating the generic fallback on "a name resolved at all"
+ * (`resolveConstraintName`) instead of "the name is in the raw PROSE" (`parseConstraintName`) reads
+ * as a harmless simplification and sanitises all five into the same generic sentence.
+ *   1. `docs/HANDOFF-TODAY.md:99-100` — system32-85, during T-270/DEF-279 itself: *"I widened
+ *      `errorMessage` when only the counter needed it, replacing a precise accounting sentence with
+ *      a content-free one. Reverted."*
+ *   2. `apps/erp/tests/integration/constraint-message-lookup-mechanism.test.ts`'s "NO key added"
+ *      case — lane B (T-271), caught in the orchestrator's review of the very fix for DEF-301,
+ *      before it was committed.
+ * Two different sessions, two different routes into the same trap, the same week. That is a
+ * property of this function's shape, not bad luck — hence a unit-level pin instead of relying on
+ * review a third time.
+ *
+ * ⚠️ **Synthetic error objects are CORRECT here, unlike the before/after pass** — worth being
+ * explicit about, since that pass deliberately refused them. There the question was "what does the
+ * REAL driver produce for these five?", which only a real provocation against Postgres can answer —
+ * answered once, for real, in `constraint-message-lookup-mechanism.test.ts` (both the WITH-key and
+ * NO-key cases, against `stock_movements_no_negative_on_hand_trg`). THAT integration test is the
+ * anchor measurement; this unit test's question is different — "given an error of a shape already
+ * measured for real, does this PURE function branch correctly?" — which a synthetic object of that
+ * same measured shape (`constraint_name` set, name absent from the message text — confirmed live in
+ * `docs/discovery/33-def-279-live-trigger-bodies.md`) answers just as well, without a database, in a
+ * suite CI runs before migrations are applied.
+ *
+ * ⛔ Does NOT add any of the five sentences to `CONSTRAINT_MESSAGES` (T-272's call, invariant 1) and
+ * does NOT provoke all five for real (the one real provocation already committed is the anchor).
+ */
+describe('T-271 part 2 — DEF-279 invariants with no key render their own text, never the generic sentence', () => {
+  // Names and representative hand-authored message shapes verified live, byte-for-byte, in
+  // docs/discovery/33-def-279-live-trigger-bodies.md. None contains `constraint "<name>"` — that
+  // absence from the prose is DEF-279's entire premise, asserted explicitly below per case.
+  const DEF_279_CASES: Array<{ constraintName: string; message: string }> = [
+    {
+      constraintName: 'journal_entries_balance_check',
+      message: 'journal entry 9f3a2b1c-0000-0000-0000-000000000000 is unbalanced: debits 100.00 <> credits 90.00',
+    },
+    {
+      constraintName: 'journal_lines_balance_check',
+      message: 'journal entry 9f3a2b1c-0000-0000-0000-000000000000 must have at least two lines (has 1)',
+    },
+    {
+      constraintName: 'stock_movements_no_negative_on_hand_trg',
+      message:
+        'stock would go negative: item 01a093c0-0000-0000-0000-000000000000 at location 01a093c0-0000-0000-0000-000000000001 would be -1.000 after this movement',
+    },
+    {
+      constraintName: 'stock_layer_consumptions_ties_trg',
+      message:
+        'layer 01a093c0-0000-0000-0000-000000000002 does not tie: quantity 10.000 minus remaining 5.000 is 5.000, but its subledger sums to 3.000',
+    },
+    {
+      constraintName: 'order_wastage_allocations_sum_100_trg',
+      message: 'order_wastage 01a093c0-0000-0000-0000-000000000003 allocations sum to 80, not 100',
+    },
+  ];
+
+  for (const { constraintName, message } of DEF_279_CASES) {
+    it(`${constraintName}: renders its own hand-authored sentence verbatim, with no key mapped`, () => {
+      expect(constraintName in CONSTRAINT_MESSAGES).toBe(false); // still true today for all five
+      expect(message).not.toMatch(/constraint "/); // the name is not in the prose — DEF-279's premise
+
+      // The measured shape: a driver error is an Error instance carrying `constraint_name` as an
+      // own property, never embedding the name in `.message` for these five (migration 0142's
+      // `USING CONSTRAINT` populates only the structured field).
+      const err = Object.assign(new Error(message), { constraint_name: constraintName });
+
+      const rendered = errorMessage(err);
+      expect(rendered).toBe(message);
+      expect(rendered).not.toContain("isn't allowed for"); // never genericConstraintMessage's wording
+      expect(rendered).not.toContain('please check the values you entered');
+    });
+  }
+});
