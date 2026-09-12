@@ -1,127 +1,140 @@
-# Handoff — 2026-09-12
+# Handoff — 2026-09-12 (evening)
 
 ## Where things stand
 
-**Everything yesterday's handoff named as blocking the production database role switch is built
-and pushed.** All three of bible row 194's cross-organisation subsystems now go through
-`systemTransaction()`, and Ian ruled the one question that was reserved for him. Four tasks shipped
-(T-267 – T-270), seven defects filed, one bible row added.
+**T-264 is COMPLETE — all three slices.** An accounting month can now be created (slice 1), closed
+(slice 2), and posted into once on the record by an `admin` or `super_admin` (slice 3, today). The
+period is never reopened, and no reopen path was built — bible row 193 is explicit that reopening
+remains unbuilt and was not what Ian was asked.
 
-**Nothing is half-built and nothing is mid-flight.** Both worker lanes were brought to a clean stop
-at a task boundary with no uncommitted work of their own.
+**T-271 and T-273 also shipped.** Nothing is half-built. Both worker lanes stopped at task
+boundaries with no uncommitted work of their own, and the tree is clean.
 
-⭐ **DEF-218 IS CLOSED. The restricted role is ON BY DEFAULT, and the production database role
-switch is unblocked.** The flip was held back all evening for one reason — all 115 files had been
-seen green only *in pieces*, two halves plus re-runs with a migration landing in between, and
-*"it was green in parts"* is a belief rather than a measurement. The single clean run finished
-after the wrap-up began: **116 files / 2747 tests / 0 failed, one invocation, quiet machine,
-migration 0142 applied.** The flip was then made and **verified three ways** rather than assumed
-(§Gates).
-
-⚠️ **What remains is Ian's, not an engineering step:** actually tightening `DATABASE_URL` on the
-production host. Nothing in the codebase blocks it now.
+⚠️ **What remains Ian's, not an engineering step:** tightening `DATABASE_URL` on the production host.
+Unblocked since yesterday; nothing in the codebase stands in the way.
 
 ---
 
-## Gates at `f0aebed`
+## Gates at `9e04a56`
 
-⚠️ **Measured at `f0aebed`, the last commit that changed CODE.** Everything after it is documentation — registers, roadmap, task statuses, this file. Stating the code sha rather than `HEAD` because a gate number is only true of the tree it was run against.
+⚠️ Measured at `9e04a56`, the last commit that changed CODE. Everything after it is documentation.
 
 | Gate | Result |
 |---|---|
 | `npm run typecheck` | **exit 0**, clean |
-| `npm run test` (unit) | **97 files · 1351 passed · 1 skipped** |
-| `npm run build` | **exit 0** (run twice today, dev server stopped first and process-verified both times) |
-| Smoketest on 9008 | **passed** — `/sign-in` 200; `/setup` with a forged setup cookie returns *"This system is already set up."* |
-| Integration, **default** role | green |
-| Integration, **restricted** role | ⭐ **116 files · 2747 passed · 0 failed** — one clean single invocation, 1642s, quiet machine, `0142` applied |
-| The DEF-218 flip itself | ⭐ **proven, not assumed** — throwaway probe run three ways then deleted: unset → `shareat_test_runner`; `=0` → `postgres`; `=1` → `shareat_test_runner`. Post-flip sample with **no flag at all**: 6 files / 51 passed |
+| `npm run test` (unit) | **98 files · 1365 passed · 1 skipped · 0 failed** |
+| `npm run build` | **exit 0** — dev server stopped and port 9008 **verified free by process enumeration** first, not by intent |
+| Smoketest on 9008 | `/sign-in` **200** on the restarted dev server |
+| Integration — **full suite** | ⭐ **119 files · 2788 passed · 0 failed**, 1624s, lane A's database with `0143` applied |
+| Integration — **independent re-run** | ⭐ **6 files · 73 passed · 0 failed** on the orchestrator's OWN database |
 
-⚠️ **Every number above was re-run by the orchestrator on its own database, never accepted from a
-lane.** Each lane's numbers matched on every slice.
+⭐ **Both integration numbers are stated because they answer different questions.** The full suite
+proves nothing else broke. The independent re-run proves the result is not an artefact of one
+database or one lane's harness — it covered `period-override`, `post-entry`, `post-entry-party`,
+`reverse-entry`, `fiscal-period-close`, `fiscal-periods-seeding`.
 
-⚠️ **The smoketest cannot prove the fix, only the absence of regression** — local dev connects as
-`postgres` with `rolbypassrls = t`, so `systemTransaction()` and `transaction()` are byte-identical
-there. The proof is the restricted-role integration suite.
+⚠️ **The two that mattered most were `reverse-entry` and `fiscal-period-close`.** Both exercise the
+trigger functions `0143` rewrote, and `reverse-entry` posts into closed periods through reversal's
+own legitimate path (`0003:202-208`) — exactly where a regression in this change would hide. ⭐ **The
+lane named them as its own unverified gap before anyone asked it to.**
+
+⚠️ **One deviation, named not buried:** lane A proved migration `0143` by applying it straight to its
+own lane database rather than to a throwaway scratch database first (ADR-012 §5 step 8). Mitigated
+after the fact — the orchestrator applied `0143` cleanly to a **second, independent** database — but
+the step as written was not followed.
 
 ---
 
 ## What happened this session
 
-### The routing, which was the whole point
+### The main job
 
 | Task | Sha | What |
 |---|---|---|
-| T-267 | `a381b84` | Till-event org resolution · orphaned-file sweep (DEF-287) · **two of three** bootstrap sites · two guard repairs |
-| T-268 | `7f621ff` | The ETL pipeline (DEF-289) — ⚠️ **8 call sites, not the 6 on record** |
-| T-269 | `9793175` | DEF-297 + DEF-298 in the orphan sweep · the third bootstrap site |
-| T-270 | `f0aebed` | DEF-279, migration `0142` — the five invariants name themselves |
+| T-264 slice 3 | `018af6f` | The fiscal-period override, migration `0143` |
+| T-271 part 1 | `627a856` | DEF-301 — the message map is looked up by name |
+| T-271 part 2 | `0517bae` | The trap that bit twice in one day becomes a red CI run |
+| T-273 | `a5c50b6` | DEF-303 — a job with nothing to run it now fails the build |
+| pre-wire | `d7436fc` | `override_period_lock`, bible row 196, ADR-006 amended |
 
-**Ian's decision, recorded in `PROJECT_BIBLE.md` §13 row 195** (`869bdba`): the bootstrap question
-*"has this system been set up at all?"* goes through bootstrap's own door rather than widening the
-auth door. ⚠️ It was asked in **three** places, not the one the handoff reserved — and
-`scripts/bootstrap-org.ts` contradicted itself, guarding with an unprincipalled read before a write
-that already used `systemTransaction()`. Bible version bumped to 3.14; it had been stale since
-2026-09-09, so rows 190–194 had landed without one.
+### ⛔ The four findings worth more than the tasks
 
-### ⛔ The four findings worth more than the tasks they came from
+1. **DEF-302 — the override is unreachable on three real flows.** `commissary/transfer.ts`
+   `confirmReceipt`, `production/index.ts` `runProductionPosting` and `trade/returns.ts`
+   `recordInternalReturn` each insert a stock movement and post a ledger entry on the **same
+   transaction, movement first**. `stock_movements_check_period_open` has no override concept, so on
+   those three the transaction dies before `postEntry` and an authorised admin sees a **stock** error
+   with nothing indicating the override was never consulted. ⭐ **Found by a lane ANSWERING A
+   BRIEFING QUESTION** — *"does any path that calls `postEntry` also insert into `stock_movements` in
+   the same transaction?"* The orchestrator expected zero and the answer was three.
+2. **The override quietly widened, and it took a ruling.** `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER`
+   is DERIVED as admin-yes/manager-no, so the new capability **enrolled itself** into the
+   adminless-manager fallback — contradicting row 193's *"admin and super_admin, nobody else"* with
+   **nothing going red**. Ian ruled the enrolment correct (row 196). ⚠️ The orchestrator recommended
+   the opposite and was wrong on the codebase's own evidence: the pin's existing comments already
+   record that a hand-maintained carve-out in a derived set is what drifts.
+3. **T-271's first pass regressed DEF-279's five, and the 26-row table could not see it.** Every one
+   of the 26 mapped constraints is a native violation populating **both** `constraint_name` and the
+   prose, so all 26 rendered identically and the before/after pass was honestly complete — while the
+   five hand-raised invariants, which populate only the first, were being flattened from *"journal
+   entry 9f3a is unbalanced: debits 100.00 <> credits 90.00"* to *"That change isn't allowed for that
+   record."* ⛔ **The same mistake T-270 made and reverted three days earlier.** Caught in review, not
+   by any gate — every gate was honestly green.
+4. **DEF-303 and DEF-304 — two more guards that see less than they claim.** `budget_reissue` is a
+   seventh registered job with no `.service`/`.timer` pair at all; and T-236's own
+   "every job has a caller" guard reads **one hardcoded file**, so `runRecurringExpenses` — which
+   lives elsewhere — is invisible to it, not merely uncalled.
 
-1. **DEF-299 — `sweepOrphanedFiles` has no production caller and never has.** No systemd unit, no
-   npm script, no route; four calls, all in its own test file. ⭐ **This recontextualises DEF-298**,
-   the data-loss race found the same afternoon: it has never fired. A landmine, not a bleed — and
-   worse for it, because whoever eventually scheduled that cron would have done so believing it had
-   been running safely for months. **Both bugs are now fixed, so it is safe to wire. It was not
-   this morning.**
-2. **DEF-279's recorded disposition was wrong, and had survived a ruling.** `USING CONSTRAINT`
-   populates `err.constraint_name`, never `err.message` — which is what `parseConstraintName`
-   reads. The fix on record since 2026-09-10 would have applied cleanly, looked right, and changed
-   nothing. ⛔ **A disposition in the register is a hypothesis too.**
-3. **DEF-295 — a guard scanning two of nine source roots** while asserting *"no file outside the
-   closed list."* `scripts/` was unscanned though the guard *requires* a caller from it, as was
-   `packages/etl/src` — the package T-268 was about to add six callers to. ⭐ Its positive control
-   (`files.length > 50`) could never have caught this: **a control on the SIZE of a scanned set
-   says nothing about whether it is the RIGHT set.**
-4. **DEF-296 — a staleness check that could not detect staleness.** It verified the exempted file
-   still *existed*, never that it still *needed* the exemption. Found three dead entries, one stale
-   for weeks and unrelated to today.
+### ⭐ The pattern worth carrying forward
 
-### Where the orchestrator was wrong, which is the useful part
+**Three guards this week were found asserting more than they check** — DEF-295 (two of nine source
+roots), DEF-296 (could notice a DELETED file, never a FIXED one), DEF-304 (one hardcoded file). In
+**all three** the guard's SCOPE was narrower than its CLAIM, and in all three it passed happily while
+blind. ⛔ **A positive control on the SIZE of a scanned set cannot catch this. Only a control on
+whether the set is the RIGHT one can.**
 
-- ⛔ **In a shared tree you cannot take a baseline after a lane has started.** Lane A reported my
-  red table was wrong; verifying, I measured 0 red on two databases and briefly concluded the lane
-  had erred. It had not — it had already applied its fix to the shared tree, so I was measuring the
-  fix and calling it a baseline. **Only the lane's own pre-edit measurement is a baseline.**
-- ⛔ **A census run concurrently with a build is not a census.** I caused three phantom failures in
-  lane B's census that way. Re-run quiet: 44/44 in 85 seconds.
-- ⛔ **Prefer the codebase's own checker over a fresh regex.** My grep said a file still reached a
-  raw handle; it was counting matches inside comments. The guard's comment-stripping function was
-  right.
-- ⛔ **The scope I added was the part that broke.** I widened `errorMessage` when only the counter
-  needed it, replacing a precise accounting sentence with a content-free one. Reverted.
+### Decisions Ian made today, and where each is recorded
+
+| Decision | Recorded in |
+|---|---|
+| The override enrols into the adminless-manager fallback, and that is **intended** | `PROJECT_BIBLE.md` §13 **row 196** |
+| Wire the orphaned-file sweep — **nightly** | `docs/DEFECTS-REGISTER.md` DEF-299 · `docs/tasks/272-*.md` |
+| Amend ADR-006's Gates table (DEF-293, DEF-294) | `docs/decisions/ADR-006-period-close.md` §Gates |
+| `webapps-65` stays on the team as lane B | this file, below |
+
+### Decisions the orchestrator made, flagged in case they are wrong
+
+- **`locked` is out of scope for the override** — only `closed`. A locked period's balances have
+  already been consumed by a later year's close, so an entry there silently breaks the closing entry
+  that consumed them. This reads bible row 193 precisely rather than narrowing it; both it and
+  DEF-284 say **closed**.
+- **The reason enum** — `late_supplier_invoice` · `regulatory_correction` · `data_entry_error` ·
+  `other` with a mandatory note. A HOW, so not escalated.
+- **DEF-303 rolls into T-272** rather than getting its own task.
+- **Scoping the sweep per-org, and thereby removing it from row 194's closed cross-org list, is
+  sanctioned without a fresh ruling** — row 194 says in terms that a subsystem leaves that list by
+  being given a principal, and removal narrows privilege. ⚠️ **Record a bible row when T-272 does
+  it.**
 
 ---
 
 ## Pick up here
 
-⚠️ **The flip is DONE — do not redo it.** `tests/integration/setup.ts` is opt-OUT now. If you need
-a permissive run for debugging, `INTEGRATION_RESTRICTED_ROLE=0`, and ⛔ say out loud that you did:
-a green run with the flag at `0` proves nothing about tenancy.
+**1. T-272 — the orphaned-file sweep, nightly, plus DEF-303's `budget_reissue`.** Ian ruled it.
+⛔ **Read the SCOPE CORRECTION at the end of `docs/tasks/272-*.md` before planning** — it is **not**
+"a script and a timer". `sweepOrphanedFiles` takes no `orgId` and `scheduler_runs.org_id` is
+`NOT NULL`, so as written **it cannot record a run at all**, and the task's own non-negotiable is
+that a sweep recording nothing is not wired. Migration slot **`0144`**, `when` must exceed
+**`1798428707084`**.
 
-**1. T-264 slice 3 — the fiscal-period override.** Unblocked now the routing has landed. Needs a new
-`override_period_lock` capability and **migration slot 0143** (`when` must exceed `1798342307084`).
-⛔ Non-negotiables are in `docs/tasks/264-*.md`: reuse migration `0005`'s transaction-local GUC so
-an unset flag fails **closed**; set the flag only after `authorize()`; never implement the override
-in TypeScript around the trigger; **watch a manager's override be refused before wiring the
-exemption.**
+**2. DEF-304** — T-236's guard reads one hardcoded file. Fix it with or right after T-273's sibling,
+so the two agree on how jobs are discovered. ⛔ Prove it the way DEF-295 was proven: plant a
+violation in a previously-unscanned location and watch it fail.
 
-**2. The year-close journal entry** (ADR-006), still unassigned: one entry via `postEntry`, dated
-the following Jan 1, zeroing income/expense into 3300, with a distinct `source_type`.
-
-**3. DEF-299, once Ian rules** — wiring the orphan sweep to a timer, on the pattern of the six in
-`docs/ops/`. Both its bugs are fixed, so it is safe now; it was not this morning.
-
-⚠️ **Exit code 0 is not a result.** A killed background census reported exit 0 twice today, and a
-completed one reported exit 0 while its own summary said 3 tests failed. **Read the output.**
+**3. The year-close journal entry** (ADR-006), still unassigned: one entry via `postEntry`, dated the
+following Jan 1, zeroing income/expense into 3300, with a distinct `source_type`. ⭐ **No migration
+needed** — `journal_entries.source_type` is free text with no CHECK constraint. It was kept out of
+today's cycle because it touches the same ledger code T-264 slice 3 was in.
 
 ---
 
@@ -129,37 +142,34 @@ completed one reported exit 0 while its own summary said 3 tests failed. **Read 
 
 | Question | Recommendation on the table |
 |---|---|
-| **DEF-299** — should abandoned uploads be swept at all, and on what schedule? | Wire it, on the pattern of the six existing timers in `docs/ops/`. Both its bugs are fixed. ⛔ Wiring it before today would have started deleting bytes out from under just-claimed files on night one |
-| **DEF-293 / DEF-294** | Two findings against ratified ADR-006 — a close gate that can never fire, and three of five gates that are continuous rather than period-scoped. Neither implies a code change. Untouched today |
-| **DEF-301** | The message map matches by raw-text substring, so a key for DEF-279's five would match nothing, silently. Fixing it changes what *every* already-mapped constraint renders — **its own task with a before/after pass**, never a drive-by |
+| **`DATABASE_URL` on the production host** | Tighten it whenever you like. Unblocked since yesterday; no engineering step remains |
+| **DEF-302** — the override is unreachable on three stock-moving flows | **(b) Make the refusal honest** — teach `stock_movements_check_period_open` to recognise the override GUC and refuse anyway, with a message saying the override does not extend to stock movements. Changes no behaviour, costs almost nothing, removes the whole diagnostic problem. (a) leave it; (c) extend the exemption — ⛔ expensive, recomputes inventory layers and COGS, needs its own ADR |
+| **Two timers to arm, not one** | T-272 will produce unit files for both the orphan sweep and `budget_reissue`. Arming either on the droplet is Ian's step (DEF-194) |
 
 ---
 
 ## Traps that have actually bitten — live in this area right now
 
-- ⛔ **`git status` can lie about another session's file.** It reported one clean while
-  `git hash-object` already differed from `git rev-parse HEAD:<path>`. **Run
-  `git update-index --refresh` first.** Two reads of the same line seconds apart disagreed because
-  a lane was writing it — use one authoritative command, not two that agree by luck.
-- ⛔ **Never `git stash` in this tree.** It sweeps every session's work, and untracked files have no
-  recovery path. To answer *"is this mine?"* use `git diff HEAD -- <path>`.
-- ⛔ **Never `npm run test:integration`** — it hits the shared database and truncates a peer's
-  fixtures mid-run. Give every lane its own DB (`make-test-dbs.mjs`). No collision all day.
-- ⛔ **Stop the dev server before `npm run build`** and verify by process enumeration, not by
-  intent. A build clobbers the `.next` a dev server is serving and presents as a phantom
-  application bug in whatever you happen to be testing.
-- ⚠️ **In PowerShell, `VAR=1 cmd` does not set the variable.** Use
-  `$env:INTEGRATION_RESTRICTED_ROLE=1` as its own statement, or the suite passes and you conclude
-  nothing is broken.
-- ⛔ **Never add an RLS policy to make the app role work on the ETL tables.** They carry FORCE RLS
-  with zero policies *by design* (`0011:142-160`) and hold captured production PII. A policy that
-  admits the app role admits every tenant.
-- ⭐ **Ask a lane a question, not only for a change.** T-267's invariant 4 asked *"does the sweep's
-  delete actually delete?"* That one sentence produced DEF-297, DEF-298 and DEF-299. None would
-  have been found by a test.
-- ⭐ **Name the expected reds in the briefing.** Both lanes hit guard failures that were correct
-  consequences of correct work; because the briefing predicted them by name, both reported them
-  verbatim instead of "fixing" a shared guard.
+- ⛔ **A before/after table can be honestly complete and still blind.** T-271's 26 rows were all
+  native constraints populating both the structured field and the prose; the five that populate only
+  one were the entire point of the defect and no row could move. **Ask what the passing set cannot
+  contain.**
+- ⛔ **The LOOKUP and the SANITISER need different resolvers.** *Which constraint is this?* → the
+  structured field. *Is this raw Postgres grammar a person must never read?* → the name appearing in
+  the PROSE. A hand-written `RAISE EXCEPTION` is not raw grammar.
+- ⛔ **A capability with `manager: false` enrols itself into the adminless-manager fallback.** The set
+  is DERIVED. Adding an admin-only capability widens that fallback with no edit to any list and
+  nothing red. Check `tests/unit/capability-matrix.test.ts`'s pin every time.
+- ⛔ **Only a pre-edit measurement is a baseline.** Once `0143` is applied to a database the pre-0143
+  refusal cannot be reproduced there. Capture the literal text first, in the report, not in scrollback.
+- ⛔ **Never `npm run test:integration`** — it hits the shared database. Give every lane its own DB
+  (`~/.claude/skills/orchestrator/tools/make-test-dbs.mjs`, run with `it.mjs`). No collision all day.
+- ⛔ **Stop the dev server before `npm run build`** and verify by **process enumeration**, not intent.
+- ⚠️ **In PowerShell, `VAR=1 cmd` does not set the variable.** Use `$env:VAR=1` as its own statement.
+- ⚠️ **This handoff's own smoketest recipe went stale in one day.** Yesterday's said `/setup` with a
+  forged cookie renders *"This system is already set up."* It now returns **307**, which is correct
+  for a database that IS set up. The cookie name still matches; the recipe was just describing a
+  different state. **Re-derive a smoketest recipe before trusting it.**
 
 ---
 
@@ -167,17 +177,23 @@ completed one reported exit 0 while its own summary said 3 tests failed. **Read 
 
 | Session | Lane | Model | Lane DB | State |
 |---|---|---|---|---|
-| `webapps-4e` | A | Sonnet 5 | `shareat_test_lanea` | **released, idle**, no work in flight. Built T-267, T-269, T-270 |
-| `webapps-65` | B | Sonnet 5 | `shareat_test_laneb` | **released, idle**, no work in flight. Built T-268 |
+| `webapps-4e` | A | Sonnet 5 | `shareat_test_lanea` | **released, idle**, no work in flight. Built T-264 slice 3 |
+| `webapps-65` | B | Sonnet 5 | `shareat_test_laneb` | **released, idle**, no work in flight. Built T-271, T-273, the discovery doc |
 | `system32-85` | orchestrator | Opus 5 | `shareat_test_orch` | this session — clear it |
 
-⭐ **`webapps-65` was brought onto the team by Ian today**, reversing yesterday's *"reports to you
-but does not take orders from you."* He pasted the worker line and ran `/model sonnet` himself.
-⛔ **Confirm with Ian before assuming that again** — it was a decision for one day, not a standing
-change.
-
 **Worker lanes stay alive and are re-adopted; only the orchestrator is cleared** (CLAUDE.md, Ian
-2026-09-07).
+2026-09-07). ⭐ **Both lanes confirmed Sonnet in their own ACKs** — no `/model` switching needed.
+
+⭐ **Both of today's real findings came from a lane raising something rather than from a test** —
+DEF-302 from a briefing question, and T-271's regression from lane B flagging a concern *after* its
+work had already been accepted and the easy move was to bank the commit.
+
+---
+
+## Numbers to allocate from
+
+- Next task: **T-274**  ·  Next defect: **DEF-305**
+- Next migration: **`0144`**, `when` must exceed **`1798428707084`**
 
 ---
 
@@ -185,19 +201,23 @@ change.
 
 ```
 You are the orchestrator for shareat-system (C:\Users\ianla\webapps\shareat-system), picking up
-from the 2026-09-12 handoff. Run the global /orchestrator skill.
+from the 2026-09-12 evening handoff. Run the global /orchestrator skill.
 
-Read in this order: docs/RULES.md, docs/HANDOFF-TODAY.md, PROJECT_BIBLE.md §3/§9/§13 rows 194-195,
-docs/DEFECTS-REGISTER.md section E (DEF-295 to DEF-301 are today's).
+Read in this order: docs/RULES.md, docs/HANDOFF-TODAY.md, PROJECT_BIBLE.md §13 rows 193-196,
+docs/DEFECTS-REGISTER.md section E (DEF-302 to DEF-304 are today's).
 
-DEF-218 is CLOSED and the restricted role is on by default — do not redo that flip. Your first
-job is T-264 slice 3, the fiscal-period override; §Pick up here has its non-negotiables and its
-migration slot. Tell Ian that tightening DATABASE_URL on the production host is now unblocked and
-is his call, not an engineering step.
+T-264 is COMPLETE — all three slices. Do not reopen it. Your first job is T-272, the orphaned-file
+sweep; ⛔ read the SCOPE CORRECTION at the END of docs/tasks/272-*.md before planning, because the
+task is NOT "a script and a timer" and its own spec above that section reads as if it were.
+
+Tell Ian that tightening DATABASE_URL on the production host is still his call, and that DEF-302
+has three dispositions waiting on him.
 
 Two worker sessions are alive and idle and are yours to re-adopt: webapps-4e (lane A,
-shareat_test_lanea) and webapps-65 (lane B, shareat_test_laneb), both Sonnet 5. Confirm with Ian
-before tasking webapps-65 — it joined the team for one day only.
+shareat_test_lanea) and webapps-65 (lane B, shareat_test_laneb), both Sonnet 5 and both confirmed.
 
-Migration slot 0143 is free; `when` must exceed 1798342307084. Next task T-271, next defect DEF-302.
+Migration slot 0144 is free; `when` must exceed 1798428707084. Next task T-274, next defect DEF-305.
+
+⭐ Ask each lane a QUESTION in its briefing, not only for a change. Both of today's real findings
+came from that, and neither would have been found by a test.
 ```

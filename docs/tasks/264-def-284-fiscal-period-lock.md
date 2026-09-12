@@ -1,9 +1,12 @@
 # T-264 — DEF-284: give the period lock a way to be armed, and an override only admins hold
 
-> **Status: RESERVED by the orchestrator, 2026-09-10.** Number reserved so no peer takes it.
-> Nothing built. ⚠️ **THREE SEPARABLE SLICES, AND SLICE 1 IS NOT ABOUT LOCKING AT ALL.** Slice 1
-> fixes a failure happening today; slices 2 and 3 build the control Ian asked for. **Do not attempt
-> all three in one change** — each has a different shape and a different risk.
+> **Status: ALL THREE SLICES COMPLETE, 2026-09-12.** Slice 1 `5706a06` (nothing could create a
+> fiscal period), slice 2 `6a9ed65` (nothing could close one), slice 3 `018af6f` (the override).
+> ⭐ **Slice 3 shipped with migration `0143`**, both journal period triggers exempted, `locked`
+> branched first with its own message, a typed reason and an audit row in `period_overrides`.
+> ⚠️ **DEF-302 is this task's known limitation, not a bug in it:** the override is unreachable on
+> the three flows that insert a stock movement and post a ledger entry in the same transaction.
+> ⛔ **No reopen path was built and none may be inferred** — bible row 193.
 
 ## The situation, in one paragraph
 

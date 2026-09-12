@@ -1,9 +1,12 @@
 # T-272 — DEF-299: the orphan file sweep has never run, and Ian has ruled it should, nightly
 
-> **Status: RESERVED by the orchestrator, 2026-09-12.** Number reserved so no peer takes it.
-> Nothing built. ⛔ **Not started today because it needs a migration slot and lane A holds the only
-> one this cycle (`0143`).** The next free index is `0144`; its journal `when` must exceed whatever
-> `0143` lands on.
+> **Status: RESERVED, NOT STARTED — 2026-09-12.** Ian ruled on 2026-09-12: **wire it, nightly.**
+> ⛔ **Blocked today only by the migration slot** — lane A held `0143`. The next free index is
+> `0144`; its journal `when` must exceed **1798428707084**.
+> ⚠️ **READ THE SCOPE CORRECTION AT THE END OF THIS FILE BEFORE PLANNING.** This is not “a script
+> and a timer”: the sweep takes no `orgId` and `scheduler_runs.org_id` is `NOT NULL`, so as written it
+> cannot record a run at all. ⭐ **DEF-303 rolls into this task** — `budget_reissue` has no unit pair
+> either, and this task is already editing `docs/ops/` and already holds the constraint migration.
 
 ## Ian's decision, 2026-09-12 — the WHAT, not open to revision
 

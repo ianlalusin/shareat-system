@@ -1,8 +1,10 @@
 # T-271 — DEF-301: the message map is matched by prose, so a key can never be added for a hand-raised invariant
 
-> **Status: RESERVED by the orchestrator, 2026-09-12.** Number reserved so no peer takes it.
-> Nothing built. Lane B (`webapps-65`, Sonnet). ⛔ **No migration slot this cycle** — lane A holds
-> `0143`. If you believe you need one, stop and report; do not take one.
+> **Status: COMPLETE, 2026-09-12.** Part 1 `627a856` (the lookup), part 2 `0517bae` (the CI guard).
+> ⚠️ **A regression was caught in review, not by the gates:** the first pass gated the generic
+> sanitiser on the wrong resolver and silently flattened DEF-279's five hand-authored sentences.
+> The 26-row before/after table could not see it — all 26 are native violations that populate both
+> the structured field and the prose. Fixed, and part 2 makes the trap a red CI run.
 
 ## Goal
 

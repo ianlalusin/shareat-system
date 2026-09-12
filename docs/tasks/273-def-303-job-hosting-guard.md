@@ -1,7 +1,11 @@
 # T-273 — DEF-303/DEF-299: a job that nothing runs must fail the build, not wait to be noticed
 
-> **Status: RESERVED by the orchestrator, 2026-09-12.** Lane B (`webapps-65`, Sonnet).
-> ⛔ **No migration slot** — lane A holds `0143`. Report a needed schema change as BLOCKED.
+> **Status: COMPLETE, 2026-09-12 — `a5c50b6`.** Built by lane B (`webapps-65`, Sonnet).
+> ⭐ **The naming rule this spec asserted was WRONG** — it does not hold for 6 of 9 jobs — and the
+> lane verified rather than trusted it, encoding an explicit `Record<SchedulerJob, string>` map so a
+> tenth job fails typecheck too. Both teeth checks run for real and the failure messages name the job.
+> ➡️ **DEF-304 came out of building it** and is NOT fixed here: T-236's sibling guard reads one
+> hardcoded file, so `runRecurringExpenses` is invisible to it.
 
 ## Goal
 
