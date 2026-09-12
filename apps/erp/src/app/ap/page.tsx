@@ -1,3 +1,4 @@
+import { PhotoInput } from '@/components/PhotoInput';
 import Link from 'next/link';
 import { requireSession } from '../../lib/session';
 import { createSupplierAction, recordInvoiceAction } from './actions';
@@ -159,8 +160,9 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
               label="Photo of the receipt"
               hint="Required before it can be verified. Upload the actual photo — a link or a typed reference is not evidence."
             >
-              <input
-                type="file"
+              {/* ⭐ T-296 — compresses a photo to under 1 MB before submit. A PDF passes through.
+                  The server's own 1 MB image ceiling is what guarantees it (Ian, 2026-09-12). */}
+              <PhotoInput
                 name="receiptPhoto"
                 accept="image/jpeg,image/png,image/webp,application/pdf"
                 className={INPUT}

@@ -1,3 +1,4 @@
+import { PhotoInput } from '@/components/PhotoInput';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ACTION_LINK } from '@/components/action-link';
@@ -276,7 +277,8 @@ export default async function CustomerDetailPage({
               label="Proof of payment"
               hint="Required for an online or e-wallet account: the deposit slip or transfer screenshot."
             >
-              <input type="file" name="receiptPhoto" accept="image/*" className="text-sm" />
+              {/* ⭐ T-296 — compressed to under 1 MB in the browser; the server enforces it. */}
+              <PhotoInput name="receiptPhoto" accept="image/*" className="text-sm" />
             </Field>
 
             <button

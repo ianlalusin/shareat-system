@@ -11,6 +11,7 @@
  * form actions carry `File` values in the `FormData` they submit, the same way `ap/page.tsx`'s
  * invoice form already does.
  */
+import { PhotoInput } from '@/components/PhotoInput';
 import { useState } from 'react';
 
 interface ItemOption {
@@ -158,8 +159,8 @@ export function NewDeliveryForm({
 
       <label className={label}>
         Photo of the paper
-        <input
-          type="file"
+        {/* ⭐ T-296 — compressed to under 1 MB before submit; a PDF passes through untouched. */}
+        <PhotoInput
           name="proofPhoto"
           accept="image/jpeg,image/png,image/webp,application/pdf"
           required

@@ -342,7 +342,6 @@
       "ancestry truncated — no font size resolvable"
     ],
     "app/customers/[customerId]/page.tsx": [
-      "UA stylesheet supplies default padding on this control; not visible from source",
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
     ],
     "app/expenses/recurring/page.tsx": [
@@ -439,6 +438,9 @@
     "app/admin/stores/[id]/page.tsx": [
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)",
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
+    ],
+    "components/PhotoInput.tsx": [
+      "className could not be resolved statically (dynamic expression outside the known shapes)"
     ]
   }
 }

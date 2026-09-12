@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { ROUTE_CAPABILITY, capabilityForRoute, navHrefAllowed } from '../../apps/erp/src/lib/route-capability';
 
@@ -43,12 +42,38 @@ function codeOnly(src: string): string {
     .join('\n');
 }
 
+/**
+ * ⚠️ **Reads the FILESYSTEM, not `git ls-files` — deliberately differing from its sibling
+ * `no-ungated-read-surface.test.ts`.**
+ *
+ * That guard asks *"does this page skip the session question"*, which is only meaningful for code
+ * that is committed. This one asks *"does a page exist behind this map entry"* — and a page that
+ * exists but is not yet staged **is a page that exists**. Using git here produced a false
+ * "orphan route" the moment a peer lane added its `ROUTE_CAPABILITY` row before staging its new
+ * page (2026-09-12, T-290). That is a normal mid-flight state on a shared tree, not a defect, and
+ * a guard that reports it teaches people to explain red away (T-262's ruling).
+ *
+ * ⭐ **The general rule, because this will come up again: on a multi-session tree, "is it
+ * committed yet" is never the question a CORRECTNESS guard should be asking.** Staging state is
+ * a fact about someone's workflow, not about whether the code is right. A guard that conflates
+ * the two goes red for reasons its own message cannot explain.
+ *
+ * ⛔ Scanning `apps/erp/src/app` only — never the repo root — so `.next` and `node_modules` are
+ * structurally out of reach rather than filtered out afterwards.
+ */
 function trackedPages(): string[] {
-  const out = execFileSync('git', ['ls-files', '-z', 'apps/erp/src/app'], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-  });
-  return out.split('\0').filter((f) => f.endsWith('/page.tsx'));
+  const out: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name === 'page.tsx') {
+        out.push(path.relative(repoRoot, full).split(path.sep).join('/'));
+      }
+    }
+  };
+  walk(APP);
+  return out;
 }
 
 /** `apps/erp/src/app/admin/users/[personId]/page.tsx` -> `/admin/users/[personId]` */

@@ -40,6 +40,32 @@ export const PURPOSE_LIMITS: Record<
   onboarding_document: { types: ['application/pdf', 'image/jpeg', 'image/png'], maxBytes: 25 * 1024 * 1024 },
 };
 
+/**
+ * ⭐ **T-296 — Ian, 2026-09-12: *"every uploaded photo accross the app to not exceed 1mb"*.**
+ *
+ * ONE ceiling for every image, applied on top of the per-purpose limit below. ⛔ Deliberately not
+ * a per-purpose `maxImageBytes` field: Ian said *"across the app"*, and five copies of one rule is
+ * five places for it to drift — a new purpose would silently inherit whatever its author typed.
+ *
+ * ⚠️ **Exactly 1 MB, and the browser aims at 950 KB** (`PHOTO_TARGET_BYTES` in
+ * `apps/erp/src/components/photo-compression.ts`). The gap is deliberate: the client aims under the
+ * line so a marginal encode is not refused by the layer that cannot explain itself as well.
+ *
+ * ⛔ **This is the guarantee, not the compression.** With JavaScript disabled no compression runs
+ * at all; this is what makes "no stored photo exceeds 1 MB" provable from `stored_files.byte_size`
+ * rather than merely likely.
+ *
+ * ⚠️ **PDFs are NOT subject to it.** They cannot be re-encoded, and the rule is about photos —
+ * a 25 MB onboarding PDF stays legal under its own purpose limit, which is also why
+ * `next.config.js`'s 26 MB body limit (T-282/DEF-317) must not be lowered to match this.
+ */
+export const MAX_IMAGE_BYTES = 1024 * 1024;
+
+/** Whether `MAX_IMAGE_BYTES` applies. Images only — see its note. */
+export function isImageContentType(contentType: string): boolean {
+  return contentType.toLowerCase().startsWith('image/');
+}
+
 /** The capability that governs the THING, not a generic "may upload". */
 const PURPOSE_CAPABILITY: Record<FilePurpose, Parameters<typeof authorize>[2]> = {
   // ⭐ T-130 moved the receipt photo from the expense to the supplier INVOICE, so the capability
@@ -101,6 +127,16 @@ async function runUpload(tx: Tx, actor: Actor, input: UploadInput): Promise<Uplo
     );
   }
   if (input.bytes.length === 0) throw new Error('uploadFile: the file is empty.');
+  // ⭐ T-296. The app-wide photo ceiling, checked BEFORE the per-purpose limit so an oversized
+  //    image gets the message about photos rather than the one about its purpose's larger cap.
+  if (isImageContentType(input.contentType) && input.bytes.length > MAX_IMAGE_BYTES) {
+    throw new Error(
+      `uploadFile: this photo is ${(input.bytes.length / 1024 / 1024).toFixed(1)} MB and photos ` +
+        `are capped at ${MAX_IMAGE_BYTES / 1024 / 1024} MB everywhere in the app. It is normally ` +
+        'compressed in the browser before upload — if you have JavaScript disabled, or the ' +
+        'compression failed, crop or retake the photo and try again.',
+    );
+  }
   if (input.bytes.length > limits.maxBytes) {
     throw new Error(
       `uploadFile: the file is ${(input.bytes.length / 1024 / 1024).toFixed(1)} MB, and the limit ` +

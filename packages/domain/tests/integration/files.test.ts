@@ -208,7 +208,16 @@ describe('the refusals', () => {
     ).rejects.toThrow(/is not accepted for a receipt photo/);
   });
 
-  it('⛔ refuses an oversized file, naming the limit', async () => {
+  /**
+   * ⚠️ **T-296 CHANGED WHAT THIS TEST PROVES, and the old expectation was left stale rather than
+   * wrong.** It asserted `/the limit for a receipt photo is 8 MB/` — the PER-PURPOSE cap. Ian's
+   * 2026-09-12 ruling (*"every uploaded photo accross the app to not exceed 1mb"*) added an
+   * app-wide photo ceiling that is checked FIRST, so an oversized IMAGE now gets the photo message
+   * instead. The per-purpose limit is still real and still refuses — for a PDF, which the photo
+   * ceiling deliberately does not touch. Both are asserted below rather than one replacing the
+   * other.
+   */
+  it('⛔ T-296 — refuses an oversized PHOTO with the app-wide 1 MB message', async () => {
     const f = await fixture('size');
     await expect(
       asOrg(f.orgId, (tx) =>
@@ -216,6 +225,50 @@ describe('the refusals', () => {
           purpose: 'receipt_photo',
           storeId: f.storeId,
           contentType: 'image/png',
+          bytes: new Uint8Array(2 * 1024 * 1024),
+        }),
+      ),
+    ).rejects.toThrow(/photos are capped at 1 MB everywhere in the app/);
+  });
+
+  it('⭐ T-296 — a photo just UNDER 1 MB is accepted', async () => {
+    // ⛔ The half that proves the ceiling is a ceiling and not a blanket refusal. A guard that
+    //    rejects everything passes a "does it refuse?" test perfectly.
+    const f = await fixture('under');
+    const r = await asOrg(f.orgId, (tx) =>
+      uploadFile(tx, f.staff, {
+        purpose: 'receipt_photo',
+        storeId: f.storeId,
+        contentType: 'image/png',
+        bytes: new Uint8Array(1000 * 1024),
+      }),
+    );
+    expect(r.byteSize).toBe(1000 * 1024);
+  });
+
+  it('⛔ a PDF is NOT subject to the photo ceiling — the per-purpose limit still governs it', async () => {
+    // A PDF cannot be canvas-re-encoded, so the 1 MB rule would make large documents unuploadable.
+    // 2 MB is over the photo ceiling and under receipt_photo's own 8 MB, so it must be ACCEPTED.
+    const f = await fixture('pdf');
+    const r = await asOrg(f.orgId, (tx) =>
+      uploadFile(tx, f.staff, {
+        purpose: 'receipt_photo',
+        storeId: f.storeId,
+        contentType: 'application/pdf',
+        bytes: new Uint8Array(2 * 1024 * 1024),
+      }),
+    );
+    expect(r.byteSize).toBe(2 * 1024 * 1024);
+  });
+
+  it('⛔ and an oversized PDF still hits the per-purpose limit, naming it', async () => {
+    const f = await fixture('pdfbig');
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        uploadFile(tx, f.staff, {
+          purpose: 'receipt_photo',
+          storeId: f.storeId,
+          contentType: 'application/pdf',
           bytes: new Uint8Array(9 * 1024 * 1024),
         }),
       ),
