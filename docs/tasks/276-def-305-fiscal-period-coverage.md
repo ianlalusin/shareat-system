@@ -1,5 +1,23 @@
 # T-276 — DEF-305: keep `fiscal_periods` coverage rolling forward
 
+> ⭐ **IAN RULED OPTION (c), 2026-09-12 — BACKFILL THE GAP AND REPORT THE RUN AS `partial`.** Put
+> to him in plain language as a three-way choice with (c) recommended; (a) and (b) are settled and
+> must not be re-proposed. The HOLD on this spec is therefore LIFTED on its design question.
+>
+> ⚠️ **It is NOT yet cleared to build, for one reason only: it needs a migration widening
+> `scheduler_runs_job_check`, and slot 0145 is held by T-281 (DEF-302) this cycle — one migration
+> per cycle (DEF-091; the 2026-08-23 collision). Build it next cycle on slot 0146.** Its own FOR IAN
+> section already says nothing is on fire, so waiting one cycle costs nothing it warned about.
+>
+> ⛔ **Two things the BUILD spec must still pin, and they are the orchestrator's to decide, not
+> Ian's:** (1) **what counts as "a gap"** — this spec names it as the price of (c) and leaves it
+> open. Proposed: measure the org's coverage frontier (`latestPeriodEnd`) against the current
+> business month, and treat **one month of slack as normal** so a run that fires a few days late
+> never reports `partial`; the threshold is *frontier more than one whole month behind*. Argue it or
+> replace it, but do not leave it unstated — **an unstated threshold is how (c) silently degrades
+> into (b)**, which is the option Ian rejected. (2) the exact `docs/ops` `.service`/`.timer` pair,
+> which makes this the THIRD unarmed timer.
+>
 > **Status: SPEC ONLY, 2026-09-12.** Lane B specs; no implementation code in this task. Sequencing
 > note from the orchestrator: T-275 (DEF-304) is rewriting the job-caller-discovery guard right now,
 > and this task adds a job name to the same `SCHEDULER_JOBS` union / `scheduler_runs_job_check`

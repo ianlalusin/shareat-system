@@ -419,6 +419,71 @@ journalctl -u shareat-month-end.service -n 50    # repeat per unit
 ⚠️ **`systemctl enable` without `--now` arms it for the next boot and not for today.** That single
 missing flag is the shape of every failure in the table at the top of this file.
 
+## ⛔ 2026-09-12 (second cycle) — IAN RULED: ARM THE TWO UNARMED TIMERS NOW, ACCEPTING NIGHTLY FAILURES
+
+`shareat-orphan-file-sweep` (T-272/DEF-299) and `shareat-budget-reissue` (T-215/DEF-303) have
+shipped unit pairs in this directory and **nothing on the box runs either**. Ian ruled to arm both.
+
+⭐ **He ruled it TWICE, and the second ruling is the one that counts.** The orchestrator first put
+the choice to him saying the jobs would *"run nightly and find nothing to do"*. **That was wrong and
+was corrected before anything was armed.** Both scripts treat zero organisations as a FAILURE, by
+deliberate design — `scripts/orphan-file-sweep.ts:73`, `scripts/budget-reissue.ts:65`, and
+`scripts/finding-observation.ts:64`, all three carrying the same comment: *"an empty run means no
+orgs were found, which is a configuration problem wearing the costume of a quiet night."* Each
+returns **exit 1**, and both `.service` files state the exit code is load-bearing *"so the host's
+mailer speaks up"*.
+
+⚠️ **THEREFORE, EXPECTED AND CORRECT AFTER ARMING: production goes from ONE unit failing nightly
+(`finding-observation`, already doing this) to THREE, until the first organisation is created.**
+Do not read those failures as a broken deployment and do not "fix" them by making an empty run
+return 0 — that reverses a decision three scripts share on purpose. The noise ends by itself the
+moment production holds an organisation, which is the same moment the jobs begin to matter.
+
+⛔ **The counter-argument was put to Ian and he overruled it, on the record:** a red that is always
+explainable teaches people to explain red away (T-262's ruling; DEF-313 filed on that exact
+reasoning the day before). He weighed that against carrying unarmed timers — the failure in this
+file's own opening table, three times — and chose arming.
+
+### The sequence, derived from `provision.sh`'s glob — never a typed list of units (DEF-240)
+
+```sh
+# 1 — ship the unit files. The CI pipeline ships no docs/, so this is the only route they travel.
+scp -r docs/ops root@159.223.46.224:/root/shareat-ops
+
+# 2 — install every unit by glob + daemon-reload. ⚠️ OMIT the domain argument: the site is already
+#     live and passing it rewrites /etc/caddy/Caddyfile and reloads Caddy for no benefit.
+#     This INSTALLS every unit and ENABLES NONE of them.
+ssh root@159.223.46.224 'bash /root/shareat-ops/provision.sh'
+
+# 3 — arm. ⚠️ `--now` is not optional: `systemctl enable` without it arms the timer for the NEXT
+#     BOOT and not for today. That single missing flag is the shape of every failure in the
+#     table at the top of this file.
+ssh root@159.223.46.224 'for f in /etc/systemd/system/shareat-*.timer; do \
+  systemctl enable --now "$(basename "$f")"; done'
+
+# 4 — ⛔ THE STEP THAT HAS HISTORICALLY NEVER BEEN DONE. NEXT and LEFT must be populated for EVERY
+#     timer. Count the rows against the units installed; never against a number in a document.
+ssh root@159.223.46.224 "systemctl list-timers 'shareat-*'"
+
+# 5 — run the two new ones once, now, and READ THE LOG (DEF-308: a job with a caller is not a job
+#     that runs). ⚠️ BOTH WILL EXIT 1 TODAY — zero organisations — and that is the correct answer.
+ssh root@159.223.46.224 'systemctl start shareat-orphan-file-sweep.service; \
+  systemctl start shareat-budget-reissue.service'
+ssh root@159.223.46.224 'journalctl -u shareat-orphan-file-sweep.service -n 30; \
+  journalctl -u shareat-budget-reissue.service -n 30'
+```
+
+⭐ **What a GOOD result looks like on step 5 today:** `orphan-file-sweep: no orgs were processed —
+nothing to sweep?` and `budget-reissue: no orgs were processed — nothing to reissue?`, each with
+exit 1. ⛔ **What a BAD result looks like:** anything mentioning `FIREBASE_STORAGE_BUCKET is set but
+no driver is installed` (DEF-308's signature — it would mean `scripts/lib/storage-bootstrap.ts` did
+not reach the box), a database permission error (the app role cannot do everything; see the
+`DATABASE_URL` section above), or the unit failing before either script prints anything at all.
+
+⚠️ **`shareat-month-end-retry.timer` deliberately has no service of its own** — it points at
+`shareat-month-end.service` via `Unit=`. Step 3's glob enables it correctly; a loop that tries to
+`start` a matching `.service` for it must skip it.
+
 ## ⚠️ Traps on the box — each has bitten once; recorded so it bites nobody twice
 
 | Trap | What it looks like | Rule |
