@@ -210,6 +210,12 @@ const EXEMPT: Record<string, string> = {
   confirmTradeOrder:
     'UNWIRED — DEF-198. `/trade/orders` creates and dispatches; the draft -> confirmed transition ' +
     'in between has no screen, so `confirmTradeOrder`’s status gate can never fire.',
+  closeYear:
+    'UNWIRED — T-274 (`docs/tasks/274-adr-006-year-close-entry.md`). ADR-006\'s year-close journal ' +
+    'entry, computed and posted through the existing `postEntry`. A screen or Server Action to ' +
+    'reach it is explicitly scoped as a SECOND slice by the task\'s own briefing — building one now ' +
+    'would be scope creep this task was told not to take. The first real year-close is Dec 2027 ' +
+    '(ADR-006 intro), so nothing is on fire; delete this row when the screen lands.',
 };
 
 describe('T-227 — every action-shaped domain export is reachable from a screen', () => {

@@ -65,35 +65,35 @@
 - `1186–1220` 10. Phase plan
 - `1221–1237` 11. Migration & ETL rules
 - `1238–1302` 12. Inherited landmines — do not repeat these
-- `1303–1506` 13. Decision log
-- `1507–1526` 14. Amendment protocol
-- `1527–1531` 15. Engineering standards — the industry practices this project follows
-  - `1532–1537` 15.1 Build order: walking skeleton first
-  - `1538–1549` 15.2 Golden-master testing — the most important practice here
-  - `1550–1558` 15.3 Strangler Fig, not big-bang cutover
-  - `1559–1563` 15.4 No dual-write
-  - `1564–1572` 15.5 Expand/contract migrations
-  - `1573–1581` 15.6 Observability from day zero, not later
-  - `1582–1586` 15.7 CI gates
-  - `1587–1591` 15.8 Backups and a tested restore
-  - `1592–1596` 15.9 Twelve-Factor config
-  - `1597–1604` 15.10 Append-only ledgers — but not event sourcing
-  - `1605–1609` 15.11 Defence in depth
-  - `1610–1638` 15.12 Skills are lenses, not assurance
-  - `1639–1645` 15.13 Reconciliation is a permanent feature
-- `1646–1650` 16. The accounting spine
-  - `1651–1682` 16.0 What we are actually fixing — the diagnosis
-  - `1683–1726` 16.1 The ten invariants — non-negotiable
-  - `1727–1741` 16.2 The oracle: how "correct" is tested
-  - `1742–1763` 16.3 The model — header + lines, not legs
-  - `1764–1783` 16.4 Deliberately simpler than ERPNext
-  - `1784–1850` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1851–1875` 16.6 What v1 already gets right — preserve the intent
-  - `1876–1897` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1898–1912` 16.8 What v1's accounting already gets right
-  - `1913–1956` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1957–2007` 16.10 Posting patterns — one canonical pattern per business event
-  - `2008–2039` 16.11 Inventory's accounting integration
+- `1303–1507` 13. Decision log
+- `1508–1527` 14. Amendment protocol
+- `1528–1532` 15. Engineering standards — the industry practices this project follows
+  - `1533–1538` 15.1 Build order: walking skeleton first
+  - `1539–1550` 15.2 Golden-master testing — the most important practice here
+  - `1551–1559` 15.3 Strangler Fig, not big-bang cutover
+  - `1560–1564` 15.4 No dual-write
+  - `1565–1573` 15.5 Expand/contract migrations
+  - `1574–1582` 15.6 Observability from day zero, not later
+  - `1583–1587` 15.7 CI gates
+  - `1588–1592` 15.8 Backups and a tested restore
+  - `1593–1597` 15.9 Twelve-Factor config
+  - `1598–1605` 15.10 Append-only ledgers — but not event sourcing
+  - `1606–1610` 15.11 Defence in depth
+  - `1611–1639` 15.12 Skills are lenses, not assurance
+  - `1640–1646` 15.13 Reconciliation is a permanent feature
+- `1647–1651` 16. The accounting spine
+  - `1652–1683` 16.0 What we are actually fixing — the diagnosis
+  - `1684–1727` 16.1 The ten invariants — non-negotiable
+  - `1728–1742` 16.2 The oracle: how "correct" is tested
+  - `1743–1764` 16.3 The model — header + lines, not legs
+  - `1765–1784` 16.4 Deliberately simpler than ERPNext
+  - `1785–1851` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1852–1876` 16.6 What v1 already gets right — preserve the intent
+  - `1877–1898` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1899–1913` 16.8 What v1's accounting already gets right
+  - `1914–1957` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1958–2008` 16.10 Posting patterns — one canonical pattern per business event
+  - `2009–2040` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 

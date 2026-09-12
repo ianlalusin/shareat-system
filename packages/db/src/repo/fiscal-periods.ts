@@ -175,6 +175,36 @@ export async function hasEarlierOpenPeriod(tx: Tx, orgId: string, period: string
   return row !== undefined;
 }
 
+/**
+ * Flips every period of `year` (Jan 1 .. Dec 31) currently `closed` to `locked`, in one statement.
+ * T-274, ADR-006 §7.5: *"`closed` -> `locked`. Automatic once the following year's close posts
+ * successfully."* Called by `closeYear` in the SAME transaction that posts the closing entry, so a
+ * rollback leaves every period exactly as it was and a commit locks them all together.
+ *
+ * ⭐ **A bare guard, never a pre-read** — same race-safety idiom `closePeriod` above already uses.
+ * Only rows currently `status = 'closed'` are touched, so calling this twice (an idempotent replay
+ * of `closeYear`) is a safe no-op the second time — the returned count is simply 0, not an error.
+ *
+ * ⚠️ **Only `closed` periods are touched, never `open` ones.** `closeYear`'s own earlier-open-period
+ * gate is what refuses before this could ever run against a year with a month still open; this
+ * function does not re-decide that — it only advances what is already `closed`.
+ */
+export async function lockYearPeriods(tx: Tx, orgId: string, year: number): Promise<number> {
+  const rows = await tx
+    .update(fiscalPeriods)
+    .set({ status: 'locked', updatedAt: sql`now()` })
+    .where(
+      and(
+        eq(fiscalPeriods.orgId, orgId),
+        gte(fiscalPeriods.startsOn, `${year}-01-01`),
+        lte(fiscalPeriods.endsOn, `${year}-12-31`),
+        eq(fiscalPeriods.status, 'closed'),
+      ),
+    )
+    .returning({ id: fiscalPeriods.id });
+  return rows.length;
+}
+
 export interface UnpostedDraft {
   readonly kind: 'expense' | 'delivery';
   readonly id: string;

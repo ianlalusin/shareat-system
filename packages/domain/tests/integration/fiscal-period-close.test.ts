@@ -9,7 +9,7 @@ import { sql as dsql } from 'drizzle-orm';
  *
  * ⭐ Slice 2 is the generic lock for ANY period, month or year alike — `closed_at`/`closed_by` plus
  * the readiness gate. The year-close journal entry ADR-006 describes is deliberately NOT built
- * here; it is unsliced follow-on work (orchestrator ruling, 2026-09-11).
+ * here — T-274 built it as its own function, `closeYear`; see `year-close.test.ts`.
  *
  * Gate order proved, in this order, per the task's own discipline — a gate not watched failing is
  * not a gate that has been tested:

@@ -5,8 +5,9 @@
  *
  * ⛔ **This is the generic lock for ANY period — month or year alike.** The year-close journal
  * entry ADR-006 describes (one entry via `postEntry`, dated the following Jan 1, zeroing
- * income/expense into 3300, distinct `source_type`) is deliberately NOT built here — it is
- * unsliced follow-on work, ruled explicitly rather than half-built into a December special case.
+ * income/expense into 3300, distinct `source_type`) is deliberately NOT built HERE — it was ruled
+ * explicitly out of this function rather than half-built into a December special case. T-274 built
+ * it as its own function, `closeYear` in `./close-year.ts`, re-exported below.
  *
  * ⭐ **Every gate here is enforced INSIDE this function, never trusted from the caller.** A
  * `ready === true` the UI already saw is a hint, not the authority — a close request for a
@@ -90,3 +91,5 @@ export async function closePeriod(
   }
   return closed;
 }
+
+export { closeYear, type CloseYearInput, type CloseYearResult } from './close-year';
