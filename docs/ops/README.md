@@ -13,6 +13,87 @@
 
 ---
 
+## ⛔ Status as of 2026-09-12 — PRODUCTION NOW CONNECTS AS A NON-BYPASSING ROLE. READ THIS BEFORE RUNNING A MIGRATION ON THE BOX.
+
+Done on the host by Ian with `system32-85`, verified at each step, **not inferred**.
+
+### What changed, in one line
+
+`DATABASE_URL` in `/srv/shareat-shared/.env.local` now names **`shareat_app_prod`**, and a second
+key **`SYSTEM_DATABASE_URL`** names the original `doadmin` string. Nothing else in that file moved.
+
+### ⭐ Why BOTH keys, and why changing only the first would have taken the whole app down
+
+`systemTransaction()` and `authTransaction()` resolve to `SYSTEM_DATABASE_URL ?? DATABASE_URL`
+(`packages/db/src/client.ts:97`). With `SYSTEM_DATABASE_URL` unset — which is how production stood
+until today — they are **byte-for-byte the same connection as `transaction()`**. So tightening
+`DATABASE_URL` alone would have tightened the auth door and the scheduler door with it, and bible
+§13 row 194 / DEF-288 record exactly what that costs: PIN sign-in returns *"that PIN is not valid
+for this store"*, every authenticated request returns *"Not signed in"*, and the ETL tables (FORCE
+RLS, **zero policies**) become unreachable. Not degraded — the whole application unusable, at once.
+⚠️ It fails CLOSED, so it is an availability wall and never a leak. That is the only reason this was
+recoverable rather than a data incident.
+
+### What was measured on the box, in order
+
+| Step | Result |
+|---|---|
+| What production connected as, before | `doadmin` · `rolsuper = f` · **`rolbypassrls = t`** |
+| `SYSTEM_DATABASE_URL` set before? | **No** (`grep -c` returned 0) |
+| Postgres version | 18.6 — role-granting needs ADMIN OPTION on the group; `doadmin` had it, having created `shareat_app` when it ran migration `0011` |
+| New role `shareat_app_prod` | `rolsuper = f` · **`rolbypassrls = f`** · `rolcanlogin = t` · member of `shareat_app` |
+| New role can read the schema | `select count(*) from organizations` → `0`, a number rather than a permission error, so migration `0011`'s grants reached it through the group |
+| After the swap | service `active`, `NRestarts 0`, **`https://erp2.shareat.net/sign-in` → 200** |
+
+⛔ **`rolbypassrls = t` on the old role is the finding, and it means row-level security was NOT
+enforcing in production for the entire life of this system.** Every RLS policy this repo has written
+and tested was being bypassed on every production query. The application-layer `where org_id = …`
+scoping was the only thing holding tenancy — which is DEF-210's three client-`orgId` screens with
+nothing behind them. ⚠️ The exposure was never realised because production has held **zero
+organisations** throughout; there was no second set of books to reach into. That is also why this
+was the cheap moment to do it and never will be again.
+
+### ⛔ THE CONSEQUENCE THAT WILL BITE: migrations on the box must use the ADMIN string
+
+`npm run db:migrate` reads `DATABASE_URL`. `shareat_app_prod` is `NOCREATEDB NOCREATEROLE` and owns
+no table, so it **cannot run a migration** — correctly, and by design. A deploy or a manual migrate
+that inherits the file as written will fail with a permission error.
+
+Run migrations with the admin string explicitly, on the box:
+
+```bash
+cd /srv/shareat
+DATABASE_URL="$(grep -m1 '^SYSTEM_DATABASE_URL=' /srv/shareat-shared/.env.local | cut -d= -f2-)" \
+  npm run db:migrate
+```
+
+⚠️ **Do not "fix" this by giving `shareat_app_prod` DDL rights.** A role that can `ALTER TABLE` can
+also `ALTER TABLE … DISABLE ROW LEVEL SECURITY`, which hands back exactly what this change bought.
+And ⛔ **do not let it own tables** — a table's owner bypasses RLS by default (migration `0011`'s own
+comments record why), so ownership would defeat the whole exercise as surely as `BYPASSRLS` did.
+
+### Rollback
+
+One line, and the backup is dated:
+
+```bash
+cp -p /root/env.local.bak.<STAMP> /srv/shareat-shared/.env.local && systemctl restart shareat-erp
+```
+
+⚠️ Keep the backup. ⛔ But reverting re-opens DEF-210: the three screens that take `org_id` from a
+hidden field in the page (stock transfers, supplier returns, customer returns) go back to having
+nothing behind them the moment a second organisation exists.
+
+### ⚠️ What is NOT proven, said plainly
+
+- **A 200 on `/sign-in` proves the page rendered, not that signing in works.** Production has no
+  organisations and no users, so there is nothing to sign in as. The mechanism is proven by the role
+  attribute (`rolbypassrls = f`), not by exercising it against data.
+- **No production read path has ever exercised its own RLS behaviour**, because there has never been
+  a row to scope. ⛔ The first `bootstrap-org` on this configuration is therefore still the real
+  test, and it should be done with someone watching rather than in passing. `docs/discovery/29`
+  §5.3 called this out before the role existed and it remains true.
+
 ## ✅ Status as of 2026-09-06 (evening) — the deploy pipeline WORKS, four timers are ARMED, and production holds ZERO organizations
 
 Verified on the box by `ianla-14` with Ian, not inferred:
