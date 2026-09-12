@@ -37,7 +37,7 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5435/shareat_test
       TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5435/shareat_test
       SESSION_SECRET: ci-only-not-a-real-secret-000000000000
-      FIREBASE_PROJECT_ID: ci-placeholder
+      FIREBASE_PROJECT_ID: ci
       FIREBASE_SERVICE_ACCOUNT_KEY: '{}'
       NEXT_PUBLIC_FIREBASE_API_KEY: ci
       NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ci
