@@ -7,6 +7,15 @@
  * point, no `package.json` line and no systemd unit — the second time this shape has happened
  * (DEF-186 was the first, a different module).
  *
+ * ⭐ **T-275 — DEF-304: widened from one hardcoded file to all of `packages/domain/src/`.**
+ * `runRecurringExpenses` (`recurring-expenses/job.ts`) is a real, correctly-wired job entry that
+ * this guard had never once looked at, because it scanned only `scheduler/index.ts`. Not merely
+ * uncalled — invisible: if its one caller (`scripts/recurring-expense-draft.ts:47`) were ever lost,
+ * this guard would have stayed green, because its population never included the function that would
+ * have gone orphaned. Same shape, same remedy, as DEF-295
+ * (`tests/unit/system-transaction-callers.test.ts`): a guard whose scanned set does not match what
+ * it claims to scan is not closed, it only looks closed. `docs/tasks/275-def-304-job-discovery-scope.md`.
+ *
  * ## Why this is a NEW file and not an addition to `domain-actions-have-callers.test.ts`
  *
  * That guard's population is exports shaped `(tx, ..., actor: Actor, ...)` — a function that
@@ -29,18 +38,27 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = path.resolve(__dirname, '../..');
-const SCHEDULER_FILE = 'packages/domain/src/scheduler/index.ts';
+const DOMAIN_SRC_ROOT = 'packages/domain/src';
 
 /**
  * ⛔ `git ls-files`, never a directory walk — `apps/erp/.next` holds turbopack copies of the
  * domain barrel and would report every export as called forever. `--others --exclude-standard`
  * includes files not yet staged, so a script written five minutes ago is seen. (Same reasoning as
- * `domain-actions-have-callers.test.ts`.)
+ * `domain-actions-have-callers.test.ts`, and the same fix DEF-295 proved in
+ * `system-transaction-callers.test.ts` for exactly this class of "scanned one path, claimed the
+ * whole tree" defect.)
  */
 function trackedFiles(): string[] {
   return execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: repoRoot, encoding: 'utf8' })
     .split('\0')
     .filter(Boolean);
+}
+
+/** Every tracked, non-test `.ts` file under `packages/domain/src/` — T-275's widened scan. */
+function domainSourceFiles(): string[] {
+  return trackedFiles().filter(
+    (f) => f.startsWith(`${DOMAIN_SRC_ROOT}/`) && f.endsWith('.ts') && !isTest(f),
+  );
 }
 
 /**
@@ -73,19 +91,26 @@ function paramsFrom(src: string, openParenIndex: number): string {
 }
 
 /**
- * name -> declaring file (always `SCHEDULER_FILE`, kept as a map for shape-parity with
- * `domain-actions-have-callers.test.ts`'s `actionShapedExports()`), for every `async` export in
- * `scheduler/index.ts` named `run*` whose first parameter is NOT `org`/`tx`/`trx` — the six
- * top-level job entries (`runMonthEnd`, `runAttendanceSweep`, `runFirestoreRelay`,
- * `runOrderWastageBackstopSweep`, `runFindingObservation`, `runBudgetReissue`).
+ * name -> declaring file, for every `async` export named `run*` under `packages/domain/src/`
+ * (T-275 — widened from one hardcoded file, DEF-304) whose first parameter is NOT a per-org/per-tx
+ * identifier — the eight top-level job entries (`runMonthEnd`, `runAttendanceSweep`,
+ * `runFirestoreRelay`, `runOrderWastageBackstopSweep`, `runFindingObservation`, `runBudgetReissue`,
+ * `runOrphanFileSweep`, `runRecurringExpenses`).
  *
  * ⛔ **First cut of this guard filtered on the first param being literally named `options`, and it
  * was wrong** — `runFirestoreRelay(drivers, options)` takes TWO parameters, `drivers` first, so
  * that filter silently dropped it: delete `scripts/firestore-relay.ts` and the old version stayed
- * green. Filtering on shape instead (first param not `org`/`tx`/`trx`) is what distinguishes these
- * six from `runJobForOrg` (first param `org`, the per-org helper every job calls through) and from
- * `lastCompletedPeriod` (not `async`, first param `today`) without depending on a name a future job
- * entry is free to spell differently.
+ * green. Filtering on shape instead (first param not `org`/`orgId`/`tx`/`trx`) is what distinguishes
+ * these eight from `runJobForOrg` (first param `org`, the per-org helper every job calls through),
+ * from `runDepreciationAsSystem`/`runAmortisationAsSystem` (first param `orgId: string` — the T-140
+ * "pushed down into the domain module" per-org helper shape, `fixed-assets/depreciate.ts:238` and
+ * `prepaid/index.ts:548`, reached only from PRIVATE wrapper functions inside `scheduler/index.ts`,
+ * never named directly by a `scripts/*.ts` caller), and from `lastCompletedPeriod` (not `async`,
+ * first param `today`) — without depending on a name a future job entry is free to spell
+ * differently. `orgId` was added to this list by T-275/DEF-304's widen, which was the first time a
+ * file containing that shape entered scan range at all; the filter is still SHAPE-based (org-like
+ * identifier vs. options bag), not a name carve-out for those two specific functions (bible row 196
+ * — a name list is the carve-out that drifts).
  *
  * ⚠️ Deliberately NOT a line number: `codeOnly()` strips block comments (including the multi-line
  * doc comment above most of these functions), which shifts the stripped source's line count below
@@ -100,12 +125,14 @@ function paramsFrom(src: string, openParenIndex: number): string {
  */
 function jobEntryExports(): Map<string, string> {
   const found = new Map<string, string>();
-  const src = read(SCHEDULER_FILE);
-  for (const m of src.matchAll(/^export (async )?function (run[A-Za-z0-9_]*)\s*(?:<[^>]*>)?\s*\(/gm)) {
-    if (!m[1]) continue; // not `async` — excludes `lastCompletedPeriod`
-    const params = paramsFrom(src, m.index! + m[0].length - 1).trim();
-    if (/^_?(org|tx|trx)\s*:/.test(params)) continue; // the per-org / per-tx helper shape
-    found.set(m[2]!, SCHEDULER_FILE);
+  for (const file of domainSourceFiles()) {
+    const src = read(file);
+    for (const m of src.matchAll(/^export (async )?function (run[A-Za-z0-9_]*)\s*(?:<[^>]*>)?\s*\(/gm)) {
+      if (!m[1]) continue; // not `async` — excludes `lastCompletedPeriod`
+      const params = paramsFrom(src, m.index! + m[0].length - 1).trim();
+      if (/^_?(org|orgId|tx|trx)\s*:/.test(params)) continue; // the per-org / per-tx helper shape
+      found.set(m[2]!, file);
+    }
   }
   return found;
 }
@@ -125,6 +152,7 @@ const KNOWN_JOB_NAMES = [
   'runMonthEnd',
   'runOrderWastageBackstopSweep',
   'runOrphanFileSweep',
+  'runRecurringExpenses',
 ].sort();
 
 function scriptsSource(): string {
@@ -168,12 +196,13 @@ describe('T-236 — every scheduler job entry export is reachable from a scripts
     // A floor, not ceremony: collapses to zero if the extraction regex breaks, a wrong root, or a
     // failed `git ls-files` — reference_sweep_needs_nonzero_control. Raised to 6 after BLOCKER 1
     // (the old floor of 5 equalled the old filter's broken count, so it could not see the hole),
-    // and to 7 by T-272's new `runOrphanFileSweep` entry point.
-    expect(jobs.size).toBeGreaterThanOrEqual(7);
+    // to 7 by T-272's `runOrphanFileSweep`, and to 8 — MEASURED, not guessed — by T-275's widened
+    // scan finding `runRecurringExpenses` for the first time.
+    expect(jobs.size).toBeGreaterThanOrEqual(8);
     expect(scriptSrc.length).toBeGreaterThan(1000);
   });
 
-  it('⭐ the extracted set is exactly the pinned six job entries — a new job updates KNOWN_JOB_NAMES', () => {
+  it('⭐ the extracted set is exactly the pinned job entries — a new job updates KNOWN_JOB_NAMES', () => {
     const extracted = [...jobs.keys()].sort();
     const missingFromExtraction = KNOWN_JOB_NAMES.filter((n) => !extracted.includes(n));
     const notInPinnedList = extracted.filter((n) => !KNOWN_JOB_NAMES.includes(n));
