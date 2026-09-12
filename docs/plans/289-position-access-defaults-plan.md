@@ -77,7 +77,7 @@ index   (store_id), (position_id)
 ### 3.2 `person_grants` — two changes
 
 1. `grant_source` gains the value `'position'`. The CHECK `person_grants_source_check` is dropped and re-added with the four values. Drizzle: extend the `check()`.
-2. New column `source_ref uuid null → position_capability_defaults (restrict)`. Non-null **iff** `grant_source = 'position'`; a CHECK states that equality both ways (`(grant_source = 'position') = (source_ref is not null)`), the T-154 style of stating a pair as an equality so neither direction is forgotten. Index on `source_ref`.
+2. New column `source_ref uuid null → position_capability_defaults (restrict)`. Index on it. CHECK **as amended in §11.1**: `(grant_source = 'position' AND source_ref IS NOT NULL) OR (grant_source IS DISTINCT FROM 'position' AND (source_ref IS NULL OR grant_source = 'grant'))` — a position row always has a ref, a grant row may (history of an upgrade, §3.3), nothing else ever does, and a NULL source is handled by `IS DISTINCT FROM` rather than falling through a null-blind equality.
 
 ### 3.3 The provenance rank — one new entry, one new rule
 
@@ -204,6 +204,34 @@ A `'position'` row renders *"via Cashier at Lipa"* and offers **no revoke contro
 | **T-291** | Inherited vs override on the person page | `apps/erp/src/app/admin/users/[personId]/page.tsx` · `apps/erp/src/app/admin/users/lib.ts` | after T-283 lands · typecheck · unit · smoketest |
 
 Each spec is written **in plan mode** (Opus specifies, Sonnet builds — CLAUDE.md, 2026-09-09) and cites this file rather than restating it.
+
+## 11. Amendments after the Opus spec review — planner rulings, 2026-09-12
+
+The spec-writer (Opus, writing T-289/290/291 from this plan) reported five defects in it. Each is
+ruled here; the sections above are amended inline where the ruling changes a rule, and the task
+docs carry the same rulings. Recorded rather than silently fixed, per §3.4a: a planner's plan is a
+hypothesis too.
+
+1. **§3.2 vs §3.3 — the `source_ref` CHECK refused the row §3.3 required.** The equality CHECK made
+   "ref kept on upgrade to `'grant'`" unrepresentable. **Ruled: keep the ref, relax the CHECK** to the
+   three-shape form now in §3.2, using `IS DISTINCT FROM` so the spec-writer's second finding (the
+   equality was null-blind on the left) is closed in the same stroke. History wins over a symmetric
+   constraint; the sweep never reads the ref, so immunity is unaffected.
+2. **T-289's file list could not typecheck.** Widening `GrantSource` breaks the exhaustive
+   `grantSourceLabel` switch in `apps/erp/src/app/admin/users/lib.ts`, a T-291 file. **Ruled:** T-289
+   adds exactly one `case 'position'` arm to that file (file 18 in its list); webapps-f7 confirmed
+   T-283 does not touch `lib.ts`. T-291 refines the label.
+3. **§4.3 four exclusions vs §7 three.** **Ruled: two checks**, as the spec-writer resolved it —
+   `OFFERABLE_TO_POSITIONS` derived from the three sets (what may be toggled), and a separate domain
+   refusal of staff-matrix capabilities (what must not become a row). Folding the fourth into the
+   constant would leave the screen nothing to render as inherited.
+4. **`tests/unit/domain-actions-have-callers.test.ts` missing from T-289's list.** Accepted; added
+   (three exemption rows, two of which T-290 deletes).
+5. **T-291's list short by two.** Accepted: `apps/erp/tests/admin-users-lib.test.ts` and the
+   `describeSources` read, which T-289 provides in `packages/db` so T-291 never reaches into it.
+
+Minor, taken as corrected in the specs: `GRANT_SOURCE_RANK` is at `access.ts:403-407`; there is no
+nav-route-reachability fixture to edit for T-290; §4.2 has six moments and five call sites.
 
 ## 10. What is still unmeasured, and does not block
 
