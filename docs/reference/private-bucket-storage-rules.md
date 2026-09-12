@@ -68,6 +68,14 @@ loyalty images offline for every diner in every store — the default bucket's `
 npm run storage-smoke
 ```
 
-Still all five green. ⭐ **If any check goes red after pasting, the rules were saved against the
+Still all green. ⭐ **If any check goes red after pasting, the rules were saved against the
 wrong bucket** — the Admin SDK is unaffected by rules, so a correctly-targeted deny-all cannot break
 this script.
+
+⭐ **T-280/DEF-311, 2026-09-12:** `storage-smoke` now runs a PRE-FLIGHT pair of checks, before the
+five numbered ones, comparing the deployed `FIREBASE_STORAGE_BUCKET` against the exact value this
+document names above (§1's `gs://shareat-hub-v2`) and against `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
+(they must never match). The five numbered checks below are unchanged and keep their numbers — the
+pre-flight pair exists because none of the five ever inspected the bucket's NAME, only whether it
+was reachable and private, and a bucket that is reachable, private, and WRONG used to pass all
+five silently. See `scripts/lib/config-contract.ts`.

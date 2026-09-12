@@ -18,11 +18,26 @@
  *
  * ⚠️ Writes and then deletes a single scratch object under `orgs/_smoke/`. It touches nothing an
  * expense could ever reference.
+ *
+ * ## ⛔ The PRE-FLIGHT block above check 1 — DEF-311, T-280
+ *
+ * Checks 1-5 all ask "is THE CONFIGURED BUCKET reachable and private?" — none of them asks
+ * "is it the RIGHT bucket?" Production ran `FIREBASE_STORAGE_BUCKET=shareat-hub-v2.
+ * firebasestorage.app` (v1's bucket) for the deployment's entire life and all five checks
+ * passed, every run, because v1's bucket is reachable and private too. The pre-flight block
+ * compares the configured value against `.env.example` and `docs/reference/
+ * private-bucket-storage-rules.md` BEFORE any network call, so a wrong-but-reachable bucket now
+ * fails immediately instead of passing five checks. See `scripts/lib/config-contract.ts`.
  */
 import { config } from 'dotenv';
 config({ path: '.env.local' });
 
 import { firebaseConfigFromEnv, firebaseStorageDriver } from '@shareat/storage-firebase';
+import {
+  checkValueAgainstDocs,
+  checkValuesDiffer,
+  STORAGE_BUCKET_EXPECTATION,
+} from './lib/config-contract';
 
 const PATH = `orgs/_smoke/${Date.now()}.txt`;
 const BODY = `shareat storage smoke ${new Date().toISOString()}`;
@@ -47,6 +62,25 @@ async function main() {
     return;
   }
   console.log(`bucket: ${cfg.bucket}`);
+
+  // PRE-FLIGHT — configuration vs documentation (DEF-311). Reachability proves nothing about
+  // whether this is the RIGHT bucket; v1's bucket was reachable and private too, and every check
+  // below went green against it for the deployment's entire life.
+  const bucketCheck = checkValueAgainstDocs(cfg.bucket, STORAGE_BUCKET_EXPECTATION);
+  if (!bucketCheck.ok) bad(bucketCheck.message);
+  ok(`FIREBASE_STORAGE_BUCKET matches documentation (${cfg.bucket})`);
+
+  const differCheck = checkValuesDiffer(
+    { envVar: 'FIREBASE_STORAGE_BUCKET', value: cfg.bucket },
+    {
+      envVar: 'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET',
+      value: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET?.trim() || undefined,
+    },
+    '.env.example:56,71-73',
+  );
+  if (!differCheck.ok) bad(differCheck.message);
+  ok('FIREBASE_STORAGE_BUCKET is not the public default bucket');
+
   const driver = firebaseStorageDriver(cfg);
 
   // 1 — write
