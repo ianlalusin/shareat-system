@@ -91,6 +91,21 @@ export default defineConfig({
           setupFiles: ['tests/integration/setup.ts'],
           fileParallelism: false,
           testTimeout: 30_000,
+          // T-285 (DEF-313): `testTimeout` and `hookTimeout` are SEPARATE vitest settings — raising
+          // one does not raise the other. Whoever set `testTimeout: 30_000` above for exactly this
+          // package's slow-under-load Postgres fixtures did not also set `hookTimeout`, so every
+          // `beforeEach` truncate here was silently defaulting to vitest's global 10_000ms. Measured
+          // (docs/tasks/285-def-313-truncate-hook-timeout.md): a `TRUNCATE … CASCADE` from
+          // `organizations` reaches 124 of 128 tables regardless of how narrow the caller's explicit
+          // list is (every test creates its own org/store/persons, so all three — and everything
+          // that references them — must be cleared every time; narrowing the list does not shrink
+          // the closure). Under real concurrent load this legitimately runs several seconds, and
+          // self-induced contention measurements reached 32.9s. `hookTimeout: 30_000` matches the
+          // precedent already adopted in `firebase/vitest.config.ts:8,10` and
+          // `spike/firestore-two-lane/vitest.config.ts:8,10`, which pair the same two settings for
+          // the same reason. Deliberately NOT set on the `unit` project above — those tests never
+          // touch a database, and a hung unit hook has no business taking 30s to say so.
+          hookTimeout: 30_000,
         },
       },
     ],
