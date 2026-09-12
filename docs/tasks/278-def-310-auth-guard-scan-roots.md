@@ -1,11 +1,6 @@
 # T-278 — DEF-310: `auth-transaction-callers.test.ts`'s `SCAN_ROOTS` is stale against its own sibling
 
-> **Status: BUILT, PROVEN, READY SENT — 2026-09-12, lane A (`webapps-4e`).** Approved by
-> `system32-85`. `SCAN_ROOTS` widened to the sibling's ten, `DEFINER_FILES` added on the same
-> pattern. Four-state plant proof executed in `scripts/`. typecheck and full unit suite green.
-> Floor (`> 50`) checked against the real widened count (536, up from 420 pre-widen) — unchanged,
-> matches the sibling's own identical, equally-loose convention; not raised unilaterally to avoid
-> creating a new cross-guard divergence. Awaiting commit.
+> **Status: ✅ COMPLETE — shipped 2026-09-12, `3b51450`, lane A. DEF-310 CLOSED by Ian.** No live stray caller existed — measured, unscoped, before anything was widened.
 
 ## The pre-check, done first, per instruction — no live stray caller exists
 

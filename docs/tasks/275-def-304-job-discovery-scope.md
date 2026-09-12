@@ -1,12 +1,6 @@
 # T-275 — DEF-304: `scheduler-jobs-have-callers.test.ts`'s job discovery is blind outside one file
 
-> **Status: BUILT, PROVEN, READY SENT — 2026-09-12, lane A (`webapps-4e`).** Approved by
-> `system32-85`. Scan widened to all of `packages/domain/src/`; exclusion filter extended to
-> `orgId` (shape-based, cites `fixed-assets/depreciate.ts:238`/`prepaid/index.ts:548`); the
-> four-state DEF-295-style proof executed (old guard blind, widened guard catches, plant deleted,
-> tree clean); typecheck and full unit suite green. DEF-309 (a job that is registered, shaped,
-> called and armed but never reaches `runJobForOrg`, so it runs and leaves no `scheduler_runs` row)
-> described, not built, per scope. Awaiting commit.
+> **Status: ✅ COMPLETE — shipped 2026-09-12, `e00549a`, lane A.** Plant-proven in four states, including the one that proves the OLD guard was blind. DEF-309 was filed out of this task’s spec phase.
 
 ## The defect, precisely
 

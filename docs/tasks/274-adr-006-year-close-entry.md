@@ -1,16 +1,6 @@
 # T-274 — ADR-006's year-close journal entry: the one posting a year-end actually makes
 
-> **Status: RESERVED, NOT STARTED — 2026-09-12.** Number reserved by the orchestrator at dispatch so
-> two sessions cannot take it. **Lane B writes the spec; the orchestrator approves it before any
-> implementation.**
->
-> ⛔ **The accounting contract is ADR-006's, not this task's to invent.** Read
-> `docs/decisions/ADR-006-period-close.md` — §"Year close does that, plus exactly one journal entry"
-> and §"⚠️ The year-close entry must be distinguishable in queries" — before writing a line of the
-> spec. Anything ADR-006 does not answer is **escalated, not decided**.
->
-> ⭐ **No migration is needed and none is allocated.** `journal_entries.source_type` is free text
-> with no CHECK constraint. Migration slot `0144` belongs to lane A this cycle (T-272).
+> **Status: ✅ COMPLETE — shipped 2026-09-12, `8381413`, lane B. No migration needed.** ⚠️ **Not reachable from any screen** — a deliberate second slice, registered in `tests/unit/domain-actions-have-callers.test.ts`’s EXEMPT list so it is a stated gap, not a silent one. ⭐ Review caught a bug every test missed: closing lines were built from an account’s RAW totals rather than its NET, which the database rejects on any year where one account has activity on both sides. DEF-305 was filed out of this task’s spec phase.
 
 ## Why now, and why it was deliberately left out of T-264
 

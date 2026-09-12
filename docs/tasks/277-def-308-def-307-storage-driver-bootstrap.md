@@ -1,15 +1,6 @@
 # T-277 — DEF-308 (make the storage-driver trap self-explaining) + DEF-307 (correct the stranded-bytes sentence)
 
-> **Status: BUILT, PROVEN, READY SENT — 2026-09-12, lane A (`webapps-4e`).** Approved by
-> `system32-85`, including the guard, on condition its doc comment states its population plainly
-> (one file today). All three parts built: refusal message names the cure (driver.ts), shared
-> `scripts/lib/storage-bootstrap.ts` extracted and `orphan-file-sweep.ts` refactored onto it, the
-> new guard plant-proven (baseline green → plant red → plant deleted → green, no residue), and the
-> DEF-307 sentence corrected. typecheck clean, full unit suite green (99 files / 1368 passed / 1
-> skipped), refactored script re-smoke-tested end to end against `shareat_test_lanea` (exit 0,
-> driver installed, real orgs processed). DEF-310 (the `auth-transaction-callers.test.ts` scan-root
-> gap, now higher severity after today's production role split) named, not touched — its own task.
-> Awaiting commit.
+> **Status: ✅ COMPLETE — shipped 2026-09-12, `c74eba5`, lane A.** DEF-308 and DEF-307 both closed. The new guard’s population is ONE FILE today and its header says so.
 
 ## Implementation spec, lane A
 
