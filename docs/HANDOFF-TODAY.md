@@ -1,5 +1,30 @@
 # Handoff — 2026-09-12 (evening wrap-up, FIVE sessions)
 
+> ⛔⛔ **PRODUCTION HAS ONE ORGANISATION, NOT ZERO — AND THE NIGHTLY ORPHAN SWEEP IS ARMED AND
+> CANNOT RUN.** Measured on the host 2026-09-12 15:57 UTC, after Ian installed and armed the
+> units by hand. `/var/log/shareat/orphan-file-sweep.log` reads
+> **`npm error Missing script: "orphan-file-sweep"`** — the deployed build predates `55fc4bd`,
+> the commit that added that script. And `/var/log/shareat/budget-reissue.log` reads
+> **`budget-reissue: ok — created 0 · 1 orgs`**, naming **SHAREAT OPC**. **Filed as DEF-326.**
+>
+> ⛔ **NINE FILES IN `docs/` ASSERT ZERO ORGANISATIONS AND EVERY ONE IS NOW SUSPECT**, including
+> `docs/ops/README.md`, this file, `docs/ROADMAP.html`, and **`docs/tasks/294-*.md`, whose
+> "do not build" assessment rests on it.** ⚠️ **Re-derive them; do not patch the number.** T-294's
+> conclusion may survive — the risky loop still cannot execute because the sweep cannot start —
+> but it has to be re-argued on the real figure.
+>
+> ⚠️ **Deploys auto-fire on green CI (`deploy.yml` triggers on `workflow_run` of CI on `main`), and
+> `ci.yml:80` runs the integration suite — so DEF-325 may be blocking every deploy. ⛔ But that
+> cannot explain a script missing since this morning, because DEF-325 only appeared tonight.**
+> Read `gh run list --workflow=CI --branch=main` and `gh run list --workflow=Deploy` before
+> adopting either hypothesis.
+>
+> ✅ **What does NOT change:** DEF-311's storage-bucket finding was settled by a measured
+> `stored_files` count of **zero rows**, not by an organisation count. That was a measurement and
+> it stands. ⚠️ **What does change:** `rolbypassrls` was live in production *while an organisation
+> existed*. It failed closed and was never a leak, but *"no second set of books to reach into"* is
+> no longer the reassurance it was.
+>
 > ⛔ **THE INTEGRATION SUITE IS RED BY ONE TEST, AND IT IS NOT A REGRESSION.**
 > **1 failed / 2834 passed across 122 files, 1828s.** The single failure is
 > `packages/domain/tests/integration/position-defaults.test.ts:537` (T-289 case 13) —
