@@ -183,6 +183,17 @@ export type Capability =
   | 'view_trial_balance'
   | 'reverse_entry'
   | 'close_period'
+  /**
+   * ⭐ T-264 slice 3 — **posting into a CLOSED period, one entry at a time.** Bible §13 row 193:
+   * `admin` and `super_admin` only, superseding ADR-006's rejection of a guarded escape path.
+   *
+   * ⛔ **NOT `close_period`, deliberately.** That one is granted to `manager` too (ADR-006 §7.4),
+   * so reusing it would hand the override to every manager — the widening Ian did not authorise.
+   *
+   * ⚠️ **This capability only decides WHO MAY RAISE THE FLAG.** The period rule itself stays in the
+   * database (migration `0003`'s two triggers); the app never re-implements it. See bible §15.11.
+   */
+  | 'override_period_lock'
   | 'post_journal_entry'
   // People
   | 'enrol_staff'
@@ -320,6 +331,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'view_trial_balance',
   'reverse_entry',
   'close_period',
+  'override_period_lock',
   'post_journal_entry',
   'enrol_staff',
   'manage_users',
@@ -476,6 +488,11 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   view_trial_balance: 'org',
   reverse_entry: 'store',
   close_period: 'org', // OPEN — Ian to confirm (§Open 2); manager also needs org-wide STORE scope, see authorize.ts
+  // ORG, like close_period and for the same reason: a fiscal period is org-wide, so there is no
+  // store whose scope could meaningfully narrow it. ⚠️ No `authorize.ts` extra condition — unlike
+  // close_period, this is never granted to a manager in the baseline, so there is no store-scope
+  // conflict to resolve.
+  override_period_lock: 'org',
   post_journal_entry: 'org',
 
   enrol_staff: 'store',
@@ -680,6 +697,14 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   // authorize.ts adds the org-wide-store-scope condition that resolves the conflict with
   // row 114's store scoping. See this file's top comment.
   close_period: { super_admin: true, admin: true, manager: true, staff: false },
+  // ⭐ DECIDED — Ian 2026-09-11 (bible row 193): admin and super_admin, nobody else. The narrowness
+  // IS the safety argument that outweighed ADR-006's never-reopen reasoning, so widening this cell
+  // reopens a ruled question. ⚠️ `manager: false` therefore also enrols it into
+  // ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER, which is DERIVED as admin-yes/manager-no — Ian ruled on
+  // 2026-09-12 that this is correct and intended (bible row 196), on the same reasoning the pin in
+  // tests/unit/capability-matrix.test.ts already records: a hand-maintained carve-out in a derived
+  // set is what drifts. An org with NO admin has nobody else who could ever authorise a late entry.
+  override_period_lock: { super_admin: true, admin: true, manager: false, staff: false },
   // "Nobody posts by hand" — reserved for break-glass repair, logged. Admin does NOT hold
   // it: entries come from source documents, never a form, not even an admin's.
   post_journal_entry: { super_admin: true, admin: false, manager: false, staff: false },

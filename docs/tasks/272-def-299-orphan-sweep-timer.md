@@ -1,0 +1,63 @@
+# T-272 — DEF-299: the orphan file sweep has never run, and Ian has ruled it should, nightly
+
+> **Status: RESERVED by the orchestrator, 2026-09-12.** Number reserved so no peer takes it.
+> Nothing built. ⛔ **Not started today because it needs a migration slot and lane A holds the only
+> one this cycle (`0143`).** The next free index is `0144`; its journal `when` must exceed whatever
+> `0143` lands on.
+
+## Ian's decision, 2026-09-12 — the WHAT, not open to revision
+
+> **Wire it, nightly**, on the pattern of the six existing timers in `docs/ops/`.
+
+Asked whether abandoned uploads should be swept at all and on what schedule, having been told that
+both of the sweep's bugs are now fixed and that it has never run in production.
+
+## Why this is a landmine and not a chore
+
+`sweepOrphanedFiles` (`packages/domain/src/files/index.ts:214`) has **no production caller and never
+has**. `git grep` returns the definition, two doc comments, and four calls — all inside
+`packages/domain/tests/integration/files.test.ts`. There is no systemd unit, no npm script, no route.
+
+⛔ **Meanwhile the codebase describes it as a running cron.** `packages/db/src/client.ts:135` names
+it in `systemTransaction()`'s privileged caller list as *"a cron across every organisation"*, and its
+own doc comment says it *"REPORTS what it did — a sweep that deletes quietly is indistinguishable
+from one that is broken."* Both sentences describe a thing that does not exist.
+
+⭐ **This recontextualises DEF-298**, the data-loss race found the same afternoon: it has never
+fired. A landmine, not a bleed — and worse for it, because whoever eventually scheduled that cron
+would have done so believing it had been running safely for months.
+
+⚠️ **Both bugs (DEF-297, DEF-298) were fixed on 2026-09-12, so it is safe to wire. It was not safe
+that morning.** Wiring it before those fixes would have started deleting bytes out from under
+just-claimed files on night one.
+
+## Scope, when this is picked up
+
+- A runner script under `scripts/`, on the pattern of `attendance-sweep.ts`,
+  `order-wastage-backstop.ts`, `finding-observation.ts`, `recurring-expense-draft.ts`.
+- A `.service` / `.timer` pair in `docs/ops/`, on the pattern of the six already there.
+- ⛔ **A migration widening `scheduler_runs_job_check`** to admit the new job name. The live
+  constraint (`0136:100-102`) is `('depreciation','amortisation','attendance_sweep','mirror_publish',
+  'inbox_relay','order_wastage_backstop','finding_observation','budget_reissue','recurring_expenses')`.
+  ⚠️ **`scheduler_runs` is a SHARED table** — `0126`, `0130`, `0131` and `0136` all carry the same
+  warning: if another lane's migration also widens this constraint in the same cycle, the two
+  DROP/ADD pairs must be reconciled into ONE naming every job from every lane.
+
+## ⛔ Non-negotiable: it records a run, or it is not wired
+
+**Do not ship the timer without the `scheduler_runs` row.** DEF-299's own lesson is that a sweep
+nobody can see is a sweep nobody knows is broken — and this defect exists precisely because the code
+*claimed* to be a reporting cron while being nothing at all. A nightly job that deletes storage bytes
+and leaves no trace of having run would reproduce the defect it is closing, one layer up.
+
+⭐ See also bible §12's sweep-control landmine (§13 row 181): **a sweep that reports a total must
+first report a known non-zero control.** A nightly "0 files swept" is indistinguishable from a
+broken query unless something proves the sweep can still count.
+
+## Out of scope
+
+- ⛔ Re-opening DEF-297 or DEF-298. Both are fixed and verified; this task consumes that work.
+- ⛔ Arming the timer on the droplet — that is Ian's, and `docs/ops` does not ship (DEF-194).
+
+See `docs/DEFECTS-REGISTER.md` DEF-299, DEF-297, DEF-298, DEF-194; `PROJECT_BIBLE.md` §13 rows 181,
+194; `packages/db/src/client.ts:135`; `docs/ops/README.md`.

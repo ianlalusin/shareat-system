@@ -127,6 +127,7 @@ they need weekly, the boundary is wrong.
 | `view_trial_balance` | org | ✅ | ✅ | ✗ | ✗ | Org-wide by nature; a store manager has no store-level trial balance to see |
 | `reverse_entry` | store | ✅ | ✅ | ✅ | ✗ | The only correction path (T-106). Must be reachable, or people find worse ways |
 | `close_period` | **org** | ✅ | ✅ | conditional | ✗ | ✅ **Ian 2026-08-25 — grantable, but only with ORG-WIDE store scope.** Keeps row 101 (admin *and* manager may close) true alongside row 114 (capabilities are store-scoped): a period is org-wide, so a manager closes only when their scope covers every store. A Lipa-only manager never closes Malvar's books |
+| `override_period_lock` | **org** | ✅ | ✅ | ✗ | ✗ | ⭐ **Ian 2026-09-11 (bible row 193) — posting into a CLOSED period, one entry at a time.** Supersedes ADR-006's rejection of a guarded escape path; the narrowness is the whole safety argument, so widening this row reopens a ruled question. ⛔ **Not `close_period`** — that is granted to `manager` too, and reusing it would hand the override to every manager. ⚠️ `manager: ✗` also enrols it into the adminless-manager fallback (derived, admin-yes/manager-no); **Ian ruled 2026-09-12 (row 196) that this is intended** |
 | `post_journal_entry` (direct) | org | ✅ | ✗ | ✗ | ✗ | **Nobody posts by hand.** Entries come from source documents. Reserved for break-glass repair, logged |
 
 ## People

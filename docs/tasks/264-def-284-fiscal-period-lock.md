@@ -263,3 +263,162 @@ can only ever fail *closed*. Build `app.period_override` the same way.
 See `docs/DEFECTS-REGISTER.md` DEF-284, DEF-249, DEF-260; `PROJECT_BIBLE.md` §16.1 invariant 7,
 §7.1, §12 landmine 17; migrations `0000` (table), `0003` (the trigger), `0005` (the exemption
 pattern), `0014` (the roles).
+
+---
+
+# ⭐ SLICE 3 BUILD NOTE — orchestrator, 2026-09-12. READ THIS BEFORE THE SLICE 3 SECTION ABOVE.
+
+Slices 1 (`5706a06`) and 2 (`6a9ed65`) are shipped. This note resolves every open decision slice 3
+had left, and records three things found by grepping the enforcement surface that neither this spec
+nor DEF-284 mentions. **Where this note and the slice 3 section above disagree, this note wins.**
+
+## ⛔ FINDING 1 — the period rule is enforced in FOUR places, not the one the spec implies
+
+`git grep check_period_open` over `packages/db/migrations/`:
+
+| # | Where | What it guards | In scope for the override? |
+|---|---|---|---|
+| 1 | `journal_entries_check_period_open` — `0003:214` | INSERT/UPDATE on `journal_entries` | ✅ **YES** |
+| 2 | `journal_lines_check_period_open` — `0003:246` | INSERT/UPDATE on `journal_lines` | ✅ **YES** |
+| 3 | `stock_movements_check_period_open` — `0063:111` | INSERT on `stock_movements` | ⛔ **NO — see below** |
+| 4 | **A TypeScript pre-check** — `post-entry.ts:118-123` | throws before the DB is ever reached | ⚠️ **Must be taught the override, or it is dead on arrival** |
+
+⛔ **Amending only #1 produces an override that appears to work and does not.** The entry header is
+let through and the first line is refused by #2, so the transaction still rolls back — with a
+*different* error message, which is the worst possible failure because it reads like a new bug.
+**Amend #1 and #2 in the same migration, or neither.**
+
+⚠️ **#4 is the subtle one and it is the reason to read `post-entry.ts` before writing SQL.**
+`postEntry` resolves the period and throws *"fiscal period … is closed"* in TypeScript *before* any
+insert. A migration that perfectly exempts both triggers changes nothing observable, because the
+override never reaches them. ⛔ **This is NOT the "do not implement the override in TypeScript"
+rule being relaxed** — that rule forbids the app being the *authority* on the period rule. #4 is a
+friendly early error, not the authority. **Teach it to stand aside when the override is active and
+let the database make the final call; do not delete it for everyone else.**
+
+### ⛔ Why `stock_movements` is deliberately OUT of scope — and the one thing to verify, not assume
+
+Ian's ruling is about **one journal entry** being let through. A stock movement is not a journal
+entry, extending the exemption there is a decision nobody has made, and #3 already permits a
+movement where no period row exists at all — a different rule with a different rationale
+(`0063:106-109`). **Do not touch #3.**
+
+⚠️ **But VERIFY rather than assume the two never travel together** — this is the slice's named
+question, and it is worth more than the code:
+
+> **Does any path that calls `postEntry` also insert into `stock_movements` in the SAME
+> transaction?** If one does, an override on that path half-succeeds: the ledger entry passes and
+> the stock movement is refused. **Report the answer either way. Do not fix it — report it.**
+
+## ⛔ FINDING 2 — the capability is ALREADY WIRED. Do not add it.
+
+`override_period_lock` was pre-wired by the orchestrator (the capability matrix is the
+orchestrator's row): `capabilities.ts` in all four places, the row in
+`docs/decisions/CAPABILITY-MATRIX.md`, and the pin in `tests/unit/capability-matrix.test.ts`
+(95 → 96). **Typecheck clean, 212/212 green at the time of writing.** Use it; do not edit those files.
+
+- `super_admin: true, admin: true, manager: false, staff: false` — scope `'org'`.
+- ⛔ **No `authorize.ts` extra condition.** Unlike `close_period`, it is never granted to a manager
+  in the baseline, so there is no store-scope conflict to resolve. Do not add one.
+
+⭐ **Ian's ruling, 2026-09-12 (bible row 196), that you must not "fix":** because the matrix cell is
+admin-yes/manager-no, the capability **automatically enrols into
+`ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER`** — the derived fallback set. So in an organisation with no
+active administrator, an elevated manager **does** hold the override. The orchestrator escalated
+this as an apparent contradiction of row 193's *"admin and super_admin only"*; **Ian ruled it
+correct and intended**: such an org has nobody else who could ever authorise a late entry, and the
+grant is revoked the moment an administrator arrives (row 188). ⛔ **Do not add a carve-out** — the
+pin's own comments record that a hand-maintained exception to a derived set is what drifts.
+
+## The contract — DECIDED, because it is a HOW
+
+⛔ **The override is EXPLICIT and PER-CALL. It is never implied by holding the capability.** An
+admin who holds it posts into open periods normally, all day, with no exemption anywhere near the
+transaction. The exemption exists only when the caller asks for it *and* passes authorize.
+
+```
+postEntry(tx, actor, { …, periodOverride: { reason: <typed>, note?: string } })
+```
+
+1. `periodOverride` absent → **nothing changes**. No GUC, no audit row, no new code path. This is
+   the case that must stay byte-identical, and it is ~100% of postings.
+2. `periodOverride` present → `authorize(actor, 'override_period_lock')` **first**. A refusal here
+   is an ordinary authorization failure and nothing is written.
+3. Only after that: `set_config('app.period_override', 'on', true)`.
+4. The TS pre-check (#4) stands aside; the **database** decides.
+5. The audit row is written **in the same transaction**, so an override that rolls back leaves no
+   record of having happened — and one that commits cannot fail to have one.
+
+⛔ **`reason` is a TYPED enum, never free text and never a boolean** (the spec's own requirement).
+`note` is the optional free-text elaboration beside it, not a replacement for it. **Propose the enum
+members in your SPEC and I will rule on them** — do not invent them in the implementation.
+
+## The audit table — DECIDED: a new table, not `audit_log`
+
+`audit_log` exists (`packages/db/schema/audit-log.ts`) and was checked first, as the spec requires.
+It does not fit, for reasons that are about shape, not taste:
+
+- `entity_id` is a single `NOT NULL uuid`. An override is about a **period AND an entry**; one of
+  the two would have to be demoted into `jsonb`.
+- A **typed** reason needs a CHECK constraint. A reason living in `jsonb` cannot be constrained,
+  which makes "typed" a comment rather than a rule.
+- An FK to `journal_entries` makes *an override with no entry* unrepresentable. `audit_log` cannot
+  express that, so the strongest guarantee available would be given up for a table reuse.
+
+**Build `period_overrides`** with: `org_id`, `period_id` → `fiscal_periods`, `entry_id` →
+`journal_entries`, `actor_person_id` → `persons` (**NOT NULL** — unlike `audit_log` there is no
+system-actor case here; a machine can never hold this capability), the typed `reason`, optional
+`note`, `created_at`. ⛔ **ADR-012 §5 step 4 applies in full**: `ENABLE ROW LEVEL SECURITY` with
+policies through `app_current_org()` (never raw `current_setting` — DEF-077), registered in
+`packages/db/src/rls/registry.ts` **and** classified in `packages/db/src/cutover/classification.ts`.
+The build stops you until both are done.
+
+## Migration slot — ALLOCATED, use exactly this
+
+| | |
+|---|---|
+| File | `packages/db/migrations/0143_t264_period_override.sql` |
+| idx | `143` |
+| `when` | **`1798428707084`** — `1798342307084 + 86_400_000 × 1`, per ADR-012 §5 step 5 |
+| tag | `0143_t264_period_override` |
+
+⛔ Hand-authored. `npm run db:generate` is retired and fails closed (RULES §1 rule 9). Prove it on a
+**scratch** database (`shareat_scratch_<x>`), never on a shared one — ADR-012 §5 step 8. Do not add
+a `meta/*_snapshot.json` (step 7).
+
+## ⛔ Watch it fail first — what "observed" means here, precisely
+
+The spec requires a refusal to be **watched, not reasoned about**. That is three distinct
+observations, and two of them are easy to conflate:
+
+1. **Before the exemption exists** — post into a closed period and watch trigger #1 raise. Capture
+   the real message. This is the baseline.
+2. **After the exemption exists, with NO flag set** — the same posting must still be refused,
+   identically. This is what proves the `coalesce(…, '') = 'on'` idiom fails CLOSED.
+3. **A `manager` attempting the override** — refused at `authorize()`, before any GUC is set.
+   ⚠️ **This is a TypeScript refusal, and on its own it does NOT satisfy the non-negotiable.**
+   Observation 2 is the database one. Report all three separately; do not merge them into one
+   "the override is refused for non-admins" assertion.
+
+## Expected reds — predicted by name, so you report them instead of fixing them
+
+- ⚠️ Anything asserting the **count** of tables, RLS-registered tables, or migrations will move by
+  one. That is correct; update the count and say so in your report.
+- ⛔ **`packages/auth/tests/super-admin-capability-set.test.ts` must stay GREEN and untouched.** Its
+  `PINNED` list is super-admin-ONLY capabilities; `override_period_lock` is admin-yes, so it is
+  correctly absent. **If that test goes red, something is wrong with your change** — it is the one
+  pin whose header says *"⛔ Do not update this to make the test pass."* Report it, do not edit it.
+- ⚠️ A test asserting `postEntry`'s signature or its closed-period error text may move. Adding an
+  **optional** field must not change any existing caller; if an existing caller needs editing,
+  stop and report — that means the field was not optional in practice.
+
+## Out of scope for slice 3 — named, so the boundary is not a judgement call
+
+- ⛔ **A reopen path** — flipping `status` from `closed` back to `open`. Bible row 193 is explicit
+  that this remains unbuilt and was not what Ian was asked. No reopen button, no status-revert
+  action, no admin screen that sets a closed period back to open.
+- ⛔ `stock_movements_check_period_open` (finding 1, #3).
+- ⛔ `apps/erp/src/lib/constraint-messages.ts` — **lane B owns it this cycle (T-271/DEF-301).** If
+  your refusal would read better with a friendly sentence, say so in your report; do not add a key.
+  DEF-301 is precisely that adding one silently matches nothing.
+- ⛔ The `errorMessage` / `CONSTRAINT_MESSAGES` map generally, for the same reason.

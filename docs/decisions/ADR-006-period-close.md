@@ -45,13 +45,58 @@ immutable. A mistake in it is corrected by the **existing `reverseEntry`**.
 
 ### Gates — hard vs warning, stated explicitly
 
-| Precondition | |
-|---|---|
-| No draft entries dated in the period | **Hard** |
-| Trial balance ties (invariant 10) | **Hard** — already a continuous CI check; costs nothing new |
-| Every `requires_party` control account's subledger sums to its control balance | **Hard, EVERY close** — one `GROUP BY` per account, thanks to T-118. Monthly closing is what makes this cheap: a subledger break is caught in the month it happens, not eleven months later |
-| No earlier period in the org still open | **Hard.** With monthly close this is nearly always already satisfied — and on 15 January the order is fixed: **close December first, then run the year close** |
-| Bank reconciliation complete | **Warning, never a gate** — no system studied enforces it, and it depends on a third party nobody here controls |
+> ⭐ **AMENDED 2026-09-12 (DEF-293, DEF-294) — Ian's decision.** Two findings were raised against
+> this table by the lane that first implemented it (T-264 slice 2, `6a9ed65`). **Neither implied a
+> code change: the implementation was already correct and what was stale was this text.** A
+> **Scope** column was added and the draft gate now names its tables; no gate was altered, added or
+> removed.
+>
+> - **DEF-293 — the draft gate named no table, and its literal reading could never fire.**
+>   `journal_entries.status = 'draft'` cannot match a committed row: draft is a *within-transaction*
+>   construction state (`repo/journal.ts:184` inserts the header as draft, `postDraftEntry` at
+>   `:255` flips it to posted, same transaction, deferred triggers at COMMIT). ⛔ **A gate that can
+>   never fire is worse than no gate** — it appears on the close checklist, passes on every period
+>   for ever, and tells the person closing the month that something was verified. That is DEF-210's
+>   shape. The gate now names the source documents that actually hold a persistent draft.
+> - **DEF-294 — three of the gates below are not period-scoped at all**, so a passing verdict means
+>   something other than what this table implies. The **Scope** column now says which is which.
+>   ⛔ **Deliberately NOT fixed by re-scoping the continuous detectors to a period** — that would
+>   weaken them. A ledger that does not balance should block **every** close, not only the month the
+>   imbalance landed in.
+
+| Precondition | Scope | |
+|---|---|---|
+| No unposted drafts dated in the period — ⚠️ **`expenses` (`business_date`) and `deliveries` (`delivered_on`)**, the two source documents this ADR itself names, **not `journal_entries.status`** (DEF-293). ⛔ `sales_days` is deliberately excluded: its statuses are `open`, `submitted`, `verified`, `voided`, and `open` means *the day is still happening*, not that work was left unfinished — gating on it would refuse a close whenever a store was mid-trading | **Period-scoped** | **Hard** |
+| Trial balance ties (invariant 10) | ⚠️ **Continuous** — org-wide and all-time, not recomputed per period | **Hard** — already a continuous CI check; costs nothing new |
+| Every `requires_party` control account's subledger sums to its control balance | ⚠️ **Continuous** — org-wide and all-time | **Hard, EVERY close** — one `GROUP BY` per account, thanks to T-118. Monthly closing is what makes this cheap: a subledger break is caught in the month it happens, not eleven months later |
+| No earlier period in the org still open | **Period-scoped** | **Hard.** With monthly close this is nearly always already satisfied — and on 15 January the order is fixed: **close December first, then run the year close** |
+| Bank reconciliation complete | — | **Warning, never a gate** — no system studied enforces it, and it depends on a third party nobody here controls |
+
+### ⚠️ How the gate is actually implemented — and why this table is a MINIMUM, not the list
+
+`closeReadiness` (`packages/domain/src/findings/index.ts:212`) does **not** evaluate these four
+preconditions one by one. It asks `listFindings` for the period and refuses the close if **any
+finding of severity `hard`** is open:
+
+```ts
+const feed = await listFindings(tx, orgId, { period });
+const blocking = feed.findings.filter((f) => f.severity === 'hard');
+```
+
+⛔ **That hard-detector set is considerably broader than this table** — roughly fifteen detectors in
+`packages/db/src/repo/findings.ts`, including `trialBalanceDoesNotTie`, `dueFromDueToNotReciprocal`
+and `openingBalanceEquityNonZero`. So the preconditions above are **the decision's minimum bar**;
+the implemented gate is whatever the hard-finding set contains on the day, and it grows whenever a
+detector is added.
+
+⚠️ **That is a deliberate and defensible design — a close should not proceed on an unsound ledger —
+but it has two consequences a reader of this ADR must know**, and neither was written down until
+DEF-294:
+
+1. **A green verdict means "no hard finding is open for this period", not "these four were
+   checked".** Adding a hard detector anywhere silently adds a close gate.
+2. **An acknowledged hard finding still blocks** (`:218-220`). Accepting a risk is not the same as
+   the books adding up, and a close is exactly the moment that distinction matters.
 
 ### ⚠️ The year-close entry must be distinguishable in queries
 

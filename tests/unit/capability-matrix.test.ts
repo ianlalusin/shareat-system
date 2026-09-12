@@ -196,7 +196,7 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
   // `bypass_count_freeze` and `can_adjust_inventory`: the first three are NOT added (no caller —
   // the same debt as `import_commissary_catalogue`), and the last two already exist as
   // `charge_staff_for_discrepancy` / `adjust_inventory`.
-  it('finds exactly 81 capability rows — NOT the "36" the task documents say in prose', () => {
+  it('finds exactly 96 capability rows — NOT the "36" the task documents say in prose', () => {
     // docs/tasks/121-roles-and-access.md and CAPABILITY-MATRIX.md's own Contract section
     // both say "36 rows" / "36 capabilities". The table itself had 38: the two
     // ⚠️-flagged open cells (set_credit_limit, close_period) plus the two platform-only
@@ -218,7 +218,7 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // into the enforcement without also being written into the document people actually
     // read, and vice versa.
     const { rows } = parseCapabilityMatrixDoc();
-    expect(rows.length).toBe(95);
+    expect(rows.length).toBe(96);
   });
 
   it('has no duplicate capability names', () => {
@@ -289,10 +289,10 @@ describe('invariant 1 — every capability has an explicit decision for all four
     expect(problems).toEqual([]);
   });
 
-  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 93 capabilities', () => {
-    expect(CAPABILITIES.length).toBe(95);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(95);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(95);
+  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 96 capabilities', () => {
+    expect(CAPABILITIES.length).toBe(96);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(96);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(96);
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));
   });
@@ -378,6 +378,15 @@ describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', (
         'manage_prepaid_items',
         'run_amortisation',
         'manage_chart_of_accounts',
+        // ⭐ T-264 slice 3's `override_period_lock` JOINED this set on 2026-09-12 with no edit to
+        // any list — admin-yes / manager-no, and the set is derived from exactly that. ⚠️ This one
+        // was escalated rather than re-pinned, because bible row 193 says the override is for
+        // `admin` and `super_admin` and NOBODY ELSE, and the fallback appears to contradict that.
+        // ⭐ Ian ruled on 2026-09-12 (bible row 196) that the enrolment is CORRECT: an org with no
+        // active administrator has nobody else who could ever authorise a late entry, and the grant
+        // is revoked the moment an administrator arrives (row 188). The alternative — a carve-out in
+        // a derived set — is precisely what this pin's own comments say drifts.
+        'override_period_lock',
         // ⭐ `provision_clock_terminal` JOINED this set on 2026-08-29, the moment Ian made it
         // admin-only (bible row 165) — it is admin-yes / manager-no, and the set is derived from
         // exactly that. ⚠️ **This is the ONE documented exception to "admin only", and it is
