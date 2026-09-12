@@ -1,5 +1,19 @@
 # Handoff — 2026-09-12 (evening wrap-up, FIVE sessions)
 
+> ⛔ **THE INTEGRATION SUITE IS RED BY ONE TEST, AND IT IS NOT A REGRESSION.**
+> **1 failed / 2834 passed across 122 files, 1828s.** The single failure is
+> `packages/domain/tests/integration/position-defaults.test.ts:537` (T-289 case 13) —
+> `Test timed out in 30000ms`. **That file passes 19/19 in 20.56s run alone**, verified on the
+> same database minutes later. It creates a scratch database and runs all 146 migrations from
+> zero, which legitimately exceeds a 30s budget while 121 other files work the same Postgres
+> instance. **Filed as DEF-325; fixing it is item 1.** ⭐ **Zero `Hook timed out` in the whole
+> run** — T-285's fix held, and DEF-313 did not recur once.
+>
+> ⚠️ **AND READ THIS BEFORE TRUSTING ANY GATE IN THIS FILE:** that run was launched as
+> `node it.mjs …; echo "EXIT=$?"`, so **the harness reported exit 0 — the echo's status, not
+> vitest's.** The failure was found by reading the log, not the exit code. **Never end a
+> background gate command with `echo`;** it launders a non-zero exit into a zero one.
+>
 > Written for a **COLD start**. It assumes you have never seen this project.
 > Read `docs/RULES.md` first, then this file. `PROJECT_BIBLE.md` wins any disagreement.
 >
@@ -29,7 +43,7 @@ Nothing is half-built; every session reported final state and released.
 | `npm run test` (unit) | **109 files · 1464 passed · 1 skipped · 0 failed** (exit code checked, not inferred from `tail`) |
 | `npm run build` | **exit 0**, port 9008 enumerated free by process list first |
 | `npm run toc` + `toc-freshness` | regenerated after bible rows 199 and 200; **4/4** |
-| Integration — full suite | ⚠️ **RAN CLEAN FOR 37+ MINUTES AND WAS STILL RUNNING AT WRAP-UP — zero failures, zero `Hook timed out`, on `shareat_test_orch` via `it.mjs`.** Not a completed pass: **confirm it before relying on it.** ⭐ The absence of hook timeouts is itself the result worth having — T-285 fixed exactly that, and this run is the first full suite since, on a quiet box. A longer runtime is *expected* now: a slow truncate that used to fail at 10s now waits up to 30s instead, so the fix trades wall clock for reliability by design |
+| Integration — full suite | ⛔ **1 failed / 2834 passed across 122 files, 1828s** on `shareat_test_orch` via `it.mjs`. The one failure is DEF-325, a from-zero migration test exceeding `testTimeout` under suite load; it passes 19/19 in 20.56s alone. ⭐ **Zero `Hook timed out` across the entire run** — T-285 held |
 | Smoketests in the browser | T-288 (manager + staff, nav **and** typed-URL refusal), T-290 (28 assertions), T-296 (four checks incl. the no-JS path) |
 
 ⛔ **Never run `npm run test:integration`** — it hits the shared database. Give every lane its own
@@ -168,7 +182,8 @@ Four dispositions have now turned out wrong: DEF-279, DEF-301, DEF-309, DEF-307.
 
 ## Pick up here
 
-1. **Ian's five items above.** Two are one-line SSH commands; one is photographing a receipt.
+1. ⛔ **DEF-325 — the one red test.** Give that from-zero migration test its own timeout, measured under load, and do NOT weaken the test or raise the project default.
+2. **Ian's five items above.** Two are one-line SSH commands; one is photographing a receipt.
 2. **DEF-314's screen — Ian ruled it gets built and it has no task number yet.** It writes an
    audit row with a typed reason, so it needs real design: who sees the control, how the reason is
    chosen, what the person is told before using it. ⛔ Not a drive-by inside another task.
