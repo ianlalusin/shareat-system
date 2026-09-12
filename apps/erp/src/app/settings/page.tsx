@@ -1,4 +1,4 @@
-import { requireSession } from '../../lib/session';
+import { requirePageAccess } from '../../lib/page-access';
 import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Settings — Shareat System' };
@@ -45,7 +45,9 @@ export const dynamic = 'force-dynamic';
  * the reason is three files away.
  */
 export default async function SettingsPage() {
-  await requireSession('/settings');
+  const { refusal } = await requirePageAccess('/settings');
+  // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
+  if (refusal) return refusal;
 
   return (
     <Page density="form">

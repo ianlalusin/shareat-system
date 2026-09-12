@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { LIABILITY_CATEGORIES } from '@shareat/db/schema';
-import { requireSession } from '../../lib/session';
+import { requirePageAccess } from '../../lib/page-access';
 import { createLiabilityAction } from './actions';
 import { CATEGORY_LABEL, listRegister, listStores, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
@@ -18,7 +18,9 @@ export default async function LiabilitiesPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await searchParams;
-  const { actor } = await requireSession('/liabilities');
+  const { actor, refusal } = await requirePageAccess('/liabilities');
+  // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
+  if (refusal) return refusal;
 
   const [stores, rows] = await Promise.all([listStores(actor.orgId), listRegister(actor.orgId)]);
   const storeById = new Map(stores.map((s) => [s.id, s]));

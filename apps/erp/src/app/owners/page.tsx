@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireSession } from '../../lib/session';
+import { requirePageAccess } from '../../lib/page-access';
 import { createOwnerAction } from './actions';
 import {
   AGED_DAYS,
@@ -24,7 +24,9 @@ export default async function OwnersPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await searchParams;
-  const { actor } = await requireSession('/owners');
+  const { actor, refusal } = await requirePageAccess('/owners');
+  // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
+  if (refusal) return refusal;
 
   const [stores, persons, owners] = await Promise.all([
     listStores(actor.orgId),

@@ -1,4 +1,4 @@
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '../../../lib/page-access';
 import { addShiftDays, toShiftDay } from '@shareat/domain';
 import { updateAttendanceConfigAction } from './actions';
 import { liveConfigFor, listStores } from './lib';
@@ -28,7 +28,9 @@ export default async function AttendanceSettingsPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await searchParams;
-  const { actor } = await requireSession('/settings/attendance');
+  const { actor, refusal } = await requirePageAccess('/settings/attendance');
+  // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
+  if (refusal) return refusal;
 
   const stores = await listStores(actor.orgId);
   const storeId = sp.store || stores[0]?.id;

@@ -30,9 +30,12 @@ import { GROUPS } from '../nav';
 import { ChevronIcon, GROUP_ICONS } from './icons';
 import { FOCUS_RING, activeHref, type SidebarState } from './sidebar-state';
 
-function groupContaining(href: string | undefined): string | undefined {
+function groupContaining(
+  groups: { label: string; links: { href: string }[] }[],
+  href: string | undefined,
+): string | undefined {
   if (!href) return undefined;
-  return GROUPS.find((g) => g.links.some((l) => l.href === href))?.label;
+  return groups.find((g) => g.links.some((l) => l.href === href))?.label;
 }
 
 /**
@@ -57,11 +60,18 @@ function useIsRailReactive(explicitState: SidebarState | undefined): boolean {
 }
 
 export function SidebarNav({
+  allowedHrefs,
   onLinkClick,
   isRailNow,
   expandFromRail,
   explicitState,
 }: {
+  /**
+   * ⭐ T-288 — the hrefs this actor may be SHOWN, computed server-side in `AppShell` from
+   * `ROUTE_CAPABILITY`. ⛔ Presentation only. The same map drives `requirePageAccess`, which is
+   * what actually refuses the route, so a hidden link is never the control (DEF-051).
+   */
+  allowedHrefs: readonly string[];
   onLinkClick?: () => void;
   isRailNow: () => boolean;
   expandFromRail: () => void;
@@ -71,9 +81,21 @@ export function SidebarNav({
   explicitState: SidebarState | undefined;
 }) {
   const pathname = usePathname();
-  const allHrefs = GROUPS.flatMap((g) => g.links.map((l) => l.href));
+  /**
+   * ⭐ T-288 — the nav this actor actually sees. A group whose every link is filtered away is
+   * dropped entirely rather than rendered as an empty heading that opens to nothing.
+   *
+   * ⚠️ `allHrefs` below is derived from the FILTERED groups on purpose. `activeHref` resolves
+   * "you are here" by longest matching prefix, so leaving hidden routes in that list would let a
+   * link the actor cannot see win the match and highlight a group that is not on screen.
+   */
+  const visibleGroups = GROUPS.map((g) => ({
+    ...g,
+    links: g.links.filter((l) => allowedHrefs.includes(l.href)),
+  })).filter((g) => g.links.length > 0);
+  const allHrefs = visibleGroups.flatMap((g) => g.links.map((l) => l.href));
   const current = activeHref(pathname, allHrefs);
-  const currentGroup = groupContaining(current);
+  const currentGroup = groupContaining(visibleGroups, current);
   const isRailReactive = useIsRailReactive(explicitState);
 
   // ⭐ Seeded from the current route on first render, then kept true across client-side
@@ -116,7 +138,7 @@ export function SidebarNav({
 
   return (
     <nav aria-label="Main" className="flex flex-col gap-1 overflow-y-auto px-2 py-2">
-      {GROUPS.map((group) => {
+      {visibleGroups.map((group) => {
         const Icon = GROUP_ICONS[group.icon];
         const open = openGroups.has(group.label);
         // The rail's own "you are here" — live only while the rail is actually what's showing, so

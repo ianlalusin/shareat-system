@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '../../../lib/page-access';
 import {
   closeMonthAction,
   contributionAction,
@@ -36,7 +36,9 @@ export default async function OwnerPage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const { actor } = await requireSession(`/owners/${id}`);
+  const { actor, refusal } = await requirePageAccess(`/owners/${id}`);
+  // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
+  if (refusal) return refusal;
 
   const owner = await getDetail(actor.orgId, id);
   if (!owner) notFound();

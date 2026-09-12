@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireSession } from '../../lib/session';
+import { requirePageAccess } from '../../lib/page-access';
 import type { PickerOption } from '../../components/two-way-picker';
 import { createMoneyTransferAction, voidMoneyTransferAction } from './actions';
 import { RecordTransferForm } from './RecordTransferForm';
@@ -21,7 +21,9 @@ export default async function MoneyTransfersPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await searchParams;
-  const { actor } = await requireSession('/money-transfers');
+  const { actor, refusal } = await requirePageAccess('/money-transfers');
+  // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
+  if (refusal) return refusal;
 
   const [stores, accounts, transfers] = await Promise.all([
     listStores(actor.orgId),

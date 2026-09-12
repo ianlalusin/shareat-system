@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { CUSTODIANS, MONEY_INSTRUMENTS } from '@shareat/db';
-import { requireSession } from '../../lib/session';
+import { requirePageAccess } from '../../lib/page-access';
 import {
   createMoneyAccountAction,
   renameMoneyAccountAction,
@@ -29,7 +29,9 @@ export default async function MoneyAccountsPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await searchParams;
-  const { actor } = await requireSession('/money-accounts');
+  const { actor, refusal } = await requirePageAccess('/money-accounts');
+  // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
+  if (refusal) return refusal;
 
   const [stores, accounts] = await Promise.all([listStores(actor.orgId), listAll(actor.orgId)]);
   const storeById = new Map(stores.map((s) => [s.id, s]));

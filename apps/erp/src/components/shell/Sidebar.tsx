@@ -122,7 +122,7 @@ function Wordmark() {
 
 /** The persistent ≥768 sidebar — rail or expanded, decided entirely by CSS off `data-sidebar-state`
  *  on the `SidebarProvider` wrapper (see globals.css). */
-function PersistentSidebar() {
+function PersistentSidebar({ allowedHrefs }: { allowedHrefs: readonly string[] }) {
   const { toggleCollapse, isRailNow, expandFromRail, state } = useSidebarContext();
   return (
     <div className="shell-sidebar hidden shrink-0 flex-col border-r border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950 md:sticky md:top-0 md:flex md:h-dvh">
@@ -143,7 +143,12 @@ function PersistentSidebar() {
           lets it grow to fit content and ignore `flex-1`'s shrink, which is exactly what let the
           nav push the footer out of the fixed-height column in the first place. */}
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <SidebarNav isRailNow={isRailNow} expandFromRail={expandFromRail} explicitState={state} />
+        <SidebarNav
+          allowedHrefs={allowedHrefs}
+          isRailNow={isRailNow}
+          expandFromRail={expandFromRail}
+          explicitState={state}
+        />
       </div>
       <div className="mx-2 mb-2 flex items-center justify-center border-t border-neutral-100 pt-2 dark:border-neutral-900">
         <form action={signOutAction}>
@@ -176,7 +181,7 @@ function PersistentSidebar() {
 
 /** The phone (< 768) off-canvas drawer, plus its scrim. Always in the DOM (so SSR/hydration never
  *  disagree); `hidden` below the open state and always `md:hidden` regardless of it. */
-function Drawer() {
+function Drawer({ allowedHrefs }: { allowedHrefs: readonly string[] }) {
   const { drawerOpen, closeDrawer } = useSidebarContext();
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -266,6 +271,7 @@ function Drawer() {
         <div className="flex-1 overflow-y-auto">
           {/* The drawer is never a rail — a heading tap is always a plain accordion toggle. */}
           <SidebarNav
+            allowedHrefs={allowedHrefs}
             onLinkClick={closeDrawer}
             isRailNow={() => false}
             expandFromRail={() => {}}
@@ -277,11 +283,16 @@ function Drawer() {
   );
 }
 
-export function Sidebar() {
+/**
+ * ⭐ T-288 — `allowedHrefs` is the filtered nav, computed server-side in `AppShell` from
+ * `ROUTE_CAPABILITY`. ⛔ Presentation only: a link this actor cannot see is ALSO refused by
+ * `requirePageAccess` on the route itself, so hiding is never the thing doing the work.
+ */
+export function Sidebar({ allowedHrefs }: { allowedHrefs: readonly string[] }) {
   return (
     <>
-      <PersistentSidebar />
-      <Drawer />
+      <PersistentSidebar allowedHrefs={allowedHrefs} />
+      <Drawer allowedHrefs={allowedHrefs} />
     </>
   );
 }

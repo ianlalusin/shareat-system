@@ -1,7 +1,7 @@
 import { formatMoney, money } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { ASSET_CATEGORIES } from '@shareat/db';
-import { requireSession } from '../../lib/session';
+import { requirePageAccess } from '../../lib/page-access';
 import { SchedulerStatus } from '../../components/scheduler-status';
 import { runDepreciationAction } from './actions';
 import {
@@ -35,7 +35,9 @@ export default async function FixedAssetsPage({
 
   // ⭐ The org comes from the SESSION, not the URL — the same rule every screen built after
   // T-138 follows, and the one the two reports pages still do not (DEF-064).
-  const { actor } = await requireSession('/fixed-assets');
+  const { actor, refusal } = await requirePageAccess('/fixed-assets');
+  // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
+  if (refusal) return refusal;
   const stores = await listStores(actor.orgId);
 
   const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : undefined;

@@ -1,4 +1,4 @@
-import { requireSession } from '../../lib/session';
+import { requirePageAccess } from '../../lib/page-access';
 import { postPayRunAction, setPayRateAction, voidPayRunAction } from './actions';
 import {
   cashAccountsFor,
@@ -41,7 +41,9 @@ export default async function PayrollPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await searchParams;
-  const { actor } = await requireSession('/payroll');
+  const { actor, refusal } = await requirePageAccess('/payroll');
+  // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
+  if (refusal) return refusal;
 
   const stores = await listStores(actor.orgId);
   const storeId = sp.store || stores[0]?.id;

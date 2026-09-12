@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { requireSession } from '../../../../lib/session';
+import { requirePageAccess } from '../../../../lib/page-access';
 import { storeDetail } from '../lib';
 import {
   deactivateStoreAction,
@@ -32,7 +32,9 @@ export default async function StoreDetailPage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const { actor } = await requireSession(`/admin/stores/${id}`);
+  const { actor, refusal } = await requirePageAccess(`/admin/stores/${id}`);
+  // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
+  if (refusal) return refusal;
   const detail = await storeDetail(actor, id);
   if (!detail) notFound();
 

@@ -1,4 +1,4 @@
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '../../../lib/page-access';
 import { listUsers } from './lib';
 import { Page } from '@/components/shell/Page';
 
@@ -14,7 +14,9 @@ export const dynamic = 'force-dynamic';
  * only place that says so.
  */
 export default async function UsersPage() {
-  const { actor } = await requireSession('/admin/users');
+  const { actor, refusal } = await requirePageAccess('/admin/users');
+  // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
+  if (refusal) return refusal;
   const users = await listUsers(actor.orgId);
   const roleless = users.filter((u) => u.role === null).length;
 

@@ -1,4 +1,4 @@
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '../../../lib/page-access';
 import { setWastageMonitorAction } from './actions';
 import { listActivePersons, listStores, monitorView } from './lib';
 import { Page } from '@/components/shell/Page';
@@ -45,7 +45,9 @@ export default async function WastageMonitorSettingsPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await searchParams;
-  const { actor } = await requireSession('/settings/wastage-monitor');
+  const { actor, refusal } = await requirePageAccess('/settings/wastage-monitor');
+  // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
+  if (refusal) return refusal;
   const stores = await listStores(actor.orgId);
   const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;
 

@@ -14,7 +14,13 @@
  * this reads it via `headers()`. ⛔ Presentation only — it decides chrome, never access.
  */
 import { cookies, headers } from 'next/headers';
+// ⛔ From the CHOKEPOINT, not from `@shareat/db` — T-261 §B6. That module is where the
+//    constraint-refusal counter lives; a direct import silently bypasses it.
+import { withOrgPrincipal } from '../../app/expenses/lib';
+import { heldCapabilities } from '@shareat/auth';
 import { currentSession } from '../../lib/session';
+import { GROUPS } from '../nav';
+import { navHrefAllowed } from '../../lib/route-capability';
 import { KIOSK_HEADER } from './kiosk';
 import { SIDEBAR_COOKIE_NAME, parseSidebarState } from './sidebar-state';
 import { Sidebar, SidebarProvider } from './Sidebar';
@@ -28,10 +34,33 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
   const initialState = parseSidebarState(cookieStore.get(SIDEBAR_COOKIE_NAME)?.value);
 
+  /**
+   * ⭐ **T-288 — Ian, 2026-09-12: *"do both hide the menu and gate the reads."***
+   *
+   * Until now this sidebar did no filtering of any kind: a cashier signing in with a store PIN on
+   * a counter tablet was shown Users, Stores, Payroll and the whole ledger. Nothing could be
+   * CHANGED — every write is gated in the domain — but everything could be read.
+   *
+   * ⛔ **Hiding is not the control and never becomes one.** The same `ROUTE_CAPABILITY` map drives
+   * `requirePageAccess`, which refuses the route itself, so typing the URL gets a refusal card
+   * rather than the data. One declaration, two consumers — because a nav filter and a page gate
+   * reading separate lists drift silently in the dangerous direction (DEF-310's shape).
+   *
+   * ⚠️ Two queries per authenticated request, not one per link: `heldCapabilities` reads the role
+   * and the grant rows once.
+   */
+  // ⛔ Principalled — see `page-access.tsx`'s note. T-231.
+  const held = await withOrgPrincipal(session.actor.orgId, (tx) =>
+    heldCapabilities(tx, session.actor),
+  );
+  const allowedHrefs = GROUPS.flatMap((g) => g.links.map((l) => l.href)).filter((href) =>
+    navHrefAllowed(href, held as ReadonlySet<string>),
+  );
+
   return (
     <SidebarProvider initialState={initialState}>
       <div className="flex min-h-dvh">
-        <Sidebar />
+        <Sidebar allowedHrefs={allowedHrefs} />
         <div className="flex min-w-0 flex-1 flex-col">
           <TopBar />
           <main className="min-w-0 flex-1">{children}</main>

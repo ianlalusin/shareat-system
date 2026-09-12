@@ -13,7 +13,7 @@ export {
 } from './capabilities';
 export type { Role, Capability, CapabilityScope } from './capabilities';
 
-export { authorize } from './authorize';
+export { authorize, heldCapabilities } from './authorize';
 /** ⭐ From the leaf, not from the modules that throw them — `packages/auth/src/errors.ts` says why.
  *  An app that needs only the classes should import `@shareat/auth/errors` and skip this barrel. */
 export { AuthenticationError, AuthorizationError } from './errors';

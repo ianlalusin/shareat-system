@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { PREPAID_CATEGORIES } from '@shareat/db';
 import { SchedulerStatus } from '../../components/scheduler-status';
-import { requireSession } from '../../lib/session';
+import { requirePageAccess } from '../../lib/page-access';
 import { createPrepaidItemAction } from './actions';
 import {
   CATEGORY_LABEL,
@@ -27,7 +27,9 @@ export default async function PrepaidPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await searchParams;
-  const { actor } = await requireSession('/prepaid');
+  const { actor, refusal } = await requirePageAccess('/prepaid');
+  // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
+  if (refusal) return refusal;
 
   const [stores, all, needingReview] = await Promise.all([
     listStores(actor.orgId),

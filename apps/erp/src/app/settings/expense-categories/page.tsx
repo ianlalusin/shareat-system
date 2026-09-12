@@ -1,4 +1,4 @@
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '../../../lib/page-access';
 import {
   createCategoryAction,
   renameCategoryAction,
@@ -40,7 +40,9 @@ export default async function ExpenseCategoriesSettingsPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await searchParams;
-  const { actor } = await requireSession('/settings/expense-categories');
+  const { actor, refusal } = await requirePageAccess('/settings/expense-categories');
+  // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
+  if (refusal) return refusal;
 
   const [categories, accounts] = await Promise.all([
     categoriesForAdmin(actor.orgId),

@@ -1,4 +1,4 @@
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '../../../lib/page-access';
 import { listStores } from '../../expenses/lib';
 import {
   createSalesChannelAction,
@@ -50,7 +50,9 @@ export default async function SalesChannelsSettingsPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await searchParams;
-  const { actor } = await requireSession('/settings/sales-channels');
+  const { actor, refusal } = await requirePageAccess('/settings/sales-channels');
+  // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
+  if (refusal) return refusal;
   const stores = await listStores(actor.orgId);
   const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;
 

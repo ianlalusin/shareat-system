@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '../../../lib/page-access';
 import { disburseLoanAction, recordPaymentAction, reverseEntryAction } from '../actions';
 import { METHOD_LABEL, STATUS_LABEL, getDetail, moneyAccounts, peso, today } from '../lib';
 import { DetailLayout } from '@/components/shell/DetailLayout';
@@ -23,7 +23,9 @@ export default async function LoanPage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const { actor } = await requireSession(`/loans/${id}`);
+  const { actor, refusal } = await requirePageAccess(`/loans/${id}`);
+  // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
+  if (refusal) return refusal;
 
   const loan = await getDetail(actor.orgId, id);
   if (!loan) notFound();

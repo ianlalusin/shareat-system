@@ -3,7 +3,7 @@ import { ASSET_CATEGORIES } from '@shareat/db';
 import { formatMoney, money, subtract } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { buildSchedule } from '@shareat/domain';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '../../../lib/page-access';
 import { disposeAssetAction, updateTermsAction } from '../actions';
 import { CATEGORY_LABEL, INTERVAL_LABEL, getAsset, listStores } from '../lib';
 import { StatusBadge } from '../page';
@@ -27,7 +27,9 @@ export default async function AssetDetailPage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const { actor } = await requireSession(`/fixed-assets/${id}`);
+  const { actor, refusal } = await requirePageAccess(`/fixed-assets/${id}`);
+  // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
+  if (refusal) return refusal;
 
   const found = await getAsset(actor.orgId, id);
   if (!found) notFound();

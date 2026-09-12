@@ -146,3 +146,49 @@ export async function authorize(
     }
   }
 }
+
+/**
+ * ⭐ **T-288 — which capabilities this actor holds, for PRESENTATION and page-level read gating.**
+ *
+ * Ian, 2026-09-12: *"do both hide the menu and gate the reads."*
+ *
+ * ## ⛔ This is NOT `authorize()`, and the three differences are all deliberate
+ *
+ * 1. **It returns a set instead of throwing.** `authorize()` throws precisely so a caller cannot
+ *    write `if (can) {…}` with no `else`. That reasoning is unchanged and this function does not
+ *    weaken it — a *menu* genuinely needs a boolean, because "render the link or do not" has no
+ *    failure path to forget. ⛔ **Never branch a mutation on this.** The write gate is
+ *    `authorize()`, unchanged, still inside every domain service.
+ * 2. **Store scope is NOT consulted.** It answers *"may this person open this CLASS of screen"*,
+ *    not *"may they act on this store"*. A page is often not store-specific, or lets you pick the
+ *    store after it loads — there is no single `storeId` to check at page level. The per-store
+ *    decision stays exactly where it is: axis 2 of `authorize()`, on the action.
+ *    ⚠️ That makes this deliberately MORE permissive than `authorize()` for a store-scoped
+ *    capability. That is the safe direction here — the screen opens, and the action is still
+ *    refused properly. The reverse would hide a screen someone may legitimately use.
+ * 3. **It reads role and grants ONCE**, so a sidebar asking about twenty routes costs two queries
+ *    rather than forty.
+ *
+ * ## ⭐ Why it lives HERE and not in `apps/erp`
+ *
+ * The rule "the matrix allows it, OR an explicit grant does" is axis 3a/3b of `authorize()`,
+ * fifteen lines above. A second copy of that rule in a front-end would be a second source of truth
+ * that drifts — the defect class this repo has filed repeatedly. Keeping it adjacent means any
+ * change to one is visible in review of the other.
+ */
+export async function heldCapabilities(tx: Tx, actor: Actor): Promise<ReadonlySet<Capability>> {
+  const activeRole = await accessRepo.activeRoleForPerson(tx, actor.personId, actor.orgId);
+  // ⛔ No active role is NOT a fallback to the least-privileged role — same posture as
+  //    `authorize()` above. An unconfigured person holds nothing.
+  if (!activeRole) return new Set();
+  const role = activeRole.role as Role;
+
+  const grants = await accessRepo.grantsForPerson(tx, actor.personId);
+  const granted = new Set(grants.filter((g) => g.revokedAt === null).map((g) => g.grantName));
+
+  const held = new Set<Capability>();
+  for (const capability of Object.keys(CAPABILITY_MATRIX) as Capability[]) {
+    if (CAPABILITY_MATRIX[capability][role] || granted.has(capability)) held.add(capability);
+  }
+  return held;
+}

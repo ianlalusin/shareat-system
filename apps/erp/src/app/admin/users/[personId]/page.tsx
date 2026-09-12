@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { CAPABILITY_SCOPE, ROLES, type Capability } from '@shareat/auth';
-import { requireSession } from '../../../../lib/session';
+import { requirePageAccess } from '../../../../lib/page-access';
 import {
   assignRoleAction,
   linkFirebaseAction,
@@ -8,7 +8,14 @@ import {
   setStoreScopeAction,
   unlinkCredentialAction,
 } from '../actions';
-import { grantableCapabilitiesFor, grantSourceLabel, userDetail } from '../lib';
+import {
+  canRevokeHere,
+  grantableCapabilitiesFor,
+  grantSourceLabel,
+  grantSummaryLine,
+  positionProvenanceLine,
+  userDetail,
+} from '../lib';
 import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'User access — Shareat System' };
@@ -23,6 +30,16 @@ const LINK_BTN =
 
 const MANILA = { timeZone: 'Asia/Manila' } as const;
 
+/**
+ * T-291 §C2 / spec T2 — the seam to T-290's screen. As of this task's build, T-290 has not landed
+ * (`apps/erp/src/app/admin/access-defaults/page.tsx` does not exist), and
+ * `tests/unit/nav-route-reachability.test.ts`'s direction-A check does not cover a page-to-page
+ * link, so an `<a href="/admin/access-defaults">` here would be a live 404 with no test to catch
+ * it. Rendered as plain text until T-290 lands; flip this one constant to the anchor once it
+ * does (T-290 lands in the same commit as this task per the task briefing).
+ */
+const ACCESS_DEFAULTS_LINK = 'Position access defaults' as const;
+
 export default async function UserAccessPage({
   params,
   searchParams,
@@ -32,7 +49,9 @@ export default async function UserAccessPage({
 }) {
   const { personId } = await params;
   const sp = await searchParams;
-  const { actor } = await requireSession(`/admin/users/${personId}`);
+  const { actor, refusal } = await requirePageAccess(`/admin/users/${personId}`);
+  // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
+  if (refusal) return refusal;
   const detail = await userDetail(actor.orgId, personId);
   if (!detail) notFound();
 
@@ -60,8 +79,7 @@ export default async function UserAccessPage({
           ) : (
             'No role — authorized for nothing'
           )}{' '}
-          · {scopedCount} store{scopedCount === 1 ? '' : 's'} · {activeGrants.length} extra grant
-          {activeGrants.length === 1 ? '' : 's'}
+          · {scopedCount} store{scopedCount === 1 ? '' : 's'} · {grantSummaryLine(activeGrants)}
         </p>
       </div>
 
@@ -162,25 +180,74 @@ export default async function UserAccessPage({
           <p className="text-sm text-neutral-500 dark:text-neutral-400">No extra grants.</p>
         ) : (
           <ul className="space-y-2">
-            {activeGrants.map((g) => (
-              <li key={g.id} className="flex flex-wrap items-center justify-between gap-3 text-sm">
-                <span>
-                  <span className="font-mono text-xs">{g.grantName}</span>
-                  <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">
-                    {grantSourceLabel(g.grantSource)}
+            {activeGrants.map((g) => {
+              const revocable = canRevokeHere(g);
+              return (
+                <li key={g.id} className="flex flex-wrap items-start justify-between gap-3 text-sm">
+                  <span>
+                    <span className="font-mono text-xs">{g.grantName}</span>
+                    <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">
+                      {revocable ? grantSourceLabel(g.grantSource) : positionProvenanceLine(g.positionSource)}
+                    </span>
                   </span>
-                </span>
-                <form action={setCapabilityGrantAction} className="flex items-center gap-2">
-                  <input type="hidden" name="personId" value={personId} />
-                  <input type="hidden" name="grantId" value={g.id} />
-                  <input type="hidden" name="granted" value="false" />
-                  <input name="reason" required placeholder="Reason to revoke" className={`${INPUT} w-40`} />
-                  <button type="submit" className={LINK_BTN}>
-                    Revoke
-                  </button>
-                </form>
-              </li>
-            ))}
+                  {revocable ? (
+                    <form action={setCapabilityGrantAction} className="flex items-center gap-2">
+                      <input type="hidden" name="personId" value={personId} />
+                      <input type="hidden" name="grantId" value={g.id} />
+                      <input type="hidden" name="granted" value="false" />
+                      <input name="reason" required placeholder="Reason to revoke" className={`${INPUT} w-40`} />
+                      <button type="submit" className={LINK_BTN}>
+                        Revoke
+                      </button>
+                    </form>
+                  ) : (
+                    // T-291 §C2 — a `'position'` row offers no revoke control here: the next
+                    // `reconcilePositionGrants` would silently undo it. In its place, the seam to
+                    // where this IS actually controlled — the defaults screen, or the person's
+                    // own positions.
+                    <div className="flex flex-col items-end gap-1 text-right text-xs text-neutral-500 dark:text-neutral-400">
+                      <span>
+                        Change this at {ACCESS_DEFAULTS_LINK}, or change their positions on their{' '}
+                        {/* T-262 / DEF-269 — an inline text link this small needs its own padding to
+                            clear the 24px touch-target floor (`inline-block` so the padding actually
+                            grows the tappable box, not just the background). `text-xs` matches the
+                            surrounding sentence rather than inheriting it, so the model — and a
+                            reviewer — can see the box is authored, not left to guesswork. */}
+                        <a
+                          href="/staff"
+                          className="inline-block py-1 text-xs underline underline-offset-2"
+                        >
+                          employment
+                        </a>
+                        .
+                      </span>
+                      {/* T-291 §C3 — Ian's decision 5: a hand-grant of a capability already held
+                          via a position upgrades its provenance to `'grant'`, one submission of
+                          `setCapabilityGrantAction` the picker cannot reach on its own, because
+                          `grantableCapabilitiesFor` already removed every held capability from it
+                          (page.tsx `offerable`, `lib.ts`'s own comment on that function). Not
+                          rendered on the actor's own page — `isSelf` already governs every other
+                          self-write control on this screen, and the self-grant refusal in
+                          `grantCapabilityAsActor` stays the real gate either way. */}
+                      {!isSelf && (
+                        <form action={setCapabilityGrantAction} className="flex flex-col items-end gap-1">
+                          <input type="hidden" name="personId" value={personId} />
+                          <input type="hidden" name="granted" value="true" />
+                          <input type="hidden" name="capability" value={g.grantName} />
+                          <button type="submit" className={LINK_BTN}>
+                            Hold in their own right
+                          </button>
+                          <span>
+                            Already held {positionProvenanceLine(g.positionSource)} — now held in their
+                            own right.
+                          </span>
+                        </form>
+                      )}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
 
@@ -197,7 +264,10 @@ export default async function UserAccessPage({
                   <span className="font-mono">{g.grantName}</span> — revoked{' '}
                   {g.revokedAt?.toLocaleDateString('en-PH', MANILA)}
                   <span className="block text-neutral-500 dark:text-neutral-400">
-                    {grantSourceLabel(g.grantSource)} · {g.revokeReason}
+                    {g.grantSource === 'position'
+                      ? positionProvenanceLine(g.positionSource)
+                      : grantSourceLabel(g.grantSource)}{' '}
+                    · {g.revokeReason}
                   </span>
                 </li>
               ))}

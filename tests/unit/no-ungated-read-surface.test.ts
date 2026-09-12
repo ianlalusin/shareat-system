@@ -32,6 +32,13 @@ const DB_HANDLES = ['getDb(', 'getSql(', "from '@shareat/db'", 'from "@shareat/d
 /** Ways a page can establish who is asking. Any one of these is enough. */
 const SESSION_MARKERS = [
   'requireSession(',
+  // ⭐ T-288. `requirePageAccess` establishes the session — its first statement is
+  //    `await requireSession(route)` — and THEN additionally refuses on capability. A page that
+  //    calls it satisfies this guard's claim strictly more than one calling `requireSession`
+  //    alone. ⛔ Added because the marker list was narrower than the guard's stated claim, not to
+  //    excuse a page that skipped the question: `route-capability-coverage.test.ts` separately
+  //    proves every mapped route actually calls it.
+  'requirePageAccess(',
   'requireActor(',
   'currentSession(',
   'reportScope(',

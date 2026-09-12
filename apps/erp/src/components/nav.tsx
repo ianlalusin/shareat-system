@@ -12,6 +12,12 @@ import type { GroupIconKey } from './shell/icons';
  * page nobody can navigate to, which is the same failure shape as ERP-rebuild's Tailwind content
  * globs (a real file in an unlisted directory is indistinguishable from a passing one).
  *
+ * ⭐ **T-288 — these links are now FILTERED before render.** `AppShell` computes which hrefs the
+ * signed-in actor may be shown from `apps/erp/src/lib/route-capability.ts` and passes them to
+ * `SidebarNav`. ⛔ This file stays pure data: it does not know about capabilities, and the filter
+ * is applied by the caller. A link hidden here is ALSO refused at its own route, so the hiding is
+ * never the control (DEF-051).
+ *
  * ⭐ T-234 slice 1: this file used to also render the top bar (`export async function Nav()`,
  * reading the session itself). That render is gone — `AppShell.tsx` reads the session now and
  * decides whether to render a shell at all, and `SidebarNav.tsx` renders these links. This file is
@@ -152,8 +158,14 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
     links: [
       // ⭐ T-219 / DEF-167 — role assignment, store scope and capability grants were fully built
       // and tested with no screen at all, so a hired person could sign in (T-217) and then be
-      // authorized for nothing. Not gated per-link: `manage_users` is matrix-false for manager,
-      // and the server refuses them properly. Hiding a link is presentation; the gate is the write.
+      // authorized for nothing.
+      //
+      // ⚠️ **This entry used to carry the line "Hiding a link is presentation; the gate is the
+      // write" as a reason NOT to filter the nav. T-288 changed that** — Ian, 2026-09-12: *"do
+      // both hide the menu and gate the reads."* A cashier on a shared counter tablet was shown
+      // this link, and `/admin/users` rendered the roster to them. ⛔ The old line is still TRUE
+      // and is not repealed: hiding alone is worthless. It is now paired with a real read gate
+      // (`requirePageAccess`), and BOTH read the one `ROUTE_CAPABILITY` map so they cannot drift.
       { href: '/admin/users', label: 'Users and roles' },
       // ⭐ T-222 — until this shipped nothing in the codebase created a store; the four dev stores
       // were inserted by hand. ⚠️ Linked here on purpose: DEF-181 was precisely a screen that

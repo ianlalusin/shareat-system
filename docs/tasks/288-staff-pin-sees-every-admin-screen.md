@@ -1,8 +1,14 @@
 # T-288 — a staff PIN reaches every admin screen, and the nav advertises them
 
-> ⚠️ **SPEC ONLY. No code in this task yet.** It needs a bible amendment (§ *The amendment* below)
-> and only the Opus planner may write that row (RULES §1 rule 14). Task number provisional pending
-> allocation by system32-85.
+> ⭐ **BUILT 2026-09-12.** Ian cleared it directly, in his own words: **"do both hide the menu and
+> gate the reads."**
+>
+> ⚠️ **The bible amendment is still UNWRITTEN** — the ruling exists, the row does not. Only the
+> Opus planner writes it (RULES §1 rule 14); system32-85 is putting it to Ian. The quotable text is
+> under *The amendment this needs*, below.
+>
+> ⚠️ **Not done: no cashier-PIN smoketest yet.** This is not finished until a seeded cashier has
+> actually been refused in a browser on 9008.
 
 **Reported by Ian, 2026-09-12:** *"i tried signing in with a staff pin only but i can access many
 restricted pages and actions for staff."*
@@ -106,3 +112,67 @@ plus a landing page that is the till, not the dashboard.
 
 typecheck · unit green · the coverage guard fails with an entry removed · a seeded cashier PIN
 reproduced in the running app on 9008 **before and after** · bible row written by the planner.
+
+---
+
+# What was actually built, and three things this spec got WRONG
+
+⭐ Recorded rather than edited away — the corrections are the useful part.
+
+## ⛔ Correction 1 — the report pages were ALREADY read-gated
+
+This spec asserted that admin reads are ungated across the board. **Too broad.** The eight
+`/reports/*` pages call `reportScope(path, capability, …)` (`apps/erp/src/app/reports/lib.ts:73`),
+which calls `authorizeForScope` — proving the capability **per store**, and throwing. That is
+strictly *stronger* than the gate this task adds.
+
+So the report routes are in `ROUTE_CAPABILITY` **for nav filtering only**, and
+`route-capability-coverage.test.ts` accepts `reportScope(` as a gate. Forcing a second, weaker call
+into eight already-correct pages would have been churn that bought nothing.
+
+⚠️ This also means DEF-051's remedy was **more complete than its own summary suggested**: reports —
+the thing DEF-051 was actually about — did get a real read gate. What never got one was everything
+else.
+
+## ⛔ Correction 2 — the nav is a DATA MODULE, not hardcoded markup
+
+This spec said `Sidebar.tsx`/`SidebarNav.tsx` contain no route table. In fact
+`apps/erp/src/components/nav.tsx` exports `GROUPS`. The filtering is applied by `AppShell`, which
+passes `allowedHrefs` down; `nav.tsx` stays pure data and knows nothing about capabilities.
+
+## ⛔ Correction 3 — no page-level refusal pattern existed to copy
+
+This spec said `/admin/stores` "early-returns for a manager with a refusal card". It does not. That
+sentence came from a *comment* in `settings/sales-channels/page.tsx` describing intent. **No such
+pattern existed anywhere**, so `requirePageAccess` created the first one.
+
+## ⭐ The defect the guards found in the gate itself
+
+`tests/unit/no-direct-transaction-in-erp.test.ts` caught the first implementation using a bare
+`transaction()` inside `requirePageAccess`. **A plain transaction connects as the table owner, for
+which RLS does not apply.** The gate reads `person_roles` and `person_grants` — org-scoped tables —
+so the access-control layer was itself querying with every tenancy policy switched off.
+
+⛔ **A single-org dev database returns the right answer anyway**, so no test of this task's own
+would have caught it. Fixed to `withOrgPrincipal`, then `withorgprincipal-chokepoint` (T-261 §B6)
+caught the fix importing it from `@shareat/db` instead of the chokepoint that owns the
+constraint-refusal counter. Three guards, three real catches, one file.
+
+## As-built
+
+| Piece | File |
+|---|---|
+| The one declaration | `apps/erp/src/lib/route-capability.ts` |
+| The read gate + refusal card | `apps/erp/src/lib/page-access.tsx` |
+| `heldCapabilities()` — matrix ∨ grant, beside `authorize()` | `packages/auth/src/authorize.ts` |
+| Nav filtering | `AppShell.tsx` → `Sidebar.tsx` → `SidebarNav.tsx` |
+| The gate, applied | 26 pages under `/admin`, `/settings`, `/payroll`, `/owners`, `/loans`, `/liabilities`, `/fixed-assets`, `/money-accounts`, `/money-transfers`, `/prepaid` |
+| Coverage guard + plant | `tests/unit/route-capability-coverage.test.ts` |
+
+⛔ **`authorize()` is unchanged.** Store scope is deliberately NOT checked at page level — a page is
+often not store-specific — so this layer is intentionally more permissive than `authorize()` for a
+store-scoped capability, which is the safe direction: the screen opens, the action still refuses.
+
+**Gates:** `tsc` exit 0 · unit **106 files / 1420 passed / 0 failed** · plant verified on real
+source (stripping `/payroll`'s gate fails the guard naming `/payroll`) · `touch-target-baseline.json`
+**unchanged** — the one new undersized control was fixed, not baselined.
