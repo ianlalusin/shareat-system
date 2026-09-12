@@ -29,7 +29,7 @@ Nothing is half-built; every session reported final state and released.
 | `npm run test` (unit) | **109 files · 1464 passed · 1 skipped · 0 failed** (exit code checked, not inferred from `tail`) |
 | `npm run build` | **exit 0**, port 9008 enumerated free by process list first |
 | `npm run toc` + `toc-freshness` | regenerated after bible rows 199 and 200; **4/4** |
-| Integration — full suite | see the banner at the top of this file if red; otherwise it ran on `shareat_test_orch` via `it.mjs` |
+| Integration — full suite | ⚠️ **RAN CLEAN FOR 37+ MINUTES AND WAS STILL RUNNING AT WRAP-UP — zero failures, zero `Hook timed out`, on `shareat_test_orch` via `it.mjs`.** Not a completed pass: **confirm it before relying on it.** ⭐ The absence of hook timeouts is itself the result worth having — T-285 fixed exactly that, and this run is the first full suite since, on a quiet box. A longer runtime is *expected* now: a slow truncate that used to fail at 10s now waits up to 30s instead, so the fix trades wall clock for reliability by design |
 | Smoketests in the browser | T-288 (manager + staff, nav **and** typed-URL refusal), T-290 (28 assertions), T-296 (four checks incl. the no-JS path) |
 
 ⛔ **Never run `npm run test:integration`** — it hits the shared database. Give every lane its own
