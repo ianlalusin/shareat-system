@@ -61,3 +61,46 @@ broken query unless something proves the sweep can still count.
 
 See `docs/DEFECTS-REGISTER.md` DEF-299, DEF-297, DEF-298, DEF-194; `PROJECT_BIBLE.md` §13 rows 181,
 194; `packages/db/src/client.ts:135`; `docs/ops/README.md`.
+
+---
+
+## ⛔ SCOPE CORRECTION, orchestrator, 2026-09-12 — this is NOT "a script and a timer"
+
+Found by lane B writing `docs/discovery/34-scheduled-job-pattern.md`, and verified independently
+before being recorded here.
+
+**`sweepOrphanedFiles(olderThanHours = 24)` takes no `orgId` and runs ONCE GLOBALLY**
+(`packages/domain/src/files/index.ts:214`), reading its candidates through a bare
+`systemTransaction` and returning one aggregate result. **`scheduler_runs.org_id` is `NOT NULL`**
+(`packages/db/schema/scheduler.ts:107-109`), and every one of the six existing jobs writes one row
+per organisation through `runJobForOrg`.
+
+⛔ **So the sweep as written cannot record a run at all** — and per this task's own non-negotiable,
+a sweep that records nothing is not wired. The two facts are in direct conflict and one of them has
+to move.
+
+⭐ **The good news is that the fix is mechanical, not architectural:** `stored_files.org_id` already
+exists and is `NOT NULL`, so `listOrphans` can be scoped per organisation without a schema change.
+⚠️ But it is real code beyond a script and a unit file: the **write** side must also move from a bare
+`systemTransaction` to the per-org system principal once the read is scoped, or the sweep will read
+one organisation's orphans and delete against another's principal.
+
+⚠️ **This also re-opens a question bible row 194 already answered.** `sweepOrphanedFiles` is on the
+closed cross-org caller list *because* it takes no `orgId` by design (DEF-287). Scoping it per-org
+would REMOVE its reason to be on that list. ⛔ **Do not quietly drop it from the list** — row 194 says
+the set changes only by a named ruling. Report it and let the orchestrator take it to Ian.
+
+### Shape to follow — `order-wastage-backstop`, not the others
+
+Per the discovery doc's §3: per-item transactions, system principal, wrapped inline in
+`scheduler/index.ts`, daily, Manila-pinned, no retry timer, bookkeeping-only `period`. ⛔ Do **not**
+copy `recurring-expense-draft`'s real-creator `Actor` shape — that is deliberate and domain-specific
+to a job that must act as a person — nor `month-end`'s retry timer, which Ian asked for by name and
+is a one-off rather than a pattern.
+
+### ⭐ And take DEF-303 with it
+
+`budget_reissue` is a seventh registered job with no `.service`/`.timer` pair either. This task is
+already wiring one un-hosted job, already editing `docs/ops/`, and already holds the
+`scheduler_runs_job_check` slot — adding a second unit pair costs almost nothing here and repeats
+every bit of setup if split out. ⚠️ Ian confirms, since it is a second nightly job on the droplet.
