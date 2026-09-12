@@ -447,3 +447,34 @@ February.
 **December and the year both close on 15 January** (ADR-006) — **December first, then the year.**
 The year close gates on *“no earlier period still open”*, so the order is forced; it is the one
 month where two closes stack, and the only month where getting the order wrong blocks both.
+
+---
+
+# E. Position access defaults — may a POSITION default this capability? — 2026-09-12
+
+**This section exists because the next person adding a capability will look here, not in a plan
+doc.** The design is `docs/plans/289-position-access-defaults-plan.md`; the decision is bible §13
+row 198 (T-289/290/291).
+
+**What a position default is.** An administrator holding `grant_capability` sets, per position and
+per store, a capability that every holder of that job gets *in addition to* this matrix. It is
+materialised as ordinary `person_grants` rows (`grant_source = 'position'`, `source_ref` → the
+default row) at the moments a human is present, and `authorize()` reads them exactly as it reads
+any other grant row. **A position is never a column in this matrix and never a parameter to
+`authorize()`.** T-121's warning stands: the moment "Cashier" becomes a permission, every job title
+becomes a permissions change.
+
+**Additive only.** A position may add to a role's row; it may never take a ✅ away. Every
+capability the `staff` column already grants shows on the screen as *inherited from the role* and
+cannot be toggled. Subtractive defaults are a gap (`CAPABILITY-GAPS.md`, 2026-09-12), not a
+feature.
+
+**Never offerable to a position — derived, not hand-listed:** `SUPER_ADMIN_ONLY_CAPABILITIES`,
+every `platform`-scope capability, and `close_period` (its manager cell is *conditional* on
+org-wide scope, which is a fact about the person, not the job). A new capability joins the
+offerable set automatically unless it lands in one of those three; ⚠️ **if that is wrong for the
+capability you are adding, say so in its Notes cell here** — the same "argue each new member"
+duty bible row 196 puts on the elevated set.
+
+**Provenance rank:** `elevation` < `position` < `grant` = `owner`. A hand-grant is never demoted;
+an elevation is superseded, not swept, when a job justifies the same capability.

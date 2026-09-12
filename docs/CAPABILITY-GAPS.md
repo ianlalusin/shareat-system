@@ -502,3 +502,26 @@ inside that pass costs a fraction of building it alone.
 
 ⚠️ **Note for whoever picks it up:** `payReimbursement` draws from a real money account and already
 calls `checkDraw`, so the screen inherits the overdraft rule for free — it does not need its own.
+
+---
+
+## Added 2026-09-12 — decided out of scope by Ian while approving position access defaults (bible row 198)
+
+### Subtractive position defaults — a job that takes a `staff` capability AWAY
+
+T-289 gives a position a *default grant set* on top of the role matrix (additive only, Ian's
+decision 1). What it deliberately does not do: let a position switch OFF a capability the `staff`
+column grants. Today every `staff` holder has `record_sale`, `record_wastage`, `transfer_stock` and
+18 others (21 rows, grep-counted) — a Dishwasher included.
+
+**Why it is a gap and not a defect:** nobody has asked for it, and v1 cannot do it either (v1
+positions only filter the sidebar). It becomes real the first time someone says *"a Dishwasher
+should not be able to record a sale"*.
+
+**What it would cost, so the next reader does not underestimate it:** a deny concept in
+`authorize()` consulted *before* the matrix column — a fourth axis where bible row 114 fixes three
+— plus the ordering question of deny-by-position versus grant-by-hand, plus every denial test the
+matrix already has re-run under the new precedence. That is a planner-level bible amendment, not a
+task. ⛔ **Do not build it as a special case inside `reconcilePositionGrants`** — a revoke of a
+matrix-held capability is unrepresentable in `person_grants` (the matrix column is `true` whatever
+the rows say), so the only honest implementation is the deny axis or nothing.
