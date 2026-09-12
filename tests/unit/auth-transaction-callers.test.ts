@@ -21,6 +21,15 @@ import { describe, expect, it } from 'vitest';
  *
  * ⚠️ This is deliberately the SAME shape as the systemTransaction guard, comment-stripping
  * included — a re-export is a hole straight through an import-only guard (T-231 contract 5).
+ *
+ * ⭐ **T-278/DEF-310 — `SCAN_ROOTS` widened from three to the sibling's ten.** It had drifted from
+ * `system-transaction-callers.test.ts` since DEF-295 widened THAT guard and this one was never
+ * touched, despite the doc comment above claiming they are "deliberately the SAME shape." Nothing
+ * distinguishes which roots could reach `authTransaction` versus `systemTransaction` — both are
+ * exported from the same `@shareat/db` barrel — so the same ten roots apply here unchanged.
+ * Production's role split (2026-09-12: `DATABASE_URL` non-bypassing, `SYSTEM_DATABASE_URL` —
+ * `authTransaction` resolves to it — still `doadmin`, still bypassing) is what raised this from a
+ * tidiness gap to a live tenancy question, per DEF-310's own filing.
  */
 
 const repoRoot = path.resolve(__dirname, '..', '..');
@@ -28,8 +37,32 @@ const repoRoot = path.resolve(__dirname, '..', '..');
 /** The closed list. Adding to it is Ian's decision (row 194), never a lane's. */
 const REQUIRED_CALLERS = ['packages/auth/src/sessions.ts'] as const;
 
-/** Where a stray caller would do damage. `packages/db` is excluded: it DEFINES the helper. */
-const SCAN_ROOTS = ['apps', 'packages/auth/src', 'packages/domain/src'] as const;
+/**
+ * ⭐ T-278/DEF-310 — the identical ten roots `system-transaction-callers.test.ts` scans, for the
+ * identical reason (DEF-295): a closed list nothing can see is not closed. `packages/db/src` is
+ * now SCANNED, not omitted — its two definer files are excluded BY NAME below
+ * (`DEFINER_FILES`), which is what `system-transaction-callers.test.ts` already does and what this
+ * guard did not. Omitting a whole root to dodge two files is how this defect class is born.
+ */
+const SCAN_ROOTS = [
+  'apps',
+  'scripts',
+  'packages/auth/src',
+  'packages/core/src',
+  'packages/db/src',
+  'packages/domain/src',
+  'packages/etl/src',
+  'packages/etl-firestore/src',
+  'packages/storage-firebase/src',
+  'packages/sync-firestore/src',
+] as const;
+
+/**
+ * The two files that DEFINE and DELIBERATELY EXPORT `authTransaction`, exempt because scanning
+ * them would make the guard report its own plumbing as an offender — same reasoning and same two
+ * files as `system-transaction-callers.test.ts`'s `DEFINER_FILES`.
+ */
+const DEFINER_FILES: readonly string[] = ['packages/db/src/client.ts', 'packages/db/src/index.ts'];
 
 function trackedFiles(): string[] {
   return execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], {
@@ -89,6 +122,7 @@ function scannable(extraExclude: readonly string[] = []): string[] {
       (f.endsWith('.ts') || f.endsWith('.tsx')) &&
       !f.includes('/tests/') &&
       !f.endsWith('.test.ts') &&
+      !DEFINER_FILES.includes(f) &&
       !extraExclude.includes(f),
   );
 }
