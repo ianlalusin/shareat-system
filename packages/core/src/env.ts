@@ -13,6 +13,7 @@
  * to a secret. Do not add a `||` fallback at a call site.
  */
 import { z } from 'zod';
+import { BUSINESS_TIMEZONE } from './datetime';
 
 const isServer = typeof window === 'undefined';
 
@@ -153,6 +154,63 @@ function formatIssues(error: z.ZodError): string {
     .join('\n');
 }
 
+/**
+ * T-292 / DEF-315 — a value can pass `serverSchema` (present, non-blank, well-formed) and still
+ * disagree with what this repo documents it OUGHT to be, or with another value it must match. Two
+ * such contracts, found by the T-280/DEF-311 sweep:
+ *
+ * ⚠️ **`APP_TIMEZONE` is checked against `BUSINESS_TIMEZONE`, not against a hand-copied literal.**
+ * `BUSINESS_TIMEZONE` (`./datetime.ts:19`) is the REAL source every business-day calculation uses
+ * today — `APP_TIMEZONE` itself is currently DECORATIVE, read by nothing (T-292's own spec has the
+ * full trace). Comparing against the live constant has no staleness risk; comparing against a
+ * copied `'Asia/Manila'` string here would have exactly the residual `scripts/lib/
+ * config-contract.ts`'s own doc comment already names for `STORAGE_BUCKET_EXPECTATION`.
+ *
+ * ⚠️ **This exact comparison shape is DUPLICATED, deliberately, in `scripts/lib/
+ * config-contract.ts`'s `checkValuesMatch`.** That file lives under `scripts/`; this one is a
+ * package; the monorepo's dependency direction (RULES §1 rule 13 / `tests/unit/
+ * app-boundaries.test.ts`) forbids a package importing from `scripts/`. So this is three plain
+ * lines re-implemented locally rather than an import across a boundary that must not be crossed.
+ * If either copy's behaviour changes, check the other.
+ *
+ * ⚠️ **Runs in every `NODE_ENV`, not gated to production** — unlike the Firebase-credential
+ * `superRefine` above, which is about PRESENCE being optional pre-T-006 (HANDOFF.md §4). This is
+ * about VALUE correctness, a different axis: neither check below can legitimately fail in a
+ * correctly-configured environment, dev or prod, so there is no reason to relax either anywhere.
+ *
+ * ⛔ **What this does NOT do, said plainly:** it does not make `APP_TIMEZONE` affect anything. It
+ * proves the documented lever and the real lever agree; it does not connect the documented lever
+ * to actual behaviour. Re-wiring `datetime.ts` to consume this variable is a separate, larger task.
+ * And the `FIREBASE_PROJECT_ID` check below fires only when `NEXT_PUBLIC_FIREBASE_PROJECT_ID` is
+ * ALSO visible in this same process — measured (T-292's spec, Finding 2) to never be true in
+ * production today, since that value is a GitHub Secret inlined at CI build time and never reaches
+ * the droplet's runtime `process.env`. A green boot proves nothing about whether production's two
+ * values actually agree.
+ */
+function checkValueContracts(cfg: ServerEnv): string[] {
+  const failures: string[] = [];
+
+  if (cfg.APP_TIMEZONE !== BUSINESS_TIMEZONE) {
+    failures.push(
+      `APP_TIMEZONE is "${cfg.APP_TIMEZONE}" but packages/core/src/datetime.ts's ` +
+        `BUSINESS_TIMEZONE — the value every business-day calculation actually uses — is ` +
+        `"${BUSINESS_TIMEZONE}". DEF-315: these must match, or one of them is silently wrong.`,
+    );
+  }
+
+  const nextPublicProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID?.trim() || undefined;
+  if (cfg.FIREBASE_PROJECT_ID && nextPublicProjectId && cfg.FIREBASE_PROJECT_ID !== nextPublicProjectId) {
+    failures.push(
+      `FIREBASE_PROJECT_ID is "${cfg.FIREBASE_PROJECT_ID}" but NEXT_PUBLIC_FIREBASE_PROJECT_ID is ` +
+        `"${nextPublicProjectId}". .env.example:46-47: if the browser signs in against one ` +
+        'project and the server verifies against another, every correct password is rejected as ' +
+        'unverifiable.',
+    );
+  }
+
+  return failures;
+}
+
 function loadServerEnv(): ServerEnv {
   const parsed = serverSchema.safeParse(process.env);
 
@@ -168,6 +226,23 @@ function loadServerEnv(): ServerEnv {
       formatIssues(parsed.error) +
       '\n\nFix .env.local (see .env.example for the full contract).\n' +
       'Nothing is defaulted on purpose — see PROJECT_BIBLE.md §7 rule 9.\n' +
+      '='.repeat(72) +
+      '\n';
+
+    throw new Error(message);
+  }
+
+  const contractFailures = checkValueContracts(parsed.data);
+  if (contractFailures.length > 0) {
+    const message =
+      '\n' +
+      '='.repeat(72) +
+      '\nShareat System REFUSED TO START — a configured value disagrees with what this repo ' +
+      'documents it ought to be.\n' +
+      '='.repeat(72) +
+      '\n' +
+      contractFailures.map((f) => `  - ${f}`).join('\n') +
+      '\n\nSee docs/tasks/292-def-315-timezone-and-project-id-contracts.md (DEF-315).\n' +
       '='.repeat(72) +
       '\n';
 

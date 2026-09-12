@@ -159,3 +159,57 @@ describe('publicEnv — identity is required, storage and analytics are not', ()
     await expect(loadPublicEnv()).rejects.toThrow(/NEXT_PUBLIC_FIREBASE_PROJECT_ID/);
   });
 });
+
+/**
+ * T-292 / DEF-315 — `loadServerEnv()`'s own two value-vs-documentation checks, executed against
+ * the real function (not `checkValuesMatch` in isolation — that is `tests/unit/
+ * config-contract.test.ts`'s job). `BASE.APP_TIMEZONE` is already `'Asia/Manila'`, which is also
+ * `BUSINESS_TIMEZONE`, so every test elsewhere in this file that never touches `APP_TIMEZONE` is
+ * already a passing control for that check — it does not need repeating per file.
+ */
+describe('env — DEF-315: APP_TIMEZONE must match BUSINESS_TIMEZONE (packages/core/src/datetime.ts)', () => {
+  it('⛔ REFUSES when APP_TIMEZONE disagrees with BUSINESS_TIMEZONE', async () => {
+    E().NODE_ENV = 'development';
+    E().APP_TIMEZONE = 'UTC';
+    await expect(loadEnv()).rejects.toThrow(/BUSINESS_TIMEZONE/);
+  });
+
+  it('⭐ CONTROL: resolves when APP_TIMEZONE matches — proves the plant above is the check firing, not something else broken', async () => {
+    E().NODE_ENV = 'development';
+    E().APP_TIMEZONE = 'Asia/Manila';
+    await expect(loadEnv()).resolves.toMatchObject({ APP_TIMEZONE: 'Asia/Manila' });
+  });
+
+  it('⭐ CONTROL: resolves on the default (APP_TIMEZONE unset) — the common case in every other test in this file', async () => {
+    E().NODE_ENV = 'development';
+    delete E().APP_TIMEZONE;
+    await expect(loadEnv()).resolves.toMatchObject({ APP_TIMEZONE: 'Asia/Manila' });
+  });
+});
+
+describe('env — DEF-315: FIREBASE_PROJECT_ID must match NEXT_PUBLIC_FIREBASE_PROJECT_ID when both are visible', () => {
+  it('⛔ REFUSES when both are set and disagree', async () => {
+    E().NODE_ENV = 'development';
+    E().FIREBASE_PROJECT_ID = 'studio-7300228488-a394e';
+    E().NEXT_PUBLIC_FIREBASE_PROJECT_ID = 'a-different-project';
+    await expect(loadEnv()).rejects.toThrow(/NEXT_PUBLIC_FIREBASE_PROJECT_ID/);
+  });
+
+  it('⭐ CONTROL: resolves when both are set and agree', async () => {
+    E().NODE_ENV = 'development';
+    E().FIREBASE_PROJECT_ID = 'studio-7300228488-a394e';
+    E().NEXT_PUBLIC_FIREBASE_PROJECT_ID = 'studio-7300228488-a394e';
+    await expect(loadEnv()).resolves.toMatchObject({
+      FIREBASE_PROJECT_ID: 'studio-7300228488-a394e',
+    });
+  });
+
+  it("⭐ CONTROL: resolves when NEXT_PUBLIC_FIREBASE_PROJECT_ID is ABSENT — today's actual production shape (T-292 Finding 2), and the executed proof this check is a genuine no-op there, not merely reasoned to be one", async () => {
+    E().NODE_ENV = 'development';
+    E().FIREBASE_PROJECT_ID = 'studio-7300228488-a394e';
+    delete E().NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+    await expect(loadEnv()).resolves.toMatchObject({
+      FIREBASE_PROJECT_ID: 'studio-7300228488-a394e',
+    });
+  });
+});

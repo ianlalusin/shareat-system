@@ -82,6 +82,41 @@ export function checkValuesDiffer(
   return { envVar: primary.envVar, ok: !collides, actual: primary.value, message };
 }
 
+/**
+ * T-292 / DEF-315 — the inverse of `checkValuesDiffer`: two variables that MUST hold the same
+ * value. `mustMatch`'s value may be undefined/blank — absence is treated as "nothing to compare,"
+ * not a contradiction, mirroring `checkValuesDiffer`'s own convention for its optional side. That
+ * is what makes this safe to call unconditionally: it is a no-op whenever one side is not visible,
+ * which — measured for both of this task's uses, not assumed — is the common case today for
+ * `FIREBASE_PROJECT_ID`/`NEXT_PUBLIC_FIREBASE_PROJECT_ID` (never both set in production; see
+ * `docs/tasks/292-def-315-timezone-and-project-id-contracts.md` Finding 2) and never happens at
+ * all for `APP_TIMEZONE`/`BUSINESS_TIMEZONE`, where the second side is always a defined constant.
+ *
+ * ⚠️ **This exact comparison also exists, DUPLICATED, inline inside
+ * `packages/core/src/env.ts`'s `loadServerEnv()`** — deliberately, not by accident. `env.ts` is a
+ * package; this file lives under `scripts/`; the monorepo's own dependency direction (RULES §1
+ * rule 13 / `tests/unit/app-boundaries.test.ts`'s sibling rule one level up) means a package must
+ * never import from `scripts/`. So `env.ts` cannot call this function — it re-implements the same
+ * three-line comparison locally instead. If this function's behaviour ever changes, check
+ * `packages/core/src/env.ts`'s copy too; nothing enforces that the two stay in sync beyond this
+ * comment and `tests/unit/env.test.ts`'s own executed proof of `env.ts`'s copy.
+ */
+export function checkValuesMatch(
+  primary: { envVar: string; value: string },
+  mustMatch: { envVar: string; value: string | undefined },
+  citation: string,
+  consequence: string,
+): ConfigContractResult {
+  const matches = mustMatch.value === undefined || mustMatch.value === primary.value;
+  const message = matches
+    ? mustMatch.value === undefined
+      ? `${primary.envVar} has no ${mustMatch.envVar} to compare against right now — nothing to check.`
+      : `${primary.envVar} and ${mustMatch.envVar} match ("${primary.value}").`
+    : `${primary.envVar} is "${primary.value}" but ${mustMatch.envVar} is "${mustMatch.value}". ` +
+      `${citation} says they must match. ${consequence}`;
+  return { envVar: primary.envVar, ok: matches, actual: primary.value, message };
+}
+
 /** DEF-311. The one populated expectation this task wires up. */
 export const STORAGE_BUCKET_EXPECTATION: ConfigExpectation = {
   envVar: 'FIREBASE_STORAGE_BUCKET',
