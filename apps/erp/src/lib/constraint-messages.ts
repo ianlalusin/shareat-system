@@ -121,14 +121,37 @@ function genericConstraintMessage(raw: string): string {
  * it rendered verbatim, SQL grammar and all, to the person moving the money. Now it degrades to a
  * generic but presentable sentence instead. A MAPPED constraint and a non-constraint error are
  * both unaffected — see docs/tasks/252-*.md §7 invariants 1 and 3.
+ *
+ * ⭐ T-271/DEF-301: the map is matched on the RESOLVED constraint name — `resolveConstraintName`,
+ * which prefers the driver's structured `err.constraint_name` over parsing prose — never a
+ * substring search over the raw message. DEF-301's own register disposition floated keeping the
+ * substring scan as a fallback for anything the resolver cannot name; that is deliberately NOT done
+ * here (system32-85, T-271 READY): it would preserve DEF-301's failure mode — a confident, WRONG
+ * sentence by coincidental substring match — in exactly the population where the resolver has
+ * already failed to find a structural name, which is the most dangerous and least visible place to
+ * keep it. An unresolved name degrades to the generic sentence or the raw fallback instead, which
+ * is a quiet, correct failure. The before/after pass (`apps/erp/tests/integration/
+ * constraint-message-lookup*.test.ts`) proves this is behaviour-preserving for all 26 mapped keys.
+ *
+ * ⛔ **The LOOKUP and the SANITISER answer different questions and must use different resolvers —
+ * a real regression caught in review, not a hypothetical.** The lookup asks "which constraint is
+ * this?", and the structured field is strictly better there (above). `genericConstraintMessage`
+ * exists to sanitise RAW POSTGRES GRAMMAR a person must never read (DEF-246/bible row 189) — and
+ * the signal for "this is raw grammar" is specifically that the constraint name appears in the
+ * PROSE, i.e. `parseConstraintName(raw)`, not merely that a name resolved at all. DEF-279's five
+ * hand-raised `RAISE EXCEPTION ... USING CONSTRAINT` invariants populate the structured field but
+ * never their own name in the message text — gating the generic fallback on `resolveConstraintName`
+ * instead of `parseConstraintName` would sanitise their hand-authored, precise sentences into the
+ * content-free generic one, exactly the regression T-270 deliberately reverted (DEF-301's register
+ * row: "the five keep rendering their own hand-authored text... and is BETTER than the generic
+ * fallback"). Covered by `constraint-message-lookup-mechanism.test.ts`'s "NO key added" case.
  */
 export function errorMessage(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
-  for (const [constraint, message] of Object.entries(CONSTRAINT_MESSAGES)) {
-    if (raw.includes(constraint)) return message;
-  }
-  const constraintName = parseConstraintName(raw);
-  if (constraintName) return genericConstraintMessage(raw);
+  const constraintName = resolveConstraintName(err);
+  const mapped = constraintName ? CONSTRAINT_MESSAGES[constraintName] : undefined;
+  if (mapped !== undefined) return mapped;
+  if (parseConstraintName(raw)) return genericConstraintMessage(raw);
   return raw.replace(/^[a-zA-Z][A-Za-z0-9_]*:\s*/, '');
 }
 
