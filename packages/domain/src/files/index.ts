@@ -213,11 +213,14 @@ export async function linkFile(
  * A file claimed in that window keeps BOTH its row and its bytes; it simply is not an orphan.
  *
  * ⚠️ **The accepted residual, named rather than hidden:** if the row-delete commits and
- * `driver.remove` then fails, the row is gone and the bytes are stranded — wasted storage,
- * detectable and recoverable by a later sweep against the bucket. That is preferred over the
- * alternative (a live row pointing at deleted bytes, which is silent, unrecoverable data loss) and
- * is why the transaction is not held open across the `driver.remove` call to "fix" it — that would
- * trade a benign failure for the worse one this task exists to remove.
+ * `driver.remove` then fails, the row is gone and the bytes are stranded — wasted storage.
+ * ⛔ **DEF-307 — NOT currently detectable or recoverable.** That would need bucket enumeration
+ * compared against `stored_files`, and the storage driver interface (`./driver`) has no `list`
+ * method at all, so nothing today can find these bytes. Accepted anyway because it is preferred
+ * over the alternative (a live row pointing at deleted bytes, which is silent, unrecoverable data
+ * loss), and is why the transaction is not held open across the `driver.remove` call to "fix" it —
+ * that would trade a benign, if currently unrecoverable, failure for the worse one this task exists
+ * to remove.
  */
 export async function sweepOrphanedFiles(
   orgId: string,

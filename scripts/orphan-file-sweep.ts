@@ -24,27 +24,21 @@
  *
  * `sweepOrphanedFiles` reaches the storage driver through `resolveStorageDriver()`, which refuses
  * to fall back to the in-memory driver when `FIREBASE_STORAGE_BUCKET` is set — deliberately,
- * because that would delete evidence of a delete without actually removing the bytes. The app
- * installs its driver once at server boot (`apps/erp/src/instrumentation.ts`); a standalone script
- * is a separate process that never runs that hook, so it has to do the same install itself, on the
- * same rule (`null` config ⇒ no bucket configured ⇒ the in-memory default is correct, dev/test).
- * Found by smoketesting this exact script (T-272) — no other job script touches storage, so this
- * gap could not have been hit by any of the six that shipped before it.
+ * because that would delete evidence of a delete without actually removing the bytes. Found by
+ * smoketesting this exact script (T-272) — no other job script touches storage, so this gap could
+ * not have been hit by any of the six that shipped before it. `scripts/lib/storage-bootstrap.ts`
+ * (T-277/DEF-308) is the fix, factored out here so a second storage-touching script calls one line
+ * instead of re-typing this block; `tests/unit/scripts-install-storage-driver.test.ts` is the guard
+ * that makes forgetting it a build failure.
  */
 import { config } from 'dotenv';
 import { closeDb } from '@shareat/db';
-import { runOrphanFileSweep, setStorageDriver } from '@shareat/domain';
-import { firebaseConfigFromEnv, firebaseStorageDriver } from '@shareat/storage-firebase';
+import { runOrphanFileSweep } from '@shareat/domain';
+import { installScriptStorageDriver } from './lib/storage-bootstrap';
 
 config({ path: '.env.local' });
 
-const storageConfig = firebaseConfigFromEnv();
-if (storageConfig) {
-  setStorageDriver(firebaseStorageDriver(storageConfig));
-  console.log(`orphan-file-sweep: Firebase storage driver installed for bucket ${storageConfig.bucket}.`);
-} else {
-  console.log('orphan-file-sweep: no FIREBASE_STORAGE_BUCKET — using the in-memory driver (dev/test).');
-}
+installScriptStorageDriver('orphan-file-sweep');
 
 function arg(name: string): string | undefined {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`));

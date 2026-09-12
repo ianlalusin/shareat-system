@@ -105,7 +105,10 @@ export function resolveStorageDriver(): StorageDriver {
     throw new Error(
       'storage: FIREBASE_STORAGE_BUCKET is set but no driver is installed. Call ' +
         'setStorageDriver() with the Firebase adapter at startup — falling back to memory here ' +
-        'would accept a receipt and then lose it.',
+        'would accept a receipt and then lose it. A standalone script must install its own, since ' +
+        "it never runs the app's boot hook (apps/erp/src/instrumentation.ts) — call " +
+        'installScriptStorageDriver() from scripts/lib/storage-bootstrap.ts, as ' +
+        'scripts/orphan-file-sweep.ts does (DEF-308).',
     );
   }
   const memory = inMemoryDriver();
