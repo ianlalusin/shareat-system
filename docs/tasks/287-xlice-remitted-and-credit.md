@@ -1,105 +1,109 @@
-# T-287 — Xlice: remitted daily AND settleable on credit
+# T-287 — Xlice is the WHOLESALE channel, and the machinery for it already exists
 
-> ⚠️ **SPEC ONLY. No code in this task yet.** Needs a migration slot, which is not allocated
-> (0145 is lane A's, 0146 is earmarked for T-276). Task number provisional.
+> ⭐ **REWRITTEN 2026-09-12 after Ian's answer.** The first draft proposed a
+> `receivable_amount` column on `sales_day_channels`. **That is now withdrawn as wrong** — see
+> "What the first draft got wrong". Spec only, no code.
 
-**Ian, 2026-09-12:** *"Xlice is a sales channel that is remittable daily but also can be settled as
-credit - AR how do i set that up?"*
+**Ian, 2026-09-12, question:** *"Xlice is a sales channel that is remittable daily but also can be
+settled as credit - AR how do i set that up?"*
 
-## ⭐ The short answer: the database already allows the channel half. The day-record does not.
+**Ian, 2026-09-12, the answer that changes the design:** *"yes possible xlice sales can be mixed of
+cash online credit from more than 1 customer this basically is our wholesale channel. separate from
+dine in channel."*
 
-`sales_channels_non_remitted_needs_receivable_check` (`packages/db/schema/sales-days.ts:152`) reads:
+## ⭐ The finding: build nothing. Xlice is `trade_orders`, and that module is already built.
 
-```sql
-is_remitted_daily = true or receivable_account_code is not null
-```
+`packages/db/schema/trade.ts` opens with *"Wholesale orders — the document a franchisee sale has
+never had. T-132."* It already carries everything Ian described:
 
-It **requires** a receivable account when the channel settles later. It does **not forbid** one when
-the channel is remitted daily. So a channel that is both is already legal at the schema level, and
-no constraint has to be widened.
+| Xlice needs | Already exists |
+|---|---|
+| A named buyer per sale | `trade_orders.customer_id` → `customers` |
+| Per-item lines at an agreed price | `trade_order_lines`, priced from `price_lists` (T-129) |
+| Only wholesale-able items | the `sellable_wholesale` line guard (T-149) |
+| Billing on dispatch | `dispatchTradeOrder` → `ar_charges` (`trade.ts:84`, `arChargeId`) |
+| Credit that ages | `ar_charges` + the AR aging report |
+| Cash or online payment | `ar_collections.money_account_id` + allocation |
+| Proof for an online payment | `ar_collections.receipt_file_id` — *"required for an ONLINE collection, never for cash"* |
+| Several customers in one day | one order each; nothing aggregates them |
+| Returns | `trade/returns` |
 
-Two things block it in practice:
+**So the setup is configuration and habit, not code:** a customer record per wholesale buyer, a
+price list, items flagged `sellable_wholesale`, and wholesale sales entered as **trade orders** —
+never as a figure on the sales day.
 
-1. **The form says the opposite.** `/settings/sales-channels` labels the field *"— none (only valid
-   when it reaches the till) —"*, which reads as a prohibition, and the page's own copy frames the
-   choice as exclusive: *"whether its money reaches the till on the day **or** is owed to us."*
-2. **A sales day records ONE number per channel.** `sales_day_channels` holds `amount` and
-   `noSales` and nothing else, so there is nowhere to say *how much* of today's Xlice take was cash
-   in the drawer and how much went out on credit.
+## ⭐ The question everyone expects to be hard, and why it is not
 
-## ⛔ What this task must NOT do: add a third state to `is_remitted_daily`
+*"If a wholesale buyer pays CASH into the cashier's till, how does that cash get into the day's
+expected remittance?"*
 
-That flag is described in the schema as *"the single most load-bearing field here"* — it decides
-whether a channel's money is part of expected remittance at all, and every remittance, till and
-reconciliation path reads it. Widening it to a three-way would touch all of them to express
-something that is **not a property of the channel**.
+**Automatically, and by design.** `packages/db/src/repo/remittance.ts:13`:
 
-⭐ **The repo already knows the axes are orthogonal and says so.** `sales_day_tenders`' header:
+> ⛔ **No `expected` column exists, and none should.** A query that enumerated document types would
+> be wrong the day a new one appears — silently, and in the safe-looking direction. This one asks
+> the ledger what the cashier actually holds, so **a document type nobody has invented yet is
+> already included.**
 
-> *"They are orthogonal axes and a day needs both: `sales_day_channels` answers where the sale came
-> FROM; this table answers where the money WENT. A Foodpanda sale can settle into any wallet, so
-> neither answers the other's question."*
+Expected remittance is the cashier's **net ledger movement for the date**, not a sum over sales
+channels. An `ar_collection` into the till's money account posts to the ledger, so it is in the
+day's owed figure without a line of new wiring. Ian, 2026-08-27 (row 157): *"the composition of all
+money movement of the day across transactions."*
 
-`is_remitted_daily` is a third thing that conflates them — a channel-level constant standing in for
-a per-transaction fact. Xlice is simply the first channel where the conflation shows.
+⭐ **This is that decision paying off.** The one design choice that looked like extra rigour in
+T-143 is the reason Xlice needs no remittance change at all.
 
-## The design
+## ⛔ What the first draft got wrong, recorded rather than deleted
 
-### 1. The channel declares it may go on credit — no schema change
+It proposed `sales_day_channels.receivable_amount` — splitting a channel's daily figure into
+collected and owed. **Three things are wrong with it**, and all three only became visible once Ian
+said "wholesale, more than one customer":
 
-Xlice is `is_remitted_daily = true` **with** `receivable_account_code` set (`1220` in practice).
-The form stops presenting the two as exclusive, and the receivable field's helper text becomes
-*"required when it settles later; optional when it reaches the till, for a channel that can also
-sell on credit."*
+1. **A receivable with no party is v1's `unallocatedAmount`** — *"money tied to nothing on 38
+   collections, no way to re-apply"*, which `ar.ts` lists as one of four v1 behaviours refused here.
+   A column on a channel row has nowhere to put the buyer.
+2. **It would have been a second, poorer copy of `ar_charges`** — no lines, no item, no price
+   history, no ageing, no allocation, no returns path.
+3. **Mixed cash + online + credit in one day cannot be expressed as one split.** Three payment
+   routes across several buyers is a set of transactions, not a pair of numbers.
 
-### 2. The day splits what was collected from what was booked
+⭐ The first draft's own "open question 1" — *can one day carry credit to more than one customer?*
+— is exactly what killed it. **Asking was cheaper than building it.**
 
-`sales_day_channels` gains `receivable_amount numeric(14,2) not null default 0`, with:
+## ⛔ The real risk: DOUBLE COUNTING
 
-```sql
-check (receivable_amount >= 0)
-check (receivable_amount <= amount)
-check (no_sales = false or receivable_amount = 0)
--- a channel may only book a receivable if it has somewhere to book it
-check (receivable_amount = 0 or <channel has receivable_account_code>)  -- trigger, not CHECK:
-                                                                       -- it crosses tables
-```
+If a wholesale sale is entered **both** as a trade order **and** as a figure on the sales day's
+Xlice channel line, revenue and receivables are counted twice.
 
-Expected remittance for the day becomes `sum(amount - receivable_amount)` over remitted channels —
-**today's behaviour is preserved exactly**, because `receivable_amount` defaults to 0 on every
-existing row.
+⭐ **Measured: there is no Xlice channel in the dev database today** — the only channels on any
+store are Walk-in, Foodpanda and GrabFood. So this is a greenfield setup with nothing to unwind,
+**provided a "Xlice" sales channel is never created.** If one already exists in production, that
+must be checked before anything else.
 
-### 3. ⭐ The credit half becomes an `ar_charge` against a named customer
+**Recommendation: do NOT create a sales channel named Xlice.** Dine-in and delivery are aggregated
+daily and anonymous; wholesale is per-buyer and documented. They are different shapes and the
+sales-day channel list is the wrong home for the second.
 
-Ian confirmed the debtor is a **named customer**, not a platform settling in bulk. So the credit
-portion is not a floating number on a sales day — it is a charge in the AR module that already
-exists (`ar_charges` / `ar_collections` / allocation / write-off, keyed by party), which brings
-ageing, collection and allocation with it at no design cost.
+## What may genuinely be missing — to confirm, not assume
 
-⛔ **This is why `receivable_amount` alone is not sufficient** and the task is not "add a column":
-a receivable with no party is exactly v1's `unallocatedAmount` — *"money tied to nothing on 38
-collections, no way to re-apply"* — which `ar.ts`'s header lists as one of four things refused here.
-**The submit form must name the customer, and the posting must create the `ar_charge`.**
-
-⚠️ **Therefore the amount cannot be a single figure per channel per day.** One day may sell to two
-customers on credit. The honest shape is a child row per (sales day, channel, customer), and
-`receivable_amount` on `sales_day_channels` is then a derived total rather than the source. **This
-is the main open design question and it should be settled before implementation, not during.**
+1. **Can `dispatchTradeOrder` record immediate payment, or only bill to AR?** If a cash wholesale
+   sale needs two steps (dispatch, then a separate collection), that is a usability gap worth a
+   one-screen fix — **not** a schema change. ⚠️ Read `packages/domain/src/trade/index.ts:336-533`
+   before deciding; do not assume from this spec.
+2. **Is a wholesale buyer required to exist as a `customer` first?** If Xlice sells to walk-up
+   wholesale buyers with no account, that needs a decision — a generic "cash wholesale" customer,
+   or a real record each time. **Ian's call.**
+3. **Does the income statement separate wholesale revenue from dine-in?** If both land on one
+   revenue account, "how is wholesale doing" is unanswerable. Check the account on
+   `trade_order`'s posting before concluding either way.
 
 ## Open questions for Ian
 
-1. **Can one Xlice day carry credit sales to more than one customer?** If yes, the child-row shape
-   above is required and this task grows. If it is always one account, the simpler column stands.
-2. **Who confirms the credit half — the cashier submitting the day, or a verifier afterwards?**
-   It creates a receivable, which is money owed; the submit/verify split already exists for sales
-   days and should probably govern this too.
-3. **Does POS already capture this?** `sales_day_tenders`' header records that a previous gap was
-   closed by noticing *"the cashier POS has this — it defines which mode of payment is used by
-   customer."* ⭐ **Read `webapps/POS` before designing the capture UI** — RULES §3, and the same
-   check shrank T-274.
+1. **Does Xlice sell items that dine-in also sells, at a different price?** That is what
+   `price_lists` is for, but it changes which items need `sellable_wholesale`.
+2. **Walk-up wholesale buyers with no account — do they exist?** (Question 2 above.)
+3. **Should wholesale revenue post to its own account** so it is separable in reporting?
 
 ## Files a future implementation would touch
 
-`packages/db/schema/sales-days.ts` · a new migration · `packages/db/src/repo/sales-days.ts` ·
-`packages/domain/src/sales-days/**` · `packages/domain/src/ar/**` ·
-`apps/erp/src/app/sales-days/**` · `apps/erp/src/app/settings/sales-channels/**`
+⭐ **Possibly none in `packages/db`.** Most likely `apps/erp/src/app/trade/orders/**` only, plus
+configuration. Confirm items 1–3 above before writing a line.

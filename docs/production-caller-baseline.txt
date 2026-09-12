@@ -13,9 +13,11 @@ assetsMissingCapitalisation
 branchOrderDetail
 buildCoverageReport
 capitalizeFromExpense
+checkValuesMatch
 childLogger
 closeAsLateReceipt
 closeSystemDb
+closeYear
 confirmTradeOrder
 convertSpecimen
 countedVariances
@@ -88,10 +90,8 @@ seedCanonicalPositions
 setCostBasisItem
 setItemPricing
 setTillFloat
-singleRoomViolation
 sumTender
 summarizeConversions
-sweepOrphanedFiles
 tablesWithScope
 tilesTheMonth
 totalOf

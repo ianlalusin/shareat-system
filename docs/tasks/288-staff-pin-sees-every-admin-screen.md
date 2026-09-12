@@ -176,3 +176,38 @@ store-scoped capability, which is the safe direction: the screen opens, the acti
 **Gates:** `tsc` exit 0 · unit **106 files / 1420 passed / 0 failed** · plant verified on real
 source (stripping `/payroll`'s gate fails the guard naming `/payroll`) · `touch-target-baseline.json`
 **unchanged** — the one new undersized control was fixed, not baselined.
+
+---
+
+# ⚠️ A GAP I LEFT, AND IT WAS MY JUDGEMENT CALL ALONE — for Ian
+
+`ROUTE_CAPABILITY` is deliberately not exhaustive: the staff-facing surfaces stay open because
+gating them would break the app for the role that uses it most. **But five routes in the Reports
+nav group are open to any signed-in person and I decided that silently, without putting it to Ian.**
+
+| Route | Holds |
+|---|---|
+| `/statutory-discounts` | ⛔ **`holder_name` and `id_number`** — the **name and government ID number** of senior-citizen and PWD customers, read off a physical card (`statutory_discount_records`) |
+| `/cutover/opening` | The organisation's opening balances — its financial starting position |
+| `/cutover/count` | The cutover stock count |
+| `/findings` | The findings feed |
+| `/admin/prerequisite-refusals` | A count of order-of-operations walls people hit |
+
+⚠️ **`/statutory-discounts` is the one that matters.** It is the only place T-288's map leaves
+**customers' personal data** readable by every signed-in person, including a cashier on a shared
+counter tablet — which is exactly the population the task was written for.
+
+⭐ **The argument for leaving it open is real**, which is why it is a question and not a defect: a
+cashier *records* SC/PWD discounts, holds `record_statutory_discount`, and cannot do the job
+without touching this data. **But recording one discount is not the same as reading the store's
+whole register**, and that distinction is a business decision, not mine.
+
+**Recommendation:** gate `/statutory-discounts` on `view_financial_reports` (manager and up) and
+leave the recording flow untouched, so a cashier can still add an entry but not browse the
+register. ⛔ **Not done — it needs Ian's ruling**, and guessing would either expose customer IDs or
+break a control a cashier needs.
+
+⚠️ Also unresolved by me: `view_financial_reports` was chosen as the gate for `/owners`, `/loans`,
+`/liabilities`, `/money-accounts`, `/money-transfers` and `/prepaid` **because it is the capability
+that separates staff from manager**, not because anyone decided a manager should see owner
+drawings. That is a business question wearing a technical answer, and it deserves review.
