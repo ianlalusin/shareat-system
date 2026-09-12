@@ -6,12 +6,32 @@
  * runs through `packages/auth`'s own `authorize()` call via the actions file. That asymmetry is
  * deliberate and matches every other admin screen here (`/staff`, `/attendance/terminals`).
  */
-import { accessRepo, personsRepo, sessionsRepo, type GrantRow, type PersonWithAccessRow } from '@shareat/db';
+import {
+  accessRepo,
+  personsRepo,
+  positionDefaultsRepo,
+  sessionsRepo,
+  type GrantRow,
+  type PersonWithAccessRow,
+} from '@shareat/db';
 import { CAPABILITIES, CAPABILITY_MATRIX, type Capability, type Role } from '@shareat/auth';
 import { listStores, withOrgPrincipal, type StoreOption } from '../../expenses/lib';
 
 export { listStores, withOrgPrincipal };
 export type { StoreOption, PersonWithAccessRow };
+
+/** T-289 §C15, via the namespace re-export — `packages/db` is outside this task's file list. */
+export type PositionDefaultSource = positionDefaultsRepo.PositionDefaultSource;
+
+/**
+ * T-291 §C2 — a `GrantRow` with the position-default facts folded on, when it has one. `null`
+ * for every non-`'position'` source, and also `null` on a `'position'` row if `describeSources`
+ * came back empty for its `sourceRef` (§C2's "should be impossible" case — the FK is `ON DELETE
+ * RESTRICT` — handled by rendering readable, never by crashing or inventing a name).
+ */
+export interface GrantWithSource extends GrantRow {
+  positionSource: PositionDefaultSource | null;
+}
 
 /** Everyone in the org with their role, store-scope count and active-grant count. */
 export async function listUsers(orgId: string): Promise<PersonWithAccessRow[]> {
@@ -23,8 +43,9 @@ export interface UserDetail {
   /** Every store in the org, each flagged with whether this person holds scope for it. */
   stores: (StoreOption & { inScope: boolean })[];
   /** Active and revoked both — invariant 11 requires a revoked grant to stay queryable with
-   *  its revocation date, and the screen is where that promise is kept. */
-  grants: GrantRow[];
+   *  its revocation date, and the screen is where that promise is kept. T-291: each row also
+   *  carries its position-default facts, when it has any, so the page never joins per row. */
+  grants: GrantWithSource[];
   /**
    * T-237 — the ways this person can sign in, LIVE ones only.
    *
@@ -62,10 +83,23 @@ export async function userDetail(orgId: string, personId: string): Promise<UserD
     ]);
     const held = new Set(scopedIds);
 
+    // T-291 §C2 — ONE batched read for every position-sourced grant's names, never per row (the
+    // shape `listEmploymentPositionsFor` already uses). `describeSources` returns `[]` for an
+    // empty input, so a person with no position grants costs nothing extra.
+    const sources = await positionDefaultsRepo.describeSources(
+      tx,
+      grants.map((g) => g.sourceRef).filter((r): r is string => r !== null),
+    );
+    const sourceById = new Map(sources.map((s) => [s.id, s]));
+    const grantsWithSource: GrantWithSource[] = grants.map((g) => ({
+      ...g,
+      positionSource: g.sourceRef ? (sourceById.get(g.sourceRef) ?? null) : null,
+    }));
+
     return {
       person,
       stores: stores.map((s) => ({ ...s, inScope: held.has(s.id) })),
-      grants: grants.sort((a, b) => a.grantName.localeCompare(b.grantName)),
+      grants: grantsWithSource.sort((a, b) => a.grantName.localeCompare(b.grantName)),
       credentials: credentials.map((c) => ({
         id: c.id,
         kind: c.kind,
@@ -93,19 +127,24 @@ export function grantableCapabilitiesFor(role: Role | null): readonly Capability
 
 /**
  * T-256 / DEF-247 — `grantSource` in one word an administrator reads without opening the bible.
- * `null` renders as "not recorded" and ONLY that — never defaulted to any of the three known
+ * `null` renders as "not recorded" and ONLY that — never defaulted to any of the four known
  * values. DEF-237's residue (a row written before migration `0140` existed) is permanent; a
  * fabricated attribution would be worse than an absent one.
+ *
+ * ⛔ No `default:` arm — the exhaustive switch is what turns a widened `GrantSource` into a
+ * compile error instead of a silently-wrong label, and that is the guard working (T-291 §C1).
  */
 export function grantSourceLabel(source: GrantRow['grantSource']): string {
   switch (source) {
     case 'elevation':
       return 'auto-elevated — clears when this org gains an active administrator';
     case 'position':
-      // T-289. T-291 refines this into "via <position> at <store>" once it lands — this arm
-      // exists here only because widening `GrantSource` makes this switch non-exhaustive
-      // otherwise (plan §11.2).
-      return 'Position default';
+      // T-291 §C1. The active-grants list itself never calls this arm for a `'position'` row —
+      // it renders `positionProvenanceLine` instead, with the actual position and store name.
+      // This arm stays exact and generic for every other reader of `grantSourceLabel` (the
+      // switch's own exhaustiveness, and any future caller that only has the source, not a
+      // fetched `PositionDefaultSource`).
+      return 'via a position default — clears when the position or the default does';
     case 'owner':
       return 'owner-equivalent grant';
     case 'grant':
@@ -113,6 +152,48 @@ export function grantSourceLabel(source: GrantRow['grantSource']): string {
     case null:
       return 'source not recorded';
   }
+}
+
+/**
+ * T-291 §C2 — "via Cashier at Lipa", from the position DEFAULT's own names, never the person's
+ * current employment. The default is the thing that justifies the row; an employment that has
+ * since moved on is exactly the case `reconcilePositionGrants` handles, and reading from it here
+ * would make this line disagree with the row it is explaining.
+ *
+ * Fails readable, never fails confident: a `null` source — which should be impossible, the FK on
+ * `person_grants.source_ref` is `ON DELETE RESTRICT` — renders the bare sentence with no names
+ * rather than crashing or inventing one.
+ */
+export function positionProvenanceLine(source: PositionDefaultSource | null): string {
+  return source ? `via ${source.positionName} at ${source.storeName}` : 'via a position default';
+}
+
+/**
+ * T-291 §C2 — the pure predicate behind "a `'position'` row offers no revoke control here".
+ * Revoking one on this page would be undone by the next `reconcilePositionGrants` — a control
+ * that appears to work and silently does not, which is worse than no control at all. Kept here,
+ * not inline in the page, for the same reason `grantSourceLabel` and `requireRevokeReason` are:
+ * testable without rendering.
+ */
+export function canRevokeHere(grant: Pick<GrantRow, 'grantSource'>): boolean {
+  return grant.grantSource !== 'position';
+}
+
+/**
+ * T-291 §C4 — after T-289 an ordinary staff member can carry several `'position'` rows they never
+ * asked for, and calling those "extra grants" beside a role name is misleading. Splits the active
+ * grants into what a position inherited for them and what was granted by some other means
+ * (a hand-grant, an elevation, an owner-equivalent, or an unrecorded pre-migration row — anything
+ * that is not `'position'`). Derived from `grantSource` alone, no new read.
+ */
+export function grantSummaryLine(grants: Pick<GrantRow, 'grantSource'>[]): string {
+  let inherited = 0;
+  let granted = 0;
+  for (const g of grants) {
+    if (g.grantSource === 'position') inherited += 1;
+    else granted += 1;
+  }
+  return `${inherited} inherited from positions · ${granted} granted`;
 }
 
 /**
