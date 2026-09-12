@@ -101,6 +101,11 @@ export function grantSourceLabel(source: GrantRow['grantSource']): string {
   switch (source) {
     case 'elevation':
       return 'auto-elevated — clears when this org gains an active administrator';
+    case 'position':
+      // T-289. T-291 refines this into "via <position> at <store>" once it lands — this arm
+      // exists here only because widening `GrantSource` makes this switch non-exhaustive
+      // otherwise (plan §11.2).
+      return 'Position default';
     case 'owner':
       return 'owner-equivalent grant';
     case 'grant':

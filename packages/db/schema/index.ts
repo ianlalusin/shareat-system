@@ -119,3 +119,10 @@ export * from './recurring-expense-drafts';
 // lock was bypassed": those differ when period_status_at_post = 'open'. Read the file header before
 // counting anything out of this table.
 export * from './period-overrides';
+
+// T-289 — position access defaults: per (position, store) capability defaults, additive to the
+// role matrix. Not in the spec's file list (a gap reported in the task report); required so
+// `tests/unit/cutover-classification.test.ts` and `tests/unit/rls-registry.test.ts` — both of
+// which enumerate tables from THIS barrel via `Object.values(schema)` — can see the table their
+// own required entries (classification.ts, rls/registry.ts) refer to.
+export * from './position-capability-defaults';

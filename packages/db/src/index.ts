@@ -303,3 +303,6 @@ export type { OrganizationRow, ReferenceDataSeeded } from './repo/organizations'
 // T-264 / DEF-284 slice 1 — the fiscal_periods writer that never existed until now.
 export * as fiscalPeriodsRepo from './repo/fiscal-periods';
 export type { SeedCalendarMonthsInput, SeedCalendarMonthsResult } from './repo/fiscal-periods';
+
+// T-289 — position access defaults: the spine.
+export * as positionDefaultsRepo from './repo/position-defaults';

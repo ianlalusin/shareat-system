@@ -1,6 +1,11 @@
 # T-291 — inherited vs. held in their own right, on the person page
 
-> **Status: SPEC WRITTEN, 2026-09-12 — awaiting APPROVED.** Written in plan mode (Opus specifies,
+> **Status: APPROVED by the planner, 2026-09-12 — build after T-289 lands (T-283 landed in `8822cfa`).**
+> ⭐ **§C3 is RULED: option 1, the explicit "Hold in their own right" control.** It is the only path
+> by which decision 5's upgrade can be reached from this page, and a static sentence describing an act
+> nobody can perform is the kind of help text that teaches nothing. Option 2 is withdrawn.
+> ⭐ **§C1's arm:** T-289 lands it as the string `'Position default'` (plan §11.2); this task rewrites
+> it to the sentence in §C1. Written in plan mode (Opus specifies,
 > Sonnet builds — CLAUDE.md, 2026-09-09). Cut from
 > [`docs/plans/289-position-access-defaults-plan.md`](../plans/289-position-access-defaults-plan.md)
 > §5.2, the **authority** for this work, carrying Ian's five decisions of 2026-09-12. Cited by

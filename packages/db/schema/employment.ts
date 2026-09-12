@@ -113,7 +113,15 @@ export const positions = pgTable(
     name: text('name').notNull(),
     isCanonical: boolean('is_canonical').notNull().default(false),
 
-    /** Retire a position without deleting it — historical employments still reference it. */
+    /**
+     * Retire a position without deleting it — historical employments still reference it.
+     *
+     * T-289 — its first ever writer is `retireStorePosition`
+     * (`packages/domain/src/people/position-defaults.ts`), which also revokes the position's
+     * `position_capability_defaults` rows and reconciles its holders. Before T-289 this column
+     * had exactly one reader (`listPositions`'s `eq(isActive, true)`) and zero writers anywhere
+     * in the repo — do not read that as dead; it is retirement waiting for its caller.
+     */
     isActive: boolean('is_active').notNull().default(true),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

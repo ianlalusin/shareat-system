@@ -216,6 +216,19 @@ const EXEMPT: Record<string, string> = {
     'reach it is explicitly scoped as a SECOND slice by the task\'s own briefing — building one now ' +
     'would be scope creep this task was told not to take. The first real year-close is Dec 2027 ' +
     '(ADR-006 intro), so nothing is on fire; delete this row when the screen lands.',
+
+  // ---- T-289 — position access defaults: the spine ------------------------------------------
+  reconcilePositionGrants:
+    'INTERNAL — never reachable from a screen BY DESIGN. `createEmployment`, `endEmployment` and ' +
+    '`setEmploymentPositions` (packages/domain/src/people/index.ts) call it at the five moments a ' +
+    'human is present; `tests/unit/position-defaults-callers.test.ts` is the closed-importer guard ' +
+    'that keeps it that way (T-289 §C11). Permanent — do not delete this row when T-290 lands.',
+  setPositionDefault:
+    'UNWIRED — T-290 builds /admin/access-defaults, the screen that calls this ' +
+    '(docs/tasks/289-position-access-defaults-spine.md §C12). Delete this row when it lands.',
+  retireStorePosition:
+    'UNWIRED — same screen, T-290 (docs/tasks/289-position-access-defaults-spine.md §C12). ' +
+    'Delete this row when it lands.',
 };
 
 describe('T-227 — every action-shaped domain export is reachable from a screen', () => {

@@ -904,6 +904,13 @@
       "when": 1798601507084,
       "tag": "0145_t281_def302_honest_stock_period_refusal",
       "breakpoints": true
+    },
+    {
+      "idx": 146,
+      "version": "7",
+      "when": 1798687907084,
+      "tag": "0146_t289_position_capability_defaults",
+      "breakpoints": true
     }
   ]
 }

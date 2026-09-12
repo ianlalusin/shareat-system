@@ -268,6 +268,16 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     reason: 'As employments — its child rows, and meaningless without them.',
   },
 
+  // ---- T-289: position access defaults (the spine) --------------------------------------
+  position_capability_defaults: {
+    class: 'keep',
+    reason:
+      'Access configuration, not pilot activity — the same reasoning as person_grants above, ' +
+      'whose row it is: purging it would silently strip capability from staff who need it on ' +
+      'day one, AND strand every person_grants row whose source_ref points at it (the FK is ' +
+      'RESTRICT, so a purge would fail loudly anyway, which is the argument here, not the accident).',
+  },
+
   // ---- T-155: attendance policy (Phase 4, lane B) ---------------------------------------
   store_attendance_config: {
     class: 'keep',

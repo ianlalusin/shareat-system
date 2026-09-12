@@ -730,6 +730,18 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'the wrong tenant.',
   },
 
+  // ---- T-289: position access defaults (the spine) --------------------------------------
+  position_capability_defaults: {
+    scope: 'org_column',
+    reason:
+      'Which capabilities a job carries by default is per-org configuration, org-scoped exactly ' +
+      'like person_grants. ⚠️ personKeyedAccess is NOT set: this table is keyed on ' +
+      '(position, store), not on a person — set_by/revoked_by are audit columns, not the ' +
+      'subject. Asserting it here would make the RLS via-person integration check demand a ' +
+      'person_id column this table does not have; org_column with the standard isolation ' +
+      'policy is the right and sufficient answer.',
+  },
+
   // ---- T-155: attendance policy (Phase 4, lane B) ---------------------------------------
   store_attendance_config: {
     scope: 'org_column',

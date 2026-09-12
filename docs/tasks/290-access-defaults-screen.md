@@ -1,6 +1,6 @@
 # T-290 — the access-defaults screen
 
-> **Status: SPEC WRITTEN, 2026-09-12 — awaiting APPROVED.** Written in plan mode (Opus specifies,
+> **Status: APPROVED by the planner, 2026-09-12 — build after T-289 lands.** Written in plan mode (Opus specifies,
 > Sonnet builds — CLAUDE.md, 2026-09-09). Cut from
 > [`docs/plans/289-position-access-defaults-plan.md`](../plans/289-position-access-defaults-plan.md)
 > §5.1, the **authority** for this work, carrying Ian's five decisions of 2026-09-12. Cited by

@@ -372,20 +372,42 @@ export interface GrantRow {
   grantedAt: Date;
   revokedAt: Date | null;
   grantSource: GrantSource | null;
+  /** T-289. The `position_capability_defaults` row that justifies this grant when
+   *  `grantSource === 'position'`; may survive as history on a `'grant'` row (§C3); null for
+   *  every other source. See `schema/access.ts`'s own comment on the column. */
+  sourceRef: string | null;
   revokeReason: string | null;
 }
 
 /**
- * WHERE a `person_grants` row came from — T-248 / DEF-237, migration 0140.
+ * WHERE a `person_grants` row came from — T-248 / DEF-237, migration 0140; `'position'` added
+ * T-289, migration 0146.
  *
  * `'elevation'` — the automatic grant-time fallback (`assignRole`, bible row 115) OR
  * `elevateManager`'s manual "explicit tick" re-elevation (bible row 116): the same reason to
  * exist, so the same eligibility to lapse when the org gains an administrator.
+ * `'position'` — materialised by `reconcilePositionGrants` (`packages/domain/src/people/
+ * position-defaults.ts`) from an active `position_capability_defaults` row. Never eligible for
+ * the elevation-arrival sweep (`revokeElevationGrantsForOrg` matches only `'elevation'`).
  * `'owner'` — `createFirstAdmin`'s founding-person equivalence grant. Never eligible for that
  * revocation: the holder already holds `admin` themselves.
  * `'grant'` — an ordinary, deliberate hand-grant (`grantCapabilityAsActor`). Never eligible.
  */
-export type GrantSource = 'elevation' | 'owner' | 'grant';
+export type GrantSource = 'elevation' | 'position' | 'owner' | 'grant';
+
+/** The base shape every `grantCapability` call shares. */
+type GrantBase = { personId: string; grantName: string; grantedBy: string | null };
+
+/**
+ * T-289 §C6. Made **unrepresentable in TypeScript**, mirroring the database CHECK: a
+ * `'position'`-sourced call MUST carry a `sourceRef`; every other source MUST NOT. The four
+ * pre-T-289 production call sites (`packages/auth/src/roles.ts:111,576,605`,
+ * `packages/domain/src/organizations/index.ts:281`) pass no `sourceRef` and keep compiling
+ * unchanged against the second arm.
+ */
+export type GrantCapabilityInput =
+  | (GrantBase & { grantSource: 'position'; sourceRef: string })
+  | (GrantBase & { grantSource: Exclude<GrantSource, 'position'>; sourceRef?: never });
 
 /**
  * ⭐ **T-248 follow-up — lane D's read-only review, finding #1, confirmed real by the
@@ -399,14 +421,26 @@ export type GrantSource = 'elevation' | 'owner' | 'grant';
  * way, but a later deliberate `'grant'`/`'owner'` call IS real evidence over "unknown
  * origin," so it still upgrades — the direction stays downward on this rank, only the
  * starting point differs from `'elevation'`.
+ *
+ * T-289 inserts `'position'` between `'elevation'` and `'grant'`/`'owner'`: a hand-grant is
+ * never demoted to sweepable by a later reconcile (stored `'grant'`, incoming `'position'` does
+ * NOT rewrite), and a mere elevation stand-in IS superseded once a position independently
+ * justifies the capability (stored `'elevation'`, incoming `'position'` DOES rewrite, and the
+ * ref is written in the same UPDATE — see `reconcilePositionGrants`).
+ *
+ * Exported (not module-private, as it was before T-289) so `tests/unit/
+ * position-defaults-offerable.test.ts` can pin the ordering and the four transitions without a
+ * database, and so `reconcilePositionGrants` can decide which capabilities are genuinely NEW
+ * (rather than a provenance upgrade of one already held) without re-deriving this rule.
  */
-const GRANT_SOURCE_RANK: Readonly<Record<'elevation' | 'owner' | 'grant', number>> = {
+export const GRANT_SOURCE_RANK: Readonly<Record<GrantSource, number>> = {
   elevation: 0,
-  grant: 1,
-  owner: 1,
+  position: 1,
+  grant: 2,
+  owner: 2,
 };
 
-function grantSourceRank(source: GrantSource | null): number {
+export function grantSourceRank(source: GrantSource | null): number {
   return source === null ? 0 : GRANT_SOURCE_RANK[source];
 }
 
@@ -429,11 +463,16 @@ function grantSourceRank(source: GrantSource | null): number {
  * already holds it as `'elevation'`. Before this fix, that hand-grant vanished into the
  * idempotent branch leaving `grantSource` at `'elevation'`, and the next admin arrival swept
  * it exactly as if the deliberate act had never happened — the precise guarantee T-248
- * exists to provide, not holding. */
-export async function grantCapability(
-  tx: Tx,
-  input: { personId: string; grantName: string; grantedBy: string | null; grantSource: GrantSource },
-): Promise<{ id: string }> {
+ * exists to provide, not holding.
+ *
+ * ⛔ **T-289 — `sourceRef` is written in the SAME UPDATE as `grantSource` on the rewrite
+ * branch, and ONLY when the incoming source is `'position'`.** Writing `grantSource =
+ * 'position'` alone would leave `sourceRef` null and violate `person_grants_position_source_
+ * ref_check` — the row would be refused and the whole transaction rolled back (§C5 transition
+ * 3's own warning). When the incoming source is `'grant'` superseding a stored `'position'`
+ * row (transition 1), `sourceRef` is left UNTOUCHED — it is history, and must be kept, never
+ * nulled or overwritten. */
+export async function grantCapability(tx: Tx, input: GrantCapabilityInput): Promise<{ id: string }> {
   const [existing] = await tx
     .select({ id: personGrants.id, grantSource: personGrants.grantSource })
     .from(personGrants)
@@ -442,7 +481,14 @@ export async function grantCapability(
   if (existing) {
     const existingSource = existing.grantSource as GrantSource | null;
     if (grantSourceRank(input.grantSource) > grantSourceRank(existingSource)) {
-      await tx.update(personGrants).set({ grantSource: input.grantSource }).where(eq(personGrants.id, existing.id));
+      await tx
+        .update(personGrants)
+        .set(
+          input.grantSource === 'position'
+            ? { grantSource: input.grantSource, sourceRef: input.sourceRef }
+            : { grantSource: input.grantSource },
+        )
+        .where(eq(personGrants.id, existing.id));
     }
     return { id: existing.id };
   }
@@ -454,6 +500,7 @@ export async function grantCapability(
       grantName: input.grantName,
       grantedBy: input.grantedBy,
       grantSource: input.grantSource,
+      sourceRef: input.sourceRef ?? null,
     })
     .returning({ id: personGrants.id });
   if (!row) throw new Error('grantCapability: insert returned no row');
@@ -534,6 +581,7 @@ export async function grantsForPerson(tx: Tx, personId: string): Promise<GrantRo
       grantedAt: personGrants.grantedAt,
       revokedAt: personGrants.revokedAt,
       grantSource: personGrants.grantSource,
+      sourceRef: personGrants.sourceRef,
       revokeReason: personGrants.revokeReason,
     })
     .from(personGrants)

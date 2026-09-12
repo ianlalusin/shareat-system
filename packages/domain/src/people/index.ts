@@ -21,6 +21,12 @@ import {
   type Tx,
 } from '@shareat/db';
 import { DEFAULT_POSITION, type EmploymentStatus } from '@shareat/db/schema';
+// T-289 — the primitive used internally at moments 3, 4, 5 (hire / positions changed / end),
+// and the two screen-facing entry points re-exported below. `reconcilePositionGrants` itself is
+// NOT re-exported here — `tests/unit/position-defaults-callers.test.ts` is the closed-importer
+// guard that keeps it reachable only from this file, its own definition, and its integration test.
+import { reconcilePositionGrants } from './position-defaults';
+export { retireStorePosition, setPositionDefault } from './position-defaults';
 
 export class EmploymentError extends Error {
   constructor(message: string) {
@@ -93,6 +99,9 @@ export async function createEmployment(
     positionIds,
     primaryPositionId,
   });
+
+  // T-289 moment 3 — a hire applies whatever position defaults the assigned positions carry.
+  await reconcilePositionGrants(tx, actor, { personId: input.personId, storeId: input.storeId });
 
   return employment;
 }
@@ -185,7 +194,14 @@ export async function endEmployment(
     );
   }
 
-  return employmentRepo.closeEmployment(tx, input);
+  const closed = await employmentRepo.closeEmployment(tx, input);
+
+  // T-289 moment 5 — ending the employment leaves no open employment at this store, so
+  // `wanted` computes empty and every position-sourced row for THIS store is revoked; other
+  // stores are untouched (a person may hold two open employments, one per store).
+  await reconcilePositionGrants(tx, actor, { personId: existing.personId, storeId: existing.storeId });
+
+  return closed;
 }
 
 /** Replace the set of positions an employment holds, naming exactly one primary. */
@@ -207,6 +223,10 @@ export async function setEmploymentPositions(
     employmentId: input.employmentId,
     ...resolved,
   });
+
+  // T-289 moment 4 — a positions change reconciles the new set: capabilities the old positions
+  // defaulted and the new ones do not are revoked; capabilities the new ones default are granted.
+  await reconcilePositionGrants(tx, actor, { personId: existing.personId, storeId: existing.storeId });
 }
 
 /** Add or rename a store's own position. ⛔ Canonical positions are not editable by a store. */

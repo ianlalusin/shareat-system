@@ -44,6 +44,7 @@ import { sql } from 'drizzle-orm';
 import { check, index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
 import { persons } from './persons';
+import { positionCapabilityDefaults } from './position-capability-defaults';
 import { stores } from './stores';
 
 // -------------------------------------------------------------------------------------
@@ -148,8 +149,24 @@ export const personGrants = pgTable(
      * inference — see the migration's own comment. NULL is never `'elevation'`, so it is simply
      * never eligible for T-248's revocation; no special-case exclusion needed anywhere that reads
      * this column.
+     *
+     * T-289, migration 0146 — a fourth value, `'position'`: this row was materialised by
+     * `reconcilePositionGrants` from an active `position_capability_defaults` row (`sourceRef`
+     * below). Ranked between `'elevation'` and `'grant'`/`'owner'` (`packages/db/src/repo/
+     * access.ts`'s `GRANT_SOURCE_RANK`) — a hand-grant is never demoted to sweepable by a later
+     * reconcile, and a position default supersedes a mere elevation stand-in.
      */
     grantSource: text('grant_source'),
+    /**
+     * T-289, migration 0146. The `position_capability_defaults` row that justifies this grant —
+     * **required** when `grantSource = 'position'`, **may** survive as history on a `'grant'` row
+     * (a hand-grant upgrading a position row keeps the ref, §C3/§C5 transition 1: it says how the
+     * row first came to exist), and **never** set for any other source, including NULL
+     * (`person_grants_position_source_ref_check` below uses `IS DISTINCT FROM` so a NULL source
+     * cannot slip a stray ref past a null-blind equality). ⛔ `packages/db` still does not know
+     * `@shareat/auth`'s members — this column names no capability, only which DEFAULT ROW acted.
+     */
+    sourceRef: uuid('source_ref').references(() => positionCapabilityDefaults.id, { onDelete: 'restrict' }),
     /**
      * WHY this grant was revoked — T-248 / DEF-237, migration 0140, the same shape as
      * `person_credentials.revokeReason` (`schema/sessions.ts`, T-239 / DEF-229). Pairs with
@@ -166,7 +183,25 @@ export const personGrants = pgTable(
     uniqueIndex('person_grants_active_person_grant_unique')
       .on(t.personId, t.grantName)
       .where(sql`${t.revokedAt} is null`),
-    check('person_grants_source_check', sql`${t.grantSource} is null or ${t.grantSource} in ('elevation', 'owner', 'grant')`),
+    index('person_grants_source_ref_idx').on(t.sourceRef),
+    check(
+      'person_grants_source_check',
+      sql`${t.grantSource} is null or ${t.grantSource} in ('elevation', 'position', 'owner', 'grant')`,
+    ),
+    /**
+     * T-289, migration 0146 (planner-ruled shape, plan §11.1). Three admitted shapes, nothing
+     * else: a `'position'` row ALWAYS carries a ref; a `'grant'` row MAY (history of an upgrade);
+     * every other source — `'elevation'`, `'owner'`, and NULL — carries none. `IS DISTINCT FROM`
+     * is load-bearing: a NULL `grant_source` is *distinct from* `'position'`, so the right-hand
+     * branch applies and demands a null ref — a naive `<> 'position'` is null-blind and would let
+     * a NULL-source row carry a stray ref through undetected.
+     */
+    check(
+      'person_grants_position_source_ref_check',
+      sql`(${t.grantSource} = 'position' and ${t.sourceRef} is not null)
+          or (${t.grantSource} is distinct from 'position'
+              and (${t.sourceRef} is null or ${t.grantSource} = 'grant'))`,
+    ),
     // ⛔ NULL-BLIND TRAP, avoided on purpose (DEF-229's own lesson, T-239): a CHECK passes when
     // its expression is NULL, so the naive `revoked_at is not null and btrim(revoke_reason) <> ''`
     // admits a revoked row with a MISSING reason. The explicit `is not null` term is load-bearing.
