@@ -22,6 +22,7 @@
  * quietly is **worse than the button**, since nobody is even expecting to press anything.
  */
 import {
+  filesRepo,
   schedulerRepo,
   storesRepo,
   systemTransaction,
@@ -33,6 +34,7 @@ import {
 import { runDepreciationAsSystem } from '../fixed-assets/depreciate';
 import { runAmortisationAsSystem } from '../prepaid';
 import { runOrderWastageBackstop } from '../wastage/orders';
+import { sweepOrphanedFiles } from '../files';
 
 import { toBusinessDate } from '@shareat/core';
 import { sql } from 'drizzle-orm';
@@ -65,7 +67,9 @@ export interface JobOutcome {
     | 'finding_observation'
     | 'budget_reissue'
     /** T-216 Part 2 — the daily recurring-expense drafting job. It drafts; it never pays. */
-    | 'recurring_expenses';
+    | 'recurring_expenses'
+    /** T-272 — the daily orphaned-file sweep, per org (DEF-299). */
+    | 'orphan_file_sweep';
   period: string;
   posted: number;
   skipped: number;
@@ -874,4 +878,68 @@ export async function runBudgetReissue(
   }
 
   return { outcomes, hadFailures: outcomes.some((o) => o.failed > 0 || o.error) };
+}
+
+// =====================================================================================
+
+/**
+ * ⭐ **T-272 — the nightly orphaned-file sweep, DEF-299.** `sweepOrphanedFiles`
+ * (`../files`) shipped with no production caller at all and is documented in two places as a
+ * running cron that has never run — the same DEF-186 shape as everything above. Scoped per org
+ * because `scheduler_runs.org_id` is `NOT NULL` and cannot record a global run
+ * (`docs/tasks/272-def-299-orphan-sweep-timer.md`).
+ *
+ * ⚠️ **This job's body does NOT go through the local `asSystem` helper the way its siblings do.**
+ * `sweepOrphanedFiles` needs its own read transaction plus one further transaction per file it
+ * deletes (`reference_postgres_batch_needs_savepoint` — a bad delete must not take the whole
+ * batch's bookkeeping down with it), so it owns its own `withSystemOrgPrincipal` calls internally
+ * rather than being handed a single open `tx`. `period` records the Manila month the run happened
+ * IN, same bookkeeping-only convention as every job here except `month-end`.
+ */
+export interface OrphanFileSweepResult {
+  outcomes: JobOutcome[];
+  hadFailures: boolean;
+}
+
+export async function runOrphanFileSweep(
+  options: { orgId?: string; trigger?: 'cron' | 'manual'; nowMs?: number } = {},
+): Promise<OrphanFileSweepResult> {
+  const trigger = options.trigger ?? 'cron';
+  const nowMs = options.nowMs ?? Date.now();
+  const period = new Date(nowMs + 8 * 3_600_000).toISOString().slice(0, 7);
+
+  const orgs = await listOrgsToRun(options.orgId);
+  const outcomes: JobOutcome[] = [];
+  for (const org of orgs) {
+    outcomes.push(await runOrphanFileSweepForOrg(org, period, trigger));
+  }
+  return { outcomes, hadFailures: outcomes.some((o) => o.failed > 0 || o.error) };
+}
+
+async function runOrphanFileSweepForOrg(
+  org: { id: string; name: string },
+  period: string,
+  trigger: 'cron' | 'manual',
+): Promise<JobOutcome> {
+  return runJobForOrg(org, 'orphan_file_sweep', period, trigger, async () => {
+    const result = await sweepOrphanedFiles(org.id, 24);
+    const failures: SchedulerFailure[] = result.failed.map((f) => ({
+      subjectId: f.path,
+      subjectName: f.path,
+      reason: f.error,
+    }));
+    return {
+      posted: result.removed,
+      skipped: result.claimed,
+      failures,
+      // ⭐ DEF-306: a capped batch and a fully-drained one otherwise look identical in
+      // `scheduler_runs`. This is the cheap, honest signal available within this job's own scope.
+      // Compared against the SAME constant `listOrphans` limits on (`filesRepo.ORPHAN_SWEEP_BATCH_LIMIT`)
+      // rather than a duplicated literal, so changing the limit cannot silently stop this from firing.
+      detail:
+        result.candidates === filesRepo.ORPHAN_SWEEP_BATCH_LIMIT
+          ? `hit the ${filesRepo.ORPHAN_SWEEP_BATCH_LIMIT}-candidate cap — more orphans may remain in this org`
+          : undefined,
+    };
+  });
 }

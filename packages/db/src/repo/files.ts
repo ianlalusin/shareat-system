@@ -69,13 +69,22 @@ export async function linkFile(
 }
 
 /**
- * Files nothing has claimed, older than `hours`.
+ * ⭐ T-272/DEF-306 — the ONE definition of the orphan sweep's per-run candidate cap. Compared
+ * against in `scheduler/index.ts` to detect when a run was capped rather than fully drained
+ * (`candidates === ORPHAN_SWEEP_BATCH_LIMIT`); changing the limit here changes the comparison too,
+ * so the two cannot silently drift apart the way a duplicated literal would.
+ */
+export const ORPHAN_SWEEP_BATCH_LIMIT = 500;
+
+/**
+ * Files nothing has claimed, older than `hours`, in ONE org.
  *
- * ⚠️ Deliberately NOT org-scoped — the sweep runs as the `system` principal across every org, the
- * same way T-140's month-end run does.
+ * ⭐ T-272/DEF-299 — scoped per org since `scheduler_runs.org_id` is `NOT NULL` and cannot record a
+ * global run. Mechanical: `stored_files.org_id` was already `NOT NULL`; this just filters on it.
  */
 export async function listOrphans(
   tx: Tx,
+  orgId: string,
   hours: number,
 ): Promise<{ id: string; storagePath: string }[]> {
   return tx
@@ -83,12 +92,13 @@ export async function listOrphans(
     .from(storedFiles)
     .where(
       and(
+        eq(storedFiles.orgId, orgId),
         isNull(storedFiles.linkedTo),
         lt(storedFiles.uploadedAt, sql`now() - make_interval(hours => ${hours})`),
       ),
     )
     .orderBy(asc(storedFiles.uploadedAt))
-    .limit(500);
+    .limit(ORPHAN_SWEEP_BATCH_LIMIT);
 }
 
 /**
@@ -105,11 +115,17 @@ export async function listOrphans(
  * expected outcome, not an error. The caller (`sweepOrphanedFiles`) needs to tell "deleted" from
  * "already claimed, leave it alone" without wrapping every delete in a try/catch for a case that
  * is not exceptional.
+ *
+ * ⭐ **T-272 — takes `orgId` even though `stored_files` carries FORCE RLS scoping this at the
+ * database.** In production the app connects as `doadmin` with `rolbypassrls = t`, so RLS is not
+ * enforced there today and the id-came-from-an-org-scoped-read three lines up would otherwise be
+ * the ONLY thing keeping this delete inside the caller's org — one layer, where RULES §6 item 3 /
+ * bible §15.11 require tenancy to be layered on purpose. Matches `getById`/`linkFile` above.
  */
-export async function deleteFile(tx: Tx, id: string): Promise<boolean> {
+export async function deleteFile(tx: Tx, orgId: string, id: string): Promise<boolean> {
   const deleted = await tx
     .delete(storedFiles)
-    .where(and(eq(storedFiles.id, id), isNull(storedFiles.linkedTo)))
+    .where(and(eq(storedFiles.id, id), eq(storedFiles.orgId, orgId), isNull(storedFiles.linkedTo)))
     .returning({ id: storedFiles.id });
   return deleted.length > 0;
 }

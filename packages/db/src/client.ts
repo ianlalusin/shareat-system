@@ -132,7 +132,6 @@ export function getSystemDb() {
  *   - the till-event **org resolution** in `runInboxRelayJobs` (row 194 subsystem 1) — the read
  *     that DISCOVERS which org a store belongs to cannot be scoped to that org; the org is its
  *     output, not its input
- *   - `sweepOrphanedFiles` (row 194 subsystem 2, DEF-287) — a cron across every organisation
  *   - the **bootstrap existence question** `anyOrganizationExists`, in `setup/lib.ts` and
  *     `sign-in/lib.ts` (**Ian's ruling, 2026-09-12**, T-267) — *"has this system been set up at
  *     all?"* is asked before any org exists, and it now uses the same door bootstrap's WRITE

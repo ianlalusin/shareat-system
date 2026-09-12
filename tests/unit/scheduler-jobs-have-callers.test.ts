@@ -124,6 +124,7 @@ const KNOWN_JOB_NAMES = [
   'runFirestoreRelay',
   'runMonthEnd',
   'runOrderWastageBackstopSweep',
+  'runOrphanFileSweep',
 ].sort();
 
 function scriptsSource(): string {
@@ -165,9 +166,10 @@ describe('T-236 — every scheduler job entry export is reachable from a scripts
 
   it('⭐ finds the job entries and the scripts source at all (DEF-179 — a scan of nothing passes)', () => {
     // A floor, not ceremony: collapses to zero if the extraction regex breaks, a wrong root, or a
-    // failed `git ls-files` — reference_sweep_needs_nonzero_control. Raised to 6 after BLOCKER 1:
-    // the old floor of 5 equalled the old filter's broken count, so it could not see the hole.
-    expect(jobs.size).toBeGreaterThanOrEqual(6);
+    // failed `git ls-files` — reference_sweep_needs_nonzero_control. Raised to 6 after BLOCKER 1
+    // (the old floor of 5 equalled the old filter's broken count, so it could not see the hole),
+    // and to 7 by T-272's new `runOrphanFileSweep` entry point.
+    expect(jobs.size).toBeGreaterThanOrEqual(7);
     expect(scriptSrc.length).toBeGreaterThan(1000);
   });
 

@@ -18,7 +18,7 @@
  */
 import { createHash } from 'node:crypto';
 import { authorize, type Actor } from '@shareat/auth';
-import { filesRepo, systemTransaction, transaction, type FilePurpose, type Tx } from '@shareat/db';
+import { filesRepo, transaction, withSystemOrgPrincipal, type FilePurpose, type Tx } from '@shareat/db';
 import { stripImageMetadata } from '@shareat/core/exif';
 import { resolveStorageDriver } from './driver';
 
@@ -191,11 +191,19 @@ export async function linkFile(
 }
 
 /**
- * ⭐ The orphan sweep — bytes nobody can reach.
+ * ⭐ The orphan sweep — bytes nobody can reach, for ONE org.
  *
  * A file uploaded for a draft that was never saved is unreachable by construction: nothing points
  * at it, and nothing ever will. ⚠️ Like T-140's runs, this REPORTS what it did — a sweep that
  * deletes quietly is indistinguishable from one that has stopped running.
+ *
+ * ⭐ **T-272/DEF-299 — scoped per org, no longer global.** `scheduler_runs.org_id` is `NOT NULL`
+ * and cannot represent a global run, so this can only be wired to a nightly timer once it runs
+ * once per org. Mechanical, not architectural: `stored_files.org_id` was already `NOT NULL`
+ * (`listOrphans` just filters on it now), and the write side moves from the bare
+ * `systemTransaction()` this used while genuinely cross-org (DEF-287) to `withSystemOrgPrincipal`,
+ * the same principal every other system-kind scheduler job uses. See
+ * `docs/tasks/272-def-299-orphan-sweep-timer.md`.
  *
  * ⭐ **T-267/DEF-298 — the row is deleted BEFORE the bytes are removed, deliberately reversed from
  * the original order.** `listOrphans`'s read can go stale: another request may `linkFile` a
@@ -212,17 +220,26 @@ export async function linkFile(
  * trade a benign failure for the worse one this task exists to remove.
  */
 export async function sweepOrphanedFiles(
+  orgId: string,
   olderThanHours = 24,
-): Promise<{ removed: number; claimed: number; failed: { path: string; error: string }[] }> {
+): Promise<{
+  removed: number;
+  claimed: number;
+  /** How many candidates this run saw, before claimed/failed are subtracted out — DEF-306: the
+   *  signal that `listOrphans`'s `.limit(500)` cap was hit (`candidates === 500`), since a capped
+   *  run and a fully-drained one are otherwise indistinguishable. */
+  candidates: number;
+  failed: { path: string; error: string }[];
+}> {
   const driver = resolveStorageDriver();
-  const orphans = await systemTransaction((tx) => filesRepo.listOrphans(tx, olderThanHours));
+  const orphans = await withSystemOrgPrincipal(orgId, (tx) => filesRepo.listOrphans(tx, orgId, olderThanHours));
 
   let removed = 0;
   let claimed = 0;
   const failed: { path: string; error: string }[] = [];
   for (const o of orphans) {
     try {
-      const deleted = await systemTransaction((tx) => filesRepo.deleteFile(tx, o.id));
+      const deleted = await withSystemOrgPrincipal(orgId, (tx) => filesRepo.deleteFile(tx, orgId, o.id));
       if (!deleted) {
         // Claimed between the read and this delete — no longer an orphan. Neither removed nor
         // failed: its bytes are deliberately untouched, and there is nothing to retry.
@@ -238,5 +255,5 @@ export async function sweepOrphanedFiles(
       failed.push({ path: o.storagePath, error: err instanceof Error ? err.message : String(err) });
     }
   }
-  return { removed, claimed, failed };
+  return { removed, claimed, candidates: orphans.length, failed };
 }

@@ -37,9 +37,6 @@ const REQUIRED_CALLERS = [
   // already uses. Not a fifth caller admitted by analogy — a named ruling, recorded.
   'apps/erp/src/app/setup/lib.ts',
   'apps/erp/src/app/sign-in/lib.ts',
-  // T-267, bible §13 row 194 subsystem 2 (DEF-287): the orphaned-file sweep is a cron
-  // across every organisation; no single org's principal expresses "all orgs".
-  'packages/domain/src/files/index.ts',
   // T-268, bible §13 row 194 subsystem 3 (DEF-289): the ETL tables carry FORCE RLS
   // with ZERO policies — deny-all by design (migration 0011:142-160), because they hold
   // captured production PII. No principal can EVER satisfy them, so this is not the

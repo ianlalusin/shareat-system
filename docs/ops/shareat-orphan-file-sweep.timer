@@ -1,0 +1,21 @@
+# T-272 / DEF-299 — DAILY, after order-wastage-backstop so the two don't contend.
+#
+# ⭐ Why daily. An orphaned upload has no wall-clock component of its own — unlike attendance_sweep,
+# whose hourly cadence exists because the cut-off is a wall-clock hour PER STORE. A day-old upload
+# has enormous slack by comparison; polling more often buys nothing a daily run does not.
+#
+# ⚠️ 03:00 Manila is after finding-observation (01:30), recurring-expense-draft (02:00) and
+# order-wastage-backstop (02:30), so this run does not contend with any of them for the same window.
+
+[Unit]
+Description=Shareat — nightly orphaned-upload sweep, per org, daily (T-272 / DEF-299)
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 Asia/Manila
+# ⚠️ Catch up after a reboot or an outage rather than skipping silently — same reasoning as every
+# other daily job's timer, and the same defect behind it (DEF-044).
+Persistent=true
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target

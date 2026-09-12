@@ -1,0 +1,29 @@
+# T-272 / DEF-299 — the nightly orphaned-upload sweep. INSTALL INSTRUCTIONS: docs/ops/README.md
+#
+# ⛔ Runs as a `system` principal, per org, with no session and no person. T-140's decision,
+# unchanged: a service account holding an admin role is a standing credential nobody watches.
+#
+# ⭐ What it is for: a file uploaded for a draft that was never saved is bytes nothing will ever
+# point at. This job collects unclaimed uploads more than a day old, per org, and reports what it
+# did — a sweep that deletes quietly is indistinguishable from one that has stopped running.
+
+[Unit]
+Description=Shareat — nightly orphaned-upload sweep, per org (T-272 / DEF-299)
+After=network-online.target
+Wants=network-online.target
+# No After=postgresql.service — the database is DO Managed Postgres, off-box (ADR-002 §1).
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/shareat
+ExecStart=/usr/bin/npm run orphan-file-sweep
+User=shareat
+Group=shareat
+
+# ⚠️ NEVER build here. This is a 2 GB droplet; a build OOMs it. This unit runs an
+# already-installed tree shipped by CI — bible §2.10.
+Environment=NODE_ENV=production
+
+# ⭐ The exit code is load-bearing: non-zero when anything failed, so the host's mailer speaks up.
+StandardOutput=append:/var/log/shareat/orphan-file-sweep.log
+StandardError=append:/var/log/shareat/orphan-file-sweep.log

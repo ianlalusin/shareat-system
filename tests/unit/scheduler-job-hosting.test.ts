@@ -50,6 +50,7 @@ const JOB_SCRIPT: Record<SchedulerJob, string> = {
   finding_observation: 'finding-observation',
   budget_reissue: 'budget-reissue',
   recurring_expenses: 'recurring-expense-draft',
+  orphan_file_sweep: 'orphan-file-sweep',
 };
 
 /** The unique scripts `JOB_SCRIPT` names — `docs/ops/shareat-<name>.{service,timer}` basenames. */
@@ -81,13 +82,11 @@ const NAMED_SECONDARY_TIMER_ONLY = ['month-end-retry'];
  * an entry NOT here must currently be false (units DO exist) — rather than trusting whoever edits
  * this object to keep it honest.
  */
-const EXEMPT_FROM_UNITS: Record<string, string> = {
-  'budget-reissue':
-    'DEF-303 — runBudgetReissue is registered in SCHEDULER_JOBS, implemented, looped over every ' +
-    'org, and reachable by `npm run budget-reissue`, but docs/ops has no shareat-budget-reissue.* ' +
-    'at all. Rolled into T-272 (2026-09-12) to build alongside DEF-299’s own new unit pair. Delete ' +
-    'this row once shareat-budget-reissue.{service,timer} both exist.',
-};
+// ⛔ DEF-303's row lived here until T-272 (2026-09-12) built shareat-budget-reissue.{service,timer}
+// alongside DEF-299's own new unit pair — deleted per this file's own "no exemption outlives its
+// reason" test below, exactly as T-273's commit message said it would be: "that is the whole point
+// of the exemption being a confession rather than a setting."
+const EXEMPT_FROM_UNITS: Record<string, string> = {};
 
 function unitBasenames(ext: 'service' | 'timer'): string[] {
   return readdirSync(OPS_DIR)

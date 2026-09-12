@@ -1,0 +1,20 @@
+# T-215 / DEF-303 — DAILY. A due date is a DAY: the promise is that a reissued budget's window has
+# already moved by the time anyone opens the screen that morning, the same reasoning
+# recurring-expense-draft's timer states for bills.
+#
+# ⚠️ 03:30 Manila is after finding-observation (01:30), recurring-expense-draft (02:00),
+# order-wastage-backstop (02:30) and orphan-file-sweep (03:00), so this run does not contend with
+# any of them for the same window.
+
+[Unit]
+Description=Shareat — daily expense-budget reissue (T-215 / DEF-303)
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 Asia/Manila
+# ⚠️ Catch up after a reboot or an outage rather than skipping silently — same reasoning as every
+# other daily job's timer, and the same defect behind it (DEF-044).
+Persistent=true
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target

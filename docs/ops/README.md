@@ -92,18 +92,21 @@ domain argument to also set up Caddy + automatic TLS on 80/443 (no traefik confl
 | **Recurring-expense drafting (T-216)** | `npm run recurring-expense-draft` | **Daily, 02:00 Manila** | A due date is a DAY, and the promise is that the bill is on screen on the morning it is due; a weekly run would surface a Tuesday bill on Sunday. ⛔ **It DRAFTS, it never pays** — a pending supplier invoice plus a draft expense, and nothing reaches the ledger until a person attaches the real bill, verifies the invoice and approves the expense. ⚠️ Runs at 02:00, after finding-observation at 01:30, so this morning's draft is not counted against yesterday |
 | **Firestore sync relay (T-204)** | `npm run firestore-relay` | Every 2 minutes | No wall-clock anchor — punches and mirror writes are useful as soon as possible, but a late run breaks nothing (idempotent, Firestore durable in the meantime). Closes DEF-132 (nothing ever ran either lane against real Firestore) and DEF-134 (nothing ever computed a fresh day's `attendance_days` row) |
 | **Order-wastage backstop (T-178 / DEF-226)** | `npm run order-wastage-backstop` | **Daily, 02:30 Manila** | The 15-day clock has no per-store wall-clock component, unlike attendance_sweep's hourly cadence — polling hourly would buy nothing. Runs after finding-observation (01:30) and recurring-expense-draft (02:00) so the three do not contend. ⛔ Shipped with NO caller at all until this task — `runOrderWastageBackstopSweep` (`scheduler/index.ts:585`) existed and nothing called it, the DEF-186 shape a second time |
+| **Orphan-file sweep (T-272 / DEF-299)** | `npm run orphan-file-sweep` | **Daily, 03:00 Manila** | A day-old unclaimed upload has no wall-clock component of its own; runs after order-wastage-backstop (02:30) so the two don't contend. ⛔ Shipped with NO caller at all until this task — `sweepOrphanedFiles` existed since T-141, was documented in two places as a running cron, and nothing called it, the DEF-186 shape a fourth time. Scoped per org (was global; `scheduler_runs.org_id` is `NOT NULL` and cannot record a global run) |
+| **Budget reissue (T-215 / DEF-303)** | `npm run budget-reissue` | **Daily, 03:30 Manila** | Runs after orphan-file-sweep (03:00) so the two don't contend. ⛔ Registered in `SCHEDULER_JOBS` and reachable by its npm script since T-215, but had no `.service`/`.timer` pair at all until this task — the DEF-186 shape a fifth time, found the day after DEF-299 |
 
-⚠️ **`recurring-expense-draft` (T-216) and `order-wastage-backstop` (T-178 / DEF-226) have unit
-files in this directory and are NOT YET ARMED** — nothing installs them until `provision.sh` is
-re-run from a fresh copy of `docs/ops`, per the section above. ⭐ **That sentence is true again as of
-T-238 (DEF-231): the install step is now a glob over `shareat-*.{service,timer}`, not a hand-written
+⚠️ **`recurring-expense-draft` (T-216), `order-wastage-backstop` (T-178 / DEF-226),
+`orphan-file-sweep` (T-272 / DEF-299) and `budget-reissue` (T-215 / DEF-303) all have unit files in
+this directory and are NOT YET ARMED** — nothing installs them until `provision.sh` is re-run from
+a fresh copy of `docs/ops`, per the section above. ⭐ **That sentence is true again as of T-238
+(DEF-231): the install step is now a glob over `shareat-*.{service,timer}`, not a hand-written
 list.** It had been a list of eleven filenames while thirteen units shipped, so re-running
 `provision.sh` installed nothing at all for `recurring-expense-draft` — the promise this line makes
 was false for the very job it names. A unit file dropped in this directory is now armed by the next
-provision run with nobody remembering to edit a list. **`budget-reissue` (T-215) has no
-unit file in this directory at all** — still to write, per the 2026-09-06 status section above;
-its absence here is not the same thing as being armed. That is two jobs with a unit file waiting
-to be armed, plus one with no unit file yet — the count is the point, not any one number of it.
+provision run with nobody remembering to edit a list. ⛔ **`budget-reissue` had no unit file in this
+directory at all until T-272 (DEF-303) — the DEF-186 shape a fifth time, its absence here was not
+the same thing as being armed, and it is now closed the same way DEF-299's was.** That is four jobs
+with a unit file waiting to be armed — the count is the point, not any one number of it.
 
 Plus a fifth unit that is not a scheduled job but the app itself: **`shareat-erp.service`**
 (`next start -p 9008`, long-running, `Restart=always`) — installed and enabled the same way, by

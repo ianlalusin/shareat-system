@@ -25,6 +25,7 @@ import { AuthorizationError, type Actor } from '@shareat/auth';
 import {
   inMemoryDriver,
   readFileUrl,
+  runOrphanFileSweep,
   setStorageDriver,
   sweepOrphanedFiles,
   uploadFile,
@@ -277,7 +278,7 @@ describe('⭐ the orphan sweep — bytes nobody can reach', () => {
     await sql`update stored_files set uploaded_at = now() - interval '2 days' where id = ${orphan.fileId}`;
     await sql`update stored_files set uploaded_at = now() - interval '2 days' where id = ${claimed.fileId}`;
 
-    const result = await sweepOrphanedFiles(24);
+    const result = await sweepOrphanedFiles(f.orgId, 24);
     expect(result.removed).toBe(1);
     expect(result.claimed).toBe(0);
     expect(result.failed).toEqual([]);
@@ -297,7 +298,7 @@ describe('⭐ the orphan sweep — bytes nobody can reach', () => {
         bytes: photoWithGps(),
       }),
     );
-    const result = await sweepOrphanedFiles(24);
+    const result = await sweepOrphanedFiles(f.orgId, 24);
     expect(result.removed).toBe(0);
     expect(result.claimed).toBe(0);
   });
@@ -343,7 +344,7 @@ describe('⭐ the orphan sweep — bytes nobody can reach', () => {
         },
       });
 
-      const result = await sweepOrphanedFiles(24);
+      const result = await sweepOrphanedFiles(f.orgId, 24);
 
       // `early` had nothing claim it — swept clean, row and bytes.
       expect(driver.files.has(early.storagePath)).toBe(false);
@@ -392,7 +393,7 @@ describe('⭐ the orphan sweep — bytes nobody can reach', () => {
         },
       });
 
-      const result = await sweepOrphanedFiles(24);
+      const result = await sweepOrphanedFiles(f.orgId, 24);
 
       // The other candidate still got swept — one failure does not stop the loop.
       expect(driver.files.has(fine.storagePath)).toBe(false);
@@ -406,6 +407,89 @@ describe('⭐ the orphan sweep — bytes nobody can reach', () => {
       const [row] = await sql<{ id: string }[]>`select id from stored_files where id = ${unreachable.fileId}`;
       expect(row).toBeUndefined();
       expect(driver.files.has(unreachable.storagePath)).toBe(true);
+    });
+  });
+
+  describe('⭐ T-272/DEF-299 — the sweep is scoped per org, not global', () => {
+    it('sweeping one org never touches another org\'s orphan', async () => {
+      const a = await fixture('org-a');
+      const b = await fixture('org-b');
+
+      const orphanA = await asOrg(a.orgId, (tx) =>
+        uploadFile(tx, a.staff, {
+          purpose: 'receipt_photo',
+          storeId: a.storeId,
+          contentType: 'image/jpeg',
+          bytes: photoWithGps(),
+        }),
+      );
+      const orphanB = await asOrg(b.orgId, (tx) =>
+        uploadFile(tx, b.staff, {
+          purpose: 'receipt_photo',
+          storeId: b.storeId,
+          contentType: 'image/jpeg',
+          bytes: photoWithGps(),
+        }),
+      );
+      await sql`update stored_files set uploaded_at = now() - interval '2 days' where id = ${orphanA.fileId}`;
+      await sql`update stored_files set uploaded_at = now() - interval '2 days' where id = ${orphanB.fileId}`;
+
+      const result = await sweepOrphanedFiles(a.orgId, 24);
+
+      // Org A's orphan is gone — row and bytes.
+      expect(result.removed).toBe(1);
+      expect(driver.files.has(orphanA.storagePath)).toBe(false);
+      const [rowA] = await sql<{ id: string }[]>`select id from stored_files where id = ${orphanA.fileId}`;
+      expect(rowA).toBeUndefined();
+
+      // ⭐ Org B's orphan is untouched — the sweep never crossed the org boundary, in either
+      // direction. It is also old enough and unclaimed, so the ONLY reason it should survive is
+      // that it belongs to a different org than the one just swept.
+      expect(driver.files.has(orphanB.storagePath)).toBe(true);
+      const [rowB] = await sql<{ id: string }[]>`select id from stored_files where id = ${orphanB.fileId}`;
+      expect(rowB).toBeDefined();
+    });
+
+    it('runOrphanFileSweep writes one scheduler_runs row for the org it ran, even when nothing was found', async () => {
+      const f = await fixture('wiring');
+      const before = await sql<{ n: string }[]>`
+        select count(*)::text as n from scheduler_runs where org_id = ${f.orgId} and job = 'orphan_file_sweep'`;
+      expect(before[0]!.n).toBe('0');
+
+      const run = await runOrphanFileSweep({ orgId: f.orgId, trigger: 'manual' });
+      expect(run.hadFailures).toBe(false);
+      expect(run.outcomes[0]!.posted).toBe(0);
+
+      const after = await sql<{ n: string; outcome: string; posted: number }[]>`
+        select count(*)::text as n, min(outcome) as outcome, min(posted_count) as posted
+        from scheduler_runs where org_id = ${f.orgId} and job = 'orphan_file_sweep'`;
+      expect(after[0]!.n).toBe('1');
+      expect(after[0]!.outcome).toBe('ok');
+      expect(after[0]!.posted).toBe(0);
+    });
+
+    it('runOrphanFileSweep records the real count it removed', async () => {
+      const f = await fixture('wiring-real');
+      const orphan = await asOrg(f.orgId, (tx) =>
+        uploadFile(tx, f.staff, {
+          purpose: 'receipt_photo',
+          storeId: f.storeId,
+          contentType: 'image/jpeg',
+          bytes: photoWithGps(),
+        }),
+      );
+      await sql`update stored_files set uploaded_at = now() - interval '2 days' where id = ${orphan.fileId}`;
+
+      const run = await runOrphanFileSweep({ orgId: f.orgId, trigger: 'manual' });
+      expect(run.hadFailures).toBe(false);
+      expect(run.outcomes[0]!.posted).toBe(1);
+      expect(driver.files.has(orphan.storagePath)).toBe(false);
+
+      const [row] = await sql<{ outcome: string; posted_count: number }[]>`
+        select outcome, posted_count from scheduler_runs
+        where org_id = ${f.orgId} and job = 'orphan_file_sweep'`;
+      expect(row?.outcome).toBe('ok');
+      expect(row?.posted_count).toBe(1);
     });
   });
 });

@@ -86,6 +86,13 @@ export const SCHEDULER_JOBS = [
    * up could not.
    */
   'recurring_expenses',
+  /**
+   * `orphan_file_sweep` — T-272, DAILY. Sweeps `stored_files` rows nothing has claimed, scoped per
+   * org (DEF-299). ⛔ Was global and cross-org by design (DEF-287) until T-272's scope correction
+   * found `scheduler_runs.org_id NOT NULL` cannot represent a global run at all — see
+   * `docs/tasks/272-def-299-orphan-sweep-timer.md`.
+   */
+  'orphan_file_sweep',
 ] as const;
 export type SchedulerJob = (typeof SCHEDULER_JOBS)[number];
 
@@ -145,7 +152,7 @@ export const schedulerRuns = pgTable(
       // build the database and this file does not — but the NEXT widening migration is written by
       // copying this list, and copying the short one would silently drop a job from the constraint
       // and break it at its next run. Both are corrected together in 0136; keep them together.
-      sql`${t.job} in ('depreciation', 'amortisation', 'attendance_sweep', 'mirror_publish', 'inbox_relay', 'order_wastage_backstop', 'finding_observation', 'budget_reissue', 'recurring_expenses')`,
+      sql`${t.job} in ('depreciation', 'amortisation', 'attendance_sweep', 'mirror_publish', 'inbox_relay', 'order_wastage_backstop', 'finding_observation', 'budget_reissue', 'recurring_expenses', 'orphan_file_sweep')`,
     ),
     check('scheduler_runs_outcome_check', sql`${t.outcome} in ('ok', 'partial', 'failed')`),
     check('scheduler_runs_period_shape_check', sql`${t.period} ~ '^[0-9]{4}-[0-9]{2}$'`),
