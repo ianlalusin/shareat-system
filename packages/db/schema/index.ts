@@ -113,3 +113,9 @@ export * from './recurring-expenses';
 // T-216 Part 2 — what each template has already drafted. ⭐ The UNIQUE (template, due date) index
 // here is the job's idempotency rule; the cursor alone cannot be it.
 export * from './recurring-expense-drafts';
+
+// T-264 slice 3 — who invoked the fiscal-period override, for which entry, and why.
+// ⛔ A row means "the override_period_lock capability was INVOKED for this entry", NOT "the period
+// lock was bypassed": those differ when period_status_at_post = 'open'. Read the file header before
+// counting anything out of this table.
+export * from './period-overrides';

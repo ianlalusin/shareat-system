@@ -228,6 +228,17 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'to; a copied column could drift from its parent, and a line whose org disagreed with its ' +
       'entry would be invisible or visible to the wrong tenant.',
   },
+  // T-264 slice 3 — DEF-284, docs/plans/264-slice3-plan.md.
+  period_overrides: {
+    scope: 'org_column',
+    reason:
+      'Which admin overrode a closed period, for which entry, and why — as sensitive as the ledger ' +
+      'entries it references; a franchise reading another org’s rows would learn which of its ' +
+      'closed periods were later touched and the stated reason. Has its own org_id (not derived ' +
+      'through entry_id) because an override record must remain readable even if a future change ' +
+      'ever let journal_entries be scoped differently — the audit trail should not depend on the ' +
+      'ledger table’s own scoping choice.',
+  },
   person_identities: {
     scope: 'derived',
     personKeyedAccess: true,

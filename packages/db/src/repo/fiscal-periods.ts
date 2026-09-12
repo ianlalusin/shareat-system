@@ -9,7 +9,7 @@
  */
 import { and, desc, eq, gte, lt, lte, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
-import { deliveries, expenses, fiscalPeriods } from '../../schema';
+import { deliveries, expenses, fiscalPeriods, periodOverrides, type PeriodOverrideReason } from '../../schema';
 
 /**
  * `[starts_on, ends_on]` for one calendar month, both `YYYY-MM-DD`, both inclusive.
@@ -227,4 +227,47 @@ export async function unpostedDraftsInPeriod(tx: Tx, orgId: string, period: stri
     ...draftExpenses.map((e) => ({ kind: 'expense' as const, id: e.id, dateOn: e.dateOn })),
     ...draftDeliveries.map((d) => ({ kind: 'delivery' as const, id: d.id, dateOn: d.dateOn })),
   ];
+}
+
+export interface InsertPeriodOverrideInput {
+  orgId: string;
+  periodId: string;
+  entryId: string;
+  actorPersonId: string;
+  reason: PeriodOverrideReason;
+  note?: string | null;
+  /** The status `postEntry` resolved for this period at the moment this row is written — 'open'
+   *  or 'closed'. Never 'locked': a locked period is refused before any row is written. */
+  periodStatusAtPost: 'open' | 'closed';
+}
+
+/**
+ * T-264 slice 3 (DEF-284, docs/plans/264-slice3-plan.md). The audit-row writer for
+ * `period_overrides`. Called by `postEntry` (packages/domain/src/ledger/post-entry.ts), in the
+ * SAME transaction, immediately after the entry is posted — so a rollback leaves no row and a
+ * commit cannot fail to have one.
+ *
+ * ⛔ **What the row means, restated here because a repo function is where a future caller looks
+ * first: "the override_period_lock capability was invoked for this entry" — NOT "the period lock
+ * was bypassed."** Those differ exactly when `periodStatusAtPost = 'open'` (see
+ * `packages/db/schema/period-overrides.ts`'s header for why `postEntry` writes this row
+ * unconditionally rather than only when the period turned out closed).
+ */
+export async function insertPeriodOverride(
+  tx: Tx,
+  input: InsertPeriodOverrideInput,
+): Promise<{ id: string }> {
+  const [row] = await tx
+    .insert(periodOverrides)
+    .values({
+      orgId: input.orgId,
+      periodId: input.periodId,
+      entryId: input.entryId,
+      actorPersonId: input.actorPersonId,
+      reason: input.reason,
+      note: input.note ?? null,
+      periodStatusAtPost: input.periodStatusAtPost,
+    })
+    .returning({ id: periodOverrides.id });
+  return row!;
 }

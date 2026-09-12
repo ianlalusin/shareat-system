@@ -23,8 +23,17 @@
  *
  * All of it runs inside ONE transaction (bible §4.3): join the caller's if one is
  * supplied, otherwise open and own one.
+ *
+ * ⭐ **T-264 slice 3 (DEF-284, docs/plans/264-slice3-plan.md) adds ONE narrow exception to "does
+ * not re-check any of them":** an optional `periodOverride` lets `admin`/`super_admin` post into a
+ * CLOSED period. This is NOT the period-open rule being reimplemented here — the database is
+ * still the sole authority (migration 0143's triggers decide, independently); this function only
+ * decides who may raise a transaction-local flag, after `authorize()` confirms the capability, and
+ * writes the audit row. See `PeriodOverride` below for the contract. `locked` periods are entirely
+ * out of the override's reach and are refused before `periodOverride` is even considered.
  */
-import { journalRepo, transaction, type Tx } from '@shareat/db';
+import { fiscalPeriodsRepo, journalRepo, schema, transaction, type Tx } from '@shareat/db';
+import { authorize, type Actor } from '@shareat/auth';
 
 export interface PostEntryLine {
   /** e.g. '6200' — never a uuid. The repo resolves code -> id (Contract §1). */
@@ -52,6 +61,24 @@ export interface PostEntryLine {
   lineMemo?: string | null;
 }
 
+/**
+ * T-264 slice 3 (DEF-284, docs/plans/264-slice3-plan.md). Nested — never a top-level `postEntry`
+ * parameter — so every existing caller's `PostEntryInput` object literal stays valid with no
+ * edits: this field is purely additive. Absent, nothing about `postEntry`'s behaviour changes at
+ * all (~100% of postings).
+ */
+export interface PeriodOverride {
+  /** Checked by `authorize(actor, 'override_period_lock')` — never trusted from a boolean or a
+   *  caller-supplied "isAdmin" flag (bible §7.1, landmine 17). */
+  actor: Actor;
+  /** Typed enum, never free text and never a boolean — see `packages/db/schema/period-overrides.ts`
+   *  for the members and why each exists. ⚠️ Only the RE-POST of a correction needs this; a
+   *  reversal of an entry in an already-closed period is already legitimate on its own (migration
+   *  0003 lines 202-208) and must never be wrapped in an override. */
+  reason: schema.PeriodOverrideReason;
+  note?: string | null;
+}
+
 export interface PostEntryInput {
   orgId: string;
   /** The business date this entry belongs to — YYYY-MM-DD. Resolved to a period, never
@@ -68,6 +95,9 @@ export interface PostEntryInput {
   memo?: string | null;
   postedBy?: string | null;
   lines: PostEntryLine[];
+  /** Posts into a CLOSED period only — see `PeriodOverride`. Never applies to a `locked` period;
+   *  that stays refused unconditionally, override or not (bible row 193, docs/plans/264-slice3-plan.md). */
+  periodOverride?: PeriodOverride;
 }
 
 export interface PostEntryResult {
@@ -115,10 +145,50 @@ async function runPostEntry(tx: Tx, input: PostEntryInput): Promise<PostEntryRes
       `postEntry: no fiscal period covers entry date ${input.entryDate} for org ${input.orgId}`,
     );
   }
-  if (period.status !== 'open') {
+
+  // T-264 slice 3 (DEF-284): 'locked' is entirely out of the override's reach, ruled by
+  // system32-85 (docs/plans/264-slice3-plan.md) — a later fiscal year's close already depends on
+  // this period's balances (ADR-006 §7.5), and the exemption bible row 193 authorises is for
+  // 'closed' periods only. Refused here, before periodOverride is even considered: no
+  // authorize() call, no GUC, no audit row, for a request migration 0143's triggers refuse
+  // unconditionally regardless of the flag. Distinct message, deliberately — an admin holding
+  // `override_period_lock` must be able to tell, from the text alone, that their capability does
+  // not reach this case, rather than reading a generic "not open" and filing a bug report against
+  // a correctly-working system (same reasoning as the trigger's own locked branch).
+  if (period.status === 'locked') {
     throw new Error(
-      `postEntry: fiscal period ${period.id} (${period.startsOn}..${period.endsOn}) is ${period.status} — cannot post an entry dated ${input.entryDate}`,
+      `postEntry: fiscal period ${period.id} (${period.startsOn}..${period.endsOn}) is locked ` +
+        `— a later fiscal year's close already depends on its balances, and the period-override ` +
+        `capability does not apply to locked periods`,
     );
+  }
+
+  // Narrowed explicitly, once, right after the 'locked' branch returns above — never re-read
+  // `period.status` after this point, so nothing downstream depends on TypeScript retaining a
+  // narrowing across several intervening `await`s.
+  const periodStatus: 'open' | 'closed' = period.status;
+
+  if (periodStatus !== 'open' && !input.periodOverride) {
+    // Only 'closed' can reach here now ('locked' returned above). Byte-identical to pre-T-264
+    // behaviour when no override is offered.
+    throw new Error(
+      `postEntry: fiscal period ${period.id} (${period.startsOn}..${period.endsOn}) is ${periodStatus} — cannot post an entry dated ${input.entryDate}`,
+    );
+  }
+
+  // T-264 slice 3 — the contract (docs/plans/264-slice3-plan.md, contract point 2): runs
+  // UNCONDITIONALLY whenever the caller passes periodOverride, independent of period.status
+  // (including when it is already 'open'). Ruled by system32-85: the period's status can be
+  // changed by a concurrent transaction between this read and the row written below, so the app
+  // can never reliably know in advance whether the exemption will actually be consumed —
+  // authorizing and recording whenever the capability was INVOKED never under-records, and
+  // over-recording is the safe direction for an audit trail. `periodStatusAtPost` (below) is what
+  // lets a reader tell which rows actually bypassed a lock.
+  let overrideInvoked = false;
+  if (input.periodOverride) {
+    await authorize(tx, input.periodOverride.actor, 'override_period_lock', { orgId: input.orgId });
+    await journalRepo.beginPeriodOverrideContext(tx);
+    overrideInvoked = true;
   }
 
   // accountCode -> accountId. An unknown code is rejected here, naming the code
@@ -157,6 +227,21 @@ async function runPostEntry(tx: Tx, input: PostEntryInput): Promise<PostEntryRes
 
   await journalRepo.insertLines(tx, entryId, resolvedLines);
   await journalRepo.postDraftEntry(tx, entryId, input.postedBy ?? null);
+
+  // T-264 slice 3 — written in the SAME transaction, immediately after the entry posts: a
+  // rollback leaves no row, a commit cannot fail to have one. `periodStatus` is 'open' or
+  // 'closed' only ('locked' returned earlier) — exactly `periodStatusAtPost`'s domain.
+  if (overrideInvoked && input.periodOverride) {
+    await fiscalPeriodsRepo.insertPeriodOverride(tx, {
+      orgId: input.orgId,
+      periodId: period.id,
+      entryId,
+      actorPersonId: input.periodOverride.actor.personId,
+      reason: input.periodOverride.reason,
+      note: input.periodOverride.note ?? null,
+      periodStatusAtPost: periodStatus,
+    });
+  }
 
   return { entryId, created: true };
 }

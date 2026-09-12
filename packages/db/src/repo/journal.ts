@@ -398,6 +398,20 @@ export async function beginReversalPostingContext(tx: Tx): Promise<void> {
 }
 
 /**
+ * T-264 slice 3 (DEF-284, docs/plans/264-slice3-plan.md). Sets a transaction-LOCAL flag, exact
+ * same shape as `beginReversalPostingContext` above (migration 0005's idiom, reused rather than
+ * invented a second time): `set_config(..., true)` — cleared at commit/rollback, never visible to
+ * any other transaction or pooled connection — that the period-open triggers (migration 0143)
+ * read as `coalesce(current_setting('app.period_override', true), '') = 'on'`, so an unset flag
+ * reads as NOT exempt. Must be called by `postEntry` ONLY after `authorize(actor,
+ * 'override_period_lock')` has succeeded — never from a caller-supplied parameter (bible §7.1,
+ * landmine 17). Never called by any other path.
+ */
+export async function beginPeriodOverrideContext(tx: Tx): Promise<void> {
+  await tx.execute(sql`select set_config('app.period_override', 'on', true)`);
+}
+
+/**
  * Backfills the reversal entry's OWN `reversal_of_entry_id`, pointing at the original it
  * unwinds (Contract §2). Necessarily an UPDATE, after postEntry has already posted the
  * new entry — postEntry (T-105, untouched by this task) has no field for it, and the

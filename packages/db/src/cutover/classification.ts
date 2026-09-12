@@ -149,6 +149,15 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     class: 'purge',
     reason: 'As journal_entries. Purged first — children before parents.',
   },
+  // T-264 slice 3 — DEF-284, docs/plans/264-slice3-plan.md.
+  period_overrides: {
+    class: 'purge',
+    reason:
+      'CASCADEs off journal_entries (ON DELETE CASCADE, entry_id), which is itself purge — same ' +
+      'lineage as journal_lines, children before parents. An override record about a pilot-era ' +
+      'entry that no longer exists after cutover is exactly audit_log’s own reasoning: pointing at ' +
+      'a deleted id is worse than no record at all.',
+  },
   audit_log: {
     class: 'purge',
     reason:
