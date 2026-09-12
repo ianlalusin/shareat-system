@@ -1,183 +1,186 @@
-# Handoff — 2026-09-12 (wrap-up)
+# Handoff — 2026-09-12 (evening wrap-up, FIVE sessions)
 
-> ⚠️ **The integration suite went RED on its wrap-up run and it is NOT a regression** — all nine
-> failures were one file’s `beforeEach` truncate timing out at 10s under load, and that file passes
-> 9/9 alone (`DEF-313`). Read the Gates table before concluding anything from a red run.
->
 > Written for a **COLD start**. It assumes you have never seen this project.
 > Read `docs/RULES.md` first, then this file. `PROJECT_BIBLE.md` wins any disagreement.
+>
+> ⚠️ **This was a five-session day on one working tree.** Every collision was on a *number*,
+> never on a file. If you are one of several sessions, read §"Working a shared tree" before
+> touching anything.
 
 ## Where things stand
 
-**Five tasks shipped today and production changed twice.** T-272 (the orphaned-file sweep, now a
-nightly per-organisation job that records every run), T-274 (a fiscal year can be closed), and three
-guard repairs — T-275, T-277, T-278. Nothing is half-built; both lanes stopped at task boundaries
-with a clean tree.
+**Fourteen tasks built, two assessments that correctly concluded *don't build it*, and one spec
+written and held.** Sixteen commits from the orchestrator plus five from the two Fable sessions.
+Nothing is half-built; every session reported final state and released.
 
-⭐ **Production stopped bypassing its own tenancy fences.** It had connected as `doadmin` with
-`rolbypassrls = t` for the life of the system, so every row-level-security policy this repo has
-written and tested was bypassed on every production query. It now connects as `shareat_app_prod`
-(NOSUPERUSER, NOBYPASSRLS, owns no table). ⛔ **Read `docs/ops/README.md`'s top section before
-running a migration on that box** — the app role cannot run one, deliberately.
+⭐ **Ian's own three bug reports were all real and all bigger than they looked.**
 
-⭐ **And production was writing accounting documents into v1's bucket** (DEF-311). Corrected the same
-day, with `stored_files` measured at **zero rows** first, so nothing had ever been written there.
+| He said | It was |
+|---|---|
+| *"invoice not saving when an image is uploaded"* | **Every upload over 1 MB died, silently** — no error, no console message. DEF-317 / T-282, then T-296 |
+| *"shareat lipa needs more than 1 storage room, i can not edit the store"* | The field had existed since migration `0062` with **no writer in any layer**. DEF-316 / T-284 |
+| *"i can access many restricted pages and actions for staff"* | Pages yes, **actions no — he corrected this himself**. Exposure, not escalation. T-288 / bible row 199 |
 
-⚠️ **Only one task is unfinished and it is unfinished on purpose:** T-276's spec is written and
-**HELD, not approved** — it needs a ruling from Ian and would be a third timer to arm.
-
----
-
-## Gates at `3b51450` — the last commit that changed CODE. Everything after it is documentation.
+## Gates at `HEAD`
 
 | Gate | Result |
 |---|---|
 | `npm run typecheck` | **exit 0** |
-| `npm run test` (unit) | **99 files · 1368 passed · 1 skipped · 0 failed** (exit 0) |
-| `npm run build` | **exit 0** — dev server stopped and port 9008 **verified free by process enumeration** first, not by intent |
-| Smoketest on 9008 | `/sign-in` **200**, `/setup` **307**, `/` **307** — recipe **re-derived**, not trusted |
-| Integration — **full suite** | ⚠️ **120 files · 2794 passed · 9 FAILED**, 1962s, orchestrator’s own DB — **all nine failures in ONE file** (`reports.test.ts`), all from a single `beforeEach` TRUNCATE hitting vitest’s 10s hook timeout |
-| Integration — **that file, re-run alone** | ⭐ **9 passed · exit 0 · 55.34s.** No content regression. Filed as **DEF-313** |
+| `npm run test` (unit) | **109 files · 1464 passed · 1 skipped · 0 failed** (exit code checked, not inferred from `tail`) |
+| `npm run build` | **exit 0**, port 9008 enumerated free by process list first |
+| `npm run toc` + `toc-freshness` | regenerated after bible rows 199 and 200; **4/4** |
+| Integration — full suite | see the banner at the top of this file if red; otherwise it ran on `shareat_test_orch` via `it.mjs` |
+| Smoketests in the browser | T-288 (manager + staff, nav **and** typed-URL refusal), T-290 (28 assertions), T-296 (four checks incl. the no-JS path) |
 
-⛔ **Never run `npm run test:integration`** — it hits the shared database and truncates a peer's
-fixtures. Give every lane its own DB with
-`~/.claude/skills/orchestrator/tools/make-test-dbs.mjs`, and run with `it.mjs <dbname>`. The full
-suite above was run that way, on the orchestrator's own database.
+⛔ **Never run `npm run test:integration`** — it hits the shared database. Give every lane its own
+with `~/.claude/skills/orchestrator/tools/make-test-dbs.mjs` and run via `it.mjs <dbname>`.
 
----
+## ⛔ What needs Ian — five things, all small, none blocking
 
-## What happened this session
-
-### The five tasks
-
-| Task | Sha | What |
+| # | What | Why only he can |
 |---|---|---|
-| T-272 + DEF-303 | `55fc4bd` | Orphan sweep nightly per org, migration `0144`; `budget_reissue` finally has units |
-| T-274 | `8381413` | `closeYear` — ADR-006's year-close entry, plus the first ever write of `locked` |
-| T-275 / DEF-304 | `e00549a` | The job-caller guard stops reading one hardcoded file |
-| T-277 / DEF-308+307 | `c74eba5` | The storage-driver trap names its own cure; a guard catches the next one |
-| T-278 / DEF-310 | `3b51450` | The auth door's guard sees ten source roots instead of three |
+| 1 | **Arm two timers on the droplet.** Commands in `docs/ops/README.md`. ⚠️ **Expect THREE units to fail nightly, not one** — these jobs treat "no organisations" as failure by design and production has none. Correct, not broken | Production host |
+| 2 | **`ssh root@159.223.46.224 'grep APP_TIMEZONE /srv/shareat-shared/.env.local'`** ⛔ **Before T-292 deploys.** That check now THROWS at env load, so a value that disagrees with `Asia/Manila` stops the app booting. Absent key is safe (defaults); present-and-different is an outage. **DEF-288's shape** | Production host |
+| 3 | **Caddy `request_body max_size`** on the same host — a second body limit that reproduces DEF-317 in production with an identical silent symptom. Untested | Production host |
+| 4 | **Photograph a real receipt and check the small print is readable** after compression. T-296's synthetic fixture cannot settle it: 28px text at 4000px becomes 14px at 2000px, and real receipt text is usually larger | Human judgement |
+| 5 | **Two business questions from T-288** — see `docs/tasks/288-*.md`, addressed to him | Business decision |
 
-### ⛔ The findings worth more than the tasks
+### The two T-288 questions, stated plainly
 
-1. **DEF-308 — every gate was green and the new nightly job would have failed on all 17
-   organisations.** `resolveStorageDriver` refuses the in-memory fallback when a bucket is
-   configured, and the only thing installing the real driver is the Next.js boot hook, which a
-   standalone script never runs. No earlier job touches storage. ⭐ **Found by running the script
-   once**, at the orchestrator's insistence, after the lane had correctly reported it unverified.
-2. **T-274's closing lines were built from RAW totals, not NET.** `debitTotal`/`creditTotal` are two
-   independent sums, so any account with activity on both sides in a year (a refund, a reversal)
-   produced a two-sided line the database rejects outright. Ten tests passed because every fixture
-   was one-sided. ⭐ **The lane had already SEEN that failure** in a forced double-count test and read
-   it as good news — the unpredicted part of a forced failure is evidence about the normal path.
-3. **DEF-310 — the AUTH door's guard scanned 3 of 10 source roots**, while its own comment claimed
-   it was "deliberately the SAME shape" as its twin, which had been widened that same morning.
-   Someone fixed one guard and did not ask whether its stated twin had the same hole. ⭐ **Found by
-   asking a lane whether any OTHER guard was blind**, after three had been found in one week.
-4. **DEF-311 — production wrote to v1's bucket.** The repo documented the correct bucket in TWO
-   places, one of them warning by name against the exact value deployed. ⛔ **Nothing compares the
-   deployed configuration against the documented one**, and `npm run storage-smoke` cannot: it
-   proves the bucket is REACHABLE, and v1's is reachable too.
+⛔ **`/statutory-discounts` is readable by every signed-in person, and it holds customers' names
+and government ID numbers.** `statutory_discount_records` carries `holder_name` and `id_number`,
+read off a physical senior-citizen or PWD card. It is the only place T-288's map leaves *customer*
+personal data open to a cashier on the shared counter tablet — the exact population the task was
+written for. ⚠️ **It is a question, not a defect:** a cashier *records* SC/PWD discounts and holds
+`record_statutory_discount`, so they must touch that data. **But recording one discount is not
+browsing the store's whole register.** Recommendation in the task doc: gate the register on
+`view_financial_reports`, leave the recording flow alone.
 
-### ⭐ The pattern, and it is now five deep
+⚠️ **And a quieter one: `view_financial_reports` was chosen as the gate for `/owners`, `/loans`,
+`/liabilities`, `/money-accounts`, `/money-transfers` and `/prepaid` because it is the capability
+that happens to separate staff from manager** — not because anyone decided a manager should see
+owner drawings. It works, it is defensible, **nobody ruled on it.** A business question wearing a
+technical answer.
 
-**DEF-295, DEF-296, DEF-304, DEF-309, DEF-310** — every one a guard whose **SCOPE was narrower than
-its CLAIM**, passing happily while blind. DEF-311 is the same shape in configuration rather than in
-a test. ⛔ **A positive control on the SIZE of a scanned set cannot catch this. Only a planted
-violation can** — and the state people skip is the one that matters: *old guard + plant = GREEN*,
-which is the only evidence the old guard was blind rather than that the new regex matches something.
+⚠️ **A third, smaller:** two rows in `stored_files` still exceed 1 MB — both from the DEF-317
+smoketest, hours before T-296 existed. *"No stored photo exceeds 1 MB"* is true **going forward**.
+Cleaning history is a separate decision and is not assumed.
 
-### Decisions Ian made today, and where each is recorded
+## Decisions Ian made today, and where each lives
 
 | Decision | Recorded in |
 |---|---|
-| Tighten production's `DATABASE_URL` to a non-bypassing role | `docs/ops/README.md` §2026-09-12 |
-| `shareat-hub-v2` is v2's storage, sole; `…firebasestorage.app` is v1's | `docs/DEFECTS-REGISTER.md` DEF-311 |
-| Close DEF-310 | register, DEF-310 |
-| Scoping the orphan sweep per-org removes it from row 194's cross-org list | `PROJECT_BIBLE.md` §13 **row 197** |
+| DEF-302 → **(b)** make the stock-period refusal honest | register DEF-302 · T-281 · `d83e295` |
+| T-276/DEF-305 → **(c)** backfill a gap and report the run `partial` | `docs/tasks/276-*.md` header |
+| **Arm both unarmed timers now**, accepting nightly failures | `docs/ops/README.md` §2026-09-12 |
+| DEF-314 → **build the override screen; it was always meant to exist** | register DEF-314 — ⚠️ **needs a task number; not yet specced** |
+| *"do both hide the menu and gate the reads"* | **bible row 199** |
+| Position access defaults: additive, materialised grant rows | **bible row 198** |
+| *"only admin can add or retire a position"* | `docs/tasks/297-*.md` (spec, NOT built) |
+| *"Fix 6, 4, 3 now; spec 1, 2, 5"* — the six-item sequencing | T-282/283/284 built; T-286/287/288 spec'd |
+| Compression: **dimensions not quality**, 1280px floor that refuses | T-296 · `cb24455` |
+| *"1 expound in laymans term"* — twice, unprompted | **bible row 200** |
 
-### Corrections the orchestrator made to its own work — on the record
+⚠️ **Two of his instructions were deliberately NOT recorded as project rules** — *"use most 5
+sonnet agents to do discovery"* and *"use opus and sonnet agents to write codes"*. They are
+session process preferences, not standing rules. Noted here so the omission is visible.
 
-- **Committed bible row 197 without re-running the unit suite**, shipping a stale line-range TOC.
-  `toc-freshness.test.ts` caught it on the next run. ⚠️ **A bible row means `npm run toc`, and then
-  the suite again.**
-- **Filed DEF-305 worse than it is.** A 60-day advance warning (`fiscalPeriodRunwayLow`,
-  `repo/findings.ts:253`) already exists; nothing ACTS on it, so the gap is real, but it is not the
-  silent outage the row first described. Amended the same day.
-- **Predicted zero reporting queries filter on `source_type`; there are four.** The lane checked the
-  premise instead of building to it and T-274 shrank.
-- **Inferred a shared BUCKET from a shared PROJECT** in DEF-311's first filing. Wrong, and Ian said
-  so. The narrower observation — three environments printing three different bucket names — was the
-  part that held.
+## ⭐ The pattern of the day — six things built, tested, green, and unreachable
 
----
+**DEF-299** a nightly job with nothing to run it · **DEF-260** `activateTerminal`, no production
+caller · **DEF-314** a capability ratified in two bible rows with no caller anywhere ·
+**DEF-316** `stores.stock_model`, no writer since it was created · **DEF-320** four declared
+upload purposes nothing passes · **DEF-321** the census that detects this, itself unwired.
 
-## Pick up here
+⛔ **Six in one day is not six coincidences, and every one was found by a person reading — never
+by a gate.** T-293 assessed whether one guard could catch them: **it cannot.** They are four
+different shapes (function / DB column / map member / optional property) with different
+false-positive classes. **Shape A is now guarded (T-295's ratchet). B, C and D are three separate
+unbudgeted builds and must not be bundled.**
 
-**1. Ian has three decisions pending (below). Two of them gate real work.**
+## ⭐ Three register rows were corrected by the lanes sent to build them
 
-**2. T-276 — DEF-305, fiscal-period coverage.** The spec is written
-(`docs/tasks/276-def-305-fiscal-period-coverage.md`) and **HELD**. It needs Ian's backfill ruling.
-⛔ Do not build it on momentum; that is what the hold is for.
+- **DEF-309's own remedy was defective in exactly the way DEF-309 is about** — a whole-file check
+  a ninth job would have passed on its siblings' calls. Caught before a line was written.
+- **DEF-315 overstated two of four items.** `APP_TIMEZONE` is read by **nothing**; the documented
+  consequence is false against the code. `FIREBASE_PROJECT_ID` never coexists with its twin in one
+  process, so no in-repo check closes that risk.
+- **DEF-307's piece 1 was already done** hours earlier by T-277 and never ticked off.
 
-**3. DEF-302 — the period override is unreachable on three stock-moving flows.** Three dispositions,
-recommendation **(b)** on the table. Ian's call because it is an inventory decision, not a ledger one.
+⛔ **A row's REMEDY is as perishable as its DIAGNOSIS. Re-derive both before acting on either.**
+Four dispositions have now turned out wrong: DEF-279, DEF-301, DEF-309, DEF-307.
 
-**4. DEF-309 — a job that never calls `runJobForOrg` would run and leave no `scheduler_runs` row**,
-and both job guards would pass it. ⚠️ Sequence it AFTER T-275 (done), and note the transitive case:
-every real job calls through a private per-org helper, so a naive check is a false positive.
+## Working a shared tree — what five sessions taught, the hard way
 
-**5. DEF-312, DEF-306, DEF-307's second half** — all small, all deliberately deferred, each with its
-trigger written into its own row.
-
----
-
-## Do not decide these alone — they are Ian's
-
-| Question | Recommendation on the table |
-|---|---|
-| **DEF-302** — the override unreachable on three flows | **(b) Make the refusal honest** — teach the stock trigger to recognise the override GUC and refuse anyway, with a message saying it does not extend to stock movements. Changes no behaviour, costs almost nothing |
-| **T-276 / DEF-305** — a gap left by an outage of the seeding job itself | Three options in the spec: never backfill · silently backfill · **backfill and report the run as partial** (the lane's recommendation) |
-| **The timers to ARM on the droplet** | **TWO** exist and are unarmed as of today — orphan sweep and budget reissue (DEF-194). T-276 would make it three. Arming is Ian's step either way |
-
----
+1. ⛔ **"Same file" is not the collision question. "What does that file import, and who brings
+   it" is the other half.** Three sessions agreed a landing order that would have broken the
+   build, because one file imported new code from *both* tasks. Only one session checked.
+   **Split on the FILE boundary, not the task boundary** — land the shared file last, after both
+   halves of its dependencies are on main.
+2. ⛔ **A green unit run is not evidence typecheck is green.** Vitest does not typecheck. Both
+   were true simultaneously today, tests green and `tsc` red on a test importing a missing module.
+3. ⛔ **A gate reading is true for minutes, not for a message.** Four stale-photograph incidents,
+   a different session each time.
+4. ⛔ **Reviewing a diff by filtering for your own identifier cannot detect a collision on that
+   identifier, by construction** — the collision *is* both parties using the same string. A
+   session lost an uncommitted register row this way while reviewing carefully. DEF-264 repeating.
+5. ⛔ **Numbers must be allocated centrally.** Three collisions today, all on numbers, none on
+   files. Every session declared its file scope and honoured it.
+6. ⚠️ **Separate lane databases are not a separate server.** Six databases on one Postgres
+   instance share buffers, WAL and CPU. DEF-313's timeouts and two `CONNECT_TIMEOUT` page stalls
+   both came from that.
+7. ⚠️ **"Needs a browser" and "needs the dev server" are different requirements.** A session was
+   queued behind a port for canvas tests that never touched the app.
 
 ## Traps that have actually bitten — live in this area right now
 
-- ⛔ **A guard that proves a caller EXISTS is not a guard that proves the caller WORKS.** DEF-308:
-  every gate green, job dead on arrival in production. **Run the thing once.**
-- ⛔ **The state people skip in a plant proof is the only one that proves anything:** *old guard +
-  plant = GREEN*. States 2–4 only prove your replacement works.
-- ⛔ **A fix that turns a silent blind spot into a noisy wrong answer is worse than the blind spot** —
-  T-275's widen would have failed two correctly-wired functions until the filter learned `orgId`.
-- ⛔ **`debitTotal` and `creditTotal` are INDEPENDENT sums per account, not mutually exclusive.**
-  Anything that swaps them onto one line breaks `journal_lines_exactly_one_side_check`.
+- ⛔ **Editing `docs/DEFECTS-REGISTER.md` by string surgery breaks it three different ways.** Shell
+  backticks get interpreted; a missing newline merges two rows; an anchor on a distant landmark
+  lands in the wrong table. **Ten rows spent part of today inside the "Open questions" table.**
+  Put the row text in a plain FILE and insert with a checked script anchored on the table's own
+  last row.
 - ⛔ **A bible row shifts every TOC line below it.** `npm run toc`, then re-run the unit suite.
-- ⚠️ **Migrations on the production box now need the admin string explicitly** — the app role cannot
-  run one. `docs/ops/README.md` carries the command.
+- ⛔ **A seed fixture's name can lie.** `Dev Cashier` / PIN `333333` held **`manager`** for seven
+  days while the sign-in page advertised it as a cashier. It briefly made correct access filtering
+  look broken. DEF-323 — instance fixed, class open.
+- ⛔ **A duplicate-key error in an integration test is not self-evidently a real defect** — check
+  whether a `beforeEach` truncate above it timed out first.
 - ⚠️ **In PowerShell, `VAR=1 cmd` does not set the variable.** Use `$env:VAR=1` as its own statement.
-- ⚠️ **Re-derive a smoketest recipe before trusting it.** Yesterday's went stale in one day.
-
----
+- ⚠️ **Re-derive a smoketest recipe before trusting it.** Two sessions were bitten in two days.
 
 ## Live agent sessions at wrap-up
 
-| Session | Lane | Model | Lane DB | State |
-|---|---|---|---|---|
-| `webapps-4e` | A | Sonnet 5 | `shareat_test_lanea` | **SAFE TO CLEAR** — told so in its own terminal. Shipped T-272, T-275, T-277, T-278 |
-| `webapps-65` | B | Sonnet 5 | `shareat_test_laneb` | **SAFE TO CLEAR** — told so in its own terminal. Shipped T-274, specced T-276 |
-| `system32-85` | orchestrator | Opus 5 | `shareat_test_orch` | this session — clear it |
+| Session | Model | Lane DB | State |
+|---|---|---|---|
+| `system32-85` | Opus 5 | `shareat_test_orch` | orchestrator — this session |
+| `webapps-4e` | Sonnet 5 | `shareat_test_lanea` | **released.** T-281, T-285, T-293, T-295 |
+| `webapps-65` | Sonnet 5 | `shareat_test_laneb` | **released.** T-279, T-280, T-292, T-294 |
+| `webapps-f7` | Fable | `shareat_test_lanef7` | **released.** T-282/283/284, T-286/287/288, T-296 |
+| `webapps-f2` | Fable | `shareat_test_lanec` | **released.** T-289/290/291, DEF-324, T-297 spec |
 
-⭐ **Lane databases survive and are re-attachable by name.** Nothing is dropped at wrap-up.
-
----
+⭐ **All lane databases survive and are re-attachable by name.** Nothing is dropped at wrap-up.
 
 ## Numbers to allocate from
 
-- Next task: **T-279** · Next defect: **DEF-313**
-- Next migration: **`0145`**, `when` must exceed **`1798515107084`**
+- Next task: **T-298** · Next defect: **DEF-325**
+- Next migration: **`0147`** (0146 shipped with T-289) · `when` must exceed **`1798687907084`**
+- ⚠️ **T-276 moves to `0147`**; it was earmarked for 0146 before T-289 took it
 
----
+## Pick up here
+
+1. **Ian's five items above.** Two are one-line SSH commands; one is photographing a receipt.
+2. **DEF-314's screen — Ian ruled it gets built and it has no task number yet.** It writes an
+   audit row with a typed reason, so it needs real design: who sees the control, how the reason is
+   chosen, what the person is told before using it. ⛔ Not a drive-by inside another task.
+3. **T-297** — positions admin-only on the staff screen. Spec written and approved-shaped, not
+   built. Gate chosen is `manage_stores`; ⚠️ bible row 196 means that reaches an elevated manager
+   in an org with no administrator, which is intended — stop and ask if Ian wants it excluded.
+4. **T-276/DEF-305** — the fiscal-period top-up job. Ian ruled **(c)**. Needs migration `0147`.
+5. **DEF-322** — three sessions added three sub-24px controls today. The fix is a default-correct
+   component, ⚠️ **but count how many of the 151 accepted FAILs it would fix first** — if most,
+   this is the baseline-shrinking task under another name.
+6. **DEF-323's class** — the sign-in page's hand-written role labels can disagree with the
+   database silently. Derive them or delete them.
 
 ## The paste-ready prompt
 
@@ -185,25 +188,30 @@ trigger written into its own row.
 You are the orchestrator for shareat-system (C:\Users\ianla\webapps\shareat-system). Run the
 global /orchestrator skill. You are starting COLD — assume you know nothing about this project.
 
-Read in this order: docs/RULES.md, docs/HANDOFF-TODAY.md, PROJECT_BIBLE.md §13 rows 193-197,
-docs/DEFECTS-REGISTER.md section E (DEF-302 through DEF-312 are the live ones).
+Read in this order: docs/RULES.md, docs/HANDOFF-TODAY.md, PROJECT_BIBLE.md §13 rows 193-200,
+docs/DEFECTS-REGISTER.md section E (DEF-302 through DEF-324 are the live ones).
 
-Five tasks shipped 2026-09-12 — T-272, T-274, T-275, T-277, T-278. Do not reopen them.
-Production now connects as a NON-BYPASSING database role and writes to the correct storage
-bucket; ⛔ read docs/ops/README.md's top section before running any migration on that host.
+Sixteen tasks shipped 2026-09-12 across five sessions — do not reopen them. Ian has FIVE small
+items waiting, three of them one-line commands on the production host, one of them photographing
+a receipt. Put them to him in plain language: ⛔ bible row 200 is his own standing instruction
+that a decision is put in HIS language, not the repo's — an accurate explanation he cannot act on
+is a failed explanation.
 
-⛔ Ian has THREE decisions pending and two of them gate work: DEF-302 (three dispositions,
-recommendation (b) on the table), T-276/DEF-305 (spec written and HELD — needs his backfill
-ruling), and arming TWO unarmed timers on the droplet. Put them to him in plain language,
-one at a time, and do not build T-276 on momentum.
+⛔ SIX things were found built, tested, green and UNREACHABLE in one day (DEF-299, 260, 314, 316,
+320, 321). Every one was found by a person reading, never by a gate. T-293 assessed whether one
+guard could catch them: it cannot — four shapes, and only shape A is now guarded by T-295's
+ratchet. Do not bundle the other three.
 
-No worker sessions are alive — spin up fresh lanes and brief them. Lane DBs shareat_test_lanea
-and shareat_test_laneb still exist and are re-attachable by name.
+⛔ FOUR register dispositions have turned out wrong (DEF-279, 301, 309, 307). A row's REMEDY is as
+perishable as its DIAGNOSIS. Re-derive both before acting on either.
 
-Migration slot 0145 is free; `when` must exceed 1798515107084. Next task T-279, next defect
-DEF-313.
+⛔ If you run more than one worker: numbers are allocated centrally (three collisions today, none
+on files), and "same file" is not the collision question — "what does that file import, and who
+brings it" is. Read §"Working a shared tree".
 
-⭐ Ask each lane a QUESTION in its briefing, not only for a change. EIGHT defects were filed on
-2026-09-12 and not one came from a test — three came from lanes answering a briefing question,
-two from running something once, one from a lane checking its own guard before writing it.
+Next task T-298, next defect DEF-325, next migration 0147 (`when` > 1798687907084).
+
+⭐ Ask each lane a QUESTION in its briefing, not only for a change. Three register rows were
+corrected today by the very lanes sent to build them, every time by checking the premise instead
+of building to it — and the orchestrator's own instruction was disproved by measurement twice.
 ```
