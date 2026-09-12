@@ -26,7 +26,10 @@ import { DEFAULT_POSITION, type EmploymentStatus } from '@shareat/db/schema';
 // NOT re-exported here — `tests/unit/position-defaults-callers.test.ts` is the closed-importer
 // guard that keeps it reachable only from this file, its own definition, and its integration test.
 import { reconcilePositionGrants } from './position-defaults';
-export { retireStorePosition, setPositionDefault } from './position-defaults';
+// `OFFERABLE_TO_POSITIONS` crosses the barrel too: T-290's screen renders from it and the spec
+// says "import it, never re-derive it" — a second derivation in apps/erp is a second source of
+// truth. (T-289's own file list missed this line; T-290's build found it.)
+export { OFFERABLE_TO_POSITIONS, retireStorePosition, setPositionDefault } from './position-defaults';
 
 export class EmploymentError extends Error {
   constructor(message: string) {

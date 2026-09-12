@@ -167,6 +167,9 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       // and is not repealed: hiding alone is worthless. It is now paired with a real read gate
       // (`requirePageAccess`), and BOTH read the one `ROUTE_CAPABILITY` map so they cannot drift.
       { href: '/admin/users', label: 'Users and roles' },
+      // T-290 — what a Cashier can do here, per store. Gated on `grant_capability` through
+      // `ROUTE_CAPABILITY`, the same map the filter above reads (bible row 198, decision 3).
+      { href: '/admin/access-defaults', label: 'Position access defaults' },
       // ⭐ T-222 — until this shipped nothing in the codebase created a store; the four dev stores
       // were inserted by hand. ⚠️ Linked here on purpose: DEF-181 was precisely a screen that
       // shipped linked from nowhere, and this is the task that cites it.

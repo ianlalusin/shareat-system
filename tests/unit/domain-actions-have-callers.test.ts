@@ -223,12 +223,9 @@ const EXEMPT: Record<string, string> = {
     '`setEmploymentPositions` (packages/domain/src/people/index.ts) call it at the five moments a ' +
     'human is present; `tests/unit/position-defaults-callers.test.ts` is the closed-importer guard ' +
     'that keeps it that way (T-289 §C11). Permanent — do not delete this row when T-290 lands.',
-  setPositionDefault:
-    'UNWIRED — T-290 builds /admin/access-defaults, the screen that calls this ' +
-    '(docs/tasks/289-position-access-defaults-spine.md §C12). Delete this row when it lands.',
-  retireStorePosition:
-    'UNWIRED — same screen, T-290 (docs/tasks/289-position-access-defaults-spine.md §C12). ' +
-    'Delete this row when it lands.',
+  // `setPositionDefault` and `retireStorePosition` carried UNWIRED rows here between T-289 and
+  // T-290; T-290 (`apps/erp/src/app/admin/access-defaults/actions.ts`) is their caller, and this
+  // guard's third `it` is what forced the rows out the moment that became true.
 };
 
 describe('T-227 — every action-shaped domain export is reachable from a screen', () => {

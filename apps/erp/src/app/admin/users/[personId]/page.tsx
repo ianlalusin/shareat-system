@@ -31,14 +31,16 @@ const LINK_BTN =
 const MANILA = { timeZone: 'Asia/Manila' } as const;
 
 /**
- * T-291 §C2 / spec T2 — the seam to T-290's screen. As of this task's build, T-290 has not landed
- * (`apps/erp/src/app/admin/access-defaults/page.tsx` does not exist), and
- * `tests/unit/nav-route-reachability.test.ts`'s direction-A check does not cover a page-to-page
- * link, so an `<a href="/admin/access-defaults">` here would be a live 404 with no test to catch
- * it. Rendered as plain text until T-290 lands; flip this one constant to the anchor once it
- * does (T-290 lands in the same commit as this task per the task briefing).
+ * T-291 §C2 / spec T2 — the seam to T-290's screen. Rendered as plain text while T-290 was not
+ * yet on main (a page-to-page link is not covered by `nav-route-reachability`'s direction-A check,
+ * so it would have been a live 404 with no guard); T-290's commit flipped it to the anchor in the
+ * same sha that adds the page, so no sha ever carried a dead link.
  */
-const ACCESS_DEFAULTS_LINK = 'Position access defaults' as const;
+const ACCESS_DEFAULTS_LINK = (
+  <a href="/admin/access-defaults" className="inline-block py-1 text-xs underline underline-offset-2">
+    Position access defaults
+  </a>
+);
 
 export default async function UserAccessPage({
   params,

@@ -42,6 +42,9 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, Capability>> = {
   // --- Who may act, and where. The keys to the building. -------------------------------------
   '/admin/users': 'manage_users',
   '/admin/stores': 'manage_stores',
+  // T-290 — position access defaults. `grant_capability` is org-scoped and is the capability the
+  // screen's every write already checks inside the domain; the page gate reads the same word.
+  '/admin/access-defaults': 'grant_capability',
 
   // --- Configuration that changes how money is classified for everyone ------------------------
   '/settings': 'manage_store_settings',

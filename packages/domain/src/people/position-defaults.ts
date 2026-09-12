@@ -166,7 +166,7 @@ export async function setPositionDefault(
   tx: Tx,
   actor: Actor,
   input: SetPositionDefaultInput,
-): Promise<{ affected: number; skippedSelf: boolean }> {
+): Promise<{ affected: number; skippedSelf: boolean; wroteDefault: boolean }> {
   // 1 — every call, both directions. `grant_capability` already means "may change who can do
   // what" (plan §2 constraint 6); no new capability is added for this screen.
   await authorize(tx, actor, 'grant_capability', {});
@@ -201,7 +201,10 @@ export async function setPositionDefault(
     );
   }
 
-  // 5 — insert (idempotent) or revoke.
+  // 5 — insert (idempotent) or revoke. `wroteDefault` says whether a DEFAULT row changed, which
+  // the bulk actions report separately from `affected` (people): writing four rows that reach
+  // nobody today is a real change, and "Nothing changed" over it would be a lie about the rows.
+  let wroteDefault = false;
   if (input.on) {
     const existing = await positionDefaultsRepo.findActiveDefault(tx, {
       positionId: input.positionId,
@@ -216,6 +219,7 @@ export async function setPositionDefault(
         capability: input.capability,
         setBy: actor.personId,
       });
+      wroteDefault = true;
     }
   } else {
     const existing = await positionDefaultsRepo.findActiveDefault(tx, {
@@ -227,11 +231,13 @@ export async function setPositionDefault(
       const actorPerson = await personsRepo.getPersonById(tx, actor.orgId, actor.personId);
       const reason = input.reason?.trim() || `Switched off by ${actorPerson?.displayName ?? 'an administrator'}`;
       await positionDefaultsRepo.revokeDefaultById(tx, existing.id, actor.personId, reason);
+      wroteDefault = true;
     }
   }
 
   // 6 — reconcile every person with an open employment at this store holding this position.
-  return reconcileHolders(tx, actor, input.storeId, input.positionId);
+  const fanout = await reconcileHolders(tx, actor, input.storeId, input.positionId);
+  return { ...fanout, wroteDefault };
 }
 
 /**
