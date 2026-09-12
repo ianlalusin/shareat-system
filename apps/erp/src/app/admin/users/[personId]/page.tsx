@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { ROLES } from '@shareat/auth';
+import { CAPABILITY_SCOPE, ROLES, type Capability } from '@shareat/auth';
 import { requireSession } from '../../../../lib/session';
 import {
   assignRoleAction,
@@ -185,28 +185,7 @@ export default async function UserAccessPage({
         )}
 
         {offerable.length > 0 && (
-          <form action={setCapabilityGrantAction} className="flex flex-wrap items-end gap-3">
-            <input type="hidden" name="personId" value={personId} />
-            <input type="hidden" name="granted" value="true" />
-            <label className="text-sm">
-              <span className="block text-neutral-600 dark:text-neutral-400">
-                Grant a capability this role does not have
-              </span>
-              <select name="capability" required defaultValue="" className={`${INPUT} font-mono text-xs`}>
-                <option value="" disabled>
-                  Select
-                </option>
-                {offerable.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button type="submit" className={BTN}>
-              Grant
-            </button>
-          </form>
+          <GrantPicker personId={personId} offerable={offerable} />
         )}
 
         {revokedGrants.length > 0 && (
@@ -323,5 +302,87 @@ export default async function UserAccessPage({
         </p>
       </section>
     </Page>
+  );
+}
+
+/**
+ * ⭐ T-283 — Ian: *"capability grant must be multi select."* One submission, many capabilities.
+ *
+ * ## Why checkboxes and not `<select multiple>`
+ *
+ * `grantableCapabilitiesFor` returns every capability the role lacks — for a cashier that is most
+ * of a **96-entry** catalogue. A native multiple-select is a scroll box that needs ctrl-click to
+ * pick a second item, which on the tablet this app is actually used on is not a control at all.
+ *
+ * ## ⭐ Why grouped by SCOPE, and why that is not decoration
+ *
+ * This screen already warns, one section up, that *"holding a capability is never enough on its
+ * own — a store-scoped action also needs the store in scope."* Grouping by `CAPABILITY_SCOPE`
+ * puts that sentence beside exactly the capabilities it applies to, at the moment the grant is
+ * being decided, instead of leaving the reader to carry it down the page.
+ *
+ * ⚠️ **Not a new pattern.** The full-width touch-target row is lifted from
+ * `settings/sales-channels/page.tsx`'s `Radio`, whose own note says *"touch targets are
+ * full-width rows, not bare dots — phone portrait is the canvas"* (RULES §3: one uniform,
+ * reusable pattern set; familiar-but-upgraded, never reinvented).
+ *
+ * ⛔ **No `required` attribute, and that is deliberate.** A checkbox group cannot express
+ * "at least one" in HTML — marking every box required would demand ALL of them. The server
+ * refuses an empty selection in `setCapabilityGrantAction`, which is where the rule belongs
+ * anyway: the browser is a convenience, never the control.
+ */
+const SCOPE_ORDER = ['store', 'org', 'platform'] as const;
+
+const SCOPE_NOTE: Record<(typeof SCOPE_ORDER)[number], string> = {
+  store: 'Also needs the store in scope above — holding the capability is never sufficient alone.',
+  org: 'Applies across the whole organisation. No store scope is consulted.',
+  platform: 'Crosses organisations. Super-admin territory — grant with care.',
+};
+
+function GrantPicker({ personId, offerable }: { personId: string; offerable: readonly Capability[] }) {
+  const byScope = SCOPE_ORDER.map((scope) => ({
+    scope,
+    items: offerable.filter((c) => CAPABILITY_SCOPE[c] === scope),
+  })).filter((g) => g.items.length > 0);
+
+  return (
+    <form action={setCapabilityGrantAction} className="space-y-4">
+      <input type="hidden" name="personId" value={personId} />
+      <input type="hidden" name="granted" value="true" />
+
+      <div>
+        <span className="block text-sm text-neutral-600 dark:text-neutral-400">
+          Grant capabilities this role does not have
+        </span>
+        <span className="block text-xs text-neutral-500 dark:text-neutral-400">
+          Tick any number — they are granted together, or not at all if one is refused.{' '}
+          {offerable.length} available.
+        </span>
+      </div>
+
+      {byScope.map((group) => (
+        <fieldset key={group.scope} className="space-y-2">
+          <legend className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+            {group.scope}-scoped ({group.items.length})
+          </legend>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">{SCOPE_NOTE[group.scope]}</p>
+          <div className="grid gap-1 sm:grid-cols-2">
+            {group.items.map((c) => (
+              <label
+                key={c}
+                className="flex cursor-pointer items-start gap-2 rounded border border-neutral-200 p-2 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-900"
+              >
+                <input type="checkbox" name="capability" value={c} className="mt-0.5" />
+                <span className="font-mono text-xs">{c}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      ))}
+
+      <button type="submit" className={BTN}>
+        Grant selected
+      </button>
+    </form>
   );
 }

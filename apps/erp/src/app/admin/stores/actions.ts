@@ -11,7 +11,13 @@
  * which is how DEF-180 happened.
  */
 import { redirect } from 'next/navigation';
-import { createStore, deactivateStore, reactivateStore, updateStoreDetails } from '@shareat/domain';
+import {
+  createStore,
+  deactivateStore,
+  reactivateStore,
+  setStoreStockModel,
+  updateStoreDetails,
+} from '@shareat/domain';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
@@ -105,6 +111,38 @@ export async function updateStoreAction(fd: FormData): Promise<void> {
     back(`/admin/stores/${storeId}`, { error: errorMessage(err) });
   }
   back(`/admin/stores/${storeId}`, { ok: 'Store updated. ⛔ The code is deliberately not editable — it is the stable handle.' });
+}
+
+/**
+ * ⭐ T-284 / DEF-316 — how a branch gains a second stockroom. Ian: *"shareat lipa needs more than
+ * 1 storage room, i can not edit the store."*
+ *
+ * ⛔ **Deliberately NOT a field on `updateStoreAction` above.** `stock_model` is an invariant, not
+ * a detail: `setStoreStockModel` runs a room-count pre-flight before it narrows, because the
+ * database guards this transition from the `stock_locations` side only (DEF-316). Folding it into
+ * the details save would route the column past that check.
+ */
+export async function setStoreStockModelAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/admin/stores');
+  const storeId = str(fd, 'storeId');
+  const raw = str(fd, 'stockModel');
+  // ⚠️ Validated here rather than cast: the value reaches the database through a CHECK constraint
+  //    either way, but a refusal that names the two legal values is worth more than a 23514.
+  if (raw !== 'single_room' && raw !== 'multi_room') {
+    back(`/admin/stores/${storeId}`, { error: 'Choose either one room or several rooms.' });
+  }
+  const model = raw as 'single_room' | 'multi_room';
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => setStoreStockModel(tx, actor, storeId, model));
+  } catch (err) {
+    back(`/admin/stores/${storeId}`, { error: errorMessage(err) });
+  }
+  back(`/admin/stores/${storeId}`, {
+    ok:
+      model === 'multi_room'
+        ? 'This store may now hold several stockrooms. Add them under Inventory / Locations.'
+        : 'This store is back to a single stockroom.',
+  });
 }
 
 export async function deactivateStoreAction(fd: FormData): Promise<void> {

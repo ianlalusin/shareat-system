@@ -178,13 +178,29 @@ export async function setStoreScopeAction(formData: FormData): Promise<void> {
 export async function setCapabilityGrantAction(formData: FormData): Promise<void> {
   const actor = await requireActor('/admin/users');
   const personId = str(formData, 'personId');
-  const capability = str(formData, 'capability') as Capability;
+  /**
+   * ⭐ T-283 — `getAll`, not `get`. The grant form submits one `capability` field PER TICKED BOX,
+   * so this is a list. `str(formData, 'capability')` read only the first and silently dropped the
+   * rest, which is the failure shape a multi-select form must never have.
+   *
+   * ⚠️ The REVOKE branch below sends no `capability` at all (it sends a `grantId`), so this is
+   * empty there and nothing downstream reads it. Kept as one read rather than two so the two
+   * branches cannot disagree about the field's name.
+   */
+  const capabilities = formData
+    .getAll('capability')
+    .filter((v): v is string => typeof v === 'string')
+    .map((v) => v.trim())
+    .filter((v) => v !== '') as Capability[];
   const grantId = str(formData, 'grantId');
   const granted = str(formData, 'granted') === 'true';
 
   try {
     await withOrgPrincipal(actor.orgId, async (tx) => {
       if (granted) {
+        if (capabilities.length === 0) {
+          throw new Error('Tick at least one capability to grant.');
+        }
         // ⭐ DEF-223 — the GRANT goes through `grantCapabilityAsActor`, which owns the
         // `authorize()` call, the self-check and the capability-name check. It used to be written
         // here, with no self-check at all: an admin could grant capabilities to themselves, and
@@ -192,7 +208,18 @@ export async function setCapabilityGrantAction(formData: FormData): Promise<void
         // grants, that self-grant became a route to appointing admins. Moved into `packages/auth`
         // for the reason this file's header already gives about role assignment — a rule in one
         // route file is a rule the next route file misses.
-        await grantCapabilityAsActor(tx, actor, { personId, capability });
+        // ⛔ ONE CALL PER CAPABILITY, deliberately — never a batched helper that gates once and
+        //    writes many. `grantCapabilityAsActor` owns the authorize(), the self-grant check and
+        //    the capability-name check that DEF-223 moved into `packages/auth` for the reason
+        //    this file's header gives: a rule in one route file is a rule the next route file
+        //    misses. Granting five at once must be five passes through that gate, not one.
+        //
+        // ⛔ And they share this ONE transaction, so a refusal on the fourth rolls back the first
+        //    three. Partial success would leave an administrator reading a success banner over a
+        //    half-applied authority change.
+        for (const capability of capabilities) {
+          await grantCapabilityAsActor(tx, actor, { personId, capability });
+        }
       } else {
         // ⚠️ The revoke branch keeps its own `authorize()` and is deliberately NOT self-checked:
         // revoking your own grant NARROWS your authority, so it cannot escalate, and refusing it
@@ -208,7 +235,13 @@ export async function setCapabilityGrantAction(formData: FormData): Promise<void
   } catch (err) {
     backToUser(personId, { error: errorMessage(err) });
   }
-  backToUser(personId, { ok: granted ? `Granted ${capability}.` : 'Grant revoked.' });
+  backToUser(personId, {
+    ok: granted
+      ? capabilities.length === 1
+        ? `Granted ${capabilities[0]}.`
+        : `Granted ${capabilities.length} capabilities: ${capabilities.join(', ')}.`
+      : 'Grant revoked.',
+  });
 }
 
 /**

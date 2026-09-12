@@ -7,7 +7,7 @@
  */
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
-import { stores, type RemittanceCadence } from '../../schema/stores';
+import { stores, type RemittanceCadence, type StockModel } from '../../schema/stores';
 
 export interface StoreCashPolicy {
   storeId: string;
@@ -172,6 +172,16 @@ export interface UpdateStorePatch {
   readonly address?: string | null;
   readonly contactNumber?: string | null;
   readonly tinBranchCode?: string | null;
+  /**
+   * ⭐ T-284 / DEF-316. The column has existed since migration `0062` and had no writer of any
+   * kind until now — every store has been `single_room`, the default, with no path off it.
+   *
+   * ⛔ **Never patch this through a general store-details save.** It is an INVARIANT, not a
+   * preference: `setStoreStockModel` in the domain runs the room-count pre-flight that the
+   * database does not have on this side (DEF-316), and reaching the column any other way skips
+   * it. `updateStoreDetails` deliberately does not forward this key.
+   */
+  readonly stockModel?: StockModel;
 }
 
 /**

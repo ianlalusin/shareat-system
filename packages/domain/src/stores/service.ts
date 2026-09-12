@@ -49,6 +49,8 @@ import { authorize, type Actor } from '@shareat/auth';
 // ⭐ The LEAF module, not `../organizations` — `organizations/index.ts` imports `createStore` from
 // this file, so importing its barrel back would close an import cycle. See `identifiers.ts`.
 import { normaliseBranchCode } from '../organizations/identifiers';
+// ⛔ The pure rule is CALLED, never re-implemented here — see `setStoreStockModel`.
+import { singleRoomViolation, type StockModel } from '../stock-locations/rules';
 
 const CAPABILITY = 'manage_stores' as const;
 
@@ -201,6 +203,69 @@ export async function updateStoreDetails(
       ? patch
       : { ...patch, tinBranchCode: normaliseBranchCode(patch.tinBranchCode) };
   await storesRepo.updateStore(tx, actor.orgId, storeId, normalised);
+}
+
+/**
+ * ⭐ **T-284 / DEF-316 — the first writer `stores.stock_model` has ever had.**
+ *
+ * Ian, 2026-09-12: *"shareat lipa needs more than 1 storage room, i can not edit the store."*
+ * The column and its CHECK were created by migration `0062`; nothing in the repository has ever
+ * written it, so every store has sat on the default `single_room` with no path off it. Same shape
+ * as DEF-299, DEF-260 and DEF-314 — built, constrained, never called.
+ *
+ * ## ⛔ Why this is its own function and not a sixth field on `updateStoreDetails`
+ *
+ * `stock_model` is an INVARIANT, not a preference — the schema says exactly that. It needs a
+ * pre-flight the other five fields do not, and a refusal about ROOMS, which is not something a
+ * general "save store details" call should have to know about. Same reasoning that gave
+ * `setWastageMonitor` below its own function and its own capability constant.
+ *
+ * ## ⛔ DEF-316 — the direction the DATABASE does not guard
+ *
+ * `stock_locations_single_room_guard_trg` fires on **`stock_locations`** and reads the store's
+ * model at that moment. **Nothing fires on `stores` when the model itself changes.** So
+ * `multi_room -> single_room` on a store already holding two rooms would land in a state the
+ * invariant forbids, with no error, and every later room insert would then refuse by pointing at
+ * a condition the store was already in.
+ *
+ * That transition has never been reachable because no writer existed. **This function is what
+ * makes it reachable, so it carries the guard in the same change.**
+ *
+ * ⚠️ **And this is currently the ONLY layer holding it.** Bible §15.11 — no layer may be the only
+ * one for a given risk — wants an `AFTER UPDATE OF stock_model ON stores` trigger reusing
+ * `0062:132-161`'s own counting query. DEF-316 carries that disposition; it needs a migration slot
+ * and none is claimed here. This is a disclosed temporary state, not a design.
+ *
+ * ## The rule is CALLED, never copied
+ *
+ * `singleRoomViolation` already answers this question and is already tested. `0062`'s own header
+ * records what a second copy costs: *"the pure rule filtered the whole list and got it right; the
+ * SQL did not, and only a test against real PostgreSQL could see the two disagree."*
+ *
+ * ⭐ **Widening is always safe.** `single_room -> multi_room` cannot violate anything — one room
+ * is a legal shape for a multi-room store — so it is never blocked. Only the narrowing direction
+ * is checked, which is also the only direction that can be wrong.
+ */
+export async function setStoreStockModel(
+  tx: Tx,
+  actor: Actor,
+  storeId: string,
+  model: StockModel,
+): Promise<void> {
+  await authorize(tx, actor, CAPABILITY, {});
+
+  if (model === 'single_room') {
+    const locations = await stockLocationsRepo.listLocations(tx, storeId);
+    const violation = singleRoomViolation(model, locations);
+    if (violation) {
+      throw new Error(
+        'This store cannot become single-room while it holds more than one active non-Receiving ' +
+          `room. Deactivate or merge the extras first — ${violation}`,
+      );
+    }
+  }
+
+  await storesRepo.updateStore(tx, actor.orgId, storeId, { stockModel: model });
 }
 
 // -----------------------------------------------------------------------------------------

@@ -27,6 +27,30 @@ const nextConfig = {
     // serverExternalPackages below — transpiling the wrapper is not the same as bundling the SDK.
     '@shareat/storage-firebase',
   ],
+  // ⭐ T-282 / DEF-317. WITHOUT this key Next caps a Server Action body at 1 MB
+  // (`next/dist/server/app-render/action-handler.js:519`), and every file upload in the app
+  // — the supplier invoice photo, the AR collection proof, the delivery document — died at
+  // 413 before the action ran. The domain's own per-purpose limits in
+  // `packages/domain/src/files/index.ts` (8 MB for a receipt, 25 MB for an onboarding
+  // document) were therefore unreachable for their whole existence: no size check, no
+  // content-type check and no EXIF strip ever saw the files people actually sent.
+  //
+  // The invariant: THE FRAMEWORK MUST NEVER BE THE LAYER THAT REFUSES A FILE THE DOMAIN
+  // WOULD ACCEPT. So this is bounded by the largest DECLARED PURPOSE_LIMITS.maxBytes
+  // (25 MB), not the largest one with a caller today (8 MB) — binding it to the reachable
+  // set leaves a green build and a production 413 for whoever wires the next purpose.
+  // 26mb = 25 MB + multipart boundary/field overhead.
+  //
+  // ⚠️ This is a blunt outer bound on EVERY action, not a control. The control is
+  // `uploadFile`, which refuses on purpose, type and size before a byte reaches storage.
+  // ⚠️ There is a SECOND limit with the identical symptom: Caddy's `request_body max_size`
+  // on the production droplet. Fixing this one does not fix that one.
+  // Guarded by `tests/unit/server-action-body-limit.test.ts`.
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '26mb',
+    },
+  },
   // Native/Node-only packages must not be bundled into the server build.
   // See PROJECT_BIBLE.md §12 landmine: Next.js server bundling of native deps.
   serverExternalPackages: ['postgres', 'firebase-admin', 'pino'],

@@ -125,7 +125,7 @@ describe('T-262 — the two non-zero controls required by §6.7(b)', () => {
  *     which usually means it is now COMPLIANT and should be removed from the baseline (do not
  *     "fix" this by deleting the baseline entry without checking why first — the control could
  *     also have been deleted, renamed, or moved to a file that no longer matches);
- *   - the accepted-baseline totals stop matching 151 FAIL / 53 UNRESOLVED — a cheap early signal
+ *   - the accepted-baseline totals stop matching 151 FAIL / 56 UNRESOLVED — a cheap early signal
  *     before the itemised diff below even runs.
  */
 function multisetDiff(baselineItems: readonly (string | number)[], actualItems: readonly (string | number)[]) {
@@ -140,8 +140,17 @@ function multisetDiff(baselineItems: readonly (string | number)[], actualItems: 
 }
 
 describe('T-262 / DEF-269 — every interactive control matches the accepted baseline', () => {
-  it('accepted-baseline totals: 151 FAIL / 53 UNRESOLVED', () => {
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 151, unresolved: 53 });
+  // ⭐ 53 → 56, T-283 + T-284 (2026-09-12). THREE controls entered the population, all of them
+  //   intentionally-accepted additions (the second of the three red cases named above), none a
+  //   regression. T-284 added the two `stockModel` radios on `admin/stores/[id]/page.tsx` — the
+  //   first writer that column has ever had (DEF-316). And T-283's capability-grant
+  //   multi-select replaced a single `<select>` with a checkbox. All three are `unresolved` for
+  //   the same reason the other 37 files are: an intrinsic checkbox/radio box is not resolvable
+  //   from source (Ian's ruling, §6.1). ⭐ FAIL is unchanged at 151 — nothing became undersized,
+  //   because all three reuse the existing full-width touch-target row idiom rather than a new
+  //   control shape.
+  it('accepted-baseline totals: 151 FAIL / 56 UNRESOLVED', () => {
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 151, unresolved: 56 });
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

@@ -5,6 +5,7 @@ import { storeDetail } from '../lib';
 import {
   deactivateStoreAction,
   reactivateStoreAction,
+  setStoreStockModelAction,
   updateStoreAction,
 } from '../actions';
 import { Page } from '@/components/shell/Page';
@@ -182,6 +183,79 @@ export default async function StoreDetailPage({
             <button type="submit"
               className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900">
               Save
+            </button>
+          </form>
+
+          {/**
+            * ⭐ T-284 / DEF-316 — Ian: *"shareat lipa needs more than 1 storage room, i can not
+            * edit the store."* `stores.stock_model` was created by migration `0062` and has had
+            * NO writer of any kind since; every store sat on the default `single_room` with no
+            * path off it. This is that path.
+            *
+            * ⛔ Its own form, not a field on Details above, because narrowing to single-room runs
+            * a room-count pre-flight the database does not have on this side (DEF-316) — folding
+            * it in would route the column past that check.
+            */}
+          <form
+            action={setStoreStockModelAction}
+            className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
+          >
+            <h2 className="text-sm font-medium">How this branch keeps stock</h2>
+            <input type="hidden" name="storeId" value={store.id} />
+            <p className="text-xs text-neutral-500">
+              A Receiving room never counts toward this — every branch needs somewhere to park a
+              delivery, including one that keeps its stock in a single place.
+            </p>
+
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-neutral-200 p-3 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-900">
+              <input
+                type="radio"
+                name="stockModel"
+                value="single_room"
+                defaultChecked={store.stockModel === 'single_room'}
+                className="mt-1"
+              />
+              <span>
+                <span className="block text-sm font-medium">One room</span>
+                <span className="block text-xs text-neutral-500 dark:text-neutral-400">
+                  A branch or kiosk. Stock lives in one place, which is also where usage posts
+                  from.
+                </span>
+              </span>
+            </label>
+
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-neutral-200 p-3 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-900">
+              <input
+                type="radio"
+                name="stockModel"
+                value="multi_room"
+                defaultChecked={store.stockModel === 'multi_room'}
+                className="mt-1"
+              />
+              <span>
+                <span className="block text-sm font-medium">Several rooms</span>
+                <span className="block text-xs text-neutral-500 dark:text-neutral-400">
+                  A commissary, or a branch with a separate stockroom and kitchen. Once this is
+                  saved, add the rooms under Inventory / Locations.
+                  {/* ⚠️ Named, not linked. An inline <Link> inside `text-xs` help text models at
+                      16px against T-262's 24px touch-target floor, and `action-link-sweep`
+                      counted it as a NEW FAIL — a real undersized control, not a bookkeeping
+                      gap. Baselining it would have accepted an accessibility defect to save a
+                      sentence; the success banner after saving names the destination anyway. */}
+                </span>
+              </span>
+            </label>
+
+            <p className="text-xs text-neutral-500">
+              ⚠️ Going back to one room is refused while the branch still has more than one active
+              non-Receiving room — deactivate or merge the extras first.
+            </p>
+
+            <button
+              type="submit"
+              className="rounded border border-neutral-300 px-4 py-2 text-sm font-medium dark:border-neutral-700"
+            >
+              Save stock model
             </button>
           </form>
 

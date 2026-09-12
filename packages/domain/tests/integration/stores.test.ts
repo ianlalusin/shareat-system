@@ -19,6 +19,7 @@ import {
   createStore,
   deactivateStore,
   reactivateStore,
+  setStoreStockModel,
   storeReadiness,
   updateStoreDetails,
 } from '../../src/stores/service';
@@ -302,5 +303,101 @@ describe('T-222 invariant 10 — a store created in org A is invisible to org B'
     const { storeId } = await make(adminA);
     const foreign = await withOrgPrincipal(orgA, (tx) => storesRepo.getById(tx, orgB, storeId));
     expect(foreign).toBeUndefined();
+  });
+});
+
+
+/**
+ * ⭐ **T-284 / DEF-316 — `stores.stock_model`'s first writer, and the guard that ships with it.**
+ *
+ * Ian, 2026-09-12: *"shareat lipa needs more than 1 storage room, i can not edit the store."* The
+ * column was created by migration `0062` and nothing has ever written it, so every store has sat
+ * on the default `single_room`.
+ *
+ * ⛔ **Why the refusal test is the important one.** The database guards this invariant from the
+ * `stock_locations` side only — `stock_locations_single_room_guard_trg` fires on room writes and
+ * reads the store's model at that moment. **Nothing fires on `stores` when the model changes**
+ * (DEF-316), so the narrowing direction has no database backstop and this service check is
+ * currently the ONLY layer holding it. An untested single layer is not a layer.
+ *
+ * ⚠️ These run against real Postgres, so the trigger is the real trigger — the two-room setup
+ * below only succeeds because the store is genuinely `multi_room` first.
+ */
+describe('T-284 / DEF-316 — changing how a branch keeps stock', () => {
+  /** A second non-Receiving room, which only a multi_room store may hold. */
+  async function addRoom(storeId: string, code: string): Promise<string> {
+    return withOrgPrincipal(orgA, async (tx) => {
+      const types = await stockLocationsRepo.listLocationTypes(tx, orgA);
+      const existing = await stockLocationsRepo.listLocations(tx, storeId);
+      const typeId = types[0]?.id ?? existing[0]!.typeId;
+      const { id } = await stockLocationsRepo.insertLocation(tx, {
+        orgId: orgA,
+        storeId,
+        code,
+        name: code,
+        typeId,
+        role: 'storage',
+        purpose: 'normal',
+        isDefault: false,
+        createdBy: adminA.personId,
+      });
+      return id;
+    });
+  }
+
+  it('⭐ a store can be switched to multi_room — the transition that had no writer at all', async () => {
+    const { storeId } = await make(adminA);
+    const before = await withOrgPrincipal(orgA, (tx) => storesRepo.getById(tx, orgA, storeId));
+    expect(before!.stockModel).toBe('single_room');
+
+    await withOrgPrincipal(orgA, (tx) => setStoreStockModel(tx, adminA, storeId, 'multi_room'));
+
+    const after = await withOrgPrincipal(orgA, (tx) => storesRepo.getById(tx, orgA, storeId));
+    expect(after!.stockModel).toBe('multi_room');
+  });
+
+  it('⭐ and only THEN can it hold a second room — the trigger proves the model actually changed', async () => {
+    const { storeId } = await make(adminA);
+    // ⛔ The state that proves the switch is real: this insert is refused while single_room.
+    await expect(addRoom(storeId, uid('R2'))).rejects.toThrow();
+
+    await withOrgPrincipal(orgA, (tx) => setStoreStockModel(tx, adminA, storeId, 'multi_room'));
+    await expect(addRoom(storeId, uid('R2'))).resolves.toBeTruthy();
+
+    const rooms = await withOrgPrincipal(orgA, (tx) => stockLocationsRepo.listActiveLocations(tx, storeId));
+    expect(rooms.length).toBe(2);
+  });
+
+  it('⛔ DEF-316 — narrowing back to single_room is REFUSED while two rooms are active', async () => {
+    const { storeId } = await make(adminA);
+    await withOrgPrincipal(orgA, (tx) => setStoreStockModel(tx, adminA, storeId, 'multi_room'));
+    await addRoom(storeId, uid('R2'));
+
+    await expect(
+      withOrgPrincipal(orgA, (tx) => setStoreStockModel(tx, adminA, storeId, 'single_room')),
+    ).rejects.toThrow(/more than one active non-Receiving room/);
+
+    // ⭐ And the refusal left the column alone. A guard that throws AFTER writing is not a guard.
+    const after = await withOrgPrincipal(orgA, (tx) => storesRepo.getById(tx, orgA, storeId));
+    expect(after!.stockModel).toBe('multi_room');
+  });
+
+  it('⭐ narrowing SUCCEEDS once the extra room is deactivated', async () => {
+    const { storeId } = await make(adminA);
+    await withOrgPrincipal(orgA, (tx) => setStoreStockModel(tx, adminA, storeId, 'multi_room'));
+    const extra = await addRoom(storeId, uid('R2'));
+
+    await withOrgPrincipal(orgA, (tx) => stockLocationsRepo.setLocationStatus(tx, extra, 'inactive'));
+    await withOrgPrincipal(orgA, (tx) => setStoreStockModel(tx, adminA, storeId, 'single_room'));
+
+    const after = await withOrgPrincipal(orgA, (tx) => storesRepo.getById(tx, orgA, storeId));
+    expect(after!.stockModel).toBe('single_room');
+  });
+
+  it('⛔ a manager may not change it — manage_stores is an admin capability', async () => {
+    const { storeId } = await make(adminA);
+    await expect(
+      withOrgPrincipal(orgA, (tx) => setStoreStockModel(tx, managerA, storeId, 'multi_room')),
+    ).rejects.toBeInstanceOf(AuthorizationError);
   });
 });
