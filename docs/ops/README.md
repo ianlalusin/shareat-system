@@ -72,6 +72,29 @@ also `ALTER TABLE … DISABLE ROW LEVEL SECURITY`, which hands back exactly what
 And ⛔ **do not let it own tables** — a table's owner bypasses RLS by default (migration `0011`'s own
 comments record why), so ownership would defeat the whole exercise as surely as `BYPASSRLS` did.
 
+### ⛔ The storage bucket — corrected 2026-09-12 (DEF-311)
+
+`FIREBASE_STORAGE_BUCKET` on the host was **`shareat-hub-v2.firebasestorage.app`**, which is **v1's**
+bucket (the project's default, used by POS and CUSTOMER — `docs/discovery/12-shared-infrastructure.md:130,140`).
+ERPv2's private accounting bucket is **`shareat-hub-v2`**, whose rules are deny-all for every path,
+reachable only by the Admin SDK which bypasses rules. Corrected on the host and verified: the app now
+logs *"Firebase driver installed for bucket shareat-hub-v2"*.
+
+⭐ **`stored_files` held ZERO rows when the switch was made**, so nothing had ever been written to the
+wrong bucket and nothing needed migrating. ⚠️ Had it been non-zero, the objects would have had to move
+FIRST — switching with live rows would leave them pointing at bytes the new bucket does not have.
+
+⚠️ **This value does NOT come from the deploy workflow.** `deploy.yml` passes only the
+`NEXT_PUBLIC_FIREBASE_*` build-time variables; the private server-side bucket lives solely in
+`/srv/shareat-shared/.env.local`, so a deploy will not overwrite or restore it either way. It is a
+hand-maintained value on the host.
+
+⛔ **How it went wrong, and why nothing caught it:** the correct bucket is documented in two places —
+`.env.example:55-60` and `docs/reference/private-bucket-storage-rules.md:62-63`, the latter warning by
+name against the exact value that was deployed. **Nothing compares the deployed configuration against
+the documented one.** `npm run storage-smoke` does not: it proves the configured bucket is reachable
+by the Admin SDK, and v1's bucket is reachable too, so all five checks pass against the wrong bucket.
+
 ### Rollback
 
 One line, and the backup is dated:
