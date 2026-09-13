@@ -1,257 +1,209 @@
-# Handoff — 2026-09-12 (evening wrap-up, FIVE sessions)
+# Handoff — 2026-09-13
 
-> ⛔⛔ **PRODUCTION HAS ONE ORGANISATION, NOT ZERO — AND THE NIGHTLY ORPHAN SWEEP IS ARMED AND
-> CANNOT RUN.** Measured on the host 2026-09-12 15:57 UTC, after Ian installed and armed the
-> units by hand. `/var/log/shareat/orphan-file-sweep.log` reads
-> **`npm error Missing script: "orphan-file-sweep"`** — the deployed build predates `55fc4bd`,
-> the commit that added that script. And `/var/log/shareat/budget-reissue.log` reads
-> **`budget-reissue: ok — created 0 · 1 orgs`**, naming **SHAREAT OPC**. **Filed as DEF-326.**
+> ✅ **GATES ARE GREEN AT `3c25275`.** No red banner. ⚠️ But read the integration line below before
+> quoting a green: the **full local integration suite was NOT run to a trustworthy result** — it was
+> OOM-killed twice today, and **DEF-245's standing rule is that CI is the only real integration
+> gate.** This handoff says so rather than implying a local green.
 >
-> ⛔ **NINE FILES IN `docs/` ASSERT ZERO ORGANISATIONS AND EVERY ONE IS NOW SUSPECT**, including
-> `docs/ops/README.md`, this file, `docs/ROADMAP.html`, and **`docs/tasks/294-*.md`, whose
-> "do not build" assessment rests on it.** ⚠️ **Re-derive them; do not patch the number.** T-294's
-> conclusion may survive — the risky loop still cannot execute because the sweep cannot start —
-> but it has to be re-argued on the real figure.
+> ⛔⛔ **NOTHING IS PUSHED. `main` is four commits ahead of `origin/main`, deliberately.** Pushing is
+> what deploys, and the top commit **rewrites how people sign in**. See *"Do not decide these
+> alone"* — this is the one thing waiting on Ian.
 >
-> ⚠️ **Deploys auto-fire on green CI (`deploy.yml` triggers on `workflow_run` of CI on `main`), and
-> `ci.yml:80` runs the integration suite — so DEF-325 may be blocking every deploy. ⛔ But that
-> cannot explain a script missing since this morning, because DEF-325 only appeared tonight.**
-> Read `gh run list --workflow=CI --branch=main` and `gh run list --workflow=Deploy` before
-> adopting either hypothesis.
+> ⭐ **Yesterday's headline is CLOSED: the nightly orphan sweep RAN on production**, verified in its
+> own log (`removed 0 · 1 orgs`, `Result=success`), after the first successful deploy in twenty
+> hours. **Neither hypothesis in DEF-326 was right** — see below.
 >
-> ✅ **What does NOT change:** DEF-311's storage-bucket finding was settled by a measured
-> `stored_files` count of **zero rows**, not by an organisation count. That was a measurement and
-> it stands. ⚠️ **What does change:** `rolbypassrls` was live in production *while an organisation
-> existed*. It failed closed and was never a leak, but *"no second set of books to reach into"* is
-> no longer the reassurance it was.
->
-> ⛔ **THE INTEGRATION SUITE IS RED BY ONE TEST, AND IT IS NOT A REGRESSION.**
-> **1 failed / 2834 passed across 122 files, 1828s.** The single failure is
-> `packages/domain/tests/integration/position-defaults.test.ts:537` (T-289 case 13) —
-> `Test timed out in 30000ms`. **That file passes 19/19 in 20.56s run alone**, verified on the
-> same database minutes later. It creates a scratch database and runs all 146 migrations from
-> zero, which legitimately exceeds a 30s budget while 121 other files work the same Postgres
-> instance. **Filed as DEF-325; fixing it is item 1.** ⭐ **Zero `Hook timed out` in the whole
-> run** — T-285's fix held, and DEF-313 did not recur once.
->
-> ⚠️ **AND READ THIS BEFORE TRUSTING ANY GATE IN THIS FILE:** that run was launched as
-> `node it.mjs …; echo "EXIT=$?"`, so **the harness reported exit 0 — the echo's status, not
-> vitest's.** The failure was found by reading the log, not the exit code. **Never end a
-> background gate command with `echo`;** it launders a non-zero exit into a zero one.
->
-> Written for a **COLD start**. It assumes you have never seen this project.
-> Read `docs/RULES.md` first, then this file. `PROJECT_BIBLE.md` wins any disagreement.
->
-> ⚠️ **This was a five-session day on one working tree.** Every collision was on a *number*,
-> never on a file. If you are one of several sessions, read §"Working a shared tree" before
-> touching anything.
+> Written for a **COLD start**. Read `docs/RULES.md` first, then this. `PROJECT_BIBLE.md` wins any
+> disagreement.
 
 ## Where things stand
 
-**Fourteen tasks built, two assessments that correctly concluded *don't build it*, and one spec
-written and held.** Sixteen commits from the orchestrator plus five from the two Fable sessions.
-Nothing is half-built; every session reported final state and released.
+**Production is healthy and current.** Deploys work and have proven it unattended three times. All
+nine timers are armed and all eight scheduled jobs report `success`. The database is at migration
+`0147` locally; **production is at `0146`** and gets `0147` on the next deploy.
 
-⭐ **Ian's own three bug reports were all real and all bigger than they looked.**
+⛔ **PIN sign-in is still broken in production** (DEF-333) — and the fix is committed but not
+deployed. Email sign-in works and is the only way in. **Two people, so it is livable; it is not
+fixed until the cutover in *"Pick up here"* runs.**
 
-| He said | It was |
-|---|---|
-| *"invoice not saving when an image is uploaded"* | **Every upload over 1 MB died, silently** — no error, no console message. DEF-317 / T-282, then T-296 |
-| *"shareat lipa needs more than 1 storage room, i can not edit the store"* | The field had existed since migration `0062` with **no writer in any layer**. DEF-316 / T-284 |
-| *"i can access many restricted pages and actions for staff"* | Pages yes, **actions no — he corrected this himself**. Exposure, not escalation. T-288 / bible row 199 |
-
-## Gates at `HEAD`
+## Gates at `3c25275`
 
 | Gate | Result |
 |---|---|
 | `npm run typecheck` | **exit 0** |
-| `npm run test` (unit) | **109 files · 1464 passed · 1 skipped · 0 failed** (exit code checked, not inferred from `tail`) |
-| `npm run build` | **exit 0**, port 9008 enumerated free by process list first |
-| `npm run toc` + `toc-freshness` | regenerated after bible rows 199 and 200; **4/4** |
-| Integration — full suite | ⛔ **1 failed / 2834 passed across 122 files, 1828s** on `shareat_test_orch` via `it.mjs`. The one failure is DEF-325, a from-zero migration test exceeding `testTimeout` under suite load; it passes 19/19 in 20.56s alone. ⭐ **Zero `Hook timed out` across the entire run** — T-285 held |
-| Smoketests in the browser | T-288 (manager + staff, nav **and** typed-URL refusal), T-290 (28 assertions), T-296 (four checks incl. the no-JS path) |
+| `npm run test` (unit) | **exit 0** — 111 files, 1472 passed, 1 skipped |
+| `npm run build` | **exit 0**, port 9008 enumerated free first |
+| `npm run toc` | exit 0, 2 files checked |
+| Integration — **scoped** | **exit 0** — 21 files, **810 passed**, 295s, on `shareat_test_orch` (`packages/auth` + `packages/db` + `apps/erp` integration) |
+| Integration — **full suite** | ⛔ **NOT RUN.** OOM-killed twice today; **2.6 GB free of 15.6** measured at the second kill. **DEF-245** — CI is the real gate |
+| Secrets scan | clean — nothing under `secrets/` or `.env*` in status or in the last four commits |
 
-⛔ **Never run `npm run test:integration`** — it hits the shared database. Give every lane its own
-with `~/.claude/skills/orchestrator/tools/make-test-dbs.mjs` and run via `it.mjs <dbname>`.
+⚠️ **A scoped sweep earlier showed 808/810.** The two failures were `rls.test.ts` hook timeouts;
+run alone that file passes **28/28, exit 0, 49.86s**. DEF-313, discriminated by measurement, not
+assumed. Both were the *tenancy* invariants — exactly where a `persons.kind` regression would show.
 
-## ⛔ What needs Ian — five things, all small, none blocking
+## What happened this session
 
-| # | What | Why only he can |
-|---|---|---|
-| 1 | ✅ **DONE 2026-09-13 — all NINE timers are now armed.** Ian armed the two on 2026-09-12 and `shareat-month-end-retry.timer` on 2026-09-13 (DEF-332 — it had been installed and never enabled, and `systemctl list-timers` cannot show that, even with `--all`). ⛔ **THE OLD GUIDANCE HERE WAS WRONG IN FOUR WAYS AND ONLY ONE OF THEM WAS THE ORGANISATION COUNT.** It said *"expect THREE units to fail nightly"*: (1) it named three scripts as carrying the empty-run guard when **all eight** carry it; (2) `attendance-sweep` is HOURLY and `firestore-relay` runs EVERY TWO MINUTES, so on a zero-organisation premise those two alone would have produced **~744 failures a day**, not "nightly"; (3) `month-end` fires monthly on the 15th, never nightly under any premise; (4) production holds **one** organisation, SHAREAT OPC. ⭐ **THE CORRECT EXPECTATION IS NOW ZERO FAILING UNITS.** Every job exits 0 against one organisation, and the single expected failure — `shareat-orphan-file-sweep`, for `Missing script` — **was fixed and verified actually running on 2026-09-13** (DEF-326 / DEF-327). ⛔ **So if ANY unit is failing now, it is a NEW and unexplained fault, not expected noise.** That distinction is the entire value of the correction: the old guidance made every red light explainable in advance, which is the failure mode DEF-313 and T-262's ruling were both about | Done — nothing needed |
-| 2 | **`ssh root@159.223.46.224 'grep APP_TIMEZONE /srv/shareat-shared/.env.local'`** ⛔ **Before T-292 deploys.** That check now THROWS at env load, so a value that disagrees with `Asia/Manila` stops the app booting. Absent key is safe (defaults); present-and-different is an outage. **DEF-288's shape** | Production host |
-| 3 | **Caddy `request_body max_size`** on the same host — a second body limit that reproduces DEF-317 in production with an identical silent symptom. Untested | Production host |
-| 4 | **Photograph a real receipt and check the small print is readable** after compression. T-296's synthetic fixture cannot settle it: 28px text at 4000px becomes 14px at 2000px, and real receipt text is usually larger | Human judgement |
-| 5 | **Two business questions from T-288** — see `docs/tasks/288-*.md`, addressed to him | Business decision |
+### 1. Nothing had deployed for twenty hours, and neither recorded hypothesis was right
 
-### The two T-288 questions, stated plainly
+`DEF-326` left two theories and told the next session to read the run logs instead of adopting
+either. Both were wrong.
 
-⛔ **`/statutory-discounts` is readable by every signed-in person, and it holds customers' names
-and government ID numbers.** `statutory_discount_records` carries `holder_name` and `id_number`,
-read off a physical senior-citizen or PWD card. It is the only place T-288's map leaves *customer*
-personal data open to a cashier on the shared counter tablet — the exact population the task was
-written for. ⚠️ **It is a question, not a defect:** a cashier *records* SC/PWD discounts and holds
-`record_statutory_discount`, so they must touch that data. **But recording one discount is not
-browsing the store's whole register.** Recommendation in the task doc: gate the register on
-`view_financial_reports`, leave the recording flow alone.
+- **DEF-327** — every Deploy had been failing at the migrate step since the production role was
+  tightened: `permission denied for database defaultdb`, 42501. `deploy.yml` ran a bare
+  `npm run db:migrate` and inherited `shareat_app_prod`, which by design cannot migrate. Under
+  `set -e` that aborts **before** the symlink swap, so the host kept serving the old release and
+  showed no error anywhere. **`docs/ops/README.md` predicted this on the day it started.**
+- **DEF-328** — CI was red for a **one-character mismatch between two placeholder project ids** in
+  `ci.yml`, not for DEF-325. **DEF-325 never once appeared as a CI failure.**
+- Three blockers were stacked where the brief named one. Fixed in `5bd6d44`, `fd95578`.
 
-⚠️ **And a quieter one: `view_financial_reports` was chosen as the gate for `/owners`, `/loans`,
-`/liabilities`, `/money-accounts`, `/money-transfers` and `/prepaid` because it is the capability
-that happens to separate staff from manager** — not because anyone decided a manager should see
-owner drawings. It works, it is defensible, **nobody ruled on it.** A business question wearing a
-technical answer.
+### 2. Ian's own bug report was, for the fourth time, bigger than it looked
 
-⚠️ **A third, smaller:** two rows in `stored_files` still exceed 1 MB — both from the DEF-317
-smoketest, hours before T-296 existed. *"No stored photo exceeds 1 MB"* is true **going forward**.
-Cleaning history is a separate decision and is not assumed.
+*"it says no store is configured but I can see the store inside"* → **PIN sign-in dead in production
+for everyone** (DEF-333). The sign-in page read `stores` through the ordinary connection before
+anyone authenticated. ⭐ **Found only because the first authenticated request under the tightened
+role had never happened** — five sessions, latest 2026-09-11, role changed 2026-09-12 — and he was
+asked to sign in specifically to test that.
 
-## Decisions Ian made today, and where each lives
+### 3. Sign-in is now two layers (T-304 + T-303, `58f198a`) — built, green, NOT deployed
+
+A per-store shared email/password signs the tablet in; a PIN then identifies the person. **It is
+v1's own pattern** (`ERP-rebuild/src/app/local-user-login/page.tsx`). It closes DEF-333 by
+**deleting the read, not widening a door** — `PRE_AUTH_PATHS` went 3 → **1**.
+
+Review caught one thing that would have shipped: the cooldown message rendered a **UTC** time to a
+Manila cashier — eight hours in the past, at the shift change the whole tuning argument was about —
+and every test passed because CI is UTC too.
+
+### 4. Nine documents asserted zero organisations; production has one (T-300, `f6c7df6`)
+
+**SHAREAT OPC**, `created_at 2026-09-08T15:56:52Z`, measured directly. 35 assertions re-derived, not
+patched. ⭐ **`ops/README`'s own `count(*) → 0` was never a census** — it was run as a non-bypassing
+role under FORCE RLS and would read 0 against any number of organisations.
+
+### 5. The pattern of the day, found SIX times
+
+**The knowledge was already written down, correctly, and disconnected from the decision that needed
+it.** `PRE_AUTH_PATHS` vs bible row 194 · `bible:1503` vs `ops/README` · nine timer files vs eight
+armed · `credentials.ts:64` vs DEF-335 · a spec's rejected draft above its own ruling · and
+`formatBusinessDateTime` — the *only sanctioned* server date formatter, **never once called**, which
+is why the first person who needed it reached for the UTC-broken one.
+
+⛔ **That is a different problem from ignorance and needs a different fix: reconcile the lists we
+already keep, not write more of them.**
+
+### Decisions Ian made today, and where each lives
 
 | Decision | Recorded in |
 |---|---|
-| DEF-302 → **(b)** make the stock-period refusal honest | register DEF-302 · T-281 · `d83e295` |
-| T-276/DEF-305 → **(c)** backfill a gap and report the run `partial` | `docs/tasks/276-*.md` header |
-| **Arm both unarmed timers now**, accepting nightly failures | `docs/ops/README.md` §2026-09-12 |
-| DEF-314 → **build the override screen; it was always meant to exist** | register DEF-314 — ⚠️ **needs a task number; not yet specced** |
-| *"do both hide the menu and gate the reads"* | **bible row 199** |
-| Position access defaults: additive, materialised grant rows | **bible row 198** |
-| *"only admin can add or retire a position"* | `docs/tasks/297-*.md` (spec, NOT built) |
-| *"Fix 6, 4, 3 now; spec 1, 2, 5"* — the six-item sequencing | T-282/283/284 built; T-286/287/288 spec'd |
-| Compression: **dimensions not quality**, 1280px floor that refuses | T-296 · `cb24455` |
-| *"1 expound in laymans term"* — twice, unprompted | **bible row 200** |
+| Apply the three pending migrations **by hand, watched**, before trusting the pipeline | DEF-327 · done, 127 → 130 |
+| Arm `shareat-month-end-retry.timer` | **DEF-332, closed same day** |
+| PINs become **globally unique**; block duplicates | `docs/tasks/302-*.md` — **deferred, built SECOND** |
+| Two-layer sign-in, v1's pattern | `docs/tasks/304-*.md` |
+| One shared credential **per store**, not one for the business | `docs/tasks/304-*.md` |
+| *"several, regularly"* work at more than one branch | T-302's sequencing |
+| Lockout **10 misses / 60s / 2-minute cooldown** (revised from 5/5min) | `docs/tasks/303-*.md` |
+| Terminal password **remembered on the tablet** | `docs/tasks/304-*.md` |
+| `provision-terminal.ts` joins the closed cross-org caller list | ⭐ **`PROJECT_BIBLE.md` row 201** |
+| CI: make docs-only pushes cheap rather than switching CI off | `docs/tasks/306-*.md` |
 
-⚠️ **Two of his instructions were deliberately NOT recorded as project rules** — *"use most 5
-sonnet agents to do discovery"* and *"use opus and sonnet agents to write codes"*. They are
-session process preferences, not standing rules. Noted here so the omission is visible.
+⭐ **Every decision is recorded outside the transcript.** Nothing is pending write-up.
 
-## ⭐ The pattern of the day — six things built, tested, green, and unreachable
+## Pick up here
 
-**DEF-299** a nightly job with nothing to run it · **DEF-260** `activateTerminal`, no production
-caller · **DEF-314** a capability ratified in two bible rows with no caller anywhere ·
-**DEF-316** `stores.stock_model`, no writer since it was created · **DEF-320** four declared
-upload purposes nothing passes · **DEF-321** the census that detects this, itself unwired.
+1. ⛔ **PUSH, THEN RUN THE SIGN-IN CUTOVER.** It is written in full in
+   `docs/tasks/304-two-layer-terminal-sign-in.md` §Cutover. The sentence the whole procedure exists
+   to make true: **an admin signing in by email reaches the app at every step.** Preconditions, the
+   ordered steps and the rollback are all there. ⚠️ Ian creates the store's Firebase account (that
+   half cannot be ours), then `scripts/provision-terminal.ts`.
+2. **Watch the first push's CI run against T-306's written prediction** — a docs push ~2-4 min with
+   four steps **skipped**, a code push unchanged ~11 min. The next push carries the change and is
+   therefore its own first test. ⭐ Hold it to the prediction rather than assuming it worked.
+3. **T-302** — global PINs. Specced, approved, deferred **on purpose** until sign-in is healthy, so
+   that re-issuing the two live PINs happens on a system where PIN login works.
+4. **DEF-325's stall is still unexplained.** DEF-334 was confirmed deterministically but its shape
+   is wrong (a fast explicit error, not a 30s stall), so **the 120s timeout is NOT yet dead weight.**
+   Re-measure before deleting it.
 
-⛔ **Six in one day is not six coincidences, and every one was found by a person reading — never
-by a gate.** T-293 assessed whether one guard could catch them: **it cannot.** They are four
-different shapes (function / DB column / map member / optional property) with different
-false-positive classes. **Shape A is now guarded (T-295's ratchet). B, C and D are three separate
-unbudgeted builds and must not be bundled.**
+## Do not decide these alone — they are Ian's
 
-## ⭐ Three register rows were corrected by the lanes sent to build them
-
-- **DEF-309's own remedy was defective in exactly the way DEF-309 is about** — a whole-file check
-  a ninth job would have passed on its siblings' calls. Caught before a line was written.
-- **DEF-315 overstated two of four items.** `APP_TIMEZONE` is read by **nothing**; the documented
-  consequence is false against the code. `FIREBASE_PROJECT_ID` never coexists with its twin in one
-  process, so no in-repo check closes that risk.
-- **DEF-307's piece 1 was already done** hours earlier by T-277 and never ticked off.
-
-⛔ **A row's REMEDY is as perishable as its DIAGNOSIS. Re-derive both before acting on either.**
-Four dispositions have now turned out wrong: DEF-279, DEF-301, DEF-309, DEF-307.
-
-## Working a shared tree — what five sessions taught, the hard way
-
-1. ⛔ **"Same file" is not the collision question. "What does that file import, and who brings
-   it" is the other half.** Three sessions agreed a landing order that would have broken the
-   build, because one file imported new code from *both* tasks. Only one session checked.
-   **Split on the FILE boundary, not the task boundary** — land the shared file last, after both
-   halves of its dependencies are on main.
-2. ⛔ **A green unit run is not evidence typecheck is green.** Vitest does not typecheck. Both
-   were true simultaneously today, tests green and `tsc` red on a test importing a missing module.
-3. ⛔ **A gate reading is true for minutes, not for a message.** Four stale-photograph incidents,
-   a different session each time.
-4. ⛔ **Reviewing a diff by filtering for your own identifier cannot detect a collision on that
-   identifier, by construction** — the collision *is* both parties using the same string. A
-   session lost an uncommitted register row this way while reviewing carefully. DEF-264 repeating.
-5. ⛔ **Numbers must be allocated centrally.** Three collisions today, all on numbers, none on
-   files. Every session declared its file scope and honoured it.
-6. ⚠️ **Separate lane databases are not a separate server.** Six databases on one Postgres
-   instance share buffers, WAL and CPU. DEF-313's timeouts and two `CONNECT_TIMEOUT` page stalls
-   both came from that.
-7. ⚠️ **"Needs a browser" and "needs the dev server" are different requirements.** A session was
-   queued behind a port for canvas tests that never touched the app.
+- ⛔⛔ **WHETHER TO PUSH.** Four commits sit unpushed. Pushing deploys the sign-in rewrite to
+  production. ⭐ **Recommendation: push.** It cannot make things worse — PIN sign-in is already at
+  zero, `0147` is additive-only, and invariant 7 + test 6 protect the email form from both states.
+  But it changes the front door of a live system and the cutover has steps only he can do.
+- **DEF-329** — nothing asserts CI's own env block satisfies the contracts the app refuses to start
+  without. Recommended shape is written; unbudgeted, needs a task number.
+- **A fourth `persons` reader** could appear and compile clean — the `kind` filter is fail-open.
+  Lane C found no fourth today and explained by category. A build-enforced guard is the fix.
 
 ## Traps that have actually bitten — live in this area right now
 
-- ⛔ **Editing `docs/DEFECTS-REGISTER.md` by string surgery breaks it three different ways.** Shell
-  backticks get interpreted; a missing newline merges two rows; an anchor on a distant landmark
-  lands in the wrong table. **Ten rows spent part of today inside the "Open questions" table.**
-  Put the row text in a plain FILE and insert with a checked script anchored on the table's own
-  last row.
-- ⛔ **A bible row shifts every TOC line below it.** `npm run toc`, then re-run the unit suite.
-- ⛔ **A seed fixture's name can lie.** `Dev Cashier` / PIN `333333` held **`manager`** for seven
-  days while the sign-in page advertised it as a cashier. It briefly made correct access filtering
-  look broken. DEF-323 — instance fixed, class open.
-- ⛔ **A duplicate-key error in an integration test is not self-evidently a real defect** — check
-  whether a `beforeEach` truncate above it timed out first.
-- ⚠️ **In PowerShell, `VAR=1 cmd` does not set the variable.** Use `$env:VAR=1` as its own statement.
-- ⚠️ **Re-derive a smoketest recipe before trusting it.** Two sessions were bitten in two days.
+- ⛔ **A shell heredoc or `-e` string with backticks EXECUTES them.** It corrupted seven identifiers
+  in this very handoff earlier today. **Write the row to a plain file and insert with a
+  column-checked script** — the register edits did this all day and never broke.
+- ⛔ **`npm run build` dirties `apps/erp/next-env.d.ts`** (`.next/dev/types` → `.next/types`); `dev`
+  flips it back. It is generated — **restore it, do not commit it.**
+- ⛔ **The full local integration suite OOMs** with lanes active. Scoped runs are healthy. DEF-245.
+- ⛔ **`systemctl list-timers` CANNOT show a timer that was never enabled** — even with `--all`. Use
+  `systemctl is-enabled`. That is how DEF-332 hid for three days.
+- ⛔ **`/srv/shareat` is the symlink the deploy swaps LAST.** When a deploy is broken it points at
+  the *stale* release, so the documented manual-migrate recipe applies nothing and prints success
+  (DEF-330). Resolve the newest release directory instead, and verify with a before/after count.
+- ⚠️ **Server runtimes are UTC.** A bare `toLocale*` tells a Manila reader a time eight hours off.
+  `formatBusinessDateTime` is the only sanctioned formatter — and until today it had **no callers**.
 
 ## Live agent sessions at wrap-up
 
 | Session | Model | Lane DB | State |
 |---|---|---|---|
 | `system32-85` | Opus 5 | `shareat_test_orch` | orchestrator — this session |
-| `webapps-4e` | Sonnet 5 | `shareat_test_lanea` | **released.** T-281, T-285, T-293, T-295 |
-| `webapps-65` | Sonnet 5 | `shareat_test_laneb` | **released.** T-279, T-280, T-292, T-294 |
-| `webapps-f7` | Fable | `shareat_test_lanef7` | **released.** T-282/283/284, T-286/287/288, T-296 |
-| `webapps-f2` | Fable | `shareat_test_lanec` | **released.** T-289/290/291, DEF-324, T-297 spec |
+| `webapps-65` | Sonnet 5 | `shareat_test_lanea` | **idle.** Built T-298, the T-301 census, T-304/T-303 |
+| `webapps-4e` | Sonnet 5 | `shareat_test_laneb` | **idle.** Built T-299, T-305, T-306 |
+| `webapps-f7` | Opus 5 | — | **idle.** Wrote T-300, specced T-302/303/304, reviewed T-304 |
 
-⭐ **All lane databases survive and are re-attachable by name.** Nothing is dropped at wrap-up.
+⭐ All lane databases are current at **131 migrations** and re-attachable by name.
 
 ## Numbers to allocate from
 
-- Next task: **T-298** · Next defect: **DEF-325**
-- Next migration: **`0147`** (0146 shipped with T-289) · `when` must exceed **`1798687907084`**
-- ⚠️ **T-276 moves to `0147`**; it was earmarked for 0146 before T-289 took it
-
-## Pick up here
-
-1. ⛔ **DEF-325 — the one red test.** Give that from-zero migration test its own timeout, measured under load, and do NOT weaken the test or raise the project default.
-2. **Ian's five items above.** Two are one-line SSH commands; one is photographing a receipt.
-2. **DEF-314's screen — Ian ruled it gets built and it has no task number yet.** It writes an
-   audit row with a typed reason, so it needs real design: who sees the control, how the reason is
-   chosen, what the person is told before using it. ⛔ Not a drive-by inside another task.
-3. **T-297** — positions admin-only on the staff screen. Spec written and approved-shaped, not
-   built. Gate chosen is `manage_stores`; ⚠️ bible row 196 means that reaches an elevated manager
-   in an org with no administrator, which is intended — stop and ask if Ian wants it excluded.
-4. **T-276/DEF-305** — the fiscal-period top-up job. Ian ruled **(c)**. Needs migration `0147`.
-5. **DEF-322** — three sessions added three sub-24px controls today. The fix is a default-correct
-   component, ⚠️ **but count how many of the 151 accepted FAILs it would fix first** — if most,
-   this is the baseline-shrinking task under another name.
-6. **DEF-323's class** — the sign-in page's hand-written role labels can disagree with the
-   database silently. Derive them or delete them.
+- Next task **T-307** · next defect **DEF-336** · next migration **`0148`** (`when` > `1798774307084`)
 
 ## The paste-ready prompt
 
-```
+<!-- Copy everything between the two rows of dashes. -->
+
+-----------------------------------------------------------------------------------------------
+
 You are the orchestrator for shareat-system (C:\Users\ianla\webapps\shareat-system). Run the
-global /orchestrator skill. You are starting COLD — assume you know nothing about this project.
+global /orchestrator skill. You are starting COLD.
 
-Read in this order: docs/RULES.md, docs/HANDOFF-TODAY.md, PROJECT_BIBLE.md §13 rows 193-200,
-docs/DEFECTS-REGISTER.md section E (DEF-302 through DEF-324 are the live ones).
+Read in this order: docs/RULES.md, docs/HANDOFF-TODAY.md, PROJECT_BIBLE.md §13 rows 194-201,
+docs/DEFECTS-REGISTER.md section E (DEF-325 through DEF-335 are the live ones).
 
-Sixteen tasks shipped 2026-09-12 across five sessions — do not reopen them. Ian has FIVE small
-items waiting, three of them one-line commands on the production host, one of them photographing
-a receipt. Put them to him in plain language: ⛔ bible row 200 is his own standing instruction
-that a decision is put in HIS language, not the repo's — an accurate explanation he cannot act on
-is a failed explanation.
+HEAD is 3c25275 on main, tree clean, gates green — but FOUR COMMITS ARE UNPUSHED ON PURPOSE.
+Pushing deploys, and the top commit rewrites sign-in. Read "Do not decide these alone" before you
+push anything.
 
-⛔ SIX things were found built, tested, green and UNREACHABLE in one day (DEF-299, 260, 314, 316,
-320, 321). Every one was found by a person reading, never by a gate. T-293 assessed whether one
-guard could catch them: it cannot — four shapes, and only shape A is now guarded by T-295's
-ratchet. Do not bundle the other three.
+PIN sign-in is broken in production (DEF-333). The fix is committed and not deployed. Email
+sign-in works and is the only way in. The cutover is written in full in
+docs/tasks/304-two-layer-terminal-sign-in.md under "Cutover" — the sentence it exists to make true
+is "an admin signing in by email reaches the app at every step". Ian creates the Firebase account;
+scripts/provision-terminal.ts does the rest.
 
-⛔ FOUR register dispositions have turned out wrong (DEF-279, 301, 309, 307). A row's REMEDY is as
-perishable as its DIAGNOSIS. Re-derive both before acting on either.
+Do NOT claim a local integration green. The full suite OOMs on this machine (DEF-245, and it bit
+twice on 2026-09-13). CI is the only real integration gate and the handoff must say so.
 
-⛔ If you run more than one worker: numbers are allocated centrally (three collisions today, none
-on files), and "same file" is not the collision question — "what does that file import, and who
-brings it" is. Read §"Working a shared tree".
+THE PATTERN OF 2026-09-13, found six times: the knowledge was already written down, correctly, and
+disconnected from the decision that needed it. Before filing anything, grep whether this repo
+already says it. Six wrong dispositions now (DEF-279, 301, 309, 307, 250, and DEF-315's own
+correction) — a row's REMEDY is as perishable as its DIAGNOSIS.
 
-Next task T-298, next defect DEF-325, next migration 0147 (`when` > 1798687907084).
+Editing docs/DEFECTS-REGISTER.md via a shell string EXECUTES its backticks. Put the row in a plain
+FILE and insert with a column-checked script anchored on section E's own last row.
 
-⭐ Ask each lane a QUESTION in its briefing, not only for a change. Three register rows were
-corrected today by the very lanes sent to build them, every time by checking the premise instead
-of building to it — and the orchestrator's own instruction was disproved by measurement twice.
-```
+Ask each lane a QUESTION, not just for a change. On 2026-09-13 the lanes corrected the orchestrator
+three times — every one by checking a premise instead of building to it.
+
+Next task T-307 · next defect DEF-336 · next migration 0148 (when > 1798774307084).
+
+-----------------------------------------------------------------------------------------------
