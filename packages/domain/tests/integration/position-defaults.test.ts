@@ -534,6 +534,17 @@ describe('T-289 case 12 — an elevated manager in an adminless org keeps the ca
 });
 
 describe('T-289 case 13 — migration 0146 applies to an empty database, and admits pre-0146-shaped rows', () => {
+  // DEF-325 (docs/tasks/299-def-325-from-zero-migration-timeout.md, Slice 2): 120_000ms here is
+  // ABSORBING LOCAL CONTENTION, NOT A PERFORMANCE BUDGET. CI runs this test in ~5.5s against the
+  // project's 30s default and has never once failed it (run 34705670725). Locally this test was
+  // observed bimodal — fine in ~2-3s, or stuck at whatever ceiling was configured, nothing between
+  // across 5 attempts — which is the signature of a lock wait, not of load (contrast DEF-313's
+  // smooth drift). ⭐ Suspected root cause, not fixed here: `scratchName` below is a HARDCODED
+  // literal shared by every lane/session on this one Postgres server, so two concurrent runs of
+  // this file race CREATE/DROP DATABASE on the identical name. Filed as DEF-334, which
+  // carries the evidence and the five-minute experiment that would confirm or kill it; whoever fixes that root cause should come back and
+  // delete this timeout override, since a scoped-per-run database name would remove the wait this
+  // is absorbing, not just outlast it.
   it('proven on a scratch database, created and dropped here — never a shared one', async () => {
     const scratchName = 'shareat_test_scratch_t289';
     const scratchUrl = (() => {
@@ -605,5 +616,5 @@ describe('T-289 case 13 — migration 0146 applies to an empty database, and adm
         await admin2.end();
       }
     }
-  });
+  }, 120_000);
 });
