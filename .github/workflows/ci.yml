@@ -13,8 +13,95 @@ env:
   NODE_VERSION: '22'
 
 jobs:
+  # T-306: a push that only touches documentation still ran the full ~11-minute job (typecheck,
+  # unit, real-Postgres integration, a production build) — no path filter existed at all. Skipping
+  # the WHOLE job on `docs/**` would be a bug here: `tests/unit/toc-freshness.test.ts` genuinely
+  # tests documentation (PROJECT_BIBLE.md's table of contents), so a docs change can legitimately
+  # fail a real gate. This job decides ONLY whether the expensive, code-only steps (integration
+  # against real Postgres, the build) are needed — typecheck and unit always run regardless of its
+  # answer, in the `verify` job below.
+  changes:
+    name: detect doc-only changes
+    runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.check.outputs.docs_only }}
+    steps:
+      # fetch-depth: 0 — a shallow clone would not contain `before`'s commit object, and the diff
+      # below needs to read it. This job is the only one that needs full history.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # FAILS OPEN, always, by construction: every path that cannot determine the changed-file list
+      # with confidence sets docs_only=false and stops — never docs_only=true by default or by
+      # falling through. A cost optimisation that silently skips integration on a real code change
+      # would cost far more than it saves.
+      #
+      # Classification (deliberate, not a `docs/**` glob — T-306's own brief named two traps):
+      #   - `docs/ops/**` is EXCLUDED even though it sits under docs/ and one file in it is
+      #     `.md` — the directory also holds `provision.sh` and the systemd `.service`/`.timer`
+      #     units actually installed on the production host. Not prose; treated as code.
+      #   - `docs/production-caller-baseline.txt` is EXCLUDED — a generated artefact
+      #     `tests/unit/production-caller-ratchet.test.ts` asserts against, not hand-written prose.
+      #     (Unit always runs regardless, so this exclusion is belt-and-suspenders, not the only
+      #     thing standing between a bad baseline edit and a green run — it's here so a change to a
+      #     generated data file is never classified as "documentation" on principle.)
+      #   - Everything else under `docs/**`, plus any `*.md` anywhere in the repo (README-style
+      #     files inside packages, ADRs, etc.), counts as documentation.
+      - name: Determine docs-only
+        id: check
+        run: |
+          set -uo pipefail
+
+          BEFORE="${{ github.event.before }}"
+          AFTER="${{ github.sha }}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BEFORE="${{ github.event.pull_request.base.sha }}"
+            AFTER="${{ github.event.pull_request.head.sha }}"
+          fi
+
+          # First push to a branch (before is the all-zero SHA), or an event shape this script
+          # doesn't recognise (e.g. workflow_dispatch, which carries neither `before` nor a PR
+          # payload): no base to diff against — run everything.
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::T-306: no usable base SHA for this event ($GITHUB_EVENT_NAME) — running everything"
+            exit 0
+          fi
+
+          # A force-push's old tip can be unreachable even after a full-history checkout (it may no
+          # longer be an ancestor of anything GitHub still serves) — `git diff` then fails loudly,
+          # which this catches rather than silently trusting an empty result.
+          if ! CHANGED="$(git diff --name-only "$BEFORE" "$AFTER" 2>&1)"; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::T-306: git diff $BEFORE..$AFTER failed — running everything. $CHANGED"
+            exit 0
+          fi
+
+          if [ -z "$CHANGED" ]; then
+            # Nothing changed between the two SHAs (e.g. an empty merge commit) — vacuously
+            # docs-only: there is no code for the skipped steps to have anything to say about.
+            echo "docs_only=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          DOCS_ONLY=true
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            case "$f" in
+              docs/ops/*) DOCS_ONLY=false ;;
+              docs/production-caller-baseline.txt) DOCS_ONLY=false ;;
+              *.md|docs/*) : ;;
+              *) DOCS_ONLY=false ;;
+            esac
+          done <<< "$CHANGED"
+
+          echo "docs_only=$DOCS_ONLY" >> "$GITHUB_OUTPUT"
+          echo "::notice::T-306: docs_only=$DOCS_ONLY for $BEFORE..$AFTER"
+
   verify:
     name: typecheck, test, build
+    needs: changes
     runs-on: ubuntu-latest
 
     services:
@@ -71,16 +158,24 @@ jobs:
       # is explicitly '0', and nothing sets it here. ⛔ Delete or reorder this step and every
       # integration test fails to connect — loudly, which is the correct direction.
       # Evidence for the flip: 116 files / 2747 tests / 0 failed, one clean single-invocation run.
+      # T-306: these four steps are the ~8 (of ~11) minutes a docs-only push has no way to need —
+      # nothing here can be affected by a Markdown edit. Skipped only when `changes` positively
+      # determined docs-only; any uncertain answer from that job already came back `false` above,
+      # so `!= 'true'` here runs everything on any value other than the literal string "true".
       - name: Provision restricted test role
+        if: needs.changes.outputs.docs_only != 'true'
         run: node scripts/provision-test-role.mjs
 
       - name: Apply migrations
+        if: needs.changes.outputs.docs_only != 'true'
         run: npm run db:migrate
 
       - name: Integration tests (real Postgres)
+        if: needs.changes.outputs.docs_only != 'true'
         run: npm run test:integration
 
       # PROJECT_BIBLE.md §2 rule 10 / §8 Rule 1:
       # the production droplet NEVER builds. Builds happen here, and only here.
       - name: Build
+        if: needs.changes.outputs.docs_only != 'true'
         run: npm run build
