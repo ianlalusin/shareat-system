@@ -1,9 +1,26 @@
 # T-304 — two-layer terminal sign-in: the terminal authenticates, the PIN identifies
 
-> **Status: SPEC WRITTEN 2026-09-13 by lane C (webapps-f7, Opus 5) — awaiting APPROVED.
-> SPEC ONLY, no code.** Leads [T-303](./303-pin-attempt-lockout.md) and
-> [T-302](./302-global-pin-uniqueness.md); both are revised to sit under it.
-> ⛔ **T-302 is recommended for DEFERRAL — see §Assessment. T-304 and T-303 do not depend on it.**
+> ✅⭐ **Status: SHIPPED, DEPLOYED AND CUT OVER — 2026-09-13.** Built in `58f198a`, deployed to
+> production, and **the §Cutover ran in full with all eight steps passing on a real device.**
+> SharEat Lipa (`LIPA`) is provisioned: terminal person `01a09b5f-14b5-767e-a683-64e7c15d5ae7`,
+> credential `01a09b5f-14bc-7b68-9d0c-d5c565c4771b`. **DEF-333 is closed end to end.**
+>
+> ⛔ **Invariant 8 was proven by ELIMINATING PATHS, not by reading the screen, and the next person
+> to verify it must do the same.** `packages/auth/src/sessions.ts` throws its single `NOT_LINKED`
+> sentence from `:202` (credential absent or not firebase-kind) **and** `:213`
+> (`personKind === 'terminal'`); the identical wording is deliberate (`:205-212`). Step 6 succeeding
+> is what rules out `:202`.
+>
+> ⚠️ **What was NOT proven:** the full integration suite has never run against this code — OOM
+> locally (DEF-245) and CI was disabled (DEF-336). Ian was told plainly and chose to deploy.
+>
+> ⚠️ **The status line this replaces still said *"SPEC ONLY, no code — awaiting APPROVED"*** long
+> after the code shipped and reached production. **It is today's own pattern on this very file:
+> a status disconnected from the thing it describes.**
+>
+> Leads [T-303](./303-pin-attempt-lockout.md) and [T-302](./302-global-pin-uniqueness.md).
+> ⛔ **T-302 remains DEFERRED — see §Assessment.** ⭐ **Its deferral is now spent: it was deferred
+> so PIN re-issuance would happen on a system where PIN login works. It does.**
 
 ## Ian's ruling
 

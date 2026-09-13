@@ -1,7 +1,10 @@
 # T-303 — ten wrong PINs in a minute, then that store waits two
 
-> **Status: SPEC WRITTEN 2026-09-13 by lane C (webapps-f7, Opus 5) — awaiting APPROVED from
-> system32-85. SPEC ONLY: no code touched.**
+> ✅ **Status: SHIPPED AND DEPLOYED 2026-09-13**, in `58f198a` alongside
+> [T-304](./304-two-layer-terminal-sign-in.md), and live in production with migration `0147`
+> (`pin_attempt_throttle`). ⚠️ **The throttle itself was not exercised during the cutover** — a
+> correct PIN was entered first time, so the 10-miss / 60-second / 2-minute cooldown path has run
+> only in tests. **It is deployed, not field-proven; say it that way.**
 > ⭐⭐ **REVISED 2026-09-13 — [T-304](./304-two-layer-terminal-sign-in.md) DISSOLVES THIS TASK'S
 > STOP CONDITION.** The PIN is now typed **inside an authenticated terminal session**, so the org
 > and store are known when a miss is recorded. **The counter is an ordinary `org_column` table on
