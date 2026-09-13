@@ -459,6 +459,46 @@ slices want to land before `bootstrap-org` runs against production.** The fix is
 database and awkward on a live one. Ian's probe (discovery 29 §7) tells us which column we are in;
 it does **not** change what this task does, so slice 1 must not wait for it.
 
+> ⛔ **RESOLVED, AND NOT IN THE ORDER THIS SECTION HOPED FOR — T-300, 2026-09-13.** The premise
+> above (*"Production has zero organizations, so no production read path has ever run under its own
+> RLS behaviour, and the repo does not say which role production connects as"*) has been measured
+> on all three counts, and the answers are worth having in one place.
+>
+> ⚠️ **First, the citation above is stale and points somewhere else now.** `docs/ops/README.md:31-34`
+> was the 2026-09-06 status when this was written; that file has since gained two dated sections
+> above it. **Read `docs/ops/README.md` §"Status as of 2026-09-06 (evening)"** — and note that the
+> original claim traces further back still, to `docs/discovery/29` §5.3, which is the actual source
+> and has also been re-derived by T-300.
+>
+> | Then unknown | Measured |
+> |---|---|
+> | which role production connects as | **`doadmin`, `rolsuper = f`, `rolbypassrls = t`** — the left-hand column, for the entire life of the system until 2026-09-12 |
+> | whether that is still true | **No.** `DATABASE_URL` now names `shareat_app_prod`, `rolbypassrls = f` (`docs/ops/README.md` §"Status as of 2026-09-12") |
+> | whether production holds an organisation | **Yes — one, `SHAREAT OPC`.** `count(*) = 1`, measured 2026-09-13 as the admin role |
+>
+> **So the table's rows were walked in this order:**
+>
+> 1. **`Today` / left column was the live world** until 2026-09-07 — the five DEF-210 sites were
+>    live and exploitable, against a database that then held zero organisations.
+> 2. **`After slice 1` / left column** from 2026-09-07: slice 1 shipped, the sites are not
+>    exploitable, the 34 paths still have no backstop.
+> 3. **`After slice 1` / RIGHT column since 2026-09-12**, and this is where production sits now:
+>    the role was tightened **and an organisation exists**, so ⛔ **"34 paths still break" is the
+>    live, undischarged state.** ⚠️ Whether anyone has *hit* one of those 34 screens under the new
+>    role is **not established** — it turns on whether the organisation was created before or after
+>    the 2026-09-12 role swap, which nobody recorded. Note that bootstrap itself would not have
+>    exercised them: `bootstrapOrganization` and the auth door both run on `SYSTEM_DATABASE_URL`,
+>    which bypasses RLS.
+>
+> ⚠️ **The sequencing hope did not hold.** *"Both slices want to land before `bootstrap-org` runs
+> against production"* — `bootstrap-org` has already run, at an unrecorded moment between
+> 2026-09-06 and 2026-09-12, **with slice 2 still open.** The fix is now the awkward one: it lands
+> on a live database with one real organisation in it rather than on an empty one.
+>
+> ⭐ **Nothing about what this task does changes**, exactly as the paragraph above predicted. What
+> changes is that **slice 2 is no longer pre-emptive work — it is the repair of a condition that is
+> already true in production**, and its cost only goes up from here.
+
 ---
 
 ## Out of scope

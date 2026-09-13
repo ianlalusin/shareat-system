@@ -523,17 +523,57 @@ expenses, sales-days, AP invoices.
 
 ### 5.3 ⚠️ The production trap this creates — the reason §7 exists
 
-Production has **never had an organisation** (`docs/ops/README.md:31-34`: *"Production has ZERO
-organizations"*). So **no production read path has ever exercised its own RLS behaviour.** The
-moment Ian runs `bootstrap-org` and staff start working, one of two opposite things happens, and
-which one depends entirely on the unread `.env.local`:
+> ⛔ **RESOLVED BY EVENTS, 2026-09-12 — T-300. Both unknowns this section turned on have been
+> measured, and the answers are not the ones the fork below was hedging between.** The original
+> text is superseded in place rather than edited, because the *reasoning* was right and it is the
+> reason §6 was a single piece of work. What follows is what actually happened.
 
-| If the production role **has** superuser/`BYPASSRLS` | If it **does not** |
-|---|---|
-| Everything works. The 5 client-`orgId` sites of §4.3 are **live and exploitable**. | The 310 principal paths work. The **34 unprincipalled paths return zero rows** and those screens break on day one of the pilot. |
+**As written (2026-09-07), and the premise was true then:** *"Production has never had an
+organisation (`docs/ops/README.md` §"Status as of 2026-09-06": 'Production has ZERO
+organizations'). So no production read path has ever exercised its own RLS behaviour."* The
+2026-09-06 reading was a real measurement — `shareat-finding-observation` exiting 1 with *"no orgs
+were processed"* under a role that *did* bypass RLS, so the emptiness was genuine and not an
+artifact. ⚠️ **This sentence is the one that got quoted forward as current for six days**, by
+`docs/ops/README.md` and `docs/tasks/231-*` among others. It was never wrong; it was only ever
+true *as of a date*, and it did not say so.
 
-**Neither outcome is acceptable to discover during the pilot**, and the recommendation in §6
-closes both at once — which is why it is a single ~2-day piece of work rather than two.
+**What was measured since:**
+
+| Unknown | Answer | Source |
+|---|---|---|
+| Does the production role bypass RLS? | **It did.** `doadmin`, `rolsuper = f`, **`rolbypassrls = t`** — for the entire life of the system until 2026-09-12 | `docs/ops/README.md` §"Status as of 2026-09-12" |
+| Does it still? | **No.** `DATABASE_URL` now names `shareat_app_prod` — `rolbypassrls = f`, `NOCREATEDB NOCREATEROLE`, owns no table | same |
+| Does production hold an organisation? | **Yes — exactly one, `SHAREAT OPC`.** `select count(*) from organizations` → `1`, run 2026-09-13 as `doadmin` (the one role RLS cannot filter). Independently derivable from `/var/log/shareat/budget-reissue.log`'s `ok — created 0 · 1 orgs`, 2026-09-12 15:57 UTC | T-300 |
+
+**So the fork below did not resolve to one column — it walked through BOTH, in order:**
+
+| | Was live until 2026-09-12 | Is live now |
+|---|---|---|
+| **Role has `BYPASSRLS`** | ✅ the actual world. *"The 5 client-`orgId` sites of §4.3 are live and exploitable"* — ⭐ **and they were, until T-231 slice 1 removed the client-supplied `orgId` on 2026-09-07** (DEF-210, fixed). The code fix closed that column five days before the role change did | — |
+| **Role does not** | — | ✅ the actual world since 2026-09-12. **The 34 unprincipalled paths now return zero rows**, and those screens will break on day one of the pilot |
+
+⛔ **The right-hand column is therefore the standing, undischarged risk.** *"Neither outcome is
+acceptable to discover during the pilot"* stands verbatim — §6's recommendation is now the
+remaining half of the work, not a hedge against an unknown.
+
+⚠️ **And the sentence that opens this section needs re-grounding rather than deletion.** *"No
+production read path has ever exercised its own RLS behaviour"* was justified by *"there has never
+been a row to scope"*, and there **is** a row to scope now. What can honestly be said today:
+
+- Every production request path **is** subject to RLS since 2026-09-12, and there is now data for
+  it to act on. The 34 unprincipalled paths therefore return zero rows **whenever they are next
+  hit**.
+- ⚠️ **Whether any of them has been hit yet is NOT established.** It turns on whether the
+  organisation was created before or after the role swap on 2026-09-12, and nobody recorded that.
+- ⭐ **Bootstrap itself does not settle it and must not be mistaken for the test.**
+  `bootstrapOrganization` runs on `systemTransaction`, and the sign-in that precedes it on the
+  `/setup` path runs on the auth door — **both resolve to `SYSTEM_DATABASE_URL`, which bypasses
+  RLS.** So the first organisation was created *without* exercising the app role's RLS behaviour at
+  all, whichever side of the swap it fell on.
+
+⛔ **The real test is therefore the first ordinary authenticated request under the restricted role,
+and it should be done with someone watching.** It has not been ticked off by anything that has
+happened so far.
 
 ---
 

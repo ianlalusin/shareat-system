@@ -33,6 +33,18 @@
 > ⚠️ It is also the only thing standing between today and the pilot: production
 > (`erp2.shareat.net`) is live, migrated, and holds **zero organizations** — confirmed 2026-09-06
 > when `shareat-finding-observation.service` exited 1 with *"no orgs were processed."*
+>
+> ⭐ **T-300, 2026-09-13 — that sentence is TRUE AND IT IS DATED, and it is deliberately left
+> standing.** It is the fixed point the timeline rests on: a real measurement, taken through the
+> system door under a role that bypassed RLS, so its zero was genuine. **This task has since been
+> carried out.** Production holds one organisation, `SHAREAT OPC` — `select count(*) from
+> organizations` → `1`, measured 2026-09-13 as the admin role. It was created at some point
+> **after** this line was written and **before** 2026-09-12 15:57 UTC; nobody recorded when, and
+> this sentence is what bounds the window from below.
+>
+> ⛔ **First-run setup is now closed** — `bootstrapOrganization` refuses once any organisation
+> exists (`packages/domain/src/organizations/index.ts:341-348`), so neither path in this spec will
+> run again. The spec stands as the record of how it was done and as the recovery reference.
 
 ## The chicken-and-egg, stated exactly
 

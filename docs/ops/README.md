@@ -42,16 +42,52 @@ recoverable rather than a data incident.
 | `SYSTEM_DATABASE_URL` set before? | **No** (`grep -c` returned 0) |
 | Postgres version | 18.6 — role-granting needs ADMIN OPTION on the group; `doadmin` had it, having created `shareat_app` when it ran migration `0011` |
 | New role `shareat_app_prod` | `rolsuper = f` · **`rolbypassrls = f`** · `rolcanlogin = t` · member of `shareat_app` |
-| New role can read the schema | `select count(*) from organizations` → `0`, a number rather than a permission error, so migration `0011`'s grants reached it through the group |
+| New role can read the schema | `select count(*) from organizations` → `0`, **a number rather than a permission error**, so migration `0011`'s grants reached it through the group. ⛔ **That `0` IS NOT A COUNT OF ORGANISATIONS — T-300.** `organizations` carries FORCE RLS with policy `id = app_current_org()` (`0011:115-118`), `app_current_org()` is NULL with no principal set (`0011:38-41`), and `shareat_app_prod` is `rolbypassrls = f` — so this query returns `0` **on any database, holding any number of organisations.** It proves `SELECT` was granted and nothing else. Production held **one** organisation when this was run |
 | After the swap | service `active`, `NRestarts 0`, **`https://erp2.shareat.net/sign-in` → 200** |
 
 ⛔ **`rolbypassrls = t` on the old role is the finding, and it means row-level security was NOT
 enforcing in production for the entire life of this system.** Every RLS policy this repo has written
 and tested was being bypassed on every production query. The application-layer `where org_id = …`
-scoping was the only thing holding tenancy — which is DEF-210's three client-`orgId` screens with
-nothing behind them. ⚠️ The exposure was never realised because production has held **zero
-organisations** throughout; there was no second set of books to reach into. That is also why this
-was the cheap moment to do it and never will be again.
+scoping was the only thing holding tenancy.
+
+### ⛔ The tenancy reassurance, RE-DERIVED — T-300, 2026-09-13
+
+> **What this paragraph used to say, and it is superseded rather than deleted because the change is
+> the point:** *"The exposure was never realised because production has held **zero organisations**
+> throughout; there was no second set of books to reach into. That is also why this was the cheap
+> moment to do it and never will be again."*
+
+**Production holds ONE organisation, `SHAREAT OPC`** — `select count(*) from organizations` → `1`,
+measured 2026-09-13 as the admin role (`SYSTEM_DATABASE_URL` / `doadmin`, the one role RLS cannot
+filter), and independently derivable from `/var/log/shareat/budget-reissue.log`'s
+`ok — created 0 · 1 orgs` at 2026-09-12 15:57 UTC. First-run setup is closed by
+`bootstrapOrganization`'s own guard, so that number cannot rise without a deliberate act the code
+currently refuses.
+
+**The conclusion survives. The reason does not, and it has to be replaced rather than reworded:**
+
+- ✅ **The exposure was still never realised** — but not because there were no books. **Cross-tenant
+  exposure needs two tenants, and there is one.** A query that forgets its `org_id` predicate
+  returns the only tenant's own rows; a client-supplied `org_id` could only name `SHAREAT OPC`
+  (a no-op) or a uuid with no row, which the foreign key refuses. That is arithmetic, not a defence.
+- ⛔ **"This was the cheap moment" was a near-miss, not a plan.** Zero organisations is evidenced for
+  2026-09-06 evening; one is evidenced for 2026-09-12 15:57 UTC. Somewhere in those six days a real
+  organisation came into existence **behind a role that bypassed RLS**, and nobody knew the window
+  was open. How long it stayed open is not recorded anywhere in this repository.
+- ⚠️ **Data-at-risk went from the empty set to a non-empty one.** Every defect whose blast radius is
+  *this* tenant's own data — a missing `authorize()`, an over-broad capability, an unauthenticated
+  route — was harmless against an empty database and is not harmless now. None of them was ever
+  protected by the organisation count; the old sentence covered for them by accident.
+- ⭐ **And one thing is SAFER than this section claimed.** The "latent landmine" framing (DEF-250,
+  `ROADMAP.html`) says a tightened role would make scheduled jobs *"silently process zero
+  organisations and report success"*. **It would not.** All eight scheduled scripts exit 1 on an
+  empty run. The failure direction of this whole change is a closed door, never an open one.
+
+⚠️ **`DEF-210` was fixed in code on 2026-09-07** (T-231 slice 1 — the hidden `orgId` fields are
+gone), five days before this role change. The sentence this section used to carry — *"DEF-210's
+three client-`orgId` screens with nothing behind them"* — described those screens as they were
+before that fix. What is still true of them is the *other* half of DEF-210: they run under plain
+`transaction()` with no principal, so RLS is not backstopping them. That is slice 2 and it is open.
 
 ### ⛔ THE CONSEQUENCE THAT WILL BITE: migrations on the box must use the ADMIN string
 
@@ -109,15 +145,37 @@ nothing behind them the moment a second organisation exists.
 
 ### ⚠️ What is NOT proven, said plainly
 
-- **A 200 on `/sign-in` proves the page rendered, not that signing in works.** Production has no
-  organisations and no users, so there is nothing to sign in as. The mechanism is proven by the role
-  attribute (`rolbypassrls = f`), not by exercising it against data.
-- **No production read path has ever exercised its own RLS behaviour**, because there has never been
-  a row to scope. ⛔ The first `bootstrap-org` on this configuration is therefore still the real
-  test, and it should be done with someone watching rather than in passing. `docs/discovery/29`
-  §5.3 called this out before the role existed and it remains true.
+- **A 200 on `/sign-in` proves the page rendered, not that signing in works.** ⚠️ **Re-grounded,
+  T-300:** the original reason given — *"Production has no organisations and no users, so there is
+  nothing to sign in as"* — is false. Production holds one organisation, and
+  `bootstrapOrganization` writes the first person, their PIN and their email link in the same
+  transaction that creates it, so there **is** something to sign in as. What remains unproven is
+  unchanged: the mechanism is proven by the role attribute (`rolbypassrls = f`), not by exercising
+  it against data.
+- **No production read path has ever exercised its own RLS behaviour** — ⚠️ **re-grounded, T-300.**
+  The reason given was *"because there has never been a row to scope"*, and there is a row to scope
+  now. Every production request path **is** subject to RLS since this change, so the 34
+  unprincipalled paths (discovery 29 §5.2) return zero rows **whenever they are next hit**. ⚠️
+  Whether any has been hit is **not established** — it depends on whether the organisation was
+  created before or after this swap, which nobody recorded.
+  ⛔ **And `bootstrap-org` having already run does NOT tick this off.** `bootstrapOrganization` and
+  the sign-in ahead of it both resolve to `SYSTEM_DATABASE_URL`, which bypasses RLS — so the first
+  organisation was created without exercising the app role's RLS behaviour at all. **The real test
+  is the first ordinary authenticated request under this role**, and it still wants someone
+  watching. `docs/discovery/29` §5.3 has been re-derived by T-300; both of its unknowns are now
+  measured.
 
-## ✅ Status as of 2026-09-06 (evening) — the deploy pipeline WORKS, four timers are ARMED, and production holds ZERO organizations
+## ✅ Status as of 2026-09-06 (evening) — the deploy pipeline WORKS, four timers are ARMED, and production held ZERO organizations ON THAT DATE
+
+> ⛔ **SUPERSEDED AS A STATEMENT OF TODAY, AND ACCURATE AS A STATEMENT OF 2026-09-06. Do not
+> "correct" the zero in this section.** Production held **one** organisation by 2026-09-12 15:57
+> UTC (`SHAREAT OPC` — see §"Status as of 2026-09-12" above, and T-300). The reading below was a
+> real measurement taken under a role that *did* bypass RLS, so its zero was genuine — and it is
+> the only fixed point the timeline has: it is what proves the organisation appeared **after**
+> 2026-09-06. Flattening it to "one" would destroy that.
+>
+> ⚠️ **This section is what six documents quoted forward as current for six days.** It was never
+> wrong. It was true *as of a date* and did not say so in a way anyone noticed.
 
 Verified on the box by `ianla-14` with Ian, not inferred:
 
@@ -131,10 +189,17 @@ Verified on the box by `ianla-14` with Ian, not inferred:
 - `/srv/shareat-shared/.env.local` was rebuilt: BOM removed, `APP_TIMEZONE` restored to
   `Asia/Manila` (it had been silently corrupted — DEF-203). See *Traps on the box* below.
 
-⛔ **Production has ZERO organizations.** `shareat-finding-observation` exits 1 with *"no orgs were
-processed — nothing to observe?"* against a live, migrated database, and will do so nightly until one
-exists. **That failure is correct; do not soften it.** T-228 (`bootstrap-org`) is the fix, and **Ian
-runs it against production himself** (`IAN-SETUP-CHECKLIST.md` §4b).
+⛔ **Production has ZERO organizations** *(true on 2026-09-06; one existed by 2026-09-12 — T-300)*.
+`shareat-finding-observation` exits 1 with *"no orgs were processed — nothing to observe?"* against
+a live, migrated database, and will do so nightly until one exists. **That failure is correct; do
+not soften it.** T-228 (`bootstrap-org`) is the fix, and **Ian runs it against production himself**
+(`IAN-SETUP-CHECKLIST.md` §4b).
+
+⭐ **This job is the timeline's clock, and it is how the zero above is known to be real:** it reads
+every organisation through the system door, so its exit 1 was a measurement and not an assumption.
+**The night it stopped saying *"no orgs were processed"* is the night the organisation appeared** —
+`journalctl -u shareat-finding-observation.service --since 2026-09-06` still holds that date, and it
+is the cheapest way to close the one window T-300 could not.
 
 ⚠️ Commits after that deploy (T-215, T-216's template half, T-226, T-227) are **not yet pushed**, so
 they are not deployed. Pushing `main` deploys, and applies migrations `0131` and `0132` to production.
@@ -222,10 +287,23 @@ covers the deployment that finally gives these something to run against.
 
 ## ⭐ Standing up an organization on production (T-228, T-232)
 
+> ⛔ **THIS HAS ALREADY BEEN DONE AND THE DOOR IS SHUT — T-300, 2026-09-13.** Production holds one
+> organisation, **`SHAREAT OPC`** (`select count(*) from organizations` → `1`, measured 2026-09-13
+> as the admin role). `bootstrapOrganization` takes an advisory lock and then refuses outright once
+> any organisation exists — *"this system already has an organization, so first-run setup is
+> closed"* (`packages/domain/src/organizations/index.ts:341-348`). **Both paths below call it, so
+> both now refuse.** Keep this section as the record of how it was done and as the recovery
+> reference; do not follow it expecting it to work. People and stores are added at `/admin/users`
+> and `/admin/stores`.
+>
+> ⚠️ **Nobody recorded when it ran.** It happened between 2026-09-06 evening and 2026-09-12 15:57
+> UTC, unwatched — which is the one thing §"What is NOT proven" above asked for and did not get.
+
 **Why this exists at all:** nothing in this codebase had ever created an organization (DEF-195).
-Production is live and migrated and held **zero** organizations, which is why
-`shareat-finding-observation.service` exits 1 nightly with *"no orgs were processed"*. That failure
-is correct; this is the fix.
+Production was live and migrated and held **zero** organizations *(true until some point between
+2026-09-06 and 2026-09-12)*, which is why `shareat-finding-observation.service` was exiting 1
+nightly with *"no orgs were processed"*. That failure was correct; this was the fix, and it has
+since been applied.
 
 ⭐ **There are two paths, and they are the same transaction.** Both call one function,
 `bootstrapOrganization` (`packages/domain/src/organizations/index.ts`), so the screen and the
@@ -233,7 +311,7 @@ command cannot drift — a step added to first-run setup is added to both, or to
 
 | | Path | When |
 |---|---|---|
-| **1. Primary** | **`/setup`, in a browser** | Normally. Sign in with your email and password; the screen appears because no organisation exists |
+| **1. Primary** | **`/setup`, in a browser** | Normally. Sign in with your email and password; the screen appears **only while no organisation exists** — ⛔ one does, so this path is closed and a sign-in now answers *"ask an administrator"* instead |
 | **2. Fallback** | `npm run bootstrap-org` on the droplet | No Firebase identity yet, no browser that can reach the site, or a recovery |
 
 ⛔ **Neither is a job.** Everything else on this page is a timer; these are one-shots that write to
@@ -244,6 +322,9 @@ the live database, run by a person — Ian — not by an agent.
 1. Open the site and sign in at **`/sign-in`** with the email and password you use in v1.
 2. That account has no person in this system and there is no organisation yet, so you land on
    **`/setup`** instead of being refused. The window is **10 minutes**; after that, sign in again.
+   ⛔ **This step no longer happens** (T-300): an organisation exists, so `resolveVerifiedSignIn`
+   returns `not-linked` and the `/setup` door does not open. The steps below are the record of the
+   run that was made, not instructions that will work today.
 3. Fill in the organisation code and name, **your real name**, the first store's code and name, and
    **choose a 6-digit PIN**.
 4. Submit. The organisation, its chart of accounts and expense categories, your person, your
@@ -426,18 +507,57 @@ shipped unit pairs in this directory and **nothing on the box runs either**. Ian
 
 ⭐ **He ruled it TWICE, and the second ruling is the one that counts.** The orchestrator first put
 the choice to him saying the jobs would *"run nightly and find nothing to do"*. **That was wrong and
-was corrected before anything was armed.** Both scripts treat zero organisations as a FAILURE, by
-deliberate design — `scripts/orphan-file-sweep.ts:73`, `scripts/budget-reissue.ts:65`, and
-`scripts/finding-observation.ts:64`, all three carrying the same comment: *"an empty run means no
-orgs were found, which is a configuration problem wearing the costume of a quiet night."* Each
-returns **exit 1**, and both `.service` files state the exit code is load-bearing *"so the host's
+was corrected before anything was armed.** The scripts treat zero organisations as a FAILURE, by
+deliberate design — `scripts/budget-reissue.ts:65`, `scripts/finding-observation.ts:64`,
+`scripts/orphan-file-sweep.ts:74` and five more, all carrying the same comment: *"an empty run means
+no orgs were found, which is a configuration problem wearing the costume of a quiet night."* Each
+returns **exit 1**, and the `.service` files state the exit code is load-bearing *"so the host's
 mailer speaks up"*.
 
-⚠️ **THEREFORE, EXPECTED AND CORRECT AFTER ARMING: production goes from ONE unit failing nightly
-(`finding-observation`, already doing this) to THREE, until the first organisation is created.**
-Do not read those failures as a broken deployment and do not "fix" them by making an empty run
-return 0 — that reverses a decision three scripts share on purpose. The noise ends by itself the
-moment production holds an organisation, which is the same moment the jobs begin to matter.
+> ⛔ **THE EXPECTATION BELOW WAS WRONG IN FOUR WAYS AND ONLY ONE OF THEM WAS THE ORGANISATION
+> COUNT — T-300, 2026-09-13. Superseded, not deleted, because the corrected version is only legible
+> next to it.**
+>
+> **What it said:** *"production goes from ONE unit failing nightly (`finding-observation`, already
+> doing this) to THREE, until the first organisation is created."*
+>
+> | Wrong how | The fact |
+> |---|---|
+> | **the script count** | it names three scripts carrying the empty-run guard. **All eight do** — `attendance-sweep:55`, `budget-reissue:65`, `finding-observation:64`, `firestore-relay:74`, `month-end:67`, `order-wastage-backstop:68`, `orphan-file-sweep:74`, `recurring-expense-draft:72` |
+> | **the cadence** | `attendance-sweep` is **hourly** and `firestore-relay` runs **every two minutes** (`*:0/2`). On a zero-org premise those two alone are ~**744 failures a day**, not "nightly" |
+> | **month-end** | fires **monthly, on the 15th** (`*-*-15 02:00 Asia/Manila`) plus a retry at 03:00. Never nightly under any premise |
+> | **the premise** | production held **one** organisation — `SHAREAT OPC` — not zero |
+>
+> ### ⭐ The correct expectation, per unit
+>
+> On the true figure, and against the **deployed** artifact (which predates `55fc4bd` and is *not*
+> what this repo's `main` contains — DEF-326/DEF-327):
+>
+> | Unit | Fires | Expected | Why |
+> |---|---|---|---|
+> | `shareat-finding-observation` | daily 01:30 Manila | ✅ **exit 0** | one org ⇒ the empty-run branch is not taken. **Its nightly failure should have stopped on the first run after the organisation appeared** |
+> | `shareat-recurring-expense-draft` | daily 02:00 | ✅ exit 0 | nothing due ⇒ `posted 0`, which is success |
+> | `shareat-order-wastage-backstop` | daily 02:30 | ✅ exit 0 | |
+> | `shareat-orphan-file-sweep` | daily 03:00 | ⛔ **exit 1 — the only expected failure** | `npm error Missing script: "orphan-file-sweep"` (DEF-326). **Nothing to do with organisations.** Persists until a deploy lands, which DEF-327 blocks |
+> | `shareat-budget-reissue` | daily 03:30 | ✅ **exit 0 — measured** | `ok — created 0 · 1 orgs` |
+> | `shareat-attendance-sweep` | **hourly** | ✅ exit 0 | |
+> | `shareat-firestore-relay` | **every 2 min** | ✅ exit 0 | |
+> | `shareat-month-end` (+ `-retry`) | **15th, 02:00 / 03:00** | ✅ exit 0 | next fire 2026-09-15 |
+>
+> ⛔ **ONE unit should be failing, not three, and the reason is a missing npm script.** Everything
+> else should have gone quiet by itself. ⚠️ **If any other unit is still failing, it is a new and
+> unexplained fault — not the expected noise.** That distinction is the whole value of getting this
+> right: the old guidance made every red light explainable, which is the failure mode T-262 and
+> DEF-313 were both filed about.
+>
+> ⚠️ **What is inferred rather than observed:** only `budget-reissue`'s exit 0 was measured. The
+> other seven are predicted from source plus unit files — all eight share `WorkingDirectory=/srv/shareat`,
+> `User=shareat` and no `EnvironmentFile`, so they resolve the same `.env.local` and the same
+> `SYSTEM_DATABASE_URL` that `budget-reissue` proved works. Read the journals before trusting the
+> column.
+
+**The standing rule is unchanged:** do not "fix" an empty-run failure by making it return 0 — that
+reverses a decision eight scripts share on purpose.
 
 ⛔ **The counter-argument was put to Ian and he overruled it, on the record:** a red that is always
 explainable teaches people to explain red away (T-262's ruling; DEF-313 filed on that exact
@@ -466,16 +586,29 @@ ssh root@159.223.46.224 'for f in /etc/systemd/system/shareat-*.timer; do \
 ssh root@159.223.46.224 "systemctl list-timers 'shareat-*'"
 
 # 5 — run the two new ones once, now, and READ THE LOG (DEF-308: a job with a caller is not a job
-#     that runs). ⚠️ BOTH WILL EXIT 1 TODAY — zero organisations — and that is the correct answer.
+#     that runs). ⛔ THE NEXT LINE WAS WRONG — T-300. It read: "BOTH WILL EXIT 1 TODAY — zero
+#     organisations — and that is the correct answer." Production held ONE organisation, so
+#     budget-reissue exited 0 ("ok — created 0 · 1 orgs") and orphan-file-sweep exited 1 for an
+#     unrelated reason: the deployed build has no such npm script (DEF-326).
 ssh root@159.223.46.224 'systemctl start shareat-orphan-file-sweep.service; \
   systemctl start shareat-budget-reissue.service'
 ssh root@159.223.46.224 'journalctl -u shareat-orphan-file-sweep.service -n 30; \
   journalctl -u shareat-budget-reissue.service -n 30'
 ```
 
-⭐ **What a GOOD result looks like on step 5 today:** `orphan-file-sweep: no orgs were processed —
-nothing to sweep?` and `budget-reissue: no orgs were processed — nothing to reissue?`, each with
-exit 1. ⛔ **What a BAD result looks like:** anything mentioning `FIREBASE_STORAGE_BUCKET is set but
+⛔ **WHAT ACTUALLY HAPPENED ON STEP 5, AND IT IS NOT WHAT THIS PARAGRAPH PREDICTED — T-300.**
+`budget-reissue` printed **`budget-reissue: ok — created 0 · 1 orgs`** naming `SHAREAT OPC`, and
+exited **0**. `orphan-file-sweep` printed **`npm error Missing script: "orphan-file-sweep"`** and
+exited 1 — for a missing entry point, not for a missing organisation. ⭐ **The two jobs disagreeing
+is what forced the logs to be read**, and it is the reason the zero-organisation premise was caught
+at all: on that premise both should have exited 1 identically.
+
+> **What this paragraph used to predict, superseded and kept for the record:** *"a GOOD result looks
+> like `orphan-file-sweep: no orgs were processed — nothing to sweep?` and `budget-reissue: no orgs
+> were processed — nothing to reissue?`, each with exit 1."*
+
+⛔ **What a BAD result looks like** — this half was right and still applies: anything mentioning
+`FIREBASE_STORAGE_BUCKET is set but
 no driver is installed` (DEF-308's signature — it would mean `scripts/lib/storage-bootstrap.ts` did
 not reach the box), a database permission error (the app role cannot do everything; see the
 `DATABASE_URL` section above), or the unit failing before either script prints anything at all.

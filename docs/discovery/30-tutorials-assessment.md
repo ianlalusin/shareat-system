@@ -189,8 +189,18 @@ order-of-operations wall?* Nothing counts it — those 130 sentences are thrown 
 telemetry records them. It is the number that should decide this feature's size. **It could be had
 cheaply**: log a counter when a domain function throws a prerequisite-shaped refusal, run for a
 month, and the tutorial backlog sorts itself by real frequency. I would rather ship that counter
-first than guess which of 58 features deserves a tutorial. Production currently holds **zero
-organizations**, so there is no history to mine instead.
+first than guess which of 58 features deserves a tutorial. ⚠️ **And there is still no history to
+mine — but the reason has changed, and the change has a direction.** This section was written on
+the premise that production held **zero** organisations; it holds **one** (`SHAREAT OPC`,
+`count(*) = 1` measured 2026-09-13 as the admin role — T-300). So the absence of history is no
+longer structural. It is now simply that the organisation is new and nobody has worked in it:
+production has one organisation, no users have signed in, and the counter would therefore start
+from a real baseline rather than from nothing.
+
+⭐ **That strengthens the recommendation rather than weakening it.** *"Ship the counter first"* was
+a proposal to create data that could not otherwise exist; it is now a proposal to start counting at
+the moment the data begins — which is a strictly better time to install a counter than a month into
+the pilot, and the window closes by itself in January.
 
 Standing in for it: **seven stores** (bible §1.1), one live franchise with a separate owner, and a
 January cutover that will onboard every one of them at once.

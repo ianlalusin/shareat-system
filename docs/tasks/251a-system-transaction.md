@@ -267,6 +267,29 @@ this lane runs no `git`, `build`, `dev`, or `test:integration` directly.
   this lane):
   1. the latent-landmine defect (a restricted `DATABASE_URL`, applied naively, would make every
      scheduled job silently process zero organisations and report success) as a register row;
+     > ⛔ **THE PARENTHESIS IS WRONG, AND IT WAS WRONG WHEN IT WAS WRITTEN — T-300, 2026-09-13.**
+     > A restricted `DATABASE_URL` does **not** make scheduled jobs report success. **All eight
+     > exit 1 on an empty run**, loudly, into the host's mailer — `attendance-sweep:55`,
+     > `budget-reissue:65`, `finding-observation:64`, `firestore-relay:74`, `month-end:67`,
+     > `order-wastage-backstop:68`, `orphan-file-sweep:74`, `recurring-expense-draft:72`, each
+     > carrying the same comment about *"a configuration problem wearing the costume of a quiet
+     > night"*, and each `.service` file stating the exit code is load-bearing so the mailer speaks.
+     >
+     > ⚠️ **Dated rather than asserted:** the guard landed in `91397aa` (2026-09-06, T-214); DEF-250,
+     > the row this bullet is describing, was filed in `245c102` (2026-09-09) — **three days
+     > later**. And `docs/ROADMAP.html` already recorded the correct behaviour from a real run:
+     > *"exit 1 with no organisations, exit 0 with one."*
+     >
+     > ⭐ **This matters beyond a wording fix, and it matters in the reassuring direction.** The
+     > sentence made the role tightening read as a silent-data risk. It never was: the failure
+     > direction of the whole change is an **availability wall** — jobs that stop and say so,
+     > screens that return zero rows, a `/setup` INSERT refused by its own `WITH CHECK`. That is
+     > what `docs/ops/README.md` §"Status as of 2026-09-12" means by *"it fails CLOSED… the only
+     > reason this was recoverable rather than a data incident."* **The landmine was always loud.**
+     >
+     > ⚠️ The *underlying* defect this bullet asked to be filed is real and unaffected: a restricted
+     > `DATABASE_URL` with `SYSTEM_DATABASE_URL` unset does break every cross-org enumerate path.
+     > Only the described symptom was wrong.
   2. the bible amendment I believe row 185 needs now that its exception has a shared, named
      implementation — recommendation only, not written by this lane.
 - ⛔ This lane runs no `git`. The orchestrator commits.

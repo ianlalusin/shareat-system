@@ -254,6 +254,30 @@ alter table "order_wastages" add constraint "order_wastages_channel_id_sales_cha
   foreign key ("channel_id") references "sales_channels"("id") on delete restrict;
 ```
 
+> ⛔ **THE COMMENT IN THAT BLOCK IS WRONG, AND IT CANNOT BE FIXED — T-300, 2026-09-13 (DEF-331).**
+>
+> *"Production holds zero `order_wastages`: there are no organizations yet."* Production holds
+> **one** organisation, `SHAREAT OPC` (`select count(*) from organizations` → `1`, measured
+> 2026-09-13 as the admin role). The premise was true when written and had already stopped being
+> true by 2026-09-12 at the latest.
+>
+> ⚠️ **The SQL block above is deliberately left byte-for-byte as it was applied**, comment and all.
+> It is a *quotation of an immutable artifact* — `packages/db/migrations/0133_t230_sales_channel_admin.sql:30,59`
+> carries these same two sentences, and bible §2 rule 9 forbids editing an applied migration.
+> Correcting the quotation here while the migration still says it would make this document disagree
+> with the thing it is quoting, which is worse than an error a reader can see.
+>
+> ⭐ **The migration's OUTCOME was correct; its ARGUMENT was not.** `set not null` succeeded, so
+> `order_wastages` genuinely held no unmatched rows at apply time. But the reason given —
+> *"there are no organizations yet"* — is not what made it safe, and would not have made it safe:
+> had an organisation existed with a free-text channel typo, the statement would have failed and
+> the correct response would still have been the dev DATA fix the comment itself prescribes, never
+> a nullable column. **The instruction in that comment is right. The justification under it is not,
+> and the justification is the part that was load-bearing for anyone reading it later.**
+>
+> ⛔ **If this migration is ever used as a template, do not copy the last sentence of either
+> comment.** The rest of both is sound.
+
 ### 4. `setSalesChannelActive`
 
 ```ts

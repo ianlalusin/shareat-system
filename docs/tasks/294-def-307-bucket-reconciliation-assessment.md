@@ -78,6 +78,48 @@ Measured, not assumed:
   measured answer is genuinely "zero, and unmeasurable-as-a-rate until at least one real org
   exists,"** not "zero, therefore safe forever."
 
+> ⛔ **THE PREMISE ABOVE IS FALSE, AND THE CONCLUSION SURVIVES ANYWAY — RE-ARGUED, NOT PATCHED.
+> T-300, 2026-09-13.**
+>
+> **Production holds ONE organisation**, `SHAREAT OPC` — `select count(*) from organizations` → `1`,
+> measured 2026-09-13 as the admin role, and independently derivable from
+> `/var/log/shareat/budget-reissue.log`'s `ok — created 0 · 1 orgs` at 2026-09-12 15:57 UTC. The
+> quoted reasoning — *"`listOrgsToRun()` returns nothing when there are no organisations… zero orgs
+> means the loop body has never executed"* — **does not hold. `listOrgsToRun` returns one row.**
+>
+> ⚠️ **And the two `docs/ops/README.md` line citations above (`:469`, `:429`) are stale** — that
+> file has gained two dated sections since. Both quoted sentences live in §"2026-09-12 (second
+> cycle) — IAN RULED: ARM THE TWO UNARMED TIMERS NOW", and **both have been corrected in place by
+> T-300**: the arming expectation was wrong in four ways, of which the organisation count was only
+> one. Read that section, not the line numbers.
+>
+> ⭐ **The finding it was supporting is unchanged: that loop body has still never executed against a
+> real object.** It now rests on three independent legs, and two of them are measurements rather
+> than inferences — which is a better footing than the single inference it replaces:
+>
+> 1. ⛔ **The job cannot start at all.** `/var/log/shareat/orphan-file-sweep.log` reads
+>    `npm error Missing script: "orphan-file-sweep"` (DEF-326) — the deployed tree predates
+>    `55fc4bd`, the commit that added that script to `package.json`. **Execution stops before any
+>    TypeScript runs, so `listOrgsToRun` is never even reached.** Measured, on the host.
+> 2. ⭐ **`stored_files` held ZERO ROWS** when the storage bucket was corrected on 2026-09-12 —
+>    checked before anything was changed, by a script written to abort if it were not (DEF-311).
+>    Even on a working deploy, `listOrphans` would return nothing and `driver.remove` would not be
+>    called. **This leg never depended on the organisation count at all**, and it is why the
+>    conclusion is robust rather than lucky.
+> 3. **It cannot become false soon.** Two independent blockers stand between today and a first real
+>    sweep: DEF-327 (the deploy's migrate step is refused, `permission denied for database
+>    defaultdb`) and DEF-325 (CI red, so Deploy is `skipped` rather than failing).
+>
+> ⚠️ **What genuinely changes: the rate is no longer unmeasurable-in-principle.** *"Unmeasurable as
+> a rate until at least one real org exists"* — that condition is now **met**. What stands between
+> here and a real rate is a working deploy and the first real upload, both of which are ordinary
+> work rather than a structural impossibility. **The clock on this assessment's evidence base has
+> started.**
+>
+> ✅ **The recommendation is unchanged: do not build bucket enumeration.** The cost section below
+> never referenced the organisation count and needs no revision. What does need revision is the
+> trigger — see the addendum at the end of §"Recommendation".
+
 ### What IS already proven, separately from the production count
 
 `packages/domain/tests/integration/files.test.ts` (~line 380-407) injects exactly this failure —
@@ -127,6 +169,32 @@ indicates `driver.remove` failed (not `deleteFile` failing first, which is a dif
 retryable case) — at that point there is a REAL incident, a real bucket, and a real rate to design
 against, instead of a hypothetical one. Nothing needs to be built to make that trigger visible:
 `scheduler_runs.failures` already carries it, per the mechanism proven above.
+
+> ⛔ **THAT TRIGGER CANNOT FIRE TODAY, AND A TRIGGER THAT CANNOT FIRE IS NOT A DEFERRAL — IT IS A
+> FORGET. T-300, 2026-09-13.**
+>
+> The trigger watches for a non-empty `failures` array **from a job that cannot run**: the deployed
+> build has no `orphan-file-sweep` npm script, so the unit exits before any TypeScript executes and
+> writes **no `scheduler_runs` row at all** (DEF-326). The closing sentence above — *"nothing needs
+> to be built to make that trigger visible"* — was true on the zero-organisation premise and is
+> false now: `scheduler_runs.failures` cannot carry what the job never got far enough to record.
+>
+> ### The replacement, in two stages
+>
+> **Stage A — the arming precondition.** `orphan_file_sweep` produces a `scheduler_runs` row *at
+> all*. That requires DEF-326 and DEF-327 cleared and one successful deploy. ⚠️ **Until stage A is
+> met, the trigger below is INERT — and it is inert KNOWINGLY**, which is the whole difference
+> between a deferral and a forget. Observable with the same command that found DEF-326:
+> `journalctl -u shareat-orphan-file-sweep.service`.
+>
+> **Stage B — the original trigger, unchanged.** Once stage A is met, watch
+> `scheduler_runs.failures` for `job = 'orphan_file_sweep'` exactly as written above.
+>
+> ⭐ **Why this is worth the extra sentence rather than a note in a report:** the assessment's
+> recommendation is *"do not build it now"*, and the only thing standing between that and *"nobody
+> ever revisited it"* is a trigger someone can actually observe. A two-stage trigger whose first
+> stage is a deploy that is already tracked by two register rows costs nothing to carry and cannot
+> quietly become unobservable.
 
 ## Scope
 

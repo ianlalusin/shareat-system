@@ -45,6 +45,17 @@ terms, with `shareat-finding-observation` exiting 1 nightly for exactly that rea
 droplet access and cannot query production directly — this is the orchestrator's/Ian's to confirm
 independently, not something I can verify myself.
 
+> ⛔ **CONFIRMED INDEPENDENTLY, AND IT CAME BACK THE OTHER WAY — T-300, 2026-09-13.** The lane was
+> right to flag this as unverifiable from here, and right to ask for it: **production holds ONE
+> organisation**, `SHAREAT OPC` (`select count(*) from organizations` → `1`, run against the live
+> database as the admin role; independently derivable from `/var/log/shareat/budget-reissue.log`'s
+> `ok — created 0 · 1 orgs` at 2026-09-12 15:57 UTC). The 2026-09-06 status quoted above was a true
+> measurement **of 2026-09-06** and had been quoted forward as current for six days.
+>
+> ⭐ **So the answer to this section's question changes from "no, and nothing is counting down" to
+> "no, and the countdown has started."** See the re-dated FOR IAN block below — the deadline is
+> **2027-09-01**.
+
 **This machine's own local dev database: not yet, but it has a visible countdown running.**
 `shareat_dev` (`DATABASE_URL`, `localhost:5435`) has exactly one organisation:
 
@@ -256,6 +267,23 @@ now over a job name instead of a migration number. **Spec now, build after, by w
 **What this is:** a scheduled job to stop `fiscal_periods` coverage from running out a year after any
 organisation is created — found while specifying T-274, not something urgent today (production has
 zero organisations; this machine's own dev org still has ~4 months of runway).
+
+> ⛔ **RE-DATED — T-300, 2026-09-13. Still not urgent. No longer open-ended, and this is the
+> sentence to read if you read nothing else in this block.**
+>
+> Production holds **one** organisation, `SHAREAT OPC`, created in business month **2026-09**
+> (`count(*) = 1`, measured 2026-09-13 as the admin role). `bootstrapOrganization` seeds **12
+> consecutive calendar months from the organisation's current business month**
+> (`fiscalPeriodSeedWindow`, `packages/domain/src/organizations/index.ts:95-117`, `months: 12`).
+>
+> **So SHAREAT OPC's `fiscal_periods` cover `2026-09` → `2027-08`, and the first uncovered date is
+> `2027-09-01` (Asia/Manila).** That is roughly **11½ months of runway** from today.
+>
+> ⭐ **The deferral survives and gets a deadline instead of a feeling.** This row predicted *"cheap
+> now and an outage later"*; the "later" is now a date, and the recommendation becomes **build the
+> coverage job before 2027-09-01**. ⚠️ The January cutover falls well inside that window, so the
+> organisation will be carrying real books long before coverage runs out — which is precisely the
+> combination that makes a silent expiry expensive rather than annoying.
 
 **Three things only you can decide:**
 

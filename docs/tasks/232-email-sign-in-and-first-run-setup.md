@@ -21,6 +21,13 @@ because no organisation exists yet — is taken to a first-run screen that creat
 his person, his roles, the first store and his sign-in link in one transaction, then lands him in
 the app.** After that, the same email signs him straight in.
 
+> ✅ **ACHIEVED, AND THE DOOR IT DESCRIBES IS NOW SHUT — T-300, 2026-09-13.** Production holds one
+> organisation, `SHAREAT OPC` (`count(*) = 1`, measured 2026-09-13 as the admin role). The clause
+> *"because no organisation exists yet"* is the gate this feature was built around, and it has
+> closed exactly as designed: `resolveVerifiedSignIn` now answers `not-linked`, and
+> `bootstrapOrganization` refuses outright. **This goal reads in the past tense from here on** — the
+> second sentence, *"after that, the same email signs him straight in"*, is the part still in force.
+
 ## The decisions already made (orchestrator, 2026-09-07 — say so if a lane finds one wrong)
 
 1. **Identity provider is v1's Firebase project** — `studio-7300228488-a394e` (ERP-rebuild's
@@ -716,6 +723,16 @@ it is staged. 3/3 with `setup/` untracked.
   handed a 10-minute token for `/setup`. Any account in v1's Firebase project qualifies. So create
   the organisation yourself before the URL is shared, and the door closes for good the moment it
   exists.
+  > ✅ **EXTINGUISHED — T-300, 2026-09-13. This is now a record of a risk that closed, not a live
+  > warning.** The organisation exists (`SHAREAT OPC`, `count(*) = 1`), so the door has shut exactly
+  > as this bullet said it would: `bootstrapOrganization` takes an advisory lock and then refuses —
+  > *"this system already has an organization, so first-run setup is closed"*
+  > (`packages/domain/src/organizations/index.ts:341-348`) — and a stranger's sign-in now returns
+  > `not-linked` rather than a `/setup` token.
+  > ⚠️ **The instruction was followed, but nobody wrote down when.** The organisation was created at
+  > some point between 2026-09-06 evening and 2026-09-12 15:57 UTC. Whether the URL was shared
+  > before that is not recorded anywhere — so this closed *safely*, but it closed **unobserved**,
+  > which is a weaker outcome than the bullet was asking for.
 - **For the 9008 smoketest**, the same three `NEXT_PUBLIC_*` values plus `FIREBASE_PROJECT_ID` must
   be in the repo's `.env.local` — they are blank there today, and with them blank the form replaces
   itself with *"Email sign-in is not configured on this server"* and the PIN form keeps working.

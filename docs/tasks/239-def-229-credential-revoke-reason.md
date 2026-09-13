@@ -402,6 +402,31 @@ production yet — nobody has completed sign-in — so `person_credentials` has 
 That is a better fact than the one the spec had ("unknown from here"), and it did not change the
 decision: the backfill statement is written and is a no-op everywhere it has run.
 
+> ⛔ **THE CONSTRUCTION IS GONE — T-300, 2026-09-13. The decision is unchanged, but this is no
+> longer the reason for it, and the paragraph above must not be quoted forward.**
+>
+> Production holds **one** organisation (`SHAREAT OPC`; `select count(*) from organizations` → `1`,
+> measured 2026-09-13 as the admin role, the one role RLS cannot filter). It was created between
+> 2026-09-06 evening and 2026-09-12 15:57 UTC.
+>
+> ⚠️ **And `person_credentials` is very unlikely to be empty any more, which is the part that
+> matters here.** `bootstrapOrganization` writes the organisation, the first person, that person's
+> PIN and the link to their email account **in one transaction** (`docs/ops/README.md` §"Standing
+> up an organization", step 4). An organisation existing therefore implies at least one credential
+> row, and the clause *"nobody has completed sign-in"* is false on the `/setup` path, which
+> requires a verified Firebase sign-in before it will open.
+>
+> ⭐ **Why the decision survives anyway, and on a better argument than a row count.** §4 option A
+> was chosen because the CHECK is **fully validated** — the database enforces it. Any row inserted
+> after the constraint exists must satisfy it or the insert is refused; correctness never depended
+> on how many rows were there. The count decided only whether the *backfill* had work to do, and a
+> backfill that is a no-op and a backfill that rewrites one row reach the same end state.
+>
+> ⚠️ **What is genuinely not established**, stated rather than assumed: whether
+> `0138_def229_credential_revoke_reason.sql`'s backfill ran before or after SHAREAT OPC was created. It does not change the outcome — rows written by
+> today's code carry the reason by construction — but nobody should claim from this document that
+> production's `person_credentials` is empty. **It almost certainly is not.**
+
 ### 13.2 Both traps, executed rather than reasoned about
 
 - **§2 — the sibling's shape.** `sessions.test.ts` now has *"a superseded PIN is revoked with the
