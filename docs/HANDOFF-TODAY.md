@@ -225,8 +225,16 @@ with the analysis written and the spec not yet written**. **DEF-336** … **DEF-
 You are the orchestrator for shareat-system (C:\Users\ianla\webapps\shareat-system). Run the
 global /orchestrator skill. You are starting COLD.
 
-Read in this order: docs/RULES.md, docs/HANDOFF-TODAY.md, PROJECT_BIBLE.md §13 rows 194-201,
+Read in this order: docs/RULES.md, docs/HANDOFF-TODAY.md, PROJECT_BIBLE.md §13 rows 194-203,
 docs/DEFECTS-REGISTER.md section E (DEF-325 through DEF-345 are the live ones).
+
+⭐ Rows 202 and 203 are new and both constrain what you may do:
+  202 — ERP v2 borrows BOTH its Firebase projects (identity from v1's ERP, storage from
+        POS/CUSTOMER). T-309 fixes it. ⛔ Do NOT move the identity project while there is only
+        one way to sign in.
+  203 — a release may ship with a §9 gate unmet ONLY on Ian's explicit authorisation after being
+        told plainly which gate did not run. ⛔ It is not standing permission, and such a release
+        is never reported as "green".
 
 Tree clean, nothing unpushed, production serving the deployed commit with migration 0147 applied.
 PIN SIGN-IN WORKS — the T-304 cutover ran in full on 2026-09-13 and all eight steps passed on a
