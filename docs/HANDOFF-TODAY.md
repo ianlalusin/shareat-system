@@ -51,8 +51,9 @@ older rows below carry over.**
 | Integration — **scoped** | **exit 0** — 21 files, 810 passed, 295s, on `shareat_test_orch` |
 | Integration — `terminal-sign-in.test.ts` alone | ⭐ **exit 0, 23/23, 4.62s** — invariants 7 and 8, re-run by the orchestrator rather than taken on report |
 | Integration — **full suite** | ⛔ **NEVER RUN AGAINST THIS CODE.** OOM twice locally (DEF-245); CI disabled (DEF-336) |
-| **CI** | ⛔ **zero runs** for `58f198a`, `3c25275`, `d2e32a1`. ✅ Workflow re-enabled; the wrap-up push is its first real exercise |
-| Deploy | **success** — `34758896635`, `workflow_dispatch`, migrate + restart + health green |
+| **CI** | ⛔ **zero runs** for `58f198a`, `3c25275`, `d2e32a1` while disabled. ✅ **Re-enabled and PROVEN: run `34766105131` fired automatically on the wrap-up push, success, 171s** |
+| Deploy | **success** twice — `34758896635` (`workflow_dispatch`, the sign-in release) and then **automatically on `workflow_run`, 199s**, for the wrap-up push |
+| ⭐ **T-306's prediction** | ✅ **CONFIRMED on the first genuinely docs-only push.** `docs_only=true`; **exactly four** steps skipped (test role, migrations, integration, build); **171s** against a predicted 2-4 min. **Lane B called all three** |
 | **Production, on a device** | ✅ **All eight cutover steps passed.** Layer 1, layer 2, and the refusal |
 
 ## The cutover — what was actually proven, and how
@@ -87,7 +88,7 @@ disconnected from the decision that needed it.** Today it stopped being only abo
 | **DEF-336** ⛔ | `CI` disabled by hand; every push inert. **Fifth member of the DEF-194/240/326/332 *installed-but-never-armed* family, first outside systemd.** The lesson was on the droplet four times and never reached the CI provider |
 | **DEF-337** ⚠️ | `provision-terminal.ts` has no `SYSTEM_DATABASE_URL` guard; `deploy.yml` was hardened against the identical failure. ⭐ **Empirically discharged today** — the script reached the DB as `doadmin` |
 | **DEF-338** ⛔ | A test comment **orders** the deletion of a timeout the register forbids deleting. Its precondition came true **eleven lines below it** |
-| **DEF-339** ⚠️ | T-306 made docs pushes cheap in `CI` and left `Deploy` rebuilding and **restarting production** for a Markdown edit |
+| **DEF-339** ⚠️ | T-306 made docs pushes cheap in `CI` and left `Deploy` rebuilding and **restarting production** for a Markdown edit. ⭐ **Now measured: CI 171s (8 min saved), then Deploy spent 199s and restarted production anyway** |
 | **DEF-340** ⛔ | Every instruction says *"the Firebase console"* and never **which** — and there are two projects. **Caught by Ian, not by us** |
 | **DEF-341** ⚠️ | `erp2.shareat.net` is not an authorised domain; `erp.shareat.net` is |
 | **DEF-342** ⚠️ | v1 uses customers' **phone numbers as Firebase uids** |
