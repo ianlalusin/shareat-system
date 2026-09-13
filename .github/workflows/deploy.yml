@@ -125,7 +125,20 @@ jobs:
             ln -sf /srv/shareat-shared/.env.local "$RELEASE/.env.local"
 
             cd "$RELEASE"
-            npm run db:migrate
+            SYSTEM_DB_URL="$(grep -m1 '^SYSTEM_DATABASE_URL=' /srv/shareat-shared/.env.local | cut -d= -f2- || true)"
+            # DEF-196/DEF-203: this file has a documented history of CRLF line endings and a BOM
+            # on the box; strip a trailing CR and one layer of surrounding quotes before judging
+            # the value empty, so a decorated-but-present key is never misreported as absent.
+            SYSTEM_DB_URL="${SYSTEM_DB_URL%$'\r'}"
+            case "$SYSTEM_DB_URL" in
+              \"*\") SYSTEM_DB_URL="${SYSTEM_DB_URL#\"}"; SYSTEM_DB_URL="${SYSTEM_DB_URL%\"}" ;;
+              \'*\') SYSTEM_DB_URL="${SYSTEM_DB_URL#\'}"; SYSTEM_DB_URL="${SYSTEM_DB_URL%\'}" ;;
+            esac
+            if [ -z "$SYSTEM_DB_URL" ]; then
+              echo "::error::SYSTEM_DATABASE_URL is missing or empty in /srv/shareat-shared/.env.local — migrations need the admin connection string (docs/ops/README.md § THE CONSEQUENCE THAT WILL BITE). Refusing to run db:migrate rather than let it fail inside migrate.ts with an unrelated 'DATABASE_URL is not set'." >&2
+              exit 1
+            fi
+            DATABASE_URL="$SYSTEM_DB_URL" npm run db:migrate
 
             ln -sfn "$RELEASE" /srv/shareat.new
             mv -Tf /srv/shareat.new /srv/shareat
