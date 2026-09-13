@@ -911,6 +911,13 @@
       "when": 1798687907084,
       "tag": "0146_t289_position_capability_defaults",
       "breakpoints": true
+    },
+    {
+      "idx": 147,
+      "version": "7",
+      "when": 1798774307084,
+      "tag": "0147_t304_t303_terminal_sign_in_and_throttle",
+      "breakpoints": true
     }
   ]
 }

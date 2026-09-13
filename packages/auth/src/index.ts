@@ -25,16 +25,18 @@ export type { AssignRoleInput, AssignRoleAsActorInput, AssignRoleResult } from '
 export {
   signInWithPin,
   signInWithFirebase,
+  resolveTerminalIdentity,
   resolveActor,
   signOut,
   endShift,
+  endAllForDevice,
   setPin,
   PIN_SESSION_TTL_MS,
   BROWSER_SESSION_TTL_MS,
   /** T-239 / DEF-229 — exported so a test asserts the sentence the code writes, not a copy. */
   PIN_SUPERSEDED_REASON,
 } from './sessions';
-export type { SignInResult, ResolvedSession } from './sessions';
+export type { SignInResult, ResolvedSession, TerminalIdentity } from './sessions';
 export { hashPin, verifyPin, pinLookupHash, isValidPinFormat, newSessionToken, sessionTokenHash } from './credentials';
 /** T-237 / DEF-224 — administering someone else's sign-in credentials. Gated on `manage_users`,
  *  unlike everything in `sessions.ts`, which is why it is a separate module. */

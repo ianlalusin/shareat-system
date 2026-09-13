@@ -56,11 +56,28 @@ export async function findActiveCredentialByLookupHash(
   return row;
 }
 
-/** The browser path: a Firebase uid resolves to at most one active credential. */
+/** `findActiveCredentialByExternalId`'s row, plus the ONE additional fact T-304 needs from the
+ *  person it belongs to: is this a real person or a terminal's own row (option (a))? Kept as a
+ *  separate, wider type rather than widening `CredentialRow` itself, because `personKind` and
+ *  `personOrgId` have no meaning for the PIN path's `findActiveCredentialByLookupHash`. */
+export interface ExternalCredentialRow extends CredentialRow {
+  personKind: 'person' | 'terminal';
+  personOrgId: string;
+}
+
+/**
+ * The browser path: a Firebase uid resolves to at most one active credential.
+ *
+ * ⭐ T-304 — joins `persons` for `kind`/`org_id` so both `signInWithFirebase` (which must REFUSE a
+ * terminal-kind person, invariant 8) and `resolveTerminalIdentity` (which requires exactly the
+ * opposite) can decide from the one call, rather than each doing its own follow-up read. This is
+ * the "already lookup #2 on row 194's door" the spec names — the door itself gains two columns,
+ * not a second caller.
+ */
 export async function findActiveCredentialByExternalId(
   tx: Tx,
   externalId: string,
-): Promise<CredentialRow | undefined> {
+): Promise<ExternalCredentialRow | undefined> {
   const [row] = await tx
     .select({
       id: personCredentials.id,
@@ -71,11 +88,14 @@ export async function findActiveCredentialByExternalId(
       lookupHash: personCredentials.lookupHash,
       externalId: personCredentials.externalId,
       revokedAt: personCredentials.revokedAt,
+      personKind: persons.kind,
+      personOrgId: persons.orgId,
     })
     .from(personCredentials)
+    .innerJoin(persons, eq(persons.id, personCredentials.personId))
     .where(and(eq(personCredentials.externalId, externalId), isNull(personCredentials.revokedAt)))
     .limit(1);
-  return row;
+  return row as ExternalCredentialRow | undefined;
 }
 
 export interface InsertCredentialInput {
@@ -282,6 +302,52 @@ export async function endAllForPerson(
     .update(sessions)
     .set({ endedAt: sql`now()`, endedReason: reason })
     .where(and(...filters))
+    .returning({ id: sessions.id });
+  return ended.length;
+}
+
+/**
+ * ⭐ T-304 — the lost-tablet runbook's actual remote sign-out. Unlinking a terminal credential
+ * only stops FUTURE layer-1 authentication (`resolveTerminalIdentity` re-checks it on every PIN
+ * submission); it does nothing to a session already live on the device, because that session
+ * belongs to whichever real PERSON last entered a PIN there, not to the terminal (the terminal
+ * holds no session at all — layer 1 mints none). `device_id` is the only column that carries the
+ * terminal, and until now nothing filtered on it.
+ *
+ * ⛔ Scoped to the device ONLY, deliberately — not a person-or-device overload. Ending "every
+ * session this device has ever issued" is exactly what a stolen-tablet response needs and nothing
+ * broader; folding it into `endAllForPerson` would risk a caller passing both and getting a wider
+ * blast radius than they asked for.
+ */
+/** `scripts/provision-terminal.ts` test 9 — refuses a second live terminal credential for a store
+ *  that already has one, rather than silently minting two shared passwords for one tablet. */
+export async function hasLiveTerminalCredentialForStore(tx: Tx, storeId: string): Promise<boolean> {
+  // ⛔ Joins `persons` for `kind = 'terminal'` rather than inferring it from `storeId is not
+  // null` on a `kind = 'firebase'` row — the exact proxy T-304's spec forbids, the same
+  // direction the admin-form refusal is forbidden to go. An admin's own firebase credential can
+  // legitimately carry a `store_id` (nothing stops one being set) and must not false-positive
+  // this check into refusing to provision a real terminal for that store.
+  const [row] = await tx
+    .select({ id: personCredentials.id })
+    .from(personCredentials)
+    .innerJoin(persons, eq(persons.id, personCredentials.personId))
+    .where(
+      and(
+        eq(personCredentials.storeId, storeId),
+        eq(personCredentials.kind, 'firebase'),
+        eq(persons.kind, 'terminal'),
+        isNull(personCredentials.revokedAt),
+      ),
+    )
+    .limit(1);
+  return !!row;
+}
+
+export async function endAllForDevice(tx: Tx, deviceId: string, reason: SessionEndReason): Promise<number> {
+  const ended = await tx
+    .update(sessions)
+    .set({ endedAt: sql`now()`, endedReason: reason })
+    .where(and(eq(sessions.deviceId, deviceId), isNull(sessions.endedAt)))
     .returning({ id: sessions.id });
   return ended.length;
 }

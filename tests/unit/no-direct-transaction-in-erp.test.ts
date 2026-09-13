@@ -61,9 +61,15 @@ const repoRoot = join(import.meta.dirname, '..', '..');
  * real file makes the rule look narrower than it is, and the next person widens it by adding a
  * neighbour.
  */
+// ⭐ T-304 — down to ONE entry, not the two DEF-333's own spec anticipated. `sign-in/page.tsx`'s
+// store list is deleted outright (the fix this whole task exists for — no pre-auth read replaces
+// it). `sign-in/actions.ts` loses its exemption too, one step further than the spec's Q4 table
+// expected: its `transaction` import was already dead (DEF-288 had already routed every real
+// read through the auth door) and the T-304 rewrite removed the import itself, so DEF-296's own
+// rule applies — an exemption that no longer reaches a raw handle is removed, not kept, because
+// keeping it "makes the rule look narrower than it is." Verified with `grep -n "transaction("
+// apps/erp/src/app/sign-in/actions.ts` before removing: zero calls, comments only.
 const PRE_AUTH_PATHS: readonly string[] = [
-  'apps/erp/src/app/sign-in/actions.ts', // signInWithPin / signOut — the org is the OUTPUT
-  'apps/erp/src/app/sign-in/page.tsx', // the store picker, rendered to a visitor with no session
   'apps/erp/src/lib/session.ts', // resolveActor — it is what produces the actor
 ];
 

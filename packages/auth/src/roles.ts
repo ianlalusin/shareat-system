@@ -366,6 +366,15 @@ export async function assignRoleAsActor(
       'manage_users',
     );
   }
+  // ⛔ T-304 — a terminal (option (a)'s `persons` row for a shared store credential) holds no
+  // role. Read from `target.kind` itself, never a proxy — the spec's own warning against
+  // inferring "terminal" from `credential.storeId is not null` applies equally on this side.
+  if (target.kind === 'terminal') {
+    throw new AuthorizationError(
+      'assignRoleAsActor: a terminal credential is not a person and may not hold a role',
+      'manage_users',
+    );
+  }
 
   /**
    * ⭐ **Both authority checks and the lockout guard read these, so they are read ONCE — T-242.**
@@ -563,6 +572,24 @@ export async function grantCapabilityAsActor(
 
   if (!CAPABILITIES.includes(input.capability)) {
     throw new Error(`grantCapabilityAsActor: '${input.capability}' is not a known capability.`);
+  }
+
+  // ⛔ T-304 — same rule and same shape as `assignRoleAsActor`: existence checked first (so
+  // `target.kind` below is never read on `undefined` — the same invariant, stated once, that
+  // makes that function's plain `target.kind` safe), THEN a terminal holds no role AND no grant,
+  // read from `target.kind` itself, never a proxy.
+  const target = await personsRepo.getPersonById(tx, actor.orgId, input.personId);
+  if (!target) {
+    throw new AuthorizationError(
+      `grantCapabilityAsActor: person ${input.personId} does not exist in org ${actor.orgId}`,
+      'grant_capability',
+    );
+  }
+  if (target.kind === 'terminal') {
+    throw new AuthorizationError(
+      'grantCapabilityAsActor: a terminal credential is not a person and may not hold a capability',
+      'grant_capability',
+    );
   }
 
   // ⛔ `granted_by` is the ACTOR, never null. The base case of the authority chain is

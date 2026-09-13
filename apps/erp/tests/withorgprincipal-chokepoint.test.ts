@@ -12,12 +12,16 @@
  * package directly again would silently create a second, unwrapped path to the database that the
  * counter cannot see.
  *
- * Part 2 (§B4.1) — F8: seven production paths hand a domain function `null` and let it open its own
+ * Part 2 (§B4.1) — production paths hand a domain function `null` and let it open its own
  * transaction, so they never pass through the chokepoint at all. Six are wrapped in
- * `recordingRefusalsFor`; the seventh (`setup/actions.ts`) is deliberately left alone — no
- * organisation exists yet on that path, so there is nothing to file a refusal row under. This is a
- * CENSUS, not a prohibition on the shape itself: an eighth appearing (wrapped or not) must be
- * accounted for explicitly, here, or the counter has a new blind spot nobody decided to accept.
+ * `recordingRefusalsFor`. ⚠️ **This paragraph's own "seven"/"six wrapped, one unwrapped" undercounts
+ * even before this change** — the DEF-288 paragraph below already lists FIVE unwrapped sites, not
+ * one, so the true prior total was eleven, not seven; the arithmetic here was never updated when
+ * those four joined. Not re-derived in full here — flagged rather than silently perpetuated. T-304
+ * adds a SIXTH unwrapped site, `resolveTerminalIdentity` (same shape, one layer earlier than the
+ * DEF-288 calls it joins), making twelve. This is a CENSUS, not a prohibition on the shape itself:
+ * a new one appearing (wrapped or not) must be accounted for explicitly, here, or the counter has
+ * a new blind spot nobody decided to accept.
  *
  * ⚠️ **Discriminate by SHAPE, not by spelling — required, not advisory (§B4.1).** A naive sweep for
  * `(null` as a first argument returns 18 matches in this tree, not 7: the other 11 are React
@@ -113,9 +117,9 @@ function domainOrAuthImportedNames(text: string): string[] {
 }
 
 /**
- * The seven call sites §B4.1 names, keyed `file:identifier`. Six are wrapped in
- * `recordingRefusalsFor` so the refusal counter can still see them; the seventh is the deliberate
- * exception below.
+ * The call sites this guard knows about, keyed `file:identifier`. Six are wrapped in
+ * `recordingRefusalsFor` so the refusal counter can still see them; the rest are the deliberate
+ * exceptions below (see the header's note on the stale "seven" this file used to claim).
  */
 const WRAPPED_NULL_TX_SITES: ReadonlySet<string> = new Set([
   'app/cutover/actions.ts:attestStep',
@@ -149,12 +153,18 @@ const ALLOWLISTED_UNWRAPPED_NULL_TX_SITES: ReadonlySet<string> = new Set([
   'app/setup/actions.ts:signInWithFirebase',
   'app/sign-in/actions.ts:signInWithPin',
   'app/sign-in/actions.ts:signOut',
+  // T-304 — the SAME shape and the SAME reason as the four DEF-288 calls above, arrived at from
+  // one layer earlier: `resolveTerminalIdentity` is what DISCOVERS the terminal's org and store,
+  // so there is no `actor.orgId` yet to file a refusal under. It is called from both
+  // `verifyTerminalAction` (layer 1) and `signInWithTerminalPinAction` (layer 2's re-resolve,
+  // orchestrator's carrier ruling, 2026-09-13) — one key here covers both call sites.
+  'app/sign-in/actions.ts:resolveTerminalIdentity',
   'app/sign-in/lib.ts:signInWithFirebase',
   'lib/session.ts:resolveActor',
 ]);
 
 describe('T-261 — every null-tx call bypassing the chokepoint is accounted for (§B4.1)', () => {
-  it('the null-tx population is exactly the seven known call sites, no eighth', () => {
+  it('the null-tx population is exactly the known call sites, no unaccounted one', () => {
     const found = new Map<string, number>(); // "file:identifier" -> 1-based line
 
     for (const f of FILES) {

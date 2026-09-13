@@ -40,6 +40,7 @@
     "budget-reissue": "tsx scripts/budget-reissue.ts",
     "recurring-expense-draft": "tsx scripts/recurring-expense-draft.ts",
     "bootstrap-org": "tsx scripts/bootstrap-org.ts",
+    "provision-terminal": "tsx scripts/provision-terminal.ts",
     "backfill-fiscal-periods": "tsx scripts/backfill-fiscal-periods.ts",
     "deploy-preflight": "tsx scripts/deploy-preflight.ts"
   },

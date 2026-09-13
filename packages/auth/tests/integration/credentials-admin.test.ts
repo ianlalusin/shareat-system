@@ -483,11 +483,11 @@ describe('DEF-228 — re-issuing a PIN retires the one it replaces', () => {
     // Before T-237 this signed in happily: the old credential was never revoked, only the sessions
     // minted under it were ended.
     await expect(
-      asOrg(f.orgId, (tx) => signInWithPin(tx, { storeId: f.storeId, pin: '111111' })),
+      asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: '111111' })),
     ).rejects.toThrow(AuthenticationError);
 
     const newSession = await asOrg(f.orgId, (tx) =>
-      signInWithPin(tx, { storeId: f.storeId, pin: '222222' }),
+      signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: '222222' }),
     );
     expect(newSession.personId).toBe(f.personId);
     expect(await liveCredentialCount(f.personId)).toBe(1);
@@ -506,11 +506,11 @@ describe('DEF-228 — re-issuing a PIN retires the one it replaces', () => {
     // One live PIN per store, and the second store's still signs in.
     expect(await liveCredentialCount(f.personId)).toBe(2);
     const atStore2 = await asOrg(f.orgId, (tx) =>
-      signInWithPin(tx, { storeId: f.storeId2, pin: '345678' }),
+      signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId2, pin: '345678' }),
     );
     expect(atStore2.personId).toBe(f.personId);
     const atStore1 = await asOrg(f.orgId, (tx) =>
-      signInWithPin(tx, { storeId: f.storeId, pin: '345678' }),
+      signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: '345678' }),
     );
     expect(atStore1.personId).toBe(f.personId);
   });

@@ -116,7 +116,7 @@ describe('signOutAction — the function every sign-out button calls (T-257/DEF-
   it('ends the SERVER session (proven by querying `sessions` directly, not by re-resolving the token) and redirects to /sign-in', async () => {
     const f = await setup('ends-session');
     await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '778899' }));
-    const res = await asOrg(f.orgId, (tx) => signInWithPin(tx, { storeId: f.storeId, pin: '778899' }));
+    const res = await asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: '778899' }));
 
     jar.set('shareat_session', res.token);
 

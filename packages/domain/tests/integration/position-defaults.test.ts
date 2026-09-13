@@ -546,7 +546,15 @@ describe('T-289 case 13 — migration 0146 applies to an empty database, and adm
   // delete this timeout override, since a scoped-per-run database name would remove the wait this
   // is absorbing, not just outlast it.
   it('proven on a scratch database, created and dropped here — never a shared one', async () => {
-    const scratchName = 'shareat_test_scratch_t289';
+    // DEF-334: was a hardcoded literal, identical across every lane/session on this one Postgres
+    // server — confirmed as a real, reproducible collision (4/4 concurrent trials, immediate
+    // `duplicate key value violates unique constraint "pg_database_datname_index"` on `CREATE
+    // DATABASE`). `process.pid` is unique among every process alive on this OS at once, so two
+    // RUNS THAT ARE BOTH STILL RUNNING can never compute the same name — that's the property
+    // (not "unlikely to collide"). The lane tag is cosmetic (so `pg_database` reads legibly); the
+    // pid is what makes it structural.
+    const laneTag = new URL(url!).pathname.replace(/^\//, '').replace(/[^a-zA-Z0-9_]/g, '_');
+    const scratchName = `${laneTag}_scratch_t289_${process.pid}`;
     const scratchUrl = (() => {
       const u = new URL(url!);
       u.pathname = `/${scratchName}`;

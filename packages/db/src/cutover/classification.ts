@@ -246,6 +246,12 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'January. Purging them forces a clean re-authentication, which is the correct posture for ' +
       'the first day of a new ledger.',
   },
+  pin_attempt_throttle: {
+    class: 'purge',
+    reason:
+      'A rate-limit counter, not configuration — same class as sessions and for the same ' +
+      'reason. A cooldown mid-window in December has no business surviving into January.',
+  },
 
   // ---- T-154: the staff master record (Phase 4, lane B) --------------------------------
   positions: {

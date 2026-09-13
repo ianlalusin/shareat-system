@@ -43,6 +43,12 @@ const REQUIRED_CALLERS = [
   // natural fix here, it is the only one. ⛔ Never add a policy to make the app role work.
   'packages/etl/src/run.ts',
   'packages/db/src/repo/etl.ts',
+  // T-304 — a one-shot admin script, run by a person, never by a request: the same shape and the
+  // same reason as `scripts/bootstrap-org.ts` above, which this file is explicitly instructed to
+  // mirror (docs/tasks/304-two-layer-terminal-sign-in.md §"SCOPE CORRECTION"). It creates a
+  // terminal's persons/credential rows before any organisation-scoped session could exist to run
+  // it, exactly bootstrap-org.ts's own justification for the same connection.
+  'scripts/provision-terminal.ts',
 ] as const;
 
 /**

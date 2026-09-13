@@ -15,7 +15,8 @@
 import type { Tx } from '@shareat/db';
 // `transaction` remains for endShift / credential supersede — NOT auth-door work: both take a
 // person already resolved, and no caller passes null, so the fallback is unreached today.
-import { sessionsRepo, authTransaction, transaction } from '@shareat/db';
+import { sessionsRepo, pinAttemptsRepo, authTransaction, transaction, withOrgPrincipal } from '@shareat/db';
+import { formatBusinessDateTime } from '@shareat/core/datetime';
 import type { Actor } from './authorize';
 import { AuthenticationError } from './errors';
 import {
@@ -60,13 +61,81 @@ export interface SignInResult {
  * ⭐ **Exactly one KDF compare runs**, because the store-scoped lookup hash narrows to at most one
  * row first (T-138 invariant 5). v1 iterates bcrypt over every candidate.
  */
+/**
+ * ⭐ T-303/T-304 — the throttle wraps the credential lookup; it does not share its connection.
+ *
+ * By the time a PIN is typed, layer 1 has already resolved the terminal's `orgId`/`storeId`
+ * (`resolveTerminalIdentity`, below), so the throttle is an ORDINARY org-scoped table now —
+ * checked and updated under a real `withOrgPrincipal(orgId, …)`, never the auth door. The auth
+ * door stays scoped to exactly the four lookups row 194 named; folding an unrelated table's
+ * reads and writes onto that same elevated connection would widen what it silently does, even
+ * though nothing would fail the closed-caller-list guard by name.
+ *
+ * ⚠️ **Cost, said out loud rather than left to a profiler**: the throttle check is now a second
+ * round trip on EVERY PIN submission, not once per sign-in — that is the price of keeping it off
+ * the auth door, and it is cheap (one indexed read when not locked).
+ *
+ * When `tx` is already supplied (tests, or any future caller with its own open, principal'd
+ * transaction) everything — throttle included — runs on that one transaction; the two-connection
+ * split above only applies to the production, `tx === null` path.
+ */
 export async function signInWithPin(
   tx: Tx | null,
-  input: { storeId: string; pin: string; deviceId?: string },
+  input: { orgId: string; storeId: string; pin: string; deviceId?: string },
 ): Promise<SignInResult> {
-  if (tx) return runPinSignIn(tx, input);
-  // DEF-288: the credential lookup precedes knowing the org, so it cannot carry a principal.
-  return authTransaction((trx) => runPinSignIn(trx, input));
+  if (tx) return runPinSignInWithThrottle(tx, tx, input);
+
+  const cooldown = await withOrgPrincipal(input.orgId, (ptx) =>
+    pinAttemptsRepo.checkThrottle(ptx, input.storeId),
+  );
+  if (cooldown.locked) throw new AuthenticationError(cooldownMessage(cooldown.lockedUntil!));
+
+  let result: SignInResult;
+  try {
+    // DEF-288: the credential lookup precedes knowing the org, so it cannot carry a principal.
+    result = await authTransaction((trx) => runPinSignIn(trx, input));
+  } catch (err) {
+    if (err instanceof AuthenticationError) {
+      // Advances identically for an unknown PIN and a wrong-person PIN — T-303 invariant 2.
+      await withOrgPrincipal(input.orgId, (ptx) => pinAttemptsRepo.recordMiss(ptx, input.orgId, input.storeId));
+    }
+    throw err;
+  }
+  await withOrgPrincipal(input.orgId, (ptx) => pinAttemptsRepo.clearOnSuccess(ptx, input.storeId));
+  return result;
+}
+
+/** Shared by the `tx`-supplied path: throttle and credential lookup on the same transaction. */
+async function runPinSignInWithThrottle(
+  throttleTx: Tx,
+  credentialTx: Tx,
+  input: { orgId: string; storeId: string; pin: string; deviceId?: string },
+): Promise<SignInResult> {
+  const cooldown = await pinAttemptsRepo.checkThrottle(throttleTx, input.storeId);
+  if (cooldown.locked) throw new AuthenticationError(cooldownMessage(cooldown.lockedUntil!));
+  try {
+    const result = await runPinSignIn(credentialTx, input);
+    await pinAttemptsRepo.clearOnSuccess(throttleTx, input.storeId);
+    return result;
+  } catch (err) {
+    if (err instanceof AuthenticationError) {
+      await pinAttemptsRepo.recordMiss(throttleTx, input.orgId, input.storeId);
+    }
+    throw err;
+  }
+}
+
+/** T-303 §Q3.B — names the clock time rather than a duration, so nobody has to do arithmetic
+ *  two minutes into a five-minute wait. Says "terminal", never "device": the counter is per
+ *  STORE, so every tablet at that branch is paused together (T-303 §Q3).
+ *
+ * ⛔ **`formatBusinessDateTime`, never a bare `toLocale*`** — `datetime.ts`'s own §12 landmine 7
+ * warning, named for exactly this call: the server runs UTC, so a raw `toLocaleTimeString` would
+ * tell a Manila cashier a time eight hours off her own clock — at a shift change, precisely the
+ * moment this message exists for. */
+function cooldownMessage(lockedUntil: Date): string {
+  const clock = formatBusinessDateTime(lockedUntil, { timeStyle: 'short' });
+  return `Too many wrong PINs. This terminal is paused until ${clock}. A manager can still sign in with their own email and password.`;
 }
 
 const BAD_PIN = 'Sign-in failed: that PIN is not valid for this store.';
@@ -126,10 +195,23 @@ export async function signInWithFirebase(
   return authTransaction((trx) => runFirebaseSignIn(trx, input));
 }
 
+const NOT_LINKED = 'Sign-in failed: this account is not linked to a person in this system.';
+
 async function runFirebaseSignIn(tx: Tx, input: { verifiedUid: string }): Promise<SignInResult> {
   const credential = await sessionsRepo.findActiveCredentialByExternalId(tx, input.verifiedUid);
   if (!credential || credential.kind !== 'firebase') {
-    throw new AuthenticationError('Sign-in failed: this account is not linked to a person in this system.');
+    throw new AuthenticationError(NOT_LINKED);
+  }
+  // ⛔⛔ T-304 invariant 8 — FULL STOP, not "only when called from the admin form."
+  // `signInWithFirebase` is reused for BOTH the admin email form and (before this check existed)
+  // would have been reusable for a terminal's shared credential. A refusal that depended on which
+  // caller invoked this function would be one convention away from being bypassed — the exact
+  // hazard the spec names: a store's shared password, typed into the ordinary admin form, must
+  // never yield a session. The SAME flat sentence as an unlinked account — this is not a new,
+  // distinguishing message, because "you used the wrong form" is not information layer 2 needs to
+  // withhold, but neither does it need advertising that terminal credentials exist at all.
+  if (credential.personKind === 'terminal') {
+    throw new AuthenticationError(NOT_LINKED);
   }
   return issue(tx, {
     personId: credential.personId,
@@ -139,6 +221,54 @@ async function runFirebaseSignIn(tx: Tx, input: { verifiedUid: string }): Promis
     deviceId: null,
     ttlMs: BROWSER_SESSION_TTL_MS,
   });
+}
+
+/** T-304 §Q1 — layer 1's own flat sentence. Distinct from `NOT_LINKED`: this box is never shown
+ *  to a person signing in as themselves, so there is no "wrong form" ambiguity to preserve, and
+ *  a store's own name in the message would cost nothing an attacker could not already see on the
+ *  sign-in screen (T-304 §Q2's store-listing removal did not make the store's EXISTENCE secret,
+ *  only the pre-auth database read that used to prove it). */
+const NOT_A_TERMINAL = 'Sign-in failed: this account is not registered as a store terminal.';
+
+export interface TerminalIdentity {
+  readonly orgId: string;
+  readonly storeId: string;
+  /** The terminal's own `persons.id` (option (a)) — stable across Firebase token refreshes, one
+   *  per shared credential. Used as `sessions.device_id` when layer 2 issues the real session,
+   *  and as `endAllForDevice`'s key for the lost-tablet runbook. */
+  readonly deviceId: string;
+}
+
+/**
+ * ⭐ T-304 layer 1 — resolves a verified Firebase uid to the store terminal it belongs to, or
+ * refuses. Mints **no session** (invariant 2): a terminal has not identified a person yet, and a
+ * `sessions` row asserts exactly that.
+ *
+ * ⛔ **Re-resolved on every PIN submission, not cached across the two steps** — orchestrator's
+ * carrier ruling, 2026-09-13. A signed cookie asserting "I am the terminal at store X" would keep
+ * working after the credential behind it was revoked, which breaks the lost-tablet runbook (its
+ * step 2 is "unlink the terminal credential → no future layer-1 sign-in resolves"). Re-checking
+ * here on every attempt is what makes that true — see `endAllForDevice` for the other half (the
+ * session already live on a stolen tablet, which unlinking alone does not touch).
+ *
+ * Reuses `findActiveCredentialByExternalId` — the door's existing lookup #2 — rather than adding
+ * a caller: the four-lookup auth door gains no fifth entry.
+ */
+export async function resolveTerminalIdentity(tx: Tx | null, verifiedUid: string): Promise<TerminalIdentity> {
+  const run = async (trx: Tx): Promise<TerminalIdentity> => {
+    const credential = await sessionsRepo.findActiveCredentialByExternalId(trx, verifiedUid);
+    if (!credential || credential.kind !== 'firebase' || credential.personKind !== 'terminal') {
+      throw new AuthenticationError(NOT_A_TERMINAL);
+    }
+    if (!credential.storeId) {
+      // Unreachable by construction if `provision-terminal` is the only writer — checked anyway,
+      // the same discipline `runPinSignIn`'s "should be unreachable" store check already follows.
+      throw new AuthenticationError(NOT_A_TERMINAL);
+    }
+    return { orgId: credential.personOrgId, storeId: credential.storeId, deviceId: credential.personId };
+  };
+  if (tx) return run(tx);
+  return authTransaction(run);
 }
 
 async function issue(
@@ -251,6 +381,26 @@ export async function endShift(
 ): Promise<{ ended: number }> {
   const run = async (trx: Tx) => ({
     ended: await sessionsRepo.endAllForPerson(trx, input.personId, 'shift_end', input.storeId),
+  });
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/**
+ * ⭐ T-304 — the lost-tablet runbook's actual remote sign-out. Unlinking the terminal credential
+ * (revoking its `person_credentials` row) only stops FUTURE layer-1 authentication —
+ * `resolveTerminalIdentity` re-checks it on every PIN submission. It does nothing to a session
+ * ALREADY live on the device, because that session belongs to whichever real person last entered
+ * a PIN there, not to the terminal (the terminal holds no session at all — invariant 2). This is
+ * the other half: end whatever is live on the device itself, `device_id` being the only column
+ * that carries it.
+ */
+export async function endAllForDevice(
+  tx: Tx | null,
+  input: { deviceId: string },
+): Promise<{ ended: number }> {
+  const run = async (trx: Tx) => ({
+    ended: await sessionsRepo.endAllForDevice(trx, input.deviceId, 'revoked'),
   });
   if (tx) return run(tx);
   return transaction(run);

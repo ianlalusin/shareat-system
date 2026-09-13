@@ -370,6 +370,15 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'would leak the shape of another franchise’s operation even with the token hashed.',
   },
 
+  // T-303/T-304 (docs/tasks/303-pin-attempt-lockout.md §THE DESIGN).
+  pin_attempt_throttle: {
+    scope: 'org_column',
+    reason:
+      'A throttle belongs to a store, and a store to one org — the same shape as a dozen ' +
+      'existing entries. Written AFTER layer 1 resolves the terminal (T-304), so org_id and ' +
+      'store_id are both known and this is never a pre-authentication write (DEF-333).',
+  },
+
   // T-124 — fixed assets (docs/tasks/124-fixed-assets-and-depreciation.md).
   prepaid_items: {
     scope: 'org_column',

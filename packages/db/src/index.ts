@@ -163,6 +163,7 @@ export type { InboxQuarantineRow, ReasonCount } from './repo/inbox-quarantine';
 export * as liabilitiesRepo from './repo/liabilities';
 export * as customersRepo from './repo/customers';
 export * as sessionsRepo from './repo/sessions';
+export * as pinAttemptsRepo from './repo/pin-attempts';
 export * as apRepo from './repo/ap';
 export * as arRepo from './repo/ar';
 export * as tradeRepo from './repo/trade';

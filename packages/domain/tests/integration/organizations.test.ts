@@ -96,7 +96,7 @@ describe('T-228 case 5 — ⭐ the chicken-and-egg, actually broken', () => {
     // is the production caller: it no longer opens a bare transaction, it passes null and lets
     // `signInWithPin` open the auth door (bible row 194). The reasoning the old comment gave is
     // still exactly right: nothing can know the org before the PIN resolves who is signing in.
-    const session = await signInWithPin(null, { storeId: made.storeId, pin });
+    const session = await signInWithPin(null, { orgId: made.orgId, storeId: made.storeId, pin });
 
     expect(session.personId).toBe(made.personId);
     expect(session.token).toBeTruthy();

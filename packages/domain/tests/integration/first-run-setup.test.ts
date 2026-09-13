@@ -311,7 +311,7 @@ describe('T-232 case 6 — the CLI calls the same function and still works', () 
     expect(result.pinCredentialId).toBeTruthy();
     expect(await countOf('person_credentials')).toBe(1);
 
-    const session = await signInWithPin(null, { storeId: result.storeId, pin });
+    const session = await signInWithPin(null, { orgId: result.orgId, storeId: result.storeId, pin });
     expect(session.personId).toBe(result.personId);
 
     // ⚠️ And nothing minted a Firebase credential by accident — an unknown uid is still refused.

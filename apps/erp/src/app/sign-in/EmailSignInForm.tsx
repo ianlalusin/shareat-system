@@ -32,52 +32,10 @@
  * browser, and it is ours.
  */
 import { useState } from 'react';
-import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
-import {
-  getAuth,
-  inMemoryPersistence,
-  setPersistence,
-  signInWithEmailAndPassword,
-  type Auth,
-} from 'firebase/auth';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { publicEnv } from '@shareat/core/env';
 import { signInWithEmailAction } from './actions';
-
-/** ⛔ Never `TERMINAL_APP_NAME`. See the header — that name owns an offline Firestore store. */
-const SIGN_IN_APP_NAME = 'shareat-sign-in';
-
-let cached: { app: FirebaseApp; auth: Auth } | null = null;
-
-/**
- * The one Firebase instance this form ever uses.
- *
- * ⚠️ Memoised and name-matched rather than re-initialised, because `initializeApp` throws on a
- * second call with the same name — and React's development double-render makes that a certainty
- * rather than a risk.
- */
-function signInFirebase(): { app: FirebaseApp; auth: Auth } {
-  if (cached) return cached;
-
-  // ⚠️ Every value here is inlined by Next at BUILD time from the deploy workflow's
-  // `NEXT_PUBLIC_FIREBASE_*` secrets. If they are wrong, the browser talks to the wrong Firebase
-  // project and Ian's password is "incorrect" against a project his account does not exist in —
-  // which is why `publicEnv()` validates them loudly instead of defaulting them.
-  const cfg = publicEnv();
-  const existing = getApps().find((a) => a.name === SIGN_IN_APP_NAME);
-  const app =
-    existing ??
-    initializeApp(
-      {
-        apiKey: cfg.NEXT_PUBLIC_FIREBASE_API_KEY,
-        authDomain: cfg.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-        projectId: cfg.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-      },
-      SIGN_IN_APP_NAME,
-    );
-
-  cached = { app, auth: getAuth(app) };
-  return cached;
-}
+import { signInFirebase, prepareSignInPersistence } from './firebase-client';
 
 /**
  * ⚠️ **One sentence for every wrong-credential shape.** `auth/user-not-found`,
@@ -167,7 +125,7 @@ export function EmailSignInForm({ next }: { next: string }) {
     try {
       const { auth } = signInFirebase();
       // Must be set before signing in — see the header. Persistence chosen per app instance.
-      await setPersistence(auth, inMemoryPersistence);
+      await prepareSignInPersistence(auth);
       const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
       idToken = await credential.user.getIdToken();
     } catch (err) {

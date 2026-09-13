@@ -13,8 +13,7 @@
  * browser chose.
  */
 import { redirect } from 'next/navigation';
-import { signInWithPin, signOut, AuthenticationError } from '@shareat/auth';
-import { transaction } from '@shareat/db';
+import { signInWithPin, signOut, resolveTerminalIdentity, AuthenticationError } from '@shareat/auth';
 import {
   setSessionCookie,
   clearSessionCookie,
@@ -31,16 +30,51 @@ function str(fd: FormData, key: string): string {
   return typeof v === 'string' ? v.trim() : '';
 }
 
-export async function signInAction(formData: FormData): Promise<void> {
-  const storeId = str(formData, 'storeId');
+/**
+ * T-304 layer 1 — verifies the terminal's Firebase credential and confirms it belongs to a
+ * store terminal (`resolveTerminalIdentity`, `@shareat/auth`), so the client can advance to the
+ * PIN step. **Returns a value rather than redirecting**: it is called directly from
+ * `TerminalSignInForm`'s submit handler, not as a `<form action>`.
+ *
+ * ⛔ **No org, no store, no tenancy id of any shape reaches the response** (invariant 9) — only
+ * `{ ok }` or `{ ok: false, message }`. The server re-resolves the identity again, from scratch,
+ * on the actual PIN submission below; this call exists purely so the terminal form can tell a
+ * wrong terminal credential from a correct one before asking for a PIN.
+ */
+export async function verifyTerminalAction(
+  idToken: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    const identity = await verifyFirebaseIdToken(idToken);
+    await resolveTerminalIdentity(null, identity.uid);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, message: preSessionMessage(err, SIGN_IN_POLICY) };
+  }
+}
+
+/**
+ * T-304 layer 2 — identifies the person. The browser posts the terminal's Firebase ID token
+ * AGAIN (never cached from layer 1 — see `TerminalSignInForm`'s header) and the PIN; the server
+ * re-resolves `{orgId, storeId}` from the token every time, so revoking the terminal credential
+ * takes effect on the very next PIN attempt rather than only the next full sign-in (orchestrator's
+ * carrier ruling, 2026-09-13 — this is what `TerminalSignInForm`'s test 12 encodes).
+ *
+ * ⚠️ **The auth door is now touched on every PIN submission, not once per sign-in.** That is a
+ * real change in how hot this path runs, and it is the ordering the ruling asks for: resolve the
+ * terminal, THEN throttle-check that store, THEN the PIN lookup and the KDF — `signInWithPin`
+ * does the throttle-before-lookup half; this function supplies the org/store the throttle needs.
+ */
+export async function signInWithTerminalPinAction(formData: FormData): Promise<void> {
+  const idToken = str(formData, 'idToken');
   const pin = str(formData, 'pin');
   const next = safeNext(str(formData, 'next'));
 
   let redirectTo: string;
   try {
-    if (!storeId) throw new AuthenticationError('Choose a store first.');
-    // `null` — the credential lookup precedes knowing the org (DEF-288, bible row 194).
-    const result = await signInWithPin(null, { storeId, pin });
+    const identity = await verifyFirebaseIdToken(idToken);
+    const { orgId, storeId, deviceId } = await resolveTerminalIdentity(null, identity.uid);
+    const result = await signInWithPin(null, { orgId, storeId, pin, deviceId });
     await setSessionCookie(result.token, result.expiresAt);
     redirectTo = next;
   } catch (err) {

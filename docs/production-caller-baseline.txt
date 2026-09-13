@@ -34,7 +34,6 @@ expectedAccumulated
 findCurrentDocument
 findLiveOfKind
 findPostedSettlementForChannelDay
-formatBusinessDateTime
 formatConversionSummary
 formatCoverageReport
 getAllocationsForPayment

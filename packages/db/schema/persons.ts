@@ -17,16 +17,29 @@ import { sql } from 'drizzle-orm';
 import { boolean, check, index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
 
-export const persons = pgTable('persons', {
-  id: uuid('id').primaryKey().default(sql`uuidv7()`),
-  orgId: uuid('org_id')
-    .notNull()
-    .references(() => organizations.id, { onDelete: 'restrict' }),
-  displayName: text('display_name').notNull(),
-  isActive: boolean('is_active').notNull().default(true),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }),
-});
+export const persons = pgTable(
+  'persons',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    displayName: text('display_name').notNull(),
+    isActive: boolean('is_active').notNull().default(true),
+    /**
+     * ⭐ T-304 — explicit, not inferred. A shared-terminal Firebase credential (option (a),
+     * `docs/tasks/304-two-layer-terminal-sign-in.md` §Q1) is attached to a `persons` row that is
+     * not a human being, and every place that would otherwise treat it as one — a role grant, a
+     * staff listing, a headcount — must read THIS column rather than a proxy like
+     * `credential.storeId is not null`, which is an implicit rule two conventions away from being
+     * wrong (the spec's own words).
+     */
+    kind: text('kind', { enum: ['person', 'terminal'] }).notNull().default('person'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }),
+  },
+  (t) => [check('persons_kind_check', sql`${t.kind} in ('person', 'terminal')`)],
+);
 
 export const personIdentities = pgTable(
   'person_identities',

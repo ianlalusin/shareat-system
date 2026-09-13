@@ -104,7 +104,7 @@ describe('the PIN round trip', () => {
     const f = await setup('rt');
     await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '123456' }));
 
-    const res = await asOrg(f.orgId, (tx) => signInWithPin(tx, { storeId: f.storeId, pin: '123456' }));
+    const res = await asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: '123456' }));
     expect(res.token.length).toBeGreaterThan(20);
 
     const resolved = await asOrg(f.orgId, (tx) => resolveActor(tx, res.token));
@@ -118,7 +118,7 @@ describe('the PIN round trip', () => {
     // A sessions table readable by an operator must not be a table of live credentials.
     const f = await setup('nostore');
     await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '222222' }));
-    const res = await asOrg(f.orgId, (tx) => signInWithPin(tx, { storeId: f.storeId, pin: '222222' }));
+    const res = await asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: '222222' }));
 
     const rows = await sql<{ token_hash: string }[]>`select token_hash from sessions where id = ${res.sessionId}`;
     expect(rows[0]!.token_hash).not.toBe(res.token);
@@ -144,11 +144,11 @@ describe('⭐ failure modes are indistinguishable', () => {
     await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '111111' }));
 
     const wrong = await asOrg(f.orgId, (tx) =>
-      signInWithPin(tx, { storeId: f.storeId, pin: '999999' }).catch((e: Error) => e.message),
+      signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: '999999' }).catch((e: Error) => e.message),
     );
     const f2 = await setup('same2');
     const unknown = await asOrg(f2.orgId, (tx) =>
-      signInWithPin(tx, { storeId: f2.storeId, pin: '888888' }).catch((e: Error) => e.message),
+      signInWithPin(tx, { orgId: f2.orgId, storeId: f2.storeId, pin: '888888' }).catch((e: Error) => e.message),
     );
     expect(wrong).toBe(unknown);
   });
@@ -158,7 +158,7 @@ describe('⭐ failure modes are indistinguishable', () => {
     for (const bad of ['', '12345', '1234567', 'abcdef', '12 456']) {
       expect(isValidPinFormat(bad)).toBe(false);
       await expect(
-        asOrg(f.orgId, (tx) => signInWithPin(tx, { storeId: f.storeId, pin: bad })),
+        asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: bad })),
       ).rejects.toThrow(AuthenticationError);
     }
   });
@@ -169,7 +169,7 @@ describe('⭐ failure modes are indistinguishable', () => {
     await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '456789' }));
 
     await expect(
-      asOrg(f.orgId, (tx) => signInWithPin(tx, { storeId: f.storeId2, pin: '456789' })),
+      asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId2, pin: '456789' })),
     ).rejects.toThrow(AuthenticationError);
 
     expect(pinLookupHash(f.storeId, '456789')).not.toBe(pinLookupHash(f.storeId2, '456789'));
@@ -190,7 +190,7 @@ describe('sessions end BOTH ways (Ian: "yes both")', () => {
   it('signing out ends it, and the token stops resolving', async () => {
     const f = await setup('signout');
     await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '112233' }));
-    const res = await asOrg(f.orgId, (tx) => signInWithPin(tx, { storeId: f.storeId, pin: '112233' }));
+    const res = await asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: '112233' }));
 
     await asOrg(f.orgId, (tx) => signOut(tx, res.token));
     await expect(asOrg(f.orgId, (tx) => resolveActor(tx, res.token))).rejects.toThrow(AuthenticationError);
@@ -201,7 +201,7 @@ describe('sessions end BOTH ways (Ian: "yes both")', () => {
     // that into a failure teaches people to ignore failures.
     const f = await setup('twice');
     await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '445566' }));
-    const res = await asOrg(f.orgId, (tx) => signInWithPin(tx, { storeId: f.storeId, pin: '445566' }));
+    const res = await asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: '445566' }));
     await asOrg(f.orgId, (tx) => signOut(tx, res.token));
     await expect(asOrg(f.orgId, (tx) => signOut(tx, res.token))).resolves.toBeUndefined();
   });
@@ -209,7 +209,7 @@ describe('sessions end BOTH ways (Ian: "yes both")', () => {
   it('an EXPIRED session is as dead as an absent one', async () => {
     const f = await setup('expired');
     await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '778899' }));
-    const res = await asOrg(f.orgId, (tx) => signInWithPin(tx, { storeId: f.storeId, pin: '778899' }));
+    const res = await asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: '778899' }));
 
     // ⚠️ Both timestamps move, not just the expiry. The `expires_at > issued_at` CHECK refused
     // the first version of this test, which tried to set expiry into the past while issue stayed
@@ -228,8 +228,8 @@ describe('sessions end BOTH ways (Ian: "yes both")', () => {
     await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '121212' }));
     await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId2, pin: '343434' }));
 
-    const a = await asOrg(f.orgId, (tx) => signInWithPin(tx, { storeId: f.storeId, pin: '121212' }));
-    const b = await asOrg(f.orgId, (tx) => signInWithPin(tx, { storeId: f.storeId2, pin: '343434' }));
+    const a = await asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: '121212' }));
+    const b = await asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId2, pin: '343434' }));
 
     const { ended } = await asOrg(f.orgId, (tx) => endShift(tx, { personId: f.personId, storeId: f.storeId }));
     expect(ended).toBe(1);
@@ -246,12 +246,12 @@ describe('changing a credential invalidates what it minted', () => {
     // Otherwise "I changed my PIN" does not mean what the person thinks it means.
     const f = await setup('rotate');
     await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '131313' }));
-    const old = await asOrg(f.orgId, (tx) => signInWithPin(tx, { storeId: f.storeId, pin: '131313' }));
+    const old = await asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: '131313' }));
 
     await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '141414' }));
     await expect(asOrg(f.orgId, (tx) => resolveActor(tx, old.token))).rejects.toThrow(AuthenticationError);
 
-    const fresh = await asOrg(f.orgId, (tx) => signInWithPin(tx, { storeId: f.storeId, pin: '141414' }));
+    const fresh = await asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: '141414' }));
     expect((await asOrg(f.orgId, (tx) => resolveActor(tx, fresh.token))).actor.personId).toBe(f.personId);
   });
 
@@ -268,7 +268,7 @@ describe('changing a credential invalidates what it minted', () => {
       }),
     );
     await expect(
-      asOrg(f.orgId, (tx) => signInWithPin(tx, { storeId: f.storeId, pin: '151515' })),
+      asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: '151515' })),
     ).rejects.toThrow(AuthenticationError);
   });
 

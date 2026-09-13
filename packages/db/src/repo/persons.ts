@@ -15,16 +15,27 @@ export interface PersonRow {
   orgId: string;
   displayName: string;
   isActive: boolean;
+  /** ⭐ T-304 — explicit, read wherever a caller must not treat a terminal as a person (a role
+   *  grant, a staff listing, a headcount). Never inferred from a proxy column. */
+  kind: 'person' | 'terminal';
 }
 
 export async function insertPerson(
   tx: Tx,
-  input: { orgId: string; displayName: string },
+  /** ⭐ T-304 — `kind` defaults to `'person'`; every existing caller is unaffected. Only
+   *  `scripts/provision-terminal.ts` ever passes `'terminal'`. */
+  input: { orgId: string; displayName: string; kind?: 'person' | 'terminal' },
 ): Promise<PersonRow> {
   const [row] = await tx
     .insert(persons)
-    .values({ orgId: input.orgId, displayName: input.displayName })
-    .returning({ id: persons.id, orgId: persons.orgId, displayName: persons.displayName, isActive: persons.isActive });
+    .values({ orgId: input.orgId, displayName: input.displayName, kind: input.kind ?? 'person' })
+    .returning({
+      id: persons.id,
+      orgId: persons.orgId,
+      displayName: persons.displayName,
+      isActive: persons.isActive,
+      kind: persons.kind,
+    });
   if (!row) throw new Error('insertPerson: insert returned no row');
   return row;
 }
@@ -61,6 +72,7 @@ export async function listWithAccessForOrg(tx: Tx, orgId: string): Promise<Perso
       orgId: persons.orgId,
       displayName: persons.displayName,
       isActive: persons.isActive,
+      kind: persons.kind,
       role: personRoles.role,
       grantedAt: personRoles.grantedAt,
       storeScopeCount: sql<number>`(select count(*)::int from ${personStoreScope} where ${personStoreScope.personId} = ${persons.id})`,
@@ -71,14 +83,24 @@ export async function listWithAccessForOrg(tx: Tx, orgId: string): Promise<Perso
       personRoles,
       and(eq(personRoles.personId, persons.id), eq(personRoles.orgId, orgId), isNull(personRoles.revokedAt)),
     )
-    .where(eq(persons.orgId, orgId))
+    // ⛔ T-304 — a terminal (option (a)'s shared-credential person) is not staff and must never
+    // appear on the "everyone in the org with their access" screen. Read directly rather than
+    // via `employments` (unlike `v_active_employments`, this listing has no employment join to
+    // lean on), so this filter is load-bearing on its own, not a belt-and-braces.
+    .where(and(eq(persons.orgId, orgId), eq(persons.kind, 'person')))
     .orderBy(asc(persons.displayName));
   return rows as PersonWithAccessRow[];
 }
 
 export async function getPersonById(tx: Tx, orgId: string, id: string): Promise<PersonRow | undefined> {
   const [row] = await tx
-    .select({ id: persons.id, orgId: persons.orgId, displayName: persons.displayName, isActive: persons.isActive })
+    .select({
+      id: persons.id,
+      orgId: persons.orgId,
+      displayName: persons.displayName,
+      isActive: persons.isActive,
+      kind: persons.kind,
+    })
     .from(persons)
     .where(and(eq(persons.id, id), eq(persons.orgId, orgId)))
     .limit(1);
@@ -97,9 +119,18 @@ export async function searchPersons(
 ): Promise<PersonRow[]> {
   const limit = input.limit ?? 20;
   const rows = await tx
-    .select({ id: persons.id, orgId: persons.orgId, displayName: persons.displayName, isActive: persons.isActive })
+    .select({
+      id: persons.id,
+      orgId: persons.orgId,
+      displayName: persons.displayName,
+      isActive: persons.isActive,
+      kind: persons.kind,
+    })
     .from(persons)
-    .where(and(eq(persons.orgId, input.orgId), ilike(persons.displayName, `%${input.query}%`)))
+    // ⛔ T-304 — a terminal is not a candidate for "the same Maria who already works Lipa".
+    .where(
+      and(eq(persons.orgId, input.orgId), eq(persons.kind, 'person'), ilike(persons.displayName, `%${input.query}%`)),
+    )
     .orderBy(asc(persons.displayName))
     .limit(limit);
   return rows;
