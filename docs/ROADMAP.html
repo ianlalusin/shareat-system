@@ -188,6 +188,10 @@
     font-family: "IBM Plex Mono", ui-monospace, monospace;
     font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums;
   }
+  /* DEF-350: the countdown is derived on read, so a date inside three weeks can say so in its
+     own right rather than waiting for somebody to notice and re-type it. */
+  .stop-away[data-state="imminent"] { color: var(--critical); font-weight: 600; }
+  .stop-away[data-state="passed"] { color: var(--faint); font-style: italic; }
   .stop-what { font-size: 13.5px; line-height: 1.45; color: var(--ink-2); }
   .stop-what b { color: var(--ink); font-weight: 600; }
 
@@ -428,7 +432,7 @@
     <div class="rail">
       <div class="stop">
         <div class="stop-date">30 Sep 2026</div>
-        <div class="stop-away">~5 weeks away</div>
+        <div class="stop-away" data-until="2026-09-30"></div>
         <div class="stop-what"><b>Wave 0 done, Wave 1 in staff hands.</b> If Wave 0 has slipped, that is the signal &mdash; it is the only part that gets more expensive with delay.</div>
       </div>
       <div class="stop">
@@ -438,17 +442,17 @@
       </div>
       <div class="stop">
         <div class="stop-date">31 Oct 2026</div>
-        <div class="stop-away">~9 weeks away</div>
+        <div class="stop-away" data-until="2026-10-31"></div>
         <div class="stop-what">Are Waves 1&ndash;2 posting <b>real transactions daily</b>, and does the trial balance still tie over pilot data?</div>
       </div>
       <div class="stop is-critical">
         <div class="stop-date">15 Nov 2026</div>
-        <div class="stop-away">~11 weeks away</div>
+        <div class="stop-away" data-until="2026-11-15"></div>
         <div class="stop-what"><b>Go / no-go for 1 January</b>, plus the purge rehearsal against a restored copy. Judged on whether the cutover is safe &mdash; never on the task list.</div>
       </div>
       <div class="stop is-critical">
         <div class="stop-date">1 Jan 2027</div>
-        <div class="stop-away">~18 weeks away</div>
+        <div class="stop-away" data-until="2027-01-01"></div>
         <div class="stop-what"><b>Books-first cutover.</b> 2026 pilot data is purged, 2027 stays, and v2 becomes the system of record.</div>
       </div>
     </div>
@@ -1117,3 +1121,46 @@
   </footer>
 
 </div>
+
+<script>
+  /* DEF-350: every "~N weeks away" on this rail was hand-typed and none was ever re-typed.
+     Measured 2026-09-14: all four read as at 2026-08-24 — three weeks before this page's own
+     "As at 12 September" header — so the 30 September gate announced "~5 weeks away" when it
+     was 16 days off, on the one date this page itself calls the only part that gets more
+     expensive with delay.
+
+     The remedy is not a fresh set of numbers: re-typing today's figures only resets the clock
+     on the same defect (DEF-347's corollary). A countdown is a fact that MOVES, so it is
+     derived on read instead of stored — which is this project's own Phase 6 invariant, that no
+     figure is ever a hand-maintained counter, applied to the document that states it.
+
+     No JS, no countdown: the absolute date above it is the load-bearing fact and stands alone.
+     Absent beats wrong. */
+  (function () {
+    var MS_PER_DAY = 86400000;
+    var now = new Date();
+    var today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+
+    document.querySelectorAll('.stop-away[data-until]').forEach(function (el) {
+      var parts = el.getAttribute('data-until').split('-');
+      var target = Date.UTC(+parts[0], +parts[1] - 1, +parts[2]);
+      var days = Math.round((target - today) / MS_PER_DAY);
+      var weeks = days / 7;
+
+      if (days < 0) {
+        el.textContent = 'passed';
+        el.setAttribute('data-state', 'passed');
+      } else if (days === 0) {
+        el.textContent = 'today';
+        el.setAttribute('data-state', 'imminent');
+      } else if (days <= 21) {
+        /* Inside three weeks, days are what a reader can act on; "~3 weeks" is not. */
+        el.textContent = days === 1 ? '1 day away' : days + ' days away';
+        el.setAttribute('data-state', 'imminent');
+      } else {
+        el.textContent = '~' + (weeks < 10 ? weeks.toFixed(1) : Math.round(weeks)) + ' weeks away';
+        el.setAttribute('data-state', 'ahead');
+      }
+    });
+  })();
+</script>
