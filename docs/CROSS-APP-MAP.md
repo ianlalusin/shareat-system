@@ -215,6 +215,35 @@ ever wanted — flagged here rather than silently assumed done.
 
 ---
 
+## 1c. ⛔ POS must NOT enable service charge until ERP can clear `2160` (T-187) ⚠️ NEW 2026-09-14
+
+> **This is the only constraint in this document that runs from ERP TO POS as a prohibition, and
+> until today it existed nowhere POS could see it.** A sweep of this file on 2026-09-14 found
+> **zero** mentions of service charge or `2160` — the rule lived only in `DEFECTS-REGISTER.md`
+> (DEF-082) and `docs/tasks/136-cash-custody.md` §9.4, both of which are ERP-side documents that
+> nobody configuring POS would ever open.
+
+**The rule:** do not switch service charge on in POS before **T-187** (service-charge
+distribution) exists in ERP v2.
+
+**Why, in one line:** every sales day carrying a service charge **credits `2160`** and *nothing in
+the ERP tree ever debits it* (DEF-082). The liability accrues and has no clearing path.
+
+**What makes it legal rather than merely untidy:** **RA 11360** requires service charges to be
+distributed to covered employees at intervals of **at most sixteen days**. A balance in `2160`
+that cannot be cleared is an undistributed statutory obligation with a clock on it.
+
+**What exists today, and what it is not:** T-152 shipped the **alarm** — `serviceChargeFloatAgeing`,
+a detector in T-135's findings layer that fires on a non-zero `2160` balance and is proven silent
+at zero. ⛔ **The alarm is a smoke detector, not a fire door.** It reports the condition *after*
+the first affected sales day has already posted; nothing anywhere prevents the POS-side toggle
+being turned on in the first place. Ian, 2026-08-29: *"for now no we dont charge but im
+planning"* — which is precisely why the alarm shipped and the document did not.
+
+**Who needs to know:** whoever administers POS configuration. This entry exists so that the
+constraint is discoverable from the cross-app map rather than only from the defect that
+describes it.
+
 ## 2. POS online orders — not yet live ⚠️ ✅
 
 Ian, 2026-08-23: **no online transactions as of now** — so there is no historical online data
