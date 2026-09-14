@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSql } from '@shareat/db/client';
 import { env } from '@shareat/core/env';
 import { logger } from '@shareat/core/logger';
+import { REVISION } from '@/generated/revision';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,7 +25,10 @@ function detailFor(error: unknown): string | undefined {
  * to remove (PROJECT_BIBLE.md §15.6). Configuration and database are checked and
  * reported separately for the same reason — see bible §13 row 72.
  *
- * Responses:
+ * Responses (every one of them also carries `revision: { sha, builtAt }` — T-308 Slice A,
+ * Invariant A1. `REVISION` is a build-time constant, never read from `env()`, so it survives
+ * both 503 paths below unconditionally — which build is running is most wanted precisely when
+ * the app is degraded):
  *   200  { status: 'ok',       configuration: 'valid',   database: 'reachable'  }
  *   503  { status: 'degraded', configuration: 'invalid', database: 'unknown'    }
  *   503  { status: 'degraded', configuration: 'valid',   database: 'unreachable'}
@@ -46,6 +50,7 @@ export async function GET() {
         status: 'degraded',
         configuration: 'invalid',
         database: 'unknown',
+        revision: REVISION,
         detail: detailFor(error),
         latencyMs: Date.now() - startedAt,
         timestamp: new Date().toISOString(),
@@ -60,6 +65,7 @@ export async function GET() {
       status: 'ok',
       configuration: 'valid',
       database: 'reachable',
+      revision: REVISION,
       latencyMs: Date.now() - startedAt,
       timestamp: new Date().toISOString(),
     });
@@ -70,6 +76,7 @@ export async function GET() {
         status: 'degraded',
         configuration: 'valid',
         database: 'unreachable',
+        revision: REVISION,
         detail: detailFor(error),
         latencyMs: Date.now() - startedAt,
         timestamp: new Date().toISOString(),

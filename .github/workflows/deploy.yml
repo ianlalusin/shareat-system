@@ -72,6 +72,11 @@ jobs:
           NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
         run: npm run deploy-preflight
 
+      - name: Write the deployed revision (T-308 Slice A — publish which commit this build is)
+        env:
+          DEPLOY_REVISION_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: npm run write-revision -- --require
+
       - name: Build
         env:
           NODE_ENV: production

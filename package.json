@@ -22,6 +22,7 @@
     "db:generate": "npm run db:generate -w @shareat/db",
     "db:migrate": "npm run db:migrate -w @shareat/db",
     "provision-test-role": "node scripts/provision-test-role.mjs",
+    "write-revision": "node scripts/write-revision.mjs",
     "dev:seed:inventory": "tsx scripts/dev-seed-inventory.ts",
     "db:studio": "npm run db:studio -w @shareat/db",
     "check": "npm run typecheck && npm run test",
