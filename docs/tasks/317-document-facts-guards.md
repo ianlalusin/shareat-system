@@ -1,7 +1,15 @@
 # T-317 — six guards for the class that beat the wrap-up ritual three times in one day
 
-> ### **Status: READY 2026-09-14 — built by lane A (Sonnet 5). Guards 2–6 green; guard 1 shipped
-> separately in `de28bd2`. Awaiting orchestrator gate confirmation and a docs/ROADMAP.html row.**
+> ### ✅ **Status: SHIPPED 2026-09-14** — guard 1 in `de28bd2`, guards 2–6 in `c67f758`, 31 tests,
+> roadmap row added the same evening.
+>
+> ⭐ **The status line this replaces said `READY … awaiting a docs/ROADMAP.html row`, and that was
+> deliberate rather than cautious.** While the lane was editing this very banner to say something
+> shipped-sounding, **guard 5 — one of this task's own six — went red against this file**, because a
+> task file may not claim shipped without a roadmap row. The lane reworded the banner to match an
+> existing repo convention instead of exempting its own task. ⛔ **An exemption written to make your
+> own task pass is how a guard becomes decorative**, and the temptation arrived within minutes of the
+> guard existing. The row now exists, so the claim is finally true and the guard is green on it.
 >
 > **Ian, 2026-09-14:** *"how can we make every document updated always i included them already in
 > wrap up skill the updating of these documents"* — then, on the answer below: *"go"*.
