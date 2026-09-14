@@ -183,17 +183,25 @@ export async function systemTransaction<T>(fn: (tx: Tx) => Promise<T>): Promise<
  * wrong on these paths — it is unexpressible.**
  *
  * ⚠️ **What that would have cost, measured rather than imagined:** with `DATABASE_URL` tightened
- * and these paths unfixed, PIN sign-in returns *"that PIN is not valid for this store"*, Firebase
+ * and these paths unfixed, PIN sign-in returns *"that PIN is not valid"*, Firebase
  * sign-in returns *"not linked to a person"*, EVERY authenticated request returns *"Not signed
  * in"*, and sign-out silently does nothing. Not degraded — the whole application unusable, at
  * once. It fails CLOSED, so it is an availability wall and never a leak.
  *
- * ## ⛔ The closed list, and it is FOUR lookups — not "the auth package"
+ * ## ⛔ The closed list, and it is THREE lookups — not "the auth package"
  *
- *   - `findActiveCredentialByLookupHash`  (PIN sign-in)
- *   - `findActiveCredentialByExternalId`  (Firebase sign-in)
+ *   - `findActiveCredentialByExternalId`  (Firebase sign-in, and T-304's terminal resolution)
  *   - `findLiveByTokenHash`               (every authenticated request, and sign-out's read)
  *   - `endSession`                        (sign-out's write)
+ *
+ * ⭐ **It was FOUR until T-302, and `findActiveCredentialByLookupHash` — the PIN lookup — LEFT.**
+ * T-304's layer 1 authenticates the terminal first, so `signInWithPin` is handed an `orgId` before
+ * a PIN is typed and runs its lookup under `withOrgPrincipal(orgId, …)` like anything else that
+ * knows its org. ⚠️ **T-304 claimed this in its §Q4 and its invariant 3 and did not do it** — the
+ * call site kept `authTransaction` under a comment saying the org "precedes" the lookup, months
+ * after that stopped being true. T-302 moved it, because org-scoped hashing made the RLS policy
+ * the second layer under bible §15.11 and left the door holding a lookup that no longer needed it.
+ * **Row 194 says removal is free and needs no ruling; this is one.**
  *
  * ⭐ **The moment a session resolves, the actor's organisation is known and everything downstream
  * goes back through `withOrgPrincipal`.** This door is for the gap before that fact exists, and

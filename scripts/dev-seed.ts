@@ -148,23 +148,40 @@ async function main(): Promise<void> {
       }
     }
 
-    // A PIN per person per store. Without one there is no way into the app at all now that the
-    // "acting as" picker is gone — which is the point, but it makes this part of the minimum.
+    // ⭐ **ONE PIN PER PERSON, not one per (person, store) — T-302.** Without a PIN there is no way
+    // into the app at all now that the "acting as" picker is gone, which is why this is part of the
+    // minimum.
+    //
+    // ⛔ **This loop used to run per store, and under org-scoped hashing that stopped meaning
+    // anything.** Both halves broke, not just the signature:
+    //  - The **existence guard** asked `store_id = <this store>`. A person seeded at store 1 has a
+    //    row stamped store 1, so store 2's guard found nothing and re-issued — and `setPin` now
+    //    retires the person's PIN org-wide before inserting. Net effect: the same PIN re-hashed
+    //    once per store on every run, each pass revoking the last, `pinsAdded` counting every one
+    //    of them, and a growing pile of revoked rows. Green, and wrong.
+    //  - The **inner loop** itself. One credential per person is the whole point of T-302; issuing
+    //    it once per store contradicts the thing being seeded.
+    //
+    // ⚠️ `stores[0]` is where the row is STAMPED (a `pin` credential must carry a `store_id`), not
+    // where it works — the seeded people are scoped across the dev org's stores and sign in at any
+    // of them. Ordered by code below so a re-seed picks the same store rather than a random one.
     let pinsAdded = 0;
+    const stampStore = [...stores].sort((a, b) => a.code.localeCompare(b.code))[0];
     for (const person of SEED_PEOPLE) {
+      if (!stampStore) break;
       const [row] = await sql<{ id: string }[]>`
         select id from persons where org_id = ${org.id} and display_name = ${person.displayName}
       `;
       if (!row) continue;
-      for (const store of stores) {
-        const [existing] = await sql<{ id: string }[]>`
-          select id from person_credentials
-          where person_id = ${row.id} and store_id = ${store.id} and kind = 'pin' and revoked_at is null
-        `;
-        if (existing) continue;
-        await transaction((tx) => setPin(tx, { personId: row.id, storeId: store.id, pin: person.pin }));
-        pinsAdded++;
-      }
+      const [existing] = await sql<{ id: string }[]>`
+        select id from person_credentials
+        where person_id = ${row.id} and kind = 'pin' and revoked_at is null
+      `;
+      if (existing) continue;
+      await transaction((tx) =>
+        setPin(tx, { orgId: org.id, personId: row.id, storeId: stampStore.id, pin: person.pin }),
+      );
+      pinsAdded++;
     }
 
     console.log(`sales channels     : ${channelsAdded} inserted across ${stores.length} store(s)`);

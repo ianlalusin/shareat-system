@@ -90,9 +90,11 @@ export const personCredentials = pgTable(
      * reason since T-185; this one never had the column at all.
      *
      * ⚠️ **Human-typed on the unlink path, a fixed sentence on the supersede path.** `setPin` has no
-     * `Actor`, so it names the act instead of a person: *"Superseded by a newly issued PIN for this
-     * store."* — exactly what `enrolFingerprint` does one table over. Neither is ever NULL once
-     * `revoked_at` is set.
+     * `Actor`, so it names the act instead of a person: *"Superseded by a newly issued PIN."* —
+     * exactly what `enrolFingerprint` does one table over. ⭐ **The words "for this store" came off
+     * that sentence in T-302**, when a PIN stopped belonging to one; migration `0148` writes a
+     * third fixed sentence for the same reason. Neither column is ever NULL once `revoked_at` is
+     * set — except `revoked_by`, which is legitimately NULL on both actor-less paths (see below).
      */
     revokeReason: text('revoke_reason'),
 

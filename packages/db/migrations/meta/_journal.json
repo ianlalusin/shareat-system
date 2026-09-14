@@ -918,6 +918,13 @@
       "when": 1798774307084,
       "tag": "0147_t304_t303_terminal_sign_in_and_throttle",
       "breakpoints": true
+    },
+    {
+      "idx": 148,
+      "version": "7",
+      "when": 1798860707084,
+      "tag": "0148_t302_retire_store_scoped_pins",
+      "breakpoints": true
     }
   ]
 }

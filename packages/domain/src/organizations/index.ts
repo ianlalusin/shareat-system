@@ -6,7 +6,7 @@
  * | To do this | You first need |
  * |---|---|
  * | Sign in | a **PIN** |
- * | `setPin` | a **`storeId`** — the PIN is hashed per store (`pinLookupHash(storeId, pin)`) |
+ * | `setPin` | an **`orgId`** — the PIN is hashed per organisation (`pinLookupHash(orgId, pin)`, T-302) — **and** a `storeId`, which is stamped on the credential row (`person_credentials_shape_check` requires one for `kind = 'pin'`) and records where it was issued |
  * | A store, properly made | `createStore` (T-222), which authorizes `manage_stores` first |
  * | To pass that gate | a person holding an **admin** role |
  * | A person and a role | an **organization** |
@@ -392,8 +392,14 @@ export async function bootstrapOrganization(
     { code: input.storeCode, name: input.storeName },
   );
 
-  // 7. The PIN — possible only now, because it is hashed per store.
+  // 7. The PIN. ⚠️ **T-302 — the hash is now per ORGANISATION, so the ordering constraint this
+  //    step used to carry is weaker than it looks**: the key needs only `org.orgId`, which step 4
+  //    already produced. The store is still required, but by the row's own CHECK (a `pin`
+  //    credential must carry a `store_id`), not by the key. ⛔ The step stays here regardless —
+  //    `createStore` must run first for the admin to hold store scope at all, and a PIN issued
+  //    before any store exists would have nowhere to be stamped.
   const pinCredential = await setPin(tx, {
+    orgId: org.orgId,
     personId: admin.personId,
     storeId: store.storeId,
     pin: input.pin,

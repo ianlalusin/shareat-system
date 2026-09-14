@@ -69,13 +69,31 @@ async function setup(hint: string): Promise<Fixture> {
     `;
     return r!.id;
   };
-  return {
+  const f = {
     orgId,
     storeId: await mkStore(`${hint}-s1`),
     storeId2: await mkStore(`${hint}-s2`),
     personId: await mkPerson(`${hint} Cashier`),
     otherPersonId: await mkPerson(`${hint} Other`),
   };
+  /*
+   * ⭐ **T-302 — the fixture now provisions store scope, and it has to.** Sign-in stopped asking
+   * `credential.storeId === input.storeId` (which was true by construction and therefore never
+   * tested anything) and started asking whether this person works at, or is scoped to, the store
+   * they are signing in at. **These fixtures held neither row**, which is exactly why the spec's
+   * original scope-only gate looked safe: every PIN test here would have gone green against a gate
+   * that refuses the entire real-world population of hired cashiers.
+   *
+   * ⚠️ Scope rather than an employment, deliberately: it is the cheaper of the two legs to set up
+   * and this file is not testing the gate. `global-pin.test.ts` tests both legs, separately, and
+   * signs in at a store the PIN was NOT issued at so the gate is what decides.
+   */
+  for (const personId of [f.personId, f.otherPersonId]) {
+    for (const storeId of [f.storeId, f.storeId2]) {
+      await sql`insert into person_store_scope (person_id, store_id) values (${personId}, ${storeId})`;
+    }
+  }
+  return f;
 }
 
 /** Runs under the real RLS principal, exactly as a request would. */
@@ -89,7 +107,7 @@ async function asOrg<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
 }
 
 beforeAll(async () => {
-  await sql`truncate table sessions, person_credentials restart identity cascade`;
+  await sql`truncate table sessions, person_credentials, person_store_scope restart identity cascade`;
 });
 
 afterAll(async () => {
@@ -102,7 +120,7 @@ afterAll(async () => {
 describe('the PIN round trip', () => {
   it('a set PIN signs in and resolves to the right person', async () => {
     const f = await setup('rt');
-    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '123456' }));
+    await asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '123456' }));
 
     const res = await asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: '123456' }));
     expect(res.token.length).toBeGreaterThan(20);
@@ -117,7 +135,7 @@ describe('the PIN round trip', () => {
   it('⚠️ the TOKEN is never stored — only its hash', async () => {
     // A sessions table readable by an operator must not be a table of live credentials.
     const f = await setup('nostore');
-    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '222222' }));
+    await asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '222222' }));
     const res = await asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: '222222' }));
 
     const rows = await sql<{ token_hash: string }[]>`select token_hash from sessions where id = ${res.sessionId}`;
@@ -127,7 +145,7 @@ describe('the PIN round trip', () => {
 
   it('⚠️ the raw PIN is never stored either', async () => {
     const f = await setup('nopin');
-    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '345678' }));
+    await asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '345678' }));
     const rows = await sql<{ secret_hash: string; lookup_hash: string }[]>`
       select secret_hash, lookup_hash from person_credentials where person_id = ${f.personId}
     `;
@@ -141,7 +159,7 @@ describe('⭐ failure modes are indistinguishable', () => {
   it('a WRONG pin and an UNKNOWN pin give the identical message', async () => {
     // Telling them apart tells an attacker which half to keep guessing.
     const f = await setup('same');
-    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '111111' }));
+    await asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '111111' }));
 
     const wrong = await asOrg(f.orgId, (tx) =>
       signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: '999999' }).catch((e: Error) => e.message),
@@ -163,25 +181,52 @@ describe('⭐ failure modes are indistinguishable', () => {
     }
   });
 
-  it('⭐ the SAME PIN in a different store does not sign in — the hash is store-scoped', async () => {
-    // v1's own good idea, kept: "the same passcode in different stores never correlates."
+  it('⭐ the SAME PIN in a different store DOES sign in — the hash is org-scoped (T-302)', async () => {
+    /*
+     * ⛔ **THIS TEST ASSERTED THE OPPOSITE UNTIL T-302, AND THE INVERSION IS THE FEATURE.** It read
+     * *"the SAME PIN in a different store does not sign in — the hash is store-scoped"*, quoting
+     * v1's *"the same passcode in different stores never correlates."* Ian's ruling, 2026-09-13,
+     * on the one number that decides it — several staff work at more than one branch, regularly —
+     * replaced that with one PIN per person across the business.
+     *
+     * ⭐ **Kept rather than deleted, inverted in place**, so the next reader finds the rule that
+     * was overturned and the date, instead of a gap where an assertion used to be. The isolation
+     * v1 was reaching for still exists — it moved up a level, to the organisation, which the next
+     * test asserts.
+     */
     const f = await setup('scoped');
-    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '456789' }));
+    await asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '456789' }));
+
+    const res = await asOrg(f.orgId, (tx) =>
+      signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId2, pin: '456789' }),
+    );
+    expect(res.personId).toBe(f.personId);
+
+    // The key no longer varies by store at all — one person, one hash, every branch.
+    expect(pinLookupHash(f.orgId, '456789')).toBe(pinLookupHash(f.orgId, '456789'));
+  });
+
+  it('⛔ …but the SAME PIN in a different ORGANISATION does not — bible invariant 7', async () => {
+    // Where v1's store isolation went. Two tenants may both hold 456789 and neither hash reveals
+    // it; a tenant-blind `HMAC(pin)` would make the unique index a cross-organisation oracle.
+    const f = await setup('org-iso');
+    const other = await setup('org-iso-2');
+    await asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '457890' }));
 
     await expect(
-      asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId2, pin: '456789' })),
+      asOrg(other.orgId, (tx) => signInWithPin(tx, { orgId: other.orgId, storeId: other.storeId, pin: '457890' })),
     ).rejects.toThrow(AuthenticationError);
 
-    expect(pinLookupHash(f.storeId, '456789')).not.toBe(pinLookupHash(f.storeId2, '456789'));
+    expect(pinLookupHash(f.orgId, '457890')).not.toBe(pinLookupHash(other.orgId, '457890'));
   });
 
   it('⛔ a duplicate PIN within a store is REFUSED, not silently shared', async () => {
     // An ambiguous credential check that picks the first match is how the wrong person gets
     // attributed for someone else's action.
     const f = await setup('dupe');
-    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '654321' }));
+    await asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '654321' }));
     await expect(
-      asOrg(f.orgId, (tx) => setPin(tx, { personId: f.otherPersonId, storeId: f.storeId, pin: '654321' })),
+      asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.otherPersonId, storeId: f.storeId, pin: '654321' })),
     ).rejects.toThrow(/already in use/);
   });
 });
@@ -189,7 +234,7 @@ describe('⭐ failure modes are indistinguishable', () => {
 describe('sessions end BOTH ways (Ian: "yes both")', () => {
   it('signing out ends it, and the token stops resolving', async () => {
     const f = await setup('signout');
-    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '112233' }));
+    await asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '112233' }));
     const res = await asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: '112233' }));
 
     await asOrg(f.orgId, (tx) => signOut(tx, res.token));
@@ -200,7 +245,7 @@ describe('sessions end BOTH ways (Ian: "yes both")', () => {
     // A cashier who signs out and then closes a stale tab has done nothing wrong, and turning
     // that into a failure teaches people to ignore failures.
     const f = await setup('twice');
-    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '445566' }));
+    await asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '445566' }));
     const res = await asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: '445566' }));
     await asOrg(f.orgId, (tx) => signOut(tx, res.token));
     await expect(asOrg(f.orgId, (tx) => signOut(tx, res.token))).resolves.toBeUndefined();
@@ -208,7 +253,7 @@ describe('sessions end BOTH ways (Ian: "yes both")', () => {
 
   it('an EXPIRED session is as dead as an absent one', async () => {
     const f = await setup('expired');
-    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '778899' }));
+    await asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '778899' }));
     const res = await asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: '778899' }));
 
     // ⚠️ Both timestamps move, not just the expiry. The `expires_at > issued_at` CHECK refused
@@ -224,12 +269,19 @@ describe('sessions end BOTH ways (Ian: "yes both")', () => {
   });
 
   it('⭐ END SHIFT ends every live session at that store, and only that store', async () => {
+    /*
+     * ⚠️ **T-302 — ONE PIN, signed in twice.** This used to issue two PINs, one per store, and sign
+     * in with each. That no longer produces two live sessions: `setPin` now retires the person's
+     * PIN org-wide, so the second issue revoked the first credential and ended its session before
+     * the test reached its assertion. **The intent survives intact and is arguably better stated**
+     * — one person, one credential, two branches, and ending a shift at one must not touch the
+     * other. `endShift` itself is unchanged by T-302 and still filters on `store_id`.
+     */
     const f = await setup('shift');
-    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '121212' }));
-    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId2, pin: '343434' }));
+    await asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '121212' }));
 
     const a = await asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: '121212' }));
-    const b = await asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId2, pin: '343434' }));
+    const b = await asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId2, pin: '121212' }));
 
     const { ended } = await asOrg(f.orgId, (tx) => endShift(tx, { personId: f.personId, storeId: f.storeId }));
     expect(ended).toBe(1);
@@ -245,10 +297,10 @@ describe('changing a credential invalidates what it minted', () => {
   it('⚠️ setting a new PIN ends sessions issued under the old one', async () => {
     // Otherwise "I changed my PIN" does not mean what the person thinks it means.
     const f = await setup('rotate');
-    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '131313' }));
+    await asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '131313' }));
     const old = await asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: '131313' }));
 
-    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '141414' }));
+    await asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '141414' }));
     await expect(asOrg(f.orgId, (tx) => resolveActor(tx, old.token))).rejects.toThrow(AuthenticationError);
 
     const fresh = await asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: '141414' }));
@@ -258,7 +310,7 @@ describe('changing a credential invalidates what it minted', () => {
   it('a revoked credential can no longer sign in', async () => {
     const f = await setup('revoke');
     const { credentialId } = await asOrg(f.orgId, (tx) =>
-      setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '151515' }),
+      setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '151515' }),
     );
     await asOrg(f.orgId, (tx) =>
       sessionsRepo.revokeCredential(tx, {
@@ -286,11 +338,11 @@ describe('changing a credential invalidates what it minted', () => {
   it('⭐ a superseded PIN is revoked with the system sentence and NO principal', async () => {
     const f = await setup('supersede-reason');
     const first = await asOrg(f.orgId, (tx) =>
-      setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '191919' }),
+      setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '191919' }),
     );
     // The re-issue. This is the write that the wrong constraint shape would refuse outright.
     await asOrg(f.orgId, (tx) =>
-      setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '202020' }),
+      setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '202020' }),
     );
 
     const [row] = await sql<
@@ -314,7 +366,7 @@ describe('listLiveForPerson — T-217 / DEF-174', () => {
   it('a live PIN shows up, a revoked one does not', async () => {
     const f = await setup('live-pin');
     const { credentialId } = await asOrg(f.orgId, (tx) =>
-      setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '161616' }),
+      setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '161616' }),
     );
     const live = await asOrg(f.orgId, (tx) => sessionsRepo.listLiveForPerson(tx, f.personId));
     expect(live).toHaveLength(1);
@@ -332,9 +384,22 @@ describe('listLiveForPerson — T-217 / DEF-174', () => {
   });
 
   it('a storeId narrows to that store only; omitting it returns every store', async () => {
+    /*
+     * ⚠️ **T-302 — the fixture writes the two rows directly instead of calling `setPin` twice.**
+     * `setPin` now enforces one live PIN per person org-wide, so it can no longer be used to build
+     * the two-credentials-at-two-stores state this repo function's `storeId` filter exists to
+     * narrow. ⭐ **The function itself is unchanged and the filter is still real** — `credentials`
+     * screens and `endShift`'s neighbours use it, and a person can still legitimately hold rows at
+     * two stores (a live PIN at one, a biometric at another; or the pre-T-302 rows `0148` revokes).
+     * Testing a repo primitive through a service that now refuses to produce the input is what
+     * would make this assertion disappear quietly.
+     */
     const f = await setup('live-scope');
-    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '171717' }));
-    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId2, pin: '181818' }));
+    await asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '171717' }));
+    await sql`
+      insert into person_credentials (person_id, kind, store_id, secret_hash, lookup_hash)
+      values (${f.personId}, 'pin', ${f.storeId2}, ${await hashPin('181818')}, ${uid('stale-hash')})
+    `;
 
     const scoped = await asOrg(f.orgId, (tx) => sessionsRepo.listLiveForPerson(tx, f.personId, f.storeId));
     expect(scoped).toHaveLength(1);

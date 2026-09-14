@@ -19,7 +19,9 @@ import { personGrants, personRoles, personStoreScope } from '../../schema/access
 // ⚠️ Tables outside the access axis this file touches: `personCredentials` for
 // `hasOtherActiveAdminWhoCanSignIn`, `persons` for `revokeElevationGrantsForOrg`'s org scoping
 // (`person_grants` carries no `org_id` of its own — same reason its RLS policy derives org
-// through the person it names).
+// through the person it names), and `employments` — read as raw SQL inside
+// `personMaySignInAtStore` (T-302), which needs "does this person work here" and cannot import
+// `repo/employment.ts` without making two repos depend on each other for one EXISTS.
 import { personCredentials } from '../../schema/sessions';
 import { persons } from '../../schema/persons';
 import { stores } from '../../schema/stores';
@@ -300,6 +302,47 @@ export async function personHasStoreScope(tx: Tx, personId: string, storeId: str
     .where(and(eq(personStoreScope.personId, personId), eq(personStoreScope.storeId, storeId)))
     .limit(1);
   return row !== undefined;
+}
+
+/**
+ * ⭐ T-302 — may this person begin a session AT this store? **An open employment here, OR a
+ * `person_store_scope` row here.** Either one, deliberately.
+ *
+ * ⛔ **Why not store scope alone, which is what T-302's own spec first said.** Measured before
+ * building: nothing in the hire flow writes a scope row. `packages/domain/src/people/index.ts`'s
+ * `createEmployment` writes the employment, its positions and its position grants and stops;
+ * `packages/auth/src/roles.ts`'s fan-out fires on `role === 'admin'` only, and
+ * `apps/erp/src/app/admin/users/actions.ts`'s `setStoreScopeAction` is a human ticking a box. So
+ * the two populations hold **different** rows: the founding admin has scope and no employment
+ * (`bootstrapOrganization` → `createStore`'s fan-out), and a hired cashier has an employment and
+ * no scope until somebody remembers. A scope-only gate would refuse the second one **with the flat
+ * `BAD_PIN` sentence** — turning a missing provisioning step from a legible mid-session
+ * `may not 'record_sale'` into an unexplainable "that PIN is not valid".
+ *
+ * ⚠️ **This is a sign-in gate, NOT an authorization check, and the distinction is load-bearing.**
+ * It answers *"does this person work here"*; `authorize()` still answers *"may they do this"* and
+ * still requires a scope row for every `'store'`-scoped capability. An employment gets you a
+ * session, never a capability — so a cashier hired but not yet scoped signs in and is refused at
+ * the first store-scoped action, which is the diagnosable failure this gate exists to preserve.
+ *
+ * ⭐ **One round trip, two EXISTS.** The PIN path runs this on every successful lookup, so it is
+ * deliberately not two queries. Both legs are index-backed:
+ * `person_store_scope_person_id_store_id_unique` and `employments_open_person_store_unique`.
+ */
+export async function personMaySignInAtStore(tx: Tx, personId: string, storeId: string): Promise<boolean> {
+  const [row] = (await tx.execute(sql`
+    select (
+      exists (
+        select 1 from person_store_scope
+        where person_id = ${personId} and store_id = ${storeId}
+      )
+      or exists (
+        select 1 from employments
+        where person_id = ${personId} and store_id = ${storeId} and ended_on is null
+      )
+    ) as ok
+  `)) as unknown as { ok: boolean }[];
+  return row?.ok === true;
 }
 
 /** Whether `storeId` belongs to `orgId` at all — a defence against `authorize()` being

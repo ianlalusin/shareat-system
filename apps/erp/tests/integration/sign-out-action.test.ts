@@ -100,7 +100,7 @@ async function asOrg<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
 }
 
 beforeAll(async () => {
-  await sql`truncate table sessions, person_credentials restart identity cascade`;
+  await sql`truncate table sessions, person_credentials, person_store_scope restart identity cascade`;
 });
 
 beforeEach(() => {
@@ -115,7 +115,10 @@ afterAll(async () => {
 describe('signOutAction — the function every sign-out button calls (T-257/DEF-259)', () => {
   it('ends the SERVER session (proven by querying `sessions` directly, not by re-resolving the token) and redirects to /sign-in', async () => {
     const f = await setup('ends-session');
-    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '778899' }));
+    // ⭐ T-302 — sign-in gates on employment-or-scope now, so a fixture person needs one of the two
+    // rows. Previously `credential.storeId === input.storeId` admitted everyone by construction.
+    await sql`insert into person_store_scope (person_id, store_id) values (${f.personId}, ${f.storeId})`;
+    await asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '778899' }));
     const res = await asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: '778899' }));
 
     jar.set('shareat_session', res.token);

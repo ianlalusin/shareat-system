@@ -1,5 +1,5 @@
 /**
- * Credential crypto — PIN hashing, the store-scoped lookup key, and session tokens.
+ * Credential crypto — PIN hashing, the org-scoped lookup key, and session tokens.
  * docs/tasks/138-identity-and-sessions.md §3.2, bible §7.1.
  *
  * ## ⛔ Everything here is keyed by a secret that MUST exist
@@ -21,10 +21,25 @@
  *
  * ## ⚠️ A 6-digit PIN is a weak secret, and the design has to admit that
  *
- * A million possibilities is not much. What makes it acceptable is everything around it: the
- * lookup is **store-scoped** so a PIN only means anything inside one store, the hash is **unique**
- * so a check touches exactly one row, and rate limiting belongs at the sign-in route.
- * **The KDF cost is doing less work here than the scoping is.**
+ * A million possibilities is not much. ⭐ **T-302/T-304 changed all three of the things that used
+ * to make it acceptable, and the honest statement is the one below — not the one this comment
+ * carried until 2026-09-14.** It said the lookup was store-scoped, the hash unique, and that
+ * "rate limiting belongs at the sign-in route". The first is deliberately gone, the third was
+ * never built where that sentence delegated it to, and only the second was ever true.
+ *
+ * | | Then | Now |
+ * |---|---|---|
+ * | Scope | **store**-scoped, so a PIN meant something only inside one store | ⛔ **ORG**-scoped (T-302). A PIN now means something across every branch of one business — **deliberately widened**, and it is what Ian asked for |
+ * | Uniqueness | unique, so a check touches exactly one row | ✅ Unchanged, and now global within the org |
+ * | Rate limiting | *"belongs at the sign-in route"* — **and nothing discharged that sentence for eleven months** | ✅ **Built.** T-303's per-store throttle, `pinAttemptsRepo`, checked before the lookup and the KDF |
+ *
+ * ⭐ **And the factor none of the three named, which is now the largest by far: T-304's layer 1.**
+ * A PIN is no longer what gets anybody in. The terminal authenticates with its own Firebase
+ * credential first, so a stranger cannot reach the PIN box at all — which is why widening the
+ * scope from store to org is a convenience decision rather than a security regression.
+ *
+ * ⚠️ **The KDF cost is still doing less work here than everything around it.** That has not
+ * changed; what changed is which things "around it" are real.
  */
 import { createHmac, randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
@@ -52,22 +67,39 @@ function derivedKey(label: 'pin-lookup' | 'session-token' | 'setup-identity'): s
 }
 
 // -------------------------------------------------------------------------------------
-// The store-scoped lookup key
+// The ORG-scoped lookup key
 // -------------------------------------------------------------------------------------
 
 /**
- * A deterministic, store-scoped key for finding the ONE credential a typed PIN could belong to.
+ * A deterministic, **organisation-scoped** key for finding the ONE credential a typed PIN could
+ * belong to. T-302.
  *
- * ⭐ **Store scoping is v1's own good idea and it survives unchanged** — *"so the same passcode in
- * different stores never correlates."* Two cashiers in different branches may both use 123456 and
- * neither hash reveals it.
+ * ⭐ **`orgId`, not `storeId` — one PIN identifies one person at every branch.** Ian's ruling,
+ * 2026-09-13, on the one number that decides it: *several staff work at more than one branch,
+ * regularly.* The unique index on `lookup_hash` (`0137`) then enforces "one live PIN ⇒ one person"
+ * across the whole business with no new constraint — two people in one org who pick the same six
+ * digits produce the same hash and the second insert is refused.
+ *
+ * ⚠️ **After T-304 this is a CONVENIENCE ruling, not a security one, and the prose must not drift
+ * back.** The terminal authenticates first, so a PIN no longer gets anybody in on its own; what
+ * this buys is one set of six digits per person instead of one per branch.
+ *
+ * ⛔⛔ **NEVER a tenant-blind `HMAC(pin)` with no scope at all.** That makes the unique index a
+ * cross-organisation oracle: an admin in one organisation learns that six digits are in use in
+ * another, and repeated, enumerates the space — bible invariant 7. It is only ever tempting when
+ * the org is unknown at lookup time, which is a symptom of PIN-FIRST sign-in. T-304's layer 1
+ * hands us the org before the PIN is typed, so it is known here. **If you find yourself needing a
+ * tenant-blind key, the thing to fix is the sign-in order, not the key** (T-304 §Q-org).
+ *
+ * ⚠️ **The `'pin-lookup'` label is unrelated to scoping and stays.** Domain separation is what
+ * stops a lookup hash being usable as a session token.
  *
  * ⚠️ **This is a lookup key, not a verifier.** It narrows to one row; `verifyPin` then decides.
  * Deterministic means an attacker with the secret could compute it — which is why the secret is
  * required rather than defaulted, and why the row still holds a real KDF hash behind it.
  */
-export function pinLookupHash(storeId: string, pin: string): string {
-  return createHmac('sha256', derivedKey('pin-lookup')).update(`${storeId}:${pin}`).digest('hex');
+export function pinLookupHash(orgId: string, pin: string): string {
+  return createHmac('sha256', derivedKey('pin-lookup')).update(`${orgId}:${pin}`).digest('hex');
 }
 
 // -------------------------------------------------------------------------------------

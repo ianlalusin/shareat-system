@@ -1,8 +1,39 @@
 # T-302 — PINs become globally unique: one PIN identifies one person, everywhere
 
-> **Status: SPEC WRITTEN 2026-09-13 by lane C (webapps-f7, Opus 5) — awaiting APPROVED from
-> system32-85. SPEC ONLY: no code touched, no other document touched.**
-> ⛔⛔ **SUPERSEDED IN ITS JUSTIFICATION, AND RECOMMENDED FOR DEFERRAL — 2026-09-13.**
+> ### ✅ **Status: APPROVED 2026-09-14 by system32-85. BUILT, GATES GREEN, NOT YET DEPLOYED.**
+>
+> **Spec written 2026-09-13 by lane C (webapps-f7); approved and built 2026-09-14 by the same lane.**
+> The sequencing gate this document set for itself has **opened**: it said *"built SECOND, after
+> T-304 + T-303 are in and sign-in is confirmed working on Ian's counter"*, and all three happened
+> on 2026-09-13 — T-303 and T-304 shipped in `58f198a` with migration `0147`, T-304's eight-step
+> cutover ran in full on a real device (SharEat Lipa provisioned), and PIN sign-in is live in
+> production.
+>
+> ⛔⛔ **NOT DEPLOYED, AND THE DEPLOY IS NOT ROUTINE. Every existing PIN stops working the moment
+> it lands** — migration `0148` revokes them all, deliberately. **Re-issuing them from Staff is a
+> required step in the same sitting**, and admin email + password sign-in is the way back in and is
+> unaffected. T-304's cutover was designed to touch zero credentials; this is the task that spends
+> that, and the blast radius grows with every store provisioned after today. See §The re-issue.
+>
+> ⚠️ **The status line this replaces still said *"awaiting APPROVED"* and *"RECOMMENDED FOR
+> DEFERRAL"*** — both true when written, both false by the time anybody read them again. DEF-348.
+>
+> ### ⛔ What changed between the spec and the build — read this before trusting anything below
+>
+> This document was written **before T-304 shipped**, and re-reading it as a stranger at build time
+> found **six defects in it, one blocking**. Each is corrected in place below, and each correction
+> is marked `⭐ CORRECTED AT BUILD TIME`. In summary:
+>
+> | # | What the spec said | What is true |
+> |---|---|---|
+> | **1** ⛔ | Sign-in gates on `personHasStoreScope` | **Blocking defect.** Nothing in the hire flow writes a scope row — `createEmployment` writes an employment and stops, and the fan-out in `roles.ts` fires for `admin` only. A scope-only gate refuses a normally-hired cashier **with the flat `BAD_PIN` sentence**. Ruled 2026-09-14: **open employment at this store OR a scope row** |
+> | **2** ⛔ | Fix #2 is `listLiveForPerson`'s third argument | It is **two** arguments. `endAllForPerson(…, input.storeId)` nine lines below has the identical shape and the spec missed it — a re-issued PIN would leave a live session at the person's other branch |
+> | **3** ⚠️ | Five load-bearing sites | **Seven.** `livePinFor` (`staff/lib.ts`) reports "no PIN issued" on every other branch's employment page, and the issue-PIN screen invites the admin to act on that — silently changing the person's PIN elsewhere |
+> | **4** ✅ | T-302 rewrites the sign-in page, shrinks `PRE_AUTH_PATHS`, and adds `identifyByPin` | **All already done by T-304.** `PRE_AUTH_PATHS` is already at one entry. **T-302 touches no sign-in file at all** — a third of the spec's own file list is struck |
+> | **5** ⚠️ | "No migration. No schema change." | **`0148` is required.** Not for schema — for the live-but-unmatchable credential rows the key change leaves behind, which two surfaces report as working PINs |
+> | **6** ⚠️ | The credential lookup must stay on the auth door | T-304 made that false and its own §Q4 claims it already moved. It had not. Moved here, because org-scoping makes the HMAC the *only* tenancy layer otherwise — bible §15.11 |
+>
+> ⛔⛔ **SUPERSEDED IN ITS JUSTIFICATION — 2026-09-13, and the deferral it recommended is SPENT.**
 > [T-304](./304-two-layer-terminal-sign-in.md) changes the sign-in model: the terminal
 > authenticates first, so the store **and** the org are known before any PIN is typed.
 >
@@ -15,15 +46,18 @@
 > 2. ⭐ **The lookup key becomes `orgId:pin`, not a tenant-blind `pin`** — see T-304 §Q-org, where
 >    the claim is checked on four legs. **This dissolves the cross-organisation oracle** that the
 >    first draft of this spec had to accept and diarise.
-> 3. ✅ **SEQUENCED, NOT DROPPED — ruled 2026-09-13.** Ian was asked the one number that decides it,
->    *how many staff work at more than one branch*, and answered **"several, regularly."** So this
->    task **is built — SECOND**, after T-304 + T-303 are in and sign-in is confirmed working on his
->    counter. ⭐ The operational half is what he chose on: with this deferred, the T-304 cutover
->    touches **zero credentials** and there is no window in which a working PIN stops working.
->    **Keep this document complete and shelved; it is next, not shelved-and-forgotten.**
+> 3. ✅ **SEQUENCED, NOT DROPPED — ruled 2026-09-13; the sequence RAN on 2026-09-14.** Ian was asked
+>    the one number that decides it, *how many staff work at more than one branch*, and answered
+>    **"several, regularly."** So this task is built **SECOND**, after T-304 + T-303 — which is
+>    exactly what happened. ⭐ The operational half is what he chose on: with this deferred, the
+>    T-304 cutover touched **zero credentials** and there was no window in which a working PIN
+>    stopped working. ⛔ **That protection is now spent, by design** — this deploy is the one where
+>    working PINs stop working, which is why it was worth deferring until sign-in was healthy.
 >
-> ⚠️ **Everything below is revised for org-scoping and remains ready to build the moment Ian
-> confirms.** Nothing here is retracted — the analysis holds; only its justification moved.
+> ⚠️ **Everything below was revised for org-scoping before the build, and the build then corrected
+> it again** — see the defect table above. The analysis holds where it is not marked
+> `⭐ CORRECTED AT BUILD TIME`; where it is, the correction wins and the original is kept beside it
+> so the reasoning that produced the mistake stays visible.
 >
 > ⛔⛔ **IF YOU ARE PICKING THIS UP LATER, READ THIS FIRST: org-scoping is what makes this task
 > SAFE, and it is not optional.** The lookup key is **`orgId:pin`**. A **tenant-blind** key —
@@ -60,6 +94,16 @@ CREATE UNIQUE INDEX "person_credentials_lookup_hash_unique"
 **`lookup_hash` alone. Partial on live rows. No `store_id` in the index.** So the moment
 `pinLookupHash` stops mixing the store in, **the database enforces global PIN uniqueness with no
 new migration and no new constraint.** ⛔ **No migration slot is needed. `0147` is not required.**
+
+> ⭐ **CORRECTED AT BUILD TIME — true about the SCHEMA, wrong about the MIGRATION.** No constraint
+> has to change, and none did. But the key change strands every existing `pin` row on a hash the
+> new code can never compute: **live credentials that cannot authenticate**, which `livePinFor`
+> renders as *"Issued &lt;date&gt;"* and `countActiveCredentials` counts toward a BLOCKING readiness
+> gate. A deploy on this reasoning alone would have stopped every cashier's PIN working while every
+> screen that could have said so said the opposite. **`0148` revokes them**, which turns that into
+> *"No sign-in PIN issued yet"* — a state the system already renders and already offers a remedy
+> for. ⛔ **"No schema change" and "no migration" are not the same claim**, and this document
+> treated them as one.
 
 ⭐ **And it is stronger than "no migration needed" — the uniqueness is not optional, it is
 structurally forced, which closes the design space.** `findActiveCredentialByLookupHash`
@@ -391,68 +435,99 @@ case is only reachable because the store-**scope** check replaces the store-**eq
 
 ---
 
-# Scope
+# Scope — ⭐ CORRECTED AT BUILD TIME
 
-**Create only, this slice:** `docs/tasks/302-global-pin-uniqueness.md`. Nothing else — no code.
+**What was actually touched, 2026-09-14.** ⛔ The spec's own list is struck where it was wrong; the
+corrections are defects 4, 5 and 6 in the banner table.
 
-**On approval, the build touches:** `packages/auth/src/credentials.ts` ·
-`packages/auth/src/sessions.ts` · `packages/auth/src/index.ts` · `packages/db/src/repo/stores.ts` ·
-`packages/domain/src/stores/service.ts` · `apps/erp/src/app/sign-in/{page.tsx,actions.ts}` ·
-`apps/erp/src/app/staff/actions.ts` · `tests/unit/no-direct-transaction-in-erp.test.ts` · the
-affected integration tests. ⛔ **No migration. No schema change.**
+| File | Why |
+|---|---|
+| `packages/auth/src/credentials.ts` | `pinLookupHash(orgId, pin)`; the three-factors comment rewritten honestly |
+| `packages/auth/src/sessions.ts` | the org-scoped lookup, the new gate, the dummy KDF, `setPin`'s two store-scoped arguments, the lookup's move off the auth door |
+| `packages/auth/src/index.ts` | exports `DUMMY_SCRYPT_HASH` so a test can prove it reaches the KDF |
+| `packages/db/src/repo/access.ts` | **new** `personMaySignInAtStore` — the gate |
+| `packages/db/src/repo/employment.ts` | **new** `listOtherOpenBranches` — feeds the issue-PIN warning |
+| `packages/db/src/repo/stores.ts` | `countActiveCredentials` asks the gate's question |
+| `packages/db/src/repo/sessions.ts` | *(unchanged — both optional arguments already existed)* |
+| `packages/db/schema/sessions.ts` | comment only: the superseded sentence lost "for this store" |
+| `packages/db/src/client.ts` | comment only: the auth door is THREE lookups, not four |
+| `packages/domain/src/stores/service.ts` | the `signIn` readiness gate's label, detail and remedy |
+| `packages/domain/src/organizations/index.ts` | `setPin` call; the stale chicken-and-egg table at `:9` |
+| `apps/erp/src/app/staff/actions.ts` | `setPin` call; two error-message regexes that would have silently stopped matching |
+| `apps/erp/src/app/staff/lib.ts` | `livePinFor` global; **new** `otherOpenBranchesFor` |
+| `apps/erp/src/app/staff/[employmentId]/page.tsx` | the cross-branch warning, **before** the form |
+| `scripts/dev-seed.ts` | one PIN per person, not one per (person, store) |
+| `packages/db/migrations/0148_t302_retire_store_scoped_pins.sql` + `meta/_journal.json` | idx 148, `when` 1798860707084 |
+| `tests/unit/{auth-transaction-callers,no-direct-transaction-in-erp}.test.ts` | comment only, no logic |
+| `packages/auth/tests/integration/global-pin.test.ts` | **new**, 18 tests |
+| six existing integration test files | `setPin` gained `orgId` |
 
-⛔ **Not mine:** `docs/tasks/301-*` (lane A) · the register · the bible · `0133` · anything under
-`.github/`.
+⛔ **NOT touched, contrary to the spec's own list: `apps/erp/src/app/sign-in/{page.tsx,actions.ts}`.**
+T-304 already built the two-step sign-in this document describes designing, and already deleted the
+pre-auth store read. `signInWithPin` already receives `orgId`. **A third of the original file list
+was work already done.**
 
-# Invariants
+⛔ **Not mine:** `docs/tasks/301-*` and `311-*` (lane A) · nineteen task banners (lane B) · the
+register · the bible · `.github/`.
 
-| # | Invariant | Citation |
-|---|---|---|
-| 1 | One live PIN ⇒ exactly one person, system-wide | `0137`'s partial unique index on `lookup_hash` |
-| 2 | A lookup still touches exactly **one** row; exactly **one** scrypt compare runs | T-138 invariant 5; `repo/sessions.ts:38-57` has no `ORDER BY` |
-| 3 | `store_id` stays NOT NULL on a PIN row | CHECK, `schema/sessions.ts:148` |
-| 4 | Every sign-in failure returns **one** sentence | `sessions.ts:72` |
-| 5 | A person signs in at a store **iff** `personHasStoreScope` | `repo/access.ts:296` |
-| 6 | No new pre-authentication read of a FORCE-RLS table; `PRE_AUTH_PATHS` **shrinks** | DEF-333 |
-| 7 | Biometric credentials keep their store-scoped lifecycle | T-185 |
+# Invariants — ⭐ CORRECTED AT BUILD TIME
 
-# Tests — failing first, for the right reason
+| # | Invariant | Citation | Proven by |
+|---|---|---|---|
+| 1 | One live PIN ⇒ exactly one person, **within an organisation** | `0137`'s partial unique index on `lookup_hash` | *refuses a second person in the SAME org…* |
+| 2 | A lookup touches exactly **one** row; exactly **one** KDF compare runs **on every path** | T-138 invariant 5 | *a lookup hash resolves to exactly one live credential*; *an unknown PIN pays for a KDF…* |
+| 3 | `store_id` stays NOT NULL on a PIN row, and now means **where it was issued** — never where it works | CHECK, `schema/sessions.ts` | *leaves ONE live PIN…* asserts the surviving row's stamp |
+| 4 | Every sign-in failure returns **one** sentence | `sessions.ts` `BAD_PIN` | *neither row at this branch is refused — with the SAME flat sentence* |
+| 5 | ⭐ **CORRECTED.** A person signs in at a store **iff** they hold an **open employment there OR a `person_store_scope` row there** — not scope alone | `repo/access.ts` `personMaySignInAtStore` | four tests, both legs separately |
+| 6 | ✅ **ALREADY TRUE — T-304 did it.** `PRE_AUTH_PATHS` is at one entry and nothing here adds to it | DEF-333 | `no-direct-transaction-in-erp.test.ts`, unchanged |
+| 7 | Biometric credentials keep their store-scoped lifecycle | T-185 | `setPin`'s `kind === 'pin'` filter, unchanged |
+| 8 | ⭐ **NEW.** Tenancy has **two** layers on the PIN path: the `orgId` inside the HMAC **and** RLS under `withOrgPrincipal` | bible §15.11 | *a PIN live in org A does not authenticate at a terminal in org B* |
 
-1. ⭐ **The one that would have caught #1:** person with a PIN at store A, store scope at A **and**
-   B, signs in **at B**. Must succeed. **Fails today** with `BAD_PIN` from the equality guard.
-2. **#2:** `setPin(P, storeA, '123456')` then `setPin(P, storeB, '123456')`. Must succeed and leave
-   **one** live PIN. Fails today with a unique violation surfaced as *"just taken at this store"*.
-3. Two **different** people, same six digits, different stores → refused. **Passes for the wrong
-   reason today** (different hashes); must pass for the right one.
-4. Two different people, same digits, **different organisations** → refused. ⚠️ Encodes the
-   accepted cross-org cost as deliberate, so nobody later reads it as a bug.
-5. A person **without** store scope at B cannot sign in at B, with the same flat sentence.
-6. `PRE_AUTH_PATHS` no longer contains `sign-in/page.tsx`, and the guard still passes with its
-   positive control.
-7. Readiness: a store with zero PIN rows but a scoped person holding a global PIN reports **ready**.
-8. ⭐ **Constant-cost failure:** a PIN matching nobody and a PIN matching a person with no scope at
-   the chosen store both perform **one** KDF compare. ⚠️ **Assert the call, not the clock** — spy on
-   the scrypt call count. A timing assertion would be flaky on CI and would prove less.
+# Tests — each shown red first, by reverting the change and re-running
+
+⭐ **Every one of the eighteen was proven by putting the OLD code back and watching the right test
+fail**, not by reasoning about it. Seven planted reverts; the results are in the READY report.
+
+⛔ **Two of these tests were WRONG when first written, and the reverts are what caught it** —
+RULES §3.2, *a test that only ever passed proves nothing*:
+
+1. **The two gate-leg tests** issued the PIN and signed in at the **same** store, so
+   `credential.storeId === input.storeId` was trivially true and they passed against the old
+   equality guard unchanged. Rewritten to issue at store A and sign in at store B, which is the
+   only arrangement where the gate is the thing deciding.
+2. **The constant-cost test** asserted the no-row path takes more than 10 ms, on the reasoning that
+   one scrypt is ~35 ms. **It passed with the dummy KDF deleted** — `signInWithPin`'s no-row path
+   makes three round trips and those alone clear 10 ms. Measured: 275–305 ms with the KDF, 26–29 ms
+   without. Rewritten to calibrate against a KDF timed in the same process.
 
 # Out of scope
 
-Rate limiting (Q3 — needs its own number) · relaxing the `store_id` CHECK · biometrics ·
-`attendance_credentials` · the `SESSION_SECRET` register row · the cross-org-collision register row.
+Rate limiting (⭐ **now built — T-303's throttle, shipped 2026-09-13**) · relaxing the `store_id`
+CHECK · biometrics · `attendance_credentials` · register rows (system32-85 files them) ·
+⭐ **making the hire flow grant a store-scope row** — the honest fix for the gap defect 1 exposed,
+raised as a QUESTION for its own task number rather than built here.
 
 # Done when
 
-All seven invariants hold · tests 1-7 pass, each shown red first · typecheck, unit and integration
-green · smoketested on 9008: sign in with a PIN at a store the PIN was **not** issued at ·
-`PRE_AUTH_PATHS` down to two · **the 2 production PINs re-issued in the same sitting as the deploy**
-· `FOR IAN` block written.
+⭐ **Build complete 2026-09-14.** All eight invariants hold · eighteen tests pass, each shown red
+first by reverting the implementation · typecheck clean · unit 1642 passed · lane integration green
+· `0148` applied to `shareat_test_lanef7` only.
+
+⛔ **NOT done, and deliberately not this lane's to do:** smoketest on 9008 (the orchestrator owns
+the port and the build) · the deploy · **the re-issue of every live PIN in the same sitting as the
+deploy**, which is an operational step system32-85 is carrying to Ian.
 
 # ⚠️ What I did not verify
 
-- **Nothing was run.** No test, no typecheck, no build. Static reading only.
-- **The production credential counts (2 pin, 1 firebase)** are the orchestrator's measurement,
-  not mine. The re-issue plan's size rests on them.
-- **`identifyByPin` returning the person's NAME** is in my sketch and is a decision I did not take:
-  showing a name to whoever typed a correct PIN is a small disclosure, and a store picker with no
-  name may be enough. **Flagging, not deciding.**
+- **The app was never run.** No `npm run build`, no dev server, no browser — the orchestrator owns
+  the port and the build, so every claim here rests on typecheck, unit and integration only.
+- **The production credential counts (2 pin, 1 firebase)** are still the orchestrator's
+  measurement, not mine. The re-issue plan's size rests on them.
+- **`0148` against production data.** It was applied to `shareat_test_lanef7`, where the rows it
+  revokes are ones the tests created. Its behaviour against the two real production PINs is
+  inferred from the statement, not observed.
 - **Whether any POS or CUSTOMER surface signs in with a PIN.** I grepped this repository only; the
   reference repos are a separate question and `apps/{pos,customer}` here are reserved and empty.
+- **The timing numbers are from this machine**, which measured one scrypt at 115–201 ms — not the
+  35 ms this document quotes elsewhere from the 2026-09-13 measurement. The ratio is what the test
+  asserts, precisely so the absolute number does not have to travel.

@@ -35,6 +35,9 @@ export {
   BROWSER_SESSION_TTL_MS,
   /** T-239 / DEF-229 — exported so a test asserts the sentence the code writes, not a copy. */
   PIN_SUPERSEDED_REASON,
+  /** T-302 — exported for the same reason: a test asserts this value actually reaches the KDF,
+   *  because three of `verifyPin`'s four `false` returns happen before it does. */
+  DUMMY_SCRYPT_HASH,
 } from './sessions';
 export type { SignInResult, ResolvedSession, TerminalIdentity } from './sessions';
 export { hashPin, verifyPin, pinLookupHash, isValidPinFormat, newSessionToken, sessionTokenHash } from './credentials';

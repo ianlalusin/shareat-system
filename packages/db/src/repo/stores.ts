@@ -256,18 +256,43 @@ export async function countSalesChannels(tx: Tx, orgId: string, storeId: string)
 }
 
 /**
- * ⭐ T-222 readiness input, and the sharpest one (spec §5). A PIN credential belongs to a
- * **(person, store) pair** — `setPin` hashes with `pinLookupHash(storeId, pin)` — so a brand-new
- * store has ZERO credentials while the sign-in page happily lists it. The first person to try
- * reports *"my PIN stopped working"*, the least informative possible symptom of a correct system.
+ * ⭐ T-222 readiness input, and the sharpest one (spec §5): **how many people can actually sign in
+ * at this store?**
  *
- * ⛔ Store creation does NOT auto-issue one: a credential is a security decision, and a
+ * ⛔ **T-302 rewrote the question, because the old one became wrong in the BLOCKING direction.**
+ * This counted `person_credentials where store_id = <this store>`. That was right while a PIN
+ * belonged to a (person, store) pair. It is not right now: a PIN row still carries one `store_id`
+ * — where it was **issued** — while the credential itself works at every branch the person works
+ * at. So a brand-new store would count **0** and the `signIn` readiness gate would block it as
+ * *"No one can sign in here yet"* while every scoped or employed person could already sign in, and
+ * its remedy would tell an admin to issue a PIN that is not needed. ⚠️ **A blocking gate that is
+ * confidently wrong is worse than one that is merely stale** — it stops a real branch opening.
+ *
+ * **The question now is the sign-in gate's own question**, asked of the whole store rather than one
+ * person: is there anybody with a live PIN who either works here or is scoped here? Kept as ONE
+ * statement so it cannot drift from `accessRepo.personMaySignInAtStore`, which it must agree with —
+ * the two are the same predicate at different cardinalities, and a readiness check that disagrees
+ * with the gate it predicts is worse than no readiness check.
+ *
+ * ⛔ Store creation does NOT auto-issue a credential: that is a security decision, and a
  * generated-and-displayed default PIN is the kind of convenience that ends up in a screenshot.
  */
 export async function countActiveCredentials(tx: Tx, storeId: string): Promise<number> {
   const [row] = (await tx.execute(sql`
-    select count(*)::int as n from person_credentials
-    where store_id = ${storeId} and kind = 'pin' and revoked_at is null
+    select count(distinct c.person_id)::int as n
+    from person_credentials c
+    where c.kind = 'pin'
+      and c.revoked_at is null
+      and (
+        exists (
+          select 1 from person_store_scope pss
+          where pss.person_id = c.person_id and pss.store_id = ${storeId}
+        )
+        or exists (
+          select 1 from employments e
+          where e.person_id = c.person_id and e.store_id = ${storeId} and e.ended_on is null
+        )
+      )
   `)) as unknown as { n: number }[];
   return Number(row?.n ?? 0);
 }

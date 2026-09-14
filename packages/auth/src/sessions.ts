@@ -15,7 +15,7 @@
 import type { Tx } from '@shareat/db';
 // `transaction` remains for endShift / credential supersede — NOT auth-door work: both take a
 // person already resolved, and no caller passes null, so the fallback is unreached today.
-import { sessionsRepo, pinAttemptsRepo, authTransaction, transaction, withOrgPrincipal } from '@shareat/db';
+import { sessionsRepo, pinAttemptsRepo, accessRepo, authTransaction, transaction, withOrgPrincipal } from '@shareat/db';
 import { formatBusinessDateTime } from '@shareat/core/datetime';
 import type { Actor } from './authorize';
 import { AuthenticationError } from './errors';
@@ -52,14 +52,17 @@ export interface SignInResult {
 // -------------------------------------------------------------------------------------
 
 /**
- * The shared-terminal path: a 6-digit PIN, scoped to one store.
+ * The shared-terminal path: a 6-digit PIN which, since T-302, identifies one person across every
+ * branch of one organisation.
  *
- * ⚠️ **Every failure returns the SAME message.** "No such PIN" and "wrong PIN" are the same
- * sentence to the caller, because distinguishing them tells an attacker which half to keep
- * guessing. The distinction is worth having in a server log, and nowhere else.
+ * ⚠️ **Every failure returns the SAME message.** "No such PIN", "wrong PIN" and "a real person who
+ * does not work at this branch" are one sentence to the caller, because distinguishing them tells
+ * an attacker which half to keep guessing. The distinction is worth having in a server log, and
+ * nowhere else.
  *
- * ⭐ **Exactly one KDF compare runs**, because the store-scoped lookup hash narrows to at most one
- * row first (T-138 invariant 5). v1 iterates bcrypt over every candidate.
+ * ⭐ **Exactly one KDF compare runs on every path**, because the org-scoped lookup hash narrows to
+ * at most one row first (T-138 invariant 5) — and because the no-row path burns one against
+ * `DUMMY_SCRYPT_HASH` so the two cost the same. v1 iterates bcrypt over every candidate.
  */
 /**
  * ⭐ T-303/T-304 — the throttle wraps the credential lookup; it does not share its connection.
@@ -92,8 +95,21 @@ export async function signInWithPin(
 
   let result: SignInResult;
   try {
-    // DEF-288: the credential lookup precedes knowing the org, so it cannot carry a principal.
-    result = await authTransaction((trx) => runPinSignIn(trx, input));
+    // ⭐ T-302 / B1 — **under a real principal, not the auth door.** This line read
+    // `authTransaction((trx) => …)` under the comment *"DEF-288: the credential lookup precedes
+    // knowing the org, so it cannot carry a principal."* That sentence was true of PIN-FIRST
+    // sign-in and stopped being true the moment T-304 landed: `input.orgId` is a parameter,
+    // resolved from the terminal's own credential by `resolveTerminalIdentity` BEFORE this runs.
+    // T-304 §Q4 and its invariant 3 both say this lookup leaves the door; the move is what makes
+    // that true of the code rather than only of the document.
+    //
+    // ⛔ **And T-302 is what makes it necessary, not merely tidy.** Once the lookup key is
+    // `orgId:pin`, the org prefix inside the HMAC is the only thing keeping a PIN inside its
+    // organisation — one layer, for a tenancy risk. Bible §15.11 / RULES §6 item 3: no layer may
+    // be the only one. Under `withOrgPrincipal` the `person_credentials_via_person` RLS policy
+    // (`p.org_id = app_current_org()`) refuses a foreign-org row independently of the hash, so a
+    // key-derivation mistake cannot by itself cross a tenant boundary.
+    result = await withOrgPrincipal(input.orgId, (trx) => runPinSignIn(trx, input));
   } catch (err) {
     if (err instanceof AuthenticationError) {
       // Advances identically for an unknown PIN and a wrong-person PIN — T-303 invariant 2.
@@ -138,33 +154,82 @@ function cooldownMessage(lockedUntil: Date): string {
   return `Too many wrong PINs. This terminal is paused until ${clock}. A manager can still sign in with their own email and password.`;
 }
 
-const BAD_PIN = 'Sign-in failed: that PIN is not valid for this store.';
+/** ⭐ T-302 — one flat sentence for EVERY failure, and it no longer says "for this store", because
+ *  after T-302 a PIN is not scoped to one. Unknown PIN, wrong PIN and "real person who does not
+ *  work here" are the same sentence to the caller; the distinction is worth having in a server log
+ *  and nowhere else. ⛔ A distinguishable "valid, but not at this branch" would be a cross-store
+ *  oracle telling anyone at any terminal whether six guessed digits are live somewhere in the
+ *  business — precisely the disclosure `orgId:pin` exists to close. */
+const BAD_PIN = 'Sign-in failed: that PIN is not valid.';
+
+/**
+ * ⛔ T-302 §"a constant-cost failure path". A fixed, well-formed scrypt hash of nothing, burned on
+ * the no-row path so that "these six digits belong to nobody" costs the same as "they belong to
+ * somebody". Without it the matched path pays one scrypt and the unmatched path pays none —
+ * **measured on this machine: 2.4 µs vs 35.0 ms, a flat +35 ms**, far above network jitter and
+ * trivially observable from a terminal. That is a timing oracle for *"these six digits belong to
+ * someone in this organisation"*, and T-302 is what makes it reachable.
+ *
+ * ⚠️ **Random bytes, not the hash of any PIN.** It is never compared against a real secret and
+ * must never match one; its only job is to cost one KDF. A literal rather than a computed value so
+ * there is no async module initialisation and no startup cost.
+ *
+ * ⛔ **Exported ONLY so a test can assert it is well-formed, and that is not fussiness.**
+ * `verifyPin` returns `false` from four places, and three of them return **before** reaching
+ * `scrypt`: a value that is not `scrypt$salt$key`, or whose key is not `SCRYPT_KEY_BYTES` long,
+ * is rejected by a string check costing nothing. So a single mistyped character here would delete
+ * the constant-cost property **while leaving this file looking exactly as if it had it** — the
+ * failure would be invisible in review, invisible in a green suite, and observable only as the
+ * timing oracle coming back. `global-pin.test.ts` asserts the KDF is actually reached.
+ */
+export const DUMMY_SCRYPT_HASH =
+  'scrypt$25a577ac8242ebd8bb04c51179e2cf6b$6ab9126744ad6ac63983a36311508d1bf72ca0c1db82e7028de01d7b181708d2fc8f9d751bbfb12c90d9b22090239ef85bbd7baff48c05463e68cfecb69f5601';
 
 async function runPinSignIn(
   tx: Tx,
-  input: { storeId: string; pin: string; deviceId?: string },
+  input: { orgId: string; storeId: string; pin: string; deviceId?: string },
 ): Promise<SignInResult> {
   if (!isValidPinFormat(input.pin)) {
     // Rejected before the KDF, so a malformed value never costs work — and so "0" and "000000"
-    // can never be the same credential.
+    // can never be the same credential. ⚠️ Deliberately NOT constant-cost with the paths below:
+    // "six digits or not" is public knowledge (`isValidPinFormat` is the rule), so the cheapness
+    // here discloses nothing a reader of this file does not already have.
     throw new AuthenticationError(BAD_PIN);
   }
 
+  // ⭐ T-302 — ORG-scoped, so the same six digits identify the same person at every branch.
   const credential = await sessionsRepo.findActiveCredentialByLookupHash(
     tx,
-    pinLookupHash(input.storeId, input.pin),
+    pinLookupHash(input.orgId, input.pin),
   );
 
   // ⚠️ Both branches say the same thing. The shape of the check is deliberately flat.
   if (!credential || credential.kind !== 'pin' || !credential.secretHash) {
+    await verifyPin(input.pin, DUMMY_SCRYPT_HASH);
     throw new AuthenticationError(BAD_PIN);
   }
-  if (credential.storeId !== input.storeId) {
-    // The lookup hash is store-scoped, so this should be unreachable — which is exactly why it is
-    // checked. A credential resolving to the wrong store means the hashing changed underneath us.
-    throw new AuthenticationError(BAD_PIN);
-  }
-  if (!(await verifyPin(input.pin, credential.secretHash))) {
+
+  // ⛔ **Both of these run, always, whatever the first one answers** — that is the point, not an
+  // oversight. Short-circuiting on `verified` would make "correct PIN, wrong branch" cost one more
+  // indexed read than "wrong PIN", re-opening a smaller version of the oracle the dummy KDF above
+  // closes. So the matched path is exactly one scrypt plus one indexed read on every outcome.
+  //
+  // ⚠️ **The residual, stated rather than waved at:** the matched path still pays one indexed read
+  // the unmatched path does not — sub-millisecond against 35 ms of KDF, which is inside the noise
+  // the dummy hash exists to hide behind. It is not closed, and closing it would mean querying
+  // access rows for a person who does not exist.
+  const verified = await verifyPin(input.pin, credential.secretHash);
+  // ⭐ T-302 — replaces `credential.storeId !== input.storeId`. That check compared the store the
+  // PIN was ISSUED at against the terminal's store; under org-scoped hashing those legitimately
+  // differ every time a person works at a second branch, which is the entire feature. The correct
+  // question is whether they work HERE — see `personMaySignInAtStore` for why it is employment OR
+  // scope and not scope alone.
+  //
+  // ⚠️ `credential.storeId` survives on the row and still means something — **where this PIN was
+  // last issued**, never where it works. Do not read it as the latter; nothing enforces that
+  // reading any more.
+  const allowed = await accessRepo.personMaySignInAtStore(tx, credential.personId, input.storeId);
+  if (!verified || !allowed) {
     throw new AuthenticationError(BAD_PIN);
   }
 
@@ -417,30 +482,40 @@ export async function endAllForDevice(
  * a copy of it: a test carrying its own duplicate of this string would go on passing after somebody
  * changed one of the two.
  */
-export const PIN_SUPERSEDED_REASON = 'Superseded by a newly issued PIN for this store.';
+export const PIN_SUPERSEDED_REASON = 'Superseded by a newly issued PIN.';
 
 /**
- * Sets a person's PIN for a store.
+ * Sets a person's PIN. ⭐ **Since T-302 a person has ONE PIN, for the whole organisation** — the
+ * `storeId` argument says where it is being issued and is stamped on the row; it no longer scopes
+ * what the PIN opens.
  *
- * ⚠️ **Retires the PIN it replaces, and ends their live sessions at that store.** Both halves, or
- * *"I changed my PIN"* does not mean what the person thinks it means — and until T-237 only the
- * second half was true (**DEF-228**: the old credential stayed live and kept signing them in).
+ * ⚠️ **Retires the PIN it replaces, and ends their live sessions.** Both halves, or *"I changed my
+ * PIN"* does not mean what the person thinks it means — and until T-237 only the second half was
+ * true (**DEF-228**: the old credential stayed live and kept signing them in).
+ *
+ * ⛔⛔ **THE OPERATIONAL CONSEQUENCE, because it is not visible from this signature:** issuing a
+ * PIN to someone who also works at another branch **changes their PIN at that branch too**. There
+ * is one credential now, so there is one set of six digits. The caller is responsible for saying
+ * so BEFORE the write — `apps/erp/src/app/staff/[employmentId]/page.tsx` does, and a confirmation
+ * after the fact would not be a control.
  */
 export async function setPin(
   tx: Tx | null,
-  input: { personId: string; storeId: string; pin: string },
+  input: { orgId: string; personId: string; storeId: string; pin: string },
 ): Promise<{ credentialId: string }> {
   const run = async (trx: Tx) => {
     if (!isValidPinFormat(input.pin)) {
       throw new AuthenticationError('A PIN must be exactly 6 digits.');
     }
-    const lookupHash = pinLookupHash(input.storeId, input.pin);
-    // ⛔ The lookup hash is UNIQUE, so a collision means someone in this store already uses this
-    // PIN. Refused with a reason the person can act on — an ambiguous credential check that
-    // picked the first match is how the wrong person gets attributed.
+    const lookupHash = pinLookupHash(input.orgId, input.pin);
+    // ⛔ The lookup hash is UNIQUE and now ORG-scoped, so a collision means someone **in this
+    // organisation** already uses this PIN — at any branch, not only this one. Refused with a
+    // reason the person can act on: an ambiguous credential check that picked the first match is
+    // how the wrong person gets attributed, and under a global key that misattribution would now
+    // cross branches.
     const taken = await sessionsRepo.findActiveCredentialByLookupHash(trx, lookupHash);
     if (taken && taken.personId !== input.personId) {
-      throw new AuthenticationError('That PIN is already in use at this store. Please choose another.');
+      throw new AuthenticationError('That PIN is already in use. Please choose another.');
     }
 
     /**
@@ -449,19 +524,28 @@ export async function setPin(
      * without ever revoking the old CREDENTIAL — so the previous PIN went on signing that person in
      * forever. The word "superseded" on the line below is what made it read correct.
      *
-     * ⚠️ **Per store, and only `pin`.** A person may hold a live PIN at more than one store — the
-     * lookup key is store-scoped by construction (`pinLookupHash(storeId, pin)`) precisely so the
-     * same six digits at two stores are two different credentials — so re-issuing at one store must
-     * leave the other alone. And a biometric credential for this store is a different credential
-     * family (T-185): a new PIN does not retire a fingerprint.
+     * ⭐ **T-302 — ORG-WIDE, and only `pin`. The `storeId` argument is deliberately NOT passed.**
+     * This read was `listLiveForPerson(trx, personId, input.storeId)`, which was right while the
+     * key was store-scoped: the same six digits at two stores were two different credentials, so
+     * re-issuing at one had to leave the other alone. Under `pinLookupHash(orgId, pin)` they are
+     * **one** credential, so a store-scoped retire would leave the person's PIN at their other
+     * branch live, the insert below would hit `person_credentials_lookup_hash_unique`, and
+     * `staff/actions.ts` would map 23505 to *"that PIN was just taken"* — about the person's own
+     * PIN. Dropping the third argument is the whole fix.
+     *
+     * ⚠️ A biometric credential is a different credential family (T-185): a new PIN does not
+     * retire a fingerprint. That is what the `kind === 'pin'` filter is for and it is unchanged.
      *
      * ⭐ A loop, not a single revoke, because rows written before this fix may already have left more
-     * than one live PIN behind: the first re-issue after this ships cleans them up.
+     * than one live PIN behind: the first re-issue after this ships cleans them up. ⭐ **Under
+     * T-302 that is no longer a historical nicety — every person with PINs at two branches has
+     * exactly that shape today**, and migration `0148` revokes them at deploy rather than leaving
+     * the cleanup to whenever somebody happens to re-issue.
      *
      * ⚠️ `revokedBy` is NULL here deliberately — there is no principal at this layer to name, and
      * `revokeCredential`'s own comment says why naming the person instead would be worse.
      */
-    const livePins = (await sessionsRepo.listLiveForPerson(trx, input.personId, input.storeId)).filter(
+    const livePins = (await sessionsRepo.listLiveForPerson(trx, input.personId)).filter(
       (c) => c.kind === 'pin',
     );
     for (const previous of livePins) {
@@ -482,7 +566,13 @@ export async function setPin(
       secretHash: await hashPin(input.pin),
       lookupHash,
     });
-    await sessionsRepo.endAllForPerson(trx, input.personId, 'superseded', input.storeId);
+    // ⭐ **T-302 — ORG-WIDE too, and the spec missed this one.** Fix #2 named the retire loop's
+    // `storeId` and stopped there; this line has the identical shape and the identical staleness.
+    // A person now holds ONE PIN, so re-issuing it must end the sessions it could sign into
+    // **everywhere**. Left store-scoped, a cashier re-issued at branch B would keep a live session
+    // at branch A that was opened with the credential this call just revoked — DEF-228's own
+    // lesson ("I changed my PIN" not meaning what the person thinks) reproduced one table over.
+    await sessionsRepo.endAllForPerson(trx, input.personId, 'superseded');
     return { credentialId: id };
   };
   if (tx) return run(tx);

@@ -484,17 +484,23 @@ export async function storeReadiness(
     },
     {
       key: 'signIn',
-      // ⭐ §5, and the sharpest one. A credential belongs to a (person, store) PAIR — `setPin` hashes
-      // with `pinLookupHash(storeId, pin)` — so a new store has ZERO credentials while the sign-in
-      // page happily lists it. The first person to try reports "my PIN stopped working", the least
-      // informative possible symptom of a correct system.
+      // ⭐ §5, and the sharpest one. A new store has nobody who can sign in at it, while the
+      // sign-in page happily lists it — the first person to try reports "my PIN stopped working",
+      // the least informative possible symptom of a correct system.
+      //
+      // ⭐ **T-302 changed what this counts, and the label had to change with it.** It used to
+      // count credential ROWS stamped with this store id. Under org-scoped hashing a PIN works at
+      // every branch its holder works at, so the honest count is PEOPLE who can sign in here —
+      // `countActiveCredentials` now asks exactly the question `personMaySignInAtStore` asks on
+      // the sign-in path. Left as it was, this gate would have BLOCKED a new branch as
+      // "No one can sign in here yet" while everybody could.
       label: 'Someone can sign in here',
       ok: credentials > 0,
       kind: 'manual',
       blocking: true,
       detail: credentials > 0
-        ? `${credentials} active credential(s).`
-        : 'No one can sign in at this store yet. Issue a PIN from Staff — ⛔ store creation deliberately does not auto-issue one, because a generated default PIN ends up in a screenshot.',
+        ? `${credentials} person(s) with a live PIN can sign in here.`
+        : 'No one can sign in at this store yet. Hire someone here, or give an existing person store scope, and make sure they hold a PIN — issue one from Staff. ⛔ Store creation deliberately does not auto-issue a PIN, because a generated default ends up in a screenshot.',
       // ⚠️ No `?store=` — `/staff` takes no store param today; adding one is a behaviour change and
       // is out of scope for T-243.
       remedy: { href: READINESS_REMEDY_ROUTE.signIn, label: 'Issue a PIN from Staff →' },

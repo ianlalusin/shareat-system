@@ -266,6 +266,36 @@ export async function listEmploymentPositionsFor(tx: Tx, employmentIds: string[]
   return rows as EmploymentPositionRow[];
 }
 
+/**
+ * ⭐ T-302 — the OTHER branches this person still works at, excluding the one being looked at.
+ *
+ * **Why a screen needs this at all:** a PIN is now one credential for the whole organisation, so
+ * issuing one on an employment page changes that person's PIN at every branch they work at. The
+ * page has to be able to say *which* branches before the button is pressed — "this also affects
+ * somewhere" is not something a user can act on; "this also affects Davao" is.
+ *
+ * ⚠️ Open employments only (`ended_on is null`), and names rather than ids, because the only
+ * consumer is a sentence read by a human.
+ */
+export async function listOtherOpenBranches(
+  tx: Tx,
+  personId: string,
+  excludeStoreId: string,
+): Promise<{ storeId: string; storeName: string }[]> {
+  const result = await tx.execute(sql`
+    select e.store_id, s.name as store_name
+    from employments e
+    join stores s on s.id = e.store_id
+    where e.person_id = ${personId}
+      and e.store_id <> ${excludeStoreId}
+      and e.ended_on is null
+    order by s.name`);
+  return (result as unknown as Record<string, unknown>[]).map((r) => ({
+    storeId: String(r.store_id),
+    storeName: String(r.store_name),
+  }));
+}
+
 /** The roster — reads the VIEW, which is the only answer to "who is active". */
 export async function listActiveRoster(tx: Tx, storeId: string): Promise<RosterRow[]> {
   const result = await tx.execute(sql`

@@ -14,10 +14,21 @@ import { describe, expect, it } from 'vitest';
  * single day of arming the tenancy lock produced four more subsystems. One list would have
  * absorbed them all and nobody would have had to look twice at any of them.
  *
- * **The one permitted caller** is `packages/auth/src/sessions.ts`, and the door is scoped to four
- * lookups inside it: `findActiveCredentialByLookupHash`, `findActiveCredentialByExternalId`,
- * `findLiveByTokenHash`, and `endSession`'s write. Everything downstream of a resolved session
- * knows the actor's organisation and goes back through `withOrgPrincipal`.
+ * **The one permitted caller** is `packages/auth/src/sessions.ts`, and the door is scoped to three
+ * lookups inside it: `findActiveCredentialByExternalId`, `findLiveByTokenHash`, and `endSession`'s
+ * write. Everything downstream of a resolved session knows the actor's organisation and goes back
+ * through `withOrgPrincipal`.
+ *
+ * ⭐ **It was four. `findActiveCredentialByLookupHash` — the PIN lookup — left the door in T-302**,
+ * which moved it to `withOrgPrincipal(orgId, …)` now that T-304's layer 1 supplies the org before a
+ * PIN is typed. Row 194 makes removal free.
+ *
+ * ⚠️ **This guard would not have noticed either way, and that is worth knowing before trusting it
+ * here.** `REQUIRED_CALLERS` is FILE-level: it asserts which files may call `authTransaction` at
+ * all, never which lookups they may wrap in it. `sessions.ts` still holds the other three, so the
+ * file-level list is unchanged and this test stays green across the move. The executable check
+ * that the PIN lookup really is org-scoped now lives where it can fail — a cross-org sign-in
+ * assertion in `packages/auth/tests/integration/global-pin.test.ts`.
  *
  * ⚠️ This is deliberately the SAME shape as the systemTransaction guard, comment-stripping
  * included — a re-export is a hole straight through an import-only guard (T-231 contract 5).

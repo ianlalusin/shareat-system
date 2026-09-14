@@ -83,7 +83,7 @@ describe('T-228 case 5 — ⭐ the chicken-and-egg, actually broken', () => {
       const { personId } = await createFirstAdmin(tx, { orgId: org.orgId, displayName: 'First Admin' });
       const actor: Actor = { personId, orgId: org.orgId };
       const store = await createStore(tx, actor, { code: 'LIPA', name: 'SharEat Lipa' });
-      await setPin(tx, { personId, storeId: store.storeId, pin });
+      await setPin(tx, { orgId: org.orgId, personId, storeId: store.storeId, pin });
       return { orgId: org.orgId, personId, storeId: store.storeId };
     });
 

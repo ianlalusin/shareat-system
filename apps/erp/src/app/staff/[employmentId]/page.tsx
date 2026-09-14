@@ -3,7 +3,7 @@ import { ENDED_STATUSES } from '@shareat/db/schema';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { requireSession } from '../../../lib/session';
 import { endEmploymentAction, issuePinAction, setPositionsAction } from '../actions';
-import { employmentDetail, livePinFor, positionsForStore } from '../lib';
+import { employmentDetail, livePinFor, otherOpenBranchesFor, positionsForStore } from '../lib';
 import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Employment — Shareat System' };
@@ -28,9 +28,12 @@ export default async function EmploymentDetailPage({
   if (!detail) notFound();
 
   const isEnded = detail.employment.endedOn !== null;
-  const [positions, livePin] = await Promise.all([
+  const [positions, livePin, otherBranches] = await Promise.all([
     positionsForStore(actor.orgId, detail.employment.storeId),
-    livePinFor(actor.orgId, detail.employment.personId, detail.employment.storeId),
+    livePinFor(actor.orgId, detail.employment.personId),
+    // ⭐ T-302 — read BEFORE the form renders, because the warning it feeds has to be on screen
+    // before the button is pressed, not in a toast after the write.
+    otherOpenBranchesFor(actor.orgId, detail.employment.personId, detail.employment.storeId),
   ]);
   const assignedIds = new Set(detail.positions.map((p) => p.positionId));
   const primaryId = detail.positions.find((p) => p.isPrimary)?.positionId;
@@ -117,12 +120,28 @@ export default async function EmploymentDetailPage({
         <h2 className="font-medium">Sign-in PIN</h2>
         {livePin ? (
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            Issued {livePin.issuedAt.toLocaleDateString('en-PH', { timeZone: 'Asia/Manila' })}. Can
-            sign in at <code>/sign-in</code> for {detail.storeName}.
+            Issued {livePin.issuedAt.toLocaleDateString('en-PH', { timeZone: 'Asia/Manila' })}. One
+            PIN per person — it signs them in at every branch they work at, not only{' '}
+            {detail.storeName}.
           </p>
         ) : (
           <p className="text-sm text-amber-700 dark:text-amber-400">
             No sign-in PIN issued yet — this person cannot sign in.
+          </p>
+        )}
+        {/*
+          ⛔ T-302 — the warning sits BEFORE the form on purpose. A person now holds ONE PIN for the
+          whole organisation, so issuing one here changes the six digits they type at every other
+          branch too. A confirmation after the write would not be a control, and "this affects
+          somewhere else" is not something an admin can act on — so it names the branches.
+        */}
+        {!isEnded && otherBranches.length > 0 && (
+          <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-300">
+            ⚠️ This person also works at{' '}
+            <strong>{otherBranches.map((b) => b.storeName).join(', ')}</strong>. They have one PIN
+            for the whole business, so issuing a new one here{' '}
+            <strong>changes the PIN they use there too</strong> — tell them the new digits before
+            their next shift at either branch.
           </p>
         )}
         {!isEnded && (
@@ -149,8 +168,8 @@ export default async function EmploymentDetailPage({
         )}
         {livePin && (
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Re-issuing replaces the current PIN and ends any of this person&rsquo;s sessions at this
-            store right now.
+            Re-issuing replaces the current PIN and ends this person&rsquo;s live sessions
+            everywhere, right now — not only at {detail.storeName}.
           </p>
         )}
       </section>

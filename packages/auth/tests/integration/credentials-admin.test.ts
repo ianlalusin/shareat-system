@@ -90,7 +90,7 @@ async function setup(hint: string): Promise<Fixture> {
   await mkRole(orgId, adminId, 'admin');
   await mkRole(orgId, managerId, 'manager');
 
-  return {
+  const f = {
     orgId,
     storeId: await mkStore(`${hint}-s1`),
     storeId2: await mkStore(`${hint}-s2`),
@@ -100,6 +100,18 @@ async function setup(hint: string): Promise<Fixture> {
     managerId,
     manager: { personId: managerId, orgId },
   };
+  /*
+   * ⭐ **T-302 — every fixture person gets store scope at both stores, and it is required now.**
+   * Sign-in gates on "does this person work at, or hold scope for, this store" instead of the old
+   * `credential.storeId === input.storeId`, which was true by construction. Without these rows the
+   * PIN cases below refuse with the flat `BAD_PIN` and look like credential bugs.
+   */
+  for (const personId of [f.adminId, f.personId, f.managerId]) {
+    for (const storeId of [f.storeId, f.storeId2]) {
+      await sql`insert into person_store_scope (person_id, store_id) values (${personId}, ${storeId})`;
+    }
+  }
+  return f;
 }
 
 /** `granted_by` NULL, as `createFirstAdmin` writes it — there is no grantor in a fixture. */
@@ -142,7 +154,7 @@ const liveCredentialCount = async (personId: string): Promise<number> => {
 };
 
 beforeAll(async () => {
-  await sql`truncate table sessions, person_credentials restart identity cascade`;
+  await sql`truncate table sessions, person_credentials, person_store_scope restart identity cascade`;
 });
 
 afterAll(async () => {
@@ -277,7 +289,7 @@ describe('unlinkCredential — the row and the sessions, together', () => {
     // ⚠️ The role alone is not enough, and that is not a fixture detail — it is the guard's whole
     // point since the Opus second read. This line failed the moment the guard was corrected.
     await mkRole(f.orgId, f.personId, 'admin');
-    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '098765' }));
+    await asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '098765' }));
     const externalId = uid('firebase');
     const { credentialId } = await asOrg(f.orgId, (tx) =>
       linkFirebaseCredential(tx, f.admin, { personId: f.adminId, uid: externalId }),
@@ -314,7 +326,7 @@ describe('⛔ case 6 — the last way into an organisation', () => {
 
     // ⭐ Give that admin a way to sign in, and the same call goes through. The pair is the point:
     // the role alone must not unblock it, and the role plus a credential must.
-    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '654321' }));
+    await asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '654321' }));
     await expect(
       asOrg(f.orgId, (tx) => unlinkCredential(tx, f.admin, { personId: f.adminId, credentialId, reason: REASON })),
     ).resolves.toMatchObject({ kind: 'firebase' });
@@ -326,7 +338,7 @@ describe('⛔ case 6 — the last way into an organisation', () => {
     const f = await setup('superadmin');
     await mkRole(f.orgId, f.personId, 'super_admin');
     // …and that super_admin must be able to sign in, or they are not a way in either.
-    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '135790' }));
+    await asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '135790' }));
     const { credentialId } = await asOrg(f.orgId, (tx) =>
       linkFirebaseCredential(tx, f.admin, { personId: f.adminId, uid: uid('firebase') }),
     );
@@ -477,8 +489,8 @@ describe('the lockout guard is serialised for the organisation', () => {
 describe('DEF-228 — re-issuing a PIN retires the one it replaces', () => {
   it('⛔ case 8: the OLD PIN no longer signs in — the security assertion of this task', async () => {
     const f = await setup('oldpin');
-    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '111111' }));
-    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '222222' }));
+    await asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '111111' }));
+    await asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '222222' }));
 
     // Before T-237 this signed in happily: the old credential was never revoked, only the sessions
     // minted under it were ended.
@@ -493,18 +505,32 @@ describe('DEF-228 — re-issuing a PIN retires the one it replaces', () => {
     expect(await liveCredentialCount(f.personId)).toBe(1);
   });
 
-  it('⭐ case 9: the SAME six digits can be re-issued, and another store’s PIN is untouched', async () => {
+  it('⭐ case 9: the SAME six digits can be re-issued — and T-302 leaves ONE credential, not two', async () => {
+    /*
+     * ⛔ **THE SECOND HALF OF THIS TEST'S TITLE USED TO BE *"and another store's PIN is
+     * untouched"*, AND T-302 DELIBERATELY REVERSES IT.** It asserted `liveCredentialCount === 2`:
+     * the lookup key was store-scoped, so the same six digits at two stores were two separate
+     * credentials and re-issuing at one had to leave the other alone.
+     *
+     * Under `pinLookupHash(orgId, pin)` they are **one** credential. Re-issuing anywhere retires
+     * the person's PIN everywhere — which is the point of the task, and is also what stops the
+     * insert below colliding with the person's own live row on the unique index.
+     *
+     * ⭐ **The half this test was originally written for survives unchanged**: re-issuing a
+     * person's OWN six digits must succeed rather than raise a raw 23505 (DEF-177 mapped that
+     * message at the presentation edge instead of fixing the cause; `0137`'s partial index and
+     * T-237's revoke-before-insert fixed it properly).
+     */
     const f = await setup('samepin');
-    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '345678' }));
-    // A live PIN at a SECOND store — the lookup key is store-scoped, so these are two credentials.
-    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId2, pin: '345678' }));
+    await asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '345678' }));
+    await asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId2, pin: '345678' }));
+    await asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '345678' }));
 
-    // ⛔ This raised a raw 23505 before 0137 (DEF-177 mapped the message at the presentation edge
-    // rather than fixing the cause).
-    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '345678' }));
+    // ⭐ ONE credential, not two — the T-302 assertion.
+    expect(await liveCredentialCount(f.personId)).toBe(1);
 
-    // One live PIN per store, and the second store's still signs in.
-    expect(await liveCredentialCount(f.personId)).toBe(2);
+    // …and that one credential signs in at BOTH stores, which is what the person actually wanted
+    // when they held two PINs before.
     const atStore2 = await asOrg(f.orgId, (tx) =>
       signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId2, pin: '345678' }),
     );
@@ -519,10 +545,11 @@ describe('DEF-228 — re-issuing a PIN retires the one it replaces', () => {
     // The pre-check that already existed, unchanged — and the control proving the revoke-first step
     // did not turn "somebody else's PIN" into a silent takeover.
     const f = await setup('taken');
-    await asOrg(f.orgId, (tx) => setPin(tx, { personId: f.personId, storeId: f.storeId, pin: '456789' }));
+    await asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '456789' }));
     await expect(
-      asOrg(f.orgId, (tx) => setPin(tx, { personId: f.adminId, storeId: f.storeId, pin: '456789' })),
-    ).rejects.toThrow(/already in use at this store/);
+      asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.adminId, storeId: f.storeId, pin: '456789' })),
+      // ⭐ T-302 — the sentence lost "at this store" when the key became org-scoped.
+    ).rejects.toThrow(/already in use/);
   });
 });
 

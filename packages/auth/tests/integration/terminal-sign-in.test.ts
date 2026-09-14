@@ -72,7 +72,7 @@ async function setup(hint: string): Promise<Fixture> {
     return r!.id;
   };
   const adminId = await mkPerson(`${hint} Admin`);
-  return {
+  const f = {
     orgId,
     storeId: await mkStore(`${hint}-s1`),
     storeId2: await mkStore(`${hint}-s2`),
@@ -80,6 +80,14 @@ async function setup(hint: string): Promise<Fixture> {
     adminId,
     admin: { personId: adminId, orgId },
   };
+  // ⭐ T-302 — sign-in now asks whether this person works at, or is scoped to, the store. These
+  // fixtures held neither row, so every PIN case here refused with the flat BAD_PIN.
+  for (const personId of [f.personId, f.adminId]) {
+    for (const storeId of [f.storeId, f.storeId2]) {
+      await sql`insert into person_store_scope (person_id, store_id) values (${personId}, ${storeId})`;
+    }
+  }
+  return f;
 }
 
 /** A terminal person + its `kind='firebase'` credential, scoped to one store — option (a). */
@@ -104,14 +112,19 @@ async function mkOrdinaryFirebasePerson(orgId: string, hint: string): Promise<{ 
   return { personId: p!.id, externalId };
 }
 
-async function mkPin(personId: string, storeId: string, pin: string): Promise<void> {
+/**
+ * ⭐ **T-302 — takes `orgId` now, because the lookup key is `HMAC(orgId:pin)`.** `storeId` is still
+ * written to the row (a `pin` credential must carry one) but no longer feeds the hash: it records
+ * where the PIN was ISSUED, never where it works.
+ */
+async function mkPin(orgId: string, personId: string, storeId: string, pin: string): Promise<void> {
   // Bypasses `setPin`'s KDF cost for fixture speed — same shape `credentials-admin.test.ts` uses
   // nowhere, but this file is under real time pressure and the hash's own correctness is proven
   // elsewhere (`credentials.test.ts`). Uses the real `hashPin`/`pinLookupHash` so the actual
   // sign-in path is exercised, not a shortcut around it.
   await sql`
     insert into person_credentials (person_id, kind, store_id, secret_hash, lookup_hash)
-    values (${personId}, 'pin', ${storeId}, ${await hashPin(pin)}, ${pinLookupHash(storeId, pin)})
+    values (${personId}, 'pin', ${storeId}, ${await hashPin(pin)}, ${pinLookupHash(orgId, pin)})
   `;
 }
 
@@ -126,7 +139,7 @@ async function asOrg<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
 }
 
 beforeAll(async () => {
-  await sql`truncate table sessions, person_credentials, pin_attempt_throttle, persons restart identity cascade`;
+  await sql`truncate table sessions, person_credentials, person_store_scope, pin_attempt_throttle, persons restart identity cascade`;
 });
 
 afterAll(async () => {
@@ -261,7 +274,7 @@ describe('a terminal-kind person is not staff (the three-part guard)', () => {
 describe('endAllForDevice', () => {
   it('ends only that device\'s live session, not another device\'s session for the same person', async () => {
     const f = await setup('end-device');
-    await mkPin(f.personId, f.storeId, '741852');
+    await mkPin(f.orgId, f.personId, f.storeId, '741852');
 
     const onDeviceA = await signInWithPin(null, { orgId: f.orgId, storeId: f.storeId, pin: '741852', deviceId: 'device-A' });
     // Same person, second PIN sign-in from a second tablet — same store, different device.
@@ -314,7 +327,7 @@ describe('hasLiveTerminalCredentialForStore — provision-terminal\'s dedup guar
 describe('pin_attempt_throttle — T-303, 10 misses / 60s window / 2 minute cooldown', () => {
   it('test 1 — ten misses locks the store; the eleventh is refused BEFORE any credential lookup runs', async () => {
     const f = await setup('throttle-lock');
-    await mkPin(f.personId, f.storeId, '111111');
+    await mkPin(f.orgId, f.personId, f.storeId, '111111');
 
     for (let i = 0; i < 10; i++) {
       await expect(
@@ -333,7 +346,7 @@ describe('pin_attempt_throttle — T-303, 10 misses / 60s window / 2 minute cool
 
   it('test 7 — a WRONG pin and an UNKNOWN pin advance the counter identically and produce the same message', async () => {
     const f = await setup('throttle-parity');
-    await mkPin(f.personId, f.storeId, '222222');
+    await mkPin(f.orgId, f.personId, f.storeId, '222222');
 
     const wrong = await signInWithPin(null, { orgId: f.orgId, storeId: f.storeId, pin: '333333' }).catch(
       (e: Error) => e.message,
@@ -352,9 +365,19 @@ describe('pin_attempt_throttle — T-303, 10 misses / 60s window / 2 minute cool
   });
 
   it('test 3 — a second store is unaffected while the first is cooling down', async () => {
+    /*
+     * ⚠️ **T-302 — the second store's PIN belongs to a DIFFERENT person now.** This gave one person
+     * two PINs, one per store, which was the normal shape while the key was store-scoped and is a
+     * state T-302 forbids (one live PIN per person, enforced by the unique index once the hashes
+     * collapse). The raw insert would still have produced it, so the test would have gone on
+     * passing while modelling something the system can no longer contain.
+     *
+     * ⭐ Two people is also the better test of what this asserts: the throttle is per STORE, so
+     * what must survive store 1's cooldown is store 2's traffic, whoever is typing.
+     */
     const f = await setup('throttle-second-store');
-    await mkPin(f.personId, f.storeId, '555555');
-    await mkPin(f.personId, f.storeId2, '666666');
+    await mkPin(f.orgId, f.personId, f.storeId, '555555');
+    await mkPin(f.orgId, f.adminId, f.storeId2, '666666');
 
     for (let i = 0; i < 10; i++) {
       await signInWithPin(null, { orgId: f.orgId, storeId: f.storeId, pin: '000000' }).catch(() => {});
@@ -363,9 +386,9 @@ describe('pin_attempt_throttle — T-303, 10 misses / 60s window / 2 minute cool
       signInWithPin(null, { orgId: f.orgId, storeId: f.storeId, pin: '555555' }),
     ).rejects.toThrow(/paused until/);
 
-    // The second store, same org, same person's own PIN there — unaffected.
+    // The second store, same org — unaffected.
     const res = await signInWithPin(null, { orgId: f.orgId, storeId: f.storeId2, pin: '666666' });
-    expect(res.personId).toBe(f.personId);
+    expect(res.personId).toBe(f.adminId);
   });
 
   it('test 3b — once locked, further misses never extend or reset the cooldown (the lock-clobber bug)', async () => {
@@ -396,7 +419,7 @@ describe('pin_attempt_throttle — T-303, 10 misses / 60s window / 2 minute cool
 
   it('test 2 — after the cooldown expires, the same store gets another attempt', async () => {
     const f = await setup('throttle-expires');
-    await mkPin(f.personId, f.storeId, '777777');
+    await mkPin(f.orgId, f.personId, f.storeId, '777777');
     for (let i = 0; i < 10; i++) {
       await signInWithPin(null, { orgId: f.orgId, storeId: f.storeId, pin: '000000' }).catch(() => {});
     }
@@ -409,7 +432,7 @@ describe('pin_attempt_throttle — T-303, 10 misses / 60s window / 2 minute cool
 
   it('test 4 — a correct PIN on the tenth attempt still succeeds; the limit is on failures, not attempts', async () => {
     const f = await setup('throttle-tenth-ok');
-    await mkPin(f.personId, f.storeId, '888888');
+    await mkPin(f.orgId, f.personId, f.storeId, '888888');
     for (let i = 0; i < 9; i++) {
       await signInWithPin(null, { orgId: f.orgId, storeId: f.storeId, pin: '000000' }).catch(() => {});
     }

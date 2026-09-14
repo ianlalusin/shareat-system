@@ -67,15 +67,37 @@ export async function employmentDetail(orgId: string, employmentId: string): Pro
   });
 }
 
-/** T-217 / DEF-174. Whether this person already has a live sign-in PIN at this store — the read
- *  half of "hired but no PIN issued yet," with no capability gate, matching every other roster
- *  read on this page (the gate belongs to issuing one, not to looking). */
-export async function livePinFor(orgId: string, personId: string, storeId: string): Promise<{ issuedAt: Date } | null> {
+/**
+ * T-217 / DEF-174. Whether this person already has a live sign-in PIN — the read half of "hired but
+ * no PIN issued yet," with no capability gate, matching every other roster read on this page (the
+ * gate belongs to issuing one, not to looking).
+ *
+ * ⭐ **T-302 — no longer narrowed to a store, and that is a correctness fix, not a tidy-up.** This
+ * passed `storeId` to `listLiveForPerson`, which was right while a PIN belonged to a (person,
+ * store) pair. Under org-scoped hashing a person holds ONE PIN whose row carries whichever store
+ * it was last issued at — so the store-narrowed read would answer *"no sign-in PIN issued yet —
+ * this person cannot sign in"* on the employment page of every OTHER branch they work at, about a
+ * PIN that works there perfectly well. Worse, that sentence invites the admin to issue one, which
+ * silently changes the person's PIN at the first branch.
+ */
+export async function livePinFor(orgId: string, personId: string): Promise<{ issuedAt: Date } | null> {
   return withOrgPrincipal(orgId, async (tx) => {
-    const rows = await sessionsRepo.listLiveForPerson(tx, personId, storeId);
+    const rows = await sessionsRepo.listLiveForPerson(tx, personId);
     const pin = rows.find((r) => r.kind === 'pin');
     return pin ? { issuedAt: pin.createdAt } : null;
   });
+}
+
+/** ⭐ T-302 — the other branches this person still works at, for the warning the issue-PIN form
+ *  shows BEFORE the button. One PIN per person now means issuing one here changes it there. */
+export async function otherOpenBranchesFor(
+  orgId: string,
+  personId: string,
+  excludeStoreId: string,
+): Promise<{ storeId: string; storeName: string }[]> {
+  return withOrgPrincipal(orgId, (tx) =>
+    employmentRepo.listOtherOpenBranches(tx, personId, excludeStoreId),
+  );
 }
 
 /**

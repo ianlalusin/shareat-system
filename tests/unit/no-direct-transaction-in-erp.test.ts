@@ -51,10 +51,15 @@ const repoRoot = join(import.meta.dirname, '..', '..');
  * not known yet, and cannot be.** ⚠️ This said "all three" while listing five; corrected
  * 2026-09-11 rather than left to imply the list is smaller than it is.
  *
- * A principal needs an org. Sign-in RESOLVES the org: `sessionsRepo.findActiveCredentialByLookupHash`
- * searches `person_credentials` by a store-scoped hash before any organisation is known, and
- * `resolveActor` is the function that produces the actor everything else derives its principal
- * from. Requiring a principal here is a chicken-and-egg, not an oversight.
+ * A principal needs an org, and `resolveActor` is the function that produces the actor everything
+ * else derives its principal from. Requiring a principal there is a chicken-and-egg, not an
+ * oversight.
+ *
+ * ⭐ **T-302 — the PIN lookup is no longer an example of this and must not be cited as one.** This
+ * paragraph used to open with `sessionsRepo.findActiveCredentialByLookupHash` "searches
+ * `person_credentials` by a store-scoped hash before any organisation is known". Both halves are
+ * now false: the hash is org-scoped, and T-304's layer 1 resolves the org from the terminal's own
+ * credential before a PIN is typed, so `signInWithPin` runs its lookup under `withOrgPrincipal`.
  *
  * ⚠️ Adding an entry means claiming some other path also cannot know its org. Almost nothing
  * qualifies. The test below refuses a stale entry, because an exemption that no longer matches a

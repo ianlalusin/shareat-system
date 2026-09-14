@@ -51,20 +51,27 @@ function errorMessage(err: unknown): string {
     return 'Only a manager or admin scoped to this store can hire, end an employment, change positions, or issue a sign-in PIN.';
   }
   if (/must be exactly 6 digits/.test(raw)) return raw;
-  if (/already in use at this store/.test(raw)) return raw;
+  // ⭐ T-302 — the sentence `setPin` throws dropped "at this store" when the lookup key became
+  // org-scoped. ⛔ This regex had to change WITH it: a mapping that still matched the old wording
+  // would silently stop matching and fall through to `sharedErrorMessage`, replacing an actionable
+  // "pick different digits" with a generic failure. Matched on the stable half of the sentence.
+  if (/already in use\. Please choose another/.test(raw)) return raw;
   // ⭐ **DEF-177 was fixed at the source by T-237 (DEF-228), and this mapping outlived its original
   // case.** It used to mean *"that is already this person's own PIN"*: `setPin`'s pre-check refused
   // only a PIN held by a DIFFERENT person, so re-entering your own reached the unique index and
-  // raised a raw Postgres message. `setPin` now retires the person's own live PIN for that store
-  // BEFORE inserting the new one, and the index is partial on `revoked_at is null`, so re-issuing
-  // the same six digits succeeds — this branch can no longer be the same person's PIN.
+  // raised a raw Postgres message. `setPin` now retires the person's own live PIN — ⭐ **since
+  // T-302 org-wide, not "for that store"** — BEFORE inserting the new one, and the index is partial
+  // on `revoked_at is null`, so re-issuing the same six digits succeeds; this branch can no longer
+  // be the same person's PIN at any branch.
   //
   // ⚠️ **Kept, because one path still reaches it**: two administrators issuing the same digits, to
   // two different people, at the same store, in the same moment — the pre-check reads before either
   // insert, so both pass it and the index refuses the second. Rare, real, and the sentence now says
   // what actually happened instead of describing a case that can no longer occur.
   if (/person_credentials_lookup_hash_unique/.test(raw)) {
-    return 'That PIN was just taken at this store — try another.';
+    // ⭐ T-302 — no longer "at this store": the index is org-wide now, so the race is two admins
+    // issuing the same digits to two different people anywhere in the business, in the same moment.
+    return 'That PIN was just taken — try another.';
   }
   if (/may not 'manage_store_settings'/.test(raw)) {
     return 'Only a manager or admin scoped to this store can add a position.';
@@ -202,7 +209,15 @@ export async function issuePinAction(formData: FormData): Promise<void> {
         throw new Error('That employment does not exist.');
       }
       await authorize(tx, actor, 'enrol_staff', { storeId: employment.storeId });
-      await setPin(tx, { personId: employment.personId, storeId: employment.storeId, pin });
+      // ⭐ T-302 — `orgId` from the ACTOR, never from the form (T-231). It is also already known
+      // to equal the employment's org: the guard three lines up refused `employment.orgId !==
+      // actor.orgId`, so the two cannot disagree here.
+      await setPin(tx, {
+        orgId: actor.orgId,
+        personId: employment.personId,
+        storeId: employment.storeId,
+        pin,
+      });
     });
   } catch (err) {
     backToEmployment(employmentId, { error: errorMessage(err) });
