@@ -15,31 +15,18 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { bannerBlock, doneIds, leadingClaim } from './lib/document-facts';
 
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
-const ROADMAP_PATH = join(REPO_ROOT, 'docs', 'ROADMAP.html');
 const TASKS_DIR = join(REPO_ROOT, 'docs', 'tasks');
 
 const PHRASE_RE =
   /AWAITING APPROVAL|SPEC NOT YET WRITTEN|NUMBER RESERVED|not yet implemented|awaiting APPROVED|Number reserved/i;
 
-// ⛔ DEF-179: this repo checks out CRLF and `.` does not match `\r`, so every line-oriented regex
-// below runs against CRLF-normalised text first — never the raw read.
-function normalise(text: string): string {
-  return text.replace(/\r\n/g, '\n');
-}
-
-/** Every `T-\d+` id the roadmap marks `t-done`. A row may name more than one id (`T-303 · T-304`). */
-function doneIds(): Set<string> {
-  const html = normalise(readFileSync(ROADMAP_PATH, 'utf8'));
-  const done = new Set<string>();
-  const taskDivRe = /<div class="task( t-done)?"><div class="task-id">(?:<span class="dot"><\/span>)?([^<]+)<\/div>/g;
-  for (const m of html.matchAll(taskDivRe)) {
-    if (!m[1]) continue; // not t-done
-    for (const id of m[2]!.match(/T-\d+/g) ?? []) done.add(id);
-  }
-  return done;
-}
+// ⛔ T-317: `doneIds`, `bannerBlock` and `leadingClaim` moved to `./lib/document-facts` so guard 5
+// (a task file claiming shipped must have a roadmap row) can reuse this exact extraction instead
+// of writing a second one (invariant 6). Behaviour unchanged — same quote-stripping, same
+// `ORIGINAL STATUS` cut, same roadmap parsing; only the definitions relocated.
 
 interface TaskFile {
   readonly id: string;
@@ -54,54 +41,6 @@ function taskFiles(): TaskFile[] {
     out.push({ id: `T-${m[1]}`, file });
   }
   return out;
-}
-
-/**
- * The leading run of `>`-blockquote lines directly under the `# T-NNN` title, with each line's
- * `> ` marker stripped BEFORE joining. Stripping after joining is wrong: a naive join of raw
- * lines re-inserts the marker between the two halves of a phrase split across a soft-wrapped
- * blockquote line (`…said "SPEC — awaiting` / `> APPROVED …`), producing `"…awaiting > APPROVED…"`,
- * which the phrase regex does not match — measured directly against `256-*.md` while building
- * this guard.
- */
-function bannerBlock(text: string): string {
-  const lines = normalise(text).split('\n');
-  let i = 0;
-  while (i < lines.length && !/^>/.test(lines[i]!)) i++;
-  const start = i;
-  while (i < lines.length && (/^>/.test(lines[i]!) || lines[i]!.trim() === '')) {
-    if (lines[i]!.trim() === '') {
-      const next = lines[i + 1];
-      if (next === undefined || !/^>/.test(next)) break;
-    }
-    i++;
-  }
-  return lines
-    .slice(start, i)
-    .map((l) => l.replace(/^>\s?/, ''))
-    .join(' ');
-}
-
-/**
- * The file's own present-tense claim, as distinct from a quotation of its former one. This corpus
- * uses two conventions to keep a corrected banner's history without it being read as current: an
- * inline quotation in `"…"`/`"…"`, and an explicit `ORIGINAL STATUS:` (or "kept for the record")
- * label. Both are stripped before the phrase list is matched.
- *
- * ⚠️ **Known accepted limitation** (recorded, not coded around — see T-312's spec, "Known
- * limitation"): a genuinely stale leading claim written INSIDE quotes for emphasis, with no
- * `ORIGINAL STATUS` label, would be stripped and missed. Measured zero such instances across the
- * full 157-id done-set this guard runs against. The alternative — trying to find "the first
- * sentence" by punctuation alone — was tried and is wrong in both directions: it over-extends on
- * `130-accounts-payable.md` (a quoted phrase's own internal period isn't followed by whitespace,
- * so the split runs past it into the real trigger text) and under-extends on files like
- * `235-def-222-pre-session-error-messages.md`, whose genuine leading claim is a short paragraph of
- * several sentences inside one bold span, not one sentence.
- */
-function leadingClaim(banner: string): string {
-  const noQuotes = banner.replace(/["“][^"”]*["”]/g, '');
-  const cut = noQuotes.search(/original status/i);
-  return cut === -1 ? noQuotes : noQuotes.slice(0, cut);
 }
 
 function isUnstartedClaim(text: string): boolean {

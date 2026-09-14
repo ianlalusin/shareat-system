@@ -28,16 +28,32 @@
  * marker. ⛔ The ~40 existing ones are deliberately NOT back-filled: a convention proves itself on
  * new writing, and back-filling forty markers would manufacture precisely the unearned assurance
  * this line of work exists to remove (sweep §Recommendations 4).
+ *
+ * ## T-317 / DEF-193 — the second variant: `STALE-IF-REACHABLE`, for a register row
+ *
+ * `docs/DEFECTS-REGISTER.md` DEF-193 asserted *"nothing in the codebase can create or edit"* an
+ * expense category. `createCategory` shipped with T-229; the row stayed `reported` for weeks and
+ * then cost two lanes a wrong costing of a later feature, on the strength of that row. **Same
+ * family as `STALE-IF-EXISTS`, extended rather than duplicated**: the claim is an absence, and the
+ * absence is of a REACHABLE symbol rather than an existing path.
+ *
+ * `<!-- STALE-IF-REACHABLE: exportedSymbol -->` goes red when that symbol has a caller under
+ * `apps/` — reusing `tests/unit/domain-actions-have-callers.test.ts`'s own reachability
+ * resolution (`./lib/document-facts`'s `appProductionSource`/`isCalledInSource`) rather than
+ * writing a second implementation of "is this reachable" (T-317 invariant 6).
  */
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { appProductionSource, isCalledInSource } from './lib/document-facts';
 
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const TASKS_DIR = join(REPO_ROOT, 'docs', 'tasks');
+const REGISTER_PATH = join(REPO_ROOT, 'docs', 'DEFECTS-REGISTER.md');
 
 const MARKER = /<!--\s*STALE-IF-EXISTS:\s*([^\s>]+)\s*-->/g;
+const REACHABLE_MARKER = /<!--\s*STALE-IF-REACHABLE:\s*([A-Za-z0-9_]+)\s*-->/g;
 
 interface Marker {
   readonly file: string;
@@ -70,6 +86,84 @@ function markers(): Marker[] {
   }
   return found;
 }
+
+interface ReachableMarker {
+  readonly line: number;
+  readonly symbol: string;
+}
+
+/**
+ * `STALE-IF-REACHABLE` markers found in `docs/DEFECTS-REGISTER.md`, the document this variant is
+ * for — a register row, not a task file. Fenced-block skipping kept for the same reason as
+ * `markers()` above, even though the register has no fenced examples today: a worked example
+ * added later should not trip its own guard.
+ */
+function reachableMarkers(): ReachableMarker[] {
+  const found: ReachableMarker[] = [];
+  // ⛔ DEF-179: CRLF normalised before any line-oriented match.
+  const text = readFileSync(REGISTER_PATH, 'utf8').replace(/\r\n/g, '\n');
+  let inFence = false;
+  text.split('\n').forEach((line, i) => {
+    if (/^\s*```/.test(line)) {
+      inFence = !inFence;
+      return;
+    }
+    if (inFence) return;
+    for (const m of line.matchAll(REACHABLE_MARKER)) {
+      found.push({ line: i + 1, symbol: m[1]! });
+    }
+  });
+  return found;
+}
+
+describe('T-317 / DEF-193 — a register row asserting an unreachable symbol must still be unreachable', () => {
+  it('⭐ non-vacuity: at least one STALE-IF-REACHABLE marker exists', () => {
+    // Same lesson as the STALE-IF-EXISTS non-vacuity check above: a marker guard with nothing to
+    // check is a green tick that means nothing.
+    expect(reachableMarkers().length).toBeGreaterThan(0);
+  });
+
+  it('⭐ non-vacuity: the reachability resolution sees real, substantial app source', () => {
+    // DEF-179's own lesson, reused: if this collapsed to near-zero, every marker below would
+    // pass for the wrong reason — "unreachable" would mean "unscanned".
+    expect(appProductionSource().length).toBeGreaterThan(100_000);
+  });
+
+  it('⛔ every STALE-IF-REACHABLE symbol is still unreachable from apps/', () => {
+    const appSource = appProductionSource();
+    const stale = reachableMarkers()
+      .filter((m) => isCalledInSource(appSource, m.symbol))
+      .map(
+        (m) =>
+          `docs/DEFECTS-REGISTER.md:${m.line} — deferral says \`${m.symbol}\` is unreachable from ` +
+          'apps/, but it now has a caller. The row is stale: either the absence it asserts has ' +
+          'been built, or a screen now reaches it under a different claim. Correct the row; do ' +
+          'not delete the marker to silence this.',
+      );
+    expect(stale).toEqual([]);
+  });
+
+  it('⭐ MUST-FIRE control, real data — DEF-193s own case as the test that would have caught it', () => {
+    // Not a synthetic symbol: `createCategory` is reachable TODAY from
+    // `apps/erp/src/app/settings/expense-categories/page.tsx`. A fixture line carrying this exact
+    // marker must be reported as stale by the same function real register markers go through —
+    // proving the mechanism against the actual regression it exists to catch, not an invented one.
+    const appSource = appProductionSource();
+    expect(isCalledInSource(appSource, 'createCategory')).toBe(true);
+
+    const fixtureLine = '| **DEF-000** | reported | <!-- STALE-IF-REACHABLE: createCategory --> a fixture row |';
+    const symbol = [...fixtureLine.matchAll(REACHABLE_MARKER)].map((m) => m[1]!);
+    expect(symbol).toEqual(['createCategory']);
+    expect(symbol.filter((s) => isCalledInSource(appSource, s))).toEqual(['createCategory']);
+  });
+
+  it('⚠️ every STALE-IF-REACHABLE symbol looks like an export, not a stray phrase', () => {
+    const bad = reachableMarkers()
+      .filter((m) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(m.symbol))
+      .map((m) => `docs/DEFECTS-REGISTER.md:${m.line} — \`${m.symbol}\` is not a bare identifier`);
+    expect(bad).toEqual([]);
+  });
+});
 
 describe('T-220 / DEF-185 — no deferral outlives the reason it was deferred', () => {
   it('⛔ every STALE-IF-EXISTS path is still absent — a deferral whose blocker is gone is stale', () => {

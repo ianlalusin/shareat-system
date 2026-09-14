@@ -22,6 +22,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { normalise, unescapedPipeCount } from './lib/document-facts';
 
 const REGISTER_PATH = fileURLToPath(new URL('../../docs/DEFECTS-REGISTER.md', import.meta.url));
 
@@ -33,20 +34,9 @@ interface Section {
   readonly expectedPipes: number;
 }
 
-// ⛔ DEF-179: this repo checks out CRLF and `.` does not match `\r`, so every line-oriented scan
-// below runs against CRLF-normalised text, never the raw read.
-function normalise(text: string): string {
-  return text.replace(/\r\n/g, '\n');
-}
-
-/** A pipe not immediately preceded by a backslash. The one count this file's shape depends on. */
-function unescapedPipeCount(line: string): number {
-  let count = 0;
-  for (let i = 0; i < line.length; i++) {
-    if (line[i] === '|' && line[i - 1] !== '\\') count++;
-  }
-  return count;
-}
+// ⛔ T-317: `normalise` and `unescapedPipeCount` moved to `./lib/document-facts` so guard 6
+// (PROJECT_BIBLE.md §13's decision-row shape) can reuse this exact counter instead of writing a
+// second one (invariant 6). Behaviour unchanged — same backslash check, same CRLF normalisation.
 
 function parseSections(text: string): Section[] {
   const lines = normalise(text).split('\n');

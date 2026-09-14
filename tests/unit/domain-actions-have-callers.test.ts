@@ -31,47 +31,20 @@
  * export now HAS a caller also fails** — that row must be deleted. The second is what stops the list
  * calcifying, and it is the pattern `tests/unit/no-client-supplied-actor.test.ts` already uses.
  */
-import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { appProductionSource, codeOnly, isCalledInSource, trackedFiles } from './lib/document-facts';
 
 const repoRoot = path.resolve(__dirname, '../..');
 const DOMAIN_ROOT = 'packages/domain/src/';
 
-/**
- * ⛔ `git ls-files`, never a directory walk. `apps/erp/.next` holds turbopack copies of the domain
- * barrel and matches **every** symbol in it, so a walk would report every export as called and pass
- * for ever. `.next` is gitignored, so enumerating from git cannot see it — structural, not a rule
- * anyone has to remember. (`docs/CAPABILITY-GAPS.md`, the sweep's first trap.)
- *
- * ⭐ `--others --exclude-standard` includes files not yet staged — a service written five
- * minutes ago is exactly the one at risk of shipping uncalled — while still honouring
- * `.gitignore`, so `.next` remains invisible.
- */
-function trackedFiles(): string[] {
-  return execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: repoRoot, encoding: 'utf8' })
-    .split('\0')
-    .filter(Boolean);
-}
-
-/**
- * ⛔ Comments stripped before matching. Names are mentioned constantly in this codebase's prose —
- * `reconcileSupplier` appears in three of its own error strings and a doc block — and a raw text
- * match would call a dead export live. ⚠️ CRLF is normalised first: this repo checks out CRLF and
- * `.` does not match `\r`, so a line-oriented scan can match nothing and pass (DEF-179).
- */
-function codeOnly(src: string): string {
-  return src
-    .replace(/\r\n/g, '\n')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .split('\n')
-    .map((line) => {
-      const idx = line.indexOf('//');
-      return idx === -1 ? line : line.slice(0, idx);
-    })
-    .join('\n');
-}
+// ⛔ T-317: `trackedFiles`, `codeOnly` and `appProductionSource` moved to `./lib/document-facts` so
+// guard 1's `STALE-IF-REACHABLE` marker can reuse this exact reachability resolution instead of
+// writing a second one (invariant 6). Behaviour unchanged — same git command, same comment
+// stripping, same `apps/**` filter; only the definitions relocated. `read`/`isTest` stay here:
+// `actionShapedExports` below is specific to this guard's domain-export population, not to
+// reachability itself.
 
 const read = (repoRelative: string) => codeOnly(readFileSync(path.join(repoRoot, repoRelative), 'utf8'));
 const isTest = (f: string) => /\.test\.tsx?$/.test(f) || f.includes('/tests/');
@@ -100,13 +73,6 @@ function actionShapedExports(): Map<string, string> {
     }
   }
   return found;
-}
-
-function appProductionSource(): string {
-  return trackedFiles()
-    .filter((f) => f.startsWith('apps/') && /\.(ts|tsx)$/.test(f) && !isTest(f))
-    .map(read)
-    .join('\n');
 }
 
 /**
@@ -231,7 +197,7 @@ const EXEMPT: Record<string, string> = {
 describe('T-227 — every action-shaped domain export is reachable from a screen', () => {
   const actions = actionShapedExports();
   const appSource = appProductionSource();
-  const called = (name: string) => new RegExp(`\\b${name}\\b`).test(appSource);
+  const called = (name: string) => isCalledInSource(appSource, name);
 
   it('⭐ finds the domain actions and the app source at all (DEF-179 — a scan of nothing passes)', () => {
     // Floors, not ceremony: each collapses to zero if the enumeration breaks — a wrong root, a
