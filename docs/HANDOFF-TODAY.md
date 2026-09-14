@@ -1,247 +1,178 @@
-# Handoff — 2026-09-14 (wrap-up)
+# Handoff — 2026-09-14 (second wrap-up of the day)
 
-> ✅⭐ **FOUR DEFECTS FIXED AND SHIPPED, ONE DEFECT RETRACTED AS FALSE, AND PRODUCTION NOW REPORTS
-> WHICH COMMIT IT IS RUNNING.** Eleven commits, all pushed but one. CI and Deploy both ran
-> automatically, twice, with nobody dispatching anything.
+> ⭐⭐ **THE DAY'S FINDING IS THAT SIX DOCUMENTS OF RECORD WERE STALE OR SELF-CONTRADICTING, THREE
+> HAD ALREADY MISLED A READER, AND THE INSTRUCTION TO KEEP THEM CURRENT ALREADY EXISTED AT FULL
+> STRENGTH.** The session opened by repairing one such defect (DEF-348) and filed **seven more of
+> the same family** — in the register itself, in the bible, in the ops doc, and one the orchestrator
+> reported to Ian as fact.
 >
-> ⭐⭐ **THE DAY'S BIGGEST FINDING IS THAT A DEFECT WE HAD FILED NEVER HAPPENED.** DEF-345 said a
-> shell had eaten a file list out of DEF-258's row. It had not. The list was there the whole time,
-> at `HEAD` and in the commit blamed. **A lane sent to re-derive it re-derived it to EXACT
-> agreement and reported that the agreement meant the premise was false** — rather than handing
-> back four filenames that matched. ⛔ **A measurement that agrees perfectly with the record is
-> evidence the record is INTACT, not evidence your repair succeeded.**
+> ⛔ **`.claude/skills/wrap-up/SKILL.md` already orders this**, with Ian's name and date on it:
+> *"every wrap-up, no exceptions"*, *"Not 'if it changed'"*, and line 139 even names the staleness
+> it exists to stop. **It lost 3–0 today.** So the answer being built is **not a reminder** — it is
+> *delete the moving fact, derive it, or let a build fail on it*. That is **T-317**.
 >
-> Written for a **COLD start**. Read `docs/RULES.md` first, then this. `PROJECT_BIBLE.md` wins any
-> disagreement.
+> ⚠️ **This is the SECOND wrap-up on 2026-09-14.** The earlier one (`71671a9`) covered the morning;
+> this covers everything after `2f07363`. Written for a **COLD start** — read `docs/RULES.md` first.
 
 ## Where things stand
 
-**Production is healthy, current, and now self-identifying.** `/api/health` returns:
+**Production is live on `1a3405e`** and self-reporting it: `/api/health` returns `configuration:
+valid`, `database: reachable`, and a `revision.sha` verified against the deploy by all forty
+characters. **T-302 shipped and deployed**, so migration `0148` has run — ⛔ **every PIN that
+existed before it is revoked and re-issuing them is Ian's, not done yet.**
 
-```
-{"status":"ok","configuration":"valid","database":"reachable",
- "revision":{"sha":"60935e97938a9fe232a968b346c466ac9833a0fb",
-             "builtAt":"2026-09-14T03:43:23.901Z"},"latencyMs":84}
-```
+Three tasks shipped (T-311, T-312, T-313 plus T-302), three specs are approved and unbuilt (T-314,
+T-316, T-317-remainder), one number is reserved with its analysis written (T-315). **Nine defects
+filed, three closed, one corrected as false-in-its-own-row.**
 
-⭐ **That `revision` field is new today (T-308 slice A), and it was verified by COMPARING the two
-values — all forty characters against the commit the deploy actually ran from — not by seeing the
-field appear.** *"Which commit is production on?"*, asked repeatedly during DEF-326 and DEF-327 and
-answerable until today only by SSH plus inference from a directory timestamp, is now one GET.
-
-Migration **`0147`** is still the last applied; **no migration was written today** and `0148` is
-free. All four lane databases sit at 131 entries.
-
-## Gates — real output, run by the orchestrator, not taken on report
+## Gates at `30e1383`
 
 | Gate | Result |
 |---|---|
 | `npm run typecheck` | **exit 0** |
-| `npm run test` (unit) | **exit 0** — 114 files, 1626 passed, 1 skipped |
-| `npm run build` | **exit 0**, dev server stopped first |
-| **Smoketest on 9008** | ✅ `/api/health` served the new `revision` field over real HTTP; `/sign-in` HTTP 200 |
-| Integration — **scoped** | `packages/db` 11 files / 239 passed · `apps/erp` 5 files / 39 passed · `position-defaults` 19/19 |
-| ⭐ Integration — **FULL SUITE** | ✅ **RAN, IN CI, AND PASSED** — run `34801123338`, success in **11m14s**. ⭐ **The first time it has ever run against the database-client change**; it OOMs locally (DEF-245) |
-| **CI** | ✅ `active`. Two runs, both **automatic on push**, both success |
-| **Deploy** | ✅ `active`. Two runs, both **automatic on `workflow_run`**, both success (3m17s, 3m~) |
-| Backtick-parity sweep | ✅ **zero odd rows across all four documents of record, with NO exemption** |
+| `npm run test` (unit) | **exit 0** — 117 files, **1655 passed**, 1 skipped |
+| `npm run build` | **exit 0**, dev server stopped and 9008 confirmed free by process enumeration first |
+| Integration — **scoped**, orchestrator's own DB | **6 files / 127 passed** on `shareat_test_orch` — the affected auth/domain surfaces |
+| Integration — **FULL SUITE** | ✅ **passed in CI** on `1a3405e`, run `34823958663`, **11m38s**. ⛔ Never run locally — it OOMs (DEF-245) |
+| Document guards | **28/28** across `task-status-banner`, `register-row-shape`, `deferral-staleness`, `toc-freshness` |
+| Backtick parity | ✅ zero odd rows across the four documents of record **and** `ROADMAP.html` |
+| CI / Deploy | ✅ both `active`, both fired automatically on push |
 
-⚠️ **What is still NOT proven:** the full integration suite has still never run *locally* (DEF-245
-stands). Everything above that says "full suite" means **in CI**.
+⚠️ **Say "passed in CI", never bare "green"** for the full suite. The scoped run is the orchestrator's
+own independent re-run, which is what proves a result is not an artefact of one lane's harness.
 
-## What shipped
+## What happened this session
 
-| | |
+**Four tasks shipped.** **T-311** — `deploy.yml` claimed eleven GitHub Secrets and read seven; the
+corrected comment ships with a test asserting claimed-versus-read **both ways**, verified by
+breaking the real file in both directions. **T-312** — fourteen shipped tasks stopped claiming they
+were never started, plus the guard. **T-313** — the register's own row shape guarded and
+**thirty-three malformed rows repaired**. **T-302** — one PIN per person across every branch, with
+migration `0148`.
+
+⭐ **Every correction today came from a lane checking a premise rather than a conclusion**, which is
+now **bible §13 row 207**:
+- **T-312 was filed as nineteen files and is fourteen.** Five of DEF-348's own nineteen lead with a
+  *correct* status and match only because they quote the banner they replaced. ⛔ And that row's
+  headline claim was **false against a row three columns away** — it said DEF-122's subject *"is
+  still stale today"* while DEF-122's State column had read `fixed` since 2 September.
+- **DEF-353's own row was wrong about its own composition** — mis-attributing five rows and missing
+  a whole failure shape (a *missing* cell, not a stray one).
+- ⛔ **The orchestrator told Ian four scheduled jobs had never run. They are all armed.** The claim
+  came from `docs/ops/README.md` asserting it in the present tense while **the same file, 230 lines
+  below, records Ian arming the last of them** (DEF-354). A lane reported it faithfully *because the
+  file says so* and hedged; the orchestrator dropped the hedge.
+- **DEF-193 had been false since T-229** — `createCategory` and its form exist, so a category *can*
+  be created at runtime. Two lanes costed Ian's staff-food allowance as *"small, but it is code"* on
+  that row; the honest answer is **zero code, two screens.**
+- **`judgeDraw`'s premise** (*a float pot's balance is complete*) is true of `1115` and **false of
+  the takings drawer** — so T-316's migration alone would have refused the exact case Ian asked
+  for. **No grep finds that; the coupling is semantic.**
+
+**Decisions Ian made, and where each is recorded:**
+
+| Decision | Recorded in |
 |---|---|
-| **DEF-338** | A test comment ordered the reader to delete a timeout the register forbids deleting, and its precondition had come true eleven lines below it. Now records the **ruling** instead of issuing an instruction |
-| **DEF-344 / T-310** | The DB client derived TLS from `NODE_ENV` and **overrode the connection string**. Deleted; the URL decides. ✅ **Verified encrypted in production** |
-| **DEF-329 / T-307** | `ci.yml`'s own `env:` block now runs through the app's real startup contract, with two controls proven red-then-green |
-| **DEF-330** | The manual-migration recipe migrated **the wrong release** (through the symlink the deploy swaps last) and printed success. Now resolves the release explicitly and proves it with a before/after count |
-| **T-308 slice A** | Production publishes its own commit. Baked into the build, not read at runtime |
-| **DEF-345** | ⛔ **RETRACTED — the claim was false when filed.** Nothing was ever lost |
-| **DEF-346** | Filed: `deploy.yml` names **eleven** required secrets; the workflow reads **seven** |
-| **DEF-315** | Corrected: its claim that nothing tests config relationships stopped being true when T-292 landed |
-| **DEF-325** | Measured under deliberate concurrency. Still **UNEXPLAINED**; the 120s override **untouched** |
-| **DEF-348** | ⛔ Filed at wrap-up: **nineteen shipped tasks have files that still say they have not shipped** — and **DEF-122 filed this exact defect on one of these exact files twelve days ago; that file is still wrong.** Reserved as **T-312**, repair deliberately NOT done tonight |
-| **DEF-347** | Filed **and fixed**: `HANDOFF.md` — the file a new machine reads FIRST — said *"T-122 in flight"* and *"67 logged decisions"* while the project was at T-311 and 206. Fixed by **deleting** the duplicated facts, not refreshing them |
+| Push the twelve commits, accepting the PIN revocation | done — production on `1a3405e`; `docs/tasks/302-*.md` status line |
+| Till floor: **PREVENT**, not alarm-only | `docs/tasks/316-till-floor-on-the-cashier-account.md` |
+| Both instruments: a cashier revolving fund **and** a collective staff-food allowance | `docs/tasks/316-*.md` §goal; bible row 128's correction |
+| Staff food is **OPEX**, category taken from v1's data | `docs/CAPABILITY-GAPS.md` (T-267→T-266 citation fixed); DEF-193's closure |
+| **Build the fingerprint**, *"import everything needed"* | `docs/tasks/314-fingerprint-capture-import.md` |
+| Backfill the roadmap for untracked tasks | done — `ff31f07`, 29 rows from shipping commits |
+| Build the document guards | `docs/tasks/317-document-facts-guards.md` |
+| Timers: *"leave for now"* | this handoff, and DEF-354's corrected state |
+| Reimbursement screen: *"later, no use case for now"* | `docs/CAPABILITY-GAPS.md` 2026-09-11 entry stands |
 
-## ⭐⭐ The rule that came out of today — bible §13 row 204
-
-**A remedy is as perishable as a diagnosis.** Any comment or register row that names a specific
-token — an identifier, a line number, a secret, a file — and asserts a present-tense fact about it
-**will go stale without anybody editing it**. ⭐ **Nine instances in one day — six before lunch, and three more found by the wrap-up that was checking whether the first six had been recorded properly:**
-
-1. **DEF-338** — *"whoever fixes that root cause should come back and delete this timeout override"*,
-   where the root cause had been fixed **eleven lines below**.
-2-4. **DEF-338's and DEF-334's own rows** cited `:541-546` for a block at 542-547, `:549-556` for
-   one ending at 555, and `:538` for a line that had stopped saying it.
-5. ⭐ **The repair created a fifth** — the replacement comment is six lines longer, so the override
-   it protects moved from `:627` to `:633`. **The fix for the stale-citation defect produced a stale
-   citation in the row describing it, within the hour.**
-6. **DEF-346** — `deploy.yml`'s secrets list, which has **no conditional grammar at all**.
-7. ⭐ **A seventh, found by this very wrap-up: `HANDOFF.md`** — the file a session on a new machine is
-   told to read FIRST — announced *"T-122 in flight"* and *"67 logged decisions"* while the project
-   was at **T-311 and 206**. Frozen 2026-08-25, wrong for about three weeks. ⛔ **Its audience is the
-   one reader who could not possibly have noticed** (DEF-347).
-8. ⭐ **An eighth, found by lane C while standing down — in ITS OWN FILE.** `docs/tasks/308-*.md`
-   still opened with **`STATUS: … AWAITING APPROVAL`** after the spec was approved, slice A built,
-   reviewed twice, shipped and **verified in production** — while the proof sat 390 lines below.
-   **The first line a cold session reads, contradicting the file's own evidence.** Fixed.
-9. ⛔⛔ **And sweeping THAT found a ninth that is nineteen files wide (DEF-348)** — every task the
-   roadmap marks done whose own file still says `Number reserved` / `awaiting APPROVED` /
-   `not yet implemented`. **DEF-122 filed this in September against `130-accounts-payable.md`. That
-   file is still wrong.** ⭐ **A single-instance fix that was never made and never generalised is
-   how a class survives twelve days of daily work landing on top of it.**
-
-⛔ **The rules:** prefer a **NAME** to a **POSITION** (an identifier survives an edit above it; a
-line number does not) · phrase it as a **ruling**, because *"whoever does X should then do Y"* is a
-booby trap with a timer · **the detection query is TOKEN-based, not grammar-based** — a sweep for
-*"whoever fixes" / "once X is fixed" / `TODO: remove`* found nothing but DEF-338 and **structurally
-cannot** match DEF-346 · an **immutable migration is exempt by construction**.
-
-⭐⭐ **AND THE COROLLARY DEF-347 ADDS, WHICH IS THE ONE THAT CHANGES WHAT YOU DO AT EVERY WRAP-UP:
-A DOCUMENT THAT IS NOT MAINTAINED MUST NOT CONTAIN A FACT THAT MOVES.** It may hold architecture,
-rationale and traps — things true for as long as the design holds — and it must **POINT** at the
-maintained documents for everything else. ⛔ **The fix for a stale status is never to re-type
-today's numbers into it**; that only resets the clock on the same defect. **Delete the duplicate.**
-
-⭐ **Row 206 and its same-day sharpening are worth reading together.** Row 206 said: prefer a guard
-to `!` on a regex match, and where `!` is used name what makes it safe. **Its first instance in the
-wild wrote the comment — and the reason it gave was false.** The code was correct for a *different*
-reason. So the row now says in terms that **it is not satisfied by a comment existing**; the comment
-must name the ACTUAL reason and a reviewer must check it. **A comment giving a plausible wrong
-reason is worse than no comment: no comment invites checking, a wrong one forecloses it.**
+⚠️ **One unrecorded item, deliberately:** the **AP-ceremony tension** — whether a floor-funded
+purchase (a broom, ice) must go through the same verified-invoice cycle as a supplier bill. Stated
+in `docs/tasks/316-*.md` §8.2, **undesigned**, needs Ian.
 
 ## Pick up here
 
-1. **T-308 slice B — the lag guard.** Spec is written and approved (`docs/tasks/308-*.md`). ⛔ **Blocked
-   on Done-when B4, which is Ian's**: a fine-grained PAT at `/srv/shareat-shared/secrets/github-guard.token`.
-   ⭐ Slice A is the hard prerequisite and it is **done and verified**, so B is now unblocked apart
-   from the token. ⛔ Its done-when demands **proof it is ARMED** — `is-enabled` AND `is-active`,
-   never `list-timers` (DEF-332) — because shipping it unarmed would be the sixth member of the
-   family it was built to catch.
-2. **T-311 / DEF-346** — correct `deploy.yml`'s secrets list **and** assert it. ⛔ **Do not do the
-   comment without the test**; the register holds four proofs that a documented expectation with no
-   executable check is just a comment. Design is costed in DEF-346 at well under an hour. **It was
-   blocked on `deploy.yml` being held by T-308 slice A — that file is now free.**
-3. **T-309 — ERP v2's own Firebase project.** Its hard gate (*"do not start while there is only one
-   way to sign in"*) has been satisfied since 2026-09-13.
-4. ⭐ **T-312 / DEF-348 — nineteen task files claim to be unstarted after shipping.** The measurement
-   is done and the query is recorded; the spec is not written. ⛔ **The sweep alone is the wrong
-   fix** — correcting nineteen banners by hand restores exactly the unguarded state DEF-122 left
-   behind on 2026-09-02, which had not even been repaired twelve days later. **Build the guard**
-   (`tests/unit/toc-freshness.test.ts` is the precedent) **and repair the nineteen in the same
-   task.** Fix `130-accounts-payable.md` first — it is DEF-122's own subject.
-5. **T-302** — one PIN per person across every branch. Specced and approved, not built.
+1. ⭐ **T-317 guards 2–6.** Guard 1 shipped (`de28bd2`) with DEF-193's own case as its red control,
+   and three guards' private copies of the same three questions were consolidated into
+   `tests/unit/lib/document-facts.ts`, proven behaviour-preserving by re-running each guard's
+   destructive control through the moved code. **Design work for guards 2 and 3 is already done and
+   is in the spec's margins:** guard 2 has exactly **two** matches across the seven real files, both
+   in `ROADMAP.html` and both legitimately exempt — and one, `'1 day away'`, sits inside the
+   `<script>` block DEF-350 added, so **a script-block exemption is needed beyond quote-stripping**
+   because a single-quoted JS literal is not caught by it. Guard 3 has two unresolved candidates in
+   undated sections (`"unarmed"` at ~:515, `"is enabled"` at ~:540) that may be past-tense narrative
+   and a durable install-versus-enable fact rather than stale claims — **read both in full context
+   before deciding.**
+2. **DEF-359 — repair the six malformed `PROJECT_BIBLE.md` §13 rows.** ⛔ **Planner only** (§14).
+   Row 146 has **eleven** pipes, rows 160/167/206 have seven, and rows **204/205 have five** — a
+   cell *missing*, which must be **reconstructed by reading the row**, not guessed. ⚠️ The counts are
+   the orchestrator's measurement and were **not** independently re-derived by a lane.
+3. **T-316** — blocked on two things that are Ian's, both in its §5 and §3.4. Do not start it
+   without them.
+4. **T-315's spec** — the measurement is written; only the backfill decision is missing.
+5. **T-314 slice A** — the only fingerprint slice needing no hardware: ~162 lines of portable logic
+   plus ~216 lines of v1's own tests. ⚠️ It legitimately ships with **no production caller** until
+   slice E; that is stated so a reviewer does not read it as the DEF-129 shape.
 
 ## Do not decide these alone — they are Ian's
 
-- ⛔ **The T-308 slice B token.** Nobody here can mint it. Item 1 above is blocked on it and on
-  nothing else.
-- ⚠️ **A fourth `persons` reader** could appear and compile clean; the `kind` filter is fail-open.
-  A build-enforced guard is the fix. *Carried from 2026-09-13, still open, still the only genuinely-Ian
-  engineering item.*
-- ⭐ **Answered 2026-09-14, recorded so they are not re-asked:** *where to publish the deployed
-  commit* (the public `/api/health`, disclosure accepted and named — §13 row 205) · *whether to push
-  the database fix on its own* (yes, so a failure would have one suspect) · *whether to push the
-  pipeline change* (yes).
+- ⛔⛔ **RE-ISSUE LIPA'S PINs.** Production has been running `0148` since 08:55Z. Every pre-existing
+  PIN is revoked; the screens correctly say *"No sign-in PIN issued yet"* with the issue form
+  beneath. **A rollback does not restore them.** Admin email-and-password sign-in is unaffected.
+- ⛔ **The live `1115` balance** — `select store_id, gl_account_code, float_target from money_accounts
+  where float_target is not null;`. **The orchestrator cannot run it** (`DATABASE_URL` → `shareat_dev`,
+  SSH blocked for agents). **Any non-zero balance stops T-316**: moving live money between accounts
+  is a posting with a date, not a schema change.
+- **Do cashiers enter the day's cash before or after handing it over?** T-316 needs a *declaration*,
+  not a verification — but if nobody enters a figure, the declared amount is zero and the rule
+  refuses real money.
+- **Fingerprint:** the dongle model (the `.so` names point at ZK9500/SLK20R-class), permission to
+  re-vendor the ZKTeco jars, and ⛔ **the app ID** — reusing `com.shareat.erp` would **replace v1's
+  live clock app** or fail on a signature mismatch, during a parallel run where v1 must keep
+  working. `com.shareat.erp2` is proposed; it is one-way.
+- **T-315's backfill** — grant scope to every open employment by migration, run a reviewed script,
+  or leave the tick manual. A migration changes who can do what in production with nobody reviewing.
+- **DEF-358** — refuse remitting before any day is verified, or admit a variance row with a null day?
+  The first is an operational change to a cashier's evening.
+- **Roadmap coverage** — now backfilled to T-101, so the *"authoritative from T-119"* question is
+  moot; T-317 guard 5 will keep it that way.
 
-## ⛔ Read this before you edit any document
+## Traps that have actually bitten — live right now
 
-**The backtick trap is real, but DEF-345 is proof that its SIGNATURE is ambiguous.** An odd backtick
-count in a table row has at least two causes, and this repository guessed wrong once:
+- ⛔ **The shell eats a backslash in `node -e`, four times today.** A regex like the unescaped-pipe
+  counter becomes an unterminated literal. **The rule is already written down and it works: Write
+  tool → plain file → a script that READS the file.** Stop reaching for `-e`.
+- ⛔ **A row describing a pipe defect will contain one.** Happened **twice**: DEF-353's first draft
+  and DEF-359's. Both were refused by the insert script at the wrong bar count. **Describe a regex
+  in words inside a table cell; never quote it.**
+- ⛔⛔ **Take a table's expected shape from its HEADER, never from a neighbouring row.** DEF-359 was
+  found because an insert script compared a correct row against a malformed neighbour and refused
+  the correct one. **The header is the schema; an adjacent row is only a sample, and a sample can be
+  the defect.**
+- ⚠️ **A guard cannot see what the roadmap does not list.** T-311's and T-312's own banners went
+  stale within hours and T-312's guard was blind to both, because its done-set is parsed from
+  `ROADMAP.html` and neither had a row (DEF-352). **The roadmap pass is the fix, not the guard.**
+- ⛔ **`npm run build` dirties `apps/erp/next-env.d.ts`.** Generated — restore it, never commit it.
+- ⛔ **The full integration suite OOMs locally** (DEF-245). Scoped runs are healthy; CI is where the
+  full suite runs.
+- ⛔ **SSH to the droplet is blocked for agents.** Ian runs host-side commands — suggest `! <command>`.
+- ⚠️ **`docs/ops/README.md` no longer records which timers are armed, on purpose** (DEF-354). The
+  arming state lives in its dated sections and on the host: `is-enabled` **and** `is-active` per
+  unit, never `list-timers` (DEF-332).
 
-1. content genuinely consumed by a shell before it was written;
-2. **a legitimately backticked regex, path or glob written inline** — which is what DEF-258 had.
+## Numbers to allocate from
 
-⭐ **The sweep is now a committed script, not an inline one-liner** — because an inline sweep for the
-backtick trap is itself vulnerable to the backtick trap:
-
-```
-node scripts/backtick-parity.mjs            # the four documents of record
-node scripts/backtick-parity.mjs <files...> # anything else
-```
-
-It reports an **anomaly** and names both causes; it no longer announces a diagnosis. ⛔ **Read the raw
-text of any flagged row before concluding.** If the named identifiers are still there, nothing was
-lost — re-spell the literal backtick (`\x60` in a regex, a doubled-backtick span otherwise) rather
-than exempting the row. **Current state: zero odd rows, no exemptions.**
-
-⚠️ **The write method still stands:** Write tool → plain file → a script that READS the file. Never
-build a document edit inside a shell string. `node -e "…"` is an `-e` string.
-
-## Traps that have actually bitten — live in this area right now
-
-- ⛔ **A test-name filter through the lane runner ran the WRONG TESTS and EXITED 0.** `it.mjs` used
-  `shell: true`, which concatenates argv unescaped (Node warns, DEP0190), so on Windows
-  `-t "some name"` was re-split; vitest read the trailing words as **filename filters**, ran four
-  unrelated files for 254s, and returned green. ✅ **Fixed 2026-09-14** — it spawns vitest's own
-  entrypoint with `shell: false`. ⭐ **A green run of the wrong tests is indistinguishable from a real
-  pass in every log anybody checks.**
-- ⛔ **`npm run build` dirties `apps/erp/next-env.d.ts`**; starting `dev` flips it back. Generated —
-  **restore it, never commit it.**
-- ⛔ **The full local integration suite OOMs.** Scoped runs are healthy. **CI is where the full suite
-  runs** (DEF-245).
-- ⛔ **`systemctl list-timers` cannot show a timer that was never enabled.** Use `is-enabled`. Its
-  GitHub twin: **`Deploy: active` means nothing if `CI` is disabled** — check `gh workflow list --all`.
-- ⛔ **`/srv/shareat` is the symlink the deploy swaps LAST** — when a deploy is broken it points at the
-  *stale* release. ✅ The recovery recipe no longer uses it (DEF-330).
-- ⛔ **`DROP DATABASE` waits are INVISIBLE to `pg_locks`** — they are `IPC` waits (`CheckpointStart`,
-  `ProcSignalBarrier`). A `pg_locks`-only investigation reports "no contention" and is wrong about
-  the mechanism. Found 2026-09-14 while measuring DEF-325.
-- ⚠️ **Server runtimes are UTC.** `formatBusinessDateTime` is the only sanctioned formatter.
-- ⛔ **SSH to the droplet is blocked for the orchestrator** by the permission classifier. Ian runs
-  host-side commands — suggest he type `! <command>`.
-
-## ⭐ The method, and it produced almost everything above
-
-**Lanes were sent QUESTIONS, not just change orders. Seven corrections came back at the
-orchestrator — two of them to numbers it had stated as measured** — and **two lanes corrected their
-own committed work.**
-
-| Correction | From |
-|---|---|
-| The tree description was one file stale | lane C |
-| The edit's line range was off by one (and so was the register) | lane B |
-| *"11 `postgres(` call sites"* — actually ~140; the grep's filter had been dropped when quoting it | lane A |
-| DEF-345's entire premise is false | lane C |
-| DEF-315's claim about `env.test.ts` stopped being true when T-292 landed | lane B |
-| DEF-344's *"one-line change is the whole migration cost"* — there is no cost | lane A |
-| The `!` question was asked about the wrong artefact: *"the concerning thing is not the error, it is the remedy"* | lane C |
-| **Its own spec said `Build` needs a variable nothing reads** | lane C, on itself |
-| **Its own fix used an env var that can be set from a distance** — replaced with an argv flag | lane C, on itself |
-
-⭐ **That last one is the one to remember.** The escape hatch added to stop the test corrupting a
-tracked file was specified as an environment variable. An env var is inherited by every child
-process; one set in the deploy environment for an unrelated reason would have made the build write
-the file elsewhere and compile in the untouched placeholder — **shipping a production artifact
-reporting `unknown` with the fail-closed check having PASSED and nothing red anywhere.** *A safety
-hatch that can be opened from a distance reintroduces the failure it was added to prevent.*
+Next task **T-318** · next defect **DEF-360** · next migration **`0152`**
+⚠️ **Reserved, do not re-issue:** `0149` and `0150` (T-314 slices F and G), `0151` (T-316).
+Each `when` must exceed **1798860707084** (`0148`) and follow ADR-012 §5's grid — ⛔ **re-derive it
+from `packages/db/migrations/README.md` at build time, never from a message.** DEF-039's failure mode
+is a migration silently skipped for a `when` that sorts wrong.
 
 ## Live agent sessions at wrap-up
 
 | Session | Model | Lane DB | State |
 |---|---|---|---|
 | `system32-85` | Opus 5 | `shareat_test_orch` | orchestrator — this session |
-| `webapps-65` | Sonnet 5 | `shareat_test_lanea` | **idle.** T-310, then T-308 slice A through three review rounds |
-| `webapps-4e` | Sonnet 5 | `shareat_test_laneb` | **idle.** DEF-338, T-307, DEF-330, and the DEF-325 measurement |
-| `webapps-f7` | Opus 5 | `shareat_test_lanef7` | **idle.** Wrote T-308's spec, reviewed slice A twice, killed DEF-345 |
-
-⚠️ **`webapps-36` has been alive since 2026-09-13 and is in no lane.** Treated as **foreign** all
-session — no work given, no assumption about its files. **Do not adopt it by name without asking Ian.**
-
-⚠️ **`docs/scratch/` is UNTRACKED and deliberately not committed** — it holds 2026-09-13's lane C
-working documents. Their substance is in the register. **Delete freely.** Lane B's DEF-325 harness
-(21 trial records, 455 lock snapshots) lives in that lane's own scratchpad, outside the repo — the
-first thing to re-run if DEF-325 ever bites again.
-
-## Numbers to allocate from
-
-- Next task **T-313** · next defect **DEF-349** · next migration **`0148`** (`when` > `1798774307084`)
-
-⚠️ **Allocated 2026-09-14, do not re-issue:** **T-310** (done) · **T-311** and **T-312** (both
-reserved, analysis complete, specs unwritten) · **DEF-346**, **DEF-347**, **DEF-348**. **Still reserved from 2026-09-13:** **T-307** (done),
-**T-308** (slice A done, slice B blocked), **T-309** (unstarted).
+| `webapps-65` | Sonnet 5 | `shareat_test_lanea` | **idle.** T-311, the fingerprint measurement, the roadmap-backfill history, v1's staff-food data |
+| `webapps-4e` | Sonnet 5 | `shareat_test_laneb` | **idle.** T-312, T-313, T-317 guard 1 + the extraction |
+| `webapps-f7` | **Opus 5** | `shareat_test_lanef7` | **idle.** T-302, and the specs for T-314 and T-316. ⚠️ Never switched to Sonnet |
 
 ## The paste-ready prompt
 
@@ -252,58 +183,47 @@ reserved, analysis complete, specs unwritten) · **DEF-346**, **DEF-347**, **DEF
 You are the orchestrator for shareat-system (C:\Users\ianla\webapps\shareat-system). Run the
 global /orchestrator skill. You are starting COLD.
 
-Read in this order: docs/RULES.md, docs/HANDOFF-TODAY.md, PROJECT_BIBLE.md §13 rows 202-206,
-docs/DEFECTS-REGISTER.md section E (DEF-325 through DEF-346 are the live ones).
+Read in this order: docs/RULES.md, docs/HANDOFF-TODAY.md, PROJECT_BIBLE.md §13 rows 204-207,
+and docs/DEFECTS-REGISTER.md section E (DEF-346 through DEF-359 are today's).
 
-⭐ Rows 204, 205 and 206 are new and all three constrain what you may do:
-  204 — a remedy is as perishable as a diagnosis. Any comment or row naming a specific token and
-        asserting a present-tense fact about it goes stale with nobody editing it. Prefer a NAME
-        to a POSITION; record the RULING, never a conditional instruction.
-  205 — production publishes its running commit at /api/health, unauthenticated. Ian's decision,
-        the disclosure accepted and named. ⛔ Do NOT "fix" it later by redacting it — that
-        silently breaks T-308 slice B.
-  206 — prefer a guard to `!` on a regex match; where `!` is used the comment must name the ACTUAL
-        reason. ⛔ The rule is NOT satisfied by a comment existing — its first instance wrote one
-        that was confidently wrong.
+⭐ Row 207 is new and it is the one that changes how you read: GREP FINDS IDENTIFIERS, NOT
+PREMISES. When a change merges or moves two things, the coupling that bites is a premise stated
+in a comment — true of the old arrangement, false of the new. And a conclusion can be right while
+its stated reason is wrong; the reason is what the next person builds on. Three instances on
+2026-09-14, and the first would have shipped a silent break of the exact case its task existed
+to serve.
 
-Tree clean, ONE commit unpushed (d2e241e, pure record-keeping — a docs push still restarts
-production, DEF-339). Production healthy and REPORTING ITS OWN COMMIT: /api/health carries
-revision.sha, verified 2026-09-14 by comparing all forty characters against the deploy.
+⛔⛔ IAN'S FIRST: re-issue Lipa's PINs. Production has run migration 0148 since 08:55Z and every
+pre-existing PIN is revoked. Ask him before doing anything else — it is the only outstanding
+item with real staff behind it.
 
-⛔⛔ FIRST, BEFORE TRUSTING ANY PIPELINE: gh workflow list --all
-Both were `active` and both fired automatically twice on 2026-09-14 — but CI sat
-`disabled_manually` for nine hours on 2026-09-13 and NOTHING reported it (DEF-336). ⚠️ Do NOT
-satisfy yourself with "Deploy: active"; Deploy is workflow_run-gated on CI.
+⛔ FIRST, BEFORE TRUSTING ANY PIPELINE: gh workflow list --all. Both were active and fired
+automatically today, but CI sat disabled_manually for nine hours on 2026-09-13 and nothing
+reported it (DEF-336). Deploy is workflow_run-gated on CI.
 
-⭐ The full integration suite RAN AND PASSED in CI (run 34801123338, 11m14s) against the current
-code. It still OOMs locally (DEF-245). Say "passed in CI", never bare "green".
+Production is healthy on 1a3405e and publishes its own commit at /api/health. Verify by comparing
+all forty characters, never by seeing the field appear.
 
-START WITH T-308 SLICE B if Ian has minted the PAT — the spec is written and approved and slice A
-is done. Otherwise T-311/DEF-346: deploy.yml names eleven required secrets and reads seven, and
-deploy.yml is now free. ⛔ Do not correct that comment without the test that asserts it.
+⭐ PICK UP T-317 GUARDS 2-6 (docs/tasks/317-document-facts-guards.md). Guard 1 shipped; the design
+work for 2 and 3 is already in the spec, including that guard 2 needs a script-block exemption
+because '1 day away' lives inside the countdown script DEF-350 added. THEN DEF-359: six
+PROJECT_BIBLE.md §13 rows are malformed and repair is planner-only.
 
-⛔ EDITING DOCS: a shell heredoc or `-e` string EXECUTES backticks. Use Write tool → plain file →
-a script that READS the file. Then run: node scripts/backtick-parity.mjs
-⚠️ An odd row is an ANOMALY, not a verdict — DEF-345 was retracted because someone read one as
-proof of damage when the cause was a regex carrying a literal backtick. READ THE RAW TEXT.
+⛔ EDITING DOCS: the shell EXECUTES backticks and EATS backslashes — it bit four times on
+2026-09-14. Write tool → plain file → a script that READS the file. Then: node
+scripts/backtick-parity.mjs
+
+⛔ A table's expected shape comes from its HEADER, never a neighbouring row. That is how DEF-359
+was found, and it is why an insert script refused a correct row.
 
 ⛔ THE LANE RUNNER: node ~/.claude/skills/orchestrator/tools/it.mjs <lane_db> <files...>
-A name filter through it used to run the WRONG TESTS and EXIT 0 (fixed 2026-09-14). Never run
-npm run test:integration — it hits the shared DB.
+Never npm run test:integration — it hits the shared DB. The full suite OOMs locally (DEF-245);
+say "passed in CI", never bare "green".
 
-ASK EACH LANE A QUESTION, NOT JUST FOR A CHANGE. On 2026-09-14 that produced seven corrections to
-the orchestrator — two to numbers it had called measured — and two lanes corrected their own
-committed work. Not one came from building.
+ASK EACH LANE A QUESTION, NOT JUST FOR A CHANGE. On 2026-09-14 that produced every correction
+that mattered, including two to numbers the orchestrator had reported to Ian as measured. Not one
+came from building.
 
-⛔ SSH to the production droplet is BLOCKED for the orchestrator. Ian runs host-side commands;
-suggest he type `! <command>` so the output lands in the conversation.
-
-Next task T-313 · next defect DEF-349 · next migration 0148 (when > 1798774307084).
-T-309, T-311 and T-312 are RESERVED stubs with analysis written and specs unwritten.
-
-⭐ T-312/DEF-348 is the cheapest real win available and its measurement is already done: nineteen
-task files marked DONE on the roadmap still open with "Number reserved" or "awaiting APPROVED".
-DEF-122 filed that exact defect on 130-accounts-payable.md on 2026-09-02 and THAT FILE IS STILL
-WRONG. ⛔ Do not just fix the nineteen — build the guard too, or it rots again.
+Next task T-318 · next defect DEF-360 · next migration 0152 (0149/0150 → T-314 F/G, 0151 → T-316).
 
 -----------------------------------------------------------------------------------------------
