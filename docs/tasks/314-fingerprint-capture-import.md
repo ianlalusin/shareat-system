@@ -230,6 +230,16 @@ done-when · **what it needs from Ian**.
 
 ## SLICE A — the portable logic
 
+> **Status: BUILT 2026-09-14 by lane B (`webapps-4e`), against the amended contract (mint, not
+> derive — see the ruling above). Typecheck + unit green (report in the lane's READY). No
+> production caller yet — slice E wires this, as designed. Two things flagged for the
+> orchestrator, not resolved here: (1) the invariant-2 seam test (a slice-A token resolving
+> through `resolveScan`) needs a new file under `apps/erp/`, which is structurally outside a
+> `packages/domain` scope and outside this slice's granted file list; (2) `packages/domain/src/
+> attendance/credentials.ts` already has its own `newMatchToken()` + inline template validation
+> that duplicate this slice's `generateMatchToken`/`core.ts`, and its `enrolFingerprint` has no
+> uniqueness retry before insert — pre-existing, not introduced here.**
+
 **Goal.** Token derivation, match-core, the re-arm state machine and the reader pool, running and
 tested in v2, with no hardware and no Android. ⭐ **This is the slice that converts "weeks of
 unknown" into "tested logic waiting for a device."**

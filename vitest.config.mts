@@ -17,6 +17,10 @@ const alias = {
   '@shareat/db': `${root}packages/db/src/index.ts`,
   // ⚠️ Subpath BEFORE the bare name — same ordering rule as `@shareat/auth/errors` below.
   '@shareat/domain/money-lines': `${root}packages/domain/src/shared/money-lines.ts`,
+  // ⭐ T-314 slice A — the clock terminal is a CLIENT path and must reach the fingerprint logic
+  // without dragging `@shareat/db` into the browser bundle. T-266 proved that exact failure once
+  // (`Module not found: Can't resolve 'net'`), which is why this leaf exists at all.
+  '@shareat/domain/attendance/fingerprint': `${root}packages/domain/src/attendance/fingerprint/index.ts`,
   '@shareat/domain': `${root}packages/domain/src/index.ts`,
   // ⚠️ The subpath goes BEFORE the bare name: these are exact-match aliases applied in order, and
   // T-237's `@shareat/auth/errors` leaf (the error classes without `@shareat/db` behind them) is

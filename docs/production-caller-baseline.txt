@@ -39,6 +39,7 @@ formatCoverageReport
 getAllocationsForPayment
 getItemForProduction
 getRecipe
+hasFingerprint
 hasOtherActiveAdmin
 isConvertibleUnit
 isHeaderCode
@@ -57,12 +58,17 @@ listRecipeLines
 listRoster
 listWriteOffsForCharge
 markReviewed
+mintUniqueToken
 newCorrelationId
 payReimbursement
 pendingItemRequests
 periodDue
 periodForDate
 periodKeyOf
+planArm
+poolEntries
+poolFor
+poolKey
 positionsBySupplier
 previewDrawingClose
 proxy
@@ -75,6 +81,7 @@ reconcileSupplier
 remainingFor
 remainingOf
 removeUsageLine
+resolveFingerprintMatchToken
 returnableQuantity
 reverseOwnerEntry
 revokeRoleById
@@ -103,6 +110,7 @@ updateMoneyAccount
 updateOwner
 upsertCategoryLife
 upsertPolicy
+validateFingerprintTemplates
 valuateShell
 voidPaymentAction
 voidShift

@@ -6,7 +6,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./money-lines": "./src/shared/money-lines.ts"
+    "./money-lines": "./src/shared/money-lines.ts",
+    "./attendance/fingerprint": "./src/attendance/fingerprint/index.ts"
   },
   "dependencies": {
     "@shareat/db": "*",

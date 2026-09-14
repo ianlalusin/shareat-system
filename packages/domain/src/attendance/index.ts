@@ -16,3 +16,9 @@ export * from './review';
 export * from './sweep';
 export * from './terminals';
 export * from './credentials';
+// ⭐ T-314 slice A. Added by the orchestrator at integration, not by the lane (shared barrel).
+// ⚠️ This is the SERVER reach — enrolment gets the fingerprint logic through `@shareat/domain`
+// like everything else here. The CLOCK TERMINAL is a client path and must NOT come this way:
+// it imports `@shareat/domain/attendance/fingerprint`, the DB-free leaf, because this barrel
+// re-exports modules that pull `@shareat/db` behind them (T-266). The leaf's own header says so.
+export * from './fingerprint';

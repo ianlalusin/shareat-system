@@ -10,6 +10,7 @@
       "@shareat/db/schema": ["../../packages/db/schema/index.ts"],
       "@shareat/db/client": ["../../packages/db/src/client.ts"],
       "@shareat/domain/money-lines": ["../../packages/domain/src/shared/money-lines.ts"],
+      "@shareat/domain/attendance/fingerprint": ["../../packages/domain/src/attendance/fingerprint/index.ts"],
       "@shareat/domain": ["../../packages/domain/src/index.ts"]
     }
   },

@@ -24,6 +24,7 @@ export interface MirroredCredential {
   kind: CredentialKind;
   cardId?: string;
   matchToken?: string;
+  templates?: string[];
 }
 
 export interface MirroredRoster {
