@@ -24,7 +24,9 @@ Firebase only as an offline edge cache for clock terminals.
 
 **`PROJECT_BIBLE.md` is the authority on this project.** Read it in full before doing
 anything. It outranks your own preferences, any habit carried over from the old codebase,
-and anything in this file. It carries 67 logged decisions, the ten accounting invariants,
+and anything in this file. It carries a numbered decision log (§13, well past 200 rows and still
+growing — ⛔ do not copy a count into any other document; that is how this file came to claim 67),
+the ten accounting invariants,
 and the landmines that must never be repeated.
 
 **Three rules you must not break, ever:**
@@ -246,9 +248,27 @@ Four foundation modules encoding v1's worst landmines as code:
 | `packages/core/src/env.ts` | v1 shipped a deploy with blank env vars; its passcode secret fell back to a public value and failed OPEN. Fail-closed, no defaults on secrets |
 | `packages/core/src/logger.ts` | Silent failure is v1's defining pathology. Structured, redacting, with `jobResult()` so a background job can never report a bare "done" |
 
-### ⭐ RESUME POINT — 2026-08-25
+### ⭐ RESUME POINT — DO NOT READ A STATUS OUT OF THIS FILE
 
-**Phase 1: COMPLETE (15/15).** **Phase 2 Wave 0: COMPLETE.** **Wave 1: T-122 in flight.**
+⛔⛔ **THIS SECTION IS A HISTORICAL SNAPSHOT, FROZEN AT 2026-08-25, AND IT IS KEPT ONLY BECAUSE THE
+FOUNDATION IT DESCRIBES IS STILL TRUE.** It said *"T-122 in flight"* for weeks after the project
+reached T-311 — a **present-tense claim nobody edited**, which is exactly the failure `PROJECT_BIBLE.md`
+§13 row 204 now names. ⭐ **The fix is not to re-type today's numbers here; it is to stop keeping a
+second copy at all.** A count written into a second document is a fact that will rot.
+
+**For the CURRENT state, in this order — all three are maintained, this file is not:**
+
+| Question | File |
+|---|---|
+| What happened last session, and what do I pick up? | ⭐ **`docs/HANDOFF-TODAY.md`** — rewritten every wrap-up, and it carries a paste-ready cold-start prompt |
+| What is done, in flight, and reserved? | **`docs/ROADMAP.html`** |
+| What is broken, and what was decided about it? | **`docs/DEFECTS-REGISTER.md`** |
+| Why is it built this way? | **`PROJECT_BIBLE.md` §13** — the decision log |
+
+**What the snapshot below still gets right:** the ledger core, the migration harness, the reports-as-views
+rule and Wave 0's three self-enforcing guards are all still standing and still describe the foundation
+accurately. **What it gets wrong is only the *in-flight* line and the *next actions*.** Read it as
+architecture, never as status.
 
 | | |
 |---|---|
@@ -258,8 +278,11 @@ Four foundation modules encoding v1's worst landmines as code:
 | **Wave 0** | **T-119** cutover classification + purge · **T-120** Row Level Security · **T-121** roles, grants, `authorize()`. **All three enforce themselves with build-failing guards** |
 | **T-122 (in flight)** | Schema, migration, routing and the domain layer are **committed and green**. **Remaining: the integration tests and the `apps/erp` screens** |
 
-**Next actions, in order:** finish T-122 (tests + screens) → T-123 sales day → Wave 2's five
-ledger-completeness modules. `docs/plans/phase-2-source-documents.md` is the sequence.
+⛔ **The "next actions" that stood here — finish T-122, then T-123 — were completed long ago and
+the line was never edited.** It has been removed rather than updated, because the next action is a
+moving fact and this file is not maintained. ⭐ **`docs/HANDOFF-TODAY.md` § "Pick up here" is the
+answer, always.** `docs/plans/phase-2-source-documents.md` remains the correct sequence document for
+Phase 2 itself.
 
 ### ⚠️ What a fresh session must know before touching anything
 
