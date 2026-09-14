@@ -16,10 +16,14 @@
 
 ## Where things stand
 
-**Production is live on `1a3405e`** and self-reporting it: `/api/health` returns `configuration:
-valid`, `database: reachable`, and a `revision.sha` verified against the deploy by all forty
-characters. **T-302 shipped and deployed**, so migration `0148` has run — ⛔ **every PIN that
-existed before it is revoked and re-issuing them is Ian's, not done yet.**
+**Production self-reports the commit it is running** at `/api/health`, alongside `configuration:
+valid` and `database: reachable`. ⛔ **Do not read a sha out of this file — ask the endpoint and
+compare all forty characters.** The sha that stood here (`1a3405e`) was stale before anybody read
+it: this handoff is itself a commit, and its own deploy ran twelve minutes after it was written.
+**DEF-360** owns that; a document of record cannot carry a figure that a later deploy falsifies.
+
+**T-302 shipped and deployed**, so migration `0148` has run and every PIN that existed before it was
+revoked. ✅ **RE-ISSUED BY IAN, 2026-09-14 — *"pin done staff can sign in now"*. Closed.**
 
 Three tasks shipped (T-311, T-312, T-313 plus T-302), three specs are approved and unbuilt (T-314,
 T-316, T-317-remainder), one number is reserved with its analysis written (T-315). **Nine defects
@@ -113,9 +117,14 @@ in `docs/tasks/316-*.md` §8.2, **undesigned**, needs Ian.
 
 ## Do not decide these alone — they are Ian's
 
-- ⛔⛔ **RE-ISSUE LIPA'S PINs.** Production has been running `0148` since 08:55Z. Every pre-existing
-  PIN is revoked; the screens correctly say *"No sign-in PIN issued yet"* with the issue form
-  beneath. **A rollback does not restore them.** Admin email-and-password sign-in is unaffected.
+- ✅ **~~RE-ISSUE LIPA'S PINs~~ — DONE, Ian, 2026-09-14: *"pin done staff can sign in now"*.**
+  Migration `0148` revoked every pre-existing PIN at 08:55Z; Ian re-issued them from each person's
+  employment page the same day. ⚠️ **Kept here rather than deleted, because the next deploy that
+  changes the PIN key does this again** — and the two things a doer needs are not on that screen:
+  the PIN box is on `/staff/<employment>`, **not** on the Credentials page beside it (that page is
+  cards and fingerprints), and **the staff roster has no PIN column**, so there is no list of who
+  still needs one. Ian worked person-by-person down the roster. A PIN-status column is unbuilt and
+  unfiled — his call whether it is worth a task.
 - ⛔ **The live `1115` balance** — `select store_id, gl_account_code, float_target from money_accounts
   where float_target is not null;`. **The orchestrator cannot run it** (`DATABASE_URL` → `shareat_dev`,
   SSH blocked for agents). **Any non-zero balance stops T-316**: moving live money between accounts
@@ -201,8 +210,9 @@ item with real staff behind it.
 automatically today, but CI sat disabled_manually for nine hours on 2026-09-13 and nothing
 reported it (DEF-336). Deploy is workflow_run-gated on CI.
 
-Production is healthy on 1a3405e and publishes its own commit at /api/health. Verify by comparing
-all forty characters, never by seeing the field appear.
+Production publishes the commit it is running at /api/health. ASK IT — do not read a sha out of this
+prompt, which is why none appears here (DEF-360). Compare all forty characters against git HEAD,
+never by seeing the field appear.
 
 ⭐ PICK UP T-317 GUARDS 2-6 (docs/tasks/317-document-facts-guards.md). Guard 1 shipped; the design
 work for 2 and 3 is already in the spec, including that guard 2 needs a script-block exemption

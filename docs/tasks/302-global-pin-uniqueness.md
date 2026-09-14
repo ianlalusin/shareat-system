@@ -3,11 +3,19 @@
 > ### ✅ **Status: SHIPPED AND DEPLOYED 2026-09-14** — built in `94554a6`, live in production on
 > `1a3405e`, verified by comparing all forty characters of `/api/health`'s `revision.sha`.
 >
-> ⛔ **Migration `0148` HAS RUN IN PRODUCTION, so every PIN that existed before it is revoked.**
-> Re-issuing them from Staff is Ian's, in the same sitting as the deploy — and a rollback does NOT
-> restore them: repointing the release restores code whose store-scoped hashes would match those
-> rows again, but they are revoked by then and `revoked_at` is not un-set. Admin email-and-password
-> sign-in is unaffected and is the way back in.
+> ⛔ **Migration `0148` HAS RUN IN PRODUCTION, so every PIN that existed before it was revoked.**
+> ✅ **RE-ISSUED AND CLOSED 2026-09-14 — Ian: *"pin done staff can sign in now"*.** A rollback would
+> NOT have restored them: repointing the release restores code whose store-scoped hashes would match
+> those rows again, but they are revoked by then and `revoked_at` is not un-set. Admin
+> email-and-password sign-in was unaffected throughout and was the way back in.
+>
+> ⭐ **TWO THINGS THE RE-ISSUE NEEDED THAT NO DOCUMENT SAID, recorded so the next key change is
+> cheaper:** (1) the PIN form lives on the employment page `/staff/<employmentId>`, **not** on
+> `/staff/<employmentId>/credentials` — that screen is cards and fingerprints only, and the
+> orchestrator sent Ian to it before reading either file. (2) **The staff roster has no PIN column**,
+> so nothing anywhere lists who still lacks one; the re-issue is a walk down the roster opening each
+> person in turn. Neither is a defect in this task — both are the operational cost of the key change
+> this task made, and they are unfiled. A roster PIN-status column is Ian's call.
 >
 > **Spec written 2026-09-13 by lane C (webapps-f7); approved and built 2026-09-14 by the same lane.**
 > The sequencing gate this document set for itself has **opened**: it said *"built SECOND, after
