@@ -62,13 +62,14 @@ stands). Everything above that says "full suite" means **in CI**.
 | **DEF-346** | Filed: `deploy.yml` names **eleven** required secrets; the workflow reads **seven** |
 | **DEF-315** | Corrected: its claim that nothing tests config relationships stopped being true when T-292 landed |
 | **DEF-325** | Measured under deliberate concurrency. Still **UNEXPLAINED**; the 120s override **untouched** |
+| **DEF-348** | ⛔ Filed at wrap-up: **nineteen shipped tasks have files that still say they have not shipped** — and **DEF-122 filed this exact defect on one of these exact files twelve days ago; that file is still wrong.** Reserved as **T-312**, repair deliberately NOT done tonight |
 | **DEF-347** | Filed **and fixed**: `HANDOFF.md` — the file a new machine reads FIRST — said *"T-122 in flight"* and *"67 logged decisions"* while the project was at T-311 and 206. Fixed by **deleting** the duplicated facts, not refreshing them |
 
 ## ⭐⭐ The rule that came out of today — bible §13 row 204
 
 **A remedy is as perishable as a diagnosis.** Any comment or register row that names a specific
 token — an identifier, a line number, a secret, a file — and asserts a present-tense fact about it
-**will go stale without anybody editing it**. Six instances in one morning:
+**will go stale without anybody editing it**. ⭐ **Nine instances in one day — six before lunch, and three more found by the wrap-up that was checking whether the first six had been recorded properly:**
 
 1. **DEF-338** — *"whoever fixes that root cause should come back and delete this timeout override"*,
    where the root cause had been fixed **eleven lines below**.
@@ -82,6 +83,15 @@ token — an identifier, a line number, a secret, a file — and asserts a prese
    told to read FIRST — announced *"T-122 in flight"* and *"67 logged decisions"* while the project
    was at **T-311 and 206**. Frozen 2026-08-25, wrong for about three weeks. ⛔ **Its audience is the
    one reader who could not possibly have noticed** (DEF-347).
+8. ⭐ **An eighth, found by lane C while standing down — in ITS OWN FILE.** `docs/tasks/308-*.md`
+   still opened with **`STATUS: … AWAITING APPROVAL`** after the spec was approved, slice A built,
+   reviewed twice, shipped and **verified in production** — while the proof sat 390 lines below.
+   **The first line a cold session reads, contradicting the file's own evidence.** Fixed.
+9. ⛔⛔ **And sweeping THAT found a ninth that is nineteen files wide (DEF-348)** — every task the
+   roadmap marks done whose own file still says `Number reserved` / `awaiting APPROVED` /
+   `not yet implemented`. **DEF-122 filed this in September against `130-accounts-payable.md`. That
+   file is still wrong.** ⭐ **A single-instance fix that was never made and never generalised is
+   how a class survives twelve days of daily work landing on top of it.**
 
 ⛔ **The rules:** prefer a **NAME** to a **POSITION** (an identifier survives an edit above it; a
 line number does not) · phrase it as a **ruling**, because *"whoever does X should then do Y"* is a
@@ -116,7 +126,13 @@ reason is worse than no comment: no comment invites checking, a wrong one forecl
    blocked on `deploy.yml` being held by T-308 slice A — that file is now free.**
 3. **T-309 — ERP v2's own Firebase project.** Its hard gate (*"do not start while there is only one
    way to sign in"*) has been satisfied since 2026-09-13.
-4. **T-302** — one PIN per person across every branch. Specced and approved, not built.
+4. ⭐ **T-312 / DEF-348 — nineteen task files claim to be unstarted after shipping.** The measurement
+   is done and the query is recorded; the spec is not written. ⛔ **The sweep alone is the wrong
+   fix** — correcting nineteen banners by hand restores exactly the unguarded state DEF-122 left
+   behind on 2026-09-02, which had not even been repaired twelve days later. **Build the guard**
+   (`tests/unit/toc-freshness.test.ts` is the precedent) **and repair the nineteen in the same
+   task.** Fix `130-accounts-payable.md` first — it is DEF-122's own subject.
+5. **T-302** — one PIN per person across every branch. Specced and approved, not built.
 
 ## Do not decide these alone — they are Ian's
 
@@ -221,10 +237,10 @@ first thing to re-run if DEF-325 ever bites again.
 
 ## Numbers to allocate from
 
-- Next task **T-312** · next defect **DEF-348** · next migration **`0148`** (`when` > `1798774307084`)
+- Next task **T-313** · next defect **DEF-349** · next migration **`0148`** (`when` > `1798774307084`)
 
-⚠️ **Allocated 2026-09-14, do not re-issue:** **T-310** (done) · **T-311** (reserved, analysis
-complete, spec unwritten) · **DEF-346**, **DEF-347**. **Still reserved from 2026-09-13:** **T-307** (done),
+⚠️ **Allocated 2026-09-14, do not re-issue:** **T-310** (done) · **T-311** and **T-312** (both
+reserved, analysis complete, specs unwritten) · **DEF-346**, **DEF-347**, **DEF-348**. **Still reserved from 2026-09-13:** **T-307** (done),
 **T-308** (slice A done, slice B blocked), **T-309** (unstarted).
 
 ## The paste-ready prompt
@@ -282,7 +298,12 @@ committed work. Not one came from building.
 ⛔ SSH to the production droplet is BLOCKED for the orchestrator. Ian runs host-side commands;
 suggest he type `! <command>` so the output lands in the conversation.
 
-Next task T-312 · next defect DEF-348 · next migration 0148 (when > 1798774307084).
-T-309 and T-311 are RESERVED stubs with analysis written and specs unwritten.
+Next task T-313 · next defect DEF-349 · next migration 0148 (when > 1798774307084).
+T-309, T-311 and T-312 are RESERVED stubs with analysis written and specs unwritten.
+
+⭐ T-312/DEF-348 is the cheapest real win available and its measurement is already done: nineteen
+task files marked DONE on the roadmap still open with "Number reserved" or "awaiting APPROVED".
+DEF-122 filed that exact defect on 130-accounts-payable.md on 2026-09-02 and THAT FILE IS STILL
+WRONG. ⛔ Do not just fix the nineteen — build the guard too, or it rots again.
 
 -----------------------------------------------------------------------------------------------

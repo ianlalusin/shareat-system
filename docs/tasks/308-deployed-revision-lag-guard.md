@@ -1,6 +1,27 @@
 # T-308 — publish the deployed revision, then assert production is not running something older than `main`
 
-> **STATUS: SPEC WRITTEN 2026-09-14 by lane C (Opus), AWAITING APPROVAL.** Supersedes the
+> ✅⭐ **STATUS: SLICE A IS SHIPPED AND VERIFIED IN PRODUCTION (2026-09-14). SLICE B IS APPROVED,
+> UNBUILT, AND BLOCKED ON IAN'S TOKEN — Done-when B4, and nothing else.**
+>
+> **Slice A** — commit `60935e9`, deployed by run `34803535420`. Production reports
+> `revision.sha = 60935e97938a9fe232a968b346c466ac9833a0fb`, **compared character-for-character
+> against the commit the deploy ran from** (Done-when A6). A5 was smoketested on 9008 first. The
+> measurements are at the foot of §Done when — ⛔ **do not re-litigate the decisions recorded here;
+> they were taken, built and proven.**
+>
+> **Slice B** — spec below is APPROVED. It needs a fine-grained PAT at
+> `/srv/shareat-shared/secrets/github-guard.token`, which only Ian can mint. A lane that cannot
+> complete B4 reports **BLOCKED**; it does not report done.
+>
+> ⚠️ **This banner previously read *"SPEC WRITTEN … AWAITING APPROVAL"* for the whole of the day on
+> which the spec was approved, slice A was built, reviewed twice, shipped and verified.** It was
+> true when written. **Found at wrap-up by its own author** (lane C), who noted that the file a cold
+> session opens to build slice B was telling it, in bold, in the first line, that nothing had been
+> approved yet — while the proof sat 390 lines below. ⛔ **A status line is as perishable as a
+> diagnosis** — `PROJECT_BIBLE.md` §13 row 204, written the same morning. **Eighth instance of that
+> class in one day, and the third found by the author of the thing it was wrong about.**
+>
+> Supersedes the
 > *"number reserved, spec not yet written"* banner. The analysis this spec rests on was written by
 > lane C on 2026-09-13 and is preserved verbatim in **§Why** below — it is the reasoning, not
 > background, and a reviewer who skips it will re-open settled questions.
