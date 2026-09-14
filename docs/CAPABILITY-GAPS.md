@@ -494,9 +494,9 @@ ageing finding grows and the only resolution is a manual journal entry, which is
 wrong, and nothing is missing from the ledger. A capability the business needs simply has no owner
 in any phase.
 
-⚠️ **Cheaper than it looks, and it should be taken with T-267.** The domain function, the posting
+⚠️ **Cheaper than it looks, and it should be taken with T-266.** The domain function, the posting
 pattern, the ageing detector and the capability all exist. What is missing is one screen listing
-what is owed per person with a "pay this" action — and T-267 is already migrating ~20 money screens
+what is owed per person with a "pay this" action — and T-266 is already migrating ~20 money screens
 onto the shared `MoneyLines` picker, which is the control that screen would need. Building it
 inside that pass costs a fraction of building it alone.
 
