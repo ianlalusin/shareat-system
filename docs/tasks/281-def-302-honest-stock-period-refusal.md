@@ -1,6 +1,7 @@
 # T-281 — DEF-302: make the stock-movement period refusal honest
 
-> **Status: SPEC WRITTEN, 2026-09-12 — awaiting APPROVED.**
+> **Status: SHIPPED.** See `docs/ROADMAP.html` (search `T-281`) for the commit, date and outcome —
+> the roadmap is the maintained record.
 > ⭐ **Ian ruled disposition (b), 2026-09-12**, choosing it over (a) leave-it and (c) extend-the-
 > exemption-to-stock. (c) is explicitly NOT sanctioned and must not be re-derived here.
 

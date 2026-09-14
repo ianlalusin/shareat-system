@@ -1,6 +1,7 @@
 # T-306 — CI is burning cost on documentation-only pushes
 
-> **Status: SPEC, awaiting APPROVED.** From Ian directly, via the orchestrator's measurement:
+> **Status: SHIPPED.** See `docs/ROADMAP.html` (search `T-306`) for the commit, date and outcome —
+> the roadmap is the maintained record. From Ian directly, via the orchestrator's measurement:
 > `.github/workflows/ci.yml` has no path filter, so a one-line register edit costs the same ~11
 > minutes as a real code push. 511 minutes over four days, ~3,000/month — private-repo allowance
 > territory. Turning CI off was genuinely on the table; this task exists to make that unnecessary.

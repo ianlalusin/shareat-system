@@ -1,6 +1,7 @@
 # T-196 — A draft expense may sit against a PENDING supplier invoice; verification posts it
 
-> **Status:** Spec ready, not yet implemented. **Depends on:** T-122 (expenses — `status`,
+> **Status: SHIPPED.** See `docs/ROADMAP.html` (search `T-196`) for the commit, date and outcome —
+> the roadmap is the maintained record. **Depends on:** T-122 (expenses — `status`,
 > `approveExpense`, `deleteExpenseDraft` all already exist), T-130 (AP — `supplier_invoices`, the
 > verify gate, the capacity trigger), T-141 (the file broker behind `receipt_file_id`).
 > **Blocks:** nothing. **Written by:** Opus, in planner role, 2026-08-31, from Ian's direction in

@@ -1,7 +1,7 @@
 # T-299 — DEF-325: the migration-from-zero proof times out under full-suite load
 
-> **Status: 2026-09-13 — SLICE 1 (DEF-328) spec below, awaiting APPROVED. Slice 2 (DEF-325,
-> the task this file was originally opened for) follows once slice 1 lands.**
+> **Status: SHIPPED.** See `docs/ROADMAP.html` (search `T-299`) for the commit, date and outcome —
+> the roadmap is the maintained record.
 > system32-85 measured CI directly (`gh run view --log-failed` on 34699289872, 34699937686,
 > 34704090611) and found DEF-325 has never once been the CI failure — filed as **DEF-328**, put in
 > front of this task as T-299's first slice. Both slices share this task number per the register's

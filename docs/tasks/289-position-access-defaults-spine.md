@@ -1,6 +1,7 @@
 # T-289 — position access defaults: the spine
 
-> **Status: SPEC WRITTEN, 2026-09-12 — awaiting APPROVED.** Written in plan mode (Opus specifies,
+> **Status: SHIPPED.** See `docs/ROADMAP.html` (search `T-289`) for the commit, date and outcome —
+> the roadmap is the maintained record. Written in plan mode (Opus specifies,
 > Sonnet builds — CLAUDE.md, 2026-09-09). Cut from
 > [`docs/plans/289-position-access-defaults-plan.md`](../plans/289-position-access-defaults-plan.md),
 > which is the **authority** for this work and carries Ian's five decisions of 2026-09-12. This file

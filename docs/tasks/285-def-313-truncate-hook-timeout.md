@@ -1,6 +1,7 @@
 # T-285 — DEF-313: the fixture-cleanup hook that times out under load
 
-> **Status: SPEC WRITTEN, 2026-09-12 — awaiting APPROVED.**
+> **Status: SHIPPED.** See `docs/ROADMAP.html` (search `T-285`) for the commit, date and outcome —
+> the roadmap is the maintained record.
 > ⭐ **Measurement overturned the register's own hypothesis.** "Narrow `resetTables()`" is not
 > available for the three known files — measured and falsified below. The fix is one line in
 > `vitest.config.mts`, and it already has a precedent elsewhere in this repo.

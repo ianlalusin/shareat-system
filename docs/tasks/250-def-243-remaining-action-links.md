@@ -1,7 +1,7 @@
 # T-250 — DEF-243: the five remaining undersized action links
 
-> **Status: RESERVED by the orchestrator, 2026-09-09. Lane B. Awaiting `[B] SPEC`.**
-> Number reserved so no peer takes it. Nothing below is built.
+> **Status: SHIPPED.** See `docs/ROADMAP.html` (search `T-250`) for the commit, date and outcome —
+> the roadmap is the maintained record.
 
 Apply T-249's shared `ACTION_LINK` (`apps/erp/src/components/action-link.ts`) to the five
 instances DEF-243 names, which DEF-239's exact-string grep missed because each splices in

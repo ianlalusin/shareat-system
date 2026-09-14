@@ -1,6 +1,7 @@
 # T-235 — DEF-222: one environment-gated formatter for the pre-session surfaces
 
-> **Status**: 📝 **SPEC — lane B, 2026-09-08. Written before any code. Awaiting APPROVED.**
+> **Status: SHIPPED.** See `docs/ROADMAP.html` (search `T-235`) for the commit, date and outcome —
+> the roadmap is the maintained record.
 >
 > ⛔ **The register's remedy assumes two things are the same policy. They are opposites.** §2 is
 > the report (RULES §3.4a — *"report a spec defect; never silently work around it"*). §3 is what I

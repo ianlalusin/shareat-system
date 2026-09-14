@@ -1,6 +1,7 @@
 # T-247 — DEF-221: an integration test placed the obvious way never runs, and is credited anyway
 
-> **Status: SPEC — awaiting APPROVED.** Lane D, spec written in plan mode. Sent as `[D] SPEC`;
+> **Status: SHIPPED.** See `docs/ROADMAP.html` (search `T-247`) for the commit, date and outcome —
+> the roadmap is the maintained record. Lane D, spec written in plan mode. Sent as `[D] SPEC`;
 > nothing below is built yet.
 
 ## Goal

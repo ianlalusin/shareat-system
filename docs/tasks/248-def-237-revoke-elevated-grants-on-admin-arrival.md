@@ -1,6 +1,7 @@
 # T-248 — DEF-237: an elevated manager's grants end when an administrator arrives
 
-> **Status: SPEC — awaiting APPROVED.** Lane D, re-spec in plan mode after the block was accepted
+> **Status: SHIPPED.** See `docs/ROADMAP.html` (search `T-248`) for the commit, date and outcome —
+> the roadmap is the maintained record. Lane D, re-spec in plan mode after the block was accepted
 > and migration slot **140** was allocated. Sent as `[D] SPEC`; nothing below is built yet.
 
 ## Ian decided the shape. This builds it.

@@ -1,6 +1,7 @@
 # T-305 — DEF-334: the from-zero proof's scratch database name is not lane-safe
 
-> **Status: CONFIRMED and fixed, awaiting APPROVED.** This is Lane B's own DEF-325 finding, handed
+> **Status: SHIPPED.** See `docs/ROADMAP.html` (search `T-305`) for the commit, date and outcome —
+> the roadmap is the maintained record. This is Lane B's own DEF-325 finding, handed
 > back by the orchestrator to confirm-or-kill and, if real, act on.
 
 Source: DEF-325's Slice 2 finding (`docs/tasks/299-def-325-from-zero-migration-timeout.md`) — a

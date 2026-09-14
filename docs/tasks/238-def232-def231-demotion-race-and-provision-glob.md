@@ -1,6 +1,7 @@
 # T-238 — DEF-232 (the demotion race) and DEF-231 (the install loop)
 
-> **Status**: 📝 **SPEC — lane D, 2026-09-08. Written before any code. Awaiting APPROVED.**
+> **Status: SHIPPED.** See `docs/ROADMAP.html` (search `T-238`) for the commit, date and outcome —
+> the roadmap is the maintained record.
 >
 > Two small, unrelated fixes, both written from T-237's round. ⛔ **§2 is a QUESTION, not a plan:**
 > the same guard has three more weaknesses, and **one of them means DEF-232's remedy as written does

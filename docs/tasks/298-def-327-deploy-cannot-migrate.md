@@ -1,8 +1,7 @@
 # T-298 — DEF-327: the deploy's migrate step connects as the app role, which by design cannot migrate
 
-> **Status: RESERVED 2026-09-13 by system32-85 — dispatched to lane A (webapps-65, Sonnet 5).**
-> Number reserved before dispatch so no other session can take it. Spec to be written by the lane
-> and approved by the orchestrator before any edit.
+> **Status: SHIPPED.** See `docs/ROADMAP.html` (search `T-298`) for the commit, date and outcome —
+> the roadmap is the maintained record.
 
 Source: measured, not hypothesised — `gh run view 34680033997 --log-failed`.
 

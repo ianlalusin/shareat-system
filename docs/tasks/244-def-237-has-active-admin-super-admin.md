@@ -1,6 +1,7 @@
 # T-244 — DEF-237's inner bug: a `super_admin`-only organisation is not "adminless"
 
-> **Status: SPEC — awaiting APPROVED.** Lane D (`ianla-0a`), spec written in plan mode per the
+> **Status: SHIPPED.** See `docs/ROADMAP.html` (search `T-244`) for the commit, date and outcome —
+> the roadmap is the maintained record. Lane D (`ianla-0a`), spec written in plan mode per the
 > orchestrator's briefing (bible row 187). Sent as `[D] SPEC`; nothing below is built yet.
 >
 > ⛔ **This task is deliberately the SMALLER HALF of DEF-237.** The grant-lifecycle question —
