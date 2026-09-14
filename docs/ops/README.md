@@ -308,18 +308,35 @@ domain argument to also set up Caddy + automatic TLS on 80/443 (no traefik confl
 | **Orphan-file sweep (T-272 / DEF-299)** | `npm run orphan-file-sweep` | **Daily, 03:00 Manila** | A day-old unclaimed upload has no wall-clock component of its own; runs after order-wastage-backstop (02:30) so the two don't contend. ⛔ Shipped with NO caller at all until this task — `sweepOrphanedFiles` existed since T-141, was documented in two places as a running cron, and nothing called it, the DEF-186 shape a fourth time. Scoped per org (was global; `scheduler_runs.org_id` is `NOT NULL` and cannot record a global run) |
 | **Budget reissue (T-215 / DEF-303)** | `npm run budget-reissue` | **Daily, 03:30 Manila** | Runs after orphan-file-sweep (03:00) so the two don't contend. ⛔ Registered in `SCHEDULER_JOBS` and reachable by its npm script since T-215, but had no `.service`/`.timer` pair at all until this task — the DEF-186 shape a fifth time, found the day after DEF-299 |
 
-⚠️ **`recurring-expense-draft` (T-216), `order-wastage-backstop` (T-178 / DEF-226),
-`orphan-file-sweep` (T-272 / DEF-299) and `budget-reissue` (T-215 / DEF-303) all have unit files in
-this directory and are NOT YET ARMED** — nothing installs them until `provision.sh` is re-run from
-a fresh copy of `docs/ops`, per the section above. ⭐ **That sentence is true again as of T-238
-(DEF-231): the install step is now a glob over `shareat-*.{service,timer}`, not a hand-written
-list.** It had been a list of eleven filenames while thirteen units shipped, so re-running
-`provision.sh` installed nothing at all for `recurring-expense-draft` — the promise this line makes
-was false for the very job it names. A unit file dropped in this directory is now armed by the next
-provision run with nobody remembering to edit a list. ⛔ **`budget-reissue` had no unit file in this
-directory at all until T-272 (DEF-303) — the DEF-186 shape a fifth time, its absence here was not
-the same thing as being armed, and it is now closed the same way DEF-299's was.** That is four jobs
-with a unit file waiting to be armed — the count is the point, not any one number of it.
+⛔⛔ **WHICH UNITS ARE ARMED IS NOT RECORDED HERE, DELIBERATELY — IT IS A FACT THAT MOVES.**
+This paragraph used to name four jobs as *"NOT YET ARMED"*. **That claim went stale and then
+misled three readers in a row** (DEF-354): Ian armed the last of them on 2026-09-12, the
+per-unit outcomes were measured on 2026-09-13, and both records sit ~230 lines below in this
+same file — while this paragraph went on asserting the opposite. ⭐ **The arming state lives in
+the dated sections at the end of this file and nowhere else**; read the newest one.
+
+⚠️ **And the only honest way to know is to ask the host**, because a unit file existing here has
+never meant it is running: `systemctl is-enabled <unit>` **and** `systemctl is-active <unit>`,
+per unit. ⛔ Never `systemctl list-timers` — it cannot show a timer that was never enabled
+(DEF-332). Agents cannot SSH; Ian runs these.
+
+**What IS durably true, and is the reason this section exists at all:**
+
+⭐ **`provision.sh` INSTALLS every unit and ENABLES none** — its own closing comment says so.
+Installing is not arming, and the gap between them has swallowed five separate jobs
+(DEF-186, DEF-226, DEF-299, DEF-303, and `recurring-expense-draft` under DEF-231).
+
+⭐ **The install step is a glob over `shareat-*.{service,timer}`, not a hand-written list** —
+fixed by T-238 (DEF-231). It had been a list of eleven filenames while thirteen units shipped, so
+a `provision.sh` re-run installed nothing at all for `recurring-expense-draft`: **the promise the
+old paragraph made was false for the very job it named.** A unit file dropped in this directory
+is now installed by the next provision run with nobody remembering to edit a list.
+
+⛔ **`docs/` is not in the deploy artifact** — `deploy.yml` tars `apps/erp/.next`, `packages`,
+`scripts`, the manifests and `node_modules`, and nothing else. So a unit file changed in this
+directory does not reach the droplet by deploying, and a unit already installed there keeps
+running the old copy until it is replaced by hand. **DEF-241 is what that looks like:** month-end's
+timezone fix is merged, its defect row says `fixed`, and the box still runs the unzoned unit.
 
 Plus a fifth unit that is not a scheduled job but the app itself: **`shareat-erp.service`**
 (`next start -p 9008`, long-running, `Restart=always`) — installed and enabled the same way, by
