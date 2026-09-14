@@ -29,14 +29,15 @@ const globalForDb = globalThis as unknown as {
 };
 
 function createClient(): Sql {
-  const { DATABASE_URL, DATABASE_POOL_MAX, NODE_ENV } = env();
+  const { DATABASE_URL, DATABASE_POOL_MAX } = env();
 
   return postgres(DATABASE_URL, {
     max: DATABASE_POOL_MAX,
     idle_timeout: 20,
     connect_timeout: 10,
-    // DO Managed Postgres requires TLS. Local dev has no cert to verify.
-    ssl: NODE_ENV === 'production' ? 'require' : false,
+    // TLS comes from the URL's own `sslmode` — DEF-344. Do NOT add an `ssl` key here: it
+    // OVERRIDES whatever the connection string says (postgres.js precedence: explicit option >
+    // URL sslmode > PGSSL env var > default false). packages/db/migrate.ts is the reference.
     // Money is numeric(14,2) and MUST NOT round-trip through a JS float.
     // postgres.js returns numeric as a string by default — keep it that way.
     // See PROJECT_BIBLE.md §6 and §12 landmine 25 (v1 used floats everywhere).
@@ -93,12 +94,12 @@ export async function closeDb(): Promise<void> {
 }
 
 function createSystemClient(): Sql {
-  const { SYSTEM_DATABASE_URL, DATABASE_URL, DATABASE_POOL_MAX, NODE_ENV } = env();
+  const { SYSTEM_DATABASE_URL, DATABASE_URL, DATABASE_POOL_MAX } = env();
   return postgres(SYSTEM_DATABASE_URL ?? DATABASE_URL, {
     max: DATABASE_POOL_MAX,
     idle_timeout: 20,
     connect_timeout: 10,
-    ssl: NODE_ENV === 'production' ? 'require' : false,
+    // TLS comes from the URL's own `sslmode` — DEF-344. See createClient() above.
     onnotice: () => {},
   });
 }
