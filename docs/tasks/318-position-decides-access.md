@@ -136,8 +136,17 @@ assertions starts throwing.
 3. A test asserting a **refusal** must be able to opt out: the helper takes the positions to grant,
    and a refusal test asks for none.
 
-⛔ **Sequenced BEFORE slice C.** Slice C's done-when cannot honestly be reported met while this
-population is red, and absorbing it silently inside slice C would hide a spec defect inside a build.
+⛔⛔ **CORRECTED: C-pre AND C ARE ONE LANE, NOT TWO — BECAUSE C-pre IS UNVERIFIABLE ALONE.** The first
+draft of this section said *"sequenced BEFORE slice C"*, which is true of the order and wrong about
+the packaging. **Adding a position and grants to a fixture changes nothing while the matrix still
+grants the capability automatically: the suite is green before the change and green after it.** A
+slice whose every test passes identically with and without its own work has proved nothing — RULES
+§3.2, *a test that only ever passed proves nothing*, applied to a whole slice rather than one test.
+
+⭐ **The flip is the only thing that can prove the fixtures.** So they ship together: the fixtures go
+in first **within the same lane**, the matrix flips second, and **the gate is the full integration
+suite green AFTER the flip.** ⛔ Green before the flip is not evidence and must not be reported as
+progress.
 
 **Slice C — the flip**
 - `docs/decisions/CAPABILITY-MATRIX.md` — ⛔ **the decision document, and it changes FIRST.**
