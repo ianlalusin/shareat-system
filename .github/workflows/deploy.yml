@@ -10,14 +10,18 @@ name: Deploy
 # DEPLOY_HOST has no fallback on purpose: silently defaulting to the old droplet if the secret
 # were ever unset would ship this app onto someone else's live production box. Fail closed instead.
 #
-# Needs GitHub Secrets that do not exist yet (checklist §4b — Ian sets these, never through an
-# agent): DEPLOY_SSH_KEY, DEPLOY_HOST (the new droplet's IP — REQUIRED, no default), DATABASE_URL,
-# SESSION_SECRET, FIREBASE_PROJECT_ID, FIREBASE_SERVICE_ACCOUNT_KEY_FILE (a path already on the
-# droplet — the key itself is never in Secrets), NEXT_PUBLIC_FIREBASE_API_KEY,
-# NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN, NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-# NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET, NEXT_PUBLIC_FIREBASE_APP_ID.
-# Until they exist this workflow fails at the "Require DEPLOY_HOST" step below — intentional
-# (fail closed, bible §7 rule 9), not a bug to work around.
+# GitHub Secrets this workflow reads (checklist §4b — Ian sets these, never through an agent):
+# DEPLOY_SSH_KEY, DEPLOY_HOST (the new droplet's IP — REQUIRED, no default, checked by the
+# "Require DEPLOY_HOST" step below), NEXT_PUBLIC_FIREBASE_API_KEY, NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+# NEXT_PUBLIC_FIREBASE_PROJECT_ID, NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET, NEXT_PUBLIC_FIREBASE_APP_ID.
+# tests/unit/deploy-secrets-list.test.ts asserts this list against the file's own secrets.* reads,
+# both ways, so it cannot drift the way it did before DEF-346 (measured 2026-09-14: this comment
+# named eleven, the workflow read seven).
+#
+# NOT GitHub Secrets — runtime values read from /srv/shareat-shared/.env.local on the droplet,
+# never set here: DATABASE_URL, SESSION_SECRET, FIREBASE_PROJECT_ID, and
+# FIREBASE_SERVICE_ACCOUNT_KEY_FILE (a path — the key itself is never in Secrets). Confusing these
+# with Secrets was DEF-346's failure mode.
 
 on:
   workflow_run:
