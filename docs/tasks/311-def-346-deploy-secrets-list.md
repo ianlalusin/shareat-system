@@ -1,7 +1,14 @@
 # T-311 — `deploy.yml`'s required-secrets list says eleven; the workflow reads seven
 
-> **STATUS: SPEC WRITTEN 2026-09-14 by webapps-65 (Sonnet 5) — awaiting APPROVED from
-> system32-85.** Allocated 2026-09-14 by the orchestrator so the number cannot be taken twice —
+> ### ✅ **Status: SHIPPED 2026-09-14 in `324989e`.** See `docs/ROADMAP.html` (search `T-311`)
+> for the outcome — the roadmap is the maintained record.
+>
+> ⚠️ **This banner said *"SPEC WRITTEN … awaiting APPROVED"* for the hours between shipping and
+> this wrap-up — an instance of the very class T-312 guards, on a file that shipped the same day.**
+> T-312's guard could not see it: its done-set is parsed from the roadmap, and T-311 had no roadmap
+> row until now (DEF-352's blind spot). **Adding the row is what makes the guard able to catch it.**
+>
+> **Spec written 2026-09-14 by lane A (`webapps-65`, Sonnet 5), approved the same day.** Allocated 2026-09-14 by the orchestrator so the number cannot be taken twice —
 > that happened on 2026-08-31, when two sessions took task 196 and DEF-117 within 2m40s.
 > **Do not implement from this file until APPROVED is received.**
 >

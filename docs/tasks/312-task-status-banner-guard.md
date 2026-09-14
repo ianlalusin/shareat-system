@@ -1,14 +1,33 @@
 # T-312 — fourteen shipped tasks have files whose leading status claim still says unstarted
 
-> **STATUS: SPEC v2 — lane B (`webapps-4e`, Sonnet 5), 2026-09-14. Awaiting APPROVED.** Reserved
+> ### ✅ **Status: SHIPPED 2026-09-14 in `9eaaf55`** — the guard plus all fourteen banner repairs.
+> See `docs/ROADMAP.html` (search `T-312`) for the outcome.
+>
+> ⛔ **And this banner itself read *"SPEC v2 — Awaiting APPROVED"* for hours after shipping — the
+> guard's own subject, on the guard's own file.** It was invisible to the guard for the same reason
+> T-311's was: no roadmap row, so not in the done-set (DEF-352). ⭐ **The fix was the roadmap pass,
+> not the guard** — which is exactly why the wrap-up ritual requires the roadmap every time.
+>
+> **Spec v2 by lane B (`webapps-4e`, Sonnet 5), 2026-09-14.** Reserved
 > 2026-09-14 by the orchestrator (`system32-85`) at wrap-up (DEF-348). v1 of this spec claimed 19
 > (then 21) files needed repair; system32-85 measured the leading status line of all nineteen
 > independently and found seven were already correct — DEF-348's own headline claim about
-> `130-accounts-payable.md` was false. v2 incorporates that correction. Nothing below is built yet.
+> `130-accounts-payable.md` was false. v2 incorporates that correction.
 >
-> ⭐ **This file is itself an instance of the class it exists to close**, and will be the guard's
-> first honest `NUMBER RESERVED` hit once T-312 ships and the roadmap marks it done. Not
-> special-cased below.
+> ⭐⭐ **THIS FILE PREDICTED THAT IT WOULD BE THE GUARD'S FIRST HONEST HIT, AND IT WAS — WITHIN
+> HOURS, DURING THE SAME DAY'S WRAP-UP.** The spec said, before the guard existed, that it would be
+> the first file flagged "once T-312 ships and the roadmap marks it done". Both happened on
+> 2026-09-14: the guard shipped in `9eaaf55`, the wrap-up added the roadmap row, and the very next
+> run failed naming this file for the phrase "NUMBER RESERVED" sitting in the sentence above.
+>
+> ⚠️ **The prediction was written in backticks, and backticks are not quotation marks** — so the
+> guard's quote-stripping did not treat it as historical, correctly: a code span is not a claim
+> about the past. The sentence is now in the past tense and the phrase is quoted, which is the
+> remedy the guard's own failure message offers. **Not special-cased, not exempted.**
+>
+> ⭐ **What it demonstrates is worth more than the fix:** the guard caught the one file whose author
+> had explicitly warned it would be caught, on the day both conditions came true. Nobody had to
+> remember.
 
 ## Goal
 

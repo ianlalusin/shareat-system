@@ -1,6 +1,13 @@
 # T-302 — PINs become globally unique: one PIN identifies one person, everywhere
 
-> ### ✅ **Status: APPROVED 2026-09-14 by system32-85. BUILT, GATES GREEN, NOT YET DEPLOYED.**
+> ### ✅ **Status: SHIPPED AND DEPLOYED 2026-09-14** — built in `94554a6`, live in production on
+> `1a3405e`, verified by comparing all forty characters of `/api/health`'s `revision.sha`.
+>
+> ⛔ **Migration `0148` HAS RUN IN PRODUCTION, so every PIN that existed before it is revoked.**
+> Re-issuing them from Staff is Ian's, in the same sitting as the deploy — and a rollback does NOT
+> restore them: repointing the release restores code whose store-scoped hashes would match those
+> rows again, but they are revoked by then and `revoked_at` is not un-set. Admin email-and-password
+> sign-in is unaffected and is the way back in.
 >
 > **Spec written 2026-09-13 by lane C (webapps-f7); approved and built 2026-09-14 by the same lane.**
 > The sequencing gate this document set for itself has **opened**: it said *"built SECOND, after
