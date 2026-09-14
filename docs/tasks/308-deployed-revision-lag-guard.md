@@ -392,6 +392,23 @@ A6. ⭐ **Measured on production after the first deploy that carries it:** `/api
 Deploy run's own log. ⛔ Not "the field appeared" — the two values compared.
 A7. A `FOR IAN` block in plain language (RULES §2).
 
+✅⭐ **SLICE A IS DONE — 2026-09-14. A5 AND A6 BOTH MEASURED, NOT ASSERTED.**
+
+**A5**, on 9008 after a clean build with the dev server stopped:
+`{"status":"ok","configuration":"valid","database":"reachable","revision":{"sha":"unknown","builtAt":null},"latencyMs":260}` — `unknown`/`null` is the correct local answer and a legal shape. ⭐ **That was the first time anything in this slice had been seen over HTTP rather than read as source text or an exit code** — by three sessions across two review passes.
+
+**A6**, against production after CI `34802978388` (success) and Deploy `34803535420` (success, automatic on `workflow_run`):
+```
+production /api/health revision.sha : 60935e97938a9fe232a968b346c466ac9833a0fb
+commit the deploy actually ran from : 60935e97938a9fe232a968b346c466ac9833a0fb
+builtAt                             : 2026-09-14T03:43:23.901Z
+```
+⛔ **The two values COMPARED, all forty characters, not "the field appeared"** — which is what A6 asked for and the distinction it was written to force. `database` stayed `reachable` at 114ms, so T-310's TLS change is still healthy under the same deploy.
+
+⭐ **And the fail-closed step did not block the pipeline.** This deploy was the first to run `npm run write-revision -- --require`, which exits 1 and writes nothing if it cannot determine the sha. It resolved cleanly from `deploy.yml:47`'s existing expression, which is the reason that expression was reused rather than a second source introduced.
+
+⚠️ **Slice B remains unbuilt and blocked on Done-when B4** — the fine-grained PAT, which is Ian's and cannot be minted from here. ⭐ **But the enabling half now stands on its own:** *"which commit is production on?"* — asked repeatedly during DEF-326 and DEF-327, answerable until today only by SSH plus inference from a directory timestamp — is now one unauthenticated GET.
+
 ### Slice B
 
 B1. `docs/ops/revision-lag-guard.mjs` — Node built-ins only, `node --check` clean.
