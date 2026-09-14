@@ -807,6 +807,80 @@
 
   <section>
     <div class="sec-head">
+      <h2>Backfilled &mdash; the tasks this page never tracked</h2>
+      <p>
+        &starf; <strong>Added 14 September 2026 on Ian&rsquo;s instruction (DEF-352).</strong> This page began
+        tracking at <strong>T-119</strong>, so twenty-nine shipped tasks and two partial ones had no row
+        here at all &mdash; which also meant T-312&rsquo;s new banner guard, whose done-set is parsed from this
+        page, was structurally blind to thirty-one task files. &#9888; <strong>Every row below is derived
+        from the commit that shipped the task</strong>, never from what the task file says about itself:
+        copying task files into the roadmap would make them the source of truth, and that inversion is
+        exactly what produced DEF-348.
+      </p>
+    </div>
+
+    <div class="wave">
+      <div class="wave-head">
+        <h3>Phase 1 &mdash; the accounting spine, task by task</h3>
+        <span class="chip c-done">complete</span>
+        <span class="why">Built 23&ndash;24 August, before this page existed. Every other module posts into it.</span>
+      </div>
+      <div class="tasks">
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-101</div><div class="task-what">Core schema &mdash; seven tables, every constraint enforced by the database</div><div class="task-note"><code>9adeb34</code> &middot; 23 Aug &middot; 10 of its tests assert the DATABASE raises the error, not application code</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-102</div><div class="task-what">Chart of accounts seeded &mdash; 75 accounts, idempotent by code</div><div class="task-note"><code>19cb926</code> &middot; 23 Aug &middot; caught its own spec&rsquo;s error before shipping: <code>3200</code> Owner&rsquo;s Drawings is contra-equity, and the spec&rsquo;s &amp;ldquo;six&amp;rdquo; enumerated only five</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-103</div><div class="task-what">Journal tables &mdash; a single-leg entry becomes impossible</div><div class="task-note"><code>d876310</code> &middot; 23 Aug &middot; the implementer found a gap the spec missed: a zero-line entry needed its own deferred trigger</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-105</div><div class="task-what">The posting engine &mdash; <code>postEntry</code>, the only door into the ledger</div><div class="task-note"><code>7efa317</code> &middot; 23 Aug &middot; closed DEF-031 for real: a posted entry could no longer have lines appended by raw SQL afterwards</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-106</div><div class="task-what"><code>reverseEntry</code> &mdash; a correction is a new entry, never an edit</div><div class="task-note"><code>956ad08</code> &middot; 23 Aug &middot; found a dormant hole outside its own scope &mdash; nothing had ever produced a <code>reversed</code> entry, so the freeze trigger never covered one (DEF-036)</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-107</div><div class="task-what">Legacy leg-direction adapter &mdash; in/out becomes a real debit or credit</div><div class="task-note"><code>956ad08</code> &middot; 23 Aug &middot; corrected its own motivation: three of the six &amp;ldquo;disagreeing&amp;rdquo; accounts it named do not actually disagree</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-108</div><div class="task-what">41 worked posting-pattern examples, one per v1 event type</div><div class="task-note"><code>ecc2401</code> &middot; 24 Aug &middot; found DEF-049 while building &mdash; <code>postEntry</code>/<code>reverseEntry</code> never learned to carry the party T-118 had already put in the schema</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-110</div><div class="task-what">Trial balance and income statement as live views, never maintained tables</div><div class="task-note"><code>bfeeae7</code> &middot; 24 Aug &middot; built because an audit found <strong>34 of 115</strong> v1 account balances disagreeing with v1&rsquo;s own counters</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-111</div><div class="task-what">Property-based invariant tests over the accounting equation</div><div class="task-note"><code>a431fb4</code> &middot; 5 Sep &middot; closed DEF-080/081 &mdash; Phase 1&rsquo;s exit gate had been signed off on an invariant suite that sat empty and unreachable by any vitest project</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-112</div><div class="task-what">The ETL framework &mdash; runs, immutable landing, quarantine, reconciliation</div><div class="task-note"><code>0280258</code> &middot; 23 Aug &middot; built ahead of any real mapping work on purpose, so a later disagreement is attributable to the source rather than the mapping</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-113</div><div class="task-what">Nominal-leg mapping &mdash; sourceType classification and the COA crosswalk</div><div class="task-note"><code>6a0dfe0</code> &middot; 23 Aug &middot; every sourceType name in the spec was wrong (kebab-case against v1&rsquo;s snake_case), and <code>ar-charge</code> and <code>sale</code> turned out to be the same value</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-117</div><div class="task-what">Replay harness stage A, and the capability inventory</div><div class="task-note"><code>387adf6</code> &middot; 23 Aug &middot; found <strong>34 capabilities with no home</strong> in the eight-phase plan &mdash; one of them, commissary-to-branch ordering, about 24 on its own</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-118</div><div class="task-what">AP/AR subledger as a <code>GROUP BY</code> over journal lines, not a parallel table</div><div class="task-note"><code>6606448</code> &middot; 23 Aug &middot; invariant 6 demonstrated with real numbers for the first time: three AP postings across two suppliers group to exactly the <code>2110</code> control balance</div></div>
+      </div>
+    </div>
+
+    <div class="wave">
+      <div class="wave-head">
+        <h3>Cross-cutting &mdash; shipped, and never given a row</h3>
+        <span class="chip c-done">complete</span>
+        <span class="why">Money movement, deployment, audit remediation, and the guards that found nine defects were one.</span>
+      </div>
+      <div class="tasks">
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-139</div><div class="task-what">Cross-store money transfers, office-to-office only, overdraw blocked</div><div class="task-note"><code>dc02ffb</code> &middot; 26 Aug &middot; second of two same-day commits; verified in the browser against Ian&rsquo;s own abuse scenario</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-140</div><div class="task-what">Month-end scheduler &mdash; a <code>system</code> principal, never a standing service-account person</div><div class="task-note"><code>381001f</code> &middot; 27 Aug &middot; the next day DEF-078 found the runner had no host trigger at all &mdash; nothing called it but a person pressing a button, v1&rsquo;s exact failure shape</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-143</div><div class="task-what">End-day reports, handover, and remittance variances that cannot hide</div><div class="task-note"><code>8ff845c</code> &middot; 27 Aug &middot; third of three same-session commits; open variances render first, above everything, by Ian&rsquo;s instruction</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-144</div><div class="task-what">Cash requests &mdash; a float that must net to zero on close</div><div class="task-note"><code>5e56fa0</code> &middot; 27 Aug &middot; <code>liquidated</code> is derived from the ledger, never stored &mdash; the third time the party-on-the-line pattern replaced a stored total</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-205</div><div class="task-what">First production deployment &mdash; dedicated droplet, pipeline, provisioning</div><div class="task-note"><code>3b0f87c</code> &middot; 4 Sep &middot; two real bugs found only by testing against the live droplet: <code>dotenv</code>/<code>tsx</code> were devDependencies, and the deploy user&rsquo;s shell blocked its own SSH commands</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-207</div><div class="task-what">Six accounting-audit fixes with no remaining design ambiguity</div><div class="task-note"><code>c3b7c3b</code> &middot; 4 Sep &middot; DEF-156/158/160/161/162/163 closed in one commit, each independently test-driven</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-208</div><div class="task-what">The accounting-foundation audit&rsquo;s last two findings</div><div class="task-note"><code>0b58842</code> &middot; 4 Sep &middot; <code>payReimbursement</code> shipped here &mdash; tested and correct, and it never got a caller in <code>apps/</code></div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-217</div><div class="task-what">Manager dashboard, shell hardening, and sign-in PIN issuance</div><div class="task-note"><code>3e0089f</code> &middot; 5 Sep &middot; closed DEF-174 &mdash; <code>setPin</code> had zero callers anywhere despite being fully built and tested, so a hired staff member could never receive a PIN</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-226</div><div class="task-what"><code>/customers/[id]</code> &mdash; AR finally gets a clearing path a human can reach</div><div class="task-note"><code>996220a</code> &middot; 6 Sep &middot; closed DEF-190: collection, void and write-off shipped with T-131 four days earlier, fully tested, zero callers</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-227</div><div class="task-what">Two mechanical guards &mdash; nav-route reachability, and domain actions have callers</div><div class="task-note"><code>2108409</code> &middot; 6 Sep &middot; found that nine separate defects were one defect: something shipped, tested, green, and unreachable</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-267</div><div class="task-what">Route the admitted cross-organisation reads through <code>systemTransaction()</code></div><div class="task-note"><code>a381b84</code> &middot; 11 Sep &middot; found DEF-297/298 in passing &mdash; a real data-loss race, verified by reverting both files and observing actual loss before trusting the fix</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-268</div><div class="task-what">Route the ETL pipeline&rsquo;s eight call sites onto the system connection</div><div class="task-note"><code>7f621ff</code> &middot; 11 Sep &middot; five ETL tables carry FORCE RLS with <strong>zero</strong> policies by design &mdash; no tenant role may ever read captured production data there</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-269</div><div class="task-what">Fix the DEF-297/298 race for real</div><div class="task-note"><code>9793175</code> &middot; 11 Sep &middot; then found DEF-299: the sweep whose race had just been fixed <em>has never once run</em>, and will not until something schedules it</div></div>
+          <div class="task t-done"><div class="task-id"><span class="dot"></span>T-270</div><div class="task-what">Make five invariant violations visible to the refusal counter</div><div class="task-note"><code>f0aebed</code> &middot; 11 Sep &middot; the fix DEF-279 had recorded as closed since 10 Sep would have changed nothing &mdash; the Postgres mechanism was verified before any SQL was written</div></div>
+      </div>
+    </div>
+
+    <div class="wave">
+      <div class="wave-head">
+        <h3>Partial &mdash; deliberately not marked done</h3>
+        <span class="chip">open</span>
+        <span class="why">Both are real work with real gaps. A done badge here would be the defect this section exists to close.</span>
+      </div>
+      <div class="tasks">
+          <div class="task"><div class="task-id"><span class="dot"></span>T-136</div><div class="task-what">Cash custody &mdash; a requirements umbrella, and two sections of it are still open</div><div class="task-note"><strong>Built:</strong> &amp;sect;1/&amp;sect;7/&amp;sect;8 as T-143, &amp;sect;5b as T-144, and &amp;sect;4 (remittance cadence and the un-remitted ceiling) as T-152 &mdash; which this task&rsquo;s own banner never counted. <strong>Open:</strong> &amp;sect;6, service-charge distribution &mdash; nothing in the tree debits <code>2160</code>, confirmed by a whole-tree search, and no commit has touched it since. <strong>&amp;sect;2</strong> (store revolving fund) was recommended AGAINST as designed, on the grounds that <em>the till already functions as the revolving fund</em> &mdash; &starf; and on 14 Sep Ian independently proposed exactly that, as a maintaining balance on the cashier account. Under assessment.</div></div>
+          <div class="task"><div class="task-id"><span class="dot"></span>T-141</div><div class="task-what">File-upload brokering &mdash; shipped further than its own banner admits</div><div class="task-note"><strong>Built and verified 14 Sep:</strong> the broker, the Firebase adapter (deny-all rules, per-request signed URLs, boot-time config check, smoke-tested against the real bucket) <em>and</em> a working upload control. The receipt-photo gate MOVED off expenses onto supplier invoices in T-130, so <code>/expenses</code> correctly has no upload and <code>/ap</code> carries the real one &mdash; a compressing file input, <code>uploadFile</code> in the same transaction as the insert, and a verify gate that refuses an invoice with no stored file. <strong>Its own banner is stale on both halves</strong> and &amp;sect;9 of the same document disproves the adapter half. Left un-done here because &amp;ldquo;is any remaining surface missing an upload?&amp;rdquo; has not been swept.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
       <h2>All nine phases</h2>
       <p>
         Resequenced in August once accounting correctness was confirmed as the point of the project.
