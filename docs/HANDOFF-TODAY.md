@@ -176,12 +176,18 @@ is a migration silently skipped for a `when` that sorts wrong.
 
 ## Live agent sessions at wrap-up
 
-| Session | Model | Lane DB | State |
+⛔ **ASK A SESSION ITS MODEL; NEVER READ IT OUT OF THIS TABLE** (DEF-361). A model changes the
+moment someone types `/model`, with no edit here and nothing to notice — this column is a snapshot
+at wrap-up, not current state, and it has already been wrong within three hours and briefed back to
+a lane as fact. **The worker briefing already requires each session to name its own model in its
+ACK. That is the answer; this column is not.**
+
+| Session | Lane DB | Model *as at wrap-up* | State |
 |---|---|---|---|
-| `system32-85` | Opus 5 | `shareat_test_orch` | orchestrator — this session |
-| `webapps-65` | Sonnet 5 | `shareat_test_lanea` | **idle.** T-311, the fingerprint measurement, the roadmap-backfill history, v1's staff-food data |
-| `webapps-4e` | Sonnet 5 | `shareat_test_laneb` | **idle.** T-312, T-313, T-317 guard 1 + the extraction |
-| `webapps-f7` | **Opus 5** | `shareat_test_lanef7` | **idle.** T-302, and the specs for T-314 and T-316. ⚠️ Never switched to Sonnet |
+| `system32-85` | `shareat_test_orch` | Opus 5 | orchestrator — this session |
+| `webapps-65` | `shareat_test_lanea` | Sonnet 5 | **idle.** T-311, the fingerprint measurement, the roadmap-backfill history, v1's staff-food data |
+| `webapps-4e` | `shareat_test_laneb` | Sonnet 5 | **idle.** T-312, T-313, T-317 guard 1 + the extraction |
+| `webapps-f7` | `shareat_test_lanef7` | Opus 5 | **idle.** T-302, and the specs for T-314 and T-316 |
 
 ## The paste-ready prompt
 

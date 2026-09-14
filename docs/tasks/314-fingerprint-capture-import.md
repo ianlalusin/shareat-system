@@ -240,14 +240,54 @@ from, and enrolment (a server path) and the clock terminal (a client path) both 
 One line changed in `apps/erp/src/lib/terminal/lane.ts`: `MirroredCredential` gains
 `templates?: string[]`.
 
-**Contract.** `deriveMatchToken(templates)` → the same token the schema's unique index keys on ·
-`buildReaderEntries(credentials)` → what gets loaded into the sensor ·
+**Contract.** ⭐⭐ **CORRECTED 2026-09-14 BY THE ORCHESTRATOR, ON LANE B'S SPEC REVIEW, BEFORE ANY
+CODE WAS WRITTEN. The original contract said `deriveMatchToken(templates)` and that was a blocking
+defect** — see §Slice A's token ruling below.
+
+`generateMatchToken()` → a fresh random token, **no arguments** ·
+`mintUniqueToken(isTaken)` → the retry-until-store-unique loop, with the uniqueness check
+**injected** · `buildReaderEntries(credentials)` → what gets loaded into the sensor ·
 `planArm(state, event)` → the re-arm decision · `poolFor(mode, credentials)` → `loggedOutPool` /
 `soloPool`.
 
+### ⛔ The token ruling — why it is minted, never derived
+
+**v1 is `generateFingerprintMatchToken(): string { return randomBytes(16).toString('hex'); }`** —
+no template argument, nothing computed from template content, minted fresh on every re-enrolment and
+checked for store-uniqueness against other users before being accepted
+(`attendance-fingerprint.actions.ts:71`, in a loop of up to 12 candidates). Its own comment states
+the property: *"M5: allocate a FRESH store-unique token on every (re-)enroll so a leaked or
+device-cached token is invalidated by re-enrollment."*
+
+⛔⛔ **A CONTENT-DERIVED TOKEN WOULD BE AN UNROTATABLE CREDENTIAL, AND THAT IS THE WHOLE ARGUMENT.**
+Hashing the templates makes the token a function of the finger — and **a person cannot rotate a
+finger.** A leaked or device-cached token could then never be invalidated for the rest of that
+person's employment, because the only input that would change it is one they cannot change. M5
+exists precisely because the credential must be rotatable while the biometric behind it is not.
+**Deriving the token silently deletes that property, and no grep finds it: the coupling is a premise
+in a comment** — bible §13 row 207, now with a fourth instance.
+
+⚠️ **The uniqueness loop stays out of the pure module's data layer but NOT out of the module.**
+`mintUniqueToken(isTaken)` takes an injected `(token) => Promise<boolean>`, so the algorithm — how
+many attempts, what happens when all of them collide — is portable, testable with a fake checker,
+and needs no database. ⛔ **Slice A must decide and test the all-candidates-collided case**; v1 draws
+12 and the spec never said what happens on 13.
+
+⭐ **Web Crypto (`globalThis.crypto.getRandomValues`), never node's `crypto` module.** Lane B's call
+and it is right: `packages/domain` is consumed by the enrolment server path *and* the clock client
+path, so a node-only import is the exact mirror of Invariant 5's browser-only ban. v1's own file
+header warns *"never import this from a client bundle"* — v2 has no such escape, so the primitive
+must work in both.
+
 **Invariants.**
-1. A token derived here matches what `resolveScan` compares against — `lane.ts:170`.
-2. Re-deriving from the same templates is stable; re-enrolling a finger changes it — `attendance-credentials.ts:87`'s own comment.
+1. A token minted here matches what `resolveScan` compares against — `resolveScan` in `lane.ts`
+   does plain string equality on `matchToken`, so any string resolves. ✅ **Citation verified intact
+   by lane B, 2026-09-14** — one of the few line references in this repo that had not drifted.
+2. ⭐ **CORRECTED.** A re-enrolment produces a **different** token, because each mint is fresh
+   randomness — **not** because anything is re-derived from template content. `attendance-credentials.ts`'s
+   comment says *"Rotated on every re-enrolment"* and **never claims the token is computed from the
+   templates**; the original invariant's conclusion was right and its stated reason was wrong, which
+   is the half the next person would have built on.
 3. 1–2 templates, never more — the CHECK at `attendance-credentials.ts:134-136`.
 4. **No face path exists in any of these files** — bible §5.3, *"never mirrored, never cached, never bundled"*.
 5. Nothing here imports Capacitor, `navigator`, or anything browser-only.
