@@ -1,9 +1,16 @@
-# T-317 — five guards for the class that beat the wrap-up ritual three times in one day
+# T-317 — six guards for the class that beat the wrap-up ritual three times in one day
 
-> ### **Status: SPEC APPROVED 2026-09-14 by `system32-85` (Opus planner). NOT BUILT.**
+> ### **Status: READY 2026-09-14 — built by lane A (Sonnet 5). Guards 2–6 green; guard 1 shipped
+> separately in `de28bd2`. Awaiting orchestrator gate confirmation and a docs/ROADMAP.html row.**
 >
 > **Ian, 2026-09-14:** *"how can we make every document updated always i included them already in
 > wrap up skill the updating of these documents"* — then, on the answer below: *"go"*.
+>
+> ⛔ **Correction, 2026-09-14 (lane A):** this doc originally specified five guards. DEF-359,
+> found and filed the same day while this task was already approved, added a sixth — its own
+> disposition reads *"T-317 gains a sixth guard"* (`docs/DEFECTS-REGISTER.md`). This doc is
+> amended in place (title, scope and the new §6 below) rather than left to point at the register,
+> so a reader gets the whole guard set from one file. See §6 for the guard itself.
 
 ## Why this exists, and why more instruction cannot be the answer
 
@@ -44,7 +51,7 @@ disagreeing with the code fails the build instead of waiting for somebody to not
 
 - `tests/unit/deferral-staleness.test.ts` — **guard 1 only**, because it already owns this marker
   family (T-220). Do not move its existing assertions.
-- `tests/unit/document-facts.test.ts` — **new**; guards 2–5.
+- `tests/unit/document-facts.test.ts` — **new**; guards 2–6.
 - `docs/DEFECTS-REGISTER.md` — ⛔ **marker insertions ONLY**, and only on rows guard 1 names. No
   prose, no state, no disposition changes. **Report any row whose state looks wrong; do not fix it.**
 - `docs/tasks/317-document-facts-guards.md` — this file.
@@ -104,7 +111,17 @@ relative-interval claim — `~N weeks away`, `N weeks away`, `N days away`, `N m
   the defect is not committing it** — the ruling already established for T-256 and T-304 on
   2026-09-14 (DEF-348), and the same quote-stripping applies.
 
-### 3. An arming or status claim in `docs/ops/README.md` lives only in a dated section — DEF-354
+⛔ **Correction from BUILD, 2026-09-14 (lane A):** the real count across the seven files is FOUR
+raw matches, not the two this margin implied elsewhere — two in `ROADMAP.html`'s `<script>` block
+(one double-quoted, already caught by quote-stripping; one a single-quoted JS literal, needing a
+structural `<script>`-block exemption on top since it's code, not prose) and two more in
+`docs/HANDOFF-TODAY.md`, which quotes the guarded phrase twice while discussing this very guard
+(one in backticks, one in plain single quotes). Ruling (system32-85): keep all seven files —
+`HANDOFF-TODAY.md` is the file most likely to mislead a reader with no memory, not a candidate for
+exclusion — and generalise quote-stripping to backtick and single-quote spans, same principle as
+the double-quote case above, not a new one.
+
+### 3. An arming or status claim in `docs/ops/README.md`'s `## The jobs` section lives only in a quote — DEF-354
 
 **The instance:** the `## The jobs` section asserted four units *"are **NOT YET ARMED**"* in the
 present tense, while **the same file, ~230 lines below, records Ian arming the last of them** and a
@@ -122,6 +139,15 @@ quotes its own old claim, in the past tense, on purpose).
 ⚠️ **Say in the test's own header that it is scoped to one file and why** — the general problem
 (*does this document contradict itself?*) is not mechanisable, and a guard that pretends otherwise
 would be the wrong kind of confidence.
+
+⛔ **Correction from BUILD, 2026-09-14 (lane A + system32-85):** "outside a dated section" is not
+narrow enough — two real, legitimate sentences elsewhere in the file ("Three jobs have now shipped
+unarmed", "Only `shareat-erp.service` is enabled directly") sit in undated sections, are not
+quoted, and are not stale claims (one is past-tense narrative, one a durable install-vs-timer
+architectural fact) — a literal phrase match would misfire on both. **Narrowed to the `## The jobs`
+section alone**, the section DEF-354's actual defect and its repair both live in. A section
+boundary is structural and survives rewording; a hand-written exemption list of sentences is bible
+§13 row 204 in its purest form and goes stale the day either sentence is reworded.
 
 ### 4. A roadmap-`t-done` task must have a task file — DEF-349
 
@@ -151,6 +177,35 @@ present in `docs/ROADMAP.html`. **Reuse T-312's leading-claim extractor** — qu
 ⚠️ **This one may be green with no exemptions after `ff31f07`, which makes non-vacuity the whole
 risk.** Assert a non-zero scanned population **and** prove the mechanism with a synthetic row that
 claims shipped and has no roadmap id.
+
+⛔ **Correction from BUILD, 2026-09-14 (lane A):** not quite exemption-free. A bare
+`\b(SHIPPED|BUILT|COMPLETE)\b` also matches inside a negation (`NOT BUILT`, four SPEC-only files —
+mechanical fix: exclude a preceding `NOT `/`not `) and inside a genuinely partial or slice-level
+claim, which is not a whole-*task* shipped claim (the roadmap tracks tasks, not slices). Excluding
+`PARTIAL`/`PARTLY`/`SLICE` from the match resolves T-136 and T-308 generally; **T-141** ("BUILT
+(service layer)… UI upload control and the live Firebase piece missing", DEF-352's own words) needs
+a named exemption because it doesn't use any of those three words. One entry, cited, paired with
+the assertion that deletes it — same shape as guard 4's T-148.
+
+### 6. Every `PROJECT_BIBLE.md` §13 decision row matches its own table's header shape — DEF-359
+
+**The instance:** measured 2026-09-14 while inserting row 207: of 206 (then 207) decision rows,
+row 146 had 11 unescaped pipes, rows 160/167/206 had 7, and rows 204/205 had 5 — six rows out of
+shape with the header's 6. **Found because the insert script took its expected count from a
+neighbouring data row (206, itself malformed) instead of the table's own header**, and so refused
+a correct row for having too few bars — the same class of error as DEF-353's first audit, in the
+authority document this time.
+
+**Mechanism:** the expected column count is read from §13's own header row
+(`| # | Date | Decision | Rationale | Reversible? |`, 6 unescaped pipes) — **never hardcoded and
+never taken from a neighbouring row.** Reuse T-313's unescaped-pipe counter (invariant 6), never a
+naive `split('|')`. Seed it red against all six malformed rows; assert non-vacuity.
+
+⚠️ **Known limit, stated rather than coded around:** a pipe *count* cannot distinguish a stray pipe
+from a missing cell when both land on the same total — DEF-359's own repair found row 206 needed
+its `Reversible?` cell reconstructed as well as its stray pipe escaped, which a count-only guard
+cannot see. This guard proves every row's column count matches the header; it does not prove every
+cell is correctly populated.
 
 ## Invariants, with citations
 
@@ -190,11 +245,15 @@ it is DEF-193's own case rendered as the test that would have caught it.
 
 ## Done when
 
-- Five guards exist in the two named files, each with its RED capture recorded in the READY message.
+- Six guards exist in the two named files, each with its RED capture recorded in the READY message
+  (guards 2, 3 and 6 as a real-data fixture reproducing an already-repaired real instance, per
+  invariant 1's second branch; guard 6's own RED was captured live, before its DEF-359 repair).
 - `npm run typecheck` clean; `npm run test` green; no integration test needed — state that if it is
   your conclusion.
 - Guard 4's T-148 exemption is present, cited, and paired with the assertion that deletes it.
+- Guard 5's T-141 exemption is present, cited, and paired with the assertion that deletes it
+  (found during BUILD, not anticipated by this spec — see §5's guard body).
 - The list of wrap-up lines the guards supersede is in the READY message, not edited into the skill.
-- ⚠️ **Not in done-when:** proof that no document is stale. These five close five measured holes;
+- ⚠️ **Not in done-when:** proof that no document is stale. These six close six measured holes;
   they do not make the class impossible, and the honest limit — *no guard catches a prose claim
   nothing else in the repo knows about* — belongs in the test headers, not in a promise here.
