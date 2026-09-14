@@ -539,12 +539,18 @@ describe('T-289 case 13 — migration 0146 applies to an empty database, and adm
   // project's 30s default and has never once failed it (run 34705670725). Locally this test was
   // observed bimodal — fine in ~2-3s, or stuck at whatever ceiling was configured, nothing between
   // across 5 attempts — which is the signature of a lock wait, not of load (contrast DEF-313's
-  // smooth drift). ⭐ Suspected root cause, not fixed here: `scratchName` below is a HARDCODED
-  // literal shared by every lane/session on this one Postgres server, so two concurrent runs of
-  // this file race CREATE/DROP DATABASE on the identical name. Filed as DEF-334, which
-  // carries the evidence and the five-minute experiment that would confirm or kill it; whoever fixes that root cause should come back and
-  // delete this timeout override, since a scoped-per-run database name would remove the wait this
-  // is absorbing, not just outlast it.
+  // smooth drift). `scratchName` below WAS a hardcoded literal, shared by every lane/session on
+  // this one Postgres server, so two concurrent runs of this file raced CREATE/DROP DATABASE on
+  // the identical name — filed as DEF-334. That race WAS confirmed deterministically (4/4
+  // concurrent trials; the comment on the test below carries the evidence), and the pid-derived
+  // `scratchName` below IS the fix.
+  // ⛔ RULING: this 120s override must NOT be removed on the strength of that fix. DEF-334's
+  // failure shape is wrong for DEF-325's stall — a fast explicit duplicate-key error at
+  // ~100-200ms, not a stall to the ceiling — so DEF-325's stall remains UNEXPLAINED; re-measure
+  // under lane isolation before touching this number.
+  // ⭐ A comment phrased "whoever fixes X should then do Y" is a booby trap with a timer, because
+  // X eventually happens and nothing links the two — record the ruling, not a conditional
+  // instruction.
   it('proven on a scratch database, created and dropped here — never a shared one', async () => {
     // DEF-334: was a hardcoded literal, identical across every lane/session on this one Postgres
     // server — confirmed as a real, reproducible collision (4/4 concurrent trials, immediate
