@@ -95,13 +95,57 @@ before that fix. What is still true of them is the *other* half of DEF-210: they
 no table, so it **cannot run a migration** — correctly, and by design. A deploy or a manual migrate
 that inherits the file as written will fail with a permission error.
 
-Run migrations with the admin string explicitly, on the box:
+Run migrations against the release you actually mean to migrate — not `/srv/shareat`. That symlink
+is swapped LAST, only after a successful migrate (`deploy.yml`, `mv -Tf /srv/shareat.new
+/srv/shareat`), so on the one deploy this recipe exists for — the one that failed AT the migrate
+step — it still points at the release BEFORE the failed one, and migrating through it silently
+applies nothing while printing the same success line a real migration would (DEF-330, measured:
+`Migrations applied in 231ms` for a no-op). Resolve the release explicitly instead, the same way
+the deploy does, and verify with a count, not with the command's own output:
 
 ```bash
-cd /srv/shareat
-DATABASE_URL="$(grep -m1 '^SYSTEM_DATABASE_URL=' /srv/shareat-shared/.env.local | cut -d= -f2-)" \
-  npm run db:migrate
+# Full ranked list first — eyeball that the top entry's timestamp matches the failed Deploy run
+# you are recovering from (visible in its GitHub Actions log) before trusting the automatic pick
+# below. If it does NOT match, STOP: something else has touched /srv/shareat-releases/ since, and
+# "newest by mtime" is no longer "the one from that deploy".
+ls -1dt /srv/shareat-releases/*/
+
+RELEASE="$(ls -1dt /srv/shareat-releases/*/ | head -1)"
+echo "Migrating release: $RELEASE"
+
+# Same extraction and sanitizing deploy.yml's migrate step uses, copied in full rather than just
+# the grep — DEF-196/DEF-203: this file has a documented history of CRLF line endings and a BOM on
+# the box, so a decorated-but-present key must never be misread as absent, and a bare grep/cut
+# would hand postgres() a connection string with a trailing \r during the exact incident where
+# that looks like a credential failure instead of a whitespace one.
+SYSTEM_DB_URL="$(grep -m1 '^SYSTEM_DATABASE_URL=' /srv/shareat-shared/.env.local | cut -d= -f2- || true)"
+SYSTEM_DB_URL="${SYSTEM_DB_URL%$'\r'}"
+case "$SYSTEM_DB_URL" in
+  \"*\") SYSTEM_DB_URL="${SYSTEM_DB_URL#\"}"; SYSTEM_DB_URL="${SYSTEM_DB_URL%\"}" ;;
+  \'*\') SYSTEM_DB_URL="${SYSTEM_DB_URL#\'}"; SYSTEM_DB_URL="${SYSTEM_DB_URL%\'}" ;;
+esac
+if [ -z "$SYSTEM_DB_URL" ]; then
+  echo "SYSTEM_DATABASE_URL is missing or empty in /srv/shareat-shared/.env.local — refusing to run." >&2
+  exit 1
+fi
+
+cd "$RELEASE"
+
+echo "Before:"
+DATABASE_URL="$SYSTEM_DB_URL" node -e "require('postgres')(process.env.DATABASE_URL,{max:1}).unsafe('select count(*)::int as n from drizzle.__drizzle_migrations').then(r=>{console.log(r[0].n);process.exit(0)}).catch(e=>{console.error(e);process.exit(1)})"
+
+DATABASE_URL="$SYSTEM_DB_URL" npm run db:migrate
+
+echo "After (must equal the journal count below):"
+DATABASE_URL="$SYSTEM_DB_URL" node -e "require('postgres')(process.env.DATABASE_URL,{max:1}).unsafe('select count(*)::int as n from drizzle.__drizzle_migrations').then(r=>{console.log(r[0].n);process.exit(0)}).catch(e=>{console.error(e);process.exit(1)})"
+
+echo "Journal entries:"
+node -e "console.log(require('./packages/db/migrations/meta/_journal.json').entries.length)"
 ```
+
+A `Migrations applied` line proves nothing on its own — DEF-330's own case printed it for zero
+applied migrations. The before/after count against the journal's entry count is the only thing
+that distinguishes "migrated" from "no-op that looked identical".
 
 ⚠️ **Do not "fix" this by giving `shareat_app_prod` DDL rights.** A role that can `ALTER TABLE` can
 also `ALTER TABLE … DISABLE ROW LEVEL SECURITY`, which hands back exactly what this change bought.
