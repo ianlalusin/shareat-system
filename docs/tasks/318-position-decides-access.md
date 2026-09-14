@@ -207,7 +207,72 @@ so it can be checked rather than inherited (bible §13 row 207).
 
 ## Needs from Ian
 
-1. ⛔ **The orphan ruling** — refuse, or grant at employment level. Recommended: refuse with the list
-   printed. Slice B cannot be written without it.
-2. ⚠️ **Confirmation that a positionless open employment is a data error** rather than a normal state
-   for, say, a new hire mid-onboarding. **If it is normal, the recommendation above inverts.**
+1. ✅ **THE ORPHAN RULING — ANSWERED 2026-09-14. An open employment with no position is a DATA
+   ERROR.** Ian chose *refuse and list them*, the recommended option, told in plain language that it
+   can hold up the release until the records are fixed. **So slice B's migration refuses to run
+   while any open employment lacks a position, and prints exactly who.** ⭐ **That makes slice A's
+   census a gate rather than a report** — it is now the thing that says whether slice B can run at
+   all, and it must be run before the migration is written, not after.
+   ⛔ **Do NOT soften this into a warning.** The whole reason it is safe to shrink the baseline is
+   that nobody loses access by accident; a positionless employment is the one shape where they
+   would, and refusing is what keeps that promise. ⚠️ **If the count turns out to be large, that is
+   a finding to bring back — not a reason to switch to granting a fallback.** The ruling was made
+   knowing it could block; changing it is Ian's, not the lane's.
+2. ✅ **Answered by the same ruling** — a positionless open employment is not a normal onboarding
+   state, so the recommendation does not invert.
+
+⚠️ **Still open, and not blocking any slice yet:** nothing. Both questions are closed.
+
+## Slice A's census — measured 2026-09-14, and what it settles
+
+⛔ **RUN AGAINST `shareat_dev`, NOT PRODUCTION.** `scripts/position-access-census.mjs` names its own
+source in its output, deliberately: a census that does not say which database it read is how a dev
+number gets quoted later as a production one. **Every figure below is a dev-database fact.** Ian runs
+it against production when he chooses; nothing here licenses a production claim.
+
+| Measure | `shareat_dev` |
+|---|---|
+| Active stores censused | 3 (2 deactivated smoketest stores excluded) |
+| ⛔ **Open employments with NO position — the gate** | **0.** The gate would not trip today. |
+| ⚠️ **Open employments holding MORE THAN ONE position** | **1** — a cashier who is also a cook |
+| Backfill size | **399** default rows (19 position×store pairs × 21) + **84** person grants = **483** |
+
+⭐ **The census found and fixed its own defect before reporting:** the first draft counted two
+deactivated stores into the backfill sizing (735 rows instead of 483). Sizing and position counts are
+now scoped to active stores; **the orphan gate and the multi-position count deliberately are NOT** —
+an open employment does not stop being open because its store was deactivated — and the script says
+how many of each fall at an inactive store rather than silently folding them in.
+
+## ⭐ THE MULTI-POSITION RULING — a person holding two positions gets the UNION
+
+**The briefing guessed this question might be hypothetical. It is not: there is a real instance.** So
+it is ruled here rather than discovered during the migration.
+
+**A person holding two positions holds the union of both positions' grants.** That is not a new
+mechanism — it is what `setPositionDefault` already does, reconciling every open-employment holder of
+a position, so a person holding two is simply reconciled by both. **No code decides between them.**
+
+⛔ **`is_primary` IS NOT AN ACCESS CONCEPT AND MUST NOT BECOME ONE.** It exists on
+`employment_positions` (a boolean on the join row, with a partial unique index allowing one primary
+per employment — **not** a `primaryPositionId` column, which is what the briefing wrongly called it),
+and **nothing in the codebase reads it for an access decision today.** Using it to pick a winner would
+invent a precedence rule the business has never expressed, and would silently demote a real
+capability somebody holds for a real reason.
+
+⚠️⚠️ **THE OPERATIONAL CONSEQUENCE, AND IT IS THE ONE THAT WILL SURPRISE SOMEBODY: TURNING A
+CAPABILITY OFF FOR ONE POSITION DOES NOT TAKE IT AWAY FROM A PERSON WHO ALSO HOLDS IT THROUGH
+ANOTHER.** Switch `submit_sales_day` off for Dishwasher, and a person who is Dishwasher *and* Server
+keeps it if Server has it. **That is correct — they really are a server — but it will look like the
+switch did not work.** ⭐ **Therefore slice D owes the screen an answer:** when a capability is
+switched off for a position, the screen must say how many of that position's holders **still hold it
+through another position**. Without that line the screen lies by omission, and the person reading it
+is the one deciding who may take money.
+
+## ⚠️ A newly-visible surface slice C and D must expect
+
+`grantableCapabilitiesFor(role)` (`apps/erp/src/app/admin/users/lib.ts`) offers, for a given role,
+whatever the matrix does **not** already grant it — so after the flip **all 21 newly appear as
+hand-grantable to an individual staff member on `/admin/users`**, bypassing position defaults
+entirely. ⭐ **This is correct and intended** — the per-person grant override is bible rows 115–116 and
+predates this task — **but nobody had named it, and it is the kind of surface that gets discovered in
+review and mistaken for a bug.** It is named now. ⚠️ Not verified: how those 21 render on that screen.
