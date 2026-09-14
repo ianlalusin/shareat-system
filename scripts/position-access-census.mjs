@@ -149,28 +149,48 @@ async function main() {
 
   // ---------------------------------------------------------------------------------------
   // 5a. Total (position x store) pairs the backfill would write a default row for, x 21.
+  // ⛔ CORRECTED 2026-09-14: the migration (0152) covers EVERY store, active or not — a
+  // deactivated store can still carry an open employment (deactivating a store ends nobody's
+  // employment), and Contract 4's byte-identical promise must hold for that person too. Scoping
+  // this sizing to active stores only would understate the exact migration it exists to size —
+  // found and fixed after building 0152, per the same "never silently fold in or drop" rule
+  // already applied to the orphan gate below. `allPairs` matches the migration exactly;
+  // `activePairs` is kept and reported alongside it so the two numbers are never silently
+  // conflated.
   // 5b. Total distinct people who would receive materialised person_grants, x 21 — one grant
   //     row per (person, capability), never per (person, position, capability): grantCapability
   //     is keyed on (personId, grantName) alone (packages/db/src/repo/access.ts), so a person
   //     holding two positions at the same store, or open employments at two stores, still needs
   //     only 21 grant rows, not more. Verified at source, not assumed.
   // ---------------------------------------------------------------------------------------
-  const [{ pair_count: defaultRowPairs }] = await sql`
+  const [{ pair_count: defaultRowPairsAll }] = await sql`
     SELECT COUNT(*)::int AS pair_count
     FROM (
       SELECT s.id AS store_id, p.id AS position_id
       FROM stores s CROSS JOIN positions p
-      WHERE s.is_active = true AND p.store_id IS NULL AND p.is_active = true
+      WHERE p.store_id IS NULL AND p.is_active = true AND p.org_id = s.org_id
+      UNION ALL
+      SELECT p.store_id, p.id
+      FROM positions p
+      WHERE p.store_id IS NOT NULL AND p.is_active = true
+    ) pairs
+  `;
+  const [{ pair_count: defaultRowPairsActiveOnly }] = await sql`
+    SELECT COUNT(*)::int AS pair_count
+    FROM (
+      SELECT s.id AS store_id, p.id AS position_id
+      FROM stores s CROSS JOIN positions p
+      WHERE s.is_active = true AND p.store_id IS NULL AND p.is_active = true AND p.org_id = s.org_id
       UNION ALL
       SELECT p.store_id, p.id
       FROM positions p JOIN stores s ON s.id = p.store_id
       WHERE s.is_active = true AND p.is_active = true
     ) pairs
   `;
+  const defaultRowPairs = defaultRowPairsAll;
   // ⚠️ Deliberately NOT scoped to active stores — an open employment is a data-integrity
   // question independent of whether its store is currently active. If a deactivated store still
-  // carries an open employment, that person would still receive materialised grants under the
-  // "grant at employment level" fallback, or still block the refuse-to-run gate — the store's
+  // carries an open employment, that person would still receive materialised grants — the store's
   // active flag does not make an open employment stop being open.
   const [{ person_count: grantedPersonCount }] = await sql`
     SELECT COUNT(DISTINCT e.person_id)::int AS person_count
@@ -229,7 +249,7 @@ async function main() {
   console.log(`\n${'='.repeat(88)}`);
   console.log('ORG-WIDE SUMMARY');
   console.log('='.repeat(88));
-  console.log(`Stores censused (active): ${stores.length}; inactive stores excluded from [1]/[4]/[5]: ${inactiveStores.length}`);
+  console.log(`Stores censused (active): ${stores.length}; inactive stores excluded from [1]/[4] (display only): ${inactiveStores.length}; [5]'s sizing covers every store, see below.`);
   console.log(`[2] TOTAL open employments with no position at all (GATE COUNT): ${totalOrphans}`);
   if (orphansAtInactive.length > 0) {
     console.log(
@@ -252,9 +272,10 @@ async function main() {
       ? '    -> Non-zero: the "which position decides access" question is real. See per-store detail above.'
       : '    -> Zero. The question dies — no employment today holds more than one position.',
   );
-  console.log(`[5] Backfill sizing:`);
-  console.log(`    (position x store) pairs that would receive a position_capability_defaults row: ${defaultRowPairs}`);
-  console.log(`    x ${CAPABILITY_COUNT} capabilities = ${defaultRowCount} position_capability_defaults rows.`);
+  console.log(`[5] Backfill sizing — matches migration 0152 exactly (every store, active or not):`);
+  console.log(`    (position x store) pairs, EVERY store: ${defaultRowPairsAll} (of which ${defaultRowPairsAll - defaultRowPairsActiveOnly} are at an inactive store)`);
+  console.log(`    (position x store) pairs, active stores only, shown for comparison: ${defaultRowPairsActiveOnly}`);
+  console.log(`    x ${CAPABILITY_COUNT} capabilities = ${defaultRowCount} position_capability_defaults rows (the real number 0152 writes).`);
   console.log(`    Distinct people who would receive materialised person_grants: ${grantedPersonCount}`);
   console.log(`    x ${CAPABILITY_COUNT} capabilities = ${personGrantCount} person_grants rows.`);
   console.log(`    TOTAL rows the backfill would write: ${defaultRowCount + personGrantCount}`);

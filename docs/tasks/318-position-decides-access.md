@@ -94,6 +94,51 @@ option that guesses a position from the person's history.**
   copied from this document** (DEF-039).
 - `packages/db/migrations/meta/_journal.json`
 
+**Slice C-pre — the test fixtures, and it is NOT optional**
+- `packages/domain/tests/integration/**` — a shared fixture helper, plus the mechanical pass over
+  the files that use it.
+
+⛔⛔ **THIS SLICE EXISTS BECAUSE THE SPEC'S OWN PREMISE 1 WAS FALSE, AND THE FALSEHOOD WAS SMUGGLED
+RATHER THAN STATED.** The spec asserted *"`authorize()` needs no change"* — **true of the function**,
+verified independently by two lanes — and then did duty for a second claim it never wrote down:
+*"and therefore nothing else needs to change either."* **That one is false.** Bible §13 row 207 at
+the level of a spec rather than a comment.
+
+**Measured 2026-09-14, two ways.** A lane reading files found the shape and reported a range it could
+not close (*"at least 2, at most 48"*); the orchestrator then intersected *every domain function that
+authorizes on one of the 21* with *every integration test that builds a staff-role actor*:
+
+| | |
+|---|---|
+| Integration test files scanned | **115** |
+| Staff actor, but calls none of the gated functions | **31** — not at risk |
+| ⛔ **Staff actor AND calls a gated function** | **19** |
+
+⚠️ **19 is an UPPER bound and is stated as one:** the intersection cannot tell whether a file calls
+the gated function with its *staff* actor or with an admin one. **Both independently confirmed
+instances — `count-workflow` and `expenses` — are inside the set**, which is the check that the
+method works.
+
+⛔ **THE MIGRATION CANNOT SAVE THESE, AND THAT IS THE POINT.** `0152` backfills data that exists
+**when it runs**. These fixtures create a fresh person with `role='staff'` **during their own test
+run**, long after migrations applied — no position, no default, no grant, because today the matrix
+grants it and nothing needs one. The moment slice C flips the cells, every one of those positive-path
+assertions starts throwing.
+
+⭐ **RULING: one shared fixture helper, not 19 explicit grant blocks.**
+1. These tests are not testing authorization — the staff actor is scenery for a count or an expense
+   flow. **19 copies of "grant the everyday capabilities" is 19 copies of one idea**, which is the
+   drift T-317 invariant 6 exists to stop.
+2. ⭐ **After T-318 the fixture is WRONG, not merely under-provisioned.** By Ian's own ruling a
+   positionless open employment is a **data error** that `0152` refuses to run against. **A fixture
+   creating one models a state production is not permitted to be in** — so the helper does not paper
+   over the flip, it makes the fixture realistic for the first time.
+3. A test asserting a **refusal** must be able to opt out: the helper takes the positions to grant,
+   and a refusal test asks for none.
+
+⛔ **Sequenced BEFORE slice C.** Slice C's done-when cannot honestly be reported met while this
+population is red, and absorbing it silently inside slice C would hide a spec defect inside a build.
+
 **Slice C — the flip**
 - `docs/decisions/CAPABILITY-MATRIX.md` — ⛔ **the decision document, and it changes FIRST.**
 - `packages/auth/src/capabilities.ts` — the 21 `staff` cells to `false`.
@@ -101,6 +146,13 @@ option that guesses a position from the person's history.**
 - `packages/auth/tests/integration/authorize.test.ts`
 - `packages/domain/tests/integration/position-defaults.test.ts`
 - `tests/unit/capability-matrix.test.ts` if its parse needs it — **not its assertions**.
+- `packages/domain/src/files/index.ts` — ⚠️ **one comment only.** It asserts *"No access changes —
+  both are granted to staff"* about `record_supplier_invoice` and `record_wastage`, and that becomes
+  **false** the moment this slice ships. The code stays correctly gated either way (it authorizes
+  through `PURPOSE_CAPABILITY`), so nothing breaks — ⛔ **but a reader will believe the comment over
+  the code.** Bible row 204's shape, and row 206's ruling that a comment giving a plausible wrong
+  reason is worse than none. Found by the T-318 review lane; fix it in the pass that is already
+  touching capability semantics, not as a separate task.
 
 **Slice D — the screen**
 - `apps/erp/src/app/admin/access-defaults/page.tsx` · `lib.ts` · `actions.ts`
@@ -235,7 +287,15 @@ it against production when he chooses; nothing here licenses a production claim.
 | Active stores censused | 3 (2 deactivated smoketest stores excluded) |
 | ⛔ **Open employments with NO position — the gate** | **0.** The gate would not trip today. |
 | ⚠️ **Open employments holding MORE THAN ONE position** | **1** — a cashier who is also a cook |
-| Backfill size | **399** default rows (19 position×store pairs × 21) + **84** person grants = **483** |
+| Backfill size | **651** default rows (31 position×store pairs × 21) + **84** person grants = **735** |
+
+⛔ **THE SIZING FIGURE WAS WRONG IN THIS DOCUMENT UNTIL SLICE B CORRECTED IT, AND THE REASON IS THE
+FINDING.** The census first reported **483** (19 pairs), sizing scoped to **active stores**. Slice B
+then established that the backfill must cover **every** store, active or not — nothing about
+deactivating a store ends anyone's employment, so scoping to active stores would silently break
+Contract 4 for anyone employed at a deactivated one. **The true figure is 735 across 31 pairs, of
+which 12 pairs are at inactive stores.** ⭐ The census now prints both, rather than replacing one
+number with another: **a figure that changed deserves to show what it changed from.**
 
 ⭐ **The census found and fixed its own defect before reporting:** the first draft counted two
 deactivated stores into the backfill sizing (735 rows instead of 483). Sizing and position counts are
