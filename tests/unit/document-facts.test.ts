@@ -137,12 +137,25 @@ describe('T-317 / DEF-350 — no relative-interval date in a document of record 
     expect([...cleaned.matchAll(RELATIVE_DATE_RE)].map((m) => m[0])).toEqual(['~5 weeks away']);
   });
 
-  it('⭐ MUST-NOT-FIRE control, real files: all four currently-exempt instances stay silent', () => {
+  // ⛔⛔ THIS CONTROL MAY ONLY ANCHOR TO FILES THAT ARE NOT REWRITTEN ON A SCHEDULE, AND IT LEARNED
+  // THAT BY BREAKING. It originally pinned four instances, two of them inside
+  // `docs/HANDOFF-TODAY.md` — a file the wrap-up ritual REGENERATES WHOLESALE every session. The
+  // very next wrap-up rewrote that document, both needles vanished, and this control failed while
+  // the guard it protects was working perfectly.
+  //
+  // ⭐ That is bible §13 row 204's shape living inside a test: an assertion naming a specific token
+  // and asserting a present-tense fact about it, in a document nothing promises to keep. The fix is
+  // not a fresher needle — the next wrap-up would delete that one too. It is to anchor only to
+  // `docs/ROADMAP.html`, whose exempt instances are structural (a computed countdown's own
+  // formatting literals) and survive every edit that does not rewrite the countdown itself.
+  //
+  // ⚠️ The guard still SCANS all seven files, HANDOFF-TODAY.md included — only this control's
+  // anchors narrowed. A hand-typed interval in the handoff still fails the build, which is the
+  // point: that file is the one a cold session acts on first.
+  it('⭐ MUST-NOT-FIRE control, real files: the durable exempt instances stay silent', () => {
     const cases = [
       { file: 'docs/ROADMAP.html', needle: '~5 weeks away', reason: 'double-quoted, inside the <script> comment — quote-stripped' },
       { file: 'docs/ROADMAP.html', needle: "'1 day away'", reason: 'single-quoted JS literal, inside <script> — script-block-stripped' },
-      { file: 'docs/HANDOFF-TODAY.md', needle: "`'1 day away'`", reason: "backtick span quoting this very guard's design" },
-      { file: 'docs/HANDOFF-TODAY.md', needle: "'1 day away' lives", reason: 'single-quoted, discussing this very guard' },
     ];
     for (const { file, needle, reason } of cases) {
       const raw = readFileSync(join(REPO_ROOT, file), 'utf8');
