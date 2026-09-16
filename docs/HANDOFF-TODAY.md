@@ -4,35 +4,39 @@
 > deployment."*** Read that as the ordering principle for everything below — when two pieces of work
 > compete, the one that unblocks a deploy wins.
 >
-> ⛔⛔ **AND THE FIRST THING TO KNOW IS THAT `main` IS CURRENTLY UNDEPLOYABLE — FOR A REASON THAT IS
-> NOT IN THIS REPOSITORY.** Twelve commits are pushed and CI is green on all of them, but **the
-> deploy job will not start:**
+> ✅✅ **DEPLOYED AND VERIFIED. Production is running `5626cf9`**, compared against `origin/main` by
+> all forty characters, built 14:21:58Z. **Migration `0152` APPLIED — the deploy log reads
+> *"Migrations applied in 259ms"*** and both of its gates passed against real production data:
+> every open employment has a position, and exactly one attribution person resolved.
 >
-> > *"The job was not started because recent account payments have failed or your spending limit
-> > needs to be increased."*
+> ⭐ **So the access backfill is LIVE. Roughly 735 rows now record what each position is currently
+> allowed to do, and nobody's access changed** — that is the point of it. **The additive half of
+> T-318's additive-then-flip order is done in production**, which means slice C's matrix flip can
+> now land without stripping anyone. ⚠️ **Slice C itself is still unfinished — see §3.**
 >
-> ⛔ **This is GitHub Actions billing, and only Ian can clear it** — Settings → Billing & plans.
-> ⭐ **How to recognise it rather than re-diagnose it: the run fails in about SIX SECONDS.** A deploy
-> that genuinely reaches the migrate step takes around three minutes. **A six-second failure means
-> no job ran at all.** ⚠️ **CI is on the same meter** — it is still launching, but if the limit is
-> exhausted CI will stop starting too, and since Deploy is `workflow_run`-gated on CI, that blocks
-> everything rather than only deployment.
->
-> ⭐ **The migration gate that blocked the two earlier deploys is FIXED and pushed** (`71e33d2`).
-> §1 is kept because the finding behind it outlives the fix.
+> ⚠️ **Three things blocked this deploy today and only the first was ours.** The migration gate
+> refused twice for a real reason (§1). Then **GitHub Actions billing** stopped jobs from starting
+> at all — Ian cleared it. ⭐ **Recognise that one by DURATION rather than re-diagnosing it: a
+> billing refusal fails in about six seconds because no job runs; a deploy that genuinely reaches
+> migrate takes about three minutes.** CI is on the same meter, and Deploy is `workflow_run`-gated
+> on CI, so an exhausted limit blocks everything rather than only deployment.
 
 ## Where things stand
 
-**Production is healthy and UNCHANGED** — still on the build from 2026-09-14, verified by asking
-`/api/health` and comparing all forty characters, not by seeing the field appear. ⭐ **The failed
-migration never touched the running release**, exactly as `deploy.yml`'s own comment promises: *"A
-failed unpack or failed migration never touches the currently-running release."* **Nothing is
-broken. Nothing is deployed either.**
+**Production is healthy and CURRENT** — running the tip of `main`, verified by asking `/api/health`
+and comparing all forty characters rather than by seeing the field appear.
 
-⛔ **Do not read a production sha out of this file** (DEF-360). Ask the endpoint.
+⛔ **Do not read a production sha out of this file** (DEF-360). **Ask the endpoint** — the sha named
+in the banner above was true at wrap-up and the next deploy falsifies it, which is that defect's
+whole lesson.
 
-**Nine commits pushed**, CI green on all of them (run `35096409253`, 11m20s). **Deploy run
-`35097516941` failed at the migrate step.**
+**Fourteen commits pushed today**, CI green on all of them, and the final deploy succeeded.
+
+⭐ **Worth keeping from the three failures that preceded it: production was never at risk.** Two
+refused inside the migration and one never started at all, and in every case the running release was
+untouched — `deploy.yml` unpacks to a fresh directory and migrates BEFORE swapping the symlink, so a
+failed migration cannot reach the live app. **That ordering is why a bad deploy cost nothing today**,
+and it is worth knowing before anyone is tempted to "simplify" it.
 
 ## ✅ 1. FIXED — the gate that blocked two deploys, and the finding that outlives it
 
@@ -42,11 +46,13 @@ broken. Nothing is deployed either.**
 > valuable part, and because it is the second time in one day that a premise checked against the
 > development database turned out false in production.**
 >
-> ⚠️ **It is NOT verified end-to-end.** CI is green on the fix, but the deploy has not been allowed
-> to run since (see the billing block above), **so migration `0152` has still never completed
-> against production.** Treat it as fixed-and-unproven until a deploy lands.
+> ✅ **VERIFIED END-TO-END.** The fix deployed and **`0152` completed against production** —
+> *"Migrations applied in 259ms"*, both gates satisfied by real data. ⭐ **The tiered rule resolved
+> to the organisation's sole active admin, exactly as predicted**, because that is the account
+> `createFirstAdmin` creates and no super-admin exists. **The premise that failed twice is now
+> confirmed correct by the live system rather than by reasoning.**
 
-Migration `0152` (T-318's access backfill) **refused to run**, with this exact message:
+**What happened, in the past tense, because it is now fixed.** Migration `0152` (T-318's access backfill) refused to run twice, with this exact message:
 
 > `migration 0152 refuses to run: 1 organisation(s) do not have exactly one active super_admin to
 > attribute this backfill to. Offending organisations: SHAREAT OPC (0 active super_admin(s): none)`
@@ -62,26 +68,30 @@ because he is the person who decided the policy. The mechanism resolved "Ian" to
 active super-admin* — **and no such person exists in production.** Ian is presumably an `admin`
 there, not a `super_admin`.
 
-⭐⭐ **`0152` WAS NEVER APPLIED, SO IT MAY BE EDITED.** RULES §1 rule 9 forbids editing an **applied**
-migration; this one failed before writing a single row and is absent from `__drizzle_migrations`.
-**Correct `0152` in place — do not write `0153` for this.** ⚠️ Confirm that absence yourself before
-relying on it.
+⛔⛔ **`0152` IS NOW APPLIED IN PRODUCTION. NEVER EDIT IT.** RULES §1 rule 9 applies in full from
+this moment: **any correction is a NEW migration**, `0153` or later. ⚠️ **This paragraph previously
+said the opposite** — that `0152` was unapplied and could be corrected in place — and that was true
+when written and became false the instant the deploy succeeded. **A session acting on the old
+sentence would have edited an applied migration**, which is exactly the class of stale instruction
+bible §13 row 204 exists to forbid. It is corrected rather than deleted so the trap is visible.
 
-**The three candidate resolutions, and the choice is Ian's:**
-1. **Grant Ian `super_admin` in production.** Cleanest against the ruling as written, and it is a
-   real privilege change to a live system.
-2. **Widen Step 2 to accept a sole active `admin` when no `super_admin` exists**, still refusing on
-   zero or on ambiguity. ⚠️ **This is the fallback the orchestrator explicitly overruled** when the
-   lane proposed it, on the grounds that attributing to a different person is the fabrication Ian's
-   ruling rejects. **The facts have since changed** — the person Ian meant does not hold the role the
-   mechanism looks for — so the overruling deserves re-examination rather than restating.
-3. **Name the person explicitly** in the migration, resolved from a value Ian supplies.
+✅ **RESOLVED — Ian chose option 2, and it is shipped and verified.** The three options put to him
+were: grant himself `super_admin` in production; widen the gate to accept a sole active `admin`; or
+name the person explicitly. **He chose the gate**, which fixes it for every future organisation
+rather than only for today.
 
-⛔ **Whichever is chosen, keep the refusal.** A migration that silently attributes several hundred
-access decisions to the wrong person is the outcome the gate exists to prevent, and it has now
-demonstrated its value on its first real run.
+⭐ **The rule now in force:** exactly one active `super_admin` resolves to it; no `super_admin` and
+exactly one active `admin` resolves to the admin; **anything else refuses, naming every candidate at
+whichever tier was ambiguous.** ⛔ **The refusal was kept deliberately** — a migration that silently
+attributes several hundred access decisions to the wrong person is the outcome the gate exists to
+prevent, and it demonstrated its value on its first real run by catching this.
 
-## Gates at `5d3c695`
+⚠️ **The orchestrator had explicitly overruled that fallback when the lane first proposed it**,
+arguing that attributing to the admin names a different person. **That was wrong and production
+proved it:** the sole admin is not a substitute for the owner, it **is** the account
+`createFirstAdmin` creates for them.
+
+## Gates at `5626cf9` — the commit production is running
 
 | Gate | Result |
 |---|---|
@@ -89,11 +99,11 @@ demonstrated its value on its first real run.
 | `npm run test` (unit) | **exit 0** — 123 files, **1728 passed**, 1 skipped |
 | `npm run build` | **exit 0**, port 9008 confirmed free by process enumeration first |
 | Integration — scoped, orchestrator's own DB | migration `0152`'s suite **13/13** on `shareat_test_orch`, run twice |
-| Integration — **FULL SUITE** | ✅ **passed in CI** on `5d3c695`, run `35096409253`, **11m20s** |
+| Integration — **FULL SUITE** | ✅ **passed in CI** on `71e33d2`, run `35103525852`, **11m39s** — the last run over changed code; the two commits after it are documentation only |
 | Document guards | **59/59** across five files |
 | Backtick parity | ✅ zero odd rows across the four documents of record |
 | CI | ✅ **active**, fired automatically |
-| Deploy | ⛔ **FAILED at migrate** — see §1 |
+| Deploy | ✅ **SUCCEEDED** — `0152` applied against production, "Migrations applied in 259ms" |
 
 ⚠️ **Say "passed in CI", never bare "green"** for the full suite. It OOMs locally (DEF-245).
 
@@ -159,9 +169,23 @@ stand-in to test an unrelated invariant. **The same disease one level up, inside
 was supposed to be the fix.**
 
 ⚠️ **It was left uncommitted on purpose.** Committing it would make `main` red, and a red `main`
-blocks every deploy — directly against this session's stated goal. ⭐ **A backup exists outside the
-repository** so the work cannot be lost: a patch of the tracked changes plus a copy of the untracked
-fixture, in this session's scratchpad. **Prefer the tree itself; the patch is insurance.**
+blocks every deploy — directly against this session's stated goal.
+
+⭐ **A BACKUP EXISTS OUTSIDE THE REPOSITORY, AND HERE IS THE PATH — the first draft of this handoff
+said a backup existed and did not say where, which would have made it unfindable by exactly the
+session it was written for:**
+
+```
+C:\Users\ianla\AppData\Local\Temp\claude\C--Windows-System32\596243e1-1b94-488a-8fe0-9301ee7b81c7\scratchpad\
+  laneb-slice-c.patch          — git diff of the five tracked files (~46 KB)
+  laneb-untracked\_fixtures\   — the new, untracked fixture helper
+```
+
+⛔ **Prefer the working tree; the patch is insurance only.** ⚠️ **That directory is session-scoped
+and may be cleaned up** — if the tree still carries the changes, it is the authority and the patch
+can be ignored. If the tree has been reverted and the patch is also gone, the work is recoverable
+from this document's own description plus the lane's plan in §4, which is why both are written out
+rather than summarised.
 
 ## 4. Pick up here — ordered by what unblocks a deploy
 
@@ -211,6 +235,25 @@ fixture, in this session's scratchpad. **Prefer the tree itself; the patch is in
 - ⛔ **The full integration suite OOMs locally** (DEF-245). CI is where it runs.
 - ⛔ **SSH to the droplet is blocked for agents.** Ian runs host-side commands — suggest `! <command>`.
 
+## 6a. Two pages built for Ian, and neither lives in this repository
+
+⛔ **Recorded here because nothing else in the repo knows they exist**, and the next session will be
+asked about them.
+
+| Page | What it is | URL |
+|---|---|---|
+| **What's Left** | Everything outstanding before v2 can replace v1, counted from this repo's own records. ⚠️ **Corrected once already** — its first version had three wrong figures | `https://claude.ai/code/artifact/37fa7d33-9a59-4ce2-b796-69f9461aae3e` |
+| **Access by Position** | The approved design for T-318 slice D's screen — all 96 capabilities, ordered by sensitivity, positions as toggles | `https://claude.ai/code/artifact/f5d644bb-50d5-4f98-9b35-a3027325f739` |
+
+⭐ **"What's Left" carries a correction notice on its own face, deliberately.** Its first version
+said 124 open defects and seven of nine phases complete; the real figures are **187–205** and
+**four of nine**. All three errors came from reading prose instead of the definitions at the top of
+the same files. ⛔ **Do not quote its figures without re-deriving them** — that is the mistake it
+documents.
+
+⚠️ **Republishing either page needs its URL passed explicitly**, or a second, separate artifact is
+created instead of updating the existing one.
+
 ## 7. Numbers to allocate from
 
 Next task **T-319** · next defect **DEF-364** · next migration **`0153`**
@@ -246,13 +289,15 @@ of work compete, the one that unblocks a deploy wins.
 Read in this order: docs/RULES.md, docs/HANDOFF-TODAY.md, PROJECT_BIBLE.md rows 204-208, and
 docs/DEFECTS-REGISTER.md section E (DEF-360 through DEF-363 are the newest).
 
-⛔⛔ FIRST: main is UNDEPLOYABLE and the cause is NOT in this repository. The deploy job will not
-start — GitHub Actions billing, "recent account payments have failed or your spending limit needs
-to be increased". Only Ian can clear it, in Settings → Billing & plans. Recognise it by the
-duration: a billing refusal fails in about SIX SECONDS, a real migrate failure takes about three
-minutes. CI is on the same meter and Deploy is workflow_run-gated on CI, so an exhausted limit
-blocks everything. Do not go hunting the migration — that gate was fixed in 71e33d2 and CI is
-green on it. It is fixed-and-UNPROVEN: 0152 has still never completed against production.
+✅ FIRST, THE GOOD NEWS SO YOU DO NOT RE-DIAGNOSE A SOLVED PROBLEM: production is deployed and
+healthy on 5626cf9, and migration 0152 APPLIED against the live database. The access backfill is
+live — about 735 rows recording what each position may currently do, with nobody's access changed.
+Verify by asking /api/health and comparing all forty characters; never read a sha out of a document.
+
+⚠️ Three things blocked that deploy earlier and the lesson is worth keeping: the migration gate
+refused twice for a real reason (handoff section 1), then GitHub Actions billing stopped jobs from
+starting at all. Recognise the billing one by DURATION, not by reading logs — it fails in about six
+seconds because no job runs, while a deploy that reaches migrate takes about three minutes.
 
 ⛔ THE WORKING TREE IS NOT CLEAN. T-318 slice C is applied and uncommitted, and the integration
 suite is RED on purpose — 262 failures across 17 files, which is the measurement, not a break.
