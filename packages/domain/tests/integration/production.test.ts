@@ -15,6 +15,7 @@ import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { receiveDelivery } from '../../src/deliveries/receive';
 import { quantity } from '../../src/stock/quantity';
 import type { LocationLike } from '../../src/stock-locations/rules';
+import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 
 /**
  * T-176 — production: slab -> slice, recipe -> batch, and the payroll lock.
@@ -152,6 +153,15 @@ beforeEach(async () => {
   fileA = f!.id;
   await seedChartOfAccounts(sql, orgA);
   await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${orgA},'2026-01-01','2026-12-31','open')`;
+
+  const [staffEmployment] = await sql<{ id: string }[]>`
+    insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
+    values (${orgA}, ${storeA}, ${staffId}, 'SE-001', 'regular', '2025-01-01')
+    returning id
+  `;
+  await grantEverydayPositionAccess(sql, {
+    orgId: orgA, storeId: storeA, employmentId: staffEmployment!.id, personId: staffId, setBy: managerId,
+  });
 });
 
 afterAll(async () => {

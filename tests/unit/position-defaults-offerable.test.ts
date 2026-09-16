@@ -8,6 +8,7 @@ import {
 } from '../../packages/auth/src/capabilities';
 import { GRANT_SOURCE_RANK, grantSourceRank, type GrantSource } from '../../packages/db/src/repo/access';
 import { OFFERABLE_TO_POSITIONS } from '../../packages/domain/src/people/position-defaults';
+import { EVERYDAY_CAPABILITIES } from '../../packages/domain/tests/integration/_fixtures/staff-everyday-access';
 
 /**
  * T-289 §C10, §C4, §C5 — no database. `docs/tasks/289-position-access-defaults-spine.md`.
@@ -80,15 +81,29 @@ describe('GRANT_SOURCE_RANK — elevation < position < grant = owner, null ranks
   });
 });
 
-describe('the staff-matrix set and OFFERABLE_TO_POSITIONS are two checks, not one', () => {
-  it('the staff-matrix set is 21 and is NOT removed from OFFERABLE_TO_POSITIONS', () => {
-    const staffMatrixCapabilities = CAPABILITIES.filter((c) => CAPABILITY_MATRIX[c].staff);
-    expect(staffMatrixCapabilities.length).toBe(21);
-    for (const c of staffMatrixCapabilities) {
+describe('T-318 — OFFERABLE_TO_POSITIONS is unaffected by the staff-matrix flip', () => {
+  it('no capability is CAPABILITY_MATRIX[c].staff === true any more — the second check T-318 deleted', () => {
+    // Before T-318, this described block proved "the staff-matrix set is 21, and it is NOT
+    // removed from OFFERABLE_TO_POSITIONS despite a SEPARATE refusal in setPositionDefault —
+    // two checks, not one" (§C10). T-318 (docs/tasks/318-position-decides-access.md Contract 1)
+    // deleted that second check and flipped every one of the 21 to staff: false, so "the
+    // staff-matrix set" can no longer be DERIVED from CAPABILITY_MATRIX — it is empty by
+    // design now (position-defaults.test.ts's Contract-2 case proves the refusal itself is
+    // gone). Pin that emptiness here explicitly, once, so nobody re-derives a stale 21 from
+    // the matrix again by accident.
+    expect(CAPABILITIES.filter((c) => CAPABILITY_MATRIX[c].staff)).toEqual([]);
+  });
+
+  it('Contract 3 — the 21 are still fully offerable; this derivation was never keyed on role', () => {
+    // "The 21" now lives only as the named list T-318's own fixture helper carries (the
+    // single place a caller needs it — its own header comment) — reusing it here instead of
+    // hand-copying a second list, which is the exact drift T-317 invariant 6 exists to stop.
+    expect(EVERYDAY_CAPABILITIES.length).toBe(21); // floor: an emptied import must not pass silently
+    for (const c of EVERYDAY_CAPABILITIES) {
       expect(
         OFFERABLE_TO_POSITIONS,
-        `${c} is staff-matrix but must still be RENDERABLE (shown as inherited, not hidden) — ` +
-          'the derived constant and the separate staff-matrix refusal in setPositionDefault are two checks',
+        `${c} moved off the staff matrix onto position grants but must still be OFFERABLE — ` +
+          'this derivation excludes only SUPER_ADMIN_ONLY, platform-scope and close_period, never a role',
       ).toContain(c);
     }
   });

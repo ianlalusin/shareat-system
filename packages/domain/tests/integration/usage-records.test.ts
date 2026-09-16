@@ -18,6 +18,7 @@ import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { receiveDelivery } from '../../src/deliveries/receive';
 import { quantity } from '../../src/stock/quantity';
 import type { LocationLike } from '../../src/stock-locations/rules';
+import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 
 /**
  * T-168 / DEF-135 — the document layer over `usage.ts`'s already-tested engine.
@@ -146,6 +147,15 @@ beforeEach(async () => {
   await sql`insert into person_store_scope (person_id, store_id) values (${managerId}, ${storeA})`;
   // ⭐ Finding B — scoped to storeB ONLY, never storeA, so acting on a storeA record is refused.
   await sql`insert into person_store_scope (person_id, store_id) values (${otherManagerId}, ${storeB})`;
+  // T-318: Staffer's only capabilities beyond the matrix now come from a position grant.
+  const [employment] = await sql<{ id: string }[]>`
+    insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
+    values (${orgA}, ${storeA}, ${staffId}, 'SE-001', 'regular', '2025-01-01')
+    returning id
+  `;
+  await grantEverydayPositionAccess(sql, {
+    orgId: orgA, storeId: storeA, employmentId: employment!.id, personId: staffId, setBy: managerId,
+  });
   staffActor = { personId: staffId, orgId: orgA };
   managerActor = { personId: managerId, orgId: orgA };
   otherManagerActor = { personId: otherManagerId, orgId: orgA };

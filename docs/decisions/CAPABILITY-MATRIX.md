@@ -28,23 +28,23 @@ they need weekly, the boundary is wrong.
 
 | Capability | Scope | super | admin | manager | staff | Notes |
 |---|---|:--:|:--:|:--:|:--:|---|
-| `record_sale` | store | ✅ | ✅ | ✅ | ✅ | The POS. Everyone on shift |
-| `submit_sales_day` | store | ✅ | ✅ | ✅ | ✅ | Cashier closes their own day |
+| `record_sale` | store | ✅ | ✅ | ✅ | ✗ | The POS. Everyone on shift. ⚠️ **T-318 (2026-09-14):** staff column moved to position-granted, not automatic — Ian's ruling to shrink the staff baseline |
+| `submit_sales_day` | store | ✅ | ✅ | ✅ | ✗ | Cashier closes their own day. ⚠️ **T-318 (2026-09-14):** staff column moved to position-granted, not automatic |
 | `verify_sales_day` | store | ✅ | ✅ | ✅ | ✗ | **Segregation:** the person who submits should not be the one who verifies |
 | `void_sales_day` | store | ✅ | ✅ | ✅ | ✗ | v1's `canVoidRecords`, promoted to a role-level capability |
-| `record_statutory_discount` | store | ✅ | ✅ | ✅ | ✅ | T-137. **Staff-open deliberately** — until POS v2 every row is transcribed from the store's paper SC/PWD logbook, and the person holding that book is a cashier. Manager-gating it is how the register stays empty |
+| `record_statutory_discount` | store | ✅ | ✅ | ✅ | ✗ | T-137. **Staff-open deliberately** — until POS v2 every row is transcribed from the store's paper SC/PWD logbook, and the person holding that book is a cashier. Manager-gating it is how the register stays empty. ⚠️ **T-318 (2026-09-14):** staff column moved to position-granted, not automatic |
 | `void_statutory_discount` | store | ✅ | ✅ | ✅ | ✗ | T-137. **The asymmetry with the row above IS the control.** The burden of proof in a BIR audit is on the seller, so withdrawing a statutory record is supervisory — same shape as `void_sales_day` |
 | `accept_remittance` | store | ✅ | ✅ | ✅ | ✗ | **DEF-052** — in v1 this grant enforced nothing. Here it must have a denial test |
 | `transfer_funds` | store | ✅ | ✅ | ✅ | ✗ | Row 150. Moving money between accounts that already exist is RECORDING, not changing what the books can record against — that is `manage_chart_of_accounts` |
-| `record_till_count` | store | ✅ | ✅ | ✅ | ✅ | T-186. ⭐ **Staff-open deliberately** — the person holding the drawer is the cashier, and a till is counted at open and close by whoever holds it. Manager-gating it is how the record stays empty; same reasoning as `record_statutory_discount` |
+| `record_till_count` | store | ✅ | ✅ | ✅ | ✗ | T-186. ⭐ **Staff-open deliberately** — the person holding the drawer is the cashier, and a till is counted at open and close by whoever holds it. Manager-gating it is how the record stays empty; same reasoning as `record_statutory_discount`. ⚠️ **T-318 (2026-09-14):** staff column moved to position-granted, not automatic |
 | `resolve_till_variance` | store | ✅ | ✅ | ✅ | **✗** | T-186. ⛔ **The asymmetry with the row above IS the control.** Charging a counted shortage names a person and moves `1230`; a cashier must never be able to charge, forgive or write off their own count. Same shape as `submit_sales_day` / `verify_sales_day` |
 
 ## Expenses
 
 | Capability | Scope | super | admin | manager | staff | Notes |
 |---|---|:--:|:--:|:--:|:--:|---|
-| `create_expense` | store | ✅ | ✅ | ✅ | ✅ | Staff record what they spend |
-| `edit_own_expense` | store | ✅ | ✅ | ✅ | ✅ | **Time-boxed** — v1 gives cashiers 48h on their own. Preserve the window. ⭐ **Also gates DELETING a draft** (2026-08-25) — deleting is the last edit you can make to it, so no separate capability exists and the window cannot drift |
+| `create_expense` | store | ✅ | ✅ | ✅ | ✗ | Staff record what they spend. ⚠️ **T-318 (2026-09-14):** staff column moved to position-granted, not automatic |
+| `edit_own_expense` | store | ✅ | ✅ | ✅ | ✗ | **Time-boxed** — v1 gives cashiers 48h on their own. Preserve the window. ⭐ **Also gates DELETING a draft** (2026-08-25) — deleting is the last edit you can make to it, so no separate capability exists and the window cannot drift. ⚠️ **T-318 (2026-09-14):** staff column moved to position-granted, not automatic |
 | `edit_any_expense` | store | ✅ | ✅ | ✅ | ✗ | Also gates deleting a draft once the window has closed, or when the actor is not its creator |
 | `void_expense` | store | ✅ | ✅ | ✅ | ✗ | |
 | `approve_expense` | store | ✅ | ✅ | ✅ | ✗ | |
@@ -53,28 +53,28 @@ they need weekly, the boundary is wrong.
 
 | Capability | Scope | super | admin | manager | staff | Notes |
 |---|---|:--:|:--:|:--:|:--:|---|
-| `record_stock_movement` | store | ✅ | ✅ | ✅ | ✅ | Receiving, transfers, counts |
+| `record_stock_movement` | store | ✅ | ✅ | ✅ | ✗ | Receiving, transfers, counts. ⚠️ **T-318 (2026-09-14):** staff column moved to position-granted, not automatic |
 | `adjust_inventory` | store | ✅ | ✅ | ✅ | ✗ | v1's `canAdjustInventory`. An adjustment is a write-off in disguise |
-| `record_wastage` | store | ✅ | ✅ | ✅ | ✅ | Recording waste must be frictionless, or it goes unrecorded |
+| `record_wastage` | store | ✅ | ✅ | ✅ | ✗ | Recording waste must be frictionless, or it goes unrecorded. ⚠️ **T-318 (2026-09-14):** staff column moved to position-granted, not automatic |
 | `charge_staff_for_discrepancy` | store | ✅ | ✅ | ✅ | ✗ | v1's `canChargeStaff`. Takes money off a person — never staff-level |
-| `transfer_stock` | store | ✅ | ✅ | ✅ | ✅ | T-167. Room-to-room within one store — a floor worker moves crates without finding a manager first, same bar as `record_stock_movement` |
+| `transfer_stock` | store | ✅ | ✅ | ✅ | ✗ | T-167. Room-to-room within one store — a floor worker moves crates without finding a manager first, same bar as `record_stock_movement`. ⚠️ **T-318 (2026-09-14):** staff column moved to position-granted, not automatic |
 | `void_transfer` | store | ✅ | ✅ | ✅ | ✗ | T-167. Voiding is supervisory — same asymmetry as `void_expense` |
-| `record_supplier_return` | store | ✅ | ✅ | ✅ | ✅ | T-170. One act by one person when the goods physically leave — same bar as `record_stock_movement` |
+| `record_supplier_return` | store | ✅ | ✅ | ✅ | ✗ | T-170. One act by one person when the goods physically leave — same bar as `record_stock_movement`. ⚠️ **T-318 (2026-09-14):** staff column moved to position-granted, not automatic |
 | `void_supplier_return` | store | ✅ | ✅ | ✅ | ✗ | T-170. Voiding is supervisory — same asymmetry as `void_transfer`/`void_expense` |
 | `apply_supplier_credit` | store | ✅ | ✅ | ✅ | ✗ | T-170. Spending the `1240` credit inside `recordPayment` — checked separately from `record_ap_payment` even though only manager+ ever holds that one either |
-| `record_customer_return` | store | ✅ | ✅ | ✅ | ✅ | T-179. One act by one person when the goods physically arrive — the AR mirror of `record_supplier_return`, same bar |
+| `record_customer_return` | store | ✅ | ✅ | ✅ | ✗ | T-179. One act by one person when the goods physically arrive — the AR mirror of `record_supplier_return`, same bar. ⚠️ **T-318 (2026-09-14):** staff column moved to position-granted, not automatic |
 | `void_customer_return` | store | ✅ | ✅ | ✅ | ✗ | T-179. Voiding is supervisory — same asymmetry as `void_supplier_return` |
 | `apply_customer_credit` | store | ✅ | ✅ | ✅ | ✗ | T-179. Spending the `2140` credit inside `recordCollection` — the AR mirror of `apply_supplier_credit` |
 | `refund_customer` | store | ✅ | ✅ | ✅ | ✗ | T-179. Paying out cash against a return is a financial decision distinct from recording the goods coming back |
-| `confirm_receipt` | store | ✅ | ✅ | ✅ | ✅ | T-173. ⭐ **Both stores are legitimate callers** — a commissary-side and a branch-side actor, from opposite grants. A branch cook signs for the crates; requiring a manager on site is the rule people work around by sharing a login. The real control is the two-sided STORE check in `confirmReceipt`, not the role |
+| `confirm_receipt` | store | ✅ | ✅ | ✅ | ✗ | T-173. ⭐ **Both stores are legitimate callers** — a commissary-side and a branch-side actor, from opposite grants. A branch cook signs for the crates; requiring a manager on site is the rule people work around by sharing a login. The real control is the two-sided STORE check in `confirmReceipt`, not the role. ⚠️ **T-318 (2026-09-14):** staff column moved to position-granted, not automatic |
 | `resolve_trade_discrepancy` | store | ✅ | ✅ | ✅ | ✗ | T-174. ⛔ Deciding goods were lost, or charging a named person, is a judgement with a posting behind it — same class as `adjust_inventory`. ⚠️ The goods are the COMMISSARY's asset, so `resolveDiscrepancy` also refuses the branch outright, whatever the role |
-| `set_item_threshold` | store | ✅ | ✅ | ✅ | ✅ | T-175, per v1. ⭐ The person who notices the shelf is empty is the person on the floor. An unset threshold is **invisible** — the item simply never appears on the low-stock list — so friction here has no counter-pressure and thresholds silently stay unset |
-| `post_order_message` | store | ✅ | ✅ | ✅ | ✅ | T-175. Either store on the order may talk about it; the thread is append-only, so the worst a wrong message can do is be answered |
-| `place_branch_order` | store | ✅ | ✅ | ✅ | ✅ | T-172 (DEF-136, 2026-09-03). The BRANCH side — draft, lines, submit, answer a proposed substitution, withdraw before dispatch. ⭐ Staff-open: the person who notices the shelf is empty is the one who orders, same bar as `set_item_threshold`; v1 gates none of the order flow by role. Store-scoped to the **branch** (`requested_by_store_id`), so a commissary-only login cannot edit a branch's ask — that is invariant 10's "each field has one owner", enforced by WHICH store the capability resolves at |
-| `fulfil_branch_order` | store | ✅ | ✅ | ✅ | ✅ | T-172. The COMMISSARY side — accept, reject, adjust quantity/rate/room, propose a substitution, mark ready. Staff-open: packing crates is floor work. Store-scoped to the **commissary** (`store_id`), so a branch login cannot touch fulfilment fields. Nothing posts |
+| `set_item_threshold` | store | ✅ | ✅ | ✅ | ✗ | T-175, per v1. ⭐ The person who notices the shelf is empty is the person on the floor. An unset threshold is **invisible** — the item simply never appears on the low-stock list — so friction here has no counter-pressure and thresholds silently stay unset. ⚠️ **T-318 (2026-09-14):** staff column moved to position-granted, not automatic |
+| `post_order_message` | store | ✅ | ✅ | ✅ | ✗ | T-175. Either store on the order may talk about it; the thread is append-only, so the worst a wrong message can do is be answered. ⚠️ **T-318 (2026-09-14):** staff column moved to position-granted, not automatic |
+| `place_branch_order` | store | ✅ | ✅ | ✅ | ✗ | T-172 (DEF-136, 2026-09-03). The BRANCH side — draft, lines, submit, answer a proposed substitution, withdraw before dispatch. ⭐ Staff-open: the person who notices the shelf is empty is the one who orders, same bar as `set_item_threshold`; v1 gates none of the order flow by role. Store-scoped to the **branch** (`requested_by_store_id`), so a commissary-only login cannot edit a branch's ask — that is invariant 10's "each field has one owner", enforced by WHICH store the capability resolves at. ⚠️ **T-318 (2026-09-14):** staff column moved to position-granted, not automatic |
+| `fulfil_branch_order` | store | ✅ | ✅ | ✅ | ✗ | T-172. The COMMISSARY side — accept, reject, adjust quantity/rate/room, propose a substitution, mark ready. Staff-open: packing crates is floor work. Store-scoped to the **commissary** (`store_id`), so a branch login cannot touch fulfilment fields. Nothing posts. ⚠️ **T-318 (2026-09-14):** staff column moved to position-granted, not automatic |
 | `dispatch_branch_order` | store | ✅ | ✅ | ✅ | ✗ | T-172. ⛔ **The posting event** — stock leaves the commissary into `1340` at FIFO cost. Not staff, same asymmetry as `dispatch_wholesale_order`. ⚠️ Separate from `confirm_receipt` (phase plan §5.4): dispatch and receipt are two acts by two stores, and a person may hold one without the other |
 | `manage_locations` | store | ✅ | ✅ | ✅ | ✗ | T-160 (DEF-135, 2026-09-03). Create, rename, re-role, set the default and deactivate a store's rooms. Manager+, as v1's location CRUD is (`inventory-location.actions.ts` gates on `isAdmin \|\| isManager`); v1's admin-only DELETE has no v2 counterpart because a room with history is deactivated, never deleted (T-160 invariant 7). ⚠️ `allocate_stock` (manual item→room reallocation, admin-only in v1) is NOT declared: nothing calls it — day-to-day moves are `transfer_stock` |
-| `receive_delivery` | store | ✅ | ✅ | ✅ | ✅ | T-166 (DEF-135). Draft a delivery or purchase, its lines and its photo, and receive it into a room. ⭐ Staff-open, same reasoning as `confirm_receipt`: the person signing for the crates at the dock is a cook or a cashier, and a manager-only gate is the rule people work around by sharing a login. The photo gate (a CHECK) and the shortage trigger are the controls, not the role |
+| `receive_delivery` | store | ✅ | ✅ | ✅ | ✗ | T-166 (DEF-135). Draft a delivery or purchase, its lines and its photo, and receive it into a room. ⭐ Staff-open, same reasoning as `confirm_receipt`: the person signing for the crates at the dock is a cook or a cashier, and a manager-only gate is the rule people work around by sharing a login. The photo gate (a CHECK) and the shortage trigger are the controls, not the role. ⚠️ **T-318 (2026-09-14):** staff column moved to position-granted, not automatic |
 | `allow_over_receipt` | store | ✅ | ✅ | ✅ | ✗ | T-166 invariant 3, kept from v1: *"suppliers sometimes legitimately send extra"* — allowed, but only with an explicit flag AND a manager. A cashier passing the flag is refused; the trigger refuses the line without it |
 | `post_usage` | store | ✅ | ✅ | ✅ | ✗ | T-168 (DEF-135). ⭐ **Posting is the only step that moves stock and hits the P&L** — *a floor worker records; a manager posts* (T-168 §3). Drafting a usage stays under `record_stock_movement` and a wastage under `record_wastage`, both staff-open, so recording is never blocked on finding a manager |
 | `void_usage_record` | store | ✅ | ✅ | ✅ | ✗ | T-168. Voiding is supervisory — same asymmetry as `void_transfer` / `void_expense` |
@@ -83,9 +83,9 @@ they need weekly, the boundary is wrong.
 | `post_production` | store | ✅ | ✅ | ✅ | ✗ | T-176. Manager+, same asymmetry as `post_usage` — a floor worker drafts a slicing/cooking run under `record_stock_movement`; posting moves stock and the books |
 | `edit_posted_production` | store | ✅ | ✅ | ✅ | ✗ | T-176. Reverses and re-applies a posted record's legs in place, incrementing its revision — supervisory, same bar as posting |
 | `void_production` | store | ✅ | ✅ | ✅ | ✗ | T-176. Voiding is supervisory — same asymmetry as `void_transfer`/`void_usage_record` |
-| `record_order_wastage` | store | ✅ | ✅ | ✅ | ✅ | T-178. A refunded or remade channel/dine-in order — staff-open, same bar as `record_wastage`: the person who hits it is the person who knows |
+| `record_order_wastage` | store | ✅ | ✅ | ✅ | ✗ | T-178. A refunded or remade channel/dine-in order — staff-open, same bar as `record_wastage`: the person who hits it is the person who knows. ⚠️ **T-318 (2026-09-14):** staff column moved to position-granted, not automatic |
 | `manage_pos_map` | store | ✅ | ✅ | ✅ | ✗ | T-177. A standing "this POS item means this stock item" decision — configuration, same bar as `manage_locations`/`manage_items` |
-| `request_pos_map` | store | ✅ | ✅ | ✅ | ✅ | T-177 invariant 7. Staff-open, same bar as `record_stock_movement` — the person who hits an unmappable item mid-pull is the person who knows, and the request itself moves no stock |
+| `request_pos_map` | store | ✅ | ✅ | ✅ | ✗ | T-177 invariant 7. Staff-open, same bar as `record_stock_movement` — the person who hits an unmappable item mid-pull is the person who knows, and the request itself moves no stock. ⚠️ **T-318 (2026-09-14):** staff column moved to position-granted, not automatic |
 | `decide_pos_map_request` | store | ✅ | ✅ | ✅ | ✗ | T-177. Approving records a `no_stock` decision; rejecting returns the item to unmapped — both are judgement calls, not staff-level |
 | `finalize_pos_usage_pull` | store | ✅ | ✅ | ✅ | ✗ | T-177 invariant 5. Finalizing writes real usage records and posts through the ledger — same asymmetry as `post_usage`/`post_production` |
 | `resolve_order_wastage` | store | ✅ | ✅ | ✅ | ✗ | T-178. Deciding platform-paid / store-absorbed / staff-charged is a judgement with a posting behind it — same class as `adjust_inventory`/`resolve_trade_discrepancy` |
@@ -108,7 +108,7 @@ they need weekly, the boundary is wrong.
 | `run_cutover` | org | ✅ | ✅ | ✅ | ✗ | T-134. ⭐ **ORG-scoped, not store** — the conversion is one org-level event and most of its steps belong to no store at all. ⚠️ The per-store discipline is not lost to that: a per-store step DEMANDS a `storeId` and writes one row per store, so a single tick still cannot hide a store nobody visited. Manager attests; the domain layer holds the purge and the opening entry to admin on top of this, because C2 and C5 are irreversible in practice |
 | `approve_item` | org | ✅ | ✗ | ✗ | ✗ | T-148. ⭐ **Super-admin alone** — the only such row in this matrix. Ian, 2026-08-28: *"superadmin only can add 1 global item."* Admins and managers request; a super-admin decides. An item is the identity every price and supplier link keys on, and a duplicate is not a row you delete afterwards — it is a price history split in two |
 | `manage_items` | org | ✅ | ✅ | ✅ | ✗ | T-145. The item master is org-wide master data — v1's per-store items are why the same product exists as 187 duplicate records. Same bar as `approve_supplier` |
-| `record_supplier_invoice` | store | ✅ | ✅ | ✅ | ✅ | T-130. Logging a pending invoice moves no money — same bar as `create_expense` |
+| `record_supplier_invoice` | store | ✅ | ✅ | ✅ | ✗ | T-130. Logging a pending invoice moves no money — same bar as `create_expense`. ⚠️ **T-318 (2026-09-14):** staff column moved to position-granted, not automatic |
 | `verify_supplier_invoice` | store | ✅ | ✅ | ✅ | ✗ | T-130. Ian, 2026-08-27: *"yes manager verifies receipts."* The verification IS the approval — recording the expense against a verified invoice still needs `approve_expense` too, so only a manager can complete the whole flow |
 | `void_supplier_invoice` | store | ✅ | ✅ | ✅ | ✗ | T-130. Cascades through the existing expense-void primitive for every linked expense — never a reimplemented reversal |
 
@@ -116,7 +116,7 @@ they need weekly, the boundary is wrong.
 
 | Capability | Scope | super | admin | manager | staff | Notes |
 |---|---|:--:|:--:|:--:|:--:|---|
-| `create_wholesale_order` | store | ✅ | ✅ | ✅ | ✅ | Staff-entered by design |
+| `create_wholesale_order` | store | ✅ | ✅ | ✅ | ✗ | Staff-entered by design. ⚠️ **T-318 (2026-09-14):** staff column moved to position-granted, not automatic |
 | `dispatch_wholesale_order` | store | ✅ | ✅ | ✅ | ✗ | **The billing event** (discovery 19 §1) and the credit-limit gate. Not staff |
 
 ## Books and reporting

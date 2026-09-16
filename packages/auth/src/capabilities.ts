@@ -550,8 +550,12 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
 // -----------------------------------------------------------------------------------------
 
 export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role, boolean>>>> = {
-  record_sale: { super_admin: true, admin: true, manager: true, staff: true },
-  submit_sales_day: { super_admin: true, admin: true, manager: true, staff: true },
+  // ⚠️ T-318 (2026-09-14): the 21 `staff` cells below moved from automatic (role matrix) to
+  // position-granted (person_grants materialised by a position default) — Ian's ruling to shrink
+  // the staff baseline. See docs/decisions/CAPABILITY-MATRIX.md's per-row T-318 notes and
+  // docs/tasks/318-position-decides-access.md. `manager`/`admin`/`super_admin` are untouched.
+  record_sale: { super_admin: true, admin: true, manager: true, staff: false },
+  submit_sales_day: { super_admin: true, admin: true, manager: true, staff: false },
   verify_sales_day: { super_admin: true, admin: true, manager: true, staff: false },
   void_sales_day: { super_admin: true, admin: true, manager: true, staff: false },
   // ⭐ Recording is STAFF-open on purpose, and it is the only way this table gets filled. There is
@@ -559,13 +563,13 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   // created while the customer is still at the counter — and the person standing there is a
   // cashier, not a manager. ⛔ Gating this to managers would not make the register stricter; it
   // would make it EMPTY, because nothing downstream can reconstruct a name or an ID number later.
-  record_statutory_discount: { super_admin: true, admin: true, manager: true, staff: true },
+  record_statutory_discount: { super_admin: true, admin: true, manager: true, staff: false },
   // ⛔ Voiding is NOT, and the asymmetry is the control. The burden of proof in a BIR audit is on
   // the seller, so withdrawing a statutory record is a supervisory act - same shape as
   // void_sales_day directly above.
   void_statutory_discount: { super_admin: true, admin: true, manager: true, staff: false },
   accept_remittance: { super_admin: true, admin: true, manager: true, staff: false },
-  record_till_count: { super_admin: true, admin: true, manager: true, staff: true },
+  record_till_count: { super_admin: true, admin: true, manager: true, staff: false },
   resolve_till_variance: { super_admin: true, admin: true, manager: true, staff: false },
   // DECIDED — Ian 2026-08-26 (bible row 150): manager, deliberately NOT admin-only.
   // ⭐ Row 149 made OPENING an account admin-only, and the distinction between the two is
@@ -575,31 +579,31 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   // cashier to office — cannot coherently be barred from moving ₱500 between two drawers.
   transfer_funds: { super_admin: true, admin: true, manager: true, staff: false },
 
-  create_expense: { super_admin: true, admin: true, manager: true, staff: true },
-  edit_own_expense: { super_admin: true, admin: true, manager: true, staff: true },
+  create_expense: { super_admin: true, admin: true, manager: true, staff: false },
+  edit_own_expense: { super_admin: true, admin: true, manager: true, staff: false },
   edit_any_expense: { super_admin: true, admin: true, manager: true, staff: false },
   void_expense: { super_admin: true, admin: true, manager: true, staff: false },
   approve_expense: { super_admin: true, admin: true, manager: true, staff: false },
 
-  record_stock_movement: { super_admin: true, admin: true, manager: true, staff: true },
+  record_stock_movement: { super_admin: true, admin: true, manager: true, staff: false },
   adjust_inventory: { super_admin: true, admin: true, manager: true, staff: false },
-  record_wastage: { super_admin: true, admin: true, manager: true, staff: true },
+  record_wastage: { super_admin: true, admin: true, manager: true, staff: false },
   charge_staff_for_discrepancy: { super_admin: true, admin: true, manager: true, staff: false },
   // T-167. Staff-open, same bar as record_stock_movement: a floor worker moves crates between
   // rooms without finding a manager first.
-  transfer_stock: { super_admin: true, admin: true, manager: true, staff: true },
+  transfer_stock: { super_admin: true, admin: true, manager: true, staff: false },
   // ⛔ Voiding is supervisory, same asymmetry as void_expense / void_statutory_discount.
   void_transfer: { super_admin: true, admin: true, manager: true, staff: false },
   // T-170. Staff-open — a return is one act by one person when the goods physically leave, same
   // bar as record_stock_movement.
-  record_supplier_return: { super_admin: true, admin: true, manager: true, staff: true },
+  record_supplier_return: { super_admin: true, admin: true, manager: true, staff: false },
   void_supplier_return: { super_admin: true, admin: true, manager: true, staff: false },
   // Same level as record_ap_payment, the capability the call it lives inside already requires —
   // spending a credit is at least as consequential as recording the payment itself.
   apply_supplier_credit: { super_admin: true, admin: true, manager: true, staff: false },
 
   // T-179. Staff-open — the AR mirror of record_supplier_return, same reasoning.
-  record_customer_return: { super_admin: true, admin: true, manager: true, staff: true },
+  record_customer_return: { super_admin: true, admin: true, manager: true, staff: false },
   void_customer_return: { super_admin: true, admin: true, manager: true, staff: false },
   // Same level as apply_supplier_credit — spending or paying out is a financial decision.
   apply_customer_credit: { super_admin: true, admin: true, manager: true, staff: false },
@@ -608,21 +612,21 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   // ⭐ Staff too: a branch cook signs for the crates that arrive, and requiring a manager on site
   // to accept a delivery is the rule people work around by sharing a login. The two-sided store
   // check is the real control here, not the role.
-  confirm_receipt: { super_admin: true, admin: true, manager: true, staff: true },
+  confirm_receipt: { super_admin: true, admin: true, manager: true, staff: false },
   // ⛔ Manager and up. Deciding that goods were lost, or charging a named person for them, is a
   // judgement with a posting behind it — the same class as `adjust_inventory`.
   resolve_trade_discrepancy: { super_admin: true, admin: true, manager: true, staff: false },
   // ⭐ Staff too, per v1: the person who notices the shelf is empty is the person on the floor,
   // and making them find a manager is how thresholds stay unset (DEF-100's neighbour — an unset
   // threshold is invisible, so friction here has no counter-pressure).
-  set_item_threshold: { super_admin: true, admin: true, manager: true, staff: true },
-  post_order_message: { super_admin: true, admin: true, manager: true, staff: true },
+  set_item_threshold: { super_admin: true, admin: true, manager: true, staff: false },
+  post_order_message: { super_admin: true, admin: true, manager: true, staff: false },
   // ⭐ T-172. Both SIDES of the order are staff-open, and the posting event is not. v1 gates none
   // of the order flow by role (only discrepancy resolution checks isManager); v2 keeps that for
   // the conversation — draft, submit, accept, pack, propose, answer — and holds the one act that
   // moves stock and posts to `1340` to the same bar as dispatch_wholesale_order.
-  place_branch_order: { super_admin: true, admin: true, manager: true, staff: true },
-  fulfil_branch_order: { super_admin: true, admin: true, manager: true, staff: true },
+  place_branch_order: { super_admin: true, admin: true, manager: true, staff: false },
+  fulfil_branch_order: { super_admin: true, admin: true, manager: true, staff: false },
   dispatch_branch_order: { super_admin: true, admin: true, manager: true, staff: false },
 
   // DEF-135 (2026-09-03). The pattern across all four documents is the one this matrix already
@@ -632,7 +636,7 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   manage_locations: { super_admin: true, admin: true, manager: true, staff: false },
   // T-166: staff too — the person signing for the crates is a cook or a cashier (confirm_receipt's
   // reasoning). The photo CHECK and the shortage trigger are the controls, not the role.
-  receive_delivery: { super_admin: true, admin: true, manager: true, staff: true },
+  receive_delivery: { super_admin: true, admin: true, manager: true, staff: false },
   // ⛔ Over-receipt is a gated exception, never a silent cashier bypass (T-166 invariant 3).
   allow_over_receipt: { super_admin: true, admin: true, manager: true, staff: false },
   // T-168: a floor worker DRAFTS (record_stock_movement / record_wastage); a manager POSTS.
@@ -681,12 +685,12 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   // is the identity every price, every supplier link and every future OCR match keys on, and a
   // duplicate identity is not a row to delete afterwards — it is a price history split in two.
   approve_item: { super_admin: true, admin: false, manager: false, staff: false },
-  record_supplier_invoice: { super_admin: true, admin: true, manager: true, staff: true },
+  record_supplier_invoice: { super_admin: true, admin: true, manager: true, staff: false },
   // DECIDED — Ian 2026-08-27: "yes manager verifies receipts."
   verify_supplier_invoice: { super_admin: true, admin: true, manager: true, staff: false },
   void_supplier_invoice: { super_admin: true, admin: true, manager: true, staff: false },
 
-  create_wholesale_order: { super_admin: true, admin: true, manager: true, staff: true },
+  create_wholesale_order: { super_admin: true, admin: true, manager: true, staff: false },
   dispatch_wholesale_order: { super_admin: true, admin: true, manager: true, staff: false },
 
   view_financial_reports: { super_admin: true, admin: true, manager: true, staff: false },
@@ -765,7 +769,7 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   // SECOND, stricter gate on top of resolve_order_wastage — same asymmetry as
   // resolve_trade_discrepancy/charge_staff_for_discrepancy. Reversing an auto-charge is
   // supervisory too, same bar as reverse_entry.
-  record_order_wastage: { super_admin: true, admin: true, manager: true, staff: true },
+  record_order_wastage: { super_admin: true, admin: true, manager: true, staff: false },
   resolve_order_wastage: { super_admin: true, admin: true, manager: true, staff: false },
   charge_staff_for_wastage: { super_admin: true, admin: true, manager: true, staff: false },
   reverse_auto_charge: { super_admin: true, admin: true, manager: true, staff: false },
@@ -775,7 +779,7 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   // the person who knows. Deciding a request and finalizing a pull are both supervisory: the
   // former is a judgement call, the latter is the step that writes real usage records and posts.
   manage_pos_map: { super_admin: true, admin: true, manager: true, staff: false },
-  request_pos_map: { super_admin: true, admin: true, manager: true, staff: true },
+  request_pos_map: { super_admin: true, admin: true, manager: true, staff: false },
   decide_pos_map_request: { super_admin: true, admin: true, manager: true, staff: false },
   finalize_pos_usage_pull: { super_admin: true, admin: true, manager: true, staff: false },
 

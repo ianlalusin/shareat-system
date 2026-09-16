@@ -31,7 +31,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 }
 
 import { APP_ROLE, transaction, type Tx } from '@shareat/db';
-import { AuthorizationError, type Actor, type Capability } from '@shareat/auth';
+import { authorize, AuthorizationError, type Actor, type Capability } from '@shareat/auth';
 import { assignRole, grantCapabilityAsActor } from '@shareat/auth';
 import {
   createEmployment,
@@ -458,11 +458,22 @@ describe('T-289 case 11 — denials, each refused at the domain', () => {
     );
   });
 
-  it('a staff-matrix capability is refused — a position default would change nothing', async () => {
+  it('T-318 Contract 2 — a former staff-matrix capability is now ACCEPTED, not refused', async () => {
+    // Until T-318, record_sale was one of 21 cells automatic for every 'staff' role, so a
+    // position default for it "would be a row that changes nothing" and this test asserted
+    // the refusal. T-318 shrank the staff baseline (docs/tasks/318-position-decides-access.md)
+    // — the 21 moved OFF the matrix onto position grants, so the refusal's own premise is now
+    // false, and Contract 2 requires the opposite: setPositionDefault accepts all 21.
     const f = await fixture('c11g');
-    await expect(setDefault(f.orgId, f.admin, f.cashierId, f.storeAId, 'record_sale', true)).rejects.toThrow(
-      PositionDefaultError,
-    );
+    const holder = await hireStaff(f, { storeId: f.storeAId, positionIds: [f.cashierId] });
+
+    const result = await setDefault(f.orgId, f.admin, f.cashierId, f.storeAId, 'record_sale', true);
+    expect(result.wroteDefault).toBe(true);
+    expect(result.affected).toBe(1);
+
+    const holderGrants = await activeGrants(holder.personId);
+    expect(holderGrants.map((g) => g.grant_name)).toContain('record_sale');
+    expect(holderGrants.find((g) => g.grant_name === 'record_sale')!.grant_source).toBe('position');
   });
 });
 
@@ -631,4 +642,67 @@ describe('T-289 case 13 — migration 0146 applies to an empty database, and adm
       }
     }
   }, 120_000);
+});
+
+// ---------------------------------------------------------------------------------------------
+// T-318 — THE TEST THAT IS THE WHOLE TASK. Ian's own report: "still cant turn off record_sale
+// submit_sales_day on dishwasher role and server and panda role they do not have this." Two
+// people, one store, two DIFFERENT positions, one capability — one holds it, one is refused.
+// This is what would have answered his question without anybody opening a screen.
+// ---------------------------------------------------------------------------------------------
+
+describe('T-318 — a position decides what a person may do', () => {
+  it('Dishwasher is refused submit_sales_day; Server, same store, holds it', async () => {
+    const f = await fixture('t318');
+
+    // 'Dishwasher' and 'Server' are two of the six CANONICAL positions (org-level,
+    // store_id null — `CANONICAL_POSITIONS` in packages/db/schema/employment.ts), already
+    // seeded by fixture()'s call to seedCanonicalPositions, exactly like f.cashierId/f.cookId
+    // above. A canonical position still gets a PER-STORE default via setPositionDefault's
+    // storeId argument (case 1 does this for Cashier) — upsertStorePosition is for a
+    // STORE-INVENTED position only and refuses a name that already exists canonically.
+    const [dishwasher] = await sql<{ id: string }[]>`
+      select id from positions where org_id = ${f.orgId} and store_id is null and name = 'Dishwasher'`;
+    const [server] = await sql<{ id: string }[]>`
+      select id from positions where org_id = ${f.orgId} and store_id is null and name = 'Server'`;
+
+    // ⛔ THE TRAP (T-302's gate-leg tests failed this way): two people who share a POSITION
+    // prove nothing. Pin the precondition explicitly so a future edit cannot silently collapse
+    // it — different positions, same store.
+    expect(dishwasher!.id).not.toBe(server!.id);
+
+    // Server gets the default; Dishwasher does not — reproducing Ian's exact report, where
+    // Dishwasher and Server both lacked a way to turn this off (or on) at all.
+    await setDefault(f.orgId, f.admin, server!.id, f.storeAId, 'submit_sales_day', true);
+
+    const dishwasherPerson = await hireStaff(f, {
+      storeId: f.storeAId,
+      positionIds: [dishwasher!.id],
+      name: 'Dishwasher Person',
+    });
+    const serverPerson = await hireStaff(f, {
+      storeId: f.storeAId,
+      positionIds: [server!.id],
+      name: 'Server Person',
+    });
+    // hireStaff only creates the employment/position link — a real actor also needs an active
+    // role and store scope, exactly as any real staff member would (fixture()'s admin/manager
+    // personas above get the same two rows for the same reason).
+    for (const personId of [dishwasherPerson.personId, serverPerson.personId]) {
+      await sql`insert into person_roles (person_id, org_id, role) values (${personId}, ${f.orgId}, 'staff')`;
+      await sql`insert into person_store_scope (person_id, store_id) values (${personId}, ${f.storeAId})`;
+    }
+
+    // Both people, same store — the halves of the trap the "different position" check above
+    // does not cover on its own.
+    const dishwasherActor: Actor = { personId: dishwasherPerson.personId, orgId: f.orgId };
+    const serverActor: Actor = { personId: serverPerson.personId, orgId: f.orgId };
+
+    await expect(
+      asOrg(f.orgId, (tx) => authorize(tx, dishwasherActor, 'submit_sales_day', { storeId: f.storeAId })),
+    ).rejects.toThrow(AuthorizationError);
+    await expect(
+      asOrg(f.orgId, (tx) => authorize(tx, serverActor, 'submit_sales_day', { storeId: f.storeAId })),
+    ).resolves.toBeUndefined();
+  });
 });

@@ -33,6 +33,7 @@ import { CUTOVER_CLASSIFICATION } from '../../../db/src/cutover/classification';
 import { RLS_REGISTRY } from '../../../db/src/rls/registry';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
+import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 import {
   createSalesDay,
   TransitShortfallBlockedError,
@@ -110,6 +111,15 @@ async function setup(hint: string): Promise<Fixture> {
   };
   const walkInChannelId = await mkChannel('Walk-in', true, null);
   const foodpandaChannelId = await mkChannel('Foodpanda', false, '1220');
+
+  const [staffEmployment] = await sql<{ id: string }[]>`
+    insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
+    values (${orgId}, ${storeId}, ${staffId}, ${uid('SE')}, 'regular', '2025-01-01')
+    returning id
+  `;
+  await grantEverydayPositionAccess(sql, {
+    orgId, storeId, employmentId: staffEmployment!.id, personId: staffId, setBy: managerId,
+  });
 
   return { orgId, storeId, storeId2, staffId, managerId, adminId, walkInChannelId, foodpandaChannelId };
 }

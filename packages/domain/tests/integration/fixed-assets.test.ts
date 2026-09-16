@@ -46,6 +46,7 @@ import {
 } from '@shareat/domain';
 import { money } from '@shareat/core/money';
 import { CAPITALISATION_DEFAULTS } from '@shareat/domain';
+import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 
 const sql = postgres(url, { max: 5 });
 
@@ -96,13 +97,20 @@ async function setup(hint: string): Promise<Fixture> {
     return r!.id;
   };
 
-  return {
-    orgId,
-    storeId,
-    staffId: await mkPerson(`${hint} Staff`, 'staff'),
-    managerId: await mkPerson(`${hint} Manager`, 'manager'),
-    adminId: await mkPerson(`${hint} Admin`, 'admin'),
-  };
+  const staffId = await mkPerson(`${hint} Staff`, 'staff');
+  const managerId = await mkPerson(`${hint} Manager`, 'manager');
+  const adminId = await mkPerson(`${hint} Admin`, 'admin');
+
+  const [employment] = await sql<{ id: string }[]>`
+    insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
+    values (${orgId}, ${storeId}, ${staffId}, ${uid('SE')}, 'regular', '2025-01-01')
+    returning id
+  `;
+  await grantEverydayPositionAccess(sql, {
+    orgId, storeId, employmentId: employment!.id, personId: staffId, setBy: adminId,
+  });
+
+  return { orgId, storeId, staffId, managerId, adminId };
 }
 
 async function asPerson<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {

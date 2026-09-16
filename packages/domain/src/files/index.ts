@@ -69,8 +69,10 @@ export function isImageContentType(contentType: string): boolean {
 /** The capability that governs the THING, not a generic "may upload". */
 const PURPOSE_CAPABILITY: Record<FilePurpose, Parameters<typeof authorize>[2]> = {
   // ⭐ T-130 moved the receipt photo from the expense to the supplier INVOICE, so the capability
-  // that governs the thing moved with it. No access changes — both are granted to staff — but a
-  // photo is now attached while logging a bill, which is not the same act as recording a spend.
+  // that governs the thing moved with it. A photo is attached while logging a bill, which is not
+  // the same act as recording a spend. ⚠️ T-318 (2026-09-14): `record_supplier_invoice` and
+  // `record_wastage` below are no longer automatic for `staff` — a position grant now decides who
+  // holds them, same as everyone else the matrix once granted them to.
   receipt_photo: 'record_supplier_invoice',
   ar_collection_proof: 'record_ar_collection',
   memo_document: 'manage_users',

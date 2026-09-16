@@ -51,6 +51,7 @@ import {
   decideCashRequest,
   releaseCashRequest,
 } from '@shareat/domain';
+import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -119,6 +120,14 @@ async function setup(hint: string): Promise<Fixture> {
   };
   const staffId = await person(`${hint} Ana`, 'staff');
   const managerId = await person(`${hint} Manager`, 'manager');
+  const [employment] = await sql<{ id: string }[]>`
+    insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
+    values (${orgId}, ${storeId}, ${staffId}, ${uid('SE')}, 'regular', '2025-01-01')
+    returning id
+  `;
+  await grantEverydayPositionAccess(sql, {
+    orgId, storeId, employmentId: employment!.id, personId: staffId, setBy: managerId,
+  });
 
   // ⭐ NOT inserted — `stores_seed_foundation_money_accounts` (migration 0029) already created
   // the five every store has from the moment it exists (bible row 156), Staff float among them.
@@ -290,6 +299,14 @@ describe('T-266 §4 — an expense paid from a staff float', () => {
       insert into persons (org_id, display_name) values (${f.orgId}, 'Ben Reyes') returning id`;
     await sql`insert into person_roles (person_id, org_id, role) values (${ben!.id}, ${f.orgId}, 'staff')`;
     await sql`insert into person_store_scope (person_id, store_id) values (${ben!.id}, ${f.storeId})`;
+    const [benEmployment] = await sql<{ id: string }[]>`
+      insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
+      values (${f.orgId}, ${f.storeId}, ${ben!.id}, ${uid('SE')}, 'regular', '2025-01-01')
+      returning id
+    `;
+    await grantEverydayPositionAccess(sql, {
+      orgId: f.orgId, storeId: f.storeId, employmentId: benEmployment!.id, personId: ben!.id, setBy: f.managerId,
+    });
 
     const anaRequest = await releaseFloatTo(f, f.staffId, '2000.00');
     const benRequest = await releaseFloatTo(f, ben!.id, '1000.00');

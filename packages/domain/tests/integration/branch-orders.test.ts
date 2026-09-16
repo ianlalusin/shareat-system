@@ -46,6 +46,7 @@ import {
 } from '@shareat/domain';
 import { receiveDelivery } from '../../src/deliveries/receive';
 import { quantity } from '../../src/stock/quantity';
+import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -164,6 +165,19 @@ async function fixture() {
   const [file] = await sql<{ id: string }[]>`
     insert into stored_files (org_id, storage_path, content_type, byte_size, checksum, purpose, uploaded_by)
     values (${orgId}, ${'orgs/' + orgId + '/p.jpg'}, 'image/jpeg', 10, ${uid('x')}, 'receipt_photo', ${superAdmin.personId}) returning id`;
+
+  const mkEmploymentAndGrant = async (storeId: string, personId: string) => {
+    const [employment] = await sql<{ id: string }[]>`
+      insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
+      values (${orgId}, ${storeId}, ${personId}, ${uid('SE')}, 'regular', '2025-01-01')
+      returning id
+    `;
+    await grantEverydayPositionAccess(sql, {
+      orgId, storeId, employmentId: employment!.id, personId, setBy: superAdmin.personId,
+    });
+  };
+  await mkEmploymentAndGrant(br.id, branchStaff.personId);
+  await mkEmploymentAndGrant(com.id, comStaff.personId);
 
   return {
     orgId, com, br, other, comKitchen, comDry, brKitchen,

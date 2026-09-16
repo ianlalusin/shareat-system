@@ -33,6 +33,7 @@ import {
   recordPayment,
   getApAgingReport,
 } from '@shareat/domain';
+import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -81,6 +82,14 @@ async function fixture(hint: string) {
     await sql`insert into person_store_scope (person_id, store_id) values (${manager!.id}, ${s})`;
     await sql`insert into person_store_scope (person_id, store_id) values (${staff!.id}, ${s})`;
   }
+  const [employment] = await sql<{ id: string }[]>`
+    insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
+    values (${orgId}, ${storeId}, ${staff!.id}, ${uid('SE')}, 'regular', '2025-01-01')
+    returning id
+  `;
+  await grantEverydayPositionAccess(sql, {
+    orgId, storeId, employmentId: employment!.id, personId: staff!.id, setBy: manager!.id,
+  });
   const [drawer] = await sql<{ id: string }[]>`
     select id from money_accounts where store_id = ${storeId}
       and instrument = 'cash' and custodian = 'cashier' and is_foundation

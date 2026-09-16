@@ -13,6 +13,7 @@ import {
   transferNow,
   voidTransfer,
 } from '@shareat/domain';
+import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 
 /**
  * T-167 — stock transfers between two rooms of one store.
@@ -111,6 +112,15 @@ async function fixture(): Promise<Fixture> {
     values (${orgId}, ${uid('ITEM')}, 'Pork Belly', 'raw_material', 'kg', ${staff!.id}) returning id`;
 
   await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${orgId}, '2020-01-01', '2035-12-31', 'open')`;
+
+  const [staffEmployment] = await sql<{ id: string }[]>`
+    insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
+    values (${orgId}, ${storeId}, ${staff!.id}, ${uid('SE')}, 'regular', '2025-01-01')
+    returning id
+  `;
+  await grantEverydayPositionAccess(sql, {
+    orgId, storeId, employmentId: staffEmployment!.id, personId: staff!.id, setBy: manager!.id,
+  });
 
   return {
     orgId,

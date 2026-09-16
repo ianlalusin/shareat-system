@@ -69,24 +69,44 @@ describe('gridCapabilityGroups — exactly the offerable set, grouped by CAPABIL
   });
 });
 
-describe('staff-matrix capabilities are shown as inherited-and-disabled, not omitted (§C6)', () => {
-  it('every staff-matrix capability (21 today) is present and flagged inherited', () => {
-    const groups = gridCapabilityGroups();
-    const byCapability = new Map(groups.flatMap((g) => g.capabilities).map((c) => [c.capability, c]));
+describe('T-318 — the staff matrix has emptied: nothing is rendered inherited any more', () => {
+  // ⛔ Formerly titled 'staff-matrix capabilities are shown as inherited-and-disabled, not
+  // omitted (§C6)' — that sentence is now the exact behaviour these two tests prove is GONE, and
+  // leaving it above them would scroll past in green as a false label (bible §13 row 206: a
+  // plausible wrong reason is worse than none). The §C6 citation is dropped rather than kept
+  // pointing at a section (docs/tasks/290-access-defaults-screen.md) that still reads "the staff
+  // matrix IS rendered [inherited-and-disabled]" — that citation is now stale too, is out of this
+  // lane's scope (docs/tasks/*.md), and is reported to the planner rather than edited here.
+  //
+  // T-318 (2026-09-14/16) shrank the staff baseline: the 21 everyday capabilities this block used
+  // to pin as "inherited" moved off the automatic `staff` matrix cell onto position grants
+  // (docs/tasks/318-position-decides-access.md, Contract 1) — `/admin/access-defaults` no longer
+  // shows `record_sale` or `submit_sales_day` as a flat, undisableable badge, which was Ian's
+  // original complaint. Their PRESENCE in the grid is already proven by the sibling
+  // 'gridCapabilityGroups' describe above (the 21 are not in any of the three excluded sets);
+  // what changed, and what is left to prove here, is `inherited` itself.
+  //
+  // ⭐ Deliberately NOT re-deriving "the 21" from any list (T-318's own fixture, the matrix, or
+  // CAPABILITY-MATRIX.md) — this file's header says the point is to prove the grid against the
+  // RULE independently, never against a second copy of the same list. Post-flip there is no
+  // staff:true cell left at all (measured: zero), so the rule collapses to one honest claim: no
+  // rendered capability is inherited. That is both simpler than naming 21 capabilities and a
+  // strictly more general proof of Contract 5 ("`GridCapability.inherited` becomes false for
+  // them by the matrix change alone") than checking only the 21 would have been.
+  it('CAPABILITY_MATRIX now holds ZERO staff:true cells — T-318 moved every one to position grants', () => {
     const staffMatrixCapabilities = CAPABILITIES.filter((c) => CAPABILITY_MATRIX[c].staff);
-    expect(staffMatrixCapabilities.length).toBe(21);
-    for (const c of staffMatrixCapabilities) {
-      const cell = byCapability.get(c);
-      expect(cell, `${c} is staff-matrix and must still be RENDERABLE, not hidden`).toBeDefined();
-      expect(cell!.inherited, `${c} must be flagged inherited (shown, disabled)`).toBe(true);
-    }
+    expect(staffMatrixCapabilities).toEqual([]);
   });
 
-  it('a non-staff-matrix capability is NOT flagged inherited', () => {
+  it('so no rendered capability is flagged inherited — every one is a live, position-granted toggle', () => {
     const groups = gridCapabilityGroups();
-    const nonStaff = groups.flatMap((g) => g.capabilities).find((c) => !CAPABILITY_MATRIX[c.capability].staff);
-    expect(nonStaff).toBeDefined();
-    expect(nonStaff!.inherited).toBe(false);
+    const rendered = groups.flatMap((g) => g.capabilities);
+    // DEF-179 floor, same reasoning as the sibling describe block above: an empty derivation
+    // must not make the loop below pass vacuously.
+    expect(rendered.length).toBeGreaterThan(50);
+    for (const cell of rendered) {
+      expect(cell.inherited, `${cell.capability} must not be flagged inherited (T-318)`).toBe(false);
+    }
   });
 });
 

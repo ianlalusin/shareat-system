@@ -34,6 +34,7 @@ import {
   listStatutoryDiscounts,
   summariseStatutoryDiscounts,
 } from '@shareat/domain';
+import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 
 const sql = postgres(url, { max: 5 });
 
@@ -61,6 +62,21 @@ async function person(orgId: string, storeId: string, name: string, role?: strin
   }
   await sql`insert into person_store_scope (person_id, store_id) values (${p!.id}, ${storeId})`;
   return p!.id;
+}
+
+/** A 'staff' person() with the everyday position grant T-318 moved off the automatic matrix —
+ *  this file's cashiers record statutory discounts, which is one of the 21. */
+async function staffPerson(orgId: string, storeId: string, name: string): Promise<string> {
+  const personId = await person(orgId, storeId, name, 'staff');
+  const [employment] = await sql<{ id: string }[]>`
+    insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
+    values (${orgId}, ${storeId}, ${personId}, ${uid('SE')}, 'regular', '2025-01-01')
+    returning id
+  `;
+  await grantEverydayPositionAccess(sql, {
+    orgId, storeId, employmentId: employment!.id, personId, setBy: personId,
+  });
+  return personId;
 }
 
 async function asOrg<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
@@ -94,7 +110,7 @@ afterAll(async () => {
 describe('T-137 statutory discount records', () => {
   it('invariant 1 — records all six statutory fields, and derives the net rather than storing it', async () => {
     const { orgId, storeId } = await newOrg('inv1');
-    const cashier = await person(orgId, storeId, 'Cashier', 'staff');
+    const cashier = await staffPerson(orgId, storeId, 'Cashier');
 
     const { id } = await asOrg(orgId, (tx) =>
       recordStatutoryDiscount(tx, actor(orgId, cashier), goodInput(storeId)),
@@ -135,7 +151,7 @@ describe('T-137 statutory discount records', () => {
 
   it('invariant 2 — ONE LIVE RECORD PER INVOICE: the "one discount only" rule is a constraint, not a check in code', async () => {
     const { orgId, storeId } = await newOrg('inv2');
-    const cashier = await person(orgId, storeId, 'Cashier', 'staff');
+    const cashier = await staffPerson(orgId, storeId, 'Cashier');
     const a = actor(orgId, cashier);
 
     await asOrg(orgId, (tx) => recordStatutoryDiscount(tx, a, goodInput(storeId)));
@@ -177,7 +193,7 @@ describe('T-137 statutory discount records', () => {
 
   it('invariant 4 — the database refuses a blank identity, not merely a NULL one', async () => {
     const { orgId, storeId } = await newOrg('inv4');
-    const cashier = await person(orgId, storeId, 'Cashier', 'staff');
+    const cashier = await staffPerson(orgId, storeId, 'Cashier');
 
     // NOT NULL stops a NULL; whitespace is what actually gets typed.
     for (const bad of [
@@ -195,7 +211,7 @@ describe('T-137 statutory discount records', () => {
 
   it('invariant 5 — amounts must be positive and the discount cannot exceed the gross', async () => {
     const { orgId, storeId } = await newOrg('inv5');
-    const cashier = await person(orgId, storeId, 'Cashier', 'staff');
+    const cashier = await staffPerson(orgId, storeId, 'Cashier');
     const a = actor(orgId, cashier);
 
     for (const [bad, constraint] of [
@@ -213,7 +229,7 @@ describe('T-137 statutory discount records', () => {
   it('invariant 6 — the register is org-isolated by RLS, because it names customers', async () => {
     const one = await newOrg('inv6a');
     const two = await newOrg('inv6b');
-    const cashier = await person(one.orgId, one.storeId, 'Cashier', 'staff');
+    const cashier = await staffPerson(one.orgId, one.storeId, 'Cashier');
 
     await asOrg(one.orgId, (tx) =>
       recordStatutoryDiscount(tx, actor(one.orgId, cashier), goodInput(one.storeId)),
@@ -230,11 +246,13 @@ describe('T-137 statutory discount records', () => {
 
   it('invariant 7 — recording is staff-open, voiding is NOT, and that asymmetry is the control', async () => {
     const { orgId, storeId } = await newOrg('inv7');
-    const cashier = await person(orgId, storeId, 'Cashier', 'staff');
+    const cashier = await staffPerson(orgId, storeId, 'Cashier');
     const manager = await person(orgId, storeId, 'Manager', 'manager');
 
-    // The matrix is the source of who may do what; assert it agrees with the behaviour below.
-    expect(CAPABILITY_MATRIX.record_statutory_discount.staff).toBe(true);
+    // T-318 moved recording off the automatic staff matrix cell onto a position grant — the
+    // cashier above holds it through staffPerson()'s helper-granted position, not the role.
+    // Voiding stays a manager-tier matrix cell, unmoved by this task.
+    expect(CAPABILITY_MATRIX.record_statutory_discount.staff).toBe(false);
     expect(CAPABILITY_MATRIX.void_statutory_discount.staff).toBe(false);
 
     // A cashier transcribing the paper logbook is the ONLY way this table gets filled today.
@@ -255,7 +273,7 @@ describe('T-137 statutory discount records', () => {
 
   it('invariant 8 — ⛔ recording a statutory discount POSTS NOTHING to the ledger (bible row 75)', async () => {
     const { orgId, storeId } = await newOrg('inv8');
-    const cashier = await person(orgId, storeId, 'Cashier', 'staff');
+    const cashier = await staffPerson(orgId, storeId, 'Cashier');
 
     const before = await sql<{ n: string }[]>`
       select count(*)::text as n from journal_entries where org_id = ${orgId}
@@ -363,7 +381,7 @@ describe('T-137 statutory discount records', () => {
 
   it('invariant 10 — no discount RATE is enforced, because the statutes define more than one', async () => {
     const { orgId, storeId } = await newOrg('inv10');
-    const cashier = await person(orgId, storeId, 'Cashier', 'staff');
+    const cashier = await staffPerson(orgId, storeId, 'Cashier');
 
     // RR 5-2017 carries a 5% special discount on basic necessities alongside the headline 20%,
     // and promotional pricing can interact with both. A hard 20% rule here would reject valid

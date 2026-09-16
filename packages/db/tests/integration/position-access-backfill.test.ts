@@ -26,10 +26,22 @@
  *
  * ⛔ **21 capability names are hardcoded here, deliberately, the same as in `0152_*.sql` itself.**
  * `packages/db` may not import `@shareat/auth` (ADR-004 / `packages/db/schema/access.ts`'s own
- * header: the dependency direction is the other way). If this list and
- * `packages/auth/src/capabilities.ts`'s real `staff: true` count ever disagree,
- * `tests/unit/capability-matrix.test.ts` is what catches it — not this file, which only proves
- * the migration reproduces whatever list it was given.
+ * header: the dependency direction is the other way).
+ *
+ * ⛔⛔ **CORRECTED — the sentence that used to stand here named a guard that does not exist.** It
+ * claimed `tests/unit/capability-matrix.test.ts` would catch this list drifting from
+ * `packages/auth/src/capabilities.ts`'s real `staff: true` cells. That test only parses
+ * `CAPABILITY-MATRIX.md` against `capabilities.ts` — it has never read this file, and nothing does.
+ * ⭐ **Nor is the drift merely theoretical any more: after T-318 slice C, `capabilities.ts` has
+ * ZERO `staff: true` cells, while the list below still names 21 — the two already disagree, and
+ * `tests/unit/capability-matrix.test.ts` passes 208/208 regardless, because it was never looking.**
+ * ⚠️ **The list itself is correct and must NOT be changed to match** — it is a frozen record of
+ * exactly what migration `0152` backfilled against real pre-existing data, `0152` is applied in
+ * production, and RULES §1 rule 9 forbids editing an applied migration or the proof of what it
+ * did. What was wrong is only the claim that something still checks it against the live matrix:
+ * nothing does, because after this task the matrix no longer carries "the everyday 21" as a
+ * concept at all — that information now lives only here, in `CAPABILITY-MATRIX.md`'s Notes
+ * column, and in the position-grant rows `0152` wrote.
  */
 import { config } from 'dotenv';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';

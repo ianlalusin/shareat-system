@@ -31,6 +31,7 @@ import {
   type Tx,
 } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
+import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 import {
   chargeTillShortage,
   closeTillShift,
@@ -87,6 +88,14 @@ async function fixture(hint: string) {
     select id from money_accounts where store_id = ${storeId}
       and instrument = 'cash' and custodian = 'cashier' and is_foundation
   `;
+  const [cashierEmployment] = await sql<{ id: string }[]>`
+    insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
+    values (${orgId}, ${storeId}, ${cashierId}, ${uid('SE')}, 'regular', '2025-01-01')
+    returning id
+  `;
+  await grantEverydayPositionAccess(sql, {
+    orgId, storeId, employmentId: cashierEmployment!.id, personId: cashierId, setBy: adminId,
+  });
   return {
     orgId,
     storeId,

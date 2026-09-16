@@ -6,6 +6,7 @@ import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { createDeliveryDocument, receiveDeliveryDocument } from '../../src/deliveries/documents';
+import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 
 /**
  * T-166 / DEF-135 — the DOCUMENT layer over `receive.ts`'s already-tested engine
@@ -126,6 +127,15 @@ async function fixture(): Promise<Fixture> {
 
   await seedChartOfAccounts(sql, orgId);
   await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${orgId}, '2020-01-01', '2035-12-31', 'open')`;
+
+  const [staffEmployment] = await sql<{ id: string }[]>`
+    insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
+    values (${orgId}, ${storeId}, ${staffP!.id}, ${uid('SE')}, 'regular', '2025-01-01')
+    returning id
+  `;
+  await grantEverydayPositionAccess(sql, {
+    orgId, storeId, employmentId: staffEmployment!.id, personId: staffP!.id, setBy: managerP!.id,
+  });
 
   return {
     orgId,

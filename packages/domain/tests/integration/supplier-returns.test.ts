@@ -21,6 +21,7 @@ import { receiveDelivery } from '../../src/deliveries/receive';
 import type { LocationLike } from '../../src/stock-locations/rules';
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../db/seed/expense-categories';
+import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 
 /**
  * T-170 — supplier returns: the goods go back, and we hold a credit. Bible row 166.
@@ -123,6 +124,15 @@ async function fixture(): Promise<Fixture> {
     select id from money_accounts where store_id = ${storeId} and instrument = 'cash' and custodian = 'cashier' and is_foundation limit 1`;
   const [category] = await sql<{ id: string }[]>`
     select id from expense_categories where org_id = ${orgId} and category = 'Cost of Goods Sold — General'`;
+
+  const [staffEmployment] = await sql<{ id: string }[]>`
+    insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
+    values (${orgId}, ${storeId}, ${staff!.id}, ${uid('SE')}, 'regular', '2025-01-01')
+    returning id
+  `;
+  await grantEverydayPositionAccess(sql, {
+    orgId, storeId, employmentId: staffEmployment!.id, personId: staff!.id, setBy: manager!.id,
+  });
 
   return {
     orgId,

@@ -16,7 +16,6 @@
 import { authorize, type Actor, type Capability } from '@shareat/auth';
 import {
   CAPABILITIES,
-  CAPABILITY_MATRIX,
   CAPABILITY_SCOPE,
   SUPER_ADMIN_ONLY_CAPABILITIES,
 } from '@shareat/auth';
@@ -34,11 +33,13 @@ export class PositionDefaultError extends Error {
  * same "argue each new member" discipline `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER` carries
  * (`packages/auth/src/capabilities.ts`, bible row 196).
  *
- * ⭐ **Two checks, not one — planner ruling, plan §11.3.** This constant is what the SCREEN may
- * render as toggleable. It deliberately does NOT also exclude the 21 capabilities the `staff`
- * role already holds in the matrix: T-290 must still render those as INHERITED ("shown, not
- * hidden" — plan §4.3), and a constant that excluded them would leave nothing to render. The
- * staff-matrix refusal is the second, separate check, in `setPositionDefault` below.
+ * ⛔ **Was two checks; T-318 (2026-09-14) retired the second.** This constant is what the SCREEN
+ * may render as toggleable, and it never excluded the 21 capabilities that `staff` used to hold
+ * automatically through the matrix — a constant that excluded them would have left nothing for
+ * T-290's INHERITED badge to render. `setPositionDefault` used to carry a SECOND check refusing a
+ * default for any of those 21 ("a row that changes nothing"); Ian's ruling moved them off the
+ * matrix onto position grants, so that refusal no longer applies and was deleted. This constant's
+ * own definition needed no change — it never read `.staff` in the first place.
  *
  * Measured the day this was written: `CAPABILITIES` = 96, `SUPER_ADMIN_ONLY_CAPABILITIES` = 4
  * (`approve_item`, `post_journal_entry`, `cross_org_access`, `view_franchise_sales`),
@@ -187,17 +188,15 @@ export async function setPositionDefault(
     throw new PositionDefaultError(`Position '${position.name}' belongs to a different store.`);
   }
 
-  // 4 — the capability is offerable (§C10's two checks).
+  // 4 — the capability is offerable (§C10's original single check). ⛔ T-318 (2026-09-14):
+  // the second check that lived here — refusing a default for any of the 21 capabilities the
+  // `staff` role held automatically — is deleted. Ian's ruling moved those 21 OFF the matrix and
+  // onto position grants, so a default for one of them is now the only way a position holds it,
+  // not "a row that changes nothing".
   if (!OFFERABLE_TO_POSITIONS.includes(input.capability)) {
     throw new PositionDefaultError(
       `'${input.capability}' may not be defaulted to a position — it is reserved to a role, a ` +
         'platform-only action, or conditional on data about the PERSON rather than the job.',
-    );
-  }
-  if (CAPABILITY_MATRIX[input.capability].staff) {
-    throw new PositionDefaultError(
-      `Every staff member already holds '${input.capability}' through the role matrix — a ` +
-        'position default would be a row that changes nothing.',
     );
   }
 

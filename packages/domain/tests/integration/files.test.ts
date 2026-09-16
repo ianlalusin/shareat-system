@@ -30,6 +30,7 @@ import {
   sweepOrphanedFiles,
   uploadFile,
 } from '@shareat/domain';
+import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 
 const sql = postgres(url, { max: 5 });
 let driver = inMemoryDriver();
@@ -72,6 +73,17 @@ const actor = (orgId: string, personId: string): Actor => ({ personId, orgId });
 async function fixture(hint: string) {
   const o = await newOrg(hint);
   const staffId = await person(o.orgId, o.storeId, 'Staff', 'staff');
+  // T-318: the only person in this fixture is Staff, so they attribute their own default — the
+  // helper writes the rows `setPositionDefault` would have written after checking a capability
+  // it does not itself need (`_fixtures/staff-everyday-access.ts`'s own doc comment).
+  const [employment] = await sql<{ id: string }[]>`
+    insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
+    values (${o.orgId}, ${o.storeId}, ${staffId}, ${uid('SE')}, 'regular', '2025-01-01')
+    returning id
+  `;
+  await grantEverydayPositionAccess(sql, {
+    orgId: o.orgId, storeId: o.storeId, employmentId: employment!.id, personId: staffId, setBy: staffId,
+  });
   return { ...o, staffId, staff: actor(o.orgId, staffId) };
 }
 

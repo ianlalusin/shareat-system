@@ -45,6 +45,7 @@ import {
 } from '@shareat/domain';
 import { receiveDelivery } from '../../src/deliveries/receive';
 import { quantity } from '../../src/stock/quantity';
+import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -113,6 +114,15 @@ async function fixture(hint: string) {
             'image/jpeg', 1024, ${uid('sum')}, ${superAdminId})
     returning id`;
   const fileId = file!.id;
+
+  const [staffEmployment] = await sql<{ id: string }[]>`
+    insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
+    values (${orgId}, ${storeId}, ${staffId}, ${uid('SE')}, 'regular', '2025-01-01')
+    returning id
+  `;
+  await grantEverydayPositionAccess(sql, {
+    orgId, storeId, employmentId: staffEmployment!.id, personId: staffId, setBy: managerId,
+  });
 
   return {
     orgId,

@@ -24,6 +24,7 @@ import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../db/seed/expense-categories';
 import { itemsRepo, closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
+import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 import {
   approveItemRequest,
   clearStoreSellability,
@@ -84,6 +85,14 @@ async function fixture(hint: string) {
   const supplier = await asOrg(orgId, (tx) =>
     createSupplier(tx, actor(orgId, manager!.id), { name: `Supplier ${code}` }),
   );
+  const [staffEmployment] = await sql<{ id: string }[]>`
+    insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
+    values (${orgId}, ${store!.id}, ${staff!.id}, ${uid('SE')}, 'regular', '2025-01-01')
+    returning id
+  `;
+  await grantEverydayPositionAccess(sql, {
+    orgId, storeId: store!.id, employmentId: staffEmployment!.id, personId: staff!.id, setBy: manager!.id,
+  });
   return {
     orgId, storeId: store!.id, managerId: manager!.id, staffId: staff!.id,
     manager: actor(orgId, manager!.id), staff: actor(orgId, staff!.id),

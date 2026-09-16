@@ -30,6 +30,7 @@ import {
   releaseCashRequest,
   settleCashRequest,
 } from '@shareat/domain';
+import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 
 const sql = postgres(url, { max: 5 });
 
@@ -61,6 +62,19 @@ async function person(orgId: string, storeId: string, name: string, role: string
   return p!.id;
 }
 
+/** T-318: gives a 'staff' person the everyday, position-granted access the matrix flip moved off
+ *  the automatic staff role. `setBy` must be a real person in this org (any actor works). */
+async function grantStaffAccess(orgId: string, storeId: string, personId: string, setBy: string) {
+  const [employment] = await sql<{ id: string }[]>`
+    insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
+    values (${orgId}, ${storeId}, ${personId}, ${uid('SE')}, 'regular', '2025-01-01')
+    returning id
+  `;
+  await grantEverydayPositionAccess(sql, {
+    orgId, storeId, employmentId: employment!.id, personId, setBy,
+  });
+}
+
 async function asOrg<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
   return transaction(async (tx) => {
     await tx.execute(dsql.raw(`set local role ${APP_ROLE}`));
@@ -76,6 +90,7 @@ async function fixture(hint: string) {
   const o = await newOrg(hint);
   const managerId = await person(o.orgId, o.storeId, 'Manager', 'manager');
   const staffId = await person(o.orgId, o.storeId, 'Ana', 'staff');
+  await grantStaffAccess(o.orgId, o.storeId, staffId, managerId);
   const [till] = await sql<{ id: string }[]>`
     select id from money_accounts where store_id = ${o.storeId}
       and instrument = 'cash' and custodian = 'cashier' and is_foundation
@@ -501,6 +516,7 @@ describe('⛔ DEF-159 — a second float cannot be released while the first is u
     await released(f, '1000.00'); // f.staffId's float, still open
 
     const otherStaffId = await person(f.orgId, f.storeId, 'Ben', 'staff');
+    await grantStaffAccess(f.orgId, f.storeId, otherStaffId, f.managerId);
     const other = actor(f.orgId, otherStaffId);
     const req = await asOrg(f.orgId, (tx) =>
       createCashRequest(tx, other, {

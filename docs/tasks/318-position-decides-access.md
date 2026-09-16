@@ -1,6 +1,20 @@
 # T-318 — a position decides what a person may do
 
-> ### **Status: SPEC — written 2026-09-14 by `system32-85` (Opus planner). NOT BUILT. Reserves T-318 and migration `0152`.**
+> ### **Status: SLICES A, B AND C ARE BUILT AND GREEN — 2026-09-17. SLICE D (the screen) is the only part outstanding.**
+>
+> **A** (the census) and **B** (migration `0152`) shipped 2026-09-14 and `0152` is **applied in
+> production** — ⛔ it may never be edited; a correction is `0153` or later (RULES §1 rule 9).
+> **C** (the matrix flip plus the whole test estate) is green: **24 changed integration files pass
+> in one run on one clean database**, the unit suite is **123 files / 1729 passed / 0 failed**,
+> typecheck and `npm run build` both exit 0. ⭐ **The test that is the whole task exists and passes**
+> — a Dishwasher and a Server at the same store, one refused `submit_sales_day` and one allowed.
+>
+> ⚠️ **What slice C cost, and it is the number worth carrying:** the risk census said **19** files.
+> The real number was **22**, and the last two were found by running the suite rather than reading
+> it. See the census correction under *Slice C-pre* — three blind spots, all three named.
+>
+> *Original status, kept because the ruling below is what authorised the work:* **SPEC — written
+> 2026-09-14 by `system32-85` (Opus planner). Reserves T-318 and migration `0152`.**
 >
 > **Ian, 2026-09-14**, shown the two options in plain language and asked which: *"yes A"* — shrink
 > the staff baseline, so the 21 everyday capabilities stop being automatic and are granted to a
@@ -119,6 +133,57 @@ the gated function with its *staff* actor or with an admin one. **Both independe
 instances — `count-workflow` and `expenses` — are inside the set**, which is the check that the
 method works.
 
+⛔⛔ **AND IT WAS ALSO A LOWER BOUND, WHICH NOBODY WROTE DOWN. THE REAL NUMBER IS 20.** Re-measured
+2026-09-16 by the orchestrator with the census widened, then **verified by running the candidates
+rather than by trusting the regex**:
+
+| File | Result |
+|---|---|
+| ⛔ `packages/domain/tests/integration/branch-orders.test.ts` | **30 tests failed** — `AuthorizationError: authorize: role 'staff' may not 'place_branch_order'`, thrown at `packages/auth/src/authorize.ts:107` via `packages/domain/src/commissary/orders.ts:351`, reached from the test at lines 223 and 831 |
+| `findings` · `order-wastage` · `pos-day-reconciliation` · `recurring-expenses-job` · `sales-channels-admin` · `sales-rollup` · `wastage-monitor` | all passed — 48/48 in one batch |
+
+⭐⭐ **THE MECHANISM, BECAUSE IT IS NOT WHERE ANYONE WOULD LOOK: the gated-function list was never
+the problem — the STAFF-ACTOR DETECTOR was.** `place_branch_order`, `submitOrder`, `acceptOrder`
+and `addBranchOrderLine` were all in the original's gated set. Its actor pattern accepted `'staff'`
+only when followed by `)` — i.e. as the **last** argument. `branch-orders.test.ts` builds its
+people with `mkPerson('Branch cook', 'staff', [br.id])` at lines 103 and 105: `'staff'` followed by
+a **comma**, because that helper takes a third parameter. **A three-argument fixture helper made a
+whole file invisible to the census.**
+
+⛔⛔ **AND THEN THE SWEEP FOUND A 21ST, WHICH NO CENSUS COULD HAVE FOUND.**
+`packages/domain/tests/integration/files.test.ts` — **16 of 16 failed**, on
+`AuthorizationError: authorize: role 'staff' may not 'record_supplier_invoice'` thrown from
+`runUpload` (`packages/domain/src/files/index.ts:121`).
+
+⭐ **The third blind spot is structurally different from the first two: THE CAPABILITY IS DATA, NOT
+A LITERAL.** That call reads `authorize(tx, actor, PURPOSE_CAPABILITY[input.purpose], …)`, and
+`PURPOSE_CAPABILITY` (line 70) maps `receipt_photo → 'record_supplier_invoice'` and
+`wastage_dispute → 'record_wastage'` — **two of the 21.** Every census we ran required a quoted
+capability *inside the `authorize(...)` call* to recognise a gated function, so `runUpload` was
+never in the gated set and nothing reaching it could be either. **No regex over call sites can see
+an indirection like this.**
+
+⛔⛔ **WORSE: THIS DOCUMENT HELD THE EVIDENCE AND DREW THE OPPOSITE CONCLUSION FROM IT.** The slice C
+scope note below names `files/index.ts`, correctly identifies that its comment *"No access changes —
+both are granted to staff"* becomes false, and then says *"The code stays correctly gated either way
+(it authorizes through `PURPOSE_CAPABILITY`), so nothing breaks."* **True of the production code,
+false of the test estate, and the two were never separated.** The spec knew those two capabilities
+were inside the 21 — it says so in the same sentence — and used that knowledge to conclude nothing
+breaks, when it was the strongest available signal that this file's tests would. ⭐ **The clause that
+made it invisible is the reassuring one.**
+
+⚠️ **The three blind spots, named so the next census does not inherit them:** (1) an actor regex that
+assumes an argument position; (2) a direct-call-only reading that cannot see a test reaching a gated
+function through an intermediate; (3) **a capability resolved through a lookup table, which is
+invisible to any call-site pattern at all.**
+
+⛔⛔ **THE RULING THAT FOLLOWS: A STATIC CENSUS NOMINATES CANDIDATES; RUNNING THEM IS WHAT SETTLES
+IT.** Three passes of increasingly careful reading produced 19, then 20, and the 21st was found by a
+sweep that read nothing. ⛔ **The operational consequence is the one that mattered:** three lanes
+would have reported green on 19 files, the tree would have looked finished, and **CI would have gone
+red on `main` — which blocks every deploy**, on the one day whose stated goal was to get closer to
+deploying.
+
 ⛔ **THE MIGRATION CANNOT SAVE THESE, AND THAT IS THE POINT.** `0152` backfills data that exists
 **when it runs**. These fixtures create a fresh person with `role='staff'` **during their own test
 run**, long after migrations applied — no position, no default, no grant, because today the matrix
@@ -149,6 +214,26 @@ suite green AFTER the flip.** ⛔ Green before the flip is not evidence and must
 progress.
 
 **Slice C — the flip**
+
+⛔⛔ **SCOPE CORRECTION, 2026-09-16 — THIS LIST WAS INCOMPLETE AND THE UNIT SUITE PROVED IT.** The
+list below named `tests/unit/capability-matrix.test.ts` as the only unit test the flip could reach.
+**It reaches two more, and both went red the moment the matrix flipped:**
+
+| File | Why it breaks | Owner |
+|---|---|---|
+| `tests/unit/position-defaults-offerable.test.ts` | Its last block derives *the staff-matrix set* as `CAPABILITIES.filter((c) => CAPABILITY_MATRIX[c].staff)` and asserts it is **21**. After the flip that set is **empty**. ⚠️ And its stated premise — *"two checks, not one"* — is itself changed, because slice C **deletes** the second check it names | lane C |
+| `apps/erp/tests/access-defaults-lib.test.ts` | Same derivation, same empty set — but worse in kind: it asserts every one of the 21 renders `inherited === true`, **which is precisely the flat badge Ian reported and this task exists to abolish** | lane A |
+
+⭐ **The measurement: `npm run test` = 2 failed / 1726 passed / 1 skipped across 123 files, working
+tree, 2026-09-16.** Typecheck was exit 0 in the same state, which is why nobody saw it — the flip is
+type-clean and fails only at the assertions.
+
+⭐⭐ **AND CONTRACT 5'S OPEN WARNING IS ANSWERED BY THE FAILURE ITSELF.** Contract 5 asked someone to
+*"confirm `inherited` is not separately hardcoded."* In `access-defaults-lib.test.ts` the sibling test
+*"a non-staff-matrix capability is NOT flagged inherited"* **still passes** while only the count
+assertion fails — so `GridCapability.inherited` really is derived from the matrix, and the 21 became
+live toggles by the matrix change alone. **Slice D does not have to build that half.**
+
 - `docs/decisions/CAPABILITY-MATRIX.md` — ⛔ **the decision document, and it changes FIRST.**
 - `packages/auth/src/capabilities.ts` — the 21 `staff` cells to `false`.
 - `packages/domain/src/people/position-defaults.ts` — delete the staff-matrix refusal (check 4b).
@@ -165,7 +250,45 @@ progress.
 
 **Slice D — the screen**
 - `apps/erp/src/app/admin/access-defaults/page.tsx` · `lib.ts` · `actions.ts`
+- `apps/erp/tests/access-defaults-lib.test.ts` (unit) and a new integration case for the disclosure count
 - Approved design: https://claude.ai/code/artifact/f5d644bb-50d5-4f98-9b35-a3027325f739
+
+⭐ **SCOPED 2026-09-16, against the code rather than the design.** Two of the three things slice D
+was expected to build turn out not to need building, and the third is the only real work.
+
+**D1 — the toggles: ALREADY DONE, by the matrix flip alone. Build nothing.** `lib.ts:79` derives
+`inherited: CAPABILITY_MATRIX[c].staff`. Contract 5 asked someone to *"confirm it is not separately
+hardcoded"*; it is not, and the proof is in the test suite rather than in a reading — when the flip
+made the staff column empty, `access-defaults-lib.test.ts`'s count assertion failed while its sibling
+*"a non-staff-matrix capability is NOT flagged inherited"* kept passing. **The 21 render as live
+controls now.**
+
+**D2 — the dead `inherited` mechanism. Decide, do not drift.** `CAPABILITY_MATRIX[c].staff` is now
+false for every capability, so `GridCapability.inherited` can never be true, and `InheritedBadge`
+(`page.tsx:223`) plus the four `cell.inherited` branches at lines 293, 301, 364 and 371 are
+unreachable. ⛔ **RULING: KEEP the derivation and the badge; do NOT delete them.** The mechanism is
+correct logic that is currently vacuous, and it is the only thing standing between the screen and a
+silent lie if anyone ever sets a `staff` cell back to `true` — a live toggle over a
+matrix-granted capability would appear to switch off access the matrix still grants. ⚠️ **What must
+change is the COMMENT at `lib.ts:66`**, which says *"The ~21 staff-matrix capabilities are INCLUDED,
+flagged `inherited`"* — false since the flip, and bible §13 row 206's class: a reader believes the
+comment over the code.
+
+**D3 — THE MULTI-POSITION DISCLOSURE. This is the actual work, and without it the screen lies by
+omission.** Per *THE MULTI-POSITION RULING* below: switching a capability off for Dishwasher does
+**not** remove it from a person who is also a Server, and **it will look like the switch did not
+work.** So when a capability is off for a position, the screen must say how many of that position's
+holders still hold it through another position.
+
+- ⭐ **There is already a batched query to extend rather than a new one to invent:**
+  `holderCountsForStore` in `lib.ts` counts open employments per position at a store in one pass,
+  and `GridPosition.holderCount` carries it. The disclosure is the same shape, narrowed by
+  capability. ⛔ **Never N+1 — §C5 already binds this screen.**
+- ⚠️ **Count people, not rows**, and match `/staff`'s own roster for the store, as `holderCount`
+  already promises.
+- ⛔ **Do not offer to "fix" it by revoking through the other position.** The union is the ruling; a
+  person who really is a Server keeps a server's access. The screen's job is to say so, not to
+  override it.
 
 ⛔ **Out of scope and orchestrator-owned:** `PROJECT_BIBLE.md` (this task needs a §13 row and an
 implementer **reports** it, RULES §1 rule 14) · `docs/ROADMAP.html` · `docs/DEFECTS-REGISTER.md` ·

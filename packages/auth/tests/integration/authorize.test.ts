@@ -191,110 +191,39 @@ describe('invariant 5 — every capability denies a role that lacks it (all 56)'
     ROLES.filter((role) => !CAPABILITY_MATRIX[capability][role]).map((role) => ({ capability, role })),
   );
 
-  // Eleven capabilities are held by ALL FOUR roles (record_sale, submit_sales_day,
-  // create_expense, edit_own_expense, record_stock_movement, record_wastage,
-  // create_wholesale_order — the "everyone on shift" set) and so have NO role to deny;
-  // invariant 5 is vacuously satisfied for these, not violated. This is a floor: it pins
-  // the KNOWN, reasoned-about set exactly, so a broken CAPABILITY_MATRIX import (e.g.
-  // resolving to an empty object, or a capability silently losing its one denying role)
-  // is caught here rather than passing vacuously one level up.
-  const UNIVERSALLY_GRANTED: readonly Capability[] = [
-    'record_sale',
-    'submit_sales_day',
-    'create_expense',
-    'edit_own_expense',
-    'record_stock_movement',
-    'record_wastage',
-    'create_wholesale_order',
-    // T-130: logging a pending supplier invoice moves no money — same bar as create_expense.
-    'record_supplier_invoice',
-    // ---- T-173/T-175, 2026-08-30 — and each one is a deliberate "everyone on shift" call ----
-    //
-    // ⚠️ A universally-granted capability can never deny anyone by ROLE, which is exactly why
-    // this list is pinned: it is the set where the role column proves nothing and some OTHER
-    // control has to be the real one. For all three below, that control is STORE SCOPE — and
-    // for the first, a second check the matrix cannot express at all.
-    //
-    // ⭐ `confirm_receipt`: a branch cook signs for the crates that arrive. Requiring a manager
-    // on site to accept a delivery is the rule people work around by sharing a login. The real
-    // control is `confirmReceipt`'s two-sided check that the actor's store is one of the TWO on
-    // the order (T-173 invariant 8) — neither a role nor a scope can say that.
-    'confirm_receipt',
-    // ⭐ `set_item_threshold`: per v1, and the reasoning is asymmetric. An unset threshold is
-    // INVISIBLE — the item simply never appears on the low-stock list — so friction here has no
-    // counter-pressure at all, while a wrong threshold is loud and instantly correctable.
-    'set_item_threshold',
-    // `post_order_message`: the thread is append-only, so the worst a wrong message can do is
-    // be answered. Locking the conversation to managers is how it goes back to being a phone
-    // call, which is the thing T-175 set out to replace.
-    'post_order_message',
-    // ⭐ T-137: recording an SC/PWD discount at the counter. Staff-open for the same reason
-    // create_expense is — the person holding the book is a cashier, and gating it to managers is
-    // how a statutory register stays empty. ⚠️ Its VOID counterpart is deliberately NOT here:
-    // `void_statutory_discount` denies staff, and that asymmetry is the control.
-    'record_statutory_discount',
-    // ⭐ T-186: counting the till at open and close. Staff-open for the same reason — the
-    // person holding the drawer IS the cashier, and a count only a manager can enter is a
-    // count that gets entered from memory hours later, if at all. ⚠️ Its resolution
-    // counterpart is deliberately NOT here: `resolve_till_variance` denies staff, because
-    // charging the shortage your own count revealed is the one thing you must not do.
-    'record_till_count',
-    // ⭐ T-167: room-to-room within one store. Staff-open, same bar as record_stock_movement — a
-    // floor worker moves crates between rooms without finding a manager first. ⚠️ Its VOID
-    // counterpart is deliberately NOT here: `void_transfer` denies staff, same asymmetry as
-    // `void_statutory_discount`/`resolve_till_variance` above.
-    'transfer_stock',
-    // ⭐ T-170: a return is one act by one person when the goods physically leave. Staff-open,
-    // same bar as record_stock_movement/transfer_stock. ⚠️ Its VOID counterpart is deliberately
-    // NOT here: `void_supplier_return` denies staff, same asymmetry as `void_transfer` above.
-    'record_supplier_return',
-    // ⭐ T-179: the AR mirror of record_supplier_return, same reasoning. ⚠️ Its VOID counterpart
-    // is likewise NOT here: `void_customer_return` denies staff.
-    'record_customer_return',
-    // ⭐ T-172 (2026-09-03): the two SIDES of a branch order. Staff-open because v1 gates none of
-    // the order conversation by role and the person who notices the empty shelf is the one who
-    // orders. The real control is STORE SCOPE, and it is asymmetric on purpose: `place_` resolves
-    // at the branch (`requested_by_store_id`) and `fulfil_` at the commissary (`store_id`), which
-    // is how "the branch edits only its lines; the commissary only fulfilment fields" (invariant
-    // 10) is enforced. ⚠️ The posting event is deliberately NOT here: `dispatch_branch_order`
-    // denies staff, same asymmetry as `dispatch_wholesale_order`.
-    'place_branch_order',
-    'fulfil_branch_order',
-    // ---- T-166 / DEF-135, 2026-09-03 ----
-    // Drafting a delivery and receiving it are one act by the person at the dock — a cook or a
-    // cashier signing for the crates — and `confirm_receipt`'s reasoning applies verbatim: a
-    // manager-only gate is the rule people work around by sharing a login. The real controls are
-    // the photo CHECK, 0066's shortage/over-receipt trigger, and `allow_over_receipt` (manager+,
-    // NOT in this list) on the one line that is actually over.
-    'receive_delivery',
-    // ⭐ T-178 (2026-09-04): a refunded or remade channel/dine-in order. Staff-open, same bar as
-    // record_wastage — the person who hits it is the person who knows. ⚠️ Its disposition
-    // counterparts are deliberately NOT here: `resolve_order_wastage`/`charge_staff_for_wastage`
-    // deny staff, same asymmetry as every other record_*/resolve_* pair above.
-    'record_order_wastage',
-    // ⭐ T-177 (2026-09-04): flagging a POS item that can't be mapped, mid-pull. Staff-open, same
-    // bar as record_stock_movement/record_order_wastage — "the person who hits it is the person
-    // who knows," and the request itself moves no stock. ⚠️ Its decision counterpart is
-    // deliberately NOT here: `decide_pos_map_request` denies staff, same asymmetry as every other
-    // record_*/resolve_* pair above.
-    'request_pos_map',
-  ];
+  // ⛔ T-318 (2026-09-14): THIS SET IS NOW EMPTY, AND THAT IS THE WHOLE POINT OF THE TASK.
+  // Twenty-one capabilities used to be held by ALL FOUR roles — `record_sale`, `submit_sales_day`,
+  // `create_expense`, `edit_own_expense`, `record_stock_movement`, `record_wastage`,
+  // `create_wholesale_order`, `record_supplier_invoice`, `confirm_receipt`, `set_item_threshold`,
+  // `post_order_message`, `record_statutory_discount`, `record_till_count`, `transfer_stock`,
+  // `record_supplier_return`, `record_customer_return`, `place_branch_order`,
+  // `fulfil_branch_order`, `receive_delivery`, `record_order_wastage`, `request_pos_map` — and had
+  // no role to deny, so invariant 5 was vacuously satisfied for them rather than violated. Ian's
+  // ruling to shrink the staff baseline (docs/tasks/318-position-decides-access.md) moved every
+  // one of them off the matrix's `staff` cell and onto position grants: `staff` now denies all 21
+  // in `CAPABILITY_MATRIX`, same as everyone else the matrix used to leave alone. The per-capability
+  // "why staff-open" reasoning this comment used to carry lives in `docs/decisions/
+  // CAPABILITY-MATRIX.md`'s Notes column, which each of the 21 rows still gives — the WHY is
+  // unchanged; only the MECHANISM (automatic vs. a position default) moved. Kept as a typed,
+  // empty constant rather than deleted outright: if a future capability becomes genuinely
+  // universal again, this is where a reviewer would expect to find that decision recorded.
+  const UNIVERSALLY_GRANTED: readonly Capability[] = [];
 
-  it('every capability EXCEPT the universally-granted 21 has at least one denial case', () => {
+  it('every capability has at least one denial case', () => {
     const covered = new Set(denialCases.map((c) => c.capability));
     const missing = CAPABILITIES.filter((c) => !covered.has(c));
     expect(missing.sort()).toEqual([...UNIVERSALLY_GRANTED].sort());
   });
 
-  it('the universally-granted 21 really are true for all four roles (why they are exempt)', () => {
-    for (const c of UNIVERSALLY_GRANTED) {
-      expect(ROLES.every((r) => CAPABILITY_MATRIX[c][r]), `${c} is not actually universal`).toBe(true);
-    }
+  it('no capability is universally granted anymore — T-318 retired the last 21', () => {
+    expect(UNIVERSALLY_GRANTED).toEqual([]);
   });
 
-  it('every OTHER capability (42 of 53) has a denial case for EVERY role that lacks it, not just one', () => {
+  it('every capability has a denial case for EVERY role that lacks it, not just one', () => {
     // Stronger than the letter of invariant 5 ("a role", singular) — proves the sweep
-    // below is exhaustive over false cells, not merely non-empty.
+    // below is exhaustive over false cells, not merely non-empty. T-318 emptied
+    // UNIVERSALLY_GRANTED, so this now runs unfiltered over all of CAPABILITIES; the `continue`
+    // stays as dead-but-harmless defence in case that set is ever non-empty again.
     for (const capability of CAPABILITIES) {
       if (UNIVERSALLY_GRANTED.includes(capability)) continue;
       const expectedFalseRoles = ROLES.filter((r) => !CAPABILITY_MATRIX[capability][r]);
@@ -352,10 +281,27 @@ describe('invariant 6 — store scope is checked separately, always', () => {
     );
   });
 
-  it('staffA holds create_expense but not storeA2 — denied', async () => {
-    expect(CAPABILITY_MATRIX.create_expense.staff).toBe(true);
-    const actor: Actor = { personId: staffA, orgId: orgA };
-    await expect(asPerson(orgA, (tx) => authorize(tx, actor, 'create_expense', { storeId: storeA2 }))).rejects.toThrow(
+  it('a staff person HOLDING create_expense via a grant is still denied at the wrong store', async () => {
+    // T-318 emptied CAPABILITY_MATRIX.*.staff (invariant 5's comment above) — a plain 'staff'
+    // role holds nothing from the matrix anymore, so proving "store scope is checked
+    // separately" for staff specifically now needs a REAL grant, not the automatic cell this
+    // test used to rely on. A fresh org/person, never orgA/staffA: the shared fixture's
+    // invariant-5 sweep expects staffA to hold NOTHING, and writing a grant onto it would
+    // break that sweep for (create_expense, staff).
+    // authorize.ts's store-scope check (axis 2) runs identically whether `allowed` came from
+    // the matrix or from personHasActiveGrant — so this exercises the same code invariant 6
+    // always has, just via the mechanism staff now actually uses.
+    const org = await insertOrg('inv6-staff-grant');
+    const store1 = await insertStore(org, 'inv6-staff-grant-1');
+    const store2 = await insertStore(org, 'inv6-staff-grant-2');
+    const person = await insertPerson(org, 'Grant-holding Staff');
+    await insertRoleRaw(person, org, 'staff');
+    await insertStoreScopeRaw(person, store1);
+    expect(CAPABILITY_MATRIX.create_expense.staff).toBe(false); // denied via the matrix alone
+    await sql`insert into person_grants (person_id, grant_name, granted_by, grant_source) values (${person}, 'create_expense', null, null)`;
+    const actor: Actor = { personId: person, orgId: org };
+    await expect(asPerson(org, (tx) => authorize(tx, actor, 'create_expense', { storeId: store1 }))).resolves.toBeUndefined();
+    await expect(asPerson(org, (tx) => authorize(tx, actor, 'create_expense', { storeId: store2 }))).rejects.toThrow(
       AuthorizationError,
     );
   });
@@ -900,8 +846,11 @@ describe('assignRole — revoke-then-insert, full history preserved', () => {
     expect(rows[1]).toMatchObject({ id: second.roleId, role: 'manager' });
     expect(rows[1]!.revoked_at).toBeNull();
 
-    // And the ACTIVE role is the new one — authorize() sees 'manager', not 'staff'.
-    expect(CAPABILITY_MATRIX.create_wholesale_order.staff).toBe(true);
+    // And the ACTIVE role is the new one — authorize() sees 'manager', not 'staff'. T-318
+    // emptied every matrix cell for 'staff' (invariant 5's comment above), so there is no
+    // longer a "staff holds this, but not this" pair to contrast; void_sales_day alone still
+    // makes the point — denied as staff (untested here, already covered by invariant 5),
+    // granted as manager, immediately below.
     expect(CAPABILITY_MATRIX.void_sales_day.staff).toBe(false);
     const actor: Actor = { personId: person, orgId: org };
     await expect(asPerson(org, (tx) => authorize(tx, actor, 'void_sales_day', { storeId: store }))).resolves.toBeUndefined();
@@ -911,11 +860,14 @@ describe('assignRole — revoke-then-insert, full history preserved', () => {
     const org = await insertOrg('norole');
     const person = await insertPerson(org, 'Unconfigured');
     const actor: Actor = { personId: person, orgId: org };
-    // record_sale is the most widely granted capability in the whole matrix (all four
-    // roles hold it) — if even THIS is denied, "no role" really does mean "nothing". No
-    // storeId is passed: role resolution fails and throws before the store check is ever
-    // reached, so there is nothing meaningful to pass.
-    expect(ROLES.every((r) => CAPABILITY_MATRIX.record_sale[r])).toBe(true);
+    // record_sale was the most widely granted capability in the whole matrix before T-318
+    // (all four roles held it). T-318 emptied 'staff' entirely (invariant 5's comment above),
+    // so record_sale is now granted to three of four roles, not all four — but that does not
+    // weaken this test: axis 3a (role resolution) runs and throws BEFORE the capability is
+    // ever looked up, so a person with no active role at all is refused regardless of which
+    // capability's matrix cells are true. No storeId is passed: there is nothing meaningful
+    // to pass once role resolution has already thrown.
+    expect(ROLES.filter((r) => r !== 'staff').every((r) => CAPABILITY_MATRIX.record_sale[r])).toBe(true);
     await expect(asPerson(org, (tx) => authorize(tx, actor, 'record_sale', {}))).rejects.toThrow(AuthorizationError);
   });
 });

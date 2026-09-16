@@ -54,6 +54,7 @@ import { closeDb, findingsRepo, moneyAccountsRepo, transaction, APP_ROLE, type T
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import { approveExpense, createExpense, deleteExpenseDraft, editExpense, voidExpense, routeExpense, recordInvoice, verifyInvoice, setTillFloat, payReimbursement } from '@shareat/domain';
 import { reimbursablePayableOf } from '../../../db/src/repo/expenses';
+import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 
 const sql = postgres(url, { max: 5 });
 
@@ -153,6 +154,14 @@ async function setup(hint: string): Promise<Fixture> {
   await insertStoreScopeRaw(staffId, storeId);
   await insertStoreScopeRaw(managerId, storeId);
   await insertStoreScopeRaw(adminId, storeId);
+  const [employment] = await sql<{ id: string }[]>`
+    insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
+    values (${orgId}, ${storeId}, ${staffId}, ${uid('SE')}, 'regular', '2025-01-01')
+    returning id
+  `;
+  await grantEverydayPositionAccess(sql, {
+    orgId, storeId, employmentId: employment!.id, personId: staffId, setBy: adminId,
+  });
   const [wallet] = await sql<{ id: string }[]>`
     insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian)
     values (${orgId}, ${storeId}, 'GCash — cashier', 'ewallet', '1140', 'cashier')

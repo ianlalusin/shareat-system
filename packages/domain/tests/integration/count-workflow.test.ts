@@ -14,6 +14,7 @@ import {
   recordCount,
 } from '@shareat/domain';
 import type { LocationLike } from '../../src/stock-locations/rules';
+import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 
 /**
  * T-169 workflow — the layer `count-sessions.ts` (the engine) deliberately does not own: who may
@@ -130,6 +131,15 @@ async function fixture(): Promise<Fixture> {
 
   const { seedChartOfAccounts } = await import('../../../db/seed/chart-of-accounts');
   await seedChartOfAccounts(sql, orgId);
+
+  const [staffEmployment] = await sql<{ id: string }[]>`
+    insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
+    values (${orgId}, ${storeId}, ${staff!.id}, ${uid('SE')}, 'regular', '2025-01-01')
+    returning id
+  `;
+  await grantEverydayPositionAccess(sql, {
+    orgId, storeId, employmentId: staffEmployment!.id, personId: staff!.id, setBy: manager!.id,
+  });
 
   return {
     orgId,
