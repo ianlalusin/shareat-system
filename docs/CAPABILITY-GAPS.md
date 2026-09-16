@@ -19,23 +19,51 @@ in production, that no phase of the rebuild currently owns.
 
 ---
 
-## 1. Blocks the January books cutover — 5 items
+## 1. ~~Blocks the January books cutover — 5 items~~ ✅ **ALL FIVE SHIPPED — CLOSED 2026-09-16**
 
-**These post to the ledger today.** ADR-005's Phase 2 list — *expenses, AP, AR, payments, cash
-requests, sales day, settlements* — omits all five, and v1 has a journal builder for each.
+> ⛔⛔ **THIS SECTION SAID "BLOCKS THE JANUARY BOOKS" FOR ROUGHLY THREE WEEKS AFTER THE LAST OF THE
+> FIVE SHIPPED, AND IT IS THE FIRST THING ANYONE OPENING THIS DOCUMENT READ.** Nobody edited it;
+> the project moved underneath it. ⭐ **Found 2026-09-14 while building a completion census for Ian,
+> then independently re-derived by a second reader before this correction was written** — the five
+> rows carry no task numbers, so closing them required mapping each description to its task and
+> checking that task's state, which is exactly the work nobody had reason to do.
+>
+> ⚠️ **It had already misled a reader:** the census reported these five as outstanding to Ian before
+> the check was run. **That is this register's own DEF-347 / bible §13 row 204 pattern** — a document
+> that is not maintained must not carry a fact that moves — landing on the document whose whole
+> purpose is to say what is missing.
 
-| Gap | v1 builder | If omitted |
-|---|---|---|
-| Fixed assets + **depreciation** | `depreciation.builder.ts` | Expenses understated every month |
-| Prepaid + **amortisation** | `amortization.builder.ts` | Same |
-| **Loans** | `loan.builder.ts` | No interest expense, no principal tracking |
-| **Owner equity movements** | `equity-movement.builder.ts` | Capital and drawings never post |
-| Generic **liability accounts** | `liability-charge/payment` | Statutory and other payables missing |
+| Gap | v1 builder | Closed by | State |
+|---|---|---|---|
+| Fixed assets + **depreciation** | `depreciation.builder.ts` | **T-124** | ✅ shipped |
+| Prepaid + **amortisation** | `amortization.builder.ts` | **T-125** | ✅ shipped |
+| **Loans** | `loan.builder.ts` | **T-126** | ✅ shipped |
+| **Owner equity movements** | `equity-movement.builder.ts` | **T-127** | ✅ shipped |
+| Generic **liability accounts** | `liability-charge/payment` | **T-128** | ✅ shipped |
 
-> They are absent from the phase plan **and** absent from the bible's list of *deliberate*
-> omissions — so this is an oversight, not a decision. Recorded in ADR-005.
+> ⭐ **THE FINDING THAT PRODUCED THIS SECTION IS KEPT, BECAUSE IT IS THE HALF THAT DOES NOT ROT.**
+> These five were absent from the phase plan **and** absent from the bible's list of *deliberate*
+> omissions — **so their absence was an oversight, not a decision**, recorded in ADR-005. That is why
+> the capability-gap pass exists at all: a phase plan can be complete against itself and still miss
+> five ledger-posting modules, because nothing in it was asked *"what does the business do that no
+> phase owns?"* ⛔ **The status above rots; that sentence does not. Do not delete it when this
+> section is eventually archived.**
 
 ## 2. Blocks day-one operations, but NOT the January books — ~30 items
+
+> ⚠️⚠️ **THIS SECTION IS DATED 2026-08-23 AND HAS NOT BEEN AUDITED SINCE. SEVERAL OF ITS ITEMS HAVE
+> SHIPPED. DO NOT READ IT AS A LIST OF WHAT IS MISSING TODAY.** Checked 2026-09-16 while closing §1,
+> and **three were confirmed shipped without looking for more**:
+> **the commissary ↔ branch order pipeline** — the ~24-capability item this section calls *"very
+> large"* — closed in Phase 3; **POS item mapping and the daily usage pull**, closed by **T-177**;
+> and **staff master record + position taxonomy**, closed by **T-154**. **Store provisioning /
+> readiness** is closed by **T-222**, which makes four.
+>
+> ⛔ **The remaining rows are UNVERIFIED in both directions** — some are certainly still open, and
+> nobody has checked which. ⭐ **This banner is deliberately not a corrected list**, because writing
+> one without doing the audit would reset the same clock §1 just proved this document cannot be
+> trusted to keep: the fix for a stale list is either an audit or an honest warning, never a fresher
+> guess. **Whoever next needs this section audits it against `docs/ROADMAP.html` first.**
 
 January is books-only, so these do not threaten the cutover date. **They threaten the
 "everything else follows in Q1" half of ADR-005**, and one of them is very large.
