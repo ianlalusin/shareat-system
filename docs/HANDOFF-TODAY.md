@@ -4,10 +4,22 @@
 > deployment."*** Read that as the ordering principle for everything below — when two pieces of work
 > compete, the one that unblocks a deploy wins.
 >
-> ⛔⛔ **AND THE FIRST THING TO KNOW IS THAT `main` IS CURRENTLY UNDEPLOYABLE.** Nine commits are
-> pushed and CI is green on them, but **the deploy FAILED** and production is still running the
-> previous build. **One migration gate is refusing, for a real reason, and it needs Ian.** Details
-> in §1 — it is the single highest-value thing to resolve.
+> ⛔⛔ **AND THE FIRST THING TO KNOW IS THAT `main` IS CURRENTLY UNDEPLOYABLE — FOR A REASON THAT IS
+> NOT IN THIS REPOSITORY.** Twelve commits are pushed and CI is green on all of them, but **the
+> deploy job will not start:**
+>
+> > *"The job was not started because recent account payments have failed or your spending limit
+> > needs to be increased."*
+>
+> ⛔ **This is GitHub Actions billing, and only Ian can clear it** — Settings → Billing & plans.
+> ⭐ **How to recognise it rather than re-diagnose it: the run fails in about SIX SECONDS.** A deploy
+> that genuinely reaches the migrate step takes around three minutes. **A six-second failure means
+> no job ran at all.** ⚠️ **CI is on the same meter** — it is still launching, but if the limit is
+> exhausted CI will stop starting too, and since Deploy is `workflow_run`-gated on CI, that blocks
+> everything rather than only deployment.
+>
+> ⭐ **The migration gate that blocked the two earlier deploys is FIXED and pushed** (`71e33d2`).
+> §1 is kept because the finding behind it outlives the fix.
 
 ## Where things stand
 
@@ -22,7 +34,17 @@ broken. Nothing is deployed either.**
 **Nine commits pushed**, CI green on all of them (run `35096409253`, 11m20s). **Deploy run
 `35097516941` failed at the migrate step.**
 
-## ⛔⛔ 1. THE ONE THING BLOCKING DEPLOYMENT — and it is a real production finding
+## ✅ 1. FIXED — the gate that blocked two deploys, and the finding that outlives it
+
+> ✅ **RESOLVED 2026-09-16 in `71e33d2`.** Ian was given both options in plain language — make
+> himself a super-admin, or fix the gate — and chose the gate, which fixes it for every future
+> organisation rather than only for today. **The section below is kept because the finding is the
+> valuable part, and because it is the second time in one day that a premise checked against the
+> development database turned out false in production.**
+>
+> ⚠️ **It is NOT verified end-to-end.** CI is green on the fix, but the deploy has not been allowed
+> to run since (see the billing block above), **so migration `0152` has still never completed
+> against production.** Treat it as fixed-and-unproven until a deploy lands.
 
 Migration `0152` (T-318's access backfill) **refused to run**, with this exact message:
 
@@ -224,11 +246,13 @@ of work compete, the one that unblocks a deploy wins.
 Read in this order: docs/RULES.md, docs/HANDOFF-TODAY.md, PROJECT_BIBLE.md rows 204-208, and
 docs/DEFECTS-REGISTER.md section E (DEF-360 through DEF-363 are the newest).
 
-⛔⛔ FIRST: main is UNDEPLOYABLE. Migration 0152 refuses because production's only organisation
-has ZERO active super-admins, and Ian ruled the backfill must be attributed to him. The gate is
-correct and found a real fact nobody knew. 0152 was NEVER APPLIED so it may be edited in place —
-verify that against __drizzle_migrations yourself. Resolving this with Ian is the whole job until
-it is done. Handoff section 1 has the three options.
+⛔⛔ FIRST: main is UNDEPLOYABLE and the cause is NOT in this repository. The deploy job will not
+start — GitHub Actions billing, "recent account payments have failed or your spending limit needs
+to be increased". Only Ian can clear it, in Settings → Billing & plans. Recognise it by the
+duration: a billing refusal fails in about SIX SECONDS, a real migrate failure takes about three
+minutes. CI is on the same meter and Deploy is workflow_run-gated on CI, so an exhausted limit
+blocks everything. Do not go hunting the migration — that gate was fixed in 71e33d2 and CI is
+green on it. It is fixed-and-UNPROVEN: 0152 has still never completed against production.
 
 ⛔ THE WORKING TREE IS NOT CLEAN. T-318 slice C is applied and uncommitted, and the integration
 suite is RED on purpose — 262 failures across 17 files, which is the measurement, not a break.
