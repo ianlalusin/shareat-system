@@ -160,6 +160,22 @@ function wouldHoldViaAxis3a(matrixAllowsForRole: boolean, hasActiveGrant: boolea
   return matrixAllowsForRole || hasActiveGrant;
 }
 
+/**
+ * DEF-039's exact failure mode, proved rather than assumed: a migration that fails inside its own
+ * transaction must leave NO row in drizzle's tracking table, or a corrected re-run of the same
+ * file would be silently skipped forever (drizzle gates on `created_at` already present). 0152's
+ * own `when` is 1799206307084 (packages/db/migrations/meta/_journal.json) — this is the literal
+ * value production's failed first run left unrecorded, confirmed directly against
+ * `drizzle.__drizzle_migrations` on `shareat_dev` and `shareat_test_lanea` before this file's
+ * 2026-09-16 edit (both absent) — this assertion is what keeps that true going forward.
+ */
+async function trackedRunCount(sql: ReturnType<typeof postgres>): Promise<number> {
+  const rows = await sql<{ c: number }[]>`
+    select count(*)::int as c from drizzle.__drizzle_migrations where created_at = 1799206307084
+  `;
+  return rows[0]!.c;
+}
+
 // =========================================================================================
 // Suite 1 — the positionless-employment refuse gate.
 // =========================================================================================
@@ -207,36 +223,104 @@ describe('T-318 slice B / migration 0152 — refuses when an open employment has
     expect(defaults[0]!.c).toBe(0);
     expect(grants[0]!.c).toBe(0);
   });
+
+  it('leaves no row in drizzle.__drizzle_migrations — a corrected re-run is not silently skipped', async () => {
+    expect(await trackedRunCount(sql)).toBe(0);
+  });
 });
 
 // =========================================================================================
-// Suite 2 — the attribution refuse gate (Ian's ruling, 2026-09-14): zero or more than one
-// active super_admin in an org must refuse, never guess.
+// Suite 2 — the attribution refuse gate. RULED TWICE, 2026-09-14 then corrected 2026-09-16
+// after production's first real deploy failed: `createFirstAdmin`
+// (packages/domain/src/organizations/index.ts) has NO code path that ever creates a
+// super_admin, so a bootstrap-created org genuinely has zero — that was the gate demanding a
+// role the system does not produce, not a data error. The corrected rule, per org: exactly one
+// active super_admin wins; failing that, exactly one active admin (the account the bootstrap
+// actually creates for the org owner) wins; anything else refuses, naming every candidate found
+// at whichever tier was ambiguous.
 // =========================================================================================
 
-describe('T-318 slice B / migration 0152 — refuses when an org has zero or multiple active super_admins', () => {
-  it('refuses with ZERO super_admins in the org', async () => {
-    const dbName = `shareat_scratch_0152_refuse_zero_sa_${Date.now()}`;
+describe('T-318 slice B / migration 0152 — the two-tier attribution rule', () => {
+  it('refuses with ZERO super_admins AND zero admins in the org — admin tier, no candidates', async () => {
+    const dbName = `shareat_scratch_0152_refuse_zero_both_${Date.now()}`;
     await createScratchDatabase(dbName);
     const sql = postgres(scratchUrl(dbName), { max: 1 });
     try {
       await applyEverythingExcept152(sql);
-      const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values ('Zero SA Org', 'ZSA') returning id`;
+      const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values ('Zero Both Org', 'ZBO') returning id`;
       const [store] = await sql<{ id: string }[]>`insert into stores (org_id, code, name, is_active) values (${org!.id}, 'S1', 'Store', true) returning id`;
       const [pos] = await sql<{ id: string }[]>`insert into positions (org_id, store_id, name, is_canonical, is_active) values (${org!.id}, null, 'Cashier', true, true) returning id`;
       const [person] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${org!.id}, 'Worker') returning id`;
       const [emp] = await sql<{ id: string }[]>`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${org!.id}, ${store!.id}, ${person!.id}, 'SC-Z1', 'regular', '2026-01-01') returning id`;
       await sql`insert into employment_positions (employment_id, position_id, is_primary) values (${emp!.id}, ${pos!.id}, true)`;
-      // No super_admin at all in this org.
+      // No super_admin, no admin at all — production's actual shape before this fix.
 
-      await expect(apply152(sql)).rejects.toThrow(/exactly one active super_admin/);
+      await expect(apply152(sql)).rejects.toThrow(/admin tier: 0 candidate\(s\): none/);
+      expect(await trackedRunCount(sql)).toBe(0);
     } finally {
       await sql.end();
       await dropScratchDatabase(dbName);
     }
   });
 
-  it('refuses with TWO active super_admins in the org, naming both', async () => {
+  it('⭐ succeeds with ZERO super_admins and ONE admin — attributes to the admin (production\'s real shape)', async () => {
+    // This is the leg that would have caught the production failure: a bootstrap-created org has
+    // exactly one admin (createFirstAdmin) and no super_admin, ever, by construction.
+    const dbName = `shareat_scratch_0152_admin_fallback_${Date.now()}`;
+    await createScratchDatabase(dbName);
+    const sql = postgres(scratchUrl(dbName), { max: 1 });
+    try {
+      await applyEverythingExcept152(sql);
+      const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values ('Admin Only Org', 'AOO') returning id`;
+      const [admin] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${org!.id}, 'The Owner') returning id`;
+      await sql`insert into person_roles (person_id, org_id, role) values (${admin!.id}, ${org!.id}, 'admin')`;
+      const [store] = await sql<{ id: string }[]>`insert into stores (org_id, code, name, is_active) values (${org!.id}, 'S1', 'Store', true) returning id`;
+      const [pos] = await sql<{ id: string }[]>`insert into positions (org_id, store_id, name, is_canonical, is_active) values (${org!.id}, null, 'Cashier', true, true) returning id`;
+      const [person] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${org!.id}, 'Worker') returning id`;
+      const [emp] = await sql<{ id: string }[]>`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${org!.id}, ${store!.id}, ${person!.id}, 'SC-A1', 'regular', '2026-01-01') returning id`;
+      await sql`insert into employment_positions (employment_id, position_id, is_primary) values (${emp!.id}, ${pos!.id}, true)`;
+
+      await expect(apply152(sql)).resolves.toBeUndefined();
+      expect(await trackedRunCount(sql)).toBe(1);
+
+      const setByRows = await sql<{ set_by: string }[]>`select distinct set_by from position_capability_defaults`;
+      expect(setByRows.map((r) => r.set_by)).toEqual([admin!.id]);
+      const grantedByRows = await sql<{ granted_by: string }[]>`select distinct granted_by from person_grants`;
+      expect(grantedByRows.map((r) => r.granted_by)).toEqual([admin!.id]);
+      const names = await activeGrantNames(sql, person!.id);
+      expect(names).toEqual(THE_21);
+    } finally {
+      await sql.end();
+      await dropScratchDatabase(dbName);
+    }
+  });
+
+  it('refuses with ZERO super_admins and TWO admins — admin tier ambiguous, naming both', async () => {
+    const dbName = `shareat_scratch_0152_refuse_two_admin_${Date.now()}`;
+    await createScratchDatabase(dbName);
+    const sql = postgres(scratchUrl(dbName), { max: 1 });
+    try {
+      await applyEverythingExcept152(sql);
+      const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values ('Two Admin Org', 'TAO') returning id`;
+      const [a1] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${org!.id}, 'Admin One') returning id`;
+      const [a2] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${org!.id}, 'Admin Two') returning id`;
+      await sql`insert into person_roles (person_id, org_id, role) values (${a1!.id}, ${org!.id}, 'admin')`;
+      await sql`insert into person_roles (person_id, org_id, role) values (${a2!.id}, ${org!.id}, 'admin')`;
+      const [store] = await sql<{ id: string }[]>`insert into stores (org_id, code, name, is_active) values (${org!.id}, 'S1', 'Store', true) returning id`;
+      const [pos] = await sql<{ id: string }[]>`insert into positions (org_id, store_id, name, is_canonical, is_active) values (${org!.id}, null, 'Cashier', true, true) returning id`;
+      const [person] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${org!.id}, 'Worker') returning id`;
+      const [emp] = await sql<{ id: string }[]>`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${org!.id}, ${store!.id}, ${person!.id}, 'SC-D1', 'regular', '2026-01-01') returning id`;
+      await sql`insert into employment_positions (employment_id, position_id, is_primary) values (${emp!.id}, ${pos!.id}, true)`;
+
+      await expect(apply152(sql)).rejects.toThrow(/Admin One.*Admin Two|Admin Two.*Admin One/s);
+      expect(await trackedRunCount(sql)).toBe(0);
+    } finally {
+      await sql.end();
+      await dropScratchDatabase(dbName);
+    }
+  });
+
+  it('refuses with TWO active super_admins in the org, naming both — super_admin tier, even though the org also has zero admins', async () => {
     const dbName = `shareat_scratch_0152_refuse_two_sa_${Date.now()}`;
     await createScratchDatabase(dbName);
     const sql = postgres(scratchUrl(dbName), { max: 1 });
@@ -254,13 +338,43 @@ describe('T-318 slice B / migration 0152 — refuses when an org has zero or mul
       await sql`insert into employment_positions (employment_id, position_id, is_primary) values (${emp!.id}, ${pos!.id}, true)`;
 
       await expect(apply152(sql)).rejects.toThrow(/Super One.*Super Two|Super Two.*Super One/s);
+      await expect(apply152(sql)).rejects.toThrow(/super_admin tier ambiguous/);
+      expect(await trackedRunCount(sql)).toBe(0);
     } finally {
       await sql.end();
       await dropScratchDatabase(dbName);
     }
   });
 
-  it('does NOT refuse for an org with no stores and no super_admin — it would receive zero rows either way', async () => {
+  it('⭐ prefers the super_admin over the admin when an org has exactly one of each', async () => {
+    // Proves the PREFERENCE ORDER, not merely that either tier alone works.
+    const dbName = `shareat_scratch_0152_prefer_sa_${Date.now()}`;
+    await createScratchDatabase(dbName);
+    const sql = postgres(scratchUrl(dbName), { max: 1 });
+    try {
+      await applyEverythingExcept152(sql);
+      const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values ('Both Roles Org', 'BRO') returning id`;
+      const [sa] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${org!.id}, 'The Super') returning id`;
+      const [admin] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${org!.id}, 'The Admin') returning id`;
+      await sql`insert into person_roles (person_id, org_id, role) values (${sa!.id}, ${org!.id}, 'super_admin')`;
+      await sql`insert into person_roles (person_id, org_id, role) values (${admin!.id}, ${org!.id}, 'admin')`;
+      const [store] = await sql<{ id: string }[]>`insert into stores (org_id, code, name, is_active) values (${org!.id}, 'S1', 'Store', true) returning id`;
+      const [pos] = await sql<{ id: string }[]>`insert into positions (org_id, store_id, name, is_canonical, is_active) values (${org!.id}, null, 'Cashier', true, true) returning id`;
+      const [person] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${org!.id}, 'Worker') returning id`;
+      const [emp] = await sql<{ id: string }[]>`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${org!.id}, ${store!.id}, ${person!.id}, 'SC-P1', 'regular', '2026-01-01') returning id`;
+      await sql`insert into employment_positions (employment_id, position_id, is_primary) values (${emp!.id}, ${pos!.id}, true)`;
+
+      await expect(apply152(sql)).resolves.toBeUndefined();
+      const setByRows = await sql<{ set_by: string }[]>`select distinct set_by from position_capability_defaults`;
+      expect(setByRows.map((r) => r.set_by)).toEqual([sa!.id]);
+      expect(setByRows.map((r) => r.set_by)).not.toEqual([admin!.id]);
+    } finally {
+      await sql.end();
+      await dropScratchDatabase(dbName);
+    }
+  });
+
+  it('does NOT refuse for an org with no stores and no super_admin or admin — it would receive zero rows either way', async () => {
     // Review finding, system32-85, 2026-09-14: Step 2 must only check organisations Step 3 would
     // actually write a row for. An org with nothing to back-fill has nobody to protect by
     // refusing, and refusing anyway would halt a production deploy for no reason. Proven here
