@@ -244,11 +244,21 @@ screen already gated it; he was told so plainly. The record says what he was tol
 - ⚠️ **`DROP DATABASE` took 38,477ms under concurrent lane load and 57–75ms on a quiet machine**
   (DEF-365). Both figures are real; the condition is the difference.
 - ⛔⛔ **NEITHER SIGN-IN ROUTE WORKS ON THIS DEV MACHINE** — the public Firebase config is blank, and
-  the screen's own notice claiming *"PIN sign-in is unaffected"* is **false** (DEF-368). ⭐ **But the
-  CLOCK TERMINAL CAN be driven**: `apps/erp/src/lib/terminal/firebase.ts` reads `process.env`
-  directly with `'emulator'` fallbacks and honours `NEXT_PUBLIC_FIREBASE_EMULATOR_HOST` (line 71,
-  wired at 101-108) — **it never calls `publicEnv()`.** Emulator ports: auth **9198**, firestore
-  **8182**.
+  the screen's own notice claiming *"PIN sign-in is unaffected"* is **false** (DEF-368).
+  ⛔⛔ **AND THE SENTENCE THAT USED TO SIT HERE — *"But the CLOCK TERMINAL CAN be driven"* — WAS ALSO
+  FALSE, MEASURED 2026-09-17 (DEF-369).** It was right that
+  `apps/erp/src/lib/terminal/firebase.ts` reads `process.env` directly with `'emulator'` fallbacks,
+  right that it honours `NEXT_PUBLIC_FIREBASE_EMULATOR_HOST`, and right that it never calls
+  `publicEnv()` — **and the conclusion was still wrong, because nobody checked whether the fallback
+  fires.** It does not: the fallbacks are `??`, `.env.local` holds those values as the **empty
+  string** rather than unset, and `getAuth()` throws `auth/invalid-api-key` before the emulator is
+  ever connected. `/clock` died on the error boundary exactly like `/sign-in`.
+  ⭐ **WHAT ACTUALLY WORKS, and it unblocks BOTH routes — no code change:** start the dev server with
+  every `NEXT_PUBLIC_FIREBASE_*` identity value set to a non-empty placeholder plus
+  `NEXT_PUBLIC_FIREBASE_EMULATOR_HOST=localhost:8182`, against the emulator suite
+  (auth **9198**, firestore **8182**). Verified by loading both screens: `/clock` renders *"Pair this
+  terminal"* and `/sign-in` renders both forms, consoles clean. **So DEF-368 is an environment
+  condition on this machine, not a second code defect — and §9.4 is reachable today.**
 
 ## 8. Numbers to allocate from
 

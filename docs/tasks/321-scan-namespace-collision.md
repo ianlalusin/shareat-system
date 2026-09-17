@@ -197,11 +197,23 @@ must be able to say what the file asserted before and after.
 
 ## Smoketest — and the pre-flight has already been done for you
 
-⭐ **The clock terminal CAN be driven on this machine, unlike `/sign-in`.** It has its own Firebase
-client (`apps/erp/src/lib/terminal/firebase.ts`) which reads `process.env.NEXT_PUBLIC_*` **directly
-with `'emulator'` fallbacks** and honours `NEXT_PUBLIC_FIREBASE_EMULATOR_HOST` (line 71, wired at
-101-108) — ⛔ **it never calls `publicEnv()`, which is why it does not hit DEF-368's wall.** Emulator
-ports are `auth 9198` / `firestore 8182` (`firebase/firebase.json`). T-200 was verified this way.
+⛔⛔ **AMENDED 2026-09-17 — THE PRE-FLIGHT BELOW WAS WRONG AND THE ORCHESTRATOR MEASURED IT (DEF-369).**
+This section previously said *"the clock terminal CAN be driven on this machine, unlike `/sign-in`"*,
+because its Firebase client reads `process.env.NEXT_PUBLIC_*` **directly with `'emulator'` fallbacks**
+and never calls `publicEnv()`. **Every one of those facts is true and the conclusion was still false:
+nobody checked whether the fallback fires.** It does not — the fallbacks are `??`, this machine's
+`.env.local` holds those values as the **empty string** rather than unset, and `getAuth()`
+(`firebase.ts:99`) throws `auth/invalid-api-key` before `connectAuthEmulator` (`:106`) is reached.
+`/clock` dropped to the error boundary exactly like `/sign-in`.
+
+⭐ **WHAT THE TESTER ACTUALLY GETS, verified by loading both screens today:** the orchestrator's dev
+server on **9008** is started with every `NEXT_PUBLIC_FIREBASE_*` identity value set to a non-empty
+placeholder and `NEXT_PUBLIC_FIREBASE_EMULATOR_HOST=localhost:8182`, against the emulator suite
+(`auth 9198` / `firestore 8182`, `firebase/firebase.json`). With that, **`/clock` renders *"Pair this
+terminal"* and `/sign-in` renders both forms, consoles clean** — so the screen gate is reachable and
+`/sign-in` is reachable too, which this spec previously assumed it was not. T-200 was verified this
+way. ⚠️ **`/clock` still needs a pairing token minted from `/attendance/terminals`, which is behind
+sign-in** — the tester reports what it could and could not reach rather than working around it.
 
 **What to drive:** a normal scan still identifies the right person and records a punch. ⚠️ **The
 collision case cannot be produced through the UI once Contract 1 lands — that is the point** — so
