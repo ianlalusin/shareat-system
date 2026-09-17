@@ -1,6 +1,20 @@
 # T-321 — a scanned value can never resolve to the wrong person
 
-> ### **Status: SPEC — written 2026-09-17 by `system32-85` (Opus planner). NOT BUILT. Reserves T-321 and migration `0153`. Closes DEF-363 and DEF-362.**
+> ### **Status: ⭐ SHIPPED 2026-09-17, in TWO releases. CI green on both. Closes DEF-363 and DEF-362.**
+>
+> | | |
+> |---|---|
+> | **Release N** `9066147` | the tolerant collision catch — matches Postgres code `23505` + `constraint_name` against the new name **and both legacy ones**. No migration. Deployed to production before N+1 was written. Closes **DEF-362** (the asymmetry: `enrolCard` caught, `enrolFingerprint` had no catch at all). |
+> | **Release N+1** `37d9011` | migration `0153` — the generated column and the one cross-column index, net **−1**; `resolveScan` refuses ambiguity instead of guessing; the false doc comment replaced. Closes **DEF-363**. |
+> | `b58d0c0` | ⛔ the red-`main` fix — `0153`'s existence broke `0152`'s own proof test, which filtered migrations by FILENAME. See the commit; the same latent bug was in this task's own test 7. |
+>
+> ⚠️ **§9.4 (the screen gate) — see the Smoketest section.** Sign-in is unusable on a dev machine
+> for a reason deeper than DEF-368 records (**DEF-371**), so the terminal was driven via a minted
+> pairing token instead. **Read what that route does and does not prove before citing it.**
+>
+> ⭐ **T-322 carries the removal of the two legacy constraint names**, on a mechanical trigger:
+> `0153` confirmed applied in production **plus three deploys since release N**, because the
+> rollback window keeps three releases.
 >
 > **Ian, 2026-09-17: *"start with DEF-363."*** Research is in —
 > `docs/discovery/36-def-363-scan-namespace.md` — and it changed three things about the register's
