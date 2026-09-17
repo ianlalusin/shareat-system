@@ -10,8 +10,10 @@ import {
   SCOPE_ORDER,
   bannerMessage,
   bulkBannerMessage,
+  computeOverlapCounts,
   copyableDefaults,
   gridCapabilityGroups,
+  overlapDisclosure,
 } from '../src/app/admin/access-defaults/lib';
 
 /**
@@ -175,5 +177,92 @@ describe('copyableDefaults — copy-from-store offers canonical positions only (
       { positionId: 'p3', isCanonical: true, capability: 'b' },
     ];
     expect(copyableDefaults(defaults)).toEqual(defaults);
+  });
+});
+
+/**
+ * T-318 D3 — the multi-position disclosure. Pure; no database (`gridDataForStore` in `lib.ts`
+ * supplies the two real inputs — `employmentPositionsForStore`'s rows and
+ * `activeDefaultsMapForStore`'s map — via the one batched read each; the integration case for
+ * that wiring lives in `apps/erp/tests/integration/access-defaults-lib.test.ts`).
+ */
+describe('computeOverlapCounts — the T-318 MULTI-POSITION RULING, made visible', () => {
+  const asMap = (entries: readonly (readonly [string, readonly Capability[]])[]) =>
+    new Map(entries.map(([k, v]) => [k, new Set(v)]));
+
+  it('one position only: nothing to report — there is no OTHER position to hold it through', () => {
+    const links = [{ employmentId: 'e1', positionId: 'dishwasher' }];
+    const activeDefaults = asMap([['dishwasher', ['submit_sales_day']]]);
+    expect(computeOverlapCounts(links, activeDefaults).size).toBe(0);
+  });
+
+  it('two positions, one supplies the capability the other lacks: the LACKING one is credited', () => {
+    const links = [
+      { employmentId: 'e1', positionId: 'dishwasher' },
+      { employmentId: 'e1', positionId: 'server' },
+    ];
+    const activeDefaults = asMap([['server', ['submit_sales_day']]]); // dishwasher has nothing
+    const overlap = computeOverlapCounts(links, activeDefaults);
+    expect(overlap.get('dishwasher')?.get('submit_sales_day' as Capability)).toBe(1);
+    // Server already holds it directly — nothing to disclose FROM Server's own column.
+    expect(overlap.get('server')?.get('submit_sales_day' as Capability)).toBeUndefined();
+  });
+
+  it('both positions hold it directly: neither is credited — holding it here needs no disclosure', () => {
+    const links = [
+      { employmentId: 'e1', positionId: 'dishwasher' },
+      { employmentId: 'e1', positionId: 'server' },
+    ];
+    const activeDefaults = asMap([
+      ['dishwasher', ['submit_sales_day']],
+      ['server', ['submit_sales_day']],
+    ]);
+    const overlap = computeOverlapCounts(links, activeDefaults);
+    expect(overlap.get('dishwasher')?.get('submit_sales_day' as Capability)).toBeUndefined();
+    expect(overlap.get('server')?.get('submit_sales_day' as Capability)).toBeUndefined();
+  });
+
+  it('two DIFFERENT employments both credit the same (position, capability): counted as 2 people', () => {
+    const links = [
+      { employmentId: 'e1', positionId: 'dishwasher' },
+      { employmentId: 'e1', positionId: 'server' },
+      { employmentId: 'e2', positionId: 'dishwasher' },
+      { employmentId: 'e2', positionId: 'server' },
+    ];
+    const activeDefaults = asMap([['server', ['submit_sales_day']]]);
+    expect(computeOverlapCounts(links, activeDefaults).get('dishwasher')?.get('submit_sales_day' as Capability)).toBe(2);
+  });
+
+  it('one employment holding THREE positions, two of which supply the same capability: counted ONCE, by person', () => {
+    const links = [
+      { employmentId: 'e1', positionId: 'dishwasher' },
+      { employmentId: 'e1', positionId: 'server' },
+      { employmentId: 'e1', positionId: 'cashier' },
+    ];
+    const activeDefaults = asMap([
+      ['server', ['submit_sales_day']],
+      ['cashier', ['submit_sales_day']],
+    ]);
+    // §C5 — count PEOPLE, not rows: this is one person, not two, even though two other
+    // positions each supply the capability.
+    expect(computeOverlapCounts(links, activeDefaults).get('dishwasher')?.get('submit_sales_day' as Capability)).toBe(1);
+  });
+
+  it('an empty input yields an empty map, not a throw', () => {
+    expect(computeOverlapCounts([], new Map()).size).toBe(0);
+  });
+});
+
+describe('overlapDisclosure — rendered only when true, never as an ambient zero', () => {
+  it('zero renders nothing at all', () => {
+    expect(overlapDisclosure(0)).toBeNull();
+  });
+
+  it('singular wording for exactly one person', () => {
+    expect(overlapDisclosure(1)).toBe('Still held by 1 person through another position.');
+  });
+
+  it('plural wording for more than one', () => {
+    expect(overlapDisclosure(3)).toBe('Still held by 3 people through another position.');
   });
 });

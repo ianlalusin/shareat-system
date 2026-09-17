@@ -63,8 +63,12 @@ export interface GridScopeGroup {
 /**
  * §T1.1/§T1.2 — the grid offers exactly the capabilities outside the three excluded sets
  * (T-289 §C10), grouped by `CAPABILITY_SCOPE` in `store` → `org` → `platform` order (T-283's
- * `GrantPicker` shape). The ~21 staff-matrix capabilities are INCLUDED, flagged `inherited`, per
- * §C6 — hiding them would make the screen lie by omission. Pure; no database.
+ * `GrantPicker` shape). ⚠️ **T-318 (2026-09-16):** the ~21 capabilities `staff` used to hold
+ * automatically are INCLUDED here same as ever — this derivation never excluded them — but they
+ * no longer render `inherited`: `CAPABILITY_MATRIX[c].staff` is false for all 96 now, so every one
+ * is a live, position-granted TOGGLE like the other 75. `inherited` stays derived below rather
+ * than deleted (D2's ruling) — it is correct logic that is currently vacuous, and the only thing
+ * standing between this screen and a silent lie if a `staff` cell is ever set back to `true`.
  *
  * ⚠️ The `platform` group always ends up empty on this screen (both platform-scoped capabilities
  * are already inside `SUPER_ADMIN_ONLY_CAPABILITIES`) — kept in the returned array anyway so the
@@ -79,6 +83,20 @@ export function gridCapabilityGroups(): GridScopeGroup[] {
       inherited: CAPABILITY_MATRIX[c].staff,
     })),
   }));
+}
+
+/**
+ * T-318 D3 — the multi-position disclosure line, or nothing. `null` on zero: rendered only when
+ * it is true, never as an ambient "0 people hold this through another position" on every OFF
+ * cell — most cells have no overlap at all, and a reassurance repeated on 90% of the grid is
+ * exactly what trains an administrator to stop reading it. When it does appear the render layer
+ * (`page.tsx`) gives it a loud, distinct treatment rather than blending it into the grid's
+ * neutral tone — a rare exception earns attention a constant caption would lose. Singular/plural
+ * matches `bannerMessage`'s own voice.
+ */
+export function overlapDisclosure(count: number): string | null {
+  if (count === 0) return null;
+  return `Still held by ${count} ${count === 1 ? 'person' : 'people'} through another position.`;
 }
 
 /**
@@ -214,27 +232,115 @@ async function activeDefaultsMapForStore(tx: Tx, storeId: string): Promise<Activ
   return map;
 }
 
+/** One row per (employment, position) link at this store, open employments only — the same join
+ *  `holderCountsForStore` already performs, ungrouped so `computeOverlapCounts` can see which
+ *  positions share an employment. */
+export interface EmploymentPositionLink {
+  readonly employmentId: string;
+  readonly positionId: string;
+}
+
+async function employmentPositionsForStore(tx: Tx, storeId: string): Promise<EmploymentPositionLink[]> {
+  return tx
+    .select({
+      employmentId: schema.employmentPositions.employmentId,
+      positionId: schema.employmentPositions.positionId,
+    })
+    .from(schema.employmentPositions)
+    .innerJoin(schema.employments, eq(schema.employments.id, schema.employmentPositions.employmentId))
+    .where(and(eq(schema.employments.storeId, storeId), isNull(schema.employments.endedOn)));
+}
+
+/** positionId -> capability -> holder count via another position. See `computeOverlapCounts`. */
+export type OverlapCountsByPosition = ReadonlyMap<string, ReadonlyMap<Capability, number>>;
+
+/** positionId -> capability -> how many PEOPLE holding that position at this store would still
+ *  hold that capability through a DIFFERENT position on the same open employment — the T-318
+ *  MULTI-POSITION RULING's union, made visible. Pure; no database — `employmentPositionsForStore`
+ * and `activeDefaultsMapForStore` are fetched once each and handed in, so this stays a single
+ * batched read plus an in-memory aggregation, never N+1 (§C5).
+ *
+ * ⚠️ **What this counts, and what it deliberately does not.** This counts ONLY the position path:
+ * a second `employment_positions` row on the same employment whose OWN active default still
+ * covers the capability. It does NOT see a per-person `person_grants` row with
+ * `grant_source: 'grant'` or `'owner'` — those outrank `'position'` (`GRANT_SOURCE_RANK`) and
+ * survive a position switch-off untouched, invisible to this function by construction (it never
+ * reads `person_grants` at all). An admin can hit the identical "the switch did not work"
+ * surprise from a direct grant, with nothing here to explain it — tracked as T-320, not built
+ * here: a different query (person_grants, not employment_positions) and a different sentence
+ * ("held some other way", not "held through another position"), and widening this function's
+ * contract mid-slice is how a slice stops shipping.
+ */
+export function computeOverlapCounts(
+  links: readonly EmploymentPositionLink[],
+  activeDefaults: ActiveDefaultsByPosition,
+): OverlapCountsByPosition {
+  const positionsByEmployment = new Map<string, string[]>();
+  for (const link of links) {
+    const list = positionsByEmployment.get(link.employmentId) ?? [];
+    list.push(link.positionId);
+    positionsByEmployment.set(link.employmentId, list);
+  }
+
+  // positionId -> capability -> the SET of employments crediting it, so each person is counted
+  // once even if two OTHER positions both supply the same capability.
+  const overlapEmployments = new Map<string, Map<Capability, Set<string>>>();
+  for (const [employmentId, positionIds] of positionsByEmployment) {
+    if (positionIds.length < 2) continue; // one position only — no "another position" exists.
+    for (const positionId of positionIds) {
+      const ownCapabilities = activeDefaults.get(positionId);
+      for (const otherPositionId of positionIds) {
+        if (otherPositionId === positionId) continue;
+        const otherCapabilities = activeDefaults.get(otherPositionId);
+        if (!otherCapabilities) continue;
+        for (const capability of otherCapabilities) {
+          if (ownCapabilities?.has(capability)) continue; // held here too — not the disclosure case.
+          const byCapability = overlapEmployments.get(positionId) ?? new Map<Capability, Set<string>>();
+          const employments = byCapability.get(capability) ?? new Set<string>();
+          employments.add(employmentId);
+          byCapability.set(capability, employments);
+          overlapEmployments.set(positionId, byCapability);
+        }
+      }
+    }
+  }
+
+  const result = new Map<string, Map<Capability, number>>();
+  for (const [positionId, byCapability] of overlapEmployments) {
+    const counts = new Map<Capability, number>();
+    for (const [capability, employments] of byCapability) counts.set(capability, employments.size);
+    result.set(positionId, counts);
+  }
+  return result;
+}
+
 export interface GridData {
   readonly positions: readonly GridPosition[];
   readonly activeDefaults: ActiveDefaultsByPosition;
+  /** T-318 D3 — see `computeOverlapCounts`'s own comment for exactly what this does and does not
+   *  cover. Looked up as `overlapCounts.get(positionId)?.get(capability) ?? 0`. */
+  readonly overlapCounts: OverlapCountsByPosition;
 }
 
 /** Everything the grid needs for one store, in one transaction: positions (ordered, §C5), each
- *  column's holder count (batched, never N+1), and which cells are currently active defaults. */
+ *  column's holder count (batched, never N+1), which cells are currently active defaults, and
+ *  the multi-position overlap disclosure (T-318 D3). */
 export async function gridDataForStore(actor: Actor, storeId: string): Promise<GridData> {
   return withOrgPrincipal(actor.orgId, async (tx) => {
-    const [rawPositions, holderCounts, activeDefaults] = await Promise.all([
+    const [rawPositions, holderCounts, activeDefaults, employmentPositionLinks] = await Promise.all([
       employmentRepo.listPositions(tx, actor.orgId, storeId),
       holderCountsForStore(tx, storeId),
       activeDefaultsMapForStore(tx, storeId),
+      employmentPositionsForStore(tx, storeId),
     ]);
+    const overlapCounts = computeOverlapCounts(employmentPositionLinks, activeDefaults);
     const positions = sortPositions(rawPositions).map((p) => ({
       id: p.id,
       name: p.name,
       isCanonical: p.isCanonical,
       holderCount: holderCounts.get(p.id) ?? 0,
     }));
-    return { positions, activeDefaults };
+    return { positions, activeDefaults, overlapCounts };
   });
 }
 

@@ -9,10 +9,12 @@ import {
 import {
   gridCapabilityGroups,
   gridDataForStore,
+  overlapDisclosure,
   storesForActor,
   type ActiveDefaultsByPosition,
   type GridPosition,
   type GridScopeGroup,
+  type OverlapCountsByPosition,
 } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
@@ -78,7 +80,7 @@ export default async function AccessDefaultsPage({
   const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]!.id;
   const otherStores = stores.filter((s) => s.id !== storeId);
 
-  const [{ positions, activeDefaults }, groups] = await Promise.all([
+  const [{ positions, activeDefaults, overlapCounts }, groups] = await Promise.all([
     gridDataForStore(actor, storeId),
     Promise.resolve(gridCapabilityGroups()),
   ]);
@@ -127,8 +129,20 @@ export default async function AccessDefaultsPage({
         </p>
       ) : (
         <>
-          <DesktopGrid storeId={storeId} positions={positions} groups={nonEmptyGroups} activeDefaults={activeDefaults} />
-          <MobileSections storeId={storeId} positions={positions} groups={nonEmptyGroups} activeDefaults={activeDefaults} />
+          <DesktopGrid
+            storeId={storeId}
+            positions={positions}
+            groups={nonEmptyGroups}
+            activeDefaults={activeDefaults}
+            overlapCounts={overlapCounts}
+          />
+          <MobileSections
+            storeId={storeId}
+            positions={positions}
+            groups={nonEmptyGroups}
+            activeDefaults={activeDefaults}
+            overlapCounts={overlapCounts}
+          />
         </>
       )}
 
@@ -240,11 +254,13 @@ function DesktopGrid({
   positions,
   groups,
   activeDefaults,
+  overlapCounts,
 }: {
   storeId: string;
   positions: readonly GridPosition[];
   groups: readonly GridScopeGroup[];
   activeDefaults: ActiveDefaultsByPosition;
+  overlapCounts: OverlapCountsByPosition;
 }) {
   return (
     <div className="hidden overflow-x-auto rounded-lg border border-neutral-200 sm:block dark:border-neutral-800">
@@ -296,20 +312,22 @@ function DesktopGrid({
                       </span>
                     )}
                   </td>
-                  {positions.map((p) => (
-                    <td key={p.id} className="px-2 py-1.5">
-                      {cell.inherited ? (
-                        <InheritedBadge />
-                      ) : (
-                        <ToggleButton
-                          storeId={storeId}
-                          positionId={p.id}
-                          capability={cell.capability}
-                          active={activeDefaults.get(p.id)?.has(cell.capability) ?? false}
-                        />
-                      )}
-                    </td>
-                  ))}
+                  {positions.map((p) => {
+                    const active = activeDefaults.get(p.id)?.has(cell.capability) ?? false;
+                    const disclosure = active ? null : overlapDisclosure(overlapCounts.get(p.id)?.get(cell.capability) ?? 0);
+                    return (
+                      <td key={p.id} className="px-2 py-1.5">
+                        {cell.inherited ? (
+                          <InheritedBadge />
+                        ) : (
+                          <ToggleButton storeId={storeId} positionId={p.id} capability={cell.capability} active={active} />
+                        )}
+                        {disclosure && (
+                          <p className="mt-1 text-[11px] font-medium text-amber-700 dark:text-amber-400">{disclosure}</p>
+                        )}
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
             </Fragment>
@@ -330,11 +348,13 @@ function MobileSections({
   positions,
   groups,
   activeDefaults,
+  overlapCounts,
 }: {
   storeId: string;
   positions: readonly GridPosition[];
   groups: readonly GridScopeGroup[];
   activeDefaults: ActiveDefaultsByPosition;
+  overlapCounts: OverlapCountsByPosition;
 }) {
   return (
     <div className="space-y-3 sm:hidden">
@@ -354,33 +374,34 @@ function MobileSections({
                   {group.scope}-scoped
                 </p>
                 <p className="text-xs text-neutral-500 dark:text-neutral-400">{group.note}</p>
-                {group.capabilities.map((cell) => (
-                  <div
-                    key={cell.capability}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-neutral-200 p-3 dark:border-neutral-800"
-                  >
-                    <span className="min-w-0 font-mono text-xs">
-                      {cell.capability}
-                      {cell.inherited && (
-                        <span className="ml-2 block font-sans text-[11px] text-neutral-500 dark:text-neutral-400">
-                          Every staff member already has this through the role matrix.
+                {group.capabilities.map((cell) => {
+                  const active = activeDefaults.get(p.id)?.has(cell.capability) ?? false;
+                  const disclosure = active ? null : overlapDisclosure(overlapCounts.get(p.id)?.get(cell.capability) ?? 0);
+                  return (
+                    <div key={cell.capability} className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="min-w-0 font-mono text-xs">
+                          {cell.capability}
+                          {cell.inherited && (
+                            <span className="ml-2 block font-sans text-[11px] text-neutral-500 dark:text-neutral-400">
+                              Every staff member already has this through the role matrix.
+                            </span>
+                          )}
                         </span>
-                      )}
-                    </span>
-                    <div className="w-24 shrink-0">
-                      {cell.inherited ? (
-                        <InheritedBadge />
-                      ) : (
-                        <ToggleButton
-                          storeId={storeId}
-                          positionId={p.id}
-                          capability={cell.capability}
-                          active={activeDefaults.get(p.id)?.has(cell.capability) ?? false}
-                        />
+                        <div className="w-24 shrink-0">
+                          {cell.inherited ? (
+                            <InheritedBadge />
+                          ) : (
+                            <ToggleButton storeId={storeId} positionId={p.id} capability={cell.capability} active={active} />
+                          )}
+                        </div>
+                      </div>
+                      {disclosure && (
+                        <p className="mt-2 text-[11px] font-medium text-amber-700 dark:text-amber-400">{disclosure}</p>
                       )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ))}
             {!p.isCanonical && (
