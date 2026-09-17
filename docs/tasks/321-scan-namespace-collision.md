@@ -292,6 +292,32 @@ collision case cannot be produced through the UI once Contract 1 lands — that 
 the browser pass is a **regression check that ordinary scanning still works**, and the tester should
 say so rather than implying it exercised the fix.
 
+## ⛔ A DATABASE THAT RAN THIS SUITE BEFORE `0153` CANNOT BE MIGRATED UNTIL IT IS CLEANED
+
+⚠️ **Found 2026-09-17 on three lane databases, and it will happen on every developer machine.**
+Two tests in this task deliberately construct a cross-kind collision — `FIXED_TOKEN` in
+`attendance-credentials-fingerprint-collision.test.ts`, and `uid('shared')` in
+`attendance-credentials-scan-collision.test.ts:109`. ⛔ **Pre-`0153` the colliding insert SUCCEEDS**
+— that is the defect they exist to prove — so their `.rejects` assertion fails and **the live pair
+is left behind. One pair per run, by construction.**
+
+**So `0153` will refuse on any database where this suite ran before it.** Revoke one side of each
+pair and re-run, or recreate the database (DEF-364's disposition, and the cheaper option for a lane
+DB). ⚠️ **Grep for BOTH values** — a cleanup that looks for only one literal misses the other.
+
+⛔⛔ **AND THE TRAP IS THE MESSAGE, NOT THE REFUSAL.** Contract 2 names the offending organisations
+and staff codes — real ones, because the fixtures build real rows — so the first person to hit this
+will reasonably conclude they have found a **genuine data problem in their data**. They have found
+their own fixtures. **Contract 2's message cannot distinguish the two, and nothing in it will tell
+them.** That is the cost of the refusal being good at its job.
+
+⭐ **A corollary worth stating, because the orchestrator got it wrong and the auditor caught it
+before it reached a commit message:** these collisions are **not** evidence that production may hold
+any. They are self-inflicted by our own tests. ⛔ Contract 2's justification is, and always was,
+that **production is not queryable from here and therefore cannot be estimated** — an argument from
+ignorance, which is sound. Replacing it with an argument from evidence our own fixtures generated
+would have been unsound *and* would have read as reassurance.
+
 ## Out of scope
 
 - Any change to how the terminal reads its input, or to T-304's two-layer sign-in.
