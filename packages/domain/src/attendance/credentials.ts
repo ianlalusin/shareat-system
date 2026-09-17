@@ -37,6 +37,7 @@ import {
 } from '@shareat/db';
 import type { CredentialKind } from '@shareat/db/schema';
 import { logger } from '@shareat/core/logger';
+import { isScanValueCollision } from './scan-value-collision';
 
 export class CredentialError extends Error {
   constructor(message: string) {
@@ -155,10 +156,12 @@ export async function enrolCard(
       enrolledBy: actor.personId,
     });
   } catch (error) {
-    // ⭐ The partial unique index is the real guard; this turns its message into a sentence. Two
-    // live cards with one id makes "who punched?" unanswerable, and a check that picks the first
-    // match is how the wrong person gets paid.
-    if (String(error).includes('attendance_credentials_card_live_unique')) {
+    // ⭐ The partial unique index is the real guard; this turns its message into a sentence.
+    // ⛔⛔ T-321/DEF-363 Contract 5 — matches by CODE + constraint name (see `isScanValueCollision`),
+    // never a hand-typed literal. After T-321's migration this value belongs to one person at a
+    // time regardless of KIND: the other live credential holding it may now be a fingerprint, not
+    // another card, so the message no longer assumes it is.
+    if (isScanValueCollision(error)) {
       // T-245 — recorded on an INDEPENDENT transaction; see recordPrerequisiteRefusal's own
       // comment for why this cannot be `prerequisiteRefusalsRepo.record(tx, …)` on this same `tx`.
       await recordPrerequisiteRefusal({
@@ -168,8 +171,8 @@ export async function enrolCard(
         reasonCode: 'attendance.credential.already_enrolled_elsewhere',
       });
       throw new CredentialError(
-        'That card is already enrolled to somebody at this organisation. Revoke it there first — ' +
-          'a card id belongs to one person at a time.',
+        'That value is already enrolled to somebody at this organisation, as a card or a ' +
+          'fingerprint. Revoke it there first — a scanned value belongs to one person at a time.',
       );
     }
     throw error;
@@ -216,15 +219,41 @@ export async function enrolFingerprint(
     }
   }
 
-  return attendanceCredentialsRepo.insertCredential(tx, {
-    orgId: employment.orgId,
-    storeId: employment.storeId,
-    employmentId: employment.id,
-    kind: 'fingerprint',
-    matchToken: newMatchToken(),
-    templates,
-    enrolledBy: actor.personId,
-  });
+  try {
+    return await attendanceCredentialsRepo.insertCredential(tx, {
+      orgId: employment.orgId,
+      storeId: employment.storeId,
+      employmentId: employment.id,
+      kind: 'fingerprint',
+      matchToken: newMatchToken(),
+      templates,
+      enrolledBy: actor.personId,
+    });
+  } catch (error) {
+    // ⛔⛔ T-321/DEF-362 Contract 4 — a raw Postgres violation must never escape the domain, same as
+    // `enrolCard`'s own catch (Contract 5), matched the same way (`isScanValueCollision`). ⚠️ Not a
+    // retry-until-unique: a minted token is 128 random bits, so THIS CATCH IS UNREACHABLE IN
+    // PRACTICE — landing on a live card id is no likelier than landing on a live token by chance,
+    // both are 2^-128, and neither is reachable deliberately (a token this function mints cannot be
+    // predicted or chosen in advance by whoever enrolled the colliding card). It exists so the
+    // practically-impossible case still cannot escape the domain as a raw constraint violation —
+    // DEF-362's own framing — not because either branch is expected to fire.
+    if (isScanValueCollision(error)) {
+      // T-245 — recorded on an INDEPENDENT transaction; see recordPrerequisiteRefusal's own
+      // comment for why this cannot be `prerequisiteRefusalsRepo.record(tx, …)` on this same `tx`.
+      await recordPrerequisiteRefusal({
+        orgId: employment.orgId,
+        storeId: employment.storeId,
+        actorPersonId: actor.personId,
+        reasonCode: 'attendance.credential.already_enrolled_elsewhere',
+      });
+      throw new CredentialError(
+        'That fingerprint minted a value already enrolled to somebody at this organisation, as a ' +
+          'card or a fingerprint. Try enrolling again — a scanned value belongs to one person at a time.',
+      );
+    }
+    throw error;
+  }
 }
 
 /** 16 random bytes as 32 hex characters — v1's `generateFingerprintMatchToken`, kept verbatim. */

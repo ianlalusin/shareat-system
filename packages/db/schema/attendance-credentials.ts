@@ -47,6 +47,15 @@ import { stores } from './stores';
 export const CREDENTIAL_KINDS = ['card', 'fingerprint'] as const;
 export type CredentialKind = (typeof CREDENTIAL_KINDS)[number];
 
+/**
+ * T-321/DEF-363 Contract 6 — the ONE place this name is written. Both `enrolCard`'s catch and
+ * `enrolFingerprint`'s new one import this rather than typing the literal, because a hand-typed
+ * copy that drifts from what the migration actually created fails OPEN: the catch stops matching
+ * and a raw Postgres violation escapes the domain again (the exact DEF-362 shape).
+ */
+export const ATTENDANCE_CREDENTIALS_SCAN_VALUE_LIVE_UNIQUE =
+  'attendance_credentials_scan_value_live_unique';
+
 export const attendanceCredentials = pgTable(
   'attendance_credentials',
   {
@@ -109,6 +118,16 @@ export const attendanceCredentials = pgTable(
      *
      * ⚠️ PARTIAL, on `revoked_at is null` — a **revoked** card id may be reissued, which is what
      * happens when a badge is lost and reprinted with the same number.
+     *
+     * ⚠️ T-321/DEF-363 — BOTH `attendance_credentials_card_live_unique` AND
+     * `attendance_credentials_token_live_unique` below are pending replacement by ONE cross-column
+     * index (`ATTENDANCE_CREDENTIALS_SCAN_VALUE_LIVE_UNIQUE` above) in a later migration (0153).
+     * Left standing here deliberately for now: `packages/domain/src/attendance/credentials.ts`'s
+     * `enrolCard`/`enrolFingerprint` catches already tolerate EITHER of these two names alongside
+     * the new one, so the code is safe to ship BEFORE the schema change lands (expand/contract,
+     * bible §15.5) — do not remove EITHER index until 0153 replaces both in the same pass as the
+     * code that stops tolerating their names. Dropping just one early re-opens the fail-open on
+     * that half exactly as dropping both would.
      */
     uniqueIndex('attendance_credentials_card_live_unique')
       .on(t.orgId, t.cardId)

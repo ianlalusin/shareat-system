@@ -173,6 +173,21 @@ describe('T-185 invariant 1 — one live card, one owner', () => {
     await expect(enrolCardBackdated(f, card, f.colleague.id)).rejects.toBeInstanceOf(CredentialError);
   });
 
+  // T-321/DEF-363 Contract 5 — the refusal wording must stop assuming the OTHER live holder of
+  // this value is a card: after T-321's migration it can be a fingerprint. Pin the SUBSTANCE (it
+  // names both kinds as possible), not the exact sentence, so a future copy-edit doesn't turn
+  // this into a tripwire someone deletes rather than a control that actually holds.
+  it('⛔ the refusal does not assume the collision partner is a card', async () => {
+    const f = await fixture('wording');
+    const card = uid('c');
+    await enrolCardBackdated(f, card);
+    const error = await enrolCardBackdated(f, card, f.colleague.id).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(CredentialError);
+    const message = (error as Error).message;
+    expect(message, message).toMatch(/card/i);
+    expect(message, message).toMatch(/fingerprint/i);
+  });
+
   it('⭐ but a REVOKED card id may be reissued — a lost badge gets reprinted', async () => {
     const f = await fixture('reissue');
     const card = uid('c');
