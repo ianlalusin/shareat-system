@@ -109,6 +109,27 @@ this code. **Production cannot be counted from here; do not estimate it.**
    where revoked_at is null` **replaces both existing indexes** — any violation of either old index
    is a violation of the new one. ⚠️ **Net index count goes DOWN by one. If your migration adds a
    third index, you have the wrong design — stop and report.**
+
+   > ### ⭐ THIS DESIGN WAS RUN, NOT ONLY REASONED — orchestrator, 2026-09-17
+   >
+   > The paragraph above came out of a research pass that deliberately wrote no SQL, so it was a
+   > hypothesis. **Bible §13 row 212: a static census only nominates; running settles it.** Built on
+   > a scratch table on a lane database (**PostgreSQL 18.6**), with the real shape check and exactly
+   > one partial unique index, all five cases behaved as Contract 1 requires:
+   >
+   > | Case | Result |
+   > |---|---|
+   > | live `card_id` = live `match_token`, one org | **rejected** by the new index |
+   > | same value in a **different** org | accepted — the index is org-scoped |
+   > | re-enrol a value whose row is **revoked** | accepted — the index is partial |
+   > | two live cards sharing an id | **rejected** by the new index |
+   > | two live tokens sharing a value | **rejected** by the new index |
+   >
+   > ⭐ **The last two are the ones that matter for the migration's safety**, and they are the reason
+   > dropping two indexes and adding one is not a loss of coverage: the single index absorbed both
+   > old indexes' own jobs, so **net −1 is correct rather than merely cheaper.** ⚠️ This settles the
+   > *shape*. It does not settle the migration — Contract 2's refusal on pre-existing colliding rows
+   > is still unwritten, and a scratch table has no production data in it.
 2. **The migration REFUSES rather than failing obscurely** if live colliding rows already exist,
    naming the offending organisations and staff codes. ⭐ **This is `0152`'s pattern and it earned
    its keep on its first real run** — an index creation that just errors tells an operator nothing.
