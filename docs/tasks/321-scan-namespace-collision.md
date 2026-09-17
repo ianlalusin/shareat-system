@@ -43,8 +43,18 @@ asserting a safe invariant. **Inverting it is this task's central test change.**
 | Line | What actually happens |
 |---|---|
 | `clock/page.tsx:220` | `const method = credential.kind === 'card' ? 'qr' : 'fingerprint';` — derived from the **guessed** kind |
-| `clock/page.tsx:242-243` | `credentialKind: credential.kind, credentialRef: value` — **the guessed kind goes into the punch** |
-| `packages/domain/src/attendance/credentials.ts:90-108` | `resolveCredentialAt` **is** correctly kind-scoped — and trusts the client-sent kind, which `resolveScan` already corrupted |
+| `clock/page.tsx:245-246` | `credentialKind: credential.kind, credentialRef: value` — **the guessed kind goes into the punch** |
+| `packages/db/src/repo/attendance-credentials.ts:90-108` | `resolveCredentialAt` **is** correctly kind-scoped (`column = input.kind === 'card' ? card_id : match_token`, then `where kind = ${input.kind} and ${column} = ${input.ref}`) — and trusts the client-sent kind, which `resolveScan` already corrupted |
+
+> ⛔ **Both citations above were WRONG in the first draft of this spec and were corrected by the
+> tester on 2026-09-17, before a line was written.** The first said `:242-243`, which is `db,` and
+> `deviceId:` — an off-by-three inside the `writePunch` object. The second named
+> `packages/domain/src/attendance/credentials.ts`, and `resolveCredentialAt` **is not in that file at
+> all** — it is the repo layer, `packages/db/src/repo/attendance-credentials.ts`, exactly as the
+> discovery document had it. ⭐ **The orchestrator took a bare filename out of a message and guessed
+> the path.** Bible §13 row 208 in the same week it was written. **The substance of the finding was
+> right in both cases; only the pointers were wrong — which is precisely how a wrong pointer
+> survives, because the claim around it reads as true.**
 
 ⛔ **So the server's correct-looking, kind-scoped query lands on the wrong employment. The
 misattribution reaches the punch, and attendance feeds payroll.** The second half of the comment is
@@ -70,9 +80,11 @@ this code. **Production cannot be counted from here; do not estimate it.**
   `1799206307084` (0152's) and be re-derived from `packages/db/migrations/README.md` at build time,
   never copied from this document** (DEF-039).
 - `packages/db/migrations/meta/_journal.json`
-- `packages/db/schema/attendance-credentials.ts`
+- `packages/db/schema/attendance-credentials.ts` — the index, **and the exported constant holding
+  its name** (Contract 6)
 - `apps/erp/src/lib/terminal/lane.ts` — `resolveScan` **and its false comment**
-- `packages/domain/src/attendance/credentials.ts` — `enrolFingerprint`'s catch, `enrolCard`'s message
+- `packages/domain/src/attendance/credentials.ts` — `enrolFingerprint`'s **new** catch, and
+  `enrolCard`'s **catch condition AND message** — ⛔ **both, not just the message** (Contract 5)
 - `apps/erp/src/app/clock/page.tsx` — **only** if the refusal needs its own message; report first
 
 **TESTER — tests only. You may not edit a single source file.**
@@ -107,8 +119,29 @@ this code. **Production cannot be counted from here; do not estimate it.**
 4. **`enrolFingerprint` translates a uniqueness violation into a `CredentialError`**, as `enrolCard`
    already does for its own constraint. ⛔ **A raw Postgres violation must never escape the domain**
    (DEF-362).
-5. **`enrolCard`'s refusal message stops assuming the collision partner is a card.** After (1) the
-   partner can be a fingerprint token, and the current wording would be wrong.
+5. ⛔⛔ **`enrolCard`'s CATCH CONDITION changes, not only its message — and getting this wrong
+   re-creates DEF-362 on the one path that currently does it right.** Found by the auditor
+   2026-09-17 **before any code was written**, and the first draft of this spec said only
+   *"`enrolCard`'s message"*, which invites exactly the narrow reading that breaks it.
+   `credentials.ts:161` is `if (String(error).includes('attendance_credentials_card_live_unique'))`
+   — **a literal match on an index name Contract 1 DELETES.** Reword the sentence and leave that
+   condition alone, and after the migration the `if` never fires, execution falls through to
+   `throw error`, and **`enrolCard` starts leaking a raw Postgres violation on every card
+   collision.** ⭐ **It would not be silent** —
+   `packages/domain/tests/integration/attendance-credentials.test.ts:169-173` asserts
+   `.rejects.toBeInstanceOf(CredentialError)` and would fail — **but only if the builder runs it**,
+   which is why it is pinned here rather than left to chance.
+   Also: the refusal wording stops assuming the partner is a card, because after (1) it can be a
+   fingerprint token.
+6. ⭐⭐ **THE NEW CONSTRAINT'S NAME IS DEFINED ONCE, IN CODE, AND IMPORTED — NEVER TYPED TWICE.**
+   **Its name is `attendance_credentials_scan_value_live_unique`.** Two catch blocks must match it
+   (`enrolCard`'s, updated; `enrolFingerprint`'s, new) and the migration must create it. ⛔ **Three
+   hand-typed copies of one string is the drift T-317 invariant 6 exists to stop**, and a typo in any
+   one of them fails open — the catch simply never matches and the raw error escapes.
+   **Export the name as a constant from `packages/db/schema/attendance-credentials.ts`** beside the
+   index that declares it, and have both catches import it. ⚠️ **If the SQL cannot import the
+   constant, the migration is the one place the literal may appear — and a test must assert the
+   constant equals what the database actually created**, so the two cannot drift silently.
 6. ⛔ **`resolveScan`'s doc comment must stop claiming it decides only what to show.** Replace it
    with what is true: its output sets `credentialKind` on the punch (`clock/page.tsx:242`) and
    therefore selects which column the server resolves against.
@@ -149,8 +182,18 @@ must be able to say what the file asserted before and after.
    revoke, re-enrol the same value: must succeed.
 6. **`enrolFingerprint` raises `CredentialError`**, not a raw constraint violation, on a collision.
 7. **The migration refuses on pre-existing colliding data**, naming the offenders — seeded
-   deliberately on a scratch database, the way `0152`'s own suite does it.
-8. **Smoketest, in Chrome, against the Firebase emulator** — see below.
+   deliberately on a scratch database, the way `0152`'s own suite does it. ⚠️ **Structurally blocked
+   until `0153` exists**, because it must read the real SQL file to exclude-then-apply it; write it
+   the moment the file lands rather than something that fails for file-not-found.
+8. ⛔ **`enrolCard` still raises `CredentialError` AFTER the rename.** The existing
+   `attendance-credentials.test.ts:169-173` already covers it — ⚠️ **but it is in the tester's scope
+   and must be RUN and reported by name**, because it is the one test standing between Contract 5's
+   trap and a silent regression. If it is not in the tester's RED report, it was not checked.
+9. ⭐ **The constant matches reality.** Assert that the exported constraint name
+   (Contract 6) equals the name the database actually created — query `pg_indexes` or
+   `pg_constraint` on the lane DB. **A constant that drifts from the migration fails open**: the
+   catch never matches and the raw error escapes, which is the defect this task exists to close.
+10. **Smoketest, in Chrome, against the Firebase emulator** — see below.
 
 ## Smoketest — and the pre-flight has already been done for you
 
