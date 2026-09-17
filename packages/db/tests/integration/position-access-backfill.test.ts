@@ -128,6 +128,30 @@ async function createScratchDatabase(name: string): Promise<void> {
   }
 }
 
+/**
+ * DEF-365 — `DROP DATABASE` has been measured at two very different speeds on this same
+ * development machine, and the difference is the CONDITION it ran under, not a property of the
+ * machine itself:
+ *
+ *   - **2026-09-16, several lanes running integration suites against this Postgres concurrently:**
+ *     dropping a database with NO connections took **38,477ms** — past vitest's 30,000ms
+ *     `hookTimeout`, which failed this file's `afterAll` while all 17 of its tests passed.
+ *   - **2026-09-17, quiet machine:** the same operation took **57–75ms** across three fresh runs,
+ *     and this file passes with the default 30s timeout, unmodified.
+ *
+ * ⭐ **So the two `afterAll` hooks below carry an explicit 120,000ms timeout as a CEILING for the
+ * contended case, not a description of normal behaviour.** A reader who measures 57ms tomorrow has
+ * not found a stale comment — they have found the quiet case this comment already names. 120s is
+ * ~3x the one contended measurement on record, sized on the asymmetry: a ceiling that is too high
+ * only delays reporting a genuinely hung drop; one too low reports a FAILED file whose tests all
+ * passed, which is exactly the signal this row exists to protect (docs/DEFECTS-REGISTER.md DEF-365).
+ * ⛔ **A lingering connection is not the failure mode to suspect here** — it makes `DROP DATABASE`
+ * FAIL in ~5s with "database is being accessed by other users", never hang, so a slow drop is
+ * never evidence of a stuck connection. ⚠️ Neither hook below ever drops more than ONE database
+ * (the middle describe block's six scratch databases are each created and dropped inline inside
+ * their own `it()`, under `testTimeout`, not here) — so the ceiling is one drop plus margin, never
+ * a multiple.
+ */
 async function dropScratchDatabase(name: string): Promise<void> {
   const adminUrl = new URL(baseUrl!);
   adminUrl.pathname = '/postgres';
@@ -215,10 +239,13 @@ describe('T-318 slice B / migration 0152 — refuses when an open employment has
     // exists, so the ONLY thing that can make this migration refuse is the positionless check.
   });
 
+  // DEF-365 — see dropScratchDatabase's own comment for the full reasoning and both dated
+  // measurements. 120_000 is a ceiling for a database drop under concurrent load, not a claim
+  // about typical speed.
   afterAll(async () => {
     await sql?.end();
     await dropScratchDatabase(dbName);
-  });
+  }, 120_000);
 
   it('rejects the whole migration run, naming the offending staff code', async () => {
     await expect(apply152(sql)).rejects.toThrow(new RegExp(orphanStaffCode));
@@ -484,10 +511,13 @@ describe('T-318 slice B / migration 0152 — backfills position_capability_defau
     await apply152(sql);
   });
 
+  // DEF-365 — see dropScratchDatabase's own comment for the full reasoning and both dated
+  // measurements. 120_000 is a ceiling for a database drop under concurrent load, not a claim
+  // about typical speed.
   afterAll(async () => {
     await sql?.end();
     await dropScratchDatabase(dbName);
-  });
+  }, 120_000);
 
   it('⭐ CONTRACT 4: a single-position holder receives exactly the 21, via grant_source=position', async () => {
     const names = await activeGrantNames(sql, singlePersonId);
