@@ -123,6 +123,31 @@ async function runCreate(
     upTo: input.remittedOn,
   });
   const settleable = reports.filter((r) => r.remittable && Number(r.owed) > 0);
+
+  // ⛔⛔ DEF-358/T-319 — REFUSE BEFORE ANY WRITE. Placed here, immediately after `settleable` is
+  // computed and BEFORE `insertRemittance` and the transfer loop below: those move real money and
+  // write real rows, and a refusal placed after either of them would leave that damage done for a
+  // call that then throws. Without this, an empty `settleable` reaches `allocateFifo` with `days:
+  // []`, which returns a non-zero `variance` and a null `varianceDayId` (nothing to attribute it
+  // to) — and the guard at this file's variance write below treats a null `varianceDayId` as "skip
+  // the row", so the cash moves through the transfer loop and NOTHING records the gap. That is
+  // DEF-358, reproduced with a real red control in `remittance.test.ts` before this existed.
+  //
+  // Two distinct refusals, not one: the remedy differs, and a single message would send someone to
+  // verify a day that is already verified and already fully settled.
+  if (settleable.length === 0) {
+    if (!reports.some((r) => r.remittable)) {
+      throw new Error(
+        `createRemittance: no sales day at or before ${input.remittedOn} has been verified yet — ` +
+          'verify a day before remitting.',
+      );
+    }
+    throw new Error(
+      `createRemittance: every verified day at or before ${input.remittedOn} already owes ` +
+        'nothing — there is nothing to settle.',
+    );
+  }
+
   const days: DayOwed[] = settleable.map((r) => ({
     salesDayId: r.businessDate, // ⚠️ keyed by DATE (row 157), not by sales-day id
     businessDate: r.businessDate,

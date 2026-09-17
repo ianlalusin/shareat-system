@@ -754,3 +754,129 @@ describe('T-153 — the till float pot', () => {
     ).rejects.toThrow(/money_accounts_float_target_shape_check/);
   });
 });
+
+describe('⛔⛔ DEF-358/T-319 — a remittance before anything is verified is refused', () => {
+  /** Zero rows for this store in the three tables a remittance writes to. */
+  async function nothingWrittenFor(f: Fixture): Promise<void> {
+    const [rows] = await sql<{ remittances: string; lines: string; transfers: string }[]>`
+      select
+        (select count(*)::text from remittances where store_id = ${f.storeId}) as remittances,
+        (select count(*)::text from remittance_lines rl
+           join remittances r on r.id = rl.remittance_id where r.store_id = ${f.storeId}) as lines,
+        (select count(*)::text from money_transfers where store_id = ${f.storeId}) as transfers
+    `;
+    expect(rows).toEqual({ remittances: '0', lines: '0', transfers: '0' });
+  }
+
+  // ⛔⛔ THE RED CONTROL — DEF-358 reproduced, not described (RULES §3.2). Run in isolation against
+  // the code as committed at `d841aa0`, BEFORE any refusal existed:
+  //   node it.mjs shareat_test_lanea packages/domain/tests/integration/remittance.test.ts \
+  //     --reporter=verbose -t "reproduces DEF-358"
+  //   ✓ ... reproduces DEF-358 ... 179ms — (1 passed | 27 skipped), 2026-09-17.
+  // Observed, not inferred: `r.variance` was `'10000.00'` (the whole handed-over amount — nothing
+  // was owed, since nothing is verified), `r.varianceId` was `null`, zero rows existed in
+  // `remittance_variances` for this remittance, and one `money_transfers` row was `posted`. Then
+  // the refusal below was added to `index.ts` and this same test was inverted in place — this
+  // comment is the record of what running it actually showed, not a description of the code.
+  it('no longer reproduces DEF-358 — a remittance before anything is verified is refused outright', async () => {
+    const f = await fixture('def358-repro');
+    // A cashier movement on a date NOBODY has verified — the exact shape the register describes.
+    await tillMovement(f, '2026-01-01', '10000.00');
+
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        createRemittance(tx, f.admin, {
+          storeId: f.storeId,
+          remittedOn: '2026-01-02',
+          lines: [{ fromMoneyAccountId: f.till, toMoneyAccountId: f.safe, amount: '10000.00' }],
+        }),
+      ),
+    ).rejects.toThrow(/createRemittance:/);
+
+    await nothingWrittenFor(f);
+  });
+
+  it('refuses with no verified day at all, and the message names the verify remedy', async () => {
+    const f = await fixture('def358-noverified');
+    await tillMovement(f, '2026-01-01', '5000.00');
+
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        createRemittance(tx, f.admin, {
+          storeId: f.storeId,
+          remittedOn: '2026-01-02',
+          lines: [{ fromMoneyAccountId: f.till, toMoneyAccountId: f.safe, amount: '5000.00' }],
+        }),
+      ),
+    ).rejects.toThrow(/verify/i);
+  });
+
+  it('refuses when verified days exist but every one already owes zero — a DIFFERENT message', async () => {
+    const f = await fixture('def358-zeroowed');
+    await verifiedDay(f, '2026-01-01');
+    await tillMovement(f, '2026-01-01', '3000.00');
+
+    // Settle it completely first — a normal, unrefused remittance.
+    const first = await asOrg(f.orgId, (tx) =>
+      createRemittance(tx, f.admin, {
+        storeId: f.storeId,
+        remittedOn: '2026-01-02',
+        lines: [{ fromMoneyAccountId: f.till, toMoneyAccountId: f.safe, amount: '3000.00' }],
+      }),
+    );
+    expect(first.variance).toBeNull();
+
+    // Nothing outstanding remains, but the day IS verified — a different situation from "nobody
+    // verified anything", and Contract 2 says it must not send anyone to verify a day that already
+    // exists and is already settled.
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        createRemittance(tx, f.admin, {
+          storeId: f.storeId,
+          remittedOn: '2026-01-03',
+          lines: [{ fromMoneyAccountId: f.till, toMoneyAccountId: f.safe, amount: '1.00' }],
+        }),
+      ),
+    ).rejects.toThrow(/nothing to settle|owes nothing/i);
+  });
+
+  it('✅ still succeeds normally — one verified day owing something, allocated, money moved', async () => {
+    const f = await fixture('def358-normal');
+    await verifiedDay(f, '2026-01-01');
+    await tillMovement(f, '2026-01-01', '7500.00');
+
+    const r = await asOrg(f.orgId, (tx) =>
+      createRemittance(tx, f.admin, {
+        storeId: f.storeId,
+        remittedOn: '2026-01-02',
+        lines: [{ fromMoneyAccountId: f.till, toMoneyAccountId: f.safe, amount: '7500.00' }],
+      }),
+    );
+    expect(r.settled).toEqual([{ businessDate: '2026-01-01', amount: '7500.00' }]);
+    expect(r.variance).toBeNull();
+
+    const [line] = await sql<{ n: number }[]>`
+      select count(*)::int n from remittance_lines rl
+      join money_transfers mt on mt.id = rl.money_transfer_id
+      where rl.remittance_id = ${r.id} and mt.status = 'posted'
+    `;
+    expect(line!.n).toBe(1);
+  });
+
+  it('⛔ nothing is written on the refusal path — the row counts, not just the throw', async () => {
+    const f = await fixture('def358-norows');
+    await tillMovement(f, '2026-01-01', '2000.00');
+
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        createRemittance(tx, f.admin, {
+          storeId: f.storeId,
+          remittedOn: '2026-01-02',
+          lines: [{ fromMoneyAccountId: f.till, toMoneyAccountId: f.safe, amount: '2000.00' }],
+        }),
+      ),
+    ).rejects.toThrow();
+
+    await nothingWrittenFor(f);
+  });
+});
