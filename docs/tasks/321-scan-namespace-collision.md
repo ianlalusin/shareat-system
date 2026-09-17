@@ -142,7 +142,7 @@ this code. **Production cannot be counted from here; do not estimate it.**
    index that declares it, and have both catches import it. ⚠️ **If the SQL cannot import the
    constant, the migration is the one place the literal may appear — and a test must assert the
    constant equals what the database actually created**, so the two cannot drift silently.
-6. ⛔ **`resolveScan`'s doc comment must stop claiming it decides only what to show.** Replace it
+7. ⛔ **`resolveScan`'s doc comment must stop claiming it decides only what to show.** Replace it
    with what is true: its output sets `credentialKind` on the punch (`clock/page.tsx:242`) and
    therefore selects which column the server resolves against.
 
