@@ -20,18 +20,24 @@ describe('T-314 seam — a slice-A token resolves through the existing resolveSc
   });
 
   /**
-   * ⛔ DISCOVERED, REPORTED, NOT FIXED — `resolveScan` is outside slice A's scope (`lane.ts` is
-   * capped at the one authorized line). `lane.ts:170` compares a scanned value against
-   * `cardId || matchToken` as ONE flat namespace. Nothing stops a card's `cardId` from coinciding
-   * with a DIFFERENT employment's `matchToken`: the two live in independent unique indexes
-   * (`attendance_credentials_card_live_unique`, `attendance_credentials_token_live_unique`), each
-   * scoped only to its own column — neither constrains the other. When the strings collide,
-   * resolution is decided by ARRAY ORDER, not by kind: a fingerprint scan can resolve to a card
-   * holder's employment, misattributing the punch to the wrong person. This test documents the
-   * actual, current behavior rather than asserting a safe invariant that would fail — see the
-   * lane's READY report for the finding.
+   * ⛔⛔ T-321/DEF-363 — INVERTED. This test used to be titled "DISCOVERED: a card cardId
+   * colliding with a different employment's matchToken resolves by array order, not by kind", and
+   * it asserted the collision RESOLVED — to the card holder with one array order, to the
+   * fingerprint holder with the other — proving array order decided who you are. That assertion
+   * PASSED (green) against `lane.ts` as it stood before this task, which is exactly RULES §3.2's
+   * warning made concrete: a test that documents broken behaviour and is green is not a red
+   * control. It is inverted here, in the same file rather than deleted, so the shape of what was
+   * wrong stays visible next to what replaced it.
+   *
+   * The database-level fix (T-321 Contract 1) makes this specific STORED state unreachable going
+   * forward — a live card_id and a live match_token can no longer share a value in one org. This
+   * test proves the SECOND, independent layer invariant 1 asks for by name: `resolveScan` itself
+   * must never guess even if it is ever handed an ambiguous array (a migration gap, a mirror bug,
+   * two credentials momentarily live during a revoke-then-reissue race) — it is a detector for a
+   * state Contract 1 is supposed to make unreachable, not a substitute for it (bible §15.11, per
+   * the spec's own framing).
    */
-  it('DISCOVERED: a card cardId colliding with a different employment\'s matchToken resolves by array order, not by kind', () => {
+  it('a card cardId colliding with a different employment\'s matchToken resolves to NOBODY, in either array order', () => {
     const shared = generateMatchToken();
     const cardHolder: MirroredCredential = {
       credentialId: 'c-card',
@@ -47,9 +53,10 @@ describe('T-314 seam — a slice-A token resolves through the existing resolveSc
       templates: ['t1'],
     };
 
-    // Card listed first: the fingerprint's own token resolves to the CARD holder — wrong person.
-    expect(resolveScan([cardHolder, fingerHolder], shared)?.employmentId).toBe('card-holder');
-    // Same input, order flipped: the answer flips with it — decided by array position alone.
-    expect(resolveScan([fingerHolder, cardHolder], shared)?.employmentId).toBe('finger-holder');
+    // ⭐ ORDER-INDEPENDENCE is the whole point of the inversion. The old test's title was "resolves
+    // by array order" — this one must fail the instant anyone reintroduces a `find` that returns
+    // the first match instead of refusing when more than one matches.
+    expect(resolveScan([cardHolder, fingerHolder], shared)).toBeNull();
+    expect(resolveScan([fingerHolder, cardHolder], shared)).toBeNull();
   });
 });

@@ -24,7 +24,6 @@ import {
   pgTable,
   text,
   timestamp,
-  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 import { employments } from './employment';
@@ -112,29 +111,33 @@ export const attendanceCredentials = pgTable(
     revokeReason: text('revoke_reason'),
   },
   (t) => [
-    /**
-     * ⭐ Two live cards with the same id makes *"who punched?"* unanswerable, and an ambiguous
-     * credential check that picks the first match is how the wrong person gets paid.
-     *
-     * ⚠️ PARTIAL, on `revoked_at is null` — a **revoked** card id may be reissued, which is what
-     * happens when a badge is lost and reprinted with the same number.
-     *
-     * ⚠️ T-321/DEF-363 — BOTH `attendance_credentials_card_live_unique` AND
-     * `attendance_credentials_token_live_unique` below are pending replacement by ONE cross-column
-     * index (`ATTENDANCE_CREDENTIALS_SCAN_VALUE_LIVE_UNIQUE` above) in a later migration (0153).
-     * Left standing here deliberately for now: `packages/domain/src/attendance/credentials.ts`'s
-     * `enrolCard`/`enrolFingerprint` catches already tolerate EITHER of these two names alongside
-     * the new one, so the code is safe to ship BEFORE the schema change lands (expand/contract,
-     * bible §15.5) — do not remove EITHER index until 0153 replaces both in the same pass as the
-     * code that stops tolerating their names. Dropping just one early re-opens the fail-open on
-     * that half exactly as dropping both would.
-     */
-    uniqueIndex('attendance_credentials_card_live_unique')
-      .on(t.orgId, t.cardId)
-      .where(sql`${t.revokedAt} is null and ${t.cardId} is not null`),
-    uniqueIndex('attendance_credentials_token_live_unique')
-      .on(t.orgId, t.matchToken)
-      .where(sql`${t.revokedAt} is null and ${t.matchToken} is not null`),
+    // NOTE: T-321/DEF-363 Contract 1 — `attendance_credentials_scan_value_live_unique`
+    // (the name is `ATTENDANCE_CREDENTIALS_SCAN_VALUE_LIVE_UNIQUE` above; that export is the ONE
+    // definition of it) is a unique index on `(org_id, coalesce(card_id, match_token))
+    // where revoked_at is null`, hand-added in migration 0153. It REPLACED the two former
+    // per-column partial unique indexes below (`attendance_credentials_card_live_unique` and
+    // `attendance_credentials_token_live_unique`) — `attendance_credentials_shape_check` means a
+    // live row only ever contributed to one of those two anyway, so any violation of either old
+    // index is also a violation of this one; net index count went DOWN by one.
+    // ⭐ WHY THIS MATTERS, carried forward from the index this replaces: two live rows sharing one
+    // scanned value makes "who punched?" unanswerable, and an ambiguous credential check that
+    // picks the first match is how the wrong person gets paid. That is true whether the two rows
+    // share a column (the old indexes' job) or share only the scan value across columns (this
+    // index's own reason to exist) — do not relax this later for convenience.
+    // ⭐ WHY PARTIAL, on `revoked_at is null`, also carried forward: a revoked value must be
+    // reissuable — a lost card gets reprinted with the same number, a fingerprint gets re-enrolled
+    // onto the same rotated slot — and only a LIVE collision is what the hazard above describes. A full
+    // (non-partial) unique index would refuse that reissue outright, which is not this index's job.
+    // ⛔ The underlying `coalesce(card_id, match_token)` value is deliberately NOT declared as a
+    // column here, even though Drizzle's `generatedAlwaysAs()` could express it. Doing so would
+    // hand it to every caller of `insertCredential`/`listLiveForEmployment` — Drizzle only ever
+    // emits the columns it declares (never `select *`/`returning *`), so a column absent from
+    // this table can never appear in either query, by construction rather than by caller
+    // discipline. `packages/domain/src/attendance/credentials.ts`'s `summarise()` exists
+    // specifically to keep the card id and match token from travelling past enrolment; an
+    // undeclared, un-typed generated column here would duplicate that same secret under a new
+    // name that no existing projection knows to strip. If a future change adds this column back,
+    // it must also audit every consumer of those two functions for exactly that.
 
     /** The ingestor's lookup: a scanned value, at a store, live. */
     index('attendance_credentials_lookup_idx').on(t.storeId, t.kind, t.revokedAt),

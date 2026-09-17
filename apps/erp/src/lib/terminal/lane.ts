@@ -158,9 +158,24 @@ export function watchMirrors(
 /**
  * Resolve a scanned badge against the mirrored credentials.
  *
- * ⚠️ **This decides what to SHOW, and nothing else.** The punch still carries the credential, never
- * the employment — T-185 made the server the authority on whose badge it is, and a terminal that
- * "helpfully" sent its own conclusion would put landmine #22 straight back.
+ * ⛔ T-321/DEF-363 (Contract 7) — this does NOT decide only what to show. Its output sets
+ * `credentialKind`/`credentialRef` on the punch (`clock/page.tsx:245-246`), and the server
+ * resolves against whichever column that kind names (`resolveCredentialAt`) — so an ambiguous
+ * guess here corrupts which EMPLOYMENT the punch lands on, not just what the terminal displays.
+ *
+ * ⭐ What stays true regardless, carried over from the comment this replaces: the punch still
+ * carries the CREDENTIAL, never the employment — T-185 made the server the authority on whose
+ * badge it is, and a terminal that "helpfully" sent its own conclusion would put landmine #22
+ * straight back. Contract 7 corrects how much this function's guess matters, not the boundary of
+ * what the terminal is trusted to assert.
+ *
+ * ⛔⛔ Contract 3 — refuses ambiguity instead of guessing. `cardId` and `matchToken` are
+ * independent columns; nothing at the database stopped one employment's card id from equalling a
+ * different employment's match token before T-321's migration, and this is a second detector for
+ * that state, not a substitute for the database making it unrepresentable (bible §15.11) — a
+ * migration gap or a revoke-then-reissue race can still hand this an ambiguous array. A value that
+ * matches MORE THAN ONE credential resolves to `null`, the same "not recognised" outcome as an
+ * unknown badge, never the first match.
  */
 export function resolveScan(
   credentials: readonly MirroredCredential[],
@@ -168,7 +183,26 @@ export function resolveScan(
 ): MirroredCredential | null {
   const value = scanned.trim();
   if (!value) return null;
-  return credentials.find((c) => c.cardId === value || c.matchToken === value) ?? null;
+  const matches = credentials.filter((c) => c.cardId === value || c.matchToken === value);
+  if (matches.length > 1) {
+    // ⚠️ A DEVELOPER-FACING BREADCRUMB ONLY — this is `lane.ts`, client-side, and `console.warn`
+    // writes to DevTools on a wall-mounted terminal nobody opens. It does not make the ambiguity
+    // OPERATOR-visible: the staffer still sees the same "not recognised" as an unknown badge, and
+    // a manager watching the store gets nothing. An operator-visible distinction would need
+    // `clock/page.tsx` to show a different message when `resolveScan` refuses on ambiguity versus
+    // an honest unknown-badge null — the spec named that file as in-scope only if the refusal
+    // needed its own message. Deliberately DEFERRED, not built: `resolveScan` returns a bare
+    // `null` either way, so the page cannot currently tell the two apart even if it wanted to, and
+    // Contract 1 makes the ambiguous state itself near-unreachable going forward. ⚠️ Credential
+    // IDS only in the breadcrumb, never the scanned VALUE — that is the card id or match token,
+    // the exact secret the schema ruling above keeps out of every return value.
+    console.warn(
+      `resolveScan: ambiguous scan matched ${matches.length} credentials — refusing rather than guessing.`,
+      { credentialIds: matches.map((m) => m.credentialId) },
+    );
+    return null;
+  }
+  return matches[0] ?? null;
 }
 
 export interface PunchInput {
