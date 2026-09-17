@@ -1,6 +1,17 @@
 # T-319 — a remittance before anything is verified is refused, not silently unrecorded
 
-> ### **Status: SPEC — written 2026-09-17 by `system32-85` (Opus planner). NOT BUILT. Reserves T-319. Closes DEF-358.**
+> ### **Status: SHIPPED 2026-09-17 — `3601126`, deployed and verified live on `5bb5595`. Closes DEF-358.** See `docs/ROADMAP.html` (search `T-319`) for the outcome — the roadmap is the maintained record.
+>
+> ⭐ **The red control was RUN before the fix existed**, not described: variance `10000.00`,
+> `varianceId` null, zero rows in `remittance_variances`, one posted transfer. This defect had never
+> had a test, which is why it survived.
+>
+> ⭐ **The §15.11 backstop this spec proposed was assessed and REJECTED**, with a counter-example the
+> spec had not anticipated — see *Invariants* item 2 and the Done-when note. No migration was
+> written; `0153` stayed free and is now T-321's.
+>
+> *Original status, kept because the ruling below is what authorised the work:* **SPEC — written
+> 2026-09-17 by `system32-85` (Opus planner). Reserves T-319.**
 >
 > **Ian's ruling, 2026-09-17.** Shown both shapes in plain language — record the difference against
 > the store and date with no day attribution, or block the handover until something is verified —

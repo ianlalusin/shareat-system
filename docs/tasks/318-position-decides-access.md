@@ -1,17 +1,25 @@
 # T-318 — a position decides what a person may do
 
-> ### **Status: SLICES A, B AND C ARE BUILT AND GREEN — 2026-09-17. SLICE D (the screen) is the only part outstanding.**
+> ### **Status: SHIPPED — all four slices, 2026-09-17.** See `docs/ROADMAP.html` (search `T-318`) for the commits, dates and outcome — the roadmap is the maintained record.
 >
-> **A** (the census) and **B** (migration `0152`) shipped 2026-09-14 and `0152` is **applied in
-> production** — ⛔ it may never be edited; a correction is `0153` or later (RULES §1 rule 9).
-> **C** (the matrix flip plus the whole test estate) is green: **24 changed integration files pass
-> in one run on one clean database**, the unit suite is **123 files / 1729 passed / 0 failed**,
-> typecheck and `npm run build` both exit 0. ⭐ **The test that is the whole task exists and passes**
-> — a Dishwasher and a Server at the same store, one refused `submit_sales_day` and one allowed.
+> **A** (the census) and **B** (migration `0152`) shipped 2026-09-14 in `7b9dd5f`; **C** (the matrix
+> flip and the whole test estate) in `d841aa0`; **D** (the screen) in `90c82d0`. **Deployed and
+> verified live on `5bb5595`** — production asked at `/api/health` and compared by all forty
+> characters — with the full integration suite passed in CI (11m56s).
+>
+> ⛔ **`0152` is APPLIED IN PRODUCTION and may never be edited**; a correction is `0153` or later
+> (RULES §1 rule 9).
+>
+> ⭐ **The test that is the whole task exists and passes** — a Dishwasher and a Server at the same
+> store, one refused `submit_sales_day` and one allowed.
 >
 > ⚠️ **What slice C cost, and it is the number worth carrying:** the risk census said **19** files.
 > The real number was **22**, and the last two were found by running the suite rather than reading
-> it. See the census correction under *Slice C-pre* — three blind spots, all three named.
+> it. See the census correction under *Slice C-pre* — three blind spots, all three named, and bible
+> §13 row 212 is the ruling that came out of it.
+>
+> ⭐ **Slice D was two-thirds free** and the reason is recorded under *Slice D*: the toggles arrived
+> with the matrix change alone. **Opened DEF-366, DEF-367 and T-320.**
 >
 > *Original status, kept because the ruling below is what authorised the work:* **SPEC — written
 > 2026-09-14 by `system32-85` (Opus planner). Reserves T-318 and migration `0152`.**
