@@ -11,6 +11,47 @@
 > at all today, so a colliding enrolment would go from *silently permitted* to **a raw Postgres
 > violation escaping the domain with no `CredentialError`** — exactly the failure shape
 > `enrolCard`'s catch exists to prevent. They ship together or the release is a regression.
+>
+> ### ⛔⛔ AMENDED 2026-09-17 — *"they ship together"* IS TOO STRONG, AND IT FORBIDS THE SAFE ORDER
+>
+> **Read precisely, the argument above is not for shipping together — it is for never shipping the
+> constraint BEFORE the catch.** Those are different rules and only the second follows from the
+> evidence. The bundle satisfied it by accident; **sequencing catch-first satisfies it on purpose,
+> and is strictly safer.** T-321 therefore ships as TWO releases:
+>
+> | | |
+> |---|---|
+> | **Release N** | the exported constant + **both tolerant catches**. No migration, no index change, no `resolveScan` change. |
+> | **Release N+1** | `0153`, `resolveScan`, the schema NOTE and index removal, the comment corrections. |
+> | *(later, no hazard)* | drop the legacy literals from the catch's known set — rides any pass that next touches the file. |
+>
+> ⭐ **Why, and it is this project's own doctrine — bible §15.5 Expand/contract:** *"Never a
+> destructive schema change in one step."* T-321 as originally specced does ADD COLUMN + DROP two
+> indexes + rename the code depending on those names **in one deploy**. ⛔ **The hazard that creates
+> is ROLLBACK, not a failed migration.** `deploy.yml:129-154` already makes code-without-migration
+> unreachable (`set -euo pipefail`; the migrate at `:150` is three lines above the symlink swap at
+> `:152-153`), so a refused `0153` never activates the new code. **But `:157` keeps the last three
+> releases so the app CAN be rolled back** — and rolling back after `0153` has applied leaves the NEW
+> schema running OLD code, whose catch matches index names that no longer exist. A catch hardened in
+> N+1 sits in the release you just rolled off; only a catch already live in N helps.
+>
+> ⭐ **Release N is worth shipping on its own merits:** `enrolFingerprint` has **no catch at all** in
+> production today — that *is* DEF-362 — so N closes it with no migration, code-only, trivially
+> revertible.
+>
+> ⛔⛔ **AND THE SPLIT SPLITS THE SUITE, WHICH IS THE PART THAT BITES.** Release N ships no migration,
+> so four Contract-1 tests **cannot** pass in it, by design: constant-matches-`pg_indexes`, the
+> two-old-indexes-are-gone test, the cross-column `enrolFingerprint` test, and spec test 3. **CI runs
+> the full integration suite on every push and a red `main` blocks every deploy** — so those land
+> WITH N+1, never before. ⭐ And because N's own claim (it closes DEF-362) had **no test proving
+> it**, N carries a new same-column test: two fingerprints in one org minting the same token violate
+> the *existing* `attendance_credentials_token_live_unique`, which the tolerant catch must turn into
+> a `CredentialError`. ⚠️ It asserts the `prerequisite_refusals` row
+> (`reason_code = 'attendance.credential.already_enrolled_elsewhere'`) rather than the exception
+> type — `CredentialError` is also raised for empty templates and for exceeding `MAX_TEMPLATES`, so
+> `toBeInstanceOf` alone could go green **from the wrong branch**, and the missing audit row is the
+> silent half of a catch that fails open. ⚠️ It must NOT hard-code a constraint name: the same pair
+> raises the legacy name in N and the new one in N+1.
 
 ## Why this exists
 
@@ -164,8 +205,18 @@ this code. **Production cannot be counted from here; do not estimate it.**
    constant, the migration is the one place the literal may appear — and a test must assert the
    constant equals what the database actually created**, so the two cannot drift silently.
 7. ⛔ **`resolveScan`'s doc comment must stop claiming it decides only what to show.** Replace it
-   with what is true: its output sets `credentialKind` on the punch (`clock/page.tsx:242`) and
+   with what is true: its output sets `credentialKind` on the punch (`clock/page.tsx:245-246`) and
    therefore selects which column the server resolves against.
+   ⛔⛔ **CORRECTED 2026-09-17 BY THE AUDITOR — THIS CONTRACT CARRIED THE OFF-BY-THREE THE SPEC'S OWN
+   CALLOUT ABOVE SAYS WAS FIXED.** It cited `clock/page.tsx:242`. **`:242` is `db,`.** The real lines
+   are `:245` `credentialKind: credential.kind` and `:246` `credentialRef: value`, verified at source.
+   The tester caught this pointer yesterday and it was corrected in the "Why this exists" table while
+   **the stale copy survived here** — so one document carried the right pointer and the wrong one
+   simultaneously. ⭐ **And this instance had teeth the first one did not:** Contract 7 orders the
+   builder to REWRITE `resolveScan`'s doc comment, and that new comment is supposed to cite where the
+   kind lands. A builder following this contract literally would have baked `:242` into the
+   replacement — **a fresh false pointer, written into the very comment this task exists to correct,
+   in a task whose thesis is that a plausible wrong reason is worse than none.**
 
 ## Invariants, with citations
 

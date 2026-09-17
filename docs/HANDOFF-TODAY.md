@@ -250,9 +250,16 @@ screen already gated it; he was told so plainly. The record says what he was tol
   `apps/erp/src/lib/terminal/firebase.ts` reads `process.env` directly with `'emulator'` fallbacks,
   right that it honours `NEXT_PUBLIC_FIREBASE_EMULATOR_HOST`, and right that it never calls
   `publicEnv()` — **and the conclusion was still wrong, because nobody checked whether the fallback
-  fires.** It does not: the fallbacks are `??`, `.env.local` holds those values as the **empty
-  string** rather than unset, and `getAuth()` throws `auth/invalid-api-key` before the emulator is
-  ever connected. `/clock` died on the error boundary exactly like `/sign-in`.
+  fires.** It does not. `.env.local` holds all five values as the **empty string** rather than unset,
+  and `''` defeats two guards in sequence: `firebase.ts:47-53` throws on a falsy `PROJECT_ID`
+  **before** the `'emulator'` fallbacks at `:54-56` are even built, and those fallbacks are `??`,
+  which does not replace `''` either. `/clock` died on the error boundary exactly like `/sign-in`.
+  ⛔⛔ **AND THE FIRST VERSION OF THIS PARAGRAPH NAMED THE WRONG ONE OF THE TWO.** It said `getAuth()`
+  threw `auth/invalid-api-key`. That console line is real, but it came from a run in which the
+  orchestrator had already set `PROJECT_ID` non-empty — **the second barrier, measured and then
+  written up as if it were the first.** The auditor caught it the same day. The register row carries
+  the full correction and the reason it matters: the remedy that followed from the wrong barrier
+  would have shipped **a passing unit test over a still-broken screen.**
   ⭐ **WHAT ACTUALLY WORKS, and it unblocks BOTH routes — no code change:** start the dev server with
   every `NEXT_PUBLIC_FIREBASE_*` identity value set to a non-empty placeholder plus
   `NEXT_PUBLIC_FIREBASE_EMULATOR_HOST=localhost:8182`, against the emulator suite
