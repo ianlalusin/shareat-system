@@ -12,13 +12,21 @@
  *
  * Mechanism: each `describe` block creates its own disposable database (connecting to the
  * `postgres` maintenance database to do so — the same technique `provision-test-role.mjs` uses),
- * applies every migration EXCEPT 0152 (a TEMP copy of `migrations/` with 0152's file and journal
- * entry removed — so the schema exists but 0152 has never run), seeds fixtures with raw SQL, THEN
- * applies 0152 alone by calling the real migrator again against the REAL, unmodified migrations
- * folder — which sees the tracking table already past every earlier entry and applies exactly the
- * one new one. This is 0152's one and only real first application, against real pre-existing data,
- * through the same `drizzle-orm/postgres-js/migrator` the app itself uses (T-118's own
- * `invariant 9` test already proves that mechanism call-for-call; this file does not re-prove it).
+ * applies every migration STRICTLY BEFORE 0152 (a TEMP copy of `migrations/` filtered by
+ * journal `when`, not by filename — see `buildFolderWithout152`'s own comment for why), seeds
+ * fixtures with raw SQL, THEN applies 0152 **and everything after it** by calling the real
+ * migrator again against the REAL, unmodified migrations folder — which sees the tracking table
+ * already past every earlier entry and applies exactly what is left, in order. ⛔⛔ **NOT "0152
+ * alone" any more, and this is a fixed CI-red incident, not a hypothetical:** once a later
+ * migration (0153) exists, the temp folder must exclude it too, or the real-folder step's `when`
+ * high-water mark jumps past 0152 and drizzle SKIPS it (the `created_at`-already-present gate
+ * `trackedRunCount`'s own comment below names) — measured on `main` as 14 failures the day 0153
+ * was added, fixed by filtering the temp folder on `when < target.when` rather than on filename
+ * prefix. Whatever runs alongside 0152 here is real, through the
+ * same `drizzle-orm/postgres-js/migrator` the app itself uses (T-118's own `invariant 9` test
+ * already proves that mechanism call-for-call; this file does not re-prove it) — and it is safe
+ * for 0152's OWN assertions because `trackedRunCount()` below counts 0152's exact `when`, not a
+ * total, and no later migration touches the tables this file backfills.
  *
  * ⚠️ Not the standing lane DB, so this file does not compete with another lane's integration run
  * against `TEST_DATABASE_URL` — it only borrows that URL's host/credentials to open its own,
@@ -94,23 +102,43 @@ const THE_21 = [
 ].sort();
 
 /**
- * A temp copy of `migrations/` with the `0152_*` file and its journal entry removed — so
- * `migrate()` against it applies every migration EXCEPT 0152. Built fresh per test run rather
- * than committed, because the real folder (and 0152's own `when`) is the only source of truth for
- * what "everything else" currently means.
+ * A temp copy of `migrations/` with 0152's file/journal entry AND EVERY MIGRATION AFTER IT
+ * removed — so `migrate()` against it applies every migration STRICTLY BEFORE 0152, and the
+ * later real-folder step (`apply152`) has exactly 0152-and-onward left to apply, in order.
+ *
+ * ⛔⛔ FIXED — this used to filter by FILENAME PREFIX (`!f.startsWith(TARGET_TAG_PREFIX)`), which
+ * excludes only the exact target and lets anything added LATER survive into the temp folder. The
+ * day migration 0153 existed, that filter left 0153 in the "everything except 0152" folder; the
+ * temp application recorded 0153's `when` (1799292707084) as the tracking table's high-water
+ * mark; the real-folder step then tried to apply 0152 (`when` 1799206307084, EARLIER) and drizzle
+ * silently SKIPPED it — the exact gate this file's own `trackedRunCount` comment already named.
+ * 0152 never ran, nothing backfilled, 14 assertions collapsed, `main` went red. **Filtering by
+ * `when` instead of by name is what makes "before the target" mean the same thing regardless of
+ * how many migrations get added after 0152 in the future** — the temp folder always ends at
+ * 0152's own timestamp, never at whatever happens to be newest on disk.
+ *
+ * Built fresh per test run rather than committed, because the real folder (and 0152's own `when`)
+ * is the only source of truth for what "before 0152" currently means.
  */
 function buildFolderWithout152(): string {
   const dir = mkdtempSync(join(tmpdir(), 'shareat-migrations-pre-0152-'));
   const metaDir = join(dir, 'meta');
   mkdirSync(metaDir, { recursive: true });
 
+  const journal = JSON.parse(readFileSync(join(REAL_MIGRATIONS_FOLDER, 'meta', '_journal.json'), 'utf8'));
+  const target = journal.entries.find((e: { tag: string }) => e.tag.startsWith(TARGET_TAG_PREFIX));
+  if (!target) {
+    throw new Error(`no journal entry tagged "${TARGET_TAG_PREFIX}" — has 0152 been renamed or removed?`);
+  }
+  const keptEntries = journal.entries.filter((e: { when: number }) => e.when < target.when);
+  const keptTags = new Set(keptEntries.map((e: { tag: string }) => e.tag));
+
   for (const f of readdirSync(REAL_MIGRATIONS_FOLDER)) {
-    if (f.endsWith('.sql') && !f.startsWith(TARGET_TAG_PREFIX)) {
+    if (f.endsWith('.sql') && keptTags.has(f.slice(0, -'.sql'.length))) {
       writeFileSync(join(dir, f), readFileSync(join(REAL_MIGRATIONS_FOLDER, f)));
     }
   }
-  const journal = JSON.parse(readFileSync(join(REAL_MIGRATIONS_FOLDER, 'meta', '_journal.json'), 'utf8'));
-  journal.entries = journal.entries.filter((e: { tag: string }) => !e.tag.startsWith(TARGET_TAG_PREFIX));
+  journal.entries = keptEntries;
   writeFileSync(join(metaDir, '_journal.json'), JSON.stringify(journal, null, 2));
 
   return dir;
@@ -178,7 +206,14 @@ async function applyEverythingExcept152(sql: ReturnType<typeof postgres>): Promi
   }
 }
 
-/** Applies whatever is left — with the real folder in place, that is exactly 0152. */
+/**
+ * Applies whatever is left — with the real folder in place and the temp folder having stopped
+ * strictly before 0152, that is 0152 AND ANY MIGRATION ADDED AFTER IT, applied together in one
+ * transaction (all pending migrations share one `migrate()` transaction — confirmed at source).
+ * No longer "exactly 0152 alone": once 0153 exists this also applies 0153, which is harmless to
+ * every assertion below because `trackedRunCount()` counts 0152's own `when`, not a total, and
+ * 0153 touches `attendance_credentials` only — a table nothing here seeds or reads.
+ */
 async function apply152(sql: ReturnType<typeof postgres>): Promise<void> {
   await migrate(drizzle(sql), { migrationsFolder: REAL_MIGRATIONS_FOLDER });
 }

@@ -4,12 +4,14 @@
  *
  * Modelled directly on packages/db/tests/integration/position-access-backfill.test.ts's own
  * refuse-gate proof for migration 0152 — same mechanism, because it is the same shape of problem:
- * a temp copy of migrations/ with the target migration's file + journal entry removed, applied to
- * a scratch database (so the schema exists but the target migration has never run), fixtures
- * seeded with raw SQL to violate the NEW constraint BEFORE that migration ever runs, then the real
- * migrations folder applied on top — which sees the tracking table already past every earlier
- * entry and therefore applies exactly the one new migration, against real pre-existing data,
- * through the same `drizzle-orm/postgres-js/migrator` the app itself uses.
+ * a temp copy of migrations/ with 0153's file/journal entry AND EVERYTHING AFTER IT removed
+ * (filtered by journal `when`, not filename — see `buildFolderWithoutTarget`'s own comment; a
+ * name-prefix filter is what turned this exact shape into 14 failures on `main` in 0152's file
+ * the day 0153 was added), applied to a scratch database (so the schema exists but 0153 has never
+ * run), fixtures seeded with raw SQL to violate the NEW constraint BEFORE that migration ever
+ * runs, then the real migrations folder applied on top — which sees the tracking table already
+ * past every earlier entry and applies exactly what is left, in order, against real pre-existing
+ * data, through the same `drizzle-orm/postgres-js/migrator` the app itself uses.
  *
  * Separate from attendance-credentials-scan-collision.test.ts, which tests Contract 1's
  * post-migration behaviour (the constraint enforcing going forward) — this file tests the
@@ -39,17 +41,37 @@ if (!/shareat_test|_test(\?|$)/.test(baseUrl)) {
 const REAL_MIGRATIONS_FOLDER = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..', 'migrations');
 const TARGET_TAG_PREFIX = '0153_';
 
+/**
+ * ⛔⛔ FILTERS BY JOURNAL `when`, NOT BY FILENAME PREFIX — deliberately, and not the obvious
+ * version. `position-access-backfill.test.ts` (0152's own proof) originally filtered by
+ * `!f.startsWith(TARGET_TAG_PREFIX)`, which excludes only the exact target and lets anything
+ * added LATER survive into "everything except the target". The day migration 0154 exists, that
+ * shape leaves 0154 in this temp folder too; the temp application's tracking table then has a
+ * `when` past 0153's own, and the later `applyTarget()` step's attempt to apply 0153 gets
+ * silently SKIPPED by drizzle's `created_at`-already-present gate — 0153 never runs, this file's
+ * assertions collapse, and it looks like 0154's fault when it is really this file's. Measured for
+ * real in 0152's own proof the day 0153 was added (14 failures on `main`); fixed there and here
+ * with the same shape so this file does not repeat it the day 0154 exists.
+ */
 function buildFolderWithoutTarget(): string {
   const dir = mkdtempSync(join(tmpdir(), 'shareat-migrations-pre-0153-'));
   const metaDir = join(dir, 'meta');
   mkdirSync(metaDir, { recursive: true });
+
+  const journal = JSON.parse(readFileSync(join(REAL_MIGRATIONS_FOLDER, 'meta', '_journal.json'), 'utf8'));
+  const target = journal.entries.find((e: { tag: string }) => e.tag.startsWith(TARGET_TAG_PREFIX));
+  if (!target) {
+    throw new Error(`no journal entry tagged "${TARGET_TAG_PREFIX}" — has 0153 been renamed or removed?`);
+  }
+  const keptEntries = journal.entries.filter((e: { when: number }) => e.when < target.when);
+  const keptTags = new Set(keptEntries.map((e: { tag: string }) => e.tag));
+
   for (const f of readdirSync(REAL_MIGRATIONS_FOLDER)) {
-    if (f.endsWith('.sql') && !f.startsWith(TARGET_TAG_PREFIX)) {
+    if (f.endsWith('.sql') && keptTags.has(f.slice(0, -'.sql'.length))) {
       writeFileSync(join(dir, f), readFileSync(join(REAL_MIGRATIONS_FOLDER, f)));
     }
   }
-  const journal = JSON.parse(readFileSync(join(REAL_MIGRATIONS_FOLDER, 'meta', '_journal.json'), 'utf8'));
-  journal.entries = journal.entries.filter((e: { tag: string }) => !e.tag.startsWith(TARGET_TAG_PREFIX));
+  journal.entries = keptEntries;
   writeFileSync(join(metaDir, '_journal.json'), JSON.stringify(journal, null, 2));
   return dir;
 }
@@ -94,7 +116,12 @@ async function applyEverythingExceptTarget(sql: ReturnType<typeof postgres>): Pr
   }
 }
 
-/** Applies whatever is left — with the real folder in place, that is exactly 0153. */
+/**
+ * Applies whatever is left — with the real folder in place and the temp folder having stopped
+ * strictly before 0153, that is 0153 and any migration added after it, in one transaction. Not
+ * "exactly 0153" once 0154 exists — see `buildFolderWithoutTarget`'s own comment for why that is
+ * fine for this file's assertions and how the temp folder stays correct regardless.
+ */
 async function applyTarget(sql: ReturnType<typeof postgres>): Promise<void> {
   await migrate(drizzle(sql), { migrationsFolder: REAL_MIGRATIONS_FOLDER });
 }
