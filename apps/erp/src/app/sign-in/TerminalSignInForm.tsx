@@ -20,16 +20,29 @@
  */
 import { useState } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
+import { publicEnv } from '@shareat/core/env';
 import { signInFirebase, prepareSignInPersistence } from './firebase-client';
 import { verifyTerminalAction, signInWithTerminalPinAction } from './actions';
 
-function firebaseSignInMessage(err: unknown): string {
+export function firebaseSignInMessage(err: unknown): string {
   const code = typeof err === 'object' && err !== null && 'code' in err ? String(err.code) : '';
   if (code === 'auth/too-many-requests') {
     return 'Too many attempts. Firebase has paused sign-in for this device for a few minutes — wait, then try again.';
   }
   if (code === 'auth/network-request-failed') {
     return 'Could not reach the sign-in service. Check the connection and try again.';
+  }
+  // T-323/Contract 1: signInFirebase()'s emulator wiring can throw auth/emulator-config-failed
+  // when the emulator is configured but unreachable in its current state; auth/invalid-emulator-
+  // scheme is kept as defence in depth against a URL shape this call site does not currently
+  // produce (its URL is the literal template `http://${name}:${port}`, so the scheme assert
+  // cannot fail today). Neither is a credential problem, so neither may fall through to "Wrong
+  // email or password." — that relocates DEF-368's lie into the emulator path this slice builds.
+  // A second, separate copy of this branch lives in EmailSignInForm.tsx's
+  // firebaseSignInMessage; keep both in step (the duplication itself is filed separately, not
+  // fixed here).
+  if (code === 'auth/emulator-config-failed' || code === 'auth/invalid-emulator-scheme') {
+    return 'The local emulator configuration failed to apply — this is not a wrong credential. Reload and check NEXT_PUBLIC_FIREBASE_EMULATOR_HOST.';
   }
   if (code === 'auth/invalid-email') return 'That does not look like an email address.';
   return 'Wrong email or password.';
@@ -52,6 +65,29 @@ export function TerminalSignInForm({ next }: { next: string }) {
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // ⚠️ Configuration is read INSIDE the render, same as EmailSignInForm — a missing value degrades
+  // to a short line on this form rather than throwing out of the sign-in page. Contract 5: without
+  // this, layer 1 renders a normal, submittable form whose failure falls through to "Wrong email
+  // or password.", blaming a password that was never involved (T-323/DEF-368).
+  let configError: string | null = null;
+  try {
+    publicEnv();
+  } catch (err) {
+    configError = err instanceof Error ? err.message : 'Public Firebase config is incomplete.';
+  }
+
+  if (configError) {
+    // ⛔ One explanation, not two: the full reason lives in EmailSignInForm's notice on this page
+    // (Contract 3), wherever page.tsx places it. This form only needs to stop offering a PIN box
+    // it cannot honour.
+    return (
+      <p className="rounded-lg border border-dashed border-amber-400 bg-amber-50 p-4 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+        Terminal sign-in is unavailable on this server. See the sign-in notice on this page for
+        why.
+      </p>
+    );
+  }
 
   async function onTerminalSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

@@ -61,6 +61,20 @@ export interface VerifiedFirebaseIdentity {
 }
 
 function authApp(): App {
+  // ⛔⛔ FAIL CLOSED, SAME SHAPE AS THE CLIENT HALF'S NODE_ENV GUARD (sign-in/firebase-client.ts)
+  // — and this server half is the more dangerous one to get wrong. T-323 makes
+  // FIREBASE_AUTH_EMULATOR_HOST part of the documented dev recipe for the first time; when
+  // firebase-admin sees it, it accepts UNSIGNED tokens — a full authentication bypass — and
+  // deploy-preflight has no denylist to stop the variable reaching a production build. This does
+  // not get to depend on that convention holding forever, so it is checked on every call, not
+  // only at first init.
+  if (process.env.NODE_ENV === 'production' && process.env.FIREBASE_AUTH_EMULATOR_HOST) {
+    throw new Error(
+      'FIREBASE_AUTH_EMULATOR_HOST is set in a production build — refusing to verify rather than ' +
+        'accept unsigned tokens.',
+    );
+  }
+
   const existing = getApps().find((a) => a.name === AUTH_APP_NAME);
   if (existing) return existing;
 
@@ -71,10 +85,15 @@ function authApp(): App {
     // trust whatever project the token came from — the fail-OPEN shape bible §7 rule 9 exists to
     // forbid. In production `env()` has already refused to start for this; this branch is
     // development, where the variable is allowed to be blank.
+    // ⛔⛔ T-323/DEF-368: this is NOT an email-only limitation. verifyFirebaseIdToken (which calls
+    // authApp()) is what verifyTerminalAction and signInWithTerminalPinAction both go through
+    // (sign-in/actions.ts) — the terminal PIN path ends at this exact same check. Without a
+    // project id, no sign-in method can be verified, PIN included; saying otherwise here would be
+    // this file's own copy of the lie T-323 exists to remove from the browser-facing notices.
     throw new Error(
-      'FIREBASE_PROJECT_ID is not set, so no email sign-in can be verified. Set it to the ' +
-        'identity project in .env.local (see .env.example — it is v1\'s project, not the ' +
-        'storage project). PIN sign-in does not need it and still works.',
+      'FIREBASE_PROJECT_ID is not set, so no sign-in can be verified — email and terminal PIN ' +
+        "both end at this same token check. Set it to the identity project in .env.local (see " +
+        ".env.example — it is v1's project, not the storage project).",
     );
   }
 

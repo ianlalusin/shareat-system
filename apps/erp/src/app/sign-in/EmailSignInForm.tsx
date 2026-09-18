@@ -52,6 +52,18 @@ function firebaseSignInMessage(err: unknown): string {
   if (code === 'auth/network-request-failed') {
     return 'Could not reach the sign-in service. Check the connection and try again.';
   }
+  // T-323/Contract 1: signInFirebase()'s emulator wiring can throw auth/emulator-config-failed
+  // when the emulator is configured but unreachable in its current state; auth/invalid-emulator-
+  // scheme is kept as defence in depth against a URL shape this call site does not currently
+  // produce (its URL is the literal template `http://${name}:${port}`, so the scheme assert
+  // cannot fail today). Neither is a credential problem, so neither may fall through to "Wrong
+  // email or password." — that relocates DEF-368's lie into the emulator path this slice builds.
+  // A second, separate copy of this branch lives in TerminalSignInForm.tsx's
+  // firebaseSignInMessage; keep both in step (the duplication itself is filed separately, not
+  // fixed here).
+  if (code === 'auth/emulator-config-failed' || code === 'auth/invalid-emulator-scheme') {
+    return 'The local emulator configuration failed to apply — this is not a wrong credential. Reload and check NEXT_PUBLIC_FIREBASE_EMULATOR_HOST.';
+  }
   if (code === 'auth/invalid-email') return 'That does not look like an email address.';
   return 'Wrong email or password.';
 }
@@ -75,8 +87,12 @@ export function EmailSignInForm({ next }: { next: string }) {
   const [busy, setBusy] = useState(false);
 
   // ⚠️ Configuration is read INSIDE the render so a missing value degrades to a sentence on this
-  // one form rather than throwing out of the sign-in page and taking the PIN form — the path every
-  // terminal in every store uses — down with it. Decision 6: the PIN sign-in stays exactly as it is.
+  // one form rather than throwing out of the sign-in page. Decision 6 originally kept the PIN
+  // form rendering unaffected by this check — T-323 Contract 5 supersedes that on this one
+  // point, deliberately: TerminalSignInForm now carries the same render-time gate, because the
+  // PIN path shares this exact publicEnv() dependency (DEF-368) and a submittable PIN box it
+  // cannot honour — telling an operator their correct PIN is a wrong password — is worse than a
+  // short unavailable line.
   //
   // ⛔ And it is read HERE, in the client component, rather than in the server page: a
   // `NEXT_PUBLIC_*` value is guaranteed to be inlined into the browser bundle at build time, which
@@ -91,11 +107,10 @@ export function EmailSignInForm({ next }: { next: string }) {
   if (configError) {
     return (
       <div className="rounded-lg border border-dashed border-amber-400 bg-amber-50 p-4 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-        <strong className="block text-sm">Email sign-in is not configured on this server.</strong>
-        <span className="mt-1 block">
-          The build is missing its Firebase identity values, so there is no project to sign in
-          against. PIN sign-in is unaffected.
-        </span>
+        <strong className="block text-sm">
+          No sign-in method is available: both email and terminal PIN sign-in need this
+          server&apos;s Firebase identity values.
+        </strong>
         {/**
          * ⛔ **The list of missing variables is shown OUTSIDE production only.** `/sign-in` is an
          * unauthenticated page, and naming which secrets a server is missing tells a stranger more
@@ -109,7 +124,8 @@ export function EmailSignInForm({ next }: { next: string }) {
         ) : (
           <span className="mt-2 block">
             An administrator can compare this deployment&apos;s Firebase values against
-            <code className="mx-1">.env.example</code>.
+            <code className="mx-1">.env.example</code>. These values are inlined when the app is
+            built, so fixing this needs a rebuild, not a restart.
           </span>
         )}
       </div>

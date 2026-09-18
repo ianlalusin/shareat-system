@@ -734,8 +734,20 @@ it is staged. 3/3 with `setup/` untracked.
   > before that is not recorded anywhere — so this closed *safely*, but it closed **unobserved**,
   > which is a weaker outcome than the bullet was asking for.
 - **For the 9008 smoketest**, the same three `NEXT_PUBLIC_*` values plus `FIREBASE_PROJECT_ID` must
-  be in the repo's `.env.local` — they are blank there today, and with them blank the form replaces
-  itself with *"Email sign-in is not configured on this server"* and the PIN form keeps working.
+  be in the repo's `.env.local` — they are blank there today.
+  ⛔⛔ **WHAT BLANK VALUES PRODUCE CHANGED ON 2026-09-18 (T-323), AND BOTH HALVES OF THE OLD
+  SENTENCE ARE NOW FALSE.** It used to read *"the form replaces itself with 'Email sign-in is not
+  configured on this server' and the PIN form keeps working."*
+  **Neither is true any more.** T-323 Contract 3 replaced that heading with *"No sign-in method is
+  available: both email and terminal PIN sign-in need this server's Firebase identity values."*, and
+  Contract 5 **deliberately gates the terminal PIN form off in the same condition** — it renders
+  *"Terminal sign-in is unavailable on this server."* and no submit control, because the PIN path
+  authenticates the tablet through the same `publicEnv()` and never did keep working (DEF-368).
+  ⭐ **So the expected output of this step is now TWO unavailable notices, and that is success, not
+  breakage.** Anyone following the old recipe would have concluded the app was broken.
+  ⚠️ **And to reach the emulator at all, the three identity values must hold NON-EMPTY
+  PLACEHOLDERS** — `publicEnv()` is called before any emulator wiring, so blank values shut both
+  doors before `connectAuthEmulator` can run. See the emulator block in `.env.example`.
   *(Orchestrator: they were exported in-process to the dev server from v1's public client config,
   never written to the repo; the browser pass ran against a throwaway migrated database.)*
 

@@ -29,9 +29,28 @@
  * answer for every test after it — the assertion would be about ordering, not about the code. It
  * needs its own file, and it is recorded as such rather than written wrongly here.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthenticationError } from '@shareat/auth';
 import { verifyFirebaseIdToken } from '../src/lib/firebase-auth-admin';
+
+/**
+ * T-323 round 5's server-side production guard (`authApp()`, `firebase-auth-admin.ts:71`) is
+ * unreachable through this file's exported surface: `authApp()` is not exported, and the ONLY
+ * caller, `verifyFirebaseIdToken`, calls it inside a `try` whose `catch` reduces every failure to
+ * the SAME flat `AuthenticationError` sentence (by design — see this file's own header). So a
+ * fixture that only checks the rejected error's TYPE or message cannot discriminate the guard
+ * throwing from a garbage token failing verification for an unrelated reason: with the guard
+ * fully deleted, a garbage token still fails and still produces that identical sentence. The
+ * guard's actual thrown message survives one place: `logger.warn({ err: ... })`
+ * (`firebase-auth-admin.ts:126-129`), logged before being flattened. Mocking it here is what
+ * makes the two cases below real evidence instead of two tests that happen to pass.
+ */
+// ⚠️ `vi.mock` factories are hoisted above the top of the file, above even a `const` declared
+// before them — `const warn = vi.fn(); vi.mock(..., () => ({ logger: { warn } }))` throws
+// "Cannot access 'warn' before initialization" for exactly that reason. `vi.hoisted()` runs its
+// callback in that same hoisted position, which is what makes the reference legal.
+const { warn } = vi.hoisted(() => ({ warn: vi.fn() }));
+vi.mock('@shareat/core/logger', () => ({ logger: { warn } }));
 
 /** `env()` validates the WHOLE server contract, so the two non-negotiable secrets must be present
  *  even though nothing on this path reads them. */
@@ -85,5 +104,55 @@ describe('verifyFirebaseIdToken — every refusal is one sentence, and none of t
     const err = await verifyFirebaseIdToken('still-not-a-jwt').catch((e: unknown) => e);
     expect(err).toBeInstanceOf(AuthenticationError);
     expect((err as Error).name).toBe('AuthenticationError');
+  });
+});
+
+describe('authApp() — the production emulator-host guard (T-323 round 5): FIREBASE_AUTH_EMULATOR_HOST accepts UNSIGNED tokens, so this is the highest-stakes assertion in the task', () => {
+  it('⛔⛔ (a) NODE_ENV=production + FIREBASE_AUTH_EMULATOR_HOST set: refuses before real token verification is ever attempted', async () => {
+    warn.mockClear();
+    process.env = {
+      ...BASE,
+      NODE_ENV: 'production',
+      // Production's own contract requires this (packages/core/src/env.ts's superRefine) — set so
+      // env() itself does not throw first and mask which check actually fired.
+      FIREBASE_SERVICE_ACCOUNT_KEY: '{"type":"service_account"}',
+      FIREBASE_AUTH_EMULATOR_HOST: 'localhost:9199',
+    } as unknown as NodeJS.ProcessEnv;
+
+    // The token value is irrelevant — authApp() throws before getAuth()/.verifyIdToken() is ever
+    // reached, which is the whole point of asserting the LOGGED message rather than the outcome.
+    await expect(verifyFirebaseIdToken('irrelevant-token-guard-throws-first')).rejects.toThrow(
+      AuthenticationError,
+    );
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]![0].err).toMatch(
+      /FIREBASE_AUTH_EMULATOR_HOST is set in a production build/,
+    );
+  });
+
+  it('⛔ (b) the negative leg: NODE_ENV=production with the variable UNSET does not refuse for the guard reason — verification proceeds and fails on the token instead', async () => {
+    warn.mockClear();
+    process.env = {
+      ...BASE,
+      NODE_ENV: 'production',
+      FIREBASE_SERVICE_ACCOUNT_KEY: '{"type":"service_account"}',
+      // No FIREBASE_AUTH_EMULATOR_HOST key at all.
+    } as unknown as NodeJS.ProcessEnv;
+
+    // `authApp()` may or may not still be memoised from an earlier test in this file (this file is
+    // statically imported and deliberately never resets modules — see the header) — either path
+    // still proves this leg: a memoised app skips straight to a real (failing) verifyIdToken call,
+    // and a fresh one reaches the same call after env() succeeds. Neither path can reach the
+    // guard's logged sentence, because the guard requires the variable to be SET.
+    await expect(verifyFirebaseIdToken('this-is-not-a-jwt')).rejects.toThrow(AuthenticationError);
+
+    // Without this leg, deleting the whole guard would still leave (a) looking green if the
+    // garbage token threw first for an unrelated reason — this proves the SAME call, with the
+    // variable unset, fails for a DIFFERENT, logged reason instead of the guard's.
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]![0].err).not.toMatch(
+      /FIREBASE_AUTH_EMULATOR_HOST is set in a production build/,
+    );
   });
 });

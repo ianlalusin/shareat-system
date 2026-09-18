@@ -278,10 +278,20 @@ assertion would be about ordering, not about the code. It needs its own file."*
     left a third of identical shape **un-labelled, inside a bullet next to a real red, where it reads
     as part of it.** That is *"one find is not a pass"* (row 214) applied to v3's own guard-labelling
     pass. **The enumeration must be exhaustive over its own output too.**
+  - ⚠️ **TWO TRUE STATEMENTS ABOUT THAT STRING WHICH READ AS A CONTRADICTION AND ARE NOT — settled
+    here so a later reader does not re-litigate it.** *(a)* **Post-submit, it is the real defect:** the
+    operator types a correct PIN, `signInFirebase()` → `publicEnv()` throws an `Error` carrying no
+    `code`, the `catch` calls `firebaseSignInMessage(err)`, **no branch matches, and the default
+    fires.** That is why Contract 5 is justified at all. *(b)* **On a static render it is vacuous:**
+    `error` is `null` before any submission, so the string never reaches the markup.
+    ⭐ **Both hold, and together they are the reason the red is the absent submit control:** a static
+    render cannot reach the failure path in (a) — and removing the submit control is what makes that
+    path unreachable for a real operator.
   - ⭐ **the regression half, which is the point:** a genuine `auth/…` failure still maps to today's
     message. Exercise `firebaseSignInMessage`'s existing branches and assert they are unchanged —
     **including** that the default branch still returns *"Wrong email or password."* for a real
-    credential failure. ⚠️ **Guard, not red.**
+    credential failure, which (a) above is the stated reason to care about rather than a habit.
+    ⚠️ **Guard, not red.**
 
 ⛔ **A test failing because a module does not exist is not the red this task needs.** All three source
 modules exist today. The red must be the assertion.
