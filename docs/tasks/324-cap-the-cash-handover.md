@@ -162,11 +162,43 @@ restricted to the settleable dates. It reuses the `cashier_movement` CTE's own r
 - `jl.party_type = 'money_account'` → the account is **`ma.id`** (this is how `1140` wallet lines name themselves; `sales-days/routing.ts:265,284` posts one per wallet).
 - otherwise → the account is the store's cashier money account whose **`gl_account_code = a.code`** (how `1110` lines resolve, via the `ca` values list).
 
-⛔ **If that fallback matches more than one active cashier account for the store, the movement cannot
-be attributed and the function must REFUSE, naming the accounts.** Do not pick one. Do not sum them.
-A store with two tills on one GL code is a configuration this cap cannot police, and saying so is the
-correct behaviour. *(Not reachable on today's data — `FOUNDATION_ACCOUNTS` gives one per code — which
-is exactly why it must be written now rather than discovered later.)*
+⛔⛔ **THE AMBIGUITY RULE, CORRECTED 2026-09-19 — AN EARLIER DRAFT OF THIS SECTION SPECIFIED A GUARD
+THAT FIRES ON THE ONE CONFIGURATION THE SYSTEM IS DESIGNED FOR.** That draft said: *"if the fallback
+matches more than one active cashier account for the store, REFUSE"*, and called it unreachable on
+today's data. **Both halves were wrong.** The builder implemented it faithfully and the auditor caught
+it. This is a spec defect, not a lane defect.
+
+**The four facts that decide it, each verified in the file:**
+- `glCodeFor` (`packages/domain/src/money-accounts/index.ts:55`) is `if (instrument !== 'cash')
+  return '1140'` — **every** e-wallet lands on 1140.
+- `createMoneyAccount`'s duplicate refusal (`money-accounts/index.ts:92`) is wrapped in
+  `if (input.instrument === 'cash')` — **there is no limit on e-wallets at all.**
+- `packages/db/schema/money-accounts.ts:64` states the intent outright: *"wallets with different
+  providers are both `ewallet` and both roll into 1140."* 1140 is `requiresParty: true`.
+- So **`1110` can never hold two** (service-enforced) and **`1140` is MEANT to hold many**
+  (party-resolved).
+
+**A code-count guard is therefore inverted.** It cannot fire for the two-tills case (unreachable
+except by raw SQL), and it *does* fire for two cashier wallets — an ordinary admin action — at which
+point `createRemittance` throws for **every** handover at that store, till included, because the
+function is called unconditionally before any write.
+
+⭐ **THE RULE, CORRECTED: ambiguity is a property of the LINES, not of the accounts.** Refuse only for
+a GL code that the fallback is **actually used for** — at least one party-less cashier line in the
+settleable dates — **and** which more than one active cashier account shares.
+⛔ **Do NOT simply exempt `requiresParty` codes.** A `1140` line with a NULL party is bad data, the
+fallback *would* resolve it, and with two wallets it is genuinely ambiguous. **Fail closed there.**
+⛔ **And the fallback join must be conditional on the party being absent.** Left unconditional it runs
+for party-bearing lines too, multiplying one journal line into N rows with the same `account_id` and
+the same `delta`, so `sum(delta)` is N×. Today N=1 everywhere and the broken guard above is the only
+thing preventing N>1 — **the two defects hide each other**, and repairing the guard alone converts a
+total outage into a silent over-allowance in which one wallet's cap is bounded by **both** wallets'
+movement. That is §3.1's masking case between two wallets, arriving through the check written to close
+it, fail-open, with §7.2 and §7.3 still green.
+⚠️ `endDayReports` does **not** have this shape — it joins only the static `ca` values list, which
+yields at most one row. The multiplication is new to `cashierMovementByAccount`.
+⚠️ **The refusal message must name a remedy that works.** *"Rename or retire one"* does not — renaming
+does not change `gl_account_code`.
 
 ### 3.5 The declared overage
 
