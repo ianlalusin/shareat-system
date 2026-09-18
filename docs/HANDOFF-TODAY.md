@@ -21,8 +21,8 @@ outage screen has stopped blaming the operator. **Closed: DEF-371 and DEF-368.**
 | `npm run typecheck` | **exit 0**, 0 type errors, 10s |
 | unit | **1770 passed**, 1 skipped, 128 files, exit 0, 51s |
 | `npm run build` | **exit 0**, 72s, with 9008 free and the emulators stopped |
-| integration | ⛔ **NOT RUN LOCALLY — stated, not glossed.** The slice touches no `packages/db` or `packages/domain` code, the local suite takes ~29m and OOMs here (DEF-245), and CI runs it on push |
-| CI on `3542a91` | **in progress at wrap-up — CHECK IT.** `gh api repos/ianlalusin/shareat-system/actions/runs/<id>/jobs` |
+| integration | ⛔ **NOT RUN LOCALLY — stated, not glossed.** The slice touches no `packages/db` or `packages/domain` code, the local suite takes ~29m and OOMs here (DEF-245). ✅ **Closed by CI — see the row below** |
+| CI | ✅ **GREEN — and not on the sha you would look at first.** `3542a91`'s run was **CANCELLED** by the docs push that followed it. `621ca66` carries the same code and its run is **`typecheck, test, build: completed success`** (15 steps), with **Deploy succeeded** on it. **Integration therefore RAN and PASSED in CI**, which is the gate the local skip was deferred to |
 
 ⚠️ **The build log reports "1 error line" and it is a red herring.** It is a source line containing
 `throw new Error(...)` quoted inside a pre-existing Turbopack warning about `packages/sync-firestore`
@@ -168,6 +168,11 @@ broken environment — `erp2.shareat.net` signs in fine and always did.**
   and then check functionally** — a listening port is not proof of a working service.
 - ⛔ **`git diff <commit> -- <path>` silently reports untracked files as deleted.** Use
   `git show <ref>:<path> | diff - <path>`.
+- ⛔⛔ **A DOCS PUSH CANCELS THE CI RUN OF THE CODE PUSH BENEATH IT, AND THE CANCELLED RUN IS THE ONE
+  YOU WILL LOOK AT.** `3542a91` (the code) shows `conclusion=cancelled`; `621ca66` (docs, same code in
+  its tree) shows `completed success` with the full `typecheck, test, build` job. **Check the run for
+  the sha that actually COMPLETED, not the sha you care about** — and confirm the heavy job RAN rather
+  than being skipped by `detect doc-only changes`, which is a real job in this workflow.
 - ⛔ **For a CI verdict use the API, not `gh run view`** — they disagreed about the same run in the
   same second. Never chain a `gh run watch` with other commands; you get the wrong exit code.
 - ⛔ **One integration suite at a time.** Two at once = a `DROP DATABASE` teardown timeout reported as
