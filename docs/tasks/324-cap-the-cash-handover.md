@@ -21,7 +21,7 @@ today, each verified in the file:
 |---|---|---|
 | `apps/erp/src/app/remittance/page.tsx:317-318` | `step="0.01"`, `min="0"` | browser only, and `min="0"` permits zero |
 | `apps/erp/src/app/remittance/actions.ts:71` | `Number(l.amount) > 0` | drops non-positive lines; **no upper bound** |
-| `packages/domain/src/remittance/index.ts:116` | `money(l.amount)` | format + `numeric(14,2)` range only |
+| `packages/domain/src/remittance/index.ts:127` | `money(l.amount)` | format + `numeric(14,2)` range only |
 | `packages/domain/src/money-transfers/index.ts:154-160` | `parseMoneyInput` + `> 0` | positivity only |
 | `packages/domain/src/money-accounts/overdraft.ts:45-56` → `money-accounts/draw-verdict.ts:51` | `judgeDraw` | ⛔ **`if (drawn <= available) return OK`** — handing over the **full ledger balance** produces no verdict at all |
 | `packages/db/schema/remittance.ts:120` (= `migrations/0030_t143_pooled_remittance.sql:45`) | `CHECK (amount > 0)` | lower bound only |
@@ -30,7 +30,7 @@ today, each verified in the file:
 `remittance_allocations`, `remittance_variances` or `money_accounts` — all 134 `.sql` files in
 `packages/db/migrations/` grepped.** The answer to *"what caps the handover"* is **none**.
 
-⚠️ **The one signal that exists is thrown away.** `index.ts:174` takes only `transfer.id`, discarding
+⚠️ **The one signal that exists is thrown away.** `index.ts:185` takes only `transfer.id`, discarding
 `CreateMoneyTransferResult.warning`, whose own comment at `money-transfers/index.ts:64-65` reads
 *"Show it; never swallow it."* Do not treat `overdraftLimit` as a working bound on this path.
 
@@ -39,17 +39,17 @@ today, each verified in the file:
 DEF-357 says: *"Do NOT cap at `owed` alone — with nothing verified, `settleable` is empty, `owed` is
 zero, and a cap of zero refuses the entire remittance."*
 
-**T-319 (`3601126`, 2026-09-17) made that unreachable.** `index.ts:138-149` refuses when
+**T-319 (`3601126`, 2026-09-17) made that unreachable.** `index.ts:149-160` refuses when
 `settleable.length === 0`, and `settleable` is `reports.filter(r => r.remittable && Number(r.owed) >
-0)` (`:125`). `runCreate` (`:74-226`) is straight-line — **no early return, no try/catch, no branch**
-— so on every path reaching the transfer loop at `:173`, `settleable.length >= 1` and `totalOwed > 0`.
+0)` (`:136`). `runCreate` (`:85-237`) is straight-line — **no early return, no try/catch, no branch**
+— so on every path reaching the transfer loop at `:184`, `settleable.length >= 1` and `totalOwed > 0`.
 Sub-centavo drift was checked and is impossible: `journal_lines.debit/credit` are `numeric(14,2)`
 (`schema/journal.ts:149-150`). T-319's own spec predicted this at `docs/tasks/319-*.md:59-63`.
 
 ### The objection that replaces it — and it is the whole design
 
 **`owed` counts only verified days.** `repo/remittance.ts:99` computes `(sd.status = 'verified') as
-remittable`; `index.ts:125` filters on it. The SQL returns a row for an unverified day **with its
+remittable`; `index.ts:136` filters on it. The SQL returns a row for an unverified day **with its
 full `owed`** — asserted at `remittance.test.ts:219-225` (`owed '10000.00'`, `remittable false`).
 `page.tsx:281-287` renders that population on screen: *"N days holding ₱X cannot be remitted yet."*
 
@@ -74,7 +74,7 @@ at `remittance-allocate.test.ts:43-47`. **A cap with no allowance makes the over
 
 `FOUNDATION_ACCOUNTS` (`schema/money-accounts.ts:83-88`) gives **every store two cashier accounts** —
 `Cashier cash` (GL `1110`) and `Cashier online` (GL `1140`). `page.tsx:310-343` renders one amount
-input per account; `index.ts:116` sums them into one `handedOver`. But `owed` is **pooled per DATE**:
+input per account; `index.ts:127` sums them into one `handedOver`. But `owed` is **pooled per DATE**:
 `repo/remittance.ts:63-84` sums every `11xx` line whose `coalesce(ma.custodian, ca.custodian) =
 'cashier'` into one `movement` figure per date.
 
@@ -99,8 +99,8 @@ the wallet remit separately, because they are different places reconciling again
 
 ### 3.2 The two checks
 
-Both fire **after** T-319's refusals (`index.ts:138-149`) and **before** `insertRemittance` (`:159`)
-and the transfer loop (`:173`) — so **nothing is written when either fires.**
+Both fire **after** T-319's refusals (`index.ts:149-160`) and **before** `insertRemittance` (`:170`)
+and the transfer loop (`:184`) — so **nothing is written when either fires.**
 
 **Check 1 — per line, the one that closes §3.1.**
 For each line: `line.amount ≤ movement(line.fromMoneyAccountId, settleableDates) + line.declaredOverage`
@@ -144,11 +144,11 @@ is exactly why it must be written now rather than discovered later.)*
   close §3.1 — that is what the first draft got wrong.
 - `RemittanceLineInput` gains `declaredOverage?: string`.
 - Parse with **`parseMoneyInput`** (`packages/domain/src/shared/money-input.ts:19-26`), **not**
-  `money()`. ⚠️ Trap 8: `index.ts:116` uses `money()` and yields a raw `TypeError: Invalid money
+  `money()`. ⚠️ Trap 8: `index.ts:127` uses `money()` and yields a raw `TypeError: Invalid money
   string:` instead of a cashier-readable sentence. **Do not copy that precedent into new code.**
 - Compare in **integer centavos**: `compare(a, b)` from `packages/core/src/money.ts:146` and `add`
   from `:78`. ⛔ **Never `Number(...)` for the comparison** — `docs/RULES.md` §1 rule 6, and §7 has a
-  case that turns on one centavo. The existing `Number(...)` at `index.ts:125` and `:203` is
+  case that turns on one centavo. The existing `Number(...)` at `index.ts:136` and `:214` is
   precedent, not licence.
 - Absent/empty ⇒ zero for the comparison, stored as **NULL**. `packages/core/src/money.ts:15-16`:
   *"a rate or amount of ZERO is a legitimate value, not 'unset'."* NULL = never asked (every row
@@ -167,13 +167,13 @@ is exactly why it must be written now rather than discovered later.)*
 ### 3.7 DEF-366, folded in — and it ships UNTESTED, deliberately
 
 `actions.ts:95` branches on `result.variance` to decide whether to promise *"recorded as an open
-item"*; the field that says a row exists is `result.varianceId`, set at `index.ts:213` only when a row
-was inserted (guard `:203`). **Change `result.variance` to `result.varianceId`. One line. No test.**
+item"*; the field that says a row exists is `result.varianceId`, set at `index.ts:224` only when a row
+was inserted (guard `:214`). **Change `result.variance` to `result.varianceId`. One line. No test.**
 
 ⭐ **Why no test, stated rather than glossed (bible §9):** the failing state is **unreachable**, and
 this was checked three ways, not assumed. `allocate.ts:88` sets `varianceDayId = Number(variance) ===
 0 ? null : (lastTouched ?? days.at(-1)?.salesDayId ?? null)`; with `variance !== 0` the chain ends at
-`days.at(-1)?.salesDayId`, which is `r.businessDate` (`index.ts:152`) — **a date string, always
+`days.at(-1)?.salesDayId`, which is `r.businessDate` (`index.ts:163`) — **a date string, always
 truthy** — and T-319 guarantees `days.length >= 1`. So `varianceId` is non-null whenever `variance`
 is. A test would have to fabricate a state the app cannot reach, and DEF-366's own disposition forbids
 the extraction that would make it reachable.
@@ -286,7 +286,26 @@ T-319's helper `nothingWrittenFor` (`remittance.test.ts:760-769`) asserts
 remittance is attempted (`money-transfers/index.ts:208`, `:234` write `storeId: from.storeId`). A
 correct implementation leaves **1**, not 0.
 
-⭐ **So assert a DELTA, not a count**: snapshot the four tables before the attempt, assert unchanged
+⛔⛔ **AND IT IS SEVEN TABLES, NOT FOUR — AN EARLIER DRAFT OF THIS SPEC UNDERCOUNTED, AND THE TWO IT
+MISSED ARE THE ONES A MONEY INVARIANT ACTUALLY TURNS ON.** A successful `createRemittance` writes:
+
+| # | Table | Written by |
+|---|---|---|
+| 1 | `remittances` | `insertRemittance` (`index.ts:170`) |
+| 2 | `remittance_lines` | `insertLine` (`index.ts:194`) |
+| 3 | `remittance_allocations` | the allocation loop |
+| 4 | `remittance_variances` | *conditional* — guard at `index.ts:214` |
+| 5 | `money_transfers` | `createMoneyTransfer` → `insertMoneyTransfer` (`money-transfers/index.ts:266`) |
+| 6 | **`journal_entries`** | ⭐ `postEntry` (`money-transfers/index.ts:255`) |
+| 7 | **`journal_lines`** | ⭐ same `postEntry` |
+
+⭐ **6 and 7 are the point.** A refusal that left a posted journal entry behind would pass a
+check that watched only the remittance tables, and the ledger is the thing this task exists to
+protect. `money_transfers.journal_entry_id` (`money-transfers/index.ts:277`) is the link to follow.
+*(Found by the T-324 tester, reading the call path rather than trusting the spec's count. This is
+what a lane raising a QUESTION before writing code is for.)*
+
+⭐ **So assert a DELTA, not a count**: snapshot all seven before the attempt, assert unchanged
 after. Two further facts the helper hides:
 - `nothingWrittenFor` is a closure **inside** the `describe` at `:758-882`. The new cases belong to
   the float-remit `describe` at `:517-634`. **It is not in scope there** — hoist or write a local one.
@@ -306,7 +325,7 @@ the balance is still ₱20,000. **It passes on the coincidence of its own fixtur
 says.
 
 **The new case:** same fixture, **`amount: '28000.00'`, no overage declared** → **REJECTED**, with the
-four-table delta unchanged and the till still ₱28,000.
+seven-table delta unchanged and the till still ₱28,000.
 
 ⭐ **The right reason it must fail today: the call RESOLVES instead of rejecting** — Vitest reports
 *"promise resolved instead of rejecting"* against `.rejects.toThrow(/createRemittance:/)`. Today
@@ -316,7 +335,7 @@ row, and **the drawer goes to ₱0.00.**
 ⛔ **If it fails naming `money_accounts_overdraft_limit`, `"would go to −"`, or `"is a till float"`,
 the TEST is wrong, not the code:**
 - `money-accounts/draw-verdict.ts:51` returns OK because `drawn (28,000) <= available (28,000)`.
-- `index.ts:108`'s float refusal **cannot** fire, and for a stronger reason than "the fixture doesn't
+- `index.ts:119`'s float refusal **cannot** fire, and for a stronger reason than "the fixture doesn't
   call `setTillFloat`": `money_accounts_float_target_shape_check`
   (`schema/money-accounts.ts:216-217`) requires `gl_account_code = '1115'` for a non-null
   `float_target`, and `f.till` is the foundation cashier-cash account on **`'1110'`**
@@ -349,7 +368,13 @@ a later **unverified** day with Till +₱20,000. Enter **Till `10000.00`, wallet
 - **One centavo short:** `declaredOverage` one centavo under the excess — refused. ⭐ This is the case
   that fails if anyone compares with `Number(...)` instead of `compare()`.
 - **Negative declaration:** `'-1.00'` — refused.
-- **Overage on a zero-amount line** does not resurrect the line (§6 item 2).
+- ⛔ **Overage on a zero-amount line** does not resurrect the line (§6 item 2) — **SLICE B, NOT HERE.**
+  This is a property of the form filter at `actions.ts:71`, which builds `lines[]` before the domain
+  ever sees them. `createRemittance` takes `lines[]` directly and does no such filtering, and a
+  zero amount is already refused downstream by `parseMoneyInput` + `> 0`
+  (`money-transfers/index.ts:154-160`) regardless of any declared overage. **There is nothing to
+  resurrect at the domain level, so a domain test for it would be a no-op asserting nothing.** It
+  belongs with the screen. *(Raised by the T-324 tester, correctly, before writing it.)*
 - **Ambiguous configuration:** two active cashier accounts sharing one `gl_account_code` → the read
   refuses and names them (§3.4).
 - **The existing `:562-600` case stays green UNMODIFIED.** ⛔ If making it pass requires editing it,
@@ -361,8 +386,8 @@ a later **unverified** day with Till +₱20,000. Enter **Till `10000.00`, wallet
 - `allocateFifo` / `allocate.ts`.
 - An account dimension on `remittance_allocations` (§3.3).
 - The `SELECT … FOR UPDATE` concurrency fix (§4) — **filed, not built.**
-- The swallowed overdraft warning at `index.ts:174`.
-- `index.ts:116`'s `money()` over `parseMoneyInput()` (DEF-272/277 family) — **new code uses
+- The swallowed overdraft warning at `index.ts:185`.
+- `index.ts:127`'s `money()` over `parseMoneyInput()` (DEF-272/277 family) — **new code uses
   `parseMoneyInput`; the existing line is not touched.**
 - The 34 repo-wide `bible §6.3` citations, two of them in files this task opens.
 - `docs/GLOSSARY.md` — it has **no entry** for `owed`, `remittable`, `settleable`, `variance`,
@@ -390,12 +415,12 @@ Everything in bible §9, and specifically:
 ## 10. Traps — every one verified in the file today
 
 1. ⛔ **DEF-366's own citation is stale** — it cites `index.ts:176-186`; T-319 moved the variance
-   write to **`:202-214`**, guard **`:203`**. Its `actions.ts:89-97` citation is correct.
+   write to **`:213-225`**, guard **`:214`**. Its `actions.ts:89-97` citation is correct.
 2. ⛔ **Stale citations, correctly attributed** *(an earlier draft of this spec got this wrong and
    sent a reader to the wrong document — row 208 is about exactly that)*:
-   **T-316** cites `index.ts:143` → now **`:169`**. Its `index.ts:105-107` still lands in the float
-   block and survives. **T-319's own spec** cites `index.ts:178` → **`:203`** (at `319-*.md:33`,
-   `:96`) and `index.ts:146-166` → **`:173-190`** (at `:83`). T-316 never cited either.
+   **T-316** cites `index.ts:143` → now **`:180`**. Its `index.ts:105-107` still lands in the float
+   block and survives. **T-319's own spec** cites `index.ts:178` → **`:214`** (at `319-*.md:33`,
+   `:96`) and `index.ts:146-166` → **`:184-201`** (at `:83`). T-316 never cited either.
 3. ⛔ **`bible §6.3` does not exist** — cited at `index.ts:366` and `actions.ts:31`, both files this
    task opens. `docs/RULES.md:118`: it means **§15.11**.
 4. ⚠️ **`remittable` means the opposite of what it looks like** — not *"may be remitted"* but
