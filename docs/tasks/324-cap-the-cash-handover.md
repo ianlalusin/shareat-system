@@ -183,11 +183,45 @@ except by raw SQL), and it *does* fire for two cashier wallets — an ordinary a
 point `createRemittance` throws for **every** handover at that store, till included, because the
 function is called unconditionally before any write.
 
-⭐ **THE RULE, CORRECTED: ambiguity is a property of the LINES, not of the accounts.** Refuse only for
-a GL code that the fallback is **actually used for** — at least one party-less cashier line in the
-settleable dates — **and** which more than one active cashier account shares.
-⛔ **Do NOT simply exempt `requiresParty` codes.** A `1140` line with a NULL party is bad data, the
-fallback *would* resolve it, and with two wallets it is genuinely ambiguous. **Fail closed there.**
+⭐⭐ **THE RULE, IN ITS FINAL FORM — KEY BOTH THE FALLBACK JOIN AND THE GUARD ON
+`accounts.requires_party = false`.** One column, and it is an invariant Postgres maintains on every
+insert and update rather than a convention anyone has to remember.
+
+⚠️ **A first correction of this section said "fail closed on a party-less `1140` line rather than
+exempting `requiresParty` codes." That was retracted — it specifies UNREACHABLE CODE.** A party-less
+`1140` line cannot exist: `journal_lines_check_party_requirement()`
+(`packages/db/migrations/0007_subledger_party_on_line.sql:68-96`, BEFORE INSERT OR UPDATE) rejects it,
+and the trigger is still live — the only `DROP TRIGGER` in the whole migration set is `0004`'s, a
+different trigger, predating it.
+
+**The same trigger enforces the converse, which is what makes the rule provable.** Both branches:
+
+```
+IF acct_requires_party AND NOT has_party  → RAISE
+IF NOT acct_requires_party AND has_party  → RAISE
+```
+
+And `1110` is **never** flipped — `0024` flips `1140`, `0035` flips `1120`, `0036` flips
+`3100`/`3200`, `0049` flips `2140`; none touches `1110`.
+
+| code | `requires_party` | the database guarantees | resolves via |
+|---|---|---|---|
+| `1110` | false | a party on the line is **rejected** | fallback, always |
+| `1140` | true | a line with **no** party is **rejected** | `ma.id`, always |
+
+**The two resolution paths cannot overlap on any row.** `journal_lines_party_both_or_neither_check`
+(`packages/db/schema/journal.ts:171-173`) closes the last gap — `(party_type is null) = (party_id is
+null)` — so *"has a party"* really does mean the join has something to match.
+⛔ **Do not special-case `'1140'` by literal.** Key on the column, or the rule breaks silently when a
+tenth party-bearing code is added.
+
+⚠️ **Two limits, which belong in the comment — writing *"always"* would be slightly false.** The
+trigger checks a party is **present**, not that it is the right **type**: a `1140` line with
+`party_type='supplier'` satisfies it, fails the `ma` join, and drops out of movement because
+`coalesce(ma.custodian, ca.custodian)` is NULL. ⭐ **Not a cap hole** — `endDayReports` filters
+identically, so the line is absent from `owed` and from `movement` alike and the two checks stay
+consistent. Same for a `party_id` pointing at a deleted account: `party_id` carries no foreign key by
+design (`schema/journal.ts:47`).
 ⛔ **And the fallback join must be conditional on the party being absent.** Left unconditional it runs
 for party-bearing lines too, multiplying one journal line into N rows with the same `account_id` and
 the same `delta`, so `sum(delta)` is N×. Today N=1 everywhere and the broken guard above is the only
