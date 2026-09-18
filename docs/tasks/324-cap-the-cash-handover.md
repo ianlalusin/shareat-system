@@ -365,6 +365,17 @@ a later **unverified** day with Till +₱20,000. Enter **Till `10000.00`, wallet
 
 - **Allowance works:** `float-remit`, `amount: '28000.00'` **with** `declaredOverage: '20000.00'` —
   accepted, one variance row, positive variance, drawer ₱0.00.
+  ⛔⛔ **AS STATED ABOVE THIS CASE PROVES NOTHING, AND IT MUST CARRY A PERSISTENCE ASSERTION.** The
+  T-324 tester ran it and reported it **green today** — correctly, and said so rather than counting
+  it among the reds. With no cap in place the declaration is simply ignored, so the outcome is
+  identical with and without it. A case that is green before and green after is not evidence; it is
+  a **control** that guards against a cap which over-refuses the legitimate path.
+  ⭐ **What makes it discriminate: assert the declaration was RECORDED** —
+  `remittance_lines.declared_overage = '20000.00'` for that line. That claim is false today (there
+  is nowhere to record it) and true after `0154`, and it is the only thing in the whole task that
+  reads the column back. Without it a builder who writes NULL unconditionally passes every gate and
+  the NULL-vs-`0` distinction of §3.5 exists **only in the migration** until whoever writes the
+  first reader discovers it broken. Assert the NULL and the explicit-`0` cases too.
 - **One centavo short:** `declaredOverage` one centavo under the excess — refused. ⭐ This is the case
   that fails if anyone compares with `Number(...)` instead of `compare()`.
 - **Negative declaration:** `'-1.00'` — refused.
