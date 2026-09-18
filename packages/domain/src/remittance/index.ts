@@ -40,6 +40,17 @@ export interface RemittanceLineInput {
   fromMoneyAccountId: string;
   toMoneyAccountId: string;
   amount: string;
+  /**
+   * ⛔ T-324 PRE-WIRE — DECLARED, UNREAD, AND DELIBERATELY SO UNTIL THE BUILDER LANDS THE CAP.
+   *
+   * Nothing reads this yet. It exists so the tester's allowance cases (spec §7.4) fail on the
+   * ASSERTION — "the overage was ignored and the call resolved" — instead of on a typecheck error
+   * for a field that does not exist. A test that fails because a symbol is missing is not a usable
+   * red; only one that fails on the behaviour it is about is.
+   *
+   * Added by the orchestrator as pre-wiring, not by the lane. See docs/tasks/324-*.md §3.5.
+   */
+  declaredOverage?: string | null;
 }
 
 export interface CreateRemittanceInput {
