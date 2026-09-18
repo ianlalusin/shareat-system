@@ -239,8 +239,11 @@ Read: docs/RULES.md, docs/HANDOFF-TODAY.md, PROJECT_BIBLE.md rows 204-215, DEFEC
 section E. ⛔ GREP the big ones — the register is ~1MB and the bible ~418KB.
 
 ⛔ T-323 IS DONE AND PUSHED (3542a91). DEF-371 and DEF-368 are closed. Do not re-open them.
-⛔ CHECK CI ON 3542a91 FIRST — it was in progress at wrap-up, and integration was NOT run locally.
-Use the API: gh api repos/ianlalusin/shareat-system/actions/runs/<id>/jobs
+✅ CI IS GREEN AND INTEGRATION RAN — but NOT on the sha you would look at. 3542a91's run was
+CANCELLED by the docs push on top of it; 621ca66 carries the same code and completed green with the
+full typecheck/test/build job, and Deploy succeeded. ⛔ When you check CI, look at the sha that
+COMPLETED, confirm the heavy job RAN rather than being skipped by 'detect doc-only changes', and use
+the API: gh api repos/ianlalusin/shareat-system/actions/runs/<id>/jobs
 
 ⛔ FIREBASE_AUTH_EMULATOR_HOST IS NO LONGER HARMLESS. Set on a production host it breaks sign-in for
 everyone, deliberately, rather than accepting unsigned tokens. It is not in deploy.yml's allowlist
@@ -253,6 +256,6 @@ not two. IAN MUST PASTE ANY PASSWORD OR TOKEN; a uid is not a credential and you
 code problem every time. Sequence heavy runs one at a time. And a harness "killed for memory" notice
 does NOT mean the child processes died — check the port, then check FUNCTIONALLY.
 
-Next task T-324 · next defect DEF-372 · next migration 0154.
+Next task T-324 · next defect DEF-374 · next migration 0154. DEF-372 and DEF-373 are FILED, not free.
 
 -----------------------------------------------------------------------------------------------
