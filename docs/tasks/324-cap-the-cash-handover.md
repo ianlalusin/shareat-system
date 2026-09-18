@@ -103,7 +103,37 @@ Both fire **after** T-319's refusals (`index.ts:149-160`) and **before** `insert
 and the transfer loop (`:184`) — so **nothing is written when either fires.**
 
 **Check 1 — per line, the one that closes §3.1.**
-For each line: `line.amount ≤ movement(line.fromMoneyAccountId, settleableDates) + line.declaredOverage`
+⛔⛔ **GROUP BY ACCOUNT FIRST. A PER-LINE CHECK DOES NOT CLOSE §3.1 — IT LETS THE SAME CASE THROUGH
+THE CAP INSTEAD OF AROUND IT.** Corrected 2026-09-18 after the auditor measured it; the first
+formulation here was per line and was wrong.
+
+```
+group input.lines by fromMoneyAccountId
+for each account A:
+    Σ(amount of A's lines)  ≤  movement(A, settleableDates) + Σ(declaredOverage of A's lines)
+```
+
+**Why per-line fails.** Nothing makes lines unique per account: `packages/db/schema/remittance.ts:121`
+carries `remittance_lines_transfer_unique` on `money_transfer_id` **only** — there is no unique on
+`(remittance_id, from_money_account_id)` (`migrations/0030_t143_pooled_remittance.sql:105`) — and
+`createRemittance` reduces over `input.lines` (`index.ts:127`) and iterates them (`:184`) without
+ever grouping. So one account can appear on two lines and **each is measured against that account's
+full movement**:
+
+> Verified day: Till +₱5,000, Wallet +₱5,000 → `movement(Till) = 5,000`, `movement(Wallet) = 5,000`,
+> `totalOwed = 10,000`. Unverified day: Till +₱20,000, so Till holds ₱25,000.
+> `lines[] = [{from: Till, amount:'5000.00'}, {from: Till, amount:'5000.00'}]` — **two lines, one account.**
+> check 1 line 1: `5,000 ≤ 5,000 + 0` ✓ · check 1 line 2: `5,000 ≤ 5,000 + 0` ✓ · check 2: `10,000 ≤ 10,000 + 0` ✓
+> **→ ACCEPTED.** ₱10,000 leaves a till whose attributable movement was ₱5,000, and the Wallet's
+> ₱5,000 is recorded settled although nothing left the Wallet.
+
+Check 2 cannot catch it — it is pooled and the pooled totals match exactly. ⛔ **Not reachable from
+today's screen** (§6 renders one input per account) **and filed anyway**, because §4 makes the domain
+the PRIMARY layer and says the database cannot express this cap: **check 1 is the only real bound, and
+a bound that trusts the shape of its input is exactly what DEF-357 was.**
+
+⭐ The refusal names the **account** — which one, what it handed over, what it can account for, and
+what declaring would take.
 
 **Check 2 — pooled, retained.**
 `handedOver ≤ totalOwed + Σ line.declaredOverage`
@@ -142,7 +172,9 @@ is exactly why it must be written now rather than discovered later.)*
 
 - **Per line, not per remittance.** It qualifies the amount it sits beside. A header field cannot
   close §3.1 — that is what the first draft got wrong.
-- `RemittanceLineInput` gains `declaredOverage?: string`.
+- `RemittanceLineInput` gains `declaredOverage?: string | null`. ⚠️ An earlier draft said `string`;
+  the pre-wire at `index.ts:53` and the form's `str(formData, …) || null` (§6 item 2) both say
+  `string | null`. **The pre-wire is the contract; this sentence was the odd one out.**
 - Parse with **`parseMoneyInput`** (`packages/domain/src/shared/money-input.ts:19-26`), **not**
   `money()`. ⚠️ Trap 8: `index.ts:127` uses `money()` and yields a raw `TypeError: Invalid money
   string:` instead of a cashier-readable sentence. **Do not copy that precedent into new code.**
@@ -376,8 +408,23 @@ a later **unverified** day with Till +₱20,000. Enter **Till `10000.00`, wallet
   reads the column back. Without it a builder who writes NULL unconditionally passes every gate and
   the NULL-vs-`0` distinction of §3.5 exists **only in the migration** until whoever writes the
   first reader discovers it broken. Assert the NULL and the explicit-`0` cases too.
-- **One centavo short:** `declaredOverage` one centavo under the excess — refused. ⭐ This is the case
-  that fails if anyone compares with `Number(...)` instead of `compare()`.
+- **One centavo short:** `declaredOverage` one centavo under the excess — refused.
+  ⛔⛔ **THIS IS A CONTROL, NOT A RED, AND AN EARLIER DRAFT CLAIMED OTHERWISE ON NO EVIDENCE.** That
+  draft said *"this is the case that fails if anyone compares with `Number(...)` instead of
+  `compare()`."* **The auditor measured it and it is false:** `Number('8000.00') +
+  Number('19999.99') = 27999.99` exactly, so `28000 > 27999.99` refuses under both implementations.
+  A sweep of **200,004** one-centavo-short pairs found **zero** that `Number()` wrongly accepts —
+  IEEE-754 doubles are exact on 2-decimal money until roughly ₱90 trillion, so a one-centavo margin
+  is never where they break. ⚠️ **That sentence was a guess that read like a measurement, in a spec
+  whose own §10 cites bible row 208 against exactly that.**
+- ⭐⭐ **EXACT EQUALITY — this is the real `Number()` red, and it runs the other way.** `Number()`
+  does not wrongly *accept* at the margin; it wrongly **REFUSES** at exact equality:
+  `1000.01 + 0.06` sums to `1000.0699999999999`, so a handover of exactly `1000.07` — correct to the
+  centavo — is refused. **4,260 of 200,004 exact-equality pairs (2.1%) diverge.**
+  **The case:** `amount == movement + declaredOverage` to the centavo, from the divergent set →
+  **ACCEPTED**. ⭐ This is literally §3.3's *"starts refusing correct remittances"*, arriving through
+  the comparison primitive instead of through a tightened bound — which is why it belongs here and
+  not in a footnote.
 - **Negative declaration:** `'-1.00'` — refused.
 - ⛔ **Overage on a zero-amount line** does not resurrect the line (§6 item 2) — **SLICE B, NOT HERE.**
   This is a property of the form filter at `actions.ts:71`, which builds `lines[]` before the domain
@@ -388,8 +435,14 @@ a later **unverified** day with Till +₱20,000. Enter **Till `10000.00`, wallet
   belongs with the screen. *(Raised by the T-324 tester, correctly, before writing it.)*
 - **Ambiguous configuration:** two active cashier accounts sharing one `gl_account_code` → the read
   refuses and names them (§3.4).
-- **The existing `:562-600` case stays green UNMODIFIED.** ⛔ If making it pass requires editing it,
-  that is **BLOCKED**, not a fix.
+- **The existing `:562-600` case stays green with its ASSERTIONS UNCHANGED.** ⛔ If making it pass
+  requires changing what it asserts, that is **BLOCKED**, not a fix.
+  ⚠️ **"Assertions unchanged", NOT "not edited" — an earlier draft said the latter and contradicted
+  itself.** Trap 10 *orders* the misleading comment at `:591-593` to be corrected, and `591-593` is
+  inside `562-600`; the auditor caught the contradiction, which would have produced either a false
+  violation report against the tester or the comment being left in place by the very spec that names
+  it as the reason DEF-357 survived. **The comment correction is EXPECTED and AUTHORISED. It has
+  already been made.**
 - ⛔ **`remittance-allocate.test.ts` must need no edit.** If it does, `allocateFifo` changed (§3.6).
 
 ## 8. Out of scope
@@ -411,7 +464,8 @@ a later **unverified** day with Till +₱20,000. Enter **Till `10000.00`, wallet
 Everything in bible §9, and specifically:
 
 1. §7.2 **and** §7.3 fail for the reasons named, **before** any source exists, with real output quoted.
-2. They pass afterwards; `remittance.test.ts:562-600` green **without having been edited**.
+2. They pass afterwards; `remittance.test.ts:562-600` green with **its assertions unchanged** — the
+   comment correction inside it (trap 10) is authorised and does not breach this item.
 3. `npm run typecheck` clean · unit green · integration green **on the lane DB** · `npm run build`
    with 9008 free.
 4. `callers.mjs`: every new export reached from non-test source.
