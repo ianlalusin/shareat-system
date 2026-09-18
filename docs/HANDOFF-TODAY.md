@@ -52,7 +52,7 @@ reach the app mints their own token and is believed.
 ⚠️ **It is not in `.github/workflows/deploy.yml`'s env allowlist and must stay out.**
 ⛔ **`scripts/deploy-preflight.ts` checks that REQUIRED keys are PRESENT and has no denylist**, so
 nothing in the pipeline would fail a build that carried it. **That gap is now security-relevant, not
-tidy-up.** It is the next obvious piece of work and it is unspecced.
+tidy-up** — filed as **DEF-373**, unspecced.
 
 ## ⭐⭐ 3. THE DAY'S TRANSFERABLE FINDING — TWO RULES, BOTH EARNED THE HARD WAY
 
@@ -137,7 +137,7 @@ broken environment — `erp2.shareat.net` signs in fine and always did.**
 1. **DEF-357** — cap the handover at what is owed plus a declared overage. T-319 unblocked it.
 2. **T-320** — access that does not come from a position. ⛔ **Still a PLACEHOLDER, no spec.** Take
    **DEF-367** with it; the register says so in terms.
-3. **`deploy-preflight.ts` denylist** — see §2. Unspecced, now security-relevant.
+3. **`deploy-preflight.ts` denylist** — now **DEF-373**. Unspecced, security-relevant.
 4. **DEF-366** — one line in `remittance/actions.ts`, in whichever pass is next in that file.
 5. **T-322** — retire the two legacy constraint names. ⛔ **Trigger is mechanical, not a date:** `0153`
    confirmed in production **plus three deploys** since release N.
@@ -145,11 +145,12 @@ broken environment — `erp2.shareat.net` signs in fine and always did.**
 
 ## 6. Open observations — not verified, do not report as checked
 
-- ⚠️ **`terminal/firebase.ts:102` has the same ungated emulator wiring T-323 just closed on the
-  sign-in client** — `if (host)` alone, no `NODE_ENV` term, and it calls `connectAuthEmulator` on
-  `/clock`, a production page every store uses. **Deliberately not touched** (must-not-touch for the
-  lane); the sign-in client's comment now says so plainly rather than implying a stylistic choice.
-  **Needs a register row and a decision.**
+- ⛔ **`terminal/firebase.ts:102` has the same ungated emulator wiring T-323 closed on the sign-in
+  client** — now **DEF-372**, and the way it was nearly lost is the day's lesson landing on the
+  orchestrator: `firebase-client.ts:66` shipped in `3542a91` asserting this was *"filed as its own
+  defect row"* **when no such row existed.** Caught by the auditor in the wrap-up audit and filed in
+  `621ca66`+. ⚠️ **A comment claiming a filing that does not exist is worse than a missing row — it
+  tells the next reader to stop looking.**
 - ⚠️ **`firebaseSignInMessage` exists independently in BOTH sign-in forms** and now carries the same
   new branch in each. They can drift. Pre-existing; **paid twice on purpose** rather than extracting a
   module mid-audit. Needs a row.
@@ -180,7 +181,7 @@ broken environment — `erp2.shareat.net` signs in fine and always did.**
 
 ## 8. Numbers to allocate from
 
-Next task **T-324** · next defect **DEF-372** · next migration **`0154`**
+Next task **T-324** · next defect **DEF-374** · next migration **`0154`**
 ⚠️ **Reserved, do not re-issue:** `0149`/`0150` (T-314 F/G), `0151` (T-316). **DEF-370's number is
 SPENT** on `daily-review/2026-09-17`.
 ⛔ **`0152` AND `0153` ARE APPLIED — never edit either.**
