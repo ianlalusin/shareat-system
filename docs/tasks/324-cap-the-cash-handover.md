@@ -425,6 +425,33 @@ a later **unverified** day with Till +₱20,000. Enter **Till `10000.00`, wallet
   **ACCEPTED**. ⭐ This is literally §3.3's *"starts refusing correct remittances"*, arriving through
   the comparison primitive instead of through a tightened bound — which is why it belongs here and
   not in a footnote.
+
+  **The values, measured by the auditor and re-verified independently by the orchestrator:**
+
+  | fixture | movement | declaredOverage | amount | raw `Number()` sum |
+  |---|---|---|---|---|
+  | `float-remit` | `8000.00` | **`1024.12`** | **`9024.12`** | `9024.119999999999` |
+  | two-account | `5000.00` | **`512.06`** | **`5512.06`** | `5512.0599999999995` |
+
+  ⛔⛔ **DO NOT ROUND OR TIDY THESE NUMBERS.** Sweeping every centavo upward from `0.01` at movement
+  `8000.00`, **`1024.12` is the FIRST value that diverges at all** — nothing below it does. A
+  "tidier" `1000.00` silently turns this into another green-under-both control. **The test's own
+  comment must say this**, or it will be tidied by someone being helpful.
+  Both plausible phrasings are caught: `amount <= movement + declared` sums to `9024.119999999999`,
+  and `amount - movement <= declared` gives `1024.1200000000008`. Both refuse.
+
+  ⛔ **This case is NOT a red on its own** — today there is no cap, so it is accepted before and
+  after. **Pair it with the persistence assertion** (`declared_overage = '1024.12'`), exactly as the
+  allowance case above. One case, two jobs.
+
+  ⛔⛔ **AND A CASE PROVING `compare()` WAS USED CANNOT EXIST — DO NOT RECORD THIS RULE AS
+  "COVERED BY TESTS".** Measured: raw `Number()` refuses (**caught**), but `.toFixed(2)` accepts and
+  `Math.round(x * 100)` accepts. At 2dp below ~₱90 trillion `Math.round(x*100)` is **arithmetically
+  correct** and agrees with `compare()` on every input a test can supply. The divergence between a
+  correct-but-rule-violating implementation and the sanctioned one exists **only in the source
+  text**. ⭐ **So "uses `compare()`, never `Number(...)`" (§3.5, `docs/RULES.md` §1 rule 6) is an
+  AUDIT obligation, enforced by reading the source — not a test obligation.** The case above
+  enforces only the subset that is also a bug.
 - **Negative declaration:** `'-1.00'` — refused.
 - ⛔ **Overage on a zero-amount line** does not resurrect the line (§6 item 2) — **SLICE B, NOT HERE.**
   This is a property of the form filter at `actions.ts:71`, which builds `lines[]` before the domain
