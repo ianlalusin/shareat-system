@@ -196,7 +196,14 @@ is exactly why it must be written now rather than discovered later.)*
 `packages/domain/src/remittance/allocate.ts` is untouched. This task decides whether the over case is
 *reached*, never what it does.
 
-### 3.7 DEF-366, folded in — and it ships UNTESTED, deliberately
+### 3.7 DEF-366, folded in — ⛔ **IN SLICE B, NOT SLICE A** — and it ships UNTESTED, deliberately
+
+> ⛔ **SLICE ASSIGNMENT, because an earlier draft left this ambiguous and the builder was right to
+> refuse it.** `actions.ts` is an `apps/erp/src/app/remittance/**` file, which is **slice B's**. The
+> slice A builder's do-not-touch list named it, while this section said the task "already opens" it.
+> **The one-line change belongs to slice B**, alongside the form field and the rewritten paragraph
+> that live in the same two files. The slice A lane correctly reported the conflict instead of
+> resolving it — a spec defect worked around is evidence destroyed.
 
 `actions.ts:95` branches on `result.variance` to decide whether to promise *"recorded as an open
 item"*; the field that says a row exists is `result.varianceId`, set at `index.ts:224` only when a row
@@ -487,6 +494,18 @@ a later **unverified** day with Till +₱20,000. Enter **Till `10000.00`, wallet
   (`docs/RULES.md` §1 rule 14).
 
 ## 9. Done when
+
+> ⛔ **THIS IS THE TASK'S DONE-WHEN, NOT ANY ONE LANE'S.** Items 5–8 are the orchestrator's or slice
+> B's — the registers, the roadmap and the screen are nobody's lane scope. **A slice A lane that
+> finds these paths absent from its SCOPE list is reading it correctly and must not touch them.**
+> Stated because the slice A builder raised exactly this and was right to.
+>
+> | Item | Whose |
+> |---|---|
+> | 1, 2, 4 | slice A — tester and builder |
+> | 3 | orchestrator (build and the full gates run with 9008 free) |
+> | 5 | slice B — the screen, driven by the tester in Chrome |
+> | 6, 7, 8 | orchestrator — registers, roadmap, commit message |
 
 Everything in bible §9, and specifically:
 
