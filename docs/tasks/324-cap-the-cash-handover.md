@@ -370,13 +370,40 @@ test passes, because they call the domain directly.** Name the wiring explicitly
    `declaredOverage: str(formData, \`lineOverage_${i}\`) || null`. ⚠️ The `.filter()` at `:71` keys on
    `l.amount`; an overage on a line with no amount must not resurrect that line.
 3. **`actions.ts:78-84`** — nothing to add at the call itself; `lines` already carries it.
-4. **`actions.ts:89-97`** — the summary gains the declared total when non-zero. ⭐ **This is what
-   gives NULL-vs-0 a reader** (§3.5): today the column would be written and never read back —
-   `listRemittances` feeds `page.tsx:374-400`, which renders Date / Reference / State and not even
-   the amount. A tri-state nothing reads is a bug waiting for whoever writes the first reader.
-5. ⛔ **`page.tsx:299-303` must be REWRITTEN.** It describes **only the short case**, so the over case
-   has no words on screen at all. This is bible row 214's mirror in its purest form — a line nobody
-   touched, made false by a change made elsewhere.
+4. **`actions.ts:89-97`** — the summary gains the declared total when non-zero.
+   ⛔⛔ **AN EARLIER DRAFT CLAIMED THIS "GIVES NULL-vs-0 A READER". IT CANNOT, AND THAT CLAIM IS
+   STRUCK.** `CreateRemittanceResult` (`packages/domain/src/remittance/index.ts:67-75`) is
+   `id, handedOver, settled, variance, varianceId` — **no declared total.** `totalDeclared` is
+   computed at `:249` and discarded; it lives only inside the refusal at `:250-256`. So the only
+   total `actions.ts` can print is one it reduces from **its own `lines[]`** — the FormData it built
+   nine lines earlier. **That is the request's input echoed back; it never observes
+   `remittance_lines.declared_overage`.** A builder writing NULL unconditionally would print
+   *"declared ₱5,000.00"* either way, so the summary cannot discriminate the very bug it was cited
+   as guarding against — and §7.4 already says the persistence assertion *"is the only thing in the
+   whole task that reads the column back."* Both could not be true; §7.4 is the true one.
+   ⭐ **The line stays** — confirming to a cashier what they just declared is worth having. It is
+   **a confirmation of input, not a read-back**, and must not be described as one.
+   ⚠️ **The column therefore has no PRODUCTION reader** — only the test. Filed, not built here:
+   giving it one means adding a field to `CreateRemittanceResult`, a slice A file already committed
+   at `1404609`, which is outside §6's surface. *(Found by the auditor before the slice landed.)*
+5. ⛔ **TWO PARAGRAPHS MUST BE REWRITTEN, NOT ONE — AND THE SECOND IS THE ONE THE MIRROR ACTUALLY
+   CATCHES.**
+   **(a) `page.tsx:299-303`** describes **only the short case**, so the over case has no words on
+   screen at all.
+   **(b) `page.tsx:281-287` AND its comment at `:278-280`** — ⛔ *"{n} days holding {₱X} **cannot be
+   remitted yet** — the sales day has to be verified first"*, and *"a day with money in it that
+   CANNOT be remitted"*. **After T-324 that is the wrong word.** The day still cannot be **settled**
+   — T-319's refusal and the `settleable` filter are untouched — **but the cash behind it CAN now be
+   handed over, by declaring the overage.** §2 calls that *"the release valve for cash the ledger
+   cannot yet attribute"*, and `heldBack.reduce(owed)` is **precisely the figure the new field
+   exists to let a cashier hand over.**
+   ⛔⛔ **Left alone, one screen says "₱5,000 cannot be remitted yet" and, twelve lines below,
+   "declare the overage beside that amount." Same screen, same money, opposite instructions.**
+   ⭐ The distinction the new wording must carry: **not settleable ≠ not handable-over.**
+   ⚠️ *This is bible row 214's mirror, and note how it was found: **not by reading the diff** — the
+   slice does not touch `:281-287` at all — but by **searching for the old claim** elsewhere in the
+   file. An earlier draft of this section named only (a). A builder executing items 1–6 faithfully
+   would have shipped the contradiction and been right to say the spec never asked.*
 6. The hint at `page.tsx:313` renders the account's **full ledger balance** (`Holds ${peso(a.balance)}`)
    — the very number the cashier is invited to type. It stays; the new words must make clear that
    **holding is not owing.**
