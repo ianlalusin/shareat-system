@@ -99,7 +99,24 @@ about the symbol — **that is BLOCKED, not a licence to re-export it and move o
 
 ---
 
-## ⛔ Tier C — NOT A LANE'S TO DELETE. Ian's call.
+## ✅ Tier C — DONE 2026-09-20. Ian ruled: delete the screenshots, keep the smoke scripts.
+
+> **Ian, 2026-09-20:** *"delete the screenshots, keep the smoke scripts"* — executed by the
+> orchestrator (`system32-df`) the same minute. **79 `.png` files removed, 5 MB reclaimed**
+> (5,492 KB → 276 KB). **17 `smoke-*.mjs` kept**, as recommended — they are the worked examples of
+> driving this app and the next screen test will crib from one. All six core tools intact
+> (`gates.mjs`, `callers.mjs`, `make-test-dbs.mjs`, `it.mjs`, `q.mjs`, `run-with-db.mjs`); 28 files
+> remain.
+> ⭐ **Checked before deleting, not after:** no file under `docs/` or any root `*.md` links to a
+> screenshot, and the only `.png` references inside the kept smoke scripts are **output paths** —
+> where they write new ones — so nothing reads what was removed.
+> ⚠ **The evidence is gone and that was the trade.** Several of those images were the only surviving
+> proof that a given screen once rendered. Ian made that call knowing it; a future session finding a
+> `docs/reviews/` entry that says "screenshot attached" will not find the screenshot.
+
+### Original assessment, kept for the record
+
+
 
 `~/.claude/skills/orchestrator/tools/` holds **79 `.png` files** and **17 `smoke-*.mjs`** scripts,
 **5.4 MB**, left by sessions going back to T-232.
