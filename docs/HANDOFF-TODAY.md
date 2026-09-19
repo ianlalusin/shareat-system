@@ -8,9 +8,14 @@
 
 ## Where things stand
 
-**T-324 is COMPLETE, both slices.** `1404609` (the cap — deployed, CI green with real Postgres,
-production verified at all 40 characters) and `d776758` (the way to declare it — committed, **not
-yet pushed at the time of writing; check**). **Closed: DEF-357 and DEF-366.**
+**T-324 is COMPLETE, both slices, and both are PUSHED and DEPLOYED.** `1404609` (the cap) and
+`d776758` (the way to declare it). Production verified at all 40 characters against `origin/main`.
+**Closed: DEF-357 and DEF-366.**
+
+> ⛔⛔ **BUT READ §4a BEFORE YOU TRUST CI ON SLICE B.** Slice B's code was **never tested by CI** at
+> first: the docs push on top **cancelled** its run, and the replacement run went **genuinely green
+> while skipping integration and the build as doc-only.** A re-run was triggered to close it — **check
+> its outcome before treating slice B as CI-verified.** ⭐ **RESOLVED before this was committed:** the re-run of `056751c` completed `success` with **`Integration tests (real Postgres) :: success`** and **`Build :: success`** — both ran, neither skipped. Slice B is CI-verified on its own code.
 
 A cash handover is now capped **per cashier account**: an account may not hand over more than it
 *moved* over the settleable dates, plus whatever overage was declared on its own lines; the pooled
@@ -84,9 +89,12 @@ unfounded when the range check really does exist.
 
 ## 3. Pick up here
 
-1. ⛔ **PUSH `d776758` AND THE DOC COMMITS IF NOT ALREADY DONE.** `git log origin/main..HEAD`.
-   ⚠️ A push to `main` **auto-deploys**. Slice A alone blocked any handover needing a declaration;
-   slice B removes that, so shipping them together is correct.
+1. ✅ **SLICE B IS CI-VERIFIED — resolved, nothing to do. See §4a for how it nearly was not.** Originally: Everything is
+   pushed and deployed; what is missing is CI's own full integration run on slice B's code. A re-run
+   of the cancelled run was triggered; **check that it completed, that `Integration tests (real
+   Postgres)` says `success` and not `skipped`, and that `Build` ran.** ⚠️ Do not push anything to
+   `main` while that run is in flight — CI cancels in-progress runs on the same branch, which is the
+   exact mechanism that caused this.
 2. **DEF-376 — the structural fix is now OWED.** Its own trigger ("two shifts, the third is the one
    to act on") fired the same day it was written. The guard is keyed by `file:line`, and it cannot
    tell a correct renumber from a wrong one: assertions are key-presence only, `m.raw` is captured
@@ -103,6 +111,37 @@ unfounded when the range check really does exist.
 6. **DEF-374** — READ COMMITTED, nothing locked: two concurrent handovers both pass.
 7. **T-320** — still a placeholder, no spec. Take **DEF-367** with it.
 8. **DEF-373** — `deploy-preflight.ts` has no denylist. Security-relevant, unspecced.
+
+## ⛔⛔ 4a. THE WORST TRAP OF THE DAY, AND IT CAUGHT THE SESSION THAT WROTE THE WARNING
+
+**A DOCS PUSH CANCELS THE CODE PUSH'S CI RUN — AND THE REPLACEMENT RUN IS GENUINELY GREEN WHILE
+TESTING NOTHING.**
+
+The previous handoff already warned that a docs push cancels the run beneath it and that *"the
+cancelled run is the one you will look at."* That warning is **not strong enough**, and this session
+followed it and still got caught:
+
+| Commit | CI | Integration | Build |
+|---|---|---|---|
+| `056751c` — slice B's CODE | **cancelled** | cancelled | skipped |
+| `f63eb65` — docs only | ✅ **green** | ⛔ **skipped** | ⛔ **skipped** |
+
+⛔ **A green CI on the tip, and slice B's code had had neither integration nor a build run against
+it in CI — while that code was already deployed to production.**
+
+**Why the green one is worse than the cancelled one:** a cancelled run *looks* wrong and makes you
+investigate. A green run does not. And the doc-only detector was behaving **correctly** — `ci.yml`
+compares against `github.event.before`, which for the docs push was the code commit, so the diff
+genuinely contained only docs. Right logic, wrong outcome.
+
+⭐ **HOW TO AVOID IT:** push code and its docs **in one push**, or push docs **first**. If they are
+already split, **re-run the cancelled run** (`gh run rerun <id>`) — its `before` predates the code,
+so the detector sees code and runs everything. ⚠️ `ci.yml` has **no `workflow_dispatch`**, so you
+cannot simply force a full run; the detector script handles that event shape but the workflow does
+not accept it. **Adding `workflow_dispatch:` to `ci.yml` is a cheap, obvious improvement and is not
+yet done.**
+⛔ **And do not push while a re-run is in flight** — `concurrency: cancel-in-progress: true` on
+`ci-${{ github.ref }}` means you will cancel it and make it three.
 
 ## 4. Traps that bit today
 
@@ -135,7 +174,7 @@ Next task **T-325** · next defect **DEF-381** · next migration **`0155`**
 | `webapps-9e` | TESTER | idle, frozen, clean. Sonnet. ⭐ Found the loose refusal matchers, three type errors `tsc` never reported, a fourth paren-scanner with the same bug, and the migration gap — none of them asked for |
 | `webapps-71` | BUILDER | idle, frozen, clean. Sonnet. ⭐ Refused to migrate a database it did not own; refused a fix that would have made things worse and asked instead |
 | `webapps-f8` | AUDITOR | idle, clean. **Opus.** ⭐ Found two defects hiding each other, a regression test our own slice had disarmed, and argued the orchestrator out of a wrong filing decision |
-| `webapps-5a` | **UNKNOWN — foreign** | appeared ~11:00, never identified. Touched nothing in T-324's paths (verified against the frozen reference object). **Ask Ian.** |
+| `webapps-5a` | **IAN** — his own session | Confirmed by Ian 2026-09-19. Not a lane, not foreign work. Touched nothing in T-324 paths (verified against the frozen reference object). ⭐ Recorded because an unidentified session sharing the working tree was a real unknown at commit time, and the answer is worth writing down rather than re-investigating. |
 
 ⚠️ **`docs/reviews/NEXT-PROMPT.md` (modified) and `docs/reviews/2026-09-17.md` (untracked)** are an
 exited session's, deliberately uncommitted since 2026-09-17. **Leave them.**
