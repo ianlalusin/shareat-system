@@ -50,3 +50,21 @@ describe('parseMoneyInput', () => {
     );
   });
 });
+
+/**
+ * T-326 — DEF-379. This file's tests above import `./money-input` by relative path, which always
+ * worked and proves nothing about the defect. `apps/erp`'s own consumer-side proof lives in
+ * apps/erp/tests/money-input-resolves.test.ts; this is the second, independent proof the
+ * ./money-lines precedent implies — that the package SUBPATH itself resolves (the exports-map +
+ * vitest-alias half of the fix), separate from apps/erp's own tsconfig path resolving it.
+ *
+ * ⚠️ Dynamic import, not a static one — a static top-level import of an unresolved specifier
+ * would fail this whole file, taking every test above down with it instead of isolating the one
+ * new assertion that is actually expected to be red right now.
+ */
+describe('resolves via its own package subpath — DEF-379', () => {
+  it('the module reachable at @shareat/domain/money-input is the same parseMoneyInput', async () => {
+    const bySubpath = await import('@shareat/domain/money-input');
+    expect(bySubpath.parseMoneyInput).toBe(parseMoneyInput);
+  });
+});

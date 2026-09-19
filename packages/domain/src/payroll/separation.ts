@@ -14,6 +14,7 @@
  * pro-rated 13th month, and the clearance gate.
  */
 import { ZERO, compare, money, type Money } from '@shareat/core/money';
+import { parseMoneyInput } from '../shared/money-input';
 import { employmentRepo, moneyAccountsRepo, separationsRepo, thirteenthMonthRepo, transaction, type Tx } from '@shareat/db';
 import type { SeparationCause } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
@@ -127,7 +128,10 @@ export async function postSeparation(
       separationDate: input.separationDate,
     });
 
-    const separationPay = money(input.separationPayAmount || '0');
+    const separationPay = parseMoneyInput(
+      input.separationPayAmount || '0',
+      'postSeparation: the separation pay',
+    );
     if (compare(separationPay, ZERO) < 0) {
       throw new Error('postSeparation: separation pay cannot be negative.');
     }

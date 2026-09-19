@@ -28,6 +28,7 @@
  */
 import { add, compare, money, ZERO, type Money } from '@shareat/core/money';
 import { apRepo, deliveriesRepo, moneyAccountsRepo, stockLayersRepo, supplierReturnsRepo, type Tx } from '@shareat/db';
+import { parseMoneyInput } from '../shared/money-input';
 import { authorize, type Actor } from '@shareat/auth';
 import { consume, reverseConsumption } from './consume';
 import { postEntry } from '../ledger/post-entry';
@@ -365,7 +366,7 @@ export async function refundSupplierCredit(tx: Tx, input: RefundCreditInput): Pr
   await authorize(tx, input.actor, 'apply_supplier_credit', { storeId: input.storeId });
   const orgId = input.actor.orgId; // T-231/DEF-210 — see recordReturn.
 
-  const amount = money(input.amount);
+  const amount = parseMoneyInput(input.amount, 'refundSupplierCredit: the amount');
   if (compare(amount, ZERO) <= 0) {
     return { ok: false, reason: 'a refund must be for a positive amount' };
   }

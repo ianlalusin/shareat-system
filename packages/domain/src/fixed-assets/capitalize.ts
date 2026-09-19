@@ -36,6 +36,7 @@ import { compare, money } from '@shareat/core/money';
 import type { DepreciationInterval } from './schedule';
 import { readPolicyOrRefuse, resolveUsefulLifeMonths } from './policy';
 import { reverseEntry } from '../ledger/reverse-entry';
+import { parseMoneyInput } from '../shared/money-input';
 
 export interface CreateAssetInput {
   storeId: string;
@@ -73,7 +74,7 @@ async function runCreateAsset(
 ): Promise<{ id: string }> {
   await authorize(tx, actor, 'manage_fixed_assets', {});
 
-  const cost = money(input.cost);
+  const cost = parseMoneyInput(input.cost, 'createAsset: the cost');
   if (compare(cost, money('0')) <= 0) {
     throw new Error('createAsset: cost must be greater than zero.');
   }
@@ -81,7 +82,18 @@ async function runCreateAsset(
   // Read the policy even on the manual path, because the salvage default comes from it — and
   // because an unreadable policy must stop this door too, not only the automatic one.
   const policy = await readPolicyOrRefuse(tx, actor.orgId);
-  const salvage = money(input.salvageValue ?? policy.defaultSalvageValue);
+  // ⛔ T-326 fix 3, /code-review — `parseMoneyInput`'s label names the OPERATOR as the source of a
+  // bad string. `input.salvageValue` really is operator-typed, but its `?? policy.defaultSalvageValue`
+  // fallback is a config value nobody on this screen touched — labelling it "the salvage value"
+  // told the person their own entry was wrong when the org's fixed-asset policy was misconfigured.
+  // ⭐ Kept on bare `money()` for the fallback, matching `capitalizeFromExpense` below, which reads
+  // the same policy value on the automatic path — both policy reads now agree, and only the string
+  // a person actually typed goes through the cashier-readable parser (DEF-379's own scope: typed
+  // input, not already-computed or configured values).
+  const salvage =
+    input.salvageValue != null
+      ? parseMoneyInput(input.salvageValue, 'createAsset: the salvage value')
+      : money(policy.defaultSalvageValue);
 
   // ⚠️ Checked here as well as by the CHECK constraint. The constraint is the guarantee; this is
   // the message. `salvage >= cost` means the asset depreciates by zero or a negative amount, and

@@ -50,6 +50,7 @@
 import { AuthenticationError, AuthorizationError } from '@shareat/auth/errors';
 import { logger } from '@shareat/core/logger';
 import { CONSTRAINT_MESSAGES } from './constraint-messages';
+import { hasStringCode, looksLikeADump } from './error-shape';
 
 export interface PreSessionMessagePolicy {
   /**
@@ -156,44 +157,11 @@ export function isUnfitForAStranger(err: unknown, message: string): boolean {
   // benefit of the doubt on a screen a stranger can open.
   if (!(err instanceof Error)) return true;
 
+  // ⭐ T-326 — `looksLikeADump` and the `code` check below now live in `./error-shape`, shared
+  // with `constraint-messages.ts`'s `errorMessage()` rather than redefined here. See that module
+  // for the reasoning (the postgres driver shape, and why this stays a shape check, not a wording
+  // match); neither predicate's behaviour changed by the move.
   if (looksLikeADump(message)) return true;
 
-  // ⛔ **ANY string `code` marks an infrastructure error — not a five-character one.**
-  //
-  // The five-character version was a real leak, and connection failure is the likeliest thing this
-  // screen will ever see: first run happens on a box nobody has finished configuring.
-  // `node_modules/postgres/src/errors.js:16-27` builds every connection error as
-  // `Object.assign(new Error('write ' + code + ' ' + host + ':' + port), { code, errno, address })`
-  // — single line, **no SQLSTATE**, not a mapped sentence — so `ECONNREFUSED` and its siblings sailed
-  // through and put the database host and port in the URL. `Errors.generic` (:36-40) is the same
-  // shape with an arbitrary-length code.
-  //
-  // ⭐ The discriminator still works, and works better: SQLSTATE, `ECONNREFUSED`, `ENOTFOUND` and
-  // Node's own `ENOENT` are all `code`s, and **a domain `Error` has none at all**. Case 11's last
-  // assertion is the control that keeps that true.
-  return typeof (err as { code?: unknown }).code === 'string';
-}
-
-/**
- * ⭐ **A sentence written for a visitor is one line. A multi-line message is a dump, whoever wrote
- * it** — a stack trace, a validation report, a banner.
- *
- * ⛔ **This is not decoration; it closes a real hole the SQLSTATE check alone leaves open.**
- * `env()` (`packages/core/src/env.ts:145-164`) throws a plain `Error` with **no** SQLSTATE whose
- * text names every unset variable, and it is reachable from `/setup`'s action by three routes:
- * `transaction()` → `packages/db/src/client.ts:30`; `setPin` → `pinLookupHash` →
- * `packages/auth/src/credentials.ts:51`; and `signInWithFirebase` → `sessionTokenHash` → that same
- * line. Without this, that banner went into the address bar of an unauthenticated page in
- * production, naming `SESSION_SECRET` and `DATABASE_URL`.
- *
- * ⚠️ **Deliberately shape, not wording.** Matching `"REFUSED TO START"` would close exactly one
- * thrower and silently miss the next. An enumeration bounds what exists today; this bounds what
- * arrives tomorrow.
- *
- * ⛔ **This alone is NOT enough, and the first cut of this file proved it.** A single-line driver
- * connection error naming a host has no newline and no SQLSTATE, and it went straight through. The
- * `code` check beside this one is what catches those; neither rule covers the other.
- */
-function looksLikeADump(message: string): boolean {
-  return message.trim().includes('\n');
+  return hasStringCode(err);
 }

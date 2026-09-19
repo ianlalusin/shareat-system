@@ -17,6 +17,7 @@ import { cashierAccounts, withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 import { add, isZero, money } from '@shareat/core/money';
+import { parseMoneyInput } from '@shareat/domain/money-input';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -105,18 +106,18 @@ export async function createRemittanceAction(formData: FormData): Promise<void> 
 
     // ⭐ Says what it settled, by date. A handover that reports only a total leaves the person
     // unable to check the one thing they care about — which days are now clear.
-    // ⚠️ NOT moved ahead of the call above (raised, then reverted — see T-324 slice B READY
-    // report). `money()` here cannot throw TODAY because `createRemittance` already validated
-    // every `declaredOverage` string with the friendlier `parseMoneyInput` before writing
-    // anything — this line is reached only once every string is proven valid. ⛔ That safety is
-    // an ORDERING (this code runs after a successful call that already checked), not a property
-    // of `money()` itself — `money()` still throws a raw, cashier-unreadable `TypeError` on bad
-    // input (trap 8 / DEF-272). A future reader who moves this earlier, or who calls it before
-    // `createRemittance` for any reason, removes the ordering that makes it safe and must switch
-    // to `parseMoneyInput` first — not currently importable from `apps/erp` (flagged separately,
-    // not fixed here).
+    // ⭐ T-326/DEF-379 — routed through `parseMoneyInput` directly rather than relying on the
+    // ordering that used to make a bare `money()` call here safe (this line only ever ran after
+    // `createRemittance` had already validated every `declaredOverage` string itself). That
+    // ordering was real but incidental — a future reader moving this earlier would have
+    // resurrected `money()`'s raw, cashier-unreadable `TypeError`. `@shareat/domain/money-input`
+    // is now reachable from `apps/erp`, so the display total gets the same readable refusal the
+    // write path already had.
     const declaredTotal = lines.reduce(
-      (sum, l) => (l.declaredOverage ? add(sum, money(l.declaredOverage)) : sum),
+      (sum, l) =>
+        l.declaredOverage
+          ? add(sum, parseMoneyInput(l.declaredOverage, 'createRemittance: the declared overage'))
+          : sum,
       money('0'),
     );
     summary =

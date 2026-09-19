@@ -14,6 +14,8 @@
  * DEF-246 only for the callers that route through this module.
  */
 import { recordConstraintRefusal } from '@shareat/domain';
+import { logger } from '@shareat/core/logger';
+import { hasStringCode, looksLikeADump } from './error-shape';
 
 export const CONSTRAINT_MESSAGES: Record<string, string> = {
   pay_runs_no_overlapping_posted_period:
@@ -114,45 +116,119 @@ function genericConstraintMessage(raw: string): string {
 }
 
 /**
- * Strips a leading `SomeErrorClass: ` prefix so a thrown message reads as one plain sentence.
+ * Strips a leading `SomeErrorClass: ` prefix so a thrown message reads as one plain sentence —
+ * the fall-through step (4) below, for a codeless application error.
  *
  * ⛔ bible §13 row 189 / DEF-246: an UNMAPPED constraint violation used to fall through to this
- * function's last line unchanged — and the raw Postgres text has no `Ctor: ` prefix to strip, so
- * it rendered verbatim, SQL grammar and all, to the person moving the money. Now it degrades to a
+ * step unchanged — and the raw Postgres text has no `Ctor: ` prefix to strip, so it rendered
+ * verbatim, SQL grammar and all, to the person moving the money. Step 3 below degrades that to a
  * generic but presentable sentence instead. A MAPPED constraint and a non-constraint error are
  * both unaffected — see docs/tasks/252-*.md §7 invariants 1 and 3.
  *
- * ⭐ T-271/DEF-301: the map is matched on the RESOLVED constraint name — `resolveConstraintName`,
- * which prefers the driver's structured `err.constraint_name` over parsing prose — never a
- * substring search over the raw message. DEF-301's own register disposition floated keeping the
- * substring scan as a fallback for anything the resolver cannot name; that is deliberately NOT done
- * here (system32-85, T-271 READY): it would preserve DEF-301's failure mode — a confident, WRONG
- * sentence by coincidental substring match — in exactly the population where the resolver has
- * already failed to find a structural name, which is the most dangerous and least visible place to
- * keep it. An unresolved name degrades to the generic sentence or the raw fallback instead, which
- * is a quiet, correct failure. The before/after pass (`apps/erp/tests/integration/
- * constraint-message-lookup*.test.ts`) proves this is behaviour-preserving for all 26 mapped keys.
+ * ⭐ T-271/DEF-301: the map (step 1) is matched on the RESOLVED constraint name —
+ * `resolveConstraintName`, which prefers the driver's structured `err.constraint_name` over
+ * parsing prose — never a substring search over the raw message. DEF-301's own register
+ * disposition floated keeping the substring scan as a fallback for anything the resolver cannot
+ * name; that is deliberately NOT done here (system32-85, T-271 READY): it would preserve DEF-301's
+ * failure mode — a confident, WRONG sentence by coincidental substring match — in exactly the
+ * population where the resolver has already failed to find a structural name, which is the most
+ * dangerous and least visible place to keep it. An unresolved name degrades to the generic
+ * sentence or the raw fallback instead, which is a quiet, correct failure. The before/after pass
+ * (`apps/erp/tests/integration/constraint-message-lookup*.test.ts`) proves this is
+ * behaviour-preserving for all 26 mapped keys.
  *
  * ⛔ **The LOOKUP and the SANITISER answer different questions and must use different resolvers —
- * a real regression caught in review, not a hypothetical.** The lookup asks "which constraint is
- * this?", and the structured field is strictly better there (above). `genericConstraintMessage`
- * exists to sanitise RAW POSTGRES GRAMMAR a person must never read (DEF-246/bible row 189) — and
- * the signal for "this is raw grammar" is specifically that the constraint name appears in the
- * PROSE, i.e. `parseConstraintName(raw)`, not merely that a name resolved at all. DEF-279's five
- * hand-raised `RAISE EXCEPTION ... USING CONSTRAINT` invariants populate the structured field but
- * never their own name in the message text — gating the generic fallback on `resolveConstraintName`
- * instead of `parseConstraintName` would sanitise their hand-authored, precise sentences into the
- * content-free generic one, exactly the regression T-270 deliberately reverted (DEF-301's register
- * row: "the five keep rendering their own hand-authored text... and is BETTER than the generic
- * fallback"). Covered by `constraint-message-lookup-mechanism.test.ts`'s "NO key added" case.
+ * a real regression caught in review, not a hypothetical.** The lookup (step 1) asks "which
+ * constraint is this?", and the structured field is strictly better there. `genericConstraintMessage`
+ * (step 3) exists to sanitise RAW POSTGRES GRAMMAR a person must never read (DEF-246/bible row
+ * 189) — and the signal for "this is raw grammar" is specifically that the constraint name
+ * appears in the PROSE, i.e. `parseConstraintName(raw)`, not merely that a name resolved at all.
+ * DEF-279's five hand-raised `RAISE EXCEPTION ... USING CONSTRAINT` invariants populate the
+ * structured field but never their own name in the message text — gating step 3 on
+ * `resolveConstraintName` instead of `parseConstraintName` would sanitise their hand-authored,
+ * precise sentences into the content-free generic one, exactly the regression T-270 deliberately
+ * reverted (DEF-301's register row: "the five keep rendering their own hand-authored text... and
+ * is BETTER than the generic fallback"). Step 2 below protects that same population, and every
+ * OTHER hand-authored `RAISE` besides — see its own comment for why the key is `code === 'P0001'`
+ * and not a resolved constraint name.
+ */
+
+/**
+ * bible §13 row 189 / DEF-378, T-326 — the fall-through's ONLY sanitised sentence for a database
+ * error not otherwise resolved above. Deliberately one sentence, not one per SQLSTATE class: the
+ * contract asks for "a presentable sentence", and every T2 case (`22P02`, `42703`, `42P01`,
+ * `22003`) needs only that no SQL grammar survives, not a distinct wording per class.
+ */
+const DATABASE_ERROR_FALLBACK =
+  'The database refused that change for a reason this screen cannot show. The detail is in the server log.';
+
+/** §2a, T-326 — the codeless-dump sentence. Reuses `looksLikeADump`; see `./error-shape`. */
+const CONFIGURATION_DUMP_FALLBACK =
+  'Something failed before it could be processed. The reason is in the server log.';
+
+/**
+ * PostgreSQL's default SQLSTATE for a `RAISE EXCEPTION` that sets no explicit `ERRCODE`. A REAL
+ * constraint violation is never P0001 — those land in class 23 (`23505` unique, `23514` check,
+ * `23503` fk, `23502` not-null) or other driver-assigned classes. So P0001 is a principled
+ * discriminator for "a human wrote this RAISE on purpose," not an enumerable one.
+ */
+const APPLICATION_RAISE_SQLSTATE = 'P0001';
+
+/**
+ * ⭐ T-326/DEF-378, corrected after `/code-review` — resolution order is UNCHANGED from before
+ * this task; the `code` check gates ONLY the fall-through (step 4), except for the P0001
+ * carve-out (step 2), which runs regardless of whether steps 1/3 would otherwise apply.
+ *
+ * ⛔⛔ **The carve-out is keyed on `code === 'P0001'`, NOT on a resolved `constraint_name`.**
+ * Measured across `packages/db/migrations/*.sql`: 95 `RAISE EXCEPTION` occurrences, only 5 ever
+ * got `USING CONSTRAINT` retrofitted onto them (`0142`, DEF-279). Every OTHER hand-authored raise
+ * — "journal entry % is unbalanced", "cannot post journal entry into period %", "cash request %
+ * is not approved", dozens more — defaults to SQLSTATE P0001, sets no `constraint_name`, and
+ * carries no `constraint "…"` in its prose. Keying the carve-out on a resolved constraint name
+ * protected only the five retrofitted sentences and silently sanitised the other ~90 into
+ * `DATABASE_ERROR_FALLBACK` — the T-270 regression this task exists to avoid, at ninety times the
+ * scale. P0001 **subsumes** the five DEF-279 sentences (`USING CONSTRAINT` doesn't change the
+ * SQLSTATE PostgreSQL assigns), so they keep exactly today's behaviour under the corrected key.
+ *
+ * 1. Mapped constraint → its sentence (unchanged). Runs first regardless of `code`: a real
+ *    constraint violation the map knows about must win even though it's never P0001.
+ * 2. **P0001 → APPLICATION-AUTHORED. Preserve the text verbatim.** Never sanitised, never logged,
+ *    because nothing was discarded.
+ * 3. Resolvable-but-unmapped constraint whose prose DOES carry `constraint "…"` → the existing
+ *    generic constraint sentence (unchanged). (A real constraint violation is never P0001, so this
+ *    step and step 2 never compete for the same error.)
+ * 4. Fall-through — the only step this task changes:
+ *    - no `code` → unchanged `Word: ` prefix strip (the DEF-301 path), except a codeless
+ *      multi-line dump (§2a — `env()`'s banner shape), which degrades to a generic sentence too.
+ *    - any string `code` (guaranteed not P0001 at this point) → a presentable sentence, never the
+ *      raw text. The raw text still reaches the server log at `error` level (Invariant 3) —
+ *      sanitising is not discarding.
  */
 export function errorMessage(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
   const constraintName = resolveConstraintName(err);
   const mapped = constraintName ? CONSTRAINT_MESSAGES[constraintName] : undefined;
   if (mapped !== undefined) return mapped;
+
+  if (hasStringCode(err) && (err as { code: string }).code === APPLICATION_RAISE_SQLSTATE) {
+    return raw.replace(/^[a-zA-Z][A-Za-z0-9_]*:\s*/, '');
+  }
+
   if (parseConstraintName(raw)) return genericConstraintMessage(raw);
-  return raw.replace(/^[a-zA-Z][A-Za-z0-9_]*:\s*/, '');
+
+  if (!hasStringCode(err)) {
+    if (looksLikeADump(raw)) {
+      logger.error(
+        { err, raw },
+        'application error message looked like a configuration dump, sanitised for the screen',
+      );
+      return CONFIGURATION_DUMP_FALLBACK;
+    }
+    return raw.replace(/^[a-zA-Z][A-Za-z0-9_]*:\s*/, '');
+  }
+
+  logger.error({ err, raw }, 'database error sanitised for the operator screen');
+  return DATABASE_ERROR_FALLBACK;
 }
 
 /**

@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./money-lines": "./src/shared/money-lines.ts",
+    "./money-input": "./src/shared/money-input.ts",
     "./attendance/fingerprint": "./src/attendance/fingerprint/index.ts"
   },
   "dependencies": {
