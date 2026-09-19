@@ -1,7 +1,14 @@
 # T-327 — the database refuses a non-finite amount, on every numeric column, so the census that follows is allowed to be wrong
 
-**Status:** SPEC — drafted by the orchestrator (`system32-4f`), 2026-09-19, revised after an
-independent Opus review. Not yet approved.
+**Status:** ⭐ **APPROVED 2026-09-19 by the orchestrator (`system32-df`)** — drafted by
+`system32-4f`, revised after an independent Opus review, then **corrected twice at protocol step 0
+by the lanes themselves, before a line of code or a line of test existed:**
+• the **BUILDER** (`webapps-4d`) found that **172 was wrong** — it counted 12 view columns that
+  cannot carry a CHECK constraint. **The target is 160.** See P2, re-measured against a live database.
+• the **AUDITOR** (`webapps-42`) found that **test 3 could pass green while proving nothing**, and
+  then that the orchestrator's own fix for that opened a second hole. See Tests 3a and 3b.
+⛔ **Both were found by reading the spec cold, by sessions that had not written it.** That is the
+argument for briefing all three roles at the START of a cycle rather than the auditor at the end.
 **Closes:** nothing on its own. **Halves DEF-382** — T-328 closes it.
 **Migration slot:** **`0155`, allocated to the BUILDER lane only.** No other lane adds a migration
 this cycle.
@@ -57,16 +64,58 @@ ROLLBACK;
 
 ### P2 — the shape of the schema, exactly. **EXECUTED.**
 
+⚠⚠ **CORRECTED 2026-09-19 by the orchestrator (`system32-df`) after the BUILDER lane reported the
+defect at protocol step 0, before writing a line. The number in the first version of this spec was
+172 and it was WRONG — it counted VIEW columns as though they were table columns.**
+
 | Measure | Value |
 |---|---|
-| `numeric` columns in `public` | **172** |
-| of those, **bare** (no precision) | **0** |
-| breakdown | 119×`(14,2)` · 27×`(14,3)` · 9×`(4,2)` · 7×`(14,4)` · 4×`(8,4)` · 3×`(14,6)` · 1 each `(5,2)`/`(6,2)`/`(6,3)` |
+| `numeric` columns in `public` on **base tables** (`relkind='r'`) — ⭐ **THE TARGET** | **160**, across **65** tables |
+| `numeric` columns in `public` on **views** (`relkind='v'`) — ⛔ **NOT TARGETABLE** | **12** |
+| total, which is where the old **172** came from | 160 + 12 |
+| of the 160, **bare** (no precision) | **0** — all 160 carry a precision |
 | columns currently holding a `NaN` | **0** |
 
-⭐ **The reviewer counted 184 from the Drizzle schema and could not reconcile it. Reconciled here:**
-`grep -c "numeric('" packages/db/schema/*.ts` → **172** column declarations; the other **12** are
-`::numeric(14,2)` **casts inside view SQL** in `packages/db/schema/views.ts`. **172 is right.**
+**The measurement, re-run rather than trusted** (bible row 208):
+
+```sql
+select cl.relkind, count(*) from pg_attribute a
+  join pg_class cl on cl.oid = a.attrelid
+  join pg_namespace n on n.oid = cl.relnamespace
+ where n.nspname = 'public' and a.atttypid = 'numeric'::regtype
+   and a.attnum > 0 and not a.attisdropped
+ group by 1;                       -- r: 160   v: 12
+```
+
+⛔⛔ **WHY THE OLD RECONCILIATION LOOKED RIGHT AND WAS NOT — THERE ARE TWO DIFFERENT SETS OF TWELVE,
+AND THE SPEC MATCHED THE WRONG ONE.** The first version said: *172 column declarations, and the other
+12 are `::numeric(14,2)` casts inside view SQL*. Both halves of that sentence are true statements
+about the tree and the conclusion drawn from them is false, because the 12 it names are not the 12
+that make up the difference. Measured, three distinct populations:
+
+| Population | Count | How to see it |
+|---|---|---|
+| real `pgTable` numeric columns | **160** | `ls packages/db/schema/*.ts \| grep -v views.ts \| xargs grep -c "numeric('"` |
+| `pgView` column DESCRIPTORS in `views.ts` | **12** | `grep -c "numeric('" packages/db/schema/views.ts` (and `grep -c "pgTable(" views.ts` → **0**) |
+| raw `::numeric(14,2)` CASTS inside view SQL bodies | **12** | `grep -c "::numeric(" packages/db/schema/views.ts` — a bare `numeric(` grep only |
+
+⭐ **The two twelves are a coincidence, and it is the coincidence that hid the error.** `grep -c
+"numeric('" packages/db/schema/*.ts` → 172 is a real number; it is 160 table columns **plus** the 12
+view descriptors. The cast population is a third set that the grep never matched at all.
+⛔ **This is the fourth time in three days a census in this repo was bound by a SPELLING rather than a
+SHAPE, and the third time the resulting number was wrong.** The lesson stands unchanged and the
+remedy is the same one T-327 exists to provide: the count is not what makes this task safe.
+
+⛔ **POSTGRES CANNOT PUT A CHECK CONSTRAINT ON A VIEW.** `ALTER TABLE v_trial_balance ADD CONSTRAINT
+…` is not a thing; the four views are `v_account_balance`, `v_trial_balance`, `v_income_statement`
+and `v_balance_sheet`, all `pgView`. Had the migration been written against 172, it would have failed
+on the 13th statement — or, worse, the schema-coverage test would have demanded a constraint on a
+relation that can never carry one and stayed red whatever the builder shipped.
+⭐ **And the 12 view columns need no guard, which is a structural argument rather than a hopeful one:**
+each is a `sum()`/`CASE` over base-table columns that the 160 constraints now guarantee finite, cast
+`::numeric(14,2)`, and P3 establishes that such a cast REFUSES a non-finite value rather than
+admitting one. A sum of finite values is finite. **A view is a projection, not a storage location —
+there is no write path to it that the 160 do not already stand in front of.**
 
 ### P3 — ⛔ `Infinity` is NOT reachable in this schema, and the reviewer's finding 1 is dismissed on this evidence. **EXECUTED.**
 
@@ -79,7 +128,7 @@ INSERT 'Infinity' INTO numeric(14,2) → ERROR: numeric field overflow
 INSERT 'Infinity' INTO numeric (bare) → stored
 ```
 
-**Every one of the 172 columns carries a precision (P2), so every one already refuses `Infinity`.**
+**Every one of the 160 target columns carries a precision (P2), so every one already refuses `Infinity`.**
 ⭐ **The remedy is adopted anyway and the rationale is replaced:** the finite-range form below costs
 nothing over a NaN-only form, covers both values in one expression, and is correct on the day
 somebody adds the first bare `numeric` column. **The schema test (§3) is what actually catches that
@@ -119,7 +168,7 @@ passes.
 - **`packages/db/schema/*.ts`** — the matching Drizzle `check()` entries. ⛔ **A constraint that
   exists only in the migration leaves the ORM's picture wrong**; mirror `ap-payments.ts`'s
   `check('<name>', sql\`…\`)` form. *(Reviewer finding 4, accepted.)*
-- **`apps/erp/src/lib/constraint-messages.ts`** — see §2. ⛔ **Not 172 map entries.**
+- **`apps/erp/src/lib/constraint-messages.ts`** — see §2. ⛔ **Not 160 map entries.**
 
 **TESTER — tests only:** the three tests in §Tests. ⛔ **May not edit a source file.**
 
@@ -138,7 +187,7 @@ its existing behaviour is frozen. *(Reviewer finding 9, accepted.)*
 
 ### 1. Every `numeric` column refuses a non-finite value
 
-Migration `0155` adds, to **all 172** columns:
+Migration `0155` adds, to **all 160 base-table columns** (⛔ **not** the 12 view columns — P2):
 
 ```sql
 ALTER TABLE <t> ADD CONSTRAINT <t>_<col>_finite_check
@@ -151,7 +200,7 @@ ALTER TABLE <t> ADD CONSTRAINT <t>_<col>_finite_check
 ⛔ **Not `CHECK (col <> 'NaN')`** — correct, but silent on a future bare column.
 ⛔ **Not `CHECK (col = col)`** — P1 row 3 proves it accepts `NaN`.
 
-⭐ **All 172, not a money subset.** *(Reviewer finding 2, accepted.)* No column in this schema has a
+⭐ **All 160, not a money subset.** *(Reviewer finding 2, accepted.)* No column in this schema has a
 legitimate non-finite value; guarding every one deletes the money/not-money judgement call, deletes
 the out-column argument, and removes the only thing about this task a census could get wrong.
 ⚠️ **If any column legitimately needs `NaN`, that is a BLOCKED finding — report it, do not skip it.**
@@ -162,12 +211,12 @@ the out-column argument, and removes the only thing about this task a census cou
 is keyed by EXACT constraint name.** Left alone, this task hands cashiers
 `new row violates check constraint "trade_orders_total_amount_finite_check"`.
 
-**Required: ONE rule, not 172 entries** — every constraint here ends `_finite_check`, so a single
+**Required: ONE rule, not 160 entries** — every constraint here ends `_finite_check`, so a single
 suffix rule resolves all of them to one sentence. Wording is the lane's to draft; it must name what
 the person should do, in the register's house style (*"That is not a valid amount. Enter a figure
 like 1234.50."*).
 ⚠️ **If the sanitiser supports only exact keys today, adding suffix support is IN SCOPE** — it is
-the difference between one rule and 172 copies that will drift.
+the difference between one rule and 160 copies that will drift.
 
 ---
 
@@ -189,15 +238,41 @@ supply it?** *(Three of the original draft's five failed that question; the revi
    rejection. ⭐ **Red before `0155`, green after** — the migration is the only thing that can change
    it.
 2. **⛔ SCHEMA COVERAGE, NOT VALUE SCANNING — the anti-rot test.** Query `pg_constraint` /
-   `information_schema` and assert **every** `numeric` column in `public` carries a
-   `_finite_check`. ⛔ **The column list is derived at runtime; no count appears in the test name or
-   as a literal** (handoff §3(d)). ⭐ **This is what fails when migration `0156` adds an unguarded
+   `information_schema` and assert **every** `numeric` column in `public` **ON A BASE TABLE**
+   carries a `_finite_check`. ⛔⛔ **THE QUERY MUST FILTER TO `relkind = 'r'` — CORRECTED 2026-09-19,
+   see P2.** `information_schema.columns` includes VIEW columns, and there are 12 of them here that
+   **can never carry a CHECK constraint, because Postgres cannot put one on a view.** An unfiltered
+   query enumerates them, demands a constraint on each, and stays **red no matter what the builder
+   ships** — a test that cannot go green is as useless as one that cannot go red, and this one would
+   have looked like a builder failure for as long as anyone believed the 172.
+   ⛔ **The column list is derived at runtime; no count appears in the test name or
+   as a literal** (handoff §3(d)). ⭐ **That rule is what makes this correction cheap:** a test that
+   had hard-coded 172 would now be wrong in a second place, and the number moved on the day the spec
+   was first read by someone who had to build against it. ⭐ **This is what fails when migration `0156` adds an unguarded
    column** — the original draft's value-scan could not, because a freshly migrated database is
    empty and scanning nothing passes. *(Reviewer findings 5 and 6, accepted — `money-positivity-census.ts`
    warns about this exact trap in its own header.)*
 3. **The operator sentence.** Drive the real path with `deliveryFee: 'abc'` and assert the message
    the cashier sees is §2's sentence. ⛔ **Asserting "it was refused" is not enough** — refusal comes
    free from `0155` and would leave §2 unproven. *(Reviewer finding 6, accepted.)*
+   ⚠ **STRENGTHENED 2026-09-19 by the orchestrator, on the AUDITOR lane's reading of this spec cold,
+   before any code existed. Two additions, and the second closes a hole the first one opened:**
+   **(3a) TWO DIFFERENT CONSTRAINT NAMES, ON DIFFERENT TABLES, both asserting the sentence.** As
+   written, test 3 drives ONE path and therefore trips ONE constraint name — so a single **exact-name**
+   entry in `CONSTRAINT_MESSAGES` passes it green, sentence and all, while §2's actual requirement
+   (ONE SUFFIX RULE covering all 160) is never implemented and never tested, and the other 159
+   constraints still hand a cashier a raw violation. ⛔ **A green test 3 over an exact-name entry is
+   WORSE than a missing test 3: it reports §2 proven when §2 is not implemented.** The constraint
+   NAME may be derived at runtime from the schema — preferred.
+   **(3b) ⛔ THE EXPECTED SENTENCE IS A HAND-WRITTEN LITERAL IN THE TEST BODY. It may NEVER come from
+   the code under test** — not by importing `CONSTRAINT_MESSAGES`, not by calling the sanitiser, not
+   through any helper that consults that map. If the expectation is built from the same map that
+   produces the actual value, **the code under test supplies both sides of the comparison and test 3
+   cannot fail**: it would pass on the suffix rule, on exact entries, on a fallback string, and on a
+   completely empty map. ⭐ **The literal is validated by CHANGING IT AND WATCHING IT GO RED, once,
+   actually executed** — not by agreeing with the map.
+   ⛔ **Also forbidden, because it is where this drifts to:** asserting merely that the message does
+   **not** contain `check constraint`. That passes on an empty string and on any fallback.
 
 ⛔ **Deliberately NOT a test:** "a `NaN` makes `sum()` return `NaN`". After `0155` no `NaN` can exist
 in a real column, so it could only be written against a TEMP table — asserting a property of
