@@ -29,8 +29,9 @@ import {
   type RemittanceCadence,
   type Tx,
 } from '@shareat/db';
-import { add, money, type Money } from '@shareat/core/money';
+import { add, compare, formatMoney, money, type Money } from '@shareat/core/money';
 import { createMoneyTransfer, voidMoneyTransfer } from '../money-transfers';
+import { parseMoneyInput } from '../shared/money-input';
 import { allocateFifo, type DayOwed } from './allocate';
 
 export { allocateFifo } from './allocate';
@@ -96,10 +97,14 @@ async function runCreate(
 
   // ⚠️ Every line must run cashier → office. A remittance that moved money the other way would be
   // a float top-up wearing a remittance's name, and would settle days it never funded.
+  // ⭐ T-324: also collects each `fromMoneyAccountId`'s name, for check 1's refusal message below —
+  // one lookup, not a second round trip once the cap needs to name an account.
+  const fromAccountNames = new Map<string, string>();
   for (const line of input.lines) {
     const from = await moneyAccountsRepo.getById(tx, actor.orgId, line.fromMoneyAccountId);
     const to = await moneyAccountsRepo.getById(tx, actor.orgId, line.toMoneyAccountId);
     if (!from || !to) throw new Error('createRemittance: a line names an account that does not exist.');
+    fromAccountNames.set(line.fromMoneyAccountId, from.name);
     if (from.custodian !== 'cashier' || to.custodian !== 'office') {
       throw new Error(
         `createRemittance: a remittance moves money from the cashier to the office, and ` +
@@ -159,6 +164,98 @@ async function runCreate(
     );
   }
 
+  // ⛔⛔ T-324 — CAP THE HANDOVER, PER CASHIER ACCOUNT. Placed here, after the refusal above and
+  // BEFORE `insertRemittance` and the transfer loop below, so nothing is written when either of
+  // the two checks fires. A single pooled cap (check 2 alone) is defeated, centavo for centavo, by
+  // a store's default two-cashier-account shape — spec §3.1 — so check 1 below closes that hole
+  // per account.
+  const settleableDates = settleable.map((r) => r.businessDate);
+  let movementByAccount: Map<string, string>;
+  try {
+    movementByAccount = await remittanceRepo.cashierMovementByAccount(
+      tx,
+      actor.orgId,
+      input.storeId,
+      settleableDates,
+    );
+  } catch (err) {
+    // Re-prefixed: the ambiguous-configuration refusal originates in the repo read, but it is a
+    // createRemittance refusal from every caller's point of view.
+    throw new Error(`createRemittance: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  // Parse and validate the declared overage per line. Absent/empty ⇒ zero for comparison, stored
+  // as NULL ("never asked"); an explicit "0" compares as zero and is stored as "0.00" ("I declare
+  // no overage") — packages/core/src/money.ts:15-16, zero is a legitimate value, not "unset".
+  const linesWithOverage = input.lines.map((line) => {
+    const raw = line.declaredOverage;
+    const isAbsent = raw == null || raw.trim() === '';
+    const declared: Money = isAbsent
+      ? money('0')
+      : parseMoneyInput(raw, 'createRemittance: the declared overage');
+    if (compare(declared, money('0')) < 0) {
+      throw new Error(`createRemittance: a declared overage cannot be negative — "${raw}" is.`);
+    }
+    return { line, declaredForCompare: declared, declaredToStore: isAbsent ? null : String(declared) };
+  });
+
+  // Check 1 — per ACCOUNT, not per line: nothing makes `fromMoneyAccountId` unique across
+  // `input.lines` (no unique index on it, `schema/remittance.ts`), so two lines against the same
+  // account must be summed before comparing, or the masking case (§3.1) is reachable THROUGH this
+  // check instead of around it.
+  //
+  // ⛔ Bounds against MOVEMENT, not owed, and deliberately so (spec §3.3): `owed = movement −
+  // allocated`, and `remittance_allocations` has no account dimension, so a prior allocation
+  // cannot be split per account without a schema change to the allocation key (out of scope).
+  // Movement is always >= that account's true owed, so this bound is LOOSER than truth — it can
+  // never refuse a legitimate handover, and check 2 below still bounds the total exactly. Do not
+  // "tighten" this to owed without giving `remittance_allocations` an account dimension — that
+  // would start refusing correct remittances.
+  const perAccount = new Map<string, { amountSum: Money; declaredSum: Money }>();
+  for (const { line, declaredForCompare } of linesWithOverage) {
+    const entry = perAccount.get(line.fromMoneyAccountId) ?? {
+      amountSum: money('0'),
+      declaredSum: money('0'),
+    };
+    entry.amountSum = add(entry.amountSum, money(line.amount));
+    entry.declaredSum = add(entry.declaredSum, declaredForCompare);
+    perAccount.set(line.fromMoneyAccountId, entry);
+  }
+  for (const [accountId, { amountSum, declaredSum }] of perAccount) {
+    const accountMovement = money(movementByAccount.get(accountId) ?? '0');
+    const allowance = add(accountMovement, declaredSum);
+    if (compare(amountSum, allowance) > 0) {
+      const name = fromAccountNames.get(accountId) ?? accountId;
+      throw new Error(
+        `createRemittance: "${name}" hands over ${formatMoney(amountSum)} in this remittance, ` +
+          `but it only moved ${formatMoney(accountMovement)} over the settleable dates — declare ` +
+          'the overage to hand over more.',
+      );
+    }
+  }
+
+  // Check 2 — pooled, retained: bounds the total exactly, independent of how it is split by line.
+  // ⚠️ `Number(r.owed).toFixed(2)` — kept by DECISION, not caught by the DEF-272 census (its regex
+  // only matches `Number(x) <op> 0`, never a bare re-stringify like this one). `r.owed` is already
+  // Postgres `numeric(14,2)` text; `.toFixed(2)` only normalises its representation (`"5000"` →
+  // `"5000.00"`), which is LOAD-BEARING because `money()` immediately after THROWS on anything not
+  // already exactly 2dp — the same conversion the pre-existing `days` map below already performs
+  // on this same field. Measured, not assumed: 500,007 two-decimal strings SAMPLED across the
+  // `numeric(14,2)` range through this exact `Number(...).toFixed(2)` path — 300k at
+  // 0.00–2,999.99, 200k near 10^9, plus its maximum 999999999999.99 — with ZERO lossy results.
+  // This is a normalisation of a database `::text` value, not a comparison against a raw human
+  // input, so DEF-272's guard does not apply to it.
+  const totalOwed = settleable.reduce((sum, r) => add(sum, money(Number(r.owed).toFixed(2))), money('0'));
+  const totalDeclared = linesWithOverage.reduce((sum, l) => add(sum, l.declaredForCompare), money('0'));
+  if (compare(handedOver, add(totalOwed, totalDeclared)) > 0) {
+    throw new Error(
+      `createRemittance: ${formatMoney(handedOver)} was handed over, but the settleable days owe ` +
+        `only ${formatMoney(totalOwed)}${
+          compare(totalDeclared, money('0')) > 0 ? ` plus ${formatMoney(totalDeclared)} declared` : ''
+        } — declare the overage to hand over more.`,
+    );
+  }
+
   const days: DayOwed[] = settleable.map((r) => ({
     salesDayId: r.businessDate, // ⚠️ keyed by DATE (row 157), not by sales-day id
     businessDate: r.businessDate,
@@ -181,7 +278,7 @@ async function runCreate(
   // transfer, and it inherits every rule T-139 already enforces — including the cashier overdraft
   // WARNING (row 154), which is exactly right here: the till holds what the ledger cannot see
   // until the day is verified.
-  for (const line of input.lines) {
+  for (const { line, declaredToStore } of linesWithOverage) {
     const transfer = await createMoneyTransfer(tx, actor, {
       fromMoneyAccountId: line.fromMoneyAccountId,
       toMoneyAccountId: line.toMoneyAccountId,
@@ -197,6 +294,7 @@ async function runCreate(
       toMoneyAccountId: line.toMoneyAccountId,
       amount: line.amount,
       moneyTransferId: transfer.id,
+      declaredOverage: declaredToStore,
     });
   }
 

@@ -939,6 +939,13 @@
       "when": 1799292707084,
       "tag": "0153_t321_def363_scan_namespace_collision",
       "breakpoints": true
+    },
+    {
+      "idx": 154,
+      "version": "7",
+      "when": 1799379107084,
+      "tag": "0154_t324_declared_overage",
+      "breakpoints": true
     }
   ]
 }

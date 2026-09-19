@@ -193,7 +193,7 @@ const CLASSIFIED: Record<string, string> = {
   'remittance/allocate.ts:65': 'derived ledger `owed`/`remaining` values, summed from journal_lines',
   'remittance/allocate.ts:66': 'derived ledger `owed`/`remaining` values, summed from journal_lines',
   'remittance/allocate.ts:75': 'derived ledger `owed`/`remaining` values, summed from journal_lines',
-  'remittance/index.ts:125': 'derived ledger `owed` value',
+  'remittance/index.ts:141': 'derived ledger `owed` value',
 
   // ---- quantity: a count/conversion factor, not money — different CHECK, different column ----
   'cutover/index.ts:221': 'quantity — recordOpeningCount, not a money field',

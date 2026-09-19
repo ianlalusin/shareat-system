@@ -108,6 +108,17 @@ export const remittanceLines = pgTable(
       .references(() => moneyAccounts.id, { onDelete: 'restrict' }),
     amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
 
+    /**
+     * ⭐ T-324 §3.5 — the release valve for cash a verified-day cap cannot yet attribute.
+     *
+     * NULL means never asked (every row before migration 0154); `0.00` means "I declare no
+     * overage" — a zero amount is a legitimate value, not "unset"
+     * (`packages/core/src/money.ts:15-16`). Nothing bounds its size on purpose: it converts a
+     * silent sweep into a deliberate act, and the resulting positive variance lands in
+     * `remittance_variances` for the office to see.
+     */
+    declaredOverage: numeric('declared_overage', { precision: 14, scale: 2 }),
+
     /** ⭐ THE SEAM. The money moved through `createMoneyTransfer` like any other transfer; this
      *  records which one, so there is exactly one posting path and one place the legs live. */
     moneyTransferId: uuid('money_transfer_id')
@@ -118,6 +129,10 @@ export const remittanceLines = pgTable(
     index('remittance_lines_remittance_idx').on(t.remittanceId),
     uniqueIndex('remittance_lines_transfer_unique').on(t.moneyTransferId),
     check('remittance_lines_amount_positive_check', sql`${t.amount} > 0`),
+    check(
+      'remittance_lines_declared_overage_check',
+      sql`${t.declaredOverage} is null or ${t.declaredOverage} >= 0`,
+    ),
   ],
 );
 
