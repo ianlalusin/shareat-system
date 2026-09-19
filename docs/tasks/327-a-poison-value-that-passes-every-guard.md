@@ -197,6 +197,40 @@ ALTER TABLE <t> ADD CONSTRAINT <t>_<col>_finite_check
 **Verified behaviour of that expression** (executed): `NaN` → **rejected**; `0` → accepted;
 `-5.25` → accepted; `99999999999.99` → accepted; `NULL` → accepted (a CHECK passes on `NULL`).
 
+⚠⚠ **NAMING RULE — ADDED 2026-09-19 by the orchestrator, measured, after the length arithmetic was
+checked rather than assumed. EVERY constraint name MUST end in `_finite_check` AND be ≤ 63 bytes,
+and where those two collide the MIDDLE is shortened, never the suffix.**
+
+Two of the 160 exceed Postgres's 63-byte identifier limit, and **Postgres truncates silently — no
+error, no warning:**
+
+| Natural name | Bytes | What Postgres would actually store |
+|---|---|---|
+| `store_attendance_config_holiday_special_non_working_multiplier_finite_check` | **75** | `store_attendance_config_holiday_special_non_working_multiplier_` — ⛔ **`_finite_check` GONE** |
+| `store_attendance_config_holiday_special_working_multiplier_finite_check` | **71** | `store_attendance_config_holiday_special_working_multiplier_fini` — ⛔ **suffix cut in half** |
+
+⛔⛔ **THE DAMAGE IS TO §2, NOT TO THE NAME.** §2's single rule keys on the `_finite_check` SUFFIX.
+Neither truncated name carries it, so those two columns would be **correctly guarded in the data and
+would still hand a cashier a raw constraint dump** — and **every gate would be green**, because test
+3 drives two other constraints entirely. A §2 hole that ships green is the precise shape of defect
+this task exists to prevent, reproduced inside the task's own remedy.
+
+⭐ **The suffix is load-bearing and is never what gets cut.** Shorten the middle of those two;
+leave the other 158 alone so the scheme stays predictable. ⚠ **And nothing may parse the table or
+column out of a constraint name** — after shortening, those two names no longer contain the full
+column name, and any logic assuming they do is wrong for exactly the two cases nobody checks by hand.
+
+**Verify rather than assume** — this must return ZERO rows after `0155` is applied:
+
+```sql
+select conname, length(conname) from pg_constraint c
+  join pg_class cl on cl.oid = c.conrelid
+  join pg_namespace n on n.oid = cl.relnamespace
+ where n.nspname = 'public' and c.contype = 'c'
+   and conname like '%finite%' and conname not like '%\_finite\_check'
+ order by 2 desc;
+```
+
 ⛔ **Not `CHECK (col <> 'NaN')`** — correct, but silent on a future bare column.
 ⛔ **Not `CHECK (col = col)`** — P1 row 3 proves it accepts `NaN`.
 
@@ -239,7 +273,22 @@ supply it?** *(Three of the original draft's five failed that question; the revi
    it.
 2. **⛔ SCHEMA COVERAGE, NOT VALUE SCANNING — the anti-rot test.** Query `pg_constraint` /
    `information_schema` and assert **every** `numeric` column in `public` **ON A BASE TABLE**
-   carries a `_finite_check`. ⛔⛔ **THE QUERY MUST FILTER TO `relkind = 'r'` — CORRECTED 2026-09-19,
+   is covered by a `_finite_check`.
+   ⛔⛔ **BY COLUMN MEMBERSHIP, NOT BY REBUILDING A NAME — CORRECTED 2026-09-19, see the naming rule
+   in §1.** The assertion is: there exists a CHECK constraint that **references that column**
+   (`pg_constraint.conkey`, the attnums the constraint covers) **and** whose name ends
+   `_finite_check`. ⛔ **Not** a reconstructed `<table>_<column>_finite_check` string — that goes red
+   on the two legitimately shortened names, the builder cannot fix it because it may not touch a test
+   file, and it looks like a builder failure for as long as anyone believes the naming scheme.
+   ⭐ **SPELLING IS NOT SHAPE, applied to this repo's own test.** Test 2 is a census. A census bound
+   by a spelling missed 21 of 56 files here, and a third and fourth spelling were invisible to the
+   ones before them. Bind it to what the constraint COVERS, not what it is called: it then survives
+   the shortened names, survives a column rename, and still fails exactly when `0156` adds an
+   unguarded column.
+   ⚠ **Keep BOTH halves of the pair.** "Some CHECK references this column" alone is green *today*,
+   before `0155` exists, because most of these columns already carry a `> 0` or range CHECK — the
+   red would vanish. `(covers this column) AND (name ends _finite_check)` is what makes it both true
+   and falsifiable. ⛔⛔ **THE QUERY MUST FILTER TO `relkind = 'r'` — CORRECTED 2026-09-19,
    see P2.** `information_schema.columns` includes VIEW columns, and there are 12 of them here that
    **can never carry a CHECK constraint, because Postgres cannot put one on a view.** An unfiltered
    query enumerates them, demands a constraint on each, and stays **red no matter what the builder
