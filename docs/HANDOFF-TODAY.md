@@ -62,6 +62,26 @@ table instead of trusting its own citations.
 ⭐ **Also this shape:** the unit suite was green while `tsc` was red **on the same file** — vitest
 strips types without checking them. A green suite is not evidence a file compiles.
 
+## ⭐ 2a. Two rules the auditor generalised, both better than the incidents that produced them
+
+**(a) Before asking an error message to name an ACTIONABLE value, count the gates AFTER the one that
+threw — and say which gate the value clears, and whether that is sufficient or only necessary.**
+
+T-324 added a helpful figure to the first cap's refusal. The first cap bounds on *movement*; the
+second bounds on *owed*. Whenever a settleable date was partly allocated they diverge, so the number
+cleared the gate that threw and **not the handover** — the cashier types it and is refused again by
+a gate that never states the number that works. ⛔ **Before the change the message was vague; after
+it, it was precise and misdirecting, which is worse.** ⭐ The auditor recorded this as **its own
+error rather than a catch** — it asked for the number, and a reviewer found the flaw.
+
+**(b) The ratio favours checking almost everything, because the checks are cheap and the misses are
+not.** Measured across this task's five audit rounds: the third stale screen paragraph came from
+**one grep** for the old claim. The three blocking findings came from reading the diff after
+`/code-review`, not from anything clever. Two *false alarms were avoided for one command each* — a
+"frozen tree has been edited" that was CRLF-vs-LF, and an overflow claim nearly corrected as
+unfounded when the range check really does exist.
+⛔ **And the one item that came back as a defect was the one thing not checked hard enough.**
+
 ## 3. Pick up here
 
 1. ⛔ **PUSH `d776758` AND THE DOC COMMITS IF NOT ALREADY DONE.** `git log origin/main..HEAD`.
