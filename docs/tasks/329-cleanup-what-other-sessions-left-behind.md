@@ -42,7 +42,21 @@ while a lane is mid-slice against it is the collision this structure exists to p
 
 ---
 
-## Tier A — 20 stale lane databases, ~450 MB. ⭐ ORCHESTRATOR ONLY, and safe.
+## ✅ Tier A — DONE 2026-09-20. **453 MB reclaimed, 23 databases → 3.**
+
+> Executed by the orchestrator (`system32-df`) immediately after T-327 committed (`1b308c8`).
+> **554 MB → 101 MB.** All 20 listed databases dropped; the three keeps remain: `shareat_test`,
+> `shareat_test_t327_builder`, `shareat_test_t327_tester`.
+> ⭐ **The keep-list was RE-DERIVED LIVE rather than trusted from this spec**, exactly as the spec
+> below instructs — `select datname, count(*) from pg_stat_activity where datname like
+> 'shareat_test%'` returned **zero active connections**, confirming no lane was mid-run, and both
+> lanes had confirmed FROZEN. A list written hours earlier has a shelf life measured in hours.
+> ⚠ **T-328 needs its own pair** (`shareat_test_t328_{tester,builder}`); `make-test-dbs.mjs` builds
+> and migrates them in seconds.
+
+### Original assessment, kept for the record
+
+
 
 **Measured:** 22 databases matching `shareat_test%` besides the shared `shareat_test`, totalling
 **491 MB**.
