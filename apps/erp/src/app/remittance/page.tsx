@@ -66,6 +66,12 @@ export default async function RemittancePage({
   const remittable = owing.filter((d) => d.remittable);
   const totalRemittable = remittable.reduce((s, d) => s + Number(d.owed), 0);
   const heldBack = owing.filter((d) => !d.remittable);
+  const handoverFormRenders = remittable.length > 0 && cashier.length > 0 && office.length > 0;
+
+  // T-324: a declared overage writes a POSITIVE variance, same as any other — the heading below
+  // has to speak to both signs, not just the short case it was written for.
+  const varianceShortCount = variances.filter((v) => Number(v.amount) < 0).length;
+  const varianceOverCount = variances.length - varianceShortCount;
 
   return (
     <Page density="table">
@@ -136,7 +142,12 @@ export default async function RemittancePage({
               {variances.length} unresolved remittance{' '}
               {variances.length === 1 ? 'variance' : 'variances'}.
             </strong>{' '}
-            Money that was counted and signed for did not arrive. ⚠️ This is a{' '}
+            {varianceShortCount > 0 && varianceOverCount > 0
+              ? 'Money that was counted and signed for did not arrive, or arrived in excess of it.'
+              : varianceOverCount > 0
+                ? 'Money arrived in excess of what was counted and signed for.'
+                : 'Money that was counted and signed for did not arrive.'}{' '}
+            ⚠️ This is a{' '}
             <strong>custody</strong> question, not a counting one — the daily counts already
             reconciled, so the date below is where the arithmetic left the residual, not who was
             holding it.
@@ -275,14 +286,26 @@ export default async function RemittancePage({
           </div>
         )}
 
-        {/* ⚠️ Named rather than hidden: a day with money in it that CANNOT be remitted is a thing
-            somebody has to act on — verify the sales day — and silently excluding it from the
-            total would leave them wondering where the money went. */}
+        {/* ⚠️ Named rather than hidden: a day with money in it that cannot yet be SETTLED is a
+            thing somebody has to act on — verify the sales day — and silently excluding it from
+            the total would leave them wondering where the money went. ⛔ Not settleable is not
+            the same as not handable-over (T-324): the cash behind it can be declared as an
+            overage and handed over today; only the verify-then-settle step waits. */}
         {heldBack.length > 0 && (
           <p className="text-xs text-amber-700 dark:text-amber-400">
             {heldBack.length} day{heldBack.length === 1 ? '' : 's'} holding{' '}
-            {peso(heldBack.reduce((s, d) => s + Number(d.owed), 0))} cannot be remitted yet — the
+            {peso(heldBack.reduce((s, d) => s + Number(d.owed), 0))} cannot be settled yet — the
             sales day has to be verified first, because that is the signed count behind it.
+            {/* ⛔ Only true when the handover form below actually renders (spec §2: when every
+                owing day is unverified, T-319's refusal fires first and there is nothing to
+                declare an overage on yet — verifying is the only next step). */}
+            {handoverFormRenders && (
+              <>
+                {' '}
+                The cash itself can still be handed over today: declare it as an overage on the
+                handover below.
+              </>
+            )}
           </p>
         )}
         <p className="text-xs text-neutral-400 dark:text-neutral-600">
@@ -292,14 +315,17 @@ export default async function RemittancePage({
       </section>
 
       {/* ── Record a handover ────────────────────────────────────────────────────────── */}
-      {remittable.length > 0 && cashier.length > 0 && office.length > 0 && (
+      {handoverFormRenders && (
         <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <div>
             <h2 className="font-medium">Record a handover</h2>
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
               It settles the oldest days first. If it is short, the shortfall lands on the last day
               it reached — and is recorded as an open item, charged to nobody until somebody says
-              who.
+              who. If an account is handing over more than it moved over the settleable dates —
+              cash from a day still waiting on verification, for instance — declare the overage
+              beside that amount; nothing is accepted until you do. The balance shown below is
+              what an account currently holds, not what it owes — holding is not owing.
             </p>
           </div>
 
@@ -313,6 +339,20 @@ export default async function RemittancePage({
                   <Field label={a.name} hint={`Holds ${peso(a.balance)}`}>
                     <input
                       name={`lineAmount_${i}`}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      inputMode="decimal"
+                      placeholder="0.00"
+                      className={INPUT}
+                    />
+                  </Field>
+                  <Field
+                    label="Declared overage"
+                    hint="Only the amount over what this account moved — not a copy of the figure above"
+                  >
+                    <input
+                      name={`lineOverage_${i}`}
                       type="number"
                       step="0.01"
                       min="0"

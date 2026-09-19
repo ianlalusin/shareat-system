@@ -29,7 +29,7 @@ import {
   type RemittanceCadence,
   type Tx,
 } from '@shareat/db';
-import { add, compare, formatMoney, money, type Money } from '@shareat/core/money';
+import { add, compare, formatMoney, money, subtract, type Money } from '@shareat/core/money';
 import { createMoneyTransfer, voidMoneyTransfer } from '../money-transfers';
 import { parseMoneyInput } from '../shared/money-input';
 import { allocateFifo, type DayOwed } from './allocate';
@@ -42,14 +42,25 @@ export interface RemittanceLineInput {
   toMoneyAccountId: string;
   amount: string;
   /**
-   * ⛔ T-324 PRE-WIRE — DECLARED, UNREAD, AND DELIBERATELY SO UNTIL THE BUILDER LANDS THE CAP.
+   * How much MORE than this account can account for the person is knowingly handing over.
    *
-   * Nothing reads this yet. It exists so the tester's allowance cases (spec §7.4) fail on the
-   * ASSERTION — "the overage was ignored and the call resolved" — instead of on a typecheck error
-   * for a field that does not exist. A test that fails because a symbol is missing is not a usable
-   * red; only one that fails on the behaviour it is about is.
+   * Read by both caps in `runCreate`: per-account (check 1) and pooled (check 2). Absent or empty
+   * means zero for the comparison and is stored as NULL — NULL is "never asked", `'0'` is "I
+   * declare no overage" (`packages/core/src/money.ts:15-16`). Negative is refused.
    *
-   * Added by the orchestrator as pre-wiring, not by the lane. See docs/tasks/324-*.md §3.5.
+   * ⚠️ This comment previously read "DECLARED, UNREAD, AND DELIBERATELY SO UNTIL THE BUILDER LANDS
+   * THE CAP" / "Nothing reads this yet". That was true when the field was pre-wired so the tester's
+   * §7.4 cases would fail on the ASSERTION rather than on a typecheck error for a missing symbol.
+   * T-324 slice A (`1404609`) landed the cap and both checks now read it, which made those two
+   * sentences false in committed code. **Nothing in slice A's diff touched this comment** — it went
+   * stale because of a change made elsewhere, which is bible row 214's mirror, and it was caught by
+   * the slice B builder reading the file rather than by any review of the diff that broke it.
+   *
+   * ⭐ See `docs/tasks/324-cap-the-cash-handover.md` §3.5 — the ruling that this figure is
+   * deliberately UNBOUNDED lives there and nowhere else. ⚠️ That pointer was in the sentences this
+   * comment replaced and the rewrite dropped it; restored after the auditor caught it. A rewrite is
+   * a deletion, and a citation is part of the removed side even when every sentence around it was
+   * replaced with a truer one.
    */
   declaredOverage?: string | null;
 }
@@ -226,10 +237,23 @@ async function runCreate(
     const allowance = add(accountMovement, declaredSum);
     if (compare(amountSum, allowance) > 0) {
       const name = fromAccountNames.get(accountId) ?? accountId;
+      // ⭐ Names which account, what it handed over, what it can account for, and what declaring
+      // would take FOR THIS CHECK. ⛔ It does NOT claim to clear the handover — `amountSum -
+      // accountMovement` clears check 1 only. Check 2 bounds on OWED, which is <= movement
+      // whenever a settleable date is partly allocated, so a check-1-clearing declaration can
+      // still leave check 2 short; check 2 below names its own, separate, actionable total. The
+      // total here is independent of `declaredSum` by construction, so it is what the field needs
+      // to hold, never a number to add to what is already typed there; the parenthetical exists
+      // so it is not misread as "on top of" whatever was already declared.
       throw new Error(
         `createRemittance: "${name}" hands over ${formatMoney(amountSum)} in this remittance, ` +
           `but it only moved ${formatMoney(accountMovement)} over the settleable dates — declare ` +
-          'the overage to hand over more.',
+          `at least ${formatMoney(subtract(amountSum, accountMovement))} total overage for this ` +
+          `account${
+            compare(declaredSum, money('0')) > 0
+              ? ` (${formatMoney(declaredSum)} of that is already declared)`
+              : ''
+          }.`,
       );
     }
   }
@@ -248,11 +272,30 @@ async function runCreate(
   const totalOwed = settleable.reduce((sum, r) => add(sum, money(Number(r.owed).toFixed(2))), money('0'));
   const totalDeclared = linesWithOverage.reduce((sum, l) => add(sum, l.declaredForCompare), money('0'));
   if (compare(handedOver, add(totalOwed, totalDeclared)) > 0) {
+    // ⭐ Unlike check 1's account-scoped figure, this total DOES clear the handover: check 1 has
+    // already passed for every account at the current `declaredSum` values, and more declared
+    // overage on any line only widens check 1's allowance for that account, never narrows it — so
+    // ADDING this much — split however you like across the lines, WITHOUT REDUCING any line's
+    // existing figure — satisfies both checks. Always positive here: the guard above requires
+    // `handedOver > totalOwed + totalDeclared`, and `totalDeclared >= 0` forces
+    // `handedOver > totalOwed`.
+    //
+    // ⛔ NOT "any split of the TOTAL". The field holds an absolute value the cashier OVERWRITES,
+    // so someone who REDISTRIBUTES to reach this figure rather than adding to it can drop a line
+    // below its own check-1 minimum: Till movement ₱5,000 handing over ₱10,000 with ₱5,000
+    // declared passes check 1; rebalancing to ₱3,500/₱3,500 across two lines still totals the
+    // figure named here and check 1 then refuses the Till at 10,000 > 5,000 + 3,500.
+    // ⭐ It always converges, so this is one extra round-trip and never a dead end: with
+    // `M = Σ max(0, amountSum(A) − movement(A))`, check 1 passing implies `totalDeclared >= M` and
+    // check 2 failing implies this figure `> totalDeclared`, hence `> M` — a valid split always
+    // exists, and an overshooting cashier is bounced to check 1, which names the account and its
+    // own minimum.
     throw new Error(
       `createRemittance: ${formatMoney(handedOver)} was handed over, but the settleable days owe ` +
         `only ${formatMoney(totalOwed)}${
           compare(totalDeclared, money('0')) > 0 ? ` plus ${formatMoney(totalDeclared)} declared` : ''
-        } — declare the overage to hand over more.`,
+        } — declare at least ${formatMoney(subtract(handedOver, totalOwed))} total overage ` +
+        `across the lines to hand over that much.`,
     );
   }
 

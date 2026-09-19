@@ -13,9 +13,10 @@ import {
   reverseRemittance,
   setStoreCashPolicy,
 } from '@shareat/domain';
-import { withOrgPrincipal } from './lib';
+import { cashierAccounts, withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
+import { add, isZero, money } from '@shareat/core/money';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -61,14 +62,32 @@ export async function createRemittanceAction(formData: FormData): Promise<void> 
   try {
     // One line per cashier account handed over — the till and the wallet remit separately,
     // because they are different places reconciling against different things.
-    const lines = formData
-      .getAll('lineAccountId')
-      .map((id, i) => ({
-        fromMoneyAccountId: String(id),
-        toMoneyAccountId: str(formData, `lineTo_${i}`),
-        amount: str(formData, `lineAmount_${i}`),
-      }))
-      .filter((l) => l.amount && Number(l.amount) > 0);
+    const rawLines = formData.getAll('lineAccountId').map((id, i) => ({
+      fromMoneyAccountId: String(id),
+      toMoneyAccountId: str(formData, `lineTo_${i}`),
+      amount: str(formData, `lineAmount_${i}`),
+      declaredOverage: str(formData, `lineOverage_${i}`) || null,
+    }));
+
+    // ⛔ The filter below keys on amount, same as always (§6 item 2: a declared overage must not
+    // resurrect a blank-amount line). But dropping the whole line SILENTLY also drops a declared
+    // overage the person actually typed, with nothing on screen saying so — refuse instead of
+    // absorbing a money figure nobody asked to throw away.
+    const orphanedOverage = rawLines.find(
+      (l) => l.declaredOverage && !(l.amount && Number(l.amount) > 0),
+    );
+    if (orphanedOverage) {
+      const accounts = await cashierAccounts(actor.orgId, storeId);
+      const name =
+        accounts.find((a) => a.id === orphanedOverage.fromMoneyAccountId)?.name ??
+        orphanedOverage.fromMoneyAccountId;
+      throw new Error(
+        `"${name}" has a declared overage but no amount handed over — enter the amount, or ` +
+          'clear the overage.',
+      );
+    }
+
+    const lines = rawLines.filter((l) => l.amount && Number(l.amount) > 0);
 
     if (lines.length === 0) {
       throw new Error('Enter what was handed over from at least one account.');
@@ -86,15 +105,35 @@ export async function createRemittanceAction(formData: FormData): Promise<void> 
 
     // ⭐ Says what it settled, by date. A handover that reports only a total leaves the person
     // unable to check the one thing they care about — which days are now clear.
+    // ⚠️ NOT moved ahead of the call above (raised, then reverted — see T-324 slice B READY
+    // report). `money()` here cannot throw TODAY because `createRemittance` already validated
+    // every `declaredOverage` string with the friendlier `parseMoneyInput` before writing
+    // anything — this line is reached only once every string is proven valid. ⛔ That safety is
+    // an ORDERING (this code runs after a successful call that already checked), not a property
+    // of `money()` itself — `money()` still throws a raw, cashier-unreadable `TypeError` on bad
+    // input (trap 8 / DEF-272). A future reader who moves this earlier, or who calls it before
+    // `createRemittance` for any reason, removes the ordering that makes it safe and must switch
+    // to `parseMoneyInput` first — not currently importable from `apps/erp` (flagged separately,
+    // not fixed here).
+    const declaredTotal = lines.reduce(
+      (sum, l) => (l.declaredOverage ? add(sum, money(l.declaredOverage)) : sum),
+      money('0'),
+    );
     summary =
       `Handed over ${result.handedOver}. Settled ${result.settled.length} day` +
       `${result.settled.length === 1 ? '' : 's'}` +
       (result.settled.length > 0
         ? `: ${result.settled.map((s) => `${s.businessDate} ${s.amount}`).join(', ')}`
         : '') +
-      (result.variance
-        ? `. ⚠️ ${Number(result.variance) < 0 ? 'SHORT' : 'OVER'} by ${Math.abs(Number(result.variance)).toFixed(2)} — recorded as an open item.`
-        : '.');
+      '.' +
+      (isZero(declaredTotal) ? '' : ` Declared overage ${declaredTotal}.`) +
+      // DEF-366: branch on varianceId, set only when a variance ROW was actually inserted
+      // (index.ts:337 guard, :347 assignment) — never on `variance`, which is just a number.
+      // The domain refusal is what makes the two agree; resting this on a client-side gate
+      // would contradict docs/RULES.md §1 rule 7.
+      (result.varianceId
+        ? ` ⚠️ ${Number(result.variance) < 0 ? 'SHORT' : 'OVER'} by ${Math.abs(Number(result.variance)).toFixed(2)} — recorded as an open item.`
+        : '');
   } catch (err) {
     back({ error: errorMessage(err), store: storeId });
   }
