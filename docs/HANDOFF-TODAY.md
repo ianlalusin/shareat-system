@@ -89,12 +89,9 @@ unfounded when the range check really does exist.
 
 ## 3. Pick up here
 
-1. ✅ **SLICE B IS CI-VERIFIED — resolved, nothing to do. See §4a for how it nearly was not.** Originally: Everything is
-   pushed and deployed; what is missing is CI's own full integration run on slice B's code. A re-run
-   of the cancelled run was triggered; **check that it completed, that `Integration tests (real
-   Postgres)` says `success` and not `skipped`, and that `Build` ran.** ⚠️ Do not push anything to
-   `main` while that run is in flight — CI cancels in-progress runs on the same branch, which is the
-   exact mechanism that caused this.
+1. ✅ **NOTHING OUTSTANDING ON T-324 — it is complete, pushed, deployed and CI-verified.** Read §4a
+   anyway: it was very nearly shipped with a green CI that had tested none of it, and the mechanism
+   is still live for the next person who splits a code push from its docs.
 2. **DEF-376 — the structural fix is now OWED.** Its own trigger ("two shifts, the third is the one
    to act on") fired the same day it was written. The guard is keyed by `file:line`, and it cannot
    tell a correct renumber from a wrong one: assertions are key-presence only, `m.raw` is captured
