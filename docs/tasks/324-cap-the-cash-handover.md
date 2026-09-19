@@ -1,6 +1,31 @@
 # T-324 — a cash handover is capped per cashier account, plus an overage somebody declared
 
-> ### **Status: SPEC — written 2026-09-18 by `system32-4f` (Opus orchestrator/planner). Reserves T-324.**
+> ### **Status: SHIPPED 2026-09-19. Slice A `1404609` (deployed, CI green on real Postgres). Slice B `d776758`. Closes `DEF-357` and `DEF-366`.**
+>
+> ⛔⛔ **EVERY LINE NUMBER IN THIS DOCUMENT IS POINT-IN-TIME AND MOST ARE NOW STALE. GREP THE ANCHOR, NEVER THE NUMBER.**
+>
+> This is not a caveat, it is the most transferable thing the task produced. **Eight times in two
+> days a line number in this repo went stale and misled somebody**, and they were not careless
+> edits — the causes were an 11-line interface comment, a 5-line doc rewrite, a 6-line pointer
+> restoration. **Twice the stale number was in a correction to an earlier stale number.** The
+> citations below were true when written and the code has moved under them three times since.
+>
+> **The anchors, for `packages/domain/src/remittance/index.ts` — search these strings:**
+>
+> | Grep for | What it is |
+> |---|---|
+> | `const handedOver` | the summed handover |
+> | `const settleable = reports.filter` | the verified-and-owing filter |
+> | `if (settleable.length === 0)` | T-319's refusal — **both caps sit below it** |
+> | `compare(amountSum` | check 1, per account, bounds on MOVEMENT |
+> | `compare(handedOver, add(totalOwed` | check 2, pooled, bounds on OWED |
+> | `insertRemittance(tx` | the first write — **both caps must be above this** |
+> | `for (const line of input.lines)` *(second occurrence)* | the transfer loop |
+> | `Number(result.variance) !== 0 && result.varianceDayId` | the variance-row guard (DEF-366's subject) |
+>
+> ⭐ **The rule this earned:** a citation is a claim, and a claim about a line number has a shelf
+> life measured in commits. Cite the anchor text; keep the number only as an aid, and grep it before
+> acting on it. Both lanes were told this and both caught a wrong number I had sent them.
 >
 > **Closes:** `DEF-357` (the work) and `DEF-366` (a one-line fold-in in a file this task already opens).
 > **Chosen by Ian, 2026-09-18** over three alternatives (DEF-373, T-320, DEF-372).
