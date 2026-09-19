@@ -109,6 +109,7 @@ export const posItemMaps = pgTable(
       'pos_item_maps_quantity_per_sale_positive_check',
       sql`${t.quantityPerSale} is null or ${t.quantityPerSale} > 0`,
     ),
+    check('pos_item_maps_quantity_per_sale_finite_check', sql`${t.quantityPerSale} > '-Infinity'::numeric and ${t.quantityPerSale} < 'Infinity'::numeric`),
   ],
 );
 
@@ -231,5 +232,6 @@ export const posUsagePullLines = pgTable(
       'pos_usage_pull_lines_quantity_positive_check',
       sql`${t.quantity} is null or ${t.quantity} > 0`,
     ),
+    check('pos_usage_pull_lines_quantity_finite_check', sql`${t.quantity} > '-Infinity'::numeric and ${t.quantity} < 'Infinity'::numeric`),
   ],
 );

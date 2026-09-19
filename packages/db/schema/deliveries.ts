@@ -177,5 +177,9 @@ export const deliveryLines = pgTable(
     ),
     check('delivery_lines_unit_cost_non_negative_check', sql`${t.unitCost} >= 0`),
     index('delivery_lines_item_idx').on(t.itemId),
+    check('delivery_lines_ordered_quantity_finite_check', sql`${t.orderedQuantity} > '-Infinity'::numeric and ${t.orderedQuantity} < 'Infinity'::numeric`),
+    check('delivery_lines_received_quantity_finite_check', sql`${t.receivedQuantity} > '-Infinity'::numeric and ${t.receivedQuantity} < 'Infinity'::numeric`),
+    check('delivery_lines_conversion_factor_finite_check', sql`${t.conversionFactor} > '-Infinity'::numeric and ${t.conversionFactor} < 'Infinity'::numeric`),
+    check('delivery_lines_unit_cost_finite_check', sql`${t.unitCost} > '-Infinity'::numeric and ${t.unitCost} < 'Infinity'::numeric`),
   ],
 );

@@ -134,6 +134,7 @@ export const orderWastages = pgTable(
     index('order_wastages_sales_day_idx').on(t.salesDayId),
     /** The backstop's own query: unresolved rows, oldest first, regardless of status. */
     index('order_wastages_backstop_idx').on(t.status, t.openedAt),
+    check('order_wastages_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
   ],
 );
 
@@ -155,5 +156,6 @@ export const orderWastageAllocations = pgTable(
     /** ⭐ Invariant 3 — percentages summing to exactly 100 whenever any exist — is a CROSS-ROW
      *  rule a single-row CHECK cannot express. It is a deferred constraint trigger, migration-only
      *  (`order_wastage_allocations_sum_100_trg`); nothing to declare on this Drizzle table. */
+    check('order_wastage_allocations_percent_finite_check', sql`${t.percent} > '-Infinity'::numeric and ${t.percent} < 'Infinity'::numeric`),
   ],
 );

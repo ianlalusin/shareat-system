@@ -77,6 +77,58 @@ export const CONSTRAINT_MESSAGES: Record<string, string> = {
 };
 
 /**
+ * T-327 §2 — a SUFFIX rule, not one `CONSTRAINT_MESSAGES` entry per column. Migration `0155`
+ * (docs/tasks/327-a-poison-value-that-passes-every-guard.md) adds a `_finite_check` CHECK to all
+ * 160 base-table `numeric` columns, mirrored in `packages/db/schema/*.ts`'s `check()` entries —
+ * every one of those 160 constraint names ends in this exact suffix, so ONE rule here resolves
+ * all of them to one sentence. The rejected alternative is 160 copies of the same wording that
+ * drift the first time one of them is edited and the other 159 are not (spec §2).
+ *
+ * ⛔ Matched on the LITERAL SUFFIX ALONE, never by parsing a table or column name back out of the
+ * constraint name. Two of the 160 (`store_attendance_config`'s two longest columns) had their
+ * middle segment abbreviated in migration `0155` to fit Postgres's 63-byte identifier limit
+ * (`store_attendance_config_holiday_spcl_nonwk_mult_finite_check`,
+ * `store_attendance_config_holiday_spcl_working_mult_finite_check`) and no longer contain their
+ * full column name — the suffix is the only part of any of these 160 names guaranteed stable.
+ *
+ * Checked by `mappedMessage` only after an exact `CONSTRAINT_MESSAGES` hit misses, so a screen
+ * that ever wants a MORE specific sentence for one particular `_finite_check` name can still add
+ * an exact entry above without this rule swallowing it first.
+ */
+const SUFFIX_CONSTRAINT_MESSAGES: ReadonlyArray<{ suffix: string; message: string }> = [
+  {
+    suffix: '_finite_check',
+    message: 'That is not a valid amount. Enter a figure like 1234.50.',
+  },
+];
+
+function suffixConstraintMessage(constraintName: string): string | undefined {
+  for (const rule of SUFFIX_CONSTRAINT_MESSAGES) {
+    if (constraintName.endsWith(rule.suffix)) return rule.message;
+  }
+  return undefined;
+}
+
+/**
+ * T-327 slice 2 — the audit found `errorMessage` (exact, then suffix) and
+ * `recordIfUnmappedConstraint` (exact only) answering "is this constraint mapped?" two different
+ * ways, so every one of the 160 `_finite_check` names read as MAPPED on the screen and UNMAPPED to
+ * the refusal counter — the register T-252/DEF-246 built to surface constraints that still need a
+ * sentence, flooded instead with 160 that already have one, on every screen that reaches the
+ * database through `expenses/lib.ts`'s `withOrgPrincipal` chokepoint (T-261/DEF-274).
+ *
+ * ⛔ THE ONE RESOLVER — the exact sentence above this file's `recordIfUnmappedConstraint` already
+ * names the fix required: *"a pattern hand-copied across callers drifts, so it lives once here
+ * instead of once per caller."* That sentence being false of this very file, for "is this
+ * constraint mapped", was the defect. `errorMessage` and `recordIfUnmappedConstraint` both call
+ * ONLY this function now — they are structurally incapable of disagreeing about mapped-ness,
+ * rather than merely agreeing again until the next caller is hand-copied instead of shared.
+ */
+function mappedMessage(constraintName: string): string | undefined {
+  return CONSTRAINT_MESSAGES[constraintName] ?? suffixConstraintMessage(constraintName);
+}
+
+/**
  * Extracts a constraint/index name from raw Postgres driver text — the `constraint "name"` shape
  * shared by a CHECK violation (`violates check constraint "…"`) and a unique violation
  * (`violates unique constraint "…"`; this file already relies on constraint/index name parity —
@@ -190,8 +242,12 @@ const APPLICATION_RAISE_SQLSTATE = 'P0001';
  * scale. P0001 **subsumes** the five DEF-279 sentences (`USING CONSTRAINT` doesn't change the
  * SQLSTATE PostgreSQL assigns), so they keep exactly today's behaviour under the corrected key.
  *
- * 1. Mapped constraint → its sentence (unchanged). Runs first regardless of `code`: a real
- *    constraint violation the map knows about must win even though it's never P0001.
+ * 1. Mapped constraint → its sentence. Runs first regardless of `code`: a real constraint
+ *    violation the map knows about must win even though it's never P0001. ⭐ T-327: resolved via
+ *    `mappedMessage` — an exact `CONSTRAINT_MESSAGES` hit, then `suffixConstraintMessage` — today,
+ *    the one `_finite_check` suffix rule (§2 above). `recordIfUnmappedConstraint` below calls the
+ *    same resolver, so the two can no longer disagree about whether a name is mapped (T-327 slice
+ *    2 — they briefly did, exact-only there, exact-then-suffix here).
  * 2. **P0001 → APPLICATION-AUTHORED. Preserve the text verbatim.** Never sanitised, never logged,
  *    because nothing was discarded.
  * 3. Resolvable-but-unmapped constraint whose prose DOES carry `constraint "…"` → the existing
@@ -207,7 +263,7 @@ const APPLICATION_RAISE_SQLSTATE = 'P0001';
 export function errorMessage(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
   const constraintName = resolveConstraintName(err);
-  const mapped = constraintName ? CONSTRAINT_MESSAGES[constraintName] : undefined;
+  const mapped = constraintName ? mappedMessage(constraintName) : undefined;
   if (mapped !== undefined) return mapped;
 
   if (hasStringCode(err) && (err as { code: string }).code === APPLICATION_RAISE_SQLSTATE) {
@@ -271,6 +327,13 @@ export const LOCALLY_MAPPED_CONSTRAINT_NAMES: ReadonlySet<string> = new Set([
  * that a pattern hand-copied across callers drifts, so it lives once here instead of once per
  * caller.
  *
+ * ⛔ **"Mapped" is `mappedMessage(constraintName) !== undefined` — the SAME resolver `errorMessage`
+ * uses, not a re-implementation.** T-327 slice 2 audit: this used to be `constraintName in
+ * CONSTRAINT_MESSAGES` on its own, an exact-only check with no suffix awareness, so every one of
+ * the 160 `_finite_check` names (mapped via the suffix rule, §2) read as MAPPED to `errorMessage`
+ * and UNMAPPED here — a refusal recorded, on every screen, for a constraint that already has a
+ * sentence. Sharing one resolver makes the two questions structurally the same question.
+ *
  * ⛔ **Why `LOCALLY_MAPPED_CONSTRAINT_NAMES` holds NAMES, never sentences.**
  * `pre-session-message.ts:137` builds `WRITTEN_FOR_A_PERSON` as
  * `new Set(Object.values(CONSTRAINT_MESSAGES))`, which gates what text may appear in the URL of the
@@ -284,7 +347,7 @@ export async function recordIfUnmappedConstraint(
 ): Promise<void> {
   const constraintName = resolveConstraintName(err);
   if (!constraintName) return;
-  if (constraintName in CONSTRAINT_MESSAGES) return;
+  if (mappedMessage(constraintName) !== undefined) return;
   if (LOCALLY_MAPPED_CONSTRAINT_NAMES.has(constraintName)) return;
   await recordConstraintRefusal({ ...context, constraintName });
 }

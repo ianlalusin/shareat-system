@@ -286,6 +286,18 @@ export const salesDays = pgTable(
       (${t.posSourced} = false and ${t.posSourcedAt} is null)
       or (${t.posSourced} = true and ${t.posSourcedAt} is not null)
     `),
+    check('sales_days_total_sales_finite_check', sql`${t.totalSales} > '-Infinity'::numeric and ${t.totalSales} < 'Infinity'::numeric`),
+    check('sales_days_unli_sales_finite_check', sql`${t.unliSales} > '-Infinity'::numeric and ${t.unliSales} < 'Infinity'::numeric`),
+    check('sales_days_ala_carte_sales_finite_check', sql`${t.alaCarteSales} > '-Infinity'::numeric and ${t.alaCarteSales} < 'Infinity'::numeric`),
+    check('sales_days_senior_discount_finite_check', sql`${t.seniorDiscount} > '-Infinity'::numeric and ${t.seniorDiscount} < 'Infinity'::numeric`),
+    check('sales_days_pwd_discount_finite_check', sql`${t.pwdDiscount} > '-Infinity'::numeric and ${t.pwdDiscount} < 'Infinity'::numeric`),
+    check('sales_days_other_discount_finite_check', sql`${t.otherDiscount} > '-Infinity'::numeric and ${t.otherDiscount} < 'Infinity'::numeric`),
+    check('sales_days_comps_finite_check', sql`${t.comps} > '-Infinity'::numeric and ${t.comps} < 'Infinity'::numeric`),
+    check('sales_days_service_charge_finite_check', sql`${t.serviceCharge} > '-Infinity'::numeric and ${t.serviceCharge} < 'Infinity'::numeric`),
+    check('sales_days_other_charges_finite_check', sql`${t.otherCharges} > '-Infinity'::numeric and ${t.otherCharges} < 'Infinity'::numeric`),
+    check('sales_days_cash_collected_finite_check', sql`${t.cashCollected} > '-Infinity'::numeric and ${t.cashCollected} < 'Infinity'::numeric`),
+    check('sales_days_online_collected_finite_check', sql`${t.onlineCollected} > '-Infinity'::numeric and ${t.onlineCollected} < 'Infinity'::numeric`),
+    check('sales_days_credit_sales_finite_check', sql`${t.creditSales} > '-Infinity'::numeric and ${t.creditSales} < 'Infinity'::numeric`),
   ],
 );
 
@@ -324,6 +336,7 @@ export const salesDayChannels = pgTable(
     check('sales_day_channels_amount_non_negative_check', sql`${t.amount} >= 0`),
     /** A "confirmed no sales" row carrying money is a contradiction. */
     check('sales_day_channels_no_sales_is_zero_check', sql`${t.noSales} = false or ${t.amount} = 0`),
+    check('sales_day_channels_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
   ],
 );
 
@@ -380,5 +393,6 @@ export const salesDayTenders = pgTable(
      *  money went into a wallet and the amount was nothing, which is not a fact about anything;
      *  the row simply should not exist. */
     check('sales_day_tenders_amount_positive_check', sql`${t.amount} > 0`),
+    check('sales_day_tenders_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
   ],
 );

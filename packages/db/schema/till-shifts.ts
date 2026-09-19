@@ -198,6 +198,8 @@ export const tillCountLines = pgTable(
     index('till_count_lines_shift_idx').on(t.shiftId),
     check('till_count_lines_moment_check', sql`${t.moment} in ('open', 'close')`),
     check('till_count_lines_counted_nonnegative_check', sql`${t.counted} >= 0`),
+    check('till_count_lines_counted_finite_check', sql`${t.counted} > '-Infinity'::numeric and ${t.counted} < 'Infinity'::numeric`),
+    check('till_count_lines_expected_finite_check', sql`${t.expected} > '-Infinity'::numeric and ${t.expected} < 'Infinity'::numeric`),
   ],
 );
 

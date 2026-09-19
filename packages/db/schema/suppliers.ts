@@ -316,5 +316,11 @@ export const supplierInvoices = pgTable(
       sql`${t.status} <> 'voided'
           or (${t.voidedBy} is not null and ${t.voidedAt} is not null and ${t.voidReason} is not null)`,
     ),
+    check('supplier_invoices_total_amount_finite_check', sql`${t.totalAmount} > '-Infinity'::numeric and ${t.totalAmount} < 'Infinity'::numeric`),
+    check('supplier_invoices_delivery_fee_finite_check', sql`${t.deliveryFee} > '-Infinity'::numeric and ${t.deliveryFee} < 'Infinity'::numeric`),
+    check('supplier_invoices_other_fees_finite_check', sql`${t.otherFees} > '-Infinity'::numeric and ${t.otherFees} < 'Infinity'::numeric`),
+    check('supplier_invoices_vat_rate_finite_check', sql`${t.vatRate} > '-Infinity'::numeric and ${t.vatRate} < 'Infinity'::numeric`),
+    check('supplier_invoices_vat_amount_finite_check', sql`${t.vatAmount} > '-Infinity'::numeric and ${t.vatAmount} < 'Infinity'::numeric`),
+    check('supplier_invoices_vat_exclusive_amount_finite_check', sql`${t.vatExclusiveAmount} > '-Infinity'::numeric and ${t.vatExclusiveAmount} < 'Infinity'::numeric`),
   ],
 );

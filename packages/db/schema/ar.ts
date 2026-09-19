@@ -69,6 +69,7 @@ export const arCharges = pgTable(
     index('ar_charges_store_idx').on(t.storeId),
     index('ar_charges_org_due_date_idx').on(t.orgId, t.dueDate),
     check('ar_charges_total_positive_check', sql`${t.totalAmount} > 0`),
+    check('ar_charges_total_amount_finite_check', sql`${t.totalAmount} > '-Infinity'::numeric and ${t.totalAmount} < 'Infinity'::numeric`),
   ],
 );
 
@@ -108,6 +109,8 @@ export const arCollections = pgTable(
     index('ar_collections_org_customer_idx').on(t.orgId, t.customerId),
     check('ar_collections_amount_positive_check', sql`${t.amount} > 0`),
     check('ar_collections_fee_not_negative_check', sql`${t.platformFee} >= 0`),
+    check('ar_collections_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
+    check('ar_collections_platform_fee_finite_check', sql`${t.platformFee} > '-Infinity'::numeric and ${t.platformFee} < 'Infinity'::numeric`),
   ],
 );
 
@@ -124,6 +127,7 @@ export const arCollectionAllocations = pgTable(
   (t) => [
     uniqueIndex('ar_collection_allocations_collection_charge_key').on(t.arCollectionId, t.arChargeId),
     index('ar_collection_allocations_charge_idx').on(t.arChargeId),
+    check('ar_collection_allocations_amount_applied_finite_check', sql`${t.amountApplied} > '-Infinity'::numeric and ${t.amountApplied} < 'Infinity'::numeric`),
   ],
 );
 
@@ -146,5 +150,5 @@ export const arWriteOffs = pgTable(
     writtenOffBy: uuid('written_off_by').notNull().references(() => persons.id, { onDelete: 'restrict' }),
     writtenOffAt: timestamp('written_off_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('ar_write_offs_charge_idx').on(t.arChargeId)],
+  (t) => [index('ar_write_offs_charge_idx').on(t.arChargeId), check('ar_write_offs_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`)],
 );

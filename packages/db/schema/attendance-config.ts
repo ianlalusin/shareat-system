@@ -351,5 +351,16 @@ export const storeAttendanceConfig = pgTable(
     // NOTE: the allowed-hours normalisation (non-empty, all within 0..23, sorted and distinct as
     // stored) is an array CHECK that Drizzle's builder cannot express; it is hand-added in the
     // migration, the same way `person_identities` documents its own expression index.
+    check('store_attendance_config_required_hours_per_shift_finite_check', sql`${t.requiredHoursPerShift} > '-Infinity'::numeric and ${t.requiredHoursPerShift} < 'Infinity'::numeric`),
+    check('store_attendance_config_half_day_hours_finite_check', sql`${t.halfDayHours} > '-Infinity'::numeric and ${t.halfDayHours} < 'Infinity'::numeric`),
+    check('store_attendance_config_default_work_hours_finite_check', sql`${t.defaultWorkHours} > '-Infinity'::numeric and ${t.defaultWorkHours} < 'Infinity'::numeric`),
+    check('store_attendance_config_default_break_hours_finite_check', sql`${t.defaultBreakHours} > '-Infinity'::numeric and ${t.defaultBreakHours} < 'Infinity'::numeric`),
+    check('store_attendance_config_night_diff_multiplier_finite_check', sql`${t.nightDiffMultiplier} > '-Infinity'::numeric and ${t.nightDiffMultiplier} < 'Infinity'::numeric`),
+    check('store_attendance_config_overtime_multiplier_finite_check', sql`${t.overtimeMultiplier} > '-Infinity'::numeric and ${t.overtimeMultiplier} < 'Infinity'::numeric`),
+    check('store_attendance_config_overtime_fixed_hourly_finite_check', sql`${t.overtimeFixedHourly} > '-Infinity'::numeric and ${t.overtimeFixedHourly} < 'Infinity'::numeric`),
+    check('store_attendance_config_holiday_regular_multiplier_finite_check', sql`${t.holidayRegularMultiplier} > '-Infinity'::numeric and ${t.holidayRegularMultiplier} < 'Infinity'::numeric`),
+    check('store_attendance_config_holiday_spcl_nonwk_mult_finite_check', sql`${t.holidaySpecialNonWorkingMultiplier} > '-Infinity'::numeric and ${t.holidaySpecialNonWorkingMultiplier} < 'Infinity'::numeric`),
+    check('store_attendance_config_holiday_spcl_working_mult_finite_check', sql`${t.holidaySpecialWorkingMultiplier} > '-Infinity'::numeric and ${t.holidaySpecialWorkingMultiplier} < 'Infinity'::numeric`),
+    check('store_attendance_config_late_charge_per_minute_finite_check', sql`${t.lateChargePerMinute} > '-Infinity'::numeric and ${t.lateChargePerMinute} < 'Infinity'::numeric`),
   ],
 );

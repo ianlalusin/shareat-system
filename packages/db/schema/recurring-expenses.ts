@@ -141,5 +141,6 @@ export const recurringExpenses = pgTable(
       sql`(${t.interval} in ('weekly','bi_weekly') and ${t.anchorDay} between 0 and 6)
           or (${t.interval} in ('monthly','quarterly','annually') and ${t.anchorDay} between 1 and 31)`,
     ),
+    check('recurring_expenses_default_amount_finite_check', sql`${t.defaultAmount} > '-Infinity'::numeric and ${t.defaultAmount} < 'Infinity'::numeric`),
   ],
 );

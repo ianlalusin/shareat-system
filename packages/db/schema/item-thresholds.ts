@@ -46,6 +46,7 @@ export const storeItemThresholds = pgTable(
     uniqueIndex('store_item_thresholds_key').on(t.storeId, t.itemId),
     check('store_item_thresholds_non_negative_check', sql`${t.lowStockThreshold} >= 0`),
     index('store_item_thresholds_org_idx').on(t.orgId),
+    check('store_item_thresholds_low_stock_threshold_finite_check', sql`${t.lowStockThreshold} > '-Infinity'::numeric and ${t.lowStockThreshold} < 'Infinity'::numeric`),
   ],
 );
 

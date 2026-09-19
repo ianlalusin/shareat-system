@@ -118,5 +118,7 @@ export const cashRequests = pgTable(
           or (${t.releasedFromMoneyAccountId} is not null and ${t.releasedOn} is not null)`,
     ),
     check('cash_requests_approved_positive_check', sql`${t.approvedAmount} is null or ${t.approvedAmount} > 0`),
+    check('cash_requests_requested_amount_finite_check', sql`${t.requestedAmount} > '-Infinity'::numeric and ${t.requestedAmount} < 'Infinity'::numeric`),
+    check('cash_requests_approved_amount_finite_check', sql`${t.approvedAmount} > '-Infinity'::numeric and ${t.approvedAmount} < 'Infinity'::numeric`),
   ],
 );

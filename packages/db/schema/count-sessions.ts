@@ -130,5 +130,8 @@ export const countLines = pgTable(
     uniqueIndex('count_lines_session_item_location_key').on(t.sessionId, t.itemId, t.locationId),
     check('count_lines_counted_non_negative_check', sql`${t.countedQuantity} >= 0`),
     index('count_lines_session_idx').on(t.sessionId),
+    check('count_lines_counted_quantity_finite_check', sql`${t.countedQuantity} > '-Infinity'::numeric and ${t.countedQuantity} < 'Infinity'::numeric`),
+    check('count_lines_expected_quantity_finite_check', sql`${t.expectedQuantity} > '-Infinity'::numeric and ${t.expectedQuantity} < 'Infinity'::numeric`),
+    check('count_lines_variance_finite_check', sql`${t.variance} > '-Infinity'::numeric and ${t.variance} < 'Infinity'::numeric`),
   ],
 );

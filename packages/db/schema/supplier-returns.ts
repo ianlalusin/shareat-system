@@ -116,5 +116,7 @@ export const supplierReturnLines = pgTable(
     uniqueIndex('supplier_return_lines_return_line_key').on(t.returnId, t.lineNo),
     index('supplier_return_lines_item_idx').on(t.itemId),
     index('supplier_return_lines_delivery_line_idx').on(t.deliveryLineId),
+    check('supplier_return_lines_quantity_finite_check', sql`${t.quantity} > '-Infinity'::numeric and ${t.quantity} < 'Infinity'::numeric`),
+    check('supplier_return_lines_unit_cost_finite_check', sql`${t.unitCost} > '-Infinity'::numeric and ${t.unitCost} < 'Infinity'::numeric`),
   ],
 );

@@ -192,6 +192,7 @@ export const expenses = pgTable(
     index('expenses_created_by_idx').on(t.createdBy),
     check('expenses_status_check', sql`${t.status} in ('draft', 'posted', 'voided')`),
     check('expenses_total_amount_positive_check', sql`${t.totalAmount} > 0`),
+    check('expenses_total_amount_finite_check', sql`${t.totalAmount} > '-Infinity'::numeric and ${t.totalAmount} < 'Infinity'::numeric`),
   ],
 );
 
@@ -258,5 +259,6 @@ export const expensePayments = pgTable(
       sql`${t.method} in ('cash', 'online', 'credit', 'other', 'reimbursable', 'ar_collection')`,
     ),
     check('expense_payments_amount_positive_check', sql`${t.amount} > 0`),
+    check('expense_payments_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
   ],
 );

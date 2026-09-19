@@ -946,6 +946,13 @@
       "when": 1799379107084,
       "tag": "0154_t324_declared_overage",
       "breakpoints": true
+    },
+    {
+      "idx": 155,
+      "version": "7",
+      "when": 1799465507084,
+      "tag": "0155_t327_finite_check_all_numeric_columns",
+      "breakpoints": true
     }
   ]
 }

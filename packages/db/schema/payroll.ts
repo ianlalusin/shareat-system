@@ -92,6 +92,7 @@ export const payRates = pgTable(
     index('pay_rates_org_idx').on(t.orgId),
     check('pay_rates_amount_positive_check', sql`${t.amount} > 0`),
     check('pay_rates_basis_check', sql`${t.basis} in ('daily', 'hourly')`),
+    check('pay_rates_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
   ],
 );
 
@@ -227,5 +228,13 @@ export const payslips = pgTable(
     check('payslips_net_identity_check', sql`${t.netPay} = ${t.grossPay} - ${t.advanceRecovered}`),
     check('payslips_net_nonnegative_check', sql`${t.netPay} >= 0`),
     check('payslips_advance_within_gross_check', sql`${t.advanceRecovered} <= ${t.grossPay}`),
+    check('payslips_days_worked_finite_check', sql`${t.daysWorked} > '-Infinity'::numeric and ${t.daysWorked} < 'Infinity'::numeric`),
+    check('payslips_basic_pay_finite_check', sql`${t.basicPay} > '-Infinity'::numeric and ${t.basicPay} < 'Infinity'::numeric`),
+    check('payslips_ot_pay_finite_check', sql`${t.otPay} > '-Infinity'::numeric and ${t.otPay} < 'Infinity'::numeric`),
+    check('payslips_night_diff_pay_finite_check', sql`${t.nightDiffPay} > '-Infinity'::numeric and ${t.nightDiffPay} < 'Infinity'::numeric`),
+    check('payslips_holiday_pay_finite_check', sql`${t.holidayPay} > '-Infinity'::numeric and ${t.holidayPay} < 'Infinity'::numeric`),
+    check('payslips_gross_pay_finite_check', sql`${t.grossPay} > '-Infinity'::numeric and ${t.grossPay} < 'Infinity'::numeric`),
+    check('payslips_advance_recovered_finite_check', sql`${t.advanceRecovered} > '-Infinity'::numeric and ${t.advanceRecovered} < 'Infinity'::numeric`),
+    check('payslips_net_pay_finite_check', sql`${t.netPay} > '-Infinity'::numeric and ${t.netPay} < 'Infinity'::numeric`),
   ],
 );

@@ -136,5 +136,6 @@ export const stockUsageLines = pgTable(
     uniqueIndex('stock_usage_lines_record_line_key').on(t.recordId, t.lineNo),
     check('stock_usage_lines_quantity_not_zero_check', sql`${t.quantity} <> 0`),
     index('stock_usage_lines_item_idx').on(t.itemId),
+    check('stock_usage_lines_quantity_finite_check', sql`${t.quantity} > '-Infinity'::numeric and ${t.quantity} < 'Infinity'::numeric`),
   ],
 );

@@ -151,5 +151,7 @@ export const owners = pgTable(
       sql`${t.ownershipPercentage} is null
           or (${t.ownershipPercentage} > 0 and ${t.ownershipPercentage} <= 100)`,
     ),
+    check('owners_ownership_percentage_finite_check', sql`${t.ownershipPercentage} > '-Infinity'::numeric and ${t.ownershipPercentage} < 'Infinity'::numeric`),
+    check('owners_drawing_limit_finite_check', sql`${t.drawingLimit} > '-Infinity'::numeric and ${t.drawingLimit} < 'Infinity'::numeric`),
   ],
 );

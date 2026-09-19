@@ -175,5 +175,7 @@ export const journalLines = pgTable(
       'journal_lines_party_type_check',
       sql`${t.partyType} is null or ${t.partyType} in ('supplier', 'customer', 'employee', 'store', 'channel', 'money_account')`,
     ),
+    check('journal_lines_debit_finite_check', sql`${t.debit} > '-Infinity'::numeric and ${t.debit} < 'Infinity'::numeric`),
+    check('journal_lines_credit_finite_check', sql`${t.credit} > '-Infinity'::numeric and ${t.credit} < 'Infinity'::numeric`),
   ],
 );

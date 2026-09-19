@@ -100,6 +100,8 @@ export const assetPolicy = pgTable(
     uniqueIndex('asset_policy_org_id_unique').on(t.orgId),
     check('asset_policy_threshold_positive_check', sql`${t.capitalizationThreshold} > 0`),
     check('asset_policy_salvage_non_negative_check', sql`${t.defaultSalvageValue} >= 0`),
+    check('asset_policy_capitalization_threshold_finite_check', sql`${t.capitalizationThreshold} > '-Infinity'::numeric and ${t.capitalizationThreshold} < 'Infinity'::numeric`),
+    check('asset_policy_default_salvage_value_finite_check', sql`${t.defaultSalvageValue} > '-Infinity'::numeric and ${t.defaultSalvageValue} < 'Infinity'::numeric`),
   ],
 );
 
@@ -266,5 +268,7 @@ export const fixedAssets = pgTable(
     ),
     /** An asset cannot be disposed of before it was acquired. */
     check('fixed_assets_disposal_after_acquisition_check', sql`${t.disposedOn} is null or ${t.disposedOn} >= ${t.acquiredOn}`),
+    check('fixed_assets_cost_finite_check', sql`${t.cost} > '-Infinity'::numeric and ${t.cost} < 'Infinity'::numeric`),
+    check('fixed_assets_salvage_value_finite_check', sql`${t.salvageValue} > '-Infinity'::numeric and ${t.salvageValue} < 'Infinity'::numeric`),
   ],
 );

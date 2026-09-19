@@ -136,5 +136,10 @@ export const separations = pgTable(
       'separations_posted_needs_account_check',
       sql`${t.status} = 'draft' or ${t.moneyAccountId} is not null`,
     ),
+    check('separations_thirteenth_month_basic_pay_earned_finite_check', sql`${t.thirteenthMonthBasicPayEarned} > '-Infinity'::numeric and ${t.thirteenthMonthBasicPayEarned} < 'Infinity'::numeric`),
+    check('separations_thirteenth_month_gross_finite_check', sql`${t.thirteenthMonthGross} > '-Infinity'::numeric and ${t.thirteenthMonthGross} < 'Infinity'::numeric`),
+    check('separations_separation_pay_amount_finite_check', sql`${t.separationPayAmount} > '-Infinity'::numeric and ${t.separationPayAmount} < 'Infinity'::numeric`),
+    check('separations_advance_recovered_finite_check', sql`${t.advanceRecovered} > '-Infinity'::numeric and ${t.advanceRecovered} < 'Infinity'::numeric`),
+    check('separations_net_pay_finite_check', sql`${t.netPay} > '-Infinity'::numeric and ${t.netPay} < 'Infinity'::numeric`),
   ],
 );

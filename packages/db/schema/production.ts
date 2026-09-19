@@ -75,6 +75,7 @@ export const productionRecipes = pgTable(
     uniqueIndex('production_recipes_org_name_key').on(t.orgId, sql`lower(${t.name})`),
     check('production_recipes_output_quantity_positive_check', sql`${t.outputQuantity} > 0`),
     index('production_recipes_org_idx').on(t.orgId),
+    check('production_recipes_output_quantity_finite_check', sql`${t.outputQuantity} > '-Infinity'::numeric and ${t.outputQuantity} < 'Infinity'::numeric`),
   ],
 );
 
@@ -98,6 +99,7 @@ export const productionRecipeLines = pgTable(
     check('production_recipe_lines_quantity_positive_check', sql`${t.quantity} > 0`),
     index('production_recipe_lines_recipe_idx').on(t.recipeId),
     index('production_recipe_lines_item_idx').on(t.itemId),
+    check('production_recipe_lines_quantity_finite_check', sql`${t.quantity} > '-Infinity'::numeric and ${t.quantity} < 'Infinity'::numeric`),
   ],
 );
 
@@ -158,6 +160,7 @@ export const productionRecords = pgTable(
     check('production_records_convert_no_journal_check', sql`${t.kind} <> 'convert' or ${t.journalEntryId} is null`),
     index('production_records_store_status_idx').on(t.storeId, t.status, t.producedOn),
     index('production_records_org_idx').on(t.orgId),
+    check('production_records_labour_cost_finite_check', sql`${t.labourCost} > '-Infinity'::numeric and ${t.labourCost} < 'Infinity'::numeric`),
   ],
 );
 
@@ -191,5 +194,6 @@ export const productionRecordLines = pgTable(
     check('production_record_lines_revision_positive_check', sql`${t.revision} > 0`),
     index('production_record_lines_record_idx').on(t.recordId),
     index('production_record_lines_item_idx').on(t.itemId),
+    check('production_record_lines_quantity_finite_check', sql`${t.quantity} > '-Infinity'::numeric and ${t.quantity} < 'Infinity'::numeric`),
   ],
 );

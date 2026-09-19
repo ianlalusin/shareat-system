@@ -99,6 +99,7 @@ export const priceListItems = pgTable(
     uniqueIndex('price_list_items_list_item_key').on(t.priceListId, t.itemId),
     index('price_list_items_org_idx').on(t.orgId),
     check('price_list_items_rate_not_negative_check', sql`${t.rate} >= 0`),
+    check('price_list_items_rate_finite_check', sql`${t.rate} > '-Infinity'::numeric and ${t.rate} < 'Infinity'::numeric`),
   ],
 );
 
@@ -201,5 +202,6 @@ export const customers = pgTable(
           or (${t.reconciledAsOf} is not null and ${t.reconciledAt} is not null
               and ${t.reconciledBy} is not null)`,
     ),
+    check('customers_credit_limit_finite_check', sql`${t.creditLimit} > '-Infinity'::numeric and ${t.creditLimit} < 'Infinity'::numeric`),
   ],
 );

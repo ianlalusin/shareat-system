@@ -111,5 +111,7 @@ export const owner_drawing_closes = pgTable(
               and ${t.adjustmentReason} is not null and length(trim(${t.adjustmentReason})) > 0
               and ${t.adjustmentEntryId} is not null)`,
     ),
+    check('owner_drawing_closes_acknowledged_amount_finite_check', sql`${t.acknowledgedAmount} > '-Infinity'::numeric and ${t.acknowledgedAmount} < 'Infinity'::numeric`),
+    check('owner_drawing_closes_adjustment_amount_finite_check', sql`${t.adjustmentAmount} > '-Infinity'::numeric and ${t.adjustmentAmount} < 'Infinity'::numeric`),
   ],
 );

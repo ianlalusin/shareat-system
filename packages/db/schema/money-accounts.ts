@@ -216,5 +216,7 @@ export const moneyAccounts = pgTable(
       'money_accounts_float_target_shape_check',
       sql`${t.floatTarget} is null or (${t.instrument} = 'cash' and ${t.custodian} = 'cashier' and ${t.glAccountCode} = '1115')`,
     ),
+    check('money_accounts_overdraft_limit_finite_check', sql`${t.overdraftLimit} > '-Infinity'::numeric and ${t.overdraftLimit} < 'Infinity'::numeric`),
+    check('money_accounts_float_target_finite_check', sql`${t.floatTarget} > '-Infinity'::numeric and ${t.floatTarget} < 'Infinity'::numeric`),
   ],
 );

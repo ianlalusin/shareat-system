@@ -150,6 +150,7 @@ export const stockTransferLines = pgTable(
     check('stock_transfer_lines_quantity_positive_check', sql`${t.quantity} > 0`),
     uniqueIndex('stock_transfer_lines_transfer_line_key').on(t.transferId, t.lineNo),
     index('stock_transfer_lines_item_idx').on(t.itemId),
+    check('stock_transfer_lines_quantity_finite_check', sql`${t.quantity} > '-Infinity'::numeric and ${t.quantity} < 'Infinity'::numeric`),
   ],
 );
 
@@ -191,5 +192,6 @@ export const stockReservations = pgTable(
     }).onDelete('restrict'),
     index('stock_reservations_item_location_idx').on(t.itemId, t.locationId),
     index('stock_reservations_org_idx').on(t.orgId),
+    check('stock_reservations_quantity_finite_check', sql`${t.quantity} > '-Infinity'::numeric and ${t.quantity} < 'Infinity'::numeric`),
   ],
 );

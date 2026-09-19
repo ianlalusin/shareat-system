@@ -146,5 +146,6 @@ export const prepaidItems = pgTable(
       sql`${t.writtenOffOn} is null or ${t.writtenOffOn} >= ${t.coverageStartDate}`,
     ),
     check('prepaid_items_name_not_blank_check', sql`length(trim(${t.name})) > 0`),
+    check('prepaid_items_total_cost_finite_check', sql`${t.totalCost} > '-Infinity'::numeric and ${t.totalCost} < 'Infinity'::numeric`),
   ],
 );

@@ -108,5 +108,6 @@ export const expenseBudgets = pgTable(
       'expense_budgets_reissue_interval_check',
       sql`${t.autoReissue} = false or ${t.reissueInterval} is not null`,
     ),
+    check('expense_budgets_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
   ],
 );

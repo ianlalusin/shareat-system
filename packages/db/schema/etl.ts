@@ -266,5 +266,8 @@ export const etlReconciliation = pgTable(
       sql`${t.quarantinedCount} is null or ${t.quarantinedCount} >= 0`,
     ),
     check('etl_reconciliation_entries_posted_nonnegative_check', sql`${t.entriesPosted} >= 0`),
+    check('etl_reconciliation_source_amount_total_finite_check', sql`${t.sourceAmountTotal} > '-Infinity'::numeric and ${t.sourceAmountTotal} < 'Infinity'::numeric`),
+    check('etl_reconciliation_debit_total_finite_check', sql`${t.debitTotal} > '-Infinity'::numeric and ${t.debitTotal} < 'Infinity'::numeric`),
+    check('etl_reconciliation_credit_total_finite_check', sql`${t.creditTotal} > '-Infinity'::numeric and ${t.creditTotal} < 'Infinity'::numeric`),
   ],
 );

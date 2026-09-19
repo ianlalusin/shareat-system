@@ -157,5 +157,7 @@ export const statutoryDiscountRecords = pgTable(
       and length(btrim(${t.idNumber})) > 0
       and length(btrim(${t.invoiceNumber})) > 0
     `),
+    check('statutory_discount_records_gross_amount_finite_check', sql`${t.grossAmount} > '-Infinity'::numeric and ${t.grossAmount} < 'Infinity'::numeric`),
+    check('statutory_discount_records_discount_amount_finite_check', sql`${t.discountAmount} > '-Infinity'::numeric and ${t.discountAmount} < 'Infinity'::numeric`),
   ],
 );

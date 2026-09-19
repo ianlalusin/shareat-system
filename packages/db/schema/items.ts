@@ -164,6 +164,10 @@ export const supplierInvoiceLines = pgTable(
   (t) => [
     uniqueIndex('supplier_invoice_lines_invoice_line_key').on(t.supplierInvoiceId, t.lineNo),
     index('supplier_invoice_lines_item_idx').on(t.itemId),
+    check('supplier_invoice_lines_quantity_finite_check', sql`${t.quantity} > '-Infinity'::numeric and ${t.quantity} < 'Infinity'::numeric`),
+    check('supplier_invoice_lines_conversion_factor_finite_check', sql`${t.conversionFactor} > '-Infinity'::numeric and ${t.conversionFactor} < 'Infinity'::numeric`),
+    check('supplier_invoice_lines_unit_price_finite_check', sql`${t.unitPrice} > '-Infinity'::numeric and ${t.unitPrice} < 'Infinity'::numeric`),
+    check('supplier_invoice_lines_line_total_finite_check', sql`${t.lineTotal} > '-Infinity'::numeric and ${t.lineTotal} < 'Infinity'::numeric`),
   ],
 );
 
@@ -296,5 +300,9 @@ export const itemPricing = pgTable(
   (t) => [
     uniqueIndex('item_pricing_item_key').on(t.itemId),
     index('item_pricing_org_idx').on(t.orgId),
+    check('item_pricing_fixed_amount_finite_check', sql`${t.fixedAmount} > '-Infinity'::numeric and ${t.fixedAmount} < 'Infinity'::numeric`),
+    check('item_pricing_markup_percent_finite_check', sql`${t.markupPercent} > '-Infinity'::numeric and ${t.markupPercent} < 'Infinity'::numeric`),
+    check('item_pricing_fixed_markup_amount_finite_check', sql`${t.fixedMarkupAmount} > '-Infinity'::numeric and ${t.fixedMarkupAmount} < 'Infinity'::numeric`),
+    check('item_pricing_margin_alert_threshold_pct_finite_check', sql`${t.marginAlertThresholdPct} > '-Infinity'::numeric and ${t.marginAlertThresholdPct} < 'Infinity'::numeric`),
   ],
 );

@@ -67,6 +67,7 @@ export const commissaryItemOfferings = pgTable(
     uniqueIndex('commissary_item_offerings_key').on(t.commissaryStoreId, t.itemId),
     check('commissary_item_offerings_manual_cost_check', sql`${t.manualCost} is null or ${t.manualCost} >= 0`),
     index('commissary_item_offerings_org_idx').on(t.orgId),
+    check('commissary_item_offerings_manual_cost_finite_check', sql`${t.manualCost} > '-Infinity'::numeric and ${t.manualCost} < 'Infinity'::numeric`),
   ],
 );
 

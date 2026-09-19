@@ -153,5 +153,6 @@ export const stockMovements = pgTable(
       .where(sql`${t.reversalOfId} is not null`),
     index('stock_movements_item_location_idx').on(t.itemId, t.locationId, t.movedAt),
     index('stock_movements_store_moved_idx').on(t.orgId, t.storeId, t.movedAt),
+    check('stock_movements_quantity_finite_check', sql`${t.quantity} > '-Infinity'::numeric and ${t.quantity} < 'Infinity'::numeric`),
   ],
 );

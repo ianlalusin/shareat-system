@@ -128,5 +128,7 @@ export const moneyTransfers = pgTable(
       'money_transfers_void_shape_check',
       sql`(${t.status} = 'voided') = (${t.voidedOn} is not null and ${t.voidReason} is not null)`,
     ),
+    check('money_transfers_amount_out_finite_check', sql`${t.amountOut} > '-Infinity'::numeric and ${t.amountOut} < 'Infinity'::numeric`),
+    check('money_transfers_amount_in_finite_check', sql`${t.amountIn} > '-Infinity'::numeric and ${t.amountIn} < 'Infinity'::numeric`),
   ],
 );

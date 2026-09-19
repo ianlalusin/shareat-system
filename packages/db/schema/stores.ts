@@ -141,5 +141,6 @@ export const stores = pgTable(
       'stores_unremitted_ceiling_positive_check',
       sql`${t.unremittedCeiling} is null or ${t.unremittedCeiling} > 0`,
     ),
+    check('stores_unremitted_ceiling_finite_check', sql`${t.unremittedCeiling} > '-Infinity'::numeric and ${t.unremittedCeiling} < 'Infinity'::numeric`),
   ],
 );

@@ -133,6 +133,8 @@ export const remittanceLines = pgTable(
       'remittance_lines_declared_overage_check',
       sql`${t.declaredOverage} is null or ${t.declaredOverage} >= 0`,
     ),
+    check('remittance_lines_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
+    check('remittance_lines_declared_overage_finite_check', sql`${t.declaredOverage} > '-Infinity'::numeric and ${t.declaredOverage} < 'Infinity'::numeric`),
   ],
 );
 
@@ -164,6 +166,7 @@ export const remittanceAllocations = pgTable(
      *  day's settlement and quietly mark it fully remitted. */
     uniqueIndex('remittance_allocations_unique').on(t.remittanceId, t.businessDate),
     check('remittance_allocations_amount_positive_check', sql`${t.amount} > 0`),
+    check('remittance_allocations_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
   ],
 );
 
@@ -231,5 +234,6 @@ export const remittanceVariances = pgTable(
           or (${t.status} = 'charged' and ${t.chargedToPersonId} is not null and ${t.resolvedBy} is not null)
           or (${t.status} = 'written_off' and ${t.reason} is not null and ${t.resolvedBy} is not null)`,
     ),
+    check('remittance_variances_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
   ],
 );

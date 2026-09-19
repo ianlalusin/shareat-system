@@ -167,6 +167,9 @@ export const tradeOrders = pgTable(
     index('trade_orders_org_customer_idx').on(t.orgId, t.customerId),
     index('trade_orders_org_store_date_idx').on(t.orgId, t.storeId, t.orderDate),
     uniqueIndex('trade_orders_ar_charge_key').on(t.arChargeId).where(sql`${t.arChargeId} is not null`),
+    check('trade_orders_total_amount_finite_check', sql`${t.totalAmount} > '-Infinity'::numeric and ${t.totalAmount} < 'Infinity'::numeric`),
+    check('trade_orders_delivery_fee_finite_check', sql`${t.deliveryFee} > '-Infinity'::numeric and ${t.deliveryFee} < 'Infinity'::numeric`),
+    check('trade_orders_other_fees_finite_check', sql`${t.otherFees} > '-Infinity'::numeric and ${t.otherFees} < 'Infinity'::numeric`),
   ],
 );
 
@@ -290,5 +293,13 @@ export const tradeOrderLines = pgTable(
     ),
     index('trade_order_lines_order_idx').on(t.orderId),
     index('trade_order_lines_org_item_idx').on(t.orgId, t.itemId),
+    check('trade_order_lines_quantity_finite_check', sql`${t.quantity} > '-Infinity'::numeric and ${t.quantity} < 'Infinity'::numeric`),
+    check('trade_order_lines_rate_finite_check', sql`${t.rate} > '-Infinity'::numeric and ${t.rate} < 'Infinity'::numeric`),
+    check('trade_order_lines_line_total_finite_check', sql`${t.lineTotal} > '-Infinity'::numeric and ${t.lineTotal} < 'Infinity'::numeric`),
+    check('trade_order_lines_requested_quantity_finite_check', sql`${t.requestedQuantity} > '-Infinity'::numeric and ${t.requestedQuantity} < 'Infinity'::numeric`),
+    check('trade_order_lines_fulfilled_quantity_finite_check', sql`${t.fulfilledQuantity} > '-Infinity'::numeric and ${t.fulfilledQuantity} < 'Infinity'::numeric`),
+    check('trade_order_lines_received_quantity_finite_check', sql`${t.receivedQuantity} > '-Infinity'::numeric and ${t.receivedQuantity} < 'Infinity'::numeric`),
+    check('trade_order_lines_dispatch_cost_finite_check', sql`${t.dispatchCost} > '-Infinity'::numeric and ${t.dispatchCost} < 'Infinity'::numeric`),
+    check('trade_order_lines_suggested_quantity_finite_check', sql`${t.suggestedQuantity} > '-Infinity'::numeric and ${t.suggestedQuantity} < 'Infinity'::numeric`),
   ],
 );

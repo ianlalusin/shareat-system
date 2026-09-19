@@ -140,5 +140,9 @@ export const thirteenthMonthPayouts = pgTable(
       'thirteenth_month_payouts_advance_within_gross_check',
       sql`${t.advanceRecovered} <= ${t.grossPay}`,
     ),
+    check('thirteenth_month_payouts_basic_pay_earned_finite_check', sql`${t.basicPayEarned} > '-Infinity'::numeric and ${t.basicPayEarned} < 'Infinity'::numeric`),
+    check('thirteenth_month_payouts_gross_pay_finite_check', sql`${t.grossPay} > '-Infinity'::numeric and ${t.grossPay} < 'Infinity'::numeric`),
+    check('thirteenth_month_payouts_advance_recovered_finite_check', sql`${t.advanceRecovered} > '-Infinity'::numeric and ${t.advanceRecovered} < 'Infinity'::numeric`),
+    check('thirteenth_month_payouts_net_pay_finite_check', sql`${t.netPay} > '-Infinity'::numeric and ${t.netPay} < 'Infinity'::numeric`),
   ],
 );

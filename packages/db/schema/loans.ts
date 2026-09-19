@@ -160,5 +160,7 @@ export const loans = pgTable(
       sql`${t.status} in ('active', 'paid_off')
           or (${t.closedOn} is not null and ${t.closeReason} is not null)`,
     ),
+    check('loans_principal_amount_finite_check', sql`${t.principalAmount} > '-Infinity'::numeric and ${t.principalAmount} < 'Infinity'::numeric`),
+    check('loans_interest_rate_finite_check', sql`${t.interestRate} > '-Infinity'::numeric and ${t.interestRate} < 'Infinity'::numeric`),
   ],
 );

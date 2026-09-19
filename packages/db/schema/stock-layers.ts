@@ -110,6 +110,9 @@ export const stockLayers = pgTable(
       .on(t.itemId, t.storeId, t.receivedAt)
       .where(sql`${t.remainingQuantity} > 0`),
     index('stock_layers_org_idx').on(t.orgId),
+    check('stock_layers_quantity_finite_check', sql`${t.quantity} > '-Infinity'::numeric and ${t.quantity} < 'Infinity'::numeric`),
+    check('stock_layers_unit_cost_finite_check', sql`${t.unitCost} > '-Infinity'::numeric and ${t.unitCost} < 'Infinity'::numeric`),
+    check('stock_layers_remaining_quantity_finite_check', sql`${t.remainingQuantity} > '-Infinity'::numeric and ${t.remainingQuantity} < 'Infinity'::numeric`),
   ],
 );
 
@@ -168,5 +171,8 @@ export const stockLayerConsumptions = pgTable(
     index('stock_layer_consumptions_outstanding_idx')
       .on(t.movementId)
       .where(sql`${t.reversedByMovementId} is null`),
+    check('stock_layer_consumptions_quantity_finite_check', sql`${t.quantity} > '-Infinity'::numeric and ${t.quantity} < 'Infinity'::numeric`),
+    check('stock_layer_consumptions_unit_cost_finite_check', sql`${t.unitCost} > '-Infinity'::numeric and ${t.unitCost} < 'Infinity'::numeric`),
+    check('stock_layer_consumptions_cost_finite_check', sql`${t.cost} > '-Infinity'::numeric and ${t.cost} < 'Infinity'::numeric`),
   ],
 );

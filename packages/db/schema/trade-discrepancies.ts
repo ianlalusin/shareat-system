@@ -110,5 +110,7 @@ export const tradeDiscrepancies = pgTable(
       .on(t.storeId, t.status, t.deferredTo)
       .where(sql`${t.status} <> 'resolved'`),
     index('trade_discrepancies_order_idx').on(t.orderId),
+    check('trade_discrepancies_quantity_finite_check', sql`${t.quantity} > '-Infinity'::numeric and ${t.quantity} < 'Infinity'::numeric`),
+    check('trade_discrepancies_value_finite_check', sql`${t.value} > '-Infinity'::numeric and ${t.value} < 'Infinity'::numeric`),
   ],
 );

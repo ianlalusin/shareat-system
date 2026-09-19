@@ -138,5 +138,8 @@ export const customerReturnLines = pgTable(
     uniqueIndex('customer_return_lines_return_line_key').on(t.returnId, t.lineNo),
     index('customer_return_lines_trade_order_line_idx').on(t.tradeOrderLineId),
     index('customer_return_lines_item_idx').on(t.itemId),
+    check('customer_return_lines_quantity_finite_check', sql`${t.quantity} > '-Infinity'::numeric and ${t.quantity} < 'Infinity'::numeric`),
+    check('customer_return_lines_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
+    check('customer_return_lines_cost_finite_check', sql`${t.cost} > '-Infinity'::numeric and ${t.cost} < 'Infinity'::numeric`),
   ],
 );

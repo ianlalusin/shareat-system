@@ -98,6 +98,7 @@ export const apPayments = pgTable(
       sql`${t.status} <> 'voided'
           or (${t.voidedBy} is not null and ${t.voidedAt} is not null and ${t.voidReason} is not null)`,
     ),
+    check('ap_payments_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
   ],
 );
 
@@ -120,5 +121,6 @@ export const apPaymentAllocations = pgTable(
   (t) => [
     uniqueIndex('ap_payment_allocations_payment_expense_key').on(t.apPaymentId, t.expenseId),
     check('ap_payment_allocations_amount_positive_check', sql`${t.amountApplied} > 0`),
+    check('ap_payment_allocations_amount_applied_finite_check', sql`${t.amountApplied} > '-Infinity'::numeric and ${t.amountApplied} < 'Infinity'::numeric`),
   ],
 );

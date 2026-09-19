@@ -88,5 +88,7 @@ export const openingCounts = pgTable(
     check('opening_counts_unit_cost_non_negative_check', sql`${t.unitCost} is null or ${t.unitCost} >= 0`),
     uniqueIndex('opening_counts_store_item_key').on(t.storeId, t.itemId),
     index('opening_counts_org_idx').on(t.orgId),
+    check('opening_counts_quantity_finite_check', sql`${t.quantity} > '-Infinity'::numeric and ${t.quantity} < 'Infinity'::numeric`),
+    check('opening_counts_unit_cost_finite_check', sql`${t.unitCost} > '-Infinity'::numeric and ${t.unitCost} < 'Infinity'::numeric`),
   ],
 );
