@@ -1,180 +1,176 @@
-# Handoff — 2026-09-19
+# Handoff — 2026-09-19 (evening)
 
 > ⭐⭐ **THE GOAL, IN IAN'S WORDS, UNCHANGED: *"make the app as close as possible to deployment."***
-> ⚠️ **AND IT IS NOT LAUNCHED YET.** A previous session assumed "deployed to production" meant "staff
-> are using it" and warned about live cashiers. There are none. That changes urgency, never
-> correctness. ⛔ **This document makes no PRESENT-TENSE claim about which commit production runs**
-> (DEF-360). Ask `/api/health` and compare all forty characters against `git rev-parse origin/main`.
+> ⚠️ **AND IT IS NOT LAUNCHED.** Production deploys exist; no staff use it yet. That changes urgency,
+> never correctness. ⛔ **This document makes no PRESENT-TENSE claim about which commit production
+> runs** (DEF-360). Ask `/api/health` and compare all forty characters against
+> `git rev-parse origin/main`.
 
 ## Where things stand
 
-**T-324 is COMPLETE, both slices, and both are PUSHED and DEPLOYED.** `1404609` (the cap) and
-`d776758` (the way to declare it). Production verified at all 40 characters against `origin/main`.
-**Closed: DEF-357 and DEF-366.**
+**Two tasks shipped and pushed today.** `origin/main` is **`e0ed123`**.
 
-> ⛔⛔ **BUT READ §4a BEFORE YOU TRUST CI ON SLICE B.** Slice B's code was **never tested by CI** at
-> first: the docs push on top **cancelled** its run, and the replacement run went **genuinely green
-> while skipping integration and the build as doc-only.** A re-run was triggered to close it — **check
-> its outcome before treating slice B as CI-verified.** ⭐ **RESOLVED before this was committed:** the re-run of `056751c` completed `success` with **`Integration tests (real Postgres) :: success`** and **`Build :: success`** — both ran, neither skipped. Slice B is CI-verified on its own code.
+| Commit | Task | Closes |
+|---|---|---|
+| `70c273f` | **T-325** — the money-positivity census is keyed by the comparison it guards | DEF-376 |
+| `e0ed123` | **T-326** — a cashier-readable error from both ends | DEF-378, DEF-379 |
 
-A cash handover is now capped **per cashier account**: an account may not hand over more than it
-*moved* over the settleable dates, plus whatever overage was declared on its own lines; the pooled
-total is bounded separately against what the days owe. Before this, **nothing bounded it at all** —
-134 migrations grepped, no CHECK, no trigger, no domain guard.
+**Filed today: DEF-381, 382, 383, 384, 385.** Register is at 384 rows.
 
-### Gates at wrap-up — real numbers
+⭐ **BOTH ARE CI-VERIFIED AT STEP LEVEL, not merely green overall** — for each commit,
+`Integration tests (real Postgres) :: success` **and** `Build :: success`, both *run*, neither
+skipped. ⚠️ **That check exists because of 2026-09-19's earlier trap**: a docs push cancels the code
+push's run beneath it, and the replacement run goes genuinely green while skipping integration and
+the build as doc-only. **Both of today's commits carried their code AND their docs in one commit,
+which avoids it by construction.** If you ever split them, push docs FIRST or re-run the cancelled
+run — and ⛔ never use `gh api …?head_sha=`, which returned `total_count: 0` for a commit with two
+runs on it. List unfiltered and match locally.
 
-| Gate | Result |
-|---|---|
-| `npm run typecheck` | **exit 0**, clean |
-| unit | **1778 passed**, 1 skipped, 129 files, exit 0 |
-| integration | **39/39** on lane DB `shareat_test_t324_builder` |
-| `npm run build` | **exit 0**, 9008 free |
-| CI (slice A) | ✅ green, and **`Integration tests (real Postgres) :: success`** confirmed at step level |
+⛔⛔ **§9.4 IS UNMET ON BOTH, AND IAN AUTHORISED SHIPPING ANYWAY** — asked plainly, told which gate
+did not run and what it left unproven, answered "push it" both times. **That authorisation is what
+makes it acceptable (bible row 203); the silence would have been the defect.** See §2 for why the
+screen could not be reached and what was done instead.
 
-⚠️ **The build's "1 error line" is the known red herring** — a source line containing
-`throw new Error(...)` quoted inside a pre-existing Turbopack warning. **Check it the same way each
-time; do not start ignoring it.**
+## ⛔ 1. PICK UP HERE — T-327 IS SPECCED IN ALL BUT NAME
 
-## ⛔⛔ 1. THE ONE RULE THIS DAY EARNED, AND IT COST EIGHT INSTANCES
+**`docs/tasks/326-*.md` §3 already contains T-327's spec material**: all 56 candidate files
+enumerated with an out-column, the method, the three patterns needed to see the population, and the
+verdict for every site. **Do not re-derive it. Do not re-run the census.**
 
-**A LINE NUMBER IS A CLAIM WITH A SHELF LIFE MEASURED IN COMMITS. GREP THE ANCHOR, NEVER THE NUMBER.**
+**T-327 = the 14 money sites T-326 deliberately did not convert.** T-326 fixed the 6 whose only
+fault was an unreadable message. The other 14 **can store malformed values**, and **DEF-382** is why
+that is not a cleanup task:
 
-Eight times in two days a line number went stale and misled somebody. Not one was a careless edit:
-an 11-line interface comment, a 5-line doc rewrite, a 6-line pointer restoration. **Twice the stale
-number was inside a correction to an earlier stale number.** It cost: 25 spec citations, a builder's
-placement instructions for a money check (which would have put it in the wrong place), and **three
-separate renumbers of a unit-test census — one of which shipped red because the session that broke
-it ran only `typecheck` and called that enough.**
+> ⛔ `Number('abc')` is `NaN`; **`NaN < 0`, `NaN <= 0` and `NaN > anything` are all `false`**, so
+> every comparison guard *accepts* it; and `NaN.toFixed(2)` is the string `"NaN"`.
+> ⚠️ **Postgres `numeric` ACCEPTS `NaN` as a value, and in Postgres ordering `NaN` is greater than
+> every non-NaN — so `CHECK (amount > 0)` PASSES for it.** Reported by the auditor from the docs;
+> **⛔ NOT YET EXECUTED against a live database — the probe was killed for memory before it answered.
+> Run it first; it is one query and it sets T-327's severity.**
 
-⭐ **Both lanes were told to grep rather than trust, and both caught a wrong number sent by the
-orchestrator.** That is the mitigation that works. `docs/tasks/324-*.md` now opens with an anchor
-table instead of trusting its own citations.
+⭐ **The auditor's framing, and it is right:** *"T-327 needs a mechanical trigger, not a queue
+position. The observable one is: any of the 14 that can reach a numeric column without `money()`."*
+That is a grep. **If that set is non-empty, T-327 is not a cleanup task.**
 
-## ⭐⭐ 2. §9.4 FOUND WHAT NO GREEN GATE COULD, TWICE IN ONE TASK
+**Then, in order:** DEF-374 (two concurrent handovers both pass a cap only one should) · DEF-380
+(a positive variance has no correct remedy and T-324 made them routine — **needs Ian's decision on
+what resolving a surplus means before any control is built**) · T-320 (+DEF-367) · DEF-373.
 
-1. **Acceptance failed with a raw Postgres error on the operator's screen** — `0154` was applied to
-   the two lane test databases and **not to the dev database the app runs against**. Typecheck,
-   1,778 unit tests and 39 integration tests all ran against databases that *had* it. Only the
-   screen could see it. **Production was never exposed** — `deploy.yml` migrates inside its unpack
-   step, and *that step's own conclusion* was confirmed rather than the run's overall green. It also
-   surfaced **DEF-378**.
-2. **A blocking fix was invisible to every test we have.** The wiring guards read *source text*, so
-   they see a conditional's contents whether or not it renders. The tester observed this and did not
-   draw the conclusion — that the fix was verified by nothing. Settled by driving a store with a
-   held-back day and no remittable day, reading the DOM rather than a screenshot.
+## ⛔⛔ 2. THE ENVIRONMENT IS BROKEN AND IT IS NOT THE CODE
 
-⭐ **Also this shape:** the unit suite was green while `tsc` was red **on the same file** — vitest
-strips types without checking them. A green suite is not evidence a file compiles.
+**The dev server starts, `/api/health` returns 200 — and EVERY page route 500s.**
 
-## ⭐ 2a. Two rules the auditor generalised, both better than the incidents that produced them
+```
+FATAL: An unexpected Turbopack error occurred
+Failed to write app endpoint /fixed-assets/page
+Caused by: [project]/apps/erp/src/app/globals.css [app-client] (css)
+  - creating new process
+  - node process exited before we could connect to it with exit code: 0xc0000142
+```
 
-**(a) Before asking an error message to name an ACTIONABLE value, count the gates AFTER the one that
-threw — and say which gate the value clears, and whether that is sufficient or only necessary.**
+`0xc0000142` is Windows failing to start a process. Turbopack cannot spawn the PostCSS worker. API
+routes work because they do not import CSS; every page does. **Reproduces after deleting `.next` on
+a fresh process, and no CSS was touched.**
+⚠️ **Four background jobs were killed for memory today**, including two full gate runs. 15 node
+processes were live at the worst point; it is process-handle exhaustion, not RAM (5 GB was free).
+⭐ **Before concluding anything about §9.4, check this first** — it may simply be gone after a
+reboot, and it is the only thing standing between this project and a working screen test.
 
-T-324 added a helpful figure to the first cap's refusal. The first cap bounds on *movement*; the
-second bounds on *owed*. Whenever a settleable date was partly allocated they diverge, so the number
-cleared the gate that threw and **not the handover** — the cashier types it and is refused again by
-a gate that never states the number that works. ⛔ **Before the change the message was vague; after
-it, it was precise and misdirecting, which is worse.** ⭐ The auditor recorded this as **its own
-error rather than a catch** — it asked for the number, and a reviewer found the flaw.
+⛔ **AND THE SIGN-IN CONSTRAINT IS STILL SEPARATE AND STILL REAL:** all five
+`NEXT_PUBLIC_FIREBASE_*` in `.env.local` are empty, and `/sign-in` has no emulator path of its own
+(DEF-371). **A token or a password is off-limits to an agent and "it is a throwaway emulator
+credential" is NOT an exemption.** Even with a working renderer, reaching a signed-in screen needs
+Ian.
 
-**(b) The ratio favours checking almost everything, because the checks are cheap and the misses are
-not.** Measured across this task's five audit rounds: the third stale screen paragraph came from
-**one grep** for the old claim. The three blocking findings came from reading the diff after
-`/code-review`, not from anything clever. Two *false alarms were avoided for one command each* — a
-"frozen tree has been edited" that was CRLF-vs-LF, and an overflow claim nearly corrected as
-unfounded when the range check really does exist.
-⛔ **And the one item that came back as a defect was the one thing not checked hard enough.**
+⭐ **WHAT TO DO INSTEAD, AND IT IS CHEAPER THAN THE SCREEN.** The auditor's suggestion, which
+worked: *"if Ian can run one command, it should not be the screen."* Executing the real code path
+produced the operator-visible sentences without a renderer —
 
-## 3. Pick up here
+```
+bad amount       → the cost — "abc" is not a valid amount. Use at most two decimal places.
+connection lost  → The database refused that change… the detail is in the server log.  (no host, no port)
+database rule    → cannot post journal entry into period 42 (status = locked)           (verbatim)
+```
 
-1. ✅ **NOTHING OUTSTANDING ON T-324 — it is complete, pushed, deployed and CI-verified.** Read §4a
-   anyway: it was very nearly shipped with a green CI that had tested none of it, and the mechanism
-   is still live for the next person who splits a code push from its docs.
-2. **DEF-376 — the structural fix is now OWED.** Its own trigger ("two shifts, the third is the one
-   to act on") fired the same day it was written. The guard is keyed by `file:line`, and it cannot
-   tell a correct renumber from a wrong one: assertions are key-presence only, `m.raw` is captured
-   and used only to print. Its positive control is hard-coded to a line number too — renumber that
-   onto a site the scan still matches and **the control passes while controlling nothing.**
-3. **DEF-380** — a positive variance can only be *charged to someone* or *written off*, both
-   short-only remedies, and **T-324 makes positive variances routine.** Decide what resolving a
-   surplus means before building a control; the likely answer is "attribute it when the day is
-   verified", which may mean automatic rather than a button.
-4. **DEF-378** — the error sanitiser covers only errors naming a constraint. Reachable in production
-   without any deployment drift, via the truncation class already in this register.
-5. **DEF-379** — `parseMoneyInput` is not exported from `@shareat/domain`, so the app layer cannot
-   use the cashier-readable money error at all. Add a `./money-input` subpath **and sweep**.
-6. **DEF-374** — READ COMMITTED, nothing locked: two concurrent handovers both pass.
-7. **T-320** — still a placeholder, no spec. Take **DEF-367** with it.
-8. **DEF-373** — `deploy-preflight.ts` has no denylist. Security-relevant, unspecced.
+**That is not a substitute for §9.4 and it was not reported as one** — but it is a far stronger thing
+to hand Ian than an absence, and it is repeatable in one vitest file.
 
-## ⛔⛔ 4a. THE WORST TRAP OF THE DAY, AND IT CAUGHT THE SESSION THAT WROTE THE WARNING
+## ⛔ 3. THE LESSONS THIS DAY ACTUALLY EARNED
 
-**A DOCS PUSH CANCELS THE CODE PUSH'S CI RUN — AND THE REPLACEMENT RUN IS GENUINELY GREEN WHILE
-TESTING NOTHING.**
+**(a) THE ORCHESTRATOR IS THE LEAST-POLICED SESSION, AND IT SHOWED — THREE TIMES.**
+Every collision today was mine: contradictory instructions that put two `test:integration` runs on
+one lane database; editing a lane's source file mid-verification without telling it (the builder
+spent real effort investigating a "regression" that was my mutation test); and creating a `.test.ts`
+under `packages/` while a gate run was scanning it. **The lanes caught all three.** ⭐ The structural
+reason: the orchestrator touches every lane's territory and nobody polices it. **Apply your own
+freeze rules to yourself, and when you take a gate over from a lane, say explicitly "this supersedes
+my earlier instruction to X" rather than assuming the newer one wins.**
 
-The previous handoff already warned that a docs push cancels the run beneath it and that *"the
-cancelled run is the one you will look at."* That warning is **not strong enough**, and this session
-followed it and still got caught:
+**(b) SPELLING IS NOT SHAPE — THREE INSTANCES IN ONE TASK.** The sweep bound was `str(formData` (35
+files); the real population was `str(fd|formData` (56), with **21 files invisible** and **seven
+carrying human-typed money**. Then the builder found a third level — template-literal field names
+like `` str(fd, `lineOverage_${i}`) `` — invisible to *both*. ⚠️ **This repo already wrote the lesson
+down** — grep `local-errormessage-convergence.test.ts` for its own census note about counting `function
+errorMessage` and missing four. **We reproduced it one spelling over, twice.**
 
-| Commit | CI | Integration | Build |
-|---|---|---|---|
-| `056751c` — slice B's CODE | **cancelled** | cancelled | skipped |
-| `f63eb65` — docs only | ✅ **green** | ⛔ **skipped** | ⛔ **skipped** |
+**(c) AN ANCHOR DOES NOT SURVIVE THE EDIT THAT DELETES THE ANCHORED CODE.** The line-number rule says
+grep the anchor. In an extract/move task the anchored code is *what moves*, so five of ten anchors
+returned nothing mid-task and the builder was one step from reconstructing a regex from prose.
+⭐ **In a move task, every anchor pointing into the moved code carries a git ref
+(`git show <sha>:<path>`); anchors into untouched files stay bare.**
 
-⛔ **A green CI on the tip, and slice B's code had had neither integration nor a build run against
-it in CI — while that code was already deployed to production.**
+**(d) RE-DERIVING A NUMBER CHANGES IT — FOUR TIMES TODAY.** "Eight domain modules" was 14. "56
+callers" was 52 files / 210 call sites, and `errorMessage` has **24 separate definitions**, so a raw
+name count measures nothing. "95 raises" was case-sensitive and missed the entire lowercase
+attendance subsystem where the developer-facing messages live. And a casualty list led with a
+sentence that was **protected**, because `CREATE OR REPLACE` supersedes and the caveat had been
+written down one paragraph earlier and not applied.
+⛔ **Corollary, learned the expensive way: DO NOT PUT A COUNT IN A TEST NAME.** It is the most-read
+and least-maintained place a stale figure can live.
 
-**Why the green one is worse than the cancelled one:** a cancelled run *looks* wrong and makes you
-investigate. A green run does not. And the doc-only detector was behaving **correctly** — `ci.yml`
-compares against `github.event.before`, which for the docs push was the code commit, so the diff
-genuinely contained only docs. Right logic, wrong outcome.
+**(e) A CHECK REPORTS SUCCESS BECAUSE NOBODY NAMED ITS INPUT SET.** The auditor's own words, about
+its own miss: it confirmed the carve-out preserved "the five" — correctly — and never asked *what
+else lands in step 4*. The answer was ~90 more sentences. ⭐ **Ask of every passing check: who chose
+its population?**
 
-⭐ **HOW TO AVOID IT:** push code and its docs **in one push**, or push docs **first**. If they are
-already split, **re-run the cancelled run** (`gh run rerun <id>`) — its `before` predates the code,
-so the detector sees code and runs everything. ⚠️ `ci.yml` has **no `workflow_dispatch`**, so you
-cannot simply force a full run; the detector script handles that event shape but the workflow does
-not accept it. **Adding `workflow_dispatch:` to `ci.yml` is a cheap, obvious improvement and is not
-yet done.**
-⛔ **And do not push while a re-run is in flight** — `concurrency: cancel-in-progress: true` on
-`ci-${{ github.ref }}` means you will cancel it and make it three.
+**(f) ASK "WHAT VALUE WOULD HAVE TO BE WRONG FOR THIS TO GO RED, AND DOES THE CODE UNDER TEST SUPPLY
+IT?"** Four instances in T-325 alone: a positive control keyed by line number; a grep for literal
+keys in a table that has none; a control computing its expected value with the function under test;
+and two negative assertions that passed only because nothing called the spy.
 
-## 4. Traps that bit today
-
-- ⛔ **`gh api …?head_sha=<sha>` RETURNED `total_count: 0` FOR A COMMIT WITH TWO RUNS ON IT.** Exit 0,
-  no error, flatly empty. The unfiltered list showed both. **Trusting it would have reported that CI
-  never ran.** Use the unfiltered list and filter locally.
-- ⛔ **A "killed for memory" notice does NOT mean the child died.** Both emulators and the dev server
-  kept serving after their wrappers were reaped. Check the port, **then check functionally.**
-- ⛔ **`callers.mjs` cannot attribute an edit to a session in a shared tree.** It flagged the tester's
-  untracked file as a forbidden path on every builder run, every round. Quote it; never treat it as
-  proof of who wrote what.
-- ⛔ **Disjoint PATHS are not disjoint STATE.** A test run executes the other lane's source by
-  definition. While a builder is mid-edit, every run the tester does measures a moving target.
-- ⚠️ **Chrome returned a STALE screenshot** showing a previous page after a completed navigation, and
-  timed out on CDP three times. Cross-check against `location.href`.
-- ⚠️ **`next-env.d.ts` flips** after a build. Revert it; never commit it.
-
-## 5. Numbers to allocate from
-
-Next task **T-325** · next defect **DEF-381** · next migration **`0155`**
-⛔ **`0154` IS APPLIED — never edit it.** Reserved, do not re-issue: `0149`/`0150`/`0151`.
-
-## 6. Live agent sessions
+## 4. Live agent sessions
 
 ⛔ **ASK A SESSION ITS MODEL; NEVER READ IT OUT OF THIS TABLE** (DEF-361).
 
 | Session | Role | State |
 |---|---|---|
-| `system32-4f` | orchestrator | **clear it** |
-| `webapps-9e` | TESTER | idle, frozen, clean. Sonnet. ⭐ Found the loose refusal matchers, three type errors `tsc` never reported, a fourth paren-scanner with the same bug, and the migration gap — none of them asked for |
-| `webapps-71` | BUILDER | idle, frozen, clean. Sonnet. ⭐ Refused to migrate a database it did not own; refused a fix that would have made things worse and asked instead |
-| `webapps-f8` | AUDITOR | idle, clean. **Opus.** ⭐ Found two defects hiding each other, a regression test our own slice had disarmed, and argued the orchestrator out of a wrong filing decision |
-| `webapps-5a` | **IAN** — his own session | Confirmed by Ian 2026-09-19. Not a lane, not foreign work. Touched nothing in T-324 paths (verified against the frozen reference object). ⭐ Recorded because an unidentified session sharing the working tree was a real unknown at commit time, and the answer is worth writing down rather than re-investigating. |
+| `system32-4f` | orchestrator | **clear it.** Ran T-325 and T-326 end to end; context is long and nothing in it is needed that is not in this file |
+| `webapps-1c` | **AUDITOR** | idle, clean, read-only throughout. **Opus.** ⭐ Found the ~90-sentence carve-out hole, the `errorMessage(null)` throw, the P0001 developer-facing class, and corrected two of its own reported figures unprompted |
+| `webapps-36` | **BUILDER** | idle, frozen, clean. Sonnet. ⭐ Found the `NaN` bypass, the third spelling-not-shape level, two other money validators, and refused to touch a test file three separate times |
+| `webapps-37` | **TESTER** | idle, frozen, clean. Sonnet. ⭐ Found the third export file (`apps/erp/tsconfig.json`), a bug in its own test's premise, and caught a wrong example in the orchestrator's own casualty list by verifying before using it |
+| `webapps-5a` | **IAN** — his own session | Not a lane, not foreign work |
 
+⭐ **The workers stay alive and keep their names.** Re-brief them from the spec on disk; the briefing
+format is self-contained by design.
 ⚠️ **`docs/reviews/NEXT-PROMPT.md` (modified) and `docs/reviews/2026-09-17.md` (untracked)** are an
 exited session's, deliberately uncommitted since 2026-09-17. **Leave them.**
+
+## 5. Numbers to allocate from
+
+Next task **T-327** · next defect **DEF-386** · next migration **`0155`**
+⛔ **`0154` IS APPLIED — never edit it.** Reserved, do not re-issue: `0149`/`0150`/`0151`.
+Lane databases that exist: `shareat_test_t325_{tester,builder}`, `shareat_test_t326_{tester,builder}`.
+
+## 6. ⛔ FOR IAN — open decisions nobody else can make
+
+1. **`DEF-370` is cited twelve times across `docs/reviews/` and HAS NO ROW IN THE REGISTER** — the
+   numbering jumps 369 → 371. Anyone chasing it finds nothing.
+2. **`docs/reviews/NEXT-PROMPT.md` has an uncommitted edit that REINSTATES a remedy its own committed
+   version had struck out as FALSE.** That file names itself the next session's instructions. Left
+   untouched all day as instructed; whether it is corrected or discarded is Ian's call.
+3. **DEF-380 needs a business decision before any code** — what does resolving a *surplus* mean? The
+   two existing remedies both assume money is missing.
+4. **The machine.** See §2. A reboot may simply fix §9.4 for everyone.
 
 ## The paste-ready prompt
 
@@ -182,50 +178,61 @@ exited session's, deliberately uncommitted since 2026-09-17. **Leave them.**
 
 -----------------------------------------------------------------------------------------------
 
-You are the orchestrator for shareat-system (C:\Users\ianla\webapps\shareat-system). Run the
-global /orchestrator skill. You are starting COLD.
+You are the orchestrator for shareat-system (C:\Users\ianla\webapps\shareat-system). Run the global
+/orchestrator skill. You are starting COLD.
 
 ⭐ IAN'S GOAL: "make the app as close as possible to deployment." ⚠️ IT IS NOT LAUNCHED. Production
 deploys exist; no staff use it yet. That changes urgency, never correctness.
 
-⭐⭐ THREE SESSIONS, THREE FIXED ROLES: a TESTER who writes the red and drives the real screen, a
+⭐⭐ THREE SESSIONS, THREE FIXED ROLES — a TESTER who writes the red and drives the real screen, a
 BUILDER who makes it green and never edits a test, an AUDITOR who runs /code-review READ-ONLY on
-every slice. Read SKILL.md §2 before briefing anybody. ⛔ GIVE EACH LANE ITS LANE DB IN THE
-BRIEFING — a slice B briefing dropped it, the builder had no alternative, and it ran against the
-SHARED database.
+every slice. Read SKILL.md §2 before briefing anybody. ⛔ GIVE EACH LANE ITS OWN LANE DB IN THE
+BRIEFING. The three workers from 2026-09-19 are alive, idle and clean: webapps-1c (AUDITOR, Opus),
+webapps-36 (BUILDER, Sonnet), webapps-37 (TESTER, Sonnet). ⛔ ASK each its model; never read it out
+of a table (DEF-361). Ian may need to accept your briefing in each terminal before it ACKs.
 
-⛔⛔ THE RULE THIS PROJECT EARNED ON 2026-09-19, AT THE COST OF EIGHT INSTANCES: A LINE NUMBER IS A
-CLAIM WITH A SHELF LIFE MEASURED IN COMMITS. GREP THE ANCHOR, NEVER THE NUMBER. Twice the stale
-number was inside a correction to an earlier stale number. Tell both lanes to grep what you send
-them; both caught a wrong number from the orchestrator that way.
+⛔⛔ THE ORCHESTRATOR IS THE LEAST-POLICED SESSION AND IT CAUSED EVERY COLLISION ON 2026-09-19: two
+integration runs on one lane database from contradictory instructions; a lane's source file edited
+mid-verification without telling it; a .test.ts created under packages/ while a gate was scanning it.
+APPLY YOUR OWN FREEZE RULES TO YOURSELF. When you take a gate over from a lane, say explicitly "this
+supersedes my earlier instruction to X".
 
-⛔⛔ BIBLE ROW 214 HAS A MIRROR AND IT IS THE HIGHEST-YIELD CHECK YOU HAVE: a PRESERVED line can be
-falsified by a change made elsewhere, and a deletion audit is structurally blind to it. IT NEEDS A
-SEARCH FOR THE OLD CLAIM, NOT A READ OF THE DIFF. On 2026-09-19 it found three stale screen
-paragraphs and a regression test our own slice had silently disarmed — the test still ran, still
-passed, and no longer detected what it was written for.
+⛔⛔ THE DEV SERVER CANNOT RENDER ANY PAGE on this machine — Turbopack cannot spawn the PostCSS worker
+(0xc0000142); /api/health returns 200 and every page 500s. Four background jobs were killed for
+memory. CHECK WHETHER THIS IS STILL TRUE BEFORE PLANNING ANY SCREEN TEST; a reboot may have fixed it.
+§9.4 was reported UNMET on both of 2026-09-19's tasks and Ian authorised shipping anyway, twice,
+after being told plainly. THE AUTHORISATION IS WHAT MAKES THAT ACCEPTABLE — the silence would have
+been the defect (bible row 203).
 
-⛔ §9.4 IS NOT A FORMALITY. Twice in one task it found what no green gate could: a migration applied
-to the test databases but not the dev one (invisible to typecheck, 1,778 unit tests and 39
-integration tests, because they all ran against databases that had it), and a blocking fix that
-source-reading guards cannot see at all because they read text whether or not it renders.
+⭐ WHEN THE SCREEN IS UNREACHABLE, EXECUTE THE PATH INSTEAD. One vitest file calling the real
+functions produced the operator-visible sentences and closed an invariant no other gate covered.
+"If Ian can run one command, it should not be the screen."
 
-⛔ VERIFICATIONS THAT LIE, ALL OBSERVED: `gh api ?head_sha=` returned total_count 0 for a commit with
-two runs on it. A "killed for memory" notice does not mean the child died — check the port, then
-check FUNCTIONALLY. callers.mjs cannot attribute an edit to a session in a shared tree. vitest was
-green while tsc was red on the same file. Chrome returned a stale screenshot after a completed
-navigation. DO NOT QUOTE A VERDICT LINE YOU HAVE NOT READ THE BODY OF.
+⛔ SPELLING IS NOT SHAPE. A census bound by one spelling missed 21 of 56 files, seven carrying
+human-typed money; a third spelling (template-literal keys) was invisible to both. This repo already
+wrote that lesson down in local-errormessage-convergence.test.ts and we reproduced it twice.
+
+⛔ AN ANCHOR DOES NOT SURVIVE THE EDIT THAT DELETES THE ANCHORED CODE. In a move/extract task, every
+anchor into the moved code carries a git ref.
+
+⛔ RE-DERIVING A NUMBER CHANGED IT FOUR TIMES ON 2026-09-19. Never put a count in a test name.
+
+⛔ ASK OF EVERY PASSING CHECK: who chose its input set? And of every assertion: what value would have
+to be wrong for this to go red, and does the code under test supply it?
 
 Read: docs/RULES.md, docs/HANDOFF-TODAY.md, PROJECT_BIBLE.md rows 204-215, DEFECTS-REGISTER.md
 section E. ⛔ GREP the big ones — the register is ~1MB and the bible ~418KB.
 
-⛔ T-324 IS COMPLETE AND PUSHED: 1404609 (cap) + d776758 (the declaration UI). DEF-357 and DEF-366
-are closed. Do not re-open them.
+⛔ T-325 (70c273f) and T-326 (e0ed123) ARE COMPLETE, PUSHED AND CI-VERIFIED. DEF-376, DEF-378 and
+DEF-379 are closed. Do not re-open them.
 
-NEXT UP, in the order a previous orchestrator would take them: DEF-376's structural fix (its own
-trigger fired), DEF-380 (positive variances have no correct remedy and T-324 made them routine),
-DEF-378, DEF-379, DEF-374, then T-320 (+DEF-367) and DEF-373.
+NEXT UP: T-327 — the 14 money sites T-326 deliberately did not convert. ⭐ ITS SPEC MATERIAL ALREADY
+EXISTS in docs/tasks/326-*.md §3: all 56 files enumerated with an out-column. DO NOT RE-RUN THE
+CENSUS. ⛔ FIRST, EXECUTE THE ONE QUERY NOBODY HAS RUN: does Postgres numeric accept 'NaN' past a
+CHECK (amount > 0)? The auditor says yes from the docs and the probe was killed before it answered.
+That single result sets T-327's severity — if the 14 can write a poison value past every CHECK, it is
+not a cleanup task. Then: DEF-374, DEF-380 (needs Ian's decision first), T-320 (+DEF-367), DEF-373.
 
-Next task T-325 · next defect DEF-381 · next migration 0155.
+Next task T-327 · next defect DEF-386 · next migration 0155.
 
 -----------------------------------------------------------------------------------------------
