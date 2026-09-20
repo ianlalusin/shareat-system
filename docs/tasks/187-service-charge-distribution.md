@@ -208,10 +208,33 @@ which is DEF-389's shape.
 
 ## 9. Slices
 
+> ⛔ **AMENDMENT 3, 2026-09-20 — THE TWO SLICES ARE NOW ONE, AND THE REPO IS WHAT SAID SO.** This
+> section originally split the domain from its screen. Running the unit guards against the tree
+> while the builder worked, two fired on the new export: `domain-actions-have-callers` (*"it
+> authorizes, so it presumes a human — and no file under `apps/` calls it"*) and
+> `production-caller-ratchet` (*"NOT tracked anywhere else"*). **They are correct.** A domain
+> function that authorizes presumes an operator, and a slice that lands one with no screen ships
+> money-moving code nothing can reach — the **DEF-129/135/136/137/147** shape, five tasks marked
+> done with zero callers, which is why those guards exist at all.
+>
+> ⛔ **Both could have been silenced — with an `EXEMPT` entry or by regenerating the baseline — and
+> both were refused.** An exemption is a promissory note, and a regenerated baseline is precisely
+> how **DEF-403** deleted a real zero-caller finding in this repo. ⭐ **A real caller is the honest
+> fix, so the screen moved into slice 1.**
+
 | Slice | Contents | Lane order |
 |---|---|---|
-| **1** | `distributeServiceCharge` + the per-store regroup + both test files | tester RED → builder GREEN → auditor → gates → one commit |
-| **2** | the operator screen, mirroring `apps/erp/src/app/liabilities/`'s three-file shape | same, after slice 1 is committed |
+| **1 (all of it)** | `distributeServiceCharge` · the per-store regroup · the operator screen under `apps/erp/src/app/service-charge/` mirroring `liabilities/`'s three-file shape · both integration test files · the screen wiring test | tester RED → builder GREEN → auditor → gates → **one commit** |
+
+⭐ **The screen's own risk, carried from T-330:** its screen was **reviewed, not smoketested**, and
+three screen-layer defects were caught by code review alone because no test in this repo can reach
+them. **This one gets driven in a real browser** — `docs/SMOKETEST.md`. The operator must see the
+store's available float **before** committing to an amount, and a refusal must name the store and
+the shortfall; a refusal the operator could not have predicted is a screen that wastes their time.
+
+⛔ **The gates live in the services, not in the action** (`liabilities/actions.ts`'s own header).
+The screen calls the domain function and lets it refuse. **A second copy of the cap in the app
+layer is a second source of truth and the two will drift** — RULES §6.3.
 
 ## 10. The §9.4 position — CHANGED 2026-09-20, and better than §5 says
 
