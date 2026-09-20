@@ -100,14 +100,34 @@ committed** — a stale patch of a superseded stub is worse than no patch.
 about to be cleared. The wrap-up committed the spec and the register rows and left **the executable
 half of the contract in one working tree.**
 
-⚠️ **AND A CLAIM ABOUT THE STUBS THAT TURNED OUT WRONG, settled by running rather than reading.** The
-auditor warned that the empty stub would make the five exact-sum vectors PASS, giving the next
-builder a false-green baseline. ⛔ **Measured instead of accepted: `npx vitest run --project unit
-packages/domain/tests/unit/auto-allocate-order.test.ts` → 17 tests, 17 FAILED.** None passes. The
-tester had already strengthened those five vectors with an `expectedAllocations` assertion, which the
-empty stub fails. ⭐ **The auditor read the stub bodies and reasoned; the tester had run.** A
-disagreeing measurement is a prompt to find out why, not a finding — and this time the reasoning was
-the thing that was wrong.
+⚠️⚠️ **AND A CLAIM ABOUT THE STUBS THAT TURNED OUT WRONG — WITH A MECHANISM THAT IS NOT THE OBVIOUS
+ONE.** The auditor warned that the empty stub would make the five exact-sum vectors PASS, giving the
+next builder a false-green baseline. ⛔ **Measured instead of accepted: `npx vitest run --project
+unit packages/domain/tests/unit/auto-allocate-order.test.ts` → 17 tests, 17 FAILED.** None passes:
+the tester had strengthened those five vectors with an `expectedAllocations` assertion the empty stub
+cannot satisfy — the repair for the very vacuity the auditor had predicted in F6.
+
+⛔⛔ **THE FIRST DIAGNOSIS OF THIS WAS ALSO WRONG, AND THE AUDITOR CORRECTED IT.** This section
+originally read *"the auditor read the stub bodies and reasoned; the tester had run"* — as though
+reading were the weak instrument. ⭐ **It was not.** Measured, three ways, after the auditor pushed
+back: the test file is **225 lines** and was **105** when it read it; `grep -c expectedAllocations`
+is **9** and was **zero**; `mtime 2026-09-20 16:35:28`. **Its inference was CORRECT for the file it
+actually read** — a bare conservation identity over an empty result does pass. ⛔ **What failed was
+saying *"on the tree as it stands today"* about a file three lanes had been editing for hours,
+without re-reading or even re-`stat`ing it.**
+
+⭐⭐ **SO THE LESSON IS NARROWER THAN "RUN THINGS, DO NOT REASON", AND THE WIDER VERSION WOULD BE
+FALSE:** F6, F7 and the `''` finding — the three sharpest results of the day — were **all reached by
+reading**, and two were confirmed by execution afterwards. ⭐ **The rule that actually applies: a read
+of a shared tree is a PHOTOGRAPH, and any present-tense claim built on one needs the mtime checked
+before it is sent.** A `stat` costs nothing and would have stopped this. ⚠️ The same instrument would
+have resolved `{console.error('CONNECT`'s authorship (§9 item 3) — skipped there too, by both of us.
+
+⭐ **Worth recording about the triage rather than the finding:** the warning was not written in
+because it disagreed with a measurement already on the record, and the disagreement was investigated
+rather than resolved by picking a side. **That is §7's rider applied in the hardest direction — against
+a lane that had been right repeatedly that day.** Being right earlier is exactly what gets the next
+claim waved through.
 
 ⚠️ **Three OTHER files are not ours and must never be staged:** `apps/erp/next-env.d.ts`
 (Next-generated), `docs/reviews/NEXT-PROMPT.md` (modified), `docs/reviews/2026-09-17.md` (untracked)
