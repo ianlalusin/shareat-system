@@ -99,6 +99,7 @@ defect.* — §9
 | How do the four apps connect? | `docs/CROSS-APP-MAP.md` |
 | What am I building next? | `docs/plans/` and `docs/tasks/` |
 | I am starting cold on a new machine | `HANDOFF.md` |
+| **How do I actually run and click the app?** (the §9.4 gate) | ⭐ **`docs/SMOKETEST.md`** — from nothing to a signed-in screenshot. ⛔ Read it before reporting §9.4 as impossible; it has been reported impossible three times on premises that were wrong |
 
 ---
 
