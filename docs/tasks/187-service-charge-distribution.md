@@ -130,10 +130,20 @@ detector's grouping — **or a recorded decision saying why it stays org-wide.**
 >
 > ⭐⭐ **SO AMENDMENT 4 IS WORTH MORE THAN ITS CRITIQUE ALLOWED: the exact-literal residual is
 > precisely the assertion that catches this**, and it is the gate that was nearly weakened on the
-> strength of an argument about the wrong scenario. ⚠️ The comparison half is certain; the rounding
-> half was **reasoned from the schema and never executed** — the auditor had no database access and
-> said so, and the tester is running it. **Fix it regardless of the result: posting a value that was
-> never validated is wrong even where the rounding happens to be harmless.**
+> strength of an argument about the wrong scenario.
+>
+> ⭐⭐ **MEASURED, NOT REASONED — the tester executed it against a real database: `'10.005'` posted
+> `debit: '10.01'` and left the float at `−0.01`.** The auditor had derived exactly that from
+> `numeric(14,2)` plus Postgres's half-away-from-zero rounding and **labelled it unexecuted rather
+> than claiming it**, having no database access. ⭐ **And the case was written the right way round —
+> the code was run with no assertions first and what it actually did was recorded, then asserted.**
+> So the sequential over-discharge three sessions believed impossible is confirmed to have existed.
+>
+> **FIXED** by routing `input.amount` through `parseMoneyInput` once, immediately after `authorize`,
+> so ⭐ **the value compared and the value posted are provably the same value** — which was the real
+> defect: `Number(input.amount)` and `debit: input.amount` were two readings of one input.
+> ⛔ **It would have been right to fix regardless of the measurement: posting a value that was never
+> validated is wrong even where the rounding happens to be harmless.**
 >
 > ⭐ **THE HALF THAT IS SEQUENTIALLY TESTABLE, AND IT IS WORTH HAVING:** plant a negative `2160`
 > balance by posting a direct ledger debit **without** going through `distributeServiceCharge`, then
