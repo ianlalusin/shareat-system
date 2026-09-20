@@ -92,7 +92,7 @@ defect.* — §9
 | Question | File |
 |---|---|
 | What are the rules, in full? | **`PROJECT_BIBLE.md`** — the authority |
-| Why is it built this way? | `docs/decisions/` (ADRs) and bible **§13**, 107 logged decisions |
+| Why is it built this way? | `docs/decisions/` (ADRs) and bible **§13**, 216 logged decisions |
 | What does this word mean? | **`docs/GLOSSARY.md`** — *read before naming anything;* several fields mean the opposite of what they look like |
 | What is already broken? | `docs/DEFECTS-REGISTER.md` |
 | What does the business do that the plan misses? | `docs/CAPABILITY-GAPS.md` |
