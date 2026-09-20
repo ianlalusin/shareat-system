@@ -154,6 +154,24 @@ therefore expressed by putting the same `storeId` on both LINES, not by a column
 **A builder who assumes an entry-level store column will produce an entry the per-store detector
 cannot see** — which is the exact failure mode this task exists to remove.
 
+### ⚠️ What this module INHERITS, cited so it is not rediscovered as new
+
+The cap comparison is written the way **every** money module here writes it — `Number(...)` with a
+`+ 0.005` tolerance (`payLiability`, four sites in `ap/index.ts`, six in `ar/index.ts`). ⛔ **That is
+deliberate and must not be "improved" in this task.** A pattern in six modules is not fixed by
+making the seventh different; it leaves the codebase harder to read and the divergence undocumented.
+
+⭐ **The known exposure is already on the books twice and this module inherits it, adding nothing
+new:** **DEF-382** (*"`NaN` passes every comparison guard in the codebase"* — `NaN > x` is false, so
+a comparison-shaped guard **accepts**; half-fixed by T-327's finite CHECK on all 160 numeric
+columns, **still open** on the guard half) and **DEF-398** (`Number()` money comparison in a module
+whose own docstring says the arithmetic is the decision).
+
+⛔ **DO NOT FILE A NEW DEFECT FOR IT.** The orchestrator nearly did, on 2026-09-20, and caught it
+only by grepping the register first — **the discipline DEF-405's retraction had established one hour
+earlier**. ⛔ **And do not "fix" it with an `isFinite` guard that substitutes a default**: that is
+DEF-395's fourth shape verbatim and is worse than the bug.
+
 ### Invariants
 
 1. ⛔ **The cap is that store's OWN 2160 balance, derived from the ledger, never a stored column.**
