@@ -94,10 +94,21 @@ otherwise meets the stale half first.
 force.** §2 said *"nobody has checked every store's configured cadence; verify before calling T-187
 done."* ⛔ **That verification is VACUOUS and cannot be performed**, for a reason found tonight and
 unrelated to Ian's ruling: **DEF-249 — no store has an attendance config row at all.** There is no
-configured cadence anywhere to check. So the gate is not waived, it is **empty**, and Ian's
-*"payday every 15 days"* (bible row 225) settles the policy. ⭐ **T-332 is what makes the
-verification possible**, by seeding the row and adding the detector. ⛔ **Its absence from T-187's
-done-when is therefore NOT a finding.**
+configured cadence anywhere to check.
+
+⛔⛔ **SAY IT THE RIGHT WAY ROUND, BECAUSE THIS SENTENCE GUARDS A STATUTORY LIABILITY: RA 11360
+compliance is currently UNVERIFIABLE FROM THE SYSTEM. It is not satisfied, and the gate is not
+"empty" in any sense that should comfort anyone.** The population is empty **because the feature is
+inoperative** — and *"an empty input set reporting success"* is the same shape as a check that
+silently skips its input, which is DEF-251 one table away. Ian's *"payday every 15 days"* (bible
+row 225) covers **intent**; ⛔ **nothing detects drift until T-332**, which is what makes
+verification possible at all by seeding the row and adding the detector.
+
+⭐ **So: its absence from T-187's done-when is NOT a finding** — T-187 cannot verify what the system
+does not record — **but nobody may read that as compliance being demonstrated.**
+⚠️ *Wording corrected 2026-09-20 after the auditor flagged the first version as "true about the
+population and slightly generous about the conclusion". It declined to press the point; it was
+right, and a compliance reader lands on this sentence.*
 
 ---
 
