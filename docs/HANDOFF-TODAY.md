@@ -7,7 +7,8 @@
 
 ## ⛔⛔ THE HONEST HEADLINE
 
-**T-330 IS COMPLETE AND COMMITTED. IT IS NOT PUSHED.** Two commits, both local:
+**T-330 IS COMPLETE AND COMMITTED. IT IS NOT PUSHED.** ⚠️ **And read §2's CORRECTION before
+repeating this document's claim that the app cannot be opened — it can.** Two commits, both local:
 
 | Commit | What |
 |---|---|
@@ -74,8 +75,31 @@ UNAFFECTED — exit 0, full route manifest.** Only the click-it gate is lost.
 ⛔⛔ **SO THE RISK PROFILE OF `5daafcd` IS: three screen-layer defects were caught by CODE REVIEW
 ALONE.** No test in this repo can reach them and nobody could open the app. ⭐ **The green suite
 proves less than it usually does, and the commit message says so in those words.**
-⛔ Do NOT close this by loosening DEF-388's sign-in guard. Cheapest untried: restart the machine or
-close the other sessions; then a clean `node_modules` reinstall. Both are Ian's to start.
+⛔ Do NOT close this by loosening DEF-388's sign-in guard.
+
+✅✅ **CORRECTED LATE THE SAME NIGHT, AND THIS IS THE MOST IMPORTANT CORRECTION IN THIS DOCUMENT:
+DEF-401 IS DEV-SERVER-ONLY AND §9.4 IS *MEETABLE*.** Ian asked for a retry; the dev server failed a
+**third** identical time, and then the obvious thing that had not been tried was tried:
+
+> **`npm run start` — `next start` on the production build — SERVES THE APP CORRECTLY.**
+> `GET /` → **307 → `/sign-in?next=%2F`** (the auth redirect, working as designed).
+> `GET /sign-in` → **200**, a real rendered form: 10,346 bytes, `type="password"`, `name="email"`,
+> a submit button, the PIN route. **The application runs.**
+
+⛔ **The “nobody can open the app” claim above was reached by testing ONLY `next dev` and
+generalising.** That generalisation was wrong, it was believed for several hours, and it is why the
+three screen-layer defects in `5daafcd` were reviewed rather than clicked. ⭐ **It is the same failure
+this register keeps recording — a present-tense claim broader than the thing actually measured.**
+
+⚠️ **WHAT IS STILL BLOCKED IS THE BROWSER, NOT THE APP.** The Playwright MCP server is pinned to the
+`chrome` channel; Chrome is not installed here; `npx playwright install chrome` **FAILS, requiring
+Administrator**. Playwright's own chromium builds ARE present (`AppData/Local/ms-playwright`) but the
+MCP tool exposes no channel override. ⭐ **The remaining blocker is ONE ELEVATED INSTALL ONLY IAN CAN
+RUN** — after which the T-330 payment screen can finally be clicked, against `next start`.
+
+⭐ **SO: RUN SMOKETESTS AGAINST `next start`, NOT `next dev`, UNTIL THE PANIC IS FIXED.** ⚠️ Remember
+`next build` must be re-run for the served bundle to include new changes, and the dev server must be
+stopped first (RULES §1 rule 10).
 
 ## ⛔ 3. WHAT IS STILL OPEN IN `5daafcd`, BY DESIGN
 
@@ -226,9 +250,11 @@ identity string, which is what you want, but say so rather than claiming `/model
 
 1. **Push or not.** Both commits local, `main` green.
 2. **Confirm the service-charge ruling** recorded from a relay.
-3. **DEF-401** — restart the machine or close sessions, then retry. Until then every UI change ships
-   verified by reading alone, which this project's own rules say has already shipped an app that
-   could not start.
+3. ⭐⭐ **ONE ELEVATED COMMAND UNBLOCKS THE SCREEN TEST FOR EVERY FUTURE TASK.** In a terminal run as
+   **Administrator**: `npx playwright install chrome`. It failed for me on privileges. The app itself
+   is fine — `npm run start` serves it correctly — so Chrome is the only thing standing between this
+   project and a real §9.4 smoketest. (The `next dev` panic is separate, still open, and costs only
+   hot-reload.)
 4. ⭐ **Optional follow-up:** under his rule a box he has **unticked** counts as empty, so
    Auto-allocate refills it. Faithful to what he said; unticking is the natural *"not this one"*
    gesture and having it undone will surprise whoever does it. Small, clean change if he wants it.
