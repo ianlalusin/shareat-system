@@ -111,6 +111,25 @@ re-split and the script rejects it. Use `SmokeOrg`, not `"Smoke Org"`.
 `sessionsRepo.insertSession`** rather than reimplementing the hash. A forge that reimplements the
 thing it forges is a second source of truth and drifts silently the day the real one changes.
 
+### Give the store something to show
+
+A bootstrapped organisation is **empty**, and an empty screen is a weak smoketest — it exercises
+the zero state and nothing else. Seed the ledger through the app's own `postEntry`, never raw SQL:
+
+```
+node <skill>/tools/run-with-db.mjs shareat_test_setup \
+  npx tsx <skill>/tools/seed-service-charge-float.ts 5000.00 18
+```
+
+⭐ **Through `postEntry`, not an INSERT**, so the rows land exactly as the real writer leaves them —
+`store_id` on **both** lines, non-draft, inside a real fiscal period. A fixture built with raw
+inserts is a second opinion about what a real row looks like, and the detectors being tested read
+precisely those columns.
+
+⚠️ **`bootstrap-org` creates twelve fiscal periods starting THIS MONTH**, so a back-dated fixture
+earlier than the 1st of the current month is refused with *"no fiscal period covers entry date"*.
+That is the period system working; pick a date inside the window.
+
 ### Then drive it
 
 Set the cookie `shareat_session` on `localhost` and load real pages. Verified tonight:
