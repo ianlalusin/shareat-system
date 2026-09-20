@@ -84,6 +84,31 @@ will be processed manually and documented manually too."* Then: *"simplify its b
 Every §9 gate. ⛔ **Plus two specific to this task:** the four existing `serviceChargeFloatAgeing`
 cases must be shown going **QUIET** after a distribution, and Q4's answer must be reflected in the
 detector's grouping — **or a recorded decision saying why it stays org-wide.**
+
+> ⛔⛔ **AMENDMENT 4, 2026-09-20 — THIS CRITERION WAS UNSAFE AS WRITTEN, AND THE AUDITOR FOUND THAT
+> IT CANNOT TELL SUCCESS FROM THE WORST FAILURE.**
+>
+> *"Show the detector goes quiet"* proves only that the balance is `≤ 0`. **And every NEGATIVE
+> balance is included in that.** `findings.ts:611` is `if (balance < 0.005) continue;` — so an
+> **over-discharged** store, whose float has been driven below zero, makes the detector go silent
+> **exactly as a correctly-settled one does.** There is no negative-balance detector anywhere in
+> `findings.ts`; the only `< 0` uses are drift and variance sign-formatting.
+>
+> ⭐⭐ **So a quiet detector is simultaneously this task's success signal AND the over-discharge
+> signature, and the direction it cannot see is the one that loses staff money.** DEF-374's
+> remittance instance is silent too — but its silence is not somebody's acceptance criterion. **This
+> one's was.**
+>
+> ⛔ **THE GATE IS NOW THE RESIDUAL, NOT THE SILENCE.** After a distribution the test must assert
+> that the store's float lands at an **exact expected NON-NEGATIVE figure**. Silence is necessary
+> and is not sufficient. ⚠️ A test that asserts only *"no finding"* is a test that passes when the
+> business has paid out more than it held.
+>
+> ⚠️ **Observed and deliberately NOT filed as its own defect:** `balance < 0.005 → continue` is the
+> shared idiom of the whole FIFO detector family (`findings.ts:611`, `992`, `1406`), so **any
+> account this family watches goes silent once driven negative.** That is a property of the family,
+> not of this change, and it is what makes the DEF-374 class self-concealing. Nobody has checked
+> whether the other two are reachable.
 ~~⚠️ **§9.4 is currently UNMEETABLE** — DEF-401: `next dev` returns 500 on every route on this
 machine.~~ ⛔ **SUPERSEDED 2026-09-20 — see §10 and `docs/SMOKETEST.md`.** The app is served by
 `npm run start`, a browser can drive it, and the screen gate is open for SCREENS (not for
