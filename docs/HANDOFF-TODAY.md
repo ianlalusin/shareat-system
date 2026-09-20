@@ -96,6 +96,24 @@ hold the wrapper stubs carrying the signature that took seven amendments to arri
 `git diff` of both files against `6ebcbf0`). It survives a reset because it is untracked. To restore:
 `git apply docs/wip/t330-wrapper-stubs.patch`. ⛔ **Delete it once the real implementation is
 committed** — a stale patch of a superseded stub is worse than no patch.
+
+⛔⛔ **DO NOT SANITY-CHECK IT WITH A PLAIN `git apply --check` — THAT IS EXPECTED TO FAIL, AND THE
+FAILURE MEANS NOTHING IS WRONG.** A patch cannot apply to a tree that already contains its changes,
+so while the stubs are still in the working tree you get `error: patch does not apply` for both
+files. ⭐ **To verify it while the changes are present, use `git apply --check --reverse`** — that
+passes, and it is the check that actually proves the patch matches the tree. Measured 2026-09-20:
+plain `--check` fails on both files, `--check --reverse` is clean, and the patch is **byte-identical
+to a fresh `git diff`** of the two files. **After a reset, against a clean HEAD, a plain `git apply`
+is correct and works.**
+⭐ **Found by the AUDITOR, which nearly reported the `--check` failure as a broken safety net and
+ruled out the innocent mechanism before sending.** ⛔ The trap was in the INSTRUCTION, not the
+artefact: a session that sanity-checks "restorable with `git apply`" — the correct instinct, and the
+one this whole day trains — sees two hard errors and concludes the net is broken, then regenerates
+the patch from a tree that has since moved, or abandons it.
+⚠️ **One limit, recorded rather than hidden:** `git diff` warned `LF will be replaced by CRLF` for
+both files. The round-trip is proven on this machine (`core.autocrlf=true`), so it does not affect
+the reset case the patch exists for. It would only matter applying it after a fresh clone with a
+different `autocrlf` — and the patch is meant to be deleted within the day.
 ⭐ **Found by the AUDITOR at the last possible moment** — after the wrap-up commit, with terminals
 about to be cleared. The wrap-up committed the spec and the register rows and left **the executable
 half of the contract in one working tree.**
