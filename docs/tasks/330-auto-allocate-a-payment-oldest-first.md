@@ -1,6 +1,11 @@
 # T-330 — a payment allocates itself across what is outstanding, oldest first
 
-**Status:** SPEC — drafted by the orchestrator (`system32-df`), 2026-09-20. **Ordered by Ian.**
+**Status:** ✅ **SHIPPED 2026-09-20 — `5daafcd`**, 17 files, 41 tests (21 unit + 20 integration).
+**GATES: PASS** typecheck 0 · unit 135 files/1878 · integration 20/20 on a lane DB · build 0. **CALLERS: 0 zero-caller exports.**
+⛔ **§9.4 UNMET — REVIEWED, NOT SMOKETESTED.** No human has loaded the screen (DEF-401). **Three**
+screen-layer defects were caught by code review alone, across three audit rounds in which **each fix
+created the next defect one slot over**. ⚠️ The click-to-merge race remains **open by design** in the
+two `*Form.tsx` components; only its false banner was fixed. Drafted by the orchestrator (`system32-df`). **Ordered by Ian.**
 **Closes:** nothing. **Makes rare** what DEF-394 records as legitimate.
 **Migration slot:** **none reserved yet** — `0155` is applied. Request one if a schema change proves needed.
 **Depends on:** T-328 landing first. ⛔ **Do not start before it commits** — T-328 is live in `ap/index.ts`,

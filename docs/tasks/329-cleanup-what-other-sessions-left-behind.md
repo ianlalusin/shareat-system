@@ -1,6 +1,10 @@
 # T-329 — clean up what other sessions left behind, and say plainly that the app itself was already tidy
 
-**Status:** SPEC — drafted by the orchestrator (`system32-df`), 2026-09-20, at Ian's request
+**Status:** ⚠️ **PARTLY SHIPPED — status line corrected 2026-09-20 during wrap-up, because it still
+read SPEC after two tiers had landed.** Verified from `git log`: **Tier C** shipped in `e6308f1` and
+**Tier E** in `e472f4b`. ⛔ **The remaining tiers were NOT audited by this wrap-up** — whoever picks
+this up must establish which are outstanding rather than trusting this line either way.
+Drafted by the orchestrator (`system32-df`), 2026-09-20, at Ian's request
 ("cleanup works left by other sessions so the app is more tidy… make this a side task").
 **Closes:** nothing. This is hygiene, not a defect fix.
 **Migration slot:** ⛔ **NONE.** A cleanup task that needs a migration is not a cleanup task.
