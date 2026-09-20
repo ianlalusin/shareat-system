@@ -84,7 +84,20 @@ will be processed manually and documented manually too."* Then: *"simplify its b
 Every §9 gate. ⛔ **Plus two specific to this task:** the four existing `serviceChargeFloatAgeing`
 cases must be shown going **QUIET** after a distribution, and Q4's answer must be reflected in the
 detector's grouping — **or a recorded decision saying why it stays org-wide.**
-⚠️ **§9.4 is currently UNMEETABLE** — DEF-401: `next dev` returns 500 on every route on this machine.
+~~⚠️ **§9.4 is currently UNMEETABLE** — DEF-401: `next dev` returns 500 on every route on this
+machine.~~ ⛔ **SUPERSEDED 2026-09-20 — see §10 and `docs/SMOKETEST.md`.** The app is served by
+`npm run start`, a browser can drive it, and the screen gate is open for SCREENS (not for
+authentication). **Struck rather than deleted** so the change is visible to a top-down reader, who
+otherwise meets the stale half first.
+
+⭐ **AND THE CADENCE GATE IS DISCHARGED, RULED 2026-09-20 — this is the one the auditor was right to
+force.** §2 said *"nobody has checked every store's configured cadence; verify before calling T-187
+done."* ⛔ **That verification is VACUOUS and cannot be performed**, for a reason found tonight and
+unrelated to Ian's ruling: **DEF-249 — no store has an attendance config row at all.** There is no
+configured cadence anywhere to check. So the gate is not waived, it is **empty**, and Ian's
+*"payday every 15 days"* (bible row 225) settles the policy. ⭐ **T-332 is what makes the
+verification possible**, by seeding the row and adding the detector. ⛔ **Its absence from T-187's
+done-when is therefore NOT a finding.**
 
 ---
 
@@ -92,7 +105,12 @@ detector's grouping — **or a recorded decision saying why it stays org-wide.**
 
 > The sections above RULE the task. They do not SPEC it: there was no file scope, and RULES §3.3
 > requires one before any lane may touch anything. Everything below is the buildable half.
-> ⛔ Nothing here re-opens a §2 ruling. Where this addendum and §2 disagree, §2 wins.
+>
+> ⛔ **Nothing here re-opens a §2 RULING — those are Ian's and they win.** ⚠️ **But §2's
+> INSTRUCTIONS to a future builder are superseded where a later section says so explicitly**, and
+> §6 is one such place. The auditor flagged that the original wording ("§2 wins", flat) left §2's
+> cadence-verification gate standing while §6 discharged it, so the document contradicted itself
+> about its own done-when. **A ruling is not an instruction; this preamble now distinguishes them.**
 
 ## 6. Ian's cadence ruling — the compliance caution of §2 is CLOSED
 
@@ -133,6 +151,20 @@ against a configured cadence.
 > amendment 1. **Derive it from the facts that make this payout unique — the store and the payday
 > — never from a timestamp or a random value**, or a double-submitted payday posts twice and the
 > float is discharged money that never left the drawer.
+>
+> ⛔⛔ **AND IT IS `store:payday` ONLY — DELIBERATELY NOT WHAT THE STRUCTURAL PRECEDENT DOES.**
+> `payLiability`'s key is `liability:{id}:payment:{on}:{amount}` — **it includes THE AMOUNT** — and
+> this spec also tells the builder to follow `payLiability` structurally. ⚠️ **Those two
+> instructions point in opposite directions and the precedent is the one a builder obeys by
+> reflex.** Flagged by the auditor before it read a line of the new source.
+>
+> ⭐ **Ruled by DIRECTION, not by severity, which is the only way this comes out right:**
+> **`store:payday`** fails **CLOSED** — a second payout on the same payday is refused, including a
+> lawful corrective one. Visible, annoying, safe.
+> **`store:payday:amount`** fails **OPEN** — a double submission at a *different* amount posts
+> **twice**, discharging float that never left the drawer. That is the precise sentence amendment 2
+> exists to prevent, and it is invisible from the screen.
+> **Only one of those is recoverable by a human noticing. Use `store:payday`.**
 
 | Input | Meaning |
 |---|---|
