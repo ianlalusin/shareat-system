@@ -220,6 +220,18 @@ DEF-395's fourth shape verbatim and is worse than the bug.
 1. ⛔ **The cap is that store's OWN 2160 balance, derived from the ledger, never a stored column.**
    Sum credits minus debits on `2160` restricted to `journal_lines.store_id = storeId`, over
    non-draft entries. A store may not spend another store's float (§2 Q4).
+
+   ⭐ **THE SECOND REASON FOR RE-DERIVING, WHICH IS STRONGER THAN "NO SECOND SOURCE OF TRUTH" AND
+   WAS NOT IN THE FIRST DRAFT — it bounds the tolerance.** The cap comparison carries a deliberate
+   half-centavo of slack (`amount > balance + 0.005`, the convention every peer follows). On a
+   recurring drawdown against a running balance that looks like it should compound — a worry the
+   org-wide precedents do not raise, because they settle a single obligation once. **It does not
+   compound, and re-derivation is exactly why:** the worst lawful payout leaves the derived balance
+   at `−0.005`, so the next call's cap is `≤ 0` and `amount <= 0` refuses any positive request.
+   **Total drift is one half-centavo, once, and then the store is locked rather than drifting.**
+   ⛔ **A stored-column cap would compound precisely as feared.** Proved by the auditor from the
+   committed precedent, 2026-09-20, in answer to the orchestrator's worry — which was right to
+   raise and wrong about where it landed.
 2. ⛔ **Exceeding the cap REFUSES. It does not clamp** (§2 Q5, *"pay only whats available never
    negative"*). Throw, naming the store and the shortfall. **Not a Result type** — the domain layer
    of this repo throws, and `payLiability` is the precedent.
