@@ -86,6 +86,29 @@ it up cold pays again for the context that produced those corrections.
 **Committing any of it makes `main` red, and CI gates Deploy** — the exact failure that left main red
 for 90 minutes on 2026-09-19 AND again on 2026-09-20. ⭐ **They are safe on disk and named here by
 path.** Commit them in the same commit as the implementation that makes them green.
+⛔⛔ **TWO OF THE SIX ARE TRACKED MODIFICATIONS, AND A RESET DESTROYS THEM.**
+`packages/domain/src/ap/index.ts` and `ar/index.ts` are ` M` — **modified tracked files**. Untracked
+files survive `git reset --hard` and `git checkout -- .`; **tracked modifications do not.** Those two
+hold the wrapper stubs carrying the signature that took seven amendments to arrive at: `tx` first,
+`storeId` fail-closed, and amendment 7's `typed`. ⭐ **The spec alone does not reconstruct them.**
+
+⭐ **SO A PATCH IS SAVED, UNTRACKED, AT `docs/wip/t330-wrapper-stubs.patch`** (158 lines,
+`git diff` of both files against `6ebcbf0`). It survives a reset because it is untracked. To restore:
+`git apply docs/wip/t330-wrapper-stubs.patch`. ⛔ **Delete it once the real implementation is
+committed** — a stale patch of a superseded stub is worse than no patch.
+⭐ **Found by the AUDITOR at the last possible moment** — after the wrap-up commit, with terminals
+about to be cleared. The wrap-up committed the spec and the register rows and left **the executable
+half of the contract in one working tree.**
+
+⚠️ **AND A CLAIM ABOUT THE STUBS THAT TURNED OUT WRONG, settled by running rather than reading.** The
+auditor warned that the empty stub would make the five exact-sum vectors PASS, giving the next
+builder a false-green baseline. ⛔ **Measured instead of accepted: `npx vitest run --project unit
+packages/domain/tests/unit/auto-allocate-order.test.ts` → 17 tests, 17 FAILED.** None passes. The
+tester had already strengthened those five vectors with an `expectedAllocations` assertion, which the
+empty stub fails. ⭐ **The auditor read the stub bodies and reasoned; the tester had run.** A
+disagreeing measurement is a prompt to find out why, not a finding — and this time the reasoning was
+the thing that was wrong.
+
 ⚠️ **Three OTHER files are not ours and must never be staged:** `apps/erp/next-env.d.ts`
 (Next-generated), `docs/reviews/NEXT-PROMPT.md` (modified), `docs/reviews/2026-09-17.md` (untracked)
 — an exited session's since 2026-09-17.
