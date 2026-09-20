@@ -4,10 +4,32 @@
 > to him in plain language as a three-way choice with (c) recommended; (a) and (b) are settled and
 > must not be re-proposed. The HOLD on this spec is therefore LIFTED on its design question.
 >
-> ⚠️ **It is NOT yet cleared to build, for one reason only: it needs a migration widening
-> `scheduler_runs_job_check`, and slot 0145 is held by T-281 (DEF-302) this cycle — one migration
-> per cycle (DEF-091; the 2026-08-23 collision). Build it next cycle on slot 0146.** Its own FOR IAN
-> section already says nothing is on fire, so waiting one cycle costs nothing it warned about.
+> ⭐⭐ **QUEUED FOR BUILD — IAN, 2026-09-20: *"queue T276"*.** Ordinary lane work before cutover:
+> **not shelved, and not jumping the queue.** The design question was already settled on 2026-09-12
+> (option c, above); both remaining gates were mechanical and both are now clear:
+>
+> | Gate | State |
+> |---|---|
+> | Lands after T-275 | ✅ T-275 has SHIPPED |
+> | A migration slot to widen `scheduler_runs_job_check` | ✅ **SLOT `0156` IS ALLOCATED TO THIS TASK** by the orchestrator (`system32-df`), 2026-09-20. `0155` is APPLIED IN PRODUCTION and must never be edited. ⛔ Reserved and NOT to be re-issued: `0149`, `0150`, `0151`. |
+>
+> ⚠️ **The stale text this replaces said "build it next cycle on slot 0146"** — written when `0145`
+> was the live slot. **Migrations have since reached `0155`**, so that instruction had been wrong for
+> roughly ten slots and would have collided with an applied migration. ⭐ Recorded rather than
+> silently corrected, because a task doc carrying a specific number nobody re-checked is exactly how
+> the hand-applied-migration defect of 2026-09-06 happened.
+>
+> ⛔ **ONE MIGRATION PER CYCLE STILL HOLDS** (DEF-091, the 2026-08-23 collision). No other lane gets
+> a slot in the cycle that builds this.
+>
+> ⭐ **Why it is armed with the others, not after them** (context given to Ian before the ruling):
+> SHAREAT OPC's periods end **2027-08**, so the first uncovered date is **2027-09-01**, and the soft
+> `fiscalPeriodRunwayLow` finding warns 60 days out — nothing is on fire. ⛔ **But the timer must be
+> installed in the SAME pass as the other production timers rather than becoming a fourth one nobody
+> installs.** `webapps-9f`'s script census measured the shape of that risk on 2026-09-20: all eight
+> live timers `ExecStart` an `npm run <name>` in `/srv/shareat`, so **the unit-to-file mapping runs
+> through `package.json` and no unit names a `scripts/` path at all** — a ninth timer added out of
+> band is invisible to every in-repo check.
 >
 > ⛔ **Two things the BUILD spec must still pin, and they are the orchestrator's to decide, not
 > Ian's:** (1) **what counts as "a gap"** — this spec names it as the price of (c) and leaves it
