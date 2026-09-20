@@ -112,15 +112,28 @@ detector's grouping — **or a recorded decision saying why it stays org-wide.**
 > follows from an exact assertion, and naming it invited the weaker reading
 > (`toBeGreaterThanOrEqual(0)`) which catches nothing but the sign.
 >
-> ⛔⛔ **WHAT THIS GATE DOES NOT PROVE, STATED BECAUSE THE FIRST DRAFT IMPLIED OTHERWISE.** Its
-> rationale is over-discharge — a float driven below zero. **A sequential test cannot produce that
-> state.** The cap re-derives from the ledger on every call, so a second sequential payout sees the
-> first one's effect and refuses; a negative balance arises only from the **DEF-374 concurrency
-> class**, which needs a harness this suite does not have. ⭐ **So AMENDMENT 4 closes the
-> CRITERION'S AMBIGUITY — nobody can mistake silence for success again — and pins the arithmetic.
-> It adds NO coverage of the over-discharge path.** ⛔ Do not report it as though it did; that would
-> be a green proving something narrower than its own justification, which is the exact failure this
-> amendment was written to remove.
+> ⛔⛔ **WHAT THIS GATE DOES NOT PROVE — AND THEN, TWO HOURS LATER, IT TURNED OUT TO PROVE MORE THAN
+> ITS OWN CRITIC ALLOWED. BOTH CORRECTIONS ARE KEPT.**
+>
+> **First version, from the auditor:** the gate's rationale is over-discharge, *"a sequential test
+> cannot produce that state"* — the cap re-derives every call, so a second sequential payout sees
+> the first and refuses; a negative balance arises only from the **DEF-374 concurrency class**. On
+> that reading the gate closed the criterion's ambiguity and added **no** coverage of over-discharge.
+>
+> ⛔⛔ **THAT WAS WRONG, AND THE SAME AUDITOR RETRACTED IT.** It reasoned about **repeated** payouts
+> and never considered **a single payout overshooting at the storage boundary.**
+> `distributeServiceCharge` validates `Number(input.amount)` but posts **`debit: input.amount`, the
+> raw string**, into `numeric(14,2)`. Float exactly ₱10.00, amount `"10.005"`: the cap compares
+> `10.005 > 10.005` — **false in JS** — so it passes, `checkDraw` passes, **Postgres rounds the
+> stored line to 10.01, and the float lands at −0.01**, which DEF-406 then keeps the detector silent
+> about. ⭐ **One call, one operator, no concurrency.**
+>
+> ⭐⭐ **SO AMENDMENT 4 IS WORTH MORE THAN ITS CRITIQUE ALLOWED: the exact-literal residual is
+> precisely the assertion that catches this**, and it is the gate that was nearly weakened on the
+> strength of an argument about the wrong scenario. ⚠️ The comparison half is certain; the rounding
+> half was **reasoned from the schema and never executed** — the auditor had no database access and
+> said so, and the tester is running it. **Fix it regardless of the result: posting a value that was
+> never validated is wrong even where the rounding happens to be harmless.**
 >
 > ⭐ **THE HALF THAT IS SEQUENTIALLY TESTABLE, AND IT IS WORTH HAVING:** plant a negative `2160`
 > balance by posting a direct ledger debit **without** going through `distributeServiceCharge`, then
