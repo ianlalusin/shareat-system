@@ -249,4 +249,15 @@ premises were wrong.** Measured by the orchestrator at cold start:
   A headless chromium loaded `/sign-in` at 200 with the correct title and a screenshot was taken.
 - **What is genuinely missing is a signed-in session.** The PIN form does not render against
   `shareat_dev`, and `shareat_test_setup` — the seeded database every earlier smoketest signed into
-  — has been deleted. Rebuilding it is this cycle's separate slice and unblocks every later task.
+  — has been deleted.
+
+> ⛔ **CORRECTION, later the same night — this section was written BEFORE the fix existed and it
+> overclaims.** It said rebuilding the seeded database *"unblocks every later task"*. **It does
+> not.** What was built instead is a **session forge** (`docs/SMOKETEST.md` §3) that mints a
+> `shareat_session` row directly against a throwaway database. ⛔ **It BYPASSES sign-in on purpose.
+> A smoketest driven through it proves things about SCREENS and nothing whatever about
+> authentication** — T-304's layer 1 authenticates the tablet against Firebase in the browser and
+> cannot be faked from a script. ⭐ **So screen testing is unblocked and end-to-end sign-in is
+> not**, and the latter still needs Ian to create the terminal account in the Firebase console.
+> ⚠️ **Read `docs/SMOKETEST.md` §3 before using it** — that is the one place the limit is stated in
+> full, and a report that calls a forged-session smoketest *"sign-in works"* is wrong.

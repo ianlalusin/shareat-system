@@ -16,13 +16,18 @@ looked.**
 | The claim | What is actually true |
 |---|---|
 | *"The app 500s / cannot be opened"* | ⛔ **`next dev` is dead on this machine (DEF-401). The APP is not.** `npm run start` serves it correctly. Smoketest against `next start`, always. |
-| *"Playwright needs Chrome and the install needs Administrator, which is Ian's"* | ⛔ **Wrong, and it cost days.** That is *branded* Chrome. **Nothing here needs it.** Playwright and three chromium builds are already installed under `%LOCALAPPDATA%\ms-playwright`. |
+| *"Playwright needs Chrome and the install needs Administrator, which is Ian's"* | ⚠️ **True for the tool being used, and avoidable with a different one.** The Playwright **MCP server** is pinned to the `chrome` channel and exposes no channel override, so through *that* door the blocker is real. ⛔ **But a standalone script driving Playwright's own chromium sidesteps it entirely**, and those builds were already on this machine: `chromium-1208` (Apr), `1228` (Jul), `1234` (Jul) — **months before DEF-401 was filed**, confirmed by directory mtimes, not assumed. |
 | *"Neither sign-in route works — the public Firebase config is blank"* (DEF-368/DEF-369) | ⚠️ **Was true, is not now.** The `NEXT_PUBLIC_*` values are populated. What was still blank was **`FIREBASE_PROJECT_ID`** — the SERVER-side one — and `next start` runs as `NODE_ENV=production`, where `env()` hard-requires it. One blank line made `/api/health` report `configuration: invalid`. |
 
 ⭐ **The general lesson, because it is the one that keeps repeating here: each of those was a true
-observation generalised one step too far.** `next dev` failing became "the app is broken".
-`playwright install chrome` failing became "nobody can drive a browser". A blank public config in
-the past became a blank config now. **Re-measure before inheriting a blocker.**
+observation generalised one step too far.** `next dev` failing became "the app is broken". One
+pinned tool's install failing became "nobody can drive a browser". A blank public config in the
+past became a blank config now. **Re-measure before inheriting a blocker.**
+
+⚠️ **And note the shape of the middle one, because it is the subtle one and this file got it wrong
+on its first draft.** Nobody erred in filing it: the claim was **accurate about the mechanism being
+used**. What was wrong was the scope it was read at. ⛔ **"That tool cannot" is not "this cannot"**
+— and the difference is a day's work either way.
 
 ---
 
@@ -151,6 +156,7 @@ a silent omission.
 - **`/api/health` reports `revision.sha: "unknown"`** locally. `npm run write-revision` populates
   it. Harmless for a smoketest; ⛔ **in production the forty characters are the only honest answer
   to "what is deployed" (DEF-360)** — never compare anything shorter.
-- ⛔ **A freshly bootstrapped store has NO `store_attendance_config` row (DEF-405)**, so
+- ⛔ **A freshly bootstrapped store has NO `store_attendance_config` row (DEF-249)**, so
   `/settings/attendance` renders a store picker and nothing else. That is the defect, not a broken
-  screen. Specced as T-332.
+  screen. Specced as T-332. ⚠️ **This was first written here as DEF-405, which is retracted as a
+  duplicate** — cite **DEF-249**, and read **DEF-251** and **DEF-256** with it.

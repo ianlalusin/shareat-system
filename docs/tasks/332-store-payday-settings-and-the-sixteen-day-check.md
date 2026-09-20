@@ -140,9 +140,14 @@ screen an admin would use to fix it renders empty because it edits a row that do
 
 ## 6. Done when
 
-Every §9 gate, including **§9.4 in a real browser — which is now possible** (see
-`docs/tasks/187-service-charge-distribution.md` §10 and `docs/HANDOFF-TODAY.md`): a signed-in
-session can be minted locally against a throwaway database and driven headless.
+Every §9 gate, including **§9.4 in a real browser — which is now possible**: a session can be minted
+locally against a throwaway database and driven headless.
+
+⛔ **Read `docs/SMOKETEST.md` §3 before using it, and cite THAT, not this sentence.** The forge
+**bypasses sign-in on purpose**, so a smoketest through it proves things about **screens** and
+**nothing whatever about authentication**. ⚠️ **Do not cite `docs/HANDOFF-TODAY.md` for this** — an
+earlier draft of this section did, and that file still carries the pre-fix claim that nobody can
+drive a browser at all.
 
 ⛔ **Plus two specific to this task:** a freshly bootstrapped store must come up with a live config
 and a populated `/settings/attendance`, **shown on screen, not asserted**; and a store set to
