@@ -4,7 +4,6 @@ acknowledgementHistory
 activateTerminal
 addUsageLine
 adjudicateRange
-allocate
 allocationsFor
 applyCreditAction
 arrivalLag

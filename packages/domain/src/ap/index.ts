@@ -44,10 +44,12 @@ import type {
   SupplierVatStatus,
 } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
+import { money } from '@shareat/core/money';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { checkDraw } from '../money-accounts/overdraft';
 import { parseMoneyInput } from '../shared/money-input';
+import { allocateOldestFirst, type AllocationItem, type TypedAmount } from '../shared/allocate-oldest-first';
 import { createExpense, type CreateExpensePaymentInput } from '../expenses/create';
 import { approveExpense, type ApproveExpenseResult } from '../expenses/approve';
 import { voidExpense } from '../expenses/void';
@@ -933,6 +935,108 @@ export async function voidPayment(
     }
 
     return { entryId: result.reversalEntryId };
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+// -------------------------------------------------------------------------------------
+// T-330 — auto-allocation SUGGESTION.
+// -------------------------------------------------------------------------------------
+
+/**
+ * The ordering keys for one open item, read separately from `openItems` and keyed by its id.
+ * ⛔ AMENDMENT 4 (F3+F7): the allocation grain is the EXPENSE, not the supplier invoice, and two
+ * expense rows can share one invoice (`expenses.supplier_invoice_id` is NOT NULL but NOT unique,
+ * `packages/db/schema/expenses.ts:149-151`) — so all three invoice-side keys (`due_date`,
+ * `invoice_no`, and a since-dropped `created_at`) can tie across them. ⛔ `createdAt` is NOT a
+ * field here and must not be re-added: it is `defaultNow()`, identical for every row one
+ * transaction writes, so it can never break a tie `id` doesn't already break. The final,
+ * always-deciding key is `expenseId` itself (`uuidv7()` — unique and creation-ordered), which
+ * `allocateOldestFirst` uses as the item's `id`.
+ */
+export interface ApOrderingKeys {
+  readonly expenseId: string;
+  /** `supplier_invoices.due_date` — NULLABLE, handed in RAW. */
+  readonly dueDate: string | null;
+  /** `supplier_invoices.invoice_date` — NOT NULL. The pure module resolves the fallback. */
+  readonly invoiceDate: string;
+  readonly invoiceNo: string | null;
+}
+
+export interface SuggestApAllocationResult {
+  readonly allocations: ApPaymentAllocationInput[];
+  readonly unallocated: string;
+}
+
+/**
+ * Suggests an oldest-first allocation of `amount` across `open`, via the pure
+ * `allocateOldestFirst`. Never posts anything.
+ *
+ * ⭐ `tx` first and `Promise`-returning, per the TESTER's correction: ruling 3 requires an
+ * `authorize` call, which needs a `Tx` and therefore makes this async. The spec's original snippet
+ * showed neither and was wrong; every other export in this file is `(tx, actor, …)`.
+ *
+ * ⛔ WRITES NOTHING, EVER (invariant 5). It proposes; `recordPayment` commits, re-reading
+ * `openItems` inside its own transaction and refusing anything not open (`:739-759`).
+ * ⛔ `open` is PASSED IN — this function must not call `openItems` itself. A second definition of
+ * "open" fails by proposing an item Save then rejects, on a figure the operator never typed.
+ * `authorize(trx, actor, 'record_ap_payment', { storeId })` gates it — Ian's ruling 2026-09-20:
+ * the capability is the payment's own. ⚠️ It is a BACKSTOP, not the gate: after AMENDMENT 2 this
+ * function reads nothing, so the ledger has already left the database in the CALLER before this
+ * runs (AMENDMENT 4, finding F2).
+ * ⛔⛔ IT REFUSES ANY HANDED-IN ITEM WHOSE `storeId` DIFFERS FROM `storeId`. `openItems`
+ * is store-scoped by Ian's ruling (`repo/ap.ts:558-564`, 2026-08-28), and nothing else binds the
+ * caller to the store the payment posts at — an org-wide fetch would propose another store's open
+ * item and Save would throw on a figure the operator never typed.
+ */
+export async function suggestPaymentAllocation(
+  tx: Tx | null,
+  actor: Actor,
+  storeId: string,
+  amount: string,
+  open: Awaited<ReturnType<typeof apRepo.openItems>>,
+  keys: readonly ApOrderingKeys[],
+  /** ⭐ Amounts the operator ALREADY TYPED. Ian's ruling 2: fill only the EMPTY boxes — these
+   *  are skipped, the payment available is reduced by their sum, and a sum exceeding the payment
+   *  is refused. Defaults to empty, so existing call sites are unaffected. AMENDMENT 7. */
+  typed: readonly TypedAmount[] = [],
+): Promise<SuggestApAllocationResult> {
+  const run = async (trx: Tx) => {
+    await authorize(trx, actor, 'record_ap_payment', { storeId });
+
+    for (const o of open) {
+      if (o.storeId !== storeId) {
+        throw new Error(
+          `suggestPaymentAllocation: expense ${o.expenseId} belongs to store ${o.storeId}, not ` +
+            `${storeId} — refusing to propose an allocation outside the payment's own store.`,
+        );
+      }
+    }
+
+    const keyByExpenseId = new Map(keys.map((k) => [k.expenseId, k]));
+    const items: AllocationItem[] = open.map((o) => {
+      const key = keyByExpenseId.get(o.expenseId);
+      if (!key) {
+        throw new Error(
+          `suggestPaymentAllocation: expense ${o.expenseId} is open but has no ordering key — ` +
+            'cannot sort it safely.',
+        );
+      }
+      return {
+        id: o.expenseId,
+        dueDate: key.dueDate,
+        documentDate: key.invoiceDate,
+        tieBreak: key.invoiceNo,
+        outstanding: money(o.outstanding),
+      };
+    });
+
+    const plan = allocateOldestFirst(items, parseMoneyInput(amount, 'suggestPaymentAllocation: the amount'), typed);
+    return {
+      allocations: plan.allocations.map((a) => ({ expenseId: a.id, amountApplied: a.amount })),
+      unallocated: plan.remainder,
+    };
   };
   if (tx) return run(tx);
   return transaction(run);

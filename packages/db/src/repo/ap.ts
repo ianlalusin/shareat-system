@@ -608,6 +608,54 @@ export async function openItems(
   }));
 }
 
+/** T-330's ordering-key shape, at the expense grain (AMENDMENT 4, F3+F7 — the sort's third key is
+ *  `expenses.id`, not anything on `supplier_invoices`, because two expenses can share one invoice). */
+export interface ApOrderingKeys {
+  expenseId: string;
+  /** `supplier_invoices.due_date` — NULLABLE, handed back RAW. */
+  dueDate: string | null;
+  /** `supplier_invoices.invoice_date` — NOT NULL, the fallback `allocateOldestFirst` resolves. */
+  invoiceDate: string;
+  invoiceNo: string | null;
+}
+
+/**
+ * T-330 §1 / AMENDMENT 1 — the narrow ordering-key lookup, keyed by the ids `openItems` already
+ * returned, used ONLY to sort. ⛔ Never a second definition of "open": the caller passes
+ * `openItems`'s own expense ids in, never re-derives them (a divergent "open" would propose an
+ * item Save then rejects, on a figure the operator never typed).
+ *
+ * ⭐ Q4, ruled: filtered by `org_id` here, in the real repo function — even though the ids already
+ * came from an org-scoped `openItems` call — because bible §15.11 says no layer may be the only
+ * one holding a risk down.
+ */
+export async function orderingKeysForExpenses(
+  tx: Tx,
+  orgId: string,
+  expenseIds: readonly string[],
+): Promise<ApOrderingKeys[]> {
+  if (expenseIds.length === 0) return [];
+  // ⛔ Each id its OWN bound parameter (`sql.join`), same discipline as `lockExpensesForAllocation`
+  // above: a single bound array parameter sends `malformed array literal` against this driver.
+  const ids = sql.join(
+    expenseIds.map((id) => sql`${id}`),
+    sql`, `,
+  );
+  const rows = (await tx.execute(sql`
+    select e.id as expense_id, si.due_date::text as due_date,
+           si.invoice_date::text as invoice_date, si.invoice_no
+    from expenses e
+    join supplier_invoices si on si.id = e.supplier_invoice_id
+    where e.org_id = ${orgId} and e.id in (${ids})
+  `)) as unknown as Record<string, string | null>[];
+  return rows.map((r) => ({
+    expenseId: String(r.expense_id ?? (r as Record<string, string>).expenseId),
+    dueDate: r.due_date ? String(r.due_date) : null,
+    invoiceDate: String(r.invoice_date ?? (r as Record<string, string>).invoiceDate),
+    invoiceNo: r.invoice_no ? String(r.invoice_no) : null,
+  }));
+}
+
 export interface AgingBucket {
   supplierId: string;
   storeId: string;

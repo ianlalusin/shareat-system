@@ -107,6 +107,7 @@ export type {
   InvoiceCapacity,
   ApPosition,
   OpenItem,
+  ApOrderingKeys,
   AgingBucket,
   ApPaymentRow,
   ApPaymentAllocationRow,

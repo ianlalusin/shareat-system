@@ -1,14 +1,15 @@
-import { PhotoInput } from '@/components/PhotoInput';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ACTION_LINK } from '@/components/action-link';
 import { requireSession } from '../../../lib/session';
 import {
   recordCollectionAction,
+  autoAllocateCollectionAction,
   voidChargeAction,
   voidCollectionAction,
   writeOffChargeAction,
 } from '../actions';
+import { AutoAllocateCollectionForm } from './AutoAllocateCollectionForm';
 import {
   TREATMENT_LABEL,
   TREATMENT_TONE,
@@ -187,107 +188,22 @@ export default async function CustomerDetailPage({
           <h2 className="font-medium">Record a payment</h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             ⛔ Name the charges this settles (bible §16.10 &mdash; a collection must never float
-            unallocated). <strong>Total received is GROSS</strong>: the receivable is relieved by
-            it, and the account receives it minus the fee. Paying more than allocated becomes real
-            store credit at 2140, which the next payment can draw on.
+            unallocated), or press &ldquo;Auto-allocate&rdquo; to fill the empty boxes
+            most-overdue-first (T-330) and edit from there. <strong>Total received is GROSS</strong>:
+            the receivable is relieved by it, and the account receives it minus the fee. Paying
+            more than allocated becomes real store credit at 2140, which the next payment can draw
+            on.
           </p>
-          <form action={recordCollectionAction} className="space-y-3">
-            <input type="hidden" name="customerId" value={customerId} />
-            <input type="hidden" name="storeId" value={storeId} />
-
-            <div className="space-y-1">
-              {openItems.map((i) => (
-                <label key={i.chargeId} className="flex flex-wrap items-center gap-3 text-sm">
-                  <input type="checkbox" name="allocateChargeId" value={i.chargeId} defaultChecked />
-                  <span className="min-w-0 flex-1">
-                    {i.referenceNo ?? i.chargeDate} &mdash; owed {peso(i.outstanding)}
-                    {i.dueDate && (
-                      <span
-                        className={
-                          i.dueDate < now
-                            ? 'ml-2 text-xs font-medium text-red-700 dark:text-red-400'
-                            : 'ml-2 text-xs text-neutral-500'
-                        }
-                      >
-                        due {i.dueDate}
-                        {i.dueDate < now && ' · overdue'}
-                      </span>
-                    )}
-                  </span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    name={`allocateAmount_${i.chargeId}`}
-                    defaultValue={i.outstanding}
-                    aria-label={`Amount applied to ${i.referenceNo ?? i.chargeDate}`}
-                    className="w-28 rounded border border-neutral-300 bg-white px-2 py-1 text-right dark:border-neutral-700 dark:bg-neutral-950"
-                  />
-                </label>
-              ))}
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Field label="Total received (gross)">
-                <input name="amount" required inputMode="decimal" placeholder="0.00" className={INPUT} />
-              </Field>
-              <Field
-                label="Platform fee"
-                hint="⛔ Booked here (6400) and NOWHERE else. Never also as an expense."
-              >
-                <input name="platformFee" inputMode="decimal" placeholder="0.00" className={INPUT} />
-              </Field>
-              <Field label="Date">
-                <input type="date" name="collectionDate" required defaultValue={now} className={INPUT} />
-              </Field>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Into account">
-                <select name="moneyAccountId" required defaultValue="" className={INPUT}>
-                  <option value="" disabled>
-                    Choose…
-                  </option>
-                  {wallets.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.name} ({w.custodian}) — {peso(w.balance)}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Reference no." hint="Optional.">
-                <input name="referenceNo" className={INPUT} />
-              </Field>
-            </div>
-
-            {/* ⭐ Offered only when there is credit to spend. A field that is always zero teaches
-                people to ignore it. */}
-            {Number(credit) > 0 && (
-              <Field
-                label="Store credit to apply"
-                hint={`${peso(credit)} held at 2140. Spending it draws the liability down instead of taking cash.`}
-              >
-                <input name="creditApplied" inputMode="decimal" placeholder="0.00" className={INPUT} />
-              </Field>
-            )}
-
-            {/* ⚠️ Required by the domain when the account is not cash and the payment is not fully
-                credit-funded — v1's real rule. Uploaded, never typed: the old shape took a URL text
-                box, so `x` was a valid proof. */}
-            <Field
-              label="Proof of payment"
-              hint="Required for an online or e-wallet account: the deposit slip or transfer screenshot."
-            >
-              {/* ⭐ T-296 — compressed to under 1 MB in the browser; the server enforces it. */}
-              <PhotoInput name="receiptPhoto" accept="image/*" className="text-sm" />
-            </Field>
-
-            <button
-              type="submit"
-              className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
-            >
-              Record payment
-            </button>
-          </form>
+          <AutoAllocateCollectionForm
+            postAction={recordCollectionAction}
+            previewAction={autoAllocateCollectionAction}
+            customerId={customerId}
+            storeId={storeId}
+            items={openItems}
+            wallets={wallets}
+            today={now}
+            credit={credit}
+          />
         </section>
       ) : (
         <p className="rounded-lg border border-neutral-200 p-4 text-sm text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">

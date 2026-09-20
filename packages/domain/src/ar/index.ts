@@ -10,9 +10,11 @@
  */
 import { arRepo, customersRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
 import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
+import { money } from '@shareat/core/money';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { parseMoneyInput } from '../shared/money-input';
+import { allocateOldestFirst, type AllocationItem, type TypedAmount } from '../shared/allocate-oldest-first';
 
 export const AR_CONTROL_CODE = arRepo.AR_CONTROL_CODE;
 export const STORE_CREDIT_CODE = arRepo.STORE_CREDIT_CODE;
@@ -544,6 +546,95 @@ export async function writeOffCharge(
       writtenOffBy: actor.personId,
     });
     return { writeOffId, entryId: result.entryId };
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+// -------------------------------------------------------------------------------------
+// T-330 — auto-allocation SUGGESTION, the AR mirror.
+// -------------------------------------------------------------------------------------
+
+/**
+ * Ordering keys for one open AR charge, keyed by its id.
+ * ⭐ Unlike AP, AR needs no grain correction: the allocation grain IS `ar_charges.id`. ⛔ AMENDMENT
+ * 4 found AR shares AP's `created_at` defect rather than being exempt from it — `ar_charges.
+ * created_at` is also `defaultNow()` (`packages/db/schema/ar.ts:64`), identical for every row one
+ * transaction writes, so it CANNOT be what makes the sort total and must not be added as a key.
+ * `chargeId` (`uuidv7()` — unique and creation-ordered) is the sort's real, always-deciding final
+ * key, which `allocateOldestFirst` uses as the item's `id`. `referenceNo` is AR's equivalent of
+ * Ian's invoice-number tie-break — a reference, not an invoice number, and nullable.
+ */
+export interface ArOrderingKeys {
+  readonly chargeId: string;
+  /** `ar_charges.due_date` — NULLABLE, handed in RAW. */
+  readonly dueDate: string | null;
+  /** `ar_charges.charge_date` — NOT NULL. The pure module resolves the fallback. */
+  readonly chargeDate: string;
+  readonly referenceNo: string | null;
+}
+
+export interface SuggestArAllocationResult {
+  readonly allocations: ArAllocationInput[];
+  readonly surplus: string;
+}
+
+/**
+ * Suggests an oldest-first allocation of `amount` across `open`, via the pure
+ * `allocateOldestFirst`. Never posts anything.
+ *
+ * ⛔ WRITES NOTHING (invariant 5); `recordCollection` commits and already books a genuine
+ * overpayment as `surplus` (DEF-394-sanctioned, `:306`). ⛔ `open` is PASSED IN, never queried
+ * here. Gated by `authorize(...)` on `record_ar_collection` — `AuthorizationError` is already
+ * imported in this file, and the TESTER's case 5 asserts on that exact class.
+ */
+export async function suggestCollectionAllocation(
+  tx: Tx | null,
+  actor: Actor,
+  storeId: string,
+  amount: string,
+  open: Awaited<ReturnType<typeof arRepo.openItems>>,
+  keys: readonly ArOrderingKeys[],
+  /** ⭐ Amounts the operator ALREADY TYPED. Ian's ruling 2: fill only the EMPTY boxes — these
+   *  are skipped, the payment available is reduced by their sum, and a sum exceeding the payment
+   *  is refused. Defaults to empty, so existing call sites are unaffected. AMENDMENT 7. */
+  typed: readonly TypedAmount[] = [],
+): Promise<SuggestArAllocationResult> {
+  const run = async (trx: Tx) => {
+    await authorize(trx, actor, 'record_ar_collection', { storeId });
+
+    for (const o of open) {
+      if (o.storeId !== storeId) {
+        throw new Error(
+          `suggestCollectionAllocation: charge ${o.chargeId} belongs to store ${o.storeId}, not ` +
+            `${storeId} — refusing to propose an allocation outside the collection's own store.`,
+        );
+      }
+    }
+
+    const keyByChargeId = new Map(keys.map((k) => [k.chargeId, k]));
+    const items: AllocationItem[] = open.map((o) => {
+      const key = keyByChargeId.get(o.chargeId);
+      if (!key) {
+        throw new Error(
+          `suggestCollectionAllocation: charge ${o.chargeId} is open but has no ordering key — ` +
+            'cannot sort it safely.',
+        );
+      }
+      return {
+        id: o.chargeId,
+        dueDate: key.dueDate,
+        documentDate: key.chargeDate,
+        tieBreak: key.referenceNo,
+        outstanding: money(o.outstanding),
+      };
+    });
+
+    const plan = allocateOldestFirst(items, parseMoneyInput(amount, 'suggestCollectionAllocation: the amount'), typed);
+    return {
+      allocations: plan.allocations.map((a) => ({ chargeId: a.id, amountApplied: a.amount })),
+      surplus: plan.remainder,
+    };
   };
   if (tx) return run(tx);
   return transaction(run);

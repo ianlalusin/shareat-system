@@ -6,6 +6,8 @@
  * ⛔ The gates live in the services, not here. A gate in a server action protects one caller.
  */
 import { redirect } from 'next/navigation';
+import { arRepo } from '@shareat/db';
+import { parseMoneyInput } from '@shareat/domain/money-input';
 import {
   createCustomer,
   createPriceList,
@@ -16,6 +18,7 @@ import {
   voidCharge,
   voidCollection,
   writeOffCharge,
+  suggestCollectionAllocation,
 } from '@shareat/domain';
 import type { CustomerGroup } from '@shareat/db/schema';
 import { withOrgPrincipal } from './lib';
@@ -98,6 +101,58 @@ export async function reconcileCustomerAction(formData: FormData): Promise<void>
 /** Back to the customer, keeping the store the user was working in. */
 function backToCustomer(customerId: string, storeId: string, params: Record<string, string>): never {
   back(`/customers/${customerId}`, storeId ? { store: storeId, ...params } : params);
+}
+
+export interface AutoAllocateCollectionRequest {
+  customerId: string;
+  storeId: string;
+  amount: string;
+  /** Boxes the operator has already typed into, by hand — never re-filled (Ian's ruling 2). */
+  typed: { chargeId: string; amount: string }[];
+}
+
+export type AutoAllocateCollectionResponse =
+  | { ok: true; allocations: { chargeId: string; amountApplied: string }[]; surplus: string }
+  | { ok: false; error: string };
+
+/**
+ * T-330 — "Auto-allocate (oldest first)" for a customer collection. Mirrors AP's
+ * `autoAllocatePaymentAction` exactly: called imperatively from the form, computes nothing
+ * itself — `suggestCollectionAllocation` is read-only (invariant 5) — and never posts; the
+ * operator still presses "Record collection" (§2). ⭐ AR's `openItems` already carries `dueDate`
+ * and `referenceNo` (AMENDMENT 4 — no separate ordering-key lookup exists or is needed on this
+ * side), so `keys` is built directly from `open`, never re-queried.
+ */
+export async function autoAllocateCollectionAction(
+  req: AutoAllocateCollectionRequest,
+): Promise<AutoAllocateCollectionResponse> {
+  const actor = await requireActor();
+  try {
+    const result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      const open = await arRepo.openItems(tx, actor.orgId, req.customerId, req.storeId);
+      const keys = open.map((o) => ({
+        chargeId: o.chargeId,
+        dueDate: o.dueDate,
+        chargeDate: o.chargeDate,
+        referenceNo: o.referenceNo,
+      }));
+      return suggestCollectionAllocation(
+        tx,
+        actor,
+        req.storeId,
+        req.amount,
+        open,
+        keys,
+        req.typed.map((t) => ({
+          id: t.chargeId,
+          amount: parseMoneyInput(t.amount, `suggestCollectionAllocation: the amount typed for charge ${t.chargeId}`),
+        })),
+      );
+    });
+    return { ok: true, allocations: result.allocations, surplus: result.surplus };
+  } catch (err) {
+    return { ok: false, error: errorMessage(err) };
+  }
 }
 
 export async function recordCollectionAction(formData: FormData): Promise<void> {

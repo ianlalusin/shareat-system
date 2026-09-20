@@ -1,11 +1,12 @@
 import { notFound } from 'next/navigation';
 import { peso } from '../../../../lib/format';
 import { requireSession } from '../../../../lib/session';
-import { editSupplierAction, recordPaymentAction } from '../../actions';
+import { editSupplierAction, recordPaymentAction, autoAllocatePaymentAction } from '../../actions';
 import { getSupplier, getPosition, listOpenItems, listInvoices, moneyAccountsFor, storesWithOpenItems, today } from '../../lib';
 import { SUPPLIER_CLASSIFICATIONS, SUPPLIER_STATUSES, SUPPLIER_VAT_STATUSES } from '@shareat/db';
 import { CLASSIFICATION_LABEL, VAT_STATUS_LABEL } from '../../lib';
 import { Page } from '@/components/shell/Page';
+import { AutoAllocatePaymentForm } from './AutoAllocatePaymentForm';
 
 export const metadata = { title: 'Supplier — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -231,48 +232,19 @@ export default async function SupplierDetailPage({
           <h2 className="font-medium">Record a payment</h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             Name the open items this settles (bible §16.10) — check the ones this payment covers
-            and how much of each. Paying more than allocated routes the rest to 1240 (advance).
+            and how much of each, or press &ldquo;Auto-allocate&rdquo; to fill the empty boxes
+            most-overdue-first (T-330) and edit from there. Paying more than allocated routes the
+            rest to 1240 (advance).
           </p>
-          <form action={recordPaymentAction} className="space-y-3">
-            <input type="hidden" name="supplierId" value={id} />
-            <input type="hidden" name="storeId" value={storeId} />
-            <div className="space-y-1">
-              {openItems.map((i) => (
-                <label key={i.expenseId} className="flex items-center gap-3 text-sm">
-                  <input type="checkbox" name="allocateExpenseId" value={i.expenseId} defaultChecked />
-                  <span className="flex-1">{i.particulars} — owed {peso(i.outstanding)}</span>
-                  <input
-                    type="text"
-                    name={`allocateAmount_${i.expenseId}`}
-                    defaultValue={i.outstanding}
-                    className="w-28 rounded border border-neutral-300 bg-white px-2 py-1 text-right dark:border-neutral-700 dark:bg-neutral-950"
-                  />
-                </label>
-              ))}
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <Field label="Total handed over">
-                <input name="amount" required placeholder="0.00" className={INPUT} />
-              </Field>
-              <Field label="From account">
-                <select name="moneyAccountId" required defaultValue="" className={INPUT}>
-                  <option value="" disabled>Choose…</option>
-                  {wallets.map((w) => (
-                    <option key={w.id} value={w.id}>{w.name} ({w.custodian}) — {peso(w.balance)}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Date">
-                <input type="date" name="businessDate" required defaultValue={today()} className={INPUT} />
-              </Field>
-            </div>
-            <Field label="Reference no." hint="Optional.">
-              <input name="referenceNo" className={INPUT} />
-            </Field>
-            <button type="submit" className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900">
-              Record payment
-            </button>
-          </form>
+          <AutoAllocatePaymentForm
+            postAction={recordPaymentAction}
+            previewAction={autoAllocatePaymentAction}
+            supplierId={id}
+            storeId={storeId}
+            items={openItems}
+            wallets={wallets}
+            today={today()}
+          />
         </section>
       )}
     </Page>

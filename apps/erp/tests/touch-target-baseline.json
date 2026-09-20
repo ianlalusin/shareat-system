@@ -313,7 +313,9 @@
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
     ],
     "app/ap/suppliers/[id]/page.tsx": [
-      "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)",
+      "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
+    ],
+    "app/ap/suppliers/[id]/AutoAllocatePaymentForm.tsx": [
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
     ],
     "app/attendance/page.tsx": [
@@ -341,7 +343,7 @@
     "app/customers/price-lists/page.tsx": [
       "ancestry truncated — no font size resolvable"
     ],
-    "app/customers/[customerId]/page.tsx": [
+    "app/customers/[customerId]/AutoAllocateCollectionForm.tsx": [
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
     ],
     "app/expenses/recurring/page.tsx": [

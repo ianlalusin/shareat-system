@@ -6,6 +6,8 @@
  * ⛔ The gates live in the services, not here — same discipline as liabilities/actions.ts.
  */
 import { redirect } from 'next/navigation';
+import { apRepo } from '@shareat/db';
+import { parseMoneyInput } from '@shareat/domain/money-input';
 import {
   createSupplier,
   editSupplier,
@@ -17,6 +19,7 @@ import {
   voidInvoice,
   recordPayment,
   voidPayment,
+  suggestPaymentAllocation,
 } from '@shareat/domain';
 import { withOrgPrincipal, INVOICE_LINE_ROWS } from './lib';
 import { requireActor } from '../../lib/session';
@@ -228,6 +231,49 @@ export async function voidInvoiceAction(formData: FormData): Promise<void> {
     back(`/ap/invoices/${id}`, { error: errorMessage(err) });
   }
   back(`/ap/invoices/${id}`, { ok: 'Voided — every linked expense was reversed with it.' });
+}
+
+export interface AutoAllocateRequest {
+  supplierId: string;
+  storeId: string;
+  amount: string;
+  /** Boxes the operator has already typed into, by hand — never re-filled (Ian's ruling 2). */
+  typed: { expenseId: string; amount: string }[];
+}
+
+export type AutoAllocateResponse =
+  | { ok: true; allocations: { expenseId: string; amountApplied: string }[]; unallocated: string }
+  | { ok: false; error: string };
+
+/**
+ * T-330 — "Auto-allocate (oldest first)" for a supplier payment. Mirrors
+ * `previewSettlementAction`'s shape: called imperatively from the form so the proposal is on
+ * screen before "Record payment" is pressed, and it computes nothing itself —
+ * `suggestPaymentAllocation` is read-only (invariant 5); `recordPayment` is the one posting path.
+ */
+export async function autoAllocatePaymentAction(req: AutoAllocateRequest): Promise<AutoAllocateResponse> {
+  const actor = await requireActor();
+  try {
+    const result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      const open = await apRepo.openItems(tx, actor.orgId, req.supplierId, req.storeId);
+      const keys = await apRepo.orderingKeysForExpenses(tx, actor.orgId, open.map((o) => o.expenseId));
+      return suggestPaymentAllocation(
+        tx,
+        actor,
+        req.storeId,
+        req.amount,
+        open,
+        keys,
+        req.typed.map((t) => ({
+          id: t.expenseId,
+          amount: parseMoneyInput(t.amount, `suggestPaymentAllocation: the amount typed for expense ${t.expenseId}`),
+        })),
+      );
+    });
+    return { ok: true, allocations: result.allocations, unallocated: result.unallocated };
+  } catch (err) {
+    return { ok: false, error: errorMessage(err) };
+  }
 }
 
 export async function recordPaymentAction(formData: FormData): Promise<void> {
