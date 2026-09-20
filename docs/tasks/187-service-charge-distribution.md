@@ -85,3 +85,145 @@ Every §9 gate. ⛔ **Plus two specific to this task:** the four existing `servi
 cases must be shown going **QUIET** after a distribution, and Q4's answer must be reflected in the
 detector's grouping — **or a recorded decision saying why it stays org-wide.**
 ⚠️ **§9.4 is currently UNMEETABLE** — DEF-401: `next dev` returns 500 on every route on this machine.
+
+---
+
+# ⭐ ADDENDUM 2026-09-20 (orchestrator `system32-df`) — the executable half
+
+> The sections above RULE the task. They do not SPEC it: there was no file scope, and RULES §3.3
+> requires one before any lane may touch anything. Everything below is the buildable half.
+> ⛔ Nothing here re-opens a §2 ruling. Where this addendum and §2 disagree, §2 wins.
+
+## 6. Ian's cadence ruling — the compliance caution of §2 is CLOSED
+
+Ian, 2026-09-20, typed directly into the orchestrator terminal (not relayed):
+*"our set up follows payday every 15 days"*.
+
+**Fifteen days is inside RA 11360's sixteen-day ceiling, so the caution §2 raised is answered and
+this task is no longer carrying it.** ⭐ **What §2 asked for was a measurement and this is a
+RULING** — Ian has stated the business's actual cadence rather than us inferring it from T-189's
+per-store cutoffs. It is authority, and the "verify every store's configured cadence before calling
+T-187 done" instruction in §2 and in `docs/HANDOFF-TODAY.md` is **discharged by it**.
+
+⚠️ **One thing the ruling does NOT do, and it is the reason T-332 exists.** Fifteen days is the
+*policy*. Nothing in the system *records* it, so nothing can detect a store that drifts off it — a
+month containing a 31st is still the case that stretches a semi-monthly gap, and today the ERP
+would not notice. Ian ordered the remedy in the same breath: *"create a doc on store settings where
+admin define the date of paydays"*. That is **T-332**, specced separately, and it is what turns this
+from a policy nobody can check into a self-reporting one. **T-187 does not depend on it** — this
+task records the payout date it is given; T-332 is what later lets a detector compare that date
+against a configured cadence.
+
+## 7. Contract
+
+**`distributeServiceCharge(tx: Tx | null, actor: Actor, input)`**, new, in the domain layer.
+
+> ⛔ **AMENDMENT 1, 2026-09-20 — this signature was WRONG when first written and the TESTER caught
+> it before a line of source existed.** The spec said `(tx, orgId, input)`. Every comparable
+> money-moving function in this repo takes an `Actor`: `payLiability(tx, actor, input)`,
+> `createRemittance(tx, actor, input)`, both `tx: Tx | null` with the run-or-open-transaction
+> pattern. ⭐ **A bare `orgId` gives no `personId` for who posted it and nothing to authorize
+> against** — it would have produced a money entry attributable to nobody, in the one module whose
+> subject is a statutory liability to staff. The tester reported it as a spec defect rather than
+> building around it (RULES §3.4a), which is exactly the behaviour that rule exists to produce.
+> **Its choice is ruled correct and is now the contract.**
+
+> ⭐ **AMENDMENT 2, same pass — `postEntry` REQUIRES an `idempotencyKey` and the spec never said
+> so.** `packages/domain/src/ledger/post-entry.ts:117` throws without one. Found while verifying
+> amendment 1. **Derive it from the facts that make this payout unique — the store and the payday
+> — never from a timestamp or a random value**, or a double-submitted payday posts twice and the
+> float is discharged money that never left the drawer.
+
+| Input | Meaning |
+|---|---|
+| `storeId` | the ONE store being paid out. Required. There is no org-wide form. |
+| `moneyAccountId` | the account the cash leaves. Must belong to `storeId`. |
+| `amount` | `Money`. The aggregate handed to staff. |
+| `paidOn` | the payday date carried onto the entry. |
+
+**Posts exactly one journal entry, two lines, both carrying `storeId`:**
+
+```
+Dr  2160  Service charge float — held for staff   <amount>   store_id = storeId
+Cr  <moneyAccount.glAccountCode>                  <amount>   store_id = storeId
+```
+
+⛔ **`journal_entries` has NO `store_id` column and that is deliberate** (`packages/db/schema/journal.ts`
+header). Store identity lives on **`journal_lines.store_id`**. "One aggregate entry per store" is
+therefore expressed by putting the same `storeId` on both LINES, not by a column on the entry.
+**A builder who assumes an entry-level store column will produce an entry the per-store detector
+cannot see** — which is the exact failure mode this task exists to remove.
+
+### Invariants
+
+1. ⛔ **The cap is that store's OWN 2160 balance, derived from the ledger, never a stored column.**
+   Sum credits minus debits on `2160` restricted to `journal_lines.store_id = storeId`, over
+   non-draft entries. A store may not spend another store's float (§2 Q4).
+2. ⛔ **Exceeding the cap REFUSES. It does not clamp** (§2 Q5, *"pay only whats available never
+   negative"*). Throw, naming the store and the shortfall. **Not a Result type** — the domain layer
+   of this repo throws, and `payLiability` is the precedent.
+3. ⛔ **Refuse BEFORE any write**, `createRemittance`'s discipline (DEF-358 / T-319). The cap check
+   is computed and thrown on strictly above the first insert, not interleaved with it.
+4. **The money account must belong to the paying store** — `payLiability` already makes this exact
+   check against its liability's store; mirror it.
+5. **No per-employee, eligibility or rounding logic in any form** (§2 Q1-Q3, §4). A reviewer seeing
+   any of the three should treat it as out-of-scope code, not as a bonus.
+
+### The regroup, in the same task
+
+`serviceChargeFloatAgeing` (`packages/db/src/repo/findings.ts`) groups by `je.entry_date` **only**
+and emits `storeId: null`. Per §2 Q4 that is now wrong as built: a payout at one store would tick
+off another store's older accrual.
+
+⭐ **Do not invent the shape — `grniNotAtRest` in the SAME FILE already is it.** It selects
+`jl.store_id`, joins `stores`, groups by `(store_id, name, entry_date)`, buckets into a
+`Map<storeId, rows>`, runs an independent FIFO walk per store, and emits one finding per store with
+`storeId` set. Mirror it.
+
+## 8. File scope — disjoint by construction
+
+**BUILDER (`webapps-4d`) — source only. ⛔ May not edit, weaken, skip or delete a single test file.**
+
+| Path | New/edit |
+|---|---|
+| `packages/domain/src/service-charge/index.ts` | **new** — `distributeServiceCharge`, shaped like `payLiability`, refusing like `createRemittance` |
+| `packages/db/src/repo/findings.ts` | **edit** — `serviceChargeFloatAgeing` only, regrouped per store, mirroring `grniNotAtRest` |
+| `packages/db/src/repo/service-charge.ts` | **new, only if needed** — the per-store 2160 balance query |
+
+**TESTER (`webapps-d1`) — test paths only. ⛔ May not edit source.**
+
+| Path | New/edit |
+|---|---|
+| `packages/domain/tests/integration/service-charge-distribution.test.ts` | **new** — the posting contract and every refusal in §7 |
+| `packages/domain/tests/integration/findings.test.ts` | **edit** — the four existing cases go per-store, plus the two-store case that proves the regroup |
+
+**ORCHESTRATOR pre-wires and owns — no lane touches these:** `packages/domain/src/index.ts`
+(barrel), `apps/erp/src/components/nav.tsx` and any second nav registry, `docs/ROADMAP.html`, the
+registers, this spec's status line.
+
+⛔ **THE ONE COUPLING, AND IT IS THE ORCHESTRATOR'S TO HOLD.** The builder's regroup of
+`findings.ts` turns the tester's four existing cases in `findings.test.ts` red until they are
+updated. **Those two land in ONE commit.** Committing them separately makes `main` red in between,
+which is DEF-389's shape.
+
+## 9. Slices
+
+| Slice | Contents | Lane order |
+|---|---|---|
+| **1** | `distributeServiceCharge` + the per-store regroup + both test files | tester RED → builder GREEN → auditor → gates → one commit |
+| **2** | the operator screen, mirroring `apps/erp/src/app/liabilities/`'s three-file shape | same, after slice 1 is committed |
+
+## 10. The §9.4 position — CHANGED 2026-09-20, and better than §5 says
+
+§5 says *"§9.4 is currently UNMEETABLE"*. ⭐ **That is no longer true, and two of its three
+premises were wrong.** Measured by the orchestrator at cold start:
+
+- `/api/health` reported `configuration: invalid` for one reason: **`FIREBASE_PROJECT_ID` was blank
+  in `.env.local`** while `NEXT_PUBLIC_FIREBASE_PROJECT_ID` beside it was filled, and `.env.example`
+  requires the two to be equal. Set to match; health is now `ok` with `database: reachable`.
+- ⛔ **"Playwright needs Chrome and the install needs Administrator" is wrong.** That is *branded*
+  Chrome and nothing here needs it. Playwright and three chromium builds are already installed.
+  A headless chromium loaded `/sign-in` at 200 with the correct title and a screenshot was taken.
+- **What is genuinely missing is a signed-in session.** The PIN form does not render against
+  `shareat_dev`, and `shareat_test_setup` — the seeded database every earlier smoketest signed into
+  — has been deleted. Rebuilding it is this cycle's separate slice and unblocks every later task.
