@@ -104,6 +104,10 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       { href: '/prepaid', label: 'Prepaid' },
       { href: '/fixed-assets', label: 'Fixed assets' },
       { href: '/liabilities', label: 'Liabilities' },
+      // T-187 — the service-charge float's payout. Sits beside Liabilities because that is what it
+      // is: 2160 is a liability to staff under RA 11360, and this is the only path that discharges
+      // it. Same `view_financial_reports` gate as its neighbours.
+      { href: '/service-charge', label: 'Service charge' },
       { href: '/owners', label: 'Owners' },
     ],
   },

@@ -902,6 +902,33 @@ const takings = (f: Fixture, on: string, amount: string, key: string) =>
 const serviceCharge = (f: Fixture, on: string, amount: string, key: string) =>
   postOn(f, on, [{ code: '1110', debit: amount }, { code: '2160', credit: amount }], key);
 
+/** T-187 §3 — a second store in the SAME org, for the per-store regroup case below. */
+async function addStore(orgId: string, hint: string) {
+  const [store] = await sql<{ id: string }[]>`
+    insert into stores (org_id, code, name) values (${orgId}, ${uid(hint)}, ${`Store ${hint}`}) returning id`;
+  return { id: store!.id };
+}
+
+/** Same shape as `serviceCharge`, but posted at an EXPLICIT store rather than the fixture's own —
+ *  needed once a single org holds more than one store. */
+async function serviceChargeAt(f: Fixture, storeId: string, on: string, amount: string, key: string) {
+  await asOrg(f.orgId, (tx) =>
+    postEntry(tx, {
+      orgId: f.orgId,
+      entryDate: on,
+      sourceType: 'manual_journal',
+      sourceId: key,
+      idempotencyKey: key,
+      memo: 'fixture',
+      postedBy: f.personId,
+      lines: [
+        { accountCode: '1110', storeId, debit: amount },
+        { accountCode: '2160', storeId, credit: amount },
+      ],
+    }),
+  );
+}
+
 const today = () => new Date().toISOString().slice(0, 10);
 const daysAgo = (n: number) =>
   new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
@@ -1041,7 +1068,7 @@ describe('T-152 — DEF-082, the service-charge float nothing can discharge', ()
     expect(await kinds(f)).not.toContain('serviceChargeFloatAgeing');
   });
 
-  it('⛔ fires once an accrual passes sixteen days, and says nothing can pay it', async () => {
+  it('⛔ fires once an accrual passes sixteen days, and says nothing can pay it — PER STORE', async () => {
     const f = await fixture('sc-aged');
     await openRecentPeriod(f);
     await serviceCharge(f, daysAgo(40), '300.00', uid('k'));
@@ -1051,6 +1078,12 @@ describe('T-152 — DEF-082, the service-charge float nothing can discharge', ()
     expect(finding!.detail).toMatch(/DEF-082/);
     // ⚠️ Soft on purpose: `hard` would block EVERY close forever, since nothing can discharge it.
     expect(finding!.severity).toBe('soft');
+    // ⭐ T-187 §2 Q4 / §3 — ruled PER STORE, so the finding must carry ITS store, mirroring
+    // `grniNotAtRest`'s shape. ⛔ Today's code groups by `entry_date` only and emits `storeId:
+    // null` org-wide — this is a real assertion failure on the shape the regroup must produce,
+    // not an import error: `serviceChargeFloatAgeing` already exists and already runs.
+    expect(finding!.storeId).toBe(f.storeId);
+    expect(finding!.key).toBe(`serviceChargeFloatAgeing:${f.storeId}`);
     const readiness = await asOrg(f.orgId, (tx) => closeReadiness(tx, f.orgId, PERIOD));
     expect(readiness.blocking.map((b) => b.kind)).not.toContain('serviceChargeFloatAgeing');
   });
@@ -1061,7 +1094,9 @@ describe('T-152 — DEF-082, the service-charge float nothing can discharge', ()
 
     await serviceCharge(f, daysAgo(40), '300.00', uid('sc-old'));
     await serviceCharge(f, daysAgo(1), '100.00', uid('sc-new'));
-    expect(await kinds(f)).toContain('serviceChargeFloatAgeing');
+    const midway = (await feed(f)).findings.find((x) => x.kind === 'serviceChargeFloatAgeing');
+    expect(midway).toBeDefined();
+    expect(midway!.storeId).toBe(f.storeId); // per-store, same as sc-aged above
 
     // Pay out exactly the OLD accrual. ₱100 of float remains, but it is one day old.
     await postOn(
@@ -1073,6 +1108,103 @@ describe('T-152 — DEF-082, the service-charge float nothing can discharge', ()
 
     // ⭐ The alarm is about the AGE of what is un-cleared, not the balance. A non-empty float that
     // is all recent is exactly the healthy state a working distribution produces.
+    expect(await kinds(f)).not.toContain('serviceChargeFloatAgeing');
+  });
+
+  // ⚠️ §3's reported gap: the four cases above only ever used day-3 and day-40, so the actual
+  // statutory cutoff — day-16 vs day-17 — has never been exercised. `SERVICE_CHARGE_MAX_DAYS`
+  // gates on `ageDays <= 16`, so sixteen must stay silent and seventeen must fire.
+  //
+  // ⚠️ Deliberately NOT `daysAgo()` (defined above): that helper subtracts from `Date.now()` in
+  // UTC, but the detector's age comes from `MANILA_TODAY` (Postgres, Asia/Manila). Manila is
+  // UTC+8, so whenever this suite runs between 16:00–23:59 UTC, Manila has already rolled over to
+  // the next calendar date and a UTC-computed "sixteen days ago" would actually land on Manila's
+  // seventeen — turning this exact boundary test flaky at exactly the boundary it exists to
+  // prove. Shifting to Manila's wall-clock before reading the date removes that skew — the same
+  // technique `manilaOffset` uses further down this file for the T-199 block, reproduced locally
+  // here since that one is scoped inside its own `describe` and declared after this point.
+  const manilaDaysAgo = (n: number) => {
+    const d = new Date(Date.now() + 8 * 3_600_000);
+    d.setUTCDate(d.getUTCDate() - n);
+    return d.toISOString().slice(0, 10);
+  };
+
+  it('⚠️ stays quiet AT exactly sixteen days — the statutory boundary itself', async () => {
+    const f = await fixture('sc-day16');
+    await openRecentPeriod(f);
+    await serviceCharge(f, manilaDaysAgo(16), '300.00', uid('k'));
+    expect(await kinds(f)).not.toContain('serviceChargeFloatAgeing');
+  });
+
+  it('⚠️ fires the day the window is exceeded — seventeen days', async () => {
+    const f = await fixture('sc-day17');
+    await openRecentPeriod(f);
+    await serviceCharge(f, manilaDaysAgo(17), '300.00', uid('k'));
+    const finding = (await feed(f)).findings.find((x) => x.kind === 'serviceChargeFloatAgeing');
+    expect(finding).toBeDefined();
+  });
+
+  it('⭐ T-187 §3 — the regroup: two stores, one past sixteen days and one inside it, exactly ONE finding, carrying the right storeId', async () => {
+    const f = await fixture('sc-regroup');
+    await openRecentPeriod(f);
+    const storeB = await addStore(f.orgId, 'sc-regroup-b');
+    await sql`insert into person_store_scope (person_id, store_id) values (${f.personId}, ${storeB.id})`;
+
+    // f.storeId is PAST sixteen days — must fire, carrying f.storeId.
+    await serviceCharge(f, daysAgo(40), '300.00', uid('regroup-old'));
+    // storeB is INSIDE the window — must stay quiet for its OWN store, and must not be swept
+    // into f.storeId's finding either.
+    await serviceChargeAt(f, storeB.id, daysAgo(3), '150.00', uid('regroup-new'));
+
+    const findings = (await feed(f)).findings.filter((x) => x.kind === 'serviceChargeFloatAgeing');
+    // ⛔ Today's code groups by `entry_date` across the WHOLE ORG (no store_id in its query at
+    // all) and emits `storeId: null`. It happens to also produce exactly ONE finding here —
+    // nothing has been debited anywhere, so the FIFO walk stops at the very first, oldest row —
+    // so a count-only assertion would pass today for the wrong reason. The real failure is that
+    // the one finding it does emit names no store, so a reader cannot tell it apart from a finding
+    // about storeB, and storeB's own inside-window entry is silently merged into it instead of
+    // being ignored. Per store, this must be exactly one finding, and it must be f.storeId's.
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.storeId).toBe(f.storeId);
+    expect(findings[0]!.key).toBe(`serviceChargeFloatAgeing:${f.storeId}`);
+  });
+
+  /**
+   * ⛔⛔ DEF-406 — documenting a known blind spot as a deliberate, failing-when-fixed state, not
+   * proving the detector correct. `serviceChargeFloatAgeing`'s own gate is `if (balance < 0.005)
+   * continue` (findings.ts:611) — no direction. A float over-discharged PAST zero reads exactly
+   * like one correctly settled AT zero, and goes just as silent. This is NOT reachable through
+   * `distributeServiceCharge` in this suite: the cap re-derives from the ledger on every call, so a
+   * second SEQUENTIAL payout sees the first and refuses — a genuinely negative float only arises
+   * from the DEF-374 concurrency class, which needs a harness this suite does not have. So the
+   * negative balance below is planted with a DIRECT ledger debit, never through the function under
+   * test, on purpose: this test is not exercising a real caller, it is pinning the detector's
+   * CURRENT behaviour against a state that should not exist so the gap has a name and a red test
+   * the day someone closes it, instead of staying a blind spot nobody wrote down.
+   */
+  it('⛔ DEF-406 — a float over-discharged PAST zero is ALSO silent, indistinguishable from a correctly settled one', async () => {
+    const f = await fixture('sc-def406');
+    await openRecentPeriod(f);
+    await serviceCharge(f, daysAgo(20), '300.00', uid('def406-credit'));
+    // Planted directly, never via distributeServiceCharge — an over-discharge past what was ever
+    // credited, the DEF-374 concurrency shape this suite cannot construct through the real caller.
+    await postOn(
+      f,
+      daysAgo(1),
+      [{ code: '2160', debit: '500.00' }, { code: '1110', credit: '500.00' }],
+      uid('def406-overdraw'),
+    );
+
+    const [row] = await sql<{ balance: string }[]>`
+      select coalesce(sum(jl.credit - jl.debit), 0)::text as balance
+      from journal_lines jl join journal_entries je on je.id = jl.entry_id
+      join accounts a on a.id = jl.account_id
+      where je.org_id = ${f.orgId} and je.status <> 'draft' and a.code = '2160' and jl.store_id = ${f.storeId}`;
+    // The premise, confirmed directly from the ledger, not from the detector under test: this
+    // store's float is genuinely negative — over-discharged, not settled.
+    expect(Number(row!.balance)).toBe(-200);
+
+    // ⛔ DEF-406 itself: silent, exactly as if the float had been correctly paid down to zero.
     expect(await kinds(f)).not.toContain('serviceChargeFloatAgeing');
   });
 });

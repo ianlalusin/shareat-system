@@ -133,6 +133,8 @@ export type { PayRateRow, PayRunRow, PayslipRow, PayableDay } from './repo/payro
 export * as tillShiftsRepo from './repo/till-shifts';
 export type { TillShiftRow, TillCountRow, CountLineWithShift, CountedVarianceRow } from './repo/till-shifts';
 export * as storesRepo from './repo/stores';
+// T-187 slice 1 — the service-charge float's own per-store balance (§7 invariant 1).
+export * as serviceChargeRepo from './repo/service-charge';
 export { REMITTANCE_CADENCES, CADENCE_DAYS } from '../schema/stores';
 export type { RemittanceCadence } from '../schema/stores';
 export type { StoreCashPolicy, StoreRow } from './repo/stores';

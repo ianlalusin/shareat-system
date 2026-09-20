@@ -550,90 +550,107 @@ export async function tillFloatOffTarget(tx: Tx, orgId: string): Promise<Detecte
 }
 
 /**
- * ⛔ **DEF-082 — the service-charge float can only ever grow.**
+ * ⛔ **DEF-082 — the service-charge float used to be able to only ever grow.**
  *
- * Every sales day carrying a service charge credits `2160`, and **nothing in this codebase debits
- * it**: there is no distribution document, and T-136 §6 still owns building one. RA 11360 requires
- * distribution to rank-and-file staff at intervals not exceeding sixteen days.
+ * Every sales day carrying a service charge credits `2160`. ⭐ **T-187 shipped the discharge
+ * path** (`distributeServiceCharge`, `packages/domain/src/service-charge/index.ts`), so this
+ * alarm no longer asks "can anything debit this at all" — it asks whether a STORE's own accrual
+ * actually WAS discharged, in time. RA 11360 requires distribution to rank-and-file staff at
+ * intervals not exceeding sixteen days.
  *
- * ⭐ **Why this alarm exists before the document it demands.** Ian, 2026-08-29: *"for now no we
- * dont charge but im planning."* That is the answer that needs a guard — `2160` reads zero today,
+ * ⭐ **Why this alarm existed before the document it demanded.** Ian, 2026-08-29: *"for now no we
+ * dont charge but im planning."* That is the answer that needed a guard — `2160` reads zero today,
  * so it looks healthy, and the day a store first enables a service charge in POS the accrual starts
  * with **nothing to announce it**. The only symptom would be a liability quietly growing, which
  * looks exactly like a normal balance sheet.
  *
- * ⚠️ **It will fire permanently once service charge is switched on, and that is the point.** T-135
- * forbids resolving a finding while it is still true, and *"we are accruing an obligation we have
- * no way to discharge"* stays true until §6 is built. The alarm is a standing demand, not a nag.
+ * ⚠️ **PER STORE, not org-wide** (T-187 §2 Q4) — a payout at one store must not silence another
+ * store's overdue accrual, and must not itself be silenced by another store's payout either.
+ * Mirrors `grniNotAtRest`'s shape in this same file: bucket by `journal_lines.store_id`, run an
+ * independent FIFO walk per store, emit one finding per store with `storeId` set.
  *
- * ⭐ **Ageing is FIFO, not "oldest line"** — credits consumed oldest-first by the debits total — so
- * it stays correct the day §6 starts posting distributions instead of needing a rewrite.
+ * ⭐ **Ageing is FIFO, not "oldest line"** — credits consumed oldest-first by the debits total —
+ * so a real distribution silences this exactly the way a manual debit always did.
  */
 export async function serviceChargeFloatAgeing(
   tx: Tx,
   orgId: string,
 ): Promise<DetectedFinding[]> {
   const rows = (await tx.execute(sql`
-    select je.entry_date::text                     as entry_date,
-           coalesce(sum(jl.credit), 0)::text       as credited,
-           coalesce(sum(jl.debit), 0)::text        as debited,
+    select jl.store_id::text                        as store_id,
+           st.name                                  as store_name,
+           je.entry_date::text                      as entry_date,
+           coalesce(sum(jl.credit), 0)::text        as credited,
+           coalesce(sum(jl.debit), 0)::text         as debited,
            -- ⭐ T-218. Today, from POSTGRES, in Manila — carried back so the age below is measured
            -- against the same clock the rest of this module gates on. now() references no
            -- grouped column, so it is legal beside the aggregates.
-           ${MANILA_TODAY}::text                   as manila_today
+           ${MANILA_TODAY}::text                    as manila_today
     from journal_lines jl
     join journal_entries je on je.id = jl.entry_id
     join accounts a        on a.id = jl.account_id
+    join stores st         on st.id = jl.store_id
     where je.org_id = ${orgId} and je.status <> 'draft' and a.code = '2160'
-    group by je.entry_date
-    order by je.entry_date asc
-  `)) as unknown as Record<string, string>[];
+    group by jl.store_id, st.name, je.entry_date
+    order by jl.store_id, je.entry_date asc
+  `)) as unknown as {
+    store_id: string; store_name: string; entry_date: string;
+    credited: string; debited: string; manila_today: string;
+  }[];
 
-  if (rows.length === 0) return [];
-
-  const balance = rows.reduce((n, r) => n + Number(r.credited) - Number(r.debited), 0);
-  if (balance < 0.005) return []; // nothing held — silent, which is today's state
-
-  // FIFO: consume the oldest credits with everything that has ever been debited.
-  let remainingDebits = rows.reduce((n, r) => n + Number(r.debited), 0);
-  let oldestUncleared: string | null = null;
+  const byStore = new Map<string, typeof rows>();
   for (const r of rows) {
-    const credited = Number(r.credited);
-    if (credited <= 0) continue;
-    if (remainingDebits >= credited - 0.005) {
-      remainingDebits -= credited;
-      continue;
-    }
-    oldestUncleared = String(r.entry_date);
-    break;
+    const list = byStore.get(r.store_id) ?? [];
+    list.push(r);
+    byStore.set(r.store_id, list);
   }
-  if (oldestUncleared === null) return [];
 
-  const ageDays = daysBetweenDates(oldestUncleared, String(rows[0]!.manila_today));
-  if (ageDays <= SERVICE_CHARGE_MAX_DAYS) return [];
+  const findings: DetectedFinding[] = [];
+  for (const [storeId, entries] of byStore) {
+    const balance = entries.reduce((n, r) => n + Number(r.credited) - Number(r.debited), 0);
+    if (balance < 0.005) continue; // nothing held at this store — silent, which is today's state
 
-  return [{
-    kind: 'serviceChargeFloatAgeing',
-    key: 'serviceChargeFloatAgeing',
-    storeId: null,
-    /**
-     * ⚠️ **`soft`, and the reasoning is worth keeping.** `hard` blocks a period close and an
-     * acknowledgement does not lift it — so with no distribution document in existence, `hard`
-     * would block **every** close, permanently, with no legitimate remedy. A control nobody can
-     * satisfy is one people route around, which is how it stops being a control at all.
-     *
-     * ⭐ And severity here tracks *"do the books add up"*, not *"is this serious"*. Every `hard`
-     * detector above is a ledger that does not tie. This one's ledger is **correct** — the
-     * liability is recorded exactly as it should be. What is overdue is the **payment**, which is a
-     * business fact the books are reporting faithfully. It stays loud and unresolvable instead.
-     */
-    severity: 'soft',
-    detail:
-      `${peso(balance)} of service charge has been held since ${oldestUncleared}, ` +
-      `${ageDays} days — RA 11360 requires distribution at intervals of at most ` +
-      `${SERVICE_CHARGE_MAX_DAYS} days. ⛔ Nothing in this system can pay it out yet ` +
-      '(DEF-082); the distribution document is T-136 §6.',
-  }];
+    // FIFO: consume the oldest credits with everything ever debited against this store's float.
+    let remainingDebits = entries.reduce((n, r) => n + Number(r.debited), 0);
+    let oldestUncleared: string | null = null;
+    for (const r of entries) {
+      const credited = Number(r.credited);
+      if (credited <= 0) continue;
+      if (remainingDebits >= credited - 0.005) {
+        remainingDebits -= credited;
+        continue;
+      }
+      oldestUncleared = r.entry_date;
+      break;
+    }
+    if (oldestUncleared === null) continue;
+
+    const ageDays = daysBetweenDates(oldestUncleared, String(entries[0]!.manila_today));
+    if (ageDays <= SERVICE_CHARGE_MAX_DAYS) continue;
+
+    findings.push({
+      kind: 'serviceChargeFloatAgeing',
+      key: `serviceChargeFloatAgeing:${storeId}`,
+      storeId,
+      /**
+       * ⚠️ **`soft`, and the reasoning is worth keeping.** `hard` blocks a period close and an
+       * acknowledgement does not lift it — a store that misses one payday would then have every
+       * close blocked with no legitimate remedy until it caught up. A control nobody can satisfy
+       * is one people route around, which is how it stops being a control at all.
+       *
+       * ⭐ And severity here tracks *"do the books add up"*, not *"is this serious"*. Every `hard`
+       * detector above is a ledger that does not tie. This one's ledger is **correct** — the
+       * liability is recorded exactly as it should be. What is overdue is the **payment**, which is
+       * a business fact the books are reporting faithfully. It stays loud and unresolvable instead.
+       */
+      severity: 'soft' as const,
+      detail:
+        `${entries[0]!.store_name} has held ${peso(balance)} of service charge since ` +
+        `${oldestUncleared}, ${ageDays} days — RA 11360 requires distribution at intervals of at ` +
+        `most ${SERVICE_CHARGE_MAX_DAYS} days. Distribute it (DEF-082).`,
+    });
+  }
+  return findings;
 }
 
 // -------------------------------------------------------------------------------------

@@ -66,6 +66,7 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, Capability>> = {
   '/owners': 'view_financial_reports',
   '/loans': 'view_financial_reports',
   '/liabilities': 'view_financial_reports',
+  '/service-charge': 'view_financial_reports',
   '/fixed-assets': 'manage_fixed_assets',
   '/money-accounts': 'view_financial_reports',
   '/money-transfers': 'view_financial_reports',

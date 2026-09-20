@@ -23,6 +23,10 @@ const alias = {
   // without dragging `@shareat/db` into the browser bundle. T-266 proved that exact failure once
   // (`Module not found: Can't resolve 'net'`), which is why this leaf exists at all.
   '@shareat/domain/attendance/fingerprint': `${root}packages/domain/src/attendance/fingerprint/index.ts`,
+  // T-187 slice 1 — mirrors the two subpaths above: `apps/erp`'s own tsconfig has no generic
+  // `@shareat/domain/*` wildcard (only the root tsconfig does), so this leaf needs its own exact
+  // entry rather than relying on the wildcard the way `npm run typecheck` (root config) does.
+  '@shareat/domain/service-charge': `${root}packages/domain/src/service-charge/index.ts`,
   '@shareat/domain': `${root}packages/domain/src/index.ts`,
   // ⚠️ The subpath goes BEFORE the bare name: these are exact-match aliases applied in order, and
   // T-237's `@shareat/auth/errors` leaf (the error classes without `@shareat/db` behind them) is
