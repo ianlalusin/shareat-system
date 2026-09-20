@@ -55,7 +55,24 @@ stops at 16 by construction measures nothing about the day it was actually paid.
 ⚠️ **`fixed_days` mode was NOT measured** — the census was scoped to the defaults and said so.
 **Do not read these numbers as covering it.**
 
-## 3. ⛔ DEF-405 — a brand-new store has NO payday policy at all, and the screen shows nothing
+## 3. ⛔ DEF-249 — a brand-new store has NO payday policy at all, and the screen shows nothing
+
+> ⛔ **CORRECTION, same night.** This section was first written against a NEW defect number,
+> **DEF-405**. It was a **duplicate**: DEF-249 had already recorded the same defect and the same
+> mechanism on 2026-09-09/10, with two discovery documents behind it. DEF-405 is retracted and its
+> measured evidence merged here. ⭐ **The census lane caught it while verifying an unrelated
+> sentence** — a 1.2MB register was never grepped before a number was issued, and **a duplicate
+> passes every guard this repo has**, because they all check whether a row is well-formed and none
+> asks whether it is new.
+>
+> ⭐⭐ **AND THE NEAR-MISS MATTERS MORE THAN THE DUPLICATE.** DEF-249 carries two consequences a
+> fresh row would have missed entirely, **both live, both on this same table, and both to be read
+> before building this task**:
+> **DEF-251** — the attendance sweep INNER JOINs on the config, so an unconfigured store is not in
+> the population at all and the job reports **clean success**. ⚠️ That is precisely the quiet-failure
+> shape §4.3's detector exists to avoid, already shipped, one table away.
+> **DEF-256** — T-197's short-shift overtime decision has **never reached a single store** through
+> this same hole. A payroll consequence, not merely a wiring one.
 
 Measured tonight against a freshly bootstrapped throwaway database:
 
@@ -71,15 +88,28 @@ fiscal periods, the first admin, the store and its default room — **and no att
 store of a new organisation has no pay cycle, `payoutDateFor` has nothing to derive from, and the
 screen an admin would use to fix it renders empty because it edits a row that does not exist.
 ⚠️ **This is the state production is in if `bootstrap-org` is how production's org was made.**
-Filed as **DEF-405**.
+⭐ **The evidence above is what this re-measurement ADDS to DEF-249**, which reasons from call sites: this was measured end to end on a running app. **Tracked as DEF-249**, with DEF-251 and DEF-256 as its live consequences.
 
 ## 4. Scope
 
-1. ⭐ **`bootstrap-org.ts` creates the live `store_attendance_config` row for the first store**, in
-   the same single transaction it already uses, from the schema defaults. ⛔ **And so does whatever
-   creates a store through `/admin/stores`** — a store created on day two has the same hole as a
-   store created on day one, and fixing only the bootstrap path hides the defect rather than
-   closing it. **Find every writer of `stores` before calling this done.**
+1. ⭐ **Seed the config in `createStore`** — `packages/domain/src/stores/service.ts:100`, in the same
+   transaction that inserts the store.
+   ⭐⭐ **THE CENSUS SETTLED WHERE THIS GOES, AND THE ANSWER IS BETTER THAN THE ONE THIS SPEC FIRST
+   GUESSED.** The first draft said "and so does whatever creates a store through `/admin/stores`",
+   inferring two independent writers that must both be fixed. **They are not two writers.** There is
+   exactly **one** INSERT into `stores` in the whole application — `storesRepo.insertStore`
+   (`packages/db/src/repo/stores.ts:152`) — with exactly **one** production caller, `createStore`,
+   which has **three doors into it**: `/admin/stores`'s `createStoreAction`, and
+   `bootstrapOrganization` (`packages/domain/src/organizations/index.ts:66,389`), which is what BOTH
+   `/setup` and `scripts/bootstrap-org.ts` call. ⛔ **So `bootstrap-org.ts` is the wrong place to fix
+   it** — patching there leaves `/admin/stores` broken. **One function, one hole, one fix.**
+   ⚠️ **No migration inserts a store and no trigger creates the config** — both checked, not assumed.
+   ⚠️ **The ~30 integration fixtures that insert a store do NOT go through `createStore`** — each
+   defines its own local raw-insert helper of the same name. Seeding inside `createStore` will not
+   reach them, and ⭐ **that is fine and worth knowing rather than fixing**: the 10 attendance-specific
+   test files already call `seedAttendanceConfig` explicitly as a visible second step, and the other
+   fixtures run against the same unconfigured state production does. **The suite is not lying to
+   itself here.**
 2. **A backfill for stores that already exist without a config.** Whether that is a migration or a
    one-shot script is the builder's call, **stated in the spec before building** — an applied
    migration is never edited, so this is the decision that cannot be taken back.
@@ -89,7 +119,7 @@ Filed as **DEF-405**.
    it by measurement** — any store on `payrollPeriodType = 'monthly'` is non-compliant every month.
    **Fire on that outright.** Follow `grniNotAtRest`'s per-store shape, which
    `serviceChargeFloatAgeing` is being regrouped onto under T-187.
-4. **A store with NO live config is itself a finding** — the DEF-405 state made visible rather than
+4. **A store with NO live config is itself a finding** — the DEF-249 state made visible rather than
    silent, so the backfill can be verified from the app instead of from SQL.
 
 ## 5. Out of scope, and the second half that is deliberately not here
