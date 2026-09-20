@@ -38,6 +38,7 @@ import { deliveriesRepo, filesRepo, stockLedgerRepo, type Tx } from '@shareat/db
 import type { ShortageReason } from '@shareat/db/schema';
 import { duplicateRisk, type DuplicateWarning } from './duplicate-risk';
 import { receiveDelivery, toBaseUnits, type ReceiveLineInput, type ReceiveResult } from './receive';
+import { parseFourDecimalCost } from '../commissary/catalogue';
 import {
   addQuantity,
   compareQuantity,
@@ -114,6 +115,12 @@ export async function createDeliveryDocument(
     throw new Error(`createDeliveryDocument: proof file ${input.proofFileId} does not exist in this org`);
   }
 
+  // T-328/DEF-382 — the validated value is CAPTURED and used below, not merely checked and
+  // discarded. A bare call whose only job is to throw makes the call site's safety rest entirely
+  // on `parseFourDecimalCost` never changing shape (`tryMoney` elsewhere in this tree is the
+  // precedent for a "parser" that returns `null` on failure instead of throwing) — `const cost =
+  // parseFourDecimalCost(...)` and using `cost` is self-guarding; a bare statement is not.
+  const validatedUnitCosts: string[] = [];
   for (const line of input.lines) {
     if (!isPositiveQuantity(quantity(line.orderedQuantity))) {
       throw new Error(`createDeliveryDocument: item ${line.itemId}'s ordered quantity must be greater than zero`);
@@ -121,6 +128,17 @@ export async function createDeliveryDocument(
     if (!(Number.isFinite(Number(line.conversionFactor)) && Number(line.conversionFactor) > 0)) {
       throw new Error(`createDeliveryDocument: item ${line.itemId}'s conversion factor must be greater than zero`);
     }
+    // ⛔ Unvalidated before this: the string reached `delivery_lines.unit_cost` (declared
+    // `numeric(14,4)`, packages/db/schema/deliveries.ts:163) straight through, and Postgres's own
+    // refusal was the only thing standing between a typo and the operator. NOT `parseMoneyInput`:
+    // that enforces two decimal places, and this column is declared with four — confirmed against
+    // the column declaration itself, not inferred from a test fixture. `parseFourDecimalCost` is
+    // the matching shape, reused rather than adding a fourth validator (DEF-383). `0` is a
+    // legitimate unit cost (a free sample, a promotional item) and the shape allows it, same as
+    // the other two lines above.
+    validatedUnitCosts.push(
+      parseFourDecimalCost(line.unitCost, `createDeliveryDocument: item ${line.itemId}'s unit cost`),
+    );
   }
 
   // ⭐ Read what already exists BEFORE writing this one, so the new draft never gets compared
@@ -160,7 +178,14 @@ export async function createDeliveryDocument(
       orderedQuantity: line.orderedQuantity,
       purchaseUnit: line.purchaseUnit,
       conversionFactor: line.conversionFactor,
-      unitCost: line.unitCost,
+      // T-328 — the validated value captured above, not `line.unitCost` (the raw, un-normalised
+      // form `parseFourDecimalCost` already trimmed and proved valid).
+      // ⛔ `!` is safe because `validatedUnitCosts` was built by iterating this SAME `input.lines`
+      // array, one push per line, in the same order (docs/RULES.md §2 row 206) — index `i` here is
+      // always in range because neither loop filters or reorders `input.lines` between them. If a
+      // future edit adds a `.filter()`/`.sort()` to either loop over `input.lines`, this index
+      // invariant breaks silently and this `!` is the only place that would have said so.
+      unitCost: validatedUnitCosts[i]!,
       locationId: line.locationId,
     })),
   );

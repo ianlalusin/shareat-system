@@ -38,6 +38,7 @@ import {
 } from '@shareat/db';
 import { authorize, AuthorizationError, type Actor, type Capability } from '@shareat/auth';
 import { parseMoneyInput } from '../shared/money-input';
+import { quantity as parseQuantity } from '../stock/quantity';
 import { recordCharge, voidCharge } from '../ar';
 import { branchPriceFor } from '../items';
 import { postEntry } from '../ledger/post-entry';
@@ -95,6 +96,42 @@ export const WHOLESALE_REVENUE_CODE = '4300';
 
 /** Decimal noise only, never a business allowance. Same value and reasoning as AP's and AR's. */
 const EPSILON = 0.005;
+
+/**
+ * `quantity()` (`packages/domain/src/stock/quantity.ts`) is a `numeric(14,3)` value's own choke
+ * point, the same relationship `money()` has to `parseMoneyInput` — it throws a raw `TypeError`,
+ * never a sentence a cashier can act on. This is that wrapper, local to this file rather than a
+ * new shared module: only this file currently needs a readable refusal for a typed quantity.
+ */
+function parseQuantityInput(raw: string, label: string): string {
+  try {
+    return parseQuantity(raw);
+  } catch {
+    throw new Error(`${label} — "${raw}" is not a valid quantity. Use at most three decimal places.`);
+  }
+}
+
+/**
+ * T-328 Contract §4b — the reconciliation check as a pure, exported, directly-callable function,
+ * so a fabricated non-finite operand can prove the refusal without going through `createTradeOrder`
+ * at all (bible §15.11 — a second layer nothing can test is decoration). `createTradeOrder`'s own
+ * guard below delegates to this for the check itself; its richer, figure-quoting message on an
+ * ordinary mismatch is unchanged and stays at that call site — a pre-existing regression test
+ * (`packages/domain/tests/integration/trade.test.ts`) pins that exact wording, and this function
+ * has no access to the goods/fees breakdown needed to reproduce it.
+ */
+export function assertTradeTotalReconciles(stated: number, computed: number): void {
+  if (!Number.isFinite(stated) || !Number.isFinite(computed)) {
+    throw new Error(
+      `assertTradeTotalReconciles: both figures must be finite — got stated=${stated}, computed=${computed}.`,
+    );
+  }
+  if (Math.abs(stated - computed) > EPSILON) {
+    throw new Error(
+      `assertTradeTotalReconciles: ${stated} does not reconcile with ${computed} (beyond ${EPSILON}).`,
+    );
+  }
+}
 
 export interface TradeLineDraft {
   itemId: string;
@@ -217,8 +254,8 @@ export async function createTradeOrder(
       const quoted = treatment === 'internal'
         ? undefined
         : await tradeRepo.quotedRate(trx, actor.orgId, input.customerId, draft.itemId);
-      const rate = draft.rate ?? derived ?? quoted?.rate;
-      if (rate === undefined || rate === null) {
+      const rawRate = draft.rate ?? derived ?? quoted?.rate;
+      if (rawRate === undefined || rawRate === null) {
         throw new Error(
           treatment === 'internal'
             ? `createTradeOrder: line ${i + 1} names ${item.name}, and nothing can price it — it ` +
@@ -228,16 +265,28 @@ export async function createTradeOrder(
               'list does not quote it. Add a rate to the price list, or state one on the line.',
         );
       }
+      // T-328 — `rate` and `quantity` each parsed and blamed by their OWN name before they are
+      // ever multiplied together. Previously `Number(rate) < 0` / `Number(draft.quantity) <= 0`
+      // were each NaN-blind (`NaN < 0` and `NaN <= 0` are both `false`), so a typo in either one
+      // survived both guards, and only the DERIVED `lineTotal` below caught it — blaming "line
+      // N's total" on whichever box the operator actually mistyped. `rate` is `numeric(14,2)`
+      // (packages/db/schema/trade.ts:201), the same shape `parseMoneyInput` enforces; `quantity`
+      // is `numeric(14,3)`, a different axis (`parseQuantityInput`, defined above).
+      const rate = parseMoneyInput(rawRate, `createTradeOrder: line ${i + 1}'s rate`);
       if (Number(rate) < 0) throw new Error(`createTradeOrder: line ${i + 1} has a negative rate.`);
-      if (Number(draft.quantity) <= 0) {
+      const parsedQuantity = parseQuantityInput(draft.quantity, `createTradeOrder: line ${i + 1}'s quantity`);
+      if (Number(parsedQuantity) <= 0) {
         throw new Error(`createTradeOrder: line ${i + 1} has a quantity of ${draft.quantity}.`);
       }
 
-      // DEF-272: always exactly 2dp already (toFixed above), so this never actually throws on
-      // precision — routed through the shared parser anyway so every money value in the set goes
-      // through the one entry point, not because this particular site was independently exploitable.
+      // T-328/DEF-272 — this call now STANDS BETWEEN a non-finite `quantity`/`rate` pair and two
+      // `numeric` columns (`trade_order_lines.rate`, `.line_total`): rate and quantity are parsed
+      // above, but that parses each FIELD on its own — the PRODUCT of two valid numbers still
+      // needs its own finite check before `.toFixed(2)` can turn a stray `Infinity` into a string
+      // Postgres would otherwise have to refuse. Do not delete this call as decoration; the two
+      // guards above and this one are not redundant with each other.
       const lineTotal = parseMoneyInput(
-        (Number(draft.quantity) * Number(rate)).toFixed(2),
+        (Number(parsedQuantity) * Number(rate)).toFixed(2),
         `createTradeOrder: line ${i + 1}'s total`,
       );
       if (Number(lineTotal) <= 0) {
@@ -246,15 +295,15 @@ export async function createTradeOrder(
       total += Number(lineTotal);
       lines.push({
         itemId: draft.itemId,
-        quantity: draft.quantity,
+        quantity: parsedQuantity,
         unit: draft.unit?.trim() || quoted?.unit || item.baseUnit,
         rate: Number(rate).toFixed(2),
         lineTotal,
       });
     }
 
-    const deliveryFee = Number(input.deliveryFee ?? 0);
-    const otherFees = Number(input.otherFees ?? 0);
+    const deliveryFee = Number(parseMoneyInput(input.deliveryFee ?? '0', 'createTradeOrder: the delivery fee'));
+    const otherFees = Number(parseMoneyInput(input.otherFees ?? '0', 'createTradeOrder: other fees'));
     if (deliveryFee < 0 || otherFees < 0) {
       throw new Error('createTradeOrder: a fee cannot be negative.');
     }
@@ -262,11 +311,30 @@ export async function createTradeOrder(
     total += deliveryFee + otherFees;
 
     const totalAmount = total.toFixed(2);
-    if (input.totalAmount != null && Math.abs(Number(input.totalAmount) - total) > EPSILON) {
-      throw new Error(
-        `createTradeOrder: the lines come to ₱${goodsTotal.toFixed(2)} plus ₱${(deliveryFee + otherFees).toFixed(2)} ` +
-          `of fees, so ₱${totalAmount} — but the order says ₱${input.totalAmount}. One of the two is wrong.`,
-      );
+    if (input.totalAmount != null) {
+      const statedTotal = Number(parseMoneyInput(input.totalAmount, 'createTradeOrder: the total'));
+      // T-328 Contract §4b — delegates to the extracted, independently-testable guard. Its own
+      // message (either refusal reason) is not what the operator sees here: this call site keeps
+      // its pre-existing, figure-quoting message on an ORDINARY MISMATCH, unchanged (a regression
+      // test, packages/domain/tests/integration/trade.test.ts, pins its exact wording, and that
+      // test predates this task). `statedTotal`/`total` are both already parsed by this point, so
+      // the guard's own finiteness branch cannot fire from here TODAY — proven directly by the
+      // unit test instead (T-328 Test 2(b)), which is the whole reason it was extracted (bible
+      // §15.11) — but "cannot fire today" is not "will never fire", and a bare `catch` would trust
+      // that unreachability forever rather than for now: it would flatten a future finiteness
+      // refusal (a parser weakened, a new caller, a third operand) into this mismatch sentence,
+      // destroying the exact distinction the tester's two non-overlapping matchers exist to keep.
+      // So re-throw anything that is not the ordinary-mismatch case unchanged, rather than
+      // assuming every refusal here means the same thing.
+      try {
+        assertTradeTotalReconciles(statedTotal, total);
+      } catch (err) {
+        if (!Number.isFinite(statedTotal) || !Number.isFinite(total)) throw err;
+        throw new Error(
+          `createTradeOrder: the lines come to ₱${goodsTotal.toFixed(2)} plus ₱${(deliveryFee + otherFees).toFixed(2)} ` +
+            `of fees, so ₱${totalAmount} — but the order says ₱${input.totalAmount}. One of the two is wrong.`,
+        );
+      }
     }
 
     const { id: orderId } = await tradeRepo.insertOrder(trx, {

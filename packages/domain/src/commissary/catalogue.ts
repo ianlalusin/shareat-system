@@ -27,10 +27,33 @@ import { authorize, type Actor } from '@shareat/auth';
 
 export type LinkStatus = (typeof LINK_STATUSES)[number];
 
-/** A manual cost as `numeric(14,4)` will store it — a non-negative amount, up to four decimals.
- *  ⛔ Never `Number()`'d for storage: the string passes through untouched, same discipline as
- *  `normaliseRate` in `commissary/orders.ts`. */
+/** A non-negative amount, up to four decimals — the shape a cost-per-unit column needs when its
+ *  column is declared with more than two decimal places of scale, as opposed to `parseMoneyInput`'s
+ *  two-decimal money rule. ⛔ Never `Number()`'d for storage: the string passes through untouched,
+ *  same discipline as `normaliseRate` in `commissary/orders.ts`. ⚠️ `upsertOffering` below still
+ *  tests this pattern inline, with its own hand-written message — left that way DELIBERATELY
+ *  (T-328/DEF-383): converging every existing caller onto one sentence-producing entry point is
+ *  DEF-383's own remedy, its own task, and out of scope here. `parseFourDecimalCost` below is for
+ *  new callers outside this file — `deliveries/documents.ts`'s `unitCost` is the first — so at
+ *  least no THIRD shape of "test this pattern inline" gets added while DEF-383 is still open. */
 const MANUAL_COST_PATTERN = /^\d+(\.\d{1,4})?$/;
+
+/**
+ * The `MANUAL_COST_PATTERN` shape, wrapped as a sentence-producing entry point — same relationship
+ * `parseMoneyInput` has to `money()` (`packages/domain/src/shared/money-input.ts`): a bare pattern
+ * test produces a boolean, never a message a cashier can act on. `label` identifies the field, same
+ * convention as `parseMoneyInput`. T-328 — introduced for `deliveries/documents.ts`'s `unitCost`.
+ */
+export function parseFourDecimalCost(raw: string, label: string): string {
+  const trimmed = raw.trim();
+  if (!MANUAL_COST_PATTERN.test(trimmed)) {
+    throw new Error(
+      `${label} — "${raw}" is not a valid amount. Use a non-negative number with up to four ` +
+        'decimal places.',
+    );
+  }
+  return trimmed;
+}
 
 // -----------------------------------------------------------------------------------------
 // commissary_links

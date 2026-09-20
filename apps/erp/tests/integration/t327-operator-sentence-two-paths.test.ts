@@ -7,12 +7,49 @@ import { sql as dsql } from 'drizzle-orm';
  * T-327 test 3 — docs/tasks/327-a-poison-value-that-passes-every-guard.md §Tests item 3, as
  * strengthened by the orchestrator 2026-09-19 (3a/3b) after the auditor read the spec cold.
  *
+ * ⭐⭐ T-328 — PATH 1 REPOINTED TWICE, 2026-09-20. THE FIRST REPOINTING WAS ITSELF WRONG.
+ * The original path 1 was `createTradeOrder({ deliveryFee: 'abc' })` — chosen when this file was
+ * written because `deliveryFee` was, at the time, unguarded at the app layer. T-327 and T-328 were
+ * specced the same week, and T-328's own spec names `deliveryFee` explicitly as a site it would
+ * convert. T-328 Contract §4a did exactly that: `deliveryFee` now goes through `parseMoneyInput`
+ * before it ever reaches `trade_orders`, so `'abc'` is refused by the APP, no row is attempted, no
+ * constraint fires. Invariant 4 of T-328's spec says this in so many words: "T-327's constraints
+ * never fire from an enumerated path. If one does, the conversion at that site is wrong." The old
+ * test failing was that invariant holding, not breaking. **A test built on a path scheduled for
+ * its own closure is a real category, worth recording where the next person reads it.**
+ *
+ * ⛔ THE FIRST REPAIR REPEATED THE SAME MISTAKE ONE STEP OUT, AND IT IS WORTH SAYING WHY IT LOOKED
+ * SAFE: `renameMoneyAccount({ overdraftLimit: 'NaN' })` → `money_accounts.overdraft_limit` was
+ * verified, correctly, to be unguarded at the app layer — `Number('NaN') < 0` is `false`, the raw
+ * string reaches the column verbatim. **What was wrong was the conclusion that it was therefore
+ * SAFE, on the reasoning "not a FormData-reading app action, so T-328 will never touch it."**
+ * `renameMoneyAccount` is not itself a FormData reader, but its caller is:
+ * `apps/erp/src/app/money-accounts/actions.ts:71` reads `str(formData, 'overdraftLimit')` and
+ * passes it straight through. It is a live, user-typed money path T-328's own enumeration never
+ * listed (filed DEF-395) — a real defect, not a safe test fixture, and a path just as eligible for
+ * closure as `deliveryFee` was. **"Not called from FormData" has to mean the ENTIRE call chain,
+ * traced to an actual UI form, not just the one function being read.**
+ *
+ * ⭐ THE ACTUAL FIX: pick a column NO FormData path can EVER reach, not merely one that happens to
+ * be unguarded today. `postEntry({ lines: [{ debit: 'NaN', ... }] })` → `journal_lines.debit`.
+ * `postEntry` (`packages/domain/src/ledger/post-entry.ts`) is, by its own header, "the ONLY way
+ * anything writes to journal_entries / journal_lines" — every poster (expenses, sales, payroll,
+ * the ETL) goes through it, and it is "deliberately thin... does not re-check" any of T-103's
+ * DB-enforced invariants, `debit`/`credit` included; they are typed `string`, passed straight into
+ * the insert. Verified this is genuinely unreachable from any UI form, not merely from this one
+ * function: `grep -rl "postEntry(" apps/erp/src` returns NOTHING — every one of `postEntry`'s 27
+ * callers is a domain function, none is an `actions.ts`. A raw ledger primitive with no FormData
+ * path to it at all, ever, is not "currently unguarded" the way `deliveryFee` and `overdraftLimit`
+ * were — there is no conversion that could ever close it, because there is no typed box behind it
+ * to convert. This is what T-327's backstop is actually FOR: the case where the app layer, by
+ * construction, has no opinion at all.
+ *
  * ⭐ Two REAL domain paths, two DIFFERENT tables, neither needing a source change — proving §2's
  * suffix rule rather than letting one exact-name `CONSTRAINT_MESSAGES` entry pass this green:
  *
- *   1. `createTradeOrder({ ..., deliveryFee: 'abc' })` — `Number('abc')` is `NaN`, the
- *      `deliveryFee < 0` guard is false on `NaN`, and `.toFixed(2)` NORMALISES it to the literal
- *      string `"NaN"` before it reaches `trade_orders.delivery_fee`.
+ *   1. `postEntry({ lines: [{ debit: 'NaN', credit: '0', accountCode: '6200' }] })` — `postEntry`
+ *      performs no validation of its own on `debit`/`credit`; the raw string reaches
+ *      `journal_lines.debit` verbatim, on a function no FormData reader ever calls.
  *   2. `setPrice({ ..., rate: 'NaN' })` — `Number('NaN') < 0` is false, and `input.rate` is
  *      inserted VERBATIM (no `.toFixed`) into `price_list_items.rate`. A different mechanism, a
  *      different table, the same poison shape.
@@ -55,7 +92,8 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 
 import { transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
-import { createCustomer, createItem, createPriceList, createTradeOrder, setPrice } from '@shareat/domain';
+import { createItem, createPriceList, postEntry, setPrice } from '@shareat/domain';
+import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { errorMessage } from '../../src/lib/constraint-messages';
 
 const sql = postgres(url, { max: 5 });
@@ -140,40 +178,26 @@ function constraintNameOf(err: unknown): string | null {
 const EXPECTED_SENTENCE = 'That is not a valid amount. Enter a figure like 1234.50.';
 
 describe('T-327 test 3 — the cashier reads a sentence, on two different constraints', () => {
-  it('⛔ path 1 — createTradeOrder, deliveryFee: \'abc\' → trade_orders.delivery_fee', async () => {
+  it("⛔ path 1 — postEntry, debit: 'NaN' → journal_lines.debit (a ledger primitive no FormData reaches)", async () => {
     const f = await fixture();
-    const item = await asOrg(f.orgId, (tx) =>
-      createItem(tx, f.superAdmin, {
-        code: uid('WS'),
-        name: `Item ${uid('n')}`,
-        kind: 'raw_material',
-        baseUnit: 'kg',
-        sellableWholesale: true,
-      }),
-    );
-    const customer = await asOrg(f.orgId, (tx) =>
-      createCustomer(tx, f.admin, { name: `Buyer ${uid('b')}`, customerGroup: 'wholesale' }),
-    );
+    await seedChartOfAccounts(sql, f.orgId);
+    await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${f.orgId}, '2026-01-01', '2026-12-31', 'open')`;
 
-    const err = await provoke(
-      () =>
-        asOrg(f.orgId, (tx) =>
-          createTradeOrder(tx, f.manager, {
-            storeId: f.storeId,
-            customerId: customer.id,
-            orderDate: '2026-01-10',
-            lines: [{ itemId: item.id, quantity: '1', rate: '10' }],
-            deliveryFee: 'abc',
-          }),
-        ),
-      async (ok) => {
-        await sql`delete from trade_order_lines where order_id = ${ok.orderId}`;
-        await sql`delete from trade_orders where id = ${ok.orderId}`;
-      },
+    const err = await provoke(() =>
+      asOrg(f.orgId, (tx) =>
+        postEntry(tx, {
+          orgId: f.orgId,
+          entryDate: '2026-01-10',
+          sourceType: 'test',
+          sourceId: uid('src'),
+          idempotencyKey: uid('idem'),
+          lines: [{ accountCode: '6200', debit: 'NaN', credit: '0' }],
+        }),
+      ),
     );
 
     const constraintName = constraintNameOf(err);
-    expect(constraintName).toMatch(/^trade_orders_.*_finite_check$/);
+    expect(constraintName).toMatch(/^journal_lines_.*_finite_check$/);
     expect(errorMessage(err)).toBe(EXPECTED_SENTENCE);
   });
 
@@ -215,26 +239,21 @@ describe('T-327 test 3 — the cashier reads a sentence, on two different constr
         sellableWholesale: true,
       }),
     );
-    const customer = await asOrg(f.orgId, (tx) =>
-      createCustomer(tx, f.admin, { name: `Buyer ${uid('b')}`, customerGroup: 'wholesale' }),
-    );
     const list = await asOrg(f.orgId, (tx) => createPriceList(tx, f.admin, { name: `List ${uid('l')}` }));
+    await seedChartOfAccounts(sql, f.orgId);
+    await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${f.orgId}, '2026-01-01', '2026-12-31', 'open')`;
 
-    const err1 = await provoke(
-      () =>
-        asOrg(f.orgId, (tx) =>
-          createTradeOrder(tx, f.manager, {
-            storeId: f.storeId,
-            customerId: customer.id,
-            orderDate: '2026-01-10',
-            lines: [{ itemId: item.id, quantity: '1', rate: '10' }],
-            deliveryFee: 'abc',
-          }),
-        ),
-      async (ok) => {
-        await sql`delete from trade_order_lines where order_id = ${ok.orderId}`;
-        await sql`delete from trade_orders where id = ${ok.orderId}`;
-      },
+    const err1 = await provoke(() =>
+      asOrg(f.orgId, (tx) =>
+        postEntry(tx, {
+          orgId: f.orgId,
+          entryDate: '2026-01-10',
+          sourceType: 'test',
+          sourceId: uid('src'),
+          idempotencyKey: uid('idem'),
+          lines: [{ accountCode: '6200', debit: 'NaN', credit: '0' }],
+        }),
+      ),
     );
     const err2 = await provoke(
       () => asOrg(f.orgId, (tx) => setPrice(tx, f.admin, { priceListId: list.id, itemId: item.id, rate: 'NaN' })),

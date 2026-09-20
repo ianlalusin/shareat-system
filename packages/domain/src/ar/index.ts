@@ -215,8 +215,13 @@ export async function recordCollection(
     const customer = await customersRepo.getById(trx, actor.orgId, input.customerId);
     if (!customer) throw new Error(`recordCollection: customer ${input.customerId} does not exist.`);
 
-    const amount = Number(input.amount);
-    const fee = Number(input.platformFee ?? '0');
+    // T-328/DEF-382 — this file's OWN `recordCharge` (above, `parseMoneyInput` at its own site)
+    // already routes through the parser; this function, `recordCollection`, did not: `amount`,
+    // `platformFee` and `creditApplied` were bare `Number()`, and `Number('abc') <= 0` is `false`,
+    // so a mistyped figure passed every guard below silently. Parsing first turns that into the
+    // parser's own readable refusal, same as every other converted site in this task.
+    const amount = Number(parseMoneyInput(input.amount, 'recordCollection: the amount'));
+    const fee = Number(parseMoneyInput(input.platformFee ?? '0', 'recordCollection: the platform fee'));
     if (amount <= 0) throw new Error('recordCollection: a collection has to be greater than zero.');
     if (fee < 0) throw new Error('recordCollection: a platform fee cannot be negative.');
     if (fee > amount) {
@@ -235,7 +240,9 @@ export async function recordCollection(
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.moneyAccountId);
     if (!account) throw new Error('recordCollection: that money account does not exist.');
 
-    const creditApplied = Number(input.creditApplied ?? '0');
+    const creditApplied = Number(
+      parseMoneyInput(input.creditApplied ?? '0', 'recordCollection: creditApplied'),
+    );
     if (creditApplied < 0) throw new Error('recordCollection: creditApplied cannot be negative.');
     if (creditApplied > 0) {
       const balance = Number(await arRepo.creditBalanceOf(trx, actor.orgId, input.customerId));
@@ -255,13 +262,24 @@ export async function recordCollection(
       );
     }
 
+    // T-328/DEF-382 — parsed here, once, before any lock or read, same pattern `recordPayment`
+    // already uses for its own allocations: every downstream use sees the same validated value,
+    // never the raw form, and a malformed one throws before a lock is even taken.
+    const allocations = input.allocations.map((a) => ({
+      chargeId: a.chargeId,
+      amountApplied: parseMoneyInput(
+        a.amountApplied,
+        `recordCollection: the allocation for charge ${a.chargeId}`,
+      ),
+    }));
+
     // ⛔ Lock before reading. AP's equivalent test passed on timing alone before its lock existed.
-    await arRepo.lockChargesForAllocation(trx, actor.orgId, input.allocations.map((a) => a.chargeId));
+    await arRepo.lockChargesForAllocation(trx, actor.orgId, allocations.map((a) => a.chargeId));
 
     const open = await arRepo.openItems(trx, actor.orgId, input.customerId, input.storeId);
     const byCharge = new Map(open.map((o) => [o.chargeId, o]));
     let allocatedTotal = 0;
-    for (const a of input.allocations) {
+    for (const a of allocations) {
       const item = byCharge.get(a.chargeId);
       if (!item) {
         throw new Error(
@@ -367,7 +385,10 @@ export async function recordCollection(
       storeId: input.storeId,
       customerId: input.customerId,
       collectionDate: input.collectionDate,
-      amount: input.amount,
+      // T-328 — the validated, normalised value, same as `platformFee` immediately below (was
+      // `input.amount`, the raw un-normalised form the parser had already validated but not
+      // reshaped).
+      amount: amount.toFixed(2),
       platformFee: fee.toFixed(2),
       moneyAccountId: input.moneyAccountId,
       referenceNo: input.referenceNo?.trim() || null,
@@ -392,7 +413,9 @@ export async function recordCollection(
       await arRepo.insertAllocations(
         trx,
         collectionId,
-        input.allocations.map((a) => ({ chargeId: a.chargeId, amountApplied: a.amountApplied })),
+        // T-328 — the parsed array, not `input.allocations`: same reasoning as `createRemittance`
+        // storing `String(declared)` rather than the raw form (packages/domain/src/remittance/index.ts).
+        allocations.map((a) => ({ chargeId: a.chargeId, amountApplied: String(a.amountApplied) })),
       );
     }
 

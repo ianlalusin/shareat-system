@@ -417,9 +417,23 @@ const CLASSIFIED_ENTRIES: {
   },
   {
     file: 'trade/index.ts',
-    comparison: 'Number(draft.quantity) <= 0',
-    reason: 'quantity — `draft.quantity`',
-    checkIdentifiers: ['draft.quantity'],
+    // ⭐ T-328 — re-keyed, not merely re-approved. The site used to compare the RAW
+    // `draft.quantity` directly (`Number(draft.quantity) <= 0`), NaN-blind the same way the
+    // sibling `rate` check was (`NaN <= 0` is `false`). The fix routes it through a dedicated
+    // parser first — `parsedQuantity = parseQuantityInput(draft.quantity, ...)`, defined above in
+    // this file, `numeric(14,3)` via `packages/domain/src/stock/quantity.ts`, NOT `money()`/
+    // `parseMoneyInput` (quantity and money are different axes; see the "quantity" category
+    // header above) — so the comparison's own text changed to `Number(parsedQuantity) <= 0`. The
+    // sibling `rate` check avoided this by keeping the SAME identifier name (`rate`) for its
+    // parsed value; `parsedQuantity` could not, because `draft.quantity` is a property path on the
+    // caller's input, not a bare identifier a parsed local could reuse.
+    comparison: 'Number(parsedQuantity) <= 0',
+    reason:
+      'quantity — routed through `parseQuantityInput(draft.quantity, ...)` above (T-328); was ' +
+      'previously NaN-blind on the raw `draft.quantity` directly, same class of gap the money-side ' +
+      'routing fixes elsewhere, but on the quantity axis via its own parser, not parseMoneyInput',
+    checkFunctions: ['createTradeOrder'],
+    checkIdentifiers: ['parsedQuantity'],
   },
 
   // ---- rate: numeric(14,4), a different column type with its own precision — out of money() scope ----

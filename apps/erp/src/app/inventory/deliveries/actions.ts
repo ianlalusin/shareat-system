@@ -132,7 +132,15 @@ export async function createDeliveryAction(fd: FormData): Promise<void> {
       orderedQuantity: orderedQuantities[i] ?? '',
       purchaseUnit: purchaseUnits[i] || 'pcs',
       conversionFactor: conversionFactors[i] || '1',
-      unitCost: unitCosts[i] ?? '0',
+      // T-328 — was `?? '0'`. The form itself cannot produce a missing `unitCost` for a row that
+      // has an itemId (every field is `required`, none `disabled`, all rendered together per row —
+      // NewDeliveryForm.tsx checked directly). But this action is reachable by any caller that can
+      // build a FormData, not only that form, and `??` only fires on an ARRAY-INDEX gap (this row's
+      // position has no matching unitCost entry at all) — a request with a shorter `unitCost` array
+      // than `itemId`. `'0'` turned that gap into a silently free line; `''` fails
+      // `createDeliveryDocument`'s `parseFourDecimalCost` check with a readable refusal instead,
+      // the same as a genuinely blank box already would if the field were not `required`.
+      unitCost: unitCosts[i] ?? '',
       locationId: locationIds[i] || null,
     }))
     .filter((l) => l.itemId && l.orderedQuantity);

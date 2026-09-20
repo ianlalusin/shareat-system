@@ -112,9 +112,13 @@ export async function recordCollectionAction(formData: FormData): Promise<void> 
     // §16.10 (*a collection must never float unallocated*) — v1 let money arrive tied to nothing
     // on 38 collections and there was then no way to re-apply it.
     const chargeIds = formData.getAll('allocateChargeId').map(String);
+    // T-328/7th-shape — was `.filter((a) => a.amountApplied && Number(a.amountApplied) > 0)`.
+    // `Number('abc') > 0` is false, so a mistyped allocation was silently dropped with no message
+    // at all. Blank stays skipped (an unticked charge); anything else is left for `recordCollection`
+    // to accept or refuse with a readable sentence.
     const allocations = chargeIds
       .map((chargeId) => ({ chargeId, amountApplied: str(formData, `allocateAmount_${chargeId}`) }))
-      .filter((a) => a.amountApplied && Number(a.amountApplied) > 0);
+      .filter((a) => a.amountApplied);
 
     const creditApplied = str(formData, 'creditApplied');
 

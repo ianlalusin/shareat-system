@@ -61,6 +61,13 @@ export async function createRemittanceAction(formData: FormData): Promise<void> 
   let summary = '';
 
   try {
+    // Fetched up front (T-328) so a malformed amount's own error can name the account, the same
+    // way the orphaned-overage refusal below already does — a multi-row form where every row's
+    // error says only "the amount handed over" leaves the operator to guess which of several
+    // accounts has the typo.
+    const accounts = await cashierAccounts(actor.orgId, storeId);
+    const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? id;
+
     // One line per cashier account handed over — the till and the wallet remit separately,
     // because they are different places reconciling against different things.
     const rawLines = formData.getAll('lineAccountId').map((id, i) => ({
@@ -70,25 +77,45 @@ export async function createRemittanceAction(formData: FormData): Promise<void> 
       declaredOverage: str(formData, `lineOverage_${i}`) || null,
     }));
 
+    // T-328/7th-shape — used to be a bare `Number(amount) > 0` check, so a mistyped amount ('abc',
+    // or a thousands separator like '3,000') was silently treated as "no amount" — the same class
+    // of bug the filter has, just inline here twice. Blank is still legitimately "nothing handed
+    // over from this account"; a parsed-but-zero-or-negative amount is unchanged too (pre-existing
+    // rule, T-134 B3). Only a non-blank string that fails to parse is new: it now throws instead
+    // of vanishing. Kept as a plain `(amount) => boolean` — no account, no closure over anything
+    // else — so it stays a single, direct, independently-testable decision.
+    const isHandedOver = (amount: string): boolean => {
+      if (!amount) return false;
+      const parsed = parseMoneyInput(amount, 'createRemittanceAction: the amount handed over');
+      return Number(parsed) > 0;
+    };
+
+    // The account name is added HERE, at the call sites, not inside `isHandedOver` — whatever it
+    // throws is re-thrown with the account attached, so the two refusal paths below both name the
+    // row the operator needs to fix, the way the orphaned-overage message already did.
+    const handedOverOn = (line: { fromMoneyAccountId: string; amount: string }): boolean => {
+      try {
+        return isHandedOver(line.amount);
+      } catch (err) {
+        throw new Error(
+          `"${accountName(line.fromMoneyAccountId)}": ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    };
+
     // ⛔ The filter below keys on amount, same as always (§6 item 2: a declared overage must not
     // resurrect a blank-amount line). But dropping the whole line SILENTLY also drops a declared
     // overage the person actually typed, with nothing on screen saying so — refuse instead of
     // absorbing a money figure nobody asked to throw away.
-    const orphanedOverage = rawLines.find(
-      (l) => l.declaredOverage && !(l.amount && Number(l.amount) > 0),
-    );
+    const orphanedOverage = rawLines.find((l) => l.declaredOverage && !handedOverOn(l));
     if (orphanedOverage) {
-      const accounts = await cashierAccounts(actor.orgId, storeId);
-      const name =
-        accounts.find((a) => a.id === orphanedOverage.fromMoneyAccountId)?.name ??
-        orphanedOverage.fromMoneyAccountId;
       throw new Error(
-        `"${name}" has a declared overage but no amount handed over — enter the amount, or ` +
-          'clear the overage.',
+        `"${accountName(orphanedOverage.fromMoneyAccountId)}" has a declared overage but no ` +
+          'amount handed over — enter the amount, or clear the overage.',
       );
     }
 
-    const lines = rawLines.filter((l) => l.amount && Number(l.amount) > 0);
+    const lines = rawLines.filter((l) => handedOverOn(l));
 
     if (lines.length === 0) {
       throw new Error('Enter what was handed over from at least one account.');

@@ -12,11 +12,70 @@
  * Every helper below finds its target structurally (by call-site marker, then balanced-paren
  * extraction), never by line number — a guard keyed on a line number breaks on edits that have
  * nothing to do with what it guards (DEF-376).
+ *
+ * ⭐⭐ T-328 — ONE assertion in this file was converted from a source-SHAPE check to a
+ * BEHAVIOURAL one; the rest were deliberately left as they were. Recorded here so a reader who
+ * finds the one behavioural block does not assume the others are too.
+ *
+ * GROUP 1 replaced the inline `l.amount && Number(l.amount) > 0` filter predicate with a named
+ * `isHandedOver(amount)` helper — same guarantee, different source shape — which broke the old
+ * regex in "an overage on a zero-amount line must not resurrect it" below. Read `isHandedOver`
+ * (`apps/erp/src/app/remittance/actions.ts`) before touching that test: it decides solely on
+ * `amount` (blank → false; parsed-but-zero → false; never reads `.declaredOverage`), and a
+ * malformed non-blank amount now THROWS `parseMoneyInput`'s sentence instead of silently
+ * vanishing — a real improvement this task exists to make, not a regression. The guarantee the
+ * test's name states is unbroken, so the fix below is EXTRACT-AND-EXECUTE the real
+ * `isHandedOver` body against the real `parseMoneyInput`, never a re-implementation of it.
+ *
+ * ⛔ EVERY OTHER ASSERTION IN THIS FILE REMAINS SOURCE-SHAPE, on purpose, and was NOT touched by
+ * this pass — they carry the same "awkward to exercise directly" property line 4-5 above states,
+ * not a behavioural guarantee of their own:
+ *   - the page.tsx / actions.ts index-pairing guards (loop variable resolution, `lineAmount_${i}`
+ *     / `lineOverage_${i}` / `declaredOverage` read at the same index) — structural by nature,
+ *     there is no "behaviour" to drive without rendering the JSX and posting real FormData;
+ *   - the DEF-366 `result.varianceId` vs `result.variance` ternary guard — same reason;
+ *   - the two rendered-paragraph-text guards (§6 item 5, and the stale heldBack claim) — these
+ *     already match on MEANING via broad content regexes, not literal sentences, which is this
+ *     file's existing answer to the same brittleness problem for prose rather than code;
+ *   - line 187's `not.toContain('overage')` on the filter's own call-site block, kept alongside
+ *     the new behavioural check below as a belt-and-suspenders guard against a FUTURE call site
+ *     combining `isHandedOver(l.amount)` with `|| l.declaredOverage` directly, which behavioural
+ *     testing of `isHandedOver` in isolation could not catch on its own.
+ *
+ * ⚠️ RESIDUAL, recorded rather than fixed — the behavioural conversion moved the brittleness, it
+ * did not eliminate it. `extractArrowFunctionBody` still finds `isHandedOver` by NAME
+ * (`const isHandedOver = `); it no longer cares what the body's TEXT looks like, but a rename or
+ * a conversion to a different construct (e.g. a `function isHandedOver(...)` declaration, or
+ * inlining it back into the filter) still breaks this test — later and louder than the old regex
+ * did (a `not.toBeNull()` failure naming exactly what could not be found, not a silent wrong
+ * match), but it breaks. The alternative — exporting `isHandedOver` so this test imports it
+ * directly — was considered and rejected: that trades this for an export that exists only because
+ * a test wanted one, which is precisely the shape `callers.mjs`'s zero-caller/test-only check
+ * exists to catch. Extraction-by-name is the better trade, not a free one.
+ *
+ * ⭐⭐ T-328, ROUND TWO — the guarantee RELOCATED when GROUP 1 threaded the account name through.
+ * `isHandedOver(amount: string)` stayed a bare scalar; a NEW wrapper, `handedOverOn(line: {
+ * fromMoneyAccountId, amount })`, is what the `.filter(...)`/`.find(...)` call sites actually call
+ * now. Both are tested below, and they carry DIFFERENT STRENGTHS of the same guarantee — say which
+ * is which, because they no longer match:
+ *   - `isHandedOver` — a SCALAR argument. Executed via `new Function('parseMoneyInput', 'amount',
+ *     body)`, so a body that tried to read anything but `amount` would be a `ReferenceError` — a
+ *     structural fact from the JS scope chain, true regardless of what the assertions check.
+ *   - `handedOverOn` — an OBJECT argument. A body reading `line.declaredOverage` against a fixture
+ *     that never sets that field gets `undefined` (falsy, no throw) and passes anyway — the
+ *     scope-chain guarantee does NOT carry over once the parameter is a bag of fields. What
+ *     protects it is only the TYPE ANNOTATION listing two fields, a convention one word away from
+ *     silent widening, not a fact the runtime enforces. This is WHY the behavioural test for
+ *     `handedOverOn` includes a fixture with `declaredOverage` set to a truthy value on a
+ *     blank-amount line, asserting `false` — built into the first version, not added after a
+ *     break, because the field's absence elsewhere is otherwise indistinguishable from a body that
+ *     correctly ignores it.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { parseMoneyInput } from '@shareat/domain/money-input';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pagePath = resolve(here, '..', 'src', 'app', 'remittance', 'page.tsx');
@@ -66,6 +125,60 @@ function scanToMatchingParen(source: string, openIdx: number): number {
 function extractParenAt(source: string, openIdx: number): string {
   const end = scanToMatchingParen(source, openIdx);
   return source.slice(openIdx + 1, end - 1);
+}
+
+/**
+ * ⭐ T-328 — the brace analogue of `scanToMatchingParen`, for extracting a FUNCTION BODY rather
+ * than a call's argument list. Same comment/string-skipping discipline, so a `}` inside a comment
+ * or a template literal in the body cannot truncate the extraction early.
+ */
+function scanToMatchingBrace(source: string, openIdx: number): number {
+  let depth = 1;
+  let i = openIdx + 1;
+  for (; i < source.length && depth > 0; i++) {
+    const c = source[i];
+    if (c === '/' && source[i + 1] === '/') {
+      const end = source.indexOf('\n', i);
+      i = end === -1 ? source.length : end;
+      continue;
+    }
+    if (c === '/' && source[i + 1] === '*') {
+      const end = source.indexOf('*/', i + 2);
+      i = end === -1 ? source.length : end + 1;
+      continue;
+    }
+    if (c === "'" || c === '"' || c === '`') {
+      const quote = c;
+      i++;
+      while (i < source.length && source[i] !== quote) {
+        if (source[i] === '\\') i++;
+        i++;
+      }
+      continue;
+    }
+    if (c === '{') depth++;
+    else if (c === '}') depth--;
+  }
+  return i;
+}
+
+/**
+ * ⭐ T-328 — extracts a named `const <name> = (...) => { ... }` arrow function's BODY TEXT (the
+ * content between its `{` and matching `}`), for BEHAVIOURAL testing: running the real extracted
+ * code against real inputs, rather than pattern-matching what it looks like. Returns null if the
+ * marker or its body cannot be found, so a caller can fail loudly and specifically rather than
+ * proceed on an empty string that silently behaves like "no body" (`new Function` on '' always
+ * returns undefined, which could pass a careless assertion for the wrong reason).
+ */
+function extractArrowFunctionBody(source: string, constMarker: string): string | null {
+  const markerIdx = source.indexOf(constMarker);
+  if (markerIdx === -1) return null;
+  const arrowIdx = source.indexOf('=>', markerIdx);
+  if (arrowIdx === -1) return null;
+  const openBrace = source.indexOf('{', arrowIdx);
+  if (openBrace === -1) return null;
+  const end = scanToMatchingBrace(source, openBrace);
+  return source.slice(openBrace + 1, end - 1);
 }
 
 /** Extracts the argument list of the first call to `marker` (which must end in the call name, no paren). */
@@ -179,12 +292,120 @@ describe('T-324 slice B — an overage on a zero-amount line must not resurrect 
 
     const { block: filterBlock } = extractCallAfter(actionsSource, mapEndIdx, '.filter');
     expect(filterBlock, 'could not find the .filter(...) chained onto the lines[] builder').not.toBe('');
-    // §6 item 2: "an overage on a line with no amount must not resurrect that line." The filter
-    // predicate must still decide solely on `.amount` — if it grows an `|| l.declaredOverage`
-    // (or similar), a zero-amount line with a declared overage would survive the filter and reach
-    // the domain, which is exactly what this guards against.
-    expect(filterBlock).toMatch(/l\.amount\s*&&\s*Number\(l\.amount\)\s*>\s*0/);
+    // Belt-and-suspenders, kept alongside the behavioural check below: guards against a FUTURE
+    // call site combining the decision with `|| l.declaredOverage` directly at the .filter(...)
+    // site, which testing isHandedOver in isolation could never see.
     expect(filterBlock.toLowerCase()).not.toContain('overage');
+  });
+
+  /**
+   * ⭐⭐ T-328 — BEHAVIOURAL, not source-shape. §6 item 2: "an overage on a line with no amount
+   * must not resurrect that line." GROUP 1 renamed the inline `l.amount && Number(l.amount) > 0`
+   * check to a named `isHandedOver(amount)` helper — same guarantee, different source text — so a
+   * regex on the old expression is the wrong instrument now. This extracts `isHandedOver`'s REAL
+   * body (structurally, same idiom as the rest of this file) and EXECUTES it against the REAL
+   * `parseMoneyInput`, so the assertion is about what the code actually DOES for a blank or
+   * zero amount, not what it happens to look like.
+   */
+  it('actions.ts: isHandedOver (the filter\'s real decision function) is false for blank and zero, true for a real amount, and never reads declaredOverage', () => {
+    const body = extractArrowFunctionBody(actionsSource, 'const isHandedOver = ');
+    expect(body, 'could not extract the isHandedOver arrow function\'s body').not.toBeNull();
+
+    // Structural half of the behavioural check: the body text itself must never reference
+    // declaredOverage — `isHandedOver` takes only `amount`, so this also catches a signature
+    // change that smuggled a second parameter in without this test noticing via arity alone.
+    expect(body!.toLowerCase()).not.toContain('overage');
+
+    // The REAL function, running for real — never a re-implementation of what it should do.
+    const isHandedOver = new Function('parseMoneyInput', 'amount', body!) as (
+      parseMoneyInput: typeof import('@shareat/domain/money-input').parseMoneyInput,
+      amount: string,
+    ) => boolean;
+
+    expect(isHandedOver(parseMoneyInput, ''), 'blank amount must not count as handed over').toBe(false);
+    expect(isHandedOver(parseMoneyInput, '0'), 'a zero amount must not count as handed over').toBe(false);
+    expect(isHandedOver(parseMoneyInput, '0.00'), 'a zero amount (2dp) must not count as handed over').toBe(false);
+    // Control — if this were false too, the function would be vacuously refusing everything and
+    // the three checks above would be proving nothing.
+    expect(isHandedOver(parseMoneyInput, '100'), 'a genuine positive amount must count as handed over').toBe(true);
+  });
+
+  /**
+   * ⭐⭐ T-328 — the guarantee RELOCATED, not merely widened. GROUP 1 threaded the account name
+   * through by adding `handedOverOn(line)`, a wrapper around the still-scalar `isHandedOver` that
+   * catches and re-labels its error with the account name. `isHandedOver` itself is untouched —
+   * still `(amount: string) => boolean`, still closure-free, still a `ReferenceError` if its body
+   * ever tried to read anything but `amount`. But the `.filter(...)`/`.find(...)` call sites now
+   * call `handedOverOn(l)`, not `isHandedOver(l.amount)` — so `handedOverOn` is what actually
+   * decides today, and NOTHING tested it until this. Verified independently before writing this
+   * (never taken on the report that produced this test): read `handedOverOn` at source — it
+   * decides solely by delegating to `isHandedOver(line.amount)`, and the only other thing its body
+   * does is catch-and-relabel; `declaredOverage` is not referenced anywhere inside it.
+   *
+   * ⚠️ THE KIND OF GUARANTEE IS WEAKER HERE THAN FOR `isHandedOver` ABOVE, RECORD WHY:
+   * `handedOverOn` takes an OBJECT (`{ fromMoneyAccountId, amount }`), so binding it for execution
+   * needs a `line` object, not a scalar. A body that read `line.declaredOverage` against a fixture
+   * that never sets that field would get `undefined` — falsy, no throw — and every assertion below
+   * would still pass; the `ReferenceError`-on-any-other-identifier property `isHandedOver` has
+   * (real, from the JS scope chain — `new Function` binds only the names listed) does NOT carry
+   * over once the argument is a bag of fields rather than a single value. What protects
+   * `handedOverOn` today is only the TYPE ANNOTATION listing two fields — a convention, one word
+   * away from being silently widened, not a structural fact the way `isHandedOver`'s is. THAT is
+   * why the fixture below explicitly sets `declaredOverage` to a truthy value on a blank-amount
+   * line and asserts `false`, built in from the first version of this test rather than added after
+   * a later break — the field's ABSENCE from other fixtures would otherwise be indistinguishable
+   * from a body that correctly ignores it.
+   */
+  it("actions.ts: handedOverOn (what the filter ACTUALLY calls today) decides only via isHandedOver, ignores declaredOverage even when present, and labels a refusal with the account", () => {
+    const isHandedOverBody = extractArrowFunctionBody(actionsSource, 'const isHandedOver = ');
+    expect(isHandedOverBody, 'could not extract isHandedOver').not.toBeNull();
+    const realIsHandedOver = new Function('parseMoneyInput', 'amount', isHandedOverBody!) as (
+      parseMoneyInput: typeof import('@shareat/domain/money-input').parseMoneyInput,
+      amount: string,
+    ) => boolean;
+
+    const handedOverOnBody = extractArrowFunctionBody(actionsSource, 'const handedOverOn = ');
+    expect(handedOverOnBody, 'could not extract handedOverOn').not.toBeNull();
+
+    // Bound to the REAL isHandedOver above (itself bound to the REAL parseMoneyInput) — never a
+    // re-implementation at either layer. accountName is a stub; only its RESULT is inspected
+    // (present in the thrown message), never its own logic — that belongs to a different guard.
+    const realHandedOverOn = new Function('isHandedOver', 'accountName', 'line', handedOverOnBody!) as (
+      isHandedOver: (amount: string) => boolean,
+      accountName: (id: string) => string,
+      line: { fromMoneyAccountId: string; amount: string; declaredOverage?: string },
+    ) => boolean;
+    const boundIsHandedOver = (amount: string) => realIsHandedOver(parseMoneyInput, amount);
+    const accountName = (id: string) => `Account ${id}`;
+
+    expect(
+      realHandedOverOn(boundIsHandedOver, accountName, { fromMoneyAccountId: 'a', amount: '' }),
+      'blank amount must not count as handed over',
+    ).toBe(false);
+    // ⭐ THE MANDATORY CASE — see the comment above. Without it, a body reading
+    // `line.declaredOverage` would read `undefined` from every OTHER fixture here and pass anyway.
+    expect(
+      realHandedOverOn(boundIsHandedOver, accountName, {
+        fromMoneyAccountId: 'a',
+        amount: '',
+        declaredOverage: '50',
+      }),
+      'a declared overage on a blank-amount line must NOT make it count as handed over',
+    ).toBe(false);
+    expect(
+      realHandedOverOn(boundIsHandedOver, accountName, { fromMoneyAccountId: 'a', amount: '0' }),
+      'a zero amount must not count as handed over, declaredOverage or not',
+    ).toBe(false);
+    expect(
+      realHandedOverOn(boundIsHandedOver, accountName, { fromMoneyAccountId: 'a', amount: '100' }),
+      'a genuine positive amount must count as handed over (control)',
+    ).toBe(true);
+
+    // The re-labelling half: a malformed amount still throws (isHandedOver's own job), and
+    // handedOverOn's own job is to name which account it was on.
+    expect(() =>
+      realHandedOverOn(boundIsHandedOver, accountName, { fromMoneyAccountId: 'acct-123', amount: 'abc' }),
+    ).toThrow(/Account acct-123/);
   });
 });
 

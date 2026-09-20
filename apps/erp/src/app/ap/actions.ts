@@ -238,12 +238,17 @@ export async function recordPaymentAction(formData: FormData): Promise<void> {
   try {
     if (!storeId) throw new Error('Choose a store.');
     const expenseIds = formData.getAll('allocateExpenseId').map(String);
+    // T-328/7th-shape — this used to be `.filter((a) => a.amountApplied && Number(a.amountApplied) > 0)`.
+    // `Number('abc') > 0` is false, so a mistyped allocation was silently dropped: no message, the
+    // line just didn't exist, and the operator believed it had been recorded. Blank is still
+    // skipped here (an unticked expense); anything else is left for `recordPayment`'s own
+    // `parseMoneyInput` to accept or refuse with a readable sentence.
     const allocations = expenseIds
       .map((expenseId) => ({
         expenseId,
         amountApplied: str(formData, `allocateAmount_${expenseId}`),
       }))
-      .filter((a) => a.amountApplied && Number(a.amountApplied) > 0);
+      .filter((a) => a.amountApplied);
 
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       recordPayment(tx, actor, {
