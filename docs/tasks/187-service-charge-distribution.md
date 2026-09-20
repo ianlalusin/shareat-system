@@ -100,9 +100,33 @@ detector's grouping — **or a recorded decision saying why it stays org-wide.**
 > one's was.**
 >
 > ⛔ **THE GATE IS NOW THE RESIDUAL, NOT THE SILENCE.** After a distribution the test must assert
-> that the store's float lands at an **exact expected NON-NEGATIVE figure**. Silence is necessary
-> and is not sufficient. ⚠️ A test that asserts only *"no finding"* is a test that passes when the
-> business has paid out more than it held.
+> that the store's float lands on an **exact figure, written as a literal**. Silence is necessary
+> and is not sufficient. ⚠️ A test that asserts only *"no finding"* passes when the business has paid
+> out more than it held.
+>
+> ⛔⛔ **AND THE EXPECTED FIGURE IS A HAND-WRITTEN LITERAL — never derived from `floatBalance`, from
+> the input amounts, or from a before-and-after delta.** This clause exists because the first draft
+> of this amendment omitted it and was **satisfiable by a test that controls nothing**:
+> `expect(after).toBe(before - 400)` is an exact figure and passes **even if `floatBalance` is
+> wrong**, because the code under test supplies both sides. ⚠️ *"Non-negative"* was also struck: it
+> follows from an exact assertion, and naming it invited the weaker reading
+> (`toBeGreaterThanOrEqual(0)`) which catches nothing but the sign.
+>
+> ⛔⛔ **WHAT THIS GATE DOES NOT PROVE, STATED BECAUSE THE FIRST DRAFT IMPLIED OTHERWISE.** Its
+> rationale is over-discharge — a float driven below zero. **A sequential test cannot produce that
+> state.** The cap re-derives from the ledger on every call, so a second sequential payout sees the
+> first one's effect and refuses; a negative balance arises only from the **DEF-374 concurrency
+> class**, which needs a harness this suite does not have. ⭐ **So AMENDMENT 4 closes the
+> CRITERION'S AMBIGUITY — nobody can mistake silence for success again — and pins the arithmetic.
+> It adds NO coverage of the over-discharge path.** ⛔ Do not report it as though it did; that would
+> be a green proving something narrower than its own justification, which is the exact failure this
+> amendment was written to remove.
+>
+> ⭐ **THE HALF THAT IS SEQUENTIALLY TESTABLE, AND IT IS WORTH HAVING:** plant a negative `2160`
+> balance by posting a direct ledger debit **without** going through `distributeServiceCharge`, then
+> assert the detector is **silent**. That documents DEF-406's blind spot as a known, deliberate
+> state with a test that names it, instead of leaving it as an absence nobody wrote down. **The
+> over-discharge PATH stays untestable here; the DETECTOR's blindness does not have to be.**
 >
 > ⚠️ **Observed and deliberately NOT filed as its own defect:** `balance < 0.005 → continue` is the
 > shared idiom of the whole FIFO detector family (`findings.ts:611`, `992`, `1406`), so **any
