@@ -72,8 +72,19 @@ export function today(): string {
 // -------------------------------------------------------------------------------------
 
 /** The three T-152 kinds. ⚠️ A store-scoped finding is matched to this store, but an **org-wide**
- *  one (`storeId === null`, which `serviceChargeFloatAgeing` always is) is always kept — filtering
- *  strictly by store would silently drop it. */
+ *  one (`storeId === null`) is always kept — filtering strictly by store would silently drop it.
+ *
+ *  ⛔ **T-187 (2026-09-20) FALSIFIED THIS COMMENT'S EXAMPLE, FROM ANOTHER FILE, WITH NO LINE OF THE
+ *  CHANGE LANDING HERE.** It used to read *"which `serviceChargeFloatAgeing` always is"*. That
+ *  detector was regrouped per store and **now never emits `storeId: null`**, so the null branch is
+ *  dead for this kind. The filter is still correct; the example was the part that rotted.
+ *
+ *  ⚠️ **And a user-visible change rode along, recorded here because it appears in no diff:** this
+ *  finding used to show on **every** store's remittance page and now shows only on its own. That is
+ *  the point of the regroup, not a regression — but nobody chose it on this screen.
+ *
+ *  ⭐ Keep the null branch. It is live for any future org-wide kind, and bible row 204 is why the
+ *  example is now stated as history rather than as a fact this comment has to maintain. */
 const CASH_CUSTODY_KINDS = new Set([
   'unremittedCeilingBreached',
   'remittanceOverdue',
