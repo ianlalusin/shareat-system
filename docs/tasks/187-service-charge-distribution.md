@@ -1,6 +1,6 @@
 # T-187 — the service-charge float is distributed to staff, and 2160 finally has a debit
 
-**Status:** ⭐ **ANSWERED AND READY TO SPEC — all five questions ruled by Ian, 2026-09-20 (bible row 223). NOT YET BUILT.** ⚠️ His answers arrived RELAYED via `webapps-17`, not typed in the orchestrator's terminal — verbatim, and flagged to him for confirmation. **Ordered by Ian** (bible rows 221, 222, 223).
+**Status:** ✅ **SHIPPED 2026-09-21, commit `9a4e78a`.** All five questions ruled by Ian (bible row 223), built, audited across **four rounds**, and **smoketested in a real browser** on all four money-account codes. Gates: typecheck 0 · unit 136 files/1883 · integration 2 files/70 · build 0 · `CALLERS: OK`. **Closes DEF-082.** ⚠️ Ships with **DEF-406**, **DEF-407** and a second confirmed member of **DEF-374** named rather than hidden — see §5 and the commit message. ⚠️ Ian's original answers arrived RELAYED via `webapps-17`, then were confirmed by him directly. **Ordered by Ian** (bible rows 221, 222, 223, 225).
 **Closes:** DEF-082 — *nothing in the codebase ever DEBITS `2160`, so the service-charge float can
 only grow.*
 **Migration slot:** ⭐ **none needed** — row 223 removed the only thing that would have required one
