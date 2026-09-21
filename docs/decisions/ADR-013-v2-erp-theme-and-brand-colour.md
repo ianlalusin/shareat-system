@@ -142,3 +142,82 @@ theme should copy that solution rather than invent a second one.
   should cite it.
 - `ERP-rebuild/src/app/globals.css:31` — v1's amber primary (read-only reference).
 - `Shareat Website/src/styles/global.css:10-12` — the three brand tokens (read-only reference).
+
+---
+
+## Amendment 1 — 2026-09-21: the source document, the full palette, and the half-day that carries the win
+
+⭐ **ADR-013 was written from a session's memory of the ruling. The ruling's own working document has
+since been found and read**, and it is considerably more complete: a nine-token palette, a
+four-step migration order already sequenced for a shared tree, and a colour-family census.
+
+**Source:** the Claude Doc *"Support System Build Plan"* (2026-09-19), section **"V1 visual
+restoration"** — `https://claude.ai/artifact/2BBR1pfS7sz2EKejpgZiPJ`. ⛔ **The theme ruling is one
+section of a document about something else entirely**, which is precisely why a repo-wide search for
+it found nothing and why it took asking a peer session to surface it.
+
+### A1.1 The full token set — RULED, and ADR-013 §1 carried only four of the nine
+
+| Token | Value | Used for |
+|---|---|---|
+| `--brand` | `#d40909` | The **one** primary action per view, active nav item, focus ring, wordmark. ⛔ **Nothing else** |
+| `--brand-hover` | `#b00707` | Hover and pressed on the above |
+| `--danger` | `#a00606` | Destructive actions and error text. ⛔ **Always outlined, never filled, always with an icon** |
+| `--danger-surface` | `#fde7e7` | Error banner backgrounds, with a left bar |
+| `--warning` | `#f4b942` | Pending, attention, needs-review. ⭐ **This is where today's 649 ambers go** |
+| `--success` | `#059669` | Posted, verified, tied |
+| `--canvas` | `#ffffff` | Page background |
+| `--surface` | `#ffffff` + `#e5e5e5` border | Cards |
+| `--ink` | `#1a1a1a` | Body text — the brand's own `shareat-black` |
+
+⭐ `--brand-hover`, `--success`, `--canvas`, `--surface` and `--ink` are **new to this record**;
+ADR-013 §1 had only the four reds and the gold.
+
+### A1.2 ⭐ The measured surface — and one number that changes the plan's shape
+
+| Measured | Doc, 2026-09-19 | Re-measured 2026-09-21 |
+|---|---|---|
+| Colour tokens in `globals.css` | **none** | none ✓ |
+| `tailwind.config.ts` theme | `theme: { extend: {} }` — empty | empty ✓ |
+| `darkMode` key in the Tailwind config | *(not stated)* | ⛔ **absent — so Tailwind is on its default `media` strategy, i.e. OS-follow.** That IS the bug |
+| `dark:` usages | 3,434 | **3,485** (active tree) |
+| Files with a local `BTN`/`INPUT` | 62 | **65** |
+| Distinct hand-written primary-button strings | **12+** | ~8 `BTN` + ~9 `INPUT` distinct literals |
+| Colour families | neutral 4,763 · **red 781** · **amber 649** · emerald 370 · white 291 · green 200 | — |
+
+⭐⭐ **THE NUMBER THAT MATTERS MOST IS THE SMALL ONE: ~8–12 distinct strings across 65 files.**
+This is a **mechanical sweep**, not 65 judgement calls — which is what makes step 3 below safe to
+spread across commits, and what makes this a candidate for a `Workflow` rather than a lane.
+⚠️ **Concentration measured: 152 files carry `dark:` classes and the top 15 hold only 22.5% of
+them.** ⛔ **There is no spine.** The refactor cannot be done by fixing ten files.
+
+### A1.3 ⭐ THE HALF-DAY THAT DELIVERS MOST OF THE WIN — and it is step 1 alone
+
+The doc's own words: *"`:root { color-scheme: light }`, with `dark` only under
+`[data-theme="dark"]`. **This one change is what makes v2 read as v1 immediately**, before any
+refactor."*
+
+1. **Tokens in `globals.css` + `tailwind.config.ts`, the `darkMode` selector, and the cookie.
+   Nothing else changes.** ⭐ *~half a day, and it delivers most of the visible win.*
+   - `darkMode: ['selector', '[data-theme="dark"]']` — ⭐ **so all 3,485 existing `dark:` classes
+     keep working and nothing has to be deleted.**
+   - A `theme` cookie read in `layout.tsx` and written onto `<html>`, **exactly as
+     `data-sidebar-state` already is.** Default light.
+2. One `components/ui/{Button,Input,Card}.tsx` carrying the tokens. **Not yet used anywhere.** *~half a day.*
+3. Replace the local constants **a few files per commit**, highest-traffic first: the shell, `/`,
+   `/sign-in`, `/staff`, `/expenses`. *~2–3 days spread out.*
+4. **Semantic sweep last:** re-point the **781 `red-*` usages that mean *error*** onto `--danger` /
+   `--danger-surface`, so brand red is left holding only chrome. *~1 day.*
+
+⛔ **"Do not do this all at once" is the doc's own instruction** — other lanes work in this tree.
+⚠️ And its operational note, which this repo's CLAUDE.md states independently: **stop the dev server
+on 9008 before any build**, because `next build` overwrites the `.next` a running server is serving.
+
+### A1.4 What this amendment does NOT resolve
+
+⛔ **The dark-mode text contrast gap in ADR-013 §1 still stands and the source document does not
+address it.** `#d40909` is **3.84:1** on black and `#a00606` is **2.52:1** — **both fail AA as
+text on a dark surface.** The palette above is specified for **light**; step 1 keeps dark mode
+working mechanically, but the dark theme's own text reds remain unchosen. ⚠️ Since step 1 defaults
+to light and makes dark opt-in, **this is not blocking for steps 1–4** — but it must be settled
+before dark mode is offered as a supported theme rather than a carried-over behaviour.
