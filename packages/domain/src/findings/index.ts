@@ -10,11 +10,14 @@
  *
  * ⛔ **This module never writes to the ledger.** Every detector is a question, not a correction.
  */
-import { findingsRepo, transaction, type Tx } from '@shareat/db';
+import { daysBetweenDates, findingsRepo, manilaToday, transaction, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 // ⭐ Reused, not redefined. T-140 already owns "the last COMPLETED month" and the scorecard must
 // observe exactly the month the screen shows, or the two disagree about what was ever asked.
 import { lastCompletedPeriod } from '../scheduler';
+// ⛔ T-332 — `payoutIntervalTooLong` needs the real period/payout math, and a repo file may not
+// import this package (ADR-004), so the arithmetic lives here rather than in `findings.ts`.
+import { derivePeriods, payoutDateFor, type PeriodConfig, type PayoutConfig } from '../payroll/periods';
 
 /** ⭐ An accepted risk should be re-accepted, not forgotten. */
 export const ACKNOWLEDGEMENT_DAYS = 30;
@@ -41,6 +44,102 @@ export interface FindingsFeed {
   openCount: number;
   acknowledgedCount: number;
   hardCount: number;
+}
+
+/**
+ * `payoutIntervalTooLong` — T-332 §4.3, amended A1.1/A1.13. Not a spread of a `findingsRepo`
+ * detector like every other entry below, and that asymmetry is deliberate: `findings.ts`'s
+ * `liveCadenceConfigs` only fetches (ADR-004 — a repo may not import this package), and
+ * `derivePeriods`/`payoutDateFor` live here, so the arithmetic that decides compliance has to run
+ * on this side of the boundary. `findings.ts`'s `payoutIntervalFinding` still owns the ceiling
+ * (Labor Code Art. 103) and the operator-facing wording, so that stays with every other
+ * detector's, even though this one computes the number that function judges.
+ *
+ * ⭐ **Computed from the real functions, never from `payrollPeriodType` alone** (DEF-409): a
+ * `semi_monthly` store on `fixed_days` with a single-entry `payoutDays` collapses both of a
+ * month's periods onto the SAME payout day, 28+ days after the previous one — a label-only check
+ * would call it compliant and be wrong.
+ *
+ * ⛔ **Twelve consecutive months, not two.** A two-month window gets the VERDICT right but not
+ * the NUMBER: `maxGapDays` is a property of the CONFIGURED cadence — its worst case across a full
+ * annual cycle — not of whichever two months happened to be examined. The same DEF-409 config
+ * reports 31 in Sep/Oct and 28 in Jan/Feb under a two-month window; the configured worst case is
+ * 31 (`t332-payday-compliance.test.ts` case 5, pre-registered). A stored acknowledgement is keyed
+ * on `storeId` alone, with no window in it, so a number that moved with the calendar would let an
+ * acknowledgement taken against one figure silently cover a different one. `periodIndex` resets
+ * to 0 per calendar month, matching the convention case 5 states: how a per-store, per-month
+ * detector actually calls `payoutDateFor`.
+ *
+ * ⭐ **The VERDICT (fires or not) genuinely is calendar-independent, and that is a separate,
+ * narrower claim than the number — worth keeping, because it explains why any twelve-month
+ * window agrees with any other.** In `lag` mode the two candidate gaps are `last − cutoff`
+ * (inside a month) and `cutoff` (across the boundary, constant); the first is worst in a 31-day
+ * month, and every pair of consecutive months contains one — so whether it fires never depends on
+ * which months were checked, only the exact number does. Probed directly: cutoff 15 and 16 never
+ * fire in any window; cutoff 14 fires in every window; cutoff 17 fires on the cross-boundary gap
+ * alone; `[10]`, `[10,25]`, `[5,20]`, `[1,17]`, `[31]` all agreed in Sep/Oct and Jan/Feb. The
+ * NUMBER those same configs report is exactly what moved, which is why it is now swept over all
+ * twelve months rather than read off two.
+ */
+async function payoutIntervalFindings(tx: Tx, orgId: string): Promise<findingsRepo.DetectedFinding[]> {
+  const [today, configs] = await Promise.all([
+    manilaToday(tx),
+    findingsRepo.liveCadenceConfigs(tx, orgId),
+  ]);
+  const [startYear, startMonth] = today.split('-').map(Number) as [number, number, number];
+
+  // Twelve consecutive months from "now" — pure arithmetic, no extra query. ⭐ The starting point
+  // is window-independent BY CONSTRUCTION, not merely observed to be: any twelve consecutive
+  // months contain exactly one of each calendar month, so every window has the identical
+  // multiset of month lengths — seven 31s, four 30s, one February. The only variation is a leap
+  // February (29 rather than 28), and a longer February can only lengthen FEBRUARY'S OWN gaps,
+  // which are never the maximum for any cadence that reaches the ceiling. So the reported number
+  // cannot depend on which month is "now".
+  const months: [number, number][] = [];
+  let y = startYear;
+  let m = startMonth;
+  for (let i = 0; i < 12; i++) {
+    months.push([y, m]);
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+  }
+
+  const findings: findingsRepo.DetectedFinding[] = [];
+  for (const cfg of configs) {
+    const periodConfig: PeriodConfig = {
+      payrollPeriodType: cfg.payrollPeriodType,
+      semiMonthlyCutoffDay: cfg.semiMonthlyCutoffDay,
+    };
+    const payoutConfig: PayoutConfig = {
+      payoutMode: cfg.payoutMode,
+      payoutLagDays: cfg.payoutLagDays,
+      payoutDays: cfg.payoutDays,
+    };
+
+    const payoutDates: string[] = [];
+    for (const [y2, m2] of months) {
+      derivePeriods(periodConfig, y2, m2).forEach((period, periodIndex) => {
+        payoutDates.push(payoutDateFor(period, payoutConfig, periodIndex));
+      });
+    }
+
+    const distinct = [...new Set(payoutDates)].sort();
+    let maxGapDays = 0;
+    for (let i = 1; i < distinct.length; i++) {
+      maxGapDays = Math.max(maxGapDays, daysBetweenDates(distinct[i - 1]!, distinct[i]!));
+    }
+
+    const finding = findingsRepo.payoutIntervalFinding({
+      storeId: cfg.storeId,
+      storeName: cfg.storeName,
+      maxGapDays,
+    });
+    if (finding) findings.push(finding);
+  }
+  return findings;
 }
 
 /**
@@ -133,6 +232,13 @@ export async function listFindings(
     // creation are both rejected traps, see the task spec); this is what stops that from becoming
     // a silent outage twelve months out instead of today's.
     ...(await findingsRepo.fiscalPeriodRunwayLow(tx, orgId)),
+    // ⭐ T-332 — DEF-409: a store's configured pay cycle cannot satisfy Labor Code Art. 103's
+    // sixteen-day ceiling. Computed from `derivePeriods`/`payoutDateFor`, not the cadence label —
+    // see `payoutIntervalFindings`'s own comment for why this is not a `findingsRepo` spread.
+    ...(await payoutIntervalFindings(tx, orgId)),
+    // The exact complement of the line above (A1.5): a store with no live config has no cadence
+    // to judge, so DEF-249's state is a second detector, not a branch inside the first.
+    ...(await findingsRepo.attendanceConfigMissing(tx, orgId)),
   ];
 
   const acks = await findingsRepo.liveAcknowledgements(tx, orgId);

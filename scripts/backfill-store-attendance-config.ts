@@ -55,13 +55,28 @@
  *     first place. This script reaches the same property by a different, more direct mechanism: an
  *     ordinary `try`/`catch` around each org's body, because there is no equivalent "always return,
  *     never throw" wrapper here to delegate to.
- *   - **Reports `inserted` / `skipped` / `failed` per store**, and computes coverage rather than
- *     trusting a counter: `seedAttendanceConfig`'s idempotence means a store already configured
- *     between this script's listing pass and its write pass is a correctly-reported `skipped`, not
- *     a swallowed conflict. In `--confirm` mode coverage is re-queried, because it actually moved;
- *     in a dry run every store's write rolled back, so coverage is PROJECTED from what would have
- *     been inserted, not re-queried — a re-query would print an unmoved number next to `inserted`
- *     lines and read as if the run had silently failed.
+ *   - **Reports `inserted` / `skipped` / `failed` per store, AND per org**, and computes coverage
+ *     rather than trusting a counter: `seedAttendanceConfig`'s idempotence means a store already
+ *     configured between this script's listing pass and its write pass is a correctly-reported
+ *     `skipped`, not a swallowed conflict. In `--confirm` mode coverage is re-queried, because it
+ *     actually moved; in a dry run every store's write rolled back, so coverage is PROJECTED from
+ *     what would have been inserted, not re-queried — a re-query would print an unmoved number
+ *     next to `inserted` lines and read as if the run had silently failed.
+ *
+ * ⚠️ **Deliberately UNFILTERED by `is_active`, unlike `payoutIntervalTooLong`/
+ * `attendanceConfigMissing` (`packages/db/src/repo/findings.ts`), and that asymmetry is not an
+ * oversight — it CLOSES A HOLE, not merely avoids one.** A detector alarming forever on a
+ * deactivated store is a permanent, unclearable false alarm, so those two filter it out. But
+ * `reactivateStore` (`stores/service.ts`) does exactly two things — `setActive(true)` and fan out
+ * store scope — and does NOT seed a config. ⛔ **If this script also skipped inactive stores, a
+ * store closed today would come back ACTIVE WITH NO CONFIG the moment someone reactivated it** —
+ * DEF-249 reopening on a store that has just started trading again, through a path nobody watches.
+ * Backfilling every store regardless of `is_active` is what prevents that: once this script has
+ * run, `supersedeConfig` always inserts a successor, so "live" never empties again, and a
+ * reactivated store already has a policy in force with no gap. The hazard this closes is real only
+ * in the window before the backfill runs (or, after, for any store this run individually FAILED
+ * on — see the failure list below, which is where slice A's per-store isolation earns its keep).
+ * Do not "fix" this into matching the detectors' filter; the two are supposed to differ.
  *
  *   npm run backfill-store-attendance-config -- --confirm
  */

@@ -303,7 +303,9 @@ export async function fiscalPeriodRunwayLow(tx: Tx, orgId: string): Promise<Dete
 // T-152 — cash that is sitting somewhere it should not be
 // -------------------------------------------------------------------------------------
 
-/** RA 11360: service charge is distributed at intervals not exceeding sixteen days. */
+/** RA 11360: service charge is distributed at intervals not exceeding sixteen days.
+ *  ⚠️ `PAY_INTERVAL_MAX_DAYS` below is the SAME number for a DIFFERENT statute (Labor Code Art.
+ *  103, wages) — deliberately a second constant, not an alias of this one. See its own note. */
 const SERVICE_CHARGE_MAX_DAYS = 16;
 
 interface StorePositionRow {
@@ -1897,6 +1899,114 @@ export async function meatSlabStale(tx: Tx, orgId: string, thresholdDays = 14): 
     detail:
       `${r.store_name} still has ${r.remaining_quantity} of a ${r.item_name} slab received ` +
       `${r.received_at}, past the freshness window. Worth a look before it becomes wastage.`,
+  }));
+}
+
+// ---------------------------------------------------------------------------------------------
+// T-332 — the sixteen-day payday check (`payoutIntervalTooLong`) and DEF-249's visibility
+// (`attendanceConfigMissing`). docs/tasks/332-store-payday-settings-and-the-sixteen-day-check.md,
+// A1.1/A1.5/A1.6/A1.13.
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Labor Code Art. 103: wages must be paid at intervals not exceeding sixteen days.
+ * ⚠️ Equal to `SERVICE_CHARGE_MAX_DAYS` above TODAY, not BY LAW: RA 11360 (service charges) and
+ * Art. 103 (wages) are two independent statutes that happen to both say sixteen. Two constants,
+ * on purpose — aliasing one to the other would let an edit to either statute silently move both,
+ * with nothing testing that it should. `SERVICE_CHARGE_MAX_DAYS` carries this same note.
+ */
+const PAY_INTERVAL_MAX_DAYS = 16;
+
+interface LiveCadenceConfig {
+  storeId: string;
+  storeName: string;
+  payrollPeriodType: 'monthly' | 'semi_monthly' | 'weekly';
+  semiMonthlyCutoffDay: number;
+  payoutMode: 'lag' | 'fixed_days';
+  payoutLagDays: number;
+  payoutDays: number[];
+}
+
+/**
+ * Every ACTIVE store's LIVE attendance-config cadence, for `payoutIntervalTooLong`.
+ * ⛔ **Data only.** `derivePeriods`/`payoutDateFor` (`packages/domain/src/payroll/periods.ts`) are
+ * what the ceiling actually has to be computed from (DEF-409 — a label-only check on
+ * `payrollPeriodType` misses a `semi_monthly` store whose `fixed_days` payout collapses two
+ * periods onto one payout day, 28+ days from the last one). A repo file may not import
+ * `@shareat/domain` (ADR-004 — see `low-stock.ts`'s own comment on the same boundary), so this
+ * only fetches; the caller runs the arithmetic and hands the result to `payoutIntervalFinding`
+ * below, which is where the ceiling and the wording live.
+ *
+ * ⛔ **`s.is_active = true`, same filter `storePositions` above already uses.** Without it, a
+ * deactivated `monthly` store fires this forever — an alarm about the pay cycle of a store that
+ * pays nobody, clearable only by editing a closed store's cadence or re-acknowledging every 30
+ * days. An alarm nobody can clear is how a findings feed stops being read.
+ */
+export async function liveCadenceConfigs(tx: Tx, orgId: string): Promise<LiveCadenceConfig[]> {
+  const rows = await tx.execute(sql`
+    select c.store_id::text as "storeId", s.name as "storeName",
+           c.payroll_period_type as "payrollPeriodType",
+           c.semi_monthly_cutoff_day as "semiMonthlyCutoffDay",
+           c.payout_mode as "payoutMode", c.payout_lag_days as "payoutLagDays",
+           c.payout_days as "payoutDays"
+      from store_attendance_config c
+      join stores s on s.id = c.store_id
+     where c.org_id = ${orgId} and c.superseded_at is null and s.is_active = true`);
+  return rows as unknown as LiveCadenceConfig[];
+}
+
+/**
+ * Turns an ALREADY-COMPUTED longest gap between consecutive paydays into a `payoutIntervalTooLong`
+ * Finding, or `null` when it satisfies Art. 103. ⭐ **Pure — no database.** Kept here, not in the
+ * caller, so the ceiling and the operator-facing wording live in the one place every other
+ * detector's do, even though the arithmetic that produces `maxGapDays` cannot (see
+ * `liveCadenceConfigs` above).
+ */
+export function payoutIntervalFinding(input: {
+  storeId: string;
+  storeName: string;
+  maxGapDays: number;
+}): DetectedFinding | null {
+  if (input.maxGapDays <= PAY_INTERVAL_MAX_DAYS) return null;
+  return {
+    kind: 'payoutIntervalTooLong',
+    key: `payoutIntervalTooLong:${input.storeId}`,
+    storeId: input.storeId,
+    severity: 'soft',
+    detail:
+      `${input.storeName}'s configured pay cycle can run ${input.maxGapDays} days between paydays ` +
+      `— over Labor Code Art. 103's ${PAY_INTERVAL_MAX_DAYS}-day ceiling on wage intervals. Review ` +
+      'the cadence in /settings/attendance.',
+  };
+}
+
+/**
+ * `attendanceConfigMissing` — DEF-249's state made visible in the feed rather than only in SQL.
+ * ⭐ **The exact complement of `payoutIntervalTooLong` above, mutually exclusive by construction**
+ * (A1.5): a store with no live config has no cadence to judge, so this is a SECOND detector, not
+ * a branch inside the first — copying `posUsagePullNotRun`/`usageRecordMissing`'s own shape and
+ * the reason stated in that pair's comment.
+ *
+ * ⛔ **`s.is_active = true`, same reason as `liveCadenceConfigs` above.** A deactivated store with
+ * no config would otherwise fire this forever too — same unclearable-alarm shape, same fix.
+ */
+export async function attendanceConfigMissing(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    select s.id::text as store_id, s.name as store_name
+      from stores s
+      left join store_attendance_config c on c.store_id = s.id and c.superseded_at is null
+     where s.org_id = ${orgId} and c.id is null and s.is_active = true
+  `)) as unknown as { store_id: string; store_name: string }[];
+
+  return rows.map((r) => ({
+    kind: 'attendanceConfigMissing',
+    key: `attendanceConfigMissing:${r.store_id}`,
+    storeId: r.store_id,
+    severity: 'soft' as const,
+    detail:
+      `${r.store_name} has no live attendance/pay-cycle policy at all — nothing for Labor Code ` +
+      'Art. 103 to judge, and /settings/attendance has nothing to show an admin until a policy ' +
+      'exists to edit.',
   }));
 }
 

@@ -515,3 +515,177 @@ request for permission** — nothing is being held up for an answer.
 > that had not written it. **The rule generalises: a finding that makes our own work look better
 > than we thought deserves the same hostile read as a finding against it — and it will not get one
 > from its author.**
+
+### A1.16 ⛔ REVERSAL — A1.6 and A1.13 are WRONG about the sixteen, and the builder caught the contradiction
+
+**A1.6 and A1.13 both instruct the detector to REUSE `SERVICE_CHARGE_MAX_DAYS` rather than declare a
+second constant. ⛔ That was reversed on 2026-09-21, after an auditor argued it, and this document
+was not updated.** The builder read both, read the orchestrator's later message saying the opposite,
+⭐ **flagged the mismatch instead of silently picking one**, and built to the newer instruction. It
+was right on both counts.
+
+**THE RULING, WHICH SUPERSEDES A1.6 AND A1.13 ON THIS POINT:** two independent constants.
+- `SERVICE_CHARGE_MAX_DAYS = 16` — **unchanged**, already correctly named for its statute (RA 11360,
+  service charges), its two call sites untouched.
+- `PAY_INTERVAL_MAX_DAYS = 16` — **new**, cited to **Labor Code Art. 103** (wages).
+- One line on each naming the other, stating the numerals are equal today, and that they are
+  **deliberately not derived from one another because they are separate statutes** — so the next
+  tidy-minded reader does not "fix" the duplication.
+
+**Why the reversal, on failure DIRECTION rather than on tidiness:**
+- ⛔ **One constant, two statutes = SILENT failure.** An amendment to the wage interval would move
+  the service-charge threshold with it, nothing names the coupling, and nothing tests it —
+  `findings.test.ts:1115` admits the day-16/day-17 boundary *"has never been exercised"*. The
+  service-charge detector would go on citing RA 11360 while enforcing a number Art. 103 moved.
+- ✅ **Two constants, one number = LOUD failure.** A future amendment needs two edits and someone may
+  miss one — but both are named, both carry citations, and `grep 16` finds them.
+- ⭐ **And the alias merely RELOCATED A1.6's own confusion** rather than removing it: a reader at the
+  wage call site would follow the name to a doc comment about service charges — the same confusion,
+  moved somewhere harder to notice.
+⚠️ Ruled under acknowledged uncertainty about the law: Art. 103 and RA 11360's IRR carry
+near-identical wording and the IRR plausibly copied it, so they may genuinely share a cause. **The
+ruling is on which error is survivable, not on a claim about the statutes.**
+
+> ⭐⭐ **THE PROCESS FINDING, which is the reason this section exists rather than a silent edit.** A
+> ruling was reversed in a MESSAGE and the AMENDMENT IT REVERSED was left standing. The lane hit a
+> document contradicting its briefing, and the only reason it did not silently build the wrong one
+> is that it reported the mismatch. ⛔ **A spec that disagrees with the instruction is a defect in
+> the spec** (RULES §2) — and this repo spent the same day correcting three other documents for
+> exactly this shape. **The document is the durable medium; a message is not.** Reverse a ruling in
+> the document in the same pass, or it will be read by someone who never saw the message.
+
+### A1.17 ⭐ ADR-004 forced a split, and the split is architecturally right
+
+`payoutIntervalTooLong` needs `derivePeriods`/`payoutDateFor`, which live in `@shareat/domain`. ⛔
+**`packages/db/src/repo/` may not reach into `@shareat/domain` (ADR-004)** — `low-stock.ts`'s own
+comment states the rule. So the detector could not be written as one function in `findings.ts`.
+
+**The split, within the two files already scoped — not a scope change:**
+- `findings.ts` (repo layer, DATA + PURE): `liveCadenceConfigs(tx, orgId)` fetches each store's live
+  cadence row; `payoutIntervalFinding({ storeId, storeName, maxGapDays })` is **pure, no DB**, takes
+  an already-computed gap, applies `PAY_INTERVAL_MAX_DAYS` and builds the Finding. ⭐ **The ceiling
+  and the operator wording stay here, exactly where every other detector keeps them.**
+- `findings/index.ts` (domain layer): a module-private `payoutIntervalFindings(tx, orgId)` runs the
+  **real** `derivePeriods`/`payoutDateFor`, finds the max gap between distinct payout dates via
+  `daysBetweenDates`, and hands it to the pure function. Spread into `listFindings` like the rest.
+
+⭐ **`daysBetweenDates` gets its first real caller here** — the pairing A1.3's export was corrected to
+include, one round later, for exactly this reason.
+⚠️ **Two consecutive months, not one, and the reason is DEF-409's own mechanism:** `derivePeriods`
+never crosses a month boundary, and **the collapse lands across one.** Which two months is arbitrary
+— Sept/Oct hand-traced against the test's Jan/Feb gives the same structural collapse and the same
+silence for the compliant default. ⛔ It is a fact about the configured cadence, not about the
+calendar.
+
+**B2 (`attendanceConfigMissing`) needed none of this** — pure SQL, self-contained in `findings.ts`.
+
+### A1.18 ⭐ SLICE B — what shipped, and the design defect the audit found in it
+
+Two detectors, registered in `listFindings`, per store, soft severity:
+**`payoutIntervalTooLong`** (cadence cannot satisfy Labor Code Art. 103) and
+**`attendanceConfigMissing`** (no live config — DEF-249's state made visible in the feed).
+
+#### ⛔ THE DEFECT THAT WAS FOUND AFTER IT WAS GREEN: the verdict was calendar-independent, the NUMBER was not
+
+The detector first windowed on `[this month, next month]` and printed the resulting `maxGapDays`.
+For the **same store and the same config** that number moved with the calendar — **31** in a Sep/Oct
+window, **28** in Jan/Feb. ⛔ **And the code comment asserted calendar-independence for BOTH.** True
+of whether it fires; false of the figure an operator actually reads and might quote at somebody.
+
+⭐ **The tester's own case 5 was what proved it**: that config's twelve months are
+`[28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]`, so the configured worst case is **31** and the
+detector was reporting whichever month pair it happened to look at.
+⚠️ Secondary: `key` is `payoutIntervalTooLong:${storeId}` with **no window in it**, so a 30-day
+acknowledgement could outlive the number it was taken against.
+
+**Fixed: a twelve-month window.** The reported figure is now the configured worst case.
+⭐⭐ **It came out 31 on the first run with no adjustment — agreeing with case 5's independently
+measured maximum.** Two routes to one number: one pure, one through the whole feed.
+
+> ⭐⭐ **AND THE THIRD FINDING WAS THE TELL FOR THE FIRST.** The audit noted that **no test asserted
+> the computed number** — a detector returning 17 would have passed every case. ⛔ **That was not
+> carelessness: asserting a literal was IMPOSSIBLE while the number depended on the run month.**
+> *The number could not be tested because it was not a property of the thing being tested.* **A
+> value you cannot write an assertion for is evidence about the design, not about the tests.**
+
+**Window-independence is now a PROOF, not an observation.** The comment previously said a full
+annual cycle "looks the same swept from any month", which invites someone to hunt for a third
+window. It now states the reason: **any twelve consecutive months contain exactly one of each
+calendar month**, so every window has the identical multiset of month lengths — seven 31s, four
+30s, one February — and a leap February can only lengthen **February's own** gaps, which are never
+the maximum for a cadence that reaches the ceiling.
+
+#### `is_active` — the detectors filter it, the backfill deliberately does NOT
+
+⛔ **A deactivated store on `monthly` would otherwise fire forever** — an alarm about the pay cycle
+of a store that pays nobody, clearable only by editing a closed store or re-acknowledging every 30
+days. *An alarm nobody can clear is how a findings feed stops being read.* Precedent:
+`storePositions` (`findings.ts:394`) filters `st.is_active = true`.
+
+⭐ **The backfill stays unfiltered, and that is load-bearing rather than merely harmless.**
+`reactivateStore` (`stores/service.ts:379-388`) is `setActive(true)` + `fanStoreScopeToAdmins` and
+**does not seed a config.** Had the backfill filtered on `is_active`, a store closed today would
+come back **active with no config** — DEF-249 reopening through a path nobody watches.
+
+| State | Behaviour |
+|---|---|
+| closed, no config | detector silent — nothing to judge, nobody to pay |
+| closed, backfilled | detector silent, policy waiting |
+| reactivated (was backfilled) | active with a policy already in force — no gap, no alarm |
+| reactivated (backfill never reached it) | ⭐ `attendanceConfigMissing` fires **at the moment it starts to matter** |
+
+⭐ **The filter DEFERS surfacing; it does not hide.** ⚠️ Scope: the hazard is real only before the
+backfill runs, and afterwards only for stores it **failed** on — which are individually named in its
+failure list, where slice A's per-store isolation earns its keep.
+
+⚠️ **The SQL placement is the load-bearing detail and must not be "tidied":** in
+`attendanceConfigMissing` the config-side predicate (`c.superseded_at is null`) is in the **ON**
+clause and the store-side one (`s.is_active = true`) in the **WHERE**. ⛔ **Moving the first into
+the WHERE silently converts the left join to an inner join, and the detector stops firing for the
+exact population it exists for.** `is_active` is `notNull().default(true)`, so `= true` drops no
+NULL rows.
+
+#### §9.4 — met, and ⛔ what the screenshot does NOT evidence
+
+Driven against `/findings` with three seeded stores: `MONTHLY` fired `payoutIntervalTooLong`,
+`NOCFG` fired `attendanceConfigMissing`, and ⭐ **`SMK` (compliant) appeared in neither** — the
+page's own OPEN count read exactly **2**. Both cited **Labor Code Art. 103**, not RA 11360.
+⛔ **FORGED SESSION** — screens only, nothing whatever about authentication.
+
+⛔ **THE SCREENSHOT WAS TAKEN AGAINST THE PRE-FIX BUILD.** The sentence **template** is unchanged,
+so it still evidences that both findings reach the screen, attach to the right stores, and cite the
+right statute. **It does NOT evidence the number now rendered** — that moved with the twelve-month
+fix and is covered instead by an integration assertion on the whole clause
+(`can run 31 days between paydays`). ⚠️ **Never cite that screenshot as evidence for the figure.**
+
+#### Tests — 8 cases, and two were added because a case proved less than it claimed
+
+Every assertion goes through `listFindings`, never a detector export (A1.2). Beyond the four
+contract cases and case 5's falsifiable measurement:
+- **right-store attribution** — two cadences, one org, one feed; asserts the `key` **as a literal**,
+  because the key is what acknowledgements are stored against, plus `length === 1` for that kind so
+  a mixed-up-configs bug cannot hide behind a matching count;
+- **the number** — `toContain('can run 31 days between paydays')`. ⛔ **The clause, never the
+  digits:** `31` is a legal day-of-month and a store name or uuid fragment can carry it. *An
+  unanchored match tells you a character appeared, not that a value was computed* — DEF-411's own
+  lesson, one layer down;
+- **`is_active`** — added because the filter had **no committed assertion at all**, only a probe the
+  builder ran and then declared missing. ⚠️ Its first version paired
+  `attendanceConfigMissing`'s silence with the **other** detector's firing, so a wholly broken
+  `attendanceConfigMissing` would have passed it; a fourth store (active, no config) fixes that.
+  ⭐ **The pairing rule the tester invented in A1.2, applied to its own newest case.**
+
+#### ⚠️ Declared residue, not pretended coverage
+
+The live **Dec→Jan** selector is unexercised — today is September, and forcing it needs a clock
+mock nothing here does. ⭐ Given the twelve-month proof above, **the starting month provably cannot
+change the answer**, so such a test would exercise the calendar rather than the code.
+
+#### 🔸 DEF-411, a second instance inside the slice that filed it
+
+`payoutIntervalFinding` (pure) and `payoutIntervalFindings` (its caller) differ by **one
+character**. The anchored check distinguishes them correctly today; what it shows is that the
+instrument's weakness is **not exotic**. ⚠️ And `attendanceConfigMissing`'s caller count is inflated
+from 1 to 3+ by a `KIND_LABEL` **string key**, prose in comments, and prose in the backfill's header
+— ⛔ **identifier matching, English counted as code, and a string used as an object key: three
+different non-callers in one number.**
