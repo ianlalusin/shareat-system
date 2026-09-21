@@ -2,8 +2,67 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * T-334 slice 1 — the v2 palette. ⛔ RULED by Ian 2026-09-19; see docs/decisions/ADR-013.
+ * These values are NOT invented here: --brand, --danger and --danger-surface are the Shareat
+ * brand's own declared tokens (Shareat Website/src/styles/global.css:10-12), and --ink is its
+ * shareat-black. The ERP is adopting the brand's palette, not choosing a new one.
+ *
+ * ⛔ color-scheme is `light`, NOT `light dark`. That one word is the defect this slice fixes: v2
+ * followed the operating system into dark mode and v1 never did, and nobody chose that — with no
+ * `darkMode` key in tailwind.config.ts, Tailwind sat on its default `media` strategy by omission.
+ * Dark is now reachable ONLY under [data-theme="dark"], which layout.tsx sets server-side from a
+ * cookie, so the first server-rendered paint is already correct and there is no flash.
+ */
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
+
+  /* The ONE primary action per view, active nav, focus ring, wordmark. Nothing else.
+     5.47:1 on white — AA for normal text, NOT AAA. Anything needing AAA uses --danger. */
+  --brand: #d40909;
+  --brand-hover: #b00707;
+
+  /* ⛔ Destructive actions and error text. ALWAYS outlined, never filled, always with an icon —
+     brand red can no longer double as the error colour, so danger is distinguished by TREATMENT
+     rather than by hue. 8.32:1 on white. */
+  --danger: #a00606;
+  --danger-surface: #fde7e7;
+
+  /* Pending, attention, needs-review — where today's 649 ambers go.
+     ⛔ 1.77:1 on white: SURFACE ONLY, NEVER TEXT. Not an oversight to be corrected. */
+  --warning: #f4b942;
+
+  --success: #059669;
+
+  --canvas: #ffffff;
+  --surface: #ffffff;
+  --surface-border: #e5e5e5;
+  --ink: #1a1a1a;
+}
+
+/*
+ * ⚠️ Dark is OPT-IN and DELIBERATELY INCOMPLETE. ADR-013 §7: #d40909 is 3.84:1 on black and
+ * #a00606 is 2.52:1 — both FAIL AA as text on a dark surface, and dark-mode text reds have NOT
+ * been chosen. The brand colours are therefore absent here rather than silently reused at a
+ * contrast that fails, and a test pins that absence open so the next author must update an
+ * expectation consciously.
+ * ⛔ Do not present dark mode as a supported theme until those values are ruled.
+ *
+ * ⛔⛔ WHAT ACTUALLY DARKENS THE PAGE TODAY IS `color-scheme: dark`, NOT THESE VARIABLES. An
+ * earlier version of this comment claimed the tokens below give the existing `dark:` utilities "a
+ * surface to sit on". They do not — as of slice 1 NOTHING consumes them: `body` sets only
+ * `font-family`, and there is not one `bg-canvas`/`text-ink`/`var(--canvas)` anywhere in `src`.
+ * They are declared here so slices 2–4 have something to migrate ONTO. ⚠️ So do not delete
+ * `color-scheme: dark` on the assumption `--canvas` covers it: that would leave the page on the
+ * user-agent's LIGHT canvas with every `dark:` utility firing on top of it. (Found by review.)
+ */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --canvas: #0a0a0a;
+  --surface: #171717;
+  --surface-border: #2e2e2e;
+  --ink: #fafafa;
 }
 
 body {
