@@ -27,9 +27,23 @@
  * over `packages/db/src/repo`.
  */
 import { sql } from 'drizzle-orm';
+import type { Tx } from '../client';
 
 /** Today's date in Manila. ⛔ Use this, never bare `current_date`. */
 export const MANILA_TODAY = sql`(now() at time zone 'Asia/Manila')::date`;
+
+/**
+ * `MANILA_TODAY` as a plain `YYYY-MM-DD` string, for a caller that needs "today" as a value rather
+ * than a fragment to embed in a larger query — e.g. seeding a new row's `effective_from`. Keeps the
+ * SQL itself inside the repo layer (bible §4.3) instead of exporting the fragment for a caller
+ * outside it to embed in its own `sql` template.
+ */
+export async function manilaToday(tx: Tx): Promise<string> {
+  const [row] = (await tx.execute(sql`select ${MANILA_TODAY}::text as today`)) as unknown as {
+    today: string;
+  }[];
+  return row!.today;
+}
 
 /**
  * Whole days between two **calendar dates** (`YYYY-MM-DD`).

@@ -38,6 +38,7 @@
  */
 import {
   accessRepo,
+  manilaToday,
   orderWastageRepo,
   personsRepo,
   stockLocationsRepo,
@@ -51,6 +52,7 @@ import { authorize, type Actor } from '@shareat/auth';
 import { normaliseBranchCode } from '../organizations/identifiers';
 // ⛔ The pure rule is CALLED, never re-implemented here — see `setStoreStockModel`.
 import { singleRoomViolation, type StockModel } from '../stock-locations/rules';
+import { seedAttendanceConfig } from '../attendance/config';
 
 const CAPABILITY = 'manage_stores' as const;
 
@@ -105,6 +107,19 @@ export async function createStore(
     stockModel: input.stockModel,
     remittanceCadence: input.remittanceCadence,
     unremittedCeiling: input.unremittedCeiling,
+  });
+
+  // 2b. ⭐ T-332/DEF-249. A store with no `store_attendance_config` row is not "using defaults", it
+  //     is unconfigured — `getConfigForShiftDay` refuses every day, and the attendance sweep's
+  //     population join (`scheduler/index.ts`) skips the store outright, silently. `seedAttendanceConfig`
+  //     is idempotent, so this is safe to call unconditionally, and `createStore` is the ONLY
+  //     production INSERT into `stores` — see the task doc's §4 for why this is not duplicated at
+  //     `scripts/bootstrap-org.ts`.
+  await seedAttendanceConfig(tx, {
+    orgId: actor.orgId,
+    storeId,
+    effectiveFrom: await manilaToday(tx),
+    createdBy: actor.personId,
   });
 
   // 3. ⭐ CAPABILITY-MATRIX.md §C.2, second half — BEFORE the room, see this file's header.

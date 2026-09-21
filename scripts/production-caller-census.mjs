@@ -62,8 +62,29 @@ import { join, relative, sep } from 'node:path';
 // Control fixtures. Hard-coded on purpose: a control you can pass in is a control you can turn off.
 // =====================================================================================
 
-/** MUST come back test-only. DEF-249's own function — 13 call sites, all under tests/. */
-const CONTROL_POSITIVE = ['seedAttendanceConfig'];
+/**
+ * MUST come back test-only.
+ *
+ * ⛔ WAS `seedAttendanceConfig` until 2026-09-21, and that choice was a latent bug in this guard:
+ * the function was test-only ONLY BECAUSE DEF-249 was open — nothing in production seeded a
+ * store's attendance config. T-332 fixed DEF-249, gave it two production callers, and this
+ * control became permanently false BY DESIGN. The guard did the right thing (failed closed and
+ * withheld its list rather than emit a wrong one), but it had to be repaired before it could pass
+ * again. ⭐ THE LESSON: a control fixture calibrated against an OPEN DEFECT expires the day the
+ * defect is fixed. Pick a control whose test-only status is guaranteed by its own CONTRACT.
+ *
+ * `__setPhase5AvailableForTests` (packages/domain/src/wastage/orders.ts:76) is that: its NAME
+ * declares it test-only, so a production call site would itself be the bug, and it cannot be
+ * quietly falsified by fixing something else.
+ *
+ * ⚠️ BUT IT IS A NAMING CONVENTION, NOT A MECHANISM. Nothing in this repo REFUSES a production
+ * call to a `__`-prefixed function. This control is strictly stronger than one calibrated against
+ * an open defect — it is not absolute, and an earlier draft of this comment read as though it
+ * were. Verified non-vacuous on 2026-09-21: three real test call sites (order-wastage.test.ts:33,
+ * 172, 396), zero production callers, present in the baseline. ⛔ A control naming a function with
+ * NO call sites at all would pass while controlling nothing, so check that before swapping it.
+ */
+const CONTROL_POSITIVE = ['__setPhase5AvailableForTests'];
 
 /**
  * MUST come back production-reachable. Each has a call site established in discovery doc 31.

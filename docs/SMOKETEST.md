@@ -153,6 +153,59 @@ until timeout. Check the file exists instead.
 
 ---
 
+### ⛔ The Chrome EXTENSION cannot set this cookie, and it cannot tell you that it failed
+
+**Measured 2026-09-21 by the T-332 tester lane (`webapps-d1`), with a control.** This is the third
+distinct "you cannot drive the browser" claim this file has had to adjudicate, and unlike the first
+two **this one is true — about the extension, and only about the extension.**
+
+| Attempt, checking the FINAL PATHNAME each time | Result |
+|---|---|
+| `document.cookie = "shareat_session=<value>; path=/"` via the extension's JS tool, then `/settings/attendance` | `landed=/sign-in?next=%2Fsettings%2Fattendance` |
+| Same, with `SameSite=Lax` added explicitly | identical |
+| ⭐ **CONTROL:** write `testcookie=hello` the same way | **persisted, read back fine** |
+| ⭐ **CONTROL:** write `shareat_session=abc123` (trivial value, so the token is not the variable) | **did not appear** |
+
+⭐ **The control is what makes this a diagnosis rather than a guess**, and it isolates the cause to
+the cookie NAME rather than to the token, the value, or the tool being broken in general.
+
+**Why:** page JavaScript **can never override or clear an HttpOnly cookie** — only a server
+`Set-Cookie` can. A name with no prior cookie (`testcookie`) takes immediately; `shareat_session`,
+which already has an HttpOnly cookie for that origin in the profile the extension drives, does not.
+
+⛔ **AND THE FAILURE IS SILENT, WHICH IS THE HALF THAT COSTS THE HOUR.** The extension's JS tool
+hard-blocks any output that looks like it is reading cookie data — `[BLOCKED: Cookie/query string
+data]` — on **any** call touching `document.cookie` for a read, **whatever the cookie name**. That is
+a safety guardrail in the tool, not something to work around. Its consequence here is that **the
+write fails AND you cannot read back to discover that it did.** You see only the redirect.
+
+⭐ **THE FIX IS THE RECIPE THIS FILE ALREADY PRESCRIBES — a standalone Playwright script**, which
+sets cookies at the browser-context level and is not subject to the restriction:
+
+```
+const { chromium } = require('C:/Users/ianla/AppData/Local/npm-cache/_npx/705bc6b22212b352/node_modules/playwright');
+const EXE = 'C:/Users/ianla/AppData/Local/ms-playwright/chromium-1234/chrome-win64/chrome.exe';
+await context.addCookies([{
+  name: 'shareat_session', value: '<forged token>',
+  domain: 'localhost', path: '/', httpOnly: true, sameSite: 'Lax',
+}]);
+```
+
+A fresh Playwright context is also a **clean profile**, so there is no stale HttpOnly cookie to
+fight — the problem disappears rather than being cleared. Copy the launch shape from
+`smoke-t290.mjs`; keep new smoke scripts **outside the repo**, in the orchestrator skill's `tools/`
+directory where every previous one lives, so they never land in the tree.
+
+> ⭐⭐ **THE DISTINCTION THAT MUST SURVIVE THIS ENTRY, because collapsing it is how §9.4 got reported
+> impossible three times:** *"I cannot authenticate the extension's browser"* is **NOT** *"the screen
+> cannot be reached."* The tester hit this, named it as a tooling gap, and ⛔ **explicitly declined
+> to escalate §9.4 as UNMET** — correctly, because the screen was fine and one mechanism was not.
+> **"That tool cannot" is not "this cannot"**, which is the same lesson §0 of this file already
+> records about the MCP Playwright server. It has now been learned twice, through two different
+> doors, about two different tools, in two days.
+
+---
+
 ## 4. What a smoketest report must contain
 
 The URL · what was clicked · **what CHANGED on screen** · console output · a screenshot where the

@@ -90,7 +90,6 @@ runCapture
 runLoad
 sampleCandidates
 scaleRecipeToTarget
-seedAttendanceConfig
 seedCanonicalPositions
 setCostBasisItem
 setItemPricing

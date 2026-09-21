@@ -12,6 +12,14 @@
  */
 export * as schema from '../schema';
 export { getSql, getDb, closeDb, transaction } from './client';
+// ⭐ T-332 — the one definition of "today" (`sql-time.ts`), made reachable outside the repo layer
+// so a caller never has to hand-spell `(now() at time zone 'Asia/Manila')::date` again (DEF-172).
+// `manilaToday` returns it as a plain string for a caller that needs a value, not a fragment.
+// `daysBetweenDates` travels with both on purpose — `sql-time.ts`'s own rule is "carry
+// `MANILA_TODAY` back as a column and use `daysBetweenDates` — never reach for the process clock"
+// (DEF-178's worst instance was exactly this pairing broken: a SQL gate re-measured with
+// `Date.now()`). Exporting one half and not the other leaves that trap half-open.
+export { MANILA_TODAY, manilaToday, daysBetweenDates } from './repo/sql-time';
 /**
  * `systemTransaction` ONLY, deliberately — not `getSystemSql`/`getSystemDb`/`closeSystemDb`
  * alongside it, and NOT for symmetry with the line above (T-251a, bible §13 row 185).
