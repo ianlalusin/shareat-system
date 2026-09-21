@@ -96,7 +96,8 @@ makes v2 read as v1 immediately**, before any refactor."*
 | `--surface` | `#ffffff` + `#e5e5e5` border | Cards |
 | `--ink` | `#1a1a1a` | Body text — the brand's own `shareat-black` |
 
-### SLICE 2 — the components, used nowhere yet
+### ✅ SLICE 2 — the components, used nowhere yet — **SHIPPED 2026-09-22**
+⭐ Contract, rulings and outcome: `docs/tasks/334-slice-2-component-contract.md`.
 `apps/erp/src/components/ui/{Button,Input,Card}.tsx` carrying the tokens. ⛔ **Not adopted by any
 screen in this slice.** ~half a day.
 

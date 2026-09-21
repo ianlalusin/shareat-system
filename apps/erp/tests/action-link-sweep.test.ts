@@ -149,8 +149,34 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
   //   from source (Ian's ruling, §6.1). ⭐ FAIL is unchanged at 151 — nothing became undersized,
   //   because all three reuse the existing full-width touch-target row idiom rather than a new
   //   control shape.
-  it('accepted-baseline totals: 151 FAIL / 56 UNRESOLVED', () => {
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 151, unresolved: 56 });
+  // ⭐ 56 → 58, T-334 slice 2 (2026-09-21). TWO controls entered the population — the new
+  //   `components/ui/Button.tsx` and `components/ui/Input.tsx` — both intentionally-accepted
+  //   additions (the second of the three red cases named above), neither a regression.
+  //   ⛔ THEY ARE UNRESOLVABLE BY CONSTRUCTION, NOT BY SLOPPINESS, and the builder proved it
+  //   empirically rather than by argument: stripping the className-append made each resolve
+  //   cleanly, restoring it put each straight back to `unresolved` with a byte-identical reason.
+  //   The cause is structural — `className` is a destructured function PARAMETER, and
+  //   `findLocalConst` only ever inspects `ts.VariableStatement`s with an `ts.isIdentifier` name
+  //   and a literal initializer, so a parameter binding can never resolve no matter how the
+  //   reference is shaped. ⭐ A source scanner that DID resolve a runtime prop to a literal would
+  //   be the actual defect. Any component accepting a passthrough `className` for a native
+  //   control is therefore permanently in this set: `Tile.tsx`, `PhotoInput.tsx` and
+  //   `two-way-picker.tsx` (×2) were already here for the identical reason; these are members
+  //   four and five of that category.
+  //   ⭐ FAIL is unchanged at 151 — nothing became undersized. Because the sweep cannot measure
+  //   these two, the orchestrator measured them BY HAND before accepting, which is the whole
+  //   point of adjudicating rather than rubber-stamping: Button is `text-sm` (20px line-height)
+  //   + `py-2.5` (10px × 2) + `border` (1px × 2) = 42px; Input is `text-sm` + `py-2` (8px × 2)
+  //   + `border` = 38px. Both clear `FLOOR_PX` (24) comfortably, and 38px is exactly the repo's
+  //   existing form-control convention. ⚠️ What is lost here is STATIC VERIFIABILITY, not tap
+  //   size — and it is lost for every future edit to these two files, which is the real cost.
+  //   ⛔ Two bugs found on the way were NOT waved through: `BASE_CLASSES` was a `+`-joined
+  //   BinaryExpression (unresolvable — `findLocalConst` does not recurse through `resolveExpr`
+  //   for a const's own initializer) and Button's variant lookup was an ElementAccessExpression
+  //   outside `resolveExpr`'s known shapes. Both were fixed in the components; only the
+  //   genuinely-structural remainder was accepted here.
+  it('accepted-baseline totals: 151 FAIL / 58 UNRESOLVED', () => {
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 151, unresolved: 58 });
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

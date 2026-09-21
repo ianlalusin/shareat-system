@@ -221,3 +221,64 @@ text on a dark surface.** The palette above is specified for **light**; step 1 k
 working mechanically, but the dark theme's own text reds remain unchosen. ⚠️ Since step 1 defaults
 to light and makes dark opt-in, **this is not blocking for steps 1–4** — but it must be settled
 before dark mode is offered as a supported theme rather than a carried-over behaviour.
+
+---
+
+## Amendment 2 — 2026-09-21: a THIRD red exists in the family, and it is the one most likely to be copied by mistake
+
+**Recorded by the orchestrator (`system32-df`), same day as Amendment 1.**
+**Source:** `webapps-17`'s persistent memory of Ian's 2026-09-19 ruling — the same note ADR-013
+itself was recovered from. Asked directly whether it held anything the ADR and Amendment 1 did not
+yet record, it named this. ⭐ **Nothing else in its note was missing**, which is itself worth
+recording: the recovery in Amendment 1 was very nearly complete.
+
+⚠️ **Verified against source before filing, per this document's own standard** — a ruling
+reconstructed from memory deserves more scepticism than one written down at the time, not less:
+
+```
+CUSTOMER/src/app/globals.css:13:    --primary: 0 100% 44%;
+```
+
+`hsl(0 100% 44%)` is **`#E00000`**. The ruled brand red is **`#d40909`**. ⛔ **They are different
+colours and they look almost identical.**
+
+### What the ruling actually warned against, stated in full for the first time
+
+ADR-013 §1 as written contrasts the v2 primary against **one** wrong red-adjacent colour: v1 ERP's
+amber (`ERP-rebuild` `--primary: 42 100% 50%`). ⭐ **The ruling named a second trap, and it is the
+more dangerous one**, because amber is obviously not red and `#E00000` obviously is:
+
+| Colour | Where it lives | What it is |
+|---|---|---|
+| `#d40909` | `Shareat Website/src/styles/global.css:10` | ⭐ **the brand's declared red — the ONLY correct source** |
+| `#E00000` | `CUSTOMER/src/app/globals.css:13` | ⛔ **a different app's own primary.** Not the brand token |
+| `42 100% 50%` (amber) | `ERP-rebuild/src/app/globals.css:31` | v1 ERP's primary — already named in §1 |
+
+> ⛔⛔ **THE RULE: "the red" IS RE-DERIVED FROM THIS DOCUMENT, NEVER FROM A LIVE APP.** Opening a
+> running Shareat app and sampling its primary colour will, three times out of four, give you the
+> wrong value — and the wrong value is visually indistinguishable from the right one at a glance.
+> The brand token is the authority; a sibling app's `--primary` is that app's decision, not the
+> brand's.
+
+### Where this bites, specifically
+
+⚠️ **T-334 slice 4 — the semantic sweep of the 781 `red-*` usages.** That slice's whole job is
+deciding which reds mean *error* and re-pointing them, which is exactly the task that tempts someone
+to establish "what the red is" by looking at a shipped app. ⭐ **This amendment exists mainly so
+that lane has something in the repo to be warned off by** — before today there was nothing:
+ADR-013 never mentioned `CUSTOMER` at all.
+
+⛔ **This changes no ruled value.** `#d40909`, `#a00606`, `#fde7e7` and the rest stand exactly as
+ruled in §1. Amendment 2 adds a warning, not a colour.
+
+### ⭐ The method note, which is the point
+
+This is the **second** time in one day that a decision of Ian's turned out to exist only in a
+terminal's memory — and the second time it was recovered only because someone asked that terminal
+directly before it was cleared. ⛔ **The first recovery (ADR-013 itself) was one `/clear` away from
+being lost outright.** This one would have been lost silently, since nobody would have known there
+was anything missing to look for.
+
+> ⭐ **Transferable: when a session is about to be released, ask it what it holds that the repo does
+> not.** Its answer costs one message. `webapps-17` was standing down from a role it had been
+> reassigned out of, and answered a question asked almost in passing; that answer is this amendment.

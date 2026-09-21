@@ -443,6 +443,12 @@
     ],
     "components/PhotoInput.tsx": [
       "className could not be resolved statically (dynamic expression outside the known shapes)"
+    ],
+    "components/ui/Button.tsx": [
+      "className could not be resolved statically (dynamic expression outside the known shapes)"
+    ],
+    "components/ui/Input.tsx": [
+      "className could not be resolved statically (dynamic expression outside the known shapes)"
     ]
   }
 }

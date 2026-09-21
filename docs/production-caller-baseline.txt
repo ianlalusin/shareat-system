@@ -1,4 +1,6 @@
+Button
 GET
+Input
 __setPhase5AvailableForTests
 acknowledgementHistory
 activateTerminal
