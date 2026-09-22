@@ -42,4 +42,18 @@ describe('Card — T-334 slice 2 contract', () => {
     expect(tokens.has('bg-surface')).toBe(true);
     expect(tokens.has('border-surface-border')).toBe(true);
   });
+
+  it('renders its children — asserted on real content, not emptiness (§11.1, §11.4)', () => {
+    // §4 enumerated what to assert on classes and never required the component to render what it
+    // was given: the audit's mutant (no {children}) passed every prior assertion. Not optional for
+    // Card even though it takes no other rest props (§11.4).
+    const html = renderToStaticMarkup(createElement(Card, { children: 'Real card content' }));
+    expect(html).toContain('Real card content');
+
+    // Negative half (round 3 finding): the line above alone is satisfied by a Card that hardcodes
+    // "Real card content" regardless of props. Different children must produce different output.
+    const otherHtml = renderToStaticMarkup(createElement(Card, { children: 'Different content' }));
+    expect(otherHtml).toContain('Different content');
+    expect(otherHtml).not.toContain('Real card content');
+  });
 });

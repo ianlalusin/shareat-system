@@ -363,3 +363,43 @@ agreed on and none had checked.** The same repo already records the lesson — *
 nominates; running settles"*, and *"anyone who promises this in one pass has not run the numbers"*
 — which is exactly what the parent task warned about, in a sentence sitting directly above the
 numbers that were wrong.
+
+---
+
+## Amendment 4 — 2026-09-22: the dark-mode contrast figure this ADR has quoted twice is 15% optimistic
+
+**Recorded by the orchestrator (`system32-df`) on a measurement by the auditor lane (`webapps-cb`,
+Opus), 2026-09-22.** ⛔ **This changes no ruling. It corrects a number that a pending ruling will be
+made from.**
+
+§1 and Amendment 1 §A1.4 both record the dark-mode reds "on black":
+
+| Colour | ADR says, on black | ⛔ **Measured on the theme's ACTUAL dark surface** |
+|---|---|---|
+| `#a00606` (`--danger`) | 2.52:1 | ⛔ **2.15:1** |
+
+⭐ **The theme's dark surface is not black.** `globals.css` sets `--surface: #171717` and
+`--canvas: #0a0a0a` under `[data-theme='dark']`. Nothing in the running application renders danger
+text on `#000000`, so the figure that has been quoted in three places describes a surface that does
+not exist.
+
+⚠️ **The conclusion is unchanged and gets slightly worse:** it failed AA at 2.52 and it fails AA
+harder at 2.15. ⛔ **But the number is load-bearing for a ruling Ian has not yet made** — how much
+lighter the dark red must be is sized directly from the current ratio, and a 15% optimistic
+starting point understates the correction needed.
+
+**Where the stale figure appears** (left in place, each now superseded by this amendment):
+`ADR-013 §1`, `ADR-013 Amendment 1 §A1.4`, `docs/tasks/334-v2-theme-brand-red-and-a-manual-dark-toggle.md §7`.
+`docs/tasks/334-slice-3-retire-the-local-constants.md §3.1` already carries the corrected figure.
+
+### ⭐ The method note, which is the same one for the third time today
+
+**A figure was quoted from document to document and none of the copies was checked against the
+thing it described.** Amendment 3 recorded this for the "~8–12 distinct strings" claim (actually
+16 + 7) and for the geometry nobody had measured; slice 3 §3.3 now refuses to quote a `dark:` count
+at all because three documents give three different numbers. ⛔ **This one is worse than those,
+because the figure is not merely wrong — it is a measurement against the wrong object.** The
+arithmetic for `#a00606` on `#000000` is correct; `#000000` is simply not where the text goes.
+
+> ⭐ **A contrast ratio is a statement about TWO colours. Quoting one of them from a ruling and the
+> other from memory produces a true number about a surface the product does not have.**

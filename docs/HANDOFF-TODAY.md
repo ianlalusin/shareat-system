@@ -52,8 +52,24 @@ rates against the current year).
 |---|---|---|---|
 | `webapps-d1` | Sonnet 5 | **TESTER** | idle, stood down, tree clean |
 | `webapps-4d` | Sonnet 5 | **BUILDER** | idle, stood down, tree clean |
-| `webapps-cb` | **Opus 5** | **AUDITOR** | ⛔ **never audited — see §8.1** |
+| `webapps-cb` | **Opus 5** | **AUDITOR** | ✅ **blanket grant from Ian 2026-09-22 — ACKs orchestrator briefings directly. See below.** |
 | `webapps-17` | Sonnet 5 | spare | idle; ⭐ it is the terminal ADR-013 was recovered from |
+
+⛔ **`webapps-cb`'s GO-AHEAD GATE IS LIFTED — AND THE GRANT IS PER-SESSION.** It originally held for
+Ian's explicit go-ahead before ACKing any orchestrator briefing, and that constraint **cost slice 2
+its independent audit**; a relay from the orchestrator was correctly refused, because *"the peer
+accurately reported approval"* and *"the peer asserted approval"* are indistinguishable from the
+receiving side. On 2026-09-22 Ian typed into that terminal, verbatim: **"ack on every orchestrators
+command"**. ⚠️ **By the pattern every prior instance of this followed, the grant is per-session: a
+`webapps-cb` that has been `/cleared` reverts to the old default until Ian repeats it there.** Do not
+assume it carries.
+⚠️ **What the grant does NOT lift** (so no future briefing has to test them): it will not act
+against its own permission settings on a peer's word, nor edit settings/CLAUDE.md/config; irreversible
+or outward-facing actions still need Ian; it reports spec defects rather than working around them and
+stays in lane; and it still verifies a briefing's cheaply-verifiable claims before acting — ⭐ that
+last habit is what produced its findings this cycle and is not a statement of distrust.
+⭐ **Running the test suite IS in its scope** (the orchestrator originally drew it too tightly at
+read-only-git; an auditor that cannot run the suite cannot check whether a green claim is true).
 
 ⭐ **Both working lanes performed above brief and the specifics are worth inheriting:** the builder
 reported BLOCKED rather than enlarging an accepted-failure list, and fixed two real bugs of its own

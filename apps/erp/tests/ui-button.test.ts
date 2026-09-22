@@ -114,4 +114,47 @@ describe('Button — T-334 slice 2 contract', () => {
     expect(tokens.has('mt-2')).toBe(true);
     expect(tokens.has('bg-brand')).toBe(true);
   });
+
+  it('renders its children — asserted on real content, not emptiness (§11.1)', () => {
+    // §4 enumerated what to assert on classes/attributes and never required the component to BE a
+    // component: the audit's mutant (no {children}, no {...rest}) passed all 11 prior assertions.
+    // This is the check the enumeration left out.
+    const html = renderToStaticMarkup(createElement(Button, { children: 'Save changes' }));
+    expect(html).toContain('Save changes');
+
+    // Negative half (round 3 finding): the line above alone is satisfied by a Button that
+    // hardcodes "Save changes" regardless of props — same control-pair shape §9 R3 requires for
+    // the danger icon. Different children must produce different output.
+    const otherHtml = renderToStaticMarkup(createElement(Button, { children: 'Cancel' }));
+    expect(otherHtml).toContain('Cancel');
+    expect(otherHtml).not.toContain('Save changes');
+  });
+
+  it('forwards disabled through {...rest} (§11.2)', () => {
+    // ⚠️ Caught by my own mutant-dies check: `\bdisabled\b` also matches the static Tailwind
+    // variant classes `disabled:pointer-events-none`/`disabled:opacity-50`, which are present on
+    // every render whether or not the element is actually disabled — a vacuous assertion, same
+    // shape as matching a substring instead of a token. `disabled=""` is the literal, unambiguous
+    // serialisation of the real boolean attribute (verified against the real component's output);
+    // the CSS variant prefix is followed by `:`, never `=""`, so this cannot collide with it.
+    const html = renderToStaticMarkup(createElement(Button, { disabled: true, children: 'Save' }));
+    expect(html).toContain('disabled=""');
+
+    // Negative half (round 3 finding): the line above alone is satisfied by a Button that is
+    // unconditionally disabled — exactly the real defect a reviewer planted and reverted today.
+    const notDisabledHtml = renderToStaticMarkup(createElement(Button, { children: 'Save' }));
+    expect(notDisabledHtml).not.toContain('disabled=""');
+  });
+
+  it('forwards onClick through {...rest} (§11.2)', () => {
+    // onClick cannot appear in static HTML — React never serialises event handlers into markup —
+    // so this is the one case in this file that does not use renderToStaticMarkup. Button is a
+    // plain function component (guard 10: no hooks), so calling it directly and reading the
+    // React element it returns is the only way to observe prop forwarding that never reaches the
+    // DOM. `any` here is deliberate: asserting Button's exact prop type would mean engaging with
+    // its implementation, which is the auditor's lane, not this file's.
+    const handleClick = () => {};
+    const element: any = Button({ onClick: handleClick, children: 'Save' } as any);
+    expect(element.props.onClick).toBe(handleClick);
+  });
 });

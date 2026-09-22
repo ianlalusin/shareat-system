@@ -174,9 +174,9 @@ saying why.
 
 # 9. ⭐ RULINGS — the lanes' spec questions, answered
 
-> ⭐ **Five gaps were found in §1–§8 above by the two lanes reading it before any code existed** —
+> ⭐ **SIX gaps were found in §1–§8 above by the three lanes reading it before any code existed** —
 > four by the auditor (`webapps-17`), one by the builder (`webapps-4d`), who independently found the
-> same icon gap. **Every one was real.** They are ruled here, in the document, because a ruling that
+> same icon gap, and one by the tester (`webapps-d1`) — see **R6**. **Every one was real.** They are ruled here, in the document, because a ruling that
 > lives only in a message is not a ruling the project has made (ADR-013's own lesson, learned the
 > expensive way three days ago).
 > ⛔ **§9 wins where it contradicts §1–§8.**
@@ -257,6 +257,35 @@ to pass a function gets a clear framework error at that call site, which is slic
 ⚠️ If the builder concludes a hook is genuinely required, that is **BLOCKED** — it would overturn
 this ruling, not sit inside it.
 
+## R6 — `secondary` is asserted by IDENTITY, not by one shared class
+
+⛔ **This ruling existed only in a message for eight hours, and the auditor caught the discrepancy**
+— §9's preamble said "five gaps" while the AUDIT briefing and `6346f64`'s subject line both said
+six. **The sixth was this one, ruled to the tester in chat on 2026-09-22 and never written here.**
+
+⭐⭐ **That is ADR-013's opening lesson recurring INSIDE the task ADR-013 produced**, on the same
+day, by the same orchestrator who wrote that lesson up twice. A decision that lives only in a
+message is not a decision the project has made — and the mechanism that caught it was not memory,
+it was a **count that did not reconcile**. Two independent records of the same number disagreeing
+is a cheap, mechanical tell, and it is the only reason this was recovered.
+
+**The gap:** §4 case 2 asks for `secondary` to be asserted positively but never gives secondary's
+utility set, the way §3 does for `primary` and `danger`. Found by the tester (`webapps-d1`).
+
+**Ruling — both halves, as the tester proposed them:**
+1. `text-ink` as the positive literal, since §3's prose names it for secondary.
+2. ⭐ `Button({})` renders **byte-identically** to `Button({variant:'secondary'})`.
+
+⭐ **The second is stronger than anything the contract specified.** It proves "secondary IS the
+default" as an *identity*, not as a coincidence of two assertions that happen to agree: an
+assertion that the no-variant output merely *contains* `text-ink` would also pass if the default
+were a fourth, unnamed variant sharing one class. Byte-identity cannot.
+⚠️ **Its limit, stated when it was approved:** byte-identity is only as strong as the two calls
+being otherwise identical. Pass the same children and the same everything-else, or it proves
+something narrower than it looks.
+
+---
+
 ## R5 — ⛔ `Card` IS NOT PROTECTED BY THE ZERO-CALLER RATCHET, AND NOBODY SHOULD THINK IT IS
 
 Found by the orchestrator on 2026-09-21 while running the unit suite over the pre-wired stubs.
@@ -321,3 +350,71 @@ surfaces it registers into being exercised"* — on the same shared surface, `li
 ⚠️ **Open for Ian (not the orchestrator's to decide):** whether the orchestrator runs the FULL
 integration suite before every commit. Measured here: **~33 minutes**. It would have caught this on
 2026-09-21. The alternative is continuing on lane-scoped gates and accepting that this class recurs.
+
+---
+
+# 11. ⛔ AMENDMENT — §4's enumerated list was treated as the whole contract, and it left the components' core behaviour unasserted
+
+**Raised by the auditor (`webapps-cb`, Opus) against `6346f64`, 2026-09-22. Scoped by Ian to be
+fixed BEFORE slice 3 adopts these components across 65 files.**
+
+## The measurement, which is what makes this a defect and not an opinion
+
+The auditor rebuilt all three components in a scratchpad **from the committed class strings**, with
+`{children}` and `{...rest}` removed and **nothing else changed**, then ran all eleven committed
+behaviour assertions verbatim — including the two added after the first audit round.
+
+> ⛔ **11 / 11 PASS.**
+
+The mutant `Button` renders `<button type="button" class="…"></button>`: **no label, `disabled`
+dropped, `onClick` dropped.** The mutant `Input` renders without `name`, `required` or
+`placeholder`.
+
+**Failure scenario:** slice 3 adopts `<Button>` on `/expenses`. A later refactor drops `{...rest}`.
+Every submit button in the application loses `disabled`, so a double-click double-posts. Typecheck
+clean, suite green, and the screen gate passes because at that moment nothing is adopted yet.
+
+## ⭐ The root cause is this document, not the tester
+
+⛔ **§4 enumerates what to assert and never asks what the enumeration leaves unconstrained.** The
+tester followed it deliberately and said so in writing at `ui-card.test.ts:15-17`.
+⚠️ **And §1 made the counter-example binding without anyone noticing:** `filter-row.test.ts:22` —
+the precedent §1 instructs the lanes to copy — asserts `toContain('name="store"')`. **The precedent
+pins the exact thing these four files leave open.**
+
+## ⭐⭐ The general fault, which matters more than the fix
+
+**This is the same shape as the geometry defect behind ADR-013 Amendment 3**, in a different
+register: a spec that enumerated what to check, and a reader who treated the enumeration as the
+contract.
+- Amendment 3: the contract specified no geometry, so the builder picked one precedent out of
+  seven, and the components match **29%** of the app's buttons and **0%** of its inputs.
+- Here: the contract specified no children/attribute assertions, so the suite never required
+  either component to **be a component at all**.
+
+> ⛔ **A SPEC'S LIST OF CHECKS IS A FLOOR, AND EVERY SPEC IN THIS PROJECT SHOULD SAY SO IN ITS OWN
+> WORDS.** Slice 3 executes against the same habit across 65 files, so its spec
+> (`334-slice-3-retire-the-local-constants.md`) must name what its enumeration does **not** cover.
+
+## What must be true before this is closed
+
+1. **`Button` and `Card` render their children** — asserted on real content, not emptiness.
+   ⚠️ **CORRECTED 2026-09-22, and the tester was right to flag it rather than decide it silently.**
+   This requirement originally read *"each of the three components renders its children"*, which is
+   **impossible for `Input`**: `<input>` is a void HTML element and takes no children, and §3 gives
+   it no `children` prop. ⭐ The auditor's own mutant description corroborates the narrower reading
+   — it names only `name`/`required`/`placeholder` for `Input`, never children. **`Input` is exempt
+   from this item and covered entirely by item 2.**
+2. Each **forwards native attributes through `{...rest}`** — at minimum `disabled` and `onClick` for
+   `Button`; `name`, `required` and `placeholder` for `Input`.
+3. ⭐ **The mutant must die.** The auditor's no-children/no-rest rebuild must FAIL the amended suite.
+   ⛔ That is the acceptance test for this amendment, not the new cases passing.
+4. ⚠️ `Card`'s children assertion is not optional either, though it takes no `rest`.
+
+⛔ **Still open and NOT in this round** (Ian scoped it to findings 1–3): guard 7 cannot see
+`bg-white`, which R1 forbids by name; all four test headers still describe the components as stubs
+and one instructs a slice-3 author that the three source files are permanently out of scope; and
+⚠️ **the dark-danger gap test this orchestrator ordered in the first audit round is itself an
+absence-only assertion** — a `Button` returning `null` passes it — which is the very shape the
+parent task's §5 forbids in its own words. Its free control is to assert `text-danger` IS present
+in the same case.

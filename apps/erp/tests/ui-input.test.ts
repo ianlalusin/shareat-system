@@ -62,4 +62,30 @@ describe('Input — T-334 slice 2 contract', () => {
     expect(tokens.has('mt-2')).toBe(true);
     expect(tokens.has('border-danger')).toBe(true);
   });
+
+  it('forwards name, required and placeholder through {...rest} (§11.2)', () => {
+    // §4 enumerated what to assert on classes/attributes and never required native attributes to
+    // actually reach the DOM: the audit's mutant (no {...rest}) rendered without name, required or
+    // placeholder and still passed every prior assertion. Input has no `children` prop (a native
+    // void `<input>` cannot take one, and §3 lists none), so §11.1's children requirement does not
+    // apply here — only §11.2's rest-forwarding does.
+    const html = renderToStaticMarkup(
+      createElement(Input, { name: 'email', required: true, placeholder: 'you@example.com' }),
+    );
+    expect(html).toContain('name="email"');
+    // Literal `required=""`, not a `\brequired\b` word-boundary regex: the Button disabled-check
+    // in this same round turned out to match Tailwind's `disabled:` variant-class prefix as well
+    // as the real attribute — the literal serialised form is what a static-HTML render actually
+    // produces and cannot collide with a class-name prefix.
+    expect(html).toContain('required=""');
+    expect(html).toContain('placeholder="you@example.com"');
+
+    // Negative half (round 3 finding): the block above alone is satisfied by an Input that
+    // hardcodes these three regardless of props — a reviewer planted exactly a bare `required`
+    // today and the suite stayed green. Confirm each is absent when not passed.
+    const omittedHtml = renderToStaticMarkup(createElement(Input, {}));
+    expect(omittedHtml).not.toContain('name="email"');
+    expect(omittedHtml).not.toContain('required=""');
+    expect(omittedHtml).not.toContain('placeholder="you@example.com"');
+  });
 });

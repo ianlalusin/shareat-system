@@ -50,7 +50,7 @@
 
 ### Definition of done — all of it, every time
 
-typecheck clean · unit tests pass · **integration tests pass against real Postgres** ·
+typecheck clean · unit tests pass · **integration tests pass against real Postgres — and the FULL suite before any PUSH, not just the lane's files (Ian, 2026-09-22; ~33 min; DEF-412 is what a lane-scoped gate hides)** ·
 **smoketested in the running app on 9008** · `npm run build` succeeds with the dev server
 stopped · self-reviewed line by line · committed with a message explaining *why* · **bible
 amended if a decision was made**. *Reporting done when any of these is unmet is itself a

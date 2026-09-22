@@ -60,40 +60,40 @@
   - `1095–1104` Ports — reserved, never shared
   - `1105–1149` Build discipline — two rules, both absolute
   - `1150–1160` Git
-- `1161–1177` 9. Definition of done
-  - `1178–1185` Parity gate
-- `1186–1220` 10. Phase plan
-- `1221–1237` 11. Migration & ETL rules
-- `1238–1302` 12. Inherited landmines — do not repeat these
-- `1303–1536` 13. Decision log
-- `1537–1556` 14. Amendment protocol
-- `1557–1561` 15. Engineering standards — the industry practices this project follows
-  - `1562–1567` 15.1 Build order: walking skeleton first
-  - `1568–1579` 15.2 Golden-master testing — the most important practice here
-  - `1580–1588` 15.3 Strangler Fig, not big-bang cutover
-  - `1589–1593` 15.4 No dual-write
-  - `1594–1602` 15.5 Expand/contract migrations
-  - `1603–1611` 15.6 Observability from day zero, not later
-  - `1612–1616` 15.7 CI gates
-  - `1617–1621` 15.8 Backups and a tested restore
-  - `1622–1626` 15.9 Twelve-Factor config
-  - `1627–1634` 15.10 Append-only ledgers — but not event sourcing
-  - `1635–1639` 15.11 Defence in depth
-  - `1640–1668` 15.12 Skills are lenses, not assurance
-  - `1669–1675` 15.13 Reconciliation is a permanent feature
-- `1676–1680` 16. The accounting spine
-  - `1681–1712` 16.0 What we are actually fixing — the diagnosis
-  - `1713–1756` 16.1 The ten invariants — non-negotiable
-  - `1757–1771` 16.2 The oracle: how "correct" is tested
-  - `1772–1793` 16.3 The model — header + lines, not legs
-  - `1794–1813` 16.4 Deliberately simpler than ERPNext
-  - `1814–1880` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1881–1905` 16.6 What v1 already gets right — preserve the intent
-  - `1906–1927` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1928–1942` 16.8 What v1's accounting already gets right
-  - `1943–1986` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1987–2037` 16.10 Posting patterns — one canonical pattern per business event
-  - `2038–2069` 16.11 Inventory's accounting integration
+- `1161–1186` 9. Definition of done
+  - `1187–1194` Parity gate
+- `1195–1229` 10. Phase plan
+- `1230–1246` 11. Migration & ETL rules
+- `1247–1311` 12. Inherited landmines — do not repeat these
+- `1312–1545` 13. Decision log
+- `1546–1565` 14. Amendment protocol
+- `1566–1570` 15. Engineering standards — the industry practices this project follows
+  - `1571–1576` 15.1 Build order: walking skeleton first
+  - `1577–1588` 15.2 Golden-master testing — the most important practice here
+  - `1589–1597` 15.3 Strangler Fig, not big-bang cutover
+  - `1598–1602` 15.4 No dual-write
+  - `1603–1611` 15.5 Expand/contract migrations
+  - `1612–1620` 15.6 Observability from day zero, not later
+  - `1621–1625` 15.7 CI gates
+  - `1626–1630` 15.8 Backups and a tested restore
+  - `1631–1635` 15.9 Twelve-Factor config
+  - `1636–1643` 15.10 Append-only ledgers — but not event sourcing
+  - `1644–1648` 15.11 Defence in depth
+  - `1649–1677` 15.12 Skills are lenses, not assurance
+  - `1678–1684` 15.13 Reconciliation is a permanent feature
+- `1685–1689` 16. The accounting spine
+  - `1690–1721` 16.0 What we are actually fixing — the diagnosis
+  - `1722–1765` 16.1 The ten invariants — non-negotiable
+  - `1766–1780` 16.2 The oracle: how "correct" is tested
+  - `1781–1802` 16.3 The model — header + lines, not legs
+  - `1803–1822` 16.4 Deliberately simpler than ERPNext
+  - `1823–1889` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1890–1914` 16.6 What v1 already gets right — preserve the intent
+  - `1915–1936` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1937–1951` 16.8 What v1's accounting already gets right
+  - `1952–1995` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `1996–2046` 16.10 Posting patterns — one canonical pattern per business event
+  - `2047–2078` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1165,6 +1165,15 @@ A change is done only when **all** of these are true:
 1. Types check (`npm run typecheck`) — clean.
 2. Unit tests pass, including the ones written *before* the implementation.
 3. Integration tests pass against a real Postgres (not a mock).
+   ⭐ **And the FULL suite runs before anything is PUSHED — not only the lane's own files**
+   (Ian, 2026-09-22; ~33 min measured). A lane-scoped integration run proves things about the
+   files that lane owns and **nothing about the surfaces it broke without owning**, so it is
+   green by construction for exactly the failure it most needs to catch. Between commits a
+   lane-scoped run is fine; before a push it is not. ⛔ **DEF-412 is what this rule is made of:**
+   `integration 2 files · 11 passed` was reported as `GATES: PASS` on 2026-09-21 while 2 of 141
+   files had run, and `main` stayed red for a day. ⚠️ DEF-126 recorded the same lesson nineteen
+   days earlier, on the same shared surface (`listFindings`) — *"a file's own tests passing is
+   not the same as the shared surfaces it registers into being exercised."*
 4. Smoketested in the running app on port 9008 — the actual screen, the actual click.
 5. `npm run build` succeeds (dev server stopped first).
 6. Self-reviewed: the diff read back line by line, hunting for what it broke, not
