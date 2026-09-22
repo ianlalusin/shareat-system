@@ -282,3 +282,84 @@ was anything missing to look for.
 > ⭐ **Transferable: when a session is about to be released, ask it what it holds that the repo does
 > not.** Its answer costs one message. `webapps-17` was standing down from a role it had been
 > reassigned out of, and answered a question asked almost in passing; that answer is this amendment.
+
+---
+
+## Amendment 3 — 2026-09-22: one size, ruled by Ian, because the measured population does not fit the components
+
+**Status:** ⭐ **ACCEPTED — Ian's ruling, 2026-09-22**, made in response to the measurement below and
+recorded the same hour. ⛔ **Not reconstructed from anybody's memory.** That is the point of it being
+here at once (Amendments 1 and 2 were both recovered days late, one from a terminal that was about
+to be cleared).
+
+### What was measured, and why it stopped slice 3 before it started
+
+T-334 slice 3 retires the local `BTN`/`INPUT` constants. Its authority documents sized it as a
+**mechanical sweep** — ADR-013 A1.3 and the parent task both say *"~8 `BTN` + ~9 `INPUT`"* distinct
+values across 65 files, and `docs/HANDOFF-TODAY.md` called it *"~8–12 distinct strings… a mapping
+exercise"*. ⛔ **Measured 2026-09-22, before dispatching anything, both numbers are wrong and the
+second is wrong in the direction that matters:**
+
+| | Claimed | Measured |
+|---|---|---|
+| Distinct `BTN` values | ~8 | **16** |
+| Distinct `INPUT` values | ~9 | **7** |
+| Files · declarations | 65 · — | **65 · 99** |
+
+⭐⭐ **But the count was never the real problem — the GEOMETRY was, and nobody had looked at it.**
+Slice 2's components ship one fixed geometry each: `Button` is `rounded-md px-4 py-2.5`, `Input` is
+`rounded-md px-3 py-2`. The population they are meant to replace:
+
+```
+BTN                                  INPUT
+  19 x  rounded    px-4 py-2           29 x  rounded    px-3 py-2
+  14 x  rounded-md px-4 py-2.5  ✅     17 x  rounded-md px-2 py-2
+   8 x  rounded-md px-3 py-2            2 x  rounded    px-2 py-1.5
+   3 x  rounded    px-3 py-1.5          1 x  rounded-md px-2 py-1.5
+   2 x  rounded-md px-2 py-1            1 x  rounded    px-2 py-1
+```
+
+⛔ **`Button` matches 14 of 48 declarations (29%). `Input` matches 0 of 51 exactly.** Adopting them
+as-is is therefore **not** retiring duplicate strings — it **visibly resizes 71% of the buttons and
+100% of the inputs in the application**. The smallest button (`rounded-md px-2 py-1`, ~30px) becomes
+42px, a 40% jump.
+
+⚠️ **This is a defect in slice 2's specification, and it is the orchestrator's.** The contract said
+Card's padding should be *"consistent with what the app already uses"* and said nothing at all about
+Button's or Input's; the builder reasonably picked one precedent out of seven. ⛔ **Nobody measured
+the population the components were built to replace before building them.** Slice 2 is not wrong —
+it is tested, audited and shipped — it simply cannot absorb the tree without a decision nobody had
+made.
+
+### The ruling
+
+> ⭐ **ONE SIZE. Every button becomes `Button`'s geometry; every input becomes `Input`'s. The
+> existing variation is not preserved.** — Ian, 2026-09-22
+
+**Consequences, stated rather than discovered:**
+1. ⛔ **This is a VISIBLE change on every screen carrying a button or a form control**, and it is
+   intended. It is not a regression and must not be reported as one.
+2. ⭐ **Buttons only ever get BIGGER, never smaller** (42px is above every measured height), so the
+   T-262/DEF-269 tap-target position improves rather than degrades. ⚠️ `action-link-sweep.test.ts`'s
+   accepted baseline **will shift** as controls resize — expect `151 FAIL` to fall, and regenerate
+   deliberately per that file's own rules, never to silence a red.
+3. ⭐ **Slice 3 stays MECHANICAL, which is what makes a `Workflow` the right vehicle.** Had the
+   answer been "preserve each call site's size", every one of the 65 files would have become a
+   judgement call (*which size is this one?*) and the sweep shape would have collapsed.
+4. ⛔ **The variation being discarded was accidental, not designed** — seven geometries for one
+   control is drift, and bible §1.2c asks for *"one uniform, reusable pattern set across screens"*.
+   ⚠️ If any individual call site turns out to need a different size for a real reason, that is a
+   finding to report, **not** a licence to reintroduce a local constant.
+5. ⛔ **No size prop was added, deliberately.** Adding `size` would bake today's drift into the
+   design system permanently. ⚠️ If a second size is ever genuinely needed it is a new ruling, and
+   it is Ian's.
+
+### ⭐ The method note
+
+**The spec's own headline number was wrong, and it was wrong in the safe-sounding direction.** Three
+separate documents repeated *"~8–12 distinct strings, a mapping exercise"* and each was quoting the
+one before it. ⛔ **One `node` script over the tree settled in seconds what three documents had
+agreed on and none had checked.** The same repo already records the lesson — *"a static read
+nominates; running settles"*, and *"anyone who promises this in one pass has not run the numbers"*
+— which is exactly what the parent task warned about, in a sentence sitting directly above the
+numbers that were wrong.
