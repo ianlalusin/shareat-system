@@ -58,14 +58,23 @@ previous run's evidence. §5 requires before/after comparison and the tool canno
 (DEF-395/382 re-derivation needs a NEW task · DEF-386 · **DEF-374** · DEF-393 · T-136 §2 · T-316 ·
 T-276 slot `0156`) · Phase 5 payroll (16 of 18; T-190 then T-193 — ⚠️ check contribution rates).
 
-## 4. ⛔ THE LANES ARE ALIVE AND NAMED. Re-adopt them; do not re-discover them.
+## 4. ⛔ THREE LANES ARE ALIVE AND NAMED. Re-adopt them; do not re-discover them.
 
 | Session | Model | Role | State |
 |---|---|---|---|
 | `webapps-d1` | Sonnet 5 | **TESTER** | idle, clean, frozen |
 | `webapps-4d` | Sonnet 5 | **BUILDER** | idle, clean, frozen |
 | `webapps-cb` | **Opus 5** | **AUDITOR** | idle; ✅ blanket grant — see below |
-| `webapps-17` | Sonnet 5 | spare | idle; ⭐ the terminal ADR-013 was recovered from |
+| ~~`webapps-17`~~ | — | — | ⛔ **GONE — cleared/closed during the 22 Sep wrap-up. Do not look for it.** |
+
+> ⛔⛔ **`webapps-17` IS THE PROOF OF METHOD FINDING 6, AND IT IS NOT HYPOTHETICAL ANY MORE.** It was
+> the terminal ADR-013 was recovered from on 21 Sep — one `/clear` from being lost outright — and on
+> 22 Sep, when it was released from a role, it was asked what it held that the repo did not. It named
+> `CUSTOMER`'s `--primary` `#E00000`: a near-identical but WRONG red that ADR-013 never mentioned.
+> That became **Amendment 2**. ⚠️ **Within the hour, that terminal ceased to exist.** Had the question
+> not been asked, nothing would have signalled the loss — unlike ADR-013 itself, there was no tell
+> that anything was missing. ⭐ **Ask a session what it holds that the repo does not, BEFORE releasing
+> it. The answer costs one message and this is the second time in two days it has paid.**
 
 ⛔ **`webapps-cb`'s GO-AHEAD GATE IS LIFTED — AND THE GRANT IS PER-SESSION.** It originally held for
 Ian's explicit go-ahead before ACKing any briefing, and that **cost slice 2 its independent audit**;
@@ -198,7 +207,7 @@ and §5 requires before/after comparison.
 
 ⛔ FOUR LANES ARE ALIVE AND NAMED — re-adopt, do not re-discover: webapps-d1 (TESTER, Sonnet),
 webapps-4d (BUILDER, Sonnet), webapps-cb (AUDITOR, Opus — has Ian's blanket ACK grant, BUT IT IS
-PER-SESSION and dies on /clear), webapps-17 (spare, Sonnet). All idle and clean.
+PER-SESSION and dies on /clear). All clean. ⛔ webapps-17 IS GONE — do not look for it.
 
 ⛔ THE SIX THINGS THAT WILL COST YOU A CYCLE:
 1. `/code-review` IS NOT READ-ONLY HERE — it MUTATES SOURCE IN PLACE to verify findings. Dispatching
