@@ -4,6 +4,7 @@ import { upsertStorePositionAction } from './actions';
 import { listStores, positionsForStore, rosterForStore } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
+import { Input } from '@/components/ui';
 
 export const metadata = { title: 'Staff — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -15,7 +16,7 @@ interface SearchParams {
 }
 
 const INPUT =
-  'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+  'rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 const BTN =
   'rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
 
@@ -146,7 +147,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
           <input type="hidden" name="storeId" value={storeId} />
           <label className="text-sm">
             <span className="block text-neutral-600 dark:text-neutral-400">Add a position</span>
-            <input name="name" required placeholder="Barista" className={INPUT} />
+            <Input name="name" required placeholder="Barista" />
           </label>
           <button type="submit" className={BTN}>
             Save

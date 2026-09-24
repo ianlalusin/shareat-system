@@ -105,13 +105,34 @@ describe('T-334 slice 1 — the OS no longer decides', () => {
     expect(globalsCss).not.toMatch(/prefers-color-scheme/);
   });
 
-  it('⚠️ the dark block is DELIBERATELY INCOMPLETE — it must not silently reuse the light reds', () => {
-    // ADR-013 §7: #d40909 is 3.84:1 on black and #a00606 is 2.52:1 — both FAIL AA as text there,
-    // and dark-mode reds have not been ruled. This pins the gap OPEN: if someone adds --brand to
-    // the dark block, they must consciously update this expectation rather than ship a failing
-    // contrast silently.
+  it('⚠️ --brand still has no dark value — that gap is DELIBERATE and remains OPEN', () => {
+    // Corrected 2026-09-23 (audit finding F3): #d40909 is 3.84:1 on BLACK (ADR-013 §7's original,
+    // symbolic figure) — on the REAL dark surface --surface #171717 it is 3.28:1, computed here
+    // with this file's own contrast()/luminance(), not copied from a document. Both fail AA
+    // (4.5:1) as text, and dark-mode brand red has not been ruled. Amendment 5 (below) ruled
+    // --danger's dark value; --brand's is a separate, still-open decision. This pins the gap: if
+    // someone adds --brand to the dark block, they must consciously update this expectation
+    // rather than ship a failing contrast silently.
+    expect(contrast('#d40909', '#000000')).toBeCloseTo(3.84, 1);
+    expect(contrast('#d40909', declaredIn(darkBlock, '--surface')!)).toBeCloseTo(3.28, 1);
     expect(declaredIn(darkBlock, '--brand')).toBeUndefined();
-    expect(declaredIn(darkBlock, '--danger')).toBeUndefined();
+  });
+
+  it('⚠️ --warning still has no dark value — globals.css claims a test pins this; this is that test (audit round 2)', () => {
+    expect(declaredIn(darkBlock, '--warning')).toBeUndefined();
+  });
+
+  it('⭐ --danger and --danger-surface now HAVE a dark value — ADR-013 Amendment 5, ruled 2026-09-23', () => {
+    // Corrected 2026-09-23: this used to pin dark --danger as undefined (ADR-013 §7's original open
+    // gap). Ian ruled it — #f87171 / #2a0f0f, a lighter red for dark only, light unchanged — so the
+    // gap this test guards moved from "does a value exist" to "is it the RULED value and does it
+    // clear the WCAG floor" (family (c): the old assertion's claim outlived the code it described).
+    expect(declaredIn(darkBlock, '--danger')).toBe('#f87171');
+    expect(declaredIn(darkBlock, '--danger-surface')).toBe('#2a0f0f');
+    expect(contrast(declaredIn(darkBlock, '--danger')!, declaredIn(darkBlock, '--surface')!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(declaredIn(darkBlock, '--danger')!, declaredIn(darkBlock, '--danger-surface')!)).toBeGreaterThanOrEqual(4.5);
+    // NEGATIVE — a "fix" that changed the light red instead of adding a dark one must fail this.
+    expect(declaredIn(lightBlock, '--danger')).toBe('#a00606');
   });
 
   it("the dark block's own ink/canvas pair is AAA — the part that IS ruled must still be legible", () => {
@@ -168,10 +189,14 @@ describe('T-334 slice 1 — contrast is a gate, computed from the declared value
     expect(contrast(declared('--ink')!, declared('--canvas')!)).toBeGreaterThanOrEqual(7);
   });
 
-  it('⚠️ the ruled reds FAIL AA as text on black — ADR-013 §7, recorded so dark mode is not called supported', () => {
-    // ⛔ This is not a bug to fix here. It is the known blocking gap, pinned so that whoever
-    // eventually chooses dark-mode text reds discovers it from a failing expectation they must
-    // consciously update, rather than from a user.
+  it('⚠️ the LIGHT reds FAIL AA as text on a symbolic black background — ADR-013 §7\'s original figure, still true, no longer about "is dark supported"', () => {
+    // Corrected 2026-09-23: this is NOT a check against the real dark surface (that is
+    // --surface #171717, asserted separately above) — it is the original ADR-013 §7 figure, kept
+    // as a historical/symbolic "what if the light value were reused verbatim on pure black"
+    // check. Both LIGHT values are unchanged by Amendment 5, so both numbers are unchanged too.
+    // ⛔ --brand's real dark-mode gap is still open (asserted above) — but --danger's is now ruled
+    // (Amendment 5, asserted above with the real surface); this line is not where that lives
+    // any more, and must not be read as "dark mode has no danger value".
     expect(contrast(declared('--brand')!, '#000000')).toBeLessThan(4.5);
     expect(contrast(declared('--danger')!, '#000000')).toBeLessThan(4.5);
   });

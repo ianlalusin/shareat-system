@@ -403,3 +403,85 @@ arithmetic for `#a00606` on `#000000` is correct; `#000000` is simply not where 
 
 > ⭐ **A contrast ratio is a statement about TWO colours. Quoting one of them from a ruling and the
 > other from memory produces a true number about a surface the product does not have.**
+
+---
+
+## Amendment 5 — 2026-09-23: dark mode gets its own red. RULED by Ian.
+
+**The problem (Amendment 4):** `--danger` `#a00606` has no dark treatment. On the dark theme's real
+surface `--surface` `#171717` it measures **2.15:1**, failing both 4.5:1 (text) and 3:1 (non-text).
+Two components already reach it: `Button` `danger` (`border-danger text-danger`) and `Input`
+`invalid` (`border-danger`). So a destructive label, and an invalid field's border, were near-invisible
+to anyone with the dark cookie set.
+
+**Options put to Ian in plain language (2026-09-23):** (1) a lighter red for dark mode only;
+(2) make danger buttons solid red with white text in both themes; (3) leave dark mode unsupported
+until later. **Ian chose (1): "add a new style for dark mode."**
+
+### The ruling
+
+Under `:root[data-theme='dark']` only:
+
+| Token | Light (unchanged) | **Dark (new)** | Measured, WCAG 2.x relative luminance |
+|---|---|---|---|
+| `--danger` | `#a00606` | **`#f87171`** | **6.48:1** on `--surface` `#171717` · 7.16:1 on `--canvas` `#0a0a0a` · 4.91:1 on `--surface-border` `#2e2e2e` |
+| `--danger-surface` | `#fde7e7` | **`#2a0f0f`** | `#f87171` on it 6.47:1 · `--ink` `#fafafa` on it 17.14:1 |
+
+⭐ **Light mode is unchanged.** `#a00606` on white is 8.32:1 and stays the brand red. Dark mode shows a
+lighter red; **that is the accepted cost Ian ruled.** It is not a second brand colour. It is the same
+token rendered for a dark surface. ⛔ Do not copy `#f87171` into a component or a `dark:` utility.
+Components keep using `text-danger` / `border-danger` / `bg-danger-surface`, and the theme swaps the value.
+
+⚠️ `--danger-surface` is referenced by no `.tsx` today (measured 2026-09-23). It is ruled now so
+slice 4, which moves the 781 `red-*` error usages onto the tokens, is not handed a pale pink
+`#fde7e7` block on a near-black page. ⚠️ `--warning` is still unruled for dark. Amendment 4's gap
+remains open for it and is out of scope here.
+
+⛔ **The test in `ui-button.test.ts` that pins the dark-danger gap OPEN must be replaced, not deleted.**
+It becomes an assertion that the dark `--danger` clears 4.5:1 against the dark `--surface`, and that
+the light value is still `#a00606`. The second half is the negative: a change that "fixes" dark by
+altering the light red must fail.
+
+⛔ **Computed, not seen.** §9.4 must look at a danger `Button` and an `invalid` `Input` in dark mode
+on the first tranche that adopts either.
+
+⛔ **The dark red must be reachable ONLY under `[data-theme='dark']`** (auditor `system32-19`,
+2026-09-23): `#f87171` on white is **2.77:1** and fails. So any path that paints the dark value without
+the dark surface is worse than the gap it closes: a mis-scoped override, a `dark:` utility, or a
+`prefers-color-scheme` block. It is declared once, inside the dark block, and nowhere else.
+Re-measured independently by the auditor: every figure in the table above reproduced. ⚠️ When this sentence was first written, the auditor had checked only four of the seven figures. It raised that itself, then measured the remaining three (4.91, 17.14, 8.32), and all matched. The sentence is true as amended, and it was not true when first written.
+
+---
+
+## Amendment 6: 2026-09-23. The focus ring goes neutral. RULED by Ian; FINAL as `ring-ink` (seen, E4).
+
+**Problem (auditor `system32-19`, first time anyone saw the ring):** `Button` and `Input` draw
+`focus-visible:ring-brand`, and `--brand` is not redefined for dark. So "focused" and "invalid" are
+both red. Ring `#d40909` vs light invalid border `#a00606` = **1.52:1**, and vs dark invalid
+`#f87171` = **1.98:1**. In dark, a focused field looked like an error. The ring cleared the 3:1
+non-text floor on dark by 0.28.
+
+**Options put to Ian:** keep red · neutral (dark grey in light, white in dark) · blue.
+**Ian chose neutral (2026-09-23).**
+
+**Proposed value, to be confirmed on screen before it ships (Ian's standing render-first rule):**
+`ring-ink`. No new token: `--ink` already flips with the theme.
+
+| | Ring | On surface | vs invalid border |
+|---|---|---|---|
+| light | `--ink` `#1a1a1a` | 17.40:1 on `#ffffff` | neutral vs red (a hue difference as well as 2.09:1 luminance) |
+| dark | `--ink` `#fafafa` | 17.18:1 on `#171717` | neutral vs red (2.65:1) |
+
+⛔ Colour is still not the sole channel. The ring sits 2px outside the border and the invalid border
+IS the border.
+
+⚠️ **Corrected 2026-09-23, before anything was built:** the light row first said `--ink` `#171717`
+(17.93:1, 2.15:1). `#171717` is the dark `--surface`; light `--ink` is `#1a1a1a` (`globals.css`).
+It was caught by `/code-review` and the tester, and re-measured by the auditor. The fourth figure in
+two days quoted without checking the thing it names. ⛔ **Implement as `ring-ink`, never as a hex.**
+
+**SEEN, 2026-09-23 (tester, E4, `t3-exp-e4-*.png`):** painted ring light `rgb(26,26,26)` / dark
+`rgb(250,250,250)` vs the current `#d40909`. In both themes the focused field and an invalid field
+are distinguishable at a glance. ⭐ Method note: `ring-ink` did not exist in the built CSS yet, so a
+class swap silently fell back to Tailwind's default blue. The preview was done by overriding
+`--tw-ring-color`. **Amendment 6 is FINAL as `ring-ink`.**

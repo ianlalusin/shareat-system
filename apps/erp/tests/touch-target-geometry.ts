@@ -97,6 +97,34 @@ export const FLOOR_PX = 24;
 const NATIVE_ALWAYS_INTERACTIVE = new Set(['a', 'button', 'input', 'select', 'textarea', 'summary']);
 const OPAQUE_COMPONENTS = new Set(['TokenReveal', 'SidebarNav']);
 
+// Audit finding F2 (T-334 slice 3, 2026-09-23, blocking): a call site adopting `<Input>`/`<Button>`
+// (T-334 slice 3) is a CAPITALISED tag — invisible to NATIVE_ALWAYS_INTERACTIVE, not `Link`, and
+// (being capitalised) never matches the onClick-div rule either. It is also NOT in
+// OPAQUE_COMPONENTS, so before this fix it fell through every branch below and was not pushed to
+// `results` AT ALL — not even as `unresolved`. The native `<input>`/`<button>` it replaced WAS
+// counted (usually `pass`), so every adoption silently shrank the census population: measured
+// 2026-09-23, native `<input>` across T-334 slice 3 tranche 1's 5 files went 34 -> 23 while
+// action-link-sweep.test.ts's own `{fail: 151, unresolved: 58}` totals never moved, because that
+// test only asserts the FAIL and UNRESOLVED buckets, never the population feeding them.
+//
+// Unlike OPAQUE_COMPONENTS (whose real box genuinely cannot be seen from the call site), Input's
+// and Button's boxes ARE known — hand-measured by the orchestrator, T-334 slice 2, recorded in
+// action-link-sweep.test.ts's own baseline-history comment: Input is `text-sm` (20px line-height)
+// + `py-2` (8px x2) + `border` (1px x2) = 38px; Button is `text-sm` + `py-2.5` (10px x2) + `border`
+// = 42px. Both are FIXED regardless of the call site's own className, because T-334 slice 3 §2 /
+// R2 make that a component-owned invariant: the caller may only add LAYOUT tokens (width,
+// alignment), never geometry — so resolving the call site's className to find a height, the way a
+// native tag would need to, is not just unnecessary here but the wrong model. A call site is
+// therefore counted directly, at the known height, PASS or FAIL against FLOOR_PX like any other
+// resolved control — never unresolved, because here the answer is not merely knowable, it is known.
+//
+// Audit round 2, item 3: the 38px/42px claim is true only for OUR `Input`/`Button`. A tag NAME
+// alone doesn't prove that — a same-named local component elsewhere could be anything. `runCensus`
+// gates this on the identifier actually being imported from `@/components/ui` (the barrel every
+// real call site is required to use — R1, test (b)) before trusting the known height; otherwise it
+// falls through to the branches below, same as any other unrecognised capitalised component.
+const KNOWN_COMPONENT_HEIGHT_PX: Record<string, number> = { Input: 38, Button: 42 };
+
 // Deliberately NOT typed `Record<string, number>` — a generic string index defeats
 // `noUncheckedIndexedAccess`'s point (every read becomes `number | undefined` again). Left to
 // infer, `keyof typeof FONT_SIZE_PX` etc. are the literal key union, so a value already narrowed
@@ -581,6 +609,12 @@ export function runCensus(srcRoot: string, globalsCssPath: string): { files: str
   const cssMinHeights = parseCssMinHeights(globalsCssPath);
   const results: ControlResult[] = [];
 
+  // Audit round 2, item 3: KNOWN_COMPONENT_HEIGHT_PX's height claim is true only for OUR `Input`/
+  // `Button` — a same-named local component (or any other origin) has no such guarantee. Resolved
+  // once per census, not per file: `@/components/ui` -> its own `index.ts` (the barrel every real
+  // call site is required to import from — R1, test (b)).
+  const designSystemBarrel = resolveModuleSpecifier(join(srcRoot, 'x.tsx'), '@/components/ui', srcRoot);
+
   for (const file of files) {
     const info = infos.get(file)!;
     const relFile = file.slice(srcRoot.length).replace(/\\/g, '/').replace(/^\//, '');
@@ -595,9 +629,25 @@ export function runCensus(srcRoot: string, globalsCssPath: string): { files: str
         const isLink = tag === 'Link';
         const isOnClickDiv = !isNative && !isLink && /^[a-z]/.test(tag) && hasAttr(attrs, 'onClick');
         const isOpaque = OPAQUE_COMPONENTS.has(tag);
+        const knownHeightCandidate = KNOWN_COMPONENT_HEIGHT_PX[tag];
+        const isFromDesignSystem = designSystemBarrel !== undefined && info.imports.get(tag)?.file === designSystemBarrel;
+        const knownHeight = knownHeightCandidate !== undefined && isFromDesignSystem ? knownHeightCandidate : undefined;
 
         if (isNative && tag === 'input' && getAttrStringValue(attrs, 'type') === 'hidden') {
           // not a candidate — never rendered/tappable
+        } else if (knownHeight !== undefined) {
+          // F2 — a call site adopting <Input>/<Button>: known, fixed height, counted directly.
+          // This is DIFFERENT from Button.tsx's/Input.tsx's own internal native <button>/<input>
+          // element (handled by the isNative branch below, unaffected by this change) — those stay
+          // unresolved for their own, unrelated, already-documented reason (a destructured
+          // className parameter, not a knowledge gap about the box).
+          results.push({
+            file: relFile,
+            line,
+            tag,
+            status: knownHeight >= FLOOR_PX ? 'pass' : 'fail',
+            px: knownHeight,
+          });
         } else if (isOpaque) {
           results.push({
             file: relFile,

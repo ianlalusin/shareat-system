@@ -8,6 +8,7 @@ import { listStores, withOrgPrincipal } from '../../../expenses/lib';
 import { enrolCardAction, enrolFingerprintAction, revokeCredentialAction } from './actions';
 import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
+import { Input } from '@/components/ui';
 
 export const metadata = { title: 'Credentials — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -17,8 +18,6 @@ interface SearchParams {
   ok?: string;
 }
 
-const INPUT =
-  'rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 const BTN =
   'rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
 
@@ -118,7 +117,7 @@ export default async function CredentialsPage({
                 <form action={revokeCredentialAction} className="flex flex-wrap items-center gap-2">
                   <input type="hidden" name="credentialId" value={c.id} />
                   <input type="hidden" name="employmentId" value={employmentId} />
-                  <input name="reason" required placeholder="Reason to revoke" className={`${INPUT} w-40`} />
+                  <Input name="reason" required placeholder="Reason to revoke" className="w-40" />
                   <button
                     type="submit"
                     className="rounded border border-red-300 px-2 py-1 text-xs text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
@@ -142,7 +141,7 @@ export default async function CredentialsPage({
           <input type="hidden" name="employmentId" value={employmentId} />
           <label className="text-sm">
             <span className="block text-neutral-600 dark:text-neutral-400">Card id</span>
-            <input name="cardId" required autoFocus placeholder="Scan or type" className={`${INPUT} w-56`} />
+            <Input name="cardId" required autoFocus placeholder="Scan or type" className="w-56" />
           </label>
           <button type="submit" className={BTN}>
             Enrol card

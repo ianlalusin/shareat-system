@@ -8,9 +8,14 @@
  * `filter-row.test.ts`'s proven pattern exactly — no jsdom, no @testing-library, `environment:
  * 'node'`, `renderToStaticMarkup`.
  *
- * Button is currently a STUB (`export function Button(): null`) pre-wired by the orchestrator so
- * red here is an assertion failure, not a module-not-found.
+ * Corrected 2026-09-23 (audit finding F7): Button was a STUB (`export function Button(): null`)
+ * pre-wired by the orchestrator ONLY for slice 2's own RED, so red then was an assertion failure,
+ * not a module-not-found. It has been fully implemented since slice 2 shipped — this file's own
+ * assertions are what proves that now, not this header.
  */
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -29,7 +34,100 @@ function classTokens(html: string): Set<string> {
   return tokens;
 }
 
+// ---------------------------------------------------------------------------------------------
+// ADR-013 Amendment 5 — parses globals.css by declaration NAME inside the right selector block,
+// never a whole-file substring (#a00606 also appears in this file's own comments). Duplicated
+// from ui-input.test.ts's copy rather than shared, matching this test suite's own convention of
+// file-local helpers (see classTokens above, and ui-token-discipline.test.ts's stripComments).
+// ---------------------------------------------------------------------------------------------
+
+const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+
+function readGlobalsCss(): string {
+  return readFileSync(path.join(REPO_ROOT, 'apps/erp/src/app/globals.css'), 'utf8');
+}
+
+function extractRootBlock(css: string, dark: boolean): string | null {
+  const re = dark ? /:root\[data-theme=['"]dark['"]\]\s*\{([^}]*)\}/ : /:root\s*\{([^}]*)\}/;
+  return re.exec(css)?.[1] ?? null;
+}
+
+// Audit round 2, item 4: the previous escape regex was malformed (a misplaced `\\` shifted the
+// character class boundary, so it matched `\\]` as two literal backslashes rather than escaping
+// `.`/`*`/etc.) — harmless today since every real token name (`--danger`, `--surface`, …) is
+// hyphen-only, but latent. This is the standard escape-regexp-metacharacters pattern.
+function extractToken(blockText: string | null, tokenName: string): string | null {
+  if (!blockText) return null;
+  const escaped = tokenName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`${escaped}:\\s*([^;]+);`);
+  return re.exec(blockText)?.[1]?.trim() ?? null;
+}
+
+function parseHex(hex: string): { r: number; g: number; b: number } {
+  let h = hex.trim().replace(/^#/, '');
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+  const num = Number.parseInt(h, 16);
+  return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+}
+
+function srgbChannelToLinear(c: number): number {
+  const cs = c / 255;
+  return cs <= 0.03928 ? cs / 12.92 : ((cs + 0.055) / 1.055) ** 2.4;
+}
+
+function relativeLuminance(hex: string): number {
+  const { r, g, b } = parseHex(hex);
+  return 0.2126 * srgbChannelToLinear(r) + 0.7152 * srgbChannelToLinear(g) + 0.0722 * srgbChannelToLinear(b);
+}
+
+function contrastRatio(hexA: string, hexB: string): number {
+  const a = relativeLuminance(hexA);
+  const b = relativeLuminance(hexB);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
 describe('Button — T-334 slice 2 contract', () => {
+  // -------------------------------------------------------------------------------------------
+  // ADR-013 Amendment 6, RULED FINAL 2026-09-24: the focus ring goes neutral (ring-ink), not
+  // brand — "focused" and "invalid" both being red made a focused field look like an error in
+  // dark mode. Two SEPARATE figures, corrected here (audit round 2) after being conflated:
+  // ring #d40909 vs dark invalid border #f87171 = 1.98:1 — FAILS the 3:1 floor, meaning the two
+  // states read as barely distinguishable, which is the actual problem being fixed; separately,
+  // the ring's own visibility against dark --surface #171717 is 3.28:1, which DOES clear 3:1
+  // (barely). Verified on screen first (RENDER-E4, 2026-09-23): light ring-ink = #1a1a1a, dark
+  // ring-ink = #fafafa, both distinguishable from the invalid border in both themes.
+  // -------------------------------------------------------------------------------------------
+  it('emits focus-visible:ring-ink and NOT focus-visible:ring-brand — token-level, both halves; nothing else in the class string changes (ADR-013 Amendment 6, FINAL)', () => {
+    const html = renderToStaticMarkup(createElement(Button, { children: 'Save' })); // default (secondary) variant
+    const tokens = classTokens(html);
+
+    expect(tokens.has('focus-visible:ring-ink')).toBe(true);
+    expect(tokens.has('focus-visible:ring-brand')).toBe(false);
+
+    // "Nothing else changes" — a literal snapshot of Button's PRE-Amendment-6 default-variant
+    // class string (captured 2026-09-23 from Button.tsx/BASE_CLASSES + secondary's
+    // VARIANT_CLASSES), with only the one ring token swapped. If the real rendered token set
+    // (minus ring-ink) differs from this (minus ring-brand), something OTHER than the ring
+    // colour moved too.
+    const preAmendment6DefaultVariant =
+      'inline-flex items-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface border border-surface-border bg-surface text-ink';
+    const expectedOthers = new Set(preAmendment6DefaultVariant.split(/\s+/).filter(Boolean));
+    expectedOthers.delete('focus-visible:ring-brand');
+
+    const actualOthers = new Set(tokens);
+    actualOthers.delete('focus-visible:ring-ink');
+
+    expect([...actualOthers].sort()).toEqual([...expectedOthers].sort());
+  });
+
+  it('mutation check: the snapshot comparison catches an UNRELATED token changing alongside the ring swap', () => {
+    const preAmendment6 = new Set('rounded-md px-4 py-2.5 focus-visible:ring-brand'.split(' '));
+    preAmendment6.delete('focus-visible:ring-brand');
+    const mutantAfter = new Set('rounded-lg px-4 py-2.5 focus-visible:ring-ink'.split(' ')); // rounded-md -> rounded-lg, unrelated to the ring
+    mutantAfter.delete('focus-visible:ring-ink');
+    expect([...mutantAfter].sort()).not.toEqual([...preAmendment6].sort());
+  });
+
   it('primary emits a solid brand fill and a hover class (§4.1)', () => {
     const html = renderToStaticMarkup(createElement(Button, { variant: 'primary', children: 'Save' }));
     const tokens = classTokens(html);
@@ -65,13 +163,70 @@ describe('Button — T-334 slice 2 contract', () => {
     expect(tokens.has('border-danger')).toBe(true);
   });
 
-  it('danger has no dark-mode text treatment yet — pins ADR-013 §7\'s open gap (audit item 5)', () => {
-    // ⛔ DO NOT "fix" this by adding a dark: class here or to Button.tsx. #a00606 measures 2.52:1
-    // on black (ADR-013 §7) — fails AA — and which red replaces it in dark mode is Ian's ruling to
-    // make, not ours (parent task §7, ADR-013 §7 "what is NOT decided"). This test pins the CURRENT
-    // state so slice 3 cannot adopt danger into dark mode without tripping it: closing this gap
-    // needs a deliberate, conscious update here, made only after Ian rules on the dark-mode danger
-    // colour — mirroring how globals.css already pins its own version of this same open gap.
+  // ---------------------------------------------------------------------------------------------
+  // ADR-013 Amendment 5 — Ian ruled the dark-mode red 2026-09-23, replacing the test that pinned
+  // the gap open (which asserted Button never carries a `dark:text-*` override). It still doesn't,
+  // but that's no longer the interesting fact: the fix lives in `globals.css`'s CSS-variable
+  // tokens, not in a Tailwind `dark:` utility on the component — Button and Input keep using
+  // `text-danger`/`border-danger`, and the theme swaps the value underneath them. So this is now a
+  // globals.css contrast test, not a Button-render test; it stays in this file because it pins
+  // Button's own danger contract, same as the rest of this describe block.
+  // ---------------------------------------------------------------------------------------------
+
+  it('dark --danger clears 4.5:1 against dark --surface, dark --danger-surface is defined and clears 4.5:1 too, and light --danger is unchanged (ADR-013 Amendment 5)', () => {
+    const css = readGlobalsCss();
+    const lightBlock = extractRootBlock(css, false);
+    const darkBlock = extractRootBlock(css, true);
+
+    const darkDanger = extractToken(darkBlock, '--danger');
+    const darkSurface = extractToken(darkBlock, '--surface');
+    const darkDangerSurface = extractToken(darkBlock, '--danger-surface');
+    const lightDanger = extractToken(lightBlock, '--danger');
+
+    // (1) dark --danger clears 4.5:1 (text) against dark --surface.
+    expect(darkDanger, 'dark --danger is not yet defined in globals.css\'s :root[data-theme="dark"] block').toBeTruthy();
+    expect(darkSurface, 'dark --surface is not defined').toBeTruthy();
+    const dangerOnSurface = contrastRatio(darkDanger as string, darkSurface as string);
+    expect(dangerOnSurface, `dark --danger vs dark --surface measured ${dangerOnSurface.toFixed(2)}:1, need >= 4.5:1`).toBeGreaterThanOrEqual(4.5);
+
+    // (2) dark --danger-surface is defined, and --danger clears 4.5:1 on it.
+    expect(darkDangerSurface, 'dark --danger-surface is not yet defined').toBeTruthy();
+    const dangerOnDangerSurface = contrastRatio(darkDanger as string, darkDangerSurface as string);
+    expect(dangerOnDangerSurface, `dark --danger vs dark --danger-surface measured ${dangerOnDangerSurface.toFixed(2)}:1, need >= 4.5:1`).toBeGreaterThanOrEqual(4.5);
+
+    // (3) NEGATIVE — a "fix" that changes the light red instead must fail this.
+    expect(lightDanger).toBe('#a00606');
+  });
+
+  it('mutation check (audit round 2, item 4): extractToken actually escapes regex metacharacters in the token name', () => {
+    // No real CSS custom property name contains a regex metacharacter, so this can't be proven
+    // against real tokens — proven against a synthetic one instead. A `.` in an UNESCAPED position
+    // would match ANY character, so `weirdXtoken` would wrongly match too; escaped, only the
+    // literal dot does.
+    const block = 'weird.token: #123456;';
+    expect(extractToken(block, 'weird.token')).toBe('#123456');
+    expect(extractToken(block, 'weirdXtoken')).toBeNull();
+  });
+
+  it('mutation check: contrastRatio reproduces ADR-013\'s own published, independently-measured figures', () => {
+    expect(contrastRatio('#a00606', '#171717')).toBeCloseTo(2.15, 1); // Amendment 4
+    expect(contrastRatio('#f87171', '#171717')).toBeCloseTo(6.48, 1); // Amendment 5, on --surface
+    expect(contrastRatio('#f87171', '#0a0a0a')).toBeCloseTo(7.16, 1); // Amendment 5, on --canvas
+    expect(contrastRatio('#a00606', '#ffffff')).toBeCloseTo(8.32, 1); // §1, light on white
+  });
+
+  it('mutation check: a "fix" that changes the light --danger instead of adding a dark one is caught by the negative half', () => {
+    // Audit finding F8: `.not.toBe('#a00606')` alone would pass just as well if extraction were
+    // broken and returned null/undefined — a negative with no positive to anchor it. Asserting the
+    // literal mutated value proves extraction actually read '#ff0000', not merely "read something
+    // that isn't #a00606".
+    const css = ":root { --danger: #ff0000; }\n:root[data-theme='dark'] { --danger: #f87171; --danger-surface: #2a0f0f; --surface: #171717; }";
+    const lightDanger = extractToken(extractRootBlock(css, false), '--danger');
+    expect(lightDanger).toBe('#ff0000');
+    expect(lightDanger).not.toBe('#a00606');
+  });
+
+  it('renders no dark:text-* override of its own — the fix lives in globals.css\'s tokens, not a component utility (Amendment 5: "do not copy #f87171 into a component or a dark: utility")', () => {
     const html = renderToStaticMarkup(createElement(Button, { variant: 'danger', children: 'Delete' }));
     const tokens = classTokens(html);
     const hasDarkTextOverride = [...tokens].some((t) => /^dark:text-/.test(t));

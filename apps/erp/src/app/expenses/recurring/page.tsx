@@ -22,6 +22,7 @@ import {
 } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
+import { Input } from '@/components/ui';
 
 export const metadata = { title: 'Recurring expenses — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -284,7 +285,7 @@ export default async function RecurringExpensesPage({
 }
 
 const INPUT =
-  'rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+  'rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 const BTN =
   'rounded border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900';
 
@@ -325,7 +326,7 @@ function TemplateForm({
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Name" hint="What a person calls it — “Lipa branch rent”.">
-          <input name="name" required defaultValue={defaults?.name ?? ''} className={`${INPUT} w-full`} />
+          <Input name="name" required defaultValue={defaults?.name ?? ''} className="w-full" />
         </Field>
         <Field
           label="Supplier"
@@ -359,13 +360,13 @@ function TemplateForm({
 
       <div className="grid gap-3 sm:grid-cols-3">
         <Field label="Default amount">
-          <input
+          <Input
             name="defaultAmount"
             required
             inputMode="decimal"
             defaultValue={defaults?.defaultAmount ?? ''}
             placeholder="0.00"
-            className={`${INPUT} w-full text-right`}
+            className="w-full text-right"
           />
         </Field>
         <Field label="How often">
@@ -381,12 +382,12 @@ function TemplateForm({
           label="On which day"
           hint="Day of the month (1–31) — or day of the week (0 = Sunday) for weekly and fortnightly. 29–31 clamp to the month end."
         >
-          <input
+          <Input
             name="anchorDay"
             required
             inputMode="numeric"
             defaultValue={defaults?.anchorDay ?? 1}
-            className={`${INPUT} w-full text-right`}
+            className="w-full text-right"
           />
         </Field>
       </div>

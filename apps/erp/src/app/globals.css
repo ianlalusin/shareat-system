@@ -41,12 +41,14 @@
 }
 
 /*
- * ⚠️ Dark is OPT-IN and DELIBERATELY INCOMPLETE. ADR-013 §7: #d40909 is 3.84:1 on black and
- * #a00606 is 2.52:1 — both FAIL AA as text on a dark surface, and dark-mode text reds have NOT
- * been chosen. The brand colours are therefore absent here rather than silently reused at a
- * contrast that fails, and a test pins that absence open so the next author must update an
- * expectation consciously.
- * ⛔ Do not present dark mode as a supported theme until those values are ruled.
+ * ⚠️ Dark is OPT-IN and still PARTIALLY INCOMPLETE. ADR-013 §1/Amendment 1: #d40909 (--brand) is
+ * 3.84:1 on black, and 3.28:1 on the theme's REAL dark surface #171717. --brand has no dark
+ * treatment or ruling yet. --danger is no longer in that state —
+ * ADR-013 Amendment 5 (2026-09-23) ruled a dark-only value for it (#f87171, in the dark block
+ * below) once Amendment 4 corrected the "on black" figure to 2.15:1 against the theme's real
+ * dark surface. --warning remains unruled for dark (Amendment 4's gap, still open) and a test
+ * pins that absence open so the next author must update an expectation consciously.
+ * ⛔ Do not present dark mode as FULLY supported until --brand and --warning are also ruled.
  *
  * ⛔⛔ WHAT ACTUALLY DARKENS THE PAGE TODAY IS `color-scheme: dark`, NOT THESE VARIABLES. An
  * earlier version of this comment claimed the tokens below give the existing `dark:` utilities "a
@@ -63,6 +65,13 @@
   --surface: #171717;
   --surface-border: #2e2e2e;
   --ink: #fafafa;
+
+  /* ADR-013 Amendment 5 — Ian ruled the dark-mode red 2026-09-23. #f87171 on #171717 is 6.48:1
+     (clears both 4.5:1 text and 3:1 non-text); on #2a0f0f it is 6.47:1. Light mode is unchanged;
+     do not copy #f87171 into a component or a dark: utility — Button/Input keep using
+     text-danger/border-danger/bg-danger-surface and the theme swaps the value underneath them. */
+  --danger: #f87171;
+  --danger-surface: #2a0f0f;
 }
 
 body {

@@ -5,6 +5,7 @@ import { hireAction } from '../actions';
 import { listStores, positionsForStore, searchPersonsFor } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
+import { Input } from '@/components/ui';
 
 export const metadata = { title: 'Hire — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -16,7 +17,7 @@ interface SearchParams {
 }
 
 const INPUT =
-  'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+  'rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 const BTN =
   'rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
 
@@ -83,7 +84,7 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
         </label>
         <label className="text-sm">
           <span className="block text-neutral-600 dark:text-neutral-400">Find a person</span>
-          <input name="q" defaultValue={query} placeholder="Maria" className={`${INPUT} w-56`} />
+          <Input name="q" defaultValue={query} placeholder="Maria" className="w-56" />
         </label>
       </FilterRow>
 
@@ -111,7 +112,7 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
           <label className="flex items-center gap-2 text-sm">
             <input type="radio" name="personChoice" value="new" required className="h-4 w-4" />
             Create new person named:
-            <input name="newDisplayName" placeholder="Full name" className={`${INPUT} w-56`} />
+            <Input name="newDisplayName" placeholder="Full name" className="w-56" />
           </label>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             ⚠️ Nothing is created until you submit, and only the option you pick is used — searching
@@ -132,7 +133,7 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
           </label>
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Start date</span>
-            <input type="date" name="startedOn" required defaultValue={toBusinessDate()} className={INPUT} />
+            <Input type="date" name="startedOn" required defaultValue={toBusinessDate()} />
           </label>
         </div>
 

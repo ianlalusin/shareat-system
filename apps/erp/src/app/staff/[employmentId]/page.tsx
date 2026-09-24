@@ -5,12 +5,13 @@ import { requireSession } from '../../../lib/session';
 import { endEmploymentAction, issuePinAction, setPositionsAction } from '../actions';
 import { employmentDetail, livePinFor, otherOpenBranchesFor, positionsForStore } from '../lib';
 import { Page } from '@/components/shell/Page';
+import { Input } from '@/components/ui';
 
 export const metadata = { title: 'Employment — Shareat System' };
 export const dynamic = 'force-dynamic';
 
 const INPUT =
-  'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+  'rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 const BTN =
   'rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
 
@@ -151,14 +152,14 @@ export default async function EmploymentDetailPage({
               <span className="block text-neutral-600 dark:text-neutral-400">
                 {livePin ? 'New PIN' : 'PIN'} (6 digits)
               </span>
-              <input
+              <Input
                 name="pin"
                 required
                 pattern="[0-9]{6}"
                 maxLength={6}
                 inputMode="numeric"
                 placeholder="000000"
-                className={`${INPUT} font-mono`}
+                className="font-mono"
               />
             </label>
             <button type="submit" className={BTN}>
@@ -210,7 +211,7 @@ export default async function EmploymentDetailPage({
             <input type="hidden" name="employmentId" value={employmentId} />
             <label className="text-sm">
               <span className="block text-neutral-600 dark:text-neutral-400">End date</span>
-              <input type="date" name="endedOn" required defaultValue={toBusinessDate()} className={INPUT} />
+              <Input type="date" name="endedOn" required defaultValue={toBusinessDate()} />
             </label>
             <label className="text-sm">
               <span className="block text-neutral-600 dark:text-neutral-400">Status</span>

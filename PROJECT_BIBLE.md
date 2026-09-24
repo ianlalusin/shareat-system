@@ -32,68 +32,68 @@
   - ` 594–606  ` 3.3 Task spec format (docs/tasks/NNN-<slug>.md)
   - ` 607–624  ` 3.4 Subagent rules
   - ` 625–646  ` 3.4a Report a spec defect; never work around it silently
-  - ` 647–654  ` 3.5 Reporting to Ian
-  - ` 655–672  ` 3.6 Research before planning — Ian, 2026-08-23
-  - ` 673–680  ` When it applies
-  - ` 681–699  ` Four guards, or this degrades into delay
-- ` 700–701  ` 4. Architecture — the relational core
-  - ` 702–718  ` 4.1 Stack
-  - ` 719–760  ` 4.2 Schema principles
-  - ` 761–781  ` 4.3 Application layering
-  - ` 782–811  ` 4.4 Reference data and seeds — how the duplicate-Rent problem dies
-- ` 812–816  ` 5. Architecture — the Firebase hot lane
-  - ` 817–849  ` 5.1 The two-lane contract
-  - ` 850–878  ` 5.2 What v1 actually does offline — and why v2 changes it
-  - ` 879–929  ` 5.3 The hot set — closed list
-  - ` 930–931  ` 5.4 Offline write-back rules
-  - ` 932–942  ` 5.3 Offline write-back rules
-- ` 943–944  ` 6. Data conventions
-  - ` 945–952  ` Money
-  - ` 953–963  ` Dates & time
-  - ` 964–969  ` Identifiers
-  - ` 970–974  ` Naming
-  - ` 975–980  ` Nulls
-- ` 981–1026 ` 7. Security model
-  - `1027–1057 ` 7.1 Identity — the v1 mess, and the v2 rule
-- `1058–1059 ` 8. Repo & environment
-  - `1060–1094 ` Layout
-  - `1095–1104` Ports — reserved, never shared
-  - `1105–1149` Build discipline — two rules, both absolute
-  - `1150–1160` Git
-- `1161–1186` 9. Definition of done
-  - `1187–1194` Parity gate
-- `1195–1229` 10. Phase plan
-- `1230–1246` 11. Migration & ETL rules
-- `1247–1311` 12. Inherited landmines — do not repeat these
-- `1312–1545` 13. Decision log
-- `1546–1565` 14. Amendment protocol
-- `1566–1570` 15. Engineering standards — the industry practices this project follows
-  - `1571–1576` 15.1 Build order: walking skeleton first
-  - `1577–1588` 15.2 Golden-master testing — the most important practice here
-  - `1589–1597` 15.3 Strangler Fig, not big-bang cutover
-  - `1598–1602` 15.4 No dual-write
-  - `1603–1611` 15.5 Expand/contract migrations
-  - `1612–1620` 15.6 Observability from day zero, not later
-  - `1621–1625` 15.7 CI gates
-  - `1626–1630` 15.8 Backups and a tested restore
-  - `1631–1635` 15.9 Twelve-Factor config
-  - `1636–1643` 15.10 Append-only ledgers — but not event sourcing
-  - `1644–1648` 15.11 Defence in depth
-  - `1649–1677` 15.12 Skills are lenses, not assurance
-  - `1678–1684` 15.13 Reconciliation is a permanent feature
-- `1685–1689` 16. The accounting spine
-  - `1690–1721` 16.0 What we are actually fixing — the diagnosis
-  - `1722–1765` 16.1 The ten invariants — non-negotiable
-  - `1766–1780` 16.2 The oracle: how "correct" is tested
-  - `1781–1802` 16.3 The model — header + lines, not legs
-  - `1803–1822` 16.4 Deliberately simpler than ERPNext
-  - `1823–1889` 16.5 PH-specific rules — isolated, versioned, dated
-  - `1890–1914` 16.6 What v1 already gets right — preserve the intent
-  - `1915–1936` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `1937–1951` 16.8 What v1's accounting already gets right
-  - `1952–1995` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `1996–2046` 16.10 Posting patterns — one canonical pattern per business event
-  - `2047–2078` 16.11 Inventory's accounting integration
+  - ` 647–662  ` 3.5 Reporting to Ian
+  - ` 663–680  ` 3.6 Research before planning — Ian, 2026-08-23
+  - ` 681–688  ` When it applies
+  - ` 689–707  ` Four guards, or this degrades into delay
+- ` 708–709  ` 4. Architecture — the relational core
+  - ` 710–726  ` 4.1 Stack
+  - ` 727–768  ` 4.2 Schema principles
+  - ` 769–789  ` 4.3 Application layering
+  - ` 790–819  ` 4.4 Reference data and seeds — how the duplicate-Rent problem dies
+- ` 820–824  ` 5. Architecture — the Firebase hot lane
+  - ` 825–857  ` 5.1 The two-lane contract
+  - ` 858–886  ` 5.2 What v1 actually does offline — and why v2 changes it
+  - ` 887–937  ` 5.3 The hot set — closed list
+  - ` 938–939  ` 5.4 Offline write-back rules
+  - ` 940–950  ` 5.3 Offline write-back rules
+- ` 951–952  ` 6. Data conventions
+  - ` 953–960  ` Money
+  - ` 961–971  ` Dates & time
+  - ` 972–977  ` Identifiers
+  - ` 978–982  ` Naming
+  - ` 983–988  ` Nulls
+- ` 989–1034 ` 7. Security model
+  - `1035–1065 ` 7.1 Identity — the v1 mess, and the v2 rule
+- `1066–1067 ` 8. Repo & environment
+  - `1068–1102` Layout
+  - `1103–1112` Ports — reserved, never shared
+  - `1113–1157` Build discipline — two rules, both absolute
+  - `1158–1168` Git
+- `1169–1194` 9. Definition of done
+  - `1195–1202` Parity gate
+- `1203–1237` 10. Phase plan
+- `1238–1254` 11. Migration & ETL rules
+- `1255–1319` 12. Inherited landmines — do not repeat these
+- `1320–1554` 13. Decision log
+- `1555–1574` 14. Amendment protocol
+- `1575–1579` 15. Engineering standards — the industry practices this project follows
+  - `1580–1585` 15.1 Build order: walking skeleton first
+  - `1586–1597` 15.2 Golden-master testing — the most important practice here
+  - `1598–1606` 15.3 Strangler Fig, not big-bang cutover
+  - `1607–1611` 15.4 No dual-write
+  - `1612–1620` 15.5 Expand/contract migrations
+  - `1621–1629` 15.6 Observability from day zero, not later
+  - `1630–1634` 15.7 CI gates
+  - `1635–1639` 15.8 Backups and a tested restore
+  - `1640–1644` 15.9 Twelve-Factor config
+  - `1645–1652` 15.10 Append-only ledgers — but not event sourcing
+  - `1653–1657` 15.11 Defence in depth
+  - `1658–1686` 15.12 Skills are lenses, not assurance
+  - `1687–1693` 15.13 Reconciliation is a permanent feature
+- `1694–1698` 16. The accounting spine
+  - `1699–1730` 16.0 What we are actually fixing — the diagnosis
+  - `1731–1774` 16.1 The ten invariants — non-negotiable
+  - `1775–1789` 16.2 The oracle: how "correct" is tested
+  - `1790–1811` 16.3 The model — header + lines, not legs
+  - `1812–1831` 16.4 Deliberately simpler than ERPNext
+  - `1832–1898` 16.5 PH-specific rules — isolated, versioned, dated
+  - `1899–1923` 16.6 What v1 already gets right — preserve the intent
+  - `1924–1945` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `1946–1960` 16.8 What v1's accounting already gets right
+  - `1961–2004` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2005–2055` 16.10 Posting patterns — one canonical pattern per business event
+  - `2056–2087` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -649,6 +649,14 @@ hidden instead of merely present.
 Every substantive report ends with a **`FOR IAN`** block: plain-language, what
 changed, what it means for the business, what needs a decision. Preconditions and
 agent-facing checks stay out of that block.
+
+**3.5a Messages are short. Token cost is a real cost. Ian, 2026-09-24 (row 227).** Every message, to Ian
+or between sessions, carries only what the reader must act on: a status line, real numbers, file paths, and the
+decision or action needed. No narration of routine progress, no restating a brief, no method essays, no
+praise sections, no bare ACKs unless asked. Ian hears only what needs him: a decision, an approval, an action
+only he can take, something he asked to see, or a commit/push. Working reports aim for 15 lines or fewer, and
+an audit's FINDINGS for 30 or fewer (ranked, file:line, one-line failure scenario each). ⭐ Brevity never drops
+evidence: the real command output that a claim rests on still goes in, it just goes in alone.
 
 ---
 
@@ -1535,6 +1543,7 @@ just a patch.**
 | 221 | 2026-09-20 | ⭐⭐ **T-187 (SERVICE-CHARGE DISTRIBUTION, CLEARING 2160) IS BUILT NOW AND THE SERVICE CHARGE STAYS SWITCHED OFF — THE CLEARING MECHANISM EXISTS BEFORE ANYONE CAN ENABLE THE THING THAT NEEDS IT.** Ian, 2026-09-20: *"service charge build but turn off"*. ⛔ **This defuses the DEF-082 landmine by SEQUENCING rather than by a warning:** every sales day carrying a service charge credits 2160, and nothing clears it — so the account grows and no distribution ever happens. The blueprint's operational tripwire was a sentence (*"do not enable service charge in POS before this exists"*), and a sentence is only as good as the person who reads it at the wrong moment. ⭐ **Build-then-enable makes the tripwire structural: by the time the switch can be flipped, the mechanism it depends on is already shipped and tested.** ⚠️ **T-187 moves from "unbuilt on purpose until service charge is switched on" to a SCHEDULABLE task** — and the switch itself stays off pending a SEPARATE ruling, which is the half that must not be quietly folded into this one. ⭐ **Not urgent for the November gate** precisely because the switch stays off; it is sequenced after T-330 and the DEF-395 re-derivation. | A guard that must be built *before* it is needed is the only kind that is ever built in time; one scheduled for the day it becomes necessary is scheduled for the day after. ⭐ And the shape is one this project has been bitten by repeatedly: a correct instruction (*"do not enable X first"*) sitting in a document, protecting a liability account nobody is watching, is the same failure as a dismissed finding — the reasoning is present, unread, and true right up to the moment it matters. ⛔ Building first costs a lane; getting it wrong costs an unexplained balance in 2160 that someone must reconstruct from sales days. | ⚠️ Building it, yes — nothing is enabled by its existence. **The ENABLE decision is separate and still open**, and this row does not grant it |
 | 222 | 2026-09-20 | ⭐⭐ **THE SERVICE CHARGE IS TURNED ON SO IT CAN BE TESTED — AND THE MEASUREMENT THAT ANSWERS IT IS THAT THERE IS NOTHING TO TURN ON.** Ian, 2026-09-20: *"service charge turn on so we can test"*. ⭐ **Measured before recording, not inferred:** `grep` for `featureFlag`/`serviceChargeEnabled` across `packages/` and `apps/` returns **nothing**; `sales_days.service_charge` is an ordinary `numeric` column defaulting to `'0'` (`packages/db/schema/sales-days.ts`), `createSalesDay` takes `serviceCharge?: string` and defaults it to `'0'`, and `/sales-days/new` already renders a `Money` field labelled *"Service charge (→ 2160 float, held for staff)"*. **So in THIS app the service charge has been enterable all along** — type an amount on a sales day and it credits 2160 today. The switch DEF-082 warns about is a **POS setting**, and `apps/pos` is reserved and unbuilt (row 218). ⛔ **Therefore this ruling requires no code change to be satisfied, and no feature flag is to be invented to satisfy it** — building a switch so it can be turned on would be scope invented out of a sentence. ⭐ **What the ruling DOES decide is the half row 221 left open:** the enable decision is **GRANTED for testing**, and T-187 is therefore pulled forward to the next lane after T-330 — ahead of the DEF-395 re-derivation, which row 221 had sequenced it behind — because a service charge that can be entered and never cleared is DEF-082 running, not waiting. | Ian asked to turn a thing on in order to test it; the honest answer is that the entry side needs no permission it does not already have, and the thing actually worth testing — the distribution that DEBITS 2160 — does not exist yet. ⭐ Reporting *"done, it was already on"* would have been true and useless: it answers the literal instruction and leaves the intent (a testable end-to-end service charge) unbuilt. The instruction is therefore read as WHAT (make the service charge exercisable end to end), and the HOW is T-187, per §0.1. | ⚠️ **Scope of the grant, stated because the two are a single sentence apart and must not be merged:** this authorises the service charge being used **in testing, on a system no staff use yet**. It does **NOT** authorise enabling the POS service-charge setting in PRODUCTION before T-187 ships — DEF-082's *"do not enable service charge in POS before the clearing exists"* stands unchanged, and RA 11360's twice-monthly distribution duty attaches to real money, not to test rows. ⛔ The production-enable decision remains OPEN and is Ian's, separately, once T-187 is built. |
 | 223 | 2026-09-20 | ⭐⭐ **T-187 RECORDS THE PAYOUT; IT DOES NOT COMPUTE IT. THE SPLIT, WHO IS ELIGIBLE, AND THE ODD CENTAVO ARE ALL OUT OF THE ERP'S SCOPE BY IAN'S EXPLICIT DECISION.** Ian, 2026-09-20, verbatim: *"the business will collect it and dispense it every payday. thats all erp should record. as to split erp wont know that, who counts erp does not have to know. odd centavo erp not know too, per store , pay only whats available never negative ----- ALL erp does not have to know will be processed manually and documented manually too."* And, in the same breath: *"simplify its build."* ✅ **RELAYED via `webapps-17`, not typed in the orchestrator's terminal — recorded with his words verbatim, put back to him for confirmation, and CONFIRMED by him the same evening (*“1 yes”*), with no corrections.** The standing rule held and cost one round trip: a relay is information, and it became authority only once he said so. ⭐ **THIS ANSWERS THREE QUESTIONS BY DISSOLVING THEM, WHICH IS NOT WHAT WAS ASKED AND IS BETTER THAN WHAT WAS ASKED.** Q1 (split formula), Q2 (rank-and-file eligibility) and Q3 (rounding) were put to him as design choices; he removed them from the system instead. ⛔ **Consequences that follow and must not be re-litigated:** NO eligibility field and therefore NO schema change; NO per-employee computation; NO rounding rule in code. The business computes and documents all three by hand, outside the ERP. ✅ **Q4 — `2160` IS PER STORE.** ⛔ This makes `serviceChargeFloatAgeing` WRONG as built: it groups by `je.entry_date` only, with no `jl.store_id`, and therefore FIFO-ages the float as one org-wide pool. It must be grouped by store alongside T-187, or the alarm will tick a payout at one store against another store's older accrual. ✅ **Q5 — pay only what is available, never negative.** A dispense exceeding that store's balance is refused, not clamped to a negative. ⚠️ **CADENCE CHANGED, AND IT OVERRIDES AN EARLIER RULING:** *"every payday"*. `docs/tasks/136-cash-custody.md` §6 offers a closed list of **daily or weekly ONLY** (Ian, 2026-08-25), with twice-monthly deliberately not offered even though lawful. **Payday cadence supersedes that list.** | Modelling a split the business performs by hand would have been a second source of truth for a number nobody would have reconciled — and eligibility in particular would have cost a schema change, a migration and a staff-record backfill to hold a fact the payroll clerk already knows. ⭐ The shape T-187 collapses to is one aggregate entry per store per payday: **Dr 2160 (that store) / Cr the money account, capped at that store's available balance.** That is a day's work, not a module. ⛔ **The trade being accepted, stated plainly rather than buried:** the ERP will hold NO record of who received what. It can prove the float was discharged and by how much; it cannot answer *“was this person paid their share”* from its own data. Ian has accepted that explicitly — *“processed manually and documented manually too”* — and it is the right trade for a business doing the arithmetic on paper anyway. | ⚠️⚠️ **ONE COMPLIANCE CAUTION, RAISED ONCE AND NOT A BLOCKER — and it is the same shape as row 220's.** RA 11360 requires distribution at intervals **not exceeding sixteen days**. *“Every payday”* is lawful only while every store's pay cycle actually stays inside 16 days. T-189 shows per-store semi-monthly cutoffs (Lipa cuts on the 15th), which is ~15–16 days and almost certainly fine — ⛔ **but nobody has checked every store's configured cadence, and a month with a 31st can stretch a semi-monthly gap to 16–17 days.** ⭐ **The ERP now records the payout date, so this is CHECKABLE rather than theoretical:** the ageing alarm, once grouped per store, will fire on its own if a store's real interval drifts past 16. **Verify the configured cadences before T-187 is called done; do not treat “payday” as self-evidently compliant.** |
+| 227 | 2026-09-24 | ⭐ **MESSAGES ARE SHORT. Every report, to Ian or between sessions, carries only what its reader must act on** (§3.5a). Ian: *"messages eats most of my token… only bring to my attention things that really needs me and dont over explain everything happening… goal is to lower token usage by messages."* | Orchestrated sessions were spending most of their token budget on cross-session and user-facing narration that nobody acted on. | Yes. It is a working convention, and it never overrides "verify, do not claim": evidence stays in. |
 | 226 | 2026-09-20 | ⭐⭐ **IAN ORDERED A STORE-SETTINGS SCREEN FOR DEFINING PAYDAYS, AND THE MEASUREMENT WAS THAT IT ALREADY EXISTS — SO T-332 IS THE CHECK, NOT THE SCREEN.** Ian, 2026-09-20: *"create a doc on store settings where admin define the date of paydays."* ⭐ **Measured before recording, by a read-only census (`webapps-17`):** `store_attendance_config` already holds `payrollPeriodType`, `semiMonthlyCutoffDay`, `payoutMode`, `payoutLagDays` and `payoutDays`, effective-dated, one live row per store; `/settings/attendance` already edits them under `manage_store_settings`, admin and manager; and `packages/domain/src/payroll/periods.ts` already derives periods and payout dates from them. All shipped under T-189c/T-189d. ⛔ **The instruction is therefore satisfied on its face — the same shape as row 222, where the order was to turn the service charge on and the measurement was that there was nothing to turn on.** ⭐ **WHAT IS GENUINELY MISSING, AND IT IS SMALLER AND MORE USEFUL:** nothing CHECKS the recorded cadence against RA 11360, and **DEF-249** covers it — a freshly bootstrapped store has no config row at all, so the screen renders empty and the policy is recorded nowhere. **Specced as T-332.** ⚠️ **Recorded as a ruling SATISFIED plus a defect FOUND, not as an instruction declined** — building the screen again would have been days spent re-creating shipped work, and RULES §4 makes saying so plainly the obligation rather than the liberty. | The order was to create something that already existed. Re-creating it would have cost days and produced a second source of truth for the pay cycle — RULES §6.3's shape. ⭐ RULES §4 makes saying so plainly the obligation rather than the liberty. | ⚠️ **Reversible in one direction only.** If Ian wants a DIFFERENT payday screen — a dedicated one rather than `/settings/attendance` — that is a live option and this row does not close it. ⛔ What is settled is that the capability exists; T-332 assumes it and would need re-scoping if a new screen were ordered instead. |
 | 225 | 2026-09-20 | ⭐⭐ **THE BUSINESS PAYS EVERY 15 DAYS, WHICH CLOSES ROW 223'S RA 11360 CAUTION — AND RUNNING THE REPO'S OWN CODE FOUND THE EXPOSURE IS ZERO SLACK, NOT OVERSHOOT.** Ian, 2026-09-20, typed directly into the orchestrator terminal rather than relayed: *"our set up follows payday every 15 days."* Fifteen days is inside the statute's sixteen-day ceiling, so the *"verify every store's configured cadence before calling T-187 done"* instruction in row 223, in `docs/tasks/187-*.md` §2 and in the handoff is **DISCHARGED BY THE RULING** — Ian has stated the business's actual cadence rather than us inferring it from T-189's per-store cutoffs. ⭐⭐ **THEN IT WAS MEASURED, AND THE HYPOTHESIS WAS HALF WRONG IN THE MORE USEFUL DIRECTION.** Row 223 feared *"a month with a 31st can stretch a semi-monthly gap to 16-17 days."* `webapps-17` ran the UNMODIFIED `derivePeriods` and `payoutDateFor` across 2026 and leap-year 2028 on the schema defaults: the maximum gap is **exactly 16 days and never 17** — but it hits 16 in **seven months of every year**, every 31-day month, 15th to 31st. `monthly` breaches every month by 12 to 15 days; `weekly` never exceeds 7. ⛔ **SO THE NUMBERS SUPERFICIALLY SUPPORT "THE CONFIG ALREADY GUARANTEES COMPLIANCE", AND THAT IS THE WRONG CONCLUSION.** Sitting exactly ON the ceiling seven times a year means any one-day slip — a weekend, a holiday, payroll run late, `payoutLagDays` bumped off 0 — breaks the statute. ⭐ **Work out the DIRECTION of an error before its SEVERITY (row 224's lesson, holding again): a gap measured too SHORT is the dangerous direction, and a model that stops at 16 by construction measures nothing about the day money was ACTUALLY handed over.** ⚠️ **`fixed_days` mode was not measured; do not read these numbers as covering it.** | Ian stated the cadence rather than us inferring it from T-189's per-store cutoffs, so it is authority, not a measurement — which is precisely why the SEPARATE measurement still mattered. ⭐ A static read nominates; running settles (row 204, and the 22-file sweep of 2026-09-16). | ⚠️ **The RULING is Ian's and reversible by him.** ⛔ **The MEASUREMENT is not a decision and cannot be reversed — only re-run.** Re-run it if `derivePeriods`, `payoutDateFor` or any `store_attendance_config` default changes; the numbers are valid only for the defaults named. |
 | 224 | 2026-09-20 | ⭐ **AN UNTICKED ALLOCATION BOX COUNTS AS EMPTY, SO AUTO-ALLOCATE REFILLS IT — IAN DECLINED THE CHANGE AND THE CURRENT BEHAVIOUR IS THE RULED ONE.** Ian, 2026-09-20, asked directly whether unticking should mean *“leave this alone”*: *“2 no change needed.”* **Context, because the question only exists because of how T-330 was built:** ruling 2 (row 211 / AMENDMENT 7) is *“fill only the EMPTY boxes, never overwriting a typed amount”*. ⛔ **A cleared or unticked box holds no typed amount, so it is EMPTY and the ruling is not engaged** — the orchestrator ruled it that way during T-330's audit round 2, and Ian has now confirmed the outcome. ⚠️ **The known consequence, accepted rather than overlooked:** unticking is the natural *“not this one”* gesture, and pressing Auto-allocate afterwards undoes it. The operator must clear the box AND not press the button again, or edit the figure after allocating. | The alternative — *“cleared means deliberately excluded”* — is a perfectly reasonable rule, and it is a NEW one. ⭐ **It was refused entry BY INFERENCE inside a bug fix and put to Ian as a question instead**, which is the whole point: this task recorded three separate occasions on which a rule nobody made arrived inside a tidy-up, a fix or an amendment, and each cost a spec amendment. ⛔ A fourth was available and was not taken. ⭐ **And the safe half is what made deferring cheap:** the behaviour is VISIBLE — the box refills on screen, the figure is editable, and nothing posts differently without the operator seeing it. A silent behaviour would have needed deciding before the commit; a visible one could wait for an answer. | ⚠️ **This does NOT rule on the click-to-merge race**, which remains open by design in the two `*Form.tsx` components (only its false banner was fixed). Row 224 is about the unticking gesture alone. ⚠️ And §9.4 has never been met for this screen — **no human has loaded it** (DEF-401), so the behaviour Ian has just ruled on has been read, never seen. |

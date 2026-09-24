@@ -12,8 +12,9 @@
  * census itself, is the actual fix: the old guard could not tell "checked and it's fine" from
  * "couldn't see it", and reported both as green.
  */
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { FLOOR_PX, runCensus, stylesheetsUnderApp } from './touch-target-geometry';
@@ -179,6 +180,21 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 151, unresolved: 58 });
   });
 
+  // Audit finding F2 (T-334 slice 3, 2026-09-23, blocking): FAIL and UNRESOLVED are the only
+  // buckets asserted above — PASS never was. A candidate that stops being counted AT ALL (not
+  // failed, not unresolved, just gone) moves neither number and is invisible to every check in this
+  // file. Measured: T-334 slice 3 adopting `<Input>` made native `<input>` in its 5 files go
+  // 34 -> 23 while {fail: 151, unresolved: 58} sat unmoved, because the 11 converted call sites
+  // landed nowhere — `touch-target-geometry.ts` did not recognise the capitalised tag as a
+  // candidate at all (fixed separately, same commit). This is the cheap, whole-population
+  // backstop the file's own header describes wanting ("a cheap early signal before the itemised
+  // diff below even runs") but never actually had for PASS.
+  it('the census TOTAL — every candidate, every bucket — matches what was actually measured', () => {
+    // 1037 = 151 FAIL + 58 UNRESOLVED + 828 PASS, all measured together via runCensus() (not
+    // computed from the other two numbers, so this cannot become circular with them).
+    expect(results.length).toBe(1037);
+  });
+
   it('no control is undersized or unresolved outside the accepted baseline', () => {
     const baselineFail: Record<string, number[]> = baseline.fail;
     const baselineUnresolved: Record<string, string[]> = baseline.unresolved;
@@ -201,5 +217,50 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
       for (const reason of missing) report.push(`baseline UNRESOLVED no longer reproduced (now resolvable?): ${file} — ${reason}`);
     }
     expect(report.sort()).toEqual([]);
+  });
+});
+
+describe('touch-target-geometry.ts — KNOWN_COMPONENT_HEIGHT_PX is gated on the real import (audit round 2, item 3)', () => {
+  it('a LOCAL component named Input (not from @/components/ui) is not counted as a 38px pass', () => {
+    const tmpRoot = mkdtempSync(join(tmpdir(), 'touch-target-known-component-'));
+    try {
+      // A real (but empty) barrel, so a genuine `@/components/ui` import would resolve — proves
+      // the negative is about ORIGIN, not about the barrel being unresolvable at all.
+      mkdirSync(join(tmpRoot, 'components', 'ui'), { recursive: true });
+      writeFileSync(join(tmpRoot, 'components', 'ui', 'index.ts'), 'export function Input() { return null; }\n');
+
+      mkdirSync(join(tmpRoot, 'app', 'fake'), { recursive: true });
+      writeFileSync(
+        join(tmpRoot, 'app', 'fake', 'page.tsx'),
+        // `Input` defined LOCALLY in this file — same name, unrelated component, no import at all.
+        'function Input() { return null; }\nexport default function Page() { return <Input />; }\n',
+      );
+
+      const { results } = runCensus(tmpRoot, globalsCssPath);
+      const hits = results.filter((r) => r.tag === 'Input');
+      expect(hits, `local Input should not be in the census at all; got ${JSON.stringify(hits)}`).toEqual([]);
+    } finally {
+      rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('control: the SAME shape, imported from the real @/components/ui, IS counted as a 38px pass', () => {
+    const tmpRoot = mkdtempSync(join(tmpdir(), 'touch-target-known-component-control-'));
+    try {
+      mkdirSync(join(tmpRoot, 'components', 'ui'), { recursive: true });
+      writeFileSync(join(tmpRoot, 'components', 'ui', 'index.ts'), 'export function Input() { return null; }\n');
+
+      mkdirSync(join(tmpRoot, 'app', 'fake'), { recursive: true });
+      writeFileSync(
+        join(tmpRoot, 'app', 'fake', 'page.tsx'),
+        "import { Input } from '@/components/ui';\nexport default function Page() { return <Input />; }\n",
+      );
+
+      const { results } = runCensus(tmpRoot, globalsCssPath);
+      const hits = results.filter((r) => r.tag === 'Input');
+      expect(hits).toEqual([{ file: 'app/fake/page.tsx', line: 2, tag: 'Input', status: 'pass', px: 38 }]);
+    } finally {
+      rmSync(tmpRoot, { recursive: true, force: true });
+    }
   });
 });

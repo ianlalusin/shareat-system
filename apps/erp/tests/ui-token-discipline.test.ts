@@ -12,8 +12,15 @@
  * not vacuous is the paired "mutation check" beside each one: a synthetic source string built to
  * violate the rule, asserted to be caught — the process §4 itself names as mandatory ("MUTATION-
  * TEST every guard you write: break the thing on purpose, watch the test fail, put it back"),
- * done here against synthetic fixtures rather than the real files, which are out of scope
- * (do-not-touch list — the builder's).
+ * done here against synthetic fixtures rather than the real files.
+ *
+ * ⭐ Corrected 2026-09-23 (T-334 slice 3, R5 — open audit item 1 from 2026-09-22): "the real files"
+ * above means EDITING `Button.tsx` / `Input.tsx` / `Card.tsx` themselves, which stay the builder's
+ * alone. It does NOT mean importing or adopting them — slice 3's entire job is wiring these three
+ * files into 65 callers via `@/components/ui`, and a cold-starting slice-3 author reading the old
+ * "out of scope (do-not-touch list — the builder's)" wording here could misread it as a
+ * prohibition on the very thing the slice exists to do. Mutation fixtures stay synthetic either
+ * way; only the framing changed.
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

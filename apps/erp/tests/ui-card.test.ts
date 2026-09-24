@@ -5,8 +5,10 @@
  * shape). Same pattern as `filter-row.test.ts`: `createElement` + `renderToStaticMarkup`,
  * `environment: 'node'`.
  *
- * Card is currently a STUB (`export function Card(): null`) pre-wired by the orchestrator so red
- * here is an assertion failure, not a module-not-found.
+ * Corrected 2026-09-23 (audit finding F7): Card was a STUB (`export function Card(): null`)
+ * pre-wired by the orchestrator ONLY for slice 2's own RED, so red then was an assertion failure,
+ * not a module-not-found. It has been fully implemented since slice 2 shipped — this file's own
+ * assertions are what proves that now, not this header.
  *
  * ⛔ §9 R5: Card is invisible to `tests/unit/production-caller-ratchet.test.ts` (DEF-403 — the
  * census counts the word "Card" in unrelated JSX/comment prose as a production caller). That is

@@ -17,14 +17,17 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 // `findLocalConst` only recognises a named constant's value when the declaration's initializer is
 // a literal AST node (`ts.isStringLiteral`/`ts.isNoSubstitutionTemplateLiteral`), never a
 // `resolveExpr`-recursed BinaryExpression, however statically foldable it is at runtime.
-// Audit finding 2: `focus-visible:ring-brand` alone put a `--brand` ring directly against
-// primary's own `bg-brand` fill — same token, no visible seam, so tabbing onto "Save" removed
-// the browser's outline and put nothing distinguishable in its place (WCAG 2.4.7). `ring-offset`
-// inserts a visible gap in `--surface` between the fill and the ring on every variant, which is
-// what actually makes the ring read as an outline rather than as the fill growing by 2px. No new
-// token — `ring-offset-surface` resolves through Tailwind's default `ringOffsetColor`, which
-// spreads `theme('colors')` the same way `ringColor` does.
-const BASE_CLASSES = 'inline-flex items-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
+// Audit finding 2 (pre-Amendment-6): `focus-visible:ring-brand` alone put a `--brand` ring
+// directly against primary's own `bg-brand` fill — same token, no visible seam, so tabbing onto
+// "Save" removed the browser's outline and put nothing distinguishable in its place (WCAG 2.4.7).
+// ADR-013 Amendment 6 (2026-09-24, FINAL) moved the ring to `ring-ink` — a different token than
+// any variant's own fill, so that specific same-token collision no longer applies — but
+// `ring-offset` is kept for the reason that still holds regardless of ring colour: it inserts a
+// visible gap in `--surface` between the fill and the ring on every variant, which is what makes
+// the ring read as an outline rather than as the fill growing by 2px. No new token —
+// `ring-offset-surface` resolves through Tailwind's default `ringOffsetColor`, which spreads
+// `theme('colors')` the same way `ringColor` does.
+const BASE_CLASSES = 'inline-flex items-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
 
 // §3: primary is the one solid fill; secondary is the careless-caller-safe default; danger is
 // OUTLINED, never filled (§9 R2 guard 9) and never carries a surface tint either — §3 gives it no
