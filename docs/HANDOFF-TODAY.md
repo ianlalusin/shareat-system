@@ -23,7 +23,7 @@ Spec: `docs/tasks/337-access-defaults-grouped-collapsible.md` (approved; commit-
 2. The tester takes the "after" set with `~/.claude/skills/orchestrator/tools/smoke-t337.mjs` (its header documents usage). "Before" = `t337-v1-desktop-{light,dark}-before.png`, `t337-v5-mobile-{light,dark}-before.png` in that folder. Run **S1** (column alignment across split tables) and **S5** (an open `<details>` survives the toggle redirect). ⛔ Either failing = STOP and report to Ian with screenshots; no improvised fallback.
 3. The auditor reviews the T-337 diff (including checking the grid.tsx extraction is pure). Then full gates, then commit.
 
-Then: **T-338** · **T-334 tranche 2+** (a Workflow; include one `w-full`-baking file, e.g. `/ap`, deliberately) · **Select primitive** (121 `<select>`s; cures the accepted dark bg mismatch) · **T-276** (slot 0157) · DEF-412's own task · **DEF-414** (person grants have no store: two-store staff are authorised at both).
+Then: **T-336 untick warning** (T-336 spec, last paragraph) · **T-338** · **T-334 tranche 2+** (a Workflow; include one `w-full`-baking file, e.g. `/ap`, deliberately) · **Select primitive** (121 `<select>`s; cures the accepted dark bg mismatch) · **T-276** (slot 0157) · DEF-412's own task · **DEF-414** (person grants have no store: two-store staff are authorised at both).
 
 ## 4. Ian's standing rules added this session (all recorded)
 - **Messages are short** (bible §3.5a, row 227; global CLAUDE.md). Only bring Ian what needs him.

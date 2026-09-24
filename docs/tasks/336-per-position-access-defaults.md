@@ -246,3 +246,8 @@ an explicit act, and re-ticking restores the row as `manual`. `seedStoreAccessDe
 re-authorizes `manage_stores`. The ERP store-created message surfaces a shortfall in the defaults.
 Known residual, accepted: the auto-`staff` role is not revoked at termination. It is not
 exploitable (axis 2 refuses without scope), but leavers keep an active role row. Candidate follow-up.
+
+**Open UI item (auditor, 2026-09-24):** unticking the store scope of a person who STILL has an open
+employment there silently removes all their store-scoped permissions, while they keep their job and
+PIN. `/admin/users` must warn at that point: "This person still works at this store; they will lose
+all permissions here." Not built. Candidate follow-up.
