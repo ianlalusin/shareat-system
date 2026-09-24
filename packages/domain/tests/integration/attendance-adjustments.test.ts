@@ -78,7 +78,7 @@ async function fixture(hint: string) {
   const [admin] = await sql<{ id: string }[]>`
     insert into persons (org_id, display_name) values (${orgId}, 'Admin') returning id`;
   await sql`insert into person_roles (person_id, org_id, role) values (${admin!.id}, ${orgId}, 'admin')`;
-  await sql`insert into person_store_scope (person_id, store_id) values (${admin!.id}, ${store!.id})`;
+  await sql`insert into person_store_scope (person_id, store_id, source) values (${admin!.id}, ${store!.id}, 'manual')`;
   const [worker] = await sql<{ id: string }[]>`
     insert into persons (org_id, display_name) values (${orgId}, 'Maria Santos') returning id`;
 
@@ -190,9 +190,12 @@ describe('T-158 invariants 2 & 3 — append-only, and attribution comes from the
 describe('T-158 invariants 4 & 5 — self-dealing, and the deputy', () => {
   it('⛔ a manager cannot adjudicate their OWN attendance', async () => {
     const f = await cleanDay('self');
-    // Give the worker a manager role and their own employment, then have them try.
+    // Give the worker a manager role and their own employment, then have them try. T-336: the
+    // hire already auto-assigned 'staff' (person_roles_active_person_org_unique allows only one
+    // active role) — revoke it before promoting, same as assignRole's own revoke-then-insert.
+    await sql`update person_roles set revoked_at = now() where person_id = ${f.workerId} and org_id = ${f.orgId} and revoked_at is null`;
     await sql`insert into person_roles (person_id, org_id, role) values (${f.workerId}, ${f.orgId}, 'manager')`;
-    await sql`insert into person_store_scope (person_id, store_id) values (${f.workerId}, ${f.storeId})`;
+    await sql`insert into person_store_scope (person_id, store_id, source) values (${f.workerId}, ${f.storeId}, 'manual') on conflict (person_id, store_id) do nothing`;
     const s = await makeSession(f.orgId, f.workerId, f.storeId);
 
     await expect(
@@ -253,7 +256,7 @@ describe('T-158 invariants 4 & 5 — self-dealing, and the deputy', () => {
     const [cashier] = await sql<{ id: string }[]>`
       insert into persons (org_id, display_name) values (${f.orgId}, 'Senior Cashier') returning id`;
     await sql`insert into person_roles (person_id, org_id, role) values (${cashier!.id}, ${f.orgId}, 'staff')`;
-    await sql`insert into person_store_scope (person_id, store_id) values (${cashier!.id}, ${f.storeId})`;
+    await sql`insert into person_store_scope (person_id, store_id, source) values (${cashier!.id}, ${f.storeId}, 'manual')`;
     const s = await makeSession(f.orgId, cashier!.id, f.storeId);
 
     // Without the grant: refused.
@@ -278,7 +281,7 @@ describe('T-158 invariants 4 & 5 — self-dealing, and the deputy', () => {
     const [cashier] = await sql<{ id: string }[]>`
       insert into persons (org_id, display_name) values (${f.orgId}, 'Senior Cashier') returning id`;
     await sql`insert into person_roles (person_id, org_id, role) values (${cashier!.id}, ${f.orgId}, 'staff')`;
-    await sql`insert into person_store_scope (person_id, store_id) values (${cashier!.id}, ${f.storeId})`;
+    await sql`insert into person_store_scope (person_id, store_id, source) values (${cashier!.id}, ${f.storeId}, 'manual')`;
     await sql`insert into person_grants (person_id, grant_name) values (${cashier!.id}, 'manage_attendance')`;
 
     // ⭐ Hiring is `enrol_staff`, which was NOT granted. Widening one capability must never grant

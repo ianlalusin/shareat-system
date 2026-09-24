@@ -192,6 +192,13 @@ const EXEMPT: Record<string, string> = {
   // `setPositionDefault` and `retireStorePosition` carried UNWIRED rows here between T-289 and
   // T-290; T-290 (`apps/erp/src/app/admin/access-defaults/actions.ts`) is their caller, and this
   // guard's third `it` is what forced the rows out the moment that became true.
+
+  // ---- T-336 — per-position access defaults at store creation -------------------------------
+  seedStoreAccessDefaults:
+    'INTERNAL — `createStore` calls it (`stores/service.ts` step 2c) to seed the ruled defaults ' +
+    'on a brand-new store; there is no human boundary because there is nothing yet for a human to ' +
+    'act on. `tests/unit/t336-canonical-position-defaults.test.ts`\'s U3 is the closed-caller-list ' +
+    'guard that keeps it that way; it also owns the one required barrel re-export (§7:135).',
 };
 
 describe('T-227 — every action-shaped domain export is reachable from a screen', () => {

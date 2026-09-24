@@ -107,11 +107,30 @@ export const personStoreScope = pgTable(
       .references(() => stores.id, { onDelete: 'cascade' }),
     grantedBy: uuid('granted_by').references(() => persons.id, { onDelete: 'restrict' }),
     grantedAt: timestamp('granted_at', { withTimezone: true }).notNull().defaultNow(),
+    /**
+     * T-336 SCOPE LIFECYCLE fix (auditor finding 1, 2026-09-24; migration 0156). WHY this row
+     * exists, not just that it does — `employment` is the only source `endEmployment` may ever
+     * delete, and only when no other open employment remains at that store: without it, ending a
+     * hire's employment could not be told apart from an admin's deliberate grant or the
+     * new-admin/new-store fan-out, so a terminated cashier kept sign-in (the bug this closes).
+     *
+     * ⭐ Priority on conflict, enforced in `accessRepo.grantStoreScope`, never here:
+     * `manual` > `fan_out` > `employment`. A `manual` grant always wins, including over an
+     * `employment` row. A `fan_out` upgrades an existing `employment` row (a hire later promoted
+     * to admin/manager keeps their scope after the employment ends) but never downgrades an
+     * existing `manual` or `fan_out` row. `employment` never overwrites anything.
+     *
+     * `default('manual')` — ~147 raw inserts across `scripts/dev-seed.ts` and test fixtures predate
+     * this column and never will pass `source`; only `createEmployment` writes `'employment'`, so
+     * every caller that has no opinion is, by construction, the same shape as a manual grant.
+     */
+    source: text('source', { enum: ['employment', 'manual', 'fan_out'] }).notNull().default('manual'),
   },
   (t) => [
     uniqueIndex('person_store_scope_person_id_store_id_unique').on(t.personId, t.storeId),
     index('person_store_scope_person_id_idx').on(t.personId),
     index('person_store_scope_store_id_idx').on(t.storeId),
+    check('person_store_scope_source_check', sql`${t.source} in ('employment', 'manual', 'fan_out')`),
   ],
 );
 

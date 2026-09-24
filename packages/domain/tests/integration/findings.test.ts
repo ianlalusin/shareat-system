@@ -64,7 +64,7 @@ async function fixture(hint: string) {
   const [p] = await sql<{ id: string }[]>`
     insert into persons (org_id, display_name) values (${orgId}, 'Admin') returning id`;
   await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${orgId}, 'admin')`;
-  await sql`insert into person_store_scope (person_id, store_id) values (${p!.id}, ${store!.id})`;
+  await sql`insert into person_store_scope (person_id, store_id, source) values (${p!.id}, ${store!.id}, 'manual')`;
   return { orgId, storeId: store!.id, admin: actor(orgId, p!.id), personId: p!.id };
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
@@ -1148,7 +1148,7 @@ describe('T-152 — DEF-082, the service-charge float nothing can discharge', ()
     const f = await fixture('sc-regroup');
     await openRecentPeriod(f);
     const storeB = await addStore(f.orgId, 'sc-regroup-b');
-    await sql`insert into person_store_scope (person_id, store_id) values (${f.personId}, ${storeB.id})`;
+    await sql`insert into person_store_scope (person_id, store_id, source) values (${f.personId}, ${storeB.id}, 'manual')`;
 
     // f.storeId is PAST sixteen days — must fire, carrying f.storeId.
     await serviceCharge(f, daysAgo(40), '300.00', uid('regroup-old'));

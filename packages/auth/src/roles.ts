@@ -137,10 +137,13 @@ export async function assignRole(tx: Tx, input: AssignRoleInput): Promise<Assign
   if (input.role === 'admin') {
     const storeIds = await accessRepo.activeStoreIdsForOrg(tx, input.orgId);
     for (const storeId of storeIds) {
+      // T-336 SCOPE LIFECYCLE fix, migration 0156 — 'fan_out': this row exists because a new
+      // admin was appointed, not because anyone hired or explicitly granted this specific store.
       await accessRepo.grantStoreScope(tx, {
         personId: input.personId,
         storeId,
         grantedBy: input.grantedBy,
+        source: 'fan_out',
       });
     }
     materialisedStoreIds = storeIds;

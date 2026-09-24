@@ -12,12 +12,20 @@
  */
 import { redirect } from 'next/navigation';
 import {
+  CANONICAL_POSITION_DEFAULTS,
   createStore,
   deactivateStore,
   reactivateStore,
   setStoreStockModel,
   updateStoreDetails,
 } from '@shareat/domain';
+
+// Derived, never hand-typed — T-336 §1's own lesson (three documents once quoted "~8-12" and none
+// had checked it). Recomputes to 38 today; changes with the ruling, not with this file.
+const TOTAL_RULED_ACCESS_DEFAULTS = Object.values(CANONICAL_POSITION_DEFAULTS).reduce(
+  (sum, caps) => sum + caps.length,
+  0,
+);
 import { withOrgPrincipal } from '../../expenses/lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
@@ -84,10 +92,18 @@ export async function createStoreAction(fd: FormData): Promise<void> {
 
   // ⭐ The fan-out is REPORTED, not silent. §C.2's second half is invisible unless someone says it
   // happened — which is precisely how its first half went unnoticed for two weeks (DEF-180).
+  // T-336/DEF-413 — the access-defaults seed gets the same treatment: a shortfall here means a
+  // hired Cashier can do nothing, and that must not be discoverable only by opening the grid.
+  const defaultsMessage =
+    result!.missingCanonical.length > 0
+      ? ` ⚠️ ${result!.accessDefaultsSeeded} of ${TOTAL_RULED_ACCESS_DEFAULTS} access defaults ` +
+        `seeded: canonical position(s) missing — ${result!.missingCanonical.join(', ')}. Run T-335's ` +
+        'backfill for this organisation.'
+      : ` Access defaults seeded (${result!.accessDefaultsSeeded}/${TOTAL_RULED_ACCESS_DEFAULTS}).`;
   back(`/admin/stores/${result!.storeId}`, {
     ok:
       `Store created with its default room, and store scope granted to ${result!.scopedAdminIds.length} ` +
-      `admin(s). ⚠️ Nobody can sign in here yet — see the readiness checklist below.`,
+      `admin(s).${defaultsMessage} ⚠️ Nobody can sign in here yet — see the readiness checklist below.`,
   });
 }
 

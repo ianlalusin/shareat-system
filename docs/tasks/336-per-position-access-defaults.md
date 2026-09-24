@@ -1,4 +1,4 @@
-**Status:** SPECCED 2026-09-24 by a planner subagent, NOT BUILT. Depends on T-335.
+**Status:** SPECCED 2026-09-24 by a planner subagent. BUILT 2026-09-24. Depends on T-335.
 
 # T-336: every new store opens with Ian's per-position access defaults (DEF-413)
 
@@ -213,3 +213,36 @@ new stores in existing orgs included"), because that is a decision. The builder 
    a role at `/admin/users/[personId]` → only then do position defaults apply. A new hire is inert
    until step 2 and nothing prompts for it. Should `/staff/hire` assign the `staff` role
    automatically, or at least warn?
+
+**Auto-`staff` delta (builder SPEC, approved 2026-09-24):** `createEmployment`, immediately before
+`reconcilePositionGrants`. If `accessRepo.activeRoleForPerson(tx, personId, orgId)` returns nothing,
+it calls `accessRepo.insertRole({ role: 'staff', grantedBy: actor.personId })`. A person who already
+holds any role is untouched. `staff` grants nothing by itself (its CAPABILITY_MATRIX row is all
+false); it only unblocks authorize() axis 1, so position-sourced grants apply.
+**Plus store scope (orchestrator, 2026-09-24, from the tester's case c):** the `staff` role alone
+still leaves a new hire refused ("no store scope"). This goes against Ian's intent that a hire can
+work from day one. So `createEmployment` also grants `person_store_scope` for the hired store,
+guarded against duplicates, and only for that store. Least privilege is unchanged: position
+defaults still decide what they can do.
+
+**⛔ SCOPE LIFECYCLE: RULED 2026-09-24 (auditor finding 1; Opus judgement; orchestrator).** The
+hire-time scope grant was never revoked: a terminated cashier kept sign-in, and grants leaked across
+stores. **Fix A, with migration `0156`** (re-allocated from T-276, which moves to `0157`, so no gap
+is ever applied out of order): `person_store_scope.source` ∈ {`employment`,`manual`,`fan_out`},
+NOT NULL, backfilled as `manual`/`fan_out`. The hire writes `employment`. An admin grant ALWAYS sets
+`manual`, including an upsert over an `employment` row. `endEmployment` deletes the row only when
+`source='employment'` AND no other open employment exists at that store. Option B (authorize
+accepts an open employment) was rejected: scope rows also drive reports, statutory discounts and
+store lists, and B would make one layer the only guard (§15.11). Tests 1–7 as listed in the
+orchestrator's brief. The remaining person-level-grant leak is **DEF-414**, out of scope.
+**0156 backfill (ruled 2026-09-24, auditor research):** every pre-existing row is backfilled as
+`manual`. No row existing before T-336 can be hire-sourced, and only `employment` rows are ever
+deleted, so a fan_out/manual label on old rows is never load-bearing. A timestamp-window
+heuristic was rejected: it risks a wrong label and buys no safety.
+**Audit round 2 rulings (2026-09-24):** `source` gets `DEFAULT 'manual'` (147 raw writers). Source
+priority is manual > fan_out > employment, so a fan-out upgrades an `employment` row and a
+promoted ex-hire keeps admin scope. An admin unticking an employed person's store is ALLOWED: it is
+an explicit act, and re-ticking restores the row as `manual`. `seedStoreAccessDefaults`
+re-authorizes `manage_stores`. The ERP store-created message surfaces a shortfall in the defaults.
+Known residual, accepted: the auto-`staff` role is not revoked at termination. It is not
+exploitable (axis 2 refuses without scope), but leavers keep an active role row. Candidate follow-up.

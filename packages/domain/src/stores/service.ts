@@ -53,6 +53,12 @@ import { normaliseBranchCode } from '../organizations/identifiers';
 // ⛔ The pure rule is CALLED, never re-implemented here — see `setStoreStockModel`.
 import { singleRoomViolation, type StockModel } from '../stock-locations/rules';
 import { seedAttendanceConfig } from '../attendance/config';
+// ⭐ The LEAF module, not the `../people` barrel — same discipline as `../organizations/identifiers`
+// above, on this file's own precedent (T-336 §7): a barrel pulls in every sibling it re-exports, and
+// this file has already been burned once by an import cycle closing through one (see the header
+// comment on that import). No cycle exists today between `people` and `stores/service` specifically —
+// this is the defensive default, not a fix for one measured.
+import { seedStoreAccessDefaults } from '../people/position-defaults';
 
 const CAPABILITY = 'manage_stores' as const;
 
@@ -74,6 +80,11 @@ export interface CreateStoreResult {
   /** ⭐ Reported, never silent: "granted scope to N admin(s)" is how §C.2's second half becomes
    *  visible rather than something a reader has to trust happened. */
   readonly scopedAdminIds: readonly string[];
+  /** T-336/DEF-413 — how many of the ruled 38 rows this store actually got. */
+  readonly accessDefaultsSeeded: number;
+  /** Canonical names this store's org has no row for yet (see `seedStoreAccessDefaults`) — empty
+   *  for any org T-335 has already seeded. */
+  readonly missingCanonical: readonly string[];
 }
 
 /**
@@ -122,6 +133,29 @@ export async function createStore(
     createdBy: actor.personId,
   });
 
+  // 2c. ⭐ T-336/DEF-413. A store with zero access-default rows is not "using the matrix", it is
+  //     unusable — a hired Cashier can do nothing until an admin visits `/admin/access-defaults` by
+  //     hand. `seedStoreAccessDefaults` is the only place this table is written for a NEW store
+  //     (T-335's own precedent: `createStore` is the only production INSERT into `stores`, so one
+  //     call here covers a new org's first store AND every later branch). Never throws for a
+  //     positionless org — it reports `missingCanonical` instead, which T-335's backfill owns closing.
+  const { inserted: accessDefaultsSeeded, missingCanonical } = await seedStoreAccessDefaults(
+    tx,
+    actor,
+    storeId,
+  );
+  // ⭐ Surfaced here, not only in `scripts/bootstrap-org.ts`'s own print line, because this function
+  // is also `/admin/stores`' path for every LATER store — a shortfall there has no script output to
+  // read. `console.warn` rather than a thrown error: T-335's backfill, not this call, owns closing
+  // the gap (§5/§8), and a positionless org must still get its store.
+  if (missingCanonical.length > 0) {
+    console.warn(
+      `createStore: org ${actor.orgId}, store ${storeId} seeded only ${accessDefaultsSeeded} access ` +
+        `default(s) — missing canonical position(s): ${missingCanonical.join(', ')}. Run T-335's ` +
+        'backfill (scripts/backfill-canonical-positions.ts) for this org.',
+    );
+  }
+
   // 3. ⭐ CAPABILITY-MATRIX.md §C.2, second half — BEFORE the room, see this file's header.
   //    "a store created later appears in nobody's scope, so creating a store must add scope rows for
   //    that org's existing admins — otherwise a new branch is invisible to the person who just
@@ -131,7 +165,7 @@ export async function createStore(
   // 4. The default room. A store with zero rooms holds no stock at all.
   const locationId = await createDefaultRoom(tx, actor, storeId, input);
 
-  return { storeId, locationId, scopedAdminIds };
+  return { storeId, locationId, scopedAdminIds, accessDefaultsSeeded, missingCanonical };
 }
 
 /**
@@ -146,7 +180,9 @@ export async function createStore(
 async function fanStoreScopeToAdmins(tx: Tx, actor: Actor, storeId: string): Promise<string[]> {
   const adminIds = await accessRepo.activeAdminPersonIds(tx, actor.orgId);
   for (const personId of adminIds) {
-    await accessRepo.grantStoreScope(tx, { personId, storeId, grantedBy: actor.personId });
+    // T-336 SCOPE LIFECYCLE fix, migration 0156 — 'fan_out', never 'manual' or 'employment': this
+    // row exists because a new store appeared, not because anyone hired or explicitly granted.
+    await accessRepo.grantStoreScope(tx, { personId, storeId, grantedBy: actor.personId, source: 'fan_out' });
   }
   return adminIds;
 }

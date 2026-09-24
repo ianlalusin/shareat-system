@@ -29,7 +29,13 @@ import { reconcilePositionGrants } from './position-defaults';
 // `OFFERABLE_TO_POSITIONS` crosses the barrel too: T-290's screen renders from it and the spec
 // says "import it, never re-derive it" — a second derivation in apps/erp is a second source of
 // truth. (T-289's own file list missed this line; T-290's build found it.)
-export { OFFERABLE_TO_POSITIONS, retireStorePosition, setPositionDefault } from './position-defaults';
+export {
+  OFFERABLE_TO_POSITIONS,
+  CANONICAL_POSITION_DEFAULTS,
+  retireStorePosition,
+  setPositionDefault,
+  seedStoreAccessDefaults,
+} from './position-defaults';
 
 export class EmploymentError extends Error {
   constructor(message: string) {
@@ -101,6 +107,48 @@ export async function createEmployment(
     employmentId: employment.id,
     positionIds,
     primaryPositionId,
+  });
+
+  // T-336, Ian's ruling 2026-09-24 — a hire is inert without this: `authorize()` refuses anyone
+  // with no active role at all, before it ever looks at a position-sourced grant
+  // (`packages/auth/src/authorize.ts`, axis 1), so T-336's whole per-position defaults table would
+  // grant nothing to a plain hire without a baseline role to carry it. Guarded, not unconditional —
+  // a person hired at a SECOND store who already holds admin/manager/super_admin/staff in this org
+  // must never be touched here. `accessRepo.insertRole` is the bare primitive (no revoke-prior-role
+  // logic, no elevation logic — see its own doc comment); `assignRoleAsActor`
+  // (`packages/auth/src/roles.ts`) is for an explicit admin-initiated role CHANGE and does not apply
+  // to a brand-new hire's baseline role.
+  //
+  // ⛔ Race-safe: `accessRepo.lockOrgAccess` (T-237, DEF-232's shape) serialises this check-then-act
+  // per ORG, so two concurrent hires of the same person at two different stores in this org cannot
+  // both read "no active role" and both insert — the second waits, then sees the first's row and
+  // skips. `insertRole` itself stays a bare primitive with no `on conflict` of its own (its other
+  // caller, `createFirstAdmin`, wants a real 23505 if a role somehow already exists there); the lock
+  // is what makes the check trustworthy instead of the insert forgiving.
+  await accessRepo.lockOrgAccess(tx, actor.orgId);
+  if (!(await accessRepo.activeRoleForPerson(tx, input.personId, actor.orgId))) {
+    await accessRepo.insertRole(tx, {
+      personId: input.personId,
+      orgId: actor.orgId,
+      role: 'staff',
+      grantedBy: actor.personId,
+    });
+  }
+
+  // T-336 — the auto-role above satisfies authorize()'s axis 1, but a store-scoped capability
+  // (`CAPABILITY-MATRIX.md` rule 4) still needs axis 2, a `person_store_scope` row, checked
+  // SEPARATELY and ALWAYS. Without this, a fresh hire with a real position grant is refused "no
+  // store scope" — role and scope are different axes on purpose (invariant 6), so satisfying one
+  // does not imply the other. `source: 'employment'` (SCOPE LIFECYCLE fix, migration 0156) is what
+  // lets `endEmployment` later tell "this row exists because of THIS hire" apart from an admin's
+  // deliberate grant or the new-admin/new-store fan-out — never overwrites an existing row of any
+  // source, so calling it here unconditionally is safe: nothing changes if this hire (e.g. the
+  // org's own admin, hired at their own store) already holds scope some other way.
+  await accessRepo.grantStoreScope(tx, {
+    personId: input.personId,
+    storeId: input.storeId,
+    grantedBy: actor.personId,
+    source: 'employment',
   });
 
   // T-289 moment 3 — a hire applies whatever position defaults the assigned positions carry.
@@ -203,6 +251,19 @@ export async function endEmployment(
   // `wanted` computes empty and every position-sourced row for THIS store is revoked; other
   // stores are untouched (a person may hold two open employments, one per store).
   await reconcilePositionGrants(tx, actor, { personId: existing.personId, storeId: existing.storeId });
+
+  // T-336 SCOPE LIFECYCLE fix (migration 0156) — the bug this closes: the hire-time scope grant
+  // was never revoked, so a terminated cashier kept sign-in. Delete the row ONLY when it exists
+  // BECAUSE of this employment (`source = 'employment'`) and no other open employment remains at
+  // this store — never an admin's deliberate `'manual'` grant or the `'fan_out'` materialisation,
+  // and never scope this same person still needs for a genuinely separate reason at this store.
+  const scope = await accessRepo.findStoreScope(tx, existing.personId, existing.storeId);
+  if (scope?.source === 'employment') {
+    const stillOpen = await employmentRepo.findOpenEmployment(tx, existing.personId, existing.storeId);
+    if (!stillOpen) {
+      await accessRepo.deleteStoreScopeById(tx, scope.id);
+    }
+  }
 
   return closed;
 }

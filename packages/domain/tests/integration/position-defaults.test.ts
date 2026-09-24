@@ -83,13 +83,13 @@ async function fixture(hint: string) {
   const [adminPerson] = await sql<{ id: string }[]>`
     insert into persons (org_id, display_name) values (${orgId}, 'Admin') returning id`;
   await sql`insert into person_roles (person_id, org_id, role) values (${adminPerson!.id}, ${orgId}, 'admin')`;
-  await sql`insert into person_store_scope (person_id, store_id) values (${adminPerson!.id}, ${storeAId})`;
-  await sql`insert into person_store_scope (person_id, store_id) values (${adminPerson!.id}, ${storeBId})`;
+  await sql`insert into person_store_scope (person_id, store_id, source) values (${adminPerson!.id}, ${storeAId}, 'manual')`;
+  await sql`insert into person_store_scope (person_id, store_id, source) values (${adminPerson!.id}, ${storeBId}, 'manual')`;
 
   const [managerPerson] = await sql<{ id: string }[]>`
     insert into persons (org_id, display_name) values (${orgId}, 'Manager A') returning id`;
   await sql`insert into person_roles (person_id, org_id, role) values (${managerPerson!.id}, ${orgId}, 'manager')`;
-  await sql`insert into person_store_scope (person_id, store_id) values (${managerPerson!.id}, ${storeAId})`;
+  await sql`insert into person_store_scope (person_id, store_id, source) values (${managerPerson!.id}, ${storeAId}, 'manual')`;
 
   await asOrg(orgId, (tx) => seedCanonicalPositions(tx, orgId));
   const [cashier] = await sql<{ id: string }[]>`
@@ -493,8 +493,8 @@ describe('T-289 case 12 — an elevated manager in an adminless org keeps the ca
     // (bible row 115). `assignRole` is the ungated primitive; no admin exists yet to gate through.
     await asOrg(orgId, (tx) => assignRole(tx, { personId: m1!.id, orgId, role: 'manager', grantedBy: null }));
     await asOrg(orgId, (tx) => assignRole(tx, { personId: m2!.id, orgId, role: 'manager', grantedBy: null }));
-    await sql`insert into person_store_scope (person_id, store_id) values (${m1!.id}, ${storeId})`;
-    await sql`insert into person_store_scope (person_id, store_id) values (${m2!.id}, ${storeId})`;
+    await sql`insert into person_store_scope (person_id, store_id, source) values (${m1!.id}, ${storeId}, 'manual')`;
+    await sql`insert into person_store_scope (person_id, store_id, source) values (${m2!.id}, ${storeId}, 'manual')`;
 
     await asOrg(orgId, (tx) => seedCanonicalPositions(tx, orgId));
     const [cashier] = await sql<{ id: string }[]>`
@@ -685,12 +685,16 @@ describe('T-318 — a position decides what a person may do', () => {
       positionIds: [server!.id],
       name: 'Server Person',
     });
-    // hireStaff only creates the employment/position link — a real actor also needs an active
-    // role and store scope, exactly as any real staff member would (fixture()'s admin/manager
-    // personas above get the same two rows for the same reason).
+    // T-336: hireStaff's createEmployment now auto-assigns 'staff' and auto-grants store scope at
+    // the hired store — a real actor doesn't need a manual insert for either any more. Assert
+    // they happened instead (same fix as t336-access-defaults-at-store-creation.test.ts's I2/I3).
     for (const personId of [dishwasherPerson.personId, serverPerson.personId]) {
-      await sql`insert into person_roles (person_id, org_id, role) values (${personId}, ${f.orgId}, 'staff')`;
-      await sql`insert into person_store_scope (person_id, store_id) values (${personId}, ${f.storeAId})`;
+      const [role] = await sql<{ role: string }[]>`
+        select role from person_roles where person_id = ${personId} and org_id = ${f.orgId} and revoked_at is null`;
+      expect(role?.role, 'createEmployment should auto-assign an active role').toBe('staff');
+      const scoped = await sql<{ id: string }[]>`
+        select id from person_store_scope where person_id = ${personId} and store_id = ${f.storeAId}`;
+      expect(scoped, 'createEmployment should grant store scope for the hired store').toHaveLength(1);
     }
 
     // Both people, same store — the halves of the trap the "different position" check above

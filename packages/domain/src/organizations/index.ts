@@ -326,6 +326,10 @@ export interface BootstrapOrganizationResult
   readonly scopedAdminIds: readonly string[];
   readonly pinCredentialId: string;
   readonly firebaseCredentialId: string | null;
+  /** T-336/DEF-413 — passthrough of `CreateStoreResult.accessDefaultsSeeded` for the first store. */
+  readonly accessDefaultsSeeded: number;
+  /** T-336/DEF-413 — passthrough of `CreateStoreResult.missingCanonical` for the first store. */
+  readonly missingCanonical: readonly string[];
 }
 
 /**
@@ -437,6 +441,8 @@ export async function bootstrapOrganization(
     storeId: store.storeId,
     locationId: store.locationId,
     scopedAdminIds: store.scopedAdminIds,
+    accessDefaultsSeeded: store.accessDefaultsSeeded,
+    missingCanonical: store.missingCanonical,
     pinCredentialId: pinCredential.credentialId,
     firebaseCredentialId: firebaseCredential?.id ?? null,
   };

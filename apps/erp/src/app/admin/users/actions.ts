@@ -164,7 +164,9 @@ export async function setStoreScopeAction(formData: FormData): Promise<void> {
       if (!inOrg) throw new Error('That store does not belong to this organisation.');
 
       if (granted) {
-        await accessRepo.grantStoreScope(tx, { personId, storeId, grantedBy: actor.personId });
+        // T-336 SCOPE LIFECYCLE fix, migration 0156 — 'manual' always wins, including over an
+        // 'employment' row: a human explicitly ticking this box must survive that hire ending.
+        await accessRepo.grantStoreScope(tx, { personId, storeId, grantedBy: actor.personId, source: 'manual' });
       } else {
         await accessRepo.revokeStoreScope(tx, personId, storeId);
       }

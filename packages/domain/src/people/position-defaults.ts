@@ -20,6 +20,7 @@ import {
   SUPER_ADMIN_ONLY_CAPABILITIES,
 } from '@shareat/auth';
 import { accessRepo, employmentRepo, personsRepo, positionDefaultsRepo, type Tx } from '@shareat/db';
+import { CANONICAL_POSITIONS } from '@shareat/db/schema';
 
 export class PositionDefaultError extends Error {
   constructor(message: string) {
@@ -53,6 +54,140 @@ export const OFFERABLE_TO_POSITIONS: readonly Capability[] = CAPABILITIES.filter
     CAPABILITY_SCOPE[c] !== 'platform' &&
     c !== 'close_period',
 );
+
+/**
+ * T-336 — DEF-413. Ian's ruled table (`docs/decisions/PROPOSAL-DEF-413-default-position-capabilities.md`,
+ * "approve all", plus its 2026-09-24 Amendment: Server and Dishwasher each gain `record_stock_movement`).
+ * The one source of truth `seedStoreAccessDefaults` seeds from and the admin grid renders — no
+ * second copy anywhere, so neither can drift from the other.
+ *
+ * Lives here, not beside `CANONICAL_POSITIONS` (`packages/db/schema/employment.ts`): `packages/db`
+ * must not know `@shareat/auth`'s members (ADR-004) and a `Capability`-typed table there would
+ * reverse that dependency.
+ *
+ * `Record<(typeof CANONICAL_POSITIONS)[number], …>` is the drift guard — a seventh canonical name,
+ * or a rename, fails typecheck here until this table answers for it.
+ */
+export const CANONICAL_POSITION_DEFAULTS: Readonly<
+  Record<(typeof CANONICAL_POSITIONS)[number], readonly Capability[]>
+> = {
+  Cashier: [
+    'record_sale',
+    'submit_sales_day',
+    'record_statutory_discount',
+    'record_till_count',
+    'create_expense',
+    'edit_own_expense',
+    'record_order_wastage',
+    'record_supplier_invoice',
+    'receive_delivery',
+    'confirm_receipt',
+    'record_supplier_return',
+    'place_branch_order',
+    'fulfil_branch_order',
+    'post_order_message',
+    'set_item_threshold',
+    'record_stock_movement',
+    'transfer_stock',
+    'record_wastage',
+  ],
+  Cook: ['record_stock_movement', 'record_wastage'],
+  Server: ['record_stock_movement', 'record_wastage'],
+  Dishwasher: ['record_stock_movement', 'record_wastage'],
+  Slicer: ['record_stock_movement', 'record_wastage', 'request_pos_map'],
+  'Inventory Staff': [
+    'receive_delivery',
+    'confirm_receipt',
+    'record_supplier_return',
+    'place_branch_order',
+    'fulfil_branch_order',
+    'post_order_message',
+    'set_item_threshold',
+    'record_stock_movement',
+    'transfer_stock',
+    'record_wastage',
+    'request_pos_map',
+  ],
+};
+
+export interface SeedStoreAccessDefaultsResult {
+  readonly inserted: number;
+  /** Canonical names this org has no row for yet (a raw fixture, or a pre-T-335 org the backfill
+   *  hasn't reached) — reported, never thrown. T-335's backfill owns closing this, not this
+   *  function. */
+  readonly missingCanonical: readonly string[];
+}
+
+/**
+ * T-336 §5 — seeds a brand-new store's per-position access defaults from
+ * `CANONICAL_POSITION_DEFAULTS`. Called ONLY from `createStore` step 2c, on the caller's
+ * transaction, after the store row exists and before the admin-scope fan-out.
+ *
+ * ⛔ **Virgin-store guard.** If the store already carries ANY default row (active or revoked),
+ * this throws. It can never fire inside `createStore` — the store id was minted a moment earlier
+ * on this same `tx` — so this is what guarantees at the code level that no existing store, and so
+ * none of production's `0152` rows, can ever be seeded or re-seeded, even by a future caller.
+ *
+ * No `reconcilePositionGrants` call: a store minted on this `tx` has no employments yet, so there
+ * is nobody to grant to. Grants arrive at hire, through `createEmployment`.
+ *
+ * ⛔ Authorizes itself (bible §7 rule 1: every actor-taking function's first statement is
+ * `authorize()`, never "my one caller already checked"). `createStore` also authorizes
+ * `manage_stores` before calling this, so the two checks are redundant on that path by
+ * construction — deliberately: this function is exported and directly callable (T-336's own
+ * integration tests call it outside `createStore` to exercise the virgin-store guard), and a
+ * second entry point with no gate of its own would be exactly the "authorization lives one call
+ * away, trust the caller" shape bible §7 exists to forbid.
+ */
+export async function seedStoreAccessDefaults(
+  tx: Tx,
+  actor: Actor,
+  storeId: string,
+): Promise<SeedStoreAccessDefaultsResult> {
+  await authorize(tx, actor, 'manage_stores', {});
+
+  if (await positionDefaultsRepo.anyDefaultAtStore(tx, storeId)) {
+    throw new PositionDefaultError(
+      `Store ${storeId} already has access-default rows — seedStoreAccessDefaults only ever runs ` +
+        'once, on a brand-new store. Re-seeding an existing store is refused, not repeated.',
+    );
+  }
+
+  const positions = await employmentRepo.listPositions(tx, actor.orgId, storeId);
+  // Matched case/space-insensitively, like every other canonical-name comparison in this codebase
+  // (`positions_org_scope_name_unique`, `employmentRepo.findPositionByName`) — a canonical row
+  // seeded or hand-inserted as ' server ' must still resolve to `Server`'s defaults.
+  const canonicalByName = new Map(
+    positions.filter((p) => p.isCanonical).map((p) => [p.name.trim().toLowerCase(), p.id]),
+  );
+
+  const missingCanonical: string[] = [];
+  const pairs: { positionId: string; capability: string }[] = [];
+  for (const name of CANONICAL_POSITIONS) {
+    const positionId = canonicalByName.get(name.trim().toLowerCase());
+    if (!positionId) {
+      missingCanonical.push(name);
+      continue;
+    }
+    for (const capability of CANONICAL_POSITION_DEFAULTS[name]) {
+      if (!OFFERABLE_TO_POSITIONS.includes(capability)) {
+        // The constant must never contain one (U1 pins that) — this is the last line, not the only one.
+        throw new PositionDefaultError(
+          `CANONICAL_POSITION_DEFAULTS['${name}'] names '${capability}', which is not offerable to a position.`,
+        );
+      }
+      pairs.push({ positionId, capability });
+    }
+  }
+
+  const { inserted } = await positionDefaultsRepo.insertDefaultsForNewStore(tx, {
+    orgId: actor.orgId,
+    storeId,
+    setBy: actor.personId,
+    pairs,
+  });
+  return { inserted, missingCanonical };
+}
 
 export interface ReconcileResult {
   readonly granted: readonly Capability[];

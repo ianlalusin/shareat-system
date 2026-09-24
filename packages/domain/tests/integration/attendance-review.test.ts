@@ -84,7 +84,7 @@ async function fixture(hint: string) {
   const [admin] = await sql<{ id: string }[]>`
     insert into persons (org_id, display_name) values (${orgId}, 'Admin') returning id`;
   await sql`insert into person_roles (person_id, org_id, role) values (${admin!.id}, ${orgId}, 'admin')`;
-  await sql`insert into person_store_scope (person_id, store_id) values (${admin!.id}, ${store!.id})`;
+  await sql`insert into person_store_scope (person_id, store_id, source) values (${admin!.id}, ${store!.id}, 'manual')`;
   const [worker] = await sql<{ id: string }[]>`
     insert into persons (org_id, display_name) values (${orgId}, 'Maria Santos') returning id`;
 
@@ -264,9 +264,11 @@ describe('T-195 — the decision surface', () => {
     const f = await fixture('ownday');
     const day = await dayFrom(f, at(14), at(23));
     // The worker, looking at their own day. `manage_attendance` is granted so the block under test
-    // is the self-adjudication rule, not a missing capability.
+    // is the self-adjudication rule, not a missing capability. T-336: the hire already
+    // auto-assigned 'staff' — revoke it before promoting, same as assignRole's revoke-then-insert.
+    await sql`update person_roles set revoked_at = now() where person_id = ${f.workerId} and org_id = ${f.orgId} and revoked_at is null`;
     await sql`insert into person_roles (person_id, org_id, role) values (${f.workerId}, ${f.orgId}, 'manager')`;
-    await sql`insert into person_store_scope (person_id, store_id) values (${f.workerId}, ${f.storeId})`;
+    await sql`insert into person_store_scope (person_id, store_id, source) values (${f.workerId}, ${f.storeId}, 'manual') on conflict (person_id, store_id) do nothing`;
     const theirs = actor(f.orgId, f.workerId);
 
     const detail = await asOrg(f.orgId, (tx) => attendanceDayDetail(tx, theirs, day.id));

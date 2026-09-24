@@ -55,6 +55,14 @@ import * as organizationsRepo from '../packages/db/src/repo/organizations';
 // ⭐ T-232 slice 2 — ONE function, two callers. `/setup` calls exactly this, so the screen and the
 // CLI cannot drift: adding a step to first-run setup is adding it to both, or to neither.
 import { bootstrapOrganization } from '../packages/domain/src/organizations';
+import { CANONICAL_POSITION_DEFAULTS } from '../packages/domain/src/people/position-defaults';
+
+// Derived, never hand-typed — T-336's own §1's lesson (three documents once quoted "~8-12" and
+// none had checked it). Recomputes to 38 today; changes with the ruling, not with this file.
+const TOTAL_RULED_ACCESS_DEFAULTS = Object.values(CANONICAL_POSITION_DEFAULTS).reduce(
+  (sum, caps) => sum + caps.length,
+  0,
+);
 
 /**
  * ⚠️ Copied from `scripts/dev-seed.ts:43`, not imported: that function is not exported and
@@ -235,6 +243,13 @@ async function main(): Promise<void> {
   console.log(`  store id            : ${result.storeId}`);
   console.log(`  default room id     : ${result.locationId}`);
   console.log(`  admins scoped       : ${result.scopedAdminIds.length}`);
+  console.log(`  access defaults     : ${result.accessDefaultsSeeded}/${TOTAL_RULED_ACCESS_DEFAULTS} across 6 positions`);
+  if (result.missingCanonical.length > 0) {
+    console.warn(
+      `  ⚠️ short of the ruled ${TOTAL_RULED_ACCESS_DEFAULTS} — missing canonical position(s): ` +
+        `${result.missingCanonical.join(', ')}`,
+    );
+  }
   console.log('');
   console.log('Sign in with:');
   console.log(`  store               : ${args.storeName}  (${args.storeCode})`);

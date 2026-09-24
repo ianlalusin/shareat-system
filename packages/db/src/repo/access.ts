@@ -267,17 +267,78 @@ export async function revokeRoleById(tx: Tx, roleId: string): Promise<void> {
 // Store scope — rows, never a bypass (CAPABILITY-MATRIX.md, bible row 114).
 // -----------------------------------------------------------------------------------------
 
-/** Grants one store. Idempotent: re-granting an already-held store is a no-op rather than
- * a unique-constraint error, so a caller assigning "every current store" in a loop never
- * has to special-case ones already held. */
+/**
+ * Grants one store. Idempotent: re-granting an already-held store is a no-op rather than a
+ * unique-constraint error, so a caller assigning "every current store" in a loop never has to
+ * special-case ones already held.
+ *
+ * T-336 SCOPE LIFECYCLE fix, migration 0156 — `source` decides what `endEmployment` may later
+ * delete, and conflicts resolve by a fixed priority: `'manual' > 'fan_out' > 'employment'`.
+ *   - `'manual'` ALWAYS wins, including over an existing `'employment'` row: an admin's deliberate
+ *     grant must survive that hire ending, which is exactly what an unconditional
+ *     `on conflict do nothing` would have gotten wrong.
+ *   - `'fan_out'` UPGRADES an existing `'employment'` row, and only that — a hire later promoted
+ *     to admin/manager keeps the scope this materialises after their employment ends, but a
+ *     `'manual'` or already-`'fan_out'` row is never touched.
+ *   - `'employment'` never overwrites an existing row of any source — it only ever fills an empty
+ *     cell (a rehire after a clean revocation).
+ */
 export async function grantStoreScope(
   tx: Tx,
-  input: { personId: string; storeId: string; grantedBy: string | null },
+  input: { personId: string; storeId: string; grantedBy: string | null; source: 'employment' | 'manual' | 'fan_out' },
 ): Promise<void> {
+  if (input.source === 'manual') {
+    await tx
+      .insert(personStoreScope)
+      .values({ personId: input.personId, storeId: input.storeId, grantedBy: input.grantedBy, source: 'manual' })
+      .onConflictDoUpdate({
+        target: [personStoreScope.personId, personStoreScope.storeId],
+        set: { source: 'manual', grantedBy: input.grantedBy },
+      });
+    return;
+  }
+  if (input.source === 'fan_out') {
+    await tx
+      .insert(personStoreScope)
+      .values({ personId: input.personId, storeId: input.storeId, grantedBy: input.grantedBy, source: 'fan_out' })
+      .onConflictDoUpdate({
+        target: [personStoreScope.personId, personStoreScope.storeId],
+        set: { source: 'fan_out', grantedBy: input.grantedBy },
+        // Only an 'employment' row is upgraded. Postgres leaves a conflicting row that fails this
+        // WHERE untouched — the same effect as DO NOTHING for a 'manual' or already-'fan_out' row.
+        setWhere: eq(personStoreScope.source, 'employment'),
+      });
+    return;
+  }
   await tx
     .insert(personStoreScope)
-    .values({ personId: input.personId, storeId: input.storeId, grantedBy: input.grantedBy })
+    .values({ personId: input.personId, storeId: input.storeId, grantedBy: input.grantedBy, source: input.source })
     .onConflictDoNothing({ target: [personStoreScope.personId, personStoreScope.storeId] });
+}
+
+/**
+ * T-336 SCOPE LIFECYCLE fix — the other half of `grantStoreScope`. Deletes exactly one
+ * `person_store_scope` row, by id, never by (person, store): the caller (`endEmployment`) has
+ * already decided this row is safe to remove (`source = 'employment'` and no other open
+ * employment at that store) and names it, the same posture as `revokeDefaultById`.
+ */
+export async function deleteStoreScopeById(tx: Tx, id: string): Promise<void> {
+  await tx.delete(personStoreScope).where(eq(personStoreScope.id, id));
+}
+
+/** The active scope row for (person, store), if any — what `endEmployment` reads before
+ *  deciding whether it may delete it. */
+export async function findStoreScope(
+  tx: Tx,
+  personId: string,
+  storeId: string,
+): Promise<{ id: string; source: string } | undefined> {
+  const [row] = await tx
+    .select({ id: personStoreScope.id, source: personStoreScope.source })
+    .from(personStoreScope)
+    .where(and(eq(personStoreScope.personId, personId), eq(personStoreScope.storeId, storeId)))
+    .limit(1);
+  return row;
 }
 
 /** Removes one store. Ordinary delete — CAPABILITY-MATRIX.md frames store scope as "rows,
@@ -308,22 +369,29 @@ export async function personHasStoreScope(tx: Tx, personId: string, storeId: str
  * ⭐ T-302 — may this person begin a session AT this store? **An open employment here, OR a
  * `person_store_scope` row here.** Either one, deliberately.
  *
- * ⛔ **Why not store scope alone, which is what T-302's own spec first said.** Measured before
- * building: nothing in the hire flow writes a scope row. `packages/domain/src/people/index.ts`'s
- * `createEmployment` writes the employment, its positions and its position grants and stops;
- * `packages/auth/src/roles.ts`'s fan-out fires on `role === 'admin'` only, and
- * `apps/erp/src/app/admin/users/actions.ts`'s `setStoreScopeAction` is a human ticking a box. So
- * the two populations hold **different** rows: the founding admin has scope and no employment
- * (`bootstrapOrganization` → `createStore`'s fan-out), and a hired cashier has an employment and
- * no scope until somebody remembers. A scope-only gate would refuse the second one **with the flat
- * `BAD_PIN` sentence** — turning a missing provisioning step from a legible mid-session
- * `may not 'record_sale'` into an unexplainable "that PIN is not valid".
+ * ⛔ **Why not store scope alone, which is what T-302's own spec first said.** Measured when this
+ * gate was built: nothing in the hire flow wrote a scope row, so a hired cashier held an
+ * employment and no scope until somebody remembered to add one by hand — a scope-only gate would
+ * have refused them with the flat `BAD_PIN` sentence, turning a missing provisioning step from a
+ * legible mid-session `may not 'record_sale'` into an unexplainable "that PIN is not valid".
+ *
+ * ⭐ **T-336 (2026-09-24) closed that specific gap** — `createEmployment` now grants
+ * `person_store_scope` for the hired store, `source = 'employment'`, in the same transaction as
+ * the employment, so a fresh hire holds both rows from the moment they exist. The OR still earns
+ * its keep: the founding admin gets scope with no employment at all (`bootstrapOrganization` →
+ * `createStore`'s fan-out, `source = 'fan_out'`), an admin/manager appointed later via
+ * `packages/auth/src/roles.ts`'s fan-out or `apps/erp/src/app/admin/users/actions.ts`'s
+ * `setStoreScopeAction` (`source = 'manual'`) is scope with no employment there either, and even a
+ * `source = 'employment'` row now survives its own employment ending if another open one remains
+ * at that store — `endEmployment`'s revocation (SCOPE LIFECYCLE fix, migration 0156) deletes it
+ * only when BOTH `source = 'employment'` and no other open employment covers this store. So "has
+ * an open employment" and "holds scope" are still two different facts — narrower than before this
+ * fix (a terminated cashier with no other role here now loses both together), never identical.
  *
  * ⚠️ **This is a sign-in gate, NOT an authorization check, and the distinction is load-bearing.**
  * It answers *"does this person work here"*; `authorize()` still answers *"may they do this"* and
- * still requires a scope row for every `'store'`-scoped capability. An employment gets you a
- * session, never a capability — so a cashier hired but not yet scoped signs in and is refused at
- * the first store-scoped action, which is the diagnosable failure this gate exists to preserve.
+ * still requires a scope row for every `'store'`-scoped capability, checked as its own axis. An
+ * employment (or a scope row) gets you a session, never a capability on its own.
  *
  * ⭐ **One round trip, two EXISTS.** The PIN path runs this on every successful lookup, so it is
  * deliberately not two queries. Both legs are index-backed:

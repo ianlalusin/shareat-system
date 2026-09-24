@@ -71,6 +71,50 @@ export async function insertDefault(
   return row;
 }
 
+/** T-336 §5 step 1 — the virgin-store guard: true if this store already carries ANY default row,
+ *  active or revoked. `seedStoreAccessDefaults` throws rather than seed or re-seed when this is
+ *  true, which is what keeps every existing store's rows (including production's `0152` rows)
+ *  unreachable by this path even if a future caller tries. */
+export async function anyDefaultAtStore(tx: Tx, storeId: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: positionCapabilityDefaults.id })
+    .from(positionCapabilityDefaults)
+    .where(eq(positionCapabilityDefaults.storeId, storeId))
+    .limit(1);
+  return row !== undefined;
+}
+
+export interface InsertDefaultsForNewStoreInput {
+  orgId: string;
+  storeId: string;
+  setBy: string;
+  pairs: readonly { positionId: string; capability: string }[];
+}
+
+/**
+ * T-336 §5 step 4 — one insert per ruled (position, capability) pair on a brand-new store.
+ * Explicit conflict target on `position_capability_defaults_active_unique`
+ * (`position_id, store_id, capability where revoked_at is null`) — T-335 §4's lesson: an implicit
+ * `on conflict do nothing` swallows ANY unique violation, not just this one, which would make
+ * `inserted` under-report. Idempotent: a second call with the same pairs inserts 0.
+ */
+export async function insertDefaultsForNewStore(
+  tx: Tx,
+  input: InsertDefaultsForNewStoreInput,
+): Promise<{ inserted: number }> {
+  let inserted = 0;
+  for (const pair of input.pairs) {
+    const result = await tx.execute(sql`
+      insert into position_capability_defaults (org_id, position_id, store_id, capability, set_by)
+      values (${input.orgId}, ${pair.positionId}, ${input.storeId}, ${pair.capability}, ${input.setBy})
+      on conflict (position_id, store_id, capability) where revoked_at is null
+      do nothing
+      returning id`);
+    inserted += (result as unknown as { id: string }[]).length;
+  }
+  return { inserted };
+}
+
 /** Revokes one default row by id. Throws if it does not exist or is already revoked, the same
  *  posture as `accessRepo.revokeGrantById` — a caller revoking a default should know which one. */
 export async function revokeDefaultById(tx: Tx, id: string, revokedBy: string, reason: string): Promise<void> {

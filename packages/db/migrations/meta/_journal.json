@@ -953,6 +953,13 @@
       "when": 1799465507084,
       "tag": "0155_t327_finite_check_all_numeric_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 156,
+      "version": "7",
+      "when": 1799551907084,
+      "tag": "0156_t336_scope_lifecycle_source",
+      "breakpoints": true
     }
   ]
 }

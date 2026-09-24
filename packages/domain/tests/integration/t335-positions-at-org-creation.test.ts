@@ -198,20 +198,27 @@ describe('T5 — seeding grants nothing', () => {
       }),
     );
 
+    // T-336 amendment: bootstrap now seeds the ruled 38 position_capability_defaults rows, and a
+    // blank hire (Server) is reconciled against them at hire time — this test's own POINT (a
+    // blank Server hire is never granted record_sale) still holds; only the raw counts changed.
     const [defaultsRow] = await sql<{ n: number }[]>`
       select count(*)::int n from position_capability_defaults where org_id = ${boot.orgId}`;
-    expect(defaultsRow!.n).toBe(0);
+    expect(defaultsRow!.n).toBe(38);
 
-    const [grantsRow] = await sql<{ n: number }[]>`
-      select count(*)::int n from person_grants where person_id = ${worker!.id} and grant_source = 'position'`;
-    expect(grantsRow!.n).toBe(0);
+    const positionGrants = await sql<{ grant_name: string }[]>`
+      select grant_name from person_grants where person_id = ${worker!.id} and grant_source = 'position' order by grant_name`;
+    expect(positionGrants.map((r) => r.grant_name)).toEqual(['record_stock_movement', 'record_wastage']);
 
-    // createEmployment writes no person_roles — a real actor also needs an active role and store
-    // scope, same as position-defaults.test.ts:691-693. Without this, authorize refuses at "no
-    // active role in org" (axis 1) before ever reaching the position-default check this test exists
-    // to prove.
-    await sql`insert into person_roles (person_id, org_id, role) values (${worker!.id}, ${boot.orgId}, 'staff')`;
-    await sql`insert into person_store_scope (person_id, store_id) values (${worker!.id}, ${boot.storeId})`;
+    // T-336 auto-role/scope delta: createEmployment now auto-assigns 'staff' and grants store
+    // scope for the hired store, so the manual inserts this test used to need here would 23505.
+    // Assert they happened instead — the point (authorize refuses without a position default) is
+    // otherwise unchanged from position-defaults.test.ts:691-693's precedent.
+    const [role] = await sql<{ role: string }[]>`
+      select role from person_roles where person_id = ${worker!.id} and org_id = ${boot.orgId} and revoked_at is null`;
+    expect(role?.role, 'createEmployment should auto-assign an active role').toBe('staff');
+    const scoped = await sql<{ id: string }[]>`
+      select id from person_store_scope where person_id = ${worker!.id} and store_id = ${boot.storeId}`;
+    expect(scoped, 'createEmployment should grant store scope for the hired store').toHaveLength(1);
 
     const workerActor: Actor = { personId: worker!.id, orgId: boot.orgId };
     await expect(
@@ -240,7 +247,10 @@ describe('T5b — an org already in 0152\'s state keeps its defaults exactly; th
   it('position_capability_defaults and person_grants are byte-identical before and after the per-org backfill', async () => {
     const boot = await systemTransaction((tx) => bootstrapOrganization(tx, { ...INPUT, code: uid('T5B') }));
     // Zero canonical rows for this org — the pre-T-335 state — plus a store-scoped position with
-    // real defaults and the matching grant, exactly 0152's shape.
+    // real defaults and the matching grant, exactly 0152's shape. T-336: bootstrap's own 38 ruled
+    // defaults now reference these positions (RESTRICT FK) — clear them first; no employment
+    // exists yet at this point in the fixture, so there is nothing fanned out to clean up too.
+    await sql`delete from position_capability_defaults where org_id = ${boot.orgId}`;
     await sql`delete from positions where org_id = ${boot.orgId}`;
     const [storePos] = await sql<{ id: string }[]>`
       insert into positions (org_id, store_id, name, is_canonical) values (${boot.orgId}, ${boot.storeId}, 'Legacy Cashier', false) returning id`;
@@ -326,6 +336,9 @@ describe('T6b — the picker source shows the six for a NEW store created after 
 describe('T7 — the backfill reports a collision and changes nothing about it', () => {
   it('org with 0 canonical rows plus a store-scoped Server: 6 inserted, collision named by store code and position id, row unchanged', async () => {
     const boot = await systemTransaction((tx) => bootstrapOrganization(tx, { ...INPUT, code: uid('T7') }));
+    // T-336: bootstrap's own 38 ruled defaults reference these positions (RESTRICT FK) — clear
+    // them first, same fix as T5b.
+    await sql`delete from position_capability_defaults where org_id = ${boot.orgId}`;
     await sql`delete from positions where org_id = ${boot.orgId}`;
     const [storeRow] = await sql<{ code: string }[]>`select code from stores where id = ${boot.storeId}`;
     const [collider] = await sql<{ id: string; store_id: string; is_active: boolean }[]>`

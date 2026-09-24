@@ -11,7 +11,7 @@
 > | Gate | State |
 > |---|---|
 > | Lands after T-275 | ✅ T-275 has SHIPPED |
-> | A migration slot to widen `scheduler_runs_job_check` | ✅ **SLOT `0156` IS ALLOCATED TO THIS TASK** by the orchestrator (`system32-df`), 2026-09-20. `0155` is APPLIED IN PRODUCTION and must never be edited. ⛔ Reserved and NOT to be re-issued: `0149`, `0150`, `0151`. |
+> | A migration slot to widen `scheduler_runs_job_check` | ✅ **SLOT `0157` IS ALLOCATED TO THIS TASK** (re-allocated 2026-09-24 by the orchestrator: `0156` went to T-336, which was ready first. It was originally allocated `0156` on 2026-09-20.) `0155` is APPLIED IN PRODUCTION and must never be edited. ⛔ Reserved and NOT to be re-issued: `0149`, `0150`, `0151`. |
 >
 > ⚠️ **The stale text this replaces said "build it next cycle on slot 0146"** — written when `0145`
 > was the live slot. **Migrations have since reached `0155`**, so that instruction had been wrong for
