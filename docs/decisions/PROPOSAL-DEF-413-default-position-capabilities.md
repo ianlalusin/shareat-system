@@ -164,3 +164,15 @@ management. These stay with managers and admins.
   POS design to decide.
 - **Defaults are stored per position AND per store.** How a new organisation's seeding covers
   stores added later is for the implementing task. It is not settled here.
+
+## Amendment, Ian, 2026-09-24
+> *"yes default permission for new branches, yes most basic must include record usage and wastage
+> thats everyone should be capable of doing"*
+
+1. **Every newly created store gets the ruled defaults**, including new branches in an existing org
+   (T-336 seeds them in `createStore`). Existing stores stay untouched.
+2. **A hire gets the basic `staff` role automatically** (T-336 open item 2 → yes).
+3. **The baseline for EVERY position includes F1 `record_stock_movement` and F3 log wastage.** This
+   changes the table: **Server and Dishwasher gain F1** (Server 1→2, Dishwasher 1→2). ⚠️ F1 is a
+   single capability: it also covers count lines and drafting a production run. Those are drafts
+   only; posting and committing stay manager-only (items 5 and 6).

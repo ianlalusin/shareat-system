@@ -46,6 +46,7 @@
 import {
   organizationsRepo,
   fiscalPeriodsRepo,
+  employmentRepo,
   personsRepo,
   accessRepo,
   sessionsRepo,
@@ -85,6 +86,7 @@ export interface CreateOrganizationResult {
   readonly accountsSeeded: number;
   readonly categoriesSeeded: number;
   readonly periodsSeeded: number;
+  readonly positionsSeeded: number;
 }
 
 /** Postgres unique-violation. */
@@ -120,12 +122,13 @@ export function fiscalPeriodSeedWindow(
 /**
  * Creates an organization **and its reference data, in the caller's transaction**.
  *
- * ⛔ An organization always has its chart of accounts, its expense categories, and a year of
- * fiscal periods to post into — or it does not exist. All three seeds run here, on this
- * transaction, so there is no window in which an org exists that cannot post. Before T-264/DEF-284
- * there was no third seed at all: `postEntry` refused the very first entry any fresh org tried to
- * record, in every environment except a test or `dev-seed-inventory.ts`, both of which wrote their
- * own period by hand.
+ * ⛔ An organization always has its chart of accounts, its expense categories, a year of fiscal
+ * periods to post into, and the six canonical positions to hire into — or it does not exist. All
+ * four seeds run here, on this transaction, so there is no window in which an org exists that
+ * cannot post or cannot hire. Before T-264/DEF-284 there was no third seed at all: `postEntry`
+ * refused the very first entry any fresh org tried to record, in every environment except a test
+ * or `dev-seed-inventory.ts`, both of which wrote their own period by hand. T-335/DEF-150 is the
+ * same shape for the fourth: `/staff/hire` had nothing to offer until the six were seeded by hand.
  */
 export async function createOrganization(
   tx: Tx,
@@ -171,7 +174,14 @@ export async function createOrganization(
     org.id,
     fiscalPeriodSeedWindow(),
   );
-  return { orgId: org.id, accountsSeeded, categoriesSeeded, periodsSeeded: periodsInserted };
+  const { inserted: positionsSeeded } = await employmentRepo.seedCanonical(tx, org.id);
+  return {
+    orgId: org.id,
+    accountsSeeded,
+    categoriesSeeded,
+    periodsSeeded: periodsInserted,
+    positionsSeeded,
+  };
 }
 
 function isUniqueViolation(err: unknown): boolean {
@@ -372,8 +382,9 @@ export async function bootstrapOrganization(
     );
   }
 
-  // 4. The organization, its chart of accounts, its expense categories, and a year of fiscal
-  //    periods to post into (T-264/DEF-284 slice 1).
+  // 4. The organization, its chart of accounts, its expense categories, a year of fiscal periods
+  //    to post into (T-264/DEF-284 slice 1), and the six canonical positions to hire into
+  //    (T-335/DEF-150).
   const org = await createOrganization(tx, { code: input.code, name: input.name });
 
   // 5. The first person: the `admin` role and the owner's four capabilities, both `granted_by` NULL.

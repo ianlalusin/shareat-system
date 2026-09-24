@@ -43,6 +43,7 @@
     "bootstrap-org": "tsx scripts/bootstrap-org.ts",
     "provision-terminal": "tsx scripts/provision-terminal.ts",
     "backfill-fiscal-periods": "tsx scripts/backfill-fiscal-periods.ts",
+    "backfill-canonical-positions": "tsx scripts/backfill-canonical-positions.ts",
     "backfill-store-attendance-config": "tsx scripts/backfill-store-attendance-config.ts",
     "deploy-preflight": "tsx scripts/deploy-preflight.ts"
   },

@@ -50,16 +50,72 @@ export interface RosterRow {
 // -------------------------------------------------------------------------------------
 
 /**
- * Seed the canonical six for an org. Idempotent — `on conflict do nothing` against the
- * expression index, the same shape `seedChartOfAccounts` uses, so a re-run changes nothing.
+ * Seed the canonical six for an org. Idempotent — T-335 §4: the `on conflict` names the exact
+ * `0080` expression index (`org_id`, `coalesce(store_id, nil-uuid)`, `lower(trim(name))`) rather
+ * than relying on Postgres's implicit "any unique violation" default, so a future second unique
+ * constraint on `positions` raises loudly instead of being silently swallowed here (which would
+ * make `inserted` under-report). Returns the count actually INSERTED — via `returning`, not the
+ * number attempted — so a caller can tell "already seeded" (0) from "just seeded" (6).
  */
-export async function seedCanonical(tx: Tx, orgId: string): Promise<void> {
+export async function seedCanonical(tx: Tx, orgId: string): Promise<{ inserted: number }> {
+  let inserted = 0;
   for (const name of CANONICAL_POSITIONS) {
-    await tx.execute(sql`
+    const result = await tx.execute(sql`
       insert into positions (org_id, store_id, name, is_canonical)
       values (${orgId}, null, ${name}, true)
-      on conflict do nothing`);
+      on conflict (org_id, coalesce(store_id, '00000000-0000-0000-0000-000000000000'::uuid), lower(trim(name)))
+      do nothing
+      returning id`);
+    inserted += (result as unknown as { id: string }[]).length;
   }
+  return { inserted };
+}
+
+export interface CanonicalNameCollision {
+  storeCode: string;
+  positionId: string;
+  name: string;
+}
+
+/**
+ * T-335 §5 — store-scoped rows whose name collides with a canonical one (case/space-insensitive),
+ * for the backfill's report. Read-only: names collisions, never resolves them (Ian's call, §5/§8).
+ */
+export async function canonicalNameCollisions(tx: Tx, orgId: string): Promise<CanonicalNameCollision[]> {
+  const canonicalLower = sql.join(
+    CANONICAL_POSITIONS.map((name) => sql`lower(trim(${name}))`),
+    sql`, `,
+  );
+  const result = await tx.execute(sql`
+    select s.code as store_code, p.id as position_id, p.name
+    from positions p
+    join stores s on s.id = p.store_id
+    where p.org_id = ${orgId}
+      and p.store_id is not null
+      and lower(trim(p.name)) in (${canonicalLower})
+    order by s.code, p.name`);
+  return (result as unknown as Record<string, unknown>[]).map((r) => ({
+    storeCode: String(r.store_code),
+    positionId: String(r.position_id),
+    name: String(r.name),
+  }));
+}
+
+/**
+ * T-335 §5 — how many org-wide canonical rows an org actually has, for the backfill's
+ * `canonical now N/6` report line. Not in §4's original list; added alongside `seedCanonical`
+ * because it is the same "only place SQL is written for positions" file (this file's own header).
+ * ⚠️ **Nothing caps this at 6.** `positions_canonical_is_org_wide_check` only forces
+ * `is_canonical = true` whenever `store_id is null` — it says nothing about the NAME — and the
+ * `0080` unique index only prevents a duplicate within one `(org, group, name)` triple. A
+ * hand-inserted org-wide row named anything else (`'Assistant Manager'`, a typo'd seventh) is
+ * perfectly legal and this function will count it. A result above 6 is not an error this function
+ * raises; it is a signal for whoever reads the report to look closer.
+ */
+export async function countCanonical(tx: Tx, orgId: string): Promise<number> {
+  const result = await tx.execute(sql`
+    select count(*)::int as n from positions where org_id = ${orgId} and is_canonical = true`);
+  return Number((result as unknown as { n: number }[])[0]?.n ?? 0);
 }
 
 export async function listPositions(tx: Tx, orgId: string, storeId: string): Promise<PositionRow[]> {

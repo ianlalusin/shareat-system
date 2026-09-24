@@ -16,7 +16,6 @@ capitalizeFromExpense
 checkValuesMatch
 childLogger
 closeAsLateReceipt
-closeSystemDb
 closeYear
 confirmTradeOrder
 convertSpecimen

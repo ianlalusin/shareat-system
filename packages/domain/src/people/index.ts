@@ -276,7 +276,7 @@ export async function listRoster(tx: Tx, input: { storeId: string }): Promise<Ro
 }
 
 /** Seed the canonical six for an org. Idempotent. */
-export async function seedCanonicalPositions(tx: Tx, orgId: string): Promise<void> {
+export async function seedCanonicalPositions(tx: Tx, orgId: string): Promise<{ inserted: number }> {
   return employmentRepo.seedCanonical(tx, orgId);
 }
 

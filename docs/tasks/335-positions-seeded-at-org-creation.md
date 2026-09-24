@@ -1,6 +1,6 @@
 # T-335 — every organisation can hire from day one (DEF-150)
 
-**Status:** SPECCED 2026-09-23 by a planner subagent, revised for the auditor's 8 findings, APPROVED by the orchestrator, NOT BUILT. Queued after T-334 slice 3 tranche 1. §5's duplicate-"Server" resolution is OPEN for Ian (the build is report-only).
+**Status:** SPECCED 2026-09-23 by a planner subagent, revised for the auditor's 8 findings, APPROVED by the orchestrator, BUILT 2026-09-24. Queued after T-334 slice 3 tranche 1. §5's duplicate-"Server" resolution is OPEN for Ian (the build is report-only).
 **Closes:** DEF-150 (`docs/DEFECTS-REGISTER.md:232`). Re-observed live 2026-09-23: a smoke org made by
 `scripts/bootstrap-org.ts` could not hire until the six were seeded by hand.
 **Approved:** Ian approved speccing a fix (orchestrator, 2026-09-23). No ruling of his is needed to BUILD
@@ -235,3 +235,8 @@ a row.
 - v1 live-data counts for Firestore `positions` (not queried; §1 step 3 explains why they do not bear
   on the goal).
 - That DEF-413's row exists in the register as described. The orchestrator is adding it; I did not read it.
+
+**Ruling 2026-09-24 (orchestrator, on a tester question):** the backfill script EXPORTS
+`backfillOrgPositions(tx, org)` → `{ inserted, collisions }`, and `main()` calls it. This is the one
+deliberate deviation from the `backfill-fiscal-periods.ts` model, so that T7 can test the per-org
+behaviour directly instead of only through `main()`.

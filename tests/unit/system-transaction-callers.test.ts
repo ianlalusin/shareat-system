@@ -49,6 +49,10 @@ const REQUIRED_CALLERS = [
   // terminal's persons/credential rows before any organisation-scoped session could exist to run
   // it, exactly bootstrap-org.ts's own justification for the same connection.
   'scripts/provision-terminal.ts',
+  // T-335, audit finding #3 — the backfill enumerates every org needing the six, the same
+  // "must act across every organisation" shape row 185 already covers. One transaction per org,
+  // same door as bootstrap-org.ts.
+  'scripts/backfill-canonical-positions.ts',
 ] as const;
 
 /**
