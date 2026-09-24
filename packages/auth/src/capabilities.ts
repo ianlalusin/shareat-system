@@ -545,6 +545,158 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
 };
 
 // -----------------------------------------------------------------------------------------
+// T-337 — business-area grouping for the admin/access-defaults screen, presentation only.
+// `authorize()` never reads it (U3), and it is not edited into CAPABILITY-MATRIX.md — an area is
+// not an access decision, and that file's own parser test compares role cells, not areas.
+//
+// Same exhaustiveness mechanism as CAPABILITY_SCOPE above: `Record<Capability, CapabilityArea>`
+// forces every one of the 96 to appear, and a bogus key fails the object literal's excess-property
+// check — a capability cannot be invented here or left out. Keyed on all 96, not the 91 offerable
+// to a position, so the guard needs no filter and a future capability cannot slip past it by being
+// non-offerable (approve_item, close_period, post_journal_entry, cross_org_access and
+// view_franchise_sales all carry a real area despite being excluded from the grid itself).
+// -----------------------------------------------------------------------------------------
+
+/** Display order on the admin/access-defaults screen. */
+export const CAPABILITY_AREAS = [
+  'sales',
+  'expenses',
+  'inventory',
+  'production',
+  'commissary',
+  'suppliers',
+  'customers',
+  'staff',
+  'books',
+  'admin',
+  'franchise',
+] as const;
+export type CapabilityArea = (typeof CAPABILITY_AREAS)[number];
+
+export const CAPABILITY_AREA_LABEL: Readonly<Record<CapabilityArea, string>> = {
+  sales: 'Sales & cash',
+  expenses: 'Expenses',
+  inventory: 'Inventory',
+  production: 'Production & POS usage',
+  commissary: 'Commissary orders',
+  suppliers: 'Suppliers & receiving',
+  customers: 'Customers & wholesale',
+  staff: 'Staff, attendance & payroll',
+  books: 'Books & reporting',
+  admin: 'Administration & settings',
+  franchise: 'Franchisor (super-admin)',
+};
+
+export const CAPABILITY_AREA: Readonly<Record<Capability, CapabilityArea>> = {
+  record_sale: 'sales',
+  submit_sales_day: 'sales',
+  verify_sales_day: 'sales',
+  void_sales_day: 'sales',
+  record_statutory_discount: 'sales',
+  void_statutory_discount: 'sales',
+  accept_remittance: 'sales',
+  record_till_count: 'sales',
+  resolve_till_variance: 'sales',
+  transfer_funds: 'sales',
+  record_order_wastage: 'sales',
+  resolve_order_wastage: 'sales',
+  charge_staff_for_wastage: 'sales',
+  reverse_auto_charge: 'sales',
+
+  create_expense: 'expenses',
+  edit_own_expense: 'expenses',
+  edit_any_expense: 'expenses',
+  void_expense: 'expenses',
+  approve_expense: 'expenses',
+  manage_expense_budgets: 'expenses',
+  manage_recurring_expenses: 'expenses',
+
+  record_stock_movement: 'inventory',
+  adjust_inventory: 'inventory',
+  record_wastage: 'inventory',
+  charge_staff_for_discrepancy: 'inventory',
+  transfer_stock: 'inventory',
+  void_transfer: 'inventory',
+  manage_locations: 'inventory',
+  post_usage: 'inventory',
+  void_usage_record: 'inventory',
+  open_count_session: 'inventory',
+  commit_count: 'inventory',
+  manage_items: 'inventory',
+  approve_item: 'inventory',
+
+  post_production: 'production',
+  edit_posted_production: 'production',
+  void_production: 'production',
+  manage_pos_map: 'production',
+  request_pos_map: 'production',
+  decide_pos_map_request: 'production',
+  finalize_pos_usage_pull: 'production',
+
+  confirm_receipt: 'commissary',
+  resolve_trade_discrepancy: 'commissary',
+  set_item_threshold: 'commissary',
+  post_order_message: 'commissary',
+  place_branch_order: 'commissary',
+  fulfil_branch_order: 'commissary',
+  dispatch_branch_order: 'commissary',
+  manage_commissary_offerings: 'commissary',
+  manage_commissary_map: 'commissary',
+
+  record_supplier_return: 'suppliers',
+  void_supplier_return: 'suppliers',
+  apply_supplier_credit: 'suppliers',
+  receive_delivery: 'suppliers',
+  allow_over_receipt: 'suppliers',
+  approve_supplier: 'suppliers',
+  record_ap_payment: 'suppliers',
+  record_supplier_invoice: 'suppliers',
+  verify_supplier_invoice: 'suppliers',
+  void_supplier_invoice: 'suppliers',
+
+  record_customer_return: 'customers',
+  void_customer_return: 'customers',
+  apply_customer_credit: 'customers',
+  refund_customer: 'customers',
+  approve_buyer: 'customers',
+  set_credit_limit: 'customers',
+  override_credit_limit: 'customers',
+  record_ar_collection: 'customers',
+  write_off_receivable: 'customers',
+  create_wholesale_order: 'customers',
+  dispatch_wholesale_order: 'customers',
+
+  enrol_staff: 'staff',
+  manage_attendance: 'staff',
+  set_pay_rate: 'staff',
+  run_payroll: 'staff',
+  provision_clock_terminal: 'staff',
+
+  run_cutover: 'books',
+  view_financial_reports: 'books',
+  view_trial_balance: 'books',
+  reverse_entry: 'books',
+  close_period: 'books',
+  override_period_lock: 'books',
+  post_journal_entry: 'books',
+  manage_fixed_assets: 'books',
+  run_depreciation: 'books',
+  manage_prepaid_items: 'books',
+  run_amortisation: 'books',
+  manage_chart_of_accounts: 'books',
+
+  manage_users: 'admin',
+  manage_stores: 'admin',
+  grant_capability: 'admin',
+  manage_store_settings: 'admin',
+  set_cash_policy: 'admin',
+  manage_price_lists: 'admin',
+
+  cross_org_access: 'franchise',
+  view_franchise_sales: 'franchise',
+};
+
+// -----------------------------------------------------------------------------------------
 // The matrix itself — every capability × every role, an explicit true/false. No default;
 // see this file's top comment for what "no default" means at the type level.
 // -----------------------------------------------------------------------------------------

@@ -27,7 +27,16 @@ import {
 } from '@shareat/db';
 import { CANONICAL_POSITIONS } from '@shareat/db/schema';
 import { OFFERABLE_TO_POSITIONS } from '@shareat/domain';
-import { CAPABILITY_MATRIX, CAPABILITY_SCOPE, type Actor, type Capability } from '@shareat/auth';
+import {
+  CAPABILITY_AREA,
+  CAPABILITY_AREAS,
+  CAPABILITY_AREA_LABEL,
+  CAPABILITY_MATRIX,
+  CAPABILITY_SCOPE,
+  type Actor,
+  type Capability,
+  type CapabilityArea,
+} from '@shareat/auth';
 // ⛔ The chokepoint, never `@shareat/db` directly — `apps/erp/tests/withorgprincipal-chokepoint.test.ts`.
 import { listStores, withOrgPrincipal, type StoreOption } from '../../expenses/lib';
 
@@ -54,35 +63,64 @@ export interface GridCapability {
   readonly inherited: boolean;
 }
 
+export interface GridAreaGroup {
+  readonly area: CapabilityArea;
+  readonly label: string;
+  readonly capabilities: readonly GridCapability[];
+}
+
 export interface GridScopeGroup {
   readonly scope: (typeof SCOPE_ORDER)[number];
   readonly note: string;
-  readonly capabilities: readonly GridCapability[];
+  readonly areas: readonly GridAreaGroup[];
 }
 
 /**
  * §T1.1/§T1.2 — the grid offers exactly the capabilities outside the three excluded sets
  * (T-289 §C10), grouped by `CAPABILITY_SCOPE` in `store` → `org` → `platform` order (T-283's
- * `GrantPicker` shape). ⚠️ **T-318 (2026-09-16):** the ~21 capabilities `staff` used to hold
- * automatically are INCLUDED here same as ever — this derivation never excluded them — but they
- * no longer render `inherited`: `CAPABILITY_MATRIX[c].staff` is false for all 96 now, so every one
- * is a live, position-granted TOGGLE like the other 75. `inherited` stays derived below rather
- * than deleted (D2's ruling) — it is correct logic that is currently vacuous, and the only thing
- * standing between this screen and a silent lie if a `staff` cell is ever set back to `true`.
+ * `GrantPicker` shape), THEN by `CAPABILITY_AREA` in `CAPABILITY_AREAS` order (T-337 — "group the
+ * access like sales, inventory, customer, attendance etc., keep the store and org scope
+ * groupings"). `capabilities` lives on the AREA group only, never flat on the scope group too —
+ * one representation, so a reader cannot render from the stale one (T-337 §2).
+ * ⚠️ **T-318 (2026-09-16):** the ~21 capabilities `staff` used to hold automatically are INCLUDED
+ * here same as ever — this derivation never excluded them — but they no longer render `inherited`:
+ * `CAPABILITY_MATRIX[c].staff` is false for all 96 now, so every one is a live, position-granted
+ * TOGGLE like the other 75. `inherited` stays derived below rather than deleted (D2's ruling) — it
+ * is correct logic that is currently vacuous, and the only thing standing between this screen and
+ * a silent lie if a `staff` cell is ever set back to `true`.
  *
- * ⚠️ The `platform` group always ends up empty on this screen (both platform-scoped capabilities
- * are already inside `SUPER_ADMIN_ONLY_CAPABILITIES`) — kept in the returned array anyway so the
- * three keys stay in a stable, testable order; the page skips rendering an empty group.
+ * ⚠️ The `platform` group always ends up with zero areas on this screen (both platform-scoped
+ * capabilities are already inside `SUPER_ADMIN_ONLY_CAPABILITIES`, so neither is offerable) —
+ * `SCOPE_ORDER`'s three keys stay in the returned array regardless, so their order stays stable
+ * and testable; the page skips rendering a scope with no areas. Same reasoning empties `franchise`
+ * out of every scope's `areas` (T-337 §1: its two members are platform-scoped AND
+ * super-admin-only).
  */
 export function gridCapabilityGroups(): GridScopeGroup[] {
-  return SCOPE_ORDER.map((scope) => ({
-    scope,
-    note: SCOPE_NOTE[scope],
-    capabilities: OFFERABLE_TO_POSITIONS.filter((c) => CAPABILITY_SCOPE[c] === scope).map((c) => ({
-      capability: c,
-      inherited: CAPABILITY_MATRIX[c].staff,
-    })),
-  }));
+  return SCOPE_ORDER.map((scope) => {
+    const offerableInScope = OFFERABLE_TO_POSITIONS.filter((c) => CAPABILITY_SCOPE[c] === scope);
+    const areas: GridAreaGroup[] = CAPABILITY_AREAS.map((area) => ({
+      area,
+      label: CAPABILITY_AREA_LABEL[area],
+      capabilities: offerableInScope
+        .filter((c) => CAPABILITY_AREA[c] === area)
+        .map((c) => ({ capability: c, inherited: CAPABILITY_MATRIX[c].staff })),
+    })).filter((a) => a.capabilities.length > 0);
+    return { scope, note: SCOPE_NOTE[scope], areas };
+  });
+}
+
+/**
+ * T-337 §3 — "on" = the cell renders `On` or `On (role)`: active in `activeSet`, OR `inherited`
+ * (a `staff`-matrix cell shown ticked-and-disabled, never a real row in `activeSet`). Pure: no
+ * database, so the render layer can call it once per (area × position) without a query each time.
+ */
+export function areaOnCount(capabilities: readonly GridCapability[], activeSet: ReadonlySet<Capability> | undefined): number {
+  let n = 0;
+  for (const c of capabilities) {
+    if (c.inherited || (activeSet?.has(c.capability) ?? false)) n++;
+  }
+  return n;
 }
 
 /**

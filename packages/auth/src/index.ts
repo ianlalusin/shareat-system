@@ -10,8 +10,11 @@ export {
   CONDITIONAL_CAPABILITIES,
   ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER,
   SUPER_ADMIN_ONLY_CAPABILITIES,
+  CAPABILITY_AREAS,
+  CAPABILITY_AREA_LABEL,
+  CAPABILITY_AREA,
 } from './capabilities';
-export type { Role, Capability, CapabilityScope } from './capabilities';
+export type { Role, Capability, CapabilityScope, CapabilityArea } from './capabilities';
 
 export { authorize, heldCapabilities } from './authorize';
 /** ⭐ From the leaf, not from the modules that throw them — `packages/auth/src/errors.ts` says why.

@@ -208,3 +208,9 @@ server stopped. §6's files exist, have been looked at, and S1–S7 and S-forms 
 **Orchestrator, 2026-09-24:** `admin/access-defaults/page.tsx` is one of slice 3's select-only
 files (an R8 geometry bump only). No tranche of slice 3 may touch it until T-337 lands; that
 tranche then applies R8 to the post-T-337 file.
+
+**Commit-1 checkpoint (2026-09-24):** the pure extraction was done ALONE (grid.tsx, page.tsx) and R2
+was green on it (3/3), before any regrouping. That is the genuine "before" run the two-commit rule
+exists for. It is not committed separately: the tester's commit-2 RED files already sit in the
+tree, so a lone commit 1 could not pass typecheck. One commit lands both parts. The auditor verifies
+the extraction's purity by diff.

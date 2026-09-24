@@ -6,14 +6,17 @@ import {
   SUPER_ADMIN_ONLY_CAPABILITIES,
   type Capability,
 } from '@shareat/auth';
+import { CAPABILITY_AREAS } from '@shareat/auth';
 import {
   SCOPE_ORDER,
+  areaOnCount,
   bannerMessage,
   bulkBannerMessage,
   computeOverlapCounts,
   copyableDefaults,
   gridCapabilityGroups,
   overlapDisclosure,
+  type GridCapability,
 } from '../src/app/admin/access-defaults/lib';
 
 /**
@@ -29,7 +32,9 @@ import {
 
 describe('gridCapabilityGroups — exactly the offerable set, grouped by CAPABILITY_SCOPE', () => {
   const groups = gridCapabilityGroups();
-  const rendered = groups.flatMap((g) => g.capabilities.map((c) => c.capability));
+  // T-337: capabilities live on the AREA group now, never flat on the scope group (lib.ts's own
+  // comment) — flattened one level further here, same fix as the T-318 describe block below.
+  const rendered = groups.flatMap((g) => g.areas.flatMap((a) => a.capabilities.map((c) => c.capability)));
 
   it('the grouping keys are store / org / platform, in that order', () => {
     expect(groups.map((g) => g.scope)).toEqual([...SCOPE_ORDER]);
@@ -59,8 +64,10 @@ describe('gridCapabilityGroups — exactly the offerable set, grouped by CAPABIL
 
   it('each rendered capability lands in the group matching its own CAPABILITY_SCOPE', () => {
     for (const group of groups) {
-      for (const cell of group.capabilities) {
-        expect(CAPABILITY_SCOPE[cell.capability]).toBe(group.scope);
+      for (const area of group.areas) {
+        for (const cell of area.capabilities) {
+          expect(CAPABILITY_SCOPE[cell.capability]).toBe(group.scope);
+        }
       }
     }
   });
@@ -68,6 +75,105 @@ describe('gridCapabilityGroups — exactly the offerable set, grouped by CAPABIL
   // DEF-179 — a floor so an empty (or accidentally over-narrow) derivation cannot pass silently.
   it('the offered set clears a floor — an empty derivation cannot pass silently', () => {
     expect(rendered.length).toBeGreaterThan(50);
+  });
+});
+
+/**
+ * T-337 — L1. `docs/tasks/337-access-defaults-grouped-collapsible.md` §7. Per-scope AREA grouping,
+ * layered on top of the SCOPE grouping the describe block above already proves.
+ */
+describe('L1 — gridCapabilityGroups: area order, exactly-91-once, and the 76/15 split', () => {
+  const groups = gridCapabilityGroups();
+
+  it('within each scope, area order is a subsequence of CAPABILITY_AREAS order', () => {
+    for (const group of groups) {
+      const areaIndexes = group.areas.map((a) => CAPABILITY_AREAS.indexOf(a.area));
+      const sorted = [...areaIndexes].sort((x, y) => x - y);
+      expect(areaIndexes, `${group.scope}'s areas are out of CAPABILITY_AREAS order`).toEqual(sorted);
+    }
+  });
+
+  it('the 91 offerable capabilities each appear exactly once across every area of every scope', () => {
+    const rendered = groups.flatMap((g) => g.areas.flatMap((a) => a.capabilities.map((c) => c.capability)));
+    expect(rendered.length).toBe(91);
+    expect(new Set(rendered).size, 'no capability appears twice').toBe(91);
+  });
+
+  it('store holds 76, org holds 15 (§1\'s totals)', () => {
+    const countFor = (scope: (typeof SCOPE_ORDER)[number]) =>
+      groups.find((g) => g.scope === scope)!.areas.reduce((n, a) => n + a.capabilities.length, 0);
+    expect(countFor('store')).toBe(76);
+    expect(countFor('org')).toBe(15);
+  });
+
+  it('NEGATIVE: no area group is ever empty — gridCapabilityGroups filters them out', () => {
+    for (const group of groups) {
+      for (const area of group.areas) {
+        expect(area.capabilities.length, `${group.scope}/${area.area} is empty and should have been filtered out`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('NEGATIVE: org has no sales area (§1: sales is 14/0 — store only)', () => {
+    const org = groups.find((g) => g.scope === 'org')!;
+    expect(org.areas.map((a) => a.area)).not.toContain('sales');
+  });
+
+  it('NEGATIVE: the excluded five (SUPER_ADMIN_ONLY + platform-scoped + close_period) are absent from every area', () => {
+    const rendered = new Set(groups.flatMap((g) => g.areas.flatMap((a) => a.capabilities.map((c) => c.capability))));
+    for (const c of SUPER_ADMIN_ONLY_CAPABILITIES) expect(rendered.has(c)).toBe(false);
+    for (const c of CAPABILITIES.filter((c) => CAPABILITY_SCOPE[c] === 'platform')) expect(rendered.has(c)).toBe(false);
+    expect(rendered.has('close_period')).toBe(false);
+  });
+
+  it('NEGATIVE: the platform SCOPE has 0 areas', () => {
+    expect(groups.find((g) => g.scope === 'platform')!.areas).toEqual([]);
+  });
+
+  it('NEGATIVE: no scope contains the franchise AREA (its two members are platform-scoped and super-admin-only, so never offerable)', () => {
+    for (const group of groups) {
+      expect(group.areas.map((a) => a.area)).not.toContain('franchise');
+    }
+  });
+});
+
+/**
+ * T-337 — L2. `areaOnCount`: "on" = active in the activeSet, OR inherited (§3).
+ */
+describe('L2 — areaOnCount: 0/n, n/n, partial, and an active capability outside the area', () => {
+  const cap = (capability: Capability, inherited = false): GridCapability => ({ capability, inherited });
+  const activeSet = (...caps: Capability[]): ReadonlySet<Capability> => new Set(caps);
+
+  it('0/n: nothing active, nothing inherited', () => {
+    const capabilities = [cap('record_sale'), cap('submit_sales_day')];
+    expect(areaOnCount(capabilities, activeSet())).toBe(0);
+  });
+
+  it('n/n: every capability active', () => {
+    const capabilities = [cap('record_sale'), cap('submit_sales_day')];
+    expect(areaOnCount(capabilities, activeSet('record_sale', 'submit_sales_day'))).toBe(2);
+  });
+
+  it('partial: one active, one not', () => {
+    const capabilities = [cap('record_sale'), cap('submit_sales_day')];
+    expect(areaOnCount(capabilities, activeSet('record_sale'))).toBe(1);
+  });
+
+  it('an inherited capability counts as on even with no activeSet entry (T-318: currently vacuous, but the logic must still count it)', () => {
+    const capabilities = [cap('record_sale', true)];
+    expect(areaOnCount(capabilities, activeSet())).toBe(1);
+  });
+
+  it('activeSet undefined (no defaults loaded yet) behaves like an empty set, never throws', () => {
+    const capabilities = [cap('record_sale')];
+    expect(areaOnCount(capabilities, undefined)).toBe(0);
+  });
+
+  it('NEGATIVE: a capability active but OUTSIDE this area\'s own list is not counted', () => {
+    const capabilities = [cap('record_sale')];
+    // 'submit_sales_day' is active, but it is not one of THIS area's capabilities — areaOnCount
+    // must count only what is in `capabilities`, never scan the whole activeSet.
+    expect(areaOnCount(capabilities, activeSet('submit_sales_day'))).toBe(0);
   });
 });
 
@@ -102,7 +208,7 @@ describe('T-318 — the staff matrix has emptied: nothing is rendered inherited 
 
   it('so no rendered capability is flagged inherited — every one is a live, position-granted toggle', () => {
     const groups = gridCapabilityGroups();
-    const rendered = groups.flatMap((g) => g.capabilities);
+    const rendered = groups.flatMap((g) => g.areas.flatMap((a) => a.capabilities));
     // DEF-179 floor, same reasoning as the sibling describe block above: an empty derivation
     // must not make the loop below pass vacuously.
     expect(rendered.length).toBeGreaterThan(50);
