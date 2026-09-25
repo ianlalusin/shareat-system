@@ -24,6 +24,14 @@ export const fiscalPeriods = pgTable(
       .default('open'),
     closedAt: timestamp('closed_at', { withTimezone: true }),
     closedBy: uuid('closed_by').references(() => persons.id, { onDelete: 'restrict' }),
+    // NOTE: T-344/DEF-422, migration 0160. Set only when this row was created by the admin
+    // "fill a missing month inside closed books" action — null on every ordinary period. A
+    // BEFORE UPDATE trigger (fiscal_periods_fill_immutable) makes both columns write-once at
+    // INSERT; a CHECK (fiscal_periods_fill_shape_check) requires fillReason non-blank iff
+    // createdBy/closedBy/closedAt are all set and status <> 'open'. DELETE is untouched (R1.6,
+    // the 2027 cutover purge).
+    createdBy: uuid('created_by').references(() => persons.id, { onDelete: 'restrict' }),
+    fillReason: text('fill_reason'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
@@ -33,5 +41,8 @@ export const fiscalPeriods = pgTable(
     // NOTE: the no-overlap rule — EXCLUDE USING gist (org_id WITH =,
     // daterange(starts_on, ends_on, '[]') WITH &&) — is hand-added in the generated
     // migration; it requires btree_gist, also hand-added there (Contract §8).
+    // NOTE: fiscal_periods_fill_shape_check (createdBy/fillReason shape) is hand-added in
+    // migration 0160, along with fiscal_periods_fill_immutable and fiscal_periods_order_guard
+    // (R1.2 — an open period may never start before a closed/locked one; see migration 0160).
   ],
 );

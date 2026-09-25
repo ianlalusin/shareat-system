@@ -214,11 +214,15 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // `reverse_auto_charge`) landed as two concurrent lanes and both sets of rows merged.
     // 93 since T-222 (`manage_stores`). 92 since T-177 (`manage_pos_map`, `request_pos_map`, `decide_pos_map_request`,
     // `finalize_pos_usage_pull`).
+    // ⭐ 96 -> 97 on 2026-09-25 (T-344/DEF-422): `create_missing_period`. ORG-scoped, admin and up
+    // only — the admin-only remedy for a month missing inside closed books (Q2). Not offerable to
+    // a position (R1.3), and does not backfill the adminless-manager fallback for a manager
+    // already elevated before this landed (R1.4; the gap is expected empty per bible row 211).
     // Having to edit this number is the guard WORKING: a capability cannot be slipped
     // into the enforcement without also being written into the document people actually
     // read, and vice versa.
     const { rows } = parseCapabilityMatrixDoc();
-    expect(rows.length).toBe(96);
+    expect(rows.length).toBe(97);
   });
 
   it('has no duplicate capability names', () => {
@@ -289,10 +293,10 @@ describe('invariant 1 — every capability has an explicit decision for all four
     expect(problems).toEqual([]);
   });
 
-  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 96 capabilities', () => {
-    expect(CAPABILITIES.length).toBe(96);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(96);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(96);
+  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 97 capabilities', () => {
+    expect(CAPABILITIES.length).toBe(97);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(97);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(97);
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));
   });
@@ -396,6 +400,14 @@ describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', (
         // `person_grants` row behind. Excluding it would need a hand-maintained carve-out in a set
         // whose whole point is being derived — and a carve-out is what drifts.
         'provision_clock_terminal',
+        // ⭐ T-344/DEF-422's `create_missing_period` JOINED this set on 2026-09-25 with no edit to
+        // any list — admin-yes / manager-no, and the set is derived from exactly that. ⚠️ This is
+        // the DERIVATION only: `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER` is recomputed from
+        // `CAPABILITY_MATRIX` at import time, so every future manager elevation in an adminless org
+        // picks it up automatically. It does NOT retroactively backfill a manager already elevated
+        // before this landed (R1.4) — that manager holds it only once re-elevated. Bible row 211:
+        // the one production org has an admin, so that gap is expected to be empty.
+        'create_missing_period',
       ].sort(),
     );
   });

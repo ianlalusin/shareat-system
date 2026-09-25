@@ -47,12 +47,17 @@ export class PositionDefaultError extends Error {
  * `CAPABILITY_SCOPE` platform = 2 (both already inside the 4), `close_period` = 1 →
  * `OFFERABLE_TO_POSITIONS.length === 91`. The test asserts the DERIVATION, not 91 — the number
  * is here only so a reviewer can tell at a glance whether it ran.
+ *
+ * ⭐ T-344/DEF-422, R1.3 — `create_missing_period` excluded too, same bar as `close_period`: it
+ * changes closed books, so it sits with the capabilities that change what a position can widen
+ * rather than what it is offered. `CAPABILITIES` is 97 as of this migration; still 91 offerable.
  */
 export const OFFERABLE_TO_POSITIONS: readonly Capability[] = CAPABILITIES.filter(
   (c) =>
     !SUPER_ADMIN_ONLY_CAPABILITIES.includes(c) &&
     CAPABILITY_SCOPE[c] !== 'platform' &&
-    c !== 'close_period',
+    c !== 'close_period' &&
+    c !== 'create_missing_period',
 );
 
 /**

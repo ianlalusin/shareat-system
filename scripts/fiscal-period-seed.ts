@@ -42,14 +42,14 @@ async function main(): Promise<number> {
 
   for (const o of result.outcomes) {
     const head = `  ${o.orgName}`;
-    if (o.error) {
-      console.error(`${head}: FAILED OUTRIGHT — ${o.error}`);
-      console.log(`${head}: ${o.detail ?? `inserted ${o.posted}`}`);
-      continue;
-    }
+    // ⛔ T-344 — was `continue` after the error line, which skipped `o.failures` entirely on the
+    // "work succeeded but closing the run row failed" path (Guard C, `scheduler/index.ts`): that
+    // outcome carries BOTH `error` and real failures from completed work, and the old code dropped
+    // them. Every branch below always runs now, regardless of whether `error` is set.
+    if (o.error) console.error(`${head}: FAILED OUTRIGHT — ${o.error}`);
     // ⚠️ Counts, never a bare "done" (bible §15.6) — "inserted 0" on a fully-covered org is a
     // healthy no-op; the same figure on a run that saw no org at all is a configuration problem.
-    console.log(`${head}: ${o.detail ?? `inserted ${o.posted}`}`);
+    if (o.detail) console.log(`${head}: ${o.detail}`);
     for (const f of o.failures) console.error(`${head}:   ⚠️ ${f.subjectName} — ${f.reason}`);
   }
 

@@ -201,9 +201,16 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // `file.includes('access-defaults')` and reading every summary candidate's line/px, not by
     // arithmetic alone — named by component here rather than by line number, which moves under
     // the next edit to this file.
-    // 1041 = 151 FAIL + 58 UNRESOLVED + 832 PASS, all measured together via runCensus() (not
+    // 1041 -> 1043, T-344/DEF-422 (2026-09-25). +2 PASS, FAIL/UNRESOLVED unmoved (both asserted
+    // above). Itemised: `app/findings/page.tsx`'s new "Create the missing month" form (the admin
+    // action for a hole missing inside closed books) — the `reason` text input at :312 (38px PASS)
+    // and its submit button at :318 (34px PASS). The form's three `type="hidden"` inputs (:309-311)
+    // are not interactive controls and the census does not count them. Verified by filtering
+    // `runCensus()`'s own results to `file === 'app/findings/page.tsx'` and reading each new
+    // candidate's line/px, not by arithmetic alone.
+    // 1043 = 151 FAIL + 58 UNRESOLVED + 834 PASS, all measured together via runCensus() (not
     // computed from the other two numbers, so this cannot become circular with them).
-    expect(results.length).toBe(1041);
+    expect(results.length).toBe(1043);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

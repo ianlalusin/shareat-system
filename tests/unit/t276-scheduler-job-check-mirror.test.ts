@@ -7,12 +7,9 @@
  * both drift the same way and this would still pass; comparing each independently against the
  * imported constant is what catches that).
  *
- * ⛔ RED today, measured (not the "naturally green until the build lands" claim an earlier draft of
- * this comment made — corrected 2026-09-25, auditor): `SCHEDULER_JOBS` itself still has 10 members,
- * so BOTH the schema and migration extraction currently return 10 names, and the `>= 11` floor at
- * `:82`/`:89` and the `toContain('fiscal_period_seed')` at `:83`/`:90` fail right now, before either
- * `sort()`-equality assertion is even reached. Green once the builder widens `SCHEDULER_JOBS`,
- * the schema CHECK sql and the migration together (same commit).
+ * ✅ Green since T-276 widened `SCHEDULER_JOBS`, the schema CHECK sql and the migration together:
+ * `SCHEDULER_JOBS` has 11 members, and both the schema and migration extraction return 11 names.
+ * Stale RED header corrected 2026-09-25 (T-344/DEF-422, tester).
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';

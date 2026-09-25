@@ -7,9 +7,17 @@
  * production organisation could not post a single journal entry. See `docs/tasks/264-*.md`'s
  * "severity correction" for the full trace.
  */
-import { and, desc, eq, gte, lt, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, lt, lte, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
-import { deliveries, expenses, fiscalPeriods, periodOverrides, type PeriodOverrideReason } from '../../schema';
+import {
+  deliveries,
+  expenses,
+  fiscalPeriods,
+  journalEntries,
+  periodOverrides,
+  suppliers,
+  type PeriodOverrideReason,
+} from '../../schema';
 
 /**
  * `[starts_on, ends_on]` for one calendar month, both `YYYY-MM-DD`, both inclusive.
@@ -119,10 +127,24 @@ export async function latestPeriodEnd(tx: Tx, orgId: string): Promise<string | n
 }
 
 /** T-264 / DEF-284 slice 2 — `'YYYY-MM'`, the string every caller (`listFindings`,
- *  `closeReadiness`, `/findings`) already uses, to this table's own `[starts_on, ends_on]`. */
-function periodBounds(period: string): { startsOn: string; endsOn: string } {
+ *  `closeReadiness`, `/findings`) already uses, to this table's own `[starts_on, ends_on]`.
+ *  ⭐ Exported (T-344) so the domain layer can turn a `'YYYY-MM'` period into the date range
+ *  `closeBlockers` (`fiscal-periods/index.ts`) takes, without a second copy of this arithmetic. */
+export function periodBounds(period: string): { startsOn: string; endsOn: string } {
   const [yStr, mStr] = period.split('-');
   return monthBounds(Number(yStr), Number(mStr));
+}
+
+/** `date` plus/minus one day, as `YYYY-MM-DD`. Local, like `monthBounds` above — this file's own
+ *  convention is small date arithmetic written here rather than imported, so a caller in
+ *  `packages/db` never needs `@shareat/core`'s branded `BusinessDate` for a one-line shift. */
+function addOneDay(date: string): string {
+  const [y, m, d] = date.split('-').map(Number) as [number, number, number];
+  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+}
+function subtractOneDay(date: string): string {
+  const [y, m, d] = date.split('-').map(Number) as [number, number, number];
+  return new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
 }
 
 /**
@@ -167,10 +189,18 @@ export async function closePeriod(
  */
 export async function hasEarlierOpenPeriod(tx: Tx, orgId: string, period: string): Promise<boolean> {
   const { startsOn } = periodBounds(period);
+  return hasEarlierOpenPeriodBefore(tx, orgId, startsOn);
+}
+
+/**
+ * `hasEarlierOpenPeriod`'s own query, keyed on a raw date rather than a `'YYYY-MM'` period — T-344
+ * §3.3's admin action fills a part-month piece, which has no period string of its own to convert.
+ */
+export async function hasEarlierOpenPeriodBefore(tx: Tx, orgId: string, beforeDate: string): Promise<boolean> {
   const [row] = await tx
     .select({ id: fiscalPeriods.id })
     .from(fiscalPeriods)
-    .where(and(eq(fiscalPeriods.orgId, orgId), lt(fiscalPeriods.startsOn, startsOn), eq(fiscalPeriods.status, 'open')))
+    .where(and(eq(fiscalPeriods.orgId, orgId), lt(fiscalPeriods.startsOn, beforeDate), eq(fiscalPeriods.status, 'open')))
     .limit(1);
   return row !== undefined;
 }
@@ -205,14 +235,156 @@ export async function lockYearPeriods(tx: Tx, orgId: string, year: number): Prom
   return rows.length;
 }
 
+export interface CoveragePeriod {
+  readonly startsOn: string;
+  readonly endsOn: string;
+  readonly status: 'open' | 'closed' | 'locked';
+}
+
+export interface CoverageHole {
+  readonly startsOn: string;
+  readonly endsOn: string;
+}
+
+export interface CoverageHolesResult {
+  /** Every period this org has, ordered by `starts_on` — `classifyHoles` (`@shareat/domain`)
+   *  reuses this same read to check whether a requested range already overlaps a period, rather
+   *  than a second SELECT. */
+  readonly periods: CoveragePeriod[];
+  /** Every gap in coverage from the org's first period through `through` (inclusive) — interior
+   *  gaps between two periods, plus the tail beyond the last one. `[]` for an org with no periods
+   *  at all; the job's own zero-period branch (`scheduler/index.ts`) handles that case, not this. */
+  readonly holes: CoverageHole[];
+  /** The latest `starts_on` among this org's `closed`/`locked` periods, or `null` if it has none.
+   *  A hole ending before this date has a closed/locked period starting after it — T-344 §3.2's
+   *  class A/B split. (Periods never overlap, so the row with this `starts_on` is, by definition,
+   *  the only one that can matter for that comparison.) */
+  readonly closeFrontierStartsOn: string | null;
+}
+
+/**
+ * T-344 §3.1 — the one SQL read `classifyHoles` (`@shareat/domain/fiscal-periods/holes`) builds
+ * on: this org's periods, the gaps between and after them through `through`, and the close
+ * frontier. Interior gaps are found by walking the ordered rows (Postgres `lag(ends_on) over
+ * (order by starts_on)` restated in JS, since the loop also has to compute the frontier from the
+ * same rows); the tail is `max(ends_on)+1 .. through` when that is non-empty.
+ */
+export async function coverageHoles(tx: Tx, orgId: string, through: string): Promise<CoverageHolesResult> {
+  const periods = await tx
+    .select({ startsOn: fiscalPeriods.startsOn, endsOn: fiscalPeriods.endsOn, status: fiscalPeriods.status })
+    .from(fiscalPeriods)
+    .where(eq(fiscalPeriods.orgId, orgId))
+    .orderBy(asc(fiscalPeriods.startsOn));
+
+  if (periods.length === 0) return { periods: [], holes: [], closeFrontierStartsOn: null };
+
+  const holes: CoverageHole[] = [];
+  let prevEnd: string | null = null;
+  for (const p of periods) {
+    if (prevEnd !== null && p.startsOn > addOneDay(prevEnd)) {
+      holes.push({ startsOn: addOneDay(prevEnd), endsOn: subtractOneDay(p.startsOn) });
+    }
+    if (prevEnd === null || p.endsOn > prevEnd) prevEnd = p.endsOn;
+  }
+  if (prevEnd !== null && through > prevEnd) {
+    holes.push({ startsOn: addOneDay(prevEnd), endsOn: through });
+  }
+
+  let closeFrontierStartsOn: string | null = null;
+  for (const p of periods) {
+    if (
+      (p.status === 'closed' || p.status === 'locked') &&
+      (closeFrontierStartsOn === null || p.startsOn > closeFrontierStartsOn)
+    ) {
+      closeFrontierStartsOn = p.startsOn;
+    }
+  }
+
+  return { periods, holes, closeFrontierStartsOn };
+}
+
+/**
+ * T-344 §3.2, R1.1 — every calendar year `Y` that is "closed" for fiscal-period purposes: a year
+ * with at least one `locked` period, OR a posted `journal_entries` row with `source_type =
+ * 'year_close'` dated `(Y+1)-01-01` (`close-year.ts`'s own idempotency shape). Both conditions are
+ * checked, independently, so a year `closeYear` locked with real periods AND a year whose periods
+ * are entirely missing but whose closing entry was posted anyway (H11b's shape) are both caught —
+ * `closeYear` itself only ever checks for an earlier OPEN period (`:58`), never a missing one.
+ */
+export async function closedYears(tx: Tx, orgId: string): Promise<Set<number>> {
+  const years = new Set<number>();
+
+  const lockedRows = await tx
+    .select({ startsOn: fiscalPeriods.startsOn })
+    .from(fiscalPeriods)
+    .where(and(eq(fiscalPeriods.orgId, orgId), eq(fiscalPeriods.status, 'locked')));
+  for (const row of lockedRows) years.add(Number(row.startsOn.slice(0, 4)));
+
+  const closeEntries = await tx
+    .select({ entryDate: journalEntries.entryDate })
+    .from(journalEntries)
+    .where(
+      and(
+        eq(journalEntries.orgId, orgId),
+        eq(journalEntries.sourceType, 'year_close'),
+        eq(journalEntries.status, 'posted'),
+      ),
+    );
+  for (const row of closeEntries) years.add(Number(row.entryDate.slice(0, 4)) - 1);
+
+  return years;
+}
+
+export interface InsertFilledPeriodInput {
+  readonly orgId: string;
+  readonly startsOn: string;
+  readonly endsOn: string;
+  readonly status: 'closed' | 'locked';
+  readonly actorId: string;
+  readonly reason: string;
+}
+
+/**
+ * T-344 §3.1/§3.3 — the one INSERT the admin "fill a missing month" action ends with: `closed_at`
+ * and `closed_by`/`created_by` all set together, `fill_reason` carried. `ON CONFLICT DO NOTHING`,
+ * bare — the same exclusion-constraint-safe idiom `seedCalendarMonths` above uses — so a second
+ * writer racing for the same range loses silently: `null` back means "another writer won", which
+ * the caller reports as a refusal, never as a quiet success.
+ */
+export async function insertFilledPeriod(tx: Tx, input: InsertFilledPeriodInput): Promise<{ id: string } | null> {
+  const [row] = await tx
+    .insert(fiscalPeriods)
+    .values({
+      orgId: input.orgId,
+      startsOn: input.startsOn,
+      endsOn: input.endsOn,
+      status: input.status,
+      closedAt: sql`now()`,
+      closedBy: input.actorId,
+      createdBy: input.actorId,
+      fillReason: input.reason,
+    })
+    .onConflictDoNothing()
+    .returning({ id: fiscalPeriods.id });
+  return row ?? null;
+}
+
 export interface UnpostedDraft {
   readonly kind: 'expense' | 'delivery';
   readonly id: string;
   readonly dateOn: string;
+  /** R1.7 — the supplier's name for an expense (always present, the FK is NOT NULL), or a
+   *  delivery's supplier name when it has one. `null` for a delivery with none — `holes.ts`'s
+   *  message builder shows that as `"{kind} delivery, no supplier"`, never a raw id (DEF-417). */
+  readonly counterpartyName: string | null;
 }
 
 /**
- * Every `expenses` or `deliveries` row still `draft`, dated inside this period.
+ * Every `expenses` or `deliveries` row still `draft`, dated inside `[startsOn, endsOn]`. T-344
+ * §3.3 turned this from a `'YYYY-MM'`-period query into a raw date range — `closeBlockers`
+ * (`packages/domain/src/fiscal-periods/index.ts`, shared by `closePeriod` and the admin
+ * "fill a missing month" action) is its only caller, and the action gates a part-month piece,
+ * which has no period string of its own.
  *
  * ⭐ **Exactly these two tables, not the other eleven with a `'draft'` status in this codebase** —
  * ADR-006 §8.2 names only these two in concrete terms (Ian: *"cashier can't create expense
@@ -228,12 +400,21 @@ export interface UnpostedDraft {
  * `journal_entries` row is never observed at rest as `draft`. A gate against it would be a check
  * that can never fire — worse than no gate, because it would sit in the close checklist looking
  * verified. See the task report for this written up as a finding against ADR-006 itself.
+ *
+ * R1.7 joins `suppliers` for `counterpartyName`, never leaked as a raw id (DEF-417): NOT NULL /
+ * INNER for `expenses` (the FK is NOT NULL — T-130), LEFT for `deliveries` (the FK is nullable — a
+ * commissary delivery may have none).
  */
-export async function unpostedDraftsInPeriod(tx: Tx, orgId: string, period: string): Promise<UnpostedDraft[]> {
-  const { startsOn, endsOn } = periodBounds(period);
+export async function unpostedDraftsInRange(
+  tx: Tx,
+  orgId: string,
+  startsOn: string,
+  endsOn: string,
+): Promise<UnpostedDraft[]> {
   const draftExpenses = await tx
-    .select({ id: expenses.id, dateOn: expenses.businessDate })
+    .select({ id: expenses.id, dateOn: expenses.businessDate, counterpartyName: suppliers.name })
     .from(expenses)
+    .innerJoin(suppliers, eq(suppliers.id, expenses.supplierId))
     .where(
       and(
         eq(expenses.orgId, orgId),
@@ -243,8 +424,14 @@ export async function unpostedDraftsInPeriod(tx: Tx, orgId: string, period: stri
       ),
     );
   const draftDeliveries = await tx
-    .select({ id: deliveries.id, dateOn: deliveries.deliveredOn })
+    .select({
+      id: deliveries.id,
+      dateOn: deliveries.deliveredOn,
+      deliveryKind: deliveries.kind,
+      supplierName: suppliers.name,
+    })
     .from(deliveries)
+    .leftJoin(suppliers, eq(suppliers.id, deliveries.supplierId))
     .where(
       and(
         eq(deliveries.orgId, orgId),
@@ -254,8 +441,22 @@ export async function unpostedDraftsInPeriod(tx: Tx, orgId: string, period: stri
       ),
     );
   return [
-    ...draftExpenses.map((e) => ({ kind: 'expense' as const, id: e.id, dateOn: e.dateOn })),
-    ...draftDeliveries.map((d) => ({ kind: 'delivery' as const, id: d.id, dateOn: d.dateOn })),
+    ...draftExpenses.map((e) => ({
+      kind: 'expense' as const,
+      id: e.id,
+      dateOn: e.dateOn,
+      counterpartyName: e.counterpartyName,
+    })),
+    // ⚠️ A delivery with no supplier gets its fallback label HERE, from its own `kind` column
+    // (`purchase`/`commissary`/…) — a business classification unrelated to this interface's own
+    // `kind: 'expense' | 'delivery'` discriminator, so it is folded into `counterpartyName` rather
+    // than exposed as a second field the two could be confused with.
+    ...draftDeliveries.map((d) => ({
+      kind: 'delivery' as const,
+      id: d.id,
+      dateOn: d.dateOn,
+      counterpartyName: d.supplierName ?? `${d.deliveryKind} delivery, no supplier`,
+    })),
   ];
 }
 

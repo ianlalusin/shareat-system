@@ -31,9 +31,17 @@ describe('OFFERABLE_TO_POSITIONS — derived, not hand-listed', () => {
     }
 
     expect(OFFERABLE_TO_POSITIONS).not.toContain('close_period');
+    // T-344/DEF-422 (R1.3): `create_missing_period` changes closed books like `close_period` and
+    // `override_period_lock` — admin/super_admin only, never offerable to a position.
+    expect(OFFERABLE_TO_POSITIONS).not.toContain('create_missing_period');
 
-    // Every OTHER capability must be present — the three sets above are the ONLY exclusions.
-    const excluded = new Set<Capability>([...SUPER_ADMIN_ONLY_CAPABILITIES, ...platformCapabilities, 'close_period']);
+    // Every OTHER capability must be present — the four exclusions above are the ONLY ones.
+    const excluded = new Set<Capability>([
+      ...SUPER_ADMIN_ONLY_CAPABILITIES,
+      ...platformCapabilities,
+      'close_period',
+      'create_missing_period',
+    ]);
     for (const c of CAPABILITIES) {
       if (!excluded.has(c)) {
         expect(OFFERABLE_TO_POSITIONS, `${c} should be offerable — it is in none of the three excluded sets`).toContain(c);

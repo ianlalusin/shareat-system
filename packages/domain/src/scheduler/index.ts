@@ -30,6 +30,7 @@ import {
   withOrgPrincipal,
   withSystemOrgPrincipal,
   type SchedulerFailure,
+  type SchedulerJob,
   type Tx,
 } from '@shareat/db';
 import { runDepreciationAsSystem } from '../fixed-assets/depreciate';
@@ -37,6 +38,7 @@ import { runAmortisationAsSystem } from '../prepaid';
 import { runOrderWastageBackstop } from '../wastage/orders';
 import { sweepOrphanedFiles } from '../files';
 import { fiscalPeriodSeedWindow } from '../organizations';
+import { classifyHoles } from '../fiscal-periods';
 
 import { toBusinessDate } from '@shareat/core';
 import { sql } from 'drizzle-orm';
@@ -59,21 +61,9 @@ export interface MonthEndOptions {
 export interface JobOutcome {
   orgId: string;
   orgName: string;
-  job:
-    | 'depreciation'
-    | 'amortisation'
-    | 'attendance_sweep'
-    | 'mirror_publish'
-    | 'inbox_relay'
-    | 'order_wastage_backstop'
-    | 'finding_observation'
-    | 'budget_reissue'
-    /** T-216 Part 2 — the daily recurring-expense drafting job. It drafts; it never pays. */
-    | 'recurring_expenses'
-    /** T-272 — the daily orphaned-file sweep, per org (DEF-299). */
-    | 'orphan_file_sweep'
-    /** T-276/DEF-305 — the monthly fiscal-period coverage top-up (§1's gap-backfill rule). */
-    | 'fiscal_period_seed';
+  // T-344 — was an inline union hand-copied from SCHEDULER_JOBS; now the derived type itself, so
+  // the two can never silently drift apart (packages/db/schema/scheduler.ts:105).
+  job: SchedulerJob;
   period: string;
   posted: number;
   skipped: number;
@@ -123,7 +113,7 @@ interface JobWork {
  */
 export async function runJobForOrg(
   org: { id: string; name: string },
-  job: JobOutcome['job'],
+  job: SchedulerJob,
   period: string,
   trigger: 'cron' | 'manual',
   work: () => Promise<JobWork>,
@@ -1055,69 +1045,192 @@ async function runFiscalPeriodSeedForOrg(
     const m = fiscalPeriodSeedWindow(new Date(nowMs));
     const mLabel = `${m.startYear}-${String(m.startMonth).padStart(2, '0')}`;
 
-    // DEF-287/§15.11 — system principal, ONE transaction for this org's whole read-plan-seed-read
-    // (never a bare `systemTransaction`): reading `F` and seeding it against, out of sync with each
-    // other, is exactly the kind of TOCTOU a shared per-org transaction exists to close.
+    // DEF-287/§15.11 — system principal, ONE transaction for this org's whole read-plan-seed
+    // (never a bare `systemTransaction`). ⚠️ **Corrected (T-344): this transaction does NOT by
+    // itself close the TOCTOU between the read below and the writes that follow** — under READ
+    // COMMITTED each statement gets its own fresh snapshot, so a concurrent `closePeriod` can still
+    // commit in between. What actually closes it: every A-fill insert is idempotent (`ON CONFLICT
+    // DO NOTHING`, `seedCalendarMonths`), so a race just means fewer rows for the loser to insert;
+    // and migration 0160's `fiscal_periods_order_guard` trigger takes a per-org advisory lock on
+    // every insert/status change and RE-CHECKS the open/closed ordering after acquiring it, which
+    // is what actually serialises this job's write against a concurrent close (R1.2, H13).
     return asSystem(org.id, async (tx) => {
       const before = await fiscalPeriodsRepo.latestPeriodEnd(tx, org.id);
 
-      let gapMonths = 0;
-      let nextLabel = '';
-      if (before !== null) {
-        nextLabel = addMonths(before.slice(0, 7), 1);
-        gapMonths = monthIndex(mLabel) - monthIndex(nextLabel);
+      // Zero-period branch — unchanged (T-344 §3.2).
+      if (before === null) {
+        const { periodsInserted, periodsSkipped } = await fiscalPeriodsRepo.seedCalendarMonths(tx, org.id, {
+          startYear: m.startYear,
+          startMonth: m.startMonth,
+          months: 12,
+        });
+        const after = await fiscalPeriodsRepo.latestPeriodEnd(tx, org.id);
+        const failures: SchedulerFailure[] = [];
+        if (periodsInserted > 0) {
+          failures.push({
+            subjectId: org.id,
+            subjectName: org.name,
+            reason:
+              `no fiscal periods existed at all; seeded ${mLabel}..${addMonths(mLabel, 11)} forward only ` +
+              '— no earlier month was invented',
+          });
+        }
+        return {
+          posted: periodsInserted,
+          skipped: periodsSkipped,
+          failures,
+          detail:
+            `window ${mLabel}..${addMonths(mLabel, 11)} · inserted ${periodsInserted} · ` +
+            `skipped ${periodsSkipped} · coverage now ends ${after ?? 'never'}`,
+        };
       }
 
-      const window =
-        before === null || gapMonths <= 0
-          ? { startYear: m.startYear, startMonth: m.startMonth, months: 12 }
-          : (() => {
-              const [y, mo] = nextLabel.split('-').map(Number) as [number, number];
-              return { startYear: y, startMonth: mo, months: gapMonths + 12 };
-            })();
+      // T-344 §3.2 — classify every hole through M+11 BEFORE any write below. This is a plain
+      // SELECT, which the order-guard trigger's advisory lock never blocks, so it reflects
+      // coverage as of the moment this run actually started — even while a concurrent close is
+      // mid-transaction and holding that lock (H13). The writes that follow are what the lock (and
+      // its re-check after acquiring it) protects.
+      const through = monthEndFromLabel(addMonths(mLabel, 11));
+      const { pieces } = await classifyHoles(tx, org.id, through);
 
-      const { periodsInserted, periodsSkipped } = await fiscalPeriodsRepo.seedCalendarMonths(tx, org.id, window);
-      const after = await fiscalPeriodsRepo.latestPeriodEnd(tx, org.id);
+      // The ordinary 12-month forward window, always run — its own per-month `ON CONFLICT DO
+      // NOTHING` fills any class-A hole that happens to fall inside it (H9's shape) exactly as it
+      // always did; a fully-covered org simply skips all twelve.
+      const { periodsInserted: windowInserted, periodsSkipped: windowSkipped } =
+        await fiscalPeriodsRepo.seedCalendarMonths(tx, org.id, {
+          startYear: m.startYear,
+          startMonth: m.startMonth,
+          months: 12,
+        });
+
+      interface ARun {
+        startsOn: string;
+        endsOn: string;
+        pieces: typeof pieces;
+      }
+      // Class A — group into contiguous whole-month runs (never crosses a hole boundary: a real
+      // period always separates two holes, so two different holes' pieces can never be date-
+      // adjacent). Grouped over the FULL run, unclipped — §3.2's Tail/Interior distinction below
+      // needs the run's true extent, not just its elapsed prefix.
+      const aRuns: ARun[] = [];
+      let current: ARun | null = null;
+      for (const piece of pieces) {
+        if (piece.class !== 'A') {
+          current = null;
+          continue;
+        }
+        if (current && piece.startsOn === addOneDay(current.endsOn)) {
+          current.endsOn = piece.endsOn;
+          current.pieces.push(piece);
+        } else {
+          current = { startsOn: piece.startsOn, endsOn: piece.endsOn, pieces: [piece] };
+          aRuns.push(current);
+        }
+      }
 
       const failures: SchedulerFailure[] = [];
-      if (before === null && periodsInserted > 0) {
-        // Invariant: an org with genuinely zero fiscal periods is abnormal, so this earns a line
-        // even though the window itself is the ordinary 12-months-forward one. ⚠️ Gated on
-        // `periodsInserted > 0`, symmetric with the gap branch's own `>= gapMonths` guard below —
-        // an overlapping run that lost the race (every candidate already inserted by the winner)
-        // reports `posted 0, ok`, not a `failed` outcome for a gap that no longer exists.
-        failures.push({
-          subjectId: org.id,
-          subjectName: org.name,
-          reason:
-            `no fiscal periods existed at all; seeded ${mLabel}..${addMonths(mLabel, 11)} forward only ` +
-            '— no earlier month was invented',
+      let backfilled = 0;
+      for (const r of aRuns) {
+        // Only the ELAPSED prefix (< M) is this job's to backfill and report — the rest of the
+        // run, if any, is exactly M..M+11 and the forward window above already covers it (H9's
+        // shape). A run entirely >= M (nothing elapsed) needs no separate call at all.
+        const elapsed = r.pieces.filter((p) => p.yearMonth < mLabel);
+        if (elapsed.length === 0) continue;
+
+        const [y, mo] = elapsed[0]!.yearMonth.split('-').map(Number) as [number, number];
+        const { periodsInserted } = await fiscalPeriodsRepo.seedCalendarMonths(tx, org.id, {
+          startYear: y,
+          startMonth: mo,
+          months: elapsed.length,
         });
-      } else if (gapMonths >= 1 && periodsInserted >= gapMonths) {
-        // ⚠️ Gated on `periodsInserted >= gapMonths`, not merely `gapMonths >= 1` — an overlapping
-        // run that already backfilled this exact gap must not re-report it a second time just
-        // because it observed the same stale `F` a moment before the winner's write landed.
-        failures.push({
-          subjectId: org.id,
-          subjectName: org.name,
-          reason:
-            `coverage gap: periods ended ${before}; backfilled ${gapMonths} elapsed month(s) ` +
-            `${nextLabel}..${addMonths(mLabel, -1)} as open — created after their own month ended, ` +
-            'so no close ever ran on them',
-        });
+        backfilled += periodsInserted;
+        // ⚠️ Gated on `periodsInserted === elapsed.length`, the same "only ours" guard the old gap
+        // branch used — an overlapping run that lost part of this exact race must not re-report a
+        // backfill it did not (fully) do.
+        if (periodsInserted === elapsed.length) {
+          // §3.2's table: a run reaching all the way to `through` (the scan boundary) with
+          // nothing bounding it on the right is THE TAIL — T-276's original shape and its
+          // original string, unchanged, so `t276-fiscal-period-seed-job.test.ts`'s case 4 stays
+          // green. Any other run is bounded by a real period after it: an INTERIOR hole, T-344's
+          // new wording.
+          const isTail = r.endsOn === through;
+          const firstMonth = elapsed[0]!.yearMonth;
+          const lastMonth = elapsed[elapsed.length - 1]!.yearMonth;
+          // ⚠️ `before` (this org's real latest period end, read at the top of this function),
+          // never `subtractOneDay(r.startsOn)` (review finding, LOW): the run's own start is where
+          // this job's A-classification happens to resume, which is NOT the same date when the
+          // tail hole's leading edge is a B/C/D piece (a closed year immediately followed by open
+          // books) — `r.startsOn` would then be one day past a piece where no period ever existed,
+          // not one day past where a real period actually ended.
+          const reason = isTail
+            ? `coverage gap: periods ended ${before}; backfilled ${periodsInserted} ` +
+              `elapsed month(s) ${firstMonth}..${lastMonth} as open — created after their own month ended, ` +
+              'so no close ever ran on them'
+            : `coverage gap: no period covered ${elapsed[0]!.startsOn}..${elapsed[elapsed.length - 1]!.endsOn}; ` +
+              `backfilled ${periodsInserted} elapsed month(s) ${firstMonth}..${lastMonth} as open — created ` +
+              'after their own month ended, so no close ever ran on them';
+          failures.push({ subjectId: org.id, subjectName: org.name, reason });
+        }
       }
 
-      const windowStartLabel = `${window.startYear}-${String(window.startMonth).padStart(2, '0')}`;
-      const windowEndLabel = addMonths(windowStartLabel, window.months - 1);
+      // Class B/C/D — never written here (Q1: the job reports, never fills inside closed books,
+      // and never fills a part-month piece). Always reported, every run, until an administrator
+      // acts (invariant 6, DEF-044's own "no silent no-op" rule).
+      for (const piece of pieces) {
+        if (piece.class === 'B') {
+          failures.push({
+            subjectId: org.id,
+            subjectName: org.name,
+            reason:
+              `month ${piece.yearMonth} is missing inside closed books, so posts dated in it are refused; ` +
+              `an administrator can create it as ${piece.targetStatus} with "Create the missing month" on /findings`,
+          });
+        } else if (piece.class === 'C') {
+          failures.push({
+            subjectId: org.id,
+            subjectName: org.name,
+            reason:
+              `${piece.startsOn}..${piece.endsOn} (part of ${piece.yearMonth}) is missing inside closed books, ` +
+              `so posts dated in it are refused; an administrator can create it as ${piece.targetStatus} with ` +
+              '"Create the missing month" on /findings',
+          });
+        } else if (piece.class === 'D') {
+          failures.push({
+            subjectId: org.id,
+            subjectName: org.name,
+            reason:
+              `coverage hole NOT filled: no period covers ${piece.startsOn}..${piece.endsOn} (part of ` +
+              `${piece.yearMonth}); the job creates whole months only, and the action refuses while earlier ` +
+              'months are open; posts dated there stay refused',
+          });
+        }
+      }
+
+      const after = await fiscalPeriodsRepo.latestPeriodEnd(tx, org.id);
+      const missingClosedCount = pieces.filter((p) => p.class === 'B' || p.class === 'C').length;
+      const openHoleCount = pieces.filter((p) => p.class === 'D').length;
 
       return {
-        posted: periodsInserted,
-        skipped: periodsSkipped,
+        posted: windowInserted + backfilled,
+        skipped: windowSkipped,
         failures,
         detail:
-          `window ${windowStartLabel}..${windowEndLabel} · inserted ${periodsInserted} · ` +
-          `skipped ${periodsSkipped} · coverage now ends ${after ?? 'never'}`,
+          `window ${mLabel}..${addMonths(mLabel, 11)} · inserted ${windowInserted + backfilled} · ` +
+          `skipped ${windowSkipped} · coverage now ends ${after ?? 'never'} · ` +
+          `missing in closed books ${missingClosedCount} · part-month holes in open books ${openHoleCount}`,
       };
     });
   });
+}
+
+/** `date` plus one day, as `YYYY-MM-DD` — local, like `monthIndex`/`addMonths` above. */
+function addOneDay(date: string): string {
+  const [y, mo, d] = date.split('-').map(Number) as [number, number, number];
+  return new Date(Date.UTC(y, mo - 1, d + 1)).toISOString().slice(0, 10);
+}
+
+/** The last day of a `'YYYY-MM'` label, as `YYYY-MM-DD`. */
+function monthEndFromLabel(yyyyMm: string): string {
+  const [y, mo] = yyyyMm.split('-').map(Number) as [number, number];
+  return new Date(Date.UTC(y, mo, 0)).toISOString().slice(0, 10);
 }

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { requireSession } from '../../lib/session';
-import { acknowledgeFindingAction, closePeriodAction } from './actions';
+import { acknowledgeFindingAction, closePeriodAction, createMissingClosedPeriodAction } from './actions';
 import {
   KIND_LABEL,
   bySeverityThenStatus,
@@ -8,7 +8,10 @@ import {
   lastCompletedPeriod,
   noteFindingView,
   selectablePeriods,
+  withOrgPrincipal,
 } from './lib';
+import { classifyHoles, type ClassifiedHolePiece } from '@shareat/domain';
+import { heldCapabilities } from '@shareat/auth';
 import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Findings — Shareat System' };
@@ -31,6 +34,14 @@ export default async function FindingsPage({
   const periods = selectablePeriods();
   const period = sp.period && periods.includes(sp.period) ? sp.period : lastCompletedPeriod();
   const { feed, readiness } = await findingsFor(actor.orgId, period);
+
+  // T-344 / DEF-422 §3.6 — independent of the 12-month period selector above, so a hole older
+  // than a year still shows. Through the same M+11 window the monthly seed job itself covers.
+  const missingPeriodsThrough = monthsAheadThrough(new Date(), 11);
+  const { pieces } = await withOrgPrincipal(actor.orgId, (tx) => classifyHoles(tx, actor.orgId, missingPeriodsThrough));
+  const missingClosedPieces = pieces.filter((p) => p.class === 'B' || p.class === 'C');
+  const held = await withOrgPrincipal(actor.orgId, (tx) => heldCapabilities(tx, actor));
+  const canCreateMissingPeriod = held.has('create_missing_period');
 
   // ⭐ T-214 — record that a human actually looked. ⚠️ Deliberately AFTER the read and outside its
   // transaction, and it swallows its own failure: the log is accountability, the page is the work.
@@ -134,6 +145,14 @@ export default async function FindingsPage({
             Close {period}
           </button>
         </form>
+      )}
+
+      {missingClosedPieces.length > 0 && (
+        <MissingPeriodsSection
+          pieces={missingClosedPieces}
+          period={period}
+          canCreate={canCreateMissingPeriod}
+        />
       )}
 
       {rows.length === 0 && (
@@ -241,3 +260,74 @@ function FindingGroup({
 
 const INPUT =
   'w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+
+/** The last day of the month `monthsAhead` months after `now`'s (UTC) month — the same M+11
+ *  window the monthly fiscal-period seed job itself covers (T-344 §1). */
+function monthsAheadThrough(now: Date, monthsAhead: number): string {
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth(); // 0-based
+  const idx = y * 12 + m + monthsAhead;
+  const ny = Math.floor(idx / 12);
+  const nm = (idx % 12) + 1;
+  return new Date(Date.UTC(ny, nm, 0)).toISOString().slice(0, 10);
+}
+
+/**
+ * T-344 / DEF-422 §3.6 — "Months missing inside closed books". Rendered from `classifyHoles`
+ * classes B and C directly, NOT from the 12-month period selector above, so a hole older than a
+ * year still appears. The button renders only for an actor holding `create_missing_period`;
+ * anyone else sees why it is missing, never a disabled control that looks broken.
+ */
+function MissingPeriodsSection({
+  pieces,
+  period,
+  canCreate,
+}: {
+  pieces: ClassifiedHolePiece[];
+  period: string;
+  canCreate: boolean;
+}) {
+  return (
+    <section className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
+      <div>
+        <h2 className="text-sm font-medium">Months missing inside closed books</h2>
+        <p className="max-w-2xl text-xs text-neutral-600 dark:text-neutral-400">
+          The monthly coverage job never fills these — it would reopen closed books. An
+          administrator can create each one explicitly, with a reason.
+        </p>
+      </div>
+      {pieces.map((p) => {
+        const label = p.whole ? p.yearMonth : `${p.startsOn} to ${p.endsOn} (part of ${p.yearMonth})`;
+        return (
+          <div key={`${p.startsOn}-${p.endsOn}`} className="space-y-2 rounded-lg border border-amber-300 bg-white p-3 dark:border-amber-800 dark:bg-neutral-950">
+            <div className="text-sm">
+              <span className="font-medium">{label}</span> — will be created as{' '}
+              <span className="font-medium">{p.targetStatus}</span>
+            </div>
+            {canCreate ? (
+              <form action={createMissingClosedPeriodAction} className="flex flex-wrap items-end gap-2">
+                <input type="hidden" name="period" value={period} />
+                <input type="hidden" name="startsOn" value={p.startsOn} />
+                <input type="hidden" name="endsOn" value={p.endsOn} />
+                <input
+                  name="reason"
+                  required
+                  placeholder="Why is this being created now?"
+                  className={`${INPUT} w-72`}
+                />
+                <button
+                  type="submit"
+                  className="rounded border border-amber-700 bg-amber-700 px-3 py-2 text-xs font-medium text-white hover:bg-amber-800"
+                >
+                  Create the missing month
+                </button>
+              </form>
+            ) : (
+              <p className="text-xs text-neutral-500">Only an administrator can create a missing month.</p>
+            )}
+          </div>
+        );
+      })}
+    </section>
+  );
+}

@@ -8,7 +8,7 @@
  * still counted, ages visibly, and expires after 30 days on its own.
  */
 import { redirect } from 'next/navigation';
-import { acknowledgeFinding, closePeriod } from '@shareat/domain';
+import { acknowledgeFinding, closePeriod, createMissingClosedPeriod } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -56,4 +56,28 @@ export async function closePeriodAction(formData: FormData): Promise<void> {
     back({ error: errorMessage(err), period });
   }
   back({ ok: `${period} is closed.`, period });
+}
+
+/**
+ * T-344 / DEF-422 §3.6 — fills one whole month, or the missing part of one, inside closed books.
+ * ⛔ Every gate — the capability, the exact-missing-piece check, the close blockers — is
+ * re-checked inside `createMissingClosedPeriod` itself; the button rendering only decides who
+ * SEES the form (`heldCapabilities`), never who may submit it.
+ */
+export async function createMissingClosedPeriodAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const period = str(formData, 'period');
+  const startsOn = str(formData, 'startsOn');
+  const endsOn = str(formData, 'endsOn');
+  const reason = str(formData, 'reason');
+
+  let result: Awaited<ReturnType<typeof createMissingClosedPeriod>>;
+  try {
+    result = await withOrgPrincipal(actor.orgId, (tx) =>
+      createMissingClosedPeriod(tx, actor, { startsOn, endsOn, reason }),
+    );
+  } catch (err) {
+    back({ error: errorMessage(err), period });
+  }
+  back({ ok: `${result.startsOn} to ${result.endsOn} is created as ${result.status}.`, period });
 }

@@ -194,6 +194,12 @@ export type Capability =
    * database (migration `0003`'s two triggers); the app never re-implements it. See bible §15.11.
    */
   | 'override_period_lock'
+  /**
+   * ⭐ T-344/DEF-422 §3.4 — creates a whole month, or the missing part of one, INSIDE CLOSED
+   * BOOKS (Q2). Admin/super_admin only, same bar as `override_period_lock`: it changes closed
+   * books. A separate capability rather than a widening of that ruled row (Ian 2026-09-25).
+   */
+  | 'create_missing_period'
   | 'post_journal_entry'
   // People
   | 'enrol_staff'
@@ -332,6 +338,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'reverse_entry',
   'close_period',
   'override_period_lock',
+  'create_missing_period',
   'post_journal_entry',
   'enrol_staff',
   'manage_users',
@@ -493,6 +500,8 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   // close_period, this is never granted to a manager in the baseline, so there is no store-scope
   // conflict to resolve.
   override_period_lock: 'org',
+  // ORG, same reason as override_period_lock: the period being filled is org-wide.
+  create_missing_period: 'org',
   post_journal_entry: 'org',
 
   enrol_staff: 'store',
@@ -678,6 +687,7 @@ export const CAPABILITY_AREA: Readonly<Record<Capability, CapabilityArea>> = {
   reverse_entry: 'books',
   close_period: 'books',
   override_period_lock: 'books',
+  create_missing_period: 'books',
   post_journal_entry: 'books',
   manage_fixed_assets: 'books',
   run_depreciation: 'books',
@@ -861,6 +871,9 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   // tests/unit/capability-matrix.test.ts already records: a hand-maintained carve-out in a derived
   // set is what drifts. An org with NO admin has nobody else who could ever authorise a late entry.
   override_period_lock: { super_admin: true, admin: true, manager: false, staff: false },
+  // DECIDED — Ian 2026-09-25 (T-344 Q2). Same bar as override_period_lock: it changes closed
+  // books, so it enrols in ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER (derived below) the same way.
+  create_missing_period: { super_admin: true, admin: true, manager: false, staff: false },
   // "Nobody posts by hand" — reserved for break-glass repair, logged. Admin does NOT hold
   // it: entries come from source documents, never a form, not even an admin's.
   post_journal_entry: { super_admin: true, admin: false, manager: false, staff: false },
@@ -1087,6 +1100,7 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   reverse_entry: 'reverse a journal entry',
   close_period: 'close an accounting period',
   override_period_lock: 'post into a closed period',
+  create_missing_period: 'create a month missing from closed books',
   post_journal_entry: 'post a journal entry directly',
   enrol_staff: 'enrol a staff member',
   manage_users: 'appoint managers and admins',

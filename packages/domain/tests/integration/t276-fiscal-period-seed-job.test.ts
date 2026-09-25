@@ -6,10 +6,10 @@ import postgres from 'postgres';
  * T-276 / DEF-305 — the fiscal-period coverage job. `docs/tasks/276-def-305-fiscal-period-coverage.md`,
  * "Build slice (2026-09-25)" §3 T1.
  *
- * ⛔ RED until the builder adds `runFiscalPeriodSeed` to `packages/domain/src/scheduler/index.ts`
- * (re-exported from `@shareat/domain` via its `export * from './scheduler'` barrel) — today the
- * import binds but the call throws `runFiscalPeriodSeed is not a function`, and `npm run typecheck`
- * separately reports TS2305 ("has no exported member").
+ * ✅ Green since T-276 shipped `runFiscalPeriodSeed` (`packages/domain/src/scheduler/index.ts`,
+ * re-exported from `@shareat/domain` via its `export * from './scheduler'` barrel). Stale RED
+ * header corrected 2026-09-25 (T-344/DEF-422, tester) — the original claim that the import binds
+ * but the call throws no longer describes this file.
  *
  * `bareOrg`/`asOrg` copied from `fiscal-periods-seeding.test.ts:40-63` — that file's own header
  * explains why (an otherwise-ordinary org with no fiscal periods, the exact pre-DEF-284 shape).
@@ -286,7 +286,8 @@ describe('T1 — runFiscalPeriodSeed', () => {
   });
 
   it('case 8 — job_check: scheduler_runs_job_check accepts every SCHEDULER_JOBS name, refuses a bogus one', async () => {
-    // RED before the build lands 'fiscal_period_seed' onto SCHEDULER_JOBS (today: 10).
+    // ✅ Green since 'fiscal_period_seed' landed on SCHEDULER_JOBS (today: 11). Stale RED comment
+    // corrected 2026-09-25 (T-344/DEF-422, tester).
     expect(SCHEDULER_JOBS.length).toBeGreaterThanOrEqual(11);
     const { orgId } = await bareOrg('c8');
     const accepted: string[] = [];

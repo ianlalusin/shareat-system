@@ -15,7 +15,7 @@
  */
 import { fiscalPeriodsRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
-import { closeReadiness } from '../findings';
+import { closeReadiness, type Finding } from '../findings';
 
 export interface ClosePeriodInput {
   /** `'YYYY-MM'` — the same string `listFindings`/`closeReadiness`/`/findings`'s period selector
@@ -26,6 +26,41 @@ export interface ClosePeriodInput {
 export interface ClosePeriodResult {
   readonly periodId: string;
   readonly closedAt: Date;
+}
+
+export interface CloseBlockersInput {
+  readonly startsOn: string;
+  readonly endsOn: string;
+}
+
+export interface CloseBlockers {
+  readonly drafts: {
+    readonly kind: 'expense' | 'delivery';
+    readonly id: string;
+    readonly dateOn: string;
+    readonly counterpartyName: string | null;
+  }[];
+  readonly blocking: Finding[];
+  readonly earlierOpen: boolean;
+}
+
+/**
+ * T-344 §3.3, R1.5 — the three checks `closePeriod` and the admin "fill a missing month" action
+ * (`./holes.ts`) both need over an arbitrary `[startsOn, endsOn]` range: unposted drafts, hard
+ * findings for the containing month, and an earlier period still open. Extracted from
+ * `closePeriod`'s own checks 2-4 below so the two callers cannot drift apart (RULES §6 item 3) —
+ * each still builds its OWN message from this data, so `closePeriod`'s stay byte-for-byte (F14).
+ *
+ * ⚠️ For a part-month piece, readiness is checked on the WHOLE containing month — conservative
+ * (it may over-refuse), but it never lets activity through that a check keyed on the exact days
+ * would have missed.
+ */
+export async function closeBlockers(tx: Tx, orgId: string, input: CloseBlockersInput): Promise<CloseBlockers> {
+  const drafts = await fiscalPeriodsRepo.unpostedDraftsInRange(tx, orgId, input.startsOn, input.endsOn);
+  const containingMonth = input.startsOn.slice(0, 7);
+  const readiness = await closeReadiness(tx, orgId, containingMonth);
+  const earlierOpen = await fiscalPeriodsRepo.hasEarlierOpenPeriodBefore(tx, orgId, input.startsOn);
+  return { drafts, blocking: readiness.blocking, earlierOpen };
 }
 
 /** `n` of `singular`/`plural`, English-only — this codebase's error sentences are read by a
@@ -55,7 +90,9 @@ export async function closePeriod(
 ): Promise<ClosePeriodResult> {
   await authorize(tx, actor, 'close_period', {});
 
-  const drafts = await fiscalPeriodsRepo.unpostedDraftsInPeriod(tx, actor.orgId, input.period);
+  const { startsOn, endsOn } = fiscalPeriodsRepo.periodBounds(input.period);
+  const { drafts, blocking, earlierOpen } = await closeBlockers(tx, actor.orgId, { startsOn, endsOn });
+
   if (drafts.length > 0) {
     const expenseCount = drafts.filter((d) => d.kind === 'expense').length;
     const deliveryCount = drafts.filter((d) => d.kind === 'delivery').length;
@@ -68,15 +105,13 @@ export async function closePeriod(
     );
   }
 
-  const readiness = await closeReadiness(tx, actor.orgId, input.period);
-  if (!readiness.ready) {
-    const kinds = [...new Set(readiness.blocking.map((b) => b.kind))].join(', ');
+  if (blocking.length > 0) {
+    const kinds = [...new Set(blocking.map((b) => b.kind))].join(', ');
     throw new Error(
       `closePeriod: ${input.period} is not ready to close — blocked by: ${kinds}.`,
     );
   }
 
-  const earlierOpen = await fiscalPeriodsRepo.hasEarlierOpenPeriod(tx, actor.orgId, input.period);
   if (earlierOpen) {
     throw new Error(
       `closePeriod: an earlier period for this organisation is still open. Periods close in order.`,
@@ -93,3 +128,12 @@ export async function closePeriod(
 }
 
 export { closeYear, type CloseYearInput, type CloseYearResult } from './close-year';
+export {
+  classifyHoles,
+  createMissingClosedPeriod,
+  type ClassifiedHolePiece,
+  type ClassifyHolesResult,
+  type CreateMissingClosedPeriodInput,
+  type CreateMissingClosedPeriodResult,
+  type HolePieceClass,
+} from './holes';

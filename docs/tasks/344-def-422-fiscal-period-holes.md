@@ -1,6 +1,6 @@
 # T-344: DEF-422 — the fiscal-period seed finds every missing month, not only those after the latest end
 
-**Status:** APPROVED 2026-09-25 (orchestrator, after independent Opus spec review; its eight CHANGES folded in as Amendment R1). **Builds only after T-341 lands** (shares `position-defaults.ts`; one migration per cycle). **Migration slot: `0160`.**
+**Status:** DONE 2026-09-26 — built per spec + Amendment R1; reviews added the order guard both ways and the locked-year guard (0160, statement-level, per-org advisory lock, pre-flight check of existing data). Full integration 155 files / 3138; unit 167 / 3020; build 0; §9.4 smoketested on 9008 (forged session). Migration `0160`.
 **Migration slot: `0160`** — for the audit columns and the order-guard trigger (§3.5). Its journal `when` = 0159's + 86 400 000.
 ⛔ This task cannot share a cycle with T-341's `0159` (one migration per cycle, DEF-091).
 **Closes:** DEF-422 (`docs/DEFECTS-REGISTER.md:629`) and the four queued T-276 follow-ups (`docs/tasks/276-def-305-fiscal-period-coverage.md:444-450`).
