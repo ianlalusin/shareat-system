@@ -1,6 +1,6 @@
 import { requirePageAccess } from '../../../lib/page-access';
 import { copyDefaultsAction, sameForEveryStoreAction } from './actions';
-import { gridCapabilityGroups, gridDataForStore, storesForActor } from './lib';
+import { gridCapabilityGroups, gridDataForStore, parseOpenParams, storesForActor } from './lib';
 import { DesktopGrid, MobileSections } from './grid';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
@@ -12,12 +12,21 @@ interface SearchParams {
   store?: string;
   ok?: string;
   error?: string;
+  // Amendment A1 — the toggle redirect's reopen hint. Untrusted: `parseOpenParams` validates.
+  cap?: string | string[];
+  pos?: string | string[];
 }
 
 const INPUT =
   'rounded-md border border-neutral-300 bg-white px-2 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
 const LINK_BTN =
   'rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900';
+
+// T-337 review fix — gridCapabilityGroups() has no per-request input (no actor, no store), so it
+// is the same value on every request; computed once at module load instead of once per request.
+// Safe ONLY because GridScopeGroup/GridAreaGroup are readonly end to end and nothing here mutates
+// this value — never push/sort a returned array or its nested arrays in place.
+const CAPABILITY_GROUPS = gridCapabilityGroups();
 
 /**
  * `/admin/access-defaults` — T-290. `docs/tasks/290-access-defaults-screen.md`.
@@ -66,12 +75,13 @@ export default async function AccessDefaultsPage({
   const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]!.id;
   const otherStores = stores.filter((s) => s.id !== storeId);
 
-  const [{ positions, activeDefaults, overlapCounts }, groups] = await Promise.all([
-    gridDataForStore(actor, storeId),
-    Promise.resolve(gridCapabilityGroups()),
-  ]);
-  const nonEmptyGroups = groups.filter((g) => g.areas.length > 0);
+  const { positions, activeDefaults, overlapCounts } = await gridDataForStore(actor, storeId);
+  const nonEmptyGroups = CAPABILITY_GROUPS.filter((g) => g.areas.length > 0);
   const canonicalPositions = positions.filter((p) => p.isCanonical);
+  const { openCapability, openPositionId } = parseOpenParams(
+    { cap: sp.cap, pos: sp.pos },
+    positions.map((p) => p.id),
+  );
 
   return (
     <Page density="wide" className="space-y-6">
@@ -121,6 +131,7 @@ export default async function AccessDefaultsPage({
             groups={nonEmptyGroups}
             activeDefaults={activeDefaults}
             overlapCounts={overlapCounts}
+            openCapability={openCapability}
           />
           <MobileSections
             storeId={storeId}
@@ -128,6 +139,8 @@ export default async function AccessDefaultsPage({
             groups={nonEmptyGroups}
             activeDefaults={activeDefaults}
             overlapCounts={overlapCounts}
+            openCapability={openCapability}
+            openPositionId={openPositionId}
           />
         </>
       )}

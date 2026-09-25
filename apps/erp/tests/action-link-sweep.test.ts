@@ -192,14 +192,15 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
   it('the census TOTAL — every candidate, every bucket — matches what was actually measured', () => {
     // 1037 -> 1041, T-337 (2026-09-24). +4 PASS, FAIL/UNRESOLVED unmoved (both asserted above).
     // Itemised: exactly 4 NEW `<summary>` source occurrences in the new
-    // `admin/access-defaults/grid.tsx` — DesktopGrid's scope-level (line 169) and area-level
-    // (line 175) summaries, and MobileSections' new scope-level (line 269) and area-level (line
-    // 278) summaries, all landing PASS at 28/28/32/32px. MobileSections' per-POSITION summary
-    // (line 257, 44px) is NOT new — it is the same "unchanged" accordion T-337 §3 names, moved
-    // here from `page.tsx` by commit 1's extraction; it was already counted before, just under a
-    // different file path, so it contributes 0 to the delta. Verified by filtering
-    // `runCensus()`'s own results to `file.includes('access-defaults')` and reading every summary
-    // candidate's line/px, not by arithmetic alone.
+    // `admin/access-defaults/grid.tsx` — DesktopGrid's scope-level summary and its area-level
+    // summary, and MobileSections' new scope-level summary and its new area-level summary, all
+    // landing PASS at 28/28/32/32px. MobileSections' per-POSITION summary (44px) is NOT new — it
+    // is the same "unchanged" accordion T-337 §3 names, moved here from `page.tsx` by commit 1's
+    // extraction; it was already counted before, just under a different file path, so it
+    // contributes 0 to the delta. Verified by filtering `runCensus()`'s own results to
+    // `file.includes('access-defaults')` and reading every summary candidate's line/px, not by
+    // arithmetic alone — named by component here rather than by line number, which moves under
+    // the next edit to this file.
     // 1041 = 151 FAIL + 58 UNRESOLVED + 832 PASS, all measured together via runCensus() (not
     // computed from the other two numbers, so this cannot become circular with them).
     expect(results.length).toBe(1041);

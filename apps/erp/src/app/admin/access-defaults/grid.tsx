@@ -8,6 +8,7 @@ import {
   type GridScopeGroup,
   type OverlapCountsByPosition,
 } from './lib';
+import { type Capability } from '@shareat/auth';
 
 // T-334 slice 3 names `page.tsx` (`:281`) for its local BTN/INPUT sweep — this is this file's own
 // local copy, not a shared export, exactly that slice's one-constant-per-file shape. `page.tsx`
@@ -81,7 +82,11 @@ function GridColgroup({ positionCount }: { positionCount: number }) {
 
 /** T-337 §3 desktop area summary, second line: "On: Cashier 7 · Cook 0 · …", in column order.
  *  Each `Name N` is its own `whitespace-nowrap` span so a wrap can only happen BETWEEN positions,
- *  never inside one (§3's wrap rule). New markup — tokens only, no `dark:`/`neutral-*`. */
+ *  never inside one (§3's wrap rule). New markup — tokens only, no `dark:`/`neutral-*`. A store-
+ *  invented position carries the same `(this store)` marker the header th spans render (T-337
+ *  review fix) — de-emphasised with `text-ink/60` rather than the header's own `dark:`-paired
+ *  `neutral-400`, since this is new §3 markup — nested inside the position's own `whitespace-
+ *  nowrap` span so it wraps with the name, never between them. */
 function OnByPosition({
   positions,
   capabilities,
@@ -97,7 +102,9 @@ function OnByPosition({
       {positions.map((p, i) => (
         <span key={p.id} className="whitespace-nowrap">
           {i > 0 && ' · '}
-          {p.name} {areaOnCount(capabilities, activeDefaults.get(p.id))}
+          {p.name}
+          {!p.isCanonical && <span className="ml-1 text-ink/60">(this store)</span>}{' '}
+          {areaOnCount(capabilities, activeDefaults.get(p.id))}
         </span>
       ))}
     </span>
@@ -120,12 +127,16 @@ export function DesktopGrid({
   groups,
   activeDefaults,
   overlapCounts,
+  openCapability,
 }: {
   storeId: string;
   positions: readonly GridPosition[];
   groups: readonly GridScopeGroup[];
   activeDefaults: ActiveDefaultsByPosition;
   overlapCounts: OverlapCountsByPosition;
+  /** Amendment A1 — reopen the area a toggle's redirect landed on. Undefined/no match ⇒ every
+   *  area stays closed, byte-identical to before this prop existed (contract point 4). */
+  openCapability?: Capability;
 }) {
   return (
     <div className="hidden overflow-x-auto rounded-lg border border-surface-border sm:block">
@@ -171,7 +182,11 @@ export function DesktopGrid({
                 {group.areas.reduce((n, a) => n + a.capabilities.length, 0)} · {group.note}
               </summary>
               {group.areas.map((area) => (
-                <details key={area.area} className="border-t border-surface-border">
+                <details
+                  key={area.area}
+                  open={openCapability != null && area.capabilities.some((c) => c.capability === openCapability)}
+                  className="border-t border-surface-border"
+                >
                   <summary className="cursor-pointer px-3 py-1.5 text-xs text-ink">
                     <span className="font-medium">{area.label}</span> · {area.capabilities.length}
                     <OnByPosition positions={positions} capabilities={area.capabilities} activeDefaults={activeDefaults} />
@@ -243,17 +258,28 @@ export function MobileSections({
   groups,
   activeDefaults,
   overlapCounts,
+  openCapability,
+  openPositionId,
 }: {
   storeId: string;
   positions: readonly GridPosition[];
   groups: readonly GridScopeGroup[];
   activeDefaults: ActiveDefaultsByPosition;
   overlapCounts: OverlapCountsByPosition;
+  /** Amendment A1 — same reopen contract as `DesktopGrid.openCapability`, but scoped to the one
+   *  position section named by `openPositionId`: other positions' copies of that same area stay
+   *  closed. Undefined/no match ⇒ falls back to today's default (first position open). */
+  openCapability?: Capability;
+  openPositionId?: string;
 }) {
   return (
     <div className="space-y-3 sm:hidden">
       {positions.map((p, i) => (
-        <details key={p.id} open={i === 0} className="rounded-lg border border-neutral-200 dark:border-neutral-800">
+        <details
+          key={p.id}
+          open={openPositionId != null ? p.id === openPositionId : i === 0}
+          className="rounded-lg border border-neutral-200 dark:border-neutral-800"
+        >
           <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
             {p.name}
             {!p.isCanonical && <span className="ml-1 text-xs text-neutral-400">(this store)</span>}
@@ -273,8 +299,12 @@ export function MobileSections({
                     <div className="space-y-2 border-t border-surface-border p-2">
                       {group.areas.map((area) => {
                         const on = areaOnCount(area.capabilities, activeDefaults.get(p.id));
+                        const isOpenArea =
+                          openPositionId === p.id &&
+                          openCapability != null &&
+                          area.capabilities.some((c) => c.capability === openCapability);
                         return (
-                          <details key={area.area} className="rounded-lg border border-surface-border">
+                          <details key={area.area} open={isOpenArea} className="rounded-lg border border-surface-border">
                             <summary className="cursor-pointer px-3 py-2 text-xs text-ink">
                               <span className="font-medium">{area.label}</span> · {on}/{area.capabilities.length} on
                             </summary>

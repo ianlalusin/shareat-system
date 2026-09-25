@@ -95,9 +95,11 @@ export async function toggleDefaultAction(formData: FormData): Promise<void> {
       message = bannerMessage(result.affected, result.skippedSelf);
     });
   } catch (err) {
-    backToGrid(storeId, { error: errorMessage(err) });
+    // Amendment A1 point 1 — cap/pos ride BOTH the ok and error redirect, so the reopened area
+    // survives whichever path the toggle took. Values are the ones already read from the form.
+    backToGrid(storeId, { error: errorMessage(err), cap: capability, pos: positionId });
   }
-  backToGrid(storeId, { ok: message });
+  backToGrid(storeId, { ok: message, cap: capability, pos: positionId });
 }
 
 /**

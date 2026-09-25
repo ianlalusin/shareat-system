@@ -29,16 +29,33 @@ describe('U1 — CAPABILITY_AREA is keyed on exactly the 96 capabilities; every 
   });
 
   it('NEGATIVE (compile-time): a table missing one capability, or naming a bogus one, fails typecheck', () => {
-    // A partial Record (missing 'close_period') must not satisfy the exhaustive type.
-    // @ts-expect-error — missing key is a type error, exactly the exhaustiveness guard U1 pins.
-    const _missingOne: Readonly<Record<Capability, CapabilityArea>> = Object.fromEntries(
-      Object.entries(CAPABILITY_AREA).filter(([k]) => k !== 'close_period'),
-    );
-    // An excess/invented key must not satisfy the type either.
+    // ⚠️ Audit finding 1 (2026-09-24): the original version of this test assigned
+    // `Object.fromEntries(...)` — typed `{ [k: string]: CapabilityArea }` — directly to
+    // `Record<Capability, CapabilityArea>`. An index-signature type is never assignable to a
+    // Record of specific literal keys REGARDLESS of which keys are actually present, so the
+    // `@ts-expect-error` fired even on the UNMUTATED entries — the negative was vacuous, proving
+    // nothing about the exhaustiveness guard it claimed to pin. Rebuilt so the only difference
+    // between a passing and a failing case is one missing key.
+
+    // Positive control — the unmutated shape, spread from the real export, must satisfy the
+    // exhaustive type. If this line itself failed to compile, every `@ts-expect-error` below would
+    // be "correct" for the same vacuous reason as before.
+    const _control = { ...CAPABILITY_AREA } satisfies Record<Capability, CapabilityArea>;
+
+    // Object-rest destructuring narrows the TYPE (not just the value) to a Record missing exactly
+    // 'close_period' — so `missingOne` differs from `_control` by precisely one key.
+    const { close_period: _omitted, ...missingOne } = CAPABILITY_AREA;
+    // @ts-expect-error — missingOne's type lacks 'close_period', the exhaustiveness guard U1 pins.
+    const _missingOne = missingOne satisfies Record<Capability, CapabilityArea>;
+
+    // An excess/invented key must not satisfy the type either — a fresh literal property, so the
+    // object literal's excess-property check still applies here.
     // @ts-expect-error — 'bogus_cap' is not a Capability, the excess-property check U1 relies on.
     const _bogusKey: Readonly<Record<Capability, CapabilityArea>> = { ...CAPABILITY_AREA, bogus_cap: 'sales' };
-    // Reference both so an unused-variable lint cannot mask the ts-expect-error lines going unused.
-    expect(Object.keys(_missingOne).length + Object.keys(_bogusKey).length).toBeGreaterThan(0);
+
+    expect(Object.keys(_control).length, 'positive control: unmutated form has all 96 keys').toBe(96);
+    expect(Object.keys(_missingOne).length, 'exactly one key removed').toBe(95);
+    expect(Object.keys(_bogusKey).length, 'one excess key added').toBe(97);
   });
 });
 

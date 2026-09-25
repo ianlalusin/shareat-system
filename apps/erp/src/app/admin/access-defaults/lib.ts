@@ -28,6 +28,7 @@ import {
 import { CANONICAL_POSITIONS } from '@shareat/db/schema';
 import { OFFERABLE_TO_POSITIONS } from '@shareat/domain';
 import {
+  CAPABILITIES,
   CAPABILITY_AREA,
   CAPABILITY_AREAS,
   CAPABILITY_AREA_LABEL,
@@ -121,6 +122,23 @@ export function areaOnCount(capabilities: readonly GridCapability[], activeSet: 
     if (c.inherited || (activeSet?.has(c.capability) ?? false)) n++;
   }
   return n;
+}
+
+/**
+ * Amendment A1, contract point 2 — `cap`/`pos` off `toggleDefaultAction`'s redirect are UNTRUSTED
+ * `searchParams`: validated here, never echoed into markup unchecked. `cap` passes only as a
+ * member of `CAPABILITIES`; `pos` only as one of THIS request's rendered position ids (never
+ * trusted against the whole org). A Next.js repeated query key comes through as `string[]`, which
+ * is rejected outright rather than silently taking `[0]` — an attacker (or a stale bookmark)
+ * controls how many times a key repeats.
+ */
+export function parseOpenParams(
+  sp: { cap?: string | string[]; pos?: string | string[] },
+  positionIds: readonly string[],
+): { openCapability: Capability | undefined; openPositionId: string | undefined } {
+  const cap = typeof sp.cap === 'string' && (CAPABILITIES as readonly string[]).includes(sp.cap) ? (sp.cap as Capability) : undefined;
+  const pos = typeof sp.pos === 'string' && positionIds.includes(sp.pos) ? sp.pos : undefined;
+  return { openCapability: cap, openPositionId: pos };
 }
 
 /**

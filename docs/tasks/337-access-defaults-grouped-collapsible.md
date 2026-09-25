@@ -1,4 +1,4 @@
-**Status:** SPECCED 2026-09-24 by a planner subagent, revised for the auditor's 6 findings, APPROVED by the orchestrator. NOT BUILT. Runs after T-336.
+**Status:** DONE 2026-09-25. Grouped + collapsible (daa3e88) and Amendment A1 (reopen the toggled area) committed together; S1 0px, S5 desktop+mobile, S6, V2 (7 positions incl. store-invented, 1 line at 1280) all PASS on screen.
 
 # T-337: group /admin/access-defaults by business area, with every group collapsible
 
@@ -214,3 +214,44 @@ was green on it (3/3), before any regrouping. That is the genuine "before" run t
 exists for. It is not committed separately: the tester's commit-2 RED files already sit in the
 tree, so a lone commit 1 could not pass typecheck. One commit lands both parts. The auditor verifies
 the extraction's purity by diff.
+
+## Amendment A1 — S5 failed; Ian ruled "reopen the toggled area" (2026-09-24)
+
+**Evidence.** S5 (tester `webapps-30`, 3× reproduced): after a toggle's `redirect()` every area `<details>`
+is closed (`t337-s5-STOP-evidence.png`). React remounts; the §3 hypothesis is false. S1 passed (0px, 16
+tables, 1280 and 640). Ian chose, of four options, **the server reopens what the user was working in**.
+§3's "Persistence: none" is superseded for this one case only.
+
+**Contract.**
+1. `toggleDefaultAction` redirects with two extra params, on BOTH the ok and the error path:
+   `cap=<capability>` and `pos=<positionId>` — the values it already read from the form. ⛔ **No form
+   changes**: no hidden input added, removed or renamed; §5's form oracle (R2) must stay green unchanged.
+   Other actions (same-for-every-store, copy, retire) do NOT add them.
+2. `page.tsx` reads `cap`/`pos` from `searchParams` as UNTRUSTED input: `cap` is used only if it is a
+   member of `CAPABILITIES`; `pos` only if it equals the id of a position in the rendered grid. Anything
+   else is ignored silently (renders the §3 defaults). Never echoed into markup.
+3. `DesktopGrid` / `MobileSections` take an optional `openCapability?: Capability` and
+   `openPositionId?: string`. Desktop: the area `<details>` containing `openCapability` (in that
+   capability's scope only) renders `open`; every other area stays closed. Mobile: the position
+   `<details>` for `openPositionId` renders `open` (in addition to none other; when absent, first-open as
+   today), and inside it the area containing `openCapability` renders `open`.
+4. Absent / invalid params ⇒ markup byte-identical to today's (R1 as written keeps passing).
+
+**Tests (tester).** R4: with `openCapability` = a store-scoped cap, exactly one desktop area tag carries
+`open` and it is that cap's area; NEGATIVE: the same area id in the OTHER scope (e.g. org `inventory` for
+a store `inventory` cap) stays closed; an org-only cap opens only in the org scope. R5 mobile: the named
+position is open and no other position is; its matching area is open; other positions' copies of that
+area are closed. R6: `toggleDefaultAction` (vi.mock `next/navigation` redirect + the domain call) redirects
+with `cap` and `pos` on success AND on a thrown domain error; NEGATIVE: `sameForEveryStoreAction`'s
+redirect has neither. R7 (page param parsing, as a pure helper the builder exports from `lib.ts`,
+`parseOpenParams(sp, positionIds)`): valid pair passes; `cap=bogus_cap` → undefined; `pos` not in the list →
+undefined; array-valued params → undefined.
+
+**Scope delta.** Builder may now edit `actions.ts` (the toggle redirect only) in addition to §8's files.
+Re-run S5 (both themes) and S6 after the build: the toggled area must be open after redirect.
+
+**A1 audit note (orchestrator, 2026-09-24).** Half-valid `cap`/`pos` pairs (only reachable by a hand-edited
+URL; the real redirect always sends both): valid `pos` + bad `cap` opens the mobile position only; valid `cap`
++ bad `pos` opens the desktop area but no mobile area. Kept as-is — conservative, never wrong about what is
+granted. Dismissed, not a defect. The `(this store)` marker in the count line widens a nowrap unit, so V2's
+two-lines-at-1280 check is re-measured after the build, not carried forward.
