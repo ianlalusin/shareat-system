@@ -121,12 +121,12 @@ function domainOrAuthImportedNames(text: string): string[] {
  * `recordingRefusalsFor` so the refusal counter can still see them; the rest are the deliberate
  * exceptions below (see the header's note on the stale "seven" this file used to claim).
  */
+// ⭐ T-342 / DEF-417 part 1, Amendment A1: the five cutover sites are wrapped in
+// `withOrgPrincipal(actor.orgId, tx => domainFn(tx, actor, …))` now — fixed, dropped from this
+// census. `runDepreciation` stays: its null branch is deliberate (per-asset transaction
+// isolation, `packages/domain/src/fixed-assets/depreciate.ts:251-253,282`), not the DEF-417 shape,
+// and the fix was reverted.
 const WRAPPED_NULL_TX_SITES: ReadonlySet<string> = new Set([
-  'app/cutover/actions.ts:attestStep',
-  'app/cutover/actions.ts:recordOpeningCount',
-  'app/cutover/actions.ts:addOpeningFigure',
-  'app/cutover/actions.ts:removeOpeningFigure',
-  'app/cutover/actions.ts:postOpeningBalances',
   'app/fixed-assets/actions.ts:runDepreciation',
 ]);
 

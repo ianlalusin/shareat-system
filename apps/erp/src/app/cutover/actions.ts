@@ -9,6 +9,7 @@
  * will ever be.
  */
 import { redirect } from 'next/navigation';
+import { type Tx } from '@shareat/db';
 import {
   addOpeningFigure,
   attestStep,
@@ -18,7 +19,7 @@ import {
 } from '@shareat/domain';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
-import { recordingRefusalsFor } from '../expenses/lib';
+import { recordingRefusalsFor, withOrgPrincipal } from '../expenses/lib';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -36,11 +37,13 @@ export async function attestStepAction(formData: FormData): Promise<void> {
   const storeId = str(formData, 'storeId');
   try {
     await recordingRefusalsFor(actor.orgId, () =>
-      attestStep(null, actor, {
-        stepCode,
-        storeId: storeId || null,
-        note: str(formData, 'note') || null,
-      }),
+      withOrgPrincipal(actor.orgId, (tx: Tx) =>
+        attestStep(tx, actor, {
+          stepCode,
+          storeId: storeId || null,
+          note: str(formData, 'note') || null,
+        }),
+      ),
     );
   } catch (err) {
     back('/cutover', { error: errorMessage(err) });
@@ -55,14 +58,16 @@ export async function recordCountAction(formData: FormData): Promise<void> {
   const unitCost = str(formData, 'unitCost');
   try {
     await recordingRefusalsFor(actor.orgId, () =>
-      recordOpeningCount(null, actor, {
-        storeId,
-        itemId: str(formData, 'itemId'),
-        // ⭐ An empty box is NOT a zero. The form only submits a row someone actually typed in, so
-        // an item nobody counted stays uncounted and keeps showing as missing.
-        quantity,
-        unitCost: unitCost || null,
-      }),
+      withOrgPrincipal(actor.orgId, (tx: Tx) =>
+        recordOpeningCount(tx, actor, {
+          storeId,
+          itemId: str(formData, 'itemId'),
+          // ⭐ An empty box is NOT a zero. The form only submits a row someone actually typed in, so
+          // an item nobody counted stays uncounted and keeps showing as missing.
+          quantity,
+          unitCost: unitCost || null,
+        }),
+      ),
     );
   } catch (err) {
     back('/cutover/count', { store: storeId, error: errorMessage(err) });
@@ -74,14 +79,16 @@ export async function addOpeningFigureAction(formData: FormData): Promise<void> 
   const actor = await requireActor();
   try {
     await recordingRefusalsFor(actor.orgId, () =>
-      addOpeningFigure(null, actor, {
-        accountCode: str(formData, 'accountCode'),
-        storeId: str(formData, 'storeId'),
-        direction: str(formData, 'direction') === 'credit' ? 'credit' : 'debit',
-        amount: str(formData, 'amount'),
-        entryDate: str(formData, 'entryDate'),
-        memo: str(formData, 'memo') || null,
-      }),
+      withOrgPrincipal(actor.orgId, (tx: Tx) =>
+        addOpeningFigure(tx, actor, {
+          accountCode: str(formData, 'accountCode'),
+          storeId: str(formData, 'storeId'),
+          direction: str(formData, 'direction') === 'credit' ? 'credit' : 'debit',
+          amount: str(formData, 'amount'),
+          entryDate: str(formData, 'entryDate'),
+          memo: str(formData, 'memo') || null,
+        }),
+      ),
     );
   } catch (err) {
     back('/cutover/opening', { error: errorMessage(err) });
@@ -93,7 +100,7 @@ export async function removeOpeningFigureAction(formData: FormData): Promise<voi
   const actor = await requireActor();
   try {
     await recordingRefusalsFor(actor.orgId, () =>
-      removeOpeningFigure(null, actor, { entryId: str(formData, 'entryId') }),
+      withOrgPrincipal(actor.orgId, (tx: Tx) => removeOpeningFigure(tx, actor, { entryId: str(formData, 'entryId') })),
     );
   } catch (err) {
     back('/cutover/opening', { error: errorMessage(err) });
@@ -110,7 +117,7 @@ export async function removeOpeningFigureAction(formData: FormData): Promise<voi
 export async function postOpeningBalancesAction(): Promise<void> {
   const actor = await requireActor();
   try {
-    await recordingRefusalsFor(actor.orgId, () => postOpeningBalances(null, actor));
+    await recordingRefusalsFor(actor.orgId, () => withOrgPrincipal(actor.orgId, (tx: Tx) => postOpeningBalances(tx, actor)));
   } catch (err) {
     back('/cutover/opening', { error: errorMessage(err) });
   }
