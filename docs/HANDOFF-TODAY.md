@@ -1,80 +1,85 @@
-# Handoff — 2026-09-25
+# Handoff — 2026-09-26
 
 > ⚠️ NOT LAUNCHED. No present-tense claim about which commit production runs (DEF-360). A green push to `main`
-> runs CI and a green CI **deploys** (`.github/workflows/deploy.yml`) — keep `main` green.
+> runs CI, and a green CI **deploys** (`.github/workflows/deploy.yml`). Keep `main` green.
 
 ## Where things stand
-Seven tasks shipped since 2026-09-24: T-337, T-339 (all five slices), T-340, T-342, T-276, and T-343 slices
-S1–S4 (human-readable refusals). Migrations **0157** (T-276) and **0158** (DEF-236) are on `main`. **T-341**
-(DEF-414, person grants per store) is specced and approved with slot **0159**; its red tests are written and
-**parked** in `docs/tasks/341-wip/` (restore steps in its README) — source not built.
+T-341 (DEF-414 + DEF-429) and T-344 (DEF-422) shipped, with migrations **0159** and **0160**. The deploy of `347fb00` ran green, so 0160's pre-flight check found no bad period data in production. CI had been red since
+24 Sep (DEF-432, shallow clone). It was fixed in `1e7862c`, and the backlog (16 commits, 0156–0159) deployed green on
+25 Sep. Four specs are **approved and queued**, in Ian's order: **T-345 → T-346 → T-343 S5 → T-347**, then wrap up.
+None of them is built.
 
-## Gates at b368a77 (the committed tree; run just before the commits)
-typecheck 0 · unit 164/165 files (one transient 20s timeout in `t343-scheduler-status.test.ts`; passes alone and the full unit project re-run gave **165 files, 2995 passed, 1 skipped**) · integration **3069/3070** (147→151 files; the one failure was a DEF-279 assertion still expecting a raw UUID, amended per T-343 R1 and re-run 2/2 — the full suite was not re-run after that one-line amendment) · build 0 (port 9008 stopped).
-⚠️ Watch `t343-scheduler-status.test.ts` for the timeout recurring.
+## Gates at 1225c19 (fresh DB `shareat_test_t344_gate3`, `node ~/.claude/skills/orchestrator/tools/gates.mjs`)
+typecheck 0 · unit **167 files / 3020 passed, 1 skipped** · integration **155 files / 3138 passed** · build 0 (9008 stopped).
+⚠️ Under memory pressure the unit project has timed out (t343-scheduler-status, deferral-staleness …). Those files pass
+alone. Close idle sessions before a full run.
 
-## What happened this session (by theme)
-- **Access defaults (T-337):** grouped + collapsible screen. S5 failed on screen (every area closed after a toggle);
-  **Ian ruled "reopen the toggled area"** → spec Amendment A1. Screen-tested both themes, desktop and mobile.
-- **Small defects (T-339):** DEF-412 (the integration suite is green again), DEF-165 (recipe scaling; one rounding),
-  DEF-337 (provision-terminal refuses a non-bypass role), DEF-148 (sales-day store picker + wallets), DEF-236
-  (blank revoke reason refused, migration 0158). DEF-181/220 were already fixed — stamped.
-- **Money (T-340, DEF-393):** a non-number invoice line is refused with a sentence; one shared
-  `assertFiguresReconcile` for trade and items.
-- **Opening-balance refusal Ian hit (T-342, DEF-417 part 1):** five cutover actions passed a null tx → RLS hid the
-  admin's own role. Fixed with `withOrgPrincipal`. `runDepreciation`'s null tx is deliberate (per-asset txs) and kept.
-- **Raw ids on screen (T-343, DEF-417 part 2, Ian's rule 2026-09-25):** S1 redacts UUIDs to `[hidden]` at the error
-  choke point; S2 `authorize()` refusals carry human sentences (ROLE_LABEL, 96 CAPABILITY_LABELs) with savepointed
-  refusal-only lookups; S3 44 repo "not found" throws name the record kind; S4 scheduler failure lines name stores.
-  Orchestrator defaults recorded in the spec header (Ian may override): fallback wording, labels, staging, privacy.
-- **Fiscal periods (T-276, DEF-305):** monthly `fiscal_period_seed` job (Ian's option c), migration 0157.
-- **Agents:** `frontend-developer`, `backend-architect`, `code-reviewer` moved to `~/.claude/agents/` (Ian).
-
-Decisions recorded: T-337 A1 (spec), T-343 defaults + R1–R3 (spec), T-341 R1 (spec), T-342 A1 (spec),
-Ian's human-readable rule (T-343 spec + DEF-417). ⚠️ **Unrecorded in the bible** (planner, §14): Ian's
-"every user-visible message names things in human terms" rule and T-276's gap threshold deserve §13 rows.
+## What happened this session
+- **T-341 (`4e986a3`)**: position grants carry their store (0159), and authorize() axis 3b matches the grant's store.
+  Three audit rounds (spec Amendments R1–R3) stopped two migration versions that would have WIDENED access. Already-hit
+  DEF-429 victims go to the cutover count for hand remedy. Pushed on Ian's word; production is not launched.
+- **DEF-432 (`1e7862c`)**: the CI verify job checks out with `fetch-depth: 0`. Ian approved deploying the backlog; the
+  deploy succeeded.
+- **T-344 (`1225c19`)**: the job classifies every hole. The admin "Create the missing month" action is on /findings,
+  with the capability `create_missing_period`. 0160 guards the order both ways and the locked year, under a per-org
+  advisory lock, with a pre-flight check of existing data. Screen-tested.
+- **Ian's decisions, all recorded in specs or the register:**
+  - T-344 Q1–Q5: report only inside closed books; build the admin action; refuse and name blocking activity; fill part-months; missed depreciation becomes T-345.
+  - T-345: the catch-up books to this month's expense 6700/6750, `[prior period]`.
+  - DEF-427/428 get built before launch (T-346).
+  - T-347: prepaids are purged, and disposed assets are deleted at cutover.
+  - DEF-430/431 are folded into T-343 (S2b, S6b).
+- **Registered**: DEF-424…439 (see the register). Open and unowned: 424, 425, 426, 433, 434, 435, 436, 439.
+- **Agents**: `backend-architect` wrote the specs; `code-reviewer` did the independent reviews (it found the
+  T-344 races and the T-347 TRUNCATE blocker).
 
 ## Pick up here
-1. **T-341** (DEF-414): restore the parked tests (`docs/tasks/341-wip/README.md`), then build per the spec +
-   Amendment R1. Migration slot 0159.
-2. **DEF-422** (T-276 follow-up): the seed job only checks after the latest period end — earlier holes are
-   never detected. Plus the queued small fixes listed at the end of the T-276 spec.
-3. **T-343 S5+** (domain tail, rows 7–16) and **S8** (choke-point bypasses) — spec lists them. Widen the census
-   scanner first (it misses concatenated/nested-template throws).
-Then: T-338, T-334 tranche 2+, Select primitive, DEF-421 (non-nullable tx, with a runDepreciation exception),
-DEF-416 (system-client silent fallback), DEF-418/419/420/423.
+1. **T-345** (`docs/tasks/345-*.md`, migration **0161**): brief the tester first (red), then the builder.
+2. **T-346** (`docs/tasks/346-*.md`, S1 **0162**, S2 **0163**, S3 no migration): three slices, one migration each.
+3. **T-343 S5** (`docs/tasks/343-*.md` §S5 + its Amendment R1): groups S5.0 → S5.1 → S5.1b → S2b → S5a → … Hold
+   the fixed-assets/stores/scheduler groups until T-346 lands.
+4. **T-347** (`docs/tasks/347-*.md`, **0164**). Then wrap up.
 
 ## Do not decide these alone — they are Ian's
-- **Arm `shareat-fiscal-period-seed.timer`** on the production host (1st of month 04:00 Manila) before 2027-09-01.
-- T-343 defaults (fallback sentence, the 96 labels in `packages/auth/src/capabilities.ts`) — override any time.
-- T-341 heads-up: staff scoped by hand to a second store with no employment there lose their position's everyday
-  access at that store (v1 behaviour); remedy is an employment or a hand-grant. Count before deploy.
-- Still open from before: the Firebase terminal account; dark-mode `--brand`/`--warning`; duplicate "Server".
+- **Arm `shareat-fiscal-period-seed.timer`** on the production host before 2027-09-01.
+- The cutover counts: T-341 §8 (hand-scoped staff and DEF-429 victims) and the T-344 production hole count. Both
+  need production read access.
+- Check each store's backfilled opening date once T-346 S1 is live.
+- Still open from before: the Firebase terminal account; dark-mode `--brand`/`--warning`; the duplicate "Server".
+
+## Unrecorded (planner, bible §14)
+Bible §13 rows are needed for Ian's human-terms rule, the T-276 gap threshold, T-341's per-store position grants,
+T-344's Q1–Q5, and the T-345 catch-up rule. POSTING-PATTERNS needs the T-345 `[prior period]` variant (after it
+builds). Run `npm run toc` after each insert.
 
 ## Traps that have actually bitten
-- **The local 9008 server connects as a bypass role** (`postgres`, `rolbypassrls = true`) — screens cannot reproduce
-  RLS bugs like DEF-417. Proof comes from integration tests under `shareat_test_runner`.
-- **A null tx is not always the bug** (`runDepreciation`). Read why the null branch exists.
-- **Guards that match source text were weaker than they looked, four times** (T-342 scanner, T-342 order test,
-  T-276 mirror negative, DEF-236 `/btrim/`). Prefer a type error or a behavioural test.
-- **Postgres aborts a tx on any statement error** — `.catch()` does not un-abort; use a savepoint.
-- The builder may never edit a test; when a builder's fix needs a test change, it goes back to the tester.
+- **A migration edited after it was applied leaves lane DBs stale.** Re-create the DB from 0000 (`make-test-dbs.mjs`
+  with a new name) before trusting a number. That cost a cycle today.
+- **Row-level BEFORE triggers that query the table misfire on multi-row UPDATEs.** Use statement-level AFTER triggers
+  with transition tables (0160).
+- **redirect() inside a try is swallowed by its catch**, and the user sees "NEXT_REDIRECT". Guarded now by
+  `apps/erp/tests/redirect-in-catch-sweep.test.ts`.
+- **Fixtures that relied on the DEF-414 leak** (staff scoped to a second store with no job there) had to hire at both
+  stores (ap, ap-aging).
+- **Killing "vitest" processes by name kills the workers' runs too.** Kill only the gate's own process tree.
+- The auditor session did not answer its last AUDIT NOW; a `code-reviewer` subagent did the final audit instead.
 
 ## Sessions
-All worker sessions are **safe to /clear**: nothing in flight, no uncommitted work of theirs, all state in the repo.
-Lane DBs (reusable by name): `shareat_test_t276_tester`, `shareat_test_t339s5_builder` (0158),
-`shareat_test_t341_tester`, `shareat_test_t343_tester`, `shareat_test_t335_builder`, smoke DB `shareat_test_setup`
-(SMOKE_ORG; now two stores SMK/SMK2, item "Pork belly", supplier "T340 Test Supplier", position "Commissary Lead").
+All are **safe to /clear**: nothing in flight, all work committed and pushed (`347fb00`), no state lives only in a
+session. Lane DBs are reusable by name: `shareat_test_t341_*`, `shareat_test_t344_tester2`, `shareat_test_t344_builder3`,
+smoke DB `shareat_test_setup` (SMOKE_ORG, stores SMK/SMK2, admin PIN 246810, T-344 smoke periods 2026-09..2027-02).
 Roles last used: tester `webapps-30` (Sonnet), builder `system32-19` (Sonnet), auditor
 `auto-assign-staff-role-on-hire` (Opus). Re-brief from `~/.claude/skills/orchestrator/worker-briefing.md`.
+Foreign sessions `webapps-a2` and `ERPNext Digital Ocean migration` are not part of this work.
 
 ## The paste-ready prompt
 ```
 You are the orchestrator for shareat-system (C:\Users\ianla\webapps\shareat-system). Run the global
 /orchestrator skill. You are starting COLD. Read docs/HANDOFF-TODAY.md (all), docs/RULES.md, then the
-T-341 spec and docs/tasks/341-wip/README.md. GREP the register and bible, never Read them whole.
+T-345 spec. GREP the register and bible, never Read them whole.
 Goal (Ian): close as many defects as possible toward deployment. It is NOT launched; a green push deploys.
-First job: T-341 (restore the parked red tests, build, audit, gates, commit). Then DEF-422, then T-343 S5+.
+Queue, in order: T-345 (0161) → T-346 (0162/0163) → T-343 S5 → T-347 (0164) → wrap up today's work.
+Use the backend-architect agent for specs and code-reviewer for independent reviews.
 Messages are short. Render before deciding. Ask for the exact command behind any reported number.
 Ian runs this terminal on Opus 5.5 at medium effort; do not ask him to switch.
 ```
