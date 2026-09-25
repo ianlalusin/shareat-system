@@ -133,7 +133,11 @@ jobs:
       NEXT_PUBLIC_FIREBASE_APP_ID: ci
 
     steps:
+      # fetch-depth: 0 — t334-slice3-tranche1-input.test.ts reads its "before" state from a pinned
+      # commit (`git show <sha>:<path>`); a shallow clone lacks it and the unit step fails (DEF-432).
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
