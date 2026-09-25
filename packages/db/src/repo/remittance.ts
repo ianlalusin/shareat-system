@@ -18,6 +18,7 @@
  */
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
+import { recordGone } from './record-gone';
 import {
   remittanceAllocations,
   remittanceLines,
@@ -367,7 +368,7 @@ export async function markReversed(
     )
     .returning({ id: remittances.id });
   if (updated.length === 0) {
-    throw new Error(`markReversed: remittance ${id} does not exist in org ${orgId}, or is already reversed`);
+    throw recordGone(`markReversed: remittance ${id} does not exist in org ${orgId}, or is already reversed`, 'remittance');
   }
 }
 
@@ -431,6 +432,6 @@ export async function resolveVariance(
     )
     .returning({ id: remittanceVariances.id });
   if (updated.length === 0) {
-    throw new Error(`resolveVariance: variance ${id} does not exist in org ${orgId}, or is not open`);
+    throw recordGone(`resolveVariance: variance ${id} does not exist in org ${orgId}, or is not open`, 'remittance variance', 'open');
   }
 }

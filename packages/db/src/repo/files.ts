@@ -7,6 +7,7 @@
 import { and, asc, eq, isNull, lt, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { storedFiles, type FilePurpose } from '../../schema/stored-files';
+import { recordGone } from './record-gone';
 
 export interface StoredFileRow {
   id: string;
@@ -64,7 +65,7 @@ export async function linkFile(
     .where(and(eq(storedFiles.id, id), eq(storedFiles.orgId, orgId)))
     .returning({ id: storedFiles.id });
   if (updated.length === 0) {
-    throw new Error(`linkFile: file ${id} does not exist in org ${orgId}`);
+    throw recordGone(`linkFile: file ${id} does not exist in org ${orgId}`, 'file');
   }
 }
 

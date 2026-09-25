@@ -16,6 +16,22 @@
  */
 import { schedulerRepo, type SchedulerJob } from '@shareat/db';
 import { withOrgPrincipal } from '../app/expenses/lib';
+import { containsIdentifier } from '../lib/error-shape';
+
+/**
+ * T-343 S4b — this screen has no session-scoped gate of its own (`SchedulerStatus` is embedded
+ * wherever a page already decided who may see it), so `last.error`/`f.subjectName`/`f.reason` are
+ * UNTRUSTED for the same reason a raw driver message is (S1): whatever a job happened to interpolate
+ * into a stored diagnostic reaches this render verbatim otherwise. `containsIdentifier` (S1,
+ * `../lib/error-shape`) is the one shared UUID test; a detail-shaped field degrades to a pointer at
+ * the server log, a label degrades to a generic one — never a raw id on screen.
+ */
+function redactDetail(text: string): string {
+  return containsIdentifier(text) ? '(detail in the server log)' : text;
+}
+function redactSubject(subjectName: string): string {
+  return containsIdentifier(subjectName) ? 'an item from an earlier run' : subjectName;
+}
 
 function monthsSince(date: Date): number {
   const now = new Date();
@@ -74,14 +90,15 @@ export async function SchedulerStatus({
           The last {label.toLowerCase()} run ({last.period}, {when}) did not complete cleanly.
         </strong>{' '}
         {last.postedCount} posted, {last.failedCount} failed.
-        {last.error && <div className="mt-1">{last.error}</div>}
-        {/* ⚠️ Verbatim, on the page. The likeliest reason is mundane — "no fiscal period covers
-            2026-06-30" — and it is only actionable if somebody can read it. */}
+        {last.error && <div className="mt-1">{redactDetail(last.error)}</div>}
+        {/* ⚠️ Verbatim WHEN id-free, on the page. The likeliest reason is mundane — "no fiscal
+            period covers 2026-06-30" — and it is only actionable if somebody can read it; an
+            id-bearing one is redacted above (`redactSubject`/`redactDetail`, T-343 S4b). */}
         {last.failures && last.failures.length > 0 && (
           <ul className="mt-2 space-y-1">
             {last.failures.map((f) => (
               <li key={f.subjectId} className="text-xs">
-                ⛔ <strong>{f.subjectName}</strong>: {f.reason}
+                ⛔ <strong>{redactSubject(f.subjectName)}</strong>: {redactDetail(f.reason)}
               </li>
             ))}
           </ul>

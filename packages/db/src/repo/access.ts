@@ -16,6 +16,7 @@
  */
 import { and, eq, exists, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { personGrants, personRoles, personStoreScope } from '../../schema/access';
+import { recordGone } from './record-gone';
 // ⚠️ Tables outside the access axis this file touches: `personCredentials` for
 // `hasOtherActiveAdminWhoCanSignIn`, `persons` for `revokeElevationGrantsForOrg`'s org scoping
 // (`person_grants` carries no `org_id` of its own — same reason its RLS policy derives org
@@ -259,7 +260,7 @@ export async function revokeRoleById(tx: Tx, roleId: string): Promise<void> {
     .where(and(eq(personRoles.id, roleId), isNull(personRoles.revokedAt)))
     .returning({ id: personRoles.id });
   if (updated.length === 0) {
-    throw new Error(`revokeRoleById: role ${roleId} does not exist or is already revoked`);
+    throw recordGone(`revokeRoleById: role ${roleId} does not exist or is already revoked`, 'role');
   }
 }
 
@@ -628,7 +629,7 @@ export async function revokeGrantById(tx: Tx, grantId: string, reason: string): 
     .where(and(eq(personGrants.id, grantId), isNull(personGrants.revokedAt)))
     .returning({ id: personGrants.id });
   if (updated.length === 0) {
-    throw new Error(`revokeGrantById: grant ${grantId} does not exist or is already revoked`);
+    throw recordGone(`revokeGrantById: grant ${grantId} does not exist or is already revoked`, 'grant');
   }
 }
 

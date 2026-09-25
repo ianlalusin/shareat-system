@@ -14,6 +14,7 @@ import { MANILA_TODAY } from './sql-time';
 import type { Tx } from '../client';
 import { owners, type OwnerStatus, type PersonalExpenseTreatment } from '../../schema/owners';
 import { owner_drawing_closes } from '../../schema/owner-drawing-closes';
+import { recordGone } from './record-gone';
 
 export const CAPITAL_CODE = '3100';
 export const DRAWINGS_CODE = '3200';
@@ -100,7 +101,7 @@ export async function updateOwner(
     .set({ ...values, updatedAt: sql`now()` })
     .where(and(eq(owners.id, id), eq(owners.orgId, orgId)))
     .returning({ id: owners.id });
-  if (updated.length === 0) throw new Error(`updateOwner: owner ${id} does not exist in org ${orgId}`);
+  if (updated.length === 0) throw recordGone(`updateOwner: owner ${id} does not exist in org ${orgId}`, 'owner');
 }
 
 // -------------------------------------------------------------------------------------

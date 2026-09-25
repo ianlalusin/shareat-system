@@ -15,6 +15,7 @@
  */
 import { and, asc, eq, isNotNull, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
+import { recordGone } from './record-gone';
 import { accounts } from '../../schema/accounts';
 import { stores } from '../../schema/stores';
 import { journalEntries, journalLines } from '../../schema/journal';
@@ -148,8 +149,9 @@ export async function retireMoneyAccount(tx: Tx, orgId: string, id: string): Pro
     )
     .returning({ id: moneyAccounts.id });
   if (updated.length === 0) {
-    throw new Error(
+    throw recordGone(
       `retireMoneyAccount: money account ${id} does not exist in org ${orgId}, or is already retired`,
+      'money account',
     );
   }
 }
@@ -166,7 +168,7 @@ export async function updateMoneyAccount(
     .where(and(eq(moneyAccounts.id, id), eq(moneyAccounts.orgId, orgId)))
     .returning({ id: moneyAccounts.id });
   if (updated.length === 0) {
-    throw new Error(`updateMoneyAccount: money account ${id} does not exist in org ${orgId}`);
+    throw recordGone(`updateMoneyAccount: money account ${id} does not exist in org ${orgId}`, 'money account');
   }
 }
 
@@ -190,7 +192,7 @@ export async function setFloatTarget(
     .where(and(eq(moneyAccounts.id, id), eq(moneyAccounts.orgId, orgId)))
     .returning({ id: moneyAccounts.id });
   if (updated.length === 0) {
-    throw new Error(`setFloatTarget: money account ${id} does not exist in org ${orgId}`);
+    throw recordGone(`setFloatTarget: money account ${id} does not exist in org ${orgId}`, 'money account');
   }
 }
 
@@ -421,6 +423,6 @@ export async function renameMoneyAccount(
     .where(and(eq(moneyAccounts.id, id), eq(moneyAccounts.orgId, orgId)))
     .returning({ id: moneyAccounts.id });
   if (updated.length === 0) {
-    throw new Error(`renameMoneyAccount: money account ${id} does not exist in org ${orgId}`);
+    throw recordGone(`renameMoneyAccount: money account ${id} does not exist in org ${orgId}`, 'money account');
   }
 }

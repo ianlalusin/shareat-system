@@ -15,7 +15,7 @@
  */
 import { recordConstraintRefusal } from '@shareat/domain';
 import { logger } from '@shareat/core/logger';
-import { hasStringCode, looksLikeADump } from './error-shape';
+import { containsIdentifier, hasStringCode, isPresentable, looksLikeADump, UUID_SHAPE } from './error-shape';
 
 export const CONSTRAINT_MESSAGES: Record<string, string> = {
   pay_runs_no_overlapping_posted_period:
@@ -219,12 +219,42 @@ const CONFIGURATION_DUMP_FALLBACK =
   'Something failed before it could be processed. The reason is in the server log.';
 
 /**
+ * T-343 S1 / DEF-417 part 2, Amendment R1 — used ONLY when a candidate sentence carrying an
+ * identifier cannot be redacted in place: the candidate is a dump (`looksLikeADump`), or redacting
+ * every UUID out of it leaves nothing. The ordinary case — a sentence with a UUID somewhere inside
+ * it — is redacted in place (`sanitiseForScreen` below), never blanked to this.
+ */
+const UNPRESENTABLE_FALLBACK =
+  'That could not be done, and the reason is not one this screen can show yet. It has been logged for your admin.';
+
+/**
  * PostgreSQL's default SQLSTATE for a `RAISE EXCEPTION` that sets no explicit `ERRCODE`. A REAL
  * constraint violation is never P0001 — those land in class 23 (`23505` unique, `23514` check,
  * `23503` fk, `23502` not-null) or other driver-assigned classes. So P0001 is a principled
  * discriminator for "a human wrote this RAISE on purpose," not an enumerable one.
  */
 const APPLICATION_RAISE_SQLSTATE = 'P0001';
+
+/** Amendment R3 item 6 — hoisted so `sanitiseForScreen` builds this RegExp once, not per call. */
+const UUID_SHAPE_GLOBAL = new RegExp(UUID_SHAPE.source, 'gi');
+
+/**
+ * T-343 S1, Amendment R1 — the final gate EVERY branch of `errorMessage` passes through. A
+ * candidate with no identifier in it is returned completely unchanged (Invariant 11: mapped
+ * constraint sentences and id-free P0001 sentences render exactly as today). One that does is
+ * redacted IN PLACE — every UUID becomes `[hidden]`, the rest of the sentence survives — and
+ * logged once with the raw diagnostic (Invariant 3: sanitising is not discarding). Only a
+ * candidate that is a dump, or empty once every UUID is stripped out of it, falls back to
+ * `UNPRESENTABLE_FALLBACK`.
+ */
+function sanitiseForScreen(candidate: string, raw: string, err: unknown): string {
+  if (!containsIdentifier(candidate)) return candidate;
+  // Amendment R3 item 3 — routine P0001 redactions were flooding error-level alerts; warn instead.
+  logger.warn({ err, raw }, 'user-facing error carried an identifier, sanitised for the screen');
+  const redacted = candidate.replace(UUID_SHAPE_GLOBAL, '[hidden]').trim();
+  if (redacted === '' || looksLikeADump(redacted)) return UNPRESENTABLE_FALLBACK;
+  return redacted;
+}
 
 /**
  * ⭐ T-326/DEF-378, corrected after `/code-review` — resolution order is UNCHANGED from before
@@ -248,8 +278,11 @@ const APPLICATION_RAISE_SQLSTATE = 'P0001';
  *    the one `_finite_check` suffix rule (§2 above). `recordIfUnmappedConstraint` below calls the
  *    same resolver, so the two can no longer disagree about whether a name is mapped (T-327 slice
  *    2 — they briefly did, exact-only there, exact-then-suffix here).
- * 2. **P0001 → APPLICATION-AUTHORED. Preserve the text verbatim.** Never sanitised, never logged,
- *    because nothing was discarded.
+ * 2. **P0001 → APPLICATION-AUTHORED. Preserve the text.** Never discarded — but as of T-343
+ *    Amendment R1 it is no longer "never sanitised, never logged": a P0001 sentence that carries
+ *    an identifier is redacted IN PLACE by `sanitiseForScreen` (every UUID → `[hidden]`, the rest
+ *    of the hand-authored sentence intact) and logged once when that happens. Only an id-free
+ *    P0001 sentence passes through completely untouched and unlogged, exactly as before this task.
  * 3. Resolvable-but-unmapped constraint whose prose DOES carry `constraint "…"` → the existing
  *    generic constraint sentence (unchanged). (A real constraint violation is never P0001, so this
  *    step and step 2 never compete for the same error.)
@@ -262,15 +295,22 @@ const APPLICATION_RAISE_SQLSTATE = 'P0001';
  */
 export function errorMessage(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
-  const constraintName = resolveConstraintName(err);
-  const mapped = constraintName ? mappedMessage(constraintName) : undefined;
-  if (mapped !== undefined) return mapped;
 
-  if (hasStringCode(err) && (err as { code: string }).code === APPLICATION_RAISE_SQLSTATE) {
-    return raw.replace(/^[a-zA-Z][A-Za-z0-9_]*:\s*/, '');
+  // Step 0 (T-343 S1) — a presentable error's own sentence wins outright, ahead of every other
+  // resolution step; steps 1-4 below run only when it is not.
+  if (isPresentable(err)) {
+    return sanitiseForScreen(err.userMessage, raw, err);
   }
 
-  if (parseConstraintName(raw)) return genericConstraintMessage(raw);
+  const constraintName = resolveConstraintName(err);
+  const mapped = constraintName ? mappedMessage(constraintName) : undefined;
+  if (mapped !== undefined) return sanitiseForScreen(mapped, raw, err);
+
+  if (hasStringCode(err) && (err as { code: string }).code === APPLICATION_RAISE_SQLSTATE) {
+    return sanitiseForScreen(raw.replace(/^[a-zA-Z][A-Za-z0-9_]*:\s*/, ''), raw, err);
+  }
+
+  if (parseConstraintName(raw)) return sanitiseForScreen(genericConstraintMessage(raw), raw, err);
 
   if (!hasStringCode(err)) {
     if (looksLikeADump(raw)) {
@@ -280,7 +320,7 @@ export function errorMessage(err: unknown): string {
       );
       return CONFIGURATION_DUMP_FALLBACK;
     }
-    return raw.replace(/^[a-zA-Z][A-Za-z0-9_]*:\s*/, '');
+    return sanitiseForScreen(raw.replace(/^[a-zA-Z][A-Za-z0-9_]*:\s*/, ''), raw, err);
   }
 
   logger.error({ err, raw }, 'database error sanitised for the operator screen');

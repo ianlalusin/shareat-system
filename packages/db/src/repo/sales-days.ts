@@ -10,6 +10,7 @@
  */
 import { and, asc, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
+import { recordGone } from './record-gone';
 import {
   salesChannels,
   salesDayChannels,
@@ -441,7 +442,11 @@ export async function updateDraft(tx: Tx, orgId: string, id: string, patch: Upda
     )
     .returning({ id: salesDays.id });
   if (updated.length === 0) {
-    throw new Error(`updateDraft: sales day ${id} does not exist in org ${orgId}, or is not open/submitted`);
+    throw recordGone(
+      `updateDraft: sales day ${id} does not exist in org ${orgId}, or is not open/submitted`,
+      'sales day',
+      'open or submitted',
+    );
   }
 }
 
@@ -452,7 +457,7 @@ export async function markSubmitted(tx: Tx, orgId: string, id: string, submitted
     .where(and(eq(salesDays.id, id), eq(salesDays.orgId, orgId), eq(salesDays.status, 'open')))
     .returning({ id: salesDays.id });
   if (updated.length === 0) {
-    throw new Error(`markSubmitted: sales day ${id} does not exist in org ${orgId}, or is not open`);
+    throw recordGone(`markSubmitted: sales day ${id} does not exist in org ${orgId}, or is not open`, 'sales day', 'open');
   }
 }
 
@@ -480,7 +485,7 @@ export async function markVerified(
     )
     .returning({ id: salesDays.id });
   if (updated.length === 0) {
-    throw new Error(`markVerified: sales day ${id} does not exist in org ${orgId}, or is already verified/voided`);
+    throw recordGone(`markVerified: sales day ${id} does not exist in org ${orgId}, or is already verified/voided`, 'sales day');
   }
 }
 
@@ -496,7 +501,7 @@ export async function markVoided(
     .where(and(eq(salesDays.id, id), eq(salesDays.orgId, orgId), eq(salesDays.status, 'verified')))
     .returning({ id: salesDays.id });
   if (updated.length === 0) {
-    throw new Error(`markVoided: sales day ${id} does not exist in org ${orgId}, or is not verified`);
+    throw recordGone(`markVoided: sales day ${id} does not exist in org ${orgId}, or is not verified`, 'sales day', 'verified');
   }
 }
 

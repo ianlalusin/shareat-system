@@ -53,7 +53,7 @@ import { RLS_REGISTRY } from '../../../db/src/rls/registry';
 import { closeDb, findingsRepo, moneyAccountsRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import { approveExpense, createExpense, deleteExpenseDraft, editExpense, voidExpense, routeExpense, recordInvoice, verifyInvoice, setTillFloat, payReimbursement } from '@shareat/domain';
-import { reimbursablePayableOf } from '../../../db/src/repo/expenses';
+import { reimbursablePayableOf, markExpenseVoided } from '../../../db/src/repo/expenses';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 
 const sql = postgres(url, { max: 5 });
@@ -1558,5 +1558,57 @@ describe('⛔ DEF-157 — payReimbursement settles 2130, which nothing previousl
         }),
       ),
     ).rejects.toThrow(/payReimbursement: the amount.*"0\.004"/);
+  });
+});
+
+// =========================================================================================
+// T-343 S3 / DEF-417 part 2 — C3. `docs/tasks/343-def-417-human-readable-refusals.md`.
+// ⛔ RED until the builder converts `expensesRepo.markExpenseVoided`'s throw to `recordGone(...)`
+// — today it throws a bare `Error` whose message contains raw UUIDs, so `err.userMessage` is
+// `undefined` and the regex below never matches.
+//
+// ⚠️ NOT a plain second `voidExpense(...)` call: `runVoidExpense` (`expenses/void.ts:54-61`) routes
+// through `reverseEntry`, which is ALREADY idempotent (invariant 4's `created:false` pattern) — a
+// second `voidExpense` on the same expense returns `created:false` and never even calls
+// `expensesRepo.markExpenseVoided` again, so this exact repo guard is unreachable through the
+// domain wrapper in a simple sequential double-click. It IS reachable — the guard exists for a
+// genuine race between two concurrent void requests — so this test calls the repo function this
+// task's own census names (`expenses.ts:524`) directly for the second write, which is the accurate
+// way to prove THAT function's contract without fabricating a real concurrent race.
+// =========================================================================================
+describe('T-343 S3 — voiding an already-voided expense names the record, never a raw id', () => {
+  it('markExpenseVoided on an already-voided row throws RecordGoneError: "That expense could not be found, or it is no longer posted."', async () => {
+    const f = await setup('t343-c3');
+    const catId = await categoryId(f.orgId, 'Cost of Goods Sold — General');
+
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: 'T-343 C3 — voided twice',
+        payments: [{ method: 'cash', amount: '500.00', moneyAccountId: f.cashDrawerId }],
+      }),
+    );
+    await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
+    await asPerson(f.orgId, (tx) => voidExpense(tx, actor(f.orgId, f.managerId), created.id, 'First void'));
+
+    let caught: unknown;
+    try {
+      await asPerson(f.orgId, (tx) =>
+        markExpenseVoided(tx, f.orgId, created.id, { voidedBy: f.managerId, voidReason: 'Second void' }),
+      );
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    const err = caught as Error & { userMessage?: string };
+    expect(err.userMessage, 'the second void must carry a presentable userMessage').toBeDefined();
+    expect(err.userMessage).toMatch(/^That expense could not be found, or it is no longer posted\./);
+    expect(err.userMessage).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    // NEGATIVE — the raw diagnostic still names the org/expense ids, unedited (Invariant 1).
+    expect(err.message).toMatch(new RegExp(created.id));
   });
 });

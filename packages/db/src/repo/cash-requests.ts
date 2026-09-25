@@ -10,6 +10,7 @@
 import { and, desc, eq, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { cashRequests, type CashRequestStatus } from '../../schema/cash-requests';
+import { recordGone } from './record-gone';
 
 export const STAFF_FLOAT_CODE = '1120';
 export const RELEASE_SOURCE = 'cash_request_release';
@@ -105,7 +106,7 @@ export async function update(
     .where(and(eq(cashRequests.id, id), eq(cashRequests.orgId, orgId)))
     .returning({ id: cashRequests.id });
   if (updated.length === 0) {
-    throw new Error(`update: cash request ${id} does not exist in org ${orgId}`);
+    throw recordGone(`update: cash request ${id} does not exist in org ${orgId}`, 'cash request');
   }
 }
 

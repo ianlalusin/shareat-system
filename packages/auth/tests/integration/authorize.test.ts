@@ -53,6 +53,18 @@ import {
   type Capability,
   type Role,
 } from '@shareat/auth';
+// ⛔ T-343 S2 — TESTER-added describe only (below). Not barrel-exported (only the two labels are,
+// per the spec's BUILDER file list) — imported by relative path, same convention
+// `errors-leaf.test.ts` uses for files this package does not put in `index.ts`. Does not exist yet;
+// this whole import is the expected red for every case in the new describe block.
+import {
+  closePeriodNeedsWholeOrg,
+  noActiveRole,
+  notAssignedToStore,
+  otherOrg,
+  roleMayNot,
+  storeNotInOrg,
+} from '../../src/refusal-text';
 
 const sql = postgres(url, { max: 5 });
 
@@ -914,4 +926,369 @@ describe('T-256 — DEF-247: grantsForPerson surfaces grant_source and revoke_re
     expect(row!.grantSource).toBeNull();
     expect(row!.revokeReason).toBeNull();
   });
+});
+
+// ---------------------------------------------------------------------------------------
+// T-343 S2 — every authorize() refusal carries a human sentence (rows 1-5 + close_period).
+// docs/tasks/343-def-417-human-readable-refusals.md §S2, T6. Against REAL Postgres — the unit-level
+// `packages/auth/tests/t343-authorize-lookups.test.ts` covers the same rows with `@shareat/db`
+// mocked; this proves the WIRING actually reaches a real `organizationsRepo`/`storesRepo` under RLS.
+//
+// ⛔ Every case below is expected red until S2 lands: `err.userMessage` does not exist on
+// `AuthorizationError` today, and `authorize.ts` throws none of the seven refusal-text sentences.
+// ---------------------------------------------------------------------------------------
+
+describe('T-343 S2 — each refusal carries a human sentence (rows 1-5 + close_period)', () => {
+  const UUID_RE = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i;
+
+  /** Guard, not `!` (bible §13 row 206) — noUncheckedIndexedAccess makes row 0 of a query result
+   *  `T | undefined`; a fixture org that does not exist is a real bug in the test, not a case to
+   *  silence with a non-null assertion. */
+  async function orgNameOf(id: string): Promise<string> {
+    const rows = await sql<{ name: string }[]>`select name from organizations where id = ${id}`;
+    const row = rows[0];
+    if (!row) throw new Error(`fixture org ${id} not found`);
+    return row.name;
+  }
+
+  async function refuse(actor: Actor, capability: Capability, ctx: { storeId?: string; orgId?: string }, org = orgA) {
+    let caught: unknown;
+    try {
+      await asPerson(org, (tx) => authorize(tx, actor, capability, ctx));
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught, 'expected authorize() to refuse').toBeInstanceOf(AuthorizationError);
+    return caught as AuthorizationError & { userMessage?: string };
+  }
+
+  it('row 5 — role may not: staffA denied void_sales_day names the role and the capability', async () => {
+    const actor: Actor = { personId: staffA, orgId: orgA };
+    const err = await refuse(actor, 'void_sales_day', { storeId: storeA1 });
+    expect(err.userMessage).toBe(roleMayNot('staff', 'void_sales_day'));
+    // NEGATIVE — today's app regexes over `err.message` (~19 files match `/may not '<cap>'/`)
+    // must still match, unchanged.
+    expect(err.message).toMatch(/role 'staff' may not 'void_sales_day'/);
+    expect(err.userMessage).not.toMatch(UUID_RE);
+  });
+
+  it('row 1 — no active role: an unconfigured person names the org, never the person id', async () => {
+    const org = await insertOrg('t343-s2-row1');
+    const person = await insertPerson(org, 'Unconfigured');
+    const identity = await asPerson(org, (tx) => accessRepo.activeRoleForPerson(tx, person, org)); // sanity: none
+    expect(identity).toBeUndefined(); // no row at all — `activeRoleForPerson` returns undefined, not null
+    const orgName = await orgNameOf(org);
+
+    const actor: Actor = { personId: person, orgId: org };
+    const err = await refuse(actor, 'record_sale', {}, org);
+    expect(err.userMessage).toBe(noActiveRole(orgName));
+    expect(err.message).toMatch(/has no active role in org/);
+    expect(err.userMessage).not.toMatch(UUID_RE);
+  });
+
+  it('row 2 — no store scope: names the store by name and code, never the store id', async () => {
+    const actor: Actor = { personId: managerA, orgId: orgA };
+    const err = await refuse(actor, 'void_expense', { storeId: storeA2 }); // managerA holds only storeA1
+    const [store] = await sql<{ name: string; code: string }[]>`select name, code from stores where id = ${storeA2}`;
+    expect(err.userMessage).toBe(notAssignedToStore('void_expense', store));
+    expect(err.message).toMatch(/has no store scope for/);
+    expect(err.userMessage).not.toMatch(UUID_RE);
+  });
+
+  it('row 3 — store not in org: names ONLY the actor\'s own org, never org B or storeB1', async () => {
+    const actor: Actor = { personId: adminA, orgId: orgA };
+    const err = await refuse(actor, 'void_expense', { storeId: storeB1 });
+    const orgAName = await orgNameOf(orgA);
+    const orgBName = await orgNameOf(orgB);
+    expect(err.userMessage).toBe(storeNotInOrg(orgAName));
+    expect(err.message).toMatch(/does not belong to org/);
+    expect(err.userMessage).not.toContain(orgBName); // never names the foreign org
+    expect(err.userMessage).not.toMatch(UUID_RE);
+  });
+
+  it('row 4 — cross-org: never names org B, even though org B is the resource\'s real org', async () => {
+    const actor: Actor = { personId: adminA, orgId: orgA };
+    const err = await refuse(actor, 'manage_price_lists', { orgId: orgB });
+    const orgBName = await orgNameOf(orgB);
+    expect(err.userMessage).toBe(otherOrg('manage_price_lists'));
+    expect(err.message).toMatch(/does not match the resource's org/);
+    expect(err.userMessage).not.toContain(orgBName);
+    expect(err.userMessage).not.toMatch(UUID_RE);
+  });
+
+  it('close_period — a manager who does not cover the whole org gets the whole-org sentence', async () => {
+    const actor: Actor = { personId: managerA, orgId: orgA };
+    const err = await refuse(actor, 'close_period', {});
+    const orgAName = await orgNameOf(orgA);
+    expect(err.userMessage).toBe(closePeriodNeedsWholeOrg(orgAName));
+    expect(err.userMessage).not.toMatch(UUID_RE);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// T-343 S2 T6, Amendment R1 §5 — the `canBypassBlock` probe-commit pattern
+// (`packages/domain/src/sales-days/create.ts:264-272`): `authorize()` is called as a PROBE inside a
+// still-open transaction, its refusal is caught, and the SAME transaction keeps writing and
+// COMMITS. If the refusal branch's new lookup ever ran a real SQL statement that failed at the
+// database (rather than being swallowed by its own `.catch(() => undefined)`), Postgres would mark
+// the transaction aborted and every later statement — including the eventual commit — would fail
+// with 25P02. This proves it does not, against real Postgres, under real RLS.
+// ---------------------------------------------------------------------------------------
+
+describe('T6 — a refused close_period probe never aborts its own still-open transaction (Amendment R1 §5)', () => {
+  it('a manager scoped to only ONE of two stores is refused close_period, and a write later in the SAME transaction still commits', async () => {
+    const org = await insertOrg('t343-t6-probe-commit');
+    // ⚠️ TWO stores, and the manager is scoped to only one — with a single store in the org,
+    // `personCoversWholeOrg` is vacuously true (invariant 8's own "no false negative on an empty
+    // org" case) and close_period would NOT be refused at all, defeating the whole point of this
+    // test. A second, unscoped store is what makes the refusal (and its lookup) actually happen.
+    const scopedStore = await insertStore(org, 't6-probe-commit-scoped');
+    await insertStore(org, 't6-probe-commit-unscoped');
+    const manager = await insertPerson(org, 'Two-store-org Manager (one store only)');
+    await insertRoleRaw(manager, org, 'manager');
+    await insertStoreScopeRaw(manager, scopedStore);
+
+    const actor: Actor = { personId: manager, orgId: org };
+    const marker = 'T6 probe-commit — written after the refused probe';
+
+    await asPerson(org, async (tx) => {
+      // Mirrors canBypassBlock exactly: probe, catch ONLY AuthorizationError, keep going — no
+      // savepoint, no rollback.
+      let bypassed: boolean;
+      try {
+        await authorize(tx, actor, 'close_period', {});
+        bypassed = true;
+      } catch (err) {
+        if (!(err instanceof AuthorizationError)) throw err;
+        bypassed = false;
+      }
+      expect(bypassed).toBe(false); // single-store manager does not cover the whole org — refused
+
+      // The transaction is still open here. A real SQL error in the refusal branch's own lookup
+      // would have marked it aborted, and this insert (still inside the SAME `tx`) would fail with
+      // 25P02 rather than the assertion below ever running.
+      await tx.execute(
+        dsql`insert into persons (org_id, display_name) values (${org}, ${marker})`,
+      );
+    });
+
+    // Reaching here at all means the transaction committed. The row existing is the direct proof.
+    const rows = await sql<{ display_name: string }[]>`
+      select display_name from persons where org_id = ${org} and display_name = ${marker}
+    `;
+    expect(rows).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// T-343 Amendment R2 (binding) — T6 was too easy: the lookup NEVER actually failed, so it proved
+// nothing about the risk it was named for. This forces the refusal-branch lookup to error FOR REAL
+// inside the same transaction, for BOTH real call sites that rely on catching only
+// `AuthorizationError` and continuing — `canBypassBlock` (sales-days/create.ts:264-272, exercised
+// directly via `authorize()` as T6 above already does) and `authorizeEither`
+// (trade/index.ts:62-78, reproduced verbatim below — it is not exported, so its own control flow is
+// copied rather than imported, the same posture T6 already takes toward `canBypassBlock`).
+//
+// ## Mechanism: REVOKE, not a mock — and why `stores` needs a COLUMN-level revoke, not a table one
+//
+// `authorize.ts` now wraps every refusal-branch lookup in `tx.transaction((t) => …).catch(() =>
+// undefined)` — a Postgres SAVEPOINT, added after this amendment. A savepoint's whole job is to
+// isolate exactly this: a failed statement inside it rolls the savepoint back, leaving the OUTER
+// transaction (and whatever it does next) untouched. Proving that for real (never a mock — RULES
+// §9.3) means making the lookup's own SELECT fail with a genuine Postgres error, not a JS one.
+//
+// `organizations` needs only a table-wide revoke: nothing else in the `close_period`/no-active-role
+// path reads that table outside the new, savepointed `organizationsRepo.identityOf` call.
+// `stores` is different — `accessRepo.storeBelongsToOrg` (`packages/db/src/repo/access.ts:420-423`)
+// reads `stores.id`/`stores.org_id` on EVERY store-scoped `authorize()` call, un-savepointed, BEFORE
+// the refusal branch is ever reached. A table-wide revoke on `stores` breaks that pre-existing check
+// first and proves nothing about the new savepointed `storesRepo.getById` lookup — the first attempt
+// found exactly this. The fix: revoke `SELECT` on `stores` entirely, then grant it back on only
+// `(id, org_id)` — `storeBelongsToOrg`'s two columns. `getById`'s wider projection (`name`, `code`, …)
+// has no grant on any of those columns and fails for real, INSIDE the savepoint.
+//
+// ## Expected result: GREEN — this is what proves the savepoint fix works
+// The refusal branch's lookup fails for real; the SAVEPOINT rolls back on its own; the outer
+// transaction is untouched; the insert that follows in the SAME transaction — mirroring what
+// `canBypassBlock`'s caller and `authorizeEither`'s caller both need to be able to do — commits.
+// Before the savepoint existed this failed with `25P02` ("current transaction is aborted, commands
+// ignored until end of transaction block"); see the report for that raw error, captured while
+// diagnosing the mechanism itself.
+// ---------------------------------------------------------------------------------------
+
+describe('T6b (Amendment R2) — a REAL refusal-lookup SQL error is contained by its own savepoint', () => {
+  /** Revokes, then restores, `SELECT` on `organizations` for `APP_ROLE` entirely. Safe as a
+   *  whole-table revoke because nothing else in `authorize()`'s `close_period`/no-active-role path
+   *  reads `organizations` outside the NEW, savepointed `organizationsRepo.identityOf` call — unlike
+   *  `stores` below, there is no pre-existing, un-savepointed read of this table to collide with. */
+  async function withOrganizationsUnreadable<T>(fn: () => Promise<T>): Promise<T> {
+    await sql.unsafe(`revoke select on organizations from ${APP_ROLE}`);
+    try {
+      return await fn();
+    } finally {
+      await sql.unsafe(`grant select on organizations to ${APP_ROLE}`);
+    }
+  }
+
+  /** Negative half, mirroring `assertStoreDetailColumnsAreBlocked` below — proves the revoke above
+   *  actually blocks `SELECT` outside any savepoint, as `APP_ROLE`, before trusting what
+   *  `authorize()`'s savepointed lookup does with it. */
+  async function assertOrganizationsAreBlocked(): Promise<void> {
+    await sql.begin(async (t) => {
+      await t.unsafe(`set local role ${APP_ROLE}`);
+      await expect(t.unsafe('select name from organizations limit 1')).rejects.toMatchObject({ code: '42501' });
+      throw new Error('t343-r2-organizations-probe-rollback'); // forces sql.begin to ROLLBACK
+    }).catch((err: unknown) => {
+      if (!(err instanceof Error) || err.message !== 't343-r2-organizations-probe-rollback') throw err;
+    });
+  }
+
+  /**
+   * ⭐ **Column-level, not table-level — this is the fix for the coordinator's finding.** A
+   * table-wide revoke on `stores` also breaks `accessRepo.storeBelongsToOrg` (axis 2's PRE-EXISTING,
+   * un-savepointed existence check, `packages/db/src/repo/access.ts:420-423` — `select id from
+   * stores where id = … and org_id = …`), which runs on every store-scoped `authorize()` call
+   * BEFORE the refusal branch is ever reached. Poisoning that check proves nothing about the NEW,
+   * savepointed `storesRepo.getById` lookup (`packages/db/src/repo/stores.ts:109-121`'s
+   * `STORE_COLUMNS` — id, code, name, timezone, isActive, stockModel, remittanceCadence,
+   * unremittedCeiling, tinBranchCode, address, contactNumber) — it just fails one statement earlier.
+   *
+   * The fix: revoke SELECT on `stores` entirely, then GRANT it back on exactly `(id, org_id)` — the
+   * only two columns `storeBelongsToOrg`'s `where` clause reads. `storeBelongsToOrg` keeps working
+   * (still returns `false` normally); `getById`'s wider projection (`name`, `code`, …) has no grant
+   * on any of those columns and fails for real, INSIDE the savepoint, exactly where Amendment R2
+   * means to provoke it.
+   */
+  async function withStoreDetailColumnsUnreadable<T>(fn: () => Promise<T>): Promise<T> {
+    await sql.unsafe('revoke select on stores from shareat_app');
+    await sql.unsafe('grant select (id, org_id) on stores to shareat_app');
+    try {
+      return await fn();
+    } finally {
+      await sql.unsafe('revoke select on stores from shareat_app');
+      await sql.unsafe('grant select on stores to shareat_app');
+    }
+  }
+
+  /** Negative half (coordinator's requirement): proves the mechanism itself actually engages —
+   *  outside any savepoint, outside any application code — before trusting what `authorize()` does
+   *  with it. `id`/`org_id` must still read; any other `stores` column must not. Run AS `shareat_app`
+   *  itself (`sql.begin` pins one connection for the whole sequence — a bare `sql.unsafe` call runs
+   *  as this file's superuser fixture connection, which the revoke/grant above never touches). */
+  async function assertStoreDetailColumnsAreBlocked(): Promise<void> {
+    await sql.begin(async (t) => {
+      await t.unsafe(`set local role ${APP_ROLE}`);
+      await expect(t.unsafe('select id, org_id from stores limit 1')).resolves.toBeDefined();
+      await expect(t.unsafe('select name from stores limit 1')).rejects.toMatchObject({ code: '42501' });
+      // The failed SELECT above already poisoned THIS savepoint-free probe transaction — roll it
+      // back explicitly rather than trying to keep using it, exactly the fate Amendment R2 is about.
+      throw new Error('t343-r2-probe-rollback'); // forces sql.begin to ROLLBACK, never COMMIT
+    }).catch((err: unknown) => {
+      if (!(err instanceof Error) || err.message !== 't343-r2-probe-rollback') throw err;
+    });
+  }
+
+  /** trade/index.ts:62-78's `authorizeEither`, reproduced verbatim — see this describe's header for
+   *  why it is copied rather than imported. Hoisted to describe scope (Amendment R3) so both the
+   *  savepoint test above and the ordering test below share ONE copy of the real control flow. */
+  async function authorizeEitherLike(
+    tx: Tx,
+    who: Actor,
+    attempts: readonly { capability: Capability; storeId: string }[],
+  ): Promise<void> {
+    let refused: AuthorizationError | undefined;
+    for (const attempt of attempts) {
+      try {
+        await authorize(tx, who, attempt.capability, { storeId: attempt.storeId });
+        return;
+      } catch (e) {
+        if (!(e instanceof AuthorizationError)) throw e;
+        refused = e;
+      }
+    }
+    throw refused ?? new AuthorizationError('authorizeEither: nothing to try', attempts[0]!.capability);
+  }
+
+  it('canBypassBlock pattern: close_period\'s org-identity lookup fails for real — the later insert still commits, inside its own savepoint', async () => {
+    const org = await insertOrg('t343-r2-canbypass');
+    const scopedStore = await insertStore(org, 't343-r2-canbypass-scoped');
+    await insertStore(org, 't343-r2-canbypass-unscoped'); // same reason as T6: a real second store
+    const manager = await insertPerson(org, 'R2 Manager (one store only)');
+    await insertRoleRaw(manager, org, 'manager');
+    await insertStoreScopeRaw(manager, scopedStore);
+
+    const actor: Actor = { personId: manager, orgId: org };
+    const marker = 'T6b canBypassBlock — written after a POISONED probe';
+
+    await withOrganizationsUnreadable(async () => {
+      await assertOrganizationsAreBlocked(); // negative half: the mechanism itself engages
+
+      const attempt = asPerson(org, async (tx) => {
+        // Verbatim shape of sales-days/create.ts:264-272's canBypassBlock.
+        let bypassed: boolean;
+        try {
+          await authorize(tx, actor, 'close_period', {});
+          bypassed = true;
+        } catch (err) {
+          if (!(err instanceof AuthorizationError)) throw err;
+          bypassed = false;
+        }
+        expect(bypassed).toBe(false);
+        await tx.execute(dsql`insert into persons (org_id, display_name) values (${org}, ${marker})`);
+      });
+
+      await expect(attempt).resolves.toBeUndefined();
+    });
+
+    const rows = await sql<{ display_name: string }[]>`
+      select display_name from persons where org_id = ${org} and display_name = ${marker}
+    `;
+    expect(rows).toHaveLength(1);
+  });
+
+  it('authorizeEither pattern: a store-scope lookup fails for real — the later insert still commits, inside its own savepoint', async () => {
+    const org = await insertOrg('t343-r2-either');
+    const storeX = await insertStore(org, 't343-r2-either-x');
+    const storeY = await insertStore(org, 't343-r2-either-y');
+    // A manager with NO store-scope rows at all — both attempts below fail via "no store scope",
+    // which is the branch that reads `stores`, never via role/capability denial.
+    const manager = await insertPerson(org, 'R2 Manager (no store scope)');
+    await insertRoleRaw(manager, org, 'manager');
+
+    const actor: Actor = { personId: manager, orgId: org };
+    const marker = 'T6b authorizeEither — written after a POISONED probe';
+
+    await withStoreDetailColumnsUnreadable(async () => {
+      await assertStoreDetailColumnsAreBlocked(); // negative half: the mechanism itself engages
+
+      const attempt = asPerson(org, async (tx) => {
+        let refused = false;
+        try {
+          await authorizeEitherLike(tx, actor, [
+            { capability: 'place_branch_order', storeId: storeX },
+            { capability: 'fulfil_branch_order', storeId: storeY },
+          ]);
+        } catch (err) {
+          if (!(err instanceof AuthorizationError)) throw err;
+          refused = true;
+        }
+        expect(refused).toBe(true);
+        await tx.execute(dsql`insert into persons (org_id, display_name) values (${org}, ${marker})`);
+      });
+
+      await expect(attempt).resolves.toBeUndefined();
+    });
+
+    const rows = await sql<{ display_name: string }[]>`
+      select display_name from persons where org_id = ${org} and display_name = ${marker}
+    `;
+    expect(rows).toHaveLength(1);
+  });
+
+  // Amendment R3(d)'s own case — "authorizeEither surfaces the PRIMARY (first) capability's
+  // refusal, not the last" — moved OUT of this file per the coordinator's finding: testing
+  // `authorizeEitherLike` (the hand copy above) can never fail on a real regression in
+  // `trade/index.ts`'s actual `authorizeEither`, only on a regression in this file's OWN copy of
+  // it. See `packages/domain/tests/integration/t343-r3d-authorize-either-order.test.ts`, which
+  // drives the REAL function through its real caller, `voidTradeOrder`.
 });

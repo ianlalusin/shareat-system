@@ -22,6 +22,7 @@
  */
 import { and, asc, desc, eq, isNull, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
+import { recordGone } from './record-gone';
 import { accounts } from '../../schema/accounts';
 import { journalEntries, journalLines } from '../../schema/journal';
 import {
@@ -281,7 +282,7 @@ export async function markReviewed(tx: Tx, orgId: string, id: string): Promise<v
     .where(and(eq(fixedAssets.id, id), eq(fixedAssets.orgId, orgId)))
     .returning({ id: fixedAssets.id });
   if (updated.length === 0) {
-    throw new Error(`markReviewed: asset ${id} does not exist in org ${orgId}`);
+    throw recordGone(`markReviewed: asset ${id} does not exist in org ${orgId}`, 'asset');
   }
 }
 
@@ -316,9 +317,7 @@ export async function updateTerms(
     )
     .returning({ id: fixedAssets.id });
   if (updated.length === 0) {
-    throw new Error(
-      `updateTerms: asset ${id} does not exist in org ${orgId}, or is not active`,
-    );
+    throw recordGone(`updateTerms: asset ${id} does not exist in org ${orgId}, or is not active`, 'asset', 'active');
   }
 }
 
@@ -336,9 +335,7 @@ export async function markDisposed(
     )
     .returning({ id: fixedAssets.id });
   if (updated.length === 0) {
-    throw new Error(
-      `markDisposed: asset ${id} does not exist in org ${orgId}, or is not active`,
-    );
+    throw recordGone(`markDisposed: asset ${id} does not exist in org ${orgId}, or is not active`, 'asset', 'active');
   }
 }
 
@@ -362,8 +359,10 @@ export async function valuateShell(
     )
     .returning({ id: fixedAssets.id });
   if (updated.length === 0) {
-    throw new Error(
+    throw recordGone(
       `valuateShell: asset ${id} does not exist in org ${orgId}, or is not pending_valuation`,
+      'asset',
+      'pending valuation',
     );
   }
 }

@@ -10,6 +10,7 @@ import type { Tx } from '../client';
 import { moneyAccounts } from '../../schema/money-accounts';
 import { stores } from '../../schema/stores';
 import { moneyTransfers, type MoneyTransferStatus } from '../../schema/money-transfers';
+import { recordGone } from './record-gone';
 
 export interface MoneyTransferRow {
   id: string;
@@ -163,8 +164,9 @@ export async function markVoided(
     )
     .returning({ id: moneyTransfers.id });
   if (updated.length === 0) {
-    throw new Error(
+    throw recordGone(
       `markVoided: money transfer ${id} does not exist in org ${orgId}, or is already voided`,
+      'money transfer',
     );
   }
 }

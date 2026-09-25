@@ -996,3 +996,127 @@ export const ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER: readonly Capability[] = CAPA
 export const SUPER_ADMIN_ONLY_CAPABILITIES: readonly Capability[] = CAPABILITIES.filter(
   (c) => CAPABILITY_MATRIX[c].super_admin && !CAPABILITY_MATRIX[c].admin,
 );
+
+// -----------------------------------------------------------------------------------------
+// T-343 S2 — presentation labels, imported by nothing (this file imports nothing at all,
+// unchanged). PRESENTATION ONLY, same posture as `CAPABILITY_AREA_LABEL` above (T-337 U3):
+// `authorize()` never reads these — see `packages/auth/tests/errors-leaf.test.ts` and T-343's own
+// census (`t343-authorize-census.test.ts`), which fails if `authorize.ts` ever compares a role or
+// capability against a LABEL instead of the key. Exhaustive `Record`s, the same mechanism as
+// `CAPABILITY_MATRIX`/`CAPABILITY_AREA`: a role or capability with no label fails to compile.
+// -----------------------------------------------------------------------------------------
+
+/** `Your role (${ROLE_LABEL[role]}) …` — `refusal-text.ts`'s `roleMayNot`. */
+export const ROLE_LABEL: Readonly<Record<Role, string>> = {
+  super_admin: 'Super admin',
+  admin: 'Admin',
+  manager: 'Manager',
+  staff: 'Staff',
+};
+
+/**
+ * Lower-case, bare-infinitive phrases completing "you can't …" — drafted from
+ * `docs/decisions/CAPABILITY-MATRIX.md`'s Notes column, one per capability, all 96. No `_`, no
+ * capability name quoted back at the reader (T1). The rule is that each label reads as a plain-
+ * English phrase completing "you can't …" — where the key itself is already plain English, the
+ * label may match it word for word (`record_wastage` → 'record wastage' is not a defect); the
+ * point is readability, not novelty for its own sake.
+ */
+export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
+  record_sale: 'record a sale',
+  submit_sales_day: 'submit a sales day',
+  verify_sales_day: 'verify a sales day',
+  void_sales_day: 'void a sales day',
+  record_statutory_discount: 'record a statutory discount',
+  void_statutory_discount: 'void a statutory discount',
+  accept_remittance: 'accept a remittance',
+  record_till_count: 'record a till count',
+  resolve_till_variance: 'resolve a till variance',
+  transfer_funds: 'transfer funds between accounts',
+  create_expense: 'record an expense',
+  edit_own_expense: 'edit your own expense',
+  edit_any_expense: 'edit or delete an expense that is not yours, or past its window',
+  void_expense: 'void an expense',
+  approve_expense: 'approve an expense',
+  record_stock_movement: 'record a stock movement',
+  adjust_inventory: 'adjust inventory',
+  record_wastage: 'record wastage',
+  charge_staff_for_discrepancy: 'charge a staff member for a discrepancy',
+  transfer_stock: 'move stock between rooms in one store',
+  void_transfer: 'void a stock transfer',
+  record_supplier_return: 'record a supplier return',
+  void_supplier_return: 'void a supplier return',
+  apply_supplier_credit: 'apply a supplier credit',
+  record_customer_return: 'record a customer return',
+  void_customer_return: 'void a customer return',
+  apply_customer_credit: 'apply a customer credit',
+  refund_customer: 'refund a customer',
+  confirm_receipt: 'confirm receipt of a commissary order',
+  resolve_trade_discrepancy: 'resolve a commissary trade discrepancy',
+  set_item_threshold: 'set a low-stock threshold',
+  post_order_message: 'post a message on a commissary order',
+  place_branch_order: 'place a branch order',
+  fulfil_branch_order: 'fulfil a branch order',
+  dispatch_branch_order: 'dispatch a branch order',
+  manage_locations: "manage a store's rooms",
+  receive_delivery: 'receive a delivery',
+  allow_over_receipt: 'receive more than was ordered',
+  post_usage: 'post a usage record',
+  void_usage_record: 'void a usage record',
+  open_count_session: 'open a count session',
+  commit_count: 'commit or cancel a stock count',
+  approve_supplier: 'approve a supplier',
+  approve_buyer: 'approve a buyer',
+  set_credit_limit: 'set a credit limit',
+  manage_expense_budgets: 'manage expense budgets',
+  manage_recurring_expenses: 'manage recurring expense templates',
+  override_credit_limit: 'override a credit limit',
+  record_ap_payment: 'record a supplier payment',
+  record_ar_collection: 'record a payment from a customer',
+  write_off_receivable: 'write off a receivable',
+  run_cutover: 'run the changeover to the new books',
+  manage_items: 'manage the organisation-wide item list',
+  approve_item: 'approve a new item',
+  record_supplier_invoice: 'record a supplier invoice',
+  verify_supplier_invoice: 'verify a supplier invoice',
+  void_supplier_invoice: 'void a supplier invoice',
+  create_wholesale_order: 'create a wholesale order',
+  dispatch_wholesale_order: 'dispatch a wholesale order',
+  view_financial_reports: 'view financial reports',
+  view_trial_balance: 'view the trial balance',
+  reverse_entry: 'reverse a journal entry',
+  close_period: 'close an accounting period',
+  override_period_lock: 'post into a closed period',
+  post_journal_entry: 'post a journal entry directly',
+  enrol_staff: 'enrol a staff member',
+  manage_users: 'appoint managers and admins',
+  manage_stores: 'open or close a store',
+  grant_capability: 'give someone extra permissions',
+  manage_attendance: 'manage attendance',
+  set_pay_rate: 'set a pay rate',
+  run_payroll: 'run payroll',
+  provision_clock_terminal: 'set up a clock-in tablet',
+  manage_store_settings: 'manage store settings',
+  set_cash_policy: "set a store's cash policy",
+  manage_price_lists: 'manage price lists',
+  manage_commissary_offerings: 'choose what the commissary offers',
+  manage_commissary_map: 'match commissary items to stock items',
+  manage_fixed_assets: 'manage fixed assets',
+  run_depreciation: 'run depreciation',
+  manage_prepaid_items: 'manage prepaid items',
+  run_amortisation: 'run amortisation',
+  manage_chart_of_accounts: 'manage the chart of accounts',
+  post_production: 'post a production run',
+  edit_posted_production: 'edit a posted production run',
+  void_production: 'void a production run',
+  record_order_wastage: 'record order wastage',
+  resolve_order_wastage: 'decide who pays for a wasted order',
+  charge_staff_for_wastage: 'charge a staff member for wastage',
+  reverse_auto_charge: 'reverse an automatic wastage charge',
+  manage_pos_map: 'match POS products to stock items',
+  request_pos_map: 'request a POS item mapping',
+  decide_pos_map_request: 'decide a POS mapping request',
+  finalize_pos_usage_pull: "finalise the day's POS usage figures",
+  cross_org_access: 'access another organisation (break-glass)',
+  view_franchise_sales: 'view franchise sales',
+};

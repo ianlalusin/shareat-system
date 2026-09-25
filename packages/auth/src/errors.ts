@@ -34,13 +34,23 @@ export class AuthenticationError extends Error {
  *
  * ⚠️ It carries the `capability` it was refused, so a caller can say *which* permission is missing
  * without parsing the sentence.
+ *
+ * ⭐ T-343 S2 — the optional third argument is the human sentence `refusal-text.ts` builds
+ * (`packages/auth/src/authorize.ts`'s seven throw sites all pass one). `message` is UNCHANGED — the
+ * raw diagnostic ~40 app regexes still match — `userMessage` is an ADDED field, never a rewrite.
+ * Set only when non-empty, so `isPresentable` (`apps/erp/src/lib/error-shape.ts`) never treats a
+ * blank string as a sentence. Other construction sites (`roles.ts`, `credentials-admin.ts`,
+ * `trade/index.ts`, and one test) keep passing only two arguments — the third stays optional so
+ * those compile unchanged and are simply non-presentable until a later slice converts them.
  */
 export class AuthorizationError extends Error {
   readonly capability: Capability;
+  readonly userMessage?: string;
 
-  constructor(message: string, capability: Capability) {
+  constructor(message: string, capability: Capability, userMessage?: string) {
     super(message);
     this.name = 'AuthorizationError';
     this.capability = capability;
+    if (userMessage !== undefined && userMessage.trim() !== '') this.userMessage = userMessage;
   }
 }

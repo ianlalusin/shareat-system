@@ -12,6 +12,7 @@
  */
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
+import { recordGone } from './record-gone';
 import {
   suppliers,
   supplierInvoices,
@@ -153,7 +154,7 @@ export async function updateSupplier(
     .where(and(eq(suppliers.id, id), eq(suppliers.orgId, orgId)))
     .returning({ id: suppliers.id });
   if (updated.length === 0) {
-    throw new Error(`updateSupplier: supplier ${id} does not exist in org ${orgId}`);
+    throw recordGone(`updateSupplier: supplier ${id} does not exist in org ${orgId}`, 'supplier');
   }
 }
 
@@ -297,7 +298,11 @@ export async function markInvoiceVerified(
     .where(and(eq(supplierInvoices.id, id), eq(supplierInvoices.orgId, orgId), eq(supplierInvoices.status, 'pending')))
     .returning({ id: supplierInvoices.id });
   if (updated.length === 0) {
-    throw new Error(`markInvoiceVerified: supplier invoice ${id} does not exist, is not in org ${orgId}, or is not pending`);
+    throw recordGone(
+      `markInvoiceVerified: supplier invoice ${id} does not exist, is not in org ${orgId}, or is not pending`,
+      'supplier invoice',
+      'pending',
+    );
   }
 }
 
@@ -319,7 +324,10 @@ export async function markInvoiceVoided(
     .where(and(eq(supplierInvoices.id, id), eq(supplierInvoices.orgId, orgId), sql`${supplierInvoices.status} <> 'voided'`))
     .returning({ id: supplierInvoices.id });
   if (updated.length === 0) {
-    throw new Error(`markInvoiceVoided: supplier invoice ${id} does not exist, is not in org ${orgId}, or is already voided`);
+    throw recordGone(
+      `markInvoiceVoided: supplier invoice ${id} does not exist, is not in org ${orgId}, or is already voided`,
+      'supplier invoice',
+    );
   }
 }
 
@@ -417,7 +425,7 @@ export async function assertOpenForRecording(
 ): Promise<void> {
   const capacity = await capacityOf(tx, orgId, invoiceId, excludeExpenseId);
   if (!capacity) {
-    throw new Error(`assertOpenForRecording: supplier invoice ${invoiceId} does not exist in org ${orgId}`);
+    throw recordGone(`assertOpenForRecording: supplier invoice ${invoiceId} does not exist in org ${orgId}`, 'supplier invoice');
   }
   if (capacity.status === 'voided') {
     throw new Error(
@@ -826,7 +834,11 @@ export async function markApPaymentPosted(
     .where(and(eq(apPayments.id, id), eq(apPayments.orgId, orgId), eq(apPayments.status, 'draft')))
     .returning({ id: apPayments.id });
   if (updated.length === 0) {
-    throw new Error(`markApPaymentPosted: ap_payment ${id} does not exist, is not in org ${orgId}, or is not a draft`);
+    throw recordGone(
+      `markApPaymentPosted: ap_payment ${id} does not exist, is not in org ${orgId}, or is not a draft`,
+      'payment',
+      'a draft',
+    );
   }
 }
 
@@ -842,7 +854,11 @@ export async function markApPaymentVoided(
     .where(and(eq(apPayments.id, id), eq(apPayments.orgId, orgId), eq(apPayments.status, 'posted')))
     .returning({ id: apPayments.id });
   if (updated.length === 0) {
-    throw new Error(`markApPaymentVoided: ap_payment ${id} does not exist, is not in org ${orgId}, or is not posted`);
+    throw recordGone(
+      `markApPaymentVoided: ap_payment ${id} does not exist, is not in org ${orgId}, or is not posted`,
+      'payment',
+      'posted',
+    );
   }
 }
 

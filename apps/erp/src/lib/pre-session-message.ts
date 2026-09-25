@@ -50,7 +50,7 @@
 import { AuthenticationError, AuthorizationError } from '@shareat/auth/errors';
 import { logger } from '@shareat/core/logger';
 import { CONSTRAINT_MESSAGES } from './constraint-messages';
-import { hasStringCode, looksLikeADump } from './error-shape';
+import { containsIdentifier, hasStringCode, isPresentable, looksLikeADump } from './error-shape';
 
 export interface PreSessionMessagePolicy {
   /**
@@ -77,13 +77,14 @@ export interface PreSessionMessagePolicy {
  * 3. Outside production it is then returned in full — a developer needs the real text.
  * 4. In production it becomes `policy.opaque`.
  *
- * @param message the sentence the caller would otherwise show. Defaults to the error's own,
- *                which is what both `/sign-in` call sites want; `/setup` passes `errorMessage(err)`.
+ * @param message the sentence the caller would otherwise show. Defaults to a presentable error's
+ *                own `userMessage` (T-343 S1) or the error's own `.message` otherwise, which is
+ *                what both `/sign-in` call sites want; `/setup` passes `errorMessage(err)` explicitly.
  */
 export function preSessionMessage(
   err: unknown,
   policy: PreSessionMessagePolicy,
-  message: string = err instanceof Error ? err.message : String(err),
+  message: string = isPresentable(err) ? err.userMessage : err instanceof Error ? err.message : String(err),
 ): string {
   // ⛔ An empty message is not an answer. It renders as an error banner with no text in it, which
   // reads as a rendering bug and tells the visitor nothing — so it takes the opaque sentence and
@@ -150,6 +151,10 @@ const WRITTEN_FOR_A_PERSON: ReadonlySet<string> = new Set(Object.values(CONSTRAI
  * | Any other single-line plain `Error` | *"the PIN must be exactly 6 digits."* |
  */
 export function isUnfitForAStranger(err: unknown, message: string): boolean {
+  // T-343 S1 — checked FIRST, ahead of every allowance below: a raw identifier is unfit for a
+  // stranger's URL no matter which of the three categories the error otherwise falls into.
+  if (containsIdentifier(message)) return true;
+
   if (err instanceof AuthenticationError || err instanceof AuthorizationError) return false;
   if (WRITTEN_FOR_A_PERSON.has(message)) return false;
 

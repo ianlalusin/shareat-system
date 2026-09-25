@@ -10,6 +10,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { personCredentials, sessions } from '../../schema/sessions';
 import { persons } from '../../schema/persons';
+import { recordGone } from './record-gone';
 
 export type CredentialKind = 'pin' | 'firebase' | 'biometric';
 export type SessionEndReason = 'signed_out' | 'shift_end' | 'revoked' | 'superseded';
@@ -192,7 +193,7 @@ export async function revokeCredential(tx: Tx, input: RevokeCredentialInput): Pr
     .where(and(eq(personCredentials.id, input.id), isNull(personCredentials.revokedAt)))
     .returning({ id: personCredentials.id });
   if (updated.length === 0) {
-    throw new Error(`revokeCredential: credential ${input.id} does not exist or is already revoked`);
+    throw recordGone(`revokeCredential: credential ${input.id} does not exist or is already revoked`, 'credential');
   }
 }
 

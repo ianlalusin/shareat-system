@@ -55,26 +55,29 @@ import { isPositiveQuantity, quantity, type Quantity } from '../stock/quantity';
  * ⭐ T-172. A BRANCH order has two legitimate actors from two stores — the branch that asked and
  * the commissary that fills it — and some acts are either's (receiving: T-173 invariant 8;
  * withdrawing before anything moved). `authorize()` deliberately throws on the first failing axis
- * and answers for ONE store, so "either store" is tried in turn and the LAST refusal is what the
- * caller sees. ⚠️ Only an `AuthorizationError` moves on to the next attempt — a dead connection or
- * a missing person stays loud, exactly as the credit-override check below treats it.
+ * and answers for ONE store, so "either store" is tried in turn — and the FIRST attempt's
+ * refusal (the primary capability's) is what the caller sees, never a later fallback attempt's,
+ * so the message shown always matches the action the caller actually meant to take (Amendment R3
+ * item 1; was the LAST refusal until fixed here). ⚠️ Only an `AuthorizationError` moves on to the
+ * next attempt — a dead connection or a missing person stays loud, exactly as the credit-override
+ * check below treats it.
  */
 async function authorizeEither(
   tx: Tx,
   actor: Actor,
   attempts: readonly { capability: Capability; storeId: string }[],
 ): Promise<void> {
-  let refused: AuthorizationError | undefined;
+  let firstRefusal: AuthorizationError | undefined;
   for (const attempt of attempts) {
     try {
       await authorize(tx, actor, attempt.capability, { storeId: attempt.storeId });
       return;
     } catch (e) {
       if (!(e instanceof AuthorizationError)) throw e;
-      refused = e;
+      firstRefusal ??= e;
     }
   }
-  throw refused ?? new AuthorizationError('authorizeEither: nothing to try', attempts[0]!.capability);
+  throw firstRefusal ?? new AuthorizationError('authorizeEither: nothing to try', attempts[0]!.capability);
 }
 import { INVENTORY_ACCOUNT_BY_ITEM_KIND } from '../stock/receipt-posting';
 import type { StockMovementKind } from '@shareat/db/schema';

@@ -20,6 +20,7 @@ import { employmentPositions, employments, positions } from '../../schema/employ
 import { positionCapabilityDefaults } from '../../schema/position-capability-defaults';
 import { stores } from '../../schema/stores';
 import type { Tx } from '../client';
+import { recordGone } from './record-gone';
 
 export interface PositionCapabilityDefaultRow {
   id: string;
@@ -124,7 +125,7 @@ export async function revokeDefaultById(tx: Tx, id: string, revokedBy: string, r
     .where(and(eq(positionCapabilityDefaults.id, id), isNull(positionCapabilityDefaults.revokedAt)))
     .returning({ id: positionCapabilityDefaults.id });
   if (updated.length === 0) {
-    throw new Error(`revokeDefaultById: default ${id} does not exist or is already revoked`);
+    throw recordGone(`revokeDefaultById: default ${id} does not exist or is already revoked`, 'position default');
   }
 }
 

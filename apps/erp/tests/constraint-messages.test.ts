@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { logger } from '@shareat/core/logger';
 import {
   CONSTRAINT_MESSAGES,
   LOCALLY_MAPPED_CONSTRAINT_NAMES,
@@ -212,36 +213,51 @@ describe('§B3 did not widen the /setup security allowlist', () => {
  * does NOT provoke all five for real (the one real provocation already committed is the anchor).
  */
 describe('T-271 part 2 — DEF-279 invariants with no key render their own text, never the generic sentence', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   // Names and representative hand-authored message shapes verified live, byte-for-byte, in
   // docs/discovery/33-def-279-live-trigger-bodies.md. None contains `constraint "<name>"` — that
   // absence from the prose is DEF-279's entire premise, asserted explicitly below per case.
-  const DEF_279_CASES: Array<{ constraintName: string; message: string }> = [
+  // ⭐ AMENDED by the T-343 tester (Amendment R1, binding — 2026-09-25): these five messages were the
+  // named example ("stock would go negative: item <uuid> at location <uuid> would be -1.000") of
+  // sentences a person relies on that S1's original all-or-nothing UUID gate would have blanked
+  // outright. R1 replaces that with in-place redaction: every UUID in the candidate becomes
+  // `[hidden]`, the rest of the hand-authored sentence survives, and the raw text is logged once —
+  // never the pre-T-343 behaviour of returning `message` completely unchanged (a UUID and all).
+  const DEF_279_CASES: Array<{ constraintName: string; message: string; redacted: string }> = [
     {
       constraintName: 'journal_entries_balance_check',
       message: 'journal entry 9f3a2b1c-0000-0000-0000-000000000000 is unbalanced: debits 100.00 <> credits 90.00',
+      redacted: 'journal entry [hidden] is unbalanced: debits 100.00 <> credits 90.00',
     },
     {
       constraintName: 'journal_lines_balance_check',
       message: 'journal entry 9f3a2b1c-0000-0000-0000-000000000000 must have at least two lines (has 1)',
+      redacted: 'journal entry [hidden] must have at least two lines (has 1)',
     },
     {
       constraintName: 'stock_movements_no_negative_on_hand_trg',
       message:
         'stock would go negative: item 01a093c0-0000-0000-0000-000000000000 at location 01a093c0-0000-0000-0000-000000000001 would be -1.000 after this movement',
+      redacted: 'stock would go negative: item [hidden] at location [hidden] would be -1.000 after this movement',
     },
     {
       constraintName: 'stock_layer_consumptions_ties_trg',
       message:
         'layer 01a093c0-0000-0000-0000-000000000002 does not tie: quantity 10.000 minus remaining 5.000 is 5.000, but its subledger sums to 3.000',
+      redacted: 'layer [hidden] does not tie: quantity 10.000 minus remaining 5.000 is 5.000, but its subledger sums to 3.000',
     },
     {
       constraintName: 'order_wastage_allocations_sum_100_trg',
       message: 'order_wastage 01a093c0-0000-0000-0000-000000000003 allocations sum to 80, not 100',
+      redacted: 'order_wastage [hidden] allocations sum to 80, not 100',
     },
   ];
 
-  for (const { constraintName, message } of DEF_279_CASES) {
-    it(`${constraintName}: renders its own hand-authored sentence verbatim, with no key mapped`, () => {
+  for (const { constraintName, message, redacted } of DEF_279_CASES) {
+    it(`${constraintName}: renders its own hand-authored sentence with ids redacted, with no key mapped`, () => {
       expect(constraintName in CONSTRAINT_MESSAGES).toBe(false); // still true today for all five
       expect(message).not.toMatch(/constraint "/); // the name is not in the prose — DEF-279's premise
 
@@ -250,10 +266,16 @@ describe('T-271 part 2 — DEF-279 invariants with no key render their own text,
       // `USING CONSTRAINT` populates only the structured field).
       const err = Object.assign(new Error(message), { constraint_name: constraintName });
 
+      // ⛔ Amendment R3 item 3 — sanitiseForScreen's in-place redaction logs at WARN, not ERROR.
+      const spy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
       const rendered = errorMessage(err);
-      expect(rendered).toBe(message);
+      // ⛔ Amendment R1 — redacted in place, never the old byte-identical-with-UUID behaviour.
+      expect(rendered).toBe(redacted);
+      expect(rendered).not.toBe(message);
       expect(rendered).not.toContain("isn't allowed for"); // never genericConstraintMessage's wording
       expect(rendered).not.toContain('please check the values you entered');
+      // Sanitising is not discarding (Invariant 3) — the raw, UUID-bearing text still reaches the log.
+      expect(spy).toHaveBeenCalledTimes(1);
     });
   }
 });

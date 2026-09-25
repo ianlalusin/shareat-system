@@ -18,6 +18,7 @@
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { expenseCategories, expensePayments, expenses } from '../../schema';
 import type { Tx } from '../client';
+import { recordGone } from './record-gone';
 
 /** DEF-157: the account `expense/routing.ts` credits for a reimbursable payment. Duplicated as
  *  a literal, the same way `arRepo`/`loansRepo` hardcode their own control-account codes rather
@@ -473,7 +474,11 @@ export async function updateExpenseDraft(
     .where(and(eq(expenses.id, id), eq(expenses.orgId, orgId), eq(expenses.status, 'draft')))
     .returning({ id: expenses.id });
   if (updated.length === 0) {
-    throw new Error(`updateExpenseDraft: expense ${id} does not exist, is not in org ${orgId}, or is not a draft`);
+    throw recordGone(
+      `updateExpenseDraft: expense ${id} does not exist, is not in org ${orgId}, or is not a draft`,
+      'expense',
+      'a draft',
+    );
   }
 }
 
@@ -497,7 +502,11 @@ export async function markExpensePosted(tx: Tx, orgId: string, id: string, input
     .where(and(eq(expenses.id, id), eq(expenses.orgId, orgId), eq(expenses.status, 'draft')))
     .returning({ id: expenses.id });
   if (updated.length === 0) {
-    throw new Error(`markExpensePosted: expense ${id} does not exist, is not in org ${orgId}, or is not a draft`);
+    throw recordGone(
+      `markExpensePosted: expense ${id} does not exist, is not in org ${orgId}, or is not a draft`,
+      'expense',
+      'a draft',
+    );
   }
 }
 
@@ -521,7 +530,11 @@ export async function markExpenseVoided(tx: Tx, orgId: string, id: string, input
     .where(and(eq(expenses.id, id), eq(expenses.orgId, orgId), eq(expenses.status, 'posted')))
     .returning({ id: expenses.id });
   if (updated.length === 0) {
-    throw new Error(`markExpenseVoided: expense ${id} does not exist, is not in org ${orgId}, or is not posted`);
+    throw recordGone(
+      `markExpenseVoided: expense ${id} does not exist, is not in org ${orgId}, or is not posted`,
+      'expense',
+      'posted',
+    );
   }
 }
 
@@ -610,6 +623,10 @@ export async function deleteExpenseDraft(tx: Tx, orgId: string, id: string): Pro
     .where(and(eq(expenses.id, id), eq(expenses.orgId, orgId), eq(expenses.status, 'draft')))
     .returning({ id: expenses.id });
   if (deleted.length === 0) {
-    throw new Error(`deleteExpenseDraft: expense ${id} does not exist, is not in org ${orgId}, or is not a draft`);
+    throw recordGone(
+      `deleteExpenseDraft: expense ${id} does not exist, is not in org ${orgId}, or is not a draft`,
+      'expense',
+      'a draft',
+    );
   }
 }

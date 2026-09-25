@@ -11,6 +11,7 @@
  */
 import { and, eq, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
+import { recordGone } from './record-gone';
 import {
   arCharges,
   arCollections,
@@ -91,7 +92,7 @@ export async function markChargePosted(
     .set({ status: 'posted', journalEntryId: input.journalEntryId, postedAt: sql`now()`, updatedAt: sql`now()` })
     .where(and(eq(arCharges.id, id), eq(arCharges.orgId, orgId), eq(arCharges.status, 'draft')))
     .returning({ id: arCharges.id });
-  if (updated.length === 0) throw new Error(`markChargePosted: charge ${id} is not a draft in org ${orgId}`);
+  if (updated.length === 0) throw recordGone(`markChargePosted: charge ${id} is not a draft in org ${orgId}`, 'charge', 'a draft');
 }
 
 export async function markChargeVoided(
@@ -105,7 +106,7 @@ export async function markChargeVoided(
     .set({ status: 'voided', voidedBy: input.voidedBy, voidedAt: sql`now()`, voidReason: input.voidReason, updatedAt: sql`now()` })
     .where(and(eq(arCharges.id, id), eq(arCharges.orgId, orgId), sql`${arCharges.status} <> 'voided'`))
     .returning({ id: arCharges.id });
-  if (updated.length === 0) throw new Error(`markChargeVoided: charge ${id} does not exist or is already voided`);
+  if (updated.length === 0) throw recordGone(`markChargeVoided: charge ${id} does not exist or is already voided`, 'charge');
 }
 
 // -------------------------------------------------------------------------------------
@@ -413,7 +414,7 @@ export async function markCollectionVoided(
     .set({ status: 'voided', voidedBy: input.voidedBy, voidedAt: sql`now()`, voidReason: input.voidReason, updatedAt: sql`now()` })
     .where(and(eq(arCollections.id, id), eq(arCollections.orgId, orgId), sql`${arCollections.status} <> 'voided'`))
     .returning({ id: arCollections.id });
-  if (updated.length === 0) throw new Error(`markCollectionVoided: collection ${id} does not exist or is already voided`);
+  if (updated.length === 0) throw recordGone(`markCollectionVoided: collection ${id} does not exist or is already voided`, 'collection');
 }
 
 export async function insertAllocations(

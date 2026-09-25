@@ -43,7 +43,7 @@ import { sql } from 'drizzle-orm';
 import { sweepStore } from '../attendance/sweep';
 import { drainOutbox, ingestEvents, type InboxDriver, type MirrorDriver } from '../sync';
 import { recordFindingObservations } from '../findings';
-import { budgetsRepo } from '@shareat/db';
+import { budgetsRepo, expensesRepo } from '@shareat/db';
 import { nextPeriodKey, resetWindowDays } from '../budgets';
 
 export interface MonthEndOptions {
@@ -345,9 +345,11 @@ async function runSweepForOrg(
   return runJobForOrg(org, 'attendance_sweep', period, trigger, async () => {
     // DEF-287: `asSystem`, not a bare `transaction`. `stores` is org-scoped under FORCE RLS, so
     // with no principal this returns zero rows and the sweep reports a clean run over nothing.
+    // T-343 S4 — `s.name`/`s.code` added to this SAME select (no extra query) so a per-store
+    // failure below can name the store, never its id.
     const stores = await asSystem(org.id, (tx) =>
       tx.execute(
-        sql`select s.id::text as "id" from stores s
+        sql`select s.id::text as "id", s.name as "name", s.code as "code" from stores s
              join store_attendance_config c on c.store_id = s.id and c.superseded_at is null
             where s.org_id = ${org.id}`,
       ),
@@ -360,7 +362,7 @@ async function runSweepForOrg(
     // ⛔ One transaction PER STORE, matching T-124 §12's reasoning that month-end already follows:
     // one bad store must not roll back the ones that succeeded. The day is derived, so a partial
     // sweep is incomplete, never inconsistent.
-    for (const store of stores as unknown as { id: string }[]) {
+    for (const store of stores as unknown as { id: string; name: string; code: string }[]) {
       try {
         const out = await asSystem(org.id, (tx) => sweepStore(tx, { storeId: store.id, nowMs }));
         swept += out.swept.length;
@@ -368,7 +370,7 @@ async function runSweepForOrg(
       } catch (err) {
         failures.push({
           subjectId: store.id,
-          subjectName: `store ${store.id}`,
+          subjectName: `${store.name} (${store.code})`,
           reason: err instanceof Error ? err.message : String(err),
         });
       }
@@ -649,11 +651,21 @@ async function runOrderWastageBackstopForOrg(
     const result = await asSystem(org.id, (tx) =>
       runOrderWastageBackstop(tx, org.id, { now: new Date(nowMs), postedBy: null }),
     );
-    const failures: SchedulerFailure[] = result.failures.map((f) => ({
-      subjectId: f.wastageId,
-      subjectName: `order wastage ${f.wastageId}`,
-      reason: f.reason,
-    }));
+    // T-343 S4 — ONE extra read, only when there is something to name: every store in the org,
+    // batched, never a per-failure lookup. `f.label` (`channel` order `orderRef` · amount) already
+    // names the wastage; this only prefixes which store it happened at.
+    const storeById =
+      result.failures.length > 0
+        ? new Map((await asSystem(org.id, (tx) => storesRepo.listForOrg(tx, org.id))).map((s) => [s.id, s]))
+        : new Map<string, { name: string; code: string }>();
+    const failures: SchedulerFailure[] = result.failures.map((f) => {
+      const store = storeById.get(f.storeId);
+      return {
+        subjectId: f.wastageId,
+        subjectName: store ? `${store.name} (${store.code}) · ${f.label}` : f.label,
+        reason: f.reason,
+      };
+    });
     return { posted: result.outcomes.length, skipped: 0, failures };
   });
 }
@@ -762,6 +774,18 @@ async function asSystem<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T
  * beyond two years something is wrong with the data, and a runaway insert loop is worse than an
  * unreissued budget.
  */
+
+/** T-343 S4 — `'202609'` -> `'September 2026'`, for a failure subjectName. Module-private: no
+ *  other caller in this codebase needs "which month is this period key" as a public API. */
+function periodLabel(periodKey: string): string {
+  const MONTH_NAMES = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+  const year = periodKey.slice(0, 4);
+  const month = MONTH_NAMES[Number(periodKey.slice(4, 6)) - 1];
+  return month ? `${month} ${year}` : periodKey;
+}
 export async function runBudgetReissue(
   options: { orgId?: string; trigger?: 'cron' | 'manual'; nowMs?: number } = {},
 ): Promise<SweepResult> {
@@ -861,11 +885,20 @@ export async function runBudgetReissue(
             }
             if (!madeAny) skipped += 1;
           } catch (e) {
+            // T-343 S4 — ONE read, inside the catch only (failures here are rare; nothing pays
+            // for this on the common path). `.catch(() => undefined)` so a failed LOOKUP degrades
+            // the name, never re-throws over the real failure it is trying to describe.
+            const [store, category] = await asSystem(org.id, (tx) =>
+              Promise.all([storesRepo.getById(tx, org.id, b.storeId), expensesRepo.getCategoryById(tx, org.id, b.categoryId)]),
+            ).catch(() => [undefined, undefined] as const);
             failures.push({
               subjectId: b.id,
-              // ⚠️ The store and category, not the uuid — a failure line nobody can act on
+              // ⚠️ The store and category, never the uuid — a failure line nobody can act on
               // without a database session is a failure line nobody acts on.
-              subjectName: `store ${b.storeId} · category ${b.categoryId} · ${b.periodKey}`,
+              subjectName:
+                store && category
+                  ? `${store.name} (${store.code}) · ${category.category} · ${periodLabel(b.periodKey)}`
+                  : `a budget for ${periodLabel(b.periodKey)}`,
               reason: e instanceof Error ? e.message : String(e),
             });
           }

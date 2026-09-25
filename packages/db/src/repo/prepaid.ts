@@ -25,6 +25,7 @@
  */
 import { and, asc, desc, eq, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
+import { recordGone } from './record-gone';
 import { accounts } from '../../schema/accounts';
 import { journalEntries, journalLines } from '../../schema/journal';
 import {
@@ -179,7 +180,7 @@ export async function confirmTerm(
     .where(and(eq(prepaidItems.id, id), eq(prepaidItems.orgId, orgId)))
     .returning({ id: prepaidItems.id });
   if (updated.length === 0) {
-    throw new Error(`confirmTerm: prepaid item ${id} does not exist in org ${orgId}`);
+    throw recordGone(`confirmTerm: prepaid item ${id} does not exist in org ${orgId}`, 'prepaid item');
   }
 }
 
@@ -200,7 +201,7 @@ export async function markStatus(
     .where(and(eq(prepaidItems.id, id), eq(prepaidItems.orgId, orgId)))
     .returning({ id: prepaidItems.id });
   if (updated.length === 0) {
-    throw new Error(`markStatus: prepaid item ${id} does not exist in org ${orgId}`);
+    throw recordGone(`markStatus: prepaid item ${id} does not exist in org ${orgId}`, 'prepaid item');
   }
 }
 

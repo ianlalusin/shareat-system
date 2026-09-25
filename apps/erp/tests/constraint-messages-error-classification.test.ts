@@ -93,8 +93,9 @@ describe('T2b — a connection error never puts the database host or port on scr
 });
 
 // ---- T2c — the DEF-279 carve-out (§2 step 2). Protects five live hand-authored sentences that
-// DO carry a code (SQLSTATE P0001) but must never be sanitised. ----
-describe('T2c — a DEF-279 hand-authored RAISE is preserved verbatim, even though it has a code', () => {
+// DO carry a code (SQLSTATE P0001) but must never be sanitised to the CONTENT-FREE fallback — as
+// of T-343 Amendment R1 (binding, 2026-09-25), their ids are redacted in place instead. ----
+describe('T2c — a DEF-279 hand-authored RAISE is preserved with only its ids redacted, even though it has a code', () => {
   // Shape verified live in docs/discovery/33-def-279-live-trigger-bodies.md: the driver's
   // structured `constraint_name` field is populated (RAISE … USING CONSTRAINT), the prose carries
   // NO `constraint "…"` clause, and no ERRCODE was set so Postgres defaults to P0001.
@@ -102,7 +103,15 @@ describe('T2c — a DEF-279 hand-authored RAISE is preserved verbatim, even thou
     'stock would go negative: item 01a093c0-0000-0000-0000-000000000000 at location ' +
     '01a093c0-0000-0000-0000-000000000001 would be -1.000 after this movement';
 
-  it('resolveConstraintName resolves via the structured field, parseConstraintName finds nothing in the prose — returned verbatim', () => {
+  // ⭐ AMENDED by the T-343 tester (Amendment R1 §1, binding): this is one of the two named examples
+  // ("stock would go negative: item <uuid> at location <uuid> would be -1.000") a return-to-the-
+  // fallback would have wrongly blanked. It is now redacted in place — every UUID replaced by
+  // `[hidden]`, the quantity and the rest of the accounting sentence intact — never byte-identical
+  // to the raw (id-bearing) text.
+  const redacted =
+    'stock would go negative: item [hidden] at location [hidden] would be -1.000 after this movement';
+
+  it('resolveConstraintName resolves via the structured field, parseConstraintName finds nothing in the prose — ids redacted, logged once', () => {
     expect(message).not.toMatch(/constraint "/); // the premise: no constraint clause in the prose
     expect('stock_movements_no_negative_on_hand_trg' in CONSTRAINT_MESSAGES).toBe(false); // unmapped
 
@@ -111,10 +120,18 @@ describe('T2c — a DEF-279 hand-authored RAISE is preserved verbatim, even thou
       code: 'P0001',
     });
 
+    // ⭐ AMENDED by the T-343 tester (Amendment R3 item 3, binding): `sanitiseForScreen`'s own
+    // redaction logs at WARN, not ERROR — an in-place id-redaction is not the same severity as the
+    // generic-fallback/dump paths tested elsewhere in this file, which are unaffected and still log
+    // at `error`.
+    const spy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
     const rendered = errorMessage(err);
-    expect(rendered).toBe(message);
+    expect(rendered).toBe(redacted);
+    expect(rendered).not.toBe(message); // no longer byte-identical to the id-bearing raw text
     expect(rendered).not.toContain("isn't allowed for"); // never genericConstraintMessage's wording
     expect(rendered).not.toContain('please check the values you entered');
+    // Sanitising is not discarding (Invariant 3) — the raw, UUID-bearing text still reaches the log.
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 
   // ⛔ The five-with-`constraint_name` case above proves the carve-out for the population my
@@ -262,14 +279,20 @@ describe('T5 — the raw text survives in the server log for every sanitised err
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('does NOT log a DEF-279 verbatim sentence — it was never sanitised, nothing was discarded', () => {
-    const spy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+  // ⭐ AMENDED by the T-343 tester (Amendment R1 §1, binding, 2026-09-25): this DEF-279 sentence
+  // carries a UUID, so as of T-343 it IS redacted (id → `[hidden]`) rather than passed through
+  // untouched — and a redaction is a sanitisation, so Invariant 3 now requires it to be logged.
+  // Flipped from "does NOT log" to "logs exactly once", the mirror image of the pre-T-343 test.
+  it('DOES log a DEF-279 sentence once it is redacted — the id was discarded, the sentence was not (T-343 Amendment R1)', () => {
+    // ⭐ AMENDED by the T-343 tester (Amendment R3 item 3): redaction logs at WARN, not ERROR.
+    const spy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
     const message = 'order_wastage 01a093c0-0000-0000-0000-000000000003 allocations sum to 80, not 100';
     const err = Object.assign(new Error(message), {
       constraint_name: 'order_wastage_allocations_sum_100_trg',
       code: 'P0001',
     });
-    errorMessage(err);
-    expect(spy).not.toHaveBeenCalled();
+    const rendered = errorMessage(err);
+    expect(rendered).toBe('order_wastage [hidden] allocations sum to 80, not 100');
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 });

@@ -34,9 +34,35 @@
  * `close_period` carries one further, capability-specific condition on top of these three
  * — see the dedicated comment at that branch below.
  */
-import { accessRepo, type Tx } from '@shareat/db';
+import { accessRepo, organizationsRepo, storesRepo, type Tx } from '@shareat/db';
+import { logger } from '@shareat/core/logger';
 import { CAPABILITY_MATRIX, CAPABILITY_SCOPE, type Capability, type Role } from './capabilities';
 import { AuthorizationError } from './errors';
+import {
+  closePeriodNeedsWholeOrg,
+  noActiveRole,
+  notAssignedToStore,
+  otherOrg,
+  roleMayNot,
+  storeNotInOrg,
+  storeRequired,
+} from './refusal-text';
+
+/**
+ * Amendment R2/R3 item 2/6 — the one helper behind all four refusal-branch lookups below. Each
+ * runs inside its own SAVEPOINT (`tx.transaction()`, which drizzle emits as a nested Postgres
+ * transaction) so a lookup that ERRORS rolls back only itself, never the caller's outer `tx`
+ * (Amendment R2 — `.catch(() => undefined)` alone does not un-abort an aborted transaction). A
+ * failed lookup is never silent: it is logged once at `warn` with the error, then swallowed —
+ * never thrown, because the refusal it decorates must still reach the caller with its fallback
+ * wording (Amendment R3 item 2).
+ */
+async function savepointLookup<T>(tx: Tx, run: (t: Tx) => Promise<T>): Promise<T | undefined> {
+  return tx.transaction(run).catch((err: unknown) => {
+    logger.warn({ err }, 'authorize: a refusal-branch lookup failed inside its savepoint');
+    return undefined;
+  });
+}
 
 /** ⚠️ Re-exported, not declared: it moved to the dependency-free `./errors` leaf so a unit test can
  *  import it without pulling `@shareat/db` through this file. Every existing importer is unchanged. */
@@ -82,6 +108,8 @@ export async function authorize(
       throw new AuthorizationError(
         `authorize: actor's org (${actor.orgId}) does not match the resource's org (${resourceOrgId}) for '${capability}'`,
         capability,
+        // Row 4 — no lookup, no org named at all (bible §7/§15.11: never disclose the resource's org).
+        otherOrg(capability),
       );
     }
   }
@@ -93,9 +121,18 @@ export async function authorize(
   // NOTHING, not "staff by default".
   const activeRole = await accessRepo.activeRoleForPerson(tx, actor.personId, actor.orgId);
   if (!activeRole) {
+    // Row 1 — refusal-branch-only lookup (Invariant 5: never on the success path above).
+    // Amendment R2 — inside a SAVEPOINT (`tx.transaction()`, a nested Postgres transaction): a
+    // lookup that ERRORS aborts whatever transaction it ran in, and `.catch(() => undefined)`
+    // alone does not un-abort one — it would only swallow the error while leaving the CALLER's tx
+    // aborted, which is exactly what breaks the probe callers (canBypassBlock and friends) that
+    // keep writing in the same tx after a caught refusal. The savepoint rolls back on its own;
+    // the outer `tx` is untouched either way.
+    const org = await savepointLookup(tx, (t) => organizationsRepo.identityOf(t, actor.orgId));
     throw new AuthorizationError(
       `authorize: person ${actor.personId} has no active role in org ${actor.orgId}`,
       capability,
+      noActiveRole(org?.name),
     );
   }
   const role = activeRole.role as Role;
@@ -104,7 +141,8 @@ export async function authorize(
   const matrixAllows = CAPABILITY_MATRIX[capability][role];
   const allowed = matrixAllows || (await accessRepo.personHasActiveGrant(tx, actor.personId, capability));
   if (!allowed) {
-    throw new AuthorizationError(`authorize: role '${role}' may not '${capability}'`, capability);
+    // Row 5 — no lookup; role and capability are already in hand.
+    throw new AuthorizationError(`authorize: role '${role}' may not '${capability}'`, capability, roleMayNot(role, capability));
   }
 
   // --- Axis 2: store scope, for 'store'-scoped capabilities only -------------------------
@@ -112,17 +150,25 @@ export async function authorize(
   // capability is necessary but never sufficient on its own (invariant 6).
   if (scope === 'store') {
     if (!ctx.storeId) {
-      throw new AuthorizationError(`authorize: '${capability}' is store-scoped but no storeId was given`, capability);
+      // No lookup — there is no storeId to look up.
+      throw new AuthorizationError(`authorize: '${capability}' is store-scoped but no storeId was given`, capability, storeRequired(capability));
     }
-    const storeInOrg = await accessRepo.storeBelongsToOrg(tx, ctx.storeId, actor.orgId);
+    const storeId = ctx.storeId; // narrowed once, so the closures below don't need it re-narrowed
+    const storeInOrg = await accessRepo.storeBelongsToOrg(tx, storeId, actor.orgId);
     if (!storeInOrg) {
-      throw new AuthorizationError(`authorize: store ${ctx.storeId} does not belong to org ${actor.orgId}`, capability);
+      // Row 3 — names the ACTOR's own org, never the foreign one the given storeId actually
+      // belongs to (bible §15.11: no cross-tenant disclosure). Amendment R2 — savepoint, see row 1.
+      const org = await savepointLookup(tx, (t) => organizationsRepo.identityOf(t, actor.orgId));
+      throw new AuthorizationError(`authorize: store ${storeId} does not belong to org ${actor.orgId}`, capability, storeNotInOrg(org?.name));
     }
-    const inScope = await accessRepo.personHasStoreScope(tx, actor.personId, ctx.storeId);
+    const inScope = await accessRepo.personHasStoreScope(tx, actor.personId, storeId);
     if (!inScope) {
+      // Row 2 — reuses the same storeId Postgres already checked above. Amendment R2 — savepoint.
+      const store = await savepointLookup(tx, (t) => storesRepo.getById(t, actor.orgId, storeId));
       throw new AuthorizationError(
-        `authorize: person ${actor.personId} (role '${role}') has no store scope for ${ctx.storeId}`,
+        `authorize: person ${actor.personId} (role '${role}') has no store scope for ${storeId}`,
         capability,
+        notAssignedToStore(capability, store),
       );
     }
   }
@@ -138,10 +184,13 @@ export async function authorize(
   if (capability === 'close_period' && role === 'manager') {
     const coversWholeOrg = await accessRepo.personCoversWholeOrg(tx, actor.personId, actor.orgId);
     if (!coversWholeOrg) {
+      // Amendment R2 — savepoint, see row 1.
+      const org = await savepointLookup(tx, (t) => organizationsRepo.identityOf(t, actor.orgId));
       throw new AuthorizationError(
         "authorize: 'close_period' requires a manager's store scope to cover the whole org " +
           '(CAPABILITY-MATRIX.md §Open 2) — this manager does not cover every active store',
         capability,
+        closePeriodNeedsWholeOrg(org?.name),
       );
     }
   }

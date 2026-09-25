@@ -13,6 +13,11 @@ export {
   CAPABILITY_AREAS,
   CAPABILITY_AREA_LABEL,
   CAPABILITY_AREA,
+  // T-343 S2 — presentation labels only. `refusal-text.ts`'s functions are deliberately NOT
+  // re-exported here (spec's own BUILDER file list) — imported by relative path, same convention
+  // `errors-leaf.test.ts` already uses for a file this package keeps out of the barrel.
+  ROLE_LABEL,
+  CAPABILITY_LABEL,
 } from './capabilities';
 export type { Role, Capability, CapabilityScope, CapabilityArea } from './capabilities';
 

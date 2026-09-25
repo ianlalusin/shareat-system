@@ -205,6 +205,12 @@ export async function insertDraftEntry(
   return { id: existing.id, created: false };
 }
 
+// ⛔ T-343 S3 — placed HERE, not at the top of the file: `t343-repo-refusal-census.test.ts`'s
+// `CLASSIFIED_INTERNAL` pins the two throws above by their EXACT line number (44, 201); an import
+// added at the top of the file would shift both and make a correctly-classified site read as
+// newly unclassified. Every `recordGone(...)` conversion below this point is unaffected either way.
+import { recordGone } from './record-gone';
+
 // -----------------------------------------------------------------------------------------
 // Lines (Contract §2) — inserted only while the parent entry is still 'draft'. Once
 // flipped to 'posted', migration 0004's replacement trigger rejects any further INSERT
@@ -262,8 +268,10 @@ export async function postDraftEntry(tx: Tx, entryId: string, postedBy: string |
     .returning({ id: journalEntries.id });
 
   if (updated.length === 0) {
-    throw new Error(
+    throw recordGone(
       `postDraftEntry: entry ${entryId} was not a draft entry (already posted, reversed, or missing)`,
+      'journal entry',
+      'a draft entry',
     );
   }
 }
@@ -433,8 +441,9 @@ export async function setReversalOfEntryId(
     .returning({ id: journalEntries.id });
 
   if (updated.length === 0) {
-    throw new Error(
+    throw recordGone(
       `setReversalOfEntryId: entry ${entryId} does not exist or already has a reversal_of_entry_id`,
+      'journal entry',
     );
   }
 }
@@ -453,6 +462,6 @@ export async function markEntryReversed(tx: Tx, entryId: string): Promise<void> 
     .returning({ id: journalEntries.id });
 
   if (updated.length === 0) {
-    throw new Error(`markEntryReversed: entry ${entryId} was not a posted entry`);
+    throw recordGone(`markEntryReversed: entry ${entryId} was not a posted entry`, 'journal entry', 'a posted entry');
   }
 }

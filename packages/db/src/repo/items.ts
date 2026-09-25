@@ -16,6 +16,7 @@
  */
 import { and, asc, eq, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
+import { recordGone } from './record-gone';
 import {
   items,
   itemRequests,
@@ -106,7 +107,7 @@ export async function updateItem(
     .set({ ...values, updatedAt: sql`now()` })
     .where(and(eq(items.id, id), eq(items.orgId, orgId)))
     .returning({ id: items.id });
-  if (updated.length === 0) throw new Error(`updateItem: item ${id} does not exist in org ${orgId}`);
+  if (updated.length === 0) throw recordGone(`updateItem: item ${id} does not exist in org ${orgId}`, 'item');
 }
 
 // -------------------------------------------------------------------------------------
@@ -615,7 +616,7 @@ export async function decideItemRequest(
     .where(and(eq(itemRequests.id, id), eq(itemRequests.orgId, orgId), eq(itemRequests.status, 'requested')))
     .returning({ id: itemRequests.id });
   if (updated.length === 0) {
-    throw new Error(`decideItemRequest: request ${id} does not exist or has already been decided`);
+    throw recordGone(`decideItemRequest: request ${id} does not exist or has already been decided`, 'item request');
   }
 }
 

@@ -7,6 +7,7 @@
  */
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
+import { recordGone } from './record-gone';
 import {
   customers,
   priceListItems,
@@ -118,7 +119,7 @@ export async function updateCustomer(
     .where(and(eq(customers.id, id), eq(customers.orgId, orgId)))
     .returning({ id: customers.id });
   if (updated.length === 0) {
-    throw new Error(`updateCustomer: customer ${id} does not exist in org ${orgId}`);
+    throw recordGone(`updateCustomer: customer ${id} does not exist in org ${orgId}`, 'customer');
   }
 }
 

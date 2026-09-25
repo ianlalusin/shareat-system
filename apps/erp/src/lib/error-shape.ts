@@ -47,3 +47,37 @@ export function hasStringCode(err: unknown): boolean {
 export function looksLikeADump(message: string): boolean {
   return message.trim().includes('\n');
 }
+
+/**
+ * T-343 S1 / DEF-417 part 2 — a UUID (any version, case-insensitive), word-bounded so it never
+ * matches inside a longer hex run. `\b` on both ends is deliberate: it is what keeps this from
+ * firing on, say, a 32-hex-character hash with no dashes, which is not the shape this task exists
+ * to hide (the census's whole point is UUIDs specifically — see the task's Goal).
+ */
+export const UUID_SHAPE = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i;
+
+/** Does this text carry a raw identifier a user must never see? Today, exactly `UUID_SHAPE`. */
+export function containsIdentifier(s: string): boolean {
+  return UUID_SHAPE.test(s);
+}
+
+/**
+ * T-343 S1 — an `Error` carrying its own, ready-to-show sentence. Producers: `AuthorizationError`
+ * (S2), `RecordGoneError` (S3), `RefusalError` (S5+). `errorMessage()` in `./constraint-messages`
+ * prefers this over every other resolution step.
+ *
+ * ⭐ Amendment R1 §4 — `!hasStringCode(err)` is required too: a DB error can carry a `code` AND
+ * (accidentally, or via a poorly-typed catch) a `userMessage`-shaped property, and without this
+ * guard it would jump the constraint map's own mapped sentence for that `code`. A real domain
+ * throw never has a `code` at all, so this excludes nothing `AuthorizationError`/`RecordGoneError`/
+ * `RefusalError` would ever legitimately set.
+ */
+export function isPresentable(err: unknown): err is Error & { userMessage: string } {
+  if (!(err instanceof Error)) return false;
+  const userMessage = (err as { userMessage?: unknown }).userMessage;
+  if (typeof userMessage !== 'string') return false;
+  if (userMessage.trim() === '') return false;
+  if (looksLikeADump(userMessage)) return false;
+  if (hasStringCode(err)) return false;
+  return true;
+}

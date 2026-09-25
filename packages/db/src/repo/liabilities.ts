@@ -9,6 +9,7 @@
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { liabilities, type LiabilityCategory } from '../../schema/liabilities';
+import { recordGone } from './record-gone';
 
 export const LIABILITY_CONTROL_CODE = '2500';
 export const CHARGE_SOURCE = 'liability_charge';
@@ -114,7 +115,7 @@ export async function updateLiability(
     .where(and(eq(liabilities.id, id), eq(liabilities.orgId, orgId)))
     .returning({ id: liabilities.id });
   if (updated.length === 0) {
-    throw new Error(`updateLiability: liability ${id} does not exist in org ${orgId}`);
+    throw recordGone(`updateLiability: liability ${id} does not exist in org ${orgId}`, 'liability');
   }
 }
 

@@ -194,7 +194,12 @@ describe('T-271 — mechanism proof: a DEF-279 trigger name can now be mapped', 
     ).toBe(false); // no key added — production reality today for all five DEF-279 invariants
 
     const message = errorMessage(err);
-    expect(message).toBe(raw); // the hand-authored sentence, verbatim (no `Ctor: ` prefix to strip here)
+    // Amendment R1 item 1: every UUID in the hand-authored sentence is redacted to `[hidden]` in
+    // place; the rest of the sentence (including the computed quantity) survives verbatim.
+    expect(message).toBe(raw.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '[hidden]'));
+    expect(message).toContain('stock would go negative: item [hidden] at location [hidden] would be');
+    expect(message).toContain('after this movement');
+    expect(message).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i); // no raw UUID
     expect(message).not.toContain("isn't allowed for"); // never `genericConstraintMessage`'s wording
     expect(message).not.toContain('please check the values you entered');
   });

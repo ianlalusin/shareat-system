@@ -546,8 +546,14 @@ export interface BackstopResult {
   outcomes: BackstopOutcome[];
   /** Ones the backstop looked at and could not close at all — e.g. the store's channel is not
    *  configured, so there is nowhere to post. Named rather than thrown, so one bad row does not
-   *  stop the rest (T-140's own per-subject failure precedent). */
-  failures: { wastageId: string; reason: string }[];
+   *  stop the rest (T-140's own per-subject failure precedent).
+   *
+   * ⭐ T-343 S4 — `label` names the wastage a human can act on (`channel`, per the schema's own
+   * comment, is already the display name AS RECORDED, never a key — no extra lookup needed to
+   * read it), never the raw id: `${channel} order ${orderRef ?? 'without an order number'} · ₱
+   * ${amount}`. `storeId` rides along so the caller (`scheduler/index.ts`, which already knows
+   * every store in this org) can prefix `Name (CODE)` without a second per-row query here. */
+  failures: { wastageId: string; storeId: string; label: string; reason: string }[];
 }
 
 /**
@@ -570,7 +576,7 @@ export async function runOrderWastageBackstop(
   const due = await orderWastageRepo.pastBackstop(trx, orgId, cutoff);
 
   const outcomes: BackstopOutcome[] = [];
-  const failures: { wastageId: string; reason: string }[] = [];
+  const failures: { wastageId: string; storeId: string; label: string; reason: string }[] = [];
   const entryDate = now.toISOString().slice(0, 10);
 
   for (const row of due) {
@@ -635,7 +641,12 @@ export async function runOrderWastageBackstop(
         journalEntryId: posted.journalEntryId,
       });
     } catch (err) {
-      failures.push({ wastageId: row.id, reason: err instanceof Error ? err.message : String(err) });
+      failures.push({
+        wastageId: row.id,
+        storeId: row.storeId,
+        label: `${row.channel} order ${row.orderRef ?? 'without an order number'} · ₱${row.amount}`,
+        reason: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
