@@ -48,7 +48,7 @@ import {
   ZERO_QUANTITY,
   type Quantity,
 } from '../stock/quantity';
-import { convertUnit } from './unit-conversion';
+import { convertUnit, divideRoundHalfUp, unitConversionFactor } from './unit-conversion';
 import {
   computeValueIdentity,
   PRODUCTION_QTY_EPS,
@@ -200,35 +200,51 @@ export type ScaleRecipeOutcome =
 export function scaleRecipeToTarget(input: ScaleRecipeInput): ScaleRecipeOutcome {
   const recipeOut = quantity(input.recipeOutputQuantity);
   const target = quantity(input.targetOutputQuantity);
+  // /code-review finding — only `target` was ever validated; a zero (or negative)
+  // recipeOutputQuantity hit `d === 0n` in scaleQuantity and returned silent zeros for every
+  // line instead of refusing (the DEF-412 "out of scope" note names this exact gap).
+  if (!isPositiveQuantity(recipeOut)) {
+    return { ok: false, reason: 'the recipe output quantity must be greater than zero' };
+  }
   if (!isPositiveQuantity(target)) return { ok: false, reason: 'the target output quantity must be greater than zero' };
 
   const lines: { itemId: string; quantity: string; unit: string }[] = [];
   for (const line of input.recipeLines) {
-    // scaled = line.quantity * target / recipeOutputQuantity, in the LINE's own unit first...
-    const scaledInLineUnit = scaleQuantity(quantity(line.quantity), target, recipeOut);
-    // ...then converted to the ITEM's base unit. A pairing that cannot convert BLOCKS (DEF-093).
-    const converted = convertUnit(scaledInLineUnit, line.unit, line.itemBaseUnit);
-    if (converted === null) {
+    // /code-review regression — converting to the base unit BEFORE scaling (the earlier fix)
+    // rounds `convertUnit`'s own result to 3dp, and then scaling rounds AGAIN: two roundings,
+    // not one. That is fine coarse-to-fine (kg line, g base — the extra headroom absorbs it) but
+    // loses precision fine-to-coarse (g line, kg base: 1.500 g -> kg rounds to 0.002 kg before
+    // scaling ever runs, baking in an error `unit-conversion.ts`'s "round once, at the end" rule
+    // forbids). Fixed by folding the RAW conversion ratio into the SAME division the scale uses —
+    // `unitConversionFactor` returns it unrounded, `divideRoundHalfUp` runs exactly once. A
+    // pairing that cannot convert still BLOCKS (DEF-093).
+    const factor = unitConversionFactor(line.unit, line.itemBaseUnit);
+    if (factor === null) {
       return {
         ok: false,
         reason: `recipe line for item ${line.itemId} is in "${line.unit}", which cannot be converted to its base unit "${line.itemBaseUnit}"`,
       };
     }
-    lines.push({ itemId: line.itemId, quantity: converted, unit: line.itemBaseUnit });
+    const scaled = scaleQuantity(quantity(line.quantity), target, recipeOut, factor);
+    lines.push({ itemId: line.itemId, quantity: scaled, unit: line.itemBaseUnit });
   }
   return { ok: true, lines };
 }
 
-function scaleQuantity(value: Quantity, numeratorQty: Quantity, denominatorQty: Quantity): Quantity {
-  // value * numeratorQty / denominatorQty, exact to 3dp, rounded half-up once at the end.
+function scaleQuantity(
+  value: Quantity,
+  numeratorQty: Quantity,
+  denominatorQty: Quantity,
+  unitFactor: { num: bigint; den: bigint },
+): Quantity {
+  // value * numeratorQty / denominatorQty * unitFactor, exact to 3dp, rounded half-up ONCE at the
+  // end via unit-conversion.ts's shared `divideRoundHalfUp` (T-339) — folding the unit-conversion
+  // ratio into this same division is what keeps it to one rounding instead of two.
   const v = toThousandths(value);
   const n = toThousandths(numeratorQty);
   const d = toThousandths(denominatorQty);
   if (d === 0n) return ZERO_QUANTITY;
-  const scaled = v * n; // scale is (1000*1000)=10^6 too big; divide by d then by 1000 (numerator's own scale)
-  const perThousand = scaled / d; // still one factor of 1000 too large
-  const rounded = (perThousand + 500n) / 1000n;
-  return fromThousandths(rounded);
+  return fromThousandths(divideRoundHalfUp(v * n * unitFactor.num, d * unitFactor.den));
 }
 
 // -----------------------------------------------------------------------------------------

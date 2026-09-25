@@ -160,9 +160,11 @@ export function getSystemDb() {
  * closed.
  *
  * ⚠️ With `SYSTEM_DATABASE_URL` unset, this is byte-for-byte `transaction()` — same connection,
- * same credentials. It diverges only where something explicitly sets that variable (the
- * integration test harness, per `docs/tasks/251-def-218-integration-harness-role.md` — not
- * production, not local dev, until a separate, later decision says otherwise).
+ * same credentials. Post the 2026-09-12 role swap that is no longer a safe default: production
+ * sets `SYSTEM_DATABASE_URL` explicitly, and an unset value silently falls back to the
+ * RLS-enforcing role instead of the system role (docs/ops/README.md:22-28). Callers that need the
+ * system role — `scripts/provision-terminal.ts` among them — must verify it themselves before
+ * calling this function; it does not verify it for them.
  */
 export async function systemTransaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
   return getSystemDb().transaction(fn);

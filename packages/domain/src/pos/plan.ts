@@ -39,7 +39,7 @@ import {
   ZERO_QUANTITY,
   type Quantity,
 } from '../stock/quantity';
-import { convertUnit } from '../production/unit-conversion';
+import { convertUnit, divideRoundHalfUp } from '../production/unit-conversion';
 
 export type PosMapMode = 'direct' | 'recipe' | 'no_stock';
 export type PlanSection = 'direct' | 'recipe' | 'orphan';
@@ -127,22 +127,17 @@ function isPositiveDecimalString(s: string): boolean {
  *
  * ⚠️ **Deliberately NOT `production/index.ts`'s `scaleQuantity`**, and not merely because that
  * file is off this module's dependency graph (plan.ts is pure; that file authorizes and posts).
- * Verified at source: that private function divides by an EXTRA `1000n` after the real result is
- * already in thousandths (`scaled / d` there already equals `value*numerator/denominator` scaled
- * by 1000 — the comment above it, *"still one factor of 1000 too large,"* is itself wrong), making
- * its answer 1000x too small. It has zero callers anywhere in `apps/` or `packages/` and zero test
- * coverage, so nothing has hit it yet — logged as DEF (see `docs/DEFECTS-REGISTER.md` §E) rather
- * than fixed here, since `production/index.ts` is outside this task's file scope. Confirmed against
- * this file's own unit test (`0.500 * 2.000 / 1.000` must be `1.000`, not `0.001`).
+ * `production/index.ts`'s `scaleQuantity` was fixed by T-339 (DEF-165). The two are now
+ * behaviourally identical; they stay separate only for the purity reason stated above, not
+ * because either is broken. Both now round through `unit-conversion.ts`'s `divideRoundHalfUp` —
+ * one rounding rule, two callers.
  */
 function scaleIngredient(lineQty: Quantity, physicalQty: Quantity, outputQty: Quantity): Quantity {
   const v = toThousandths(lineQty);
   const n = toThousandths(physicalQty);
   const d = toThousandths(outputQty);
   if (d === 0n) return ZERO_QUANTITY;
-  const scaled = v * n; // (real value * 1000) * (real numerator * 1000) = real product * 1e6
-  const rounded = (scaled + d / 2n) / d; // real product's thousandths, half-up: scaled / d already IS it
-  return fromThousandths(rounded);
+  return fromThousandths(divideRoundHalfUp(v * n, d));
 }
 
 export function explodePosSales(input: ExplodeInput): PlanLine[] {

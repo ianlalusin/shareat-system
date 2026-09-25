@@ -61,6 +61,12 @@ async function fixture(hint: string) {
     values (${orgId}, '2026-01-01', '2026-01-31', 'open')`;
   const [store] = await sql<{ id: string }[]>`
     insert into stores (org_id, code, name) values (${orgId}, ${uid(hint)}, ${`Store ${hint}`}) returning id`;
+  // T-339 (DEF-412) — every SUPPORTED store creator (`stores/service.ts:129`) seeds a live
+  // attendance config; this fixture inserts by raw SQL and must match that, or
+  // `attendanceConfigMissing` rightly fires for a store no real path could ever produce.
+  await asOrg(orgId, (tx) =>
+    seedAttendanceConfig(tx, { orgId, storeId: store!.id, effectiveFrom: '2026-01-01' }),
+  );
   const [p] = await sql<{ id: string }[]>`
     insert into persons (org_id, display_name) values (${orgId}, 'Admin') returning id`;
   await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${orgId}, 'admin')`;
@@ -128,6 +134,28 @@ describe('a clean ledger reports nothing', () => {
     expect(result.findings).toEqual([]);
     expect(result.openCount).toBe(0);
     expect(result.hardCount).toBe(0);
+  });
+
+  // T-339 (DEF-412) negative half — the clean fixture's `[]` above is not vacuous proof that
+  // `attendanceConfigMissing` works: `fixture()` itself now seeds a live config for its own
+  // store (the slice 1 fix), so THAT store stays quiet. It is the SECOND store, inserted here by
+  // raw SQL with no config of its own, that must fire — proving the detector actually fires on an
+  // unconfigured store rather than never firing at all.
+  it('⭐ a second, unconfigured store DOES fire attendanceConfigMissing — the clean [] above is not vacuous', async () => {
+    const f = await fixture('clean2');
+    await openFarFutureCoverage(f);
+    const [second] = await sql<{ id: string }[]>`
+      insert into stores (org_id, code, name) values (${f.orgId}, ${uid('clean2-second')}, 'Second store')
+      returning id`;
+    const result = await feed(f);
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]!.kind).toBe('attendanceConfigMissing');
+    expect(result.findings[0]!.storeId).toBe(second!.id);
+    // Documentation only, not an independent assertion — `toHaveLength(1)` plus the `kind` check
+    // above already exclude every other kind, `payoutIntervalTooLong` included. Kept because
+    // DEF-412 asked this exact question by name (no config -> `liveCadenceConfigs` returns
+    // nothing -> `payoutIntervalTooLong` cannot have fired) and this line is that answer, in code.
+    expect(result.findings.some((x) => x.kind === 'payoutIntervalTooLong')).toBe(false);
   });
 });
 

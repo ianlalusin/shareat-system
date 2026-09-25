@@ -26,8 +26,13 @@ export type ConvertibleUnit = (typeof CONVERTIBLE_UNITS)[number];
 
 /** Half-up on the absolute value — same rounding convention as `stock/layers.ts`'s
  *  `divideRoundHalfUp`, duplicated locally (it is a generic rounding primitive, not the
- *  conversion TABLE §4 forbids a second copy of). */
-function divideRoundHalfUp(numerator: bigint, denominator: bigint): bigint {
+ *  conversion TABLE §4 forbids a second copy of). Exported (T-339/DEF-165) so this module's
+ *  scale rule stays the ONE rounding rule for line-quantity scaling too — `production/index.ts`'s
+ *  `scaleQuantity` and `pos/plan.ts`'s `scaleIngredient` both call this rather than each hand-
+ *  rolling their own half-up arithmetic.
+ *  ⚠️ `denominator` must be positive — sign is carried on `numerator` only; a negative or zero
+ *  denominator is a caller bug, not a case this function normalises. */
+export function divideRoundHalfUp(numerator: bigint, denominator: bigint): bigint {
   const negative = numerator < 0n;
   const abs = negative ? -numerator : numerator;
   const quotient = abs / denominator;
@@ -40,6 +45,19 @@ function scale(value: Quantity, numerator: bigint, denominator: bigint): Quantit
   const thousandths = toThousandths(value);
   const scaled = thousandths * numerator;
   return fromThousandths(divideRoundHalfUp(scaled, denominator));
+}
+
+/** The unscaled `{ num, den }` ratio `unitConversionFactor` and `convertUnit` share — one place
+ *  that states which pairings convert and by what factor, so the two can never drift apart. */
+function conversionRatio(from: string, to: string): { num: bigint; den: bigint } | null {
+  if (from === to) return { num: 1n, den: 1n };
+  if (from === 'g' && to === 'kg') return { num: 1n, den: 1000n };
+  if (from === 'kg' && to === 'g') return { num: 1000n, den: 1n };
+  if (from === 'ml' && to === 'ltr') return { num: 1n, den: 1000n };
+  if (from === 'ltr' && to === 'ml') return { num: 1000n, den: 1n };
+  // Every other pairing — pcs<->pack, pcs<->box, kg<->ltr, roll<->anything, and any unrecognised
+  // string — needs a per-item factor this module deliberately does not guess at.
+  return null;
 }
 
 /**
@@ -56,14 +74,25 @@ export function convertUnit(value: Quantity, fromUnit: string, toUnit: string): 
   const to = toUnit.trim();
   // ⛔ Blank is never an implicit match (§10.6) — a unitless recipe line must not silently pass.
   if (!from || !to) return null;
-  if (from === to) return value;
-  if (from === 'g' && to === 'kg') return scale(value, 1n, 1000n);
-  if (from === 'kg' && to === 'g') return scale(value, 1000n, 1n);
-  if (from === 'ml' && to === 'ltr') return scale(value, 1n, 1000n);
-  if (from === 'ltr' && to === 'ml') return scale(value, 1000n, 1n);
-  // Every other pairing — pcs<->pack, pcs<->box, kg<->ltr, roll<->anything, and any unrecognised
-  // string — needs a per-item factor this module deliberately does not guess at.
-  return null;
+  const ratio = conversionRatio(from, to);
+  if (!ratio) return null;
+  if (ratio.num === 1n && ratio.den === 1n) return value;
+  return scale(value, ratio.num, ratio.den);
+}
+
+/**
+ * The RAW, unrounded `{ num, den }` conversion ratio for `fromUnit -> toUnit` (T-339/DEF-165 fine-
+ * to-coarse regression). `convertUnit` rounds its result to 3dp — fine for a value that stands
+ * alone, but a caller that scales the converted value AFTERWARDS (e.g. `scaleRecipeToTarget`)
+ * would round TWICE: once here, once in the scale. This exists so that caller can fold the ratio
+ * into the SAME `divideRoundHalfUp` call the scale itself uses — one division, rounded once.
+ * Returns `null` for the same unconvertible pairings `convertUnit` refuses.
+ */
+export function unitConversionFactor(fromUnit: string, toUnit: string): { num: bigint; den: bigint } | null {
+  const from = fromUnit.trim();
+  const to = toUnit.trim();
+  if (!from || !to) return null;
+  return conversionRatio(from, to);
 }
 
 /** Whether `unit` is a recognised base unit at all — used to give a readable refusal rather than

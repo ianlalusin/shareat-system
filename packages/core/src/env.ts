@@ -54,9 +54,11 @@ const serverSchema = z.object({
 
   /**
    * The SYSTEM connection `systemTransaction()` uses (T-251a, bible §13 row 185) — optional,
-   * same postgres:// shape as `DATABASE_URL`. Unset in every environment this task touches (local
-   * dev, CI, every lane DB); `systemTransaction()` falls back to `DATABASE_URL` when absent, so
-   * this variable existing changes nothing until something explicitly sets it.
+   * same postgres:// shape as `DATABASE_URL`. Post the 2026-09-12 role swap this is no longer a
+   * safe-by-default variable (DEF-416): production MUST set it explicitly, and `systemTransaction()`
+   * silently falls back to `DATABASE_URL` — the RLS-ENFORCING role — when it is unset or blank, not
+   * to some inert "not production, not local dev" state. Callers that need the system role (e.g.
+   * `scripts/provision-terminal.ts`) must verify it is set themselves before trusting a lookup.
    */
   SYSTEM_DATABASE_URL: blankAsAbsent().refine(
     (v) => v === undefined || v.startsWith('postgres://') || v.startsWith('postgresql://'),

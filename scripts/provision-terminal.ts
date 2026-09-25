@@ -77,10 +77,38 @@ async function findStoreByCode(tx: Tx, code: string): Promise<StoreLookup | unde
   return row ? { id: row.id, orgId: row.org_id, name: row.name } : undefined;
 }
 
+/**
+ * /code-review finding — a non-blank `SYSTEM_DATABASE_URL` is not enough: it can still connect
+ * under a role without the bypass-RLS privilege, under which every store looks missing (silently,
+ * via RLS) rather than loudly refusing. Mirrors `scripts/backfill-canonical-positions.ts`'s
+ * `currentRole()`, which already queries this for the same reason — but only informs. DEF-337's
+ * disposition is "refuse, never warn" (RULES §1 rule 7 / bible §13 row 201), so this REFUSES
+ * instead, and does so BEFORE the first store lookup: a lookup that already ran under the wrong
+ * role has already produced its silent, misleading "not found".
+ */
+async function assertSystemRoleBypassesRls(): Promise<void> {
+  const [row] = (await systemTransaction((tx) =>
+    tx.execute(sql`select rolbypassrls from pg_roles where rolname = current_user`),
+  )) as unknown as { rolbypassrls: boolean }[];
+  if (!row?.rolbypassrls) {
+    throw new Error(
+      'provision-terminal: SYSTEM_DATABASE_URL connects, but its role does not have rolbypassrls. Without it the store lookup runs under the RLS-enforcing role and every store looks missing. Nothing was written.',
+    );
+  }
+}
+
 async function main(): Promise<void> {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('provision-terminal: DATABASE_URL is not set. Expected it in .env.local.');
+  const systemUrl = process.env.SYSTEM_DATABASE_URL;
+  if (systemUrl === undefined || systemUrl.trim() === '') {
+    throw new Error(
+      'provision-terminal: SYSTEM_DATABASE_URL is not set (or blank). Without it the store lookup runs under the RLS-enforcing role and every store looks missing. Locally, set it to the same value as DATABASE_URL. Nothing was written.',
+    );
+  }
   const args = parseArgs(process.argv.slice(2));
+
+  await assertSystemRoleBypassesRls();
 
   const store = await systemTransaction((tx) => findStoreByCode(tx, args.storeCode));
   if (!store) {
