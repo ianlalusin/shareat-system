@@ -322,3 +322,121 @@ zero organisations; this machine's own dev org still has ~4 months of runway).
 3. **Nothing is on fire.** No environment I can check has hit this yet, and the existing
    `fiscalPeriodRunwayLow` finding already gives 60 days' warning today, soft and non-blocking. This
    can wait for a normal cycle; it does not need to jump the queue.
+
+
+## Build slice (2026-09-25) — APPROVED by the orchestrator
+
+**Status:** BUILT 2026-09-25 (T1–T5 37/37; scratch-DB proof 138 / 1799638307084; audit: F-null race guard added). Design: option (c), Ian 2026-09-12.
+**Migration slot:** `0157`. ⛔ One migration this cycle (DEF-091). `0157` must be on `main` before T-339 slice 5's
+`0158` (its `when` is already computed from ours: `1799724707084`).
+**Model:** Sonnet builder + Sonnet tester; disjoint files; each on its OWN lane DB; neither runs `npm run test:integration`.
+
+### 0. Spec drift (checked 2026-09-25, HEAD `2e2f13d`)
+| Spec says | Code today | Fix |
+|---|---|---|
+| `createOrganization` … `organizations/index.ts:169` | function `:133`; `seedCalendarMonths` call `:172-176` | cite `:172` |
+| `fiscalPeriodSeedWindow` `:113-118` | `:115-120` (doc `:95-114`), `months: 12` at `:119` | cite `:115-120` |
+| `listFindings` wiring `findings/index.ts:135` | `:234` | cite `:234` |
+| slot `*-*-01 03:30:00 Asia/Manila` | ⛔ collides with `budget-reissue` daily 03:30 | **`*-*-01 04:00:00 Asia/Manila`** |
+| constraint widened by 0126…0144 | 0144 is the live list (10 names) | 0157 copies 0144's 10 and adds the 11th |
+| (new) `JobOutcome['job']` `scheduler/index.ts:60-72` is a hand-copied union | builder widens it too |
+| (new) `finishRun` derives outcome (`packages/db/src/repo/scheduler.ts:60-61`); CHECK needs `partial ⇒ failed>0 AND posted>0` | the gap rule always has posted ≥ 1 when it writes a failure |
+
+### 1. Gap threshold (pinned)
+M = current business month (Asia/Manila, `fiscalPeriodSeedWindow(now)`); F = `latestPeriodEnd(tx, orgId)` (any
+status); next = month after F; gapMonths = monthIndex(M) − monthIndex(next).
+| Case | Seed window | Failure entry | Outcome |
+|---|---|---|---|
+| F null | M, 12 months | `no fiscal periods existed at all; seeded {M}..{M+11} forward only — no earlier month was invented` | `partial` (posted 12) |
+| gapMonths ≤ 0 (incl. F = end of M−1) | M, 12 months | none | `ok` |
+| gapMonths ≥ 1 | from next, gapMonths + 12 months | `coverage gap: periods ended {F}; backfilled {gapMonths} elapsed month(s) {next}..{M−1} as open — created after their own month ended, so no close ever ran on them` — **only if `periodsInserted ≥ gapMonths`** | `partial` |
+`partial` fires only when a month that has already ENDED is created (the risk option (c) exists to surface). The
+`≥ gapMonths` guard stops an overlapping run writing a `failed` (posted 0) row for a gap the winner reported. No cap
+on gapMonths (deterministic; the manual backfill only seeds forward).
+
+### 2. BUILDER paths (source only)
+1. `packages/db/migrations/0157_t276_def305_fiscal_period_seed_job.sql` (new; 0144-style header: T-276/DEF-305, why,
+   shared-constraint warning, "Hand-authored per ADR-012 §5"). Only statements:
+   ```sql
+   ALTER TABLE "scheduler_runs" DROP CONSTRAINT "scheduler_runs_job_check";--> statement-breakpoint
+   ALTER TABLE "scheduler_runs" ADD CONSTRAINT "scheduler_runs_job_check"
+   	CHECK ("job" IN ('depreciation', 'amortisation', 'attendance_sweep', 'mirror_publish', 'inbox_relay',
+   	                 'order_wastage_backstop', 'finding_observation', 'budget_reissue', 'recurring_expenses',
+   	                 'orphan_file_sweep', 'fiscal_period_seed'));
+   ```
+2. `packages/db/migrations/meta/_journal.json`: append
+   `{ "idx": 157, "version": "7", "when": 1799638307084, "tag": "0157_t276_def305_fiscal_period_seed_job", "breakpoints": true }`
+   (0156's `1799551907084` + 86 400 000). No snapshot (§5.7).
+3. `packages/db/schema/scheduler.ts`: append `'fiscal_period_seed'` to `SCHEDULER_JOBS` (sibling-style doc comment)
+   and to the `scheduler_runs_job_check` `sql` list (`:155`).
+4. `packages/domain/src/scheduler/index.ts`: import `fiscalPeriodsRepo` (`:24-33`) and `fiscalPeriodSeedWindow` from
+   `'../organizations'`; widen `JobOutcome['job']` (`:60-72`); append
+   `export async function runFiscalPeriodSeed(options: { orgId?: string; trigger?: 'cron' | 'manual'; nowMs?: number } = {}): Promise<SweepResult>`
+   (`listOrgsToRun`, one `runFiscalPeriodSeedForOrg(org, period, trigger, nowMs)` per org; `period` =
+   `new Date(nowMs + 8*3_600_000).toISOString().slice(0,7)`); private `runFiscalPeriodSeedForOrg` →
+   `runJobForOrg(org, 'fiscal_period_seed', …)`, ONE `asSystem(org.id, tx => …)`: read F, apply §1,
+   `seedCalendarMonths`, read F again; return `{ posted, skipped, failures, detail }` with
+   `detail = "window {start}..{end} · inserted {n} · skipped {k} · coverage now ends {F-after}"`; failures
+   `subjectId: org.id, subjectName: org.name`. §1 month arithmetic module-private (no zero-caller export). Doc comment:
+   one-tx-per-org exception, option (c), threshold → this section.
+5. `scripts/fiscal-period-seed.ts` (new, modelled on `scripts/budget-reissue.ts`): `--org=`, `--manual`, per-org
+   `inserted/skipped/failed` + detail + failures; exit 1 on `hadFailures` or zero orgs; else
+   `fiscal-period-seed: ok — inserted {Σposted} · {n} orgs`.
+6. `package.json`: `"fiscal-period-seed": "tsx scripts/fiscal-period-seed.ts"`.
+7. `docs/ops/shareat-fiscal-period-seed.service` (byte-shape copy of `shareat-orphan-file-sweep.service`,
+   `ExecStart=/usr/bin/npm run fiscal-period-seed`, log `/var/log/shareat/fiscal-period-seed.log`).
+8. `docs/ops/shareat-fiscal-period-seed.timer`: `OnCalendar=*-*-01 04:00:00 Asia/Manila`, `Persistent=true`,
+   `AccuracySec=5min`; header states the slot reason.
+9. `docs/ops/README.md`: one row in `## The jobs`. ⛔ No `unarmed`/`is armed`/`not armed`/`NOT YET ARMED`/`is enabled`
+   in that section (`tests/unit/document-facts.test.ts:202`).
+Not the builder's: the bible, the register, `findings.ts`, `scripts/backfill-fiscal-periods.ts`, `organizations/index.ts`.
+
+### 3. TESTER paths (tests only; red first)
+**T1 `packages/domain/tests/integration/t276-fiscal-period-seed-job.test.ts`** (new; `bareOrg` fixture from
+`fiscal-periods-seeding.test.ts:40-54`; periods via SQL; `NOW = Date.parse('2026-08-31T20:00:00Z')` = 2026-09-01 04:00
+Manila, M = `2026-09`; each case `runFiscalPeriodSeed({ orgId, nowMs: NOW })` and reads the `fiscal_period_seed` run
+row). Red before build: `/runFiscalPeriodSeed is not a function/` (regex); typecheck TS2305.
+| # | Given | Expect | Negative half |
+|---|---|---|---|
+| 1 on schedule | 2026-09..2027-07 | posted 1, skipped 11, failed 0, `ok`, period `2026-09`; 2027-08 `open` | nothing before 2026-09-01; count +1 exactly |
+| 2 covered no-op | same org, rerun | posted 0, skipped 12, `ok`; a second run row exists (DEF-044) | count unchanged; gap not re-reported |
+| 3 legacy wide | one `2020-01-01..2035-12-31` | posted 0, skipped 12, `ok`; detail has `coverage now ends 2035-12-31` | count still 1 |
+| 4 gap → `partial` | 2026-01..05 (Jan–Apr `closed` with closed_at/by; May `open`) | posted 15, failed 1, `partial`, `hadFailures`; failures[0] = `{subjectId, subjectName, reason: 'coverage gap: periods ended 2026-05-31; backfilled 3 elapsed month(s) 2026-06..2026-08 as open — created after their own month ended, so no close ever ran on them'}`; coverage ends 2027-08-31 | 06/07/08 `open`, closed_at/by null; old 5 rows' (status, closed_at, closed_by, updated_at) unchanged; nothing before 2026-06-01 |
+| 4b rerun | case 4 org | posted 0, skipped 12, `ok` | not `partial` twice |
+| 5 slack boundary | 2025-09..2026-08 | posted 12, `ok`, no failures | not `partial`; nothing before 2026-09-01 |
+| 6 zero periods | `bareOrg` | posted 12, failed 1, `partial`, `'no fiscal periods existed at all; seeded 2026-09..2027-08 forward only — no earlier month was invented'` | nothing before 2026-09-01 |
+| 7 Manila pin (DEF-283) | 2026-09..2027-07 | at `2026-08-31T16:00:00Z`: posted 1, period `2026-09` | fresh identical org at `…T15:59:00Z`: posted 0, skipped 12, period `2026-08` |
+| 8 job_check | superuser inserts | all 11 names (literal list `toEqual([...SCHEDULER_JOBS].sort())`) insert | `'not_a_job'` rejects `/scheduler_runs_job_check/` |
+**T2 `tests/unit/t276-scheduler-job-check-mirror.test.ts`** (new): names from the schema CHECK sql and from the LAST
+journal-order migration with `ADD CONSTRAINT "scheduler_runs_job_check"` both equal `[...SCHEDULER_JOBS].sort()` and
+include `fiscal_period_seed`; ≥11 names each; negative: a fixture with one name dropped mismatches.
+**T3 `tests/unit/scheduler-job-hosting.test.ts`**: `JOB_SCRIPT` gains `fiscal_period_seed: 'fiscal-period-seed'`.
+**T4 `tests/unit/scheduler-jobs-have-callers.test.ts`**: `KNOWN_JOB_NAMES` += `'runFiscalPeriodSeed'`, floor `>= 8` → `>= 9`.
+**T5 `tests/unit/scheduler-job-run-recording.test.ts`**: `PINNED` row `{ kind: 'fiscal_period_seed', entry:
+'runFiscalPeriodSeed', file: 'packages/domain/src/scheduler/index.ts', walkFrom: 'runFiscalPeriodSeedForOrg',
+expectedHopsFromEntry: 2, expectedPathFromEntry: ['runFiscalPeriodSeedForOrg'] }`; `10` → `11` (`:423`, `:444`,
+`:447`); new case: PINNED kinds sorted `toEqual([...SCHEDULER_JOBS].sort())`.
+Untouched: `recurring-expenses-job.test.ts:508`.
+
+### 4. Invariants
+1. Past-dated periods are only ever created `open` (`fiscal-periods.ts:88`) and always produce a failure line; existing
+   rows never updated (`ON CONFLICT DO NOTHING`). Ruling (c); T-264:179.
+2. Backfilled open months block closing later months via `hasEarlierOpenPeriod` (`fiscal-periods.ts:168`, ADR-006 §7.4).
+3. Every run recorded, even a no-op (`runJobForOrg`, `scheduler/index.ts:120`, DEF-044); `skipped_count` = window size (bible §13 row 181).
+4. `partial ⇒ posted > 0` (`scheduler_runs_outcome_matches_failures_check`) — guaranteed by §1's guard.
+5. Job names match in 3 places: `SCHEDULER_JOBS` = schema CHECK = 0157 (DEF-217); 0157 carries all of 0144's names.
+6. System principal, one tx per org (discovery 34 §3.1–3.4); RLS via `withSystemOrgPrincipal`, never bare `systemTransaction` (DEF-287; §15.11).
+7. Business month from Asia/Manila (DEF-283); zoned timer (DEF-241).
+8. Hand-authored, on the grid, never edited once applied (RULES §1 rule 9; ADR-012 §5.1–5.7).
+9. `fiscalPeriodRunwayLow` unchanged.
+
+### 5. Done when
+T1–T5 each seen red for the stated reason, then green; typecheck + unit green incl. `migration-journal.test.ts`;
+FULL integration green (orchestrator runs it); scratch-DB proof (ADR-012 §5.8: `createdb shareat_scratch_t276`,
+migrate, `select count(*), max(created_at) from drizzle.__drizzle_migrations` → 138 and 1799638307084; accept
+`fiscal_period_seed`, refuse `not_a_job`; `dropdb`); smoketest (re-measure dev coverage; `npm run fiscal-period-seed --
+--manual` then rerun → second `inserted 0, skipped 12`); build green with 9008 stopped. FOR IAN: one more timer to arm
+(`shareat-fiscal-period-seed.timer`, the 1st at 04:00 Manila) **before 2027-09-01**.
+Planner uncertainties: zero-period org reported `partial` (orchestrator keeps it — an org with no periods is abnormal);
+match the missing-export red by regex; `docs/ops/README.md` says month-end runs "Monthly, 1st" but its timer is
+`*-*-15` (stale; log separately).

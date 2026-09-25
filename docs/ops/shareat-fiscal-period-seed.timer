@@ -1,0 +1,23 @@
+# T-276 / DEF-305 — MONTHLY, 1st, 04:00 Manila.
+#
+# ⭐ Why monthly, on the 1st. Coverage moves in whole calendar months and the gap this job closes
+# only ever grows once a month at most — a finer cadence would buy nothing over the 12-month slack
+# every org already carries from its own bootstrap seed or the previous month's top-up.
+#
+# ⚠️ 04:00 Manila, not 03:30 — 03:30 is budget-reissue's own slot (docs/ops/shareat-budget-reissue.
+# timer) and the two would otherwise contend for the same minute. This runs after every other daily
+# job (finding-observation 01:30, recurring-expense-draft 02:00, order-wastage-backstop 02:30,
+# orphan-file-sweep 03:00, budget-reissue 03:30).
+
+[Unit]
+Description=Shareat — monthly fiscal-period coverage top-up, per org, monthly (T-276 / DEF-305)
+
+[Timer]
+OnCalendar=*-*-01 04:00:00 Asia/Manila
+# ⚠️ Catch up after a reboot or an outage rather than skipping silently — same reasoning as every
+# other job's timer, and the same defect behind it (DEF-044).
+Persistent=true
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target

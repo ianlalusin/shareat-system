@@ -149,6 +149,7 @@ const KNOWN_JOB_NAMES = [
   'runBudgetReissue',
   'runFindingObservation',
   'runFirestoreRelay',
+  'runFiscalPeriodSeed',
   'runMonthEnd',
   'runOrderWastageBackstopSweep',
   'runOrphanFileSweep',
@@ -197,8 +198,8 @@ describe('T-236 — every scheduler job entry export is reachable from a scripts
     // failed `git ls-files` — reference_sweep_needs_nonzero_control. Raised to 6 after BLOCKER 1
     // (the old floor of 5 equalled the old filter's broken count, so it could not see the hole),
     // to 7 by T-272's `runOrphanFileSweep`, and to 8 — MEASURED, not guessed — by T-275's widened
-    // scan finding `runRecurringExpenses` for the first time.
-    expect(jobs.size).toBeGreaterThanOrEqual(8);
+    // scan finding `runRecurringExpenses` for the first time, and to 9 by T-276's `runFiscalPeriodSeed`.
+    expect(jobs.size).toBeGreaterThanOrEqual(9);
     expect(scriptSrc.length).toBeGreaterThan(1000);
   });
 

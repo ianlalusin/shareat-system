@@ -23,6 +23,7 @@
  */
 import {
   filesRepo,
+  fiscalPeriodsRepo,
   schedulerRepo,
   storesRepo,
   systemTransaction,
@@ -35,6 +36,7 @@ import { runDepreciationAsSystem } from '../fixed-assets/depreciate';
 import { runAmortisationAsSystem } from '../prepaid';
 import { runOrderWastageBackstop } from '../wastage/orders';
 import { sweepOrphanedFiles } from '../files';
+import { fiscalPeriodSeedWindow } from '../organizations';
 
 import { toBusinessDate } from '@shareat/core';
 import { sql } from 'drizzle-orm';
@@ -69,7 +71,9 @@ export interface JobOutcome {
     /** T-216 Part 2 — the daily recurring-expense drafting job. It drafts; it never pays. */
     | 'recurring_expenses'
     /** T-272 — the daily orphaned-file sweep, per org (DEF-299). */
-    | 'orphan_file_sweep';
+    | 'orphan_file_sweep'
+    /** T-276/DEF-305 — the monthly fiscal-period coverage top-up (§1's gap-backfill rule). */
+    | 'fiscal_period_seed';
   period: string;
   posted: number;
   skipped: number;
@@ -941,5 +945,146 @@ async function runOrphanFileSweepForOrg(
           ? `hit the ${filesRepo.ORPHAN_SWEEP_BATCH_LIMIT}-candidate cap — more orphans may remain in this org`
           : undefined,
     };
+  });
+}
+
+// =====================================================================================
+
+/**
+ * ⭐ **T-276 / DEF-305 — the monthly fiscal-period coverage top-up, MONTHLY, 1st.**
+ *
+ * `bootstrapOrganization` seeds 12 months of fiscal periods once, at creation (T-264/DEF-284), and
+ * nothing has topped that up since — an org running past its first year eventually reaches a month
+ * `postEntry` has no period for at all, and every post that month is refused (the DEF-305 gap).
+ * This job keeps every org's coverage 12 months ahead of its current Manila business month and, per
+ * the approved design **option (c)**, backfills any month that already ELAPSED with no period at
+ * all — created `open`, never closed retroactively (invariant 1) — so the gap is surfaced as a
+ * `scheduler_runs` failure line instead of silently blocking the next post someone tries.
+ *
+ * ## §1's rule, in code: the gap threshold
+ *
+ * Let `M` = the current business month (Asia/Manila, via `fiscalPeriodSeedWindow`'s own
+ * `toBusinessDate` conversion — DEF-283, never a raw-UTC shift) and `F` = the org's latest period
+ * end (any status), read inside the SAME transaction the seed writes into.
+ *
+ * | Case | Seed window | Failure line |
+ * |---|---|---|
+ * | `F` is `null` (no periods at all — abnormal; an org this bare is worth a line even though the seed itself is ordinary) | `M`, 12 months | *"no fiscal periods existed at all…"* |
+ * | the month after `F` is `M` or earlier (ordinary running coverage, including a legacy period that already reaches past `M`) | `M`, 12 months | none — `ok` |
+ * | the month after `F` is BEFORE `M` (one or more whole months elapsed with no period) | from the month after `F`, `gapMonths + 12` months | *"coverage gap…"*, gated on `periodsInserted >= gapMonths` so an overlapping run never re-reports a gap the winner already closed |
+ *
+ * `monthIndex`/`addMonths` below are this rule's own month arithmetic, module-private on purpose —
+ * nothing else in this codebase needs "which month is N months after this one" as a public API,
+ * and a zero-caller export is exactly the DEF-186 shape T-236's own guard exists to catch.
+ */
+export async function runFiscalPeriodSeed(
+  options: { orgId?: string; trigger?: 'cron' | 'manual'; nowMs?: number } = {},
+): Promise<SweepResult> {
+  const trigger = options.trigger ?? 'cron';
+  const nowMs = options.nowMs ?? Date.now();
+  // Same bookkeeping-only convention as every job above except month-end: the run row records the
+  // Manila month this run happened IN, not a period being closed — this job has no "through" period
+  // of its own, it tops up whatever window §1 computes.
+  const period = new Date(nowMs + 8 * 3_600_000).toISOString().slice(0, 7);
+
+  const orgs = await listOrgsToRun(options.orgId);
+  const outcomes: JobOutcome[] = [];
+  for (const org of orgs) {
+    outcomes.push(await runFiscalPeriodSeedForOrg(org, period, trigger, nowMs));
+  }
+  return { outcomes, hadFailures: outcomes.some((o) => o.failed > 0 || o.error) };
+}
+
+/** `YYYY-MM` → a linear month index, so "N months after/before" is one subtraction. */
+function monthIndex(yyyyMm: string): number {
+  const [y, m] = yyyyMm.split('-').map(Number) as [number, number];
+  return y * 12 + (m - 1);
+}
+
+/** `YYYY-MM` shifted by `delta` months (either direction), back to `YYYY-MM`. */
+function addMonths(yyyyMm: string, delta: number): string {
+  const idx = monthIndex(yyyyMm) + delta;
+  const y = Math.floor(idx / 12);
+  const m = (idx % 12) + 1;
+  return `${y}-${String(m).padStart(2, '0')}`;
+}
+
+async function runFiscalPeriodSeedForOrg(
+  org: { id: string; name: string },
+  period: string,
+  trigger: 'cron' | 'manual',
+  nowMs: number,
+): Promise<JobOutcome> {
+  return runJobForOrg(org, 'fiscal_period_seed', period, trigger, async () => {
+    // `fiscalPeriodSeedWindow` is the SAME function `bootstrapOrganization` uses (T-264 — one
+    // definition of "12 months forward, from the org's own Manila business month"); only its
+    // `startYear`/`startMonth` are used here — `months` is recomputed below when there is a gap.
+    const m = fiscalPeriodSeedWindow(new Date(nowMs));
+    const mLabel = `${m.startYear}-${String(m.startMonth).padStart(2, '0')}`;
+
+    // DEF-287/§15.11 — system principal, ONE transaction for this org's whole read-plan-seed-read
+    // (never a bare `systemTransaction`): reading `F` and seeding it against, out of sync with each
+    // other, is exactly the kind of TOCTOU a shared per-org transaction exists to close.
+    return asSystem(org.id, async (tx) => {
+      const before = await fiscalPeriodsRepo.latestPeriodEnd(tx, org.id);
+
+      let gapMonths = 0;
+      let nextLabel = '';
+      if (before !== null) {
+        nextLabel = addMonths(before.slice(0, 7), 1);
+        gapMonths = monthIndex(mLabel) - monthIndex(nextLabel);
+      }
+
+      const window =
+        before === null || gapMonths <= 0
+          ? { startYear: m.startYear, startMonth: m.startMonth, months: 12 }
+          : (() => {
+              const [y, mo] = nextLabel.split('-').map(Number) as [number, number];
+              return { startYear: y, startMonth: mo, months: gapMonths + 12 };
+            })();
+
+      const { periodsInserted, periodsSkipped } = await fiscalPeriodsRepo.seedCalendarMonths(tx, org.id, window);
+      const after = await fiscalPeriodsRepo.latestPeriodEnd(tx, org.id);
+
+      const failures: SchedulerFailure[] = [];
+      if (before === null && periodsInserted > 0) {
+        // Invariant: an org with genuinely zero fiscal periods is abnormal, so this earns a line
+        // even though the window itself is the ordinary 12-months-forward one. ⚠️ Gated on
+        // `periodsInserted > 0`, symmetric with the gap branch's own `>= gapMonths` guard below —
+        // an overlapping run that lost the race (every candidate already inserted by the winner)
+        // reports `posted 0, ok`, not a `failed` outcome for a gap that no longer exists.
+        failures.push({
+          subjectId: org.id,
+          subjectName: org.name,
+          reason:
+            `no fiscal periods existed at all; seeded ${mLabel}..${addMonths(mLabel, 11)} forward only ` +
+            '— no earlier month was invented',
+        });
+      } else if (gapMonths >= 1 && periodsInserted >= gapMonths) {
+        // ⚠️ Gated on `periodsInserted >= gapMonths`, not merely `gapMonths >= 1` — an overlapping
+        // run that already backfilled this exact gap must not re-report it a second time just
+        // because it observed the same stale `F` a moment before the winner's write landed.
+        failures.push({
+          subjectId: org.id,
+          subjectName: org.name,
+          reason:
+            `coverage gap: periods ended ${before}; backfilled ${gapMonths} elapsed month(s) ` +
+            `${nextLabel}..${addMonths(mLabel, -1)} as open — created after their own month ended, ` +
+            'so no close ever ran on them',
+        });
+      }
+
+      const windowStartLabel = `${window.startYear}-${String(window.startMonth).padStart(2, '0')}`;
+      const windowEndLabel = addMonths(windowStartLabel, window.months - 1);
+
+      return {
+        posted: periodsInserted,
+        skipped: periodsSkipped,
+        failures,
+        detail:
+          `window ${windowStartLabel}..${windowEndLabel} · inserted ${periodsInserted} · ` +
+          `skipped ${periodsSkipped} · coverage now ends ${after ?? 'never'}`,
+      };
+    });
   });
 }

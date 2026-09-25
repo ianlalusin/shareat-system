@@ -51,6 +51,8 @@ const JOB_SCRIPT: Record<SchedulerJob, string> = {
   budget_reissue: 'budget-reissue',
   recurring_expenses: 'recurring-expense-draft',
   orphan_file_sweep: 'orphan-file-sweep',
+  // T-276/DEF-305 — the monthly fiscal-period coverage top-up.
+  fiscal_period_seed: 'fiscal-period-seed',
 };
 
 /** The unique scripts `JOB_SCRIPT` names — `docs/ops/shareat-<name>.{service,timer}` basenames. */

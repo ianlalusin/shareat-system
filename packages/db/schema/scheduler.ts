@@ -93,6 +93,14 @@ export const SCHEDULER_JOBS = [
    * `docs/tasks/272-def-299-orphan-sweep-timer.md`.
    */
   'orphan_file_sweep',
+  /**
+   * `fiscal_period_seed` — T-276/DEF-305, MONTHLY, 1st. Tops up a running org's fiscal-period
+   * coverage 12 months ahead, and — option (c) — backfills any month that ELAPSED with no period
+   * at all (created `open`, never closed retroactively) so `postEntry` never again refuses a fresh
+   * org's first entry the way DEF-305's bootstrap gap did. `docs/tasks/276-def-305-fiscal-period-
+   * coverage.md`'s "Build slice" §1 is the exact gap-threshold rule.
+   */
+  'fiscal_period_seed',
 ] as const;
 export type SchedulerJob = (typeof SCHEDULER_JOBS)[number];
 
@@ -152,7 +160,7 @@ export const schedulerRuns = pgTable(
       // build the database and this file does not — but the NEXT widening migration is written by
       // copying this list, and copying the short one would silently drop a job from the constraint
       // and break it at its next run. Both are corrected together in 0136; keep them together.
-      sql`${t.job} in ('depreciation', 'amortisation', 'attendance_sweep', 'mirror_publish', 'inbox_relay', 'order_wastage_backstop', 'finding_observation', 'budget_reissue', 'recurring_expenses', 'orphan_file_sweep')`,
+      sql`${t.job} in ('depreciation', 'amortisation', 'attendance_sweep', 'mirror_publish', 'inbox_relay', 'order_wastage_backstop', 'finding_observation', 'budget_reissue', 'recurring_expenses', 'orphan_file_sweep', 'fiscal_period_seed')`,
     ),
     check('scheduler_runs_outcome_check', sql`${t.outcome} in ('ok', 'partial', 'failed')`),
     check('scheduler_runs_period_shape_check', sql`${t.period} ~ '^[0-9]{4}-[0-9]{2}$'`),
