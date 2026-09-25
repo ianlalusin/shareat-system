@@ -578,6 +578,20 @@ async function secondStore(f: FixtureWithSupplier, hint: string) {
   const storeId = store!.id;
   await sql`insert into person_store_scope (person_id, store_id) values (${f.managerId}, ${storeId})`;
   await sql`insert into person_store_scope (person_id, store_id) values (${f.staffId}, ${storeId})`;
+  // T-341 / DEF-414 (orchestrator CHANGES, 2026-09-25): person_store_scope alone no longer
+  // authorises a store-scoped, position-sourced capability here — f.staff needs a real
+  // employment/position at THIS store too, or creditExpenseAt's recordInvoice call correctly
+  // refuses (staff's record_supplier_invoice grant is scoped to f.storeId's own default only).
+  // Not the DEF-414 leak this fixture used to rely on — a genuine second-store hire; this describe
+  // block tests AP scoping, not staff authorisation.
+  const [employment] = await sql<{ id: string }[]>`
+    insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
+    values (${f.orgId}, ${storeId}, ${f.staffId}, ${uid('SE')}, 'regular', '2025-01-01')
+    returning id
+  `;
+  await grantEverydayPositionAccess(sql, {
+    orgId: f.orgId, storeId, employmentId: employment!.id, personId: f.staffId, setBy: f.managerId,
+  });
   const [drawer] = await sql<{ id: string }[]>`
     select id from money_accounts where store_id = ${storeId}
       and instrument = 'cash' and custodian = 'cashier' and is_foundation

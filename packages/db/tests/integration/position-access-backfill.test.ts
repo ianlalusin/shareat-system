@@ -26,7 +26,18 @@
  * same `drizzle-orm/postgres-js/migrator` the app itself uses (T-118's own `invariant 9` test
  * already proves that mechanism call-for-call; this file does not re-prove it) — and it is safe
  * for 0152's OWN assertions because `trackedRunCount()` below counts 0152's exact `when`, not a
- * total, and no later migration touches the tables this file backfills.
+ * total.
+ *
+ * ⛔⛔ **CORRECTED (T-341, 2026-09-25) — "no later migration touches the tables this file
+ * backfills" is no longer true.** Migration 0159 adds `person_grants.store_id`, drops
+ * `person_grants_active_person_grant_unique` and replaces it with two partial indexes. Every
+ * assertion here that only reads `grant_name` / `set_by` / `granted_by` / row counts is
+ * unaffected (0159's own backfill step preserves them). The one exception is the standalone
+ * idempotency test below, which re-executes 0152's raw SQL a second time: post-0159 that
+ * statement's `ON CONFLICT ("person_id","grant_name") WHERE revoked_at IS NULL` no longer
+ * names an existing constraint at all, so it now runs in its OWN scratch database stopped
+ * exactly at 0152 — proving "safe if replayed" is only ever a coherent question asked at a
+ * migration's own historical schema position, never forever.
  *
  * ⚠️ Not the standing lane DB, so this file does not compete with another lane's integration run
  * against `TEST_DATABASE_URL` — it only borrows that URL's host/credentials to open its own,
@@ -211,9 +222,47 @@ async function applyEverythingExcept152(sql: ReturnType<typeof postgres>): Promi
  * strictly before 0152, that is 0152 AND ANY MIGRATION ADDED AFTER IT, applied together in one
  * transaction (all pending migrations share one `migrate()` transaction — confirmed at source).
  * No longer "exactly 0152 alone": once 0153 exists this also applies 0153, which is harmless to
- * every assertion below because `trackedRunCount()` counts 0152's own `when`, not a total, and
- * 0153 touches `attendance_credentials` only — a table nothing here seeds or reads.
+ * every assertion below because `trackedRunCount()` counts 0152's own `when`, not a total.
+ * ⛔ **Not universally harmless any more (T-341, 2026-09-25):** 0159 restructures
+ * `person_grants`'s unique indexes. Every `it()` in this file that uses this function only reads
+ * state 0152 itself wrote, which stays correct; the one exception (the idempotency test) does
+ * NOT use this function — see its own comment.
  */
+function buildFolderThrough152(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'shareat-migrations-through-0152-'));
+  const metaDir = join(dir, 'meta');
+  mkdirSync(metaDir, { recursive: true });
+
+  const journal = JSON.parse(readFileSync(join(REAL_MIGRATIONS_FOLDER, 'meta', '_journal.json'), 'utf8'));
+  const target = journal.entries.find((e: { tag: string }) => e.tag.startsWith(TARGET_TAG_PREFIX));
+  if (!target) {
+    throw new Error(`no journal entry tagged "${TARGET_TAG_PREFIX}" — has 0152 been renamed or removed?`);
+  }
+  const keptEntries = journal.entries.filter((e: { when: number }) => e.when <= target.when);
+  const keptTags = new Set(keptEntries.map((e: { tag: string }) => e.tag));
+
+  for (const f of readdirSync(REAL_MIGRATIONS_FOLDER)) {
+    if (f.endsWith('.sql') && keptTags.has(f.slice(0, -'.sql'.length))) {
+      writeFileSync(join(dir, f), readFileSync(join(REAL_MIGRATIONS_FOLDER, f)));
+    }
+  }
+  journal.entries = keptEntries;
+  writeFileSync(join(metaDir, '_journal.json'), JSON.stringify(journal, null, 2));
+
+  return dir;
+}
+
+/** Applies every migration up to AND INCLUDING 0152, and stops there — never any later
+ *  migration. Used only by the idempotency test, which needs 0152's OWN historical schema
+ *  position, not whatever the tip currently is (T-341, 2026-09-25). */
+async function applyThrough152(sql: ReturnType<typeof postgres>): Promise<void> {
+  const dir = buildFolderThrough152();
+  try {
+    await migrate(drizzle(sql), { migrationsFolder: dir });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
 async function apply152(sql: ReturnType<typeof postgres>): Promise<void> {
   await migrate(drizzle(sql), { migrationsFolder: REAL_MIGRATIONS_FOLDER });
 }
@@ -610,24 +659,56 @@ describe('T-318 slice B / migration 0152 — backfills position_capability_defau
     // already-recorded tag) — this proves the SQL itself is safe if it ever were, by executing
     // its statements a second time directly, the same way T-118's `invariant 9` proves its
     // trigger is not duplicated.
-    const beforeDefaults = (await sql<{ c: number }[]>`select count(*)::int as c from position_capability_defaults`)[0]!.c;
-    const beforeGrants = (await sql<{ c: number }[]>`select count(*)::int as c from person_grants`)[0]!.c;
+    //
+    // ⛔ **Own dedicated scratch database, stopped exactly AT 0152 (T-341, 2026-09-25) — never
+    // this describe block's shared, already-fully-migrated-to-tip `sql`.** Migration 0159 drops
+    // the exact index 0152's `ON CONFLICT ("person_id","grant_name") WHERE revoked_at IS NULL`
+    // targets and replaces it with two partial ones; against the post-0159 schema that statement
+    // no longer names an existing constraint at all ("there is no unique or exclusion constraint
+    // matching the ON CONFLICT specification") — not a defect in 0159, just proof that "is 0152's
+    // frozen SQL safe to replay" is only a coherent question AT 0152's own historical schema
+    // position, never forever. `applyThrough152` stops there on purpose.
+    const dbName = `shareat_scratch_0152_idempotent_${Date.now()}`;
+    await createScratchDatabase(dbName);
+    const idemSql = postgres(scratchUrl(dbName), { max: 1 });
+    try {
+      await applyEverythingExcept152(idemSql);
+      const [org] = await idemSql<{ id: string }[]>`insert into organizations (name, code) values ('Idempotent Org', 'IDM') returning id`;
+      const [admin] = await idemSql<{ id: string }[]>`insert into persons (org_id, display_name) values (${org!.id}, 'The Owner') returning id`;
+      await idemSql`insert into person_roles (person_id, org_id, role) values (${admin!.id}, ${org!.id}, 'admin')`;
+      const [store] = await idemSql<{ id: string }[]>`insert into stores (org_id, code, name, is_active) values (${org!.id}, 'S1', 'Store', true) returning id`;
+      const [pos] = await idemSql<{ id: string }[]>`insert into positions (org_id, store_id, name, is_canonical, is_active) values (${org!.id}, null, 'Cashier', true, true) returning id`;
+      const [person] = await idemSql<{ id: string }[]>`insert into persons (org_id, display_name) values (${org!.id}, 'Worker') returning id`;
+      const [emp] = await idemSql<{ id: string }[]>`
+        insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
+        values (${org!.id}, ${store!.id}, ${person!.id}, 'SC-IDM1', 'regular', '2026-01-01') returning id`;
+      await idemSql`insert into employment_positions (employment_id, position_id, is_primary) values (${emp!.id}, ${pos!.id}, true)`;
 
-    const file = readdirSync(REAL_MIGRATIONS_FOLDER).find((f) => f.startsWith(TARGET_TAG_PREFIX));
-    expect(file, '0152_*.sql not found in the real migrations folder').toBeDefined();
-    const statements = readFileSync(join(REAL_MIGRATIONS_FOLDER, file!), 'utf8')
-      .split('--> statement-breakpoint')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    await sql.begin(async (tx) => {
-      for (const stmt of statements) {
-        await tx.unsafe(stmt);
-      }
-    });
+      await applyThrough152(idemSql);
 
-    const afterDefaults = (await sql<{ c: number }[]>`select count(*)::int as c from position_capability_defaults`)[0]!.c;
-    const afterGrants = (await sql<{ c: number }[]>`select count(*)::int as c from person_grants`)[0]!.c;
-    expect(afterDefaults).toBe(beforeDefaults);
-    expect(afterGrants).toBe(beforeGrants);
+      const beforeDefaults = (await idemSql<{ c: number }[]>`select count(*)::int as c from position_capability_defaults`)[0]!.c;
+      const beforeGrants = (await idemSql<{ c: number }[]>`select count(*)::int as c from person_grants`)[0]!.c;
+      expect(beforeGrants, 'non-vacuity: the fixture must actually produce rows for the replay to prove anything').toBeGreaterThan(0);
+
+      const file = readdirSync(REAL_MIGRATIONS_FOLDER).find((f) => f.startsWith(TARGET_TAG_PREFIX));
+      expect(file, '0152_*.sql not found in the real migrations folder').toBeDefined();
+      const statements = readFileSync(join(REAL_MIGRATIONS_FOLDER, file!), 'utf8')
+        .split('--> statement-breakpoint')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      await idemSql.begin(async (tx) => {
+        for (const stmt of statements) {
+          await tx.unsafe(stmt);
+        }
+      });
+
+      const afterDefaults = (await idemSql<{ c: number }[]>`select count(*)::int as c from position_capability_defaults`)[0]!.c;
+      const afterGrants = (await idemSql<{ c: number }[]>`select count(*)::int as c from person_grants`)[0]!.c;
+      expect(afterDefaults).toBe(beforeDefaults);
+      expect(afterGrants).toBe(beforeGrants);
+    } finally {
+      await idemSql.end();
+      await dropScratchDatabase(dbName);
+    }
   });
 });

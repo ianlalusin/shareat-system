@@ -122,10 +122,22 @@ describe('(c) a hired Cashier passes authorize for a ruled capability once staff
     await withOrgPrincipal(boot.orgId, (tx) => createEmployment(tx, adminActor, { storeId: boot.storeId, personId: worker!.id, employmentStatus: 'probationary', startedOn: '2026-09-24' }));
     await grantOnExistingPrimaryPosition({ orgId: boot.orgId, storeId: boot.storeId, personId: worker!.id, setBy: boot.personId, capability: 'record_sale' });
     const workerActor: Actor = { personId: worker!.id, orgId: boot.orgId };
+
+    // The lost leg, restored: the hire never wrote a person_store_scope row at storeB at all —
+    // quoted directly, not just implied by the refusal below.
+    const [scopeAtB] = await sql<{ id: string }[]>`
+      select id from person_store_scope where person_id = ${worker!.id} and store_id = ${storeB!.id}`;
+    expect(scopeAtB, 'storeB: never granted').toBeUndefined();
+
     await expect(
       withOrgPrincipal(boot.orgId, (tx) => authorize(tx, workerActor, 'record_sale', { storeId: storeB!.id })),
-      'the hire scoped only boot.storeId; storeB was never granted',
-    ).rejects.toThrow(/no store scope/);
+      // T-341 / DEF-414 (orchestrator CHANGES, 2026-09-25): the position-sourced grant this hire
+      // wrote is scoped to boot.storeId's own default only (`store_id` = boot.storeId, filled by
+      // the migration 0159 trigger) — it does not match storeB, so axis 3b now refuses BEFORE axis
+      // 2 ever checks scope, "may not", not "no store scope" (storeB also has no store-scope row,
+      // but that is never reached).
+      'the hire granted record_sale via a position default scoped to boot.storeId only — refused on the grant at storeB, before scope is even checked',
+    ).rejects.toThrow(/may not 'record_sale'/);
   });
 
   it('refused for a capability the position never granted, even with hire-granted store scope', async () => {

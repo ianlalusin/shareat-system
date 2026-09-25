@@ -1,6 +1,6 @@
 # T-341: DEF-414 — a position grant authorises only at the store whose default produced it
 
-**Status:** APPROVED 2026-09-25 (orchestrator, after independent Opus auth review — Amendment R1 at the end is binding). **Migration slot: `0159`** (after 0157 T-276 and 0158 T-339 slice 5); its journal `when` = 0158's + 86 400 000.
+**Status:** DONE 2026-09-25 — built per spec + Amendments R1–R3 (three audit rounds + independent code-reviewer). Full integration 153 files / 3088 passed; §9.4 smoketested on 9008 (forged session; screens only). Migration `0159`.
 **Closes:** DEF-414 (`docs/DEFECTS-REGISTER.md:621`) and a same-root sibling found by the planner (§2.2; the
 orchestrator registers it).
 **Model:** Sonnet, both roles. TESTER writes first and records red; BUILDER second; paths disjoint (§6).
@@ -207,3 +207,23 @@ Verdict was CHANGES: no path widens access; two data shapes would LOSE justified
 6. **`is_active` (LOW).** One rule: only ACTIVE positions justify a grant — step 5 and the item-1/2 repairs filter
    `p.is_active` like 0152 (`0152_t318_position_access_defaults_backfill.sql:211`). If `wantedDefaultsForPersonAtStore`
    does not, record it as a separate DEF; do not change it here.
+
+## Amendment R2 — first-build audit (2026-09-25, orchestrator), binding
+The auditor and an independent code-reviewer both found that the first build of 0159 WIDENED access:
+- step 5 materialisation ignored `employment_positions`, which re-created the DEF-414 leak;
+- revoked rows counted as evidence;
+- step 5 twinned revoked rows as active.
+Fixes, all binding:
+1. Materialisation joins the person's held ACTIVE positions (`d.position_id = ep.position_id`, `p.is_active`).
+2. Evidence is an active row, or a revoked row in the §2.2 shape: the person still holds, at `g.store_id`, the row's position with an active default.
+3. Twins are made from active rows only, and copy `granted_at`.
+4. The `authorize.ts` header is updated.
+**Ruling:** an elevation or NULL-source row granted AFTER its default's `set_at` and later upgraded is NOT twinned. Twinning it could preserve the leak for position-born rows. It goes into the §8 cutover count instead.
+
+## Amendment R3 — re-audit (2026-09-25, orchestrator), binding; supersedes R1 item 2 and R2 item 2
+The auditor showed that the revoked-evidence branch was inverted. The real §2.2 victim loses its A employment through `endEmployment`, or its A default through toggle-off, so it fails the branch. The only shape that passes is a DELIBERATE admin revocation, and materialising that widens access.
+**Ruling:** drop the revoked branch entirely. Step 5 evidence is an ACTIVE `'position'` row at another store only.
+Already-hit §2.2 victims are people wanted at S today with no active row. They lack that access today, so leaving them alone loses nothing (bible row 211). They go into the §8 cutover count, listed by name for a hand remedy.
+Tests:
+- Victim22 is seeded with an ENDED A employment and asserts NO B row.
+- A deliberate-revocation case also asserts no B row.

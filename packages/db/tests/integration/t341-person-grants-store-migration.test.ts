@@ -121,7 +121,9 @@ describe('T-341 / DEF-414 M1-M4 — the person_grants store backfill migration',
     grantHistoryId: string; grantHistoryRowId: string;
     nullSourceId: string; nullSourceRowId: string;
     exNullId: string; exNullRowId: string;
+    exElevationId: string; exElevationRowId: string;
     victimId: string; victimRevokedRowId: string;
+    deliberateRevokeId: string; deliberateRevokeRowId: string;
   }
   const ids = {} as FixtureIds;
 
@@ -141,37 +143,60 @@ describe('T-341 / DEF-414 M1-M4 — the person_grants store backfill migration',
     const [admin] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Admin') returning id`;
     ids.adminId = admin!.id;
 
-    // One org-wide 'Cashier' position, used by every seeded person below.
+    // One org-wide 'Cashier' position, used by every seeded person below by default. 'Cook' exists
+    // only so R (below) can hold a DIFFERENT position at B than the one the shared active default
+    // is on — the fixture that proves step 5 checks WHICH position is held, not merely that some
+    // open employment exists (builder's self-report, orchestrator CHANGES 2026-09-25).
     const [cashier] = await sql<{ id: string }[]>`
       insert into positions (org_id, store_id, name, is_canonical, is_active) values (${orgId}, null, 'Cashier', true, true) returning id`;
     ids.cashierId = cashier!.id;
+    const [cook] = await sql<{ id: string }[]>`
+      insert into positions (org_id, store_id, name, is_canonical, is_active) values (${orgId}, null, 'Cook', true, true) returning id`;
 
-    async function defaultAt(storeId: string, capability: string, opts: { revoked?: boolean; setAt?: string } = {}) {
+    async function defaultAt(
+      storeId: string,
+      capability: string,
+      opts: { revoked?: boolean; setAt?: string; positionId?: string } = {},
+    ) {
       const [d] = await sql<{ id: string }[]>`
-        insert into position_capability_defaults (org_id, position_id, store_id, capability, set_by, set_at, revoked_at)
-        values (${orgId}, ${cashier!.id}, ${storeId}, ${capability},
+        insert into position_capability_defaults
+          (org_id, position_id, store_id, capability, set_by, set_at, revoked_at, revoked_by, revoke_reason)
+        values (${orgId}, ${opts.positionId ?? cashier!.id}, ${storeId}, ${capability},
                 ${ids.adminId}, ${opts.setAt ?? new Date().toISOString()},
-                ${opts.revoked ? new Date().toISOString() : null})
+                ${opts.revoked ? new Date().toISOString() : null},
+                ${opts.revoked ? ids.adminId : null},
+                ${opts.revoked ? 'Revoked for T-341 migration test fixture' : null})
         returning id`;
       return d!.id;
     }
-    async function openEmployment(personId: string, storeId: string) {
-      await sql`
+    // Every open/ended employment also links `employment_positions` (default Cashier) — step 5's
+    // own wording is "holding a position with an active default", so a fixture with no position
+    // link cannot exercise that half of the check at all.
+    async function openEmployment(personId: string, storeId: string, positionId: string = cashier!.id) {
+      const [emp] = await sql<{ id: string }[]>`
         insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-        values (${orgId}, ${storeId}, ${personId}, ${uid('SC')}, 'regular', '2025-01-01')`;
+        values (${orgId}, ${storeId}, ${personId}, ${uid('SC')}, 'regular', '2025-01-01') returning id`;
       await sql`insert into person_store_scope (person_id, store_id, source) values (${personId}, ${storeId}, 'employment')`;
+      await sql`insert into employment_positions (employment_id, position_id, is_primary) values (${emp!.id}, ${positionId}, true)`;
     }
-    async function endedEmployment(personId: string, storeId: string) {
-      await sql`
+    async function endedEmployment(personId: string, storeId: string, positionId: string = cashier!.id) {
+      const [emp] = await sql<{ id: string }[]>`
         insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on, ended_on)
-        values (${orgId}, ${storeId}, ${personId}, ${uid('SC')}, 'resigned', '2025-01-01', '2025-06-01')`;
+        values (${orgId}, ${storeId}, ${personId}, ${uid('SC')}, 'resigned', '2025-01-01', '2025-06-01') returning id`;
       await sql`insert into person_store_scope (person_id, store_id, source) values (${personId}, ${storeId}, 'employment')`;
+      await sql`insert into employment_positions (employment_id, position_id, is_primary) values (${emp!.id}, ${positionId}, true)`;
     }
-    async function positionRow(personId: string, sourceRef: string, opts: { revoked?: boolean; grantedAt?: string } = {}) {
+    async function positionRow(
+      personId: string,
+      sourceRef: string,
+      opts: { revoked?: boolean; grantedAt?: string; grantName?: string } = {},
+    ) {
       const [g] = await sql<{ id: string }[]>`
-        insert into person_grants (person_id, grant_name, grant_source, source_ref, granted_by, granted_at, revoked_at)
-        values (${personId}, 'record_sale', 'position', ${sourceRef}, ${ids.adminId},
-                ${opts.grantedAt ?? new Date().toISOString()}, ${opts.revoked ? new Date().toISOString() : null})
+        insert into person_grants (person_id, grant_name, grant_source, source_ref, granted_by, granted_at, revoked_at, revoke_reason)
+        values (${personId}, ${opts.grantName ?? 'record_sale'}, 'position', ${sourceRef}, ${ids.adminId},
+                ${opts.grantedAt ?? new Date().toISOString()},
+                ${opts.revoked ? new Date().toISOString() : null},
+                ${opts.revoked ? 'Revoked for T-341 migration test fixture' : null})
         returning id`;
       return g!.id;
     }
@@ -195,14 +220,19 @@ describe('T-341 / DEF-414 M1-M4 — the person_grants store backfill migration',
     await sql`insert into person_store_scope (person_id, store_id, source) values (${q!.id}, ${ids.storeA}, 'manual')`;
     ids.qRowId = await positionRow(q!.id, defB);
 
-    // R — Cashier at A and B, but B's default is REVOKED — no B row must be materialised.
+    // R — Cashier at A (gets an A row, like P); at B holds COOK, not Cashier, and Cook's own
+    // record_sale default at B is genuinely revoked. Cashier's record_sale default at B (defB)
+    // stays ACTIVE throughout, shared with P/Q — a migration that materialises on "open
+    // employment + SOME active default for this store/capability" without checking WHICH
+    // position the person holds would wrongly grab defB for R. No B row must be materialised
+    // either way (orchestrator CHANGES 2026-09-25 — R previously revoked an unrelated
+    // 'adjust_inventory' default, leaving defB active and making R behaviourally identical to P).
     const [r] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'R') returning id`;
     ids.rId = r!.id;
     await openEmployment(r!.id, ids.storeA);
-    await openEmployment(r!.id, ids.storeB);
-    const defBRevoked = await defaultAt(ids.storeB, 'adjust_inventory', { revoked: true });
+    await openEmployment(r!.id, ids.storeB, cook!.id);
+    await defaultAt(ids.storeB, 'record_sale', { revoked: true, positionId: cook!.id });
     ids.rRowId = await positionRow(r!.id, defA);
-    void defBRevoked;
 
     // E — Cashier at A (open) and B (ENDED) — no B row must be materialised.
     const [e] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'E') returning id`;
@@ -236,15 +266,45 @@ describe('T-341 / DEF-414 M1-M4 — the person_grants store backfill migration',
     ids.exNullId = exNull!.id;
     await openEmployment(exNull!.id, ids.storeA);
     const lateDefA = await defaultAt(ids.storeA, 'void_expense', { setAt: '2026-06-01T00:00:00Z' });
-    ids.exNullRowId = await positionRow(exNull!.id, lateDefA, { grantedAt: '2026-01-01T00:00:00Z' });
+    ids.exNullRowId = await positionRow(exNull!.id, lateDefA, { grantedAt: '2026-01-01T00:00:00Z', grantName: 'void_expense' });
 
-    // Amendment R1 item 2 — an already-hit §2.2 victim: a REVOKED 'position' row for record_sale at
-    // A, person is ALSO wanted (open employment, active default) at B with no active row there.
+    // Amendment R1 item 1 (twin #2) — an "ex-elevation" row: same upgraded-row tell
+    // (`granted_at` predates the default's `set_at`), but for 'manage_users' — admin:true,
+    // manager:false, the same capability case 12 grants via the real auto-elevation fallback —
+    // on a person who holds NO admin role in this org (no `person_roles` row at all) and has
+    // open employment at BOTH stores, so "both stores still resolve" has two stores to check.
+    // This is the shape that must infer the pre-upgrade source as 'elevation', not NULL.
+    const [exElevation] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'ExElevation') returning id`;
+    ids.exElevationId = exElevation!.id;
+    await openEmployment(exElevation!.id, ids.storeA);
+    await openEmployment(exElevation!.id, ids.storeB);
+    const lateDefManageUsers = await defaultAt(ids.storeA, 'manage_users', { setAt: '2026-06-01T00:00:00Z' });
+    ids.exElevationRowId = await positionRow(exElevation!.id, lateDefManageUsers, {
+      grantedAt: '2026-01-01T00:00:00Z',
+      grantName: 'manage_users',
+    });
+
+    // Amendment R3 (supersedes R1 item 2 / R2 item 2) — the REAL §2.2 victim shape: their A
+    // employment has ENDED (that's how the A row came to be revoked — T-289's own reconcile-on-
+    // endEmployment, not a deliberate admin act), and they're ALSO wanted at B (open employment,
+    // active default) with no active row there. R3's ruling: this must NOT be materialised — they
+    // lack B access today, so leaving them alone loses nothing; they go into the §8 cutover count.
     const [victim] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Victim22') returning id`;
     ids.victimId = victim!.id;
-    await openEmployment(victim!.id, ids.storeA);
+    await endedEmployment(victim!.id, ids.storeA);
     await openEmployment(victim!.id, ids.storeB);
     ids.victimRevokedRowId = await positionRow(victim!.id, defA, { revoked: true });
+
+    // Amendment R3 item 2 — the deliberate-revocation case: open Cashier at A AND B, both defaults
+    // ACTIVE, but an admin deliberately revoked the A row (not an ended employment, not a toggled-
+    // off default — the person is still fully wanted at A). Materialising a B row here would be a
+    // genuine WIDENING (step 5 must never treat a revoked row as evidence of anything). Expect RED
+    // against the current 0159, per the orchestrator.
+    const [deliberate] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'DeliberateRevoke') returning id`;
+    ids.deliberateRevokeId = deliberate!.id;
+    await openEmployment(deliberate!.id, ids.storeA);
+    await openEmployment(deliberate!.id, ids.storeB);
+    ids.deliberateRevokeRowId = await positionRow(deliberate!.id, defA, { revoked: true });
   });
 
   afterAll(async () => {
@@ -275,7 +335,10 @@ describe('T-341 / DEF-414 M1-M4 — the person_grants store backfill migration',
 
     const r = await sql<{ store_id: string }[]>`
       select store_id from person_grants where person_id = ${ids.rId} and grant_name = 'record_sale' and revoked_at is null`;
-    expect(r.some((row) => row.store_id === ids.storeB), 'R — B default revoked, no B row').toBe(false);
+    expect(
+      r.some((row) => row.store_id === ids.storeB),
+      "R — holds Cook (not Cashier) at B; Cashier's own active record_sale default there (defB) must not be wrongly materialised via a position R does not hold",
+    ).toBe(false);
 
     const e = await sql<{ store_id: string }[]>`
       select store_id from person_grants where person_id = ${ids.eId} and grant_name = 'record_sale' and revoked_at is null`;
@@ -297,11 +360,44 @@ describe('T-341 / DEF-414 M1-M4 — the person_grants store backfill migration',
     expect(rows.some((r) => r.store_id === ids.storeA), 'the original row is pinned to A').toBe(true);
   });
 
-  it('Amendment R1 item 2 — the already-revoked §2.2 victim gets B materialised (still wanted there)', async () => {
+  it("Amendment R1 item 1 (twin #2) — the ex-elevation row's twin carries grant_source='elevation'; both stores still resolve (row existence)", async () => {
+    const rows = await sql<{ store_id: string | null; grant_source: string | null }[]>`
+      select store_id, grant_source from person_grants where person_id = ${ids.exElevationId} and grant_name = 'manage_users' and revoked_at is null`;
+    expect(rows.length, 'the original (now store-pinned) row plus a person-level elevation twin').toBe(2);
+    const twin = rows.find((r) => r.store_id === null);
+    expect(twin, 'a person-level twin (store_id null) preserves pre-upgrade access').toBeDefined();
+    expect(
+      twin!.grant_source,
+      "the twin carries the ORIGINAL pre-upgrade source — 'elevation', not NULL — because this person holds no admin role and manage_users is elevation-eligible",
+    ).toBe('elevation');
+    expect(rows.some((r) => r.store_id === ids.storeA), 'the original row is pinned to A').toBe(true);
+
+    // "Both stores still resolve" (row existence): the twin is store_id NULL, which
+    // `personHasActiveGrant`'s `store_id IS NULL OR store_id = atStoreId` matches at ANY store
+    // the person has scope at — and this person has open employment (hence store scope) at both.
+    const scopes = await sql<{ store_id: string }[]>`
+      select store_id from person_store_scope where person_id = ${ids.exElevationId}`;
+    expect(scopes.map((s) => s.store_id).sort()).toEqual([ids.storeA, ids.storeB].sort());
+  });
+
+  it('Amendment R3 — the already-hit §2.2 victim (ended A employment) gets NO B row materialised', async () => {
     const rows = await sql<{ store_id: string | null; revoked_at: string | null }[]>`
       select store_id, revoked_at from person_grants where person_id = ${ids.victimId} and grant_name = 'record_sale'`;
     const activeB = rows.find((r) => r.store_id === ids.storeB && r.revoked_at === null);
-    expect(activeB, 'B is wanted (open employment + active default) and had no active row — must be materialised').toBeDefined();
+    expect(
+      activeB,
+      'R3: a revoked row is never evidence — this person is wanted at B today with no active row, which is the §8 cutover shape, not something step 5 may materialise',
+    ).toBeUndefined();
+  });
+
+  it('Amendment R3 item 2 — a DELIBERATE admin revocation at A gets NO B row materialised either (still open, still wanted at A)', async () => {
+    const rows = await sql<{ store_id: string | null; revoked_at: string | null }[]>`
+      select store_id, revoked_at from person_grants where person_id = ${ids.deliberateRevokeId} and grant_name = 'record_sale'`;
+    const activeB = rows.find((r) => r.store_id === ids.storeB && r.revoked_at === null);
+    expect(
+      activeB,
+      'a revoked row is never evidence, even when the person is still fully wanted at A — materialising B here would be a genuine widening',
+    ).toBeUndefined();
   });
 
   /** Amendment R2 item 4 — every M4 raw insert runs as the APP role with the org set (never only as

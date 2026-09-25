@@ -25,11 +25,18 @@
  *    at all is refused outright — there is no implicit lowest-privilege default (contrast
  *    v1, where an unconfigured user quietly became the least-privileged Server position;
  *    here "no role" means "not authorized for anything in this org", stated, not inferred).
+ *    ⭐ **T-341 / DEF-414.** For a 'store'-scoped capability, the override grant must match
+ *    THIS store: a `'position'`-sourced row (`grantSource: 'position'`) is honoured only at
+ *    the store whose default produced it, never at a store the person merely has scope at —
+ *    `accessRepo.personHasActiveGrant`'s `atStoreId` argument. A person-level grant (every
+ *    other source, `storeId IS NULL`) still matches everywhere, unchanged.
  * 3. **Store scope** — for a 'store'-scoped capability only: does a `person_store_scope`
  *    row exist for this exact store? Checked SEPARATELY from the capability decision and
  *    ALWAYS, per CAPABILITY-MATRIX.md rule 4 ("scope is checked separately and always") —
  *    invariant 6 exists specifically to prove holding the capability is not sufficient on
- *    its own.
+ *    its own. A store-scoped grant passing axis 2 above says only that THIS store's default
+ *    justifies the capability; this axis still separately requires the person to hold scope
+ *    there — the two are never the same check.
  *
  * `close_period` carries one further, capability-specific condition on top of these three
  * — see the dedicated comment at that branch below.
@@ -138,8 +145,13 @@ export async function authorize(
   const role = activeRole.role as Role;
 
   // --- Axis 3a/3b: capability from the matrix, OR an explicit override grant -------------
+  // T-341 / DEF-414 — a store-scoped capability's grant check is narrowed to THIS store (a
+  // 'position'-sourced grant matches only its own default's store; a person-level grant still
+  // matches everywhere, unchanged). Axis 2 below still runs separately and always — a store-scoped
+  // call with no storeId falls through to axis 2's own "no storeId was given" refusal unchanged.
   const matrixAllows = CAPABILITY_MATRIX[capability][role];
-  const allowed = matrixAllows || (await accessRepo.personHasActiveGrant(tx, actor.personId, capability));
+  const allowed =
+    matrixAllows || (await accessRepo.personHasActiveGrant(tx, actor.personId, capability, scope === 'store' ? ctx.storeId : undefined));
   if (!allowed) {
     // Row 5 — no lookup; role and capability are already in hand.
     throw new AuthorizationError(`authorize: role '${role}' may not '${capability}'`, capability, roleMayNot(role, capability));

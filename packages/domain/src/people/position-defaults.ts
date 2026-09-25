@@ -254,22 +254,22 @@ export async function reconcilePositionGrants(
     }
   }
 
-  // Step 5 — grant every wanted capability. `grantCapability` is idempotent per §C4/§C5; a
-  // capability already actively held (any source) is left alone unless the incoming 'position'
-  // rank strictly outranks the stored one, in which case grantCapability rewrites provenance
-  // (and, for 'position', the ref) in the same statement. `granted` reports only capabilities
-  // that are genuinely NEW to this person or newly justified at the 'position' rank — read
-  // BEFORE the call so a same-rank or higher-ranked existing row is never miscounted.
+  // Step 5 — grant every wanted capability. T-341 / DEF-414: `grantCapability`'s 'position' arm
+  // COEXISTS with a person-level row rather than rewriting it (schema/access.ts's two partial
+  // unique indexes, migration 0159) — no rank logic survives here either. `existingActive` is
+  // this person's active 'position' rows AT THIS STORE ONLY: a capability already held here via a
+  // position default is idempotent (not newly granted); a capability held only by a person-level
+  // hand-grant, or by a 'position' row at a DIFFERENT store, is still genuinely NEW at this store
+  // — `grantCapability` inserts a real second row for it, and `granted` reports that (Amendment
+  // R1 item 3: `affected` now counts this, where the old rank comparison undercounted it).
   const existingActive = new Map(
     (await accessRepo.grantsForPerson(tx, input.personId))
-      .filter((g) => g.revokedAt === null)
+      .filter((g) => g.revokedAt === null && g.grantSource === 'position' && g.storeId === input.storeId)
       .map((g) => [g.grantName as Capability, g] as const),
   );
 
   const granted: Capability[] = [];
   for (const [capability, defaultId] of wantedByCapability) {
-    const existing = existingActive.get(capability);
-    const existingRank = existing ? accessRepo.grantSourceRank(existing.grantSource) : -1;
     await accessRepo.grantCapability(tx, {
       personId: input.personId,
       grantName: capability,
@@ -277,7 +277,7 @@ export async function reconcilePositionGrants(
       grantSource: 'position',
       sourceRef: defaultId,
     });
-    if (accessRepo.grantSourceRank('position') > existingRank) {
+    if (!existingActive.has(capability)) {
       granted.push(capability);
     }
   }

@@ -41,7 +41,7 @@
  * never the reverse).
  */
 import { sql } from 'drizzle-orm';
-import { check, index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { check, foreignKey, index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
 import { persons } from './persons';
 import { positionCapabilityDefaults } from './position-capability-defaults';
@@ -187,6 +187,20 @@ export const personGrants = pgTable(
      */
     sourceRef: uuid('source_ref').references(() => positionCapabilityDefaults.id, { onDelete: 'restrict' }),
     /**
+     * T-341 / DEF-414, migration 0159. Which store a `'position'`-sourced grant is honoured at —
+     * the store `sourceRef`'s default belongs to, ALWAYS set for `grant_source = 'position'` and
+     * NEVER set for any other source (`person_grants_store_shape_check` below). A raw insert that
+     * omits it is filled by a hand-added trigger (migration 0159 — `packages/db/migrations/
+     * README.md` §3: what Drizzle cannot express, a trigger cannot be declared here).
+     *
+     * ⛔ A position-sourced row and a person-level row (`storeId IS NULL`, every other source) now
+     * COEXIST for the same `(personId, grantName)` — neither ever rewrites the other
+     * (`repo/access.ts`'s `grantCapability`). Before 0159 there was exactly one active slot per
+     * `(personId, grantName)`; DEF-414 is that a store-scoped position grant authorised at every
+     * store the person had SCOPE at, not only the store whose default produced it.
+     */
+    storeId: uuid('store_id').references(() => stores.id, { onDelete: 'restrict' }),
+    /**
      * WHY this grant was revoked — T-248 / DEF-237, migration 0140, the same shape as
      * `person_credentials.revokeReason` (`schema/sessions.ts`, T-239 / DEF-229). Pairs with
      * `revokedAt`; this table has never carried a `revokedBy` (unlike `person_credentials`) and
@@ -196,12 +210,17 @@ export const personGrants = pgTable(
   },
   (t) => [
     index('person_grants_person_id_idx').on(t.personId),
-    // At most one ACTIVE grant per (person, grant_name) — re-granting after a revocation
-    // inserts a new row rather than un-revoking the old one, so each grant's own window
-    // (granted_at .. revoked_at) stays exact.
-    uniqueIndex('person_grants_active_person_grant_unique')
+    index('person_grants_store_id_idx').on(t.storeId),
+    // T-341, migration 0159. One (person, grant_name) active slot became two: a PERSON-LEVEL slot
+    // (storeId IS NULL — elevation/owner/grant/NULL-source) and a PER-STORE slot (storeId IS NOT
+    // NULL — 'position' only), replacing the single `person_grants_active_person_grant_unique`
+    // this table carried through migration 0140. See this column's own comment for why.
+    uniqueIndex('person_grants_active_person_level_unique')
       .on(t.personId, t.grantName)
-      .where(sql`${t.revokedAt} is null`),
+      .where(sql`${t.revokedAt} is null and ${t.storeId} is null`),
+    uniqueIndex('person_grants_active_position_store_unique')
+      .on(t.personId, t.grantName, t.storeId)
+      .where(sql`${t.revokedAt} is null and ${t.storeId} is not null`),
     index('person_grants_source_ref_idx').on(t.sourceRef),
     check(
       'person_grants_source_check',
@@ -230,5 +249,24 @@ export const personGrants = pgTable(
           or (${t.revokedAt} is not null and ${t.revokeReason} is not null
               and btrim(${t.revokeReason}) <> '')`,
     ),
+    // T-341, migration 0159. Every row's shape, from here on: a 'position' row ALWAYS carries a
+    // store; every other source NEVER does. `IS DISTINCT FROM` for the same null-blind reason as
+    // `person_grants_position_source_ref_check` above.
+    check(
+      'person_grants_store_shape_check',
+      sql`(${t.grantSource} = 'position' and ${t.storeId} is not null)
+          or (${t.grantSource} is distinct from 'position' and ${t.storeId} is null)`,
+    ),
+    // T-341, migration 0159. A position row's store must be the store its OWN default belongs to
+    // — MATCH SIMPLE (Drizzle's default, unwritten): a 'grant' row that keeps a history ref but no
+    // store (storeId NULL) skips this FK entirely; the single-column FK on sourceRef above still
+    // requires that history ref to exist. `position_capability_defaults_id_store_unique`
+    // (`schema/position-capability-defaults.ts` — hand-added in migration 0159, no Drizzle mirror,
+    // same as `stock_locations_id_store_id_key`) is what this composite FK references.
+    foreignKey({
+      columns: [t.sourceRef, t.storeId],
+      foreignColumns: [positionCapabilityDefaults.id, positionCapabilityDefaults.storeId],
+      name: 'person_grants_source_ref_store_fk',
+    }).onDelete('restrict'),
   ],
 );

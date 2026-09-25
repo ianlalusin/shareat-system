@@ -111,10 +111,21 @@ describe('2 — hire at A, terminate, hire at B as Cashier: authorised at B, ref
       withOrgPrincipal(boot.orgId, (tx) => authorize(tx, workerActor, 'record_sale', { storeId: storeB.storeId })),
       'authorised at B — the live hire',
     ).resolves.toBeUndefined();
+
+    // The lost leg, restored: this file's own theme is that terminate() deletes the A scope row
+    // (source='employment', no other open employment there) — quoted directly, not just asserted
+    // by the comment on the refusal below.
+    expect(await hasScope(worker!.id, boot.storeId), 'A: the employment-sourced scope row is gone').toBe(false);
+
     await expect(
       withOrgPrincipal(boot.orgId, (tx) => authorize(tx, workerActor, 'record_sale', { storeId: boot.storeId })),
-      'refused at A — the terminated one',
-    ).rejects.toThrow(/no store scope/);
+      // T-341 / DEF-414 (orchestrator CHANGES, 2026-09-25): A's position-sourced grant was revoked
+      // by terminate(); the only active one is scoped to storeB (via migration 0159's store_id fill
+      // trigger). Axis 3b refuses on the grant BEFORE axis 2 ever checks scope, so this is "may
+      // not", not "no store scope" — A's scope row is also gone (this file's own theme), but that
+      // is never reached.
+      'refused at A — the surviving grant is scoped to B only, refused before scope is even checked',
+    ).rejects.toThrow(/may not 'record_sale'/);
   });
 });
 

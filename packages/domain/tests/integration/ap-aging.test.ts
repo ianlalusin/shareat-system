@@ -90,6 +90,19 @@ async function fixture(hint: string) {
   await grantEverydayPositionAccess(sql, {
     orgId, storeId, employmentId: employment!.id, personId: staff!.id, setBy: manager!.id,
   });
+  // T-341 / DEF-414 (orchestrator CHANGES, 2026-09-25): person_store_scope alone no longer
+  // authorises a store-scoped, position-sourced capability at store2Id — staff needs a real
+  // employment/position THERE too, or `creditInvoiceAt(f, f.store2Id, ...)`'s recordInvoice call
+  // correctly refuses (staff's record_supplier_invoice grant is scoped to storeId's own default
+  // only). Not the DEF-414 leak this fixture used to rely on — a genuine second-store hire.
+  const [employment2] = await sql<{ id: string }[]>`
+    insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
+    values (${orgId}, ${store2Id}, ${staff!.id}, ${uid('SE')}, 'regular', '2025-01-01')
+    returning id
+  `;
+  await grantEverydayPositionAccess(sql, {
+    orgId, storeId: store2Id, employmentId: employment2!.id, personId: staff!.id, setBy: manager!.id,
+  });
   const [drawer] = await sql<{ id: string }[]>`
     select id from money_accounts where store_id = ${storeId}
       and instrument = 'cash' and custodian = 'cashier' and is_foundation

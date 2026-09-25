@@ -14,8 +14,9 @@
  * Every function takes a `Tx`, never the base connection (same convention as
  * `repo/journal.ts`) — so a caller cannot write outside a transaction by accident.
  */
-import { and, eq, exists, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { and, eq, exists, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { personGrants, personRoles, personStoreScope } from '../../schema/access';
+import { positionCapabilityDefaults } from '../../schema/position-capability-defaults';
 import { recordGone } from './record-gone';
 // ⚠️ Tables outside the access axis this file touches: `personCredentials` for
 // `hasOtherActiveAdminWhoCanSignIn`, `persons` for `revokeElevationGrantsForOrg`'s org scoping
@@ -488,6 +489,9 @@ export interface GrantRow {
    *  `grantSource === 'position'`; may survive as history on a `'grant'` row (§C3); null for
    *  every other source. See `schema/access.ts`'s own comment on the column. */
   sourceRef: string | null;
+  /** T-341 / DEF-414. The store a `'position'`-sourced row is honoured at; null for every other
+   *  source. See `schema/access.ts`'s own comment on the column. */
+  storeId: string | null;
   revokeReason: string | null;
 }
 
@@ -561,46 +565,90 @@ export function grantSourceRank(source: GrantSource | null): number {
  * previously revoked grant is a distinct row, and re-granting inserts a new one rather
  * than reviving the old — the old row's revocation date stays intact and queryable.
  *
- * ⭐ **T-248 follow-up.** On the idempotent (already-active) branch, `grantSource` is
- * re-written ONLY when the incoming source outranks the stored one on `GRANT_SOURCE_RANK`
- * (strictly less sweepable) — e.g. stored `'elevation'`, incoming `'grant'`: a deliberate
- * hand-grant of a capability the target already held via the auto-elevation fallback is
- * real new evidence and must not be left tagged as still-sweepable. The reverse, and every
- * same-rank call, is UNCHANGED from before: the existing row's provenance stands, because a
- * second call is not evidence the first was wrong.
+ * ⭐ **T-341 / DEF-414 — two branches, and they never touch each other's rows.** A `'position'`
+ * call never rewrites a person-level row, and a person-level call never rewrites a `'position'`
+ * row; the two COEXIST for the same `(personId, grantName)` (`schema/access.ts`'s two partial
+ * unique indexes, migration 0159). The rank-based rewrite T-248/T-289 built (below) survives
+ * ONLY on the person-level branch, where it always applied to same-shape rows.
  *
- * ⛔ **Why this had to change, concretely.** `grant_capability` is itself
+ * **Position branch.** Idempotent on `(personId, grantName, 'position', storeId)`, where
+ * `storeId` is `input.sourceRef`'s own default's store (found by a correlated subquery — this
+ * function has no separate lookup round-trip to make). No rank logic: a second position call for
+ * the same store is transition 4 (§C5), unconditionally a no-op. `storeId` itself is left for the
+ * fill trigger (migration 0159) to derive on INSERT, the same as every raw fixture writer.
+ *
+ * **Person-level branch (`storeId IS NULL`).** Unchanged from T-248/T-289 except restricted to
+ * `storeId IS NULL` rows — a `'position'` row is invisible to this branch and vice versa.
+ * `grantSource` is re-written ONLY when the incoming source outranks the stored one on
+ * `GRANT_SOURCE_RANK` (strictly less sweepable) — e.g. stored `'elevation'`, incoming `'grant'`:
+ * a deliberate hand-grant of a capability the target already held via the auto-elevation
+ * fallback is real new evidence and must not be left tagged as still-sweepable. The reverse, and
+ * every same-rank call, is UNCHANGED: the existing row's provenance stands, because a second call
+ * is not evidence the first was wrong.
+ *
+ * ⛔ **Why this had to change, concretely (T-248).** `grant_capability` is itself
  * `{ admin: true, manager: false }`, so an auto-elevated manager holds it — meaning one
  * elevated manager can `grantCapabilityAsActor` a capability to ANOTHER elevated manager who
- * already holds it as `'elevation'`. Before this fix, that hand-grant vanished into the
+ * already holds it as `'elevation'`. Before that fix, the hand-grant vanished into the
  * idempotent branch leaving `grantSource` at `'elevation'`, and the next admin arrival swept
- * it exactly as if the deliberate act had never happened — the precise guarantee T-248
- * exists to provide, not holding.
- *
- * ⛔ **T-289 — `sourceRef` is written in the SAME UPDATE as `grantSource` on the rewrite
- * branch, and ONLY when the incoming source is `'position'`.** Writing `grantSource =
- * 'position'` alone would leave `sourceRef` null and violate `person_grants_position_source_
- * ref_check` — the row would be refused and the whole transaction rolled back (§C5 transition
- * 3's own warning). When the incoming source is `'grant'` superseding a stored `'position'`
- * row (transition 1), `sourceRef` is left UNTOUCHED — it is history, and must be kept, never
- * nulled or overwritten. */
+ * it exactly as if the deliberate act had never happened. */
 export async function grantCapability(tx: Tx, input: GrantCapabilityInput): Promise<{ id: string }> {
+  if (input.grantSource === 'position') {
+    const [existing] = await tx
+      .select({ id: personGrants.id })
+      .from(personGrants)
+      .where(
+        and(
+          eq(personGrants.personId, input.personId),
+          eq(personGrants.grantName, input.grantName),
+          eq(personGrants.grantSource, 'position'),
+          isNull(personGrants.revokedAt),
+          exists(
+            tx
+              .select({ one: sql`1` })
+              .from(positionCapabilityDefaults)
+              .where(
+                and(
+                  eq(positionCapabilityDefaults.id, input.sourceRef),
+                  eq(positionCapabilityDefaults.storeId, personGrants.storeId),
+                ),
+              ),
+          ),
+        ),
+      )
+      .limit(1);
+    if (existing) return { id: existing.id };
+
+    const [row] = await tx
+      .insert(personGrants)
+      .values({
+        personId: input.personId,
+        grantName: input.grantName,
+        grantedBy: input.grantedBy,
+        grantSource: 'position',
+        sourceRef: input.sourceRef,
+      })
+      .returning({ id: personGrants.id });
+    if (!row) throw new Error('grantCapability: insert returned no row');
+    return row;
+  }
+
   const [existing] = await tx
     .select({ id: personGrants.id, grantSource: personGrants.grantSource })
     .from(personGrants)
-    .where(and(eq(personGrants.personId, input.personId), eq(personGrants.grantName, input.grantName), isNull(personGrants.revokedAt)))
+    .where(
+      and(
+        eq(personGrants.personId, input.personId),
+        eq(personGrants.grantName, input.grantName),
+        isNull(personGrants.storeId),
+        isNull(personGrants.revokedAt),
+      ),
+    )
     .limit(1);
   if (existing) {
     const existingSource = existing.grantSource as GrantSource | null;
     if (grantSourceRank(input.grantSource) > grantSourceRank(existingSource)) {
-      await tx
-        .update(personGrants)
-        .set(
-          input.grantSource === 'position'
-            ? { grantSource: input.grantSource, sourceRef: input.sourceRef }
-            : { grantSource: input.grantSource },
-        )
-        .where(eq(personGrants.id, existing.id));
+      await tx.update(personGrants).set({ grantSource: input.grantSource }).where(eq(personGrants.id, existing.id));
     }
     return { id: existing.id };
   }
@@ -612,7 +660,7 @@ export async function grantCapability(tx: Tx, input: GrantCapabilityInput): Prom
       grantName: input.grantName,
       grantedBy: input.grantedBy,
       grantSource: input.grantSource,
-      sourceRef: input.sourceRef ?? null,
+      sourceRef: null,
     })
     .returning({ id: personGrants.id });
   if (!row) throw new Error('grantCapability: insert returned no row');
@@ -672,11 +720,27 @@ export async function revokeElevationGrantsForOrg(
     .returning({ personId: personGrants.personId, grantName: personGrants.grantName });
 }
 
-export async function personHasActiveGrant(tx: Tx, personId: string, grantName: string): Promise<boolean> {
+/**
+ * T-341 / DEF-414. `atStoreId` omitted (every pre-T-341 caller: `roles.ts:214`, org-scoped
+ * checks, the two integration-test callers) keeps today's semantics — any active row, whatever
+ * its store. Given, a `'position'`-sourced row matches only its OWN store; a person-level row
+ * (`storeId IS NULL`, every other source) matches every store, same as before this column
+ * existed — that is what "coexist" (`grantCapability`) means for a read.
+ */
+export async function personHasActiveGrant(
+  tx: Tx,
+  personId: string,
+  grantName: string,
+  atStoreId?: string,
+): Promise<boolean> {
+  const filters = [eq(personGrants.personId, personId), eq(personGrants.grantName, grantName), isNull(personGrants.revokedAt)];
+  if (atStoreId !== undefined) {
+    filters.push(or(isNull(personGrants.storeId), eq(personGrants.storeId, atStoreId))!);
+  }
   const [row] = await tx
     .select({ id: personGrants.id })
     .from(personGrants)
-    .where(and(eq(personGrants.personId, personId), eq(personGrants.grantName, grantName), isNull(personGrants.revokedAt)))
+    .where(and(...filters))
     .limit(1);
   return row !== undefined;
 }
@@ -694,6 +758,7 @@ export async function grantsForPerson(tx: Tx, personId: string): Promise<GrantRo
       revokedAt: personGrants.revokedAt,
       grantSource: personGrants.grantSource,
       sourceRef: personGrants.sourceRef,
+      storeId: personGrants.storeId,
       revokeReason: personGrants.revokeReason,
     })
     .from(personGrants)

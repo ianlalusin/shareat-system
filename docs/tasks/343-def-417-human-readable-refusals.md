@@ -205,6 +205,13 @@ with `U` in subject and reason → rendered text has no UUID (red: contains `U`)
 - **S6** labels for dispositions and item kinds (rows 10, 11) beside the enums in `packages/db/schema/*`; also the raw
   keys already on screen (`admin/access-defaults/grid.tsx:211,319` → `CAPABILITY_LABEL`; `admin/users/*` →
   `ROLE_LABEL`; `items/page.tsx` kind; `inventory/usage` reason codes).
+- **S6b (DEF-431, folded in by Ian 2026-09-25)** `/admin/users/[id]` "Extra capability grants": show `CAPABILITY_LABEL`
+  for held rows and the grant grid, with the key as secondary text at most. Show "…now held in their own right" only
+  AFTER "Hold in their own right" succeeds, not beside every row beforehand. Evidence: `~/.claude/skills/orchestrator/tools/t341-admin-users-page.png`.
+- **S2b (DEF-430, folded in by Ian 2026-09-25; lands after T-341)** a store-scoped refusal from axis 3b where the person
+  holds the capability via a position at OTHER stores must not blame the role. Name the store and where the job is, e.g.
+  "…can't submit a sales day at SmokeStore Two — their Cashier job is at SmokeStore." Needs a refusal-only lookup,
+  savepointed like S2's. Evidence: `t341-smk2-refusal.png`.
 - **S7** collapse ≈40 app regexes into `err instanceof AuthorizationError && err.capability === …`, or delete.
 - **S8** the four choke-point bypasses.
 - **S9** strict flip — codeless fall-through returns the fallback for any non-presentable Error; precondition: ratchet at zero.
