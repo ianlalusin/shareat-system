@@ -4,6 +4,7 @@ import { listStores, listChannels, listMoneyAccountsForPicker } from '../lib';
 import { requireSession } from '../../../lib/session';
 import { createSalesDayAction } from '../actions';
 import { Page } from '@/components/shell/Page';
+import { FilterRow } from '@/components/FilterRow';
 
 export const metadata = { title: 'New sales day — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -27,7 +28,10 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
 
   const channels = storeId ? await listChannels(orgId, storeId) : [];
   const activeChannels = channels.filter((c) => c.isActive);
-  const wallets = await listMoneyAccountsForPicker(orgId);
+  // DEF-148, other half (/code-review): unfiltered wallets let a form built for store A render
+  // store B's wallets — create.ts's tender resolver refuses that at save time; filter here to the
+  // same storeId the hidden input and the channel listing already use.
+  const wallets = (await listMoneyAccountsForPicker(orgId)).filter((w) => w.storeId === storeId);
 
   const carry = new URLSearchParams();
   if (storeId) carry.set('store', storeId);
@@ -54,24 +58,45 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
         </div>
       )}
 
-      <form action={createSalesDayAction} className="space-y-6 text-sm">
-        {/* ⭐ No orgId and no "acting as" — both come from the session now (T-138). */}
-        <section className="grid gap-4 sm:grid-cols-2">
-          <label className="flex flex-col gap-1">
-            <span className={LABEL}>Store</span>
-            <select
-              name="storeId"
-              defaultValue={storeId ?? ''}
-              className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-950"
-            >
-              {stores.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({s.code})
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1">
+      {stores.length === 0 ? (
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+          This organisation has no stores yet.
+        </p>
+      ) : (
+        <>
+          {stores.length > 1 && (
+            <FilterRow submitLabel="Switch store">
+              <label className="flex flex-col gap-1">
+                <span className={LABEL}>Store</span>
+                {/* text-sm is load-bearing: it used to inherit from the POST form's ancestor
+                    className; FilterRow hides that ancestry from the touch-target census, so
+                    removing this changes the modelled control size. */}
+                <select
+                  name="store"
+                  defaultValue={storeId}
+                  className="rounded border border-neutral-300 bg-white px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+                >
+                  {stores.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.code})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </FilterRow>
+          )}
+
+          <form action={createSalesDayAction} className="space-y-6 text-sm">
+            {/* ⭐ No orgId and no "acting as" — both come from the session now (T-138). */}
+            <input type="hidden" name="storeId" value={storeId} />
+            <section className="grid gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-1">
+                <span className={LABEL}>Store</span>
+                <p className="rounded border border-neutral-300 bg-neutral-50 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900">
+                  {stores.find((s) => s.id === storeId)?.name} ({stores.find((s) => s.id === storeId)?.code})
+                </p>
+              </div>
+              <label className="flex flex-col gap-1">
             <span className={LABEL}>Business date</span>
             <input
               type="date"
@@ -234,7 +259,9 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
         >
           Save draft
         </button>
-      </form>
+          </form>
+        </>
+      )}
     </Page>
   );
 }
