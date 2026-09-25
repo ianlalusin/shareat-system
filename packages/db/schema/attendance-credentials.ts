@@ -160,11 +160,18 @@ export const attendanceCredentials = pgTable(
       `,
     ),
 
-    /** ⛔ A revocation with no human or no reason is not an audit trail. */
+    /**
+     * ⛔ A revocation with no human, no reason, or a BLANK reason is not an audit trail.
+     * T-339 slice 5 / DEF-236 (migration 0158) widened this from "not null" to "not null and not
+     * blank" — same clause shape as sibling `person_credentials_revoke_check` (0138). The explicit
+     * `is not null` stays ahead of `btrim(...) <> ''` deliberately: dropping it would be NULL-blind
+     * (a CHECK passes on NULL, so a missing reason would slip through the same gap 0138 already
+     * documents).
+     */
     check(
       'attendance_credentials_revoke_check',
       sql`(${t.revokedAt} is null and ${t.revokedBy} is null and ${t.revokeReason} is null)
-          or (${t.revokedAt} is not null and ${t.revokedBy} is not null and ${t.revokeReason} is not null)`,
+          or (${t.revokedAt} is not null and ${t.revokedBy} is not null and ${t.revokeReason} is not null and btrim(${t.revokeReason}) <> '')`,
     ),
   ],
 );
