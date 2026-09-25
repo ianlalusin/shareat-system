@@ -38,6 +38,7 @@ import {
 } from '@shareat/db';
 import { authorize, AuthorizationError, type Actor, type Capability } from '@shareat/auth';
 import { parseMoneyInput } from '../shared/money-input';
+import { assertFiguresReconcile } from '../shared/reconcile';
 import { quantity as parseQuantity } from '../stock/quantity';
 import { recordCharge, voidCharge } from '../ar';
 import { branchPriceFor } from '../items';
@@ -119,18 +120,13 @@ function parseQuantityInput(raw: string, label: string): string {
  * ordinary mismatch is unchanged and stays at that call site — a pre-existing regression test
  * (`packages/domain/tests/integration/trade.test.ts`) pins that exact wording, and this function
  * has no access to the goods/fees breakdown needed to reproduce it.
+ *
+ * T-340 — the finiteness-then-tolerance check itself now lives in `shared/reconcile.ts`'s
+ * `assertFiguresReconcile`, shared with `items/index.ts`'s line/header checks; this function is a
+ * thin, byte-identical-message wrapper so its name, export and signature never change.
  */
 export function assertTradeTotalReconciles(stated: number, computed: number): void {
-  if (!Number.isFinite(stated) || !Number.isFinite(computed)) {
-    throw new Error(
-      `assertTradeTotalReconciles: both figures must be finite — got stated=${stated}, computed=${computed}.`,
-    );
-  }
-  if (Math.abs(stated - computed) > EPSILON) {
-    throw new Error(
-      `assertTradeTotalReconciles: ${stated} does not reconcile with ${computed} (beyond ${EPSILON}).`,
-    );
-  }
+  assertFiguresReconcile('assertTradeTotalReconciles', stated, computed, EPSILON);
 }
 
 export interface TradeLineDraft {

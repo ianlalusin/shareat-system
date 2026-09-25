@@ -21,6 +21,7 @@ import {
 import type { BaseUnit, ItemKind, PurchaseUnit } from '@shareat/db/schema';
 import { computeBranchPrice, type BranchPrice } from './branch-price';
 import { authorize, type Actor } from '@shareat/auth';
+import { assertFiguresReconcile } from '../shared/reconcile';
 
 export interface CreateItemInput {
   code: string;
@@ -182,7 +183,25 @@ export async function validateInvoiceLines(
 
     if (!(qty > 0)) throw new Error(`validateInvoiceLines: line ${i + 1} (${item.name}) needs a quantity above zero.`);
     if (!(factor > 0)) throw new Error(`validateInvoiceLines: line ${i + 1} (${item.name}) needs a conversion factor above zero.`);
-    if (Math.abs(qty * price - total) > LINE_EPSILON) {
+    // T-340/DEF-393 — price checked before total, so a typed `abc` unit price is what the app
+    // path quotes, not the `NaN` computed from it (T-328 §4c). `Number.isFinite`, not a `>= 0`
+    // comparison — that would add an out-of-scope negativity rule (money-positivity-guard shape).
+    if (!Number.isFinite(price)) {
+      throw new Error(`validateInvoiceLines: line ${i + 1} (${item.name}) — the unit price "${l.unitPrice}" is not a number.`);
+    }
+    if (!Number.isFinite(total)) {
+      throw new Error(`validateInvoiceLines: line ${i + 1} (${item.name}) — the line total "${l.lineTotal}" is not a number.`);
+    }
+    // T-340 — delegates the finiteness-then-tolerance check to the shared guard (trade's own
+    // :329-337 pattern): re-throw a finiteness refusal unchanged (Invariant 6 — never flattened
+    // into the mismatch sentence below), otherwise keep this call site's own figure-quoting
+    // message, byte-identical to before this task. `price`/`total` already passed the checks
+    // above, so only the COMPUTED `qty * price` can still be non-finite here (an overflow, e.g.
+    // `1e300 × 1e10`), which is why this delegate call still needs its own finiteness branch.
+    try {
+      assertFiguresReconcile(`validateInvoiceLines: line ${i + 1} (${item.name})`, total, qty * price, LINE_EPSILON);
+    } catch (err) {
+      if (!Number.isFinite(total) || !Number.isFinite(qty * price)) throw err;
       throw new Error(
         `validateInvoiceLines: line ${i + 1} (${item.name}) does not add up — ${l.quantity} × ` +
           `₱${l.unitPrice} is ₱${(qty * price).toFixed(2)}, not ₱${l.lineTotal}.`,
@@ -208,7 +227,12 @@ export async function validateInvoiceLines(
     });
   }
 
-  if (Math.abs(sum - Number(invoiceTotal)) > LINE_EPSILON) {
+  // T-340 — same delegate-and-re-throw shape as the line check above; label pinned per Amendment
+  // R1 so a re-thrown finiteness refusal reads as the invoice total, not a specific line.
+  try {
+    assertFiguresReconcile('validateInvoiceLines: the invoice total', Number(invoiceTotal), sum, LINE_EPSILON);
+  } catch (err) {
+    if (!Number.isFinite(Number(invoiceTotal)) || !Number.isFinite(sum)) throw err;
     throw new Error(
       `validateInvoiceLines: the lines total ₱${sum.toFixed(2)}, but the invoice says ` +
         `₱${invoiceTotal}. Either the lines are incomplete or the total is wrong — both are worth ` +

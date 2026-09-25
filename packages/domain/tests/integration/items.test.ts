@@ -25,6 +25,7 @@ import { seedExpenseCategories } from '../../../db/seed/expense-categories';
 import { itemsRepo, closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
+import type { InvoiceLineDraft } from '@shareat/domain';
 import {
   approveItemRequest,
   clearStoreSellability,
@@ -36,6 +37,7 @@ import {
   requestItem,
   setStoreSellability,
   recordInvoice,
+  setInvoiceLines,
   undeclareSupplierItem,
   updateItem,
   verifyInvoice,
@@ -279,6 +281,223 @@ describe('the rules a line must satisfy before it becomes a price', () => {
     const invoiceId = await invoiceWithLines(f, '2026-01-10', '4500.00', []);
     const [row] = await sql`select status from supplier_invoices where id = ${invoiceId}`;
     expect(row!.status).toBe('verified');
+  });
+});
+
+describe('T-340 — a non-number never reaches the line arithmetic', () => {
+  it('I1 (app path\'s exact shape): a typed "abc" price names the line and quotes "abc", not the computed line total', async () => {
+    const f = await fixture('t340-i1');
+    const item = await porkBelly(f);
+    const fileId = await evidence(f);
+    // ⛔ Amendment R1 §3: NOT invoiceWithLines — it verifies, and setInvoiceLines refuses a
+    // non-pending invoice. recordInvoice directly, with no lines, left pending.
+    const created = await asOrg(f.orgId, (tx) =>
+      recordInvoice(tx, f.staff, {
+        storeId: f.storeId, supplierId: f.supplierId, invoiceDate: '2026-01-10',
+        totalAmount: '2900.00', receiptFileId: fileId, lines: [],
+      }),
+    );
+    const bad: InvoiceLineDraft = {
+      itemId: item, quantity: '10', purchaseUnit: 'kg', conversionFactor: '1',
+      unitPrice: 'abc', lineTotal: (Number('10') * Number('abc')).toFixed(2),
+    };
+    await expect(
+      asOrg(f.orgId, (tx) => setInvoiceLines(tx, f.staff, created.id, [bad])),
+    ).rejects.toThrow(/line 1 \(Pork belly .*\) — the unit price "abc" is not a number/);
+    await expect(
+      asOrg(f.orgId, (tx) => setInvoiceLines(tx, f.staff, created.id, [bad])),
+    ).rejects.not.toThrow(/line total/);
+  });
+
+  it('I2: unit price AND line total both "NaN" — price is checked first', async () => {
+    const f = await fixture('t340-i2');
+    const item = await porkBelly(f);
+    const fileId = await evidence(f);
+    const created = await asOrg(f.orgId, (tx) =>
+      recordInvoice(tx, f.staff, {
+        storeId: f.storeId, supplierId: f.supplierId, invoiceDate: '2026-01-10',
+        totalAmount: '2900.00', receiptFileId: fileId, lines: [],
+      }),
+    );
+    const bad: InvoiceLineDraft = {
+      itemId: item, quantity: '10', purchaseUnit: 'kg', conversionFactor: '1',
+      unitPrice: 'NaN', lineTotal: 'NaN',
+    };
+    await expect(
+      asOrg(f.orgId, (tx) => setInvoiceLines(tx, f.staff, created.id, [bad])),
+    ).rejects.toThrow(/the unit price "NaN" is not a number/);
+  });
+
+  it('I3: an "Infinity" unit price is refused the same way', async () => {
+    const f = await fixture('t340-i3');
+    const item = await porkBelly(f);
+    const fileId = await evidence(f);
+    const created = await asOrg(f.orgId, (tx) =>
+      recordInvoice(tx, f.staff, {
+        storeId: f.storeId, supplierId: f.supplierId, invoiceDate: '2026-01-10',
+        totalAmount: '2900.00', receiptFileId: fileId, lines: [],
+      }),
+    );
+    const bad: InvoiceLineDraft = {
+      itemId: item, quantity: '10', purchaseUnit: 'kg', conversionFactor: '1',
+      unitPrice: 'Infinity', lineTotal: 'Infinity',
+    };
+    await expect(
+      asOrg(f.orgId, (tx) => setInvoiceLines(tx, f.staff, created.id, [bad])),
+    ).rejects.toThrow(/the unit price "Infinity" is not a number/);
+  });
+
+  it('I4: a valid unit price but a "NaN" line total names the LINE TOTAL, not the price', async () => {
+    const f = await fixture('t340-i4');
+    const item = await porkBelly(f);
+    const fileId = await evidence(f);
+    const created = await asOrg(f.orgId, (tx) =>
+      recordInvoice(tx, f.staff, {
+        storeId: f.storeId, supplierId: f.supplierId, invoiceDate: '2026-01-10',
+        totalAmount: '2900.00', receiptFileId: fileId, lines: [],
+      }),
+    );
+    const bad: InvoiceLineDraft = {
+      itemId: item, quantity: '10', purchaseUnit: 'kg', conversionFactor: '1',
+      unitPrice: '290', lineTotal: 'NaN',
+    };
+    await expect(
+      asOrg(f.orgId, (tx) => setInvoiceLines(tx, f.staff, created.id, [bad])),
+    ).rejects.toThrow(/the line total "NaN" is not a number/);
+  });
+
+  it('I5 (Amendment R1 §2): an overflow to Infinity is a finiteness refusal, never flattened into "does not add up"', async () => {
+    const f = await fixture('t340-i5');
+    const item = await porkBelly(f);
+    const fileId = await evidence(f);
+    const created = await asOrg(f.orgId, (tx) =>
+      recordInvoice(tx, f.staff, {
+        storeId: f.storeId, supplierId: f.supplierId, invoiceDate: '2026-01-10',
+        totalAmount: '2900.00', receiptFileId: fileId, lines: [],
+      }),
+    );
+    const bad: InvoiceLineDraft = {
+      itemId: item, quantity: '1e300', purchaseUnit: 'kg', conversionFactor: '1',
+      unitPrice: '1e10', lineTotal: '1',
+    };
+    await expect(
+      asOrg(f.orgId, (tx) => setInvoiceLines(tx, f.staff, created.id, [bad])),
+    ).rejects.toThrow(/finite/i);
+    await expect(
+      asOrg(f.orgId, (tx) => setInvoiceLines(tx, f.staff, created.id, [bad])),
+    ).rejects.not.toThrow(/does not add up/);
+  });
+
+  it('I6 (optional, Amendment R1 §2): two lines summing to Infinity refuse at the HEADER check as finiteness, not "the lines total"', async () => {
+    const f = await fixture('t340-i6');
+    const item = await porkBelly(f);
+    const fileId = await evidence(f);
+    const created = await asOrg(f.orgId, (tx) =>
+      recordInvoice(tx, f.staff, {
+        storeId: f.storeId, supplierId: f.supplierId, invoiceDate: '2026-01-10',
+        totalAmount: '2900.00', receiptFileId: fileId, lines: [],
+      }),
+    );
+    const huge: InvoiceLineDraft = {
+      itemId: item, quantity: '1', purchaseUnit: 'kg', conversionFactor: '1',
+      unitPrice: '1e308', lineTotal: '1e308',
+    };
+    await expect(
+      asOrg(f.orgId, (tx) => setInvoiceLines(tx, f.staff, created.id, [huge, { ...huge }])),
+    ).rejects.toThrow(/finite/i);
+    await expect(
+      asOrg(f.orgId, (tx) => setInvoiceLines(tx, f.staff, created.id, [huge, { ...huge }])),
+    ).rejects.not.toThrow(/the lines total/);
+  });
+
+  it('N1: an "abc" quantity still refuses at the pre-existing quantity guard, unchanged', async () => {
+    const f = await fixture('t340-n1');
+    const item = await porkBelly(f);
+    const fileId = await evidence(f);
+    const created = await asOrg(f.orgId, (tx) =>
+      recordInvoice(tx, f.staff, {
+        storeId: f.storeId, supplierId: f.supplierId, invoiceDate: '2026-01-10',
+        totalAmount: '2900.00', receiptFileId: fileId, lines: [],
+      }),
+    );
+    const bad: InvoiceLineDraft = {
+      itemId: item, quantity: 'abc', purchaseUnit: 'kg', conversionFactor: '1',
+      unitPrice: 'abc', lineTotal: 'NaN',
+    };
+    await expect(
+      asOrg(f.orgId, (tx) => setInvoiceLines(tx, f.staff, created.id, [bad])),
+    ).rejects.toThrow(/needs a quantity above zero/);
+  });
+
+  it('N2: zero is a legitimate price and total (bible §12 landmine 8) — accepted, not refused', async () => {
+    const f = await fixture('t340-n2');
+    const item = await porkBelly(f);
+    const fileId = await evidence(f);
+    const created = await asOrg(f.orgId, (tx) =>
+      recordInvoice(tx, f.staff, {
+        storeId: f.storeId, supplierId: f.supplierId, invoiceDate: '2026-01-10',
+        totalAmount: '2900.00', receiptFileId: fileId, lines: [],
+      }),
+    );
+    const lines: InvoiceLineDraft[] = [
+      { itemId: item, quantity: '10', purchaseUnit: 'kg', conversionFactor: '1', unitPrice: '290', lineTotal: '2900.00' },
+      { itemId: item, quantity: '1', purchaseUnit: 'kg', conversionFactor: '1', unitPrice: '0', lineTotal: '0.00' },
+    ];
+    const result = await asOrg(f.orgId, (tx) => setInvoiceLines(tx, f.staff, created.id, lines));
+    expect(result.count).toBe(2);
+    const rows = await sql`
+      select unit_price from supplier_invoice_lines where supplier_invoice_id = ${created.id} order by line_no`;
+    expect(rows[1]!.unit_price).toBe('0.0000');
+  });
+
+  it('N3: a 4dp unit price is accepted and stored exactly — no parser routes it through 2dp money', async () => {
+    const f = await fixture('t340-n3');
+    const item = await porkBelly(f);
+    const fileId = await evidence(f);
+    const created = await asOrg(f.orgId, (tx) =>
+      recordInvoice(tx, f.staff, {
+        storeId: f.storeId, supplierId: f.supplierId, invoiceDate: '2026-01-10',
+        totalAmount: '24.69', receiptFileId: fileId, lines: [],
+      }),
+    );
+    const lines: InvoiceLineDraft[] = [
+      { itemId: item, quantity: '2', purchaseUnit: 'kg', conversionFactor: '1', unitPrice: '12.3456', lineTotal: '24.69' },
+    ];
+    const result = await asOrg(f.orgId, (tx) => setInvoiceLines(tx, f.staff, created.id, lines));
+    expect(result.count).toBe(1);
+    const [row] = await sql`
+      select unit_price, line_total from supplier_invoice_lines where supplier_invoice_id = ${created.id}`;
+    expect(row!.unit_price).toBe('12.3456');
+    expect(row!.line_total).toBe('24.69');
+  });
+
+  it('N4: no partial state — a good set of lines survives a later rejected setInvoiceLines call untouched', async () => {
+    const f = await fixture('t340-n4');
+    const item = await porkBelly(f);
+    const fileId = await evidence(f);
+    const created = await asOrg(f.orgId, (tx) =>
+      recordInvoice(tx, f.staff, {
+        storeId: f.storeId, supplierId: f.supplierId, invoiceDate: '2026-01-10',
+        totalAmount: '2900.00', receiptFileId: fileId, lines: [],
+      }),
+    );
+    await asOrg(f.orgId, (tx) =>
+      setInvoiceLines(tx, f.staff, created.id, [
+        { itemId: item, quantity: '10', purchaseUnit: 'kg', conversionFactor: '1', unitPrice: '290', lineTotal: '2900.00' },
+      ]),
+    );
+    const bad: InvoiceLineDraft = {
+      itemId: item, quantity: '10', purchaseUnit: 'kg', conversionFactor: '1',
+      unitPrice: 'abc', lineTotal: (Number('10') * Number('abc')).toFixed(2),
+    };
+    await expect(
+      asOrg(f.orgId, (tx) => setInvoiceLines(tx, f.staff, created.id, [bad])),
+    ).rejects.toThrow(/the unit price "abc" is not a number/);
+    const [row] = await sql`
+      select count(*)::int as count, max(unit_price) as max_price
+      from supplier_invoice_lines where supplier_invoice_id = ${created.id}`;
+    expect(row!.count).toBe(1);
+    expect(row!.max_price).toBe('290.0000');
   });
 });
 
