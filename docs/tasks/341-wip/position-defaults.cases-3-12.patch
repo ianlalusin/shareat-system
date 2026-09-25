@@ -1,0 +1,128 @@
+diff --git a/packages/domain/tests/integration/position-defaults.test.ts b/packages/domain/tests/integration/position-defaults.test.ts
+index c3b4c17..d0f8401 100644
+--- a/packages/domain/tests/integration/position-defaults.test.ts
++++ b/packages/domain/tests/integration/position-defaults.test.ts
+@@ -30,7 +30,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
+   throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} — name must contain "_test".`);
+ }
+ 
+-import { APP_ROLE, transaction, type Tx } from '@shareat/db';
++import { APP_ROLE, accessRepo, transaction, type Tx } from '@shareat/db';
+ import { authorize, AuthorizationError, type Actor, type Capability } from '@shareat/auth';
+ import { assignRole, grantCapabilityAsActor } from '@shareat/auth';
+ import {
+@@ -202,8 +202,8 @@ describe('T-289 case 2 — toggle off revokes only position rows carrying that r
+   });
+ });
+ 
+-describe('T-289 case 3 — a hand-grant over a position row upgrades provenance to grant', () => {
+-  it('keeps the ref, and the row survives the toggle off', async () => {
++describe('T-341/DEF-414 case 3 — a hand-grant over a position row coexists with', () => {
++  it('two active rows after the hand-grant; toggle-off revokes only the position row; @B rejects once the grant is revoked too', async () => {
+     const f = await fixture('c3');
+     const holder = await hireStaff(f, { storeId: f.storeAId, positionIds: [f.cashierId] });
+ 
+@@ -211,23 +211,49 @@ describe('T-289 case 3 — a hand-grant over a position row upgrades provenance
+     const before = (await activeGrants(holder.personId)).find((g) => g.grant_name === 'adjust_inventory')!;
+     expect(before.grant_source).toBe('position');
+     expect(before.source_ref).not.toBeNull();
++    const positionRowId = before.id;
+     const refBefore = before.source_ref;
+ 
+     await asOrg(f.orgId, (tx) =>
+       grantCapabilityAsActor(tx, f.admin, { personId: holder.personId, capability: 'adjust_inventory' }),
+     );
+ 
+-    const afterGrant = (await activeGrants(holder.personId)).find((g) => g.grant_name === 'adjust_inventory')!;
+-    expect(afterGrant.grant_source).toBe('grant');
+-    // ⛔ §C3/§C5 transition 1 — the ref is HISTORY and must be kept, never nulled or rewritten.
+-    expect(afterGrant.source_ref).toBe(refBefore);
+-    expect(afterGrant.id).toBe(before.id); // same row, upgraded in place — not a new row
++    // T-341 §4.2 — coexist, not upgrade: the hand-grant's non-position arm only ever matches an
++    // existing `store_id IS NULL` row, so it never finds the position row (store = A) and inserts a
++    // SECOND row instead. Red (pre-T-341): a single row upgraded in place, `expected 'position' to
++    // be 'grant'` on the length-2 assertion below (there is only ever one active row today).
++    const afterGrant = await activeGrants(holder.personId);
++    const forCap = afterGrant.filter((g) => g.grant_name === 'adjust_inventory');
++    expect(forCap.length, 'the original position row AND a new hand-grant row now coexist').toBe(2);
++    const positionRow = forCap.find((g) => g.grant_source === 'position')!;
++    const grantRow = forCap.find((g) => g.grant_source === 'grant')!;
++    expect(positionRow, 'the original position row is untouched').toBeDefined();
++    expect(positionRow.id).toBe(positionRowId);
++    expect(positionRow.source_ref).toBe(refBefore);
++    expect(grantRow, 'a new hand-grant row, store_id null').toBeDefined();
++    expect(grantRow.id).not.toBe(positionRowId);
+ 
+     await setDefault(f.orgId, f.admin, f.cashierId, f.storeAId, 'adjust_inventory', false);
+ 
+-    const afterToggleOff = (await activeGrants(holder.personId)).find((g) => g.grant_name === 'adjust_inventory');
+-    expect(afterToggleOff, 'the upgraded row must survive — the sweep matches on grant_source, never source_ref').toBeDefined();
+-    expect(afterToggleOff!.grant_source).toBe('grant');
++    const afterToggleOff = await activeGrants(holder.personId);
++    const survivor = afterToggleOff.find((g) => g.grant_name === 'adjust_inventory');
++    expect(survivor, 'the hand-grant row survives the position sweep — it is grant_source=grant, never matched').toBeDefined();
++    expect(survivor!.grant_source).toBe('grant');
++    expect(survivor!.id).toBe(grantRow.id);
++    await expect(
++      asOrg(f.orgId, (tx) => authorize(tx, actor(f.orgId, holder.personId), 'adjust_inventory', { storeId: f.storeAId })),
++    ).resolves.toBeUndefined();
++
++    // Amendment R1 item 5 — once the surviving hand-grant is ALSO revoked, nothing justifies the
++    // capability anywhere: @A rejects (no position, no grant left) and @B rejects too (this holder
++    // was never scoped to B at all — no position ever justified it there).
++    await asOrg(f.orgId, (tx) => accessRepo.revokeGrantById(tx, survivor!.id, 'T-341 case 3 amendment'));
++    await expect(
++      asOrg(f.orgId, (tx) => authorize(tx, actor(f.orgId, holder.personId), 'adjust_inventory', { storeId: f.storeAId })),
++    ).rejects.toThrow(/may not 'adjust_inventory'/);
++    await expect(
++      asOrg(f.orgId, (tx) => authorize(tx, actor(f.orgId, holder.personId), 'adjust_inventory', { storeId: f.storeBId })),
++    ).rejects.toThrow();
+   });
+ });
+ 
+@@ -522,16 +548,31 @@ describe('T-289 case 12 — an elevated manager in an adminless org keeps the ca
+       setPositionDefault(tx, m2Actor, { positionId: cashier!.id, storeId, capability: 'manage_users', on: true }),
+     );
+ 
++    // T-341 §4.2 — coexist: the position arm only matches an existing `grant_source='position'` row
++    // AT THIS STORE, never the elevation row (different source, store_id null), so it INSERTS a
++    // second row rather than upgrading the elevation one in place. Red (pre-T-341): today there is
++    // only ever one row (upgraded), so this length-2 assertion fails.
+     grants = await activeGrants(m1!.id);
+-    expect(grants.find((g) => g.grant_name === 'manage_users')!.grant_source).toBe('position');
+-
+-    // Admin arrives — the elevation sweep runs and must NOT touch this now-position-sourced row.
++    const forCap = grants.filter((g) => g.grant_name === 'manage_users');
++    expect(forCap.length, 'one active elevation row AND one active position row now coexist').toBe(2);
++    expect(forCap.some((g) => g.grant_source === 'elevation')).toBe(true);
++    const positionRow = forCap.find((g) => g.grant_source === 'position');
++    expect(positionRow, 'a new position-sourced row at this store').toBeDefined();
++    expect(positionRow!.source_ref).not.toBeNull();
++
++    // Admin arrives — the elevation sweep runs and must revoke the (still-separate) elevation row,
++    // but leave the position row alone.
+     const [adminPerson] = await sql<{ id: string }[]>`
+       insert into persons (org_id, display_name) values (${orgId}, 'New Admin') returning id`;
+     await asOrg(orgId, (tx) => assignRole(tx, { personId: adminPerson!.id, orgId, role: 'admin', grantedBy: m2!.id }));
+ 
+     grants = await activeGrants(m1!.id);
+-    expect(grants.map((g) => g.grant_name)).toContain('manage_users');
++    const afterAdmin = grants.filter((g) => g.grant_name === 'manage_users');
++    expect(afterAdmin.map((g) => g.grant_source)).toEqual(['position']);
++    expect(afterAdmin[0]!.id).toBe(positionRow!.id);
++    await expect(
++      asOrg(orgId, (tx) => authorize(tx, actor(orgId, m1!.id), 'manage_users', {})),
++    ).resolves.toBeUndefined();
+ 
+     // Switching the default off DOES revoke it — the accepted consequence, Invariant 8.
+     const adminActor = actor(orgId, adminPerson!.id);
+@@ -541,6 +582,9 @@ describe('T-289 case 12 — an elevated manager in an adminless org keeps the ca
+ 
+     grants = await activeGrants(m1!.id);
+     expect(grants.map((g) => g.grant_name)).not.toContain('manage_users');
++    await expect(
++      asOrg(orgId, (tx) => authorize(tx, actor(orgId, m1!.id), 'manage_users', {})),
++    ).rejects.toThrow();
+   });
+ });
+ 

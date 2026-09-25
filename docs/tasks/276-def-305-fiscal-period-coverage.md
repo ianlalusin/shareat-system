@@ -440,3 +440,11 @@ migrate, `select count(*), max(created_at) from drizzle.__drizzle_migrations` �
 Planner uncertainties: zero-period org reported `partial` (orchestrator keeps it — an org with no periods is abnormal);
 match the missing-export red by regex; `docs/ops/README.md` says month-end runs "Monthly, 1st" but its timer is
 `*-*-15` (stale; log separately).
+
+## Post-commit /code-review of 23be5ca (2026-09-25) — follow-ups
+Logged: DEF-422 (holes earlier than the latest period end are never detected; mid-month ends) — the next T-276
+slice; DEF-423 (ops `arg()` pattern, "2 GB" comments). Queued small fixes (after T-343 S4 releases
+`scheduler/index.ts`): `scripts/fiscal-period-seed.ts:49` prints `o.failures` even on the `o.error` branch;
+`scheduler/index.ts:1026` comment corrected — the per-org transaction does NOT close the F-read race under READ
+COMMITTED, the `periodsInserted` guards do; `JobOutcome['job']` → `SchedulerJob`; stale "RED" headers in the two
+T-276 test files (tester).
