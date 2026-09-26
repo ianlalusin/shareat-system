@@ -9,4 +9,4 @@
  */
 export type Outcome<T> =
   | ({ readonly ok: true } & T)
-  | { readonly ok: false; readonly reason: string };
+  | { readonly ok: false; readonly reason: string; readonly userReason?: string };

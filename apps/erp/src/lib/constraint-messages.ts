@@ -336,6 +336,22 @@ export function errorMessage(err: unknown): string {
 export { recordConstraintRefusal };
 
 /**
+ * T-343 S5.1b — turns a commissary `Outcome`'s failure arm into a screen sentence. `userReason`,
+ * when present, passes the S1 gate as `errorMessage`'s presentable arm (step 0); its absence still
+ * routes `reason` through `errorMessage`'s fallback sanitisation, so a raw id never reaches a URL
+ * either way.
+ */
+export function outcomeMessage(result: {
+  readonly ok: false;
+  readonly reason: string;
+  readonly userReason?: string;
+}): string {
+  return errorMessage(
+    Object.assign(new Error(result.reason), result.userReason ? { userMessage: result.userReason } : {}),
+  );
+}
+
+/**
  * Constraint NAMES that a screen-local `CONSTRAINT_MESSAGES` map already covers — `till/actions.ts`
  * and `remittance/actions.ts` each keep one, and this module cannot see them. Names only, never
  * sentences: see the ⛔ below `recordIfUnmappedConstraint`.

@@ -15,7 +15,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { eq } from 'drizzle-orm';
 import { authorize, type Actor } from '@shareat/auth';
-import { lowStockRepo, schema, type Tx } from '@shareat/db';
+import { goneSentence, lowStockRepo, schema, type Tx } from '@shareat/db';
 import { SHORTAGE_REASONS, type ShortageReason } from '@shareat/db/schema';
 import {
   acceptOrder,
@@ -33,6 +33,7 @@ import {
   updateBranchOrderLine,
   voidTradeOrder,
 } from '@shareat/domain';
+import { outcomeMessage } from '@/lib/constraint-messages';
 import { requireActor } from '../../../../lib/session';
 import { errorMessageOf, withOrgPrincipal } from '../lib';
 
@@ -71,7 +72,7 @@ export async function postMessageAction(fd: FormData): Promise<void> {
 
   const result = await withOrgPrincipal(actor.orgId, async (tx) => {
     const parties = await lowStockRepo.orderParties(tx, orderId);
-    if (!parties) return { ok: false as const, reason: 'that order does not exist' };
+    if (!parties) return { ok: false as const, reason: 'that order does not exist', userReason: goneSentence('order') };
 
     // ⚠️ The actor's OWN scope, read from the database — never from the form. It is both the
     // authorisation input and the "are you on this order" input, so a client-supplied value would
@@ -89,7 +90,11 @@ export async function postMessageAction(fd: FormData): Promise<void> {
       (id) => id === parties.commissaryStoreId || id === parties.branchStoreId,
     );
     if (!onThisOrder) {
-      return { ok: false as const, reason: 'only the two stores on this order can talk about it' };
+      return {
+        ok: false as const,
+        reason: 'only the two stores on this order can talk about it',
+        userReason: 'Only the two stores on this order can talk about it.',
+      };
     }
     await authorize(tx, actor, 'post_order_message', { storeId: onThisOrder });
 
@@ -103,7 +108,7 @@ export async function postMessageAction(fd: FormData): Promise<void> {
   });
 
   if (!result.ok) {
-    redirect(`/commissary/orders/${orderId}?error=${encodeURIComponent(result.reason)}`);
+    redirect(`/commissary/orders/${orderId}?error=${encodeURIComponent(outcomeMessage(result))}`);
   }
   revalidatePath(`/commissary/orders/${orderId}`);
 }

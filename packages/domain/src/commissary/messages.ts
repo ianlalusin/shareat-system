@@ -12,7 +12,7 @@
  * ⛔ **No attachments, no read receipts, no notifications.** In-app notification is its own
  * deferred gap in `CAPABILITY-GAPS.md`; bolting half of it on here is how a trail stops being one.
  */
-import { lowStockRepo, type Tx } from '@shareat/db';
+import { goneSentence, lowStockRepo, type Tx } from '@shareat/db';
 import type { Outcome } from './outcome';
 
 export interface PostMessageInput {
@@ -31,20 +31,32 @@ export async function postOrderMessage(
   input: PostMessageInput,
 ): Promise<Outcome<{ id: string }>> {
   const body = input.body.trim();
-  if (body.length === 0) return { ok: false, reason: 'a message needs something in it' };
+  if (body.length === 0) {
+    return { ok: false, reason: 'a message needs something in it', userReason: 'A message needs something in it.' };
+  }
   if (body.length > MAX_MESSAGE_LENGTH) {
-    return { ok: false, reason: `a message is at most ${MAX_MESSAGE_LENGTH} characters` };
+    return {
+      ok: false,
+      reason: `a message is at most ${MAX_MESSAGE_LENGTH} characters`,
+      userReason: `A message is at most ${MAX_MESSAGE_LENGTH} characters.`,
+    };
   }
 
   const parties = await lowStockRepo.orderParties(tx, input.orderId);
-  if (!parties) return { ok: false, reason: `order ${input.orderId} does not exist` };
+  if (!parties) {
+    return { ok: false, reason: `order ${input.orderId} does not exist`, userReason: goneSentence('order') };
+  }
 
   // ⭐ BOTH sides are in this conversation — T-173 invariant 8's rule, applied to talking as well
   // as to confirming. ⚠️ A one-sided check would break the highest-volume commissary flow: the
   // branch reporting a short crate is exactly the message worth having.
   const allowed = new Set([parties.commissaryStoreId, parties.branchStoreId].filter(Boolean) as string[]);
   if (!input.actorStoreIds.some((id) => allowed.has(id))) {
-    return { ok: false, reason: 'only the two stores on this order can talk about it' };
+    return {
+      ok: false,
+      reason: 'only the two stores on this order can talk about it',
+      userReason: 'Only the two stores on this order can talk about it.',
+    };
   }
 
   const row = await lowStockRepo.postMessage(tx, {
@@ -58,10 +70,16 @@ export async function listOrderMessages(
   input: { orderId: string; actorStoreIds: readonly string[] },
 ): Promise<Outcome<{ messages: readonly { id: string; body: string; authorId: string; createdAt: Date }[] }>> {
   const parties = await lowStockRepo.orderParties(tx, input.orderId);
-  if (!parties) return { ok: false, reason: `order ${input.orderId} does not exist` };
+  if (!parties) {
+    return { ok: false, reason: `order ${input.orderId} does not exist`, userReason: goneSentence('order') };
+  }
   const allowed = new Set([parties.commissaryStoreId, parties.branchStoreId].filter(Boolean) as string[]);
   if (!input.actorStoreIds.some((id) => allowed.has(id))) {
-    return { ok: false, reason: 'only the two stores on this order can read it' };
+    return {
+      ok: false,
+      reason: 'only the two stores on this order can read it',
+      userReason: 'Only the two stores on this order can read it.',
+    };
   }
   return { ok: true, messages: await lowStockRepo.listMessages(tx, input.orderId) };
 }

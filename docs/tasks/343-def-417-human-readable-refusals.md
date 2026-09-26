@@ -855,3 +855,8 @@ amendment, before S2b's review fold shifted them.
 | R4.8 `CONVERTED_FILES` for the three S5.3 files; siblings stay S5.5+; ratchet lowered by measured count only | S5.3 TESTER `:702-709` |
 | R4.9 `commissary/catalogue.ts` site table (16 throws) | S5.3 `:687-700` |
 | R4.10 `canBypassBlock` is `sales-days/create.ts:284` | `:57`, `:259`, `:268` (S2b's `:284-291` citation was already correct) |
+
+### R4 rulings (orchestrator, 2026-09-27, S5.1b audit)
+- **S5.1b app guards (auditor HIGH):** `commissary/orders/[id]/actions.ts:75` (order missing/voided) and `:93` (not a party) refuse BEFORE `postOrderMessage`, so the domain's `goneSentence('order')` never reached `:106`. Ruling (option a): the action sets `userReason` on both arms — `:75` → `goneSentence('order')`, `:93` → `Only the two stores on this order can talk about it.` The guards stay (they avoid a domain call). New legs M5/M6 (through the real arms), M7 (the id-free `userReason`s); M4 carries an explicit timeout.
+- **/code-review in a shared tree:** the auditor does not plant into uncommitted shared work; it runs `/code-review` on each slice's commit afterwards, and its manual diff read is the pre-commit audit. A post-commit finding becomes a follow-up, not a revert.
+- **S5.2 typing (auditor, 2026-09-27):** `InvoiceCapacity` gains `invoiceNo: string | null`, `invoiceDate: BusinessDate` (parsed with `parseBusinessDate` inside `capacityOf`, never a bare `as BusinessDate` cast) and `supplierName: string`. Only the supplier name needs adding to the `group by`.
