@@ -98,6 +98,8 @@ export const KIND_LABEL: Record<string, string> = {
   fiscalPeriodRunwayLow: 'Fiscal period coverage running low',
   payoutIntervalTooLong: 'Pay cycle exceeds the sixteen-day ceiling',
   attendanceConfigMissing: 'No pay-cycle policy configured',
+  openingDateContradicted: 'Opening date contradicted by recorded sales',
+  assetHeldPastOpening: 'Asset waiting on its store to open',
 };
 
 /**

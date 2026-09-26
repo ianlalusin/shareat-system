@@ -5,9 +5,10 @@
  * lives here is the **cash-custody policy** (bible row 129), because it is a money control and
  * changing it changes how much cash may sit in a drawer.
  */
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
-import type { Tx } from '../client';
+import { and, asc, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
+import type { Executor, Tx } from '../client';
 import { stores, type RemittanceCadence, type StockModel } from '../../schema/stores';
+import { MANILA_TODAY } from './sql-time';
 
 export interface StoreCashPolicy {
   storeId: string;
@@ -130,6 +131,24 @@ export async function listForOrg(tx: Tx, orgId: string): Promise<StoreRow[]> {
     .from(stores)
     .where(eq(stores.orgId, orgId))
     .orderBy(desc(stores.isActive), asc(stores.code)) as unknown as Promise<StoreRow[]>;
+}
+
+/**
+ * T-346 S3 (DEF-428), §3.5 — `openingDate` per store, for `reports/store-comparison.ts`'s column
+ * header. `Executor`, not `Tx` — a report reads through whichever the caller already has open
+ * (`reportsRepo`'s own convention), never opens its own.
+ */
+export async function openingDatesByStore(
+  ex: Executor,
+  orgId: string,
+  storeIds: string[],
+): Promise<Map<string, string | null>> {
+  if (storeIds.length === 0) return new Map();
+  const rows = await ex
+    .select({ id: stores.id, openingDate: stores.openingDate })
+    .from(stores)
+    .where(and(eq(stores.orgId, orgId), inArray(stores.id, storeIds)));
+  return new Map(rows.map((r) => [r.id, r.openingDate]));
 }
 
 /** ⚠️ Scoped by org as well as id — an id from another tenant must read as absent, not as a row. */
@@ -332,6 +351,18 @@ export async function firstTradingDate(tx: Tx, storeId: string): Promise<string 
  */
 export function isPreOpening(openingDate: string | null, today: string): boolean {
   return openingDate === null || openingDate > today;
+}
+
+/**
+ * ⭐ The SQL twin of `isPreOpening`, above — landing NOW (Amendment R2 item 3) that its readers
+ * exist (§3.5): `tillFloatOffTarget` (against today) and `openingDateContradicted` (against a
+ * store's own first-trading date). Nest a raw column/expression fragment for both arguments —
+ * `sql\`st.opening_date\`` for `openingDate`, and either the default (today) or another `sql`
+ * fragment (e.g. `store_first_trading_date(st.id)`) for `asOf` — so a caller composing a larger raw
+ * query never re-derives this comparison inline.
+ */
+export function isPreOpeningSql(openingDate: SQL, asOf: SQL = MANILA_TODAY): SQL {
+  return sql`(${openingDate} IS NULL OR ${openingDate} > ${asOf})`;
 }
 
 /**

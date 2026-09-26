@@ -3,6 +3,10 @@ import { formatMoney, type Money } from '@shareat/core/money';
 export interface StoreComparisonColumn {
   storeId: string;
   storeName: string;
+  /** T-346 S3 (DEF-428), §3.5 / R6.3 — the same three states as the `/admin/stores` list badge:
+   *  `Not yet open — no opening date set` / `Opens {d}` / `Opened {d}`. Precomputed by the page
+   *  (`storesRepo.isPreOpening`) rather than this presentational component importing `@shareat/db`. */
+  openingLabel: string;
   revenue: Money;
   costOfSales: Money;
   grossProfit: Money;
@@ -21,7 +25,7 @@ export interface StoreComparisonColumn {
  * does no arithmetic beyond `formatMoney`.
  */
 export function StoreComparisonTable({ stores }: { stores: StoreComparisonColumn[] }) {
-  const rows: { label: string; key: keyof Omit<StoreComparisonColumn, 'storeId' | 'storeName'>; emphasis?: boolean }[] = [
+  const rows: { label: string; key: keyof Omit<StoreComparisonColumn, 'storeId' | 'storeName' | 'openingLabel'>; emphasis?: boolean }[] = [
     { label: 'Revenue (net of contra)', key: 'revenue' },
     { label: 'Cost of sales', key: 'costOfSales' },
     { label: 'Gross profit', key: 'grossProfit', emphasis: true },
@@ -38,7 +42,12 @@ export function StoreComparisonTable({ stores }: { stores: StoreComparisonColumn
           <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
             <th className="px-3 py-2 font-medium">Figure</th>
             {stores.map((s) => (
-              <th key={s.storeId} className="px-3 py-2 text-right font-medium">{s.storeName}</th>
+              <th key={s.storeId} className="px-3 py-2 text-right font-medium">
+                {s.storeName}
+                <span className="block text-xs font-normal text-neutral-500 dark:text-neutral-400">
+                  {s.openingLabel}
+                </span>
+              </th>
             ))}
           </tr>
         </thead>

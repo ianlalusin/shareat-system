@@ -273,19 +273,19 @@ export async function bookMissedMonth(
 }
 
 /**
- * §3.3 — the close check's own question: does EVERY active subject that owes `period` (per its
- * schedule) have an effective entry keyed for it? True vacuously when nobody owes it at all — that
- * is what unblocks T-344 on an old hole no live asset or item ever reached back to.
- *
- * ⭐ Reused, not reimplemented, by `findings/index.ts`'s §3.3 filter — one question, asked once, so
- * "the close check says covered" and "the screen says covered" can never disagree.
+ * §3.3 — the SET of active subjects that owe `period` (per schedule) with no effective entry
+ * keyed for it. T-346 S3, Amendment R5.4 — the ONE computation of "does anybody still owe this":
+ * T-345's close check asks `.size === 0`, and `findings/index.ts`'s `periodicPostingsStillMissing`
+ * builds its finding's DETAIL count from this same set, so "is anybody missing" and "how many are
+ * missing" can never disagree.
  */
-export async function periodFullyCovered(
+export async function subjectsOwingWithoutEntry(
   tx: Tx,
   orgId: string,
   schedule: MissedMonthSchedule,
   period: string,
-): Promise<boolean> {
+): Promise<Set<string>> {
+  const out = new Set<string>();
   if (schedule === 'depreciation') {
     const assets = await fixedAssetsRepo.listDepreciable(tx, orgId);
     // Amendment R3.3 — one batched read for every asset, never one query per asset in the loop.
@@ -293,18 +293,18 @@ export async function periodFullyCovered(
     for (const asset of assets) {
       const scheduleInput = scheduleInputFor(asset);
       if (!scheduleInput || !periodDue(scheduleInput, period)) continue;
-      if (!postedByAsset.get(asset.id)?.has(period)) return false;
+      if (!postedByAsset.get(asset.id)?.has(period)) out.add(asset.id);
     }
-    return true;
+    return out;
   }
   const items = await prepaidRepo.listPrepaidItems(tx, orgId, { status: 'active' });
   const postedByItem = await prepaidRepo.postedPeriodsByItem(tx, orgId);
   for (const item of items) {
     const itemPeriods = prepaidSchedule(item);
     if (!itemPeriods.some((p) => p.period === period)) continue;
-    if (!postedByItem.get(item.id)?.has(period)) return false;
+    if (!postedByItem.get(item.id)?.has(period)) out.add(item.id);
   }
-  return true;
+  return out;
 }
 
 export interface MissedMonthRow {

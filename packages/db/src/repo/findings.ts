@@ -17,6 +17,8 @@ import { CADENCE_DAYS } from '../../schema/stores';
 import { formatMoney, money } from '@shareat/core/money';
 // ⛔ T-218 — the ONE definition of "today" for the repo layer. Never bare `current_date`.
 import { MANILA_TODAY, daysBetweenDates } from './sql-time';
+import { isPreOpeningSql } from './stores';
+import { periodBounds } from './fiscal-periods';
 
 /**
  * ⛔ **Never interpolate the symbol by hand.** A hand-rolled peso plus `toFixed(2)` renders a
@@ -181,11 +183,18 @@ export async function periodicPostingsMissed(
   orgId: string,
   period: string,
 ): Promise<DetectedFinding[]> {
+  // T-346 S3 (DEF-428), §3.5 / R5.1 — a cheap SUPERSET, used only to decide whether depreciation
+  // needs checking at all: an asset still HELD (in_service_on IS NULL, or later than P) is not
+  // "depreciable this month" no matter how active it is. The real DETAIL count — which asset,
+  // owing exactly P, has no effective entry for it — is `domain/findings/index.ts`'s job
+  // (`periodicPostingsStillMissing`), never re-derived here.
+  const periodEndsOn = periodBounds(period).endsOn;
   const rows = (await tx.execute(sql`
     with work as (
       select
         (select count(*) from fixed_assets fa
-          where fa.org_id = ${orgId} and fa.status = 'active') as depreciable,
+          where fa.org_id = ${orgId} and fa.status = 'active'
+            and fa.in_service_on is not null and fa.in_service_on <= ${periodEndsOn}) as depreciable,
         (select count(*) from prepaid_items pi
           where pi.org_id = ${orgId} and pi.status = 'active') as prepaid
     ),
@@ -210,6 +219,9 @@ export async function periodicPostingsMissed(
       key: `depreciationNotBooked:${period}`,
       storeId: null,
       severity: 'hard',
+      // ⛔ R5.1 — provisional only. `domain/findings/index.ts`'s `periodicPostingsStillMissing`
+      // OVERWRITES this with the true count from `subjectsOwingWithoutEntry` whenever the finding
+      // survives its filter; this superset count exists only to decide whether to check at all.
       detail:
         `${r.depreciable} asset(s) are still depreciating and nothing ran for ${period}. ` +
         'DEF-044: this stopped for two months in v1 and only a capture found it.',
@@ -221,6 +233,8 @@ export async function periodicPostingsMissed(
       key: `amortisationNotBooked:${period}`,
       storeId: null,
       severity: 'hard',
+      // ⛔ R5.1 — provisional only, same as `depreciationNotBooked` above: the domain layer
+      // overwrites this detail with the true count before it is ever shown.
       detail:
         `${r.prepaid} prepaid item(s) still have a balance and nothing ran for ${period}. ` +
         '⚠️ Measured against OPEN BALANCES, not last month’s activity — a finished schedule and a ' +
@@ -505,11 +519,21 @@ export async function remittanceOverdue(tx: Tx, orgId: string): Promise<Detected
  */
 export async function tillFloatOffTarget(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
   const rows = (await tx.execute(sql`
-    select ma.id::text                                   as account_id,
-           ma.name                                       as name,
-           ma.store_id::text                             as store_id,
-           ma.float_target::text                         as target,
-           coalesce(sum(jl.debit - jl.credit), 0)::text   as balance
+    select ma.id::text                                          as account_id,
+           ma.name                                               as name,
+           ma.store_id::text                                     as store_id,
+           ma.float_target::text                                 as target,
+           coalesce(sum(jl.debit - jl.credit), 0)::text           as balance,
+           -- T-346 S3 (DEF-428), §3.5 / R1.6 / R6.1 -- BOTH signals must say "not yet open": the
+           -- store's own stated opening_date (isPreOpeningSql -- an explicit past opening_date
+           -- means open, no matter what) AND store_first_trading_date (never re-derived from
+           -- opening_date alone -- a store that genuinely trades with no opening_date recorded is
+           -- not pre-opening for this purpose either). Suppressing on either signal ALONE is wrong
+           -- in a different direction: opening_date alone wrongly suppresses a trading, undated
+           -- store; first_trading_date alone wrongly suppresses a store an admin already marked
+           -- open on paper, before its first real sale.
+           (${isPreOpeningSql(sql`st.opening_date`)}
+             and store_first_trading_date(ma.store_id) is null)::text as still_pre_opening
     from money_accounts ma
     -- Scoped by (gl code, store), mirroring balanceOf exactly. A float pot is NOT
     -- requires_party, so its lines carry no money-account party and a party join would read
@@ -520,9 +544,11 @@ export async function tillFloatOffTarget(tx: Tx, orgId: string): Promise<Detecte
       on jl.account_id = a.id and jl.store_id = ma.store_id
     left join journal_entries je
       on je.id = jl.entry_id and je.status <> 'draft'
+    left join stores st
+      on st.id = ma.store_id
     where ma.org_id = ${orgId} and ma.float_target is not null and ma.is_active
       and (jl.id is null or je.id is not null)
-    group by ma.id, ma.name, ma.store_id, ma.float_target
+    group by ma.id, ma.name, ma.store_id, ma.float_target, st.opening_date
   `)) as unknown as Record<string, string>[];
 
   const out: DetectedFinding[] = [];
@@ -531,6 +557,11 @@ export async function tillFloatOffTarget(tx: Tx, orgId: string): Promise<Detecte
     const balance = Number(r.balance);
     const drift = balance - target;
     if (Math.abs(drift) < 0.005) continue;
+    // R1.6/R6.1 — suppressed ONLY when the store is still pre-opening by BOTH measures AND the
+    // balance itself is exactly zero (nothing has ever touched this pot yet). Any non-zero
+    // balance still fires regardless — that is evidence something was posted where it should not
+    // have been.
+    if (r.still_pre_opening === 'true' && Math.abs(balance) < 0.005) continue;
     out.push({
       kind: 'tillFloatOffTarget',
       key: `tillFloatOffTarget:${r.account_id}`,
@@ -546,6 +577,115 @@ export async function tillFloatOffTarget(tx: Tx, orgId: string): Promise<Detecte
             'in the takings drawer, which quietly removes it from what has to be remitted. ' +
             '⚠️ Not a counted overage: a physical over goes to the tip box and never reaches the ' +
             'books at all.'),
+    });
+  }
+  return out;
+}
+
+/**
+ * T-346 S3 (DEF-428), §3.5 — a store recorded a sale before, or with no, stated opening date.
+ * Soft: this never blocks a close (ADR-006 §7 is a closed list), it is an administrative nudge.
+ *
+ * ⭐ **Both arms are reachable (R5.3), even though `setStoreOpeningDate` refuses a date after the
+ * store's own first trading day (Amendment R3.6/R2.1) — that refusal only blocks the FORWARD
+ * route.** The NULL arm fires the ordinary way: a store trades before anyone ever sets a date at
+ * all. The "later than a sale" arm needs a BACKDATED sales day — one inserted (or corrected) for a
+ * date before an opening date that was already set — since R3.6 makes it impossible to set an
+ * opening date that is already before a KNOWN first trading day. Kept as two arms, documented,
+ * rather than deleted as one that "can never fire".
+ *
+ * ⭐ Reuses `store_first_trading_date` (migration 0162) via `isPreOpeningSql` (R2.3) — the same
+ * "has this store traded, and is its stated opening date honest about it" question `setStoreOpeningDate`
+ * itself asks, never a second definition of "has traded".
+ */
+export async function openingDateContradicted(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    with candidates as (
+      -- T-346 S3 (DEF-428), R6.2/R7.1 — a cheap pre-filter BEFORE the (heavier)
+      -- store_first_trading_date call below: a store can only ever contradict its own opening
+      -- date if it either has none at all, or has EITHER half of "has traded" (a sales day, or a
+      -- posted sale entry line — store_first_trading_date's own two arms) recorded earlier than
+      -- the date it claims. Every other store is excluded here without ever computing its precise
+      -- first-trading date. ⚠️ Deliberately over-inclusive: neither EXISTS filters out a voided
+      -- sales day (the sales_days arm) or checks anything beyond status/source_type (the journal
+      -- arm) — a false positive here only costs one extra store_first_trading_date call, while a
+      -- false negative would silently drop a real contradiction.
+      select st.id as store_id, st.name as name, st.opening_date as opening_date
+      from stores st
+      where st.org_id = ${orgId}
+        and (
+          st.opening_date is null
+          or exists (
+            select 1 from sales_days sd
+            where sd.store_id = st.id and sd.business_date < st.opening_date
+          )
+          or exists (
+            select 1 from journal_entries je
+            join journal_lines jl on jl.entry_id = je.id
+            where je.source_type = 'sale' and je.status = 'posted' and jl.store_id = st.id
+              and je.entry_date < st.opening_date
+          )
+        )
+    ),
+    resolved as (
+      select store_id, name, opening_date, store_first_trading_date(store_id) as first_trading_date
+      from candidates
+    )
+    select store_id::text, name, opening_date::text as opening_date, first_trading_date::text as first_trading_date
+    from resolved
+    where first_trading_date is not null
+      and ${isPreOpeningSql(sql`opening_date`, sql`first_trading_date`)}
+  `)) as unknown as Record<string, string | null>[];
+
+  return rows.map((r) => ({
+    kind: 'openingDateContradicted',
+    key: `openingDateContradicted:${r.store_id}`,
+    storeId: String(r.store_id),
+    severity: 'soft',
+    detail:
+      `${r.name} recorded sales on ${r.first_trading_date} but ` +
+      (r.opening_date ? `opens on ${r.opening_date}` : 'has no opening date') +
+      '; set its opening date — its assets depreciate from it',
+  }));
+}
+
+/**
+ * T-346 S3 (DEF-428), §3.5 / Amendment R1.7, R5.6 — an active asset waiting on its store to open,
+ * for long enough that it is worth a nudge. Soft: never blocks a close.
+ *
+ * ⭐ **The store-side condition is `opening_date IS NULL`, and ONLY that** (R5.6 — the "past
+ * opening date with no sales" half of the original wording is dropped as unreachable). Migration
+ * 0163's fill trigger derives `in_service_on := greatest(opening_date, acquired_on)` — never
+ * NULL — for a `'store_opening'` asset the instant its store's `opening_date` becomes non-NULL,
+ * and `stores_opening_date_propagate` re-fires that derivation synchronously, in the same
+ * transaction, for every ACTIVE follower (R4.4). So an active `'store_opening'` asset can have
+ * `in_service_on IS NULL` only while its store currently has NO opening date at all — there is no
+ * reachable state where the store's `opening_date` is a past date and this asset is still held.
+ */
+const HELD_PAST_OPENING_THRESHOLD_DAYS = 30;
+
+export async function assetHeldPastOpening(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
+  const rows = (await tx.execute(sql`
+    select fa.id::text as asset_id, fa.name as name, fa.acquired_on::text as acquired_on,
+           fa.store_id::text as store_id, st.name as store_name, ${MANILA_TODAY}::text as manila_today
+    from fixed_assets fa
+    join stores st on st.id = fa.store_id
+    where fa.org_id = ${orgId} and fa.status = 'active' and fa.in_service_source = 'store_opening'
+      and fa.in_service_on is null
+  `)) as unknown as Record<string, string>[];
+
+  const out: DetectedFinding[] = [];
+  for (const r of rows) {
+    const days = daysBetweenDates(String(r.acquired_on), String(r.manila_today));
+    if (days <= HELD_PAST_OPENING_THRESHOLD_DAYS) continue;
+    out.push({
+      kind: 'assetHeldPastOpening',
+      key: `assetHeldPastOpening:${r.asset_id}`,
+      storeId: String(r.store_id),
+      severity: 'soft',
+      detail:
+        `${r.name} at ${r.store_name} has been waiting ${days} days to go into service; ` +
+        `${r.store_name} has no opening date`,
     });
   }
   return out;

@@ -21,7 +21,7 @@ import { derivePeriods, payoutDateFor, type PeriodConfig, type PayoutConfig } fr
 // T-345 §3.3 — one question ("does every active subject owing P have an effective entry for it"),
 // shared with `bookMissedMonth`'s own screen list, so the close check and the screen can never
 // disagree about which month still counts as missing.
-import { periodFullyCovered } from '../missed-months';
+import { subjectsOwingWithoutEntry } from '../missed-months';
 
 /** ⭐ An accepted risk should be re-accepted, not forgotten. */
 export const ACKNOWLEDGEMENT_DAYS = 30;
@@ -147,10 +147,15 @@ async function payoutIntervalFindings(tx: Tx, orgId: string): Promise<findingsRe
 }
 
 /**
- * T-345 §3.3 — drops `depreciationNotBooked:P` / `amortisationNotBooked:P` once every active
- * subject that owes P has an effective entry keyed for it (the run's own posting, or an adjustment
- * naming P — `periodFullyCovered` does not care which). It is a filter over the ONE feed
- * `periodicPostingsMissed` already produced, never a second computation of the same question.
+ * T-345 §3.3, T-346 S3 Amendment R5.1/R5.4 — drops `depreciationNotBooked:P` / `amortisationNotBooked:P`
+ * once every active subject that owes P has an effective entry keyed for it (the run's own posting,
+ * or an adjustment naming P), and, for whatever survives, REPLACES the repo's provisional detail
+ * with the true count. `periodicPostingsMissed`'s own count is a cheap superset (active subjects
+ * that could possibly owe P at all) — it decides only whether this filter needs to run, never the
+ * number shown. The number shown, and whether the finding survives at all, both come from the ONE
+ * set `subjectsOwingWithoutEntry` computes — the same set T-345's close check asks `.size === 0`
+ * of — so "how many are missing" and "is anybody missing" can never disagree, and a quarterly
+ * asset outside its quarter-end month or a fully-depreciated one is never counted.
  */
 async function periodicPostingsStillMissing(
   tx: Tx,
@@ -162,9 +167,20 @@ async function periodicPostingsStillMissing(
     const schedule =
       f.kind === 'depreciationNotBooked' ? 'depreciation' : f.kind === 'amortisationNotBooked' ? 'amortisation' : null;
     const period = schedule ? keyPeriod(f.key) : null;
-    if (!schedule || !period || !(await periodFullyCovered(tx, orgId, schedule, period))) {
+    if (!schedule || !period) {
       out.push(f);
+      continue;
     }
+    const owing = await subjectsOwingWithoutEntry(tx, orgId, schedule, period);
+    if (owing.size === 0) continue;
+    out.push({
+      ...f,
+      detail:
+        schedule === 'depreciation'
+          ? `${owing.size} asset(s) are still depreciating and nothing ran for ${period}. ` +
+            'DEF-044: this stopped for two months in v1 and only a capture found it.'
+          : `${owing.size} prepaid item(s) owe ${period} with no entry.`,
+    });
   }
   return out;
 }
@@ -200,6 +216,10 @@ export async function listFindings(
     ...(await findingsRepo.serviceChargeFloatAgeing(tx, orgId)),
     // T-153 — a till float not holding its configured amount.
     ...(await findingsRepo.tillFloatOffTarget(tx, orgId)),
+    // T-346 S3 (DEF-428), §3.5 — a store's stated opening date contradicted by when it actually
+    // first traded, and an active asset still waiting on its store to open.
+    ...(await findingsRepo.openingDateContradicted(tx, orgId)),
+    ...(await findingsRepo.assetHeldPastOpening(tx, orgId)),
     // T-186 — a CLOSED shift whose physical count did not match the ledger. ⚠️ Deliberately
     // adjacent to the line above: they look identical as a number and mean opposite things,
     // and only one of them names somebody who owes money.

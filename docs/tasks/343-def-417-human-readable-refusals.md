@@ -650,3 +650,4 @@ R1 stays above as the record. Lines are as of this amendment.
 - **S5.4's sites:** two, `discrepancies/actions.ts:59,87`; `:106` belongs to S5.1b. R1.1's "three" is superseded.
 - **F6:** S5.1, where `create.ts:146`'s sentence lands. Accepted.
 - **Ruling 1 refined (auditor):** the allowlist is keyed by the raw message text, never file:line, and exempts only the first-argument rule.
+- **CEILINGS measurement (auditor, 2026-09-26):** measured from the `HEAD` the group commits on top of — re-measured immediately before committing — never the working tree, and S5.0 commits only after T-346 S3 has committed. The barrel export lines for S5.0 (`packages/db/src/index.ts`, `packages/domain/src/index.ts`) are added by the orchestrator after T-346 S3 commits, so no commit carries another lane's hunks.

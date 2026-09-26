@@ -1,5 +1,6 @@
 import { getStorePLComparison } from '@shareat/domain';
 import { authorize } from '@shareat/auth';
+import { storesRepo } from '@shareat/db';
 import { reportScope, runReport } from '../lib';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { EmptyState } from '@/components/reports/EmptyState';
@@ -57,9 +58,18 @@ export default async function StoreComparisonPage({
   });
 
   const storeName = new Map(scope.stores.map((s) => [s.id, `${s.name} (${s.code})`]));
+  // T-346 S3 (DEF-428), §3.5 / R6.3 — the same three states as the `/admin/stores` list badge
+  // (`admin/stores/page.tsx`, Amendment R3.3), never re-derived as a looser two-state version.
+  // Figures are unaffected either way (pre-opening costs are expensed, not capitalised, PAS 16 ¶19).
   const columns: StoreComparisonColumn[] = stores.stores.map((s) => ({
     storeId: s.storeId,
     storeName: storeName.get(s.storeId) ?? s.storeId,
+    openingLabel:
+      s.openingDate === null
+        ? 'Not yet open — no opening date set'
+        : storesRepo.isPreOpening(s.openingDate, today)
+          ? `Opens ${s.openingDate}`
+          : `Opened ${s.openingDate}`,
     revenue: s.statement.revenue,
     costOfSales: s.statement.costOfSales,
     grossProfit: s.statement.grossProfit,

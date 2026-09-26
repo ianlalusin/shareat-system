@@ -4,7 +4,7 @@
  * dashboard tile or a comparison screen calls the SAME named query a statement does, never a
  * second definition of the same number).
  */
-import type { Executor } from '@shareat/db';
+import { storesRepo, type Executor } from '@shareat/db';
 import { getIncomeStatement, type IncomeStatementResult } from './income-statement';
 
 export interface StorePLComparisonInput {
@@ -18,6 +18,9 @@ export interface StorePLComparisonInput {
 export interface StorePLComparisonRow {
   storeId: string;
   statement: IncomeStatementResult;
+  /** T-346 S3 (DEF-428), §3.5 — for the column header (`Opened {d}` / `Pre-opening`). The figures
+   *  above are unchanged either way: pre-opening costs are expensed, not capitalised (PAS 16 ¶19). */
+  openingDate: string | null;
 }
 
 export interface StorePLComparisonBasis {
@@ -36,13 +39,20 @@ export interface StorePLComparisonResult {
 export async function getStorePLComparison(ex: Executor, input: StorePLComparisonInput): Promise<StorePLComparisonResult> {
   const includeYearClose = input.includeYearClose ?? false;
 
-  const statements = await Promise.all(
-    input.storeIds.map((storeId) =>
-      getIncomeStatement(ex, { orgId: input.orgId, storeId, fromDate: input.fromDate, toDate: input.toDate, includeYearClose }),
+  const [statements, openingDates] = await Promise.all([
+    Promise.all(
+      input.storeIds.map((storeId) =>
+        getIncomeStatement(ex, { orgId: input.orgId, storeId, fromDate: input.fromDate, toDate: input.toDate, includeYearClose }),
+      ),
     ),
-  );
+    storesRepo.openingDatesByStore(ex, input.orgId, input.storeIds),
+  ]);
 
-  const stores: StorePLComparisonRow[] = input.storeIds.map((storeId, i) => ({ storeId, statement: statements[i]! }));
+  const stores: StorePLComparisonRow[] = input.storeIds.map((storeId, i) => ({
+    storeId,
+    statement: statements[i]!,
+    openingDate: openingDates.get(storeId) ?? null,
+  }));
 
   return {
     stores,
