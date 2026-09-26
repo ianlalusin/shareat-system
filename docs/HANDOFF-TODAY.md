@@ -1,91 +1,104 @@
-# Handoff — 2026-09-26 (evening)
+# Handoff — 2026-09-27 (morning)
 
 > ⚠️ NOT LAUNCHED. A green push to `main` runs CI, and a green CI **deploys** (`.github/workflows/deploy.yml`).
-> ⭐ **Standing rule (Ian, 2026-09-26): push ONLY at wrap-up, unless Ian says otherwise.** Commit each clean
-> slice locally; one push at the end of the session.
+> ⛔ **NOT PUSHED.** Ian was away and said to skip anything that needs him, and a push deploys. Every commit
+> since `bf6741c` is **local only**. Pushing is Ian's first action: `git push` after he looks at the log.
+> ⭐ Standing (Ian, 2026-09-26): push only at wrap-up, unless Ian says otherwise.
 
 ## Where things stand
-Ian's queue for 26 Sep is done except T-343 S5's later groups. **Shipped:** T-345 (missed-month catch-up,
-0161), T-346 (store opening date + in-service date, 0162/0163; DEF-427, DEF-428), T-347 (cutover purge,
-0164; DEF-437), T-343 S5.0 (refusal foundation) and S5.1 (sales days + expenses in human terms).
-**Designed only:** ADR-014 (the "AI brain", PROPOSED, post-launch). **Reserved:** T-348 (DEF-440, page width).
+Ian's queue (T-343 S5.1b → S2b → S5a → S5.2 → S5.3) is done, and so are four follow-up slices the audits
+produced (S5.2 follow-up, S5.1c, S5.1d, S5.3b). T-343 is open for S5.4 (after S6 labels), S5.5+ (≈180
+domain sites), S6/S6b, S7, S8, S9.
 
-## Gates at `c6c761a` (fresh DB, `node ~/.claude/skills/orchestrator/tools/gates.mjs --db shareat_test_s51_t347_gate --port 9008`)
-typecheck 0 · unit **173 files / 3125 passed, 1 skipped** · integration **162 files / 3278 of 3279** · build 0 (9008 stopped).
-The one integration failure is `stock-usage.test.ts` "Hook timed out in 30000ms" under load (that file took 41 min in
-the suite); **21/21 alone**. Untouched by today's work. The wrap-up pushed this exact tree (docs-only commits on top).
-⚠️ Load timeouts recur: `t343-scheduler-status`, `t336-canonical-position-defaults`, `no-committed-secrets`,
-`stock-usage` all passed alone. Run full gates with other sessions idle.
+## Gates at `60e81ec` (fresh DB, `node ~/.claude/skills/orchestrator/tools/gates.mjs --db shareat_test_gate_0927d --port 9008`)
+typecheck 0 · unit **180 files / 3186 passed, 1 skipped** · integration **3311/3311 tests; 162/163 files** · build 0.
+The one file: `attendance-credentials-scan-collision-migration.test.ts` "Hook timed out in 120000ms" under load.
+It is untouched by this work and passes **2/2 alone** on the same DB. Earlier gate runs today were fully green
+(`b16480f`, `b32f9a6`, `1c00abd`).
 
-## What happened this session
-- **T-345** `7c26f6d`: an admin books a missed month's depreciation/amortisation into this month, `[prior period]`,
-  amount from the schedule. Audit added a floor (never before the org's earliest fiscal period).
-- **T-346** `1ac1bca` / `78350ce` / `22475b1`: `stores.opening_date`; `fixed_assets.in_service_on/_source` with a
-  fill trigger and a guard over posted months; reversals behind an in-page confirm; findings and store comparison
-  honour the opening date. Spec Amendments R2–R6.
-- **T-343 S5.0** `76557b0`, **S5.1** `e62ef27`: `refuse()` sanitises; per-directory throw CEILINGS measured at HEAD;
-  56 sales-day/expense sites converted. The S5.1 builder built before release; red was then confirmed against HEAD
-  with its code set aside and restored (byte-diff verified).
-- **T-347** `c6c761a`: purge engine in `packages/db/src/cutover/purge.ts`; FK drop → TRUNCATE → one-statement shell
-  clear → FK re-add, one transaction; sequences reset only if owned by a purged table. Rehearsed on a dev copy.
-- **Local environment** (Ian): `shareat_dev` rebuilt from zero; terminal provisioned at LIP; Ian's email linked.
-  Recipe now in `HANDOFF.md` §4a; values in `.env.local` (`DEV_TERMINAL_*`, `DEV_IAN_*`).
-- **Registered:** DEF-440 (narrow two-column pages, T-348), DEF-441 (a confirm pins intent, not plan), DEF-442
-  (asset can be created at a deactivated store, reported). **Fixed in the register:** DEF-427, 428, 437.
-- **Docs:** ADR-014 + `docs/discovery/38-ai-brain.md` (PROPOSED; open questions for Ian at the end of the ADR).
-- **Decisions by Ian, and where they live:** T-345 floor/confirm rulings → spec Amendments; push only at wrap-up →
-  **UNRECORDED in the bible** (see below); T-348 "must be fixed" → `docs/tasks/348-*.md`; rebuild shareat_dev →
-  `HANDOFF.md` §4a.
+## What happened this session (by theme)
+- **Refusals in human terms (T-343, DEF-417 part 2):** these slices were committed:
+  - S5.1b `1456aaf`: commissary order messages.
+  - S2b `b16480f`: DEF-430, a store refusal names where the person's job is.
+  - S5a `ae55895`: roles and credentials.
+  - S5.2 `83f9364` and its follow-up `1c04d52`: AP and customers.
+  - S5.3 `1c00abd`: deliveries, catalogue, opening balances.
+  - S5.3b `60e81ec`: receipt reasons, opening amounts, visible line numbers.
+- **Bypasses closed:** six app wrappers answered before the shared `errorMessage`, so no human sentence
+  could reach their screens:
+  - commissary orders: S5.1c `b32f9a6`, DEF-445/446;
+  - wastage, admin/stores, deliveries, locations: S5.1d `36b33df`, DEF-448/450.
+- **FIXED:** DEF-430, 445, 446, 448, 450, 453 (an AP refusal named another STORE's expense; found by post-commit
+  /code-review). DEF-444 half fixed.
+- **Reported:** DEF-443 (a voided order accepts messages), 447 (row-5 hardening), 449 (second date call site),
+  451 (three census blind spots), 452 (13 more wrappers), 454 (≈18 `parseMoneyInput` callers).
+- **Screen tests on 9008:** S5.1b and S5.1c, light and dark. Seeded rows are marked `T343S51B`/`T343S51C`. Stores
+  cannot be deleted (append-only config), so four deactivated test stores remain in `shareat_dev`. Scripts are in
+  `~/.claude/skills/orchestrator/tools/t343s51b-*`.
+- **Decisions, all recorded in `docs/tasks/343-*.md`:**
+  - S2b: second-person voice; deactivated stores omitted.
+  - K1's scope.
+  - The S5.1b/S5.2/S5.3/S5.3b rulings.
+  - Amendment R4.
+  - The auditor runs `/code-review` post-commit in a throwaway worktree, never planting in the shared tree.
+- **Process lessons, now standing lane conventions:**
+  - Testers run `npm run typecheck` before reporting, because vitest never runs tsc; three test files shipped
+    tsc-red to review.
+  - Red claims in test comments are written in the past tense.
+  - Legs written after a fix landed were verified red by setting the fix aside against HEAD, then restoring
+    byte-identical (`diff -q`).
 
 ## Pick up here
-1. **T-343 S5.1b** (commissary order messages, `messages.ts`, sole owner of `commissary/orders/[id]/actions.ts:106`),
-   then **S2b** → **S5a** (measure the roles.ts two-arg sites with the S5.0 scanner BEFORE writing K1 — spec
-   rulings at the end of `docs/tasks/343-*.md`) → S5.2 → S5.3 → S6/S6b → S5.4.
-2. **T-348** once Ian picks a layout from rendered screenshots (tester renders `table` density vs record+aside on
-   the eight pages at 1366/1920/phone).
-3. A fiscal-period cleanup task for DEF-424/426/433/434/439 (proposed to Ian; not approved yet).
+1. **Ian: push** (see the banner), after `git log --oneline bf6741c..HEAD`.
+2. **T-343 S6/S6b.** S6 adds labels for dispositions and item kinds, and is S5.4's precondition. S6b is DEF-431.
+3. **DEF-454 sweep:** give all ≈18 `parseMoneyInput` callers a human label. Cheap and mechanical, a `Workflow`
+   candidate.
+4. **T-343 S7:** DEF-452's 13 wrappers, using the S5.1c/S5.1d pattern (`isPresentable` first).
 
 ## Do not decide these alone — they are Ian's
-- T-348's layout (from screenshots).
-- ADR-014's open questions (pilot use case, providers, budget, knowledge scope, approver, Infisical when).
-- The fiscal-period cleanup task above.
-- Still open: arm `shareat-fiscal-period-seed.timer` before 2027-09-01; the T-341 §8 and T-344 production counts;
-  check each store's backfilled opening date now that 0162 is live; dark-mode `--brand`/`--warning`; duplicate "Server".
+- The push itself.
+- T-348's layout (from screenshots). ADR-014's open questions. The fiscal-period cleanup task (DEF-424/426/433/434/439).
+- DEF-443: should a voided order's message thread be read-only?
+- Still open from before: arm `shareat-fiscal-period-seed.timer` before 2027-09-01; the T-341 §8 / T-344
+  production counts; dark-mode `--brand`/`--warning`; duplicate "Server".
 
 ## Unrecorded (planner, bible §14)
-Bible §13 rows still needed: **push only at wrap-up (Ian, 2026-09-26, standing)**; Ian's human-terms rule; the T-276
-gap threshold; T-341 per-store position grants; T-344 Q1–Q5; the T-345 catch-up rule. POSTING-PATTERNS needs the
-T-345 `[prior period]` catch-up variant. Run `npm run toc` after each insert.
+Bible §13 rows still needed (carried over): push only at wrap-up; Ian's human-terms rule; the T-276 gap threshold;
+T-341 per-store grants; T-344 Q1–Q5; the T-345 catch-up rule. New: the post-commit `/code-review`-in-a-worktree
+rule, and "a refusal may name only records the actor is entitled to see at THIS store" (DEF-453's lesson, stronger
+than rule 7's org scope). Run `npm run toc` after each insert. POSTING-PATTERNS still needs the T-345 variant.
 
 ## Traps that have actually bitten
-- **Specs had their review amendments unfolded** (T-346 S1/S2, T-343 S5, T-347): the body a builder implements from
-  still said the old thing. Before building any slice, have the auditor grep the body against its amendments.
-- **Freeze the whole tree during full gates** — a "write-only" test edit mid-gate invalidated a run. Set other lanes'
-  in-progress files aside (backup, restore, `diff -q`) rather than gating a mixed tree.
-- A **working-tree** throw ratchet counts another lane's uncommitted files; measure at HEAD, one key per directory.
-- `pg_sequences` has no `is_called` on PG 18 — read the sequence relation itself.
-- Backticks inside an SQL comment inside `sql\`…\`` end the template literal.
-- `scripts/cutover-purge.ts` writes `docs/reviews/cutover-purge-<date>.md` on every run; tests set `CUTOVER_PURGE_REPORT_DIR`.
-- Signing out in Chrome drops the terminal connection; screen testers must never sign out.
+- **Specs had amendments unfolded.** Before any slice builds, have the auditor check the body against its amendments.
+  Amendment R4 exists because of this.
+- **A refusal lookup scoped by org only can leak another store's record** (DEF-453). Name by lookup only after the
+  store-scoped guard.
+- **vitest is not tsc.** Run `npm run typecheck` before calling a test file done.
+- **A `'use client'` path must never reach `@shareat/db`.** `shared/money-input.ts` stays import-free (T-266).
+- The census can't see a derived value behind a local `const`, a helper call, or a quoted key in a literal (DEF-451).
+- **Freeze all lanes during full gates** (about 45 min now). Load timeouts recur in single files; re-run alone.
+- Testers use their LANE DB via `run-with-db.mjs`, never `shareat_test`. One lane migrated the shared DB this session.
+- `shareat_dev` stores can't be deleted (append-only attendance config), so deactivate them instead.
 
 ## Sessions
-All six are **safe to /clear**: nothing in flight, every slice committed and pushed, nothing lives only in a session.
-Last roles: T-347/T-346 tester `webapps-30`, builder `system32-19`; T-343 tester `webapps-a2`, builder `webapps-83`;
-auditor `auto-assign-staff-role-on-hire` (Opus). Lane DBs reusable by name: `shareat_test_t343s5_{tester,builder}`,
-`shareat_test_t347_{tester,builder}`. Re-brief from `~/.claude/skills/orchestrator/worker-briefing.md`.
-An unmerged `daily-review/2026-09-17` branch exists — merge or discard it deliberately.
+All lanes are idle, and nothing uncommitted is theirs. **Safe to /clear:** tester `webapps-30`, builder `system32-19`,
+auditor `auto-assign-staff-role-on-hire`, and this orchestrator. Lane DBs are reusable by name:
+`shareat_test_t343s5_{tester,builder}`. The review worktree is at `…/scratchpad/wt-review`; remove it with
+`git worktree remove`. `webapps-a2`, `webapps-83` and `Shareat-system defect closure [cb99ee]` were unused this
+session. The unmerged `daily-review/2026-09-17` branch still exists.
 
 ## The paste-ready prompt
 ```
 You are the orchestrator for shareat-system (C:\Users\ianla\webapps\shareat-system). Run the global
 /orchestrator skill. You are starting COLD. Read docs/HANDOFF-TODAY.md (all), docs/RULES.md, then
-docs/tasks/343-def-417-human-readable-refusals.md §S5 (groups table, S5.1b, and the rulings at the end).
+docs/tasks/343-def-417-human-readable-refusals.md: the Status line, "Later slices", and the S6/S6b lines.
 GREP the register and bible, never Read them whole.
+FIRST: confirm with Ian that bf6741c..HEAD has been pushed; if not, ask before pushing (a push deploys).
 Goal (Ian): close as many defects as possible toward deployment. It is NOT launched.
 STANDING: commit slices locally; push ONLY at wrap-up unless Ian says otherwise.
-Queue: T-343 S5.1b → S2b → S5a → S5.2 → S5.3 → wrap up today's work. Before any slice builds, have the
-auditor check the spec body against its amendments. Freeze all lanes during full gates.
-Use the backend-architect agent for specs and code-reviewer / the auditor for independent reviews.
+Queue: T-343 S6/S6b → DEF-454 sweep → S7 (DEF-452) → wrap up today's work. Have the planner spec S6
+first; the auditor checks each spec body against its amendments before it builds. Freeze lanes during gates.
+Testers run npm run typecheck before every report. The auditor runs /code-review post-commit in a worktree.
 Messages are short. Render before deciding. Ask for the exact command behind any reported number.
 Ian runs this terminal on Opus 5.5 at medium effort; do not ask him to switch.
 ```

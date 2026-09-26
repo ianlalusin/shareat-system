@@ -1,6 +1,6 @@
 # T-343: DEF-417 (part 2) — user-visible refusals name things in human terms, never raw ids or keys
 
-**Status:** S1–S4 DONE 2026-09-25 (independent Opus review + Amendments R1–R3; audit; isolated /code-review). S5–S9 open. ⛔ §9.4 UNMET for S2 — no refusal banner screen-tested yet.
+**Status:** S1–S4 DONE 2026-09-25. S5.0–S5.1 DONE 2026-09-26. **S5.1b, S2b, S5a, S5.2 (+follow-up), S5.3, S5.1c, S5.1d, S5.3b DONE 2026-09-27** (each: tester red, builder, Opus audit, full gates; committed locally, push pending Ian). Refusal banners screen-tested on 9008 for S5.1b/S5.1c. Open: S5.4 (after S6), S5.5+, S6/S6b, S7 (DEF-452), S8, S9.
 **Orchestrator defaults (Ian may override any time):** fallback wording as proposed in S1.3; the 96 capability labels
 are Sonnet-drafted from CAPABILITY-MATRIX.md notes and fixed later if Ian wants; staging S1 = fail closed on
 IDENTIFIERS, strict flip at S9; S3 names the record's KIND, not its number; cross-org refusals never name the other
@@ -1020,3 +1020,10 @@ amendment, before S2b's review fold shifted them.
 - **S5.2 typing (auditor, 2026-09-27):** `InvoiceCapacity` gains `invoiceNo: string | null`, `invoiceDate: BusinessDate` (parsed with `parseBusinessDate` inside `capacityOf`, never a bare `as BusinessDate` cast) and `supplierName: string`. Only the supplier name needs adding to the `group by`.
 - **S5a K1 scope (tester, 2026-09-27, accepted):** K1's first-argument rule applies to `roles.ts` and `credentials-admin.ts` only. `authorize.ts`'s raw diagnostics are id/key-shaped by design (`may not 'record_sale'`), every one already carries a `userMessage` third argument, and T5's census covers them. The 3-arg and 0-raw-`Error` rules still span all of `packages/auth/src`. Measured allowlist: 5 (`roles.ts:367,393,447,586`, `credentials-admin.ts:45`), keyed by text.
 - **S5.3 parseFourDecimalCost (builder QUESTION, 2026-09-27):** its only caller (`deliveries/documents.ts:140`) passes an id-bearing label. It gains a separate `humanLabel` argument (`Line ${n}: the unit cost`); the raw `label` and message stay byte-identical (Invariant 1).
+
+### S5.3b rulings (orchestrator, 2026-09-27, post-commit review of 1c00abd + S5.1d audit)
+- **Receipt reasons (regression):** S5.3's `documents.ts:362` fallback replaced three already-readable `receive.ts` reasons with "…Reload the page and try again.", which is wrong advice for a draft. Ruling (ii): `packages/domain/src/deliveries/receive.ts`'s four `Outcome` reasons gain `userReason` now (id-free sentence; the COA-ALIGNMENT citation and quoted kind key dropped from the sentence, raw byte-identical); `documents.ts` already prefers `userReason`.
+- **`parseMoneyInput`** (`shared/money-input.ts`) gains the same raw/human label split as `parseFourDecimalCost`; `cutover/opening.ts:72` passes `This amount`/`The amount` as the human label.
+- **Line numbering:** "Line n" names the operator's VISIBLE form row. `apps/erp/src/app/inventory/deliveries/actions.ts` numbers rows before it drops empty ones and passes `lineNo` on each line; the domain uses `line.lineNo ?? i + 1`.
+- **Proof photo:** the better local sentence moves into the domain (`refuse(raw, "That photo could not be found — try attaching it again.")` at `documents.ts:115`), and the now-dead local branch in `inventory/deliveries/actions.ts` is deleted.
+- **S5.1d X1** (raw-text source scan) is dropped: it pinned spelling, not behaviour, and shaped comments. The behavioural W/S/D/L legs are the guard.
