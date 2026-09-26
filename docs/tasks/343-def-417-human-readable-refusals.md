@@ -561,6 +561,102 @@ could not be found."
 
 ---
 
+### S5.1d: the remaining app wrappers that pre-empt refusals (DEF-448, DEF-450, rest of DEF-444)
+**Status:** APPROVED 2026-09-27 (orchestrator). **Model:** Sonnet, tester then builder. **Migration:** none. Independent
+of S5.3 (touches no `packages/domain` file; S5.3's in-flight test files are not in this slice's paths).
+
+**Goal.** On the wastage, stores, deliveries and rooms screens, every `AuthorizationError` reaches the person as its
+S2/S2b `userMessage`, and any presentable error beats a screen-local regex. Local sentences for non-authorization
+errors (constraint names, plain domain throws) stay.
+
+**Evidence** (HEAD `6b8f7cc`, verified):
+- **Rule for every wrapper below:** `authorize()`'s seven throw sites (`packages/auth/src/authorize.ts:116-221`) all pass
+  a `userMessage` (S2/S2b), and the shared `errorMessage` (`apps/erp/src/lib/constraint-messages.ts:296`, step 0 `:301`)
+  is its only reader. A local branch keyed on `may not '…'`, `no store scope` or `authorize:` is a **pure bypass**.
+- `apps/erp/src/app/wastage/actions.ts:57-63` `errorMessageOf`: `:59-60` `may not '…'` → `Your role may not <key>.`;
+  `:61` `no store scope` → local sentence; `:62` shared. **Both branches are bypasses** (DEF-448, the DEF-445 twin).
+  Five callers in the file (`:120/136/167/194/214`).
+- `apps/erp/src/app/admin/stores/actions.ts:52-75` local `errorMessage`: `:63-65` `no store scope` and `:66-68`
+  `authorize:` (returns "Only an admin or super-admin can open or close a branch." for ANY refusal, including
+  `manage_store_settings`, `stores/service.ts:455`) are **bypasses**. `:54-62` (three constraint names) are **kept**:
+  real class-23 errors, never presentable. `:72-73` `^(setStoreOpeningDate|createStore): (.+)$` is a **duplicate**:
+  shared step 4 (`:323`) strips the same prefix from a codeless Error and also sanitises. It pre-empts a presentable
+  error whose raw starts with that prefix (what S5 conversion of `stores/service.ts` will produce). Delete it.
+- `apps/erp/src/app/inventory/deliveries/actions.ts:48-107`: `:51-53` `receive_delivery`, `:54-57` `allow_over_receipt`,
+  `:58-60` `no store scope` are **bypasses**. `:61-102` (11 branches: DB constraints, plain domain throws) are **kept**.
+  But they run before shared, so after S5.3 converts `deliveries/documents.ts` (e.g. `:115` proof file → `gone(…)`), the
+  local regex would still beat the domain's presentable sentence. Hence the presentable guard below.
+- `apps/erp/src/app/inventory/locations/actions.ts:35-69`: `:38-40` `manage_locations`, `:41-43` `no store scope for` are
+  **bypasses**. `:44-64` (constraints, the `single_room` plain throw) are **kept**.
+- DEF-444 remainder (**out of this slice**): `commissary/orders/[id]/actions.ts:53-64` `perform()` only ever sees a
+  thrown error. A vanished order throws a plain `Error` (`packages/domain/src/commissary/orders.ts:116` `branch order
+  <id> does not exist.`, `packages/domain/src/trade/index.ts:682`). The only tell is `/does not exist/`, which also
+  matches "that item does not exist." (`orders.ts:270`), so that is guessing. Even `gone(…)` returns a plain
+  `RefusalError`, not a gone-typed one. **Precondition:** when `commissary/orders.ts` is converted (S5.5+), `:116`
+  throws `recordGone(raw, 'order')` (`RecordGoneError`, `packages/db/src/repo/record-gone.ts:25`). Then `perform()`
+  can redirect `instanceof RecordGoneError` to the list. DEF-444 stays half open and names that slice.
+- **Not in this slice** (S7's "≈40 app regexes"): the same `may not '…'` shape in `inventory/{pos-map,pos-usage,
+  production,usage,counts}`, `items`, `staff`, `staff/[employmentId]/credentials`, `trade/orders`,
+  `commissary/catalogue`, `attendance/terminals`, `admin/users`, `admin/access-defaults` `actions.ts` (grep at HEAD).
+
+**Change (BUILDER).**
+1. `wastage/actions.ts`: delete `:58-61`. `errorMessageOf(err)` = `sharedErrorMessage(err)`. Keep the name and all five
+   call sites. Update the doc comment.
+2. `admin/stores/actions.ts`, `inventory/deliveries/actions.ts`, `inventory/locations/actions.ts`: in each local
+   `errorMessage`, (a) make the first statement `if (isPresentable(err)) return sharedErrorMessage(err);` (import
+   `isPresentable` from `@/lib/error-shape`; presentable wins, which is step 0 of the shared function, run first here);
+   (b) delete the bypass branches listed above; (c) stores only: delete the `named` branch `:72-73`. Every other branch
+   keeps its text and order. Fix the doc comments that name authorize denials.
+- **BUILDER paths:** `apps/erp/src/app/wastage/actions.ts`, `apps/erp/src/app/admin/stores/actions.ts`,
+  `apps/erp/src/app/inventory/deliveries/actions.ts`, `apps/erp/src/app/inventory/locations/actions.ts`.
+- **TESTER paths (disjoint):** `apps/erp/tests/t343-s5-1d-wrapper-refusals.test.ts` (new). Same harness as
+  `t343-s5-1c-commissary-refusals.test.ts` (`RedirectSignal`, mocked `next/navigation`/`next/cache`/session/
+  `withOrgPrincipal`, domain functions mocked to throw). The REAL `@/lib/constraint-messages` and `@/lib/error-shape`.
+  The real `AuthorizationError` (third-argument `userMessage` S) and the real `RefusalError`/`refuse` from
+  `packages/db/src/refusal`. The wrappers are private, so each leg drives an exported action and reads the `error`
+  param. W-legs need `salesDaysRepo.findByBusinessDate` → a row (`wastage/actions.ts:99` checks it before the domain).
+
+| Id | Leg (action → domain mock throws) | Asserts | Expected red |
+|---|---|---|---|
+| W1 | `recordOrderWastageAction` → `AuthorizationError("authorize: role 'manager' may not 'record_order_wastage'", cap, S)` | `error === S` | `Your role may not record order wastage.` |
+| W2 | `disputeOrderWastageAction` → raw `… has no store scope for <uuid>`, `userMessage` S | `error === S` | `You are not assigned to the store this action belongs to.` |
+| W3 ⛔ | `recordOrderWastageAction` → plain `Error('recordOrderWastage: <uuid> text')` | equals `errorMessage(err)`, no UUID | green now |
+| S1 | `createStoreAction` → `AuthorizationError("authorize: role 'manager' may not 'manage_stores'", cap, S)` | `error === S` | `Only an admin or super-admin can open or close a branch.` |
+| S2 | `setStoreOpeningDateAction` → raw `no store scope`, `userMessage` S | `error === S` | `You do not have access to that store.` |
+| S3 | `createStoreAction` → `refuse('createStore: raw tail', S)` | `error === S` | `raw tail` (the `named` branch) |
+| S4 ⛔ | `createStoreAction` → `{ code: '23514', constraint: 'stores_pooling_requires_ceiling_check' }` Error | the local pooling sentence | green now |
+| S5 ⛔ | `createStoreAction` → plain `Error('createStore: a store needs a code.')` | `a store needs a code.` | green now (must stay after S3's deletion) |
+| D1 | `receiveDeliveryAction` → `may not 'receive_delivery'`, S | `error === S` | `Recording or receiving a delivery needs at least staff access…` |
+| D2 | same → `may not 'allow_over_receipt'`, S | `error === S` | `Only a manager or admin can approve receiving more…` |
+| D3 | `createDeliveryAction` → `no store scope`, S | `error === S` | `You are not assigned to the store this delivery belongs to.` |
+| D4 | `createDeliveryAction` → `refuse('createDeliveryDocument: proof file <uuid> does not exist in this org', S)` | `error === S` | `That photo could not be found — try attaching it again.` |
+| D5 ⛔ | receive → plain `Error('receiveDeliveryDocument: line 2 must carry a shortage reason')` | the local shortage sentence | green now |
+| D6 ⛔ | create → `{ code: '23505', constraint: 'deliveries_supplier_reference_key' }` Error | the local duplicate sentence | green now |
+| L1 | `createLocationAction` → `may not 'manage_locations'`, S | `error === S` | `Only a manager or admin scoped to this store may manage its rooms.` |
+| L2 | same → `no store scope for <uuid>`, S | `error === S` | `You do not have access to manage rooms for this store.` |
+| L3 ⛔ | same → `{ code: '23505', constraint: 'stock_locations_one_receiving_per_store' }` Error | the local Receiving sentence | green now |
+| L4 ⛔ | `createLocationAction` → plain Error containing `is single_room and already has an active non-Receiving room` | the local ONE-room sentence | green now |
+| X1 ⛔ | source text of the four BUILDER files | none contains `may not '`, `no store scope` or `/authorize:/` | all four contain one |
+
+Build each constraint-shaped error the way `local-errormessage-convergence.test.ts` does. Read the export names from
+the files at HEAD. The action names above are the ones the tester verifies, not guesses to copy.
+
+**Negative halves (unedited, must stay green):** `apps/erp/tests/local-errormessage-convergence.test.ts` (each of the
+three still declares a local `errorMessage` and imports the shared one aliased), `t343-s1-presentable.test.ts`,
+`t343-s5-action-guard.test.ts`, `t343-s5-1c-commissary-refusals.test.ts`, `t343-s5-outcome-message.test.ts`.
+**No existing test asserts any sentence this slice deletes.** Greps over `apps/erp/tests` and `packages` for every
+deleted sentence and for `Your role may not` find only source files and S5.1c's own leg labels (`:153`, `:285`).
+So the TESTER updates no existing test.
+
+**Smoketest (9008, screenshots).** (a) As a manager whose job is at store A: on `/wastage?store=<B>`, with a sales day
+already recorded at B for that date (`:99` refuses first otherwise), record a wastage. The banner shows the S2b
+"…the Manager job that lets you is at A" sentence, not `Your role may not …`. (b) As staff on `/admin/stores`,
+change a store's opening date. The banner shows the S2 sentence for `manage_stores`, not "Only an admin or
+super-admin…". (c) On deliveries, tick "allow over-receipt" as staff and receive. The banner shows the S2 sentence for
+`allow_over_receipt`.
+
+---
+
 ### S2b: a store refusal names where the job is, not the role (DEF-430), before S5a
 **Status:** APPROVED 2026-09-26 (orchestrator, after independent review). **Model:** Sonnet, tester then builder. **Migration:** none (reads three existing
 tables; no column, index or policy added). Must land before S5a (both edit `packages/auth/src/refusal-text.ts`).
@@ -923,3 +1019,4 @@ amendment, before S2b's review fold shifted them.
 - **/code-review in a shared tree:** the auditor does not plant into uncommitted shared work; it runs `/code-review` on each slice's commit afterwards, and its manual diff read is the pre-commit audit. A post-commit finding becomes a follow-up, not a revert.
 - **S5.2 typing (auditor, 2026-09-27):** `InvoiceCapacity` gains `invoiceNo: string | null`, `invoiceDate: BusinessDate` (parsed with `parseBusinessDate` inside `capacityOf`, never a bare `as BusinessDate` cast) and `supplierName: string`. Only the supplier name needs adding to the `group by`.
 - **S5a K1 scope (tester, 2026-09-27, accepted):** K1's first-argument rule applies to `roles.ts` and `credentials-admin.ts` only. `authorize.ts`'s raw diagnostics are id/key-shaped by design (`may not 'record_sale'`), every one already carries a `userMessage` third argument, and T5's census covers them. The 3-arg and 0-raw-`Error` rules still span all of `packages/auth/src`. Measured allowlist: 5 (`roles.ts:367,393,447,586`, `credentials-admin.ts:45`), keyed by text.
+- **S5.3 parseFourDecimalCost (builder QUESTION, 2026-09-27):** its only caller (`deliveries/documents.ts:140`) passes an id-bearing label. It gains a separate `humanLabel` argument (`Line ${n}: the unit cost`); the raw `label` and message stay byte-identical (Invariant 1).
