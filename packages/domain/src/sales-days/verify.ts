@@ -21,6 +21,7 @@ import { money } from '@shareat/core/money';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { routeSalesDay } from './routing';
+import { refuse, gone, internalFault } from '../shared/refusal';
 
 export interface VerifySalesDayResult {
   journalEntryId: string;
@@ -39,12 +40,15 @@ export async function submitSalesDay(tx: Tx | null, actor: Actor, salesDayId: st
 
 async function runSubmit(tx: Tx, actor: Actor, salesDayId: string): Promise<void> {
   const day = await salesDaysRepo.getById(tx, actor.orgId, salesDayId);
-  if (!day) throw new Error(`submitSalesDay: sales day ${salesDayId} does not exist in org ${actor.orgId}`);
+  if (!day) throw gone(`submitSalesDay: sales day ${salesDayId} does not exist in org ${actor.orgId}`, 'sales day');
 
   await authorize(tx, actor, 'submit_sales_day', { storeId: day.storeId });
 
   if (day.status !== 'open') {
-    throw new Error(`submitSalesDay: sales day ${salesDayId} is ${day.status} — only an open day may be submitted`);
+    throw refuse(
+      `submitSalesDay: sales day ${salesDayId} is ${day.status} — only an open day may be submitted`,
+      `Only an open sales day can be submitted — this one is ${day.status}.`,
+    );
   }
   await salesDaysRepo.markSubmitted(tx, actor.orgId, salesDayId, actor.personId);
 }
@@ -64,7 +68,7 @@ export async function verifySalesDay(
 
 async function runVerify(tx: Tx, actor: Actor, salesDayId: string): Promise<VerifySalesDayResult> {
   const day = await salesDaysRepo.getById(tx, actor.orgId, salesDayId);
-  if (!day) throw new Error(`verifySalesDay: sales day ${salesDayId} does not exist in org ${actor.orgId}`);
+  if (!day) throw gone(`verifySalesDay: sales day ${salesDayId} does not exist in org ${actor.orgId}`, 'sales day');
 
   await authorize(tx, actor, 'verify_sales_day', { storeId: day.storeId });
 
@@ -72,14 +76,17 @@ async function runVerify(tx: Tx, actor: Actor, salesDayId: string): Promise<Veri
   // than a second entry.
   if (day.status === 'verified') {
     if (!day.journalEntryId) {
-      throw new Error(
+      throw internalFault(
         `verifySalesDay: sales day ${salesDayId} is verified but carries no journalEntryId — data inconsistency`,
       );
     }
     return { journalEntryId: day.journalEntryId, created: false };
   }
   if (day.status === 'voided') {
-    throw new Error(`verifySalesDay: sales day ${salesDayId} is voided — cannot post`);
+    throw refuse(
+      `verifySalesDay: sales day ${salesDayId} is voided — cannot post`,
+      "This sales day has been voided, so it can't be posted.",
+    );
   }
 
   const channels = await salesDaysRepo.getChannelsForDay(tx, salesDayId);
@@ -113,7 +120,10 @@ async function runVerify(tx: Tx, actor: Actor, salesDayId: string): Promise<Veri
     // ⚠️ The day is UNCHANGED — still open or submitted, fixable and re-verifiable. A day that
     // cannot balance quarantines rather than posting a guessed entry, and the reason names what
     // disagrees with what.
-    throw new Error(`verifySalesDay: sales day ${salesDayId} cannot post — ${routed.reason}`);
+    throw refuse(
+      `verifySalesDay: sales day ${salesDayId} cannot post — ${routed.reason}`,
+      `This sales day can't be posted yet: ${routed.reason}.`,
+    );
   }
 
   const result = await postEntry(tx, {
@@ -169,25 +179,29 @@ async function runVoid(
   reason: string,
 ): Promise<{ reversalEntryId: string }> {
   const day = await salesDaysRepo.getById(tx, actor.orgId, salesDayId);
-  if (!day) throw new Error(`voidSalesDay: sales day ${salesDayId} does not exist in org ${actor.orgId}`);
+  if (!day) throw gone(`voidSalesDay: sales day ${salesDayId} does not exist in org ${actor.orgId}`, 'sales day');
 
   await authorize(tx, actor, 'void_sales_day', { storeId: day.storeId });
 
   // ⚠️ Status first, before any posting work: an unverified day has nothing to reverse, and a
   // voided one has already been reversed.
   if (day.status !== 'verified') {
-    throw new Error(
+    throw refuse(
       `voidSalesDay: sales day ${salesDayId} is ${day.status} — only a verified day has a posting to ` +
         `reverse. An unverified day is edited or left alone; nothing has been recognised from it`,
+      `Only a verified sales day can be voided — this one is ${day.status}. An unverified day is edited instead.`,
     );
   }
   if (!day.journalEntryId) {
-    throw new Error(`voidSalesDay: sales day ${salesDayId} is verified but carries no journalEntryId — data inconsistency`);
+    throw internalFault(`voidSalesDay: sales day ${salesDayId} is verified but carries no journalEntryId — data inconsistency`);
   }
 
   const trimmed = (reason ?? '').trim();
   if (!trimmed) {
-    throw new Error('voidSalesDay: reason is required and cannot be empty or whitespace-only');
+    throw refuse(
+      'voidSalesDay: reason is required and cannot be empty or whitespace-only',
+      'Reason is required and cannot be empty or whitespace-only.',
+    );
   }
 
   // The ORIGINAL entry stands. Both sides remain in the ledger (bible §4) — this is the same

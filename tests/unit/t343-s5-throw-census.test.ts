@@ -139,3 +139,40 @@ describe('W3 — the real packages/db/src/repo tree: the 3 ap.ts sites, plus the
     expect(attendance).toBeDefined();
   });
 });
+
+describe('W-local-const — a bare identifier bound one hop away to a derived/id shape is not "plain" (/code-review, S5.1, 2026-09-26)', () => {
+  // The shape `expenses/categories.ts:143-144`'s rewrap had at review time: `refuse`'s 2nd arg is
+  // a conditional whose false branch is a bare identifier (`raw`), itself a local `const` bound to
+  // a template that reads `err.message` a couple of lines earlier — the id-shaped risk is real even
+  // though no ID_NAME_RE/KEY_NAME_RE name, `.message`, `.join(...)` or `String(...)` appears
+  // directly in the argument expression the AST hands the classifier.
+  const LOCAL_CONST_FIXTURE = `
+function rewrap(err: unknown) {
+  const raw = \`setCategoryAccount: \${err instanceof Error ? err.message : String(err)}\`;
+  throw refuse('other raw', err instanceof RefusalError ? err.userMessage : raw);
+}
+`;
+
+  it('refuse\'s 2nd arg resolves the local const one hop and classifies derived', () => {
+    const hits = censusFixture(LOCAL_CONST_FIXTURE).filter((s) => s.callee === 'refuse');
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.kind).toBe('derived');
+  });
+
+  it('stops at ONE hop — a const bound only to another const\'s bare name is not chased further', () => {
+    const TWO_HOP_FIXTURE = `
+function f(err: { id: string }) {
+  const a = err.id;
+  const b = a;
+  throw new Error(b);
+}
+`;
+    // \`b\`'s own initializer is the bare identifier \`a\` — one hop from \`b\` resolves to \`a\`
+    // itself (an Identifier node), which the one-hop call classifies WITHOUT chasing further:
+    // \`a\`'s own name doesn't match ID_NAME_RE, so this stays plain. Documents the bound,
+    // not a defect — an unbounded constant-folder was explicitly rejected (see the header).
+    const hits = censusFixture(TWO_HOP_FIXTURE);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.kind).toBe('plain');
+  });
+});

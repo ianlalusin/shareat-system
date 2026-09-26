@@ -1612,3 +1612,145 @@ describe('T-343 S3 — voiding an already-voided expense names the record, never
     expect(err.message).toMatch(new RegExp(created.id));
   });
 });
+
+// =========================================================================================
+// T-343 S5.1 — expense refusals name things in human terms, never a raw id (rows 7, 8, 12)
+// docs/tasks/343-def-417-human-readable-refusals.md §S5.1.
+// =========================================================================================
+
+/** A second supplier — created locally rather than added to the shared Fixture, since only
+ *  create.ts:146's mismatch scenario (E4, F6) needs one. */
+async function insertSupplier(orgId: string, name: string, createdBy: string): Promise<string> {
+  const [row] = await sql<{ id: string }[]>`
+    insert into suppliers (org_id, name, created_by) values (${orgId}, ${name}, ${createdBy}) returning id
+  `;
+  return row!.id;
+}
+
+describe('T-343 S5.1 — expense refusals carry a human sentence', () => {
+  it('E3a: approveExpense on a voided expense — exact sentence, no UUID', async () => {
+    const f = await setup('t343-s51-e3a');
+    const catId = await categoryId(f.orgId, 'Cost of Goods Sold — General');
+    const created = await asPerson(f.orgId, (tx) =>
+      createExpense(tx, actor(f.orgId, f.staffId), {
+        storeId: f.storeId,
+        supplierId: f.supplierId,
+        supplierInvoiceId: f.supplierInvoiceId,
+        businessDate: BUSINESS_DATE,
+        categoryId: catId,
+        particulars: 'T-343 E3a',
+        payments: [{ method: 'cash', amount: '500.00', moneyAccountId: f.cashDrawerId }],
+      }),
+    );
+    await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
+    await asPerson(f.orgId, (tx) => voidExpense(tx, actor(f.orgId, f.managerId), created.id, 'wrong category'));
+
+    let caught: unknown;
+    try {
+      await asPerson(f.orgId, (tx) => approveExpense(tx, actor(f.orgId, f.managerId), created.id));
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    const err = caught as Error & { userMessage?: string };
+    expect(err.userMessage).toBe("This expense has been voided, so it can't be posted.");
+    expect(err.userMessage).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    // E5 (⛔ negative): the raw diagnostic still matches today's regex, unedited (Invariant 1).
+    expect(err.message).toMatch(/is voided — cannot post/);
+  });
+
+  it('E3b: voidExpense on a stale id — "That expense could not be found.", no UUID', async () => {
+    const f = await setup('t343-s51-e3b');
+    const staleId = '00000000-0000-4000-8000-000000000000';
+
+    let caught: unknown;
+    try {
+      await asPerson(f.orgId, (tx) => voidExpense(tx, actor(f.orgId, f.managerId), staleId, 'anything'));
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    const err = caught as Error & { userMessage?: string };
+    expect(err.userMessage).toMatch(/^That expense could not be found\./);
+    expect(err.userMessage).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+  });
+
+  it('E4: createExpense with supplier A\'s invoice and supplierId B names both suppliers, no UUID', async () => {
+    const f = await setup('t343-s51-e4');
+    const catId = await categoryId(f.orgId, 'Cost of Goods Sold — General');
+    const supplierBId = await insertSupplier(f.orgId, 'T-343 E4 Supplier B', f.staffId);
+
+    let caught: unknown;
+    try {
+      await asPerson(f.orgId, (tx) =>
+        createExpense(tx, actor(f.orgId, f.staffId), {
+          storeId: f.storeId,
+          supplierId: supplierBId,
+          supplierInvoiceId: f.supplierInvoiceId, // belongs to supplier A (f.supplierId)
+          businessDate: BUSINESS_DATE,
+          categoryId: catId,
+          particulars: 'T-343 E4',
+          payments: [{ method: 'cash', amount: '500.00', moneyAccountId: f.cashDrawerId }],
+        }),
+      );
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    const err = caught as Error & { userMessage?: string };
+    expect(err.userMessage).toBe(
+      'That invoice is from t343-s51-e4 Supplier, not T-343 E4 Supplier B. An expense takes its supplier from its invoice.',
+    );
+    expect(err.userMessage).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    // E5 (⛔ negative): the raw diagnostic still matches today's regex, unedited (Invariant 1).
+    expect(err.message).toMatch(/does not own supplier invoice/);
+  });
+
+  /**
+   * F6 (R1.4). ⚠️ **Read this before touching the fixture below — a genuine ambiguity, flagged
+   * rather than silently resolved (shareat-system-flag-unruled-behavior-in-new-tests):** the
+   * spec's own words are "an expense WHOSE PARTICULARS are 'Rice\n sack' and an invoice number
+   * containing U" — grammatically `input.particulars` and the invoice's own number. But
+   * `create.ts:146`'s actual sentence (confirmed against the now-converted source) is
+   * `` `That invoice is from ${supplier.name}, not ${picked?.name ?? '...'}. An expense takes
+   * its supplier from its invoice.` `` — it interpolates NEITHER `particulars` NOR an invoice
+   * number; the ONLY free-text, lookup-driven substitution is `picked.name` (the MISMATCHED
+   * supplier's own name, refusal-path-looked-up from `input.supplierId`). There is no mechanism
+   * by which `input.particulars` or an invoice number could reach this specific sentence at all.
+   * **Read here as:** the picked supplier's NAME carries the messy content this fixture needs to
+   * prove sanitisation against — "Rice\n sack" standing in for the newline-bearing free text,
+   * and an appended UUID standing in for the id `refuse()` must redact. If this reading is wrong,
+   * the planner corrects it; the assertions below are exactly F4's rules (whitespace collapse +
+   * UUID redaction), just exercised through this real call site instead of a synthetic `refuse()`.
+   */
+  it('F6: sanitisation survives a real createExpense mismatch — one line, UUID hidden', async () => {
+    const f = await setup('t343-s51-f6');
+    const catId = await categoryId(f.orgId, 'Cost of Goods Sold — General');
+    const messyU = '0190a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b';
+    const supplierBId = await insertSupplier(f.orgId, `Rice\n sack ${messyU}`, f.staffId);
+
+    let caught: unknown;
+    try {
+      await asPerson(f.orgId, (tx) =>
+        createExpense(tx, actor(f.orgId, f.staffId), {
+          storeId: f.storeId,
+          supplierId: supplierBId,
+          supplierInvoiceId: f.supplierInvoiceId,
+          businessDate: BUSINESS_DATE,
+          categoryId: catId,
+          particulars: 'T-343 F6',
+          payments: [{ method: 'cash', amount: '500.00', moneyAccountId: f.cashDrawerId }],
+        }),
+      );
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    const err = caught as Error & { userMessage?: string };
+    expect(err.userMessage, 'sanitised sentence must exist').toBeDefined();
+    expect(err.userMessage).not.toMatch(/\n/);
+    expect(err.userMessage).not.toContain(messyU);
+    expect(err.userMessage).toContain('[hidden]');
+    expect(err.userMessage).toBe('That invoice is from t343-s51-f6 Supplier, not Rice sack [hidden]. An expense takes its supplier from its invoice.');
+  });
+});

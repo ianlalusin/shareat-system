@@ -19,6 +19,7 @@ import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry } from '../ledger/post-entry';
 import { routeExpense } from './routing';
 import { capitalizeApprovedExpense } from '../fixed-assets/capitalize';
+import { refuse, gone, internalFault } from '../shared/refusal';
 
 export interface ApproveExpenseResult {
   journalEntryId: string;
@@ -48,19 +49,22 @@ async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promi
   // is store-scoped and the store is a property of the resource itself.
   const expense = await expensesRepo.getExpenseById(tx, actor.orgId, expenseId);
   if (!expense) {
-    throw new Error(`approveExpense: expense ${expenseId} does not exist in org ${actor.orgId}`);
+    throw gone(`approveExpense: expense ${expenseId} does not exist in org ${actor.orgId}`, 'expense');
   }
 
   await authorize(tx, actor, 'approve_expense', { storeId: expense.storeId });
 
   if (expense.status === 'posted') {
     if (!expense.journalEntryId) {
-      throw new Error(`approveExpense: expense ${expenseId} is posted but carries no journalEntryId — data inconsistency`);
+      throw internalFault(`approveExpense: expense ${expenseId} is posted but carries no journalEntryId — data inconsistency`);
     }
     return { journalEntryId: expense.journalEntryId, created: false };
   }
   if (expense.status === 'voided') {
-    throw new Error(`approveExpense: expense ${expenseId} is voided — cannot post`);
+    throw refuse(
+      `approveExpense: expense ${expenseId} is voided — cannot post`,
+      "This expense has been voided, so it can't be posted.",
+    );
   }
 
   // ⭐ T-196 — the gate moved from EXISTENCE to POSTING. `createExpense` no longer refuses a
@@ -89,7 +93,10 @@ async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promi
 
   const category = await expensesRepo.getCategoryById(tx, actor.orgId, expense.categoryId);
   if (!category) {
-    throw new Error(`approveExpense: category ${expense.categoryId} for expense ${expenseId} no longer exists`);
+    throw refuse(
+      `approveExpense: category ${expense.categoryId} for expense ${expenseId} no longer exists`,
+      'The category on this expense no longer exists. Pick another category, then approve it.',
+    );
   }
 
   const payments = await expensesRepo.getPaymentsForExpense(tx, expenseId);
@@ -102,8 +109,9 @@ async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promi
   for (const id of walletIds) {
     const acct = await moneyAccountsRepo.getById(tx, actor.orgId, id);
     if (!acct) {
-      throw new Error(
+      throw refuse(
         `approveExpense: expense ${expenseId} names money account ${id}, which does not exist in this org`,
+        'A money account on this expense no longer exists. Edit the payment, then approve it.',
       );
     }
     wallets.set(id, acct.glAccountCode);
@@ -184,7 +192,10 @@ async function runApproveExpense(tx: Tx, actor: Actor, expenseId: string): Promi
   if (!routed.ok) {
     // Invariants 7, 8, 9, 10 all surface here, by name, never a bare exception. The
     // expense itself is UNCHANGED — still a draft, fixable and re-approvable.
-    throw new Error(`approveExpense: expense ${expenseId} cannot post — ${routed.reason}`);
+    throw refuse(
+      `approveExpense: expense ${expenseId} cannot post — ${routed.reason}`,
+      `This expense can't be posted yet: ${routed.reason}.`,
+    );
   }
 
   const result = await postEntry(tx, {

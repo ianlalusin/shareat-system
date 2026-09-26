@@ -15,6 +15,7 @@ import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry } from '../ledger/post-entry';
 import { parseMoneyInput } from '../shared/money-input';
 import { EXPENSE_FUNDING_ACCOUNTS } from './routing';
+import { refuse, gone } from '../shared/refusal';
 
 export interface PayReimbursementInput {
   storeId: string;
@@ -44,19 +45,23 @@ export async function payReimbursement(
 
     const amount = parseMoneyInput(input.amount, 'payReimbursement: the amount');
     if (Number(amount) <= 0) {
-      throw new Error('payReimbursement: the amount has to be greater than zero.');
+      throw refuse('payReimbursement: the amount has to be greater than zero.', 'The amount has to be greater than zero.');
     }
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.fromMoneyAccountId);
-    if (!account) throw new Error('payReimbursement: that money account does not exist.');
+    if (!account) throw gone('payReimbursement: that money account does not exist.', 'money account');
 
     const position = await expensesRepo.reimbursablePayableOf(trx, actor.orgId, input.employeeId);
     if (Number(position.outstanding) <= 0) {
-      throw new Error('payReimbursement: this employee has nothing outstanding on 2130.');
+      throw refuse(
+        'payReimbursement: this employee has nothing outstanding on 2130.',
+        'This employee has no unpaid reimbursement.',
+      );
     }
     if (Number(amount) > Number(position.outstanding) + 0.005) {
-      throw new Error(
+      throw refuse(
         `payReimbursement: ${amount} is more than the ${position.outstanding} owed. There is ` +
           'no account for a reimbursement overpayment to land in — check the amount.',
+        `${amount} is more than the ${position.outstanding} owed. There is no account for a reimbursement overpayment to land in — check the amount.`,
       );
     }
 

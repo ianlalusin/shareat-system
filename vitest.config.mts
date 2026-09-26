@@ -19,6 +19,10 @@ const alias = {
   '@shareat/domain/money-lines': `${root}packages/domain/src/shared/money-lines.ts`,
   // T-326 — mirrors '@shareat/domain/money-lines' above; same exact-match-before-bare-name rule.
   '@shareat/domain/money-input': `${root}packages/domain/src/shared/money-input.ts`,
+  // T-343 S5.0 — mirrors the two subpaths above: `refusal-leaf.ts` has no `@shareat/db` import
+  // deliberately (a `'use client'` component may reach for `humanDate`/`internalFault` directly),
+  // so it needs its own exact entry the same reason the other leaves above do.
+  '@shareat/domain/refusal-leaf': `${root}packages/domain/src/shared/refusal-leaf.ts`,
   // ⭐ T-314 slice A — the clock terminal is a CLIENT path and must reach the fingerprint logic
   // without dragging `@shareat/db` into the browser bundle. T-266 proved that exact failure once
   // (`Module not found: Can't resolve 'net'`), which is why this leaf exists at all.

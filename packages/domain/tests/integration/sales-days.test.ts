@@ -41,6 +41,7 @@ import {
   verifySalesDay,
   voidSalesDay,
   SalesDayBlockedError,
+  InternalFaultError,
 } from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
@@ -798,6 +799,115 @@ describe('DEF-272 — a sub-centavo tender amount gets a written sentence, not m
         }),
       ),
     ).rejects.toThrow(/tenders:.*amount.*"0\.004"/);
+  });
+});
+
+// =========================================================================================
+// T-343 S5.1 — sales-days refusals name things in human terms, never a raw id (rows 7, 8, 12)
+// docs/tasks/343-def-417-human-readable-refusals.md §S5.1.
+// =========================================================================================
+
+describe('T-343 S5.1 — sales-days refusals carry a human sentence', () => {
+  it('E1: voidSalesDay on an open day — userMessage is exactly verify.ts:179\'s sentence with "open"; no UUID', async () => {
+    const f = await setup('t343-s51-e1');
+    const { id } = await asPerson(f.orgId, (tx) =>
+      createSalesDay(tx, actor(f.orgId, f.staffId), simpleDay(f.storeId, D1)),
+    );
+
+    let caught: unknown;
+    try {
+      await asPerson(f.orgId, (tx) => voidSalesDay(tx, actor(f.orgId, f.managerId), id, 'wrong day'));
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    const err = caught as Error & { userMessage?: string };
+    expect(err.userMessage).toBe(
+      'Only a verified sales day can be voided — this one is open. An unverified day is edited instead.',
+    );
+    expect(err.userMessage).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+
+    // E5 (⛔ negative): the raw diagnostic still matches today's regex, unedited (Invariant 1).
+    expect(err.message).toMatch(/only a verified day has a posting/);
+  });
+
+  it('E2: a duplicate createSalesDay names the date and status; no UUID', async () => {
+    const f = await setup('t343-s51-e2');
+    await asPerson(f.orgId, (tx) => createSalesDay(tx, actor(f.orgId, f.staffId), simpleDay(f.storeId, D1)));
+
+    let caught: unknown;
+    try {
+      await asPerson(f.orgId, (tx) => createSalesDay(tx, actor(f.orgId, f.staffId), simpleDay(f.storeId, D1)));
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    const err = caught as Error & { userMessage?: string };
+    expect(err.userMessage, 'a duplicate day must carry a presentable userMessage').toBeDefined();
+    // `humanDate('2026-01-10')` — no second date formatter (Design). D1 is defined above as
+    // '2026-01-10'; independently formatted here to avoid the self-referential-control trap
+    // (a-control-must-not-compute-its-own-expectation) — the literal is hand-verified, not called.
+    expect(err.userMessage).toContain('Jan 10, 2026');
+    expect(err.userMessage).toContain('open');
+    expect(err.userMessage).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+
+    // E5 (⛔ negative): the raw diagnostic still matches today's regex, unedited (Invariant 1).
+    expect(err.message).toMatch(/already exists for store/);
+  });
+
+  it('/code-review: a duplicate with an UNPADDED businessDate ("2026-1-10") still gets the refusal sentence, never "Invalid business date"', async () => {
+    // Postgres's own `date` column parses "2026-1-10" and "2026-01-10" identically, so the
+    // duplicate check finds the existing row either way — but `humanDate()` takes a `BusinessDate`
+    // (`parseBusinessDate`'s strict `/^\d{4}-\d{2}-\d{2}$/`), which "2026-1-10" fails.
+    // `create.ts`'s `safeHumanDate` (code-review item 7) catches that and falls back to the RAW
+    // string rather than crashing the refusal it is naming — so the assertion here is the fallback
+    // actually firing (the raw date shown verbatim, no crash), not that malformed input somehow
+    // still gets the nicely-formatted date (a nicer message for genuinely malformed input is not
+    // the safety property this guards; never crashing, and never leaking, is).
+    const f = await setup('t343-s51-e2b');
+    await asPerson(f.orgId, (tx) => createSalesDay(tx, actor(f.orgId, f.staffId), simpleDay(f.storeId, '2026-01-10')));
+
+    let caught: unknown;
+    try {
+      await asPerson(f.orgId, (tx) =>
+        createSalesDay(tx, actor(f.orgId, f.staffId), simpleDay(f.storeId, '2026-1-10')),
+      );
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    const err = caught as Error & { userMessage?: string };
+    expect(err.userMessage, 'must be the duplicate-day refusal, never a raw "Invalid business date" crash').not.toMatch(
+      /Invalid business date/,
+    );
+    expect(err.userMessage).toContain('2026-1-10'); // safeHumanDate's fallback: raw string, verbatim
+    expect(err.userMessage).toContain('open');
+    expect(err.userMessage).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+  });
+
+  it('E6: a verified day planted with no journal entry throws InternalFaultError, never a userMessage', async () => {
+    const f = await setup('t343-s51-e6');
+    const { id } = await asPerson(f.orgId, (tx) =>
+      createSalesDay(tx, actor(f.orgId, f.staffId), simpleDay(f.storeId, D1)),
+    );
+    await asPerson(f.orgId, (tx) => verifySalesDay(tx, actor(f.orgId, f.managerId), id));
+
+    // Test-only corruption, planted directly against the real row (cheaper and more convincing
+    // than a synthetic fixture — shareat-system-real-source-plant-when-cheap): the public API
+    // never leaves a verified day with no journal_entry_id, so this state can only be reached by
+    // writing around it, exactly as an actual data-inconsistency would be found.
+    await sql`update sales_days set journal_entry_id = null where id = ${id}`;
+
+    let caught: unknown;
+    try {
+      await asPerson(f.orgId, (tx) => verifySalesDay(tx, actor(f.orgId, f.managerId), id));
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(InternalFaultError);
+    const err = caught as InternalFaultError & { userMessage?: string };
+    expect(Object.prototype.hasOwnProperty.call(err, 'userMessage')).toBe(false);
+    expect(err.message).toMatch(/is verified but carries no journalEntryId/);
   });
 });
 

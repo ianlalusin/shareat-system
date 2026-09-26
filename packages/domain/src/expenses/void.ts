@@ -12,6 +12,7 @@ import { authorize, type Actor } from '@shareat/auth';
 import { expensesRepo, transaction, type Tx } from '@shareat/db';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { retireAssetFromVoidedExpense } from '../fixed-assets/capitalize';
+import { refuse, gone, internalFault } from '../shared/refusal';
 
 export interface VoidExpenseResult {
   reversalEntryId: string;
@@ -32,23 +33,27 @@ export async function voidExpense(
 async function runVoidExpense(tx: Tx, actor: Actor, expenseId: string, reason: string): Promise<VoidExpenseResult> {
   const expense = await expensesRepo.getExpenseById(tx, actor.orgId, expenseId);
   if (!expense) {
-    throw new Error(`voidExpense: expense ${expenseId} does not exist in org ${actor.orgId}`);
+    throw gone(`voidExpense: expense ${expenseId} does not exist in org ${actor.orgId}`, 'expense');
   }
 
   await authorize(tx, actor, 'void_expense', { storeId: expense.storeId });
 
   if (expense.status === 'draft') {
-    throw new Error(
+    throw refuse(
       `voidExpense: expense ${expenseId} is a draft — nothing has been posted yet to void; edit or discard it instead`,
+      'This expense is still a draft, so there is nothing posted to void. Edit or discard it instead.',
     );
   }
   if (!expense.journalEntryId) {
-    throw new Error(`voidExpense: expense ${expenseId} is ${expense.status} but carries no journalEntryId — data inconsistency`);
+    throw internalFault(`voidExpense: expense ${expenseId} is ${expense.status} but carries no journalEntryId — data inconsistency`);
   }
 
   const trimmedReason = (reason ?? '').trim();
   if (!trimmedReason) {
-    throw new Error('voidExpense: reason is required and cannot be empty or whitespace-only');
+    throw refuse(
+      'voidExpense: reason is required and cannot be empty or whitespace-only',
+      'Reason is required and cannot be empty or whitespace-only.',
+    );
   }
 
   const result = await reverseEntry(tx, {

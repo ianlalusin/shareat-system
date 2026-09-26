@@ -29,7 +29,23 @@
 import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
 import { moneyAccountsRepo, salesDaysRepo, tradeDiscrepanciesRepo, transaction, type Tx } from '@shareat/db';
 import { add, money, type Money } from '@shareat/core/money';
+import { parseBusinessDate } from '@shareat/core/datetime';
 import { parseMoneyInput } from '../shared/money-input';
+import { refuse, humanDate } from '../shared/refusal';
+
+/**
+ * A refusal message builder must never itself throw (code-review item 7, 2026-09-26):
+ * `input.businessDate` is caller-supplied and `parseBusinessDate` rejects anything not strictly
+ * `YYYY-MM-DD` (e.g. `2026-1-10`, unpadded) — a malformed date must fall back to the raw string
+ * rather than crash the refusal it is naming.
+ */
+function safeHumanDate(rawBusinessDate: string): string {
+  try {
+    return humanDate(parseBusinessDate(rawBusinessDate));
+  } catch {
+    return rawBusinessDate;
+  }
+}
 
 export interface CreateSalesDayChannelInput {
   channelId: string;
@@ -113,9 +129,11 @@ async function runCreate(tx: Tx, actor: Actor, input: CreateSalesDayInput): Prom
 
   const existing = await salesDaysRepo.findByBusinessDate(tx, actor.orgId, input.storeId, input.businessDate);
   if (existing) {
-    throw new Error(
+    throw refuse(
       `createSalesDay: a sales day already exists for store ${input.storeId} on ${input.businessDate} ` +
         `(status ${existing.status}) — edit it rather than creating a second`,
+      `This store already has a sales day for ${safeHumanDate(input.businessDate)} ` +
+        `(${existing.status}). Edit that one instead of starting a second.`,
     );
   }
 
@@ -233,17 +251,19 @@ export async function writeChannels(
   const rows = channels.map((c) => {
     const cfg = byId.get(c.channelId);
     if (!cfg) {
-      throw new Error(
+      throw refuse(
         `sales day channels: channel ${c.channelId} is not configured for store ${storeId} — ` +
           `a day may only report channels its own store has`,
+        "One of the sales channels on this day isn't set up for this store. Reload the page and try again.",
       );
     }
     const amount = money(c.amount);
     const noSales = c.noSales ?? false;
     if (noSales && Number(amount) !== 0) {
-      throw new Error(
+      throw refuse(
         `sales day channels: "${cfg.name}" is marked "no sales" but carries ${amount} — ` +
           `a confirmed zero and an amount are different claims`,
+        `"${cfg.name}" is marked "no sales" but carries ${amount} — a confirmed zero and an amount are different claims.`,
       );
     }
     return { channelId: c.channelId, amount: String(amount), noSales };
@@ -304,14 +324,16 @@ async function writeTenders(
   const rows = tenders.map((t) => {
     const cfg = byId.get(t.moneyAccountId);
     if (!cfg) {
-      throw new Error(
+      throw refuse(
         `sales day tenders: money account ${t.moneyAccountId} is not an active account for store ` +
           `${storeId} — a day may only report money into its own store's wallets`,
+        "One of the wallets on this day isn't an active wallet of this store. Reload the page and try again.",
       );
     }
     if (seen.has(t.moneyAccountId)) {
-      throw new Error(
+      throw refuse(
         `sales day tenders: "${cfg.name}" appears twice — one row per wallet, summed by the caller`,
+        `"${cfg.name}" appears twice — one row per wallet, summed by the caller.`,
       );
     }
     seen.add(t.moneyAccountId);
@@ -319,9 +341,10 @@ async function writeTenders(
     // message, not a written sentence. `parseMoneyInput` is the shared entry point that fixes that.
     const amount = parseMoneyInput(t.amount, `sales day tenders: "${cfg.name}"'s amount`);
     if (Number(amount) <= 0) {
-      throw new Error(
+      throw refuse(
         `sales day tenders: "${cfg.name}" carries ${amount} — a tender row of zero says money ` +
           `moved and the amount was nothing, which is not a fact about anything. Omit the row`,
+        `"${cfg.name}" carries ${amount} — a tender row of zero says money moved and the amount was nothing, which is not a fact about anything. Omit the row.`,
       );
     }
     return { moneyAccountId: t.moneyAccountId, amount: String(amount) };

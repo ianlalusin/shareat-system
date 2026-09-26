@@ -32,6 +32,7 @@
  */
 import { authorize, type Actor } from '@shareat/auth';
 import { expensesRepo, transaction, type Tx } from '@shareat/db';
+import { RefusalError, refuse, gone } from '../shared/refusal';
 
 /**
  * Org-scoped, admin-only. ⭐ **One capability for the whole screen — create, map, rename and
@@ -55,19 +56,21 @@ const CAPABILITY = 'manage_chart_of_accounts' as const;
 async function assertMappableAccount(tx: Tx, orgId: string, code: string): Promise<void> {
   const account = await expensesRepo.accountForMapping(tx, orgId, code);
   if (!account) {
-    throw new Error(`no account with code '${code}' exists in org ${orgId}`);
+    throw refuse(`no account with code '${code}' exists in org ${orgId}`, `There is no account with code ${code}.`);
   }
   if (!account.isPostable) {
-    throw new Error(
+    throw refuse(
       `account '${code}' (${account.name}) is a header and cannot be posted to — only leaf ` +
         'accounts are postable (bible §16.9). Map to one of its children instead.',
+      `Account '${code}' (${account.name}) is a header and cannot be posted to — only leaf accounts are postable. Map to one of its children instead.`,
     );
   }
   if (account.status !== 'active') {
-    throw new Error(
+    throw refuse(
       `account '${code}' (${account.name}) is ${account.status}, not active. A reserved account ` +
         'is defined but deliberately not postable and not in pickers (bible §16.9); activate it ' +
         'first if this mapping is really wanted.',
+      `Account '${code}' (${account.name}) is ${account.status}, not active. A reserved account is defined but deliberately not postable and not in pickers; activate it first if this mapping is really wanted.`,
     );
   }
 }
@@ -118,8 +121,9 @@ async function run(tx: Tx, actor: Actor, input: SetCategoryAccountInput): Promis
   if (!category) {
     // Covers a bad id and another org's id identically, and that is correct: under RLS the second
     // is simply invisible, and reporting "not yours" would confirm the row exists.
-    throw new Error(
+    throw gone(
       `setCategoryAccount: category ${input.categoryId} does not exist in org ${actor.orgId}`,
+      'expense category',
     );
   }
 
@@ -135,7 +139,11 @@ async function run(tx: Tx, actor: Actor, input: SetCategoryAccountInput): Promis
     try {
       await assertMappableAccount(tx, actor.orgId, code);
     } catch (err) {
-      throw new Error(`setCategoryAccount: ${err instanceof Error ? err.message : String(err)}`);
+      // Rewrap: keeps the inner userMessage (rule 5) rather than re-deriving one from `.message`.
+      // A non-RefusalError rethrows AS-IS (S1's fallback handles it) — wrapping it here would put
+      // an internal diagnostic on screen (code-review item 4, 2026-09-26).
+      if (!(err instanceof RefusalError)) throw err;
+      throw refuse(`setCategoryAccount: ${err.message}`, err.userMessage);
     }
   }
 
@@ -169,7 +177,7 @@ export interface CreateCategoryInput {
 
 function cleanCategoryName(raw: string): string {
   const name = raw.trim();
-  if (!name) throw new Error('createCategory: a category needs a name.');
+  if (!name) throw refuse('createCategory: a category needs a name.', 'A category needs a name.');
   return name;
 }
 
@@ -190,9 +198,10 @@ async function refuseDuplicateName(
 ): Promise<void> {
   const existing = await expensesRepo.categoryByNormalisedName(tx, orgId, category);
   if (existing && existing.id !== exceptCategoryId) {
-    throw new Error(
+    throw refuse(
       `This organisation already has a category called "${existing.category}" — names are ` +
         'compared ignoring case and spacing, so it would be the same category twice.',
+      `This organisation already has a category called "${existing.category}" — names are compared ignoring case and spacing, so it would be the same category twice.`,
     );
   }
 }
@@ -232,12 +241,13 @@ export async function renameCategory(
 ): Promise<void> {
   await authorize(tx, actor, CAPABILITY, {});
   const existing = await expensesRepo.getCategoryById(tx, actor.orgId, input.categoryId);
-  if (!existing) throw new Error('renameCategory: that category does not exist in this organisation.');
+  if (!existing) throw gone('renameCategory: that category does not exist in this organisation.', 'expense category');
   if (existing.isSystem) {
-    throw new Error(
+    throw refuse(
       `"${existing.category}" is a seeded category, so its name is fixed — the seed owns it, and ` +
         'renaming it here would have the next seed re-create the original beside it. Retire it and ' +
         'add your own if it is wrong for this business.',
+      `"${existing.category}" is a seeded category, so its name is fixed — the seed owns it, and renaming it here would have the next seed re-create the original beside it. Retire it and add your own if it is wrong for this business.`,
     );
   }
 
@@ -261,6 +271,6 @@ export async function setCategoryActive(
 ): Promise<void> {
   await authorize(tx, actor, CAPABILITY, {});
   const existing = await expensesRepo.getCategoryById(tx, actor.orgId, input.categoryId);
-  if (!existing) throw new Error('setCategoryActive: that category does not exist in this organisation.');
+  if (!existing) throw gone('setCategoryActive: that category does not exist in this organisation.', 'expense category');
   await expensesRepo.setCategoryActive(tx, actor.orgId, input.categoryId, input.isActive);
 }

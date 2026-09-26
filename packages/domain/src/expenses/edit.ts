@@ -14,7 +14,20 @@
 import { authorize, type Actor } from '@shareat/auth';
 import { apRepo, expensesRepo, transaction, type Tx } from '@shareat/db';
 import { add, money } from '@shareat/core/money';
+import { logger } from '@shareat/core/logger';
 import type { CreateExpensePaymentInput } from './create';
+import { refuse, gone } from '../shared/refusal';
+
+/** S2/R2's `savepointLookup` (`packages/auth/src/authorize.ts`), same reasoning as
+ *  `expenses/create.ts`'s own copy: a refusal-path naming lookup here must not abort a
+ *  caller-owned transaction on a Postgres error (22P02) — run inside its own SAVEPOINT, logged
+ *  once at `warn` on failure, then swallowed (code-review item 5, 2026-09-26). */
+async function savepointLookup<T>(tx: Tx, run: (t: Tx) => Promise<T>): Promise<T | undefined> {
+  return tx.transaction(run).catch((err: unknown) => {
+    logger.warn({ err }, 'editExpense: a refusal-branch naming lookup failed inside its savepoint');
+    return undefined;
+  });
+}
 
 /** v1's own edit window, preserved (CAPABILITY-MATRIX.md: "Time-boxed — v1 gives
  *  cashiers 48h on their own. Preserve the window"). Exported so a test can compute
@@ -55,12 +68,13 @@ async function runEditExpense(tx: Tx, actor: Actor, expenseId: string, input: Ed
   // by actor.orgId already), so nothing is exposed ahead of the authorization decision.
   const expense = await expensesRepo.getExpenseById(tx, actor.orgId, expenseId);
   if (!expense) {
-    throw new Error(`editExpense: expense ${expenseId} does not exist in org ${actor.orgId}`);
+    throw gone(`editExpense: expense ${expenseId} does not exist in org ${actor.orgId}`, 'expense');
   }
 
   if (expense.status !== 'draft') {
-    throw new Error(
+    throw refuse(
       `editExpense: expense ${expenseId} is ${expense.status} — only a draft may be edited (invariant 13); void it instead`,
+      `Only a draft can be edited — this expense is ${expense.status}. Void it instead.`,
     );
   }
 
@@ -76,7 +90,7 @@ async function runEditExpense(tx: Tx, actor: Actor, expenseId: string, input: Ed
   const patch: Parameters<typeof expensesRepo.updateExpenseDraft>[3] = {};
   if (input.categoryId !== undefined) {
     const category = await expensesRepo.getCategoryById(tx, actor.orgId, input.categoryId);
-    if (!category) throw new Error(`editExpense: category ${input.categoryId} does not exist in org ${actor.orgId}`);
+    if (!category) throw gone(`editExpense: category ${input.categoryId} does not exist in org ${actor.orgId}`, 'expense category');
     patch.categoryId = input.categoryId;
   }
 
@@ -93,14 +107,22 @@ async function runEditExpense(tx: Tx, actor: Actor, expenseId: string, input: Ed
     const invoiceId = input.supplierInvoiceId ?? expense.supplierInvoiceId;
     const invoice = await apRepo.getSupplierInvoiceById(tx, actor.orgId, invoiceId);
     if (!invoice) {
-      throw new Error(`editExpense: supplier invoice ${invoiceId} does not exist in org ${actor.orgId}`);
+      throw gone(`editExpense: supplier invoice ${invoiceId} does not exist in org ${actor.orgId}`, 'supplier invoice');
     }
     // Same single-source-of-truth rule as create: the invoice owns the supplier.
     const supplierId = input.supplierId ?? invoice.supplierId;
     if (supplierId !== invoice.supplierId) {
-      throw new Error(
+      // Refusal-path only, S5 rule 6: neither name is loaded elsewhere in this function, so both
+      // need a fresh lookup here; each falls back to a deictic phrase on failure. Savepointed
+      // (code-review item 5): a Postgres error here must not abort a caller-owned tx. ⛔ Sequential,
+      // never Promise.all — two savepoints on the SAME tx/connection cannot run concurrently
+      // (code-review item 9).
+      const invoiceSupplier = await savepointLookup(tx, (t) => apRepo.getSupplierById(t, actor.orgId, invoice.supplierId));
+      const picked = await savepointLookup(tx, (t) => apRepo.getSupplierById(t, actor.orgId, supplierId));
+      throw refuse(
         `editExpense: supplier ${supplierId} does not own supplier invoice ${invoiceId} — ` +
           `that invoice belongs to supplier ${invoice.supplierId}.`,
+        `That invoice is from ${invoiceSupplier?.name ?? 'its own supplier'}, not ${picked?.name ?? 'the supplier you picked'}. An expense takes its supplier from its invoice.`,
       );
     }
     patch.supplierInvoiceId = invoiceId;
@@ -109,13 +131,13 @@ async function runEditExpense(tx: Tx, actor: Actor, expenseId: string, input: Ed
   }
   if (input.particulars !== undefined) {
     const trimmed = input.particulars.trim();
-    if (!trimmed) throw new Error('editExpense: particulars cannot be blank');
+    if (!trimmed) throw refuse('editExpense: particulars cannot be blank', 'Particulars cannot be blank.');
     patch.particulars = trimmed;
   }
 
   if (input.payments !== undefined) {
     if (input.payments.length === 0) {
-      throw new Error('editExpense: at least one payment is required');
+      throw refuse('editExpense: at least one payment is required', 'At least one payment is required.');
     }
     const amounts = input.payments.map((p) => money(p.amount));
     patch.totalAmount = add(...amounts);

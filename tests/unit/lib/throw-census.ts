@@ -78,13 +78,48 @@ function nameClassification(name: string): Classification {
 }
 
 /**
+ * The nearest enclosing `const <name> = <initializer>` for `identifier`, walking UP the real
+ * lexical scope chain (blocks and the source file are the only scopes that matter here — same
+ * restriction, same reason, as `apps/erp/tests/touch-target-geometry.ts`'s `findLocalConst`).
+ * `let`/`var` are excluded on purpose: a REASSIGNED binding cannot be resolved to one value, so
+ * treating it as if it could would be a false confidence, not a wider net.
+ */
+function findLocalConstInit(identifier: ts.Identifier): ts.Expression | undefined {
+  let current: ts.Node | undefined = identifier.parent;
+  while (current) {
+    const statements = ts.isSourceFile(current) || ts.isBlock(current) ? current.statements : undefined;
+    if (statements) {
+      for (const stmt of statements) {
+        if (!ts.isVariableStatement(stmt)) continue;
+        if (!(stmt.declarationList.flags & ts.NodeFlags.Const)) continue;
+        for (const decl of stmt.declarationList.declarations) {
+          if (ts.isIdentifier(decl.name) && decl.name.text === identifier.text && decl.initializer) {
+            return decl.initializer;
+          }
+        }
+      }
+    }
+    current = current.parent;
+  }
+  return undefined;
+}
+
+/**
  * Classifies one expression by every interpolated/concatenated operand it contains, recursing into
  * nested templates, `+` chains and conditional branches (R1.3, W1 shapes 3-5). A bare string/numeric
  * literal contributes nothing (`plain`) — only the LEAVES that are identifiers, property accesses,
  * or the three named "derived" shapes ever change the verdict.
+ *
+ * `resolveLocalConst` (/code-review, S5.1, 2026-09-26): a bare identifier that is itself a local
+ * `const` bound to a derived/id-shaped expression a few lines earlier — `const raw = \`x:
+ * ${err.message}\`; refuse(other, raw)` — carries the SAME risk as writing the expression inline,
+ * and `expenses/categories.ts:143-144`'s rewrap does exactly this. Resolved ONE hop only: the
+ * recursive call into the initializer passes `false`, so a chain of `const a = b; const c = a;`
+ * stops at `b`'s own shape and does not also chase `b` back to whatever defined IT — deliberately
+ * bounded, not a general constant-folder.
  */
-export function classifyExpression(expr: ts.Expression): Classification {
-  if (ts.isParenthesizedExpression(expr)) return classifyExpression(expr.expression);
+export function classifyExpression(expr: ts.Expression, resolveLocalConst = true): Classification {
+  if (ts.isParenthesizedExpression(expr)) return classifyExpression(expr.expression, resolveLocalConst);
 
   // /code-review, S5.0 (2026-09-26): `foo!`, `foo as Bar` and `await foo` are transparent wrappers
   // around the SAME operand — `${supplierId!}`, `${(row as Row).supplierId}` and
@@ -126,7 +161,12 @@ export function classifyExpression(expr: ts.Expression): Classification {
     return nameClassification(expr.name.text);
   }
 
-  if (ts.isIdentifier(expr)) return nameClassification(expr.text);
+  if (ts.isIdentifier(expr)) {
+    const own = nameClassification(expr.text);
+    if (!resolveLocalConst) return own;
+    const init = findLocalConstInit(expr);
+    return init ? combine(own, classifyExpression(init, false)) : own;
+  }
 
   if (ts.isTemplateExpression(expr)) {
     let worst: Classification = 'plain';

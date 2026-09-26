@@ -28,6 +28,7 @@
 import { authorize, type Actor } from '@shareat/auth';
 import { expensesRepo, transaction, type Tx } from '@shareat/db';
 import { EDIT_WINDOW_MS } from './edit';
+import { refuse, gone } from '../shared/refusal';
 
 export async function deleteExpenseDraft(tx: Tx | null, actor: Actor, expenseId: string): Promise<void> {
   if (tx) return runDeleteExpenseDraft(tx, actor, expenseId);
@@ -40,7 +41,7 @@ async function runDeleteExpenseDraft(tx: Tx, actor: Actor, expenseId: string): P
   // the right ctx.storeId. The read is already filtered by actor.orgId.
   const expense = await expensesRepo.getExpenseById(tx, actor.orgId, expenseId);
   if (!expense) {
-    throw new Error(`deleteExpenseDraft: expense ${expenseId} does not exist in org ${actor.orgId}`);
+    throw gone(`deleteExpenseDraft: expense ${expenseId} does not exist in org ${actor.orgId}`, 'expense');
   }
 
   // ⚠️ Status FIRST, before authorize() — a posted or voided expense is not deletable by
@@ -48,9 +49,10 @@ async function runDeleteExpenseDraft(tx: Tx, actor: Actor, expenseId: string): P
   // authorization decision for one. This mirrors invariant 13's treatment of editing: the
   // restriction is on the RECORD's state, not on the person.
   if (expense.status !== 'draft') {
-    throw new Error(
+    throw refuse(
       `deleteExpenseDraft: expense ${expenseId} is ${expense.status} — only a draft may be deleted. ` +
         'A posted expense is voided, which REVERSES it and leaves both entries standing (bible §4).',
+      `Only a draft can be deleted — this expense is ${expense.status}. Void a posted expense instead.`,
     );
   }
 

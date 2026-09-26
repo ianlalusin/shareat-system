@@ -37,7 +37,25 @@
 import { authorize, type Actor } from '@shareat/auth';
 import { apRepo, expensesRepo, transaction, type Tx } from '@shareat/db';
 import { add, money } from '@shareat/core/money';
+import { logger } from '@shareat/core/logger';
 import type { ExpensePaymentMethod } from './routing';
+import { refuse, gone } from '../shared/refusal';
+
+/**
+ * S2/R2's `savepointLookup` (`packages/auth/src/authorize.ts`), applied here: `createExpense`
+ * can run inside a CALLER-owned transaction (`ap/index.ts:634`'s `recordExpenseForInvoice`), so a
+ * refusal-path naming lookup that errors must not abort that whole transaction — `.catch(() =>
+ * undefined)` alone does not un-abort an already-aborted Postgres transaction (22P02). Runs the
+ * lookup inside its own SAVEPOINT (`tx.transaction()`, a nested Postgres transaction); a failed
+ * lookup rolls back only itself and is logged once at `warn`, then swallowed, so the refusal it
+ * decorates still reaches the caller with its fallback wording (code-review item 5, 2026-09-26).
+ */
+async function savepointLookup<T>(tx: Tx, run: (t: Tx) => Promise<T>): Promise<T | undefined> {
+  return tx.transaction(run).catch((err: unknown) => {
+    logger.warn({ err }, 'createExpense: a refusal-branch naming lookup failed inside its savepoint');
+    return undefined;
+  });
+}
 
 export interface CreateExpensePaymentInput {
   method: ExpensePaymentMethod;
@@ -94,15 +112,18 @@ async function runCreateExpense(tx: Tx, actor: Actor, input: CreateExpenseInput)
 
   const particulars = input.particulars.trim();
   if (!particulars) {
-    throw new Error('createExpense: particulars is required — what the spend was actually for');
+    throw refuse(
+      'createExpense: particulars is required — what the spend was actually for',
+      'Particulars is required — what the spend was actually for.',
+    );
   }
   if (input.payments.length === 0) {
-    throw new Error('createExpense: at least one payment is required');
+    throw refuse('createExpense: at least one payment is required', 'At least one payment is required.');
   }
 
   const category = await expensesRepo.getCategoryById(tx, actor.orgId, input.categoryId);
   if (!category) {
-    throw new Error(`createExpense: category ${input.categoryId} does not exist in org ${actor.orgId}`);
+    throw gone(`createExpense: category ${input.categoryId} does not exist in org ${actor.orgId}`, 'expense category');
   }
 
   const amounts = input.payments.map((p) => money(p.amount));
@@ -114,8 +135,9 @@ async function runCreateExpense(tx: Tx, actor: Actor, input: CreateExpenseInput)
   // still requires 'verified'.
   const invoice = await apRepo.getSupplierInvoiceById(tx, actor.orgId, input.supplierInvoiceId);
   if (!invoice) {
-    throw new Error(
+    throw gone(
       `createExpense: supplier invoice ${input.supplierInvoiceId} does not exist in org ${actor.orgId}`,
+      'supplier invoice',
     );
   }
   await apRepo.assertOpenForRecording(tx, actor.orgId, input.supplierInvoiceId, totalAmount, 'draft');
@@ -133,20 +155,26 @@ async function runCreateExpense(tx: Tx, actor: Actor, input: CreateExpenseInput)
   // the step that moves money.
   const supplier = await apRepo.getSupplierById(tx, actor.orgId, invoice.supplierId);
   if (!supplier) {
-    throw new Error(`createExpense: supplier ${invoice.supplierId} does not exist in org ${actor.orgId}`);
+    throw gone(`createExpense: supplier ${invoice.supplierId} does not exist in org ${actor.orgId}`, 'supplier');
   }
   if (supplier.status !== 'active') {
-    throw new Error(
+    throw refuse(
       `createExpense: ${supplier.name} is ${supplier.status}, not active — an expense cannot be ` +
         'recorded against a supplier the business has stopped buying from.',
+      `${supplier.name} is ${supplier.status}, not active — an expense cannot be recorded against a supplier the business has stopped buying from.`,
     );
   }
 
   if (input.supplierId !== invoice.supplierId) {
-    throw new Error(
+    // Refusal-path only: `supplier` above is already the invoice's own supplier, reused; the
+    // picked supplier's name needs a fresh lookup that never runs on the success path (S5 rule 6),
+    // savepointed since this function can run inside a caller-owned tx (code-review item 5).
+    const picked = await savepointLookup(tx, (t) => apRepo.getSupplierById(t, actor.orgId, input.supplierId));
+    throw refuse(
       `createExpense: supplier ${input.supplierId} does not own supplier invoice ` +
         `${input.supplierInvoiceId} — that invoice belongs to supplier ${invoice.supplierId}. ` +
         'An expense takes its supplier from the invoice it is recorded against.',
+      `That invoice is from ${supplier.name}, not ${picked?.name ?? 'the supplier you picked'}. An expense takes its supplier from its invoice.`,
     );
   }
 
