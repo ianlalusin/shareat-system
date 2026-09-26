@@ -455,17 +455,23 @@ describe('T-346 S2 / migration 0163 — the in-service fill trigger, its guard, 
     );
   });
 
-  it('⛔ a shell (pending_valuation) with an in-service source is refused (23514)', async () => {
+  // T-347 Amendment R3.2 — this used to assert a 23514 refusal, but that only ever held because
+  // the pre-0164 `fixed_assets_disposal_pair_check` refused EVERY `pending_valuation` row,
+  // regardless of `in_service_source`. Once 0164 adds the shell's own branch, this insert reaches
+  // `fixed_assets_in_service_a_fill`, whose very first lines force a `pending_valuation` row's
+  // in-service columns to NULL unconditionally (0163:70-73) — the fill trigger silently corrects
+  // a caller-supplied source rather than the row ever being rejected for carrying one.
+  it('a shell (pending_valuation) with a supplied in-service source is accepted, and the fill trigger silently nulls it', async () => {
     const orgId = await org9('shell');
     const personId = await person9(orgId);
     const storeId = await store9(orgId, null);
-    await expect(
-      sql9.unsafe(
-        `insert into fixed_assets (org_id, store_id, name, category, status, in_service_source, created_by)
-         values ($1, $2, 'Shell', 'equipment', 'pending_valuation', 'acquired', $3)`,
-        [orgId, storeId, personId] as never[],
-      ),
-    ).rejects.toMatchObject({ code: '23514' });
+    const [row] = (await sql9.unsafe(
+      `insert into fixed_assets (org_id, store_id, name, category, status, in_service_source, created_by)
+       values ($1, $2, 'Shell', 'equipment', 'pending_valuation', 'acquired', $3)
+       returning id`,
+      [orgId, storeId, personId] as never[],
+    )) as unknown as { id: string }[];
+    expect(await inServiceOf9(row!.id)).toEqual({ source: null, on: null });
   });
 
   // --- R4.2 — correcting acquired_on on an 'acquired' asset re-derives in_service_on --------------

@@ -223,3 +223,15 @@ R1 above is kept as the record; its items are now folded into the body in place,
 8. **New, T-345 (R2.7), lines 55-57.** The disposed-row DELETE needs `missed_month_adjustments` (`0161:38-39`, `fixed_asset_id`
    → `fixed_assets` ON DELETE RESTRICT; purge class, `classification.ts:591`) already truncated.
 Migration slot `0164` unchanged.
+
+## Amendment R3 — build findings (2026-09-26), binding
+1. `recurring_expenses.last_drafted_expense_id → expenses` (ON DELETE SET NULL) also blocks a TRUNCATE: Postgres refuses TRUNCATE on any referencing FK whatever its ON DELETE action. `recurring_expenses` is reclassified `keep` → `keep_shell` with `clearColumns: ['last_drafted_expense_id']`, found by `planPurge`'s runtime FK derivation (the sweep in §2 missed it).
+2. T-346's `t346-migrations.test.ts` "a shell with an in-service source is refused" only ever passed because the pre-0164 `disposal_pair_check` refused every shell. The fill trigger silently forces a shell's in-service columns to NULL; the test is inverted to assert that.
+3. N4b proves the G backstop in a scratch database whose tables are OWNED by a non-superuser role without BYPASSRLS (§2's G shape), running `applyPurge` as that owner: it must fail loudly, never match zero rows. `shareat_app` (DML grants only) cannot reach the shell step at all.
+
+## Amendment R4 — code review (2026-09-26), binding
+1. A post-condition asserts `mirror_version_seq`'s `last_value`/`is_called` are unchanged, and the fixture advances that sequence first, so deleting it from `SEQUENCES_NEVER_RESET` turns the suite red.
+2. The sequence reset is an ALLOWLIST: only sequences owned by purge-class tables restart (fails closed for a future serial on a keep table).
+3. FK derivation is one row per constraint (`distinct on (c.oid)` or `array_agg`), so a composite FK is dropped and re-added once.
+4. §3.3's order is: the RLS preflight (a `pg_roles` read) first, then `set local row_security = off` as the first statement that touches data.
+5. Mutant proof (tester, 2026-09-26): with the reset as an ownership allowlist, removing `mirror_version_seq` from `SEQUENCES_NEVER_RESET` changes nothing (a free-standing sequence is never in the allowlist). The exclusion set and the Invariant 7 post-condition are defence in depth; a direct `restart` injected into `applyPurge` trips the post-condition and rolls back, which S1 catches.

@@ -275,12 +275,21 @@ export const fixedAssets = pgTable(
       `,
     ),
     /** Disposal is all-or-nothing: a date with no reason cannot be explained to whoever asks,
-     *  and a reason with no date has not happened. Same shape as the session end-pair. */
+     *  and a reason with no date has not happened. Same shape as the session end-pair.
+     *  ⭐ T-347 (DEF-437), migration 0164 — the third branch is the cutover shell: a
+     *  `pending_valuation` row was never disposed, so all three disposal columns must be NULL.
+     *  Without it, a shelled asset (cost/acquired_on NULL, status='pending_valuation') satisfied
+     *  NEITHER the 'active' branch (status wrong) NOR the 'disposed' branch (disposed_on/reason
+     *  NULL) — the shell this task exists to write could not physically exist. */
     check(
       'fixed_assets_disposal_pair_check',
       sql`
         (${t.status} = 'active' and ${t.disposedOn} is null and ${t.disposalReason} is null)
         or (${t.status} = 'disposed' and ${t.disposedOn} is not null and ${t.disposalReason} is not null)
+        or (
+          ${t.status} = 'pending_valuation'
+          and ${t.disposedOn} is null and ${t.disposalReason} is null and ${t.disposedBy} is null
+        )
       `,
     ),
     /** An asset cannot be disposed of before it was acquired. */

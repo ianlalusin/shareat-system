@@ -105,12 +105,18 @@ describe('DEF-079 — the purge against a POSTED ledger', () => {
     ).rejects.toThrow(/immutable/);
   });
 
-  it('the purge script uses TRUNCATE for the purge class, not DELETE', async () => {
+  it('the purge engine uses TRUNCATE for the purge class, not DELETE', async () => {
+    // T-347 §3.1 — the engine (TRUNCATE, the FK procedure, the shell step) moved out of the CLI
+    // script into `packages/db/src/cutover/purge.ts`; `scripts/cutover-purge.ts` is now argument
+    // parsing + ceremony + report only, calling `planPurge`/`applyPurge`. ⛔ RED on current `main`:
+    // this file does not exist yet (ENOENT), which is the correct red until the BUILDER lands it —
+    // grepping the OLD path (`scripts/cutover-purge.ts`) would stay green by accident once TRUNCATE
+    // moves, having stopped testing anything.
     const { readFileSync } = await import('node:fs');
     const { join } = await import('node:path');
     const { fileURLToPath } = await import('node:url');
     const root = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..', '..', '..');
-    const src = readFileSync(join(root, 'scripts', 'cutover-purge.ts'), 'utf8');
+    const src = readFileSync(join(root, 'packages', 'db', 'src', 'cutover', 'purge.ts'), 'utf8');
     // ⚠️ Asserts the SHAPE, because the behaviour itself cannot be asserted without emptying a
     // shared database. Narrow on purpose: it fails if someone reverts to a bare delete loop.
     expect(src).toMatch(/truncate table/i);

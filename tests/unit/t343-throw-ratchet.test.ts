@@ -28,6 +28,19 @@
  * sibling like `refusal.ts`, or an untracked subdirectory like `cutover/`) was ever counted at all.
  * Two synthetic keys (`packages/domain/src/*`, `packages/db/src/*`) now cover exactly what the
  * per-subdirectory entries leave out — see `measure()` and the `CEILINGS` comment.
+ *
+ * ⛔ **`/code-review` round 2 (2026-09-26): `packages/db/src/*` counted a whole SUBTREE (everything
+ * outside `repo/`, recursively), which coupled T-343's ceiling to T-347's unrelated, in-flight work
+ * in `packages/db/src/cutover/purge.ts` — the tree read 3 instead of 1 purely because another lane
+ * was mid-edit on a directory this key had no business watching.** `DB_SRC_OUTSIDE_REPO` now counts
+ * ONLY the loose files directly at `packages/db/src` (same rule as `DOMAIN_ROOT_LOOSE`); every real
+ * subdirectory besides `repo/` gets its OWN key instead. `rls/` gets one here (0, uncontested).
+ * `cutover/` did NOT at the time this was written — T-347 was still in flight, and the rule was that
+ * T-347's OWN tester adds that key at T-347's commit, measured against ITS OWN HEAD, not guessed at
+ * from a moving tree. **It has since done so** (`'packages/db/src/cutover': 2` below) — kept, not
+ * re-measured here. `currentTargetDirs()` also enumerates `packages/db/src`'s subdirectories now
+ * (except `repo/`, which keeps its own key regardless), so the NEXT new one fails closed the same
+ * way a new `packages/domain/src` subdirectory already does.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -37,6 +50,7 @@ import { describe, expect, it } from 'vitest';
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..', '..');
 const DOMAIN_SRC = resolve(repoRoot, 'packages', 'domain', 'src');
+const DB_SRC = resolve(repoRoot, 'packages', 'db', 'src');
 
 /** Synthetic keys for a covered root's own loose contents — see the CEILINGS comment below. */
 const DOMAIN_ROOT_LOOSE = 'packages/domain/src/*';
@@ -60,7 +74,7 @@ const CEILINGS: Record<string, number> = {
   'packages/domain/src/customers': 11,
   'packages/domain/src/cutover': 13,
   'packages/domain/src/deliveries': 11,
-  'packages/domain/src/expenses': 40,
+  'packages/domain/src/expenses': 0, // T-343 S5.1: 40 -> 0, all converted to refuse/gone/internalFault
   'packages/domain/src/files': 9,
   'packages/domain/src/findings': 1,
   'packages/domain/src/fiscal-periods': 15,
@@ -83,7 +97,7 @@ const CEILINGS: Record<string, number> = {
   'packages/domain/src/remittance': 17,
   'packages/domain/src/reports': 0,
   'packages/domain/src/sales-channels': 10,
-  'packages/domain/src/sales-days': 16,
+  'packages/domain/src/sales-days': 0, // T-343 S5.1: 16 -> 0, all converted to refuse/gone/internalFault
   'packages/domain/src/scheduler': 0,
   'packages/domain/src/service-charge': 6,
   'packages/domain/src/shared': 9,
@@ -97,13 +111,21 @@ const CEILINGS: Record<string, number> = {
   'packages/domain/src/wastage': 11,
   'packages/auth/src': 7,
   'packages/db/src/repo': 20,
+  'packages/db/src/rls': 0,
+  // T-347 (DEF-437), own commit — measured independently against `packages/db/src/cutover/purge.ts`
+  // (`classification.ts` has none): `derivePurgeOrder`'s cycle guard (:161) and `applyPurge`'s
+  // post-condition failure (:380). Both are test/operator-only diagnostics inside a script/engine
+  // that only ever runs by hand against a single pre-cutover database, never a user-facing path —
+  // the header's own rule: T-347's tester adds this key at T-347's commit, measured at ITS OWN HEAD.
+  'packages/db/src/cutover': 2,
   // /code-review, S5.0 (2026-09-26): the two covered roots' own LOOSE contents — everything the
   // per-subdirectory entries above do not reach. Without these, a raw throw added directly at
-  // `packages/domain/src/index.ts`, or anywhere under `packages/db/src` outside `repo/` (a sibling
-  // like `refusal.ts` or `cutover/`), escaped both the ceiling and the "new directory" fail-closed
+  // `packages/domain/src/index.ts` escaped both the ceiling and the "new directory" fail-closed
   // check below — `currentTargetDirs()` only ever walked SUBDIRECTORIES.
   [DOMAIN_ROOT_LOOSE]: 0,
-  [DB_SRC_OUTSIDE_REPO]: 1, // packages/db/src/refusal.ts:42 — refuse()'s own empty-sentence guard.
+  // Loose files ONLY (round 2 above) — client.ts (0), index.ts (0), refusal.ts (1, its own
+  // empty-sentence guard at :42). `cutover/` is deliberately absent; see the header.
+  [DB_SRC_OUTSIDE_REPO]: 1,
 };
 
 /**
@@ -160,45 +182,29 @@ function countLooseFilesRaw(absDir: string): number {
   return total;
 }
 
-/** Every `.ts` file under `absDir`, recursively, EXCEPT the named immediate subdirectories (each of
- *  which already has its own separately-tracked CEILINGS entry) — `excludeTopLevelDirNames` is
- *  checked only at `absDir`'s own top level, so an unrelated same-named directory nested deeper
- *  stays covered rather than silently skipped too. */
-function countRawThrowNewErrorExcluding(absDir: string, excludeTopLevelDirNames: ReadonlySet<string>): number {
-  let total = 0;
-  for (const entry of readdirSync(absDir, { withFileTypes: true })) {
-    if (entry.isDirectory() && excludeTopLevelDirNames.has(entry.name)) continue;
-    const full = join(absDir, entry.name);
-    if (entry.isDirectory()) {
-      total += countRawThrowNewError(full);
-    } else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts')) {
-      const matches = readFileSync(full, 'utf8').match(/throw new Error\(/g);
-      if (matches) total += matches.length;
-    }
-  }
-  return total;
-}
-
 /** Dispatches each CEILINGS key to the counting rule it actually needs — a per-subdirectory entry
- *  counts its own subtree; the two synthetic "loose contents" keys count what the subdirectory
- *  entries deliberately leave out (see the CEILINGS comment). */
+ *  counts its own subtree; the two synthetic "loose contents" keys count only the loose files at
+ *  that root (see the CEILINGS comment — round 2's fix for the T-347 coupling). */
 function measure(dir: string): number {
   if (dir === DOMAIN_ROOT_LOOSE) return countLooseFilesRaw(DOMAIN_SRC);
-  if (dir === DB_SRC_OUTSIDE_REPO) {
-    return countRawThrowNewErrorExcluding(resolve(repoRoot, 'packages', 'db', 'src'), new Set(['repo']));
-  }
+  if (dir === DB_SRC_OUTSIDE_REPO) return countLooseFilesRaw(resolve(repoRoot, 'packages', 'db', 'src'));
   return countRawThrowNewError(resolve(repoRoot, dir));
 }
 
-/** Every CURRENT top-level directory under `packages/domain/src`, plus the two fixed non-domain
- *  trees and the two "loose contents" synthetic keys — recomputed live so a directory added after
- *  this file was written is caught by the next test, not silently skipped. */
+/** Every CURRENT top-level directory under `packages/domain/src`, every current subdirectory of
+ *  `packages/db/src` except `repo/` (which keeps its own fixed key regardless), plus the fixed
+ *  non-domain trees and the two "loose contents" synthetic keys — recomputed live so a directory
+ *  added after this file was written is caught by the next test, not silently skipped. */
 function currentTargetDirs(): string[] {
   const domainDirs = readdirSync(DOMAIN_SRC, { withFileTypes: true })
     .filter((e) => e.isDirectory())
     .map((e) => `packages/domain/src/${e.name}`)
     .sort();
-  return [...domainDirs, DOMAIN_ROOT_LOOSE, 'packages/auth/src', 'packages/db/src/repo', DB_SRC_OUTSIDE_REPO];
+  const dbDirs = readdirSync(DB_SRC, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && e.name !== 'repo')
+    .map((e) => `packages/db/src/${e.name}`)
+    .sort();
+  return [...domainDirs, DOMAIN_ROOT_LOOSE, 'packages/auth/src', 'packages/db/src/repo', ...dbDirs, DB_SRC_OUTSIDE_REPO];
 }
 
 describe('T-343 R1.2 — the raw throw-new-Error ratchet, per directory, never rises', () => {

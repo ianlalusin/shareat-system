@@ -41,6 +41,15 @@ export interface KeepShellEntry extends BaseEntry {
   readonly class: 'keep_shell';
   /** The row survives; these columns are set NULL and re-entered at cutover. */
   readonly clearColumns: readonly string[];
+  /** T-347 (DEF-437) §3.2 — literal values the shell step writes instead of NULL, in the SAME
+   *  UPDATE as `clearColumns` (never a column also listed there — `cutover-classification.test.ts`
+   *  U1 enforces it). `fixed_assets` uses this to reclassify every surviving row to
+   *  `pending_valuation` and clear its stale `needs_review` flag in one statement. */
+  readonly set?: Readonly<Record<string, string | boolean>>;
+  /** T-347 (DEF-437) §3.2 — rows describing something that no longer exists on 1 January are
+   *  DELETEd outright (before the `set`/`clearColumns` UPDATE), never shelled. `fixed_assets` uses
+   *  this to drop every `disposed` row — Ian's Q2 ruling. */
+  readonly dropWhere?: { readonly column: string; readonly in: readonly string[] };
 }
 
 export interface DateScopedEntry extends BaseEntry {
@@ -365,13 +374,22 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
   },
 
   // ---- T-124: fixed assets ---------------------------------------------------------------
+  // T-347 (DEF-437), §3.2 — Ian's Q1 ruling: RECLASSIFIED keep_shell → purge. A keep_shell here
+  // would need total_cost, coverage_start_date and coverage_months ALL nullable (`0026`'s table
+  // body has them NOT NULL — DEF-437's own shape D), a second nullable-money ripple through
+  // repo/prepaid.ts, domain/prepaid, the amortisation run and /prepaid, for a shell that keeps only
+  // a name and category anyway — a re-entry in every practical sense. T-134 creates the opening
+  // item fresh. Nothing references prepaid_items (verified against pg_constraint /
+  // schema/missed-month-adjustments.ts — only missed_month_adjustments does, and that is purge
+  // class too, truncated in the same batch), so there is no FK to drop and re-add for it either.
   prepaid_items: {
-    class: 'keep_shell',
+    class: 'purge',
     reason:
-      'A prepaid contract survives the cutover — an insurance policy does not lapse on 1 January ' +
-      'because the books restarted. But its COST is re-entered from the December position, the ' +
-      'same treatment fixed_assets gets, so the item stays and its money is cleared.',
-    clearColumns: ['total_cost', 'coverage_start_date', 'coverage_months', 'source_expense_id'],
+      'Ian Q1 (2026-09-25): purged and re-entered in T-134, not kept as a shell. A prepaid ' +
+      'contract does not stop existing on 1 January, but its cost, start and term are re-entered ' +
+      'from the December position exactly like fixed_assets — the difference is that here nothing ' +
+      'worth keeping would survive a shell (name and category alone), so the row is dropped and ' +
+      'recreated rather than carrying a second nullable-cost code path through the amortisation run.',
   },
   cash_requests: {
     class: 'purge',
@@ -572,6 +590,12 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'in_service_on',
       'in_service_source',
     ],
+    // T-347 (DEF-437), §3.2 — Ian's Q2 ruling: a disposed asset does not exist on 1 January, so it
+    // is DELETEd, never shelled (dropWhere runs first). The survivor becomes the explicit shell
+    // state and its stale needs_review flag is cleared with it, both in the SAME statement as
+    // clearColumns — the whole reason this task exists: a half-cleared row satisfies no CHECK.
+    dropWhere: { column: 'status', in: ['disposed'] },
+    set: { status: 'pending_valuation', needs_review: false },
     reason:
       'ADR-007 §3 names this case exactly: "fixed assets keep name, category and remaining ' +
       'useful life; cost and accumulated depreciation are re-entered." The physical asset still ' +
@@ -585,7 +609,11 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'makes T-134s "what is still missing" list a plain query rather than a reconciliation. ' +
       'T-346 S2 (DEF-427): in_service_on/in_service_source clear alongside acquired_on — a shell ' +
       'with no cost or acquisition date has no in-service date either (0163\'s own shape check ' +
-      'agrees: pending_valuation requires both NULL).',
+      'agrees: pending_valuation requires both NULL). T-347 (DEF-437): a DISPOSED row can be ' +
+      'neither valued (cost NULL) nor a shell (disposal_pair_check forbids it), so it no longer ' +
+      'exists on 1 January and is dropped outright; the survivor\'s status/needs_review land in the ' +
+      'one UPDATE alongside every cleared column, or the fill/guard triggers this table carries ' +
+      'since T-346 refuse the half-cleared intermediate state (0163, R2.5/R2.6).',
   },
   // T-345 — the missed-month catch-up link.
   missed_month_adjustments: {
@@ -999,15 +1027,27 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'from a KEEP table must never be able to BLOCK the purge of a PURGE one.',
   },
   recurring_expenses: {
-    class: 'keep',
+    // T-347 (DEF-437) — RECLASSIFIED keep → keep_shell (one column). `ON DELETE SET NULL` answers
+    // an ordinary row-by-row DELETE of an expense, but NEVER a TRUNCATE: Postgres refuses to
+    // TRUNCATE a table referenced by ANY foreign key from a table not in the same TRUNCATE
+    // statement, regardless of that FK's ON DELETE action (SET NULL/CASCADE/RESTRICT all block it
+    // identically). This is a genuinely NEW same-root shape T-347's own dynamic FK derivation
+    // (`purge.ts`'s `planPurge`, reading `pg_constraint` rather than a hand-list) caught that
+    // §2's evidence sweep did not enumerate — reported and fixed together, per the task's own
+    // "orchestrator registers" note for shapes the sweep finds.
+    class: 'keep_shell',
+    clearColumns: ['last_drafted_expense_id'],
     reason:
       'CONFIGURATION, and the clearest case in the table. A template says "Lipa pays rent on the ' +
       '5th" — a standing fact about how the business operates, not an event that happened in ' +
       '2026. Purging it would mean re-typing every fixed bill on 1 January, which is exactly the ' +
-      'forgetting this module exists to prevent. ⛔ **The trap this classification exposed:** ' +
-      '`last_drafted_expense_id` points at `expenses`, which PURGES — a `restrict` FK there ' +
-      'would make a KEEP table BLOCK the purge of a PURGE one. It is `ON DELETE SET NULL` for ' +
-      'exactly that reason, and provenance of a deleted draft is worth nothing anyway.',
+      'forgetting this module exists to prevent. `last_drafted_expense_id` points at `expenses`, ' +
+      'which PURGES, so the ROW survives as keep_shell with exactly one column cleared — the same ' +
+      'shape as fixed_assets.source_expense_id, and provenance of a deleted draft is worth nothing ' +
+      'anyway. ⛔ **The trap this classification USED TO expose, restated correctly:** `ON DELETE ' +
+      'SET NULL` prevents a blocking RESTRICT on an ordinary DELETE, but TRUNCATE checks for any ' +
+      'referencing FK regardless of its ON DELETE action — so this column still needed the same ' +
+      'drop/clear/re-add procedure T-347 built for fixed_assets, not exemption from it.',
   },
   expense_budgets: {
     class: 'purge',

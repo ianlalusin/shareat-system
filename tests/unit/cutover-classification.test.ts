@@ -154,3 +154,66 @@ describe('cutover classification — every table declares whether it survives', 
     }
   });
 });
+
+/**
+ * T-347 U1 — `docs/tasks/347-def-437-cutover-purge-assets.md` §4 (case U1), §3.2.
+ *
+ * `KeepShellEntry` gains two optional fields the purge engine's shell step needs:
+ * `set?: Record<string, string | boolean>` (columns the shell step writes a fixed value into,
+ * rather than nulling) and `dropWhere?: { column: string; in: readonly string[] }` (rows deleted
+ * outright rather than shelled — `fixed_assets`'s disposed rows).
+ *
+ * ⛔ RED on current `main` (property unknown): `KeepShellEntry` does not declare `set` or
+ * `dropWhere` yet, so narrowing to `entry.class === 'keep_shell'` and reading `entry.set` /
+ * `entry.dropWhere` below fails `tsc` — "Property 'set' does not exist on type 'KeepShellEntry'".
+ * This is a TYPECHECK red, not a vitest runtime red: the project's vitest transform does not
+ * type-check, so `npm run test` alone would let `entry.set` evaluate to `undefined` at runtime
+ * and these assertions would fail on their VALUES instead (also red, but for a different, weaker
+ * reason) — `npm run typecheck` is what proves "property unknown" precisely.
+ */
+describe('T-347 U1 — keep_shell set/dropWhere columns are well-formed (R1.5)', () => {
+  it('every `set` column exists on its table and is never also in clearColumns', () => {
+    const problems: string[] = [];
+    for (const [table, entry] of Object.entries(CUTOVER_CLASSIFICATION)) {
+      if (entry.class !== 'keep_shell') continue;
+      const set = entry.set;
+      if (!set) continue;
+      const cols = new Set(schemaColumnNames(table));
+      for (const col of Object.keys(set)) {
+        if (!cols.has(col)) problems.push(`${table}.${col} (set) does not exist`);
+        if (entry.clearColumns.includes(col)) problems.push(`${table}.${col} is in both set and clearColumns`);
+      }
+    }
+    expect(problems).toEqual([]);
+  });
+
+  it('every `dropWhere` column exists on its table', () => {
+    const problems: string[] = [];
+    for (const [table, entry] of Object.entries(CUTOVER_CLASSIFICATION)) {
+      if (entry.class !== 'keep_shell') continue;
+      const dropWhere = entry.dropWhere;
+      if (!dropWhere) continue;
+      const cols = new Set(schemaColumnNames(table));
+      if (!cols.has(dropWhere.column)) problems.push(`${table}.${dropWhere.column} (dropWhere) does not exist`);
+    }
+    expect(problems).toEqual([]);
+  });
+
+  it('fixed_assets.clearColumns contains in_service_on and in_service_source (R1.5)', () => {
+    const entry = CUTOVER_CLASSIFICATION['fixed_assets'];
+    expect(entry?.class).toBe('keep_shell');
+    if (entry?.class === 'keep_shell') {
+      expect(entry.clearColumns).toContain('in_service_on');
+      expect(entry.clearColumns).toContain('in_service_source');
+    }
+  });
+
+  it('fixed_assets carries a dropWhere for disposed shells, and a set reclassifying the survivor to pending_valuation (§3.2)', () => {
+    const entry = CUTOVER_CLASSIFICATION['fixed_assets'];
+    expect(entry?.class).toBe('keep_shell');
+    if (entry?.class === 'keep_shell') {
+      expect(entry.dropWhere).toEqual({ column: 'status', in: ['disposed'] });
+      expect(entry.set).toEqual({ status: 'pending_valuation', needs_review: false });
+    }
+  });
+});
