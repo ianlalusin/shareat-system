@@ -5,6 +5,7 @@ import { storeDetail } from '../lib';
 import {
   deactivateStoreAction,
   reactivateStoreAction,
+  setStoreOpeningDateAction,
   setStoreStockModelAction,
   updateStoreAction,
 } from '../actions';
@@ -185,6 +186,34 @@ export default async function StoreDetailPage({
             <button type="submit"
               className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900">
               Save
+            </button>
+          </form>
+
+          {/**
+            * ⭐ T-346 S1 (DEF-428). Its own form, not a field on Details above — same reasoning as
+            * `stock_model` below: `setStoreOpeningDate` carries a refusal (has this store already
+            * traded?) a general "save details" call should not have to know about.
+            *
+            * ⛔ No confirm-reversal control here — §3.4's cascade is S2's; `fixed_assets.in_service_on`
+            * does not exist yet, so there is nothing today's call could ever need to reverse.
+            */}
+          <form
+            action={setStoreOpeningDateAction}
+            className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
+          >
+            <h2 className="text-sm font-medium">Opening date</h2>
+            <input type="hidden" name="storeId" value={store.id} />
+            <label className="block text-sm">
+              <span className="block text-neutral-600 dark:text-neutral-400">Opening date</span>
+              <input type="date" name="openingDate" defaultValue={store.openingDate ?? ''}
+                className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
+            </label>
+            <p className="text-xs text-neutral-500">
+              Leave blank if it has not opened. The first day this store trades.
+            </p>
+            <button type="submit"
+              className="rounded border border-neutral-300 px-4 py-2 text-sm font-medium dark:border-neutral-700">
+              Save opening date
             </button>
           </form>
 

@@ -60,6 +60,7 @@ export default async function StoresPage({
               <th className="p-3">Cadence</th>
               <th className="p-3 text-right">Rooms</th>
               <th className="p-3">Status</th>
+              <th className="p-3">Opening</th>
             </tr>
           </thead>
           <tbody>
@@ -83,11 +84,22 @@ export default async function StoresPage({
                     <span className="text-neutral-500">Inactive</span>
                   )}
                 </td>
+                {/* T-346 S1 (DEF-428) — Amendment R3.3: three states via the shared `isPreOpening`
+                    (R1 item 11 originally specified two; superseded). */}
+                <td className="p-3">
+                  {s.openingDate === null ? (
+                    <span className="text-neutral-500">Not yet open</span>
+                  ) : s.preOpening ? (
+                    <span className="text-amber-600">Opens {s.openingDate}</span>
+                  ) : (
+                    <span className="text-emerald-700 dark:text-emerald-400">Opened {s.openingDate}</span>
+                  )}
+                </td>
               </tr>
             ))}
             {stores.length === 0 && (
               <tr>
-                <td className="p-4 text-neutral-500" colSpan={5}>
+                <td className="p-4 text-neutral-500" colSpan={6}>
                   No stores yet.
                 </td>
               </tr>
@@ -129,6 +141,14 @@ export default async function StoresPage({
               <option value="weekly">weekly</option>
               <option value="monthly">monthly</option>
             </select>
+          </label>
+          <label className="text-sm">
+            <span className="block text-neutral-600 dark:text-neutral-400">Opening date</span>
+            <input type="date" name="openingDate"
+              className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
+            <span className="mt-1 block text-xs text-neutral-500">
+              Leave blank if it has not opened. The first day this store trades.
+            </span>
           </label>
           <label className="text-sm sm:col-span-2">
             <span className="block text-neutral-600 dark:text-neutral-400">

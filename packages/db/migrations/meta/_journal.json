@@ -995,6 +995,13 @@
       "when": 1799983907084,
       "tag": "0161_t345_missed_month_adjustments",
       "breakpoints": true
+    },
+    {
+      "idx": 162,
+      "version": "7",
+      "when": 1800070307084,
+      "tag": "0162_t346_store_opening_date",
+      "breakpoints": true
     }
   ]
 }

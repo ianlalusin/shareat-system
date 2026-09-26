@@ -16,6 +16,7 @@ import {
   createStore,
   deactivateStore,
   reactivateStore,
+  setStoreOpeningDate,
   setStoreStockModel,
   updateStoreDetails,
 } from '@shareat/domain';
@@ -29,6 +30,12 @@ const TOTAL_RULED_ACCESS_DEFAULTS = Object.values(CANONICAL_POSITION_DEFAULTS).r
 import { withOrgPrincipal } from '../../expenses/lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
+// T-346 Amendment R3.1 — the one date-validity check, never re-derived per call site.
+import { storesRepo } from '@shareat/db';
+
+function invalidDateMessage(raw: string): string {
+  return `"${raw}" is not a valid date. Use the date picker, or type it as YYYY-MM-DD.`;
+}
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -59,6 +66,11 @@ function errorMessage(err: unknown): string {
   if (/authorize:/.test(raw)) {
     return 'Only an admin or super-admin can open or close a branch.';
   }
+  // T-346 S1 — `setStoreOpeningDate`'s and `createStore`'s own refusals already read as full
+  // sentences (including the date-format one, delta audit); strip only the function-name prefix so
+  // it does not read like an internal error.
+  const named = /^(?:setStoreOpeningDate|createStore): (.+)$/.exec(raw);
+  if (named) return named[1]!;
   return sharedErrorMessage(err);
 }
 
@@ -71,6 +83,12 @@ export async function createStoreAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/admin/stores');
   const cadence = str(fd, 'remittanceCadence') || 'daily';
   const ceilingRaw = str(fd, 'unremittedCeiling');
+  const openingDate = str(fd, 'openingDate') || null;
+  // T-346 Amendment R3.1 — validated here, in human terms, rather than let a malformed string
+  // reach `createStore`'s date-typed column as a raw 22007.
+  if (openingDate !== null && !storesRepo.isValidDateString(openingDate)) {
+    back('/admin/stores', { error: invalidDateMessage(openingDate) });
+  }
 
   let result: Awaited<ReturnType<typeof createStore>> | undefined;
   try {
@@ -84,6 +102,7 @@ export async function createStoreAction(fd: FormData): Promise<void> {
         // ⚠️ Empty string is NOT zero — an unset ceiling is null, and the database decides whether
         // that is legal for this cadence.
         unremittedCeiling: ceilingRaw === '' ? null : ceilingRaw,
+        openingDate,
       }),
     );
   } catch (err) {
@@ -158,6 +177,29 @@ export async function setStoreStockModelAction(fd: FormData): Promise<void> {
       model === 'multi_room'
         ? 'This store may now hold several stockrooms. Add them under Inventory / Locations.'
         : 'This store is back to a single stockroom.',
+  });
+}
+
+/**
+ * T-346 S1 (DEF-428). ⛔ §3.4's confirm-reversal step is S2's — `fixed_assets.in_service_on` does
+ * not exist yet, so there is nothing this call could ever need to reverse today. The form below
+ * carries no confirm control for that reason; S2 adds one when it wires the cascade in.
+ */
+export async function setStoreOpeningDateAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/admin/stores');
+  const storeId = str(fd, 'storeId');
+  const openingDate = str(fd, 'openingDate') || null;
+  // T-346 Amendment R3.1 — same helper as createStoreAction; no second copy of the check.
+  if (openingDate !== null && !storesRepo.isValidDateString(openingDate)) {
+    back(`/admin/stores/${storeId}`, { error: invalidDateMessage(openingDate) });
+  }
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => setStoreOpeningDate(tx, actor, storeId, { openingDate }));
+  } catch (err) {
+    back(`/admin/stores/${storeId}`, { error: errorMessage(err) });
+  }
+  back(`/admin/stores/${storeId}`, {
+    ok: openingDate ? `Opening date set to ${openingDate}.` : 'Opening date cleared.',
   });
 }
 

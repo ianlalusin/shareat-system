@@ -5,7 +5,7 @@
  * capability gate — the gate belongs to the WRITE, not to looking at a list — and every mutation
  * runs through `packages/domain/src/stores/service.ts`'s own `authorize()` via the actions file.
  */
-import { storesRepo, stockLocationsRepo, type StoreRow } from '@shareat/db';
+import { manilaToday, storesRepo, stockLocationsRepo, type StoreRow } from '@shareat/db';
 import { storeReadiness, type ReadinessCheck } from '@shareat/domain';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { AuthorizationError, type Actor } from '@shareat/auth';
@@ -15,15 +15,19 @@ export type { StoreRow, ReadinessCheck };
 
 export interface StoreListRow extends StoreRow {
   readonly roomCount: number;
+  /** T-346 Amendment R3.3 — computed once here via `isPreOpening`, so the list badge's three
+   *  states (`Not yet open` / `Opens {d}` / `Opened {d}`) never re-derive the comparison. */
+  readonly preOpening: boolean;
 }
 
 export async function listStoresForAdmin(orgId: string): Promise<StoreListRow[]> {
   return withOrgPrincipal(orgId, async (tx) => {
     const stores = await storesRepo.listForOrg(tx, orgId);
+    const today = await manilaToday(tx);
     const out: StoreListRow[] = [];
     for (const s of stores) {
       const rooms = await stockLocationsRepo.listActiveLocations(tx, s.id);
-      out.push({ ...s, roomCount: rooms.length });
+      out.push({ ...s, roomCount: rooms.length, preOpening: storesRepo.isPreOpening(s.openingDate, today) });
     }
     return out;
   });

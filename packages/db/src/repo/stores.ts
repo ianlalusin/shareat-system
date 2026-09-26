@@ -104,6 +104,8 @@ export interface StoreRow {
   readonly tinBranchCode: string | null;
   readonly address: string | null;
   readonly contactNumber: string | null;
+  /** ⭐ T-346 S1 (DEF-428). `null` = not yet open; a future date = planned. */
+  readonly openingDate: string | null;
 }
 
 const STORE_COLUMNS = {
@@ -118,6 +120,7 @@ const STORE_COLUMNS = {
   tinBranchCode: stores.tinBranchCode,
   address: stores.address,
   contactNumber: stores.contactNumber,
+  openingDate: stores.openingDate,
 } as const;
 
 /** Every store in the org, active first then by code — the `/admin/stores` list. */
@@ -147,6 +150,8 @@ export interface InsertStoreInput {
   readonly stockModel?: 'single_room' | 'multi_room';
   readonly remittanceCadence?: string;
   readonly unremittedCeiling?: string | null;
+  /** T-346 S1. Absent or `null` both mean "not yet open". */
+  readonly openingDate?: string | null;
 }
 
 export async function insertStore(tx: Tx, input: InsertStoreInput): Promise<{ id: string }> {
@@ -160,6 +165,7 @@ export async function insertStore(tx: Tx, input: InsertStoreInput): Promise<{ id
       ...(input.stockModel ? { stockModel: input.stockModel } : {}),
       ...(input.remittanceCadence ? { remittanceCadence: input.remittanceCadence as 'daily' } : {}),
       ...(input.unremittedCeiling !== undefined ? { unremittedCeiling: input.unremittedCeiling } : {}),
+      ...(input.openingDate !== undefined ? { openingDate: input.openingDate } : {}),
     })
     .returning({ id: stores.id });
   return row!;
@@ -172,6 +178,9 @@ export interface UpdateStorePatch {
   readonly address?: string | null;
   readonly contactNumber?: string | null;
   readonly tinBranchCode?: string | null;
+  /** T-346 S1. Written only by `setStoreOpeningDate`, which carries the "has traded" refusal — this
+   *  patch has no business rule of its own, same posture as `address`/`contactNumber`. */
+  readonly openingDate?: string | null;
   /**
    * ⭐ T-284 / DEF-316. The column has existed since migration `0062` and had no writer of any
    * kind until now — every store has been `single_room`, the default, with no path off it.
@@ -295,4 +304,50 @@ export async function countActiveCredentials(tx: Tx, storeId: string): Promise<n
       )
   `)) as unknown as { n: number }[];
   return Number(row?.n ?? 0);
+}
+
+// -----------------------------------------------------------------------------------------
+// T-346 S1 (DEF-428) — the store's opening date.
+// -----------------------------------------------------------------------------------------
+
+/**
+ * ⭐ The one definition of "has this store traded" — reads the SQL function migration 0162
+ * defines (`store_first_trading_date`), so the migration's one-time backfill and this live check
+ * can never quietly disagree. `null` means the store has not traded yet.
+ */
+export async function firstTradingDate(tx: Tx, storeId: string): Promise<string | null> {
+  const [row] = (await tx.execute(
+    sql`select store_first_trading_date(${storeId}) as first_trading_date`,
+  )) as unknown as { first_trading_date: string | null }[];
+  return row?.first_trading_date ?? null;
+}
+
+/**
+ * ⭐ One definition (DEF-283) — this is the TS twin; the SQL fragment lands with S3 where its
+ * readers are (Amendment R2 item 3). A store with no opening date, or one still in the future,
+ * has not opened yet.
+ *
+ * ⚠️ Only meaningful once `openingDate` has passed `isValidDateString` — `'2026-3-1'` sorts before
+ * `'2026-03-01'` as a bare string, which is exactly the mis-comparison Amendment R3.1 found.
+ */
+export function isPreOpening(openingDate: string | null, today: string): boolean {
+  return openingDate === null || openingDate > today;
+}
+
+/**
+ * ⭐ Amendment R3.1 — a real `YYYY-MM-DD` calendar date, not merely shaped like one. Every
+ * date-vs-date comparison in this feature (`isPreOpening`, the "has traded" check, the backfill
+ * itself) is a plain STRING comparison, which is only safe once this is true: `'01/01/2099'` is not
+ * a date at all, and `'2026-3-1'` — valid, unpadded — sorts BEFORE `'2026-03-01'` as a string
+ * despite naming a LATER day. One definition, called everywhere a caller-supplied date reaches a
+ * comparison, so no call site re-derives its own (and possibly looser) check.
+ */
+export function isValidDateString(value: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!m) return false;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }

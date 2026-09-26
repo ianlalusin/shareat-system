@@ -9,6 +9,7 @@ import { sql } from 'drizzle-orm';
 import {
   boolean,
   check,
+  date,
   numeric,
   pgTable,
   text,
@@ -58,6 +59,15 @@ export const stores = pgTable(
     // (src/lib/datetime.ts) — never a global constant.
     timezone: text('timezone').notNull().default('Asia/Manila'),
     isActive: boolean('is_active').notNull().default(true),
+
+    /**
+     * ⭐ T-346 S1 (DEF-428) — the first day this store trades. null = not yet open; a future date =
+     * planned. Set by an admin (`stores/service.ts`'s `setStoreOpeningDate`) or backfilled by
+     * migration 0162 for a store already trading when this column was added — see that migration's
+     * `store_first_trading_date` for the one definition of "has traded" it and the runtime refusal
+     * both use.
+     */
+    openingDate: date('opening_date'),
 
     /**
      * ⭐ **How this store organises stock — T-160, and it is an INVARIANT rather than a

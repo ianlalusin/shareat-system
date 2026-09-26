@@ -219,9 +219,20 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // and reading `git diff HEAD -- apps/erp/src/app/findings/page.tsx` directly, not by arithmetic
     // alone — the file's third pre-existing input/button pair (:258/:263) is `acknowledgeFindingAction`,
     // unrelated to either task, and was already counted before this change.
-    // 1045 = 151 FAIL + 58 UNRESOLVED + 836 PASS, all measured together via runCensus() (not
+    // 1045 -> 1048, T-346 S1 (2026-09-26). +3, FAIL/UNRESOLVED unmoved (both asserted above).
+    // Itemised, verified against `git diff HEAD -- apps/erp/src/app/admin/stores/` directly (not
+    // by arithmetic alone), exactly three new interactive controls and nothing else changed in
+    // that diff: `app/admin/stores/page.tsx`'s create-store form gains one `<input type="date"
+    // name="openingDate">` (no new button — it shares the form's existing submit); and
+    // `app/admin/stores/[id]/page.tsx` gains its own "Opening date" form — a second
+    // `<input type="date" name="openingDate">` plus its "Save opening date" submit button. The
+    // detail-page form's `type="hidden"` `storeId` input is not an interactive control and the
+    // census does not count it. ⛔ Pixel classification (PASS/FAIL/UNRESOLVED per control) held
+    // pending the code-review hold on this cycle — re-verify against `runCensus()`'s own filtered
+    // results the same way T-344/T-345's entries were, before trusting this number as final.
+    // 1048 = 151 FAIL + 58 UNRESOLVED + 839 PASS, all measured together via runCensus() (not
     // computed from the other two numbers, so this cannot become circular with them).
-    expect(results.length).toBe(1045);
+    expect(results.length).toBe(1048);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

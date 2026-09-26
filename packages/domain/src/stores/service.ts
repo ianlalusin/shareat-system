@@ -72,6 +72,8 @@ export interface CreateStoreInput {
   /** The default room's code/name. Defaults to a stockroom, which every store needs to hold stock. */
   readonly roomCode?: string;
   readonly roomName?: string;
+  /** T-346 S1 (DEF-428). Absent or `null` both mean "not yet open". */
+  readonly openingDate?: string | null;
 }
 
 export interface CreateStoreResult {
@@ -106,6 +108,11 @@ export async function createStore(
   const name = input.name.trim();
   if (!code) throw new Error('createStore: a store needs a code.');
   if (!name) throw new Error('createStore: a store needs a name.');
+  // T-346 Amendment R3.1 / delta audit — same check and same helper as `setStoreOpeningDate`; a new
+  // store cannot have traded yet, so there is no "has traded" comparison here, only the format one.
+  if (input.openingDate != null && !storesRepo.isValidDateString(input.openingDate)) {
+    throw new Error(`createStore: "${input.openingDate}" is not a valid date (expected YYYY-MM-DD)`);
+  }
 
   // 2. The store row. ⛔ The cash-custody pairing is NOT re-checked here — the database refuses an
   //    unbounded pile of cash on a long cadence (`stores_pooling_requires_ceiling_check`), and a
@@ -118,6 +125,7 @@ export async function createStore(
     stockModel: input.stockModel,
     remittanceCadence: input.remittanceCadence,
     unremittedCeiling: input.unremittedCeiling,
+    openingDate: input.openingDate,
   });
 
   // 2b. ⭐ T-332/DEF-249. A store with no `store_attendance_config` row is not "using defaults", it
@@ -254,6 +262,49 @@ export async function updateStoreDetails(
       ? patch
       : { ...patch, tinBranchCode: normaliseBranchCode(patch.tinBranchCode) };
   await storesRepo.updateStore(tx, actor.orgId, storeId, normalised);
+}
+
+/**
+ * ⭐ T-346 S1 (DEF-428). `openingDate: null` = not yet open; a future date = planned; a past date =
+ * the day it opened.
+ *
+ * ⚠️ **Once a store has traded, its opening date can never be later than the day it first traded**
+ * (Amendment R3.6, superseding R2.1/R2.4's looser "not cleared or moved into the future") —
+ * `storesRepo.firstTradingDate` is the SAME definition `store_first_trading_date` (migration 0162)
+ * used to backfill this column, so a store the backfill already called "open" can never be told a
+ * later — or no — date by a subsequent edit. Moving the date EARLIER than first trading is
+ * unrestricted — that is a correction, not a claim that it never opened.
+ *
+ * ⛔ **Step 3 (§3.2, "from S2 on, apply §3.4 to each follower asset") is not implemented yet.**
+ * `fixed_assets.in_service_on` does not exist until migration 0163; T-346 S2 wires the cascade into
+ * this function. `confirmReversal` is accepted now so the call shape does not change under S2.
+ */
+export async function setStoreOpeningDate(
+  tx: Tx,
+  actor: Actor,
+  storeId: string,
+  input: { openingDate: string | null; confirmReversal?: boolean },
+): Promise<void> {
+  await authorize(tx, actor, CAPABILITY, {});
+
+  // Amendment R3.1 — a real calendar date, not merely shaped like one, before any comparison below
+  // trusts it as a sortable string ('2026-3-1' sorts before '2026-03-01' despite naming a later day).
+  if (input.openingDate !== null && !storesRepo.isValidDateString(input.openingDate)) {
+    throw new Error(`setStoreOpeningDate: "${input.openingDate}" is not a valid date (expected YYYY-MM-DD)`);
+  }
+
+  const store = await storesRepo.getById(tx, actor.orgId, storeId);
+  if (!store) throw new Error('setStoreOpeningDate: that store does not exist in this organisation.');
+
+  const firstTrading = await storesRepo.firstTradingDate(tx, storeId);
+  if (firstTrading !== null && (input.openingDate === null || input.openingDate > firstTrading)) {
+    throw new Error(
+      `setStoreOpeningDate: ${store.name} has traded since ${firstTrading}; its opening date must ` +
+        'be on or before that',
+    );
+  }
+
+  await storesRepo.updateStore(tx, actor.orgId, storeId, { openingDate: input.openingDate });
 }
 
 /**
@@ -487,6 +538,7 @@ export async function storeReadiness(
   }
   const channels = await storesRepo.countSalesChannels(tx, actor.orgId, store.id);
   const credentials = await storesRepo.countActiveCredentials(tx, store.id);
+  const today = await manilaToday(tx);
 
   return [
     {
@@ -555,6 +607,22 @@ export async function storeReadiness(
       // ⚠️ No `?store=` — `/staff` takes no store param today; adding one is a behaviour change and
       // is out of scope for T-243.
       remedy: { href: READINESS_REMEDY_ROUTE.signIn, label: 'Issue a PIN from Staff →' },
+    },
+    {
+      // ⭐ T-346 S1 (DEF-428). Manual, and deliberately NON-blocking (R2.2): a store not open yet is
+      // a real, ordinary state — under construction, or waiting on a launch date — never a fault.
+      // S2 adds the depreciation consequence to this same detail; S1 only states the fact.
+      key: 'openingDate',
+      label: 'Opening date',
+      ok: store.openingDate !== null,
+      kind: 'manual',
+      blocking: false,
+      detail:
+        store.openingDate === null
+          ? 'Not yet open — no opening date set'
+          : storesRepo.isPreOpening(store.openingDate, today)
+            ? `Opens ${store.openingDate}`
+            : `Opened ${store.openingDate}`,
     },
   ];
 }
