@@ -39,14 +39,14 @@ export function today(): string {
 }
 
 /**
- * Strips the throwing function's name and turns an authorisation refusal into a sentence.
+ * T-343 S5.1c — DEF-445/DEF-446. Both the row-5 (`roleMayNot`/S2b's `jobIsElsewhere`) and row-2
+ * (`notAssignedToStore`) `AuthorizationError`s already carry a `userMessage`; this used to
+ * regex-match their raw diagnostic and answer with a generic sentence of its own BEFORE
+ * `sharedErrorMessage` ever got a chance to prefer the real one (S1's gate). Deleted, not
+ * bypassed: `sharedErrorMessage` is the one place `userMessage` is preferred.
  * ⚠️ Here and not in an actions file: a `'use server'` module may export only async functions.
  */
 export function errorMessageOf(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err);
-  const denied = /may not '([a-z_]+)'/.exec(raw);
-  if (denied) return `Your role may not ${denied[1]!.replace(/_/g, ' ')}.`;
-  if (/no store scope/.test(raw)) return 'You are not assigned to the store this action belongs to.';
   return sharedErrorMessage(err);
 }
 

@@ -65,50 +65,71 @@ async function perform(orderId: string, fn: (tx: Tx, actor: Actor) => Promise<st
 
 // ---- T-175: the thread ---------------------------------------------------------------------------
 
+/** `postOrderMessage`'s own `Outcome<{id:string}>`, plus `gone` — this action's OWN `:75` guard
+ *  arm, not the domain's. Explicit so a future failure arm can't silently widen what `result.gone`
+ *  means below. */
+type PostMessageResult =
+  | { readonly ok: true; readonly id: string }
+  | { readonly ok: false; readonly reason: string; readonly userReason?: string; readonly gone?: true };
+
 export async function postMessageAction(fd: FormData): Promise<void> {
   const actor = await requireActor();
   const orderId = str(fd, 'orderId');
   const body = typeof fd.get('body') === 'string' ? String(fd.get('body')) : '';
 
-  const result = await withOrgPrincipal(actor.orgId, async (tx) => {
-    const parties = await lowStockRepo.orderParties(tx, orderId);
-    if (!parties) return { ok: false as const, reason: 'that order does not exist', userReason: goneSentence('order') };
+  let result: PostMessageResult;
+  try {
+    result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      const parties = await lowStockRepo.orderParties(tx, orderId);
+      // ⭐ T-343 DEF-444 — `gone: true` marks the order itself as vanished, not merely this
+      // action refused: the redirect below sends the person to the list, never back to a page
+      // that would 404 the moment they land on it.
+      if (!parties) {
+        return { ok: false as const, reason: 'that order does not exist', userReason: goneSentence('order'), gone: true as const };
+      }
 
-    // ⚠️ The actor's OWN scope, read from the database — never from the form. It is both the
-    // authorisation input and the "are you on this order" input, so a client-supplied value would
-    // defeat the two-sided check entirely (T-138, and `no-client-supplied-actor` holds it closed).
-    const scope = await tx
-      .select({ storeId: schema.personStoreScope.storeId })
-      .from(schema.personStoreScope)
-      .where(eq(schema.personStoreScope.personId, actor.personId));
-    const actorStoreIds = scope.map((s) => s.storeId);
+      // ⚠️ The actor's OWN scope, read from the database — never from the form. It is both the
+      // authorisation input and the "are you on this order" input, so a client-supplied value would
+      // defeat the two-sided check entirely (T-138, and `no-client-supplied-actor` holds it closed).
+      const scope = await tx
+        .select({ storeId: schema.personStoreScope.storeId })
+        .from(schema.personStoreScope)
+        .where(eq(schema.personStoreScope.personId, actor.personId));
+      const actorStoreIds = scope.map((s) => s.storeId);
 
-    // ⭐ Authorise against the store that is actually ON the order. An earlier draft looped over
-    // every scope and broke on the first success — which fell through silently when NONE
-    // succeeded, authorising nobody. One explicit intersection, one check.
-    const onThisOrder = actorStoreIds.find(
-      (id) => id === parties.commissaryStoreId || id === parties.branchStoreId,
-    );
-    if (!onThisOrder) {
-      return {
-        ok: false as const,
-        reason: 'only the two stores on this order can talk about it',
-        userReason: 'Only the two stores on this order can talk about it.',
-      };
-    }
-    await authorize(tx, actor, 'post_order_message', { storeId: onThisOrder });
+      // ⭐ Authorise against the store that is actually ON the order. An earlier draft looped over
+      // every scope and broke on the first success — which fell through silently when NONE
+      // succeeded, authorising nobody. One explicit intersection, one check.
+      const onThisOrder = actorStoreIds.find(
+        (id) => id === parties.commissaryStoreId || id === parties.branchStoreId,
+      );
+      if (!onThisOrder) {
+        return {
+          ok: false as const,
+          reason: 'only the two stores on this order can talk about it',
+          userReason: 'Only the two stores on this order can talk about it.',
+        };
+      }
+      await authorize(tx, actor, 'post_order_message', { storeId: onThisOrder });
 
-    return postOrderMessage(tx, {
-      orgId: actor.orgId,
-      orderId,
-      body,
-      authorId: actor.personId,
-      actorStoreIds,
+      return postOrderMessage(tx, {
+        orgId: actor.orgId,
+        orderId,
+        body,
+        authorId: actor.personId,
+        actorStoreIds,
+      });
     });
-  });
+  } catch (err) {
+    // T-343 S5.1c/DEF-445 — `authorize()`'s refusal (and anything else `withOrgPrincipal` throws)
+    // used to escape this action into the framework's error boundary. A banner now, like every
+    // other action here.
+    redirect(`/commissary/orders/${orderId}?error=${encodeURIComponent(errorMessageOf(err))}`);
+  }
 
   if (!result.ok) {
-    redirect(`/commissary/orders/${orderId}?error=${encodeURIComponent(outcomeMessage(result))}`);
+    const target = 'gone' in result && result.gone ? '/commissary/orders' : `/commissary/orders/${orderId}`;
+    redirect(`${target}?error=${encodeURIComponent(outcomeMessage(result))}`);
   }
   revalidatePath(`/commissary/orders/${orderId}`);
 }
