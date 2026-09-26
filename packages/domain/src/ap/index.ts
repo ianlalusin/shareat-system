@@ -802,13 +802,16 @@ export async function recordPayment(
     for (const a of allocations) {
       const item = byExpense.get(a.expenseId);
       if (!item) {
+        // ⚠️ Never named — this branch means the id is not in THIS STORE's open items, and
+        // `expenseKey`'s lookup is org-scoped only (R4.7), so a real expense here could belong to
+        // another store in the same org. Naming it would leak that store's expense across the
+        // boundary this refusal exists to hold (auditor CHANGES, S5.2 follow-up #1).
         throw refuse(
           `recordPayment: expense ${a.expenseId} is not an open item for this supplier at this ` +
             'store — it may belong to another supplier or another store, not be a credit expense, ' +
             'already be fully paid, or not be posted.',
-          `${capitalise(await expenseKey(trx, actor.orgId, a.expenseId))} is not an open item for this ` +
-            'supplier at this store — it may belong to another supplier or another store, not be ' +
-            'a credit expense, already be fully paid, or not be posted.',
+          'This expense is not an open item for this supplier at this store — it may belong to ' +
+            'another supplier or another store, not be a credit expense, already be fully paid, or not be posted.',
         );
       }
       const applied = Number(a.amountApplied);

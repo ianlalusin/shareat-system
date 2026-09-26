@@ -11,7 +11,7 @@
  * named error; the trigger is the backstop that holds regardless of code path.
  */
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
-import { businessDayRange, formatBusinessDateTime, parseBusinessDate, type BusinessDate } from '@shareat/core/datetime';
+import { businessDayRange, formatBusinessDateTime, parseBusinessDate } from '@shareat/core/datetime';
 import type { Tx } from '../client';
 import { refuse } from '../refusal';
 import { recordGone } from './record-gone';
@@ -371,7 +371,10 @@ export interface InvoiceCapacity {
   /** T-343 S5.2 (R4.6) — `supplier_invoices.invoice_no` is nullable; `assertOpenForRecording`
    *  names the invoice by number when one exists, else by date (rule 2's no-number fallback). */
   invoiceNo: string | null;
-  invoiceDate: BusinessDate;
+  /** Raw `YYYY-MM-DD`, unparsed — kept on the success path so a malformed value never fails a
+   *  read that isn't even about naming this invoice. `invoicePhrase` parses it lazily, only when
+   *  it needs the human date, and falls back if parsing fails (S5.2 follow-up #4). */
+  invoiceDate: string;
   supplierName: string;
 }
 
@@ -409,7 +412,7 @@ export async function capacityOf(
     recorded: Number(row.recorded).toFixed(2),
     remaining: Number(row.remaining).toFixed(2),
     invoiceNo: row.invoice_no ?? null,
-    invoiceDate: parseBusinessDate(row.invoice_date as string),
+    invoiceDate: row.invoice_date as string,
     supplierName: row.supplier_name as string,
   };
 }
@@ -417,11 +420,18 @@ export async function capacityOf(
 /** R4.6 — `${inv}`/`${Inv}`: the invoice named by number when one exists, else the no-number
  *  fallback, both from `rule 2`. `formatBusinessDateTime`/`businessDayRange` are the exact pair
  *  `@shareat/domain`'s `humanDate` calls (no second date formatter) — inlined here, not imported,
- *  because `packages/db` cannot depend on `@shareat/domain` (the dependency runs the other way). */
+ *  because `packages/db` cannot depend on `@shareat/domain` (the dependency runs the other way).
+ *  `invoiceDate` is parsed here, lazily, only for the no-number branch that actually needs it
+ *  (S5.2 follow-up #4) — a malformed value falls back to the number-less, date-less phrase rather
+ *  than failing the whole refusal it is meant to help explain. */
 function invoicePhrase(capacity: InvoiceCapacity): string {
-  return capacity.invoiceNo
-    ? `invoice ${capacity.invoiceNo} from ${capacity.supplierName}`
-    : `the ${formatBusinessDateTime(businessDayRange(capacity.invoiceDate).start, { dateStyle: 'medium' })} invoice from ${capacity.supplierName}`;
+  if (capacity.invoiceNo) return `invoice ${capacity.invoiceNo} from ${capacity.supplierName}`;
+  try {
+    const date = parseBusinessDate(capacity.invoiceDate);
+    return `the ${formatBusinessDateTime(businessDayRange(date).start, { dateStyle: 'medium' })} invoice from ${capacity.supplierName}`;
+  } catch {
+    return `the invoice from ${capacity.supplierName}`;
+  }
 }
 
 function capitalise(s: string): string {

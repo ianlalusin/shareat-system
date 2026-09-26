@@ -1190,3 +1190,41 @@ describe('T-343 S5.2 — P7: verifyInvoice’s missing-attestation sentence name
     expect(userMessage).not.toContain('unconfirmed: price');
   });
 });
+
+describe('T-343 S5.2fu — P8: a manager at store A allocating a REAL store-B expense gets the same generic refusal, never store B’s particulars or date', () => {
+  it('userMessage says "This expense…", never the store-B particulars/date the raw diagnostic is allowed to carry', async () => {
+    const f = await fixtureWithSupplier('s5-2fu-p8');
+    const b = await secondStore(f, 's5-2fu-p8-b');
+
+    const particulars = 'Store B confidential purchase';
+    const atB = await creditExpenseAt(f, b.storeId, '750.00', particulars);
+    const [expenseRow] = await sql<{ business_date: string }[]>`
+      select business_date::text as business_date from expenses where id = ${atB.expenseId}
+    `;
+    const expenseDate = expenseRow!.business_date;
+
+    const caught = await asOrg(f.orgId, (tx) =>
+      recordPayment(tx, f.manager, {
+        storeId: f.storeId, // ⛔ store A — atB.expenseId belongs to store B
+        supplierId: f.supplierId,
+        businessDate: '2026-03-02',
+        amount: '750.00',
+        moneyAccountId: f.drawerId,
+        allocations: [{ expenseId: atB.expenseId, amountApplied: '750.00' }],
+      }),
+    ).then(
+      () => null,
+      (e: unknown) => e as Error,
+    );
+
+    expect(caught, 'the cross-store allocation was not refused at all').not.toBeNull();
+    // The RAW diagnostic is internal-only and may name the id — never asserted here.
+    expect(caught!.message).toContain(atB.expenseId);
+    const userMessage = (caught as unknown as { userMessage?: string }).userMessage;
+    expect(userMessage, 'must carry a userMessage').toBeDefined();
+    expect(userMessage!.startsWith('This expense')).toBe(true);
+    expect(userMessage).not.toContain(particulars);
+    expect(userMessage).not.toContain(humanDate(parseBusinessDate(expenseDate)));
+    expect(userMessage).not.toContain(atB.expenseId);
+  });
+});
