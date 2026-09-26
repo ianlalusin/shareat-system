@@ -24,6 +24,7 @@ import {
 } from '@shareat/db';
 import { LINK_STATUSES } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
+import { gone, refuse } from '../shared/refusal';
 
 export type LinkStatus = (typeof LINK_STATUSES)[number];
 
@@ -41,15 +42,19 @@ const MANUAL_COST_PATTERN = /^\d+(\.\d{1,4})?$/;
 /**
  * The `MANUAL_COST_PATTERN` shape, wrapped as a sentence-producing entry point — same relationship
  * `parseMoneyInput` has to `money()` (`packages/domain/src/shared/money-input.ts`): a bare pattern
- * test produces a boolean, never a message a cashier can act on. `label` identifies the field, same
- * convention as `parseMoneyInput`. T-328 — introduced for `deliveries/documents.ts`'s `unitCost`.
+ * test produces a boolean, never a message a cashier can act on. `rawLabel` identifies the field
+ * in the raw diagnostic exactly as before this task (Invariant 1 — callers keep passing whatever
+ * they always did, id included, since `.message` is a log, never a screen). `humanLabel` is the
+ * SEPARATE, id-free phrase the userMessage uses — `deliveries/documents.ts`'s call passes
+ * `Line ${n}: the unit cost`. T-328 — introduced for `deliveries/documents.ts`'s `unitCost`.
  */
-export function parseFourDecimalCost(raw: string, label: string): string {
+export function parseFourDecimalCost(raw: string, rawLabel: string, humanLabel: string): string {
   const trimmed = raw.trim();
   if (!MANUAL_COST_PATTERN.test(trimmed)) {
-    throw new Error(
-      `${label} — "${raw}" is not a valid amount. Use a non-negative number with up to four ` +
+    throw refuse(
+      `${rawLabel} — "${raw}" is not a valid amount. Use a non-negative number with up to four ` +
         'decimal places.',
+      `${humanLabel} — "${raw}" is not a valid amount. Use a non-negative number with up to four decimal places.`,
     );
   }
   return trimmed;
@@ -97,9 +102,10 @@ export async function upsertCommissaryLink(
     // ⛔ The database's own check (`commissary_links_not_self_check`) refuses this too; refusing it
     // here as well means the message explains WHY rather than naming a constraint.
     if (input.commissaryStoreId === input.branchStoreId) {
-      throw new Error(
+      throw refuse(
         'upsertCommissaryLink: a store cannot supply itself — the commissary and the branch must ' +
           'be two different stores.',
+        'A store cannot supply itself — the commissary and the branch must be two different stores.',
       );
     }
 
@@ -110,10 +116,10 @@ export async function upsertCommissaryLink(
     const commissary = found.get(input.commissaryStoreId);
     const branch = found.get(input.branchStoreId);
     if (!commissary) {
-      throw new Error(`upsertCommissaryLink: commissary store ${input.commissaryStoreId} does not exist in this organisation.`);
+      throw gone(`upsertCommissaryLink: commissary store ${input.commissaryStoreId} does not exist in this organisation.`, 'commissary store');
     }
     if (!branch) {
-      throw new Error(`upsertCommissaryLink: branch store ${input.branchStoreId} does not exist in this organisation.`);
+      throw gone(`upsertCommissaryLink: branch store ${input.branchStoreId} does not exist in this organisation.`, 'branch store');
     }
 
     const { id: linkId } = await commissaryCatalogueRepo.upsertLink(trx, {
@@ -169,20 +175,27 @@ export async function upsertOffering(
     await authorize(trx, actor, 'manage_commissary_offerings', { storeId: input.commissaryStoreId });
 
     const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
-    if (!item) throw new Error(`upsertOffering: item ${input.itemId} does not exist.`);
+    if (!item) throw gone(`upsertOffering: item ${input.itemId} does not exist.`, 'item');
     if (item.status !== 'active') {
-      throw new Error(`upsertOffering: ${item.name} is ${item.status}, not active — only an active item can be offered.`);
+      throw refuse(
+        `upsertOffering: ${item.name} is ${item.status}, not active — only an active item can be offered.`,
+        `${item.name} is ${item.status}, not active — only an active item can be offered.`,
+      );
     }
     if (!item.isPurchasable) {
-      throw new Error(`upsertOffering: ${item.name} is not marked purchasable, so this commissary cannot supply it.`);
+      throw refuse(
+        `upsertOffering: ${item.name} is not marked purchasable, so this commissary cannot supply it.`,
+        `${item.name} is not marked purchasable, so this commissary cannot supply it.`,
+      );
     }
 
     let manualCost: string | null = null;
     if (input.manualCost != null && input.manualCost.trim() !== '') {
       const trimmed = input.manualCost.trim();
       if (!MANUAL_COST_PATTERN.test(trimmed)) {
-        throw new Error(
+        throw refuse(
           `upsertOffering: "${input.manualCost}" is not a manual cost — a non-negative amount, up to four decimals.`,
+          `"${input.manualCost}" is not a manual cost — a non-negative amount, up to four decimals.`,
         );
       }
       manualCost = trimmed;
@@ -229,38 +242,68 @@ export async function upsertMap(
 
     const linked = await commissaryRepo.activeLinkExists(trx, actor.orgId, input.commissaryStoreId, input.branchStoreId);
     if (!linked) {
-      throw new Error(
+      // R4.9 :232 — rule 2 (stores as `Name (CODE)`), one refusal-path org-scoped read of both
+      // stores (rule 6/7). `upsertMap` is not used as a probe inside a continuing tx — its one
+      // production caller (`apps/erp/src/app/commissary/catalogue/actions.ts`'s `upsertMapAction`)
+      // opens a transaction for this call alone, so a plain read needs no savepoint.
+      // ⚠️ rule 6 — a naming lookup's own failure must never break the refusal it decorates: any
+      // error here (a dropped connection) falls back to the same deictic phrases, same shape as
+      // `ap/index.ts`'s `expenseKey` (S5.2 audit CHANGES).
+      let branchName = 'This branch';
+      let commissaryName = 'that commissary';
+      try {
+        const stores = await commissaryCatalogueRepo.storesInOrg(trx, actor.orgId, [
+          input.commissaryStoreId,
+          input.branchStoreId,
+        ]);
+        const commissaryStore = stores.get(input.commissaryStoreId);
+        const branchStore = stores.get(input.branchStoreId);
+        if (branchStore) branchName = `${branchStore.name} (${branchStore.code})`;
+        if (commissaryStore) commissaryName = `${commissaryStore.name} (${commissaryStore.code})`;
+      } catch {
+        // Falls back to the deictic phrases already set above.
+      }
+      throw refuse(
         'upsertMap: this branch has no active link to that commissary — link the two stores ' +
           '(T-171) before mapping an item between them.',
+        `${branchName} has no active link to ${commissaryName} — link the two stores before mapping an item between them.`,
       );
     }
 
     const commissaryItem = await itemsRepo.getItemById(trx, actor.orgId, input.commissaryItemId);
-    if (!commissaryItem) throw new Error(`upsertMap: commissary item ${input.commissaryItemId} does not exist.`);
+    if (!commissaryItem) throw gone(`upsertMap: commissary item ${input.commissaryItemId} does not exist.`, 'commissary item');
     if (commissaryItem.status !== 'active') {
-      throw new Error(`upsertMap: ${commissaryItem.name} is ${commissaryItem.status}, not active.`);
+      throw refuse(
+        `upsertMap: ${commissaryItem.name} is ${commissaryItem.status}, not active.`,
+        `${commissaryItem.name} is ${commissaryItem.status}, not active.`,
+      );
     }
 
     const branchItem = await itemsRepo.getItemById(trx, actor.orgId, input.branchItemId);
-    if (!branchItem) throw new Error(`upsertMap: branch item ${input.branchItemId} does not exist.`);
+    if (!branchItem) throw gone(`upsertMap: branch item ${input.branchItemId} does not exist.`, 'branch item');
     if (branchItem.status !== 'active') {
-      throw new Error(`upsertMap: ${branchItem.name} is ${branchItem.status}, not active.`);
+      throw refuse(
+        `upsertMap: ${branchItem.name} is ${branchItem.status}, not active.`,
+        `${branchItem.name} is ${branchItem.status}, not active.`,
+      );
     }
 
     // ⭐ T-171 invariant 8. Never guess a conversion — `confirmReceipt` would otherwise refuse the
     // stock at receipt time, far downstream of where the mismatch was actually made.
     if (commissaryItem.baseUnit !== branchItem.baseUnit) {
-      throw new Error(
+      throw refuse(
         `upsertMap: ${commissaryItem.name} is measured in ${commissaryItem.baseUnit} and ` +
           `${branchItem.name} in ${branchItem.baseUnit} — fix the branch item's base unit first. ` +
           'Nothing here guesses a conversion.',
+        `${commissaryItem.name} is measured in ${commissaryItem.baseUnit} and ${branchItem.name} ` +
+          `in ${branchItem.baseUnit} — fix the branch item's base unit first. Nothing here guesses a conversion.`,
       );
     }
 
     let expenseCategoryId: string | null = null;
     if (input.expenseCategoryId) {
       const category = await expensesRepo.getCategoryById(trx, actor.orgId, input.expenseCategoryId);
-      if (!category) throw new Error(`upsertMap: expense category ${input.expenseCategoryId} does not exist.`);
+      if (!category) throw gone(`upsertMap: expense category ${input.expenseCategoryId} does not exist.`, 'expense category');
       expenseCategoryId = category.id;
     }
 
@@ -286,7 +329,7 @@ export async function removeMap(
 ): Promise<{ removed: boolean }> {
   const run = async (trx: Tx): Promise<{ removed: boolean }> => {
     const row = await commissaryCatalogueRepo.getMapById(trx, actor.orgId, input.id);
-    if (!row) throw new Error(`removeMap: map ${input.id} does not exist.`);
+    if (!row) throw gone(`removeMap: map ${input.id} does not exist.`, 'item mapping');
     // ⭐ The map is the BRANCH's to own (T-171 invariant 9) — checked at the row's own
     // `branchStoreId`, never the commissary's, same as `upsertMap`.
     await authorize(trx, actor, 'manage_commissary_map', { storeId: row.branchStoreId });

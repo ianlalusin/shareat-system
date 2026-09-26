@@ -70,10 +70,10 @@ const CEILINGS: Record<string, number> = {
   'packages/domain/src/budgets': 4,
   'packages/domain/src/cash-requests': 21,
   'packages/domain/src/channel-settlements': 12,
-  'packages/domain/src/commissary': 64,
+  'packages/domain/src/commissary': 48, // T-343 S5.3: 64 -> 48, catalogue.ts converted to refuse/gone/internalFault
   'packages/domain/src/customers': 0, // T-343 S5.2: 11 -> 0, all converted to refuse/gone/internalFault
-  'packages/domain/src/cutover': 13,
-  'packages/domain/src/deliveries': 11,
+  'packages/domain/src/cutover': 4, // T-343 S5.3: 13 -> 4, opening.ts converted to refuse/gone/internalFault
+  'packages/domain/src/deliveries': 1, // T-343 S5.3: 11 -> 1, documents.ts converted to refuse/gone/internalFault
   'packages/domain/src/expenses': 0, // T-343 S5.1: 40 -> 0, all converted to refuse/gone/internalFault
   'packages/domain/src/files': 9,
   'packages/domain/src/findings': 1,

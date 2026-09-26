@@ -512,3 +512,22 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
     expect(row!.debit).toBe('0.01');
   });
 });
+
+describe('T-343 S5.3 — removeOpeningFigure’s gone-entry refusal, in human terms', () => {
+  it('userMessage is the S3 gone sentence, no UUID', async () => {
+    const f = await fixture('s5-3-opening');
+    const missingEntryId = crypto.randomUUID();
+
+    const caught = await asOrg(f.orgId, (tx) => removeOpeningFigure(tx, f.admin, { entryId: missingEntryId })).then(
+      () => null,
+      (e: unknown) => e as Error,
+    );
+
+    expect(caught, 'the removal was not refused at all').not.toBeNull();
+    expect(caught!.message).toContain(missingEntryId);
+    const userMessage = (caught as { userMessage?: string }).userMessage;
+    expect(userMessage, 'must carry a userMessage').toBeDefined();
+    expect(userMessage).toMatch(/^That opening figure could not be found\./);
+    expect(userMessage).not.toContain(missingEntryId);
+  }, 30000);
+});

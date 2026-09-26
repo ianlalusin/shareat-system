@@ -39,6 +39,7 @@ import type { ShortageReason } from '@shareat/db/schema';
 import { duplicateRisk, type DuplicateWarning } from './duplicate-risk';
 import { receiveDelivery, toBaseUnits, type ReceiveLineInput, type ReceiveResult } from './receive';
 import { parseFourDecimalCost } from '../commissary/catalogue';
+import { gone, internalFault, refuse } from '../shared/refusal';
 import {
   addQuantity,
   compareQuantity,
@@ -95,16 +96,21 @@ export async function createDeliveryDocument(
   await authorize(tx, actor, 'receive_delivery', { storeId: input.storeId });
 
   if (input.kind !== 'supplier' && input.kind !== 'purchase') {
-    throw new Error(
+    // Invariant 13 — unreachable from a real user: the one production caller
+    // (apps/erp/src/app/inventory/deliveries/actions.ts:116) computes `kind` as
+    // `str(fd, 'kind') === 'supplier' ? 'supplier' : 'purchase'`, a ternary that can never
+    // resolve to anything else regardless of what the form sends. Only a caller bypassing the
+    // action (a direct `CreateDeliveryInput` with a bad `kind`) reaches this line.
+    throw internalFault(
       "createDeliveryDocument: kind must be 'supplier' or 'purchase' — a commissary delivery is " +
         "created only by T-173's own cross-store receipt",
     );
   }
   if (input.kind === 'supplier' && !input.supplierId) {
-    throw new Error('createDeliveryDocument: a supplier delivery must name its supplier');
+    throw refuse('createDeliveryDocument: a supplier delivery must name its supplier', 'A supplier delivery must name its supplier.');
   }
   if (input.lines.length === 0) {
-    throw new Error('createDeliveryDocument: a delivery needs at least one line');
+    throw refuse('createDeliveryDocument: a delivery needs at least one line', 'A delivery needs at least one line.');
   }
 
   // ⭐ Invariant 1, checked here even though the CHECK constraint also refuses it — the CHECK only
@@ -112,7 +118,7 @@ export async function createDeliveryDocument(
   // citing DEF-077's own regression: a photo gate that only checks "a string was given" isn't one).
   const file = await filesRepo.getById(tx, actor.orgId, input.proofFileId);
   if (!file) {
-    throw new Error(`createDeliveryDocument: proof file ${input.proofFileId} does not exist in this org`);
+    throw gone(`createDeliveryDocument: proof file ${input.proofFileId} does not exist in this org`, 'proof photo');
   }
 
   // T-328/DEF-382 — the validated value is CAPTURED and used below, not merely checked and
@@ -121,12 +127,20 @@ export async function createDeliveryDocument(
   // precedent for a "parser" that returns `null` on failure instead of throwing) — `const cost =
   // parseFourDecimalCost(...)` and using `cost` is self-guarding; a bare statement is not.
   const validatedUnitCosts: string[] = [];
-  for (const line of input.lines) {
+  for (const [i, line] of input.lines.entries()) {
+    // R4.9 — named by LINE POSITION, never the item id: at this point the line hasn't been proved
+    // to name a real item yet, so a position is the only human key available.
     if (!isPositiveQuantity(quantity(line.orderedQuantity))) {
-      throw new Error(`createDeliveryDocument: item ${line.itemId}'s ordered quantity must be greater than zero`);
+      throw refuse(
+        `createDeliveryDocument: item ${line.itemId}'s ordered quantity must be greater than zero`,
+        `Line ${i + 1}: the ordered quantity must be greater than zero.`,
+      );
     }
     if (!(Number.isFinite(Number(line.conversionFactor)) && Number(line.conversionFactor) > 0)) {
-      throw new Error(`createDeliveryDocument: item ${line.itemId}'s conversion factor must be greater than zero`);
+      throw refuse(
+        `createDeliveryDocument: item ${line.itemId}'s conversion factor must be greater than zero`,
+        `Line ${i + 1}: the conversion factor must be greater than zero.`,
+      );
     }
     // ⛔ Unvalidated before this: the string reached `delivery_lines.unit_cost` (declared
     // `numeric(14,4)`, packages/db/schema/deliveries.ts:163) straight through, and Postgres's own
@@ -137,7 +151,7 @@ export async function createDeliveryDocument(
     // legitimate unit cost (a free sample, a promotional item) and the shape allows it, same as
     // the other two lines above.
     validatedUnitCosts.push(
-      parseFourDecimalCost(line.unitCost, `createDeliveryDocument: item ${line.itemId}'s unit cost`),
+      parseFourDecimalCost(line.unitCost, `createDeliveryDocument: item ${line.itemId}'s unit cost`, `Line ${i + 1}: the unit cost`),
     );
   }
 
@@ -231,7 +245,7 @@ export async function receiveDeliveryDocument(
 ): Promise<ReceiveResult> {
   const delivery = await deliveriesRepo.getDeliveryDocument(tx, input.deliveryId);
   if (!delivery) {
-    throw new Error(`receiveDeliveryDocument: delivery ${input.deliveryId} does not exist`);
+    throw gone(`receiveDeliveryDocument: delivery ${input.deliveryId} does not exist`, 'delivery');
   }
 
   // ⭐ Invariant 11 (RLS): passing the delivery's OWN org/store means a manager scoped to store A
@@ -239,13 +253,16 @@ export async function receiveDeliveryDocument(
   await authorize(tx, actor, 'receive_delivery', { storeId: delivery.storeId, orgId: delivery.orgId });
 
   if (delivery.status !== 'draft') {
-    throw new Error(`receiveDeliveryDocument: delivery ${input.deliveryId} is ${delivery.status}, not draft`);
+    throw refuse(
+      `receiveDeliveryDocument: delivery ${input.deliveryId} is ${delivery.status}, not draft`,
+      `This delivery is ${delivery.status}, not draft.`,
+    );
   }
 
   const draftByLine = new Map(input.lines.map((l) => [l.lineId, l]));
   for (const line of delivery.lines) {
     if (!draftByLine.has(line.id)) {
-      throw new Error(`receiveDeliveryDocument: line ${line.lineNo} was not answered`);
+      throw refuse(`receiveDeliveryDocument: line ${line.lineNo} was not answered`, `Line ${line.lineNo} was not answered.`);
     }
   }
 
@@ -338,7 +355,16 @@ export async function receiveDeliveryDocument(
     // ⛔ The header and line updates above already wrote. THROW so the whole transaction unwinds
     // rather than leaving a `received` document with nothing posted — T-166 §7.2's own lesson,
     // repeated here one layer up.
-    throw new Error(`receiveDeliveryDocument: ${outcome.reason}`);
+    // `receive.ts` (S5.5+, out of scope) has no `userReason` of its own YET — read defensively so
+    // this keeps working the day it gains one, without editing that file now. Never `outcome.reason`
+    // itself in the sentence; that is `receive.ts`'s own unconverted, potentially id-bearing raw.
+    const innerUserReason = (outcome as { userReason?: unknown }).userReason;
+    throw refuse(
+      `receiveDeliveryDocument: ${outcome.reason}`,
+      typeof innerUserReason === 'string' && innerUserReason.trim() !== ''
+        ? innerUserReason
+        : "This delivery couldn't be received. Reload the page and try again.",
+    );
   }
 
   return outcome;

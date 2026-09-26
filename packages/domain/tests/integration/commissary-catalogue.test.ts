@@ -320,3 +320,24 @@ describe('T-171 / DEF-129 — commissary_item_map', () => {
     expect(row).toBeUndefined();
   });
 });
+
+describe('T-343 S5.3 — upsertCommissaryLink refuses a store supplying itself, in human terms', () => {
+  it('userMessage is the plain rule-4 sentence, never the raw function-name prefix', async () => {
+    const f = await fixture();
+    const caught = await asOrg(f.orgId, (tx) =>
+      upsertCommissaryLink(tx, f.comManager, { commissaryStoreId: f.commissaryId, branchStoreId: f.commissaryId }),
+    ).then(
+      () => null,
+      (e: unknown) => e as Error,
+    );
+
+    expect(caught, 'the self-supply link was not refused at all').not.toBeNull();
+    expect(caught!.message).toMatch(/^upsertCommissaryLink:/);
+    const userMessage = (caught as { userMessage?: string }).userMessage;
+    expect(userMessage, 'must carry a userMessage').toBeDefined();
+    expect(userMessage).not.toMatch(/^upsertCommissaryLink:/);
+    expect(userMessage).toBe(
+      'A store cannot supply itself — the commissary and the branch must be two different stores.',
+    );
+  }, 30000);
+});

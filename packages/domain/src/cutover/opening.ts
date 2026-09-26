@@ -21,6 +21,7 @@
 import { cutoverRepo, journalRepo, transaction, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { parseMoneyInput } from '../shared/money-input';
+import { gone, refuse } from '../shared/refusal';
 
 export const OPENING_EQUITY_CODE = '3900';
 export const OPENING_SOURCE_TYPE = 'opening_balance';
@@ -59,20 +60,26 @@ export async function addOpeningFigure(
     await authorize(trx, actor, 'run_cutover', {});
 
     if (input.accountCode === OPENING_EQUITY_CODE) {
-      throw new Error(
+      throw refuse(
         'addOpeningFigure: 3900 is the other half of every opening figure, not a figure of its ' +
           'own. Entering it directly would let the difference be plugged to zero by hand, which ' +
           'is the one thing this is built not to allow.',
+        '3900 is the other half of every opening figure, not a figure of its own. Entering it ' +
+          'directly would let the difference be plugged to zero by hand, which is the one thing ' +
+          'this is built not to allow.',
       );
     }
     const amount = parseMoneyInput(input.amount, 'addOpeningFigure: the amount');
-    if (!(Number(amount) > 0)) throw new Error('addOpeningFigure: an opening figure has to be greater than zero.');
+    if (!(Number(amount) > 0)) {
+      throw refuse('addOpeningFigure: an opening figure has to be greater than zero.', 'An opening figure has to be greater than zero.');
+    }
 
     const period = await journalRepo.findPeriodForDate(trx, actor.orgId, input.entryDate);
     if (!period) {
-      throw new Error(
+      throw refuse(
         `addOpeningFigure: no fiscal period covers ${input.entryDate}. Create the opening period ` +
           'first — the conversion posts into it.',
+        `No fiscal period covers ${input.entryDate}. Create the opening period first — the conversion posts into it.`,
       );
     }
 
@@ -161,15 +168,16 @@ export async function removeOpeningFigure(
     await authorize(trx, actor, 'run_cutover', {});
     const entry = await journalRepo.findEntryById(trx, input.entryId);
     if (!entry || entry.orgId !== actor.orgId) {
-      throw new Error(`removeOpeningFigure: entry ${input.entryId} does not exist.`);
+      throw gone(`removeOpeningFigure: entry ${input.entryId} does not exist.`, 'opening figure');
     }
     if (entry.sourceType !== OPENING_SOURCE_TYPE) {
-      throw new Error('removeOpeningFigure: that is not an opening-balance entry.');
+      throw refuse('removeOpeningFigure: that is not an opening-balance entry.', 'That is not an opening-balance entry.');
     }
     if (entry.status !== 'draft') {
-      throw new Error(
+      throw refuse(
         'removeOpeningFigure: this has already been posted. The books are open, so a correction ' +
           'is a reversal now, not a deletion.',
+        'This has already been posted. The books are open, so a correction is a reversal now, not a deletion.',
       );
     }
     await cutoverRepo.deleteDraftEntry(trx, actor.orgId, input.entryId);
@@ -199,22 +207,24 @@ export async function postOpeningBalances(
 
     const drafts = await cutoverRepo.openingDrafts(trx, actor.orgId);
     if (drafts.length === 0) {
-      throw new Error('postOpeningBalances: there are no opening figures to post.');
+      throw refuse('postOpeningBalances: there are no opening figures to post.', 'There are no opening figures to post.');
     }
 
     const residual = await cutoverRepo.openingEquityResidual(trx, actor.orgId);
     if (Math.abs(Number(residual)) > EPSILON) {
-      throw new Error(
+      throw refuse(
         `postOpeningBalances: opening balance equity still carries ₱${residual}. This halts — ` +
           'there is no plug account. Find the difference; it has been on screen the whole time.',
+        `Opening balance equity still carries ₱${residual}. This halts — there is no plug account. Find the difference; it has been on screen the whole time.`,
       );
     }
 
     const drift = await cutoverRepo.trialBalanceDrift(trx, actor.orgId);
     if (Math.abs(Number(drift)) > EPSILON) {
-      throw new Error(
+      throw refuse(
         `postOpeningBalances: debits and credits differ by ₱${drift} across the ledger. The books ` +
           'cannot open on an entry that does not balance.',
+        `Debits and credits differ by ₱${drift} across the ledger. The books cannot open on an entry that does not balance.`,
       );
     }
 

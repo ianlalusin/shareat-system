@@ -242,6 +242,52 @@ describe('T-166 doc — the photo gate and basic shape refusals', () => {
     ).rejects.toThrow(/commissary/);
   });
 
+  it('T-343 S5.3: a zero ordered quantity is named by LINE POSITION, never the item id, in userMessage', async () => {
+    const f = await fixture();
+    const caught = await asOrg(f.orgId, (tx) =>
+      createDeliveryDocument(tx, f.staff, {
+        storeId: f.storeId,
+        kind: 'purchase',
+        supplierId: null,
+        referenceNo: null,
+        deliveredOn: '2026-09-01',
+        proofFileId: f.fileId,
+        lines: [baseLine(f, { orderedQuantity: '0' })],
+      }),
+    ).then(
+      () => null,
+      (e: unknown) => e as Error,
+    );
+
+    expect(caught, 'the bad line was not refused at all').not.toBeNull();
+    expect(caught!.message).toContain(f.itemA);
+    const userMessage = (caught as { userMessage?: string }).userMessage;
+    expect(userMessage, 'must carry a userMessage').toBeDefined();
+    expect(userMessage).toMatch(/^Line 1:/);
+    expect(userMessage).not.toContain(f.itemA);
+  }, 30000);
+
+  it('⛔ T-343 S5.3 message-regex: the raw diagnostic stays byte-identical (Invariant 1) — a non-existent proof file id', async () => {
+    const f = await fixture();
+    const fakeFileId = crypto.randomUUID();
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        createDeliveryDocument(tx, f.staff, {
+          storeId: f.storeId,
+          kind: 'purchase',
+          supplierId: null,
+          referenceNo: null,
+          deliveredOn: '2026-09-01',
+          proofFileId: fakeFileId,
+          lines: [baseLine(f)],
+        }),
+      ),
+      // ⛔ Green now and after — `refuse`/`gone` never rewrite `message`, only add `userMessage`
+      // (Invariant 1). Same scenario as this describe's OWN unedited test above, asserted a second,
+      // independent way so a conversion that accidentally changed the raw text fails HERE too.
+    ).rejects.toThrow(/createDeliveryDocument: proof file .+ does not exist in this org/);
+  }, 30000);
+
   it('a delivery with no lines is refused', async () => {
     const f = await fixture();
     await expect(
