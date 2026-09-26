@@ -100,7 +100,7 @@ const CEILINGS: Record<string, number> = {
   'packages/domain/src/sales-days': 0, // T-343 S5.1: 16 -> 0, all converted to refuse/gone/internalFault
   'packages/domain/src/scheduler': 0,
   'packages/domain/src/service-charge': 6,
-  'packages/domain/src/shared': 9,
+  'packages/domain/src/shared': 8, // T-343 S5.3b: 9 -> 8, money-input.ts's parseMoneyInput converted to refuse(...)
   'packages/domain/src/statutory-discounts': 3,
   'packages/domain/src/stock': 8,
   'packages/domain/src/stock-locations': 16,

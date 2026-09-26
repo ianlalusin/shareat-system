@@ -531,3 +531,27 @@ describe('T-343 S5.3 — removeOpeningFigure’s gone-entry refusal, in human te
     expect(userMessage).not.toContain(missingEntryId);
   }, 30000);
 });
+
+describe('T-343 S5.3b — R2: addOpeningFigure’s amount refusal carries a human userMessage', () => {
+  it('amount "1.234": userMessage is capitalised, names neither addOpeningFigure nor the lower-case "the amount —" fragment (was no userMessage at all)', async () => {
+    const f = await fixture('s5-3b-r2');
+
+    const caught = await asOrg(f.orgId, (tx) =>
+      addOpeningFigure(tx, f.admin, {
+        accountCode: '1110', storeId: f.storeId, direction: 'debit', amount: '1.234', entryDate: '2027-01-01',
+      }),
+    ).then(
+      () => null,
+      (e: unknown) => e as Error,
+    );
+
+    expect(caught, 'the bad amount was not refused at all').not.toBeNull();
+    // ⛔ Raw stays byte-identical — R1.5's own promise, re-asserted here (R2's ⛔ half).
+    expect(caught!.message).toBe('addOpeningFigure: the amount — "1.234" is not a valid amount. Use at most two decimal places.');
+    const userMessage = (caught as unknown as { userMessage?: string }).userMessage;
+    expect(userMessage, 'must carry a userMessage').toBeDefined();
+    expect(userMessage).toMatch(/^[A-Z]/);
+    expect(userMessage).not.toContain('addOpeningFigure');
+    expect(userMessage).not.toContain('the amount —');
+  }, 30000);
+});

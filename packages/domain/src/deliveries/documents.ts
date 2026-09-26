@@ -63,6 +63,10 @@ export interface CreateDeliveryLineInput {
   readonly unitCost: string;
   /** `null` — undecided; parked in Receiving at receive time (T-166 invariant 5). */
   readonly locationId: string | null;
+  /** S5.3b R3 — the operator's own VISIBLE form row (1-based), assigned by the caller BEFORE it
+   *  drops any empty rows. Falls back to the post-filter array position when a caller omits it
+   *  (existing callers, tests), so "Line n" still names something rather than nothing. */
+  readonly lineNo?: number;
 }
 
 export interface CreateDeliveryInput {
@@ -118,7 +122,10 @@ export async function createDeliveryDocument(
   // citing DEF-077's own regression: a photo gate that only checks "a string was given" isn't one).
   const file = await filesRepo.getById(tx, actor.orgId, input.proofFileId);
   if (!file) {
-    throw gone(`createDeliveryDocument: proof file ${input.proofFileId} does not exist in this org`, 'proof photo');
+    throw refuse(
+      `createDeliveryDocument: proof file ${input.proofFileId} does not exist in this org`,
+      'That photo could not be found — try attaching it again.',
+    );
   }
 
   // T-328/DEF-382 — the validated value is CAPTURED and used below, not merely checked and
@@ -130,16 +137,20 @@ export async function createDeliveryDocument(
   for (const [i, line] of input.lines.entries()) {
     // R4.9 — named by LINE POSITION, never the item id: at this point the line hasn't been proved
     // to name a real item yet, so a position is the only human key available.
+    // S5.3b R3 — `lineNo` is the operator's own VISIBLE form row, assigned by the caller before it
+    // drops empty rows; the post-filter array index (`i + 1`) is only a fallback for callers that
+    // never numbered their rows (existing callers, tests).
+    const n = line.lineNo ?? i + 1;
     if (!isPositiveQuantity(quantity(line.orderedQuantity))) {
       throw refuse(
         `createDeliveryDocument: item ${line.itemId}'s ordered quantity must be greater than zero`,
-        `Line ${i + 1}: the ordered quantity must be greater than zero.`,
+        `Line ${n}: the ordered quantity must be greater than zero.`,
       );
     }
     if (!(Number.isFinite(Number(line.conversionFactor)) && Number(line.conversionFactor) > 0)) {
       throw refuse(
         `createDeliveryDocument: item ${line.itemId}'s conversion factor must be greater than zero`,
-        `Line ${i + 1}: the conversion factor must be greater than zero.`,
+        `Line ${n}: the conversion factor must be greater than zero.`,
       );
     }
     // ⛔ Unvalidated before this: the string reached `delivery_lines.unit_cost` (declared
@@ -151,7 +162,7 @@ export async function createDeliveryDocument(
     // legitimate unit cost (a free sample, a promotional item) and the shape allows it, same as
     // the other two lines above.
     validatedUnitCosts.push(
-      parseFourDecimalCost(line.unitCost, `createDeliveryDocument: item ${line.itemId}'s unit cost`, `Line ${i + 1}: the unit cost`),
+      parseFourDecimalCost(line.unitCost, `createDeliveryDocument: item ${line.itemId}'s unit cost`, `Line ${n}: the unit cost`),
     );
   }
 
@@ -318,6 +329,7 @@ export async function receiveDeliveryDocument(
       conversionFactor: line.conversionFactor,
       unitCost: line.unitCost,
       locationId,
+      lineNo: line.lineNo,
     });
   }
 
@@ -354,15 +366,13 @@ export async function receiveDeliveryDocument(
   if (!outcome.ok) {
     // ⛔ The header and line updates above already wrote. THROW so the whole transaction unwinds
     // rather than leaving a `received` document with nothing posted — T-166 §7.2's own lesson,
-    // repeated here one layer up.
-    // `receive.ts` (S5.5+, out of scope) has no `userReason` of its own YET — read defensively so
-    // this keeps working the day it gains one, without editing that file now. Never `outcome.reason`
-    // itself in the sentence; that is `receive.ts`'s own unconverted, potentially id-bearing raw.
-    const innerUserReason = (outcome as { userReason?: unknown }).userReason;
+    // repeated here one layer up. S5.3b — `receive.ts`'s own `userReason` (all four of its
+    // reasons now carry one). Never `outcome.reason` itself in the sentence; that is the raw,
+    // unsanitised diagnostic.
     throw refuse(
       `receiveDeliveryDocument: ${outcome.reason}`,
-      typeof innerUserReason === 'string' && innerUserReason.trim() !== ''
-        ? innerUserReason
+      outcome.userReason && outcome.userReason.trim() !== ''
+        ? outcome.userReason
         : "This delivery couldn't be received. Reload the page and try again.",
     );
   }

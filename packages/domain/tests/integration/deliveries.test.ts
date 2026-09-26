@@ -664,3 +664,104 @@ describe('T-166 doc — a received delivery is immutable, and store scope is enf
     ).rejects.toThrow(/not answered/);
   });
 });
+
+describe('T-343 S5.3b — R1: receiveDeliveryDocument surfaces receiveDelivery’s own userReason', () => {
+  it('every line received as zero: userMessage is receive.ts’s own userReason, not "…Reload the page and try again." (was the generic fallback)', async () => {
+    const f = await fixture();
+    const created = await asOrg(f.orgId, (tx) =>
+      createDeliveryDocument(tx, f.staff, {
+        storeId: f.storeId,
+        kind: 'purchase',
+        supplierId: null,
+        referenceNo: null,
+        deliveredOn: '2026-09-01',
+        proofFileId: f.fileId,
+        lines: [baseLine(f)],
+      }),
+    );
+    const [line] = await linesOf(created.deliveryId);
+
+    const caught = await asOrg(f.orgId, (tx) =>
+      receiveDeliveryDocument(tx, f.staff, {
+        deliveryId: created.deliveryId,
+        lines: [{ lineId: line!.id, receivedQuantity: '0' }],
+      }),
+    ).then(
+      () => null,
+      (e: unknown) => e as Error,
+    );
+
+    expect(caught, 'receiving nothing was not refused at all').not.toBeNull();
+    expect(caught!.message).toContain('every line was received as zero — nothing to post');
+    const userMessage = (caught as unknown as { userMessage?: string }).userMessage;
+    expect(userMessage, 'must carry a userMessage').toBeDefined();
+    expect(userMessage).not.toBe("This delivery couldn't be received. Reload the page and try again.");
+    expect(userMessage).toMatch(/^[A-Z]/);
+    expect(userMessage).toMatch(/\.$/);
+  }, 30000);
+});
+
+describe('T-343 S5.3b — R3: "Line n" names the operator’s VISIBLE form row, not the post-filter array index', () => {
+  it('a bad row 3, after an empty row 2 was dropped: "Line 3:", not "Line 2:" (was the array-index number)', async () => {
+    const f = await fixture();
+    // Simulates what `inventory/deliveries/actions.ts` will send once it numbers rows BEFORE
+    // dropping empties: row 2 (truly empty — no itemId at all) never reaches here; rows 1 and 3
+    // carry their ORIGINAL form position as `lineNo`. Assigned via a variable, not an inline
+    // literal, so TS's excess-property check does not fire on a field `CreateDeliveryLineInput`
+    // does not declare yet (R3 adds it to the domain side).
+    const lines = [
+      baseLine(f),
+      { ...baseLine(f, { orderedQuantity: '0' }), lineNo: 3 },
+    ];
+
+    const caught = await asOrg(f.orgId, (tx) =>
+      createDeliveryDocument(tx, f.staff, {
+        storeId: f.storeId,
+        kind: 'purchase',
+        supplierId: null,
+        referenceNo: null,
+        deliveredOn: '2026-09-01',
+        proofFileId: f.fileId,
+        lines,
+      }),
+    ).then(
+      () => null,
+      (e: unknown) => e as Error,
+    );
+
+    expect(caught, 'the bad line was not refused at all').not.toBeNull();
+    const userMessage = (caught as unknown as { userMessage?: string }).userMessage;
+    expect(userMessage, 'must carry a userMessage').toBeDefined();
+    expect(userMessage).toMatch(/^Line 3:/);
+    expect(userMessage).not.toMatch(/^Line 2:/);
+  }, 30000);
+});
+
+describe('T-343 S5.3b — R4: a gone proof photo carries its own sentence, not the generic gone( ) wording', () => {
+  it('userMessage === "That photo could not be found — try attaching it again." (was goneSentence(\'proof photo\'))', async () => {
+    const f = await fixture();
+    const fakeFileId = crypto.randomUUID();
+
+    const caught = await asOrg(f.orgId, (tx) =>
+      createDeliveryDocument(tx, f.staff, {
+        storeId: f.storeId,
+        kind: 'purchase',
+        supplierId: null,
+        referenceNo: null,
+        deliveredOn: '2026-09-01',
+        proofFileId: fakeFileId,
+        lines: [baseLine(f)],
+      }),
+    ).then(
+      () => null,
+      (e: unknown) => e as Error,
+    );
+
+    expect(caught, 'the missing photo was not refused at all').not.toBeNull();
+    // ⛔ Raw stays byte-identical — R1.5's own promise, re-asserted here (R4's ⛔ half).
+    expect(caught!.message).toBe(`createDeliveryDocument: proof file ${fakeFileId} does not exist in this org`);
+    const userMessage = (caught as unknown as { userMessage?: string }).userMessage;
+    expect(userMessage, 'must carry a userMessage').toBeDefined();
+    expect(userMessage).toBe('That photo could not be found — try attaching it again.');
+  }, 30000);
+});

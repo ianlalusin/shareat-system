@@ -353,3 +353,84 @@ describe('T-166 — the line-level controls', () => {
     ).rejects.toThrow(/supplier_reference_key/);
   });
 });
+
+/** T-343 S5.3b R1's own criteria: id-free, capitalised, ends ".", no "COA" citation, no quoted kind. */
+function assertHumanUserReason(userReason: unknown): asserts userReason is string {
+  expect(typeof userReason, 'must carry a userReason').toBe('string');
+  const s = userReason as string;
+  expect(s, 'must be capitalised').toMatch(/^[A-Z]/);
+  expect(s, 'must end with a period').toMatch(/\.$/);
+  expect(s, 'must never carry a UUID').not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+  expect(s, 'must never cite COA-ALIGNMENT').not.toContain('COA');
+  expect(s, 'must never carry a quoted kind key').not.toMatch(/"[a-z_]+"/);
+}
+
+describe('T-343 S5.3b — R1: receiveDelivery’s four Outcome reasons each carry a userReason', () => {
+  it('no lines: raw stays byte-identical, userReason is human (was no userReason at all)', async () => {
+    const deliveryId = await makeDelivery('purchase');
+    const res = await withOrgPrincipal(orgA, (tx) =>
+      receiveDelivery(tx, {
+        orgId: orgA, storeId: storeA, deliveryId, deliveredOn: '2026-08-20',
+        locations: locations(), receivedBy: personA,
+        lines: [],
+      }),
+    );
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.reason).toBe('a delivery with no lines receives nothing');
+    assertHumanUserReason((res as unknown as { userReason?: unknown }).userReason);
+  });
+
+  it('every line received as zero: raw stays byte-identical, userReason is human (was no userReason at all)', async () => {
+    const deliveryId = await makeDelivery('purchase');
+    const res = await withOrgPrincipal(orgA, (tx) =>
+      receiveDelivery(tx, {
+        orgId: orgA, storeId: storeA, deliveryId, deliveredOn: '2026-08-20',
+        locations: locations(), receivedBy: personA,
+        lines: [
+          { lineId: '1', itemId: itemA, itemKind: 'raw_material', receivedQuantity: quantity('0'), conversionFactor: '1', unitCost: '1.0000', locationId: kitchen },
+          { lineId: '2', itemId: itemB, itemKind: 'supply', receivedQuantity: quantity('0'), conversionFactor: '1', unitCost: '1.0000', locationId: kitchen },
+        ],
+      }),
+    );
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.reason).toBe('every line was received as zero — nothing to post');
+    assertHumanUserReason((res as unknown as { userReason?: unknown }).userReason);
+  });
+
+  it('no location and nowhere to park it: raw stays byte-identical, userReason is human (was no userReason at all)', async () => {
+    const deliveryId = await makeDelivery('purchase');
+    const res = await withOrgPrincipal(orgA, (tx) =>
+      receiveDelivery(tx, {
+        orgId: orgA, storeId: storeA, deliveryId, deliveredOn: '2026-08-20',
+        locations: [], receivedBy: personA,
+        lines: [{ lineId: '1', itemId: itemA, itemKind: 'raw_material', receivedQuantity: quantity('5'), conversionFactor: '1', unitCost: '1.0000', locationId: null }],
+      }),
+    );
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.reason).toBe('a line has no location and the store has no Receiving, default, or active room to park it in');
+    const userReason = (res as unknown as { userReason?: unknown }).userReason;
+    assertHumanUserReason(userReason);
+    // Orchestrator heads-up (2026-09-27): this reason is being reworded to name the line by
+    // position ("Line n") — cheap to pin the shape now rather than the exact wording, which is
+    // about to change.
+    expect(userReason, 'must name the line by position').toContain('Line ');
+  });
+
+  it('an item kind with no inventory account: raw stays byte-identical, userReason drops the COA citation and the quoted kind (was no userReason at all)', async () => {
+    const deliveryId = await makeDelivery('purchase');
+    const res = await withOrgPrincipal(orgA, (tx) =>
+      receiveDelivery(tx, {
+        orgId: orgA, storeId: storeA, deliveryId, deliveredOn: '2026-08-20',
+        locations: locations(), receivedBy: personA,
+        lines: [{ lineId: '1', itemId: itemA, itemKind: 'nonexistent_kind', receivedQuantity: quantity('5'), conversionFactor: '1', unitCost: '1.0000', locationId: kitchen }],
+      }),
+    );
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.reason).toBe('item kind "nonexistent_kind" has no inventory account in COA-ALIGNMENT §4.1');
+    assertHumanUserReason((res as unknown as { userReason?: unknown }).userReason);
+  });
+});

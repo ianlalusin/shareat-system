@@ -69,7 +69,7 @@ export async function addOpeningFigure(
           'this is built not to allow.',
       );
     }
-    const amount = parseMoneyInput(input.amount, 'addOpeningFigure: the amount');
+    const amount = parseMoneyInput(input.amount, 'addOpeningFigure: the amount', 'This amount');
     if (!(Number(amount) > 0)) {
       throw refuse('addOpeningFigure: an opening figure has to be greater than zero.', 'An opening figure has to be greater than zero.');
     }

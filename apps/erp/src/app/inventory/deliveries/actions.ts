@@ -21,6 +21,7 @@ import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { peso } from '../../../lib/format';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
+import { isPresentable } from '../../../lib/error-shape';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -41,26 +42,25 @@ const SHORTAGE_REASON_VALUES: readonly string[] = [
   'other',
 ];
 
-/** Strips the throwing function's name — right for a log, useless on screen. Maps the handful of
- *  known refusals (authorize denials, T-166's own DB CHECKs and trigger) onto a sentence a
- *  cashier or manager can act on; anything else falls back to the raw message with its prefix
- *  trimmed. */
+/**
+ * Strips the throwing function's name — right for a log, useless on screen. Maps the handful of
+ * known refusals (T-166's own DB CHECKs and trigger) onto a sentence a cashier or manager can act
+ * on; anything else falls back to the raw message with its prefix trimmed.
+ *
+ * T-343 S5.1d — DEF-450. Every `AuthorizationError` `authorize` throws already carries the S2/S2b
+ * `userMessage`; presentable wins first. The old three branches — the two capability-name checks
+ * (`receive_delivery`, `allow_over_receipt`) plus the store-scope-refusal shape — answered a
+ * generic sentence for every refusal on either capability regardless of the real reason — deleted,
+ * not bypassed.
+ *
+ * T-343 S5.3b — the proof-file branch that used to live here moved into the domain itself
+ * (`deliveries/documents.ts`'s own `refuse(…)`, the better of the two wordings), and is deleted
+ * from here as dead code: presentable answers first, before this local regex ever runs.
+ */
 function errorMessage(err: unknown): string {
+  if (isPresentable(err)) return sharedErrorMessage(err);
   const raw = err instanceof Error ? err.message : String(err);
 
-  if (/may not 'receive_delivery'/.test(raw)) {
-    return 'Recording or receiving a delivery needs at least staff access to this store.';
-  }
-  if (/may not 'allow_over_receipt'/.test(raw)) {
-    return 'Only a manager or admin can approve receiving more than what was ordered — untick ' +
-      '"allow over-receipt", or ask a manager to receive it.';
-  }
-  if (/no store scope/.test(raw)) {
-    return 'You are not assigned to the store this delivery belongs to.';
-  }
-  if (/proof file .* does not exist/.test(raw)) {
-    return 'That photo could not be found — try attaching it again.';
-  }
   if (/must name its supplier/.test(raw)) {
     return 'A supplier delivery must name its supplier.';
   }
@@ -126,6 +126,9 @@ export async function createDeliveryAction(fd: FormData): Promise<void> {
   const locationIds = strs(fd, 'locationId');
   // A row whose item was never picked is an empty row, not an error — skipped. A row WITH an item
   // and no quantity is a real mistake, and the domain says so.
+  // T-343 S5.3b R3 — numbered BEFORE the filter drops empty rows, so `lineNo` is the operator's own
+  // VISIBLE form row position, not the array index of whatever survives filtering. A middle row
+  // left entirely blank must not shift every later row's "Line n" down by one.
   const lines = itemIds
     .map((itemId, i) => ({
       itemId,
@@ -142,6 +145,7 @@ export async function createDeliveryAction(fd: FormData): Promise<void> {
       // the same as a genuinely blank box already would if the field were not `required`.
       unitCost: unitCosts[i] ?? '',
       locationId: locationIds[i] || null,
+      lineNo: i + 1,
     }))
     .filter((l) => l.itemId && l.orderedQuantity);
 

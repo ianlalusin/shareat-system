@@ -46,6 +46,10 @@ export interface ReceiveLineInput {
   readonly unitCost: string;
   /** NULL parks the line in Receiving — see this file's header. */
   readonly locationId: string | null;
+  /** S5.3b — the DB line's own position, named in the no-location refusal below. Optional: this
+   *  function has direct test callers that build lines by hand with no `lineNo` at all, and the
+   *  refusal falls back to a deictic phrase when it is absent. */
+  readonly lineNo?: string;
 }
 
 export interface ReceiveDeliveryInput {
@@ -68,7 +72,7 @@ export interface ReceiveResult {
   readonly totalValue: Money;
 }
 
-export type ReceiveOutcome = ReceiveResult | { readonly ok: false; readonly reason: string };
+export type ReceiveOutcome = ReceiveResult | { readonly ok: false; readonly reason: string; readonly userReason?: string };
 
 /**
  * Receive a delivery: stock in, cost layered, value posted — atomically.
@@ -78,16 +82,24 @@ export type ReceiveOutcome = ReceiveResult | { readonly ok: false; readonly reas
  */
 export async function receiveDelivery(tx: Tx, input: ReceiveDeliveryInput): Promise<ReceiveOutcome> {
   if (input.lines.length === 0) {
-    return { ok: false, reason: 'a delivery with no lines receives nothing' };
+    return {
+      ok: false,
+      reason: 'a delivery with no lines receives nothing',
+      userReason: 'A delivery with no lines receives nothing.',
+    };
   }
 
   const parkingLocation = resolveReceivingLocation(input.locations);
   if (!parkingLocation && input.lines.some((l) => l.locationId === null)) {
     // ⛔ Refuse rather than invent a room. A store with no active location cannot hold stock, and
     // writing the movement anyway is exactly how v1 lost it.
+    const idx = input.lines.findIndex((l) => l.locationId === null);
+    const unparkable = input.lines[idx]!;
+    const n = unparkable.lineNo ?? String(idx + 1);
     return {
       ok: false,
       reason: 'a line has no location and the store has no Receiving, default, or active room to park it in',
+      userReason: `Line ${n} has no location, and the store has no Receiving, default, or active room to park it in.`,
     };
   }
 
@@ -103,6 +115,7 @@ export async function receiveDelivery(tx: Tx, input: ReceiveDeliveryInput): Prom
       return {
         ok: false,
         reason: `item kind "${line.itemKind}" has no inventory account in COA-ALIGNMENT §4.1`,
+        userReason: "This item's kind has no inventory account set up. Ask an admin to fix it before receiving this item.",
       };
     }
   }
@@ -159,7 +172,11 @@ export async function receiveDelivery(tx: Tx, input: ReceiveDeliveryInput): Prom
   }
 
   if (receiptLines.length === 0) {
-    return { ok: false, reason: 'every line was received as zero — nothing to post' };
+    return {
+      ok: false,
+      reason: 'every line was received as zero — nothing to post',
+      userReason: 'Every line was received as zero — nothing to post.',
+    };
   }
 
   const posted = await postReceiptValue(tx, {
