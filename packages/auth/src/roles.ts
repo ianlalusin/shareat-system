@@ -24,10 +24,11 @@
  * SQL is written. This file only decides WHAT to write (the elevated set, the revoke-then-
  * insert sequence for a role change) and calls the repo to write it.
  */
-import { accessRepo, personsRepo, type Tx } from '@shareat/db';
+import { accessRepo, goneSentence, personsRepo, refuse, type Tx } from '@shareat/db';
 import {
   CAPABILITIES,
   ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER,
+  ROLE_LABEL,
   SUPER_ADMIN_ONLY_CAPABILITIES,
   type Capability,
 } from './capabilities';
@@ -346,6 +347,7 @@ export async function assignRoleAsActor(
     throw new AuthorizationError(
       'assignRoleAsActor: an actor may not change their own role — ask another admin, so a mistake here cannot lock the org out',
       'manage_users',
+      'An actor may not change their own role — ask another admin, so a mistake here cannot lock the org out.',
     );
   }
 
@@ -367,6 +369,7 @@ export async function assignRoleAsActor(
     throw new AuthorizationError(
       `assignRoleAsActor: person ${input.personId} does not exist in org ${actor.orgId}`,
       'manage_users',
+      goneSentence('person'),
     );
   }
   // ⛔ T-304 — a terminal (option (a)'s `persons` row for a shared store credential) holds no
@@ -376,6 +379,7 @@ export async function assignRoleAsActor(
     throw new AuthorizationError(
       'assignRoleAsActor: a terminal credential is not a person and may not hold a role',
       'manage_users',
+      'A terminal credential is not a person and may not hold a role.',
     );
   }
 
@@ -395,6 +399,7 @@ export async function assignRoleAsActor(
           `admin holding every capability super_admin has and admin does not (bible row 116 — only ` +
           `a super-admin appoints an admin); actor holds '${actorRole?.role ?? 'no role'}'`,
         'manage_users',
+        `Only a super admin can make someone ${ROLE_LABEL[input.role]}. Your role is ${actorRole ? ROLE_LABEL[actorRole.role] : 'none'}.`,
       );
     }
   }
@@ -452,6 +457,7 @@ export async function assignRoleAsActor(
           `'${targetRole.role}' any more, only the system owner can make it; you hold ` +
           `'${actorRole?.role ?? 'no role'}'`,
         'manage_users',
+        `This person is ${ROLE_LABEL[targetRole.role]}, which outranks you, so you can't change their role.`,
       );
     }
   }
@@ -496,6 +502,9 @@ export async function assignRoleAsActor(
           'appoint another admin or super_admin who holds a credential first, or the org is left ' +
           'with nobody able to manage users',
         'manage_users',
+        "Refusing to demote this org's only active admin who can sign in — appoint another admin " +
+          'or super admin who holds a credential first, or the org is left with nobody able to ' +
+          'manage users.',
       );
     }
   }
@@ -570,11 +579,15 @@ export async function grantCapabilityAsActor(
     throw new AuthorizationError(
       'grantCapabilityAsActor: an actor may not grant themselves a capability — ask another admin, so nobody can widen their own authority',
       'grant_capability',
+      'An actor may not grant themselves a capability — ask another admin, so nobody can widen their own authority.',
     );
   }
 
   if (!CAPABILITIES.includes(input.capability)) {
-    throw new Error(`grantCapabilityAsActor: '${input.capability}' is not a known capability.`);
+    throw refuse(
+      `grantCapabilityAsActor: '${input.capability}' is not a known capability.`,
+      "That isn't a permission this system knows.",
+    );
   }
 
   // ⛔ T-304 — same rule and same shape as `assignRoleAsActor`: existence checked first (so
@@ -586,12 +599,14 @@ export async function grantCapabilityAsActor(
     throw new AuthorizationError(
       `grantCapabilityAsActor: person ${input.personId} does not exist in org ${actor.orgId}`,
       'grant_capability',
+      goneSentence('person'),
     );
   }
   if (target.kind === 'terminal') {
     throw new AuthorizationError(
       'grantCapabilityAsActor: a terminal credential is not a person and may not hold a capability',
       'grant_capability',
+      'A terminal credential is not a person and may not hold a capability.',
     );
   }
 

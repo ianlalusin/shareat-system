@@ -7,8 +7,9 @@
  * same row lives in the new describes added to `t341-position-grants-per-store.test.ts` (I1-I6b)
  * and `authorize.test.ts` (I7).
  *
- * ⛔ RED today: `accessRepo.positionGrantsElsewhere` does not exist, and `authorize.ts`'s row 5 makes
- * no lookup at all — every leg below fails for the reason the §S2b table states.
+ * ⛔ Was red before the builder: `accessRepo.positionGrantsElsewhere` did not exist, and
+ * `authorize.ts`'s row 5 made no lookup at all — every leg below failed for the reason the §S2b
+ * table states.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';

@@ -24,7 +24,7 @@
  * ends that person's live sessions. A revoked row beside a live session is the same defect wearing
  * different clothes.
  */
-import { sessionsRepo, accessRepo, personsRepo, type Tx } from '@shareat/db';
+import { sessionsRepo, accessRepo, goneSentence, personsRepo, refuse, type Tx } from '@shareat/db';
 import { authorize, type Actor } from './authorize';
 import { AuthorizationError } from './errors';
 
@@ -45,6 +45,7 @@ async function requirePersonInOrg(tx: Tx, actor: Actor, personId: string): Promi
     throw new AuthorizationError(
       `person ${personId} does not exist in org ${actor.orgId}`,
       'manage_users',
+      goneSentence('person'),
     );
   }
 }
@@ -64,18 +65,28 @@ async function requirePersonInOrg(tx: Tx, actor: Actor, personId: string): Promi
  */
 function validUid(raw: string): string {
   const uid = raw.trim();
-  if (!uid) throw new Error('Paste the Firebase uid for the account to link.');
+  if (!uid) {
+    throw refuse('Paste the Firebase uid for the account to link.', 'Paste the Firebase uid for the account to link.');
+  }
   if (uid.includes('@')) {
-    throw new Error(
+    throw refuse(
+      'That looks like an email address. Paste the account\'s Firebase uid from the console — the ' +
+        'person still signs in with their email and password.',
       'That looks like an email address. Paste the account\'s Firebase uid from the console — the ' +
         'person still signs in with their email and password.',
     );
   }
   if (/\s/.test(uid)) {
-    throw new Error('A Firebase uid contains no spaces. Copy just the uid from the console.');
+    throw refuse(
+      'A Firebase uid contains no spaces. Copy just the uid from the console.',
+      'A Firebase uid contains no spaces. Copy just the uid from the console.',
+    );
   }
   if (uid.length > 128) {
-    throw new Error('That is too long to be a Firebase uid (the longest is 128 characters).');
+    throw refuse(
+      'That is too long to be a Firebase uid (the longest is 128 characters).',
+      'That is too long to be a Firebase uid (the longest is 128 characters).',
+    );
   }
   return uid;
 }
@@ -186,7 +197,8 @@ export async function unlinkCredential(
    */
   const reason = input.reason.trim();
   if (!reason) {
-    throw new Error(
+    throw refuse(
+      'Unlinking a sign-in account needs a reason — a revoked credential nobody can explain is not an audit trail.',
       'Unlinking a sign-in account needs a reason — a revoked credential nobody can explain is not an audit trail.',
     );
   }
@@ -208,7 +220,10 @@ export async function unlinkCredential(
   const live = await sessionsRepo.listLiveForPerson(tx, input.personId);
   const target = live.find((c) => c.id === input.credentialId);
   if (!target) {
-    throw new Error('That sign-in account is not linked to this person, or it has already been unlinked.');
+    throw refuse(
+      'That sign-in account is not linked to this person, or it has already been unlinked.',
+      'That sign-in account is not linked to this person, or it has already been unlinked.',
+    );
   }
 
   await refuseIfLastWayIn(tx, actor, input.personId, live.length);
@@ -262,5 +277,7 @@ async function refuseIfLastWayIn(
     'This is the last way into this organisation. Give someone else an admin role, or issue this ' +
       'person a PIN, before unlinking it.',
     'manage_users',
+    'This is the last way into this organisation. Give someone else an admin role, or issue this ' +
+      'person a PIN, before unlinking it.',
   );
 }

@@ -81,6 +81,13 @@ function joinList(items: readonly string[]): string {
 export function jobIsElsewhere(capability: Capability, here: { name: string; code: string } | undefined, jobs: readonly JobElsewhere[]): string {
   const H = here ? `${clean(here.name)} (${clean(here.code)})` : 'that store';
 
+  // DEF-447c — `jobs` is empty only if a future caller skips `authorize.ts`'s own `jobs.length`
+  // check; there is no `role` here to build `roleMayNot`, so this drops the (otherwise empty)
+  // "jobs that let you" clause rather than print one that names nothing.
+  if (jobs.length === 0) {
+    return `You can't ${CAPABILITY_LABEL[capability]} at ${H}. Ask an admin if you need to do it here too.`;
+  }
+
   const groups: { storeName: string; storeCode: string; positions: string[] }[] = [];
   const byStore = new Map<string, (typeof groups)[number]>();
   for (const job of jobs) {

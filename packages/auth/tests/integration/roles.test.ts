@@ -1105,3 +1105,66 @@ describe('DEF-234 — removal requires rank', () => {
     expect((await roleOf(newcomer, org))?.role).toBe('staff');
   });
 });
+
+// ---------------------------------------------------------------------------------------
+// T-343 S5a — K2, K3, K4. `docs/tasks/343-def-417-human-readable-refusals.md` §S5a.
+// `assignRoleAsActor`'s two id-shaped `AuthorizationError`s (`roles.ts:367,393`) gain a third
+// `userMessage` argument; K4 pins the RAW (first-argument) diagnostic byte-identical to today.
+//
+// ⛔ Was red before S5a: neither `roles.ts:367` nor `:393` carried a third argument at all, so
+// `userMessage` was `undefined` for both — K2/K3 failed with "undefined does not match/contain …",
+// exactly K1's own "expected red: undefined" for both legs.
+// ---------------------------------------------------------------------------------------
+
+describe('T-343 S5a — K2/K3: assignRoleAsActor’s id-shaped refusals gain a human userMessage', () => {
+  it('K2: assigning super_admin without the authority names the role, never the raw key', async () => {
+    const org = await insertOrg('s5a-k2');
+    const actor = await insertPerson(org, 'Ordinary Admin');
+    await insertRoleRaw(actor, org, 'admin');
+    await giveCredential(actor);
+    const target = await insertPerson(org, 'Target Person');
+    await insertRoleRaw(target, org, 'staff');
+
+    const caught = await asPerson(org, (tx) =>
+      assignRoleAsActor(tx, actorOf(actor, org), { personId: target, role: 'super_admin' }),
+    ).then(
+      () => null,
+      (e: unknown) => e as AuthorizationError,
+    );
+
+    expect(caught, 'the assignment was not refused at all').not.toBeNull();
+    // K4 — the raw diagnostic stays byte-identical to today (K1's allowlist pins this exact text).
+    expect(caught!.message).toBe(
+      "assignRoleAsActor: assigning 'super_admin' requires super_admin — the role itself, or an " +
+        'admin holding every capability super_admin has and admin does not (bible row 116 — only ' +
+        "a super-admin appoints an admin); actor holds 'admin'",
+    );
+    const userMessage = (caught as unknown as { userMessage?: string }).userMessage;
+    expect(userMessage, 'must carry a userMessage').toBeDefined();
+    expect(userMessage).toContain('Super admin');
+    expect(userMessage).not.toContain("'super_admin'");
+  });
+
+  it('K3: assigning a role to a missing person → the S3 gone sentence, no UUID', async () => {
+    const org = await insertOrg('s5a-k3');
+    const actor = await insertPerson(org, 'Ordinary Admin');
+    await insertRoleRaw(actor, org, 'admin');
+    await giveCredential(actor);
+    const missingPersonId = '00000000-0000-4000-8000-000000000000';
+
+    const caught = await asPerson(org, (tx) =>
+      assignRoleAsActor(tx, actorOf(actor, org), { personId: missingPersonId, role: 'staff' }),
+    ).then(
+      () => null,
+      (e: unknown) => e as AuthorizationError,
+    );
+
+    expect(caught, 'the assignment was not refused at all').not.toBeNull();
+    // K4 — the raw diagnostic stays byte-identical to today (K1's allowlist pins this exact text).
+    expect(caught!.message).toBe(`assignRoleAsActor: person ${missingPersonId} does not exist in org ${org}`);
+    const userMessage = (caught as unknown as { userMessage?: string }).userMessage;
+    expect(userMessage, 'must carry a userMessage').toBeDefined();
+    expect(userMessage).toMatch(/^That person could not be found\./);
+    expect(userMessage).not.toContain(missingPersonId);
+  });
+});

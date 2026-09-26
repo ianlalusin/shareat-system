@@ -519,11 +519,11 @@ describe('T-343 S2b — I6 (⛔): a cross-org plant never leaks org Y’s store,
     } catch (err) {
       plantError = err;
     }
-    if (plantError) {
-      // A guard refused the cross-org plant outright — record it verbatim; nothing further to check.
-      console.warn('I6: cross-org plant refused —', (plantError as Error).message);
-      return;
-    }
+    // /code-review (2026-09-27): a silent `console.warn` + `return` here let this leg pass while
+    // asserting nothing, if the plant were ever refused. Fail loudly instead — this leg's whole
+    // point is to prove the refusal stays clean WITH the plant in place, not merely that a guard
+    // exists somewhere.
+    expect(plantError, `the cross-org plant must succeed for this leg to test anything: ${(plantError as Error | undefined)?.message}`).toBeUndefined();
 
     let caught: unknown;
     try {
@@ -558,10 +558,9 @@ describe('T-343 S2b — I6b (⛔): positionGrantsElsewhere itself, on a BYPASSRL
     } catch (err) {
       plantError = err;
     }
-    if (plantError) {
-      console.warn('I6b: cross-org plant refused —', (plantError as Error).message);
-      return;
-    }
+    // /code-review (2026-09-27): same fix as I6 — fail loudly if the plant is ever refused, rather
+    // than passing while asserting nothing.
+    expect(plantError, `the cross-org plant must succeed for this leg to test anything: ${(plantError as Error | undefined)?.message}`).toBeUndefined();
 
     // NO `asOrg` — a plain `transaction()` is the BYPASSRLS fixture connection (T-341/DEF-414's own
     // `asOrg` restricted-role wrapper is deliberately not used here; see the leg's own note: FORCED

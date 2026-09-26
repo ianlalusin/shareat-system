@@ -1,16 +1,15 @@
 /**
- * T-343 S2b — J1-J5: `jobIsElsewhere` (new, `refusal-text.ts`), the DEF-430 sentence.
+ * T-343 S2b — J1-J6: `jobIsElsewhere` (`refusal-text.ts`), the DEF-430 sentence.
  * docs/tasks/343-def-417-human-readable-refusals.md §S2b Design 1.
  *
- * ⛔ TESTER, not BUILDER — `jobIsElsewhere`/`JobElsewhere` do not exist yet; every call below is
- * expected to fail (`jobIsElsewhere is not a function`) until S2b lands (same posture as
+ * ⛔ Was red before the builder: `jobIsElsewhere`/`JobElsewhere` did not exist, so every call below
+ * failed (`jobIsElsewhere is not a function`) until S2b landed (same posture as
  * `t343-refusal-text.test.ts`'s own header for S2, which stays unedited).
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { CAPABILITIES, type Capability } from '../src/capabilities';
-// ⛔ S2b BUILDER-only export — does not exist yet. Missing today; expected red.
 import { jobIsElsewhere, type JobElsewhere } from '../src/refusal-text';
 
 const UUID_RE = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i;
@@ -121,5 +120,14 @@ describe('J5 (⛔) — refusal-text.ts has exactly one import, from ./capabiliti
     const imports = withoutBlocks.split('\n').filter((line) => /^\s*import\b/.test(line));
     expect(imports).toHaveLength(1);
     expect(imports[0]).toContain("from './capabilities'");
+  });
+});
+
+describe('J6 — jobIsElsewhere([]) never prints an empty jobs clause', () => {
+  it('falls back to the plain "You can\'t … here too." sentence, no ": ." and no "are at other stores"', () => {
+    const sentence = jobIsElsewhere('submit_sales_day', SMK2, []);
+    expect(sentence).toBe("You can't submit a sales day at SmokeStore Two (SMK2). Ask an admin if you need to do it here too.");
+    expect(sentence).not.toContain(': .');
+    expect(sentence).not.toContain('are at other stores');
   });
 });
