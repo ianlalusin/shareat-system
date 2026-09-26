@@ -54,7 +54,7 @@ first and records raw red. Gates: RULES §2 incl. the **full** integration suite
   `/has no active role/` `admin/access-defaults/actions.ts:43`); `production/index.ts:866`
   `/already reversed|does not exist/`; `admin/users/actions.ts:80,104`; ≈45 test files ⇒ **human text is an ADDITIONAL
   field, never a rewrite of `message`.**
-- `authorize()` is used as a probe inside one tx (`ar/index.ts:82-85`, `sales-days/create.ts:266-270`,
+- `authorize()` is used as a probe inside one tx (`ar/index.ts:82-85`, `sales-days/create.ts:284-291` (R4.10),
   `trade/index.ts:70-74`, `admin/stores/lib.ts:60-64`) ⇒ refusal-time lookups must not fail on accepted input.
 - RLS on lookup tables is org isolation only (`0011_row_level_security.sql:83`, `:117`).
 - Shared `errorMessage` imported by 55 files; ≈22 local wrappers (DEF-257 guard
@@ -208,7 +208,7 @@ with `U` in subject and reason → rendered text has no UUID (red: contains `U`)
 - **S6b (DEF-431, folded in by Ian 2026-09-25)** `/admin/users/[id]` "Extra capability grants": show `CAPABILITY_LABEL`
   for held rows and the grant grid, with the key as secondary text at most. Show "…now held in their own right" only
   AFTER "Hold in their own right" succeeds, not beside every row beforehand. Evidence: `~/.claude/skills/orchestrator/tools/t341-admin-users-page.png`.
-- **S2b (DEF-430, folded in by Ian 2026-09-25; lands after T-341)** a store-scoped refusal from axis 3b where the person
+- **S2b (DEF-430, folded in by Ian 2026-09-25; lands after T-341) — now specced in full at §S2b (APPROVED 2026-09-26).** A store-scoped refusal from axis 3b where the person
   holds the capability via a position at OTHER stores must not blame the role. Name the store and where the job is, e.g.
   "…can't submit a sales day at SmokeStore Two — their Cashier job is at SmokeStore." Needs a refusal-only lookup,
   savepointed like S2's. Evidence: `t341-smk2-refusal.png`.
@@ -256,7 +256,7 @@ slice; S1+S2 one push. After S4, DEF-417 part 2 stamped **PARTIAL** (rows 1–6 
 3. **S8 gains** the local wrappers that return raw text before the gate: `admin/access-defaults/actions.ts:57`,
    `staff/actions.ts:43-58`, `inventory/production/actions.ts:37`.
 4. **Hardening:** `isPresentable` also requires `!hasStringCode(err)` so a DB error never jumps its mapped sentence.
-5. **S2 T6 gains a probe-commit case:** `canBypassBlock` (`sales-days/create.ts:266`) refuses a manager who does not
+5. **S2 T6 gains a probe-commit case:** `canBypassBlock` (`sales-days/create.ts:284`, R4.10) refuses a manager who does not
    cover the whole org (a refusal that triggers a lookup), then the same transaction keeps writing and COMMITS — no 25P02.
 6. Nit: use a name-only org read if one exists; else `identityOf` is acceptable.
 
@@ -265,7 +265,7 @@ slice; S1+S2 one push. After S4, DEF-417 part 2 stamped **PARTIAL** (rows 1–6 
    the probe callers then fail later with 25P02. **Each refusal-branch lookup runs inside a SAVEPOINT** (a nested
    `tx.transaction(t => …)`, which drizzle emits as a savepoint) with the catch around it, so a failed lookup rolls
    back only itself. Cost is on the refusal path only; the success path stays query-free (T2).
-2. Probe callers are four, not one: `sales-days/create.ts:266` (`canBypassBlock`), `ar/index.ts:82-84`,
+2. Probe callers are four, not one: `sales-days/create.ts:284` (`canBypassBlock`, R4.10), `ar/index.ts:82-84`,
    `people/index.ts:208-216` (loop over stores), `trade/index.ts:70-77` (`authorizeEither`, loop over capabilities).
    T6 covers `canBypassBlock` AND `authorizeEither`, each with a FORCED lookup error (the tester chooses the mechanism —
    e.g. a role without SELECT on `organizations`/`stores`, or a relation made unavailable inside the test tx) and
@@ -317,7 +317,8 @@ CLASSIFIED_INTERNAL is now pinned by file + message substring, not line.
   `Outcome` `{ ok:false, reason }` (`commissary/outcome.ts:10-12`); apps put `reason` straight into `?error=` with no
   `errorMessage` (`apps/erp/src/app/commissary/discrepancies/actions.ts:59,87`; **`commissary/orders/[id]/actions.ts:106`
   — a bypass S8 does not list**). The S1 UUID gate never sees them. (R1.1: `:106` was mis-traced — it shows
-  `postOrderMessage`'s reasons from `commissary/messages.ts:40,61`, not transfer/discrepancy; S5.1b owns it.)
+  `postOrderMessage`'s reasons, not transfer/discrepancy; S5.1b owns it. R4.1: only `commissary/messages.ts:40` is in
+  `postOrderMessage` and reaches `:106`; `:61` is in `listOrderMessages` (`:56`) — S5.1b still converts it.)
 - **Auth cannot import domain** (`packages/domain/package.json:15-17`: domain depends on auth and db; auth depends on db).
   A class defined only in `packages/domain/src/shared/` is unreachable from `roles.ts`/`credentials-admin.ts`;
   `recordGone` is repo-internal (`packages/db/src/index.ts:15-17`, type export only).
@@ -389,7 +390,7 @@ argument with the same classifier.
 | S5.0 | foundation + widened scanner | — | 0 converted | everything below depends on it; the scanner must be trusted before any "0 left" |
 | S5.1 | sales days + expenses | 7, 8, 12 | 56 | highest traffic: every store, every day (submit/verify/void a day; record/approve an expense) |
 | S5.1b | commissary order messages (R1.1) | — (the fifth bypass) | `messages.ts:34,36,40,47,61,64` | after S5.1; any time after S5.0, **no S6 dependency**; **sole owner of `commissary/orders/[id]/actions.ts:106`** (S8 does not list it, S5.4 does not touch it); adds `Outcome.userReason` and `outcomeMessage` that S5.4 reuses |
-| S2b | DEF-430, listed above | — | — | T-341 landed (`4e986a3`); disjoint from S5.1 and may run beside it; **must precede S5a** (both edit `auth/src/refusal-text.ts`) |
+| S2b | DEF-430 — specced in full at **§S2b** below (APPROVED) | row 5 (store-scoped) | `authorize.ts:152-158` | T-341 landed (`4e986a3`); disjoint from S5.1 and may run beside it; **must precede S5a** (both edit `auth/src/refusal-text.ts`) |
 | S5a | auth roles + credentials | 15 | 7 raw + 11 two-arg | admin-only traffic; serial after S2b |
 | S5.2 | AP + customers + repo `ap.ts` | 9, 14b, new | 39 + 11 + 3 | weekly supplier and customer work |
 | S5.3 | deliveries + catalogue + opening | 13, 14a, 16 | 10 + 16 + 9 | low traffic; `run_cutover` is once per org |
@@ -462,9 +463,10 @@ Scope: every raw `throw new Error(` in `packages/domain/src/sales-days/{create,v
 | `verify.ts:75,185` · `approve.ts:58` · `void.ts:46` | `internalFault(raw)` |
 | every other site | rule 4 (same sentence, prefix and citations dropped) |
 
-**BUILDER:** the 9 source files above; `tests/unit/t343-throw-ratchet.test.ts` `CEILINGS` entries for `sales-days` and
-`expenses` only (lower each to its measured count; `internalFault` sites leave the count too) (R1.2).
-**TESTER:** `packages/domain/tests/t343-s5-domain-census.test.ts` (new; a `CONVERTED_DIRS` list each later group
+**BUILDER:** the 9 source files above — source only (R4.4).
+**TESTER:** `tests/unit/t343-throw-ratchet.test.ts` `CEILINGS` entries for `sales-days` and `expenses` only, after the
+builder's READY (lower each to the count measured at HEAD + the builder's change; `internalFault` sites leave the count
+too) (R1.2, R4.4); `packages/domain/tests/t343-s5-domain-census.test.ts` (new; a `CONVERTED_DIRS` list each later group
 appends to); `packages/domain/tests/integration/sales-days.test.ts` and `expenses.test.ts` (new
 `describe('T-343 S5.1 …')` only); `apps/erp/tests/t343-s5-action-guard.test.ts` (new).
 
@@ -490,8 +492,150 @@ appends to); `packages/domain/tests/integration/sales-days.test.ts` and `expense
 ### S5.1b: commissary order messages (the fifth bypass), after S5.1 (R1.1)
 Specified in full by R1.1 below (sites, `Outcome.userReason`, `outcomeMessage(result)`, BUILDER/TESTER paths, legs
 M1–M4). Summary: `apps/erp/src/app/commissary/orders/[id]/actions.ts:106` shows `result.reason` from
-`postOrderMessage` (`packages/domain/src/commissary/messages.ts:40,61`, `order ${input.orderId} does not exist`), not
-transfer/discrepancy. This group **alone owns `:106`**; it does not wait on S6.
+`postOrderMessage` (`packages/domain/src/commissary/messages.ts:40`, `order ${input.orderId} does not exist`), not
+transfer/discrepancy. (R4.1) The same id-bearing reason at `messages.ts:61` is in `listOrderMessages` (`:56`), which does
+not reach `:106`; it converts all the same (`userReason` = `goneSentence('order')`). This group **alone owns `:106`**;
+it does not wait on S6.
+
+---
+
+### S2b: a store refusal names where the job is, not the role (DEF-430), before S5a
+**Status:** APPROVED 2026-09-26 (orchestrator, after independent review). **Model:** Sonnet, tester then builder. **Migration:** none (reads three existing
+tables; no column, index or policy added). Must land before S5a (both edit `packages/auth/src/refusal-text.ts`).
+
+**Goal.** When `authorize()` refuses a store-scoped capability at row 5 (axis 3a/3b) and the person does hold it
+through a position at another store in the same org, the sentence names this store and the store where the job
+is. It does not blame the role. Where no such job exists, or the lookup fails, the S2 sentence is shown unchanged.
+
+**Evidence** (HEAD `bf6741c`, verified):
+- `~/.claude/skills/orchestrator/tools/t341-smk2-refusal.png`: New sales day at SmokeStore Two (SMK2) →
+  `Refused: Your role (Staff) can't submit a sales day. Ask an admin if you need to.` The same person can submit at
+  SmokeStore (SMK), where their Cashier position's default grants it. The sentence sends the admin to change the role.
+  The real fix is a position default or an employment at SMK2.
+- `packages/auth/src/authorize.ts:152-158`: `allowed = matrixAllows || personHasActiveGrant(…, scope === 'store' ?
+  ctx.storeId : undefined)`. On `!allowed` it throws `roleMayNot(role, capability)`, with no lookup (`:156`).
+- `packages/db/src/repo/access.ts:730-749` `personHasActiveGrant`: when given `atStoreId`, it matches `store_id IS NULL
+  OR store_id = atStoreId`. So a `'position'` row at another store fails the check by design (T-341/DEF-414). That is
+  the refusal this slice rewords, and **the check itself does not change**.
+- `packages/db/schema/access.ts:188-202,257-258`: `person_grants.source_ref` → `position_capability_defaults.id`.
+  `store_id` is NOT NULL exactly when `grant_source = 'position'` (CHECK). It is filled by the trigger
+  `0159_t341_person_grants_store.sql:222-239`. `packages/db/schema/position-capability-defaults.ts:39-65` has
+  `org_id, position_id, store_id`. `packages/db/schema/employment.ts:99-125` has `positions.name, org_id, is_active`.
+  `packages/db/schema/stores.ts:61` has `is_active`. RLS on `position_capability_defaults` is FORCED and org-scoped
+  (`0146_…:71-73`).
+- `packages/auth/src/refusal-text.ts:17`: the only import is `./capabilities` (labels). The function for row 5 is at
+  `:29-31`. `packages/auth/src/authorize.ts:67-72` `savepointLookup` is the one helper for refusal lookups (R2.1, R3.2,
+  R3.6).
+- Scenario fixture already exists: `packages/domain/tests/integration/t341-position-grants-per-store.test.ts:131-155`
+  (P1: Cashier at B, Cook at A; `record_sale@A` rejects `/may not 'record_sale'/`).
+- Probe callers whose row-5 refusals now do the lookup. Every capability named here is `'store'`-scoped, with its
+  `CAPABILITY_SCOPE` line in `capabilities.ts`:
+  - `ar/index.ts:82` (`override_credit_limit`, `:479`).
+  - `people/index.ts:206-212` (`enrol_staff`, `:518`), with one call per refused store in the loop.
+  - `trade/index.ts:690-692` (`authorizeEither`): `place_branch_order` (`:449`).
+  - The same call also tries `fulfil_branch_order` (`:450`).
+  - `trade/index.ts:803-805` (`authorizeEither`, `confirm_receipt`, `:435`).
+  - `sync/health.ts:343` (`mayProvision`, `provision_clock_terminal`, `:527`). It runs on every manager quarantine view,
+    and its `catch {}` is bare.
+  `submit_sales_day` (the DEF-430 capability) is at `:394`. `canBypassBlock` (`sales-days/create.ts:284-291`) probes
+  `close_period`, which is `'org'`, so it is unaffected.
+
+**Design.**
+1. **Sentence** (`refusal-text.ts`, new pure function `jobIsElsewhere(capability, here, jobs)`). `here: { name; code }
+   | undefined`. `jobs: readonly JobElsewhere[]`, where `JobElsewhere = { positionName; storeName; storeCode }` is
+   declared **in `refusal-text.ts`**. It is structurally equal to the repo row. ⛔ No new import (R1.5 stays true: one
+   import, `./capabilities`). Let `H` = `${here.name} (${here.code})`, or `that store`. Let `S(j)` = `${storeName}
+   (${storeCode})`. Every interpolated name has its whitespace collapsed (`/\s+/g` → `' '`, then trimmed), so a
+   position name with a newline cannot break the single-line rule. Jobs are grouped by store, keeping the input order.
+   Positions within a store are de-duplicated and joined `A`, `A and B`, or `A, B and C`.
+   | Case | Sentence |
+   |---|---|
+   | 1 store, 1 position | `You can't ${label} at ${H} — the ${pos} job that lets you is at ${S}. Ask an admin if you need to do it here too.` |
+   | 1 store, 2+ positions | `… — the ${join(positions)} jobs that let you are at ${S}. Ask an admin …` |
+   | 2–3 stores | `You can't ${label} at ${H} — the jobs that let you are at other stores: ${join(positions)} at ${S1}; ${…} at ${S2}. Ask an admin if you need to do it here too.` |
+   | 4+ stores | the first 3 groups, then `; and ${n} more store(s)` (`1 more store`, `2 more stores`) |
+   DEF-430's example becomes `You can't submit a sales day at SmokeStore Two (SMK2) — the Cashier job that lets you is
+   at SmokeStore (SMK). Ask an admin if you need to do it here too.` ⚠️ **Voice:** DEF-430 wrote "their Cashier job",
+   but the banner is read by the refused person. S2's rule holds: the actor is "you", and no person is looked up.
+   "The job that lets you" stays true even when the person holds the same position here with the default switched off.
+2. **Lookup** (`packages/db/src/repo/access.ts`, new `positionGrantsElsewhere(tx, { personId, orgId, capability,
+   excludingStoreId })` → `PositionGrantElsewhereRow[]`). `access.ts` declares its own `export interface
+   PositionGrantElsewhereRow { positionName; storeName; storeCode }` and imports nothing from `@shareat/auth`, which
+   would create a package cycle. It is only structurally equal to `refusal-text.ts`'s `JobElsewhere`. It sits beside
+   `personHasActiveGrant`, whose semantics it mirrors. It is
+   one SELECT DISTINCT `positions.name, stores.name, stores.code`, from `person_grants g` joined to
+   `position_capability_defaults d` (`d.id = g.source_ref AND d.store_id = g.store_id`), then `positions p`
+   (`p.id = d.position_id`), then `stores s` (`s.id = g.store_id`). WHERE: `g.person_id`; `g.grant_name = capability`;
+   `g.revoked_at IS NULL`; `g.grant_source = 'position'`; `g.store_id <> excludingStoreId`; `s.is_active`; and
+   **`s.org_id = d.org_id = p.org_id = orgId`**. ORDER BY `s.name, s.code, p.name`. No LIMIT: the row count is
+   bounded by one person's positions × stores, and the sentence needs the true store count for "and N more".
+   ⛔ There is no `throw` in it, so the ratchet is unchanged. Inactive stores are excluded because a job at a closed
+   store "lets you" do nothing. If only inactive stores hold the job, the S2 sentence is shown. There is **no
+   `p.is_active` filter.** That mirrors `personHasActiveGrant` (`access.ts:730-749`), which still honours a grant whose
+   position has been retired, so naming that position is truthful.
+3. **authorize.ts, row 5 only.** Inside `if (!allowed)`, and only when `scope === 'store' && ctx.storeId`, make ONE
+   `savepointLookup(tx, async (t) => { const jobs = await accessRepo.positionGrantsElsewhere(t, …); return jobs.length
+   ? { jobs, here: await storesRepo.getById(t, actor.orgId, storeId) } : undefined; })`. When no job is found, that is
+   one SELECT, and `getById` is never called. Then `throw new AuthorizationError(<message byte-identical>,
+   capability, found ? jobIsElsewhere(capability, found.here, found.jobs) : roleMayNot(role, capability))`. The third argument is written inline, with both calls in it, so S2's T5 census (`t343-authorize-census.test.ts:84-92`)
+   stays green unedited. `ctx.storeId` has already been sent to Postgres by the same call (`:154`), which satisfies
+   S2's "reuse values the same call already sent". Update the `:156` comment.
+   ⛔ There is no lookup on the success path, for org- or platform-scoped capabilities, or when `ctx.storeId` is absent.
+   **This supersedes S2's "Row 5 — no lookup" and R2.2's "row 5 … does no lookup"** for store-scoped capabilities. The
+   cost is accepted on R3's dismissal reasoning: one savepoint and two SELECTs, on the refusal path only. The worst
+   case is the `enrol_staff` loop, with one lookup per refused store.
+4. **Cross-org rule.** The sentence never names another org's store, position or org. This is enforced in two layers
+   (§15.11): the explicit `org_id = orgId` filters on all three joined tables, plus RLS on the defaults and stores.
+   `here` comes from `getById(orgId, …)`. For a foreign `storeId`, `here` is `undefined` and the sentence reads
+   "that store".
+5. **Failure.** If either query errors, the savepoint rolls back only itself and one `warn` is logged (the existing
+   helper). The sentence is then `roleMayNot`, the unchanged S2 text. An empty result also gives `roleMayNot`.
+   `message`, `capability` and the refusal records are unchanged (Invariants 1, 2).
+
+**BUILDER:** `packages/auth/src/refusal-text.ts`, `packages/auth/src/authorize.ts`, `packages/db/src/repo/access.ts`.
+**TESTER:** `packages/auth/tests/t343-s2b-refusal-text.test.ts` (new), `packages/auth/tests/t343-s2b-authorize-lookup.test.ts`
+(new, `vi.mock('@shareat/db')` as `t343-authorize-lookups.test.ts:34-70`), `packages/domain/tests/integration/t341-position-grants-per-store.test.ts`
+(new `describe('T-343 S2b …')` only, reusing `fixture`/`hireStaff`/`setDefault`), `packages/auth/tests/integration/authorize.test.ts`
+(new `describe` only, beside T6b).
+
+| Id | Leg | Asserts | Expected red |
+|---|---|---|---|
+| J1 | + | `jobIsElsewhere('submit_sales_day', {name:'SmokeStore Two',code:'SMK2'}, [{positionName:'Cashier',storeName:'SmokeStore',storeCode:'SMK'}])` === the DEF-430 sentence in Design 1 exactly | import fails (function missing) |
+| J2 | + | two positions at one store → `the Cashier and Cook jobs that let you are at SmokeStore (SMK)`; duplicate position rows collapse | missing |
+| J3 | + | 2 stores → the `other stores:` form, groups in input order, `; ` separator; 5 stores → 3 groups + `; and 2 more stores`; 4 → `1 more store` | missing |
+| J4 | ⛔ | `here` undefined → `at that store`; `positionName: 'Head\n  Cook'` → `Head Cook`, single line; for every `Capability`, the S2 T1 rules hold (a copy of `assertHumanSentence`, since `t343-refusal-text.test.ts` stays unedited) | missing |
+| J5 | ⛔ | `refusal-text.ts` has exactly one `import`, from `./capabilities` (R1.5) | green before and after |
+| L1 | + | mocked: staff, matrix false, grant false, `submit_sales_day` + storeId, `positionGrantsElsewhere` → 1 row, `getById` → SMK2 ⇒ `userMessage` === J1's sentence; `message` === `authorize: role 'staff' may not 'submit_sales_day'` | `userMessage` is the `roleMayNot` text |
+| L2 | + | `positionGrantsElsewhere` called once with `{ personId, orgId: actor.orgId, capability, excludingStoreId: storeId }` | 0 calls |
+| L3 | ⛔ | lookup → `[]` ⇒ `userMessage` === `roleMayNot('staff','submit_sales_day')`; `getById` not called | green before and after |
+| L4 | ⛔ | lookup rejects ⇒ still `AuthorizationError`, `roleMayNot` text, `logger.warn` called once | warn 0 calls |
+| L5 | ⛔ | success path (allow-all) with `positionGrantsElsewhere`/`getById` spies that THROW → resolves, neither called; the org-scoped row-5 refusal (`close_period` by staff) and the missing-storeId refusal → neither called | green before and after |
+| L6 | + | census: `authorize.ts`'s row-5 `new AuthorizationError(` third argument contains `jobIsElsewhere(` AND `roleMayNot(`; `positionGrantsElsewhere(` occurs only inside a `savepointLookup(` call | no `jobIsElsewhere(` |
+| I1 | + | real DB, P1 shape: `record_sale@A` → `userMessage` === `You can't record a sale at ${A.name} (${A.code}) — the Cashier job that lets you is at ${B.name} (${B.code}). Ask an admin if you need to do it here too.`; `err.message` still `/may not 'record_sale'/` | `roleMayNot` text |
+| I2 | + | Cashier at A AND B, default on at B only → names B only; A appears only as `here` | `roleMayNot` text |
+| I3 | + | add store C with Cashier + default on → the 2-store form; groups ordered by store name | `roleMayNot` text |
+| I4 | ⛔ | the only job-store deactivated (`stores.is_active = false`) → `roleMayNot` text | green before and after |
+| I5 | ⛔ | staff with no position grant anywhere → S2's exact `roleMayNot` sentence | green before and after |
+| I6 | ⛔ | cross-org: org Y with store, position, and default for the same capability; superuser plants a `'position'` `person_grants` row for the org-X person with `source_ref` → Y's default; refusal at an X store → `userMessage` === `roleMayNot`, contains no Y store name/code or org name. If the DB refuses the plant, record the error verbatim and report it (a guard already exists) | green before and after; red only if a layer leaks |
+| I6b | ⛔ | Call `accessRepo.positionGrantsElsewhere` directly on the superuser/BYPASSRLS fixture connection, with `orgId` = X and I6's planted row → returns `[]`. The explicit `org_id` filters are the only thing that can make it pass here. In I6, FORCED RLS on `position_capability_defaults` (`0146`) masks a missing filter, so I6 alone cannot catch that. The plant satisfies the composite FK (`0159` step 8) because its `store_id` is the store of Y's default | green after S2b; red if any explicit `org_id` filter is removed (record that mutation run) |
+| I7 | ⛔ | savepoint (`authorize.test.ts`, T6b mechanism `:1092-1180`): `revoke select on positions from shareat_app`; in ONE tx, a planted DEF-430-shape refusal is caught with the `roleMayNot` text, then the same tx inserts a marker and COMMITS, and the marker is visible afterwards; negative half: a positions SELECT as `shareat_app` outside a savepoint fails (the revoke bites); grant restored in `finally` | green before (no lookup); after S2b red only as 25P02 on the marker (lookup escaped its savepoint) |
+
+**Negative halves (unedited):** `packages/auth/tests/t343-refusal-text.test.ts` (T1), `t343-authorize-lookups.test.ts`
+(T2–T4), `t343-authorize-census.test.ts` (T5), `errors-leaf.test.ts`; every existing describe in
+`authorize.test.ts` (incl. T6, T6b) and `t341-position-grants-per-store.test.ts` P1–P8 (P1 keeps its `/may not
+'record_sale'/`); `position-defaults.test.ts`; `tests/unit/t343-throw-ratchet.test.ts` (no throw added, `CEILINGS`
+untouched); the app `/may not '<cap>'/` regex maps (`message` byte-identical). Then the **full** integration suite.
+⚠️ `t343-authorize-lookups.test.ts:34-46` mocks `accessRepo` without `positionGrantsElsewhere`. A future row-5 refusal
+added to that file would therefore take the warn → `roleMayNot` fallback path, and nothing would flag it. It is not
+red today, because no row-5 store case exists there. It stays unedited, and L1–L6 live in their own file with the
+function mocked.
+Any of these red → STOP and report.
+**Smoketest (9008, `docs/SMOKETEST.md`):** sign in as the T-341 smoketest staff member (Staff role, Cashier at
+SmokeStore). Sales days → New → switch to SmokeStore Two (SMK2) → Save draft. The banner should read exactly
+`Refused: You can't submit a sales day at SmokeStore Two (SMK2) — the Cashier job that lets you is at SmokeStore (SMK).
+Ask an admin if you need to do it here too.` Then check the control at SmokeStore (SMK): it is not refused on this
+ground. Then a staff member with no position shows the S2 sentence unchanged. Screenshot both themes beside
+`t341-smk2-refusal.png`.
 
 ---
 
@@ -499,54 +643,89 @@ transfer/discrepancy. This group **alone owns `:106`**; it does not wait on S6.
 `AuthorizationError` already takes `userMessage` (S2). `roles.ts` and `credentials-admin.ts` import `refuse` and
 `goneSentence` from `@shareat/db` themselves; `refusal-text.ts` gains no import and stays pure (R1.5).
 - `roles.ts:367,586` · `credentials-admin.ts:45` → third arg `goneSentence('person')`.
-- `roles.ts:393` → `Only a super admin can make someone ${ROLE_LABEL[input.role]}. Your role is ${ROLE_LABEL[actorRole] ?? 'none'}.`
-- `roles.ts:447` → `This person is ${ROLE_LABEL[targetRole]}, which outranks you, so you can't change their role.`
+- `roles.ts:393` → `Only a super admin can make someone ${ROLE_LABEL[input.role]}. Your role is ${actorRole ? ROLE_LABEL[actorRole.role] : 'none'}.`
+  (R4.3: `actorRole` and `targetRole` are rows from `activeRoleForPerson` (`roles.ts:388-389`), not `Role` strings — the
+  label reads `.role`, i.e. `ROLE_LABEL[actorRole?.role]` with the `'none'` fallback when there is no row.)
+- `roles.ts:447` → `This person is ${ROLE_LABEL[targetRole.role]}, which outranks you, so you can't change their role.` (R4.3; `targetRole` is non-null inside the `if (targetRole)` at `:435`)
 - `roles.ts:577` → `refuse(raw, "That isn't a permission this system knows.")` (R1.5).
 - id-free `AuthorizationError`s (`roles.ts:346,376,494,570,592`, `credentials-admin.ts:261`) → third arg, rule 4.
 - `credentials-admin.ts:67,69,75,78,189,211` → `refuse(raw, <same sentence>)` (already written for a person) (R1.5).
 Sentences live in `packages/auth/src/refusal-text.ts`. ⛔ `errors.ts` untouched (Invariant 7); `capabilities.ts` read only.
-**BUILDER:** `packages/auth/src/{roles.ts,credentials-admin.ts,refusal-text.ts}`; the ratchet's `packages/auth/src`
-`CEILINGS` entry (R1.2).
-**TESTER:** `packages/auth/tests/t343-s5a-census.test.ts` (new); `packages/auth/tests/integration/roles.test.ts` (new `describe` only).
+**BUILDER:** `packages/auth/src/{roles.ts,credentials-admin.ts,refusal-text.ts}` — source only (R4.4).
+**TESTER:** `packages/auth/tests/t343-s5a-census.test.ts` (new); `packages/auth/tests/integration/roles.test.ts` (new `describe` only);
+the ratchet's `packages/auth/src` `CEILINGS` entry (R1.2), lowered after the builder's READY to the count measured at
+HEAD + the builder's change (R4.4 — the builder never edits a test file).
 
 | Id | Leg | Asserts | Expected red |
 |---|---|---|---|
-| K1 | + | census: `auth/src` has 0 raw `throw new Error(`; every `new AuthorizationError(` has 3 args; no id/key/derived first argument on any `throw new <X>(` (R1.2), EXCEPT the four `roles.ts` raw messages K4/Invariant 1 pin byte-identical — allowlisted by their raw message TEXT (never file:line; S5a edits lines around them), exempt from the first-argument rule only; the 3-arg rule still applies to them, which is what keeps the exemption safe, and the test says so (R2 ruling 1); no `new RefusalError(` (R1.5) | red: 7 raw, 11 two-arg |
-
-> (R2 ruling 1 is folded into K1 above: the four `roles.ts` raw messages are allowlisted by text.)
+| K1 | + | census: `auth/src` has 0 raw `throw new Error(`; every `new AuthorizationError(` has 3 args; no id/key/derived first argument on any `throw new <X>(` (R1.2), EXCEPT an allowlist of raw messages K4/Invariant 1 pin byte-identical. (R4.2) The allowlist is sized by MEASUREMENT: before writing K1 the tester runs the S5.0 scanner over `packages/auth/src` and lists every id/key/derived first argument; each hit is either converted or allowlisted. Known today: `roles.ts:367,393,447,586` and `credentials-admin.ts:45` (`person ${personId} does not exist in org ${actor.orgId}`) — five, not four; the measurement, not this list, decides. Each entry is keyed by its raw message TEXT (never file:line; S5a edits lines around them), carries a one-line reason citing K4/Invariant 1, and is exempt from the first-argument rule only; the 3-arg rule still applies to every entry, which is what keeps the exemption safe, and the test says so (R2 ruling 1); no `new RefusalError(` (R1.5) | red: 7 raw, 11 two-arg |
 | K2 | + | an admin assigning `super_admin` → `userMessage` contains `Super admin`, not `'super_admin'` | undefined |
 | K3 | + | assigning a role to a missing person → `/^That person could not be found\./`, no UUID | undefined |
 | K4 | ⛔ | K2/K3 `err.message` byte-identical to today; `roles.test.ts` case 6 (the DEF-177 absence) green unedited | green before and after |
+
+> (R2 ruling 1 is folded into K1 above: the raw messages K4/Invariant 1 pin are allowlisted by text; R4.2 sizes the
+> list by measurement. R4.5: this note moved out of the table so K2–K4 render inside it.)
 
 ---
 
 ### S5.2: AP, customers, and the repo sites S3 missed (rows 9, 14b)
 Scope: `packages/domain/src/ap/index.ts` (39), `packages/domain/src/customers/index.ts` (11), and
-`packages/db/src/repo/ap.ts:431,437,443` → `refuse(raw, …)` (R1.5): `Invoice ${invoiceNo} from ${supplierName} has been voided, so
-nothing more can be recorded against it.` · `… hasn't been verified yet, so this can't post against it.` · `… has only
-₱${remaining} left of ₱${total}; ₱${amount} doesn't fit.` Names come from the `capacity` row; extend `capacityOf`'s
-select with `invoiceNo` and the supplier name if absent (same query, no new one). Not-found → `gone`;
-`ap/index.ts:747,754,756` name the expense by its human key (one refusal-path read); `:918`, `:1010`, `:1022` →
+`packages/db/src/repo/ap.ts:431,437,443` → `refuse(raw, …)` (R1.5), the invoice named `${inv}` below:
+`${Inv} has been voided, so nothing more can be recorded against it.` · `${Inv} hasn't been verified yet, so this can't
+post against it.` · `${Inv} has only ₱${remaining} left of ₱${total}; ₱${amount} doesn't fit.` (R4.6)
+`supplier_invoices.invoice_no` is **nullable** (`packages/db/schema/suppliers.ts:208`), so `${inv}` follows rule 2:
+`invoice ${invoiceNo} from ${supplierName}` when a number exists, else the no-number fallback
+`the ${humanDate(invoiceDate)} invoice from ${supplierName}` (`${Inv}` = the same, capitalised). Names come from the
+`capacity` row: `capacityOf` (`packages/db/src/repo/ap.ts:371-398`) is extended **in the same query** with
+`si.invoice_no`, `si.invoice_date` and the supplier's name (a join to `suppliers` on `si.supplier_id`, same org; added to
+the `group by`) — no new query. `InvoiceCapacity` gains the three fields additively; the other caller
+`apps/erp/src/app/ap/lib.ts:85` is unaffected. Not-found → `gone`;
+`ap/index.ts:747,754,756` name the expense by its human key (one refusal-path read). (R4.7) That read is **org-scoped**
+(`actor.orgId`, rule 7 / Invariant 6): an `expenseId` that is not an expense of the caller's org yields no row, and the
+sentence falls back to the deictic `this expense` — never a name from another org. `:918`, `:1010`, `:1022` →
 `internalFault` (states the caller cannot produce).
-**BUILDER:** those three source files; the ratchet's `ap`, `customers` and `packages/db/src/repo` `CEILINGS` entries
-(R1.2). **TESTER:** census `CONVERTED_DIRS += ap, customers`; the db
+**BUILDER:** those three source files — source only (R4.4). **TESTER:** the ratchet's `ap`, `customers` and
+`packages/db/src/repo` `CEILINGS` entries (R1.2), lowered after the builder's READY to the count measured at HEAD + the
+builder's change (R4.4); census `CONVERTED_DIRS += ap, customers`; the db
 census empties `PENDING_S5_2`; `packages/domain/tests/integration/ap.test.ts` (new `describe` only).
 
 | Id | Leg | Asserts | Expected red |
 |---|---|---|---|
 | P1 | + | census: 0 raw in `ap/`, `customers/`; `PENDING_S5_2` empty; no id/key/derived first argument on any `throw new <X>(` (R1.2); no `new RefusalError(` (R1.5) | red: 50 + 3 |
-| P2 | + | an expense against a voided invoice → names `invoiceNo` and the supplier, no UUID | undefined |
+| P2 | + | an expense against a voided invoice → names `invoiceNo` and the supplier, no UUID; the same against a voided invoice with **no** `invoice_no` → `the ${humanDate} invoice from ${supplierName}`, never `invoice null` (R4.6) | undefined |
 | P3 | + | `recordPayment` over-allocating one expense → names it as `"particulars" (date)` | undefined |
 | P4 | ⛔ | P2/P3 messages match today's regexes; `ap-aging`, `ap-auto-allocate`, `supplier-master`, `supplier-returns` green unedited | green |
 
 ### S5.3: deliveries, catalogue, opening balances (rows 13, 14a, 16)
 Scope: `deliveries/documents.ts` (10; `:126`, `:129` → `Line ${n}: …` by position; `:115` → `gone(raw, 'proof photo')`),
 `commissary/catalogue.ts` (16; stores as `Name (CODE)`, items by name), `cutover/opening.ts` (9; `:164` →
-`gone(raw, 'opening figure')`). **BUILDER:** those three files; the ratchet's `deliveries`, `commissary` and `cutover`
-`CEILINGS` entries (R1.2). **TESTER:** `CONVERTED_DIRS +=` the
-three files; one integration leg per file (new `describe` in the nearest existing file) + a ⛔ message-regex leg. The
-census also fails on an id/key/derived first argument to any `throw new <X>(` (R1.2) and on `new RefusalError(` (R1.5).
-Red: 35 raw.
+`gone(raw, 'opening figure')`).
+
+**`commissary/catalogue.ts` sites (R4.9)** — each read at HEAD `bf6741c`; rule 4 keeps the wording minus the
+`fnName:` prefix and any T-/bible citation:
+| Site | Becomes |
+|---|---|
+| `:50` `parseFourDecimalCost` | rule 4: `${label} — "${raw}" is not a valid amount. Use a non-negative number with up to four decimal places.` (also reached from `deliveries/documents.ts`; one sentence for both) |
+| `:100` | rule 4: `A store cannot supply itself — the commissary and the branch must be two different stores.` |
+| `:113` · `:116` | `gone(raw, 'commissary store')` · `gone(raw, 'branch store')` |
+| `:172` · `:239` · `:245` | `gone(raw, 'item')` · `gone(raw, 'commissary item')` · `gone(raw, 'branch item')` |
+| `:174` · `:177` | rule 4, item by name: `${item.name} is ${item.status}, not active — only an active item can be offered.` · `${item.name} is not marked purchasable, so this commissary cannot supply it.` |
+| `:184` | rule 4: `"${input.manualCost}" is not a manual cost — a non-negative amount, up to four decimals.` (`refuse` sanitises the typed value) |
+| `:232` | rule 2, stores as `Name (CODE)`: `${branch} has no active link to ${commissary} — link the two stores before mapping an item between them.` (the `(T-171)` citation dropped). One refusal-path, org-scoped read of both stores (rule 6/7); on any failure `This branch` / `that commissary`. Builder reports whether `upsertMap` is a probe caller (rule 6) |
+| `:241` · `:247` | rule 4: `${commissaryItem.name} is ${commissaryItem.status}, not active.` · the same for `branchItem` |
+| `:253` | rule 4, items by name (already): `${commissaryItem.name} is measured in … Nothing here guesses a conversion.` |
+| `:263` · `:289` | `gone(raw, 'expense category')` · `gone(raw, 'item mapping')` |
+
+**BUILDER:** those three files — source only (R4.4). **TESTER:** (R4.8) `CONVERTED_DIRS` holds whole directories and D1
+requires 0 raw per directory, but `deliveries/`, `commissary/` and `cutover/` keep unconverted siblings
+(`deliveries/receive.ts` 1, `commissary/fulfilment.ts` 16, `commissary/orders.ts` 32, `cutover/index.ts` 4 — S5.5+). So
+S5.3 does **not** append to `CONVERTED_DIRS`; it adds a per-file list `CONVERTED_FILES = ['deliveries/documents.ts',
+'commissary/catalogue.ts', 'cutover/opening.ts']` that the census checks for 0 raw `throw new Error(` and the same
+first-argument / `refuse`-argument / `new RefusalError(` rules as D1, and counts toward D2's floor. The ratchet's
+`deliveries`, `commissary` and `cutover` `CEILINGS` entries (R1.2) are lowered, after the builder's READY, by the
+measured count of the three files' conversions only (R4.4, R4.8) — the siblings' raw throws stay in those entries. One
+integration leg per file (new `describe` in the nearest existing file) + a ⛔ message-regex leg. The census also fails
+on an id/key/derived first argument to any `throw new <X>(` (R1.2) and on `new RefusalError(` (R1.5). Red: 35 raw.
 
 ### S5.4: commissary Outcome reasons (rows 10, 11), after S6
 `Outcome`'s failure arm already has optional `userReason?: string` from S5.1b; S5.4 reuses it (R1.1). Every `reason:` in
@@ -574,9 +753,10 @@ DEF-417 part 2 rows 7–16 are stamped FIXED; the ≈180-site remainder stays op
 Independent Opus review returned CHANGES. Where this amendment and the S5 body differ, this wins.
 
 1. **(HIGH) The fifth bypass was mis-traced.** `apps/erp/src/app/commissary/orders/[id]/actions.ts:106` shows
-   `result.reason` from `postMessageAction` (`:67`) → `postOrderMessage`, whose id-bearing reasons are
-   `packages/domain/src/commissary/messages.ts:40` and `:61` (`order ${input.orderId} does not exist`), not
-   transfer/discrepancy. New group **S5.1b: commissary order messages**. It does not wait on S6 and runs any time after S5.0.
+   `result.reason` from `postMessageAction` (`:67`) → `postOrderMessage`, whose id-bearing reason is
+   `packages/domain/src/commissary/messages.ts:40` (`order ${input.orderId} does not exist`), not
+   transfer/discrepancy. (R4.1: `:61` carries the same reason but is in `listOrderMessages` (`:56`) and does not reach
+   `:106`; it still converts below.) New group **S5.1b: commissary order messages**. It does not wait on S6 and runs any time after S5.0.
    It **alone owns `:106`**: S8 does not list it, and S5.4 does not touch it.
    - `Outcome`'s failure arm gains optional `userReason?: string` here (`commissary/outcome.ts`); S5.4 reuses it.
    - `messages.ts:40,61` → `userReason` = `goneSentence('order')`. Id-free reasons (`:34,36,47,64`) → `userReason` =
@@ -646,12 +826,32 @@ R1 stays above as the record. Lines are as of this amendment.
 3. R1.4 names F6 but not its group; it is placed in S5.1 (`:482`) because the `create.ts:146` sentence lands there.
 
 ### R2 rulings (orchestrator, 2026-09-26)
-- **roles.ts:367,393,447,586 vs K1:** K4 and Invariant 1 win. Those four raw messages stay byte-identical; K1's census carries them as an explicit allowlist, each entry citing K4/Invariant 1 as the reason. No other allowlist entry is added.
+- **roles.ts:367,393,447,586 vs K1:** K4 and Invariant 1 win. Those four raw messages stay byte-identical; K1's census carries them as an explicit allowlist, each entry citing K4/Invariant 1 as the reason. ~~No other allowlist entry is added.~~ (Superseded by R4.2: the allowlist is sized by measurement; `credentials-admin.ts:45` is a fifth known entry.)
 - **S5.4's sites:** two, `discrepancies/actions.ts:59,87`; `:106` belongs to S5.1b. R1.1's "three" is superseded.
 - **F6:** S5.1, where `create.ts:146`'s sentence lands. Accepted.
 - **Ruling 1 refined (auditor):** the allowlist is keyed by the raw message text, never file:line, and exempts only the first-argument rule.
 - **CEILINGS measurement (auditor, 2026-09-26):** measured from the `HEAD` the group commits on top of — re-measured immediately before committing — never the working tree, and S5.0 commits only after T-346 S3 has committed. The barrel export lines for S5.0 (`packages/db/src/index.ts`, `packages/domain/src/index.ts`) are added by the orchestrator after T-346 S3 commits, so no commit carries another lane's hunks.
 - **S5.0 baseline entries (orchestrator, 2026-09-26):** `humanDate` and `internalFault` ship in S5.0 with no production caller; `docs/production-caller-baseline.txt` was regenerated to carry them. **S5.1 gives both their first caller and regenerates the baseline without them** — S5.1 is not done while either name is still in it.
-- **Forward note for S5a (auditor, S5.0 review):** ruling 1 allowlists FOUR `roles.ts` raw messages, but that is a prediction; the evidence counts 11 two-arg `AuthorizationError` sites in `packages/auth/src`. S5a MEASURES how many classify id/key/derived with the S5.0 scanner BEFORE writing K1, and sizes the allowlist from that measurement (each entry still keyed by text and justified by K4/Invariant 1, or converted).
-- **CEILINGS edits belong to the TESTER (orchestrator, 2026-09-26):** where a group lists the ratchet's `CEILINGS` lines under BUILDER, the tester makes that edit instead, after the builder's READY, lowering each named entry to the count measured at HEAD + the builder's change. The builder never edits a test file.
+- **Forward note for S5a (auditor, S5.0 review):** ruling 1 allowlists FOUR `roles.ts` raw messages, but that is a prediction; the evidence counts 11 two-arg `AuthorizationError` sites in `packages/auth/src`. S5a MEASURES how many classify id/key/derived with the S5.0 scanner BEFORE writing K1, and sizes the allowlist from that measurement (each entry still keyed by text and justified by K4/Invariant 1, or converted). **Folded into K1 by R4.2.**
+- **CEILINGS edits belong to the TESTER (orchestrator, 2026-09-26):** where a group lists the ratchet's `CEILINGS` lines under BUILDER, the tester makes that edit instead, after the builder's READY, lowering each named entry to the count measured at HEAD + the builder's change. The builder never edits a test file. **Folded into the S5.1, S5a, S5.2 and S5.3 BUILDER/TESTER lines by R4.4.**
 - **Ratchet keys and other lanes (orchestrator, 2026-09-26, S5.1 review):** `packages/db/src/*` counts LOOSE files at that root only (today `refusal.ts`, 1). Each subdirectory of `packages/db/src` other than `repo/` is its own key; `packages/db/src/cutover` is added by T-347's tester at T-347's commit, at the measured count. A key never absorbs another lane's new directory, so no ceiling is ever raised.
+
+## Amendment R4 — body-vs-amendment audit (2026-09-26)
+Orchestrator rulings, each verified by an independent auditor at HEAD `bf6741c` and re-read by the planner; folded in
+place, tagged `(R4.n)`. Renumbered from "R3" by the orchestrator (2026-09-26), because "Amendment R3" is already the
+S1+S2 code review above. That review is cited as "R3 item n", and by S2b as `R3.2`/`R3.6`. Every `(R4.n)` tag in the
+S5 sections and at `:57,259,268` belongs to THIS amendment. `### S2b` was not touched. Line numbers are as of this
+amendment, before S2b's review fold shifted them.
+
+| Item | Folded at |
+|---|---|
+| R4.1 `messages.ts:61` is in `listOrderMessages` (`:56`); only `:40` reaches `:106` | evidence `:319-321`; S5.1b stub `:494-498`; R1.1 item 1 `:738-742` |
+| R4.2 K1 allowlist sized by measurement; `credentials-admin.ts:45` a fifth entry | K1 `:644`; blockquote `:649-650`; R2 ruling 1 struck through `:812`; forward note marked folded `:818` |
+| R4.3 `ROLE_LABEL[actorRole?.role]` / `ROLE_LABEL[targetRole.role]` | S5a bullets `:629-632` |
+| R4.4 `CEILINGS` edits move from BUILDER to TESTER | S5.1 `:466-470`; S5a `:637-640`; S5.2 `:670-672`; S5.3 `:702-709`; R2 ruling marked folded `:819` |
+| R4.5 blockquote moved out of the K table | `:648-650` (after K4) |
+| R4.6 `invoice_no` nullable → rule-2 no-number fallback; `capacityOf` extended in the same query | S5.2 scope `:655-665`; P2 `:678` |
+| R4.7 `ap/index.ts:747` lookup org-scoped, deictic fallback | S5.2 `:666-668` |
+| R4.8 `CONVERTED_FILES` for the three S5.3 files; siblings stay S5.5+; ratchet lowered by measured count only | S5.3 TESTER `:702-709` |
+| R4.9 `commissary/catalogue.ts` site table (16 throws) | S5.3 `:687-700` |
+| R4.10 `canBypassBlock` is `sales-days/create.ts:284` | `:57`, `:259`, `:268` (S2b's `:284-291` citation was already correct) |
