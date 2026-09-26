@@ -499,6 +499,68 @@ it does not wait on S6.
 
 ---
 
+### S5.1c: the commissary order page's own refusal paths (DEF-445, DEF-446)
+**Status:** APPROVED 2026-09-27 (orchestrator). **Model:** Sonnet, tester then builder. **Migration:** none. Runs after
+S5.1b (same `[id]/actions.ts`); independent of S2b/S5a (touches no `packages/auth` file). Folds DEF-444 (same function).
+
+**Goal.** Every refusal on the branch-order screens reaches the person as the S2/S2b sentence (`userMessage`), a refused
+post shows a banner instead of the error boundary, and a post about a vanished order lands on the list, not a 404.
+
+**Evidence** (HEAD `48efa8a`, verified):
+- `apps/erp/src/app/commissary/orders/lib.ts:45-51` `errorMessageOf`: `:47-48` regex `/may not '([a-z_]+)'/` on
+  `err.message` → `Your role may not <key>.`; `:49` `/no store scope/` → a local sentence. Both return BEFORE `:50`
+  `sharedErrorMessage(err)` (`apps/erp/src/lib/constraint-messages.ts:296`, the only reader of `userMessage`, `:302`).
+  Both raw texts come from `AuthorizationError`s that already carry a `userMessage`: row 5 (`roleMayNot`, S2/S2b) and
+  row 2 (`packages/auth/src/authorize.ts:200-204`, `notAssignedToStore`). So both branches are pure bypasses.
+- Callers (grep, whole `apps`/`packages`): `[id]/actions.ts:59` (`perform()`, every order action) and
+  `orders/actions.ts:55` (save draft, list page). **Both screens change text**: refusals now read the S2/S2b sentence.
+  `apps/erp/src/app/wastage/actions.ts:57-60` is a separate private copy of the same regex (a sixth bypass). **Not in
+  this slice**: it needs its own DEF number.
+- `[id]/actions.ts:68-114` `postMessageAction`: no try/catch. `:99` `authorize(tx, actor, 'post_order_message', …)`
+  throws out of the action. `post_order_message` is `staff: false` (`packages/auth/src/capabilities.ts:797`).
+  `[id]/page.tsx:407` renders the composer with no capability check, and the page has no capability helper (`:62` reads
+  only `orderView` + `actorStoreIds`). Ruling: **catch; do not gate the composer** (gating needs a new helper, not
+  the smallest change).
+- DEF-444: `:75` returns the gone-order outcome, and `:110-111` redirects every failure to `/commissary/orders/<id>`,
+  which calls `notFound()` (`page.tsx:63`).
+
+**Change (BUILDER).**
+1. `lib.ts:45-51`: delete `:46-49`. `errorMessageOf(err)` = `sharedErrorMessage(err)`. Keep the export and its name
+   (two callers, and `t343-s5-outcome-message.test.ts:59-62` mocks it by name). Update the doc comment.
+2. `[id]/actions.ts` `postMessageAction`: wrap the `withOrgPrincipal(…)` call in try/catch. On catch →
+   `back(orderId, { error: errorMessageOf(err) })`. `redirect()` stays OUTSIDE the try, same as `perform()`.
+3. DEF-444: the `:75` arm is marked gone (e.g. `gone: true` on the local result). When a failure is gone, redirect to
+   `/commissary/orders?error=…` (the list). Every other failure keeps `/commissary/orders/<id>?error=…`. The text is
+   unchanged: `outcomeMessage(result)`. `perform()`'s gone-shape is **not** censused here (DEF-444's second half stays open).
+- **BUILDER paths:** `apps/erp/src/app/commissary/orders/lib.ts`, `apps/erp/src/app/commissary/orders/[id]/actions.ts`.
+- **TESTER paths (disjoint):** `apps/erp/tests/t343-s5-1c-commissary-refusals.test.ts` (new). Same harness as
+  `t343-s5-outcome-message.test.ts` (`RedirectSignal`, mocked `@shareat/db`/`@shareat/domain`). Use the REAL
+  `errorMessageOf` for C1–C3 and C8, and the real `AuthorizationError` built with a third-argument `userMessage`.
+
+| Id | Leg | Asserts | Expected red |
+|---|---|---|---|
+| C1 | `errorMessageOf(new AuthorizationError("… may not 'fulfil_branch_order'", cap, S))` | `=== S` | returns `Your role may not fulfil branch order.` |
+| C2 | same, raw `… has no store scope for <uuid>`, `userMessage` S | `=== S` | returns the local `You are not assigned…` sentence |
+| C3 ⛔ | plain `Error` with a UUID and a `fn: ` prefix, no `userMessage` | equals `errorMessage(err)`, no UUID | green now (must stay) |
+| C4 | `postMessageAction`, `authorize` throws `AuthorizationError(…, S)` | redirects to `/commissary/orders/order-1`, `error === S` | throws `AuthorizationError` (no redirect) |
+| C5 ⛔ | `postMessageAction` succeeds | no `error` param; `postOrderMessage` called once; revalidates `/commissary/orders/order-1` | green now |
+| C6 | `orderParties` → `null` | pathname `=== '/commissary/orders'`, `error === goneSentence('order')` | pathname is `/commissary/orders/order-1` |
+| C7 ⛔ | not-a-party (`:93`) | pathname stays `/commissary/orders/order-1` | green now |
+| C8 | `orders/actions.ts` save draft, domain throws `AuthorizationError(…, S)` | `error === S` | `Your role may not …` |
+| C9 ⛔ | source text of `lib.ts` | contains no `may not '` and no `no store scope` | contains both |
+
+**Negative halves (unedited, must stay green):** `apps/erp/tests/t343-s5-outcome-message.test.ts` M3–M6 (M5 asserts the
+param only, not the path), `apps/erp/tests/local-errormessage-convergence.test.ts`,
+`apps/erp/tests/t343-s5-action-guard.test.ts`, `packages/domain/tests/integration/t343-s5-commissary-messages.test.ts`.
+No existing test asserts `Your role may not` (grep: only `lib.ts:48` and `wastage/actions.ts:60`, both source).
+
+**Smoketest (9008, screenshots).** As staff scoped to the branch on an open order: (a) post a message → a banner with
+the S2 sentence for `post_order_message`, no error boundary; (b) a refused order action → the S2/S2b sentence, not
+`Your role may not …`; (c) open an order, delete it elsewhere, post from the stale tab → the list page with "That order
+could not be found."
+
+---
+
 ### S2b: a store refusal names where the job is, not the role (DEF-430), before S5a
 **Status:** APPROVED 2026-09-26 (orchestrator, after independent review). **Model:** Sonnet, tester then builder. **Migration:** none (reads three existing
 tables; no column, index or policy added). Must land before S5a (both edit `packages/auth/src/refusal-text.ts`).
@@ -860,3 +922,4 @@ amendment, before S2b's review fold shifted them.
 - **S5.1b app guards (auditor HIGH):** `commissary/orders/[id]/actions.ts:75` (order missing/voided) and `:93` (not a party) refuse BEFORE `postOrderMessage`, so the domain's `goneSentence('order')` never reached `:106`. Ruling (option a): the action sets `userReason` on both arms — `:75` → `goneSentence('order')`, `:93` → `Only the two stores on this order can talk about it.` The guards stay (they avoid a domain call). New legs M5/M6 (through the real arms), M7 (the id-free `userReason`s); M4 carries an explicit timeout.
 - **/code-review in a shared tree:** the auditor does not plant into uncommitted shared work; it runs `/code-review` on each slice's commit afterwards, and its manual diff read is the pre-commit audit. A post-commit finding becomes a follow-up, not a revert.
 - **S5.2 typing (auditor, 2026-09-27):** `InvoiceCapacity` gains `invoiceNo: string | null`, `invoiceDate: BusinessDate` (parsed with `parseBusinessDate` inside `capacityOf`, never a bare `as BusinessDate` cast) and `supplierName: string`. Only the supplier name needs adding to the `group by`.
+- **S5a K1 scope (tester, 2026-09-27, accepted):** K1's first-argument rule applies to `roles.ts` and `credentials-admin.ts` only. `authorize.ts`'s raw diagnostics are id/key-shaped by design (`may not 'record_sale'`), every one already carries a `userMessage` third argument, and T5's census covers them. The 3-arg and 0-raw-`Error` rules still span all of `packages/auth/src`. Measured allowlist: 5 (`roles.ts:367,393,447,586`, `credentials-admin.ts:45`), keyed by text.
