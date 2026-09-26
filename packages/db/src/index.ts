@@ -12,9 +12,11 @@
  */
 export * as schema from '../schema';
 export { getSql, getDb, closeDb, transaction } from './client';
-// T-343 S3 — the type only; `recordGone(...)` stays a repo-internal import (relative path), same
-// convention `refusal-text.ts` (`@shareat/auth`) uses for a function the barrel does not surface.
+// T-343 S5.0 — the refusal foundation (`refuse`, `RefusalError`, `goneSentence`, `UUID_SHAPE`) and
+// `recordGone`, now surfaced: S5's groups call them from domain and app code (first caller: S5.1).
 export type { RecordGoneError } from './repo/record-gone';
+export { recordGone } from './repo/record-gone';
+export { RefusalError, refuse, goneSentence, UUID_SHAPE } from './refusal';
 // ⭐ T-332 — the one definition of "today" (`sql-time.ts`), made reachable outside the repo layer
 // so a caller never has to hand-spell `(now() at time zone 'Asia/Manila')::date` again (DEF-172).
 // `manilaToday` returns it as a plain string for a caller that needs a value, not a fragment.

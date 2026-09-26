@@ -28,6 +28,8 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+// T-343 S5.0 — the widened AST scanner (see the new describe block at the end of this file).
+import { censusTree } from '../../../tests/unit/lib/throw-census';
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..');
 const REPO_DIR = path.join(repoRoot, 'packages', 'db', 'src', 'repo');
@@ -188,5 +190,62 @@ describe('C1 — repo record-gone census: every id-shaped throw is recordGone(..
       return !window.includes('recordGone(');
     });
     expect(stillBareThrow.map((s) => `${s.file}:${s.line}`)).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// T-343 S5.0 — W4 (widened scanner). §S5 S5.0 table: "every id hit is recordGone(, in
+// CLASSIFIED_INTERNAL, or in PENDING_S5_2 = exactly the 3 ap.ts sites (pinned by message
+// substring); a stale PENDING_S5_2 entry fails". Uses `throw-census.ts` (a real AST walk) precisely
+// because C1's own `findIdShapedThrows` above is the thing the S5 evidence proved has blind spots
+// (concatenation, nested templates) — this describe is the widened replacement's own proof, not a
+// second copy of C1's job. C1 above is left untouched (S3's negative half).
+// ---------------------------------------------------------------------------------------------
+
+/** The 3 live, user-reachable, id-bearing repo throws the OLD regex never saw (S5 evidence,
+ *  `ap.ts:431,437,443` — concatenated template + string, the same shape as `attendance-punches.ts`
+ *  and one `CLASSIFIED_INTERNAL` `etl.ts` entry above). S5.2 converts these to `refuse(...)` naming
+ *  the invoice and supplier, and empties this list — a stale entry (moved, reworded, or already
+ *  converted) fails the test below rather than silently going unnoticed. */
+const PENDING_S5_2: { file: string; messageSubstring: string; reason: string }[] = [
+  { file: 'ap.ts', messageSubstring: 'is voided — nothing further may be', reason: 'S5.2 converts this to refuse(...) naming the invoice and supplier (spec §S5.2)' },
+  { file: 'ap.ts', messageSubstring: 'cannot post until it is verified', reason: 'S5.2 converts this to refuse(...) naming the invoice and supplier (spec §S5.2)' },
+  // /code-review: 'does not fit' alone is too generic to pin one site — widened to the full,
+  // distinctive tail of :443's message (its own `capacity.recorded`/`amount` fields make this
+  // string unlikely to collide with any other throw ap.ts ever grows).
+  { file: 'ap.ts', messageSubstring: 'already recorded ₱${capacity.recorded}) — ` + `₱${amount} does not fit', reason: 'S5.2 converts this to refuse(...) naming the invoice and supplier (spec §S5.2)' },
+];
+
+/** Every non-`plain` site in the real repo tree — id/key/derived only; `recordGone(`/`gone(`/
+ *  `internalFault(` call sites are already-converted and never appear here (`throw-census.ts`'s
+ *  `CONVERTED_CALLEES`), so they need no allowlist entry at all. */
+function nonPlainRepoSites() {
+  return censusTree(REPO_DIR).filter((s) => s.kind !== 'plain');
+}
+
+describe('T-343 S5.0 — widened scanner', () => {
+  it('PENDING_S5_2 is exactly 3 entries, all in ap.ts', () => {
+    expect(PENDING_S5_2).toHaveLength(3);
+    expect(PENDING_S5_2.every((e) => e.file === 'ap.ts')).toBe(true);
+  });
+
+  it('every PENDING_S5_2 entry still names a real non-plain site — a stale entry fails', () => {
+    const sites = nonPlainRepoSites();
+    const stale = PENDING_S5_2.filter(
+      (e) => !sites.some((s) => s.file.endsWith(`/${e.file}`) && s.text.includes(e.messageSubstring)),
+    );
+    expect(stale).toEqual([]);
+  });
+
+  it('⛔ every non-plain repo throw is recordGone(-shaped, CLASSIFIED_INTERNAL, or PENDING_S5_2 — nothing else', () => {
+    const sites = nonPlainRepoSites();
+    const unaccounted = sites.filter(
+      (s) =>
+        !CLASSIFIED_INTERNAL.some((e) => s.file.endsWith(`/${e.file}`) && s.text.includes(e.messageSubstring)) &&
+        !PENDING_S5_2.some((e) => s.file.endsWith(`/${e.file}`) && s.text.includes(e.messageSubstring)),
+    );
+    console.log(`S5.0 widened scanner: ${sites.length} non-plain repo sites, ${unaccounted.length} unaccounted:`);
+    for (const s of unaccounted) console.log(`  ${s.file}:${s.line}  ${s.text.slice(0, 90)}`);
+    expect(unaccounted.map((s) => `${s.file}:${s.line}`)).toEqual([]);
   });
 });

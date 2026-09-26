@@ -10,14 +10,22 @@
  * ⛔ Not a validator, not a second source of truth for WHETHER a record exists — the repo already
  * decided that by finding no row. This only turns the sentence a screen shows into one that names
  * the kind of thing that vanished, not the uuid it was looked up by.
+ *
+ * S5.0: re-parented onto `RefusalError` (`../refusal.ts`) — `name`, `message` and `userMessage`
+ * unchanged (S5 Design). `goneSentence` itself now lives there too, one wording shared with
+ * `gone(...)` (`packages/domain/src/shared/refusal.ts`).
+ *
+ * The `userMessage` is built through `refuse()` (code-review CHANGES item 5, 2026-09-26) — the
+ * SAME sanitisation `gone(...)` gets, so an interpolated `what`/`notLonger` is redacted/collapsed
+ * identically from either entry point. A no-op for today's literal callers (`recordGone`'s own
+ * test is unedited, byte-identical).
  */
-export class RecordGoneError extends Error {
-  readonly userMessage: string;
+import { RefusalError, refuse, goneSentence } from '../refusal';
 
+export class RecordGoneError extends RefusalError {
   constructor(message: string, userMessage: string) {
-    super(message);
+    super(message, userMessage);
     this.name = 'RecordGoneError';
-    this.userMessage = userMessage;
   }
 }
 
@@ -28,8 +36,5 @@ export class RecordGoneError extends Error {
  * cannot tell the two apart.
  */
 export function recordGone(rawMessage: string, what: string, notLonger?: string): RecordGoneError {
-  const userMessage =
-    `That ${what} could not be found${notLonger ? `, or it is no longer ${notLonger}` : ''}. ` +
-    'Someone may have changed it — reload the page and try again.';
-  return new RecordGoneError(rawMessage, userMessage);
+  return new RecordGoneError(rawMessage, refuse(rawMessage, goneSentence(what, notLonger)).userMessage);
 }

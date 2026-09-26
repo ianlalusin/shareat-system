@@ -6,6 +6,7 @@ export * from './shared/constraint-refusals';
 /** ⭐ T-266 — the pure money-form rules, imported by BOTH the client component and the server
  *  action so the two cannot disagree about what a document allows. */
 export * from './shared/money-lines';
+export * from './shared/refusal'; // T-343 S5.0
 export * from './ledger/post-entry';
 export * from './ledger/reverse-entry';
 export * from './reports/trial-balance';

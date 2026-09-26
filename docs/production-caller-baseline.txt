@@ -40,6 +40,8 @@ getItemForProduction
 getRecipe
 hasFingerprint
 hasOtherActiveAdmin
+humanDate
+internalFault
 isConvertibleUnit
 isHeaderCode
 isStartDecisionMaterial
