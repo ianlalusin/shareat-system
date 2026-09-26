@@ -34,10 +34,14 @@ import {
 
 export type AssetStatus = 'active' | 'disposed' | 'pending_valuation';
 export type DepreciationIntervalValue = 'monthly' | 'quarterly' | 'semiannual' | 'annually';
+/** T-346 S2 (DEF-427). `null` only for a shell. */
+export type InServiceSource = 'acquired' | 'store_opening' | 'set';
 
 /** The account every depreciation charge credits — the contra-asset (spec §5). Named once here
  *  so a caller can never pass 1510 by accident. */
 export const ACCUMULATED_DEPRECIATION_CODE = '1590';
+/** The account every depreciation charge debits. Named once for the same reason. */
+export const DEPRECIATION_EXPENSE_CODE = '6700';
 
 export interface FixedAssetRow {
   id: string;
@@ -55,6 +59,9 @@ export interface FixedAssetRow {
   needsReview: boolean;
   notes: string | null;
   sourceExpenseId: string | null;
+  /** T-346 S2 (DEF-427). `null` on a non-shell row means HELD — depreciates nothing yet. */
+  inServiceOn: string | null;
+  inServiceSource: InServiceSource | null;
   disposedOn: string | null;
   disposalReason: string | null;
   disposedBy: string | null;
@@ -78,6 +85,8 @@ const COLUMNS = {
   needsReview: fixedAssets.needsReview,
   notes: fixedAssets.notes,
   sourceExpenseId: fixedAssets.sourceExpenseId,
+  inServiceOn: fixedAssets.inServiceOn,
+  inServiceSource: fixedAssets.inServiceSource,
   disposedOn: fixedAssets.disposedOn,
   disposalReason: fixedAssets.disposalReason,
   disposedBy: fixedAssets.disposedBy,
@@ -198,6 +207,11 @@ export interface InsertAssetInput {
   notes: string | null;
   sourceExpenseId: string | null;
   createdBy: string;
+  /** T-346 S2 (DEF-427). Both optional — the migration's fill trigger derives whichever is absent
+   *  (§3.3 step 4); the `/fixed-assets/new` "In service" choice supplies both when the operator
+   *  named one explicitly. */
+  inServiceSource?: InServiceSource | null;
+  inServiceOn?: string | null;
 }
 
 export async function insertAsset(tx: Tx, input: InsertAssetInput): Promise<{ id: string }> {
@@ -509,4 +523,98 @@ export async function assetsMissingCapitalisation(
       ),
     );
   return rows;
+}
+
+// -------------------------------------------------------------------------------------
+// T-346 S2 (DEF-427) — in-service date: reading what is posted, and writing the columns.
+// -------------------------------------------------------------------------------------
+
+export interface PostedDepreciationEntry {
+  /** `YYYY-MM`, from the idempotency key — never `entry_date` (R1.2's own reasoning). */
+  period: string;
+  entryId: string;
+  /** The 6700 debit — a decimal string, e.g. `'1000.00'`. */
+  amount: string;
+}
+
+/** Every currently-POSTED depreciation entry for this asset, by period, with its own id and
+ *  amount — `setAssetInService` (`fixed-assets/in-service.ts`) needs all three to decide which
+ *  months a new schedule still owes at the SAME amount (kept) versus not (reversed, §3.4 step 2). */
+export async function postedDepreciationEntries(
+  tx: Tx,
+  orgId: string,
+  assetId: string,
+): Promise<PostedDepreciationEntry[]> {
+  const rows = await tx
+    .select({ entryId: journalEntries.id, key: journalEntries.idempotencyKey, amount: journalLines.debit })
+    .from(journalEntries)
+    .innerJoin(journalLines, eq(journalLines.entryId, journalEntries.id))
+    .innerJoin(accounts, eq(journalLines.accountId, accounts.id))
+    .where(
+      and(
+        eq(journalEntries.orgId, orgId),
+        eq(journalEntries.sourceType, 'depreciation'),
+        eq(journalEntries.sourceId, assetId),
+        eq(journalEntries.status, 'posted'),
+        eq(accounts.code, DEPRECIATION_EXPENSE_CODE),
+      ),
+    );
+  const out: PostedDepreciationEntry[] = [];
+  for (const r of rows) {
+    const m = /:depreciation:(\d{4}-\d{2})(?:#\d+)?$/.exec(r.key ?? '');
+    if (m) out.push({ period: m[1]!, entryId: r.entryId, amount: r.amount });
+  }
+  return out.sort((a, b) => a.period.localeCompare(b.period));
+}
+
+/** Periods this asset has a REVERSED (not currently posted) depreciation entry for — `§3.4` step 3's
+ *  "or already held by a reversed entry" half of the DEF-435 check: a month a previous correction
+ *  already tried and failed to re-book stays refused, the same honesty T-345 gives it (DEF-435). */
+export async function reversedDepreciationPeriods(tx: Tx, orgId: string, assetId: string): Promise<Set<string>> {
+  const rows = await tx
+    .select({ key: journalEntries.idempotencyKey })
+    .from(journalEntries)
+    .where(
+      and(
+        eq(journalEntries.orgId, orgId),
+        eq(journalEntries.sourceType, 'depreciation'),
+        eq(journalEntries.sourceId, assetId),
+        eq(journalEntries.status, 'reversed'),
+      ),
+    );
+  const periods = new Set<string>();
+  for (const r of rows) {
+    const m = /:depreciation:(\d{4}-\d{2})(?:#\d+)?$/.exec(r.key ?? '');
+    if (m) periods.add(m[1]!);
+  }
+  return periods;
+}
+
+/**
+ * Writes the in-service columns directly. ⚠️ **Does not replicate the fill trigger's own logic** —
+ * for `'acquired'`/`'store_opening'`, `in_service_on` is left OUT of the SET list entirely, so
+ * migration 0163's `fixed_assets_in_service_a_fill` derives it (RULES §6.3: the database derives
+ * the default, not a second copy here). Only `'set'` carries an explicit value, because that is the
+ * one source the trigger never overwrites. The caller (`setAssetInService`) computes the SAME
+ * value independently beforehand, to plan which posted months to reverse before this write ever
+ * runs — the migration's guard trigger is what actually enforces the result stays legal.
+ */
+export async function setInServiceSource(
+  tx: Tx,
+  orgId: string,
+  id: string,
+  input: { source: InServiceSource; inServiceOn?: string },
+): Promise<void> {
+  const updated = await tx
+    .update(fixedAssets)
+    .set({
+      inServiceSource: input.source,
+      ...(input.source === 'set' ? { inServiceOn: input.inServiceOn } : {}),
+      updatedAt: sql`now()`,
+    })
+    .where(and(eq(fixedAssets.id, id), eq(fixedAssets.orgId, orgId)))
+    .returning({ id: fixedAssets.id });
+  if (updated.length === 0) {
+    throw recordGone(`setInServiceSource: asset ${id} does not exist in org ${orgId}`, 'asset');
+  }
 }

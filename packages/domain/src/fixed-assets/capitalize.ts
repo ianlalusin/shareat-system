@@ -49,6 +49,14 @@ export interface CreateAssetInput {
   usefulLifeMonths?: number | null;
   interval?: DepreciationInterval;
   notes?: string | null;
+  /**
+   * The `/fixed-assets/new` "In service" choice (§3.6, T-346/DEF-427). Omitting both
+   * leaves the fill trigger (migration 0163) to derive `'acquired'` on insert — every
+   * writer gets the fill, this one included.
+   */
+  inServiceSource?: fixedAssetsRepo.InServiceSource;
+  /** Required, and only meaningful, when `inServiceSource` is `'set'`. */
+  inServiceOn?: string;
 }
 
 /**
@@ -127,6 +135,8 @@ async function runCreateAsset(
     notes: input.notes?.trim() || null,
     sourceExpenseId: null,
     createdBy: actor.personId,
+    inServiceSource: input.inServiceSource ?? null,
+    inServiceOn: input.inServiceSource === 'set' ? input.inServiceOn : undefined,
   });
 }
 

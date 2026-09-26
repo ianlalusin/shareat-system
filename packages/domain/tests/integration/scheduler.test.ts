@@ -35,8 +35,12 @@ async function orgWithAsset(hint: string, opts: { withPeriod: boolean }) {
     insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id
   `;
   await seedChartOfAccounts(sql, org!.id);
+  // T-346 S2: opening_date on/before every asset's acquired_on below, so the S2 in-service fill
+  // trigger (once it lands) derives 'store_opening' in-service dates equal to acquired_on rather
+  // than leaving these assets HELD (opening_date NULL) — this file's whole point is asserting real
+  // depreciation postings happen.
   const [store] = await sql<{ id: string }[]>`
-    insert into stores (org_id, code, name) values (${org!.id}, ${uid(hint)}, ${`Store ${hint}`}) returning id
+    insert into stores (org_id, code, name, opening_date) values (${org!.id}, ${uid(hint)}, ${`Store ${hint}`}, '2020-01-01') returning id
   `;
   const [person] = await sql<{ id: string }[]>`
     insert into persons (org_id, display_name) values (${org!.id}, 'Owner') returning id

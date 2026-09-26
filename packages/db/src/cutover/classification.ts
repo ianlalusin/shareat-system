@@ -564,7 +564,14 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
   },
   fixed_assets: {
     class: 'keep_shell',
-    clearColumns: ['cost', 'salvage_value', 'acquired_on', 'source_expense_id'],
+    clearColumns: [
+      'cost',
+      'salvage_value',
+      'acquired_on',
+      'source_expense_id',
+      'in_service_on',
+      'in_service_source',
+    ],
     reason:
       'ADR-007 §3 names this case exactly: "fixed assets keep name, category and remaining ' +
       'useful life; cost and accumulated depreciation are re-entered." The physical asset still ' +
@@ -575,7 +582,10 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'table is what revealed the shell could not physically EXIST: cost was NOT NULL, so the ' +
       'purge could not have cleared it. fixed_assets.status gained an explicit ' +
       '`pending_valuation` state, and the cutover leaves every surviving row in it — which also ' +
-      'makes T-134s "what is still missing" list a plain query rather than a reconciliation.',
+      'makes T-134s "what is still missing" list a plain query rather than a reconciliation. ' +
+      'T-346 S2 (DEF-427): in_service_on/in_service_source clear alongside acquired_on — a shell ' +
+      'with no cost or acquisition date has no in-service date either (0163\'s own shape check ' +
+      'agrees: pending_valuation requires both NULL).',
   },
   // T-345 — the missed-month catch-up link.
   missed_month_adjustments: {

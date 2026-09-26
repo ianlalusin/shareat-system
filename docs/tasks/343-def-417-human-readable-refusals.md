@@ -316,7 +316,8 @@ CLASSIFIED_INTERNAL is now pinned by file + message substring, not line.
 - **Rows 10–11 are not throws:** `commissary/transfer.ts:164,170,174` and `commissary/discrepancy.ts:74,87,159` return
   `Outcome` `{ ok:false, reason }` (`commissary/outcome.ts:10-12`); apps put `reason` straight into `?error=` with no
   `errorMessage` (`apps/erp/src/app/commissary/discrepancies/actions.ts:59,87`; **`commissary/orders/[id]/actions.ts:106`
-  — a bypass S8 does not list**). The S1 UUID gate never sees them.
+  — a bypass S8 does not list**). The S1 UUID gate never sees them. (R1.1: `:106` was mis-traced — it shows
+  `postOrderMessage`'s reasons from `commissary/messages.ts:40,61`, not transfer/discrepancy; S5.1b owns it.)
 - **Auth cannot import domain** (`packages/domain/package.json:15-17`: domain depends on auth and db; auth depends on db).
   A class defined only in `packages/domain/src/shared/` is unreachable from `roles.ts`/`credentials-admin.ts`;
   `recordGone` is repo-internal (`packages/db/src/index.ts:15-17`, type export only).
@@ -331,21 +332,27 @@ CLASSIFIED_INTERNAL is now pinned by file + message substring, not line.
 ### Design
 **One class, at the lowest shared layer.** `packages/db/src/refusal.ts` (new, value-import-free):
 `class RefusalError extends Error { readonly userMessage: string }`, `name = 'RefusalError'`. `RecordGoneError` becomes
-`extends RefusalError` (name, `message`, `userMessage` unchanged). `record-gone.ts` exports pure
-`goneSentence(what, notLonger?)`; `recordGone` uses it (one wording). `@shareat/db` exports both values. This departs
+`extends RefusalError` (name, `message`, `userMessage` unchanged). `refuse(raw, sentence)`, the pure
+`goneSentence(what, notLonger?)` and `RefusalError` are all defined in `packages/db/src/refusal.ts`; `goneSentence` is
+re-parented there from `record-gone.ts`, and `recordGone` imports and uses it (one wording) (R1.5). The UUID regex
+`refuse` uses also lives in `refusal.ts` (R1.4). `@shareat/db` exports all three values. **Constructing `RefusalError`
+directly is test-only:** production code calls `refuse`/`gone`/`recordGone` (R1.5). This departs
 from the one-liner ("RefusalError in domain") because auth could not reach a domain class; the domain file still
 exists as the producer API:
 
-`packages/domain/src/shared/refusal.ts` (new) re-exports `RefusalError` and adds:
+`packages/domain/src/shared/refusal.ts` (new) re-exports `RefusalError` and `refuse` (R1.5), and adds:
 | Helper | Returns | Use |
 |---|---|---|
-| `refuse(raw, sentence)` | `RefusalError` | every refusal a person can act on |
+| `refuse(raw, sentence)` (defined in `@shareat/db`, re-exported, R1.5) | `RefusalError` | every refusal a person can act on |
 | `gone(raw, what, notLonger?)` | `RefusalError`, `userMessage = goneSentence(…)` | "X does not exist" in domain |
 | `internalFault(raw)` | `InternalFaultError extends Error`, **no** `userMessage` | unreachable invariants ("carries no journalEntryId — data inconsistency", "no ordering key"); shows S1's fallback and leaves the ratchet honestly |
 | `humanDate(d)` | `formatBusinessDateTime(businessDayRange(d).start, { dateStyle: 'medium' })` | no second date formatter |
 
-`refuse` throws a plain `Error` at call time if `sentence` is empty, multi-line, or contains a UUID (a programming
-error, caught by tests, never by users). `message` is always `raw`, byte-identical (Invariant 1).
+`refuse` **sanitises**; it does not throw on free text (sentences interpolate particulars, invoice numbers and names).
+It collapses every whitespace run (newlines included) to one space, trims, and replaces each UUID with `[hidden]` (the
+S1 token). It throws only when the result is empty (possible only with an empty literal; test-caught).
+`apps/erp/src/lib/error-shape.ts` keeps its leaf copy of the UUID regex, and a parity test (F7) pins the two `.source`
+strings equal (R1.4). `message` is always `raw`, byte-identical (Invariant 1).
 
 **Sentence rules (every group):**
 1. One line, ends `.`, second person, no function prefix (`createExpense:`), no `_`, no quoted raw key, no column name
@@ -369,7 +376,10 @@ error, caught by tests, never by users). `message` is always `raw`, byte-identic
 `tests/unit/lib/document-facts.ts`, AST precedent `apps/erp/tests/touch-target-geometry.ts`). A `ts.createSourceFile`
 walk of `throw new <X>(arg)` and, opt-in, `reason:` property initialisers. It classifies `arg` by every interpolated or
 `+`-concatenated operand, recursing into nested templates and conditionals: **id** (final name
-`/^(id|[a-z]\w*Id|uid)$/`), **key** (`itemKind|kind|disposition|role|capability`), else **plain**. It returns
+`/^(id|[a-z]\w*Id|uid)$/`), **key** (`itemKind|kind|disposition|role|capability`), **derived** (an operand that is a
+`.join(…)` call, a `.message` access, or `String(<non-literal>)` — ids collected into a list and joined later) (R1.3),
+else **plain**. Derived counts as needing classification: it fails the census unless the site is in an allowlist with a
+one-line reason (e.g. the rule-5 rewrap, which reads `userMessage`, not `.message`) (R1.3). It returns
 `{ file, line, kind, callee, text }`, counts `refuse(`/`gone(`/`internalFault(` sites, and classifies `refuse`'s 2nd
 argument with the same classifier.
 
@@ -378,6 +388,7 @@ argument with the same classifier.
 |---|---|---|---|---|
 | S5.0 | foundation + widened scanner | — | 0 converted | everything below depends on it; the scanner must be trusted before any "0 left" |
 | S5.1 | sales days + expenses | 7, 8, 12 | 56 | highest traffic: every store, every day (submit/verify/void a day; record/approve an expense) |
+| S5.1b | commissary order messages (R1.1) | — (the fifth bypass) | `messages.ts:34,36,40,47,61,64` | after S5.1; any time after S5.0, **no S6 dependency**; **sole owner of `commissary/orders/[id]/actions.ts:106`** (S8 does not list it, S5.4 does not touch it); adds `Outcome.userReason` and `outcomeMessage` that S5.4 reuses |
 | S2b | DEF-430, listed above | — | — | T-341 landed (`4e986a3`); disjoint from S5.1 and may run beside it; **must precede S5a** (both edit `auth/src/refusal-text.ts`) |
 | S5a | auth roles + credentials | 15 | 7 raw + 11 two-arg | admin-only traffic; serial after S2b |
 | S5.2 | AP + customers + repo `ap.ts` | 9, 14b, new | 39 + 11 + 3 | weekly supplier and customer work |
@@ -386,9 +397,15 @@ argument with the same classifier.
 | S5.4 | commissary `Outcome` reasons | 10, 11 | ≈16 reasons | needs S6 labels and an app edit that overlaps S8 |
 | S5.5+ | the ≈180 unowned sites (stock, production, …) | — | — | specced later; ledger, fixed-assets, stores and scheduler after T-346 |
 
-**Ratchet rule (every group):** lower `CEILING` by exactly the number of raw `throw new Error(` the group removed
-(measured before and after on its own files, both numbers in the commit message). Tightening to the measured total
-(taking S3's 43) is done by the first S5 commit **after T-346 lands**; earlier would turn T-344..T-346 red. Never raised.
+**Ratchet rule (every group) (R1.2):** at S5.0, `tests/unit/t343-throw-ratchet.test.ts` replaces the single `CEILING`
+with `CEILINGS: Record<dir, number>`, one per top-level directory under `packages/domain/src`, plus `packages/auth/src`
+and `packages/db/src/repo`, each set to the count measured at the S5.0 commit (total today: 702). **Stated allowance:**
+`+10` each on `missed-months`, `fixed-assets`, `stores`, `ledger` (the T-345/T-346 dirs), named `ALLOWANCE_UNTIL_T346`
+in the file; the first commit after T-346 lands removes it, re-measuring those four. No other slack anywhere. A new
+directory with no entry fails. Each group lowers **its own directories' `CEILINGS` entries** to the measured count
+(before and after numbers in the commit message). Never raised.
+> **T-346 status note (R2, 2026-09-26):** T-346 S1 landed as commit `1ac1bca` (2026-09-26); S2/S3 are landing today.
+> The S5.0 builder runs `git log --oneline --grep "T-346"` before setting `ALLOWANCE_UNTIL_T346`.
 
 ---
 
@@ -396,22 +413,26 @@ argument with the same classifier.
 **BUILDER:** `packages/db/src/refusal.ts` (new), `packages/db/src/repo/record-gone.ts`, `packages/db/src/index.ts`,
 `packages/domain/src/shared/refusal.ts` (new), `packages/domain/src/index.ts` (one export line).
 **TESTER:** `tests/unit/lib/throw-census.ts` (new), `tests/unit/t343-s5-throw-census.test.ts` (new),
-`packages/domain/tests/t343-s5-refusal.test.ts` (new), `packages/db/tests/t343-repo-refusal-census.test.ts` (new `describe` only).
+`packages/domain/tests/t343-s5-refusal.test.ts` (new), `packages/db/tests/t343-repo-refusal-census.test.ts` (new `describe` only),
+`tests/unit/t343-throw-ratchet.test.ts` (`CEILING` → `CEILINGS` + `ALLOWANCE_UNTIL_T346`, R1.2),
+`apps/erp/tests/t343-s5-uuid-shape-parity.test.ts` (new, F7, R1.4).
 
 | Id | Leg | Asserts | Expected red |
 |---|---|---|---|
-| W1 | + | fixture of 5 shapes (single template; multi-line template with trailing comma; `'…' + \`${x.supplierId}\``; `'store ' + storeId + '…'`; nested `${a ? \`${b.id}\` : ''}`) yields exactly 5 **id** hits at the right lines | green on arrival (tester code); record the S3 regex's count on the same fixture (expected 2) as the gap evidence |
+| W1 | + | fixture of 7 shapes: (1) single template; (2) multi-line template with trailing comma; (3) `'…' + \`${x.supplierId}\``; (4) `'store ' + storeId + '…'`; (5) nested `${a ? \`${b.id}\` : ''}`; (6) `short.push(\`${line.itemId} …\`)` then `reason: \`…${short.join(', ')}\`` (the `commissary/transfer.ts:170,174,178` shape); (7) `\`x: ${err.message}\`` (the `expenses/categories.ts:138` shape) — yields exactly **5 id + 2 derived** hits at the right lines (R1.3) | green on arrival (tester code); record the S3 regex's count on shapes 1–5 (expected 2) as the gap evidence |
 | W2 | ⛔ | an id-free fixture (plain string; template interpolating only `amount`, `name`, `status`) yields 0 hits; AND the shared `assertFinds(scanner, fixture, 5)` helper **fails** when given `() => []` (a scanner that matches nothing must fail, DEF-179) | green on arrival |
 | W3 | + | real tree: scanning `packages/db/src/repo` finds the 3 `ap.ts` id hits, and **visits** the `remittance.ts` nested-template throw and the `attendance-punches.ts` concatenated throw (present in the all-throws list) | green on arrival |
 | W4 | + | db census `describe('T-343 S5.0 — widened scanner')`: every id hit is `recordGone(`, in `CLASSIFIED_INTERNAL`, or in `PENDING_S5_2` = exactly the 3 `ap.ts` sites (pinned by message substring); a stale `PENDING_S5_2` entry fails | green on arrival; S5.2 empties the list |
 | F1 | + | `refuse(raw, s)`: `instanceof RefusalError` and `Error`, `message === raw`, `userMessage === s`, `name === 'RefusalError'` | import fails (module missing) |
 | F2 | + | `gone(raw, 'expense', 'posted').userMessage === recordGone(raw, 'expense', 'posted').userMessage`; `recordGone(…) instanceof RefusalError` | missing |
 | F3 | ⛔ | `internalFault(raw)` has no own `userMessage`; `message === raw` | missing |
-| F4 | ⛔ | `refuse(raw, '')`, `refuse(raw, 'a\nb')`, `refuse(raw, \`x ${U}\`)` each throw at call time | missing |
+| F4 | ⛔ | (R1.4) `refuse(raw, 'a\n  b').userMessage === 'a b'`; `refuse(raw, \`x ${U}\`).userMessage === 'x [hidden]'`; `refuse(raw, '  ')` throws | missing |
 | F5 | + | `humanDate('2026-09-25')` equals the `formatBusinessDateTime` expression above and contains `2026` and `25` | missing |
+| F7 | ⛔ | (R1.4) `apps/erp/tests/t343-s5-uuid-shape-parity.test.ts`: `error-shape.ts`'s `UUID_SHAPE.source` equals the `packages/db/src/refusal.ts` copy | missing |
 
 **Negative halves (unedited):** `packages/db/tests/t343-record-gone.test.ts` (byte-identical after the re-parent), the
-S3 `C1` describe, `packages/auth/tests/errors-leaf.test.ts`, `tests/unit/t343-throw-ratchet.test.ts`.
+S3 `C1` describe, `packages/auth/tests/errors-leaf.test.ts`. (`t343-throw-ratchet.test.ts` is no longer unedited: S5.0's
+tester converts it to `CEILINGS`, R1.2.)
 
 ---
 
@@ -441,15 +462,15 @@ Scope: every raw `throw new Error(` in `packages/domain/src/sales-days/{create,v
 | `verify.ts:75,185` · `approve.ts:58` · `void.ts:46` | `internalFault(raw)` |
 | every other site | rule 4 (same sentence, prefix and citations dropped) |
 
-**BUILDER:** the 9 source files above; `tests/unit/t343-throw-ratchet.test.ts` `CEILING` line only (lower by the
-measured drop; `internalFault` sites leave the count too).
+**BUILDER:** the 9 source files above; `tests/unit/t343-throw-ratchet.test.ts` `CEILINGS` entries for `sales-days` and
+`expenses` only (lower each to its measured count; `internalFault` sites leave the count too) (R1.2).
 **TESTER:** `packages/domain/tests/t343-s5-domain-census.test.ts` (new; a `CONVERTED_DIRS` list each later group
 appends to); `packages/domain/tests/integration/sales-days.test.ts` and `expenses.test.ts` (new
 `describe('T-343 S5.1 …')` only); `apps/erp/tests/t343-s5-action-guard.test.ts` (new).
 
 | Id | Leg | Asserts | Expected red |
 |---|---|---|---|
-| D1 | + | census: `sales-days/`, `expenses/` have 0 raw `throw new Error(`; every `refuse(` 2nd arg classifies **plain** | red: 56 raw sites (record the list) |
+| D1 | + | census: `sales-days/`, `expenses/` have 0 raw `throw new Error(`; every `refuse(` 2nd arg classifies **plain**; no `throw new <X>(` of any class whose first argument classifies id, key or derived (R1.2; derived allowlist per R1.3); no `new RefusalError(` (R1.5) | red: 56 raw sites (record the list) |
 | D2 | ⛔ | census floor: across `CONVERTED_DIRS`, `refuse(` + `gone(` + `internalFault(` ≥ 50 (a converted tree that scans empty fails) | red: 0 |
 | E1 | + | `voidSalesDay` on an open day → `userMessage` exactly the `verify.ts:179` sentence with `open`; no UUID | undefined |
 | E2 | + | duplicate `createSalesDay` → `userMessage` contains `humanDate(date)`, no UUID | undefined |
@@ -458,6 +479,7 @@ appends to); `packages/domain/tests/integration/sales-days.test.ts` and `expense
 | E5 | ⛔ | each E1–E4 `err.message` still matches its current regex (`/only a verified day has a posting/`, `/already exists for store/`, `/is voided — cannot post/`, `/does not own supplier invoice/`) | green before and after |
 | E6 | ⛔ | a planted verified day with no journal entry → `InternalFaultError` with no `userMessage`; through `errorMessage` → the S1 fallback | class missing |
 | A1 | + | `voidSalesDayAction` (redirect mocked as in R7; real `constraint-messages`) with a mocked `voidSalesDay` throwing `refuse(\`… ${U}\`, s)` → decoded `error` === `s` | green if S1 holds; if red, report it (a bypass) |
+| F6 | + | (R1.4) an expense whose particulars are `"Rice\n sack"` and an invoice number containing `U` renders as one line with `[hidden]` through the `create.ts:146` sentence | undefined |
 
 **Negative halves (unedited):** `sales-days.test.ts`, `expenses.test.ts`, `expense-categories-admin.test.ts`,
 `expenses-staff-float.test.ts`, `ap.test.ts`, every app test matching these messages; the full integration suite.
@@ -465,21 +487,33 @@ appends to); `packages/domain/tests/integration/sales-days.test.ts` and `expense
 
 ---
 
+### S5.1b: commissary order messages (the fifth bypass), after S5.1 (R1.1)
+Specified in full by R1.1 below (sites, `Outcome.userReason`, `outcomeMessage(result)`, BUILDER/TESTER paths, legs
+M1–M4). Summary: `apps/erp/src/app/commissary/orders/[id]/actions.ts:106` shows `result.reason` from
+`postOrderMessage` (`packages/domain/src/commissary/messages.ts:40,61`, `order ${input.orderId} does not exist`), not
+transfer/discrepancy. This group **alone owns `:106`**; it does not wait on S6.
+
+---
+
 ### S5a: auth roles and credentials (row 15), after S2b
-`AuthorizationError` already takes `userMessage` (S2). `RefusalError` comes from `@shareat/db`.
+`AuthorizationError` already takes `userMessage` (S2). `roles.ts` and `credentials-admin.ts` import `refuse` and
+`goneSentence` from `@shareat/db` themselves; `refusal-text.ts` gains no import and stays pure (R1.5).
 - `roles.ts:367,586` · `credentials-admin.ts:45` → third arg `goneSentence('person')`.
 - `roles.ts:393` → `Only a super admin can make someone ${ROLE_LABEL[input.role]}. Your role is ${ROLE_LABEL[actorRole] ?? 'none'}.`
 - `roles.ts:447` → `This person is ${ROLE_LABEL[targetRole]}, which outranks you, so you can't change their role.`
-- `roles.ts:577` → `new RefusalError(raw, "That isn't a permission this system knows.")`.
+- `roles.ts:577` → `refuse(raw, "That isn't a permission this system knows.")` (R1.5).
 - id-free `AuthorizationError`s (`roles.ts:346,376,494,570,592`, `credentials-admin.ts:261`) → third arg, rule 4.
-- `credentials-admin.ts:67,69,75,78,189,211` → `new RefusalError(raw, <same sentence>)` (already written for a person).
+- `credentials-admin.ts:67,69,75,78,189,211` → `refuse(raw, <same sentence>)` (already written for a person) (R1.5).
 Sentences live in `packages/auth/src/refusal-text.ts`. ⛔ `errors.ts` untouched (Invariant 7); `capabilities.ts` read only.
-**BUILDER:** `packages/auth/src/{roles.ts,credentials-admin.ts,refusal-text.ts}`; the ratchet `CEILING` line.
+**BUILDER:** `packages/auth/src/{roles.ts,credentials-admin.ts,refusal-text.ts}`; the ratchet's `packages/auth/src`
+`CEILINGS` entry (R1.2).
 **TESTER:** `packages/auth/tests/t343-s5a-census.test.ts` (new); `packages/auth/tests/integration/roles.test.ts` (new `describe` only).
 
 | Id | Leg | Asserts | Expected red |
 |---|---|---|---|
-| K1 | + | census: `auth/src` has 0 raw `throw new Error(`; every `new AuthorizationError(` has 3 args | red: 7 raw, 11 two-arg |
+| K1 | + | census: `auth/src` has 0 raw `throw new Error(`; every `new AuthorizationError(` has 3 args; no id/key/derived first argument on any `throw new <X>(` (R1.2), EXCEPT the four `roles.ts` raw messages K4/Invariant 1 pin byte-identical — allowlisted by their raw message TEXT (never file:line; S5a edits lines around them), exempt from the first-argument rule only; the 3-arg rule still applies to them, which is what keeps the exemption safe, and the test says so (R2 ruling 1); no `new RefusalError(` (R1.5) | red: 7 raw, 11 two-arg |
+
+> (R2 ruling 1 is folded into K1 above: the four `roles.ts` raw messages are allowlisted by text.)
 | K2 | + | an admin assigning `super_admin` → `userMessage` contains `Super admin`, not `'super_admin'` | undefined |
 | K3 | + | assigning a role to a missing person → `/^That person could not be found\./`, no UUID | undefined |
 | K4 | ⛔ | K2/K3 `err.message` byte-identical to today; `roles.test.ts` case 6 (the DEF-177 absence) green unedited | green before and after |
@@ -488,18 +522,19 @@ Sentences live in `packages/auth/src/refusal-text.ts`. ⛔ `errors.ts` untouched
 
 ### S5.2: AP, customers, and the repo sites S3 missed (rows 9, 14b)
 Scope: `packages/domain/src/ap/index.ts` (39), `packages/domain/src/customers/index.ts` (11), and
-`packages/db/src/repo/ap.ts:431,437,443` → `RefusalError`: `Invoice ${invoiceNo} from ${supplierName} has been voided, so
+`packages/db/src/repo/ap.ts:431,437,443` → `refuse(raw, …)` (R1.5): `Invoice ${invoiceNo} from ${supplierName} has been voided, so
 nothing more can be recorded against it.` · `… hasn't been verified yet, so this can't post against it.` · `… has only
 ₱${remaining} left of ₱${total}; ₱${amount} doesn't fit.` Names come from the `capacity` row; extend `capacityOf`'s
 select with `invoiceNo` and the supplier name if absent (same query, no new one). Not-found → `gone`;
 `ap/index.ts:747,754,756` name the expense by its human key (one refusal-path read); `:918`, `:1010`, `:1022` →
 `internalFault` (states the caller cannot produce).
-**BUILDER:** those three source files; the ratchet line. **TESTER:** census `CONVERTED_DIRS += ap, customers`; the db
+**BUILDER:** those three source files; the ratchet's `ap`, `customers` and `packages/db/src/repo` `CEILINGS` entries
+(R1.2). **TESTER:** census `CONVERTED_DIRS += ap, customers`; the db
 census empties `PENDING_S5_2`; `packages/domain/tests/integration/ap.test.ts` (new `describe` only).
 
 | Id | Leg | Asserts | Expected red |
 |---|---|---|---|
-| P1 | + | census: 0 raw in `ap/`, `customers/`; `PENDING_S5_2` empty | red: 50 + 3 |
+| P1 | + | census: 0 raw in `ap/`, `customers/`; `PENDING_S5_2` empty; no id/key/derived first argument on any `throw new <X>(` (R1.2); no `new RefusalError(` (R1.5) | red: 50 + 3 |
 | P2 | + | an expense against a voided invoice → names `invoiceNo` and the supplier, no UUID | undefined |
 | P3 | + | `recordPayment` over-allocating one expense → names it as `"particulars" (date)` | undefined |
 | P4 | ⛔ | P2/P3 messages match today's regexes; `ap-aging`, `ap-auto-allocate`, `supplier-master`, `supplier-returns` green unedited | green |
@@ -507,28 +542,32 @@ census empties `PENDING_S5_2`; `packages/domain/tests/integration/ap.test.ts` (n
 ### S5.3: deliveries, catalogue, opening balances (rows 13, 14a, 16)
 Scope: `deliveries/documents.ts` (10; `:126`, `:129` → `Line ${n}: …` by position; `:115` → `gone(raw, 'proof photo')`),
 `commissary/catalogue.ts` (16; stores as `Name (CODE)`, items by name), `cutover/opening.ts` (9; `:164` →
-`gone(raw, 'opening figure')`). **BUILDER:** those three files; the ratchet line. **TESTER:** `CONVERTED_DIRS +=` the
-three files; one integration leg per file (new `describe` in the nearest existing file) + a ⛔ message-regex leg.
+`gone(raw, 'opening figure')`). **BUILDER:** those three files; the ratchet's `deliveries`, `commissary` and `cutover`
+`CEILINGS` entries (R1.2). **TESTER:** `CONVERTED_DIRS +=` the
+three files; one integration leg per file (new `describe` in the nearest existing file) + a ⛔ message-regex leg. The
+census also fails on an id/key/derived first argument to any `throw new <X>(` (R1.2) and on `new RefusalError(` (R1.5).
 Red: 35 raw.
 
 ### S5.4: commissary Outcome reasons (rows 10, 11), after S6
-`Outcome`'s failure arm gains optional `userReason?: string` (`commissary/outcome.ts`); every `reason:` in
+`Outcome`'s failure arm already has optional `userReason?: string` from S5.1b; S5.4 reuses it (R1.1). Every `reason:` in
 `transfer.ts`/`discrepancy.ts` sets it: item kinds and dispositions through S6's labels, the `short` list by item
-**name** (one refusal-path read of the listed ids), discrepancies deictically. Apps render
-`result.userReason ?? result.reason` through the shared S1 redaction at the three `commissary/**/actions.ts` sites
-above. Coordinate with S8, which owns the bypass list (`orders/[id]/actions.ts:106` is added to it). **TESTER:** census
-in the scanner's `reason:` mode over the two files (red: ≈16 id/key reasons); one integration leg each for transfer
-and discrepancy; ⛔ `reason` byte-identical.
+**name** (one refusal-path read of the listed ids), discrepancies deictically. Apps render through S5.1b's
+`outcomeMessage(result)` (R1.1) at S5.4's own `commissary/**/actions.ts` sites (`discrepancies/actions.ts:59,87`).
+S5.4 does **not** touch `orders/[id]/actions.ts:106` — S5.1b alone owns it, and S8 does not list it (R1.1). **TESTER:** census
+in the scanner's `reason:` mode over the two files (red: ≈16 id/key/derived reasons, R1.3); it also fails on
+`new RefusalError(` (R1.5); one integration leg each for transfer and discrepancy; ⛔ `reason` byte-identical.
 
 ### Invariants (S5, in addition to 1–11)
-12. One `RefusalError` class; `recordGone` and `gone` share `goneSentence`.
+12. One `RefusalError` class; `recordGone` and `gone` share `goneSentence`, defined beside it in
+    `packages/db/src/refusal.ts`; production code never writes `new RefusalError(` (R1.5).
 13. `internalFault` never carries a `userMessage`; it is only for states no user input can produce.
 14. No S5 group edits a file owned by T-344/T-345/T-346 until that task lands.
-15. The ratchet only falls; every drop is the group's own measured count.
+15. The ratchet only falls; every drop is the group's own measured count, per directory (R1.2).
 
 ### Done when (per group)
 As "Done when (per slice)" above, plus: the census lists the group's dirs and goes red→green with the raw list
-recorded; `CEILING` lowered by the measured drop; the group's highest-traffic refusal smoketested on 9008. After S5.4,
+recorded; the group's own directories' `CEILINGS` entries lowered to the measured count, and `ALLOWANCE_UNTIL_T346`
+removed by the first commit after T-346 lands (R1.2); the group's highest-traffic refusal smoketested on 9008. After S5.4,
 DEF-417 part 2 rows 7–16 are stamped FIXED; the ≈180-site remainder stays open under S5.5+.
 
 ### S5 Amendment R1 — spec review (2026-09-25), binding
@@ -587,3 +626,27 @@ Independent Opus review returned CHANGES. Where this amendment and the S5 body d
    `RefusalError` directly is test-only:** production code calls `refuse`/`gone`/`recordGone`. Every census (D1, K1, P1,
    S5.3, S5.4) fails on `new RefusalError(` outside `packages/db/src/refusal.ts` and `record-gone.ts`. S5a's two
    `new RefusalError(raw, …)` bullets read `refuse(raw, …)`.
+
+## Amendment R2 — S5 fold (2026-09-26)
+S5 Amendment R1 was binding but never folded into the S5 body. Each R1 item is now folded in place, tagged `(R1.n)`;
+R1 stays above as the record. Lines are as of this amendment.
+
+| R1 item | Folded at |
+|---|---|
+| R1.1 S5.1b | evidence `:319` (`:106` mis-traced); groups table row `:391`; new stub section `:490`; S5.4 body `:555-561` (reuses `userReason`/`outcomeMessage`, does not touch `:106`) |
+| R1.2 per-directory `CEILINGS` | ratchet rule `:400-406`; S5.0 TESTER path `:417`; S5.1 BUILDER `:466`; S5a BUILDER `:508-509`; S5.2 BUILDER `:534-535`; S5.3 BUILDER `:548-549`; first-argument rule in D1 `:473`, K1 `:514`, P1 `:540`, S5.3 `:551`; Invariant 15 `:568`; Done when `:572-573`; S5.0 negative halves no longer list the ratchet test |
+| R1.2 `ALLOWANCE_UNTIL_T346` note | `:407-408` (T-346 S1 = `1ac1bca`; builder checks `git log --oneline --grep "T-346"` first) |
+| R1.3 derived | scanner paragraph `:380-382`; W1 7 shapes, 5 id + 2 derived `:422`; S5.4 census `:560` |
+| R1.4 `refuse` sanitises | Design `:351-355`; UUID regex home `:338`; F4 replaced `:429`; F7 `:431` + TESTER path `:418`; F6 `:482` |
+| R1.5 `refuse(raw, …)` / re-parent | Design `:335-343`; S5a import line `:499-500`, `:504`, `:506`; S5.2 `ap.ts` `:528`; `new RefusalError(` census in D1, K1, P1, S5.3 `:551`, S5.4 `:561`; Invariant 12 `:564-565` |
+
+**Open, not settled by R1 (planner ruling needed):**
+1. R1.2's first-argument rule on K1 contradicts K4/Invariant 1 at `roles.ts:367,393,447,586` (see the note at `:516`).
+2. R1.1 says "S5.4's three sites"; with `:106` moved to S5.1b, the evidence names only two (`discrepancies/actions.ts:59,87`).
+3. R1.4 names F6 but not its group; it is placed in S5.1 (`:482`) because the `create.ts:146` sentence lands there.
+
+### R2 rulings (orchestrator, 2026-09-26)
+- **roles.ts:367,393,447,586 vs K1:** K4 and Invariant 1 win. Those four raw messages stay byte-identical; K1's census carries them as an explicit allowlist, each entry citing K4/Invariant 1 as the reason. No other allowlist entry is added.
+- **S5.4's sites:** two, `discrepancies/actions.ts:59,87`; `:106` belongs to S5.1b. R1.1's "three" is superseded.
+- **F6:** S5.1, where `create.ts:146`'s sentence lands. Accepted.
+- **Ruling 1 refined (auditor):** the allowlist is keyed by the raw message text, never file:line, and exempts only the first-argument rule.

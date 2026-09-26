@@ -58,6 +58,10 @@ export default async function FixedAssetsPage({
   const totalCost = rows.reduce((a, r) => a + Number(r.cost ?? 0), 0);
   const totalAccumulated = rows.reduce((a, r) => a + Number(r.accumulated), 0);
   const totalBook = rows.reduce((a, r) => a + Number(r.bookValue), 0);
+  // T-346 S2 (DEF-427), §3.6 — held assets sit on the books at cost, depreciating nothing, so
+  // their cost is worth calling out as its own group rather than blending into the grand total.
+  const heldRows = rows.filter((r) => r.status === 'active' && r.inServiceOn === null);
+  const heldCost = heldRows.reduce((a, r) => a + Number(r.cost ?? 0), 0);
 
   return (
     <Page density="table">
@@ -233,6 +237,11 @@ export default async function FixedAssetsPage({
                         Needs review
                       </span>
                     )}
+                    {r.status === 'active' && r.inServiceOn === null && (
+                      <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                        Not yet in service
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-2">{CATEGORY_LABEL[r.category] ?? r.category}</td>
                   <td className="px-3 py-2">{storeById.get(r.storeId)?.code ?? '—'}</td>
@@ -256,6 +265,17 @@ export default async function FixedAssetsPage({
               ))}
             </tbody>
             <tfoot>
+              {heldRows.length > 0 && (
+                <tr className="border-t border-neutral-200 bg-amber-50 text-amber-900 dark:border-neutral-800 dark:bg-amber-950 dark:text-amber-300">
+                  <td className="px-3 py-2" colSpan={4}>
+                    Not yet in service — {heldRows.length} asset{heldRows.length === 1 ? '' : 's'}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {formatMoney(money(heldCost.toFixed(2)))}
+                  </td>
+                  <td className="px-3 py-2" colSpan={4} />
+                </tr>
+              )}
               <tr className="border-t border-neutral-200 bg-neutral-50 font-medium dark:border-neutral-800 dark:bg-neutral-900">
                 <td className="px-3 py-2" colSpan={4}>
                   {rows.length} asset{rows.length === 1 ? '' : 's'}

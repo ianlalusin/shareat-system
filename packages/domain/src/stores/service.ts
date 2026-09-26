@@ -38,6 +38,7 @@
  */
 import {
   accessRepo,
+  fixedAssetsRepo,
   manilaToday,
   orderWastageRepo,
   personsRepo,
@@ -47,6 +48,7 @@ import {
   type Tx,
 } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
+import { describeReversal, executeReversals, planInServiceReversal } from '../fixed-assets/in-service';
 // ⭐ The LEAF module, not `../organizations` — `organizations/index.ts` imports `createStore` from
 // this file, so importing its barrel back would close an import cycle. See `identifiers.ts`.
 import { normaliseBranchCode } from '../organizations/identifiers';
@@ -275,9 +277,16 @@ export async function updateStoreDetails(
  * later — or no — date by a subsequent edit. Moving the date EARLIER than first trading is
  * unrestricted — that is a correction, not a claim that it never opened.
  *
- * ⛔ **Step 3 (§3.2, "from S2 on, apply §3.4 to each follower asset") is not implemented yet.**
- * `fixed_assets.in_service_on` does not exist until migration 0163; T-346 S2 wires the cascade into
- * this function. `confirmReversal` is accepted now so the call shape does not change under S2.
+ * ⭐ **T-346 S2 (DEF-427), §3.2 step 3.** Every `'store_opening'`-sourced follower asset re-derives
+ * its `in_service_on` from this store's date the moment it changes — migration 0163's
+ * `stores_opening_date_propagate` trigger does that re-derivation automatically once the write
+ * below lands. What this function adds on top is everything the trigger CANNOT do: plan which
+ * followers' posted depreciation the new date would make illegal, refuse outright on a DEF-435
+ * conflict, and reverse what needs reversing — all BEFORE the write, in the same transaction, so
+ * the trigger's own guard (`fixed_assets_in_service_b_guard`) never has anything left to catch.
+ * ONE confirm covers every affected asset — not one per asset — reusing `planInServiceReversal` /
+ * `executeReversals` / `describeReversal` so this cascade and `setAssetInService`'s own single-asset
+ * path can never describe the same reversal two different ways.
  */
 export async function setStoreOpeningDate(
   tx: Tx,
@@ -302,6 +311,68 @@ export async function setStoreOpeningDate(
       `setStoreOpeningDate: ${store.name} has traded since ${firstTrading}; its opening date must ` +
         'be on or before that',
     );
+  }
+
+  // §3.2 step 3 — every follower this store's own opening-date change would touch. Mirrors
+  // migration 0163's `fixed_assets_in_service_a_fill`'s own `'store_opening'` branch exactly
+  // (NULL while the store has none, else the later of the new opening date and the asset's own
+  // acquisition), so the plan below matches what the trigger will actually derive once written.
+  //
+  // ⛔ Amendment R4.4 (1) — `status = 'active'` only. A disposed asset is no longer depreciating
+  // anything and re-deriving its in_service_on would be a no-op with teeth: it can only ever
+  // surface a phantom DEF-435 conflict or reversal against history that no longer matters. The
+  // propagation trigger's own `WHERE` carries the identical `status = 'active'` condition, so a
+  // disposed follower is frozen on BOTH sides, never just one.
+  const followers = (await fixedAssetsRepo.listAssets(tx, actor.orgId, { storeId, status: 'active' })).filter(
+    (a) => a.inServiceSource === 'store_opening',
+  );
+
+  const plans = await Promise.all(
+    followers.map(async (asset) => {
+      // ⭐ Safe: `inServiceSource === 'store_opening'` only ever exists on a non-shell row (the
+      // fill trigger forces both columns NULL for `pending_valuation`), and a non-shell row always
+      // carries a cost and an acquisition date (0163's own shape CHECK ties the three together).
+      const newInServiceOn =
+        input.openingDate === null
+          ? null
+          : input.openingDate > asset.acquiredOn!
+            ? input.openingDate
+            : asset.acquiredOn!;
+      return { asset, plan: await planInServiceReversal(tx, actor.orgId, asset, newInServiceOn) };
+    }),
+  );
+
+  const conflicted = plans.find(({ plan }) => plan.conflict);
+  if (conflicted) {
+    throw new Error(
+      `setStoreOpeningDate: ${conflicted.asset.name}: ${conflicted.plan.conflict!.period} would need ` +
+        `re-booking at ${conflicted.plan.conflict!.amount}, which this cannot do yet (DEF-435)`,
+    );
+  }
+
+  const affected = plans.filter(({ plan }) => plan.toReverse.length > 0);
+  if (affected.length > 0 && !input.confirmReversal) {
+    const perAsset = affected
+      .map(({ asset, plan }) => `${asset.name} — ${describeReversal(plan.toReverse)}`)
+      .join('; ');
+    throw new Error(
+      `setStoreOpeningDate: ${store.name} — moving the opening date reverses depreciation for ` +
+        `${affected.length} asset(s): ${perAsset}; confirm to proceed`,
+    );
+  }
+
+  if (affected.length > 0) {
+    const today = await manilaToday(tx);
+    const dateLabel = input.openingDate ?? 'held (no opening date yet)';
+    for (const { asset, plan } of affected) {
+      await executeReversals(
+        tx,
+        actor.personId,
+        today,
+        `${store.name}'s opening date changed to ${dateLabel} — in-service date follows automatically`,
+        plan.toReverse,
+      );
+    }
   }
 
   await storesRepo.updateStore(tx, actor.orgId, storeId, { openingDate: input.openingDate });

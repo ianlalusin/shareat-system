@@ -53,8 +53,11 @@ async function newOrg(hint: string) {
     insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id
   `;
   await seedChartOfAccounts(sql, org!.id);
+  // T-346 S3: opening_date in the past (before 2026, this file's whole calendar), so once
+  // `tillFloatOffTarget`'s pre-opening-AND-zero-balance suppression (R1.6) lands, these stores read
+  // as already-open and till-float mismatches keep firing exactly as this file expects today.
   const [store] = await sql<{ id: string }[]>`
-    insert into stores (org_id, code, name) values (${org!.id}, ${uid(hint)}, ${`Store ${hint}`}) returning id
+    insert into stores (org_id, code, name, opening_date) values (${org!.id}, ${uid(hint)}, ${`Store ${hint}`}, '2020-01-01') returning id
   `;
   await sql`
     insert into fiscal_periods (org_id, starts_on, ends_on, status)

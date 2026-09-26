@@ -1002,6 +1002,13 @@
       "when": 1800070307084,
       "tag": "0162_t346_store_opening_date",
       "breakpoints": true
+    },
+    {
+      "idx": 163,
+      "version": "7",
+      "when": 1800156707084,
+      "tag": "0163_t346_asset_in_service",
+      "breakpoints": true
     }
   ]
 }

@@ -51,7 +51,7 @@ describe('depreciation intervals — engine and column agree', () => {
     // indistinguishable in production from "this asset is not due yet".
     for (const interval of columnIntervals()) {
       const periods = buildSchedule({
-        acquiredOn: '2026-01-01',
+        startsOn: '2026-01-01',
         cost: money('120000'),
         salvageValue: money('0'),
         usefulLifeMonths: 24,

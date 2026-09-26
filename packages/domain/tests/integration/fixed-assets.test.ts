@@ -83,8 +83,12 @@ async function setup(hint: string): Promise<Fixture> {
     `;
   }
 
+  // T-346 S2: opening_date well before every asset date this file uses (all within 2026), so the
+  // S2 in-service fill trigger (once it lands) derives 'store_opening' in-service dates equal to
+  // acquired_on rather than leaving these assets HELD — this file is the depreciation engine's own
+  // integration suite.
   const [store] = await sql<{ id: string }[]>`
-    insert into stores (org_id, code, name) values (${orgId}, ${uid(hint)}, ${`Store ${hint}`}) returning id
+    insert into stores (org_id, code, name, opening_date) values (${orgId}, ${uid(hint)}, ${`Store ${hint}`}, '2020-01-01') returning id
   `;
   const storeId = store!.id;
 
@@ -651,7 +655,7 @@ describe('the terms stamped on the asset', () => {
     const assetId = await anAsset(f, { cost: '77777.77', usefulLifeMonths: 7 });
 
     const expected = buildSchedule({
-      acquiredOn: '2026-01-15',
+      startsOn: '2026-01-15',
       cost: money('77777.77'),
       salvageValue: money('0'),
       usefulLifeMonths: 7,

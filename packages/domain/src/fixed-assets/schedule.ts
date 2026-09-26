@@ -38,8 +38,11 @@ const MONTH_STEP: Record<DepreciationInterval, number> = {
 };
 
 export interface ScheduleInput {
-  /** `YYYY-MM-DD`. The first period starts in this month. */
-  acquiredOn: string;
+  /** `YYYY-MM-DD`. The first period starts in this month.
+   *  ⭐ T-346 S2 (DEF-427) — renamed from `acquiredOn`: the schedule starts when the asset is IN
+   *  SERVICE (PAS 16), not necessarily when it was bought. `scheduleInputFor` (`depreciate.ts`)
+   *  is what feeds `in_service_on` in here; this file stays ignorant of where the date came from. */
+  startsOn: string;
   cost: Money;
   salvageValue: Money;
   /** MONTHS (bible row 140), not years. */
@@ -79,7 +82,7 @@ export function buildSchedule(input: ScheduleInput): SchedulePeriod[] {
   const depreciable = subtract(input.cost, input.salvageValue);
 
   return buildStraightLine({
-    startsOn: input.acquiredOn,
+    startsOn: input.startsOn,
     amount: depreciable,
     periods,
     monthStep,

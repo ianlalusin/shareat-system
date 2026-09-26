@@ -29,7 +29,7 @@ export default async function StoreDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ ok?: string; error?: string }>;
+  searchParams: Promise<{ ok?: string; error?: string; confirm?: string; openingDate?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -194,8 +194,11 @@ export default async function StoreDetailPage({
             * `stock_model` below: `setStoreOpeningDate` carries a refusal (has this store already
             * traded?) a general "save details" call should not have to know about.
             *
-            * ⛔ No confirm-reversal control here — §3.4's cascade is S2's; `fixed_assets.in_service_on`
-            * does not exist yet, so there is nothing today's call could ever need to reverse.
+            * ⭐ T-346 S2 (DEF-427), §3.2 step 3 / R4.5. Moving the date can cascade a reversal
+            * across every `'store_opening'`-sourced follower asset — `setStoreOpeningDate` plans
+            * that and refuses once (naming every affected asset) unless confirmed. `sp.confirm`
+            * is that refusal's OWN message, shown verbatim as an in-page step — never
+            * `window.confirm()` — with a resubmit that carries `confirmReversal=1`.
             */}
           <form
             action={setStoreOpeningDateAction}
@@ -205,15 +208,31 @@ export default async function StoreDetailPage({
             <input type="hidden" name="storeId" value={store.id} />
             <label className="block text-sm">
               <span className="block text-neutral-600 dark:text-neutral-400">Opening date</span>
-              <input type="date" name="openingDate" defaultValue={store.openingDate ?? ''}
+              {/* ⛔ `??`, not `||` — load-bearing. `sp.openingDate` is `''` when the confirm
+                  round-trip is carrying a DELIBERATELY CLEARED date; `||` would treat that empty
+                  string as absent and silently fall through to `store.openingDate`, undoing the
+                  clear the moment the confirm step re-renders this field. */}
+              <input type="date" name="openingDate" defaultValue={sp.openingDate ?? store.openingDate ?? ''}
                 className="mt-1 w-full rounded border border-neutral-300 p-2 dark:border-neutral-700 dark:bg-neutral-900" />
             </label>
             <p className="text-xs text-neutral-500">
               Leave blank if it has not opened. The first day this store trades.
             </p>
+            {sp.confirm && (
+              <>
+                <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                  {sp.confirm}
+                </div>
+                {/* ⛔ A hidden input, not a checkbox — clicking "Confirm and save" IS the
+                    confirmation; a checkbox's native box is unresolvable-by-construction for the
+                    touch-target sweep (Ian's ruling §6.1, T-262), and a second tick-then-click
+                    gesture here would be redundant with the button itself. */}
+                <input type="hidden" name="confirmReversal" value="1" />
+              </>
+            )}
             <button type="submit"
               className="rounded border border-neutral-300 px-4 py-2 text-sm font-medium dark:border-neutral-700">
-              Save opening date
+              {sp.confirm ? 'Confirm and save' : 'Save opening date'}
             </button>
           </form>
 

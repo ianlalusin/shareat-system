@@ -62,7 +62,7 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
   // Wrapping the action in `withOrgPrincipal` and passing that tx through switches this call into
   // atomic mode, which is a regression, not a fix — the null branch already opens its own
   // per-asset `withOrgPrincipal` transactions internally (DEF-287), so it was never RLS-unsafe.
-  'app/fixed-assets/actions.ts:147',
+  'app/fixed-assets/actions.ts:198',
 ]);
 
 function isUseServerFile(content: string): boolean {

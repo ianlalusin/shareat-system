@@ -59,8 +59,11 @@ async function fixture(hint: string) {
   await sql`
     insert into fiscal_periods (org_id, starts_on, ends_on, status)
     values (${orgId}, '2026-01-01', '2026-01-31', 'open')`;
+  // T-346 S2/S3: opening_date before the fixed-asset fixtures' 2026-01-01 acquired_on below, so
+  // once the S2 in-service fill trigger and S3's `periodicPostingsMissed` land, these assets read
+  // as in-service (not HELD) and the depreciationNotBooked cases still fire/clear as before.
   const [store] = await sql<{ id: string }[]>`
-    insert into stores (org_id, code, name) values (${orgId}, ${uid(hint)}, ${`Store ${hint}`}) returning id`;
+    insert into stores (org_id, code, name, opening_date) values (${orgId}, ${uid(hint)}, ${`Store ${hint}`}, '2020-01-01') returning id`;
   // T-339 (DEF-412) — every SUPPORTED store creator (`stores/service.ts:129`) seeds a live
   // attendance config; this fixture inserts by raw SQL and must match that, or
   // `attendanceConfigMissing` rightly fires for a store no real path could ever produce.

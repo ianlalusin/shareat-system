@@ -230,9 +230,24 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // census does not count it. ⛔ Pixel classification (PASS/FAIL/UNRESOLVED per control) held
     // pending the code-review hold on this cycle — re-verify against `runCensus()`'s own filtered
     // results the same way T-344/T-345's entries were, before trusting this number as final.
-    // 1048 = 151 FAIL + 58 UNRESOLVED + 839 PASS, all measured together via runCensus() (not
+    // 1048 -> 1054, T-346 S2 (DEF-427) (2026-09-26). +6, FAIL/UNRESOLVED unmoved (both asserted
+    // above). Itemised, verified against `git diff HEAD -- apps/erp/src/app/fixed-assets/ apps/erp/src/app/admin/stores/`
+    // directly (not by arithmetic alone), exactly six new interactive controls and nothing else:
+    // `app/fixed-assets/[id]/page.tsx`'s new "In service" form — the `mode` `<select>`, the
+    // "Specific date" `<input type="date" name="inServiceOn">`, the `reason` text input, and its
+    // submit button (four); `app/fixed-assets/new/page.tsx`'s new "When it goes into service"
+    // section — the `inServiceMode` `<select>` and its own `<input type="date" name="inServiceOn">`
+    // (two). Per Ian's ruling §6.1 (T-262), the mode pickers are `<select>` elements, not radios —
+    // a native radio/checkbox box is unresolvable-by-construction for the touch-target sweep, which
+    // is exactly the 8-UNRESOLVED regression an earlier radio-based draft of this same UI produced
+    // before the builder redesigned it; a `<select>` sizes from its own classes like this file's
+    // other pickers. The confirm-reversal steps on both the asset page and
+    // `app/admin/stores/[id]/page.tsx` add only `type="hidden"` inputs (`confirmReversal`) and
+    // reuse each form's EXISTING submit button (relabelled, not a new element) — the census does
+    // not count hidden inputs, and an unchanged button contributes nothing to the delta.
+    // 1054 = 151 FAIL + 58 UNRESOLVED + 845 PASS, all measured together via runCensus() (not
     // computed from the other two numbers, so this cannot become circular with them).
-    expect(results.length).toBe(1048);
+    expect(results.length).toBe(1054);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

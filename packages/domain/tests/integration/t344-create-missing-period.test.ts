@@ -110,8 +110,11 @@ async function rolesFixture(hint: string) {
     insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
   const orgId = org!.id;
   await seedChartOfAccounts(sql, orgId);
+  // T-346 S2 (R4.1): opening_date before activeFixedAsset's 2026-01-01 acquired_on, so once the S2
+  // in-service fill trigger lands, `periodFullyCovered` (missed-months/index.ts, via the exported
+  // `scheduleInputFor`) still sees this asset owing its schedule instead of reading it as HELD.
   const [store] = await sql<{ id: string }[]>`
-    insert into stores (org_id, code, name) values (${orgId}, ${uid('s')}, 'Store') returning id`;
+    insert into stores (org_id, code, name, opening_date) values (${orgId}, ${uid('s')}, 'Store', '2020-01-01') returning id`;
   const person = async (name: string, role: string) => {
     const [p] = await sql<{ id: string }[]>`
       insert into persons (org_id, display_name) values (${orgId}, ${name}) returning id`;

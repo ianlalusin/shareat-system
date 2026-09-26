@@ -291,3 +291,297 @@ describe('T-346 S1 / migration 0162 — backfills stores.opening_date (M1)', () 
 });
 
 // =================================================================================================
+// I9 — S2, migration 0163's own triggers/CHECK (R1.9: appended here rather than a new file, DB /
+// APP role / raw SQL, same family as this file's own M1). Not a backfill-proof scratch DB like M1
+// above — these are ordinary INSERT/UPDATE behaviours against the real `_test` database, which
+// already has 0163 applied once the builder lands it. §3.3 steps 3-6, Amendment R4 (R1.1, R1.2,
+// R1.8, R4.2).
+//
+// ⛔ RED until migration `0163_t346_asset_in_service.sql` exists: every case here selects or writes
+// `fixed_assets.in_service_on` / `in_service_source`, which do not exist yet — "column ... does not
+// exist" — except the two guard-trigger cases, which instead find no rejection at all (the trigger
+// does not exist to raise it), and the two CHECK cases (23514), which likewise find the INSERT
+// resolves instead of rejecting, since the CHECK does not exist yet either.
+// =================================================================================================
+
+describe('T-346 S2 / migration 0163 — the in-service fill trigger, its guard, and the shape CHECK (I9)', () => {
+  const sql9 = postgres(baseUrl!, { max: 5 });
+  let seq9 = 0;
+  const uid9 = (p: string) => `i9-${p}-${Date.now()}-${++seq9}`;
+
+  afterAll(async () => {
+    await sql9.end({ timeout: 5 });
+  });
+
+  async function org9(codeHint: string) {
+    const code = uid9(codeHint);
+    const [org] = await sql9<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
+    return org!.id;
+  }
+  async function store9(orgId: string, openingDate: string | null): Promise<string> {
+    const [row] = await sql9<{ id: string }[]>`
+      insert into stores (org_id, code, name, opening_date) values (${orgId}, ${uid9('s')}, 'Store', ${openingDate}) returning id`;
+    return row!.id;
+  }
+  async function person9(orgId: string): Promise<string> {
+    const [row] = await sql9<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Fixture') returning id`;
+    return row!.id;
+  }
+  /** Every column `fixed_assets_valuation_shape_check` requires when NOT `pending_valuation`. */
+  async function insertAsset9(input: {
+    orgId: string;
+    storeId: string;
+    personId: string;
+    acquiredOn: string;
+    cost?: string;
+    usefulLifeMonths?: number;
+    interval?: 'monthly' | 'quarterly' | 'semiannual' | 'annually';
+    status?: 'active' | 'pending_valuation';
+    inServiceSource?: 'acquired' | 'store_opening' | 'set' | null;
+    inServiceOn?: string | null;
+  }): Promise<string> {
+    const cols: string[] = ['org_id', 'store_id', 'name', 'category', 'acquired_on', 'cost', 'salvage_value', 'useful_life_months', 'interval', 'status', 'created_by'];
+    const status = input.status ?? 'active';
+    const vals: unknown[] = [
+      input.orgId, input.storeId, 'Chiller', 'equipment', input.acquiredOn, input.cost ?? '24000.00', '0',
+      input.usefulLifeMonths ?? 24, input.interval ?? 'monthly', status, input.personId,
+    ];
+    if (input.inServiceSource !== undefined) {
+      cols.push('in_service_source');
+      vals.push(input.inServiceSource);
+    }
+    if (input.inServiceOn !== undefined) {
+      cols.push('in_service_on');
+      vals.push(input.inServiceOn);
+    }
+    const placeholders = cols.map((_, i) => `$${i + 1}`).join(', ');
+    const [row] = (await sql9.unsafe(
+      `insert into fixed_assets (${cols.join(', ')}) values (${placeholders}) returning id`,
+      vals as never[],
+    )) as unknown as { id: string }[];
+    return row!.id;
+  }
+  async function inServiceOf9(assetId: string): Promise<{ source: string | null; on: string | null }> {
+    const [row] = await sql9<{ in_service_source: string | null; in_service_on: string | null }[]>`
+      select in_service_source, in_service_on::text as in_service_on from fixed_assets where id = ${assetId}`;
+    return { source: row?.in_service_source ?? null, on: row?.in_service_on ?? null };
+  }
+  async function openPeriod9(orgId: string, aroundDate: string): Promise<void> {
+    const [y, m] = aroundDate.split('-').map(Number) as [number, number];
+    await sql9`
+      insert into fiscal_periods (org_id, starts_on, ends_on, status)
+      values (${orgId}, ${`${y}-${String(m).padStart(2, '0')}-01`}, ${new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10)}, 'open')`;
+  }
+  async function seedAccounts9(orgId: string): Promise<Record<string, string>> {
+    const codes: [string, string, string][] = [
+      ['6700', 'Depreciation', 'expense'],
+      ['1590', 'Accumulated depreciation', 'asset'],
+    ];
+    const ids: Record<string, string> = {};
+    for (const [code, name, type] of codes) {
+      const [row] = await sql9<{ id: string }[]>`
+        insert into accounts (org_id, code, name, type, normal_balance, is_postable)
+        values (${orgId}, ${code}, ${name}, ${type}, ${type === 'income' ? 'credit' : 'debit'}, true) returning id`;
+      ids[code] = row!.id;
+    }
+    return ids;
+  }
+  /** Posts one depreciation entry with a caller-chosen KEY MONTH and a caller-chosen entry_date, so
+   *  R1.2's "the month comes from the KEY, never entry_date" can be tested directly — mirrors
+   *  T-345's own catch-up shape (dated on the booking day, keyed to the month it belongs to). */
+  async function postDepreciationKeyed(
+    orgId: string,
+    storeId: string,
+    personId: string,
+    assetId: string,
+    keyMonth: string,
+    entryDate: string,
+    accts: Record<string, string>,
+  ): Promise<void> {
+    await openPeriod9(orgId, entryDate);
+    await sql9.begin(async (tx) => {
+      const [entry] = await tx<{ id: string }[]>`
+        insert into journal_entries (org_id, entry_date, period_id, source_type, source_id, idempotency_key, memo, posted_by, status)
+        values (${orgId}, ${entryDate},
+          (select id from fiscal_periods where org_id = ${orgId} and starts_on <= ${entryDate} and ends_on >= ${entryDate}),
+          'depreciation', ${assetId}, ${`asset:${assetId}:depreciation:${keyMonth}`}, 'fixture', ${personId}, 'draft')
+        returning id`;
+      await tx`insert into journal_lines (entry_id, line_no, account_id, debit, credit, store_id) values (${entry!.id}, 1, ${accts['6700']!}, '1000.00', 0, ${storeId})`;
+      await tx`insert into journal_lines (entry_id, line_no, account_id, debit, credit, store_id) values (${entry!.id}, 2, ${accts['1590']!}, 0, '1000.00', ${storeId})`;
+      await tx`update journal_entries set status = 'posted', posted_at = now() where id = ${entry!.id}`;
+    });
+  }
+  async function expectGuard9(promise: Promise<unknown>, detail: RegExp): Promise<void> {
+    await expect(promise).rejects.toMatchObject({ code: 'P0001', message: expect.stringMatching(detail) });
+  }
+
+  // --- R1.8 / §3.3 step 4 — the fill rule itself -------------------------------------------------
+
+  it('an insert with no in-service columns is filled both ways: store_opening when the store has no date, acquired when it already opened', async () => {
+    const orgId = await org9('fill');
+    const personId = await person9(orgId);
+    const heldStore = await store9(orgId, null);
+    const openStore = await store9(orgId, '2020-01-01');
+
+    const heldAsset = await insertAsset9({ orgId, storeId: heldStore, personId, acquiredOn: '2026-03-15' });
+    expect(await inServiceOf9(heldAsset)).toEqual({ source: 'store_opening', on: null });
+
+    const acquiredAsset = await insertAsset9({ orgId, storeId: openStore, personId, acquiredOn: '2026-03-15' });
+    expect(await inServiceOf9(acquiredAsset)).toEqual({ source: 'acquired', on: '2026-03-15' });
+  });
+
+  it('source NULL with in_service_on supplied ⇒ "set", the value is kept (R1.8)', async () => {
+    const orgId = await org9('setfill');
+    const personId = await person9(orgId);
+    const storeId = await store9(orgId, null);
+    const assetId = await insertAsset9({
+      orgId, storeId, personId, acquiredOn: '2026-03-15', inServiceOn: '2026-12-01',
+    });
+    expect(await inServiceOf9(assetId)).toEqual({ source: 'set', on: '2026-12-01' });
+  });
+
+  it('⛔ R1.8/R4.2: "acquired" with a supplied value ≠ acquired_on raises "must equal it"', async () => {
+    const orgId = await org9('acqmismatch');
+    const personId = await person9(orgId);
+    const storeId = await store9(orgId, null);
+    await expectGuard9(
+      Promise.resolve(
+        insertAsset9({
+          orgId, storeId, personId, acquiredOn: '2026-03-15',
+          inServiceSource: 'acquired', inServiceOn: '2026-04-01',
+        }),
+      ),
+      /an in-service date on the acquisition date must equal it/,
+    );
+  });
+
+  it('⛔ a shell (pending_valuation) with an in-service source is refused (23514)', async () => {
+    const orgId = await org9('shell');
+    const personId = await person9(orgId);
+    const storeId = await store9(orgId, null);
+    await expect(
+      sql9.unsafe(
+        `insert into fixed_assets (org_id, store_id, name, category, status, in_service_source, created_by)
+         values ($1, $2, 'Shell', 'equipment', 'pending_valuation', 'acquired', $3)`,
+        [orgId, storeId, personId] as never[],
+      ),
+    ).rejects.toMatchObject({ code: '23514' });
+  });
+
+  // --- R4.2 — correcting acquired_on on an 'acquired' asset re-derives in_service_on --------------
+
+  describe('R4.2 — UPDATE of acquired_on on an "acquired" asset', () => {
+    it('re-derives in_service_on to match, with no error', async () => {
+      const orgId = await org9('redervie');
+      const personId = await person9(orgId);
+      // A store with NO opening date fills 'store_opening' (held), not 'acquired' — the fill rule
+      // is "store_opening if opening_date IS NULL OR > acquired_on, else acquired". An already-open
+      // store (like the fill-rule test's own openStore) is what actually resolves 'acquired'.
+      const storeId = await store9(orgId, '2020-01-01');
+      const assetId = await insertAsset9({ orgId, storeId, personId, acquiredOn: '2026-03-15' });
+      expect((await inServiceOf9(assetId)).source).toBe('acquired');
+
+      await sql9`update fixed_assets set acquired_on = '2026-04-01' where id = ${assetId}`;
+      expect(await inServiceOf9(assetId)).toEqual({ source: 'acquired', on: '2026-04-01' });
+    });
+
+    it('⛔ the SAME update also supplying a conflicting in_service_on raises', async () => {
+      const orgId = await org9('redervie-conflict');
+      const personId = await person9(orgId);
+      const storeId = await store9(orgId, '2020-01-01'); // already-open ⇒ 'acquired', same reason as above
+      const assetId = await insertAsset9({ orgId, storeId, personId, acquiredOn: '2026-03-15' });
+      expect((await inServiceOf9(assetId)).source).toBe('acquired');
+      await expectGuard9(
+        sql9.unsafe(
+          `update fixed_assets set acquired_on = $1, in_service_on = $2 where id = $3`,
+          ['2026-04-01', '2026-05-01', assetId] as never[],
+        ),
+        /an in-service date on the acquisition date must equal it/,
+      );
+    });
+  });
+
+  // --- R1.1 — the guard is a bare BEFORE UPDATE, no column list, so it also catches a move made by
+  // the fill itself (store_id change) or by propagation (store opening_date change) ---------------
+
+  describe('R1.1 — the guard catches an in-service move made by ANOTHER column\'s own update', () => {
+    it('⛔ store_id changed to a store that opens later, past a posted month, raises the guard error', async () => {
+      const orgId = await org9('storemove');
+      const personId = await person9(orgId);
+      const accts = await seedAccounts9(orgId);
+      const earlyStore = await store9(orgId, null); // no date ⇒ store_opening, held NULL (the fill rule)
+      const lateStore = await store9(orgId, '2026-09-01');
+      const assetId = await insertAsset9({ orgId, storeId: earlyStore, personId, acquiredOn: '2026-03-15' });
+      // Fails loudly if the fixture's own fill assumption is wrong, same discipline as the
+      // propagation case below.
+      expect(await inServiceOf9(assetId)).toEqual({ source: 'store_opening', on: null });
+      // Held — a raw-SQL post still lands (postDepreciationKeyed bypasses the domain schedule
+      // entirely), and the guard cares only about the OLD-vs-NEW in_service_on transition, not
+      // whether the asset was "supposed to" owe this month.
+      await postDepreciationKeyed(orgId, earlyStore, personId, assetId, '2026-03', '2026-03-31', accts);
+
+      await expectGuard9(
+        sql9`update fixed_assets set store_id = ${lateStore} where id = ${assetId}`,
+        /already has depreciation posted for 2026-03; reverse it before moving its in-service date/,
+      );
+    });
+
+    it('⛔ a store opening_date update, propagating a follower past a posted month, raises the guard naming the asset', async () => {
+      const orgId = await org9('propmove');
+      const personId = await person9(orgId);
+      const accts = await seedAccounts9(orgId);
+      // Opens AFTER acquisition — the fill rule's "store_opening if opening_date IS NULL OR >
+      // acquired_on" only takes this branch when the date is later than acquired_on (2026-03-15).
+      // 2026-01-01 (an earlier date) would resolve 'acquired' instead, and a later opening_date
+      // update would never touch an 'acquired' asset at all — the guard could never fire.
+      const storeId = await store9(orgId, '2026-04-01');
+      const assetId = await insertAsset9({ orgId, storeId, personId, acquiredOn: '2026-03-15' });
+      // Fails loudly if that assumption is wrong, rather than the guard assertion below failing
+      // for an unrelated reason.
+      expect(await inServiceOf9(assetId)).toEqual({ source: 'store_opening', on: '2026-04-01' });
+
+      await postDepreciationKeyed(orgId, storeId, personId, assetId, '2026-04', '2026-04-30', accts);
+
+      await expectGuard9(
+        sql9`update stores set opening_date = '2026-09-01' where id = ${storeId}`,
+        /Chiller.*already has depreciation posted for 2026-04; reverse it before moving its in-service date/,
+      );
+    });
+  });
+
+  // --- R1.2 — the guard reads the posted month from the KEY, never entry_date --------------------
+
+  describe('R1.2 — the illegal month comes from the KEY, not entry_date', () => {
+    it('⛔ a T-345 catch-up keyed 2026-04, dated 2026-09: moving in-service to 2026-06 is refused', async () => {
+      const orgId = await org9('catchupkey');
+      const personId = await person9(orgId);
+      const accts = await seedAccounts9(orgId);
+      const storeId = await store9(orgId, '2026-01-01');
+      const assetId = await insertAsset9({ orgId, storeId, personId, acquiredOn: '2026-03-15' });
+      // Keyed for April, but booked (dated) in September — same shape as a T-345 catch-up.
+      await postDepreciationKeyed(orgId, storeId, personId, assetId, '2026-04', '2026-09-15', accts);
+
+      await expectGuard9(
+        sql9`update fixed_assets set in_service_source = 'set', in_service_on = '2026-06-01' where id = ${assetId}`,
+        /already has depreciation posted for 2026-04; reverse it before moving its in-service date/,
+      );
+    });
+
+    it('⛔ a quarterly asset keyed 2026-06 (period Apr-Jun): moving in-service to 2026-05 is refused', async () => {
+      const orgId = await org9('quarterkey');
+      const personId = await person9(orgId);
+      const accts = await seedAccounts9(orgId);
+      const storeId = await store9(orgId, '2026-01-01');
+      const assetId = await insertAsset9({
+        orgId, storeId, personId, acquiredOn: '2026-01-01', interval: 'quarterly',
+      });
+      // Key 2026-06 covers the quarter Apr-Jun (period start = key month − (step−1) = 06 − 2 = 04).
+      await postDepreciationKeyed(orgId, storeId, personId, assetId, '2026-06', '2026-06-30', accts);
+
+      await expectGuard9(
+        sql9`update fixed_assets set in_service_source = 'set', in_service_on = '2026-05-01' where id = ${assetId}`,
+        /already has depreciation posted for 2026-06; reverse it before moving its in-service date/,
+      );
+    });
+  });
+});

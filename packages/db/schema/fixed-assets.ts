@@ -215,6 +215,22 @@ export const fixedAssets = pgTable(
     /** Back-link to the CAPEX expense that capitalised this (T-122's seam). */
     sourceExpenseId: uuid('source_expense_id').references(() => expenses.id, { onDelete: 'restrict' }),
 
+    /**
+     * ⭐ T-346 S2 (DEF-427) — CIP as a STATE, not an account (PAS 16). When it may depreciate:
+     * `null` for a shell (mirrors `acquired_on`); for every other asset, the day it is available
+     * for use — its OWN acquisition, or its store's opening, whichever governs (`in_service_source`).
+     * A `null` value on a non-shell row means HELD: on the books at cost, depreciating nothing yet.
+     * NOTE: filled and guarded by two hand-added triggers in migration 0163
+     * (`fixed_assets_in_service_a_fill`, `fixed_assets_in_service_b_guard`) — drizzle cannot write
+     * either. See that migration for the fill rule and the guard's exact month-illegality check.
+     */
+    inServiceOn: date('in_service_on'),
+    /** `'acquired'` — same as `acquired_on`, the ordinary case. `'store_opening'` — this asset's
+     *  store had not opened (or opened after it) when it was acquired; derived from the store's own
+     *  `opening_date`, re-derived whenever that changes (migration 0163's propagation trigger).
+     *  `'set'` — an admin named an explicit date, kept verbatim. `null` only for a shell. */
+    inServiceSource: text('in_service_source', { enum: ['acquired', 'store_opening', 'set'] }),
+
     // ── Disposal ────────────────────────────────────────────────────────────────────
     disposedOn: date('disposed_on'),
     disposalReason: text('disposal_reason'),
@@ -234,6 +250,7 @@ export const fixedAssets = pgTable(
     index('fixed_assets_category_idx').on(t.category),
     index('fixed_assets_needs_review_idx').on(t.needsReview),
     index('fixed_assets_source_expense_id_idx').on(t.sourceExpenseId),
+    index('fixed_assets_org_id_in_service_on_idx').on(t.orgId, t.inServiceOn),
 
     check('fixed_assets_cost_positive_check', sql`${t.cost} is null or ${t.cost} > 0`),
     check('fixed_assets_salvage_non_negative_check', sql`${t.salvageValue} is null or ${t.salvageValue} >= 0`),
@@ -270,5 +287,29 @@ export const fixedAssets = pgTable(
     check('fixed_assets_disposal_after_acquisition_check', sql`${t.disposedOn} is null or ${t.disposedOn} >= ${t.acquiredOn}`),
     check('fixed_assets_cost_finite_check', sql`${t.cost} > '-Infinity'::numeric and ${t.cost} < 'Infinity'::numeric`),
     check('fixed_assets_salvage_value_finite_check', sql`${t.salvageValue} > '-Infinity'::numeric and ${t.salvageValue} < 'Infinity'::numeric`),
+    check(
+      'fixed_assets_in_service_source_check',
+      sql`${t.inServiceSource} is null or ${t.inServiceSource} in ('acquired', 'store_opening', 'set')`,
+    ),
+    /** ⭐ T-346 S2 — the two shapes, same discipline as `fixed_assets_valuation_shape_check`: a
+     *  shell carries neither in-service column; every other asset carries a source, and an
+     *  `'acquired'` source's date can only ever equal `acquired_on` (the fill trigger enforces this
+     *  going forward; this CHECK is what makes the DATABASE the authority on it, not just the
+     *  trigger). `in_service_on`, whenever it is set, may never precede `acquired_on`. */
+    check(
+      'fixed_assets_in_service_shape_check',
+      sql`
+        (${t.status} = 'pending_valuation' and ${t.inServiceSource} is null and ${t.inServiceOn} is null)
+        or (
+          ${t.status} <> 'pending_valuation' and ${t.inServiceSource} is not null
+          and (${t.inServiceSource} <> 'acquired' or ${t.inServiceOn} = ${t.acquiredOn})
+          and (${t.inServiceSource} <> 'set' or ${t.inServiceOn} is not null)
+        )
+      `,
+    ),
+    check(
+      'fixed_assets_in_service_on_after_acquired_check',
+      sql`${t.inServiceOn} is null or ${t.inServiceOn} >= ${t.acquiredOn}`,
+    ),
   ],
 );

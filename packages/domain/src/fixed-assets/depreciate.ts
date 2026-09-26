@@ -66,12 +66,18 @@ export interface RunDepreciationResult {
   skipped: number;
 }
 
-/** The schedule inputs for an asset, or `null` if it cannot have one (a `pending_valuation`
- *  shell has neither cost nor acquisition date). */
-function scheduleInputFor(asset: fixedAssetsRepo.FixedAssetRow): ScheduleInput | null {
-  if (!asset.acquiredOn || !asset.cost) return null;
+/**
+ * The schedule inputs for an asset, or `null` if it cannot have one — a `pending_valuation` shell
+ * (no cost yet), or a HELD asset (T-346 S2, DEF-427): `in_service_on IS NULL` while its store has
+ * not opened, and PAS 16 says an asset depreciates from when it is available for use, not from
+ * when it was bought. ⭐ **Exported (R4.1)** — T-345's `missed-months/index.ts` used to duplicate
+ * this as a private `assetScheduleInput`, built from `acquired_on`; that duplicate is now this
+ * function, so a held asset's catch-up correctly owes nothing too.
+ */
+export function scheduleInputFor(asset: fixedAssetsRepo.FixedAssetRow): ScheduleInput | null {
+  if (!asset.inServiceOn || !asset.cost) return null;
   return {
-    acquiredOn: asset.acquiredOn,
+    startsOn: asset.inServiceOn,
     cost: money(asset.cost),
     salvageValue: money(asset.salvageValue ?? '0'),
     usefulLifeMonths: asset.usefulLifeMonths,

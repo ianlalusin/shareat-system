@@ -140,8 +140,12 @@ async function rolesFixture(hint: string): Promise<OrgFixture> {
     insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
   const orgId = org!.id;
   await seedChartOfAccounts(sql, orgId);
+  // T-346 S2 (R4.1): opening_date well before every asset/item date this file ever uses (A22's
+  // 2025-06-01 is the earliest), so the exported `scheduleInputFor` `bookMissedMonth`/`missedMonths`
+  // switch to (replacing the private `assetScheduleInput`) derives 'store_opening' in-service dates
+  // equal to acquired_on, never HELD — this whole file depends on assets depreciating normally.
   const [store] = await sql<{ id: string }[]>`
-    insert into stores (org_id, code, name) values (${orgId}, ${uid('s')}, 'Store') returning id`;
+    insert into stores (org_id, code, name, opening_date) values (${orgId}, ${uid('s')}, 'Store', '2020-01-01') returning id`;
   const person = async (name: string, role: string) => {
     const [p] = await sql<{ id: string }[]>`
       insert into persons (org_id, display_name) values (${orgId}, ${name}) returning id`;
@@ -228,7 +232,7 @@ function amortisationPoster(f: OrgFixture, itemId: string): (period: string) => 
 
 /** ₱24,000, 24 months, no salvage, acquired 2026-01-15 — 1,000.00/month exactly, spec §4. */
 const DEPR_SCHEDULE = buildSchedule({
-  acquiredOn: '2026-01-15',
+  startsOn: '2026-01-15',
   cost: money('24000.00'),
   salvageValue: money('0'),
   usefulLifeMonths: 24,

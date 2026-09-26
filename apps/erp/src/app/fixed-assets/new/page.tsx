@@ -86,6 +86,33 @@ export default async function NewAssetPage({
           </div>
         </section>
 
+        {/* ⭐ T-346 S2 (DEF-427), §3.6 / Amendment R4.6. An asset depreciates from the day it is IN
+            SERVICE, not from acquisition — a store not yet open means the physical thing sits on
+            the books at cost, depreciating nothing, until it opens. The default sends NO source at
+            all: migration 0163's own fill trigger decides, at insert time, between 'store_opening'
+            (store has no opening date yet, or opens after this acquisition) and 'acquired' (store
+            already trading) — exactly what the label says, in one sentence, without this form ever
+            re-deriving that rule itself. The other two are deliberate overrides.
+            ⛔ A `<select>`, not radios — same reason the delivery/receiving screens picked one:
+            a native radio/checkbox box is unresolvable-by-construction for the touch-target sweep
+            (Ian's ruling §6.1, T-262), while a `<select>` sizes from its own classes exactly like
+            this file's other pickers. */}
+        <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <h2 className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
+            When it goes into service
+          </h2>
+          <Field label="Choice">
+            <select name="inServiceMode" defaultValue="" className={INPUT}>
+              <option value="">When the store opens (or on the acquisition date if it already has)</option>
+              <option value="acquired">On the acquisition date — even if the store has not opened yet</option>
+              <option value="set">A specific date —</option>
+            </select>
+          </Field>
+          <Field label="Specific date" hint="Only used when 'A specific date' is chosen above">
+            <input type="date" name="inServiceOn" className={`${INPUT} max-w-xs`} />
+          </Field>
+        </section>
+
         <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
             What it costs, and how long it lasts

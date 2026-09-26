@@ -26,6 +26,9 @@ export interface RegisterRow {
   interval: string;
   status: string;
   needsReview: boolean;
+  /** T-346 S2 (DEF-427). `null` on an active asset means HELD — depreciating nothing yet. */
+  inServiceOn: string | null;
+  inServiceSource: fixedAssetsRepo.InServiceSource | null;
   /** ⭐ Summed from the journal on every render. There is no column holding this. */
   accumulated: string;
   /** cost − accumulated. Also derived; also has no column. */
@@ -64,6 +67,8 @@ export async function listRegister(
         interval: a.interval,
         status: a.status,
         needsReview: a.needsReview,
+        inServiceOn: a.inServiceOn,
+        inServiceSource: a.inServiceSource,
         accumulated: acc,
         bookValue: String(subtract(money(cost), money(acc))),
       };

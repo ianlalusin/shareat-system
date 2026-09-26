@@ -24,8 +24,8 @@ import {
   type MissedMonthSchedule,
   type Tx,
 } from '@shareat/db';
-import { money } from '@shareat/core/money';
-import { periodDue, periodsThrough, type ScheduleInput } from '../fixed-assets/schedule';
+import { periodDue, periodsThrough } from '../fixed-assets/schedule';
+import { scheduleInputFor } from '../fixed-assets/depreciate';
 import { checkFullyAmortised, prepaidSchedule } from '../prepaid';
 import { periodsThroughOf, type SchedulePeriod } from '../shared/straight-line';
 import { postEntry } from '../ledger/post-entry';
@@ -47,20 +47,6 @@ function isLinkCollision(err: unknown): boolean {
   if (typeof err !== 'object' || err === null) return false;
   const { code, constraint_name: constraintName } = err as { code?: unknown; constraint_name?: unknown };
   return code === UNIQUE_VIOLATION && typeof constraintName === 'string' && LINK_UNIQUE_CONSTRAINTS.has(constraintName);
-}
-
-/** Mirrors `fixed-assets/depreciate.ts`'s own private `scheduleInputFor` — duplicated rather than
- *  exported from a do-not-touch file, the same "small derivation, duplicated, cited" precedent
- *  `repo/fixed-assets.ts`'s `postedDepreciationPeriods` follows for `repo/prepaid.ts`'s regex. */
-function assetScheduleInput(asset: fixedAssetsRepo.FixedAssetRow): ScheduleInput | null {
-  if (!asset.acquiredOn || !asset.cost) return null;
-  return {
-    acquiredOn: asset.acquiredOn,
-    cost: money(asset.cost),
-    salvageValue: money(asset.salvageValue ?? '0'),
-    usefulLifeMonths: asset.usefulLifeMonths,
-    interval: asset.interval,
-  };
 }
 
 export interface OrgPeriodContext {
@@ -139,7 +125,7 @@ export async function bookMissedMonth(
       throw new Error(`bookMissedMonth: asset ${input.subjectId} does not exist in this organisation`);
     }
     ({ name, status, storeId } = asset);
-    const scheduleInput = assetScheduleInput(asset);
+    const scheduleInput = scheduleInputFor(asset);
     charge = scheduleInput ? periodDue(scheduleInput, belongsToPeriod) : null;
   } else {
     const item = await prepaidRepo.getById(tx, actor.orgId, input.subjectId);
@@ -305,7 +291,7 @@ export async function periodFullyCovered(
     // Amendment R3.3 — one batched read for every asset, never one query per asset in the loop.
     const postedByAsset = await fixedAssetsRepo.postedDepreciationPeriodsByAsset(tx, orgId);
     for (const asset of assets) {
-      const scheduleInput = assetScheduleInput(asset);
+      const scheduleInput = scheduleInputFor(asset);
       if (!scheduleInput || !periodDue(scheduleInput, period)) continue;
       if (!postedByAsset.get(asset.id)?.has(period)) return false;
     }
@@ -343,7 +329,7 @@ export async function missedMonths(tx: Tx, orgId: string, through: string): Prom
   // Amendment R3.3 — one batched read for every asset, never one query per asset in the loop.
   const postedByAsset = await fixedAssetsRepo.postedDepreciationPeriodsByAsset(tx, orgId);
   for (const asset of assets) {
-    const scheduleInput = assetScheduleInput(asset);
+    const scheduleInput = scheduleInputFor(asset);
     if (!scheduleInput) continue;
     const owed = periodsThrough(scheduleInput, through);
     const posted = postedByAsset.get(asset.id) ?? new Set<string>();

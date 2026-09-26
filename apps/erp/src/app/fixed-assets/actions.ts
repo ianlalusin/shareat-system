@@ -17,6 +17,7 @@ import {
   createAsset,
   disposeAsset,
   runDepreciation,
+  setAssetInService,
   type DepreciationInterval,
 } from '@shareat/domain';
 import { fixedAssetsRepo, type AssetCategory } from '@shareat/db';
@@ -48,6 +49,12 @@ export async function createAssetAction(formData: FormData): Promise<void> {
 
     const lifeRaw = str(formData, 'usefulLifeMonths');
     const salvageRaw = str(formData, 'salvageValue');
+    // T-346 S2 (DEF-427), §3.6 / Amendment R4.6 — the default radio sends NO source at all, so
+    // migration 0163's own fill trigger infers 'store_opening' vs 'acquired' at insert time; only
+    // an explicit 'acquired' or 'set' choice overrides that (never a fallback to 'acquired' here).
+    const inServiceModeRaw = str(formData, 'inServiceMode');
+    const inServiceSource: fixedAssetsRepo.InServiceSource | undefined =
+      inServiceModeRaw === 'acquired' || inServiceModeRaw === 'set' ? inServiceModeRaw : undefined;
 
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       createAsset(tx, actor, {
@@ -62,6 +69,8 @@ export async function createAssetAction(formData: FormData): Promise<void> {
         salvageValue: salvageRaw === '' ? null : salvageRaw,
         interval: (str(formData, 'interval') || 'monthly') as DepreciationInterval,
         notes: str(formData, 'notes') || null,
+        inServiceSource,
+        inServiceOn: inServiceSource === 'set' ? str(formData, 'inServiceOn') : undefined,
       }),
     );
     newId = result.id;
@@ -104,6 +113,48 @@ export async function updateTermsAction(formData: FormData): Promise<void> {
   }
 
   redirect(`/fixed-assets/${assetId}?${qs}&ok=terms`);
+}
+
+/**
+ * Correct WHEN an asset went into service. T-346 S2 (DEF-427), §3.4/§3.6.
+ *
+ * ⭐ The confirm step is a second submit, not a client-side dialog — `confirmReversal` round-trips
+ * through the URL's `pending=1` flag and a resubmitted hidden field, the same shape
+ * `disposeAssetAction`'s sibling screens use nowhere else in this app because nothing else needed
+ * a "this reverses N entries" checkpoint before this task. `setAssetInService`'s OWN error message
+ * (the one thing that names which entries and how much) is what the confirm banner shows verbatim.
+ */
+export async function setAssetInServiceAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const assetId = str(formData, 'assetId');
+  const qs = carryQs(formData);
+  const mode = str(formData, 'mode') as 'acquired' | 'store_opening' | 'set';
+  const confirmReversal = str(formData, 'confirmReversal') === '1';
+
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      setAssetInService(tx, actor, assetId, {
+        mode,
+        inServiceOn: mode === 'set' ? str(formData, 'inServiceOn') : undefined,
+        reason: str(formData, 'reason'),
+        confirmReversal,
+      }),
+    );
+  } catch (err) {
+    const message = errorMessage(err);
+    // "confirm to proceed" is `setAssetInService`'s own refusal shape (in-service.ts) — the ONE
+    // string this action recognises to show a confirm checkpoint instead of a plain error.
+    if (message.endsWith('confirm to proceed')) {
+      redirect(
+        `/fixed-assets/${assetId}?${qs}&confirm=${encodeURIComponent(message)}&mode=${mode}` +
+          `&inServiceOn=${encodeURIComponent(str(formData, 'inServiceOn'))}` +
+          `&reason=${encodeURIComponent(str(formData, 'reason'))}`,
+      );
+    }
+    redirect(`/fixed-assets/${assetId}?${qs}&error=${encodeURIComponent(message)}`);
+  }
+
+  redirect(`/fixed-assets/${assetId}?${qs}&ok=inservice`);
 }
 
 export async function disposeAssetAction(formData: FormData): Promise<void> {

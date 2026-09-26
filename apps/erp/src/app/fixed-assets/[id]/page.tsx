@@ -4,7 +4,7 @@ import { formatMoney, money, subtract } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { buildSchedule } from '@shareat/domain';
 import { requirePageAccess } from '../../../lib/page-access';
-import { disposeAssetAction, updateTermsAction } from '../actions';
+import { disposeAssetAction, setAssetInServiceAction, updateTermsAction } from '../actions';
 import { CATEGORY_LABEL, INTERVAL_LABEL, getAsset, listStores } from '../lib';
 import { StatusBadge } from '../page';
 import { DetailLayout } from '@/components/shell/DetailLayout';
@@ -16,6 +16,11 @@ interface SearchParams {
   store?: string;
   error?: string;
   ok?: string;
+  /** Set by `setAssetInServiceAction` when a reversal needs confirming — its own refusal text. */
+  confirm?: string;
+  mode?: string;
+  inServiceOn?: string;
+  reason?: string;
 }
 
 export default async function AssetDetailPage({
@@ -43,14 +48,17 @@ export default async function AssetDetailPage({
   const cost = money(asset.cost ?? '0');
   const bookValue = subtract(cost, money(accumulated));
   const isActive = asset.status === 'active';
+  const isHeld = isActive && asset.inServiceOn === null;
 
   // The full schedule, so the screen can show what is still owed rather than only what has been
   // charged. Pure — no database, and it is the SAME function the posting uses, so what is shown
   // here and what will be posted cannot disagree.
+  // ⭐ T-346 S2 (DEF-427) — starts from `in_service_on`, not `acquired_on`. A HELD asset
+  // (`in_service_on IS NULL`) has no schedule at all: it depreciates nothing until it is.
   const schedule =
-    asset.acquiredOn && asset.cost
+    asset.inServiceOn && asset.cost
       ? buildSchedule({
-          acquiredOn: asset.acquiredOn,
+          startsOn: asset.inServiceOn,
           cost,
           salvageValue: money(asset.salvageValue ?? '0'),
           usefulLifeMonths: asset.usefulLifeMonths,
@@ -97,6 +105,11 @@ export default async function AssetDetailPage({
           Disposed. The remaining book value was written off to 7400.
         </div>
       )}
+      {sp.ok === 'inservice' && (
+        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+          In-service date updated.
+        </div>
+      )}
 
       {asset.needsReview && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
@@ -135,6 +148,77 @@ export default async function AssetDetailPage({
         readable in a screenshot only. Dropping back to one column at exactly the width the rail
         appears puts them back at ~372px. Amendment to T-240 §3.5, reported not silently made.
       */}
+      {/* ⭐ T-346 S2 (DEF-427), §3.4/§3.6. HELD means on the books at cost, depreciating nothing,
+          until the store opens or someone sets a date directly — not an error state. */}
+      <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="font-medium">In service</h2>
+        {isHeld ? (
+          <p className="text-sm text-amber-800 dark:text-amber-300">
+            <strong className="font-medium">Not yet in service.</strong> This asset is on the
+            books at cost and depreciates nothing until its store opens, or a date is set below.
+          </p>
+        ) : (
+          <p className="text-sm text-neutral-700 dark:text-neutral-300">
+            In service since <strong>{asset.inServiceOn ?? '—'}</strong>
+            {asset.inServiceSource === 'store_opening' && " — follows this store's opening date"}
+            {asset.inServiceSource === 'acquired' && ' — the acquisition date'}
+            {asset.inServiceSource === 'set' && ' — set directly'}
+            .
+          </p>
+        )}
+
+        {isActive && (
+          <>
+            {sp.confirm && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                {sp.confirm}
+              </div>
+            )}
+            <form action={setAssetInServiceAction} className="space-y-3">
+              <input type="hidden" name="assetId" value={asset.id} />
+              <input type="hidden" name="filterStore" value={sp.store ?? ''} />
+              {/* ⛔ A `<select>`, not radios — a native radio's box is unresolvable-by-construction
+                  for the touch-target sweep (Ian's ruling §6.1, T-262); a `<select>` sizes from its
+                  own classes exactly like this file's other pickers. */}
+              <Field label="Choice">
+                <select
+                  name="mode"
+                  defaultValue={sp.mode ?? asset.inServiceSource ?? 'acquired'}
+                  className={INPUT}
+                >
+                  <option value="acquired">On the acquisition date ({asset.acquiredOn ?? '—'})</option>
+                  <option value="store_opening">When the store opens</option>
+                  <option value="set">A specific date —</option>
+                </select>
+              </Field>
+              <Field label="Specific date" hint="Only used when 'A specific date' is chosen above">
+                <input
+                  type="date"
+                  name="inServiceOn"
+                  min={asset.acquiredOn ?? undefined}
+                  defaultValue={sp.inServiceOn ?? asset.inServiceOn ?? ''}
+                  className={`${INPUT} max-w-xs`}
+                />
+              </Field>
+              <Field label="Reason" hint="Required — an audit trail with no reason is unauditable">
+                <input name="reason" required defaultValue={sp.reason ?? ''} className={INPUT} />
+              </Field>
+              {/* ⛔ A hidden input, not a checkbox — clicking "Confirm change" IS the confirmation
+                  (same one-button shape as the dispose form below); a checkbox here would be a
+                  second, redundant gesture, and its native box is unresolvable-by-construction for
+                  the touch-target sweep the same way the radios above were. */}
+              {sp.confirm && <input type="hidden" name="confirmReversal" value="1" />}
+              <button
+                type="submit"
+                className="rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+              >
+                {sp.confirm ? 'Confirm change' : 'Update in-service date'}
+              </button>
+            </form>
+          </>
+        )}
+      </section>
+
       <div className="grid gap-6 lg:grid-cols-2 min-[1440px]:grid-cols-1">
         <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="font-medium">Depreciation terms</h2>
@@ -217,7 +301,9 @@ export default async function AssetDetailPage({
             <h2 className="mb-3 font-medium">Schedule</h2>
             {schedule.length === 0 ? (
               <p className="text-sm text-neutral-500 dark:text-neutral-400">
-                No schedule — this asset has no cost or acquisition date yet.
+                {isHeld
+                  ? 'Not yet in service — nothing to schedule yet.'
+                  : 'No schedule — this asset has no cost or in-service date yet.'}
               </p>
             ) : (
               <div className="max-h-80 overflow-y-auto">

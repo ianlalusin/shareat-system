@@ -1,0 +1,255 @@
+/**
+ * setAssetInService — correcting when an asset went into service. T-346 S2 (DEF-427).
+ * docs/tasks/346-store-opening-and-in-service-date.md §3.4.
+ *
+ * ⭐ **Reverse, never rewrite.** Closed books are never touched (bible row 193); the correction
+ * convention already exists (T-106, `POSTING-PATTERNS.md:1220-1241`): reverse the wrong months in
+ * an open month, keep the right ones. There is nothing to RE-POST here — straight-line equal
+ * instalments mean a month the new schedule still owes, at the SAME amount, needs no correction at
+ * all, and a month it owes at a DIFFERENT amount is refused outright (DEF-435) rather than
+ * re-booked, because nothing in this codebase may post over/instead of an existing key.
+ *
+ * ⚠️ **This file independently computes the same in-service value migration 0163's fill trigger
+ * would derive**, so it can plan which posted months to reverse BEFORE writing anything — the
+ * trigger only sees the final state, too late to reverse first. `repo/fixed-assets.ts`'s
+ * `setInServiceSource` is what actually writes the columns, and the migration's guard trigger is
+ * the backstop that enforces the result stays legal (RULES §6.3) if this ever disagreed with it.
+ */
+import { authorize, type Actor } from '@shareat/auth';
+import { fixedAssetsRepo, journalRepo, manilaToday, storesRepo, type Tx } from '@shareat/db';
+import { add, formatMoney, money } from '@shareat/core/money';
+import { reverseEntry } from '../ledger/reverse-entry';
+import { buildSchedule, type ScheduleInput } from './schedule';
+
+export interface SetAssetInServiceInput {
+  mode: 'acquired' | 'store_opening' | 'set';
+  /** Required for `mode: 'set'`; ignored otherwise (the other two modes derive their own date). */
+  inServiceOn?: string;
+  reason: string;
+  /** Required once §3.4 step 4 finds anything to reverse — the confirm-then-proceed flow. */
+  confirmReversal?: boolean;
+}
+
+export interface SetAssetInServiceResult {
+  inServiceSource: 'acquired' | 'store_opening' | 'set';
+  inServiceOn: string | null;
+  /** Periods reversed by this call, oldest first. Empty when nothing needed reversing. */
+  reversed: string[];
+}
+
+/** Resolves what `mode` means for THIS asset right now — mirrors migration 0163's fill trigger
+ *  exactly (§3.3 step 4), duplicated here for the reason this file's own header names. */
+async function resolveMode(
+  tx: Tx,
+  orgId: string,
+  asset: fixedAssetsRepo.FixedAssetRow,
+  input: SetAssetInServiceInput,
+): Promise<{ source: 'acquired' | 'store_opening' | 'set'; inServiceOn: string | null }> {
+  if (input.mode === 'acquired') {
+    return { source: 'acquired', inServiceOn: asset.acquiredOn };
+  }
+  if (input.mode === 'store_opening') {
+    const store = await storesRepo.getById(tx, orgId, asset.storeId);
+    const openingDate = store?.openingDate ?? null;
+    // ⭐ Safe: `setAssetInService` already refused a non-'active' asset before calling this, and an
+    // active row is never a shell — its acquired_on/cost are always set (0163's shape CHECK).
+    const inServiceOn =
+      openingDate === null ? null : openingDate > asset.acquiredOn! ? openingDate : asset.acquiredOn!;
+    return { source: 'store_opening', inServiceOn };
+  }
+  if (!input.inServiceOn) {
+    throw new Error('setAssetInService: a date is required to set an explicit in-service date.');
+  }
+  return { source: 'set', inServiceOn: input.inServiceOn };
+}
+
+interface ReversalConflict {
+  period: string;
+  amount: string;
+}
+
+interface ReversalPlan {
+  /** R — sorted oldest first. */
+  toReverse: fixedAssetsRepo.PostedDepreciationEntry[];
+  conflict: ReversalConflict | null;
+}
+
+/** §3.4 steps 2-3, shared by `setAssetInService` and `setStoreOpeningDate`'s own cascade (§3.2
+ *  step 3) — one computation of "what would this in-service change reverse", never two. */
+export async function planInServiceReversal(
+  tx: Tx,
+  orgId: string,
+  asset: fixedAssetsRepo.FixedAssetRow,
+  newInServiceOn: string | null,
+): Promise<ReversalPlan> {
+  const posted = await fixedAssetsRepo.postedDepreciationEntries(tx, orgId, asset.id);
+  const reversedPeriods = await fixedAssetsRepo.reversedDepreciationPeriods(tx, orgId, asset.id);
+
+  const owedByPeriod = new Map<string, string>();
+  if (newInServiceOn !== null) {
+    // ⭐ Safe: both callers (`applyInServiceChange`, gated on `asset.status === 'active'` earlier
+    // in `setAssetInService`; `setStoreOpeningDate`'s cascade, filtered to `status: 'active'` AND
+    // `inServiceSource === 'store_opening'`) only ever hand this an active, non-shell asset — a
+    // shell's cost is NULL only alongside `in_service_source` also NULL (0163's shape CHECK), which
+    // an active/store_opening row can never be.
+    const scheduleInput: ScheduleInput = {
+      startsOn: newInServiceOn,
+      cost: money(asset.cost!),
+      salvageValue: money(asset.salvageValue ?? '0'),
+      usefulLifeMonths: asset.usefulLifeMonths,
+      interval: asset.interval,
+    };
+    for (const p of buildSchedule(scheduleInput)) {
+      owedByPeriod.set(p.period, String(p.amount));
+    }
+  }
+
+  const toReverse = posted
+    .filter((e) => owedByPeriod.get(e.period) !== e.amount)
+    .sort((a, b) => a.period.localeCompare(b.period));
+  const toReversePeriods = new Set(toReverse.map((e) => e.period));
+  const postedPeriods = new Set(posted.map((e) => e.period));
+
+  let conflict: ReversalConflict | null = null;
+  for (const [period, amount] of [...owedByPeriod.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    if (toReversePeriods.has(period) || (reversedPeriods.has(period) && !postedPeriods.has(period))) {
+      conflict = { period, amount };
+      break;
+    }
+  }
+
+  return { toReverse, conflict };
+}
+
+/** Is the entry's own fiscal period still open right now? Decides whether `reverseEntry` gets an
+ *  explicit `reversalDate` (R1.4: pass Manila today ONLY for a non-open period; otherwise let
+ *  `reverseEntry` default to the original's own date, un-prefixed). */
+async function isPeriodOpen(tx: Tx, entryId: string): Promise<boolean> {
+  const entry = await journalRepo.findEntryById(tx, entryId);
+  if (!entry) throw new Error(`setAssetInService: journal entry ${entryId} does not exist`);
+  const period = await journalRepo.findPeriodById(tx, entry.periodId);
+  return period?.status === 'open';
+}
+
+/** `${n} entries (first–last), ₱total` — the one phrasing both the single-asset confirm
+ *  (`applyInServiceChange`) and the store-wide cascade (`stores/service.ts` §3.2 step 3) use, so
+ *  the two confirm messages never drift apart in shape. */
+export function describeReversal(toReverse: fixedAssetsRepo.PostedDepreciationEntry[]): string {
+  const first = toReverse[0]!.period;
+  const last = toReverse[toReverse.length - 1]!.period;
+  const total = toReverse.reduce((sum, e) => add(sum, money(e.amount)), money('0'));
+  return `${toReverse.length} depreciation entries (${first}–${last}), ${formatMoney(total)}`;
+}
+
+/**
+ * Reverses every planned entry, dating each one per R1.4 (`reverseEntry`'s own open/closed-period
+ * branching — this only decides whether to override it). `memo` is the caller's full reversal
+ * reason text, used verbatim for every entry reversed by this call.
+ *
+ * ⭐ Takes `reversedBy` (a bare id), not the caller's `Actor` — this is a shared internal helper,
+ * never a user-facing entry point on its own (`setAssetInService` and `setStoreOpeningDate` are
+ * the two that authorize), and the only thing of the actor it ever needed was `.personId`.
+ */
+export async function executeReversals(
+  tx: Tx,
+  reversedBy: string | null,
+  today: string,
+  memo: string,
+  toReverse: fixedAssetsRepo.PostedDepreciationEntry[],
+): Promise<string[]> {
+  for (const e of toReverse) {
+    const open = await isPeriodOpen(tx, e.entryId);
+    await reverseEntry(tx, {
+      entryId: e.entryId,
+      reason: memo,
+      reversedBy,
+      ...(open ? {} : { reversalDate: today }),
+    });
+  }
+  return toReverse.map((e) => e.period);
+}
+
+/**
+ * §3.4 steps 1, 4-6 — authorize, blank-reason, confirm-then-reverse, write the columns. Runs on the
+ * caller's transaction (never opens its own — always called from inside `withOrgPrincipal`, same as
+ * every other fixed-assets writer). Any refusal writes nothing.
+ */
+async function applyInServiceChange(
+  tx: Tx,
+  actor: Actor,
+  asset: fixedAssetsRepo.FixedAssetRow,
+  target: { source: 'acquired' | 'store_opening' | 'set'; inServiceOn: string | null },
+  reason: string,
+  confirmReversal: boolean | undefined,
+): Promise<SetAssetInServiceResult> {
+  const plan = await planInServiceReversal(tx, actor.orgId, asset, target.inServiceOn);
+
+  if (plan.conflict) {
+    throw new Error(
+      `setAssetInService: ${asset.name}: ${plan.conflict.period} would need re-booking at ` +
+        `${plan.conflict.amount}, which this cannot do yet (DEF-435)`,
+    );
+  }
+
+  if (plan.toReverse.length > 0 && !confirmReversal) {
+    throw new Error(
+      `setAssetInService: ${asset.name} — moving the in-service date reverses ${describeReversal(plan.toReverse)}; ` +
+        'confirm to proceed',
+    );
+  }
+
+  const dateLabel = target.inServiceOn ?? 'held (no opening date yet)';
+  const today = await manilaToday(tx);
+  await executeReversals(
+    tx,
+    actor.personId,
+    today,
+    `in-service date corrected to ${dateLabel} — ${reason}`,
+    plan.toReverse,
+  );
+
+  if (target.source === 'set') {
+    await fixedAssetsRepo.setInServiceSource(tx, actor.orgId, asset.id, {
+      source: 'set',
+      inServiceOn: target.inServiceOn!,
+    });
+  } else {
+    await fixedAssetsRepo.setInServiceSource(tx, actor.orgId, asset.id, { source: target.source });
+  }
+
+  return {
+    inServiceSource: target.source,
+    inServiceOn: target.inServiceOn,
+    reversed: plan.toReverse.map((e) => e.period),
+  };
+}
+
+/**
+ * The asset-initiated entry point (§3.6's `/fixed-assets/[id]` change form). `setStoreOpeningDate`
+ * (`stores/service.ts` §3.2 step 3) is the STORE-initiated one, applying the same
+ * `applyInServiceChange` to every `'store_opening'` follower instead.
+ */
+export async function setAssetInService(
+  tx: Tx,
+  actor: Actor,
+  assetId: string,
+  input: SetAssetInServiceInput,
+): Promise<SetAssetInServiceResult> {
+  await authorize(tx, actor, 'manage_fixed_assets', {});
+
+  const reason = input.reason.trim();
+  if (!reason) {
+    throw new Error('setAssetInService: a reason is required.');
+  }
+
+  const asset = await fixedAssetsRepo.getById(tx, actor.orgId, assetId);
+  if (!asset) {
+    throw new Error(`setAssetInService: asset ${assetId} does not exist in this organisation.`);
+  }
+  if (asset.status !== 'active') {
+    throw new Error(`setAssetInService: ${asset.name} is ${asset.status}; only an active asset's in-service date can be changed.`);
+  }
+
+  const target = await resolveMode(tx, actor.orgId, asset, input);
+  return applyInServiceChange(tx, actor, asset, target, reason, input.confirmReversal);
+}

@@ -11,7 +11,7 @@ import { buildSchedule, periodDue, periodsThrough, expectedAccumulated } from '.
  */
 
 const base = {
-  acquiredOn: '2026-01-15',
+  startsOn: '2026-01-15',
   cost: money('120000'),
   salvageValue: money('0'),
   usefulLifeMonths: 60,
@@ -57,7 +57,7 @@ describe('the schedule covers exactly the depreciable amount', () => {
 
 describe('intervals', () => {
   it('quarterly gives 4 periods a year, and each entry dates at the END of its quarter', () => {
-    const s = buildSchedule({ ...base, acquiredOn: '2026-01-01', usefulLifeMonths: 12, interval: 'quarterly' });
+    const s = buildSchedule({ ...base, startsOn: '2026-01-01', usefulLifeMonths: 12, interval: 'quarterly' });
     expect(s.length).toBe(4);
     expect(s.map((p) => p.period)).toEqual(['2026-03', '2026-06', '2026-09', '2026-12']);
     // ⚠️ A charge must land INSIDE the period it describes, or it lands in the wrong month's books.
@@ -69,21 +69,21 @@ describe('intervals', () => {
     // ⚠️ My first expectation here was 2026-12 / 2027-11 / 2028-10 — I stepped the END month
     // forward by 11 each time instead of stepping the START by 12. The code was right and the
     // test was wrong, which is the more useful way round for a test to fail.
-    const s = buildSchedule({ ...base, acquiredOn: '2026-01-01', usefulLifeMonths: 36, interval: 'annually' });
+    const s = buildSchedule({ ...base, startsOn: '2026-01-01', usefulLifeMonths: 36, interval: 'annually' });
     expect(s.length).toBe(3);
     expect(s.map((p) => p.period)).toEqual(['2026-12', '2027-12', '2028-12']);
     expect(s.map((p) => p.entryDate)).toEqual(['2026-12-31', '2027-12-31', '2028-12-31']);
   });
 
   it('an annual asset acquired mid-year ends its periods mid-year too', () => {
-    const s = buildSchedule({ ...base, acquiredOn: '2026-07-01', usefulLifeMonths: 24, interval: 'annually' });
+    const s = buildSchedule({ ...base, startsOn: '2026-07-01', usefulLifeMonths: 24, interval: 'annually' });
     expect(s.map((p) => p.period)).toEqual(['2027-06', '2028-06']);
   });
 
   it('monthly entry dates handle February and leap years without a lookup table', () => {
-    const s = buildSchedule({ ...base, acquiredOn: '2027-02-10', usefulLifeMonths: 12 });
+    const s = buildSchedule({ ...base, startsOn: '2027-02-10', usefulLifeMonths: 12 });
     expect(s[0]!.entryDate).toBe('2027-02-28');
-    const leap = buildSchedule({ ...base, acquiredOn: '2028-02-10', usefulLifeMonths: 12 });
+    const leap = buildSchedule({ ...base, startsOn: '2028-02-10', usefulLifeMonths: 12 });
     expect(leap[0]!.entryDate).toBe('2028-02-29');
   });
 });
@@ -103,7 +103,7 @@ describe('periodDue — null, never a zero charge', () => {
   });
 
   it('a quarterly asset owes nothing in the months between its quarters', () => {
-    const q = { ...base, acquiredOn: '2026-01-01', interval: 'quarterly' as const };
+    const q = { ...base, startsOn: '2026-01-01', interval: 'quarterly' as const };
     expect(periodDue(q, '2026-03')).not.toBeNull();
     expect(periodDue(q, '2026-04')).toBeNull();
   });
@@ -174,7 +174,7 @@ describe('semi-annual (bible row 140)', () => {
   it('charges twice a year, on the last day of each half', () => {
     const s = buildSchedule({
       ...base,
-      acquiredOn: '2026-01-01',
+      startsOn: '2026-01-01',
       usefulLifeMonths: 24,
       interval: 'semiannual',
     });
@@ -185,7 +185,7 @@ describe('semi-annual (bible row 140)', () => {
 
   it('sits between quarterly and annual, and all four agree on the total', () => {
     const of = (interval: 'monthly' | 'quarterly' | 'semiannual' | 'annually') =>
-      buildSchedule({ ...base, acquiredOn: '2026-01-01', usefulLifeMonths: 24, interval });
+      buildSchedule({ ...base, startsOn: '2026-01-01', usefulLifeMonths: 24, interval });
     expect([of('monthly').length, of('quarterly').length, of('semiannual').length, of('annually').length])
       .toEqual([24, 8, 4, 2]);
     // ⭐ The interval changes how often it charges, never how much it charges in total.
