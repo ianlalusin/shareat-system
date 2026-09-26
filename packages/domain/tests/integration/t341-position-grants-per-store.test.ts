@@ -313,3 +313,267 @@ describe('P8 (self-skip, bible §7 rule 5) — an admin hiring themselves gains 
     expect(otherGrants.map((g) => g.grant_name)).toContain('record_sale');
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// T-343 S2b (DEF-430) — I1-I6b. `docs/tasks/343-def-417-human-readable-refusals.md` §S2b.
+// A store refusal names WHERE the job is, not the role, when `authorize()`'s row 5 finds the
+// same capability held via a position default at another store. Reuses `fixture`/`hireStaff`/
+// `setDefault`/`check` above — no new fixture machinery.
+//
+// ⛔ RED when written (tester baseline, before the builder): `accessRepo.positionGrantsElsewhere`
+// did not exist and `authorize.ts`'s row 5 made no lookup, so every `+` leg below failed with the
+// unchanged `roleMayNot` text; every `⛔` leg was already true then (that IS its point) and must
+// stay true after S2b too — it is not a claim about the CURRENT state of the source tree.
+// ---------------------------------------------------------------------------------------------
+
+const STORE_NAME = (row: { name: string; code: string }) => `${row.name} (${row.code})`;
+const ROLE_MAY_NOT_RECORD_SALE = "Your role (Staff) can't record a sale. Ask an admin if you need to.";
+
+async function storeInfo(storeId: string): Promise<{ name: string; code: string }> {
+  const [row] = await sql<{ name: string; code: string }[]>`select name, code from stores where id = ${storeId}`;
+  return row!;
+}
+
+describe('T-343 S2b — I1: record_sale@A names the Cashier job at B (DEF-430 shape)', () => {
+  it("userMessage names B; err.message still /may not 'record_sale'/", async () => {
+    const f = await fixture('s2b-i1');
+    await setDefault(f.orgId, f.admin, f.cashierId, f.storeBId, 'record_sale', true);
+    const { personId } = await hireStaff(f, { storeId: f.storeBId, positionIds: [f.cashierId] });
+    // DEF-430 shape: also employed (as Cook) at A, so the person has scope to be refused there.
+    await asOrg(f.orgId, (tx) =>
+      createEmployment(tx, f.admin, {
+        storeId: f.storeAId,
+        personId,
+        employmentStatus: 'probationary',
+        startedOn: '2026-01-05',
+        positionIds: [f.cookId],
+        primaryPositionId: f.cookId,
+      }),
+    );
+
+    const a = await storeInfo(f.storeAId);
+    const b = await storeInfo(f.storeBId);
+
+    let caught: unknown;
+    try {
+      await check(f, personId, 'record_sale', f.storeAId);
+    } catch (err) {
+      caught = err;
+    }
+    expect((caught as Error).message).toMatch(/may not 'record_sale'/);
+    expect((caught as { userMessage?: string }).userMessage).toBe(
+      `You can't record a sale at ${STORE_NAME(a)} — the Cashier job that lets you is at ${STORE_NAME(b)}. Ask an admin if you need to do it here too.`,
+    );
+  });
+});
+
+describe('T-343 S2b — I2: Cashier at A AND B, default only at B → names B only; A appears only as "here"', () => {
+  it('userMessage names only B, never A', async () => {
+    const f = await fixture('s2b-i2');
+    await setDefault(f.orgId, f.admin, f.cashierId, f.storeBId, 'record_sale', true);
+    const { personId } = await hireStaff(f, { storeId: f.storeAId, positionIds: [f.cashierId] });
+    await asOrg(f.orgId, (tx) =>
+      createEmployment(tx, f.admin, {
+        storeId: f.storeBId,
+        personId,
+        employmentStatus: 'probationary',
+        startedOn: '2026-01-05',
+        positionIds: [f.cashierId],
+        primaryPositionId: f.cashierId,
+      }),
+    );
+
+    const a = await storeInfo(f.storeAId);
+    const b = await storeInfo(f.storeBId);
+    const aLabel = STORE_NAME(a);
+    const bLabel = STORE_NAME(b);
+
+    let caught: unknown;
+    try {
+      await check(f, personId, 'record_sale', f.storeAId);
+    } catch (err) {
+      caught = err;
+    }
+    const msg = (caught as { userMessage?: string }).userMessage ?? '';
+    // A is "here" (Design 1: `H`) — it appears exactly ONCE, before " — ", never inside the jobs
+    // clause. A real negative: this fails if A is ever also listed among the jobs.
+    const dashIndex = msg.indexOf(' — ');
+    expect(dashIndex, 'sentence must have the " — " separator between H and the jobs clause').toBeGreaterThan(-1);
+    const hereClause = msg.slice(0, dashIndex);
+    const jobsClause = msg.slice(dashIndex);
+    expect(msg.split(aLabel).length - 1, `${aLabel} must appear exactly once (as "here")`).toBe(1);
+    expect(hereClause).toContain(aLabel);
+    expect(jobsClause).toContain(bLabel);
+    expect(jobsClause).not.toContain(aLabel);
+  });
+});
+
+describe('T-343 S2b — I3: a third store (C) → the 2-store form, groups ordered by store NAME (not creation order)', () => {
+  it('C (named to sort first) is listed before B', async () => {
+    const f = await fixture('s2b-i3');
+    // Named to sort ALPHABETICALLY BEFORE storeB's fixture-generated name ("Store s2b-i3... B"),
+    // while being created and defaulted AFTER B — the only way this proves a real name-sort
+    // instead of an artifact of insertion order.
+    const [storeC] = await sql<{ id: string }[]>`
+      insert into stores (org_id, code, name) values (${f.orgId}, ${uid('s2b-i3c')}, 'AAA First Store') returning id`;
+    const storeCId = storeC!.id;
+    // `fixture()` only grants the admin scope at A/B — a manually-inserted third store needs its
+    // own grant, or `createEmployment` below refuses with "no store scope" before this leg ever
+    // reaches the refusal it exists to test.
+    await sql`insert into person_store_scope (person_id, store_id, source) values (${f.adminId}, ${storeCId}, 'manual')`;
+
+    await setDefault(f.orgId, f.admin, f.cashierId, f.storeBId, 'record_sale', true);
+    await setDefault(f.orgId, f.admin, f.cashierId, storeCId, 'record_sale', true);
+    const { personId } = await hireStaff(f, { storeId: f.storeBId, positionIds: [f.cashierId] });
+    await asOrg(f.orgId, (tx) =>
+      createEmployment(tx, f.admin, {
+        storeId: storeCId,
+        personId,
+        employmentStatus: 'probationary',
+        startedOn: '2026-01-05',
+        positionIds: [f.cashierId],
+        primaryPositionId: f.cashierId,
+      }),
+    );
+
+    const a = await storeInfo(f.storeAId);
+    const b = await storeInfo(f.storeBId);
+    const c = await storeInfo(storeCId);
+
+    let caught: unknown;
+    try {
+      await check(f, personId, 'record_sale', f.storeAId);
+    } catch (err) {
+      caught = err;
+    }
+    expect((caught as { userMessage?: string }).userMessage).toBe(
+      `You can't record a sale at ${STORE_NAME(a)} — the jobs that let you are at other stores: ` +
+        `Cashier at ${STORE_NAME(c)}; Cashier at ${STORE_NAME(b)}. ` +
+        'Ask an admin if you need to do it here too.',
+    );
+  });
+});
+
+describe('T-343 S2b — I4 (⛔): the only job-store deactivated → roleMayNot text', () => {
+  it('green before and after', async () => {
+    const f = await fixture('s2b-i4');
+    await setDefault(f.orgId, f.admin, f.cashierId, f.storeBId, 'record_sale', true);
+    const { personId } = await hireStaff(f, { storeId: f.storeBId, positionIds: [f.cashierId] });
+    await asOrg(f.orgId, (tx) =>
+      createEmployment(tx, f.admin, {
+        storeId: f.storeAId,
+        personId,
+        employmentStatus: 'probationary',
+        startedOn: '2026-01-05',
+        positionIds: [f.cookId],
+        primaryPositionId: f.cookId,
+      }),
+    );
+    await sql`update stores set is_active = false where id = ${f.storeBId}`;
+
+    let caught: unknown;
+    try {
+      await check(f, personId, 'record_sale', f.storeAId);
+    } catch (err) {
+      caught = err;
+    }
+    expect((caught as { userMessage?: string }).userMessage).toBe(ROLE_MAY_NOT_RECORD_SALE);
+  });
+});
+
+describe('T-343 S2b — I5 (⛔): staff with no position grant anywhere → S2’s exact roleMayNot sentence', () => {
+  it('green before and after', async () => {
+    const f = await fixture('s2b-i5');
+    const { personId } = await hireStaff(f, { storeId: f.storeAId, positionIds: [f.cookId] }); // no record_sale default anywhere
+
+    let caught: unknown;
+    try {
+      await check(f, personId, 'record_sale', f.storeAId);
+    } catch (err) {
+      caught = err;
+    }
+    expect((caught as { userMessage?: string }).userMessage).toBe(ROLE_MAY_NOT_RECORD_SALE);
+  });
+});
+
+describe('T-343 S2b — I6 (⛔): a cross-org plant never leaks org Y’s store, position or org name into X’s refusal', () => {
+  it('green before and after; userMessage stays roleMayNot', async () => {
+    const fY = await fixture('s2b-i6-y');
+    await setDefault(fY.orgId, fY.admin, fY.cashierId, fY.storeAId, 'record_sale', true);
+    const [yDefault] = await sql<{ id: string }[]>`
+      select id from position_capability_defaults
+      where org_id = ${fY.orgId} and position_id = ${fY.cashierId} and store_id = ${fY.storeAId} and capability = 'record_sale'`;
+    const yStore = await storeInfo(fY.storeAId);
+    const [yOrg] = await sql<{ name: string }[]>`select name from organizations where id = ${fY.orgId}`;
+
+    const fX = await fixture('s2b-i6-x');
+    const { personId: xPersonId } = await hireStaff(fX, { storeId: fX.storeAId, positionIds: [fX.cashierId] });
+
+    // ⭐ Superuser plant (this file's own `sql`, which already bypasses RLS for fixture setup) —
+    // `source_ref` -> Y's default; the fill trigger (0159 step 9) computes `store_id` from it.
+    let plantError: unknown;
+    try {
+      await sql`
+        insert into person_grants (person_id, grant_name, granted_by, grant_source, source_ref)
+        values (${xPersonId}, 'record_sale', ${fX.adminId}, 'position', ${yDefault!.id})`;
+    } catch (err) {
+      plantError = err;
+    }
+    if (plantError) {
+      // A guard refused the cross-org plant outright — record it verbatim; nothing further to check.
+      console.warn('I6: cross-org plant refused —', (plantError as Error).message);
+      return;
+    }
+
+    let caught: unknown;
+    try {
+      await check(fX, xPersonId, 'record_sale', fX.storeBId);
+    } catch (err) {
+      caught = err;
+    }
+    const msg = (caught as { userMessage?: string }).userMessage ?? '';
+    expect(msg).toBe(ROLE_MAY_NOT_RECORD_SALE);
+    expect(msg).not.toContain(yStore.code);
+    expect(msg).not.toContain(yStore.name);
+    expect(msg).not.toContain(yOrg!.name);
+  });
+});
+
+describe('T-343 S2b — I6b (⛔): positionGrantsElsewhere itself, on a BYPASSRLS connection, still excludes Y', () => {
+  it('returns [] for X — the explicit org_id filters, not FORCED RLS, do the work', async () => {
+    const fY = await fixture('s2b-i6b-y');
+    await setDefault(fY.orgId, fY.admin, fY.cashierId, fY.storeAId, 'record_sale', true);
+    const [yDefault] = await sql<{ id: string }[]>`
+      select id from position_capability_defaults
+      where org_id = ${fY.orgId} and position_id = ${fY.cashierId} and store_id = ${fY.storeAId} and capability = 'record_sale'`;
+
+    const fX = await fixture('s2b-i6b-x');
+    const { personId: xPersonId } = await hireStaff(fX, { storeId: fX.storeAId, positionIds: [fX.cashierId] });
+
+    let plantError: unknown;
+    try {
+      await sql`
+        insert into person_grants (person_id, grant_name, granted_by, grant_source, source_ref)
+        values (${xPersonId}, 'record_sale', ${fX.adminId}, 'position', ${yDefault!.id})`;
+    } catch (err) {
+      plantError = err;
+    }
+    if (plantError) {
+      console.warn('I6b: cross-org plant refused —', (plantError as Error).message);
+      return;
+    }
+
+    // NO `asOrg` — a plain `transaction()` is the BYPASSRLS fixture connection (T-341/DEF-414's own
+    // `asOrg` restricted-role wrapper is deliberately not used here; see the leg's own note: FORCED
+    // RLS on `position_capability_defaults` would otherwise mask a missing `org_id` filter).
+    const rows = await transaction((tx) =>
+      accessRepo.positionGrantsElsewhere(tx, {
+        personId: xPersonId,
+        orgId: fX.orgId,
+        capability: 'record_sale',
+        excludingStoreId: fX.storeBId,
+      }),
+    );
+    expect(rows).toEqual([]);
+  });
+});

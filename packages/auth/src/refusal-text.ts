@@ -55,3 +55,60 @@ export function storeRequired(capability: Capability): string {
 export function closePeriodNeedsWholeOrg(orgName: string | undefined): string {
   return `Closing a period changes every store's books, so a manager needs to be assigned to every active store in ${orgName ?? 'the organization'}.`;
 }
+
+/**
+ * T-343 S2b (DEF-430). Row 5, store-scoped: the person holds `capability` through a position at
+ * another store in this org. Names where the job actually works instead of blaming the role.
+ * Structurally equal to `@shareat/db`'s `PositionGrantElsewhereRow` — no import, on purpose (R1.5:
+ * one import, `./capabilities`).
+ */
+export interface JobElsewhere {
+  readonly positionName: string;
+  readonly storeName: string;
+  readonly storeCode: string;
+}
+
+function clean(s: string): string {
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+function joinList(items: readonly string[]): string {
+  if (items.length === 1) return items[0]!;
+  if (items.length === 2) return `${items[0]!} and ${items[1]!}`;
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]!}`;
+}
+
+export function jobIsElsewhere(capability: Capability, here: { name: string; code: string } | undefined, jobs: readonly JobElsewhere[]): string {
+  const H = here ? `${clean(here.name)} (${clean(here.code)})` : 'that store';
+
+  const groups: { storeName: string; storeCode: string; positions: string[] }[] = [];
+  const byStore = new Map<string, (typeof groups)[number]>();
+  for (const job of jobs) {
+    const storeCode = clean(job.storeCode);
+    let group = byStore.get(storeCode);
+    if (!group) {
+      group = { storeName: clean(job.storeName), storeCode, positions: [] };
+      byStore.set(storeCode, group);
+      groups.push(group);
+    }
+    const positionName = clean(job.positionName);
+    if (!group.positions.includes(positionName)) group.positions.push(positionName);
+  }
+
+  let middle: string;
+  if (groups.length === 1) {
+    const group = groups[0]!;
+    const S = `${group.storeName} (${group.storeCode})`;
+    middle =
+      group.positions.length === 1
+        ? `the ${group.positions[0]!} job that lets you is at ${S}`
+        : `the ${joinList(group.positions)} jobs that let you are at ${S}`;
+  } else {
+    const shown = groups.slice(0, 3).map((g) => `${joinList(g.positions)} at ${g.storeName} (${g.storeCode})`);
+    const rest = groups.length - shown.length;
+    const tail = rest > 0 ? `${shown.join('; ')}; and ${rest} more store${rest === 1 ? '' : 's'}` : shown.join('; ');
+    middle = `the jobs that let you are at other stores: ${tail}`;
+  }
+
+  return `You can't ${CAPABILITY_LABEL[capability]} at ${H} — ${middle}. Ask an admin if you need to do it here too.`;
+}

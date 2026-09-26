@@ -14,8 +14,9 @@
  * Every function takes a `Tx`, never the base connection (same convention as
  * `repo/journal.ts`) — so a caller cannot write outside a transaction by accident.
  */
-import { and, eq, exists, inArray, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, asc, eq, exists, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { personGrants, personRoles, personStoreScope } from '../../schema/access';
+import { positions } from '../../schema/employment';
 import { positionCapabilityDefaults } from '../../schema/position-capability-defaults';
 import { recordGone } from './record-gone';
 // ⚠️ Tables outside the access axis this file touches: `personCredentials` for
@@ -743,6 +744,53 @@ export async function personHasActiveGrant(
     .where(and(...filters))
     .limit(1);
   return row !== undefined;
+}
+
+/** T-343 S2b (DEF-430). Structurally equal to `refusal-text.ts`'s `JobElsewhere` — imports
+ *  nothing from `@shareat/auth` (a package cycle), so the two are related only by shape. */
+export interface PositionGrantElsewhereRow {
+  positionName: string;
+  storeName: string;
+  storeCode: string;
+}
+
+/**
+ * Every OTHER active store where a `'position'`-sourced grant gives `personId` `capability` —
+ * the jobs that let them do it, everywhere but `excludingStoreId`. Mirrors
+ * `personHasActiveGrant`'s semantics: no `p.is_active` filter, because a grant through a
+ * retired position is still active and still true. No `throw`, so the ratchet is unchanged.
+ */
+export async function positionGrantsElsewhere(
+  tx: Tx,
+  args: { personId: string; orgId: string; capability: string; excludingStoreId: string },
+): Promise<PositionGrantElsewhereRow[]> {
+  return tx
+    .selectDistinct({
+      positionName: positions.name,
+      storeName: stores.name,
+      storeCode: stores.code,
+    })
+    .from(personGrants)
+    .innerJoin(
+      positionCapabilityDefaults,
+      and(eq(positionCapabilityDefaults.id, personGrants.sourceRef), eq(positionCapabilityDefaults.storeId, personGrants.storeId)),
+    )
+    .innerJoin(positions, eq(positions.id, positionCapabilityDefaults.positionId))
+    .innerJoin(stores, eq(stores.id, personGrants.storeId))
+    .where(
+      and(
+        eq(personGrants.personId, args.personId),
+        eq(personGrants.grantName, args.capability),
+        isNull(personGrants.revokedAt),
+        eq(personGrants.grantSource, 'position'),
+        ne(personGrants.storeId, args.excludingStoreId),
+        eq(stores.isActive, true),
+        eq(stores.orgId, args.orgId),
+        eq(positionCapabilityDefaults.orgId, args.orgId),
+        eq(positions.orgId, args.orgId),
+      ),
+    )
+    .orderBy(asc(stores.name), asc(stores.code), asc(positions.name));
 }
 
 /** All grant rows for a person — active and revoked — because invariant 11 requires a

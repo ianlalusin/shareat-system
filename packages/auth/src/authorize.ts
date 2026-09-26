@@ -47,6 +47,7 @@ import { CAPABILITY_MATRIX, CAPABILITY_SCOPE, type Capability, type Role } from 
 import { AuthorizationError } from './errors';
 import {
   closePeriodNeedsWholeOrg,
+  jobIsElsewhere,
   noActiveRole,
   notAssignedToStore,
   otherOrg,
@@ -153,8 +154,27 @@ export async function authorize(
   const allowed =
     matrixAllows || (await accessRepo.personHasActiveGrant(tx, actor.personId, capability, scope === 'store' ? ctx.storeId : undefined));
   if (!allowed) {
-    // Row 5 — no lookup; role and capability are already in hand.
-    throw new AuthorizationError(`authorize: role '${role}' may not '${capability}'`, capability, roleMayNot(role, capability));
+    // Row 5 — S2b/DEF-430: for a store-scoped capability, one savepointed lookup asks whether a
+    // position at ANOTHER store gives the person this capability, and names that store instead of
+    // blaming the role. Org/platform-scoped capabilities and a missing storeId skip the lookup —
+    // there is nowhere else to point to.
+    const rowFiveStoreId = scope === 'store' ? ctx.storeId : undefined;
+    const found = rowFiveStoreId
+      ? await savepointLookup(tx, async (t) => {
+          const jobs = await accessRepo.positionGrantsElsewhere(t, {
+            personId: actor.personId,
+            orgId: actor.orgId,
+            capability,
+            excludingStoreId: rowFiveStoreId,
+          });
+          return jobs.length ? { jobs, here: await storesRepo.getById(t, actor.orgId, rowFiveStoreId) } : undefined;
+        })
+      : undefined;
+    throw new AuthorizationError(
+      `authorize: role '${role}' may not '${capability}'`,
+      capability,
+      found ? jobIsElsewhere(capability, found.here, found.jobs) : roleMayNot(role, capability),
+    );
   }
 
   // --- Axis 2: store scope, for 'store'-scoped capabilities only -------------------------

@@ -1292,3 +1292,81 @@ describe('T6b (Amendment R2) — a REAL refusal-lookup SQL error is contained by
   // it. See `packages/domain/tests/integration/t343-r3d-authorize-either-order.test.ts`, which
   // drives the REAL function through its real caller, `voidTradeOrder`.
 });
+
+// ---------------------------------------------------------------------------------------
+// T-343 S2b — I7: the NEW row-5 store-scoped lookup (`positionGrantsElsewhere`, DEF-430) must be
+// contained by its own savepoint exactly like the Amendment R2 lookups above (T6b). Same
+// REVOKE-not-mock mechanism (RULES §9.3 — never a mock), applied to `positions`, the table §S2b
+// Design 2's `positionGrantsElsewhere` joins to resolve `positionName`.
+// docs/tasks/343-def-417-human-readable-refusals.md §S2b, leg I7.
+//
+// ⛔ GREEN when written (tester baseline, before the builder): `authorize.ts`'s row 5 made no
+// lookup at all, so revoking `positions` touched nothing on this path — the refusal was
+// `roleMayNot`'s unchanged text regardless ("green before (no lookup)"). It stays green after the
+// builder's real lookup lands too, for a DIFFERENT reason: this fixture holds no grant anywhere, so
+// `positionGrantsElsewhere` (whether it runs and errors under the revoke, or is never reached) still
+// falls back to `roleMayNot` either way. It turns red only if a future implementation lets the
+// lookup's SQL error escape its savepoint (25P02 on the marker insert).
+// ---------------------------------------------------------------------------------------
+
+describe('I7 (⛔, S2b) — a REAL positions-lookup SQL error is contained by its own savepoint', () => {
+  /** Mirrors T6b's `withOrganizationsUnreadable`. */
+  async function withPositionsUnreadable<T>(fn: () => Promise<T>): Promise<T> {
+    await sql.unsafe(`revoke select on positions from ${APP_ROLE}`);
+    try {
+      return await fn();
+    } finally {
+      await sql.unsafe(`grant select on positions to ${APP_ROLE}`);
+    }
+  }
+
+  /** Negative half — proves the revoke actually bites, outside any savepoint, before trusting
+   *  what `authorize()`'s (future) lookup does with it. */
+  async function assertPositionsAreBlocked(): Promise<void> {
+    await sql
+      .begin(async (t) => {
+        await t.unsafe(`set local role ${APP_ROLE}`);
+        await expect(t.unsafe('select name from positions limit 1')).rejects.toMatchObject({ code: '42501' });
+        throw new Error('t343-s2b-i7-positions-probe-rollback');
+      })
+      .catch((err: unknown) => {
+        if (!(err instanceof Error) || err.message !== 't343-s2b-i7-positions-probe-rollback') throw err;
+      });
+  }
+
+  it('a row-5 store-scoped refusal is caught with the roleMayNot text; the same tx commits a marker after', async () => {
+    const org = await insertOrg('t343-s2b-i7');
+    const store = await insertStore(org, 't343-s2b-i7-store');
+    const staff = await insertPerson(org, 'I7 Staff (no submit_sales_day anywhere)');
+    await insertRoleRaw(staff, org, 'staff');
+    await insertStoreScopeRaw(staff, store);
+
+    const actor: Actor = { personId: staff, orgId: org };
+    const marker = 'I7 — written after a POISONED positions probe';
+
+    await withPositionsUnreadable(async () => {
+      await assertPositionsAreBlocked(); // negative half: the mechanism itself engages
+
+      const attempt = asPerson(org, async (tx) => {
+        let caught: unknown;
+        try {
+          await authorize(tx, actor, 'submit_sales_day', { storeId: store });
+        } catch (err) {
+          caught = err;
+        }
+        expect(caught).toBeInstanceOf(AuthorizationError);
+        expect((caught as { userMessage?: string }).userMessage).toBe(
+          "Your role (Staff) can't submit a sales day. Ask an admin if you need to.",
+        );
+        await tx.execute(dsql`insert into persons (org_id, display_name) values (${org}, ${marker})`);
+      });
+
+      await expect(attempt).resolves.toBeUndefined();
+    });
+
+    const rows = await sql<{ display_name: string }[]>`
+      select display_name from persons where org_id = ${org} and display_name = ${marker}
+    `;
+    expect(rows).toHaveLength(1);
+  });
+});
