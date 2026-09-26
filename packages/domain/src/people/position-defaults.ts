@@ -50,14 +50,18 @@ export class PositionDefaultError extends Error {
  *
  * ⭐ T-344/DEF-422, R1.3 — `create_missing_period` excluded too, same bar as `close_period`: it
  * changes closed books, so it sits with the capabilities that change what a position can widen
- * rather than what it is offered. `CAPABILITIES` is 97 as of this migration; still 91 offerable.
+ * rather than what it is offered. `CAPABILITIES` is 97 as of that migration; still 91 offerable.
+ *
+ * ⭐ T-345, same bar again — `book_missed_month` excluded too: it also changes what counts as
+ * booked for a closed month. `CAPABILITIES` is 98 as of this migration; still 91 offerable.
  */
 export const OFFERABLE_TO_POSITIONS: readonly Capability[] = CAPABILITIES.filter(
   (c) =>
     !SUPER_ADMIN_ONLY_CAPABILITIES.includes(c) &&
     CAPABILITY_SCOPE[c] !== 'platform' &&
     c !== 'close_period' &&
-    c !== 'create_missing_period',
+    c !== 'create_missing_period' &&
+    c !== 'book_missed_month',
 );
 
 /**

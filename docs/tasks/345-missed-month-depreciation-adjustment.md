@@ -1,6 +1,6 @@
 # T-345: an adjustment naming a missed month counts as that month's depreciation or amortisation
 
-**Status:** APPROVED 2026-09-25 (orchestrator, after independent Opus spec review; its nine CHANGES folded in as Amendment R1). **Builds only after T-344 lands** (it extends T-344's `/findings` section and its
+**Status:** DONE 2026-09-26 (built, three audit rounds, §9.4 screen-tested on shareat_dev with real terminal + PIN sign-in). APPROVED 2026-09-25 (orchestrator, after independent Opus spec review; its nine CHANGES folded in as Amendment R1). **Builds only after T-344 lands** (it extends T-344's `/findings` section and its
 `closeBlockers`; one migration per cycle, DEF-091). **Migration slot: `0161`**, journal `when` = 0160's + 86 400 000.
 
 > **Decision (Ian, 2026-09-25):** the catch-up books to THIS month's depreciation or amortisation expense (6700/6750), labelled `[prior period]`. It does not go to opening retained earnings.
@@ -189,7 +189,7 @@ the bible, the register.
 - **DEF-427 (in-service date, not built).** When it lands, `scheduleInputFor` must start from `in_service_on`, and
   `bookMissedMonth` then follows automatically. ⚠️ An adjustment booked BEFORE DEF-427 for a month the asset later turns
   out not to owe becomes an over-charge. DEF-427's own task must list such links and reverse them.
-- Re-booking after an adjustment is reversed. That is DEF-435 (registered). This task refuses it honestly (R1.2, A16).
+- Re-booking after an adjustment is reversed. That is DEF-435 (registered). This task refuses it honestly (R1.2, A16). ⚠️ (R2) **Known consequence:** after a reversal, P's `depreciationNotBooked`/`amortisationNotBooked` finding returns and blocks P's close (and T-344's fill for P) until DEF-435 lands. That is deliberate: a reversal is a human act, and counting a reversed link as "booked" would understate the books. DEF-435 carries it.
 - A failed run clearing `depreciationNotBooked` (§2 ⚠️, candidate DEF); disposed assets; "as booked vs as belonging" reports (row 103(a)); the job's failure line naming this remedy.
 
 ## 8. Done when
@@ -214,3 +214,19 @@ The independent Opus review returned CHANGES. Each item is folded in above; this
 7. **LOW:** a `BEFORE DELETE` trigger refuses unless `pg_trigger_depth() > 1`. §3.1, D1.
 8. **LOW:** adminless-manager-allowed test. A15.
 9. **LOW:** A6 and A12 each use their own org; the trigger checks the line accounts (check 5). §3.1, D1.
+
+## Amendment R2 — auditor question (2026-09-26), binding
+1. §7: a reversed adjustment re-blocks P's close until DEF-435. Stated, not fixed. §3.3 is unchanged: a reversed link is NOT booked.
+2. (R3, builder READY) R1.7's cascade premise is wrong: a POSTED entry can never be DELETEd (`journal_entries_check_posted_immutable`, 0005:87-95), and the cutover purge TRUNCATEs purge-class tables (`scripts/cutover-purge.ts:202-219`), which fires no row trigger. D1's leg becomes: a direct DELETE is refused, and TRUNCATE of `journal_entries` together with `missed_month_adjustments` (as the purge does) succeeds. The `pg_trigger_depth()` exception stays as harmless defence.
+3. (R3) A15's fixture must be genuinely adminless: revoke super_admin as well as admin (`hasActiveAdmin` counts both, `access.ts:80`).
+
+## Amendment R3 — code audit (2026-09-26), binding
+1. **HIGH, floor.** `missedMonths` and `bookMissedMonth` only consider P ≥ the org's earliest `fiscal_periods` month. Earlier months precede the books; their depreciation belongs in the opening balance, and booking them would double-count 1590. Refuse `{P} is before the books began ({first month})`. The 0161 guard gains check 6: P ≥ the org's earliest fiscal period (and an org with no periods refuses). A month after the floor with no period is a T-344 hole and stays bookable. Tests A22 (not listed, refused) and a D1 negative.
+2. **MEDIUM, disclosure.** `/findings` renders the section's names and amounts only to holders of `book_missed_month`. Others see just `Only an administrator can book a missed month.`
+3. **MEDIUM, N+1.** Posted periods are read in one batched query for all subjects (as `accumulatedByAsset`, `repo/fixed-assets.ts:407`), in both `periodFullyCovered` and `missedMonths`.
+4. **LOW.** "will be booked in" uses the Manila month (`currentPeriod()`), not UTC.
+5. **LOW.** File 2 asserts the real `CAPABILITY_MATRIX.book_missed_month` row, not a spread copy.
+6. D1's 46-table TRUNCATE leg is dropped: it takes ACCESS EXCLUSIVE on most of the schema and deadlocks concurrent files in the full suite. TRUNCATE not firing row triggers is a Postgres property, and classification is pinned by `cutover-classification.test.ts`.
+
+## §9.4 record (2026-09-26)
+Real sign-in on 9008 against `shareat_dev` (terminal at LIP + PIN, entered by Ian). Staff: disclosure sentence only. Admin: row `Smoketest Chiller — 2026-04 — ₱1,000.00 — will be booked in 2026-09`; blank reason refused (HTML `required`; server check pinned by A10); booked → row gone; T-344 fill of April then succeeds. **Manager view waived:** signing out drops the terminal connection, and a manager hits the same capability branch as staff (A13 pins the refusal). Screenshots: `~/.claude/skills/orchestrator/tools/t345-{1..5}-*.jpg`. Fixture left net-zero (five entries reversed; posted entries cannot be deleted).

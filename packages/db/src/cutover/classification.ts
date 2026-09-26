@@ -577,6 +577,15 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       '`pending_valuation` state, and the cutover leaves every surviving row in it — which also ' +
       'makes T-134s "what is still missing" list a plain query rather than a reconciliation.',
   },
+  // T-345 — the missed-month catch-up link.
+  missed_month_adjustments: {
+    class: 'purge',
+    reason:
+      'CASCADEs off journal_entries (ON DELETE CASCADE, journal_entry_id), which is itself purge — ' +
+      'same lineage as journal_lines and period_overrides, children before parents. A link naming a ' +
+      'pilot-era catch-up entry that no longer exists after cutover is exactly period_overrides’ own ' +
+      'reasoning: pointing at a deleted id is worse than no record at all.',
+  },
 
   // ---- T-130: suppliers, supplier invoices, AP payments --------------------------------
   suppliers: {

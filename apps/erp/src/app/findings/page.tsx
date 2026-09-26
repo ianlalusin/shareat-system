@@ -1,17 +1,25 @@
 import Link from 'next/link';
 import { requireSession } from '../../lib/session';
-import { acknowledgeFindingAction, closePeriodAction, createMissingClosedPeriodAction } from './actions';
+import {
+  acknowledgeFindingAction,
+  bookMissedMonthAction,
+  closePeriodAction,
+  createMissingClosedPeriodAction,
+} from './actions';
 import {
   KIND_LABEL,
   bySeverityThenStatus,
   findingsFor,
   lastCompletedPeriod,
   noteFindingView,
+  peso,
   selectablePeriods,
   withOrgPrincipal,
 } from './lib';
-import { classifyHoles, type ClassifiedHolePiece } from '@shareat/domain';
+import { classifyHoles, missedMonths, type ClassifiedHolePiece, type MissedMonthRow } from '@shareat/domain';
 import { heldCapabilities } from '@shareat/auth';
+// T-345 Amendment R3.4 — the Manila month, not UTC.
+import { currentPeriod } from '../fixed-assets/lib';
 import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Findings — Shareat System' };
@@ -42,6 +50,15 @@ export default async function FindingsPage({
   const missingClosedPieces = pieces.filter((p) => p.class === 'B' || p.class === 'C');
   const held = await withOrgPrincipal(actor.orgId, (tx) => heldCapabilities(tx, actor));
   const canCreateMissingPeriod = held.has('create_missing_period');
+
+  // T-345 §3.5 — the last COMPLETED month, same as the periodic-posting detectors themselves, and
+  // independent of the 12-month period selector above (a hole can be older than a year).
+  // ⚠️ Amendment R3.2 — asset/item NAMES and AMOUNTS are read only for a `book_missed_month`
+  // holder; a non-holder never triggers this query at all, and sees only the plain refusal line.
+  const canBookMissedMonth = held.has('book_missed_month');
+  const missedMonthRows = canBookMissedMonth
+    ? await withOrgPrincipal(actor.orgId, (tx) => missedMonths(tx, actor.orgId, lastCompletedPeriod()))
+    : [];
 
   // ⭐ T-214 — record that a human actually looked. ⚠️ Deliberately AFTER the read and outside its
   // transaction, and it swallows its own failure: the log is accountability, the page is the work.
@@ -152,6 +169,14 @@ export default async function FindingsPage({
           pieces={missingClosedPieces}
           period={period}
           canCreate={canCreateMissingPeriod}
+        />
+      )}
+
+      {(canBookMissedMonth ? missedMonthRows.length > 0 : true) && (
+        <ScheduledChargesMissedSection
+          rows={missedMonthRows}
+          period={period}
+          canBook={canBookMissedMonth}
         />
       )}
 
@@ -328,6 +353,71 @@ function MissingPeriodsSection({
           </div>
         );
       })}
+    </section>
+  );
+}
+
+/**
+ * T-345 §3.5 — beside "Months missing inside closed books": a scheduled charge that could not post
+ * in its own month, with the amount the schedule says and a required reason. The button renders
+ * only for an actor holding `book_missed_month`; anyone else sees why it is missing, never a
+ * disabled control that looks broken.
+ */
+function ScheduledChargesMissedSection({
+  rows,
+  period,
+  canBook,
+}: {
+  rows: MissedMonthRow[];
+  period: string;
+  canBook: boolean;
+}) {
+  return (
+    <section className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
+      <div>
+        <h2 className="text-sm font-medium">Scheduled charges missed in closed months</h2>
+        <p className="max-w-2xl text-xs text-neutral-600 dark:text-neutral-400">
+          A depreciation or amortisation charge that could not post in its own month. An
+          administrator can book it once, in the current open month, for the amount the schedule
+          says — never typed.
+        </p>
+      </div>
+      {/* ⚠️ Amendment R3.2 — a non-holder sees only this line, never a name or an amount. The
+          caller already skips the `missedMonths` read entirely for them; `rows` is empty here too,
+          but the branch is on `canBook`, not on row count, so the disclosure holds either way. */}
+      {!canBook ? (
+        <p className="text-xs text-neutral-500">Only an administrator can book a missed month.</p>
+      ) : (
+        rows.map((r) => (
+          <div
+            key={`${r.schedule}-${r.subjectId}-${r.belongsToPeriod}`}
+            className="space-y-2 rounded-lg border border-amber-300 bg-white p-3 dark:border-amber-800 dark:bg-neutral-950"
+          >
+            <div className="text-sm">
+              <span className="font-medium">{r.subjectName}</span> — {r.belongsToPeriod} —{' '}
+              {peso(Number(r.amount))} — will be booked in {currentPeriod()}
+            </div>
+            <form action={bookMissedMonthAction} className="flex flex-wrap items-end gap-2">
+              <input type="hidden" name="period" value={period} />
+              <input type="hidden" name="schedule" value={r.schedule} />
+              <input type="hidden" name="subjectId" value={r.subjectId} />
+              <input type="hidden" name="belongsToPeriod" value={r.belongsToPeriod} />
+              <input
+                name="reason"
+                required
+                placeholder="Why is this being booked now?"
+                className={`${INPUT} w-72`}
+              />
+              <button
+                type="submit"
+                className="rounded border border-amber-700 bg-amber-700 px-3 py-2 text-xs font-medium text-white hover:bg-amber-800"
+              >
+                Book it
+              </button>
+            </form>
+          </div>
+        ))
+      )}
     </section>
   );
 }

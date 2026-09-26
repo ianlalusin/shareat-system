@@ -432,16 +432,20 @@ export async function accumulatedByAsset(
 }
 
 /** The periods this asset has already been charged for, as `YYYY-MM` strings.
- *  Used to answer "what is still owed?" without re-deriving it from idempotency keys. */
+ *  Used to answer "what is still owed?" without re-deriving it from idempotency keys.
+ *
+ *  ⭐ **T-345 R1.1 — read from the KEY, not `entry_date`.** A missed-month catch-up is dated in the
+ *  month it was BOOKED, not the month it belongs to (`asset:{id}:depreciation:{P}`, entry dated
+ *  after P) — `entry_date` would report the catch-up twice (once for its real month, once — wrongly
+ *  — under the booking month) and never report P itself. `repo/prepaid.ts`'s own `postedPeriods`
+ *  already does this; the `(?:#\d+)?` tail is the same re-post-after-reversal shape. */
 export async function postedDepreciationPeriods(
   tx: Tx,
   orgId: string,
   assetId: string,
 ): Promise<string[]> {
   const rows = await tx
-    .select({
-      period: sql<string>`to_char(${journalEntries.entryDate}, 'YYYY-MM')`,
-    })
+    .select({ key: journalEntries.idempotencyKey })
     .from(journalEntries)
     .where(
       and(
@@ -451,7 +455,40 @@ export async function postedDepreciationPeriods(
         eq(journalEntries.status, 'posted'),
       ),
     );
-  return rows.map((r) => r.period);
+  const periods: string[] = [];
+  for (const r of rows) {
+    const m = /:depreciation:(\d{4}-\d{2})(?:#\d+)?$/.exec(r.key ?? '');
+    if (m) periods.push(m[1]!);
+  }
+  return periods;
+}
+
+/** The same figure for every asset in the org at once, as a map keyed by asset id — the N+1 guard
+ *  for `postedDepreciationPeriods`, the same reasoning `accumulatedByAsset` gives above: a caller
+ *  walking every asset (T-345 §3.2/§3.3) must not call the single-asset version once per asset. */
+export async function postedDepreciationPeriodsByAsset(
+  tx: Tx,
+  orgId: string,
+): Promise<Map<string, Set<string>>> {
+  const rows = await tx
+    .select({ assetId: journalEntries.sourceId, key: journalEntries.idempotencyKey })
+    .from(journalEntries)
+    .where(
+      and(
+        eq(journalEntries.orgId, orgId),
+        eq(journalEntries.sourceType, 'depreciation'),
+        eq(journalEntries.status, 'posted'),
+      ),
+    );
+  const byAsset = new Map<string, Set<string>>();
+  for (const r of rows) {
+    const m = /:depreciation:(\d{4}-\d{2})(?:#\d+)?$/.exec(r.key ?? '');
+    if (!m) continue;
+    const set = byAsset.get(r.assetId) ?? new Set<string>();
+    set.add(m[1]!);
+    byAsset.set(r.assetId, set);
+  }
+  return byAsset;
 }
 
 /** Assets whose cost has never been capitalised to 1510 — the reconciliation hook T-135's OIL

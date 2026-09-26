@@ -16,7 +16,7 @@ import { CAPABILITIES, CAPABILITY_AREA, CAPABILITY_AREAS, type Capability, type 
 // watching tsc refuse — a runtime `expect` cannot observe a type error.
 // -------------------------------------------------------------------------------------
 
-describe('U1 — CAPABILITY_AREA is keyed on exactly the 97 capabilities; every area is used', () => {
+describe('U1 — CAPABILITY_AREA is keyed on exactly the 98 capabilities; every area is used', () => {
   it('keys set-equal CAPABILITIES', () => {
     expect([...Object.keys(CAPABILITY_AREA)].sort()).toEqual([...CAPABILITIES].sort());
   });
@@ -53,9 +53,11 @@ describe('U1 — CAPABILITY_AREA is keyed on exactly the 97 capabilities; every 
     // @ts-expect-error — 'bogus_cap' is not a Capability, the excess-property check U1 relies on.
     const _bogusKey: Readonly<Record<Capability, CapabilityArea>> = { ...CAPABILITY_AREA, bogus_cap: 'sales' };
 
-    expect(Object.keys(_control).length, 'positive control: unmutated form has all 97 keys').toBe(97);
-    expect(Object.keys(_missingOne).length, 'exactly one key removed').toBe(96);
-    expect(Object.keys(_bogusKey).length, 'one excess key added').toBe(98);
+    // ⛔ T-345 RED — today CAPABILITY_AREA still has 97 keys, so these are 97/96/98 until the
+    // builder adds `book_missed_month`.
+    expect(Object.keys(_control).length, 'positive control: unmutated form has all 98 keys').toBe(98);
+    expect(Object.keys(_missingOne).length, 'exactly one key removed').toBe(97);
+    expect(Object.keys(_bogusKey).length, 'one excess key added').toBe(99);
   });
 });
 
@@ -104,6 +106,8 @@ const ORACLE: Readonly<Record<CapabilityArea, readonly string[]>> = {
     'run_cutover', 'view_financial_reports', 'view_trial_balance', 'reverse_entry', 'close_period',
     'override_period_lock', 'post_journal_entry', 'manage_fixed_assets', 'run_depreciation',
     'manage_prepaid_items', 'run_amortisation', 'manage_chart_of_accounts', 'create_missing_period',
+    // ⛔ T-345 RED — not in CAPABILITY_AREA until the builder lands `book_missed_month`.
+    'book_missed_month',
   ],
   admin: [
     'manage_users', 'manage_stores', 'grant_capability', 'manage_store_settings', 'set_cash_policy',
@@ -113,15 +117,16 @@ const ORACLE: Readonly<Record<CapabilityArea, readonly string[]>> = {
 };
 
 describe('U2 — the literal per-area table matches CAPABILITY_AREA exactly', () => {
-  it('every capability inverts to the oracle\'s area, and the counts match §1 (97 total)', () => {
+  it('every capability inverts to the oracle\'s area, and the counts match §1 (98 total)', () => {
     const inverted: Record<string, string[]> = {};
     for (const [cap, area] of Object.entries(CAPABILITY_AREA)) (inverted[area] ??= []).push(cap);
     const sortedInverted = Object.fromEntries(Object.entries(inverted).map(([k, v]) => [k, [...v].sort()]));
     const sortedOracle = Object.fromEntries(Object.entries(ORACLE).map(([k, v]) => [k, [...v].sort()]));
     expect(sortedInverted).toEqual(sortedOracle);
 
+    // ⛔ T-345 RED — CAPABILITY_AREA still totals 97 until the builder adds `book_missed_month`.
     const total = Object.values(ORACLE).reduce((sum, caps) => sum + caps.length, 0);
-    expect(total).toBe(97);
+    expect(total).toBe(98);
   });
 
   it('NEGATIVE: the oracle is itself a partition — no capability id appears in two areas', () => {

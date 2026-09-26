@@ -200,6 +200,13 @@ export type Capability =
    * books. A separate capability rather than a widening of that ruled row (Ian 2026-09-25).
    */
   | 'create_missing_period'
+  /**
+   * ⭐ T-345 / T-344 Q5 — books a scheduled depreciation or amortisation charge missed in a month
+   * that is missing, closed or locked, into an open month with a typed reason. The amount comes
+   * from the schedule, never typed. Same bar as `create_missing_period`: it changes what counts as
+   * booked for a closed month.
+   */
+  | 'book_missed_month'
   | 'post_journal_entry'
   // People
   | 'enrol_staff'
@@ -339,6 +346,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'close_period',
   'override_period_lock',
   'create_missing_period',
+  'book_missed_month',
   'post_journal_entry',
   'enrol_staff',
   'manage_users',
@@ -502,6 +510,9 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   override_period_lock: 'org',
   // ORG, same reason as override_period_lock: the period being filled is org-wide.
   create_missing_period: 'org',
+  // ORG, same reason as create_missing_period — the schedule and the month being caught up are
+  // both org-wide facts, not scoped to any one store.
+  book_missed_month: 'org',
   post_journal_entry: 'org',
 
   enrol_staff: 'store',
@@ -688,6 +699,7 @@ export const CAPABILITY_AREA: Readonly<Record<Capability, CapabilityArea>> = {
   close_period: 'books',
   override_period_lock: 'books',
   create_missing_period: 'books',
+  book_missed_month: 'books',
   post_journal_entry: 'books',
   manage_fixed_assets: 'books',
   run_depreciation: 'books',
@@ -874,6 +886,10 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   // DECIDED — Ian 2026-09-25 (T-344 Q2). Same bar as override_period_lock: it changes closed
   // books, so it enrols in ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER (derived below) the same way.
   create_missing_period: { super_admin: true, admin: true, manager: false, staff: false },
+  // DECIDED — Ian 2026-09-25 (T-345 / T-344 Q5). Same bar as create_missing_period: it changes what
+  // counts as booked for a closed month, so it enrols in ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER
+  // (derived below) the same way.
+  book_missed_month: { super_admin: true, admin: true, manager: false, staff: false },
   // "Nobody posts by hand" — reserved for break-glass repair, logged. Admin does NOT hold
   // it: entries come from source documents, never a form, not even an admin's.
   post_journal_entry: { super_admin: true, admin: false, manager: false, staff: false },
@@ -1101,6 +1117,7 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   close_period: 'close an accounting period',
   override_period_lock: 'post into a closed period',
   create_missing_period: 'create a month missing from closed books',
+  book_missed_month: "book a missed month's depreciation or amortisation",
   post_journal_entry: 'post a journal entry directly',
   enrol_staff: 'enrol a staff member',
   manage_users: 'appoint managers and admins',

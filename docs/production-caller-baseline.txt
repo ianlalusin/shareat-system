@@ -61,7 +61,6 @@ mintUniqueToken
 newCorrelationId
 payReimbursement
 pendingItemRequests
-periodDue
 periodForDate
 periodKeyOf
 planArm

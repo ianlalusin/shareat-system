@@ -42,6 +42,7 @@ export * from './channel-settlements';
 export * from './findings';
 export * from './fiscal-periods';
 export * from './cutover';
+export * from './missed-months';
 
 // ---- Phase 3, the inventory wave (T-160 to T-173) --------------------------------------------
 // ⚠️ These had no export line at all until T-173. The package exposes only `.`, so nothing outside

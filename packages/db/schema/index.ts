@@ -127,3 +127,7 @@ export * from './period-overrides';
 // which enumerate tables from THIS barrel via `Object.values(schema)` — can see the table their
 // own required entries (classification.ts, rls/registry.ts) refer to.
 export * from './position-capability-defaults';
+
+// T-345 — the link between a missed month's catch-up journal entry and the period it counts as
+// booked for.
+export * from './missed-month-adjustments';

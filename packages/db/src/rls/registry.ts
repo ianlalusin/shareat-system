@@ -542,6 +542,12 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'beyond habit: a register lists what a business OWNS, so cross-org visibility would hand a ' +
       'franchisee an inventory of another franchisee’s equipment and what it cost them.',
   },
+  // T-345 — the missed-month catch-up link, as fiscal_periods: which month an org books its own
+  // scheduled charges for is its own business, and the row names the admin and the reason.
+  missed_month_adjustments: {
+    scope: 'org_column',
+    reason: 'As fiscal_periods — each org catches up its own missed months, on its own calendar.',
+  },
 
   // T-130 — suppliers, supplier invoices, AP payments (docs/tasks/130-accounts-payable.md).
   suppliers: {

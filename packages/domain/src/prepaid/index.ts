@@ -35,7 +35,7 @@ import {
 } from '@shareat/db';
 import { money, subtract, type Money } from '@shareat/core/money';
 import { parseMoneyInput } from '../shared/money-input';
-import { buildStraightLine, periodsThroughOf } from '../shared/straight-line';
+import { buildStraightLine, periodsThroughOf, type SchedulePeriod } from '../shared/straight-line';
 import { readPolicyOrRefuse } from '../fixed-assets/policy';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
@@ -267,17 +267,33 @@ async function amortiseItemCore(
     (result.created ? posted : skipped).push(period.period);
   }
 
-  // The schedule finished. ⚠️ Derived from the schedule's own last period, never from a running
-  // total — there is no running total.
-  const last = schedule[schedule.length - 1];
-  if (last && posted.length > 0 && input.asOfPeriod >= last.period) {
-    const releasedAll = (await prepaidRepo.postedPeriods(tx, actor.orgId, item.id)).size;
-    if (releasedAll >= schedule.length) {
-      await prepaidRepo.markStatus(tx, actor.orgId, item.id, { status: 'fully_amortised' });
-    }
+  // The schedule finished. Only worth checking when this run actually posted something — behaviour
+  // unchanged, see `checkFullyAmortised` below.
+  if (posted.length > 0) {
+    await checkFullyAmortised(tx, actor.orgId, item.id, schedule, input.asOfPeriod);
   }
 
   return { posted, skipped };
+}
+
+/**
+ * ⭐ T-345 §3.2 step 9 — shared, not copied: `bookMissedMonth` re-runs this after catching up a
+ * missed month, the same way the ordinary run does after posting one. Derived from the schedule's
+ * own last period, never from a running total — there is no running total.
+ */
+export async function checkFullyAmortised(
+  tx: Tx,
+  orgId: string,
+  itemId: string,
+  schedule: SchedulePeriod[],
+  asOfPeriod: string,
+): Promise<void> {
+  const last = schedule[schedule.length - 1];
+  if (!last || asOfPeriod < last.period) return;
+  const releasedAll = (await prepaidRepo.postedPeriods(tx, orgId, itemId)).size;
+  if (releasedAll >= schedule.length) {
+    await prepaidRepo.markStatus(tx, orgId, itemId, { status: 'fully_amortised' });
+  }
 }
 
 // -------------------------------------------------------------------------------------

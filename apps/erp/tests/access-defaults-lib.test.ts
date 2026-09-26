@@ -54,6 +54,9 @@ describe('gridCapabilityGroups — exactly the offerable set, grouped by CAPABIL
     // `override_period_lock` — admin/super_admin only, never offerable to a position, so it must
     // never appear on this grid either.
     expect(rendered).not.toContain('create_missing_period');
+    // ⛔ T-345 §3.4: `book_missed_month` is the same shape — admin/super_admin only, never
+    // offerable to a position, so it must never appear on this grid either.
+    expect(rendered).not.toContain('book_missed_month');
   });
 
   it('every capability outside the three excluded sets IS rendered, exactly once', () => {
@@ -63,6 +66,7 @@ describe('gridCapabilityGroups — exactly the offerable set, grouped by CAPABIL
       ...platformCapabilities,
       'close_period',
       'create_missing_period',
+      'book_missed_month' as Capability,
     ]);
     for (const c of CAPABILITIES) {
       if (excluded.has(c)) continue;
@@ -128,12 +132,14 @@ describe('L1 — gridCapabilityGroups: area order, exactly-91-once, and the 76/1
     expect(org.areas.map((a) => a.area)).not.toContain('sales');
   });
 
-  it('NEGATIVE: the excluded six (SUPER_ADMIN_ONLY + platform-scoped + close_period + create_missing_period) are absent from every area', () => {
+  it('NEGATIVE: the excluded set (SUPER_ADMIN_ONLY + platform-scoped + close_period + create_missing_period + book_missed_month) is absent from every area', () => {
     const rendered = new Set(groups.flatMap((g) => g.areas.flatMap((a) => a.capabilities.map((c) => c.capability))));
     for (const c of SUPER_ADMIN_ONLY_CAPABILITIES) expect(rendered.has(c)).toBe(false);
     for (const c of CAPABILITIES.filter((c) => CAPABILITY_SCOPE[c] === 'platform')) expect(rendered.has(c)).toBe(false);
     expect(rendered.has('close_period')).toBe(false);
     expect(rendered.has('create_missing_period')).toBe(false);
+    // ⛔ T-345 §3.4
+    expect(rendered.has('book_missed_month' as Capability)).toBe(false);
   });
 
   it('NEGATIVE: the platform SCOPE has 0 areas', () => {

@@ -218,11 +218,16 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // only — the admin-only remedy for a month missing inside closed books (Q2). Not offerable to
     // a position (R1.3), and does not backfill the adminless-manager fallback for a manager
     // already elevated before this landed (R1.4; the gap is expected empty per bible row 211).
+    // ⭐ 97 -> 98 (T-345): `book_missed_month`. ORG-scoped, admin and up only — the admin-only
+    // remedy for a scheduled charge missed in a closed/locked/missing month, booked once into an
+    // open month (Ian 2026-09-25). Not offerable to a position, same reasoning as
+    // `create_missing_period` immediately above.
     // Having to edit this number is the guard WORKING: a capability cannot be slipped
     // into the enforcement without also being written into the document people actually
     // read, and vice versa.
+    // ⛔ RED until the builder adds the row — today's document still has 97 rows.
     const { rows } = parseCapabilityMatrixDoc();
-    expect(rows.length).toBe(97);
+    expect(rows.length).toBe(98);
   });
 
   it('has no duplicate capability names', () => {
@@ -293,10 +298,11 @@ describe('invariant 1 — every capability has an explicit decision for all four
     expect(problems).toEqual([]);
   });
 
-  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 97 capabilities', () => {
-    expect(CAPABILITIES.length).toBe(97);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(97);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(97);
+  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 98 capabilities', () => {
+    // ⛔ T-345 RED — today these are 97 until `book_missed_month` lands.
+    expect(CAPABILITIES.length).toBe(98);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(98);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(98);
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));
   });
@@ -408,6 +414,13 @@ describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', (
         // before this landed (R1.4) — that manager holds it only once re-elevated. Bible row 211:
         // the one production org has an admin, so that gap is expected to be empty.
         'create_missing_period',
+        // ⭐ T-345's `book_missed_month` JOINS this set with no edit to any list — admin-yes /
+        // manager-no, same derivation, same reasoning as `create_missing_period` directly above:
+        // an adminless org's manager is the top of the tree and somebody must be able to catch up
+        // a scheduled charge a closed month trapped. ⛔ T-345 RED — the key is not a Capability yet,
+        // so this line is why `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER` fails to compile as
+        // `Capability[]` today (see `t345-book-missed-month-capability.test.ts`).
+        'book_missed_month',
       ].sort(),
     );
   });

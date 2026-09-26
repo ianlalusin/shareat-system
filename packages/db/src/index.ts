@@ -321,3 +321,7 @@ export type { SeedCalendarMonthsInput, SeedCalendarMonthsResult } from './repo/f
 
 // T-289 — position access defaults: the spine.
 export * as positionDefaultsRepo from './repo/position-defaults';
+
+// T-345 — the missed-month catch-up link.
+export * as missedMonthsRepo from './repo/missed-months';
+export type { MissedMonthSchedule } from '../schema/missed-month-adjustments';

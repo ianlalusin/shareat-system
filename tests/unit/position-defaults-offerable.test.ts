@@ -34,13 +34,19 @@ describe('OFFERABLE_TO_POSITIONS — derived, not hand-listed', () => {
     // T-344/DEF-422 (R1.3): `create_missing_period` changes closed books like `close_period` and
     // `override_period_lock` — admin/super_admin only, never offerable to a position.
     expect(OFFERABLE_TO_POSITIONS).not.toContain('create_missing_period');
+    // T-345 §3.4: `book_missed_month` is the same shape — admin/super_admin only, never
+    // offerable to a position. ⛔ RED until the builder adds it; today this assertion passes
+    // vacuously (the string is absent because the capability does not exist yet), but the
+    // "every OTHER capability must be present" loop below is what actually pins it, once it exists.
+    expect(OFFERABLE_TO_POSITIONS).not.toContain('book_missed_month' as Capability);
 
-    // Every OTHER capability must be present — the four exclusions above are the ONLY ones.
+    // Every OTHER capability must be present — the five exclusions above are the ONLY ones.
     const excluded = new Set<Capability>([
       ...SUPER_ADMIN_ONLY_CAPABILITIES,
       ...platformCapabilities,
       'close_period',
       'create_missing_period',
+      'book_missed_month' as Capability,
     ]);
     for (const c of CAPABILITIES) {
       if (!excluded.has(c)) {

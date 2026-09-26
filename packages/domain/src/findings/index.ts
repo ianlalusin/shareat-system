@@ -18,6 +18,10 @@ import { lastCompletedPeriod } from '../scheduler';
 // ⛔ T-332 — `payoutIntervalTooLong` needs the real period/payout math, and a repo file may not
 // import this package (ADR-004), so the arithmetic lives here rather than in `findings.ts`.
 import { derivePeriods, payoutDateFor, type PeriodConfig, type PayoutConfig } from '../payroll/periods';
+// T-345 §3.3 — one question ("does every active subject owing P have an effective entry for it"),
+// shared with `bookMissedMonth`'s own screen list, so the close check and the screen can never
+// disagree about which month still counts as missing.
+import { periodFullyCovered } from '../missed-months';
 
 /** ⭐ An accepted risk should be re-accepted, not forgotten. */
 export const ACKNOWLEDGEMENT_DAYS = 30;
@@ -143,6 +147,29 @@ async function payoutIntervalFindings(tx: Tx, orgId: string): Promise<findingsRe
 }
 
 /**
+ * T-345 §3.3 — drops `depreciationNotBooked:P` / `amortisationNotBooked:P` once every active
+ * subject that owes P has an effective entry keyed for it (the run's own posting, or an adjustment
+ * naming P — `periodFullyCovered` does not care which). It is a filter over the ONE feed
+ * `periodicPostingsMissed` already produced, never a second computation of the same question.
+ */
+async function periodicPostingsStillMissing(
+  tx: Tx,
+  orgId: string,
+  findings: findingsRepo.DetectedFinding[],
+): Promise<findingsRepo.DetectedFinding[]> {
+  const out: findingsRepo.DetectedFinding[] = [];
+  for (const f of findings) {
+    const schedule =
+      f.kind === 'depreciationNotBooked' ? 'depreciation' : f.kind === 'amortisationNotBooked' ? 'amortisation' : null;
+    const period = schedule ? keyPeriod(f.key) : null;
+    if (!schedule || !period || !(await periodFullyCovered(tx, orgId, schedule, period))) {
+      out.push(f);
+    }
+  }
+  return out;
+}
+
+/**
  * Every condition that currently holds, with its acknowledgement if it has a live one.
  *
  * ⚠️ `period` is the month the periodic-posting detectors ask about — normally the last completed
@@ -161,7 +188,11 @@ export async function listFindings(
     ...(await findingsRepo.unpartiedControlLines(tx, orgId)),
     ...(await findingsRepo.openingBalanceResidual(tx, orgId)),
     ...(await findingsRepo.clearingNotAtRest(tx, orgId)),
-    ...(await findingsRepo.periodicPostingsMissed(tx, orgId, options.period)),
+    ...(await periodicPostingsStillMissing(
+      tx,
+      orgId,
+      await findingsRepo.periodicPostingsMissed(tx, orgId, options.period),
+    )),
     // T-152 — cash sitting somewhere it should not be. Row 129's ceiling and cadence, plus
     // DEF-082's service-charge float, which nothing can currently discharge.
     ...(await findingsRepo.unremittedCeilingBreached(tx, orgId)),

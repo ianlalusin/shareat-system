@@ -208,9 +208,20 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // are not interactive controls and the census does not count them. Verified by filtering
     // `runCensus()`'s own results to `file === 'app/findings/page.tsx'` and reading each new
     // candidate's line/px, not by arithmetic alone.
-    // 1043 = 151 FAIL + 58 UNRESOLVED + 834 PASS, all measured together via runCensus() (not
+    // 1043 -> 1045, T-345 (2026-09-26). +2 PASS, FAIL/UNRESOLVED unmoved (both asserted above).
+    // Itemised: `app/findings/page.tsx`'s new "Scheduled charges missed in closed months" section
+    // (`ScheduledChargesMissedSection`) — the `reason` text input at :397 (38px PASS) and its
+    // "Book it" submit button at :403 (34px PASS). Same shape and same two pixel values as T-344's
+    // own pair immediately above it in the same file (createMissingClosedPeriodAction's form, now
+    // at :333/:339 — unchanged, just shifted down by the new imports/section). The form's four
+    // `type="hidden"` inputs (:393-396) are not interactive controls and the census does not count
+    // them. Verified by filtering `runCensus()`'s own results to `file === 'app/findings/page.tsx'`
+    // and reading `git diff HEAD -- apps/erp/src/app/findings/page.tsx` directly, not by arithmetic
+    // alone — the file's third pre-existing input/button pair (:258/:263) is `acknowledgeFindingAction`,
+    // unrelated to either task, and was already counted before this change.
+    // 1045 = 151 FAIL + 58 UNRESOLVED + 836 PASS, all measured together via runCensus() (not
     // computed from the other two numbers, so this cannot become circular with them).
-    expect(results.length).toBe(1043);
+    expect(results.length).toBe(1045);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

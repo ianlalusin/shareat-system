@@ -212,7 +212,18 @@ export async function createMissingClosedPeriod(
     );
   }
   if (blockers.drafts.length > 0 || blockers.blocking.length > 0) {
-    const lines = [...blockers.drafts.map(draftLabel), ...blockers.blocking.map((f) => f.detail)];
+    // T-345 §3.5 — a depreciation or amortisation finding gains a pointer at the remedy that
+    // actually clears it: booking activity in the current month does NOT satisfy
+    // `periodicPostingsMissed` (it asks about a RUN, not an entry), so the plain Q3 sentence below
+    // would send an admin to book something that leaves this exact refusal in place next time.
+    const lines = [
+      ...blockers.drafts.map(draftLabel),
+      ...blockers.blocking.map((f) =>
+        f.kind === 'depreciationNotBooked' || f.kind === 'amortisationNotBooked'
+          ? `${f.detail} Book it under "Scheduled charges missed in closed months"`
+          : f.detail,
+      ),
+    ];
     throw new Error(
       `createMissingClosedPeriod: ${lines.join('; ')}. Book this activity in the current open month as a ` +
         'prior-period adjustment, then try again. Closed books are not reopened.',

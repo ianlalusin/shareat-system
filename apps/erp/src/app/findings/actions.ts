@@ -8,7 +8,7 @@
  * still counted, ages visibly, and expires after 30 days on its own.
  */
 import { redirect } from 'next/navigation';
-import { acknowledgeFinding, closePeriod, createMissingClosedPeriod } from '@shareat/domain';
+import { acknowledgeFinding, bookMissedMonth, closePeriod, createMissingClosedPeriod } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -80,4 +80,35 @@ export async function createMissingClosedPeriodAction(formData: FormData): Promi
     back({ error: errorMessage(err), period });
   }
   back({ ok: `${result.startsOn} to ${result.endsOn} is created as ${result.status}.`, period });
+}
+
+/**
+ * T-345 §3.5 — books one scheduled charge missed in a closed month into the current open month.
+ * ⛔ Every gate — the capability, the subject's status, the schedule, the link — is re-checked
+ * inside `bookMissedMonth` itself; the button rendering only decides who SEES the form.
+ */
+export async function bookMissedMonthAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const period = str(formData, 'period');
+  const scheduleRaw = str(formData, 'schedule');
+  const subjectId = str(formData, 'subjectId');
+  const belongsToPeriod = str(formData, 'belongsToPeriod');
+  const reason = str(formData, 'reason');
+
+  // ⚠️ Audit finding (2026-09-26, DEF-417): validated here, in human terms, rather than cast — an
+  // unvalidated cast would let a bogus value fall into `bookMissedMonth`'s amortisation branch and
+  // surface a raw id in the "does not exist" refusal.
+  if (scheduleRaw !== 'depreciation' && scheduleRaw !== 'amortisation') {
+    back({ error: 'That is not a schedule this screen knows how to book.', period });
+  }
+  const schedule = scheduleRaw as 'depreciation' | 'amortisation';
+
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      bookMissedMonth(tx, actor, { schedule, subjectId, belongsToPeriod, reason }),
+    );
+  } catch (err) {
+    back({ error: errorMessage(err), period });
+  }
+  back({ ok: `${belongsToPeriod} is booked.`, period });
 }

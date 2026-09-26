@@ -301,6 +301,32 @@ export async function postedPeriods(
   return periods;
 }
 
+/** The same figure for every item in the org at once, as a map keyed by item id — the N+1 guard
+ *  for `postedPeriods`, same reasoning as `amortisedByItem` above: a caller walking every item
+ *  (T-345 §3.2/§3.3) must not call the single-item version once per item. */
+export async function postedPeriodsByItem(tx: Tx, orgId: string): Promise<Map<string, Set<string>>> {
+  const rows = await tx
+    .select({ itemId: journalEntries.sourceId, key: journalEntries.idempotencyKey })
+    .from(journalEntries)
+    .where(
+      and(
+        eq(journalEntries.orgId, orgId),
+        eq(journalEntries.sourceType, AMORTISATION_SOURCE_TYPE),
+        ne(journalEntries.status, 'draft'),
+        ne(journalEntries.status, 'reversed'),
+      ),
+    );
+  const byItem = new Map<string, Set<string>>();
+  for (const r of rows) {
+    const m = /:amortisation:(\d{4}-\d{2})(?:#\d+)?$/.exec(r.key ?? '');
+    if (!m) continue;
+    const set = byItem.get(r.itemId) ?? new Set<string>();
+    set.add(m[1]!);
+    byItem.set(r.itemId, set);
+  }
+  return byItem;
+}
+
 /**
  * Every entry ever written for one (item, period), reversed ones included, oldest first.
  *
