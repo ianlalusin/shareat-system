@@ -45,10 +45,12 @@ import type {
 } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { money } from '@shareat/core/money';
+import { parseBusinessDate } from '@shareat/core/datetime';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { checkDraw } from '../money-accounts/overdraft';
 import { parseMoneyInput } from '../shared/money-input';
+import { gone, humanDate, internalFault, refuse } from '../shared/refusal';
 import { allocateOldestFirst, type AllocationItem, type TypedAmount } from '../shared/allocate-oldest-first';
 import { createExpense, type CreateExpensePaymentInput } from '../expenses/create';
 import { approveExpense, type ApproveExpenseResult } from '../expenses/approve';
@@ -116,7 +118,7 @@ export async function createSupplier(
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'approve_supplier', {});
     const name = input.name.trim();
-    if (!name) throw new Error('createSupplier: a supplier needs a name people will recognise.');
+    if (!name) throw refuse('createSupplier: a supplier needs a name people will recognise.', 'A supplier needs a name people will recognise.');
     return apRepo.insertSupplier(trx, {
       orgId: actor.orgId,
       name,
@@ -165,13 +167,13 @@ export async function editSupplier(
 
     const existing = await apRepo.getSupplierById(trx, actor.orgId, input.supplierId);
     if (!existing) {
-      throw new Error(`editSupplier: supplier ${input.supplierId} does not exist.`);
+      throw gone(`editSupplier: supplier ${input.supplierId} does not exist.`, 'supplier');
     }
 
     const values: Parameters<typeof apRepo.updateSupplier>[3] = {};
     if (input.name !== undefined) {
       const name = input.name.trim();
-      if (!name) throw new Error('editSupplier: a supplier needs a name people will recognise.');
+      if (!name) throw refuse('editSupplier: a supplier needs a name people will recognise.', 'A supplier needs a name people will recognise.');
       values.name = name;
     }
     if (input.address !== undefined) values.address = orNull(input.address) ?? null;
@@ -215,14 +217,17 @@ export async function reconcileSupplier(
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'approve_supplier', {});
     const supplier = await apRepo.getSupplierById(trx, actor.orgId, input.supplierId);
-    if (!supplier) throw new Error(`reconcileSupplier: supplier ${input.supplierId} does not exist.`);
+    if (!supplier) throw gone(`reconcileSupplier: supplier ${input.supplierId} does not exist.`, 'supplier');
 
     const position = await apRepo.positionOf(trx, actor.orgId, supplier.id);
     if (Math.abs(Number(position.controlBalance)) > 0.005) {
-      throw new Error(
+      throw refuse(
         `reconcileSupplier: this supplier is owed ₱${position.controlBalance}. An anchor says ` +
           `they were verified at ZERO on a date, so stamping one now would tell every later aging ` +
           `report that a live obligation was settled.`,
+        `This supplier is owed ₱${position.controlBalance}. An anchor says they were verified at ` +
+          'ZERO on a date, so stamping one now would tell every later aging report that a live ' +
+          'obligation was settled.',
       );
     }
 
@@ -289,21 +294,22 @@ export async function recordInvoice(
     await authorize(trx, actor, 'record_supplier_invoice', { storeId: input.storeId });
 
     const supplier = await apRepo.getSupplierById(trx, actor.orgId, input.supplierId);
-    if (!supplier) throw new Error(`recordInvoice: supplier ${input.supplierId} does not exist.`);
+    if (!supplier) throw gone(`recordInvoice: supplier ${input.supplierId} does not exist.`, 'supplier');
     // ⭐ Ian, 2026-08-28, requirement 1: the supplier must be EXISTING **and ACTIVE**. A v2
     // tightening — v1's `upsertReceiptAction` checks only that the supplier document exists
     // (`receipt.actions.ts`), so an inactive supplier can still be billed against there. An
     // inactive supplier is one the business has stopped buying from; a new bill from one is
     // either a mistake or something worth a second look, and neither should post quietly.
     if (supplier.status !== 'active') {
-      throw new Error(
+      throw refuse(
         `recordInvoice: ${supplier.name} is ${supplier.status}, not active — reactivate the ` +
           'supplier first if you really are still buying from them.',
+        `${supplier.name} is ${supplier.status}, not active — reactivate the supplier first if you really are still buying from them.`,
       );
     }
 
     const amount = Number(input.totalAmount);
-    if (amount <= 0) throw new Error('recordInvoice: an invoice total has to be greater than zero.');
+    if (amount <= 0) throw refuse('recordInvoice: an invoice total has to be greater than zero.', 'An invoice total has to be greater than zero.');
 
     let duplicateWarning: string | undefined;
     const invoiceNo = input.invoiceNo?.trim() || null;
@@ -382,6 +388,14 @@ export interface VerifyInvoiceAttestation {
   price: boolean;
 }
 
+/** Human labels for `VerifyInvoiceAttestation`'s own keys — never the literal key in a sentence. */
+const ATTESTATION_LABEL: Record<keyof VerifyInvoiceAttestation, string> = {
+  supplier: 'the supplier',
+  invoice: 'the invoice number and date',
+  items: 'the items',
+  price: 'the prices',
+};
+
 /**
  * ⭐ Replace a PENDING invoice's lines — the wiring T-145 was missing.
  *
@@ -403,12 +417,13 @@ export async function setInvoiceLines(
 ): Promise<{ count: number }> {
   const run = async (trx: Tx) => {
     const invoice = await apRepo.getSupplierInvoiceById(trx, actor.orgId, invoiceId);
-    if (!invoice) throw new Error(`setInvoiceLines: supplier invoice ${invoiceId} does not exist.`);
+    if (!invoice) throw gone(`setInvoiceLines: supplier invoice ${invoiceId} does not exist.`, 'supplier invoice');
     await authorize(trx, actor, 'record_supplier_invoice', { storeId: invoice.storeId });
     if (invoice.status !== 'pending') {
-      throw new Error(
+      throw refuse(
         `setInvoiceLines: invoice ${invoiceId} is ${invoice.status}. Lines can only be changed ` +
           'while it is still pending — after verification they are what somebody attested to.',
+        `This invoice is ${invoice.status}. Lines can only be changed while it is still pending — after verification they are what somebody attested to.`,
       );
     }
     const goodsTotal = (
@@ -468,18 +483,23 @@ export async function verifyInvoice(
 ): Promise<void> {
   const run = async (trx: Tx) => {
     const invoice = await apRepo.getSupplierInvoiceById(trx, actor.orgId, invoiceId);
-    if (!invoice) throw new Error(`verifyInvoice: supplier invoice ${invoiceId} does not exist.`);
+    if (!invoice) throw gone(`verifyInvoice: supplier invoice ${invoiceId} does not exist.`, 'supplier invoice');
     await authorize(trx, actor, 'verify_supplier_invoice', { storeId: invoice.storeId });
 
     if (invoice.status !== 'pending') {
-      throw new Error(`verifyInvoice: supplier invoice ${invoiceId} is ${invoice.status}, not pending.`);
+      throw refuse(
+        `verifyInvoice: supplier invoice ${invoiceId} is ${invoice.status}, not pending.`,
+        `This invoice is ${invoice.status}, not pending.`,
+      );
     }
 
     // ⛔ Segregation of duties. The DB enforces it too; this is the sentence a human can act on.
     if (invoice.createdBy === actor.personId) {
-      throw new Error(
+      throw refuse(
         'verifyInvoice: you logged this invoice, so you cannot also verify it. Verification is a ' +
           'second pair of eyes — ask a manager who did not enter it, or an admin.',
+        'You logged this invoice, so you cannot also verify it. Verification is a second pair of ' +
+          'eyes — ask a manager who did not enter it, or an admin.',
       );
     }
 
@@ -487,39 +507,48 @@ export async function verifyInvoice(
       (k) => !attestation[k],
     );
     if (missing.length > 0) {
-      throw new Error(
+      const labels = missing.map((k) => ATTESTATION_LABEL[k]);
+      const joined = labels.length > 1 ? `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]!}` : labels[0]!;
+      throw refuse(
         `verifyInvoice: confirm every part of the bill before verifying it — still unconfirmed: ` +
           `${missing.join(', ')}. Verifying means you checked the supplier, the invoice details, ` +
           'the items and the prices against the photo.',
+        `Confirm every part of the bill before verifying it — still unconfirmed: ${joined}. ` +
+          'Verifying means you checked the supplier, the invoice details, the items and the ' +
+          'prices against the photo.',
       );
     }
 
     const supplier = await apRepo.getSupplierById(trx, actor.orgId, invoice.supplierId);
-    if (!supplier) throw new Error(`verifyInvoice: supplier ${invoice.supplierId} does not exist.`);
+    if (!supplier) throw gone(`verifyInvoice: supplier ${invoice.supplierId} does not exist.`, 'supplier');
     if (supplier.status !== 'active') {
-      throw new Error(`verifyInvoice: ${supplier.name} is ${supplier.status}, not active.`);
+      throw refuse(`verifyInvoice: ${supplier.name} is ${supplier.status}, not active.`, `${supplier.name} is ${supplier.status}, not active.`);
     }
 
     const isCommissaryMirror = !!supplier.counterpartyStoreId;
     if (!isCommissaryMirror) {
       if (!invoice.receiptFileId) {
-        throw new Error(
+        throw refuse(
           `verifyInvoice: supplier invoice ${invoiceId} has no receipt photo — upload one before ` +
             'verifying. A photo of the paper is the evidence the whole gate rests on (DEF-055).',
+          'This invoice has no receipt photo — upload one before verifying. A photo of the paper ' +
+            'is the evidence the whole gate rests on.',
         );
       }
       // ⭐ T-141's real check, not a truthiness test: the file must exist, in this org, and belong
       // to this invoice's store. A receipt from somewhere else is not evidence for this bill.
       const file = await filesRepo.getById(trx, actor.orgId, invoice.receiptFileId);
       if (!file) {
-        throw new Error(
+        throw refuse(
           `verifyInvoice: supplier invoice ${invoiceId} names a receipt file that does not exist in this org.`,
+          'This invoice names a receipt file that does not exist in this org.',
         );
       }
       if (file.storeId && file.storeId !== invoice.storeId) {
-        throw new Error(
+        throw refuse(
           `verifyInvoice: supplier invoice ${invoiceId} names a receipt belonging to another store — ` +
             'a photo from somewhere else is not evidence for this invoice.',
+          'This invoice names a receipt belonging to another store — a photo from somewhere else is not evidence for this invoice.',
         );
       }
     }
@@ -536,9 +565,19 @@ export async function verifyInvoice(
         await approveExpense(trx, actor, d.id);
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err);
-        throw new Error(
+        const innerUserMessage = err instanceof Error ? (err as { userMessage?: unknown }).userMessage : undefined;
+        // Rewrap: keeps the inner userMessage (rule 5) rather than re-deriving one from `.message`.
+        // ⚠️ Presentable, not `instanceof RefusalError` — `AuthorizationError` (e.g. S2's
+        // `transfer_funds` refusal on a cross-store draw inside `approveExpense`) carries a
+        // `userMessage` too and is not a `RefusalError`; the same `isPresentable`-shaped check
+        // `apps/erp/src/lib/error-shape.ts` uses (including its `instanceof Error` guard, so a
+        // thrown non-Error can't TypeError here), duplicated since domain cannot import it.
+        throw refuse(
           `verifyInvoice: supplier invoice ${invoiceId} cannot be verified — draft expense ${d.id} ` +
             `failed to post: ${reason}`,
+          typeof innerUserMessage === 'string' && innerUserMessage.trim() !== ''
+            ? innerUserMessage
+            : 'This invoice could not be verified — posting one of its draft expenses failed. Check the draft and try again.',
         );
       }
     }
@@ -576,11 +615,11 @@ export async function voidInvoice(
 ): Promise<void> {
   const run = async (trx: Tx) => {
     const invoice = await apRepo.getSupplierInvoiceById(trx, actor.orgId, input.invoiceId);
-    if (!invoice) throw new Error(`voidInvoice: supplier invoice ${input.invoiceId} does not exist.`);
+    if (!invoice) throw gone(`voidInvoice: supplier invoice ${input.invoiceId} does not exist.`, 'supplier invoice');
     await authorize(trx, actor, 'void_supplier_invoice', { storeId: invoice.storeId });
 
     const reason = input.reason.trim();
-    if (!reason) throw new Error('voidInvoice: say why this invoice is being voided.');
+    if (!reason) throw refuse('voidInvoice: say why this invoice is being voided.', 'Say why this invoice is being voided.');
 
     const live = await apRepo.liveExpensesForInvoice(trx, actor.orgId, input.invoiceId);
     for (const e of live) {
@@ -652,6 +691,24 @@ export async function recordExpenseForInvoice(
 // AP payments — settling a supplier against named open items
 // -------------------------------------------------------------------------------------
 
+/** R4.7 — org-scoped: an expenseId from another org (or none at all) yields no row, and the
+ *  sentence falls back to the deictic "this expense" rather than a name from another org
+ *  (rule 7 / Invariant 6). One refusal-path read, only when a naming is actually needed.
+ *  ⚠️ rule 6 — never lets a naming lookup's own failure break the refusal it decorates: any
+ *  error here (a bad businessDate, a dropped connection) falls back to the same deictic phrase. */
+async function expenseKey(trx: Tx, orgId: string, expenseId: string): Promise<string> {
+  try {
+    const expense = await expensesRepo.getExpenseById(trx, orgId, expenseId);
+    return expense ? `"${expense.particulars}" (${humanDate(parseBusinessDate(expense.businessDate))})` : 'this expense';
+  } catch {
+    return 'this expense';
+  }
+}
+
+function capitalise(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 export interface ApPaymentAllocationInput {
   expenseId: string;
   amountApplied: string;
@@ -699,15 +756,16 @@ export async function recordPayment(
     await authorize(trx, actor, 'record_ap_payment', { storeId: input.storeId });
 
     const supplier = await apRepo.getSupplierById(trx, actor.orgId, input.supplierId);
-    if (!supplier) throw new Error(`recordPayment: supplier ${input.supplierId} does not exist.`);
+    if (!supplier) throw gone(`recordPayment: supplier ${input.supplierId} does not exist.`, 'supplier');
 
     const parsedAmount = parseMoneyInput(input.amount, 'recordPayment: the amount');
     const amount = Number(parsedAmount);
-    if (amount <= 0) throw new Error('recordPayment: a payment has to be greater than zero.');
+    if (amount <= 0) throw refuse('recordPayment: a payment has to be greater than zero.', 'A payment has to be greater than zero.');
     if (input.allocations.length === 0) {
-      throw new Error(
+      throw refuse(
         'recordPayment: name at least one open item this payment settles (bible §16.10 — a ' +
           'payment must never float unallocated).',
+        'Name at least one open item this payment settles — a payment must never float unallocated.',
       );
     }
 
@@ -744,31 +802,41 @@ export async function recordPayment(
     for (const a of allocations) {
       const item = byExpense.get(a.expenseId);
       if (!item) {
-        throw new Error(
+        throw refuse(
           `recordPayment: expense ${a.expenseId} is not an open item for this supplier at this ` +
             'store — it may belong to another supplier or another store, not be a credit expense, ' +
             'already be fully paid, or not be posted.',
+          `${capitalise(await expenseKey(trx, actor.orgId, a.expenseId))} is not an open item for this ` +
+            'supplier at this store — it may belong to another supplier or another store, not be ' +
+            'a credit expense, already be fully paid, or not be posted.',
         );
       }
       const applied = Number(a.amountApplied);
-      if (applied <= 0) throw new Error(`recordPayment: allocation for expense ${a.expenseId} must be greater than zero.`);
+      if (applied <= 0) {
+        throw refuse(
+          `recordPayment: allocation for expense ${a.expenseId} must be greater than zero.`,
+          `The allocation for ${await expenseKey(trx, actor.orgId, a.expenseId)} must be greater than zero.`,
+        );
+      }
       if (applied > Number(item.outstanding) + 0.005) {
-        throw new Error(
+        throw refuse(
           `recordPayment: expense ${a.expenseId} has only ₱${item.outstanding} still owed — ` +
             `₱${a.amountApplied} does not fit.`,
+          `${capitalise(await expenseKey(trx, actor.orgId, a.expenseId))} has only ₱${item.outstanding} still owed — ₱${a.amountApplied} doesn't fit.`,
         );
       }
       allocatedTotal += applied;
     }
     if (allocatedTotal > amount + 0.005) {
-      throw new Error(
+      throw refuse(
         `recordPayment: allocations total ₱${allocatedTotal.toFixed(2)}, more than the ` +
           `₱${input.amount} handed over — a payment cannot allocate more than it pays.`,
+        `Allocations total ₱${allocatedTotal.toFixed(2)}, more than the ₱${input.amount} handed over — a payment cannot allocate more than it pays.`,
       );
     }
 
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.moneyAccountId);
-    if (!account) throw new Error('recordPayment: that money account does not exist.');
+    if (!account) throw gone('recordPayment: that money account does not exist.', 'money account');
     if (account.storeId !== input.storeId) {
       // ⭐ Cross-store money movement — same rule as `approveExpense` (bible row 153).
       await authorize(trx, actor, 'transfer_funds', { storeId: account.storeId });
@@ -783,19 +851,21 @@ export async function recordPayment(
       // only manager+ ever holds `record_ap_payment` anyway (this file's own top authorize call).
       await authorize(trx, actor, 'apply_supplier_credit', { storeId: input.storeId });
     }
-    if (creditApplied < 0) throw new Error('recordPayment: creditApplied cannot be negative.');
+    if (creditApplied < 0) throw refuse('recordPayment: creditApplied cannot be negative.', 'The credit applied cannot be negative.');
     if (creditApplied > amount + 0.005) {
-      throw new Error(
+      throw refuse(
         `recordPayment: creditApplied (₱${creditApplied.toFixed(2)}) cannot exceed the ` +
           `₱${input.amount} payment it is funding.`,
+        `The credit applied (₱${creditApplied.toFixed(2)}) cannot exceed the ₱${input.amount} payment it is funding.`,
       );
     }
     if (creditApplied > 0) {
       const balance = Number(await apRepo.advancesPositionOf(trx, actor.orgId, input.supplierId));
       if (creditApplied > balance + 0.005) {
-        throw new Error(
+        throw refuse(
           `recordPayment: ${supplier.name} holds only ₱${balance.toFixed(2)} of return credit — ` +
             `₱${creditApplied.toFixed(2)} does not fit.`,
+          `${supplier.name} holds only ₱${balance.toFixed(2)} of return credit — ₱${creditApplied.toFixed(2)} doesn't fit.`,
         );
       }
     }
@@ -908,18 +978,21 @@ export async function voidPayment(
 ): Promise<{ entryId: string }> {
   const run = async (trx: Tx) => {
     const payment = await apRepo.getApPaymentById(trx, actor.orgId, input.paymentId);
-    if (!payment) throw new Error(`voidPayment: ap_payment ${input.paymentId} does not exist.`);
+    if (!payment) throw gone(`voidPayment: ap_payment ${input.paymentId} does not exist.`, 'payment');
     await authorize(trx, actor, 'record_ap_payment', { storeId: payment.storeId });
 
     if (payment.status !== 'posted') {
-      throw new Error(`voidPayment: ap_payment ${input.paymentId} is ${payment.status}, not posted.`);
+      throw refuse(
+        `voidPayment: ap_payment ${input.paymentId} is ${payment.status}, not posted.`,
+        `This payment is ${payment.status}, not posted.`,
+      );
     }
     if (!payment.journalEntryId) {
-      throw new Error(`voidPayment: ap_payment ${input.paymentId} is posted but carries no journalEntryId — data inconsistency.`);
+      throw internalFault(`voidPayment: ap_payment ${input.paymentId} is posted but carries no journalEntryId — data inconsistency.`);
     }
 
     const reason = input.reason.trim();
-    if (!reason) throw new Error('voidPayment: say why this payment is being voided.');
+    if (!reason) throw refuse('voidPayment: say why this payment is being voided.', 'Say why this payment is being voided.');
 
     const result = await reverseEntry(trx, {
       entryId: payment.journalEntryId,
@@ -1006,8 +1079,11 @@ export async function suggestPaymentAllocation(
     await authorize(trx, actor, 'record_ap_payment', { storeId });
 
     for (const o of open) {
+      // Holds only while every caller fetches `open` for the SAME store it passes here
+      // (apps/erp/src/app/ap/actions.ts:260) — a caller mismatch is a bug in the caller, not
+      // something the person acting can fix, hence internalFault rather than a user sentence.
       if (o.storeId !== storeId) {
-        throw new Error(
+        throw internalFault(
           `suggestPaymentAllocation: expense ${o.expenseId} belongs to store ${o.storeId}, not ` +
             `${storeId} — refusing to propose an allocation outside the payment's own store.`,
         );
@@ -1018,7 +1094,7 @@ export async function suggestPaymentAllocation(
     const items: AllocationItem[] = open.map((o) => {
       const key = keyByExpenseId.get(o.expenseId);
       if (!key) {
-        throw new Error(
+        throw internalFault(
           `suggestPaymentAllocation: expense ${o.expenseId} is open but has no ordering key — ` +
             'cannot sort it safely.',
         );

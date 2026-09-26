@@ -202,19 +202,16 @@ describe('C1 — repo record-gone census: every id-shaped throw is recordGone(..
 // second copy of C1's job. C1 above is left untouched (S3's negative half).
 // ---------------------------------------------------------------------------------------------
 
-/** The 3 live, user-reachable, id-bearing repo throws the OLD regex never saw (S5 evidence,
- *  `ap.ts:431,437,443` — concatenated template + string, the same shape as `attendance-punches.ts`
- *  and one `CLASSIFIED_INTERNAL` `etl.ts` entry above). S5.2 converts these to `refuse(...)` naming
- *  the invoice and supplier, and empties this list — a stale entry (moved, reworded, or already
- *  converted) fails the test below rather than silently going unnoticed. */
-const PENDING_S5_2: { file: string; messageSubstring: string; reason: string }[] = [
-  { file: 'ap.ts', messageSubstring: 'is voided — nothing further may be', reason: 'S5.2 converts this to refuse(...) naming the invoice and supplier (spec §S5.2)' },
-  { file: 'ap.ts', messageSubstring: 'cannot post until it is verified', reason: 'S5.2 converts this to refuse(...) naming the invoice and supplier (spec §S5.2)' },
-  // /code-review: 'does not fit' alone is too generic to pin one site — widened to the full,
-  // distinctive tail of :443's message (its own `capacity.recorded`/`amount` fields make this
-  // string unlikely to collide with any other throw ap.ts ever grows).
-  { file: 'ap.ts', messageSubstring: 'already recorded ₱${capacity.recorded}) — ` + `₱${amount} does not fit', reason: 'S5.2 converts this to refuse(...) naming the invoice and supplier (spec §S5.2)' },
-];
+/**
+ * T-343 S5.2 — emptied. Was the 3 live, user-reachable, id-bearing repo throws the OLD regex never
+ * saw (S5 evidence, `ap.ts:431,437,443` — concatenated template + string, the same shape as
+ * `attendance-punches.ts` and one `CLASSIFIED_INTERNAL` `etl.ts` entry above). S5.2's builder
+ * converts these to `refuse(...)` naming the invoice and supplier; emptied here so the widened
+ * scanner below (§S5.0) now holds them to the SAME bar as every other repo site — no more excuse
+ * once the conversion lands. A stale (re-added, non-empty) entry would only mask a regression, so
+ * this list is never repopulated.
+ */
+const PENDING_S5_2: { file: string; messageSubstring: string; reason: string }[] = [];
 
 /** Every non-`plain` site in the real repo tree — id/key/derived only; `recordGone(`/`gone(`/
  *  `internalFault(` call sites are already-converted and never appear here (`throw-census.ts`'s
@@ -224,9 +221,8 @@ function nonPlainRepoSites() {
 }
 
 describe('T-343 S5.0 — widened scanner', () => {
-  it('PENDING_S5_2 is exactly 3 entries, all in ap.ts', () => {
-    expect(PENDING_S5_2).toHaveLength(3);
-    expect(PENDING_S5_2.every((e) => e.file === 'ap.ts')).toBe(true);
+  it('T-343 S5.2 — PENDING_S5_2 is empty (the 3 ap.ts sites are converted or must be unaccounted)', () => {
+    expect(PENDING_S5_2).toEqual([]);
   });
 
   it('every PENDING_S5_2 entry still names a real non-plain site — a stale entry fails', () => {

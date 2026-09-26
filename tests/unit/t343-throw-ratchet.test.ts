@@ -64,14 +64,14 @@ const DB_SRC_OUTSIDE_REPO = 'packages/db/src/*';
  * message (R1.2).
  */
 const CEILINGS: Record<string, number> = {
-  'packages/domain/src/ap': 39,
+  'packages/domain/src/ap': 0, // T-343 S5.2: 39 -> 0, all converted to refuse/gone/internalFault
   'packages/domain/src/ar': 35,
   'packages/domain/src/attendance': 1,
   'packages/domain/src/budgets': 4,
   'packages/domain/src/cash-requests': 21,
   'packages/domain/src/channel-settlements': 12,
   'packages/domain/src/commissary': 64,
-  'packages/domain/src/customers': 11,
+  'packages/domain/src/customers': 0, // T-343 S5.2: 11 -> 0, all converted to refuse/gone/internalFault
   'packages/domain/src/cutover': 13,
   'packages/domain/src/deliveries': 11,
   'packages/domain/src/expenses': 0, // T-343 S5.1: 40 -> 0, all converted to refuse/gone/internalFault
@@ -109,8 +109,8 @@ const CEILINGS: Record<string, number> = {
   'packages/domain/src/till': 18,
   'packages/domain/src/trade': 53,
   'packages/domain/src/wastage': 11,
-  'packages/auth/src': 7,
-  'packages/db/src/repo': 20,
+  'packages/auth/src': 0, // T-343 S5a: 7 -> 0, all converted to refuse/gone/AuthorizationError(...,userMessage)
+  'packages/db/src/repo': 17, // T-343 S5.2: 20 -> 17, the 3 ap.ts sites converted to refuse(...)
   'packages/db/src/rls': 0,
   // T-347 (DEF-437), own commit — measured independently against `packages/db/src/cutover/purge.ts`
   // (`classification.ts` has none): `derivePurgeOrder`'s cycle guard (:161) and `applyPurge`'s

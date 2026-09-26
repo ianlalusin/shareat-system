@@ -122,13 +122,25 @@ describe('W2 — an id-free fixture yields 0 hits, and assertFinds cannot be foo
   });
 });
 
-describe('W3 — the real packages/db/src/repo tree: the 3 ap.ts sites, plus the two shapes the old regex could not see', () => {
+describe('W3 — the real packages/db/src/repo tree: the (converted) ap.ts sites, plus the two shapes the old regex could not see', () => {
   const REPO_DIR = resolve(repoRoot, 'packages', 'db', 'src', 'repo');
 
-  it('finds exactly the 3 ap.ts id-shaped sites, at :431, :437, :443', () => {
-    const sites = censusTree(REPO_DIR).filter((s) => s.file.endsWith('/ap.ts') && s.kind !== 'plain');
-    expect(sites.map((s) => s.line).sort((a, b) => a - b)).toEqual([431, 437, 443]);
-    expect(sites.every((s) => s.kind === 'id')).toBe(true);
+  // T-343 S5.2 (builder, landed): the 3 sites this test used to find as RAW id-shaped throws
+  // (`:431,437,443`) are now `refuse(raw, sentence)` calls — `capacityOf` names the invoice/supplier
+  // in the sentence instead. Rewritten so this test still proves the scanner VISITS and correctly
+  // classifies real, current evidence (3 non-empty `refuse(` hits with distinctive text) rather than
+  // weakening into "0 id-shaped hits", which would also pass if the scanner had simply gone blind
+  // (the DEF-179 shape `assertFinds` exists to catch elsewhere in this file).
+  it('the 3 former id-shaped sites are now refuse( calls, classified plain — the scanner still visits and reads them', () => {
+    const all = censusTree(REPO_DIR).filter((s) => s.file.endsWith('/ap.ts'));
+    const refuseSites = all.filter((s) => s.callee === 'refuse');
+    expect(refuseSites).toHaveLength(3);
+    expect(refuseSites.every((s) => s.kind === 'plain')).toBe(true);
+    expect(refuseSites.some((s) => s.text.includes('voided'))).toBe(true);
+    expect(refuseSites.some((s) => s.text.includes("hasn't been verified"))).toBe(true);
+    expect(refuseSites.some((s) => s.text.includes("doesn't fit"))).toBe(true);
+    // No raw id-shaped throw remains anywhere in ap.ts.
+    expect(all.filter((s) => s.kind !== 'plain')).toEqual([]);
   });
 
   it('visits (does not skip) the remittance.ts nested-template throw and the attendance-punches.ts concatenated throw', () => {

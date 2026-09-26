@@ -11,7 +11,9 @@
  * named error; the trigger is the backstop that holds regardless of code path.
  */
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { businessDayRange, formatBusinessDateTime, parseBusinessDate, type BusinessDate } from '@shareat/core/datetime';
 import type { Tx } from '../client';
+import { refuse } from '../refusal';
 import { recordGone } from './record-gone';
 import {
   suppliers,
@@ -366,6 +368,11 @@ export interface InvoiceCapacity {
   totalAmount: string;
   recorded: string;
   remaining: string;
+  /** T-343 S5.2 (R4.6) — `supplier_invoices.invoice_no` is nullable; `assertOpenForRecording`
+   *  names the invoice by number when one exists, else by date (rule 2's no-number fallback). */
+  invoiceNo: string | null;
+  invoiceDate: BusinessDate;
+  supplierName: string;
 }
 
 export async function capacityOf(
@@ -384,20 +391,41 @@ export async function capacityOf(
       si.status,
       si.total_amount::text as total_amount,
       coalesce(sum(e.total_amount), 0)::text as recorded,
-      (si.total_amount - coalesce(sum(e.total_amount), 0))::text as remaining
+      (si.total_amount - coalesce(sum(e.total_amount), 0))::text as remaining,
+      si.invoice_no,
+      si.invoice_date::text as invoice_date,
+      s.name as supplier_name
     from supplier_invoices si
+    join suppliers s on s.id = si.supplier_id and s.org_id = si.org_id
     left join expenses e on e.supplier_invoice_id = si.id and e.status <> 'voided'
       ${excludeExpenseId ? sql`and e.id <> ${excludeExpenseId}` : sql``}
     where si.id = ${invoiceId} and si.org_id = ${orgId}
-    group by si.id, si.status, si.total_amount
-  `)) as unknown as Record<string, string>[];
+    group by si.id, si.status, si.total_amount, s.name
+  `)) as unknown as Record<string, string | null>[];
   if (!row) return undefined;
   return {
     status: row.status as SupplierInvoiceStatus,
     totalAmount: Number(row.total_amount).toFixed(2),
     recorded: Number(row.recorded).toFixed(2),
     remaining: Number(row.remaining).toFixed(2),
+    invoiceNo: row.invoice_no ?? null,
+    invoiceDate: parseBusinessDate(row.invoice_date as string),
+    supplierName: row.supplier_name as string,
   };
+}
+
+/** R4.6 — `${inv}`/`${Inv}`: the invoice named by number when one exists, else the no-number
+ *  fallback, both from `rule 2`. `formatBusinessDateTime`/`businessDayRange` are the exact pair
+ *  `@shareat/domain`'s `humanDate` calls (no second date formatter) — inlined here, not imported,
+ *  because `packages/db` cannot depend on `@shareat/domain` (the dependency runs the other way). */
+function invoicePhrase(capacity: InvoiceCapacity): string {
+  return capacity.invoiceNo
+    ? `invoice ${capacity.invoiceNo} from ${capacity.supplierName}`
+    : `the ${formatBusinessDateTime(businessDayRange(capacity.invoiceDate).start, { dateStyle: 'medium' })} invoice from ${capacity.supplierName}`;
+}
+
+function capitalise(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 /**
@@ -428,22 +456,25 @@ export async function assertOpenForRecording(
     throw recordGone(`assertOpenForRecording: supplier invoice ${invoiceId} does not exist in org ${orgId}`, 'supplier invoice');
   }
   if (capacity.status === 'voided') {
-    throw new Error(
+    throw refuse(
       `assertOpenForRecording: supplier invoice ${invoiceId} is voided — nothing further may be ` +
         'recorded against it',
+      `${capitalise(invoicePhrase(capacity))} has been voided, so nothing more can be recorded against it.`,
     );
   }
   if (target === 'posted' && capacity.status !== 'verified') {
-    throw new Error(
+    throw refuse(
       `assertOpenForRecording: supplier invoice ${invoiceId} is ${capacity.status} — a draft may ` +
         'stand against it, but it cannot post until it is verified',
+      `${capitalise(invoicePhrase(capacity))} hasn't been verified yet, so this can't post against it.`,
     );
   }
   if (Number(amount) > Number(capacity.remaining) + CAPACITY_EPSILON) {
-    throw new Error(
+    throw refuse(
       `assertOpenForRecording: supplier invoice ${invoiceId} has only ₱${capacity.remaining} ` +
         `remaining (total ₱${capacity.totalAmount}, already recorded ₱${capacity.recorded}) — ` +
         `₱${amount} does not fit`,
+      `${capitalise(invoicePhrase(capacity))} has only ₱${capacity.remaining} left of ₱${capacity.totalAmount}; ₱${amount} doesn't fit.`,
     );
   }
 }

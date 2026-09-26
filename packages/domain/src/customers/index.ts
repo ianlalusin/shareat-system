@@ -16,6 +16,7 @@
 import { customersRepo, itemsRepo, transaction, type Tx } from '@shareat/db';
 import type { CustomerGroup, CustomerTreatment } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
+import { gone, refuse } from '../shared/refusal';
 
 export { treatmentOf } from '@shareat/db';
 
@@ -43,25 +44,30 @@ export async function createCustomer(
     await authorize(trx, actor, 'manage_chart_of_accounts', {});
 
     const name = input.name.trim();
-    if (!name) throw new Error('createCustomer: a customer needs a name people will recognise.');
+    if (!name) throw refuse('createCustomer: a customer needs a name people will recognise.', 'A customer needs a name people will recognise.');
 
     const storeLink = input.counterpartyStoreId ?? null;
     const orgLink = input.counterpartyOrgId ?? null;
     // ⛔ ADR-008 §2. The CHECK refuses this too; refusing it here as well means the message explains
     // WHY rather than naming a constraint.
     if (storeLink && orgLink) {
-      throw new Error(
+      throw refuse(
         'createCustomer: a customer is either one of our own stores or another company, never ' +
           'both. One treatment eliminates the movement and the other books real revenue, so ' +
           'setting both would make it ambiguous — and nothing on any screen would look wrong.',
+        'A customer is either one of our own stores or another company, never both. One treatment ' +
+          'eliminates the movement and the other books real revenue, so setting both would make it ' +
+          'ambiguous — and nothing on any screen would look wrong.',
       );
     }
     // ⚠️ Our OWN org is not a counterparty org. It would derive as an inter-entity sale to
     // ourselves — real revenue against no external party.
     if (orgLink && orgLink === actor.orgId) {
-      throw new Error(
+      throw refuse(
         'createCustomer: that is this organisation. A counterparty org is ANOTHER company — use ' +
           'the store link for one of our own stores.',
+        'That is this organisation. A counterparty org is ANOTHER company — use the store link for ' +
+          'one of our own stores.',
       );
     }
 
@@ -108,14 +114,16 @@ export async function reconcileCustomer(
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'manage_chart_of_accounts', {});
     const customer = await customersRepo.getById(trx, actor.orgId, input.customerId);
-    if (!customer) throw new Error(`reconcileCustomer: customer ${input.customerId} does not exist.`);
+    if (!customer) throw gone(`reconcileCustomer: customer ${input.customerId} does not exist.`, 'customer');
 
     const balance = await customersRepo.balanceOf(trx, actor.orgId, customer.id);
     if (Math.abs(Number(balance)) > 0.005) {
-      throw new Error(
+      throw refuse(
         `reconcileCustomer: this customer owes ₱${balance}. An anchor says they were verified at ` +
           `ZERO on a date, so stamping one now would tell every later aging report that a live ` +
           `debt was settled.`,
+        `This customer owes ₱${balance}. An anchor says they were verified at ZERO on a date, so ` +
+          'stamping one now would tell every later aging report that a live debt was settled.',
       );
     }
 
@@ -142,7 +150,7 @@ export async function createPriceList(
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'manage_chart_of_accounts', {});
     const name = input.name.trim();
-    if (!name) throw new Error('createPriceList: a price list needs a name.');
+    if (!name) throw refuse('createPriceList: a price list needs a name.', 'A price list needs a name.');
     return customersRepo.insertPriceList(trx, {
       orgId: actor.orgId,
       name,
@@ -169,12 +177,12 @@ export async function setPrice(
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'manage_chart_of_accounts', {});
     const list = await customersRepo.getPriceList(trx, actor.orgId, input.priceListId);
-    if (!list) throw new Error(`setPrice: price list ${input.priceListId} does not exist.`);
+    if (!list) throw gone(`setPrice: price list ${input.priceListId} does not exist.`, 'price list');
 
     const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
-    if (!item) throw new Error(`setPrice: item ${input.itemId} does not exist.`);
+    if (!item) throw gone(`setPrice: item ${input.itemId} does not exist.`, 'item');
     if (item.status !== 'active') {
-      throw new Error(`setPrice: ${item.name} is inactive — reactivate it before quoting a rate.`);
+      throw refuse(`setPrice: ${item.name} is inactive — reactivate it before quoting a rate.`, `${item.name} is inactive — reactivate it before quoting a rate.`);
     }
     // ⭐ T-149, and the reason this task exists: nothing previously stopped someone quoting cooked
     // food to a franchisee. A price list is a wholesale instrument, so an item on one must be
@@ -183,16 +191,19 @@ export async function setPrice(
     // per-branch one. If Lipa sells bulgogi sauce wholesale, the rate is quotable.
     const wholesaleSomewhere = await itemsRepo.sellableWholesaleAnywhere(trx, actor.orgId, item.id);
     if (!wholesaleSomewhere) {
-      throw new Error(
+      throw refuse(
         `setPrice: ${item.name} is not sold wholesale, so it cannot go on a price list. A bento ` +
           'box is sold à la carte and not to a franchisee. Mark it wholesale-sellable first if ' +
           'that is genuinely what you mean.',
+        `${item.name} is not sold wholesale, so it cannot go on a price list. A bento box is sold ` +
+          'à la carte and not to a franchisee. Mark it wholesale-sellable first if that is ' +
+          'genuinely what you mean.',
       );
     }
     // ⚠️ Zero is allowed — a genuinely free line exists (a sample, a promotional unit) and refusing
     // it would push people to enter 0.01. Negative is not: that is a discount, not a price.
     if (Number(input.rate) < 0) {
-      throw new Error('setPrice: a rate cannot be negative. A negative price is a discount.');
+      throw refuse('setPrice: a rate cannot be negative. A negative price is a discount.', 'A rate cannot be negative. A negative price is a discount.');
     }
 
     await customersRepo.upsertPriceListItem(trx, {

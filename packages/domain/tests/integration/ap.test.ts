@@ -30,8 +30,10 @@ import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../db/seed/expense-categories';
 import { apRepo, closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
+import { parseBusinessDate } from '@shareat/core/datetime';
 import {
   createSupplier,
+  humanDate,
   recordInvoice,
   verifyInvoice,
   voidInvoice,
@@ -1037,5 +1039,154 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
         }),
       ),
     ).rejects.toThrow(/recordPayment: the allocation for expense.*"0\.004"/);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// T-343 S5.2 — P2, P3. `docs/tasks/343-def-417-human-readable-refusals.md` §S5.2.
+// `packages/db/src/repo/ap.ts`'s `assertOpenForRecording` (:431,437,443) threw a raw `Error` with no
+// `userMessage` before this slice; S5.2 converts it to `refuse(raw, sentence)` naming the invoice
+// (rule 2: `invoice ${invoiceNo} from ${supplierName}`, or the no-number fallback `the ${humanDate}
+// invoice from ${supplierName}` when `invoice_no` is null) and the supplier. `createExpense` never
+// catches this throw — it propagates as-is, so the REAL domain call surfaces exactly what
+// `capacityOf`'s caller sees.
+//
+// ⛔ Was red before the builder: neither leg's `userMessage` existed (P1/P2's own "expected red:
+// undefined").
+// ---------------------------------------------------------------------------------------
+
+describe('T-343 S5.2 — P2: a voided invoice’s refusal names the invoice and supplier, no UUID', () => {
+  it('with an invoice_no: "Invoice <no> from <supplier> has been voided…"', async () => {
+    const f = await fixtureWithSupplier('s5-2-p2-numbered');
+    const fileId = await receiptFile(f.orgId, f.storeId, f.staffId);
+    const invoiceNo = 'INV-5551';
+    const created = await asOrg(f.orgId, (tx) =>
+      recordInvoice(tx, f.staff, {
+        storeId: f.storeId,
+        supplierId: f.supplierId,
+        invoiceDate: '2026-01-10',
+        totalAmount: '500.00',
+        receiptFileId: fileId,
+        invoiceNo,
+      }),
+    );
+    await asOrg(f.orgId, (tx) => voidInvoice(tx, f.manager, { invoiceId: created.id, reason: 'Wrong invoice' }));
+
+    const caught = await draftExpense(f, created.id, '500.00', f.categoryId, 'Too late').then(
+      () => null,
+      (e: unknown) => e as Error,
+    );
+
+    expect(caught, 'the draft was not refused at all').not.toBeNull();
+    expect(caught!.message).toMatch(/voided/);
+    const userMessage = (caught as unknown as { userMessage?: string }).userMessage;
+    expect(userMessage, 'must carry a userMessage').toBeDefined();
+    expect(userMessage).toContain(invoiceNo);
+    expect(userMessage).toContain('s5-2-p2-numbered Supplier');
+    expect(userMessage).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+  });
+
+  it('with NO invoice_no: "The <humanDate> invoice from <supplier> has been voided…", never "invoice null"', async () => {
+    const f = await fixtureWithSupplier('s5-2-p2-unnumbered');
+    const invoiceId = await pendingInvoice(f, '500.00');
+    await asOrg(f.orgId, (tx) => voidInvoice(tx, f.manager, { invoiceId, reason: 'Wrong invoice' }));
+
+    const caught = await draftExpense(f, invoiceId, '500.00', f.categoryId, 'Too late').then(
+      () => null,
+      (e: unknown) => e as Error,
+    );
+
+    expect(caught, 'the draft was not refused at all').not.toBeNull();
+    expect(caught!.message).toMatch(/voided/);
+    const userMessage = (caught as unknown as { userMessage?: string }).userMessage;
+    expect(userMessage, 'must carry a userMessage').toBeDefined();
+    expect(userMessage).not.toContain('invoice null');
+    expect(userMessage).toContain(humanDate(parseBusinessDate('2026-01-10')));
+    expect(userMessage).toContain('s5-2-p2-unnumbered Supplier');
+  });
+});
+
+describe('T-343 S5.2 — P3: recordPayment over-allocating one expense names it by its human key', () => {
+  it('"particulars" (date) has only ₱X still owed…', async () => {
+    const f = await fixtureWithSupplier('s5-2-p3');
+    const invoiceId = await verifiedInvoice(f, '1000.00');
+    const particulars = 'Sacks of rice';
+    const { expenseId } = await creditExpense(f, invoiceId, '1000.00', particulars);
+
+    const caught = await asOrg(f.orgId, (tx) =>
+      recordPayment(tx, f.manager, {
+        storeId: f.storeId,
+        supplierId: f.supplierId,
+        businessDate: '2026-01-15',
+        amount: '1000.00',
+        moneyAccountId: f.drawerId,
+        allocations: [{ expenseId, amountApplied: '1000.01' }],
+      }),
+    ).then(
+      () => null,
+      (e: unknown) => e as Error,
+    );
+
+    expect(caught, 'the over-allocation was not refused at all').not.toBeNull();
+    expect(caught!.message).toMatch(/does not fit/);
+    const userMessage = (caught as unknown as { userMessage?: string }).userMessage;
+    expect(userMessage, 'must carry a userMessage').toBeDefined();
+    expect(userMessage).toContain(`"${particulars}"`);
+    expect(userMessage).not.toContain(expenseId);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// T-343 S5.2 — P6, P7 (auditor CHANGES, 2026-09-27).
+// ---------------------------------------------------------------------------------------
+
+describe('T-343 S5.2 — P6: expenseKey’s fallback names a deleted/cross-org expense as "This expense"', () => {
+  it('userMessage starts with "This expense" (capital T), no UUID', async () => {
+    const f = await fixtureWithSupplier('s5-2-p6');
+    const missingExpenseId = crypto.randomUUID();
+
+    const caught = await asOrg(f.orgId, (tx) =>
+      recordPayment(tx, f.manager, {
+        storeId: f.storeId,
+        supplierId: f.supplierId,
+        businessDate: '2026-01-15',
+        amount: '100.00',
+        moneyAccountId: f.drawerId,
+        allocations: [{ expenseId: missingExpenseId, amountApplied: '100.00' }],
+      }),
+    ).then(
+      () => null,
+      (e: unknown) => e as Error,
+    );
+
+    expect(caught, 'the allocation was not refused at all').not.toBeNull();
+    expect(caught!.message).toContain(missingExpenseId);
+    const userMessage = (caught as unknown as { userMessage?: string }).userMessage;
+    expect(userMessage, 'must carry a userMessage').toBeDefined();
+    expect(userMessage!.startsWith('This expense')).toBe(true);
+    expect(userMessage).not.toContain(missingExpenseId);
+  });
+});
+
+describe('T-343 S5.2 — P7: verifyInvoice’s missing-attestation sentence names only the parts actually missing', () => {
+  it('"…still unconfirmed: the items and the prices." — never a bare "price"/"items" key', async () => {
+    const f = await fixtureWithSupplier('s5-2-p7');
+    const invoiceId = await pendingInvoice(f, '500.00');
+
+    const caught = await asOrg(f.orgId, (tx) =>
+      verifyInvoice(tx, f.manager, invoiceId, { supplier: true, invoice: true, items: false, price: false }),
+    ).then(
+      () => null,
+      (e: unknown) => e as Error,
+    );
+
+    expect(caught, 'verification was not refused at all').not.toBeNull();
+    const userMessage = (caught as unknown as { userMessage?: string }).userMessage;
+    expect(userMessage, 'must carry a userMessage').toBeDefined();
+    // The DYNAMIC clause — only the parts actually left unattested, joined "A and B", never the raw
+    // keys ("items", "price") standing alone.
+    expect(userMessage).toContain('still unconfirmed: the items and the prices.');
+    expect(userMessage).not.toContain('unconfirmed: items');
+    expect(userMessage).not.toContain('unconfirmed: price');
   });
 });
