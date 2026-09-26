@@ -206,6 +206,26 @@ Firebase values can stay blank until the auth bridge is wired in Phase 0 T-006.
 
 > **Never commit `.env.local`.** It is gitignored. Never paste secrets into chat.
 
+### 4a. A local database you can actually sign into (2026-09-26)
+
+PIN sign-in has two layers (T-304): a **terminal** (a Firebase email/password account, linked to a
+store) and then a person's PIN. A fresh `shareat_dev` has neither. Rebuild it the way it was rebuilt
+on 2026-09-26:
+
+1. Migrate an empty `shareat_dev`: `npm run db:migrate`.
+2. `SYSTEM_DATABASE_URL` = the same value as `DATABASE_URL` (the scripts refuse without it), then
+   `npx tsx scripts/bootstrap-org.ts --code=shareat --name=Shareat "--admin=<your name>" --store-code=LIP --store-name=Lipa --pin=<6 digits> --confirm`.
+3. `npm run dev:seed` — the four dev people and their PINs (`scripts/dev-seed.ts` `SEED_PEOPLE`).
+4. **Ian** creates the terminal account in the Firebase console (project `NEXT_PUBLIC_FIREBASE_PROJECT_ID`),
+   then `npm run provision-terminal -- --store=LIP --uid=<uid> --confirm`.
+5. Link your own email: insert a `person_credentials` row (`kind='firebase'`, `external_id` = your uid)
+   for your person, or do it from the staff credentials screen once signed in by PIN.
+
+Record the terminal email/password and uids in `.env.local` (`DEV_TERMINAL_*`, `DEV_IAN_*`), never
+in chat or git. In the browser, a human connects the terminal once ("Connect this terminal"); an
+agent never types that password. **Signing out drops the terminal connection** — tell agents doing
+screen tests never to sign out.
+
 ### Verify everything works
 
 ```bash
