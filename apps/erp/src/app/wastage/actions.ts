@@ -53,12 +53,13 @@ function isRedirectSignal(err: unknown): boolean {
   );
 }
 
-/** Strips the throwing function's name and turns an authorisation refusal into a sentence. */
+/**
+ * T-343 S5.1d — DEF-448. `authorize()`'s `AuthorizationError`s already carry the S2/S2b
+ * `userMessage`; this used to regex-match the raw diagnostic and answer with a generic role/scope
+ * sentence of its own before `sharedErrorMessage` ever got a chance to prefer the real one.
+ * Deleted, not bypassed.
+ */
 function errorMessageOf(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err);
-  const denied = /may not '([a-z_]+)'/.exec(raw);
-  if (denied) return `Your role may not ${denied[1]!.replace(/_/g, ' ')}.`;
-  if (/no store scope/.test(raw)) return 'You are not assigned to the store this action belongs to.';
   return sharedErrorMessage(err);
 }
 

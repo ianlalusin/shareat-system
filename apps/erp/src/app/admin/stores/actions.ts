@@ -30,6 +30,7 @@ const TOTAL_RULED_ACCESS_DEFAULTS = Object.values(CANONICAL_POSITION_DEFAULTS).r
 import { withOrgPrincipal } from '../../expenses/lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
+import { isPresentable } from '../../../lib/error-shape';
 // T-346 Amendment R3.1 — the one date-validity check, never re-derived per call site.
 import { storesRepo } from '@shareat/db';
 
@@ -48,8 +49,19 @@ function str(fd: FormData, key: string): string {
  * act on. ⛔ Keyed on the constraint name deliberately, so a rename fails loudly here rather than
  * silently falling through to a generic error — and there is no second copy of the rule itself
  * (bible §6.3, `setCashPolicy`'s own precedent).
+ *
+ * T-343 S5.1d — DEF-448's twin here. Every `AuthorizationError` `authorize` throws already carries
+ * the S2/S2b `userMessage`; presentable wins first (the shared function's own step 0, run here so
+ * the constraint-name branches below never get a chance to out-guess it). The old two branches —
+ * one keyed on the store-scope-refusal shape, one matching any diagnostic with that gate function's
+ * own name in front — answered a GENERIC role/scope sentence for every refusal, including ones
+ * that were never about `manage_stores` at all (`manage_store_settings`, `stores/service.ts:455`)
+ * — deleted, not bypassed. The `setStoreOpeningDate`/`createStore` prefix-strip duplicated the
+ * shared function's own step 4, and pre-empted a presentable error whose raw happened to start
+ * with the same prefix — deleted too.
  */
 function errorMessage(err: unknown): string {
+  if (isPresentable(err)) return sharedErrorMessage(err);
   const raw = err instanceof Error ? err.message : String(err);
   if (/stores_pooling_requires_ceiling_check/.test(raw)) {
     return 'A store that pools cash must name the ceiling that bounds it. Either set the cadence to daily, or give an unremitted ceiling.';
@@ -60,17 +72,6 @@ function errorMessage(err: unknown): string {
   if (/stores_org_id_code_unique|duplicate key/.test(raw)) {
     return 'Another store in this organisation already uses that code. Codes are the stable handle and must be unique.';
   }
-  if (/no store scope|has no store scope/.test(raw)) {
-    return 'You do not have access to that store.';
-  }
-  if (/authorize:/.test(raw)) {
-    return 'Only an admin or super-admin can open or close a branch.';
-  }
-  // T-346 S1 — `setStoreOpeningDate`'s and `createStore`'s own refusals already read as full
-  // sentences (including the date-format one, delta audit); strip only the function-name prefix so
-  // it does not read like an internal error.
-  const named = /^(?:setStoreOpeningDate|createStore): (.+)$/.exec(raw);
-  if (named) return named[1]!;
   return sharedErrorMessage(err);
 }
 

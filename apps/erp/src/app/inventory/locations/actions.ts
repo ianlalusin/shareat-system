@@ -24,23 +24,26 @@ import {
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
+import { isPresentable } from '../../../lib/error-shape';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
 }
 
-/** Turns a thrown domain/DB message into one sentence a manager can act on. Kept LOCAL to this
- *  file — `apps/erp/src/lib/constraint-messages.ts` is shared and not this task's to edit. */
+/**
+ * Turns a thrown domain/DB message into one sentence a manager can act on. Kept LOCAL to this
+ * file — `apps/erp/src/lib/constraint-messages.ts` is shared and not this task's to edit.
+ *
+ * T-343 S5.1d — DEF-450. Every `AuthorizationError` `authorize` throws already carries the S2/S2b
+ * `userMessage`; presentable wins first. The old two branches — the `manage_locations` capability
+ * check and the store-scope-refusal shape — answered a generic sentence for every refusal on that
+ * capability regardless of the real reason — deleted, not bypassed.
+ */
 function errorMessage(err: unknown): string {
+  if (isPresentable(err)) return sharedErrorMessage(err);
   const raw = err instanceof Error ? err.message : String(err);
 
-  if (/may not 'manage_locations'/.test(raw)) {
-    return 'Only a manager or admin scoped to this store may manage its rooms.';
-  }
-  if (/no store scope for/.test(raw)) {
-    return 'You do not have access to manage rooms for this store.';
-  }
   if (/is single_room and already has an active non-Receiving room/.test(raw)) {
     return 'This store keeps stock in ONE room. Deactivate or repurpose the existing room before adding another.';
   }
