@@ -10,6 +10,7 @@ import {
 } from '../actions';
 import {
   canRevokeHere,
+  foldActiveGrants,
   grantableCapabilitiesFor,
   grantSourceLabel,
   grantSummaryLine,
@@ -64,6 +65,10 @@ export default async function UserAccessPage({
   const heldNames = new Set(activeGrants.map((g) => g.grantName));
   const offerable = grantableCapabilitiesFor(person.role).filter((c) => !heldNames.has(c));
   const scopedCount = stores.filter((s) => s.inScope).length;
+  // T-349 / DEF-456 §3.4 — one line per capability and store; a covered 'position' row folds into
+  // its covering 'grant'/'owner' row's line instead of listing on its own.
+  const foldedGrants = foldActiveGrants(activeGrants);
+  const storeNameById = new Map(stores.map((s) => [s.id, s.name]));
 
   return (
     <Page density="form">
@@ -81,7 +86,8 @@ export default async function UserAccessPage({
           ) : (
             'No role — authorized for nothing'
           )}{' '}
-          · {scopedCount} store{scopedCount === 1 ? '' : 's'} · {grantSummaryLine(activeGrants)}
+          · {scopedCount} store{scopedCount === 1 ? '' : 's'} ·{' '}
+          {grantSummaryLine(foldedGrants.map((fg) => fg.grant))}
         </p>
       </div>
 
@@ -178,19 +184,30 @@ export default async function UserAccessPage({
           row, with its date, so &ldquo;who could do this in March&rdquo; stays answerable.
         </p>
 
-        {activeGrants.length === 0 ? (
+        {foldedGrants.length === 0 ? (
           <p className="text-sm text-neutral-500 dark:text-neutral-400">No extra grants.</p>
         ) : (
           <ul className="space-y-2">
-            {activeGrants.map((g) => {
+            {foldedGrants.map(({ grant: g, alsoVia }) => {
               const revocable = canRevokeHere(g);
+              // T-349 / DEF-456 §3.4 — a store-scoped 'grant' row names its store; every other
+              // revocable source keeps its plain grantSourceLabel.
+              const provenance =
+                revocable && g.grantSource === 'grant' && g.storeId
+                  ? `hand-granted at ${storeNameById.get(g.storeId) ?? 'an unknown store'}`
+                  : revocable
+                    ? grantSourceLabel(g.grantSource)
+                    : positionProvenanceLine(g.positionSource);
               return (
                 <li key={g.id} className="flex flex-wrap items-start justify-between gap-3 text-sm">
                   <span>
                     <span>{capabilityTitle(g.grantName)}</span>
-                    <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">
-                      {revocable ? grantSourceLabel(g.grantSource) : positionProvenanceLine(g.positionSource)}
-                    </span>
+                    <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">{provenance}</span>
+                    {alsoVia && (
+                      <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">
+                        also {positionProvenanceLine(alsoVia)}
+                      </span>
+                    )}
                     <span className="block font-mono text-[11px] text-neutral-500 dark:text-neutral-400">
                       {g.grantName}
                     </span>
@@ -227,14 +244,17 @@ export default async function UserAccessPage({
                         .
                       </span>
                       {/* T-291 §C3 — Ian's decision 5: a hand-grant of a capability already held
-                          via a position creates a SECOND, org-wide (store-NULL) person-level grant
-                          row alongside it — the position-sourced (store-scoped) row is untouched
-                          (migration 0159; `access.ts:637-655` only matches/upgrades an existing
+                          via a position creates a SECOND grant row alongside it — the
+                          position-sourced (store-scoped) row is untouched (migration 0159;
+                          `access.ts`'s position branch only matches/upgrades an existing
                           store-NULL row, so a position row never qualifies).
-                          ⛔ DEF-456 — this describes TODAY'S DEFECT, not the intent. Ian ruled
-                          2026-09-27 that this second row must stay STORE-scoped (to the position's
-                          own store), not org-wide; `access.ts` widening it to every store is the
-                          bug DEF-456 tracks, still open.
+                          ⭐ T-349 / DEF-456 (2026-09-27) — that second row is now STORE-scoped, to
+                          THIS row's own store, never org-wide: `positionGrantId` below names this
+                          exact job row, `grantCapabilityAsActor` reads its store from
+                          `activePositionGrantForPerson`, never the form (§7.1), and
+                          `accessRepo.grantCapability`'s store-grant branch writes `store_id` to
+                          that store, `source_ref` always NULL. Revoking the hand grant leaves this
+                          job row, and the access it gives at this store, untouched.
                           One submission of
                           `setCapabilityGrantAction` the picker cannot reach on its own, because
                           `grantableCapabilitiesFor` already removed every held capability from it
@@ -248,6 +268,12 @@ export default async function UserAccessPage({
                           <input type="hidden" name="granted" value="true" />
                           <input type="hidden" name="capability" value={g.grantName} />
                           <input type="hidden" name="intent" value="hold_own_right" />
+                          {/* T-349 / DEF-456 §3.4 — the store the hold lands at is resolved
+                              server-side from THIS row (`activePositionGrantForPerson`), never a
+                              store field on the form (§7.1). Every folded 'position' line reaching
+                              this branch is, by construction, uncovered — `g.id` names exactly the
+                              job row the hold is made from. */}
+                          <input type="hidden" name="positionGrantId" value={g.id} />
                           <button type="submit" className={LINK_BTN}>
                             Hold in their own right
                           </button>

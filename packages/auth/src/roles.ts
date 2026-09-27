@@ -27,6 +27,7 @@
 import { accessRepo, goneSentence, personsRepo, refuse, type Tx } from '@shareat/db';
 import {
   CAPABILITIES,
+  CAPABILITY_SCOPE,
   ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER,
   ROLE_LABEL,
   SUPER_ADMIN_ONLY_CAPABILITIES,
@@ -522,6 +523,14 @@ export async function assignRoleAsActor(
 export interface GrantCapabilityAsActorInput {
   readonly personId: string;
   readonly capability: Capability;
+  /**
+   * T-349 / DEF-456, S2 — "hold in their own right AT the position row's own store." Given, the
+   * store comes ONLY from `accessRepo.activePositionGrantForPerson(positionGrantId)`, never a
+   * form field (§7.1) — there is no `atStoreId`/`storeId` field on this input at all, so a caller
+   * has no parameter through which to even attempt widening it. Omitted (person-level, org-wide)
+   * behaves exactly as before this task.
+   */
+  readonly positionGrantId?: string;
 }
 
 /**
@@ -574,7 +583,7 @@ export async function grantCapabilityAsActor(
   tx: Tx,
   actor: Actor,
   input: GrantCapabilityAsActorInput,
-): Promise<void> {
+): Promise<{ wrote: boolean; heldEverywhere: boolean; storeName: string | null }> {
   await authorize(tx, actor, 'grant_capability', {});
 
   if (actor.personId === input.personId) {
@@ -612,9 +621,56 @@ export async function grantCapabilityAsActor(
     );
   }
 
+  // T-349 / DEF-456, S2 — "hold in their own right AT the position row's own store." The store
+  // comes ONLY from the position row `activePositionGrantForPerson` reads back, never from
+  // `input` (there is no store field on `GrantCapabilityAsActorInput` to even forge — §7.1). A
+  // stale, revoked, wrong-person, wrong-source or wrong-capability id all refuse the same way.
+  if (input.positionGrantId !== undefined) {
+    const row = await accessRepo.activePositionGrantForPerson(tx, {
+      personId: input.personId,
+      grantId: input.positionGrantId,
+    });
+    if (!row || row.grantName !== input.capability) {
+      throw refuse(
+        `grantCapabilityAsActor: positionGrantId ${input.positionGrantId} does not name an active ` +
+          `'position'-sourced grant of '${input.capability}' for person ${input.personId}`,
+        'That permission no longer comes from their job there. Reload the page to see what they hold now.',
+      );
+    }
+
+    // T-349 §3.2 item 9 (orchestrator ruling, 2026-09-27) — a position DEFAULT for an org-scoped
+    // capability (`CAPABILITY_SCOPE[c] !== 'store'`) already carries org-wide authority; `authorize`
+    // never applies a store filter to it, so a store-scoped hold would be honoured everywhere while
+    // the banner claimed one store. Writing the ordinary person-level 'grant' row instead keeps
+    // exactly the authority the position row already gives, org-wide — nothing widens.
+    if (CAPABILITY_SCOPE[input.capability] !== 'store') {
+      const result = await accessRepo.grantCapability(tx, {
+        personId: input.personId,
+        grantName: input.capability,
+        grantedBy: actor.personId,
+        grantSource: 'grant',
+      });
+      return { wrote: result.wrote, heldEverywhere: result.heldEverywhere, storeName: null };
+    }
+
+    // ⛔ `granted_by` is the ACTOR, never null (same rule as the person-level write below).
+    const result = await accessRepo.grantCapability(tx, {
+      personId: input.personId,
+      grantName: input.capability,
+      grantedBy: actor.personId,
+      grantSource: 'grant',
+      atStoreId: row.storeId,
+    });
+    return {
+      wrote: result.wrote,
+      heldEverywhere: result.heldEverywhere,
+      storeName: result.heldEverywhere ? null : row.storeName,
+    };
+  }
+
   // ⛔ `granted_by` is the ACTOR, never null. The base case of the authority chain is
   // `createFirstAdmin` and nowhere else; every row after it names who is answerable for it.
-  await accessRepo.grantCapability(tx, {
+  const result = await accessRepo.grantCapability(tx, {
     personId: input.personId,
     grantName: input.capability,
     grantedBy: actor.personId,
@@ -622,6 +678,7 @@ export async function grantCapabilityAsActor(
     // admin-arrival revocation (`revokeElevationGrantsForOrg` matches only `'elevation'`).
     grantSource: 'grant',
   });
+  return { wrote: result.wrote, heldEverywhere: result.heldEverywhere, storeName: null };
 }
 
 /**

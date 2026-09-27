@@ -8,13 +8,13 @@
  * raw SQL, mutations run as the APP role (`asApp`) so both RLS and every trigger/CHECK/index fire
  * exactly as production would.
  *
- * ⛔ TESTER, not BUILDER. Migration `0165_t349_person_grants_store_grant.sql` does not exist yet —
- * every leg here runs against the CURRENT (pre-0165) `person_grants_store_shape_check` and the
- * CURRENT single `person_grants_active_position_store_unique` index (`packages/db/schema/
- * access.ts:221-223,255-259`, read at `1e98cd0`). No leg here "locates" a migration file — M1-M5 are
- * all behavioural: they assert what 0165 ships, and are expected red against TODAY's schema for the
- * stated reason. Once 0165 lands, this file is unchanged; the SAME `migrate()` call against the
- * SAME real folder simply includes it, and every leg flips to its `+`/`⛔` outcome.
+ * Post-commit review (orchestrator, 2026-09-27): migration `0165_t349_person_grants_store_grant.sql`
+ * has landed (`3d601ab`) and every leg below now runs against the SHIPPED shape — the widened
+ * `person_grants_store_shape_check` (re-added under the same name) and the split
+ * `person_grants_active_position_store_unique` / `person_grants_active_grant_store_unique` indexes
+ * (`packages/db/schema/access.ts`). No leg here "locates" a migration file — the full real folder is
+ * applied to a scratch database each run, so this file needed no edit when 0165 landed and needs
+ * none for any later migration either.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -130,13 +130,13 @@ describe('T-349 / DEF-456 S1 M1-M5 — the person_grants store-scoped grant shap
           values (${personId}, 'confirm_receipt', 'grant', null, ${storeA}, ${adminId})
           returning id, store_id`,
       );
-      expect(row[0]!.store_id, 'today: the old shape CHECK (23514) refuses this insert outright').toBe(storeA);
+      expect(row[0]!.store_id, "0165's widened shape CHECK admits 'grant'+store; the row reads back with the store it was given").toBe(storeA);
     },
     30000,
   );
 
   it(
-    "M2 — 'elevation'+store and 'owner'+store are refused (23514); 'position' with no store and no ref is refused (record which error); NULL source+store is the documented hole",
+    "M2 — 'elevation'+store and 'owner'+store are refused by the widened shape check; the source_ref check (pre-existing, untouched by 0165) still refuses a store-less 'position' row; the NULL-blind hole is closed",
     async () => {
       const elevationPerson = await newPerson(uid('M2-elevation'));
       await expect(
@@ -144,7 +144,7 @@ describe('T-349 / DEF-456 S1 M1-M5 — the person_grants store-scoped grant shap
           tx`insert into person_grants (person_id, grant_name, grant_source, source_ref, store_id, granted_by)
              values (${elevationPerson}, 'confirm_receipt', 'elevation', null, ${storeA}, ${adminId})`,
         ),
-      ).rejects.toMatchObject({ code: '23514' });
+      ).rejects.toMatchObject({ code: '23514', constraint_name: 'person_grants_store_shape_check' });
 
       const ownerPerson = await newPerson(uid('M2-owner'));
       await expect(
@@ -152,43 +152,34 @@ describe('T-349 / DEF-456 S1 M1-M5 — the person_grants store-scoped grant shap
           tx`insert into person_grants (person_id, grant_name, grant_source, source_ref, store_id, granted_by)
              values (${ownerPerson}, 'confirm_receipt', 'owner', null, ${storeA}, ${adminId})`,
         ),
-      ).rejects.toMatchObject({ code: '23514' });
+      ).rejects.toMatchObject({ code: '23514', constraint_name: 'person_grants_store_shape_check' });
 
-      // Record which error: the shape CHECK (23514) or the fill trigger's own named error (raised
-      // BEFORE the CHECK on a 'position' row with no source_ref to derive a store from).
+      // Re-aimed (post-commit review): a 'position' row with no source_ref was always refused by
+      // `person_grants_position_source_ref_check` (migration 0146, T-289) — a constraint 0165 does
+      // not touch. This leg no longer proves anything about T-349; it is a baseline confirmation
+      // that 0165's widened shape check did not accidentally loosen an unrelated one. Confirmed by
+      // running it: the source_ref check fires, not the fill trigger (there is no source_ref to
+      // derive a store FROM, so the trigger's own "no visible default" path is never reached either
+      // — the source_ref check rejects the row before the trigger would run).
       const positionPerson = await newPerson(uid('M2-position'));
-      let positionError: unknown;
-      try {
-        await asApp((tx) =>
+      await expect(
+        asApp((tx) =>
           tx`insert into person_grants (person_id, grant_name, grant_source, source_ref, store_id, granted_by)
              values (${positionPerson}, 'confirm_receipt', 'position', null, null, ${adminId})`,
-        );
-      } catch (e) {
-        positionError = e;
-      }
-      expect(positionError, "'position' with no store and no ref must be refused, by SOME mechanism").toBeDefined();
-      const code = (positionError as { code?: string } | undefined)?.code;
-      const message = positionError instanceof Error ? positionError.message : String(positionError);
-      // eslint-disable-next-line no-console -- the spec explicitly asks the tester to RECORD which.
-      console.log(`[T-349 M2] 'position' with no store/no ref → code=${code ?? '(none)'} message=${message}`);
-      expect(
-        code === '23514' || /no visible default for source_ref/.test(message),
-        `expected either the shape CHECK (23514) or the fill trigger's own named error; got code=${code}, message=${message}`,
-      ).toBe(true);
+        ),
+      ).rejects.toMatchObject({ code: '23514', constraint_name: 'person_grants_position_source_ref_check' });
 
-      // The documented hole: NULL grant_source + a store makes the CHECK's own expression
-      // evaluate to NULL (neither branch is TRUE nor FALSE), and Postgres accepts a NULL CHECK
-      // result. This assertion states the DESIRED (post-0165) behaviour — it is expected to fail
-      // today because the insert actually SUCCEEDS. That resolution, not a rejection, IS today's
-      // red for M2's fourth leg.
+      // The documented NULL-blind hole (§2): before 0165, `grant_source IS NULL` made the old
+      // CHECK's expression evaluate to NULL (neither branch TRUE nor FALSE) and Postgres accepted a
+      // NULL CHECK result — a NULL-source row could carry a store. 0165's `IS NOT DISTINCT FROM`
+      // rewrite closes it: a NULL source now falls into the "never a store" branch explicitly.
       const nullSourcePerson = await newPerson(uid('M2-nullsource'));
       await expect(
         asApp((tx) =>
           tx`insert into person_grants (person_id, grant_name, grant_source, source_ref, store_id, granted_by)
              values (${nullSourcePerson}, 'confirm_receipt', null, null, ${storeA}, ${adminId})`,
         ),
-        'today: a NULL grant_source + a store SUCCEEDS (the NULL-blind hole §2/§3.1 step 1 closes) — the promise resolves instead of rejecting',
-      ).rejects.toMatchObject({ code: '23514' });
+      ).rejects.toMatchObject({ code: '23514', constraint_name: 'person_grants_store_shape_check' });
     },
     30000,
   );
@@ -201,14 +192,16 @@ describe('T-349 / DEF-456 S1 M1-M5 — the person_grants store-scoped grant shap
         tx`insert into person_grants (person_id, grant_name, grant_source, source_ref, store_id, granted_by)
            values (${personId}, 'confirm_receipt', 'position', ${defAId}, ${storeA}, ${adminId})`,
       );
-      // Today: the old shape CHECK fires on the 'grant'+store insert itself, before the (not yet
-      // split) per-store unique index would ever get a chance to.
+      // 0165's widened shape check admits the 'grant'+store insert, and the per-store unique index
+      // is split by source (`person_grants_active_position_store_unique` /
+      // `..._active_grant_store_unique`), so this 'grant' row does not collide with the 'position'
+      // row already at the same (person, cap, store).
       await expect(
         asApp((tx) =>
           tx`insert into person_grants (person_id, grant_name, grant_source, source_ref, store_id, granted_by)
              values (${personId}, 'confirm_receipt', 'grant', null, ${storeA}, ${adminId})`,
         ),
-        'today: the old shape CHECK (23514) refuses the grant+store insert before both rows could ever coexist',
+        "the 'grant' row must be able to coexist with the 'position' row at the same (person, cap, store)",
       ).resolves.toBeDefined();
 
       const rows = await sql<{ grant_source: string | null; store_id: string | null }[]>`
@@ -224,23 +217,20 @@ describe('T-349 / DEF-456 S1 M1-M5 — the person_grants store-scoped grant shap
     'M4 — a second active \'grant\' row at A is refused (person_grants_active_grant_store_unique — 23505)',
     async () => {
       const personId = await newPerson(uid('M4'));
-      // Seed the first, expected to succeed once 0165 lands — but expected to fail against today's
-      // CHECK. Wrap in a try/catch so the SECOND (the actual leg under test) still runs regardless.
-      try {
-        await asApp((tx) =>
-          tx`insert into person_grants (person_id, grant_name, grant_source, source_ref, store_id, granted_by)
-             values (${personId}, 'confirm_receipt', 'grant', null, ${storeA}, ${adminId})`,
-        );
-      } catch {
-        // expected today — see M1
-      }
+      // The seed insert now succeeds outright (0165 admits 'grant'+store) — no try/catch swallow;
+      // if it throws, the test fails loudly here rather than silently letting a real regression
+      // through to the (then-meaningless) second insert.
+      await asApp((tx) =>
+        tx`insert into person_grants (person_id, grant_name, grant_source, source_ref, store_id, granted_by)
+           values (${personId}, 'confirm_receipt', 'grant', null, ${storeA}, ${adminId})`,
+      );
       await expect(
         asApp((tx) =>
           tx`insert into person_grants (person_id, grant_name, grant_source, source_ref, store_id, granted_by)
              values (${personId}, 'confirm_receipt', 'grant', null, ${storeA}, ${adminId})`,
         ),
-        'today: 23514 (the old shape CHECK), not 23505 (the not-yet-split per-store unique index) — wrong reason, recorded',
-      ).rejects.toMatchObject({ code: '23505' });
+        "a second active 'grant' at the same (person, cap, store) must be refused by its own partial unique index",
+      ).rejects.toMatchObject({ code: '23505', constraint_name: 'person_grants_active_grant_store_unique' });
     },
     30000,
   );
@@ -258,7 +248,7 @@ describe('T-349 / DEF-456 S1 M1-M5 — the person_grants store-scoped grant shap
           tx`insert into person_grants (person_id, grant_name, grant_source, source_ref, store_id, granted_by)
              values (${personId}, 'confirm_receipt', 'grant', null, ${storeA}, ${adminId})`,
         ),
-        'today: the old shape CHECK (23514) refuses the store-carrying grant before both slots could ever be proven separate',
+        'the store-carrying slot and the person-level (NULL-store) slot are separate — this grant must not collide with the existing NULL-store one',
       ).resolves.toBeDefined();
 
       const rows = await sql<{ store_id: string | null }[]>`

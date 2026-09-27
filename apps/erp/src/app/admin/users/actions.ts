@@ -144,12 +144,32 @@ export async function setCapabilityGrantAction(formData: FormData): Promise<void
   /** T-343 S6b / DEF-431 — only picks the banner's WORDING, never a gate: every grant still runs
    *  `grantCapabilityAsActor` once per capability regardless of what a forged `intent` says. */
   const intent = str(formData, 'intent');
+  /** T-349 / DEF-456, S2 — which position row a "hold in their own right" came from. The store the
+   *  hold lands at is resolved server-side from THIS row, never a store field on the form (§7.1;
+   *  there is no such field to forge). */
+  const positionGrantId = str(formData, 'positionGrantId');
 
+  let holdResult: { wrote: boolean; heldEverywhere: boolean; storeName: string | null } | undefined;
   try {
     await withOrgPrincipal(actor.orgId, async (tx) => {
       if (granted) {
         if (capabilities.length === 0) {
           throw new Error('Tick at least one capability to grant.');
+        }
+        if (intent === 'hold_own_right') {
+          // T-349 / DEF-456 §3.4 — exactly one capability AND a non-empty positionGrantId are
+          // required, refused BEFORE any write. So `intent` can now only ever *refuse*, never
+          // widen: an old cached form (no positionGrantId field) cannot fall back to the old
+          // org-wide grant.
+          if (capabilities.length !== 1 || !positionGrantId) {
+            throw new Error('Reload the page and try again.');
+          }
+          holdResult = await grantCapabilityAsActor(tx, actor, {
+            personId,
+            capability: capabilities[0]!,
+            positionGrantId,
+          });
+          return;
         }
         // ⭐ DEF-223 — the GRANT goes through `grantCapabilityAsActor`, which owns the
         // `authorize()` call, the self-check and the capability-name check. It used to be written
@@ -187,8 +207,14 @@ export async function setCapabilityGrantAction(formData: FormData): Promise<void
   }
   backToUser(personId, {
     ok: granted
-      ? intent === 'hold_own_right' && capabilities.length === 1
-        ? `${capabilityTitle(capabilities[0]!)} is now held in their own right.`
+      ? intent === 'hold_own_right'
+        ? holdResult!.wrote
+          ? holdResult!.storeName === null
+            ? `${capabilityTitle(capabilities[0]!)} is now held in their own right.`
+            : `${capabilityTitle(capabilities[0]!)} is now held in their own right at ${holdResult!.storeName}.`
+          : holdResult!.heldEverywhere
+            ? `${capabilityTitle(capabilities[0]!)} was already held in their own right everywhere.`
+            : `${capabilityTitle(capabilities[0]!)} was already held in their own right at ${holdResult!.storeName}.`
         : capabilities.length === 1
           ? `Granted: ${capabilityTitle(capabilities[0]!)}.`
           : `Granted ${capabilities.length} capabilities: ${capabilities.map((c) => capabilityTitle(c)).join('; ')}.`

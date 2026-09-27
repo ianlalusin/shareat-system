@@ -26,10 +26,12 @@
  *    v1, where an unconfigured user quietly became the least-privileged Server position;
  *    here "no role" means "not authorized for anything in this org", stated, not inferred).
  *    ⭐ **T-341 / DEF-414.** For a 'store'-scoped capability, the override grant must match
- *    THIS store: a `'position'`-sourced row (`grantSource: 'position'`) is honoured only at
- *    the store whose default produced it, never at a store the person merely has scope at —
- *    `accessRepo.personHasActiveGrant`'s `atStoreId` argument. A person-level grant (every
- *    other source, `storeId IS NULL`) still matches everywhere, unchanged.
+ *    THIS store: a store-carrying row (`'position'`-sourced, or since T-349 / DEF-456 a `'grant'`
+ *    hold in their own right) is honoured only at the store it names, never at a store the
+ *    person merely has scope at — `accessRepo.personHasActiveGrant`'s `atStoreId` argument. A
+ *    person-level grant (every other source, `storeId IS NULL`) still matches everywhere,
+ *    unchanged. No code here changed for T-349 — `personHasActiveGrant`'s own query already
+ *    reads a store-scoped row correctly, whatever its source.
  * 3. **Store scope** — for a 'store'-scoped capability only: does a `person_store_scope`
  *    row exist for this exact store? Checked SEPARATELY from the capability decision and
  *    ALWAYS, per CAPABILITY-MATRIX.md rule 4 ("scope is checked separately and always") —

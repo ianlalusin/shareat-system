@@ -439,6 +439,12 @@ describe('U2 — the position-sourced grant\'s "Hold in their own right" form ca
     expect(fields).toEqual(
       expect.arrayContaining([{ name: 'intent', value: 'hold_own_right' }]),
     );
+    // T-349 S2 (DEF-456) ruled edit — the store is taken from the position row's OWN grant, never
+    // the form, so the hold form now also carries which row that is (`staffDetail()`'s
+    // `submit_sales_day` row is `grant-2`).
+    expect(fields).toEqual(
+      expect.arrayContaining([{ name: 'positionGrantId', value: 'grant-2' }]),
+    );
   });
 });
 
@@ -536,12 +542,15 @@ function grantFormData(overrides: {
   personId?: string;
   capabilities?: string[];
   intent?: string;
+  positionGrantId?: string;
 }): FormData {
   const fd = new FormData();
   fd.set('personId', overrides.personId ?? 'person-1');
   fd.set('granted', 'true');
   for (const c of overrides.capabilities ?? ['record_sale']) fd.append('capability', c);
   if (overrides.intent) fd.set('intent', overrides.intent);
+  // T-349 S2 (DEF-456) ruled edit — the hidden field the hold form now carries.
+  if (overrides.positionGrantId) fd.set('positionGrantId', overrides.positionGrantId);
   return fd;
 }
 
@@ -573,28 +582,40 @@ describe('A1-A6 — setCapabilityGrantAction banners', () => {
     expect(grantCapabilityAsActor).toHaveBeenCalledTimes(1);
   });
 
-  it('A2 (+) / A4 (⛔ negative): intent=hold_own_right — one capability names it "now held"; two capabilities do NOT', async () => {
-    grantCapabilityAsActor.mockResolvedValue(undefined);
+  it(
+    'A2 (+) / A4 (⛔ negative): intent=hold_own_right with a positionGrantId — one capability names it "now held … at <store>"; two capabilities refuse before any write',
+    async () => {
+      // T-349 S2 (DEF-456) ruled edit — the banner now names the STORE the hold reached
+      // (`grantCapabilityAsActor`'s new return shape), never a bare "now held".
+      grantCapabilityAsActor.mockResolvedValue({ wrote: true, heldEverywhere: false, storeName: 'SmokeStore' });
 
-    const toOne = await expectRedirectTo(() =>
-      actions.setCapabilityGrantAction(grantFormData({ capabilities: ['record_sale'], intent: 'hold_own_right' })),
-    );
-    const paramsOne = new URL(toOne, 'http://localhost').searchParams;
-    expect(paramsOne.get('ok'), `redirect URL was: ${toOne}`).toBe(
-      `${capabilityTitle('record_sale')} is now held in their own right.`,
-    );
+      const toOne = await expectRedirectTo(() =>
+        actions.setCapabilityGrantAction(
+          grantFormData({ capabilities: ['record_sale'], intent: 'hold_own_right', positionGrantId: 'grant-position-1' }),
+        ),
+      );
+      const paramsOne = new URL(toOne, 'http://localhost').searchParams;
+      expect(paramsOne.get('ok'), `redirect URL was: ${toOne}`).toBe(
+        `${capabilityTitle('record_sale')} is now held in their own right at SmokeStore.`,
+      );
 
-    const toTwo = await expectRedirectTo(() =>
-      actions.setCapabilityGrantAction(
-        grantFormData({ capabilities: ['record_sale', 'submit_sales_day'], intent: 'hold_own_right' }),
-      ),
-    );
-    const paramsTwo = new URL(toTwo, 'http://localhost').searchParams;
-    expect(paramsTwo.get('ok'), `A4 (negative): redirect URL was: ${toTwo}`).not.toContain('now held');
-    expect(paramsTwo.get('ok'), `redirect URL was: ${toTwo}`).toBe(
-      `Granted 2 capabilities: ${capabilityTitle('record_sale')}; ${capabilityTitle('submit_sales_day')}.`,
-    );
-  });
+      // A4 (negative) — two capabilities under intent=hold_own_right is refused outright (§3.4:
+      // "exactly one capability AND a non-empty positionGrantId are required"), never the old
+      // "Granted 2 capabilities…" banner, whether or not a positionGrantId is present.
+      const toTwo = await expectRedirectTo(() =>
+        actions.setCapabilityGrantAction(
+          grantFormData({
+            capabilities: ['record_sale', 'submit_sales_day'],
+            intent: 'hold_own_right',
+            positionGrantId: 'grant-position-1',
+          }),
+        ),
+      );
+      const paramsTwo = new URL(toTwo, 'http://localhost').searchParams;
+      expect(paramsTwo.get('error'), `A4 (negative): redirect URL was: ${toTwo}`).toBeTruthy();
+      expect(paramsTwo.has('ok'), `redirect URL was: ${toTwo}`).toBe(false);
+    },
+  );
 
   it('A3: two capabilities, no intent → ok names both titles joined by "; ", with no "_"', async () => {
     grantCapabilityAsActor.mockResolvedValue(undefined);
@@ -610,19 +631,29 @@ describe('A1-A6 — setCapabilityGrantAction banners', () => {
     expect(grantCapabilityAsActor).toHaveBeenCalledTimes(2);
   });
 
-  it('A5 (⛔): grantCapabilityAsActor throws AuthorizationError with intent=hold_own_right → error param, no ok, no "now held"; called once', async () => {
-    grantCapabilityAsActor.mockRejectedValueOnce(
-      new AuthorizationError("may not 'grant_capability'", 'record_sale' as Capability),
-    );
-    const to = await expectRedirectTo(() =>
-      actions.setCapabilityGrantAction(grantFormData({ capabilities: ['record_sale'], intent: 'hold_own_right' })),
-    );
-    const params = new URL(to, 'http://localhost').searchParams;
-    expect(params.get('error'), `redirect URL was: ${to}`).toBeTruthy();
-    expect(params.get('error')).not.toContain('now held');
-    expect(params.has('ok'), `redirect URL was: ${to}`).toBe(false);
-    expect(grantCapabilityAsActor).toHaveBeenCalledTimes(1);
-  });
+  it(
+    'A5 (⛔): grantCapabilityAsActor throws AuthorizationError with intent=hold_own_right (a positionGrantId present, so the NEW gate lets it through to the real call) → error param, no ok, no "now held"; called once — excludes the gate-refused cases, which never reach the call at all',
+    async () => {
+      // T-349 S2 (DEF-456) ruled edit — a positionGrantId is included so this case still exercises
+      // what it always tested (authorize()'s OWN refusal, reached via a real call), not the NEW
+      // §3.4 gate refusal (no positionGrantId / >1 capability), which never calls
+      // grantCapabilityAsActor at all — that "refused before any write" shape is A4's job (above)
+      // and T-349's own `t349-hold-own-right-page.test.ts` A3, not this case.
+      grantCapabilityAsActor.mockRejectedValueOnce(
+        new AuthorizationError("may not 'grant_capability'", 'record_sale' as Capability),
+      );
+      const to = await expectRedirectTo(() =>
+        actions.setCapabilityGrantAction(
+          grantFormData({ capabilities: ['record_sale'], intent: 'hold_own_right', positionGrantId: 'grant-position-1' }),
+        ),
+      );
+      const params = new URL(to, 'http://localhost').searchParams;
+      expect(params.get('error'), `redirect URL was: ${to}`).toBeTruthy();
+      expect(params.get('error')).not.toContain('now held');
+      expect(params.has('ok'), `redirect URL was: ${to}`).toBe(false);
+      expect(grantCapabilityAsActor).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('A6 (⛔): revoke → ok === "Grant revoked."', async () => {
     const to = await expectRedirectTo(() => actions.setCapabilityGrantAction(revokeFormData({})));

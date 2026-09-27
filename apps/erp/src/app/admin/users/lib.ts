@@ -197,6 +197,49 @@ export function grantSummaryLine(grants: Pick<GrantRow, 'grantSource'>[]): strin
 }
 
 /**
+ * T-349 / DEF-456 §3.4. One line per capability and store. A `'position'` row is COVERED by an
+ * ACTIVE `'grant'`/`'owner'` row for the same capability at its own store, or by one with a NULL
+ * store (covers every store). A covered `'position'` row is not listed on its own — its covering
+ * row's line carries the covered row's position provenance too (`alsoVia`), so the page can add
+ * "also via Cashier at SmokeStore" beside it and hide its hold button. Pure: a re-shaping of the
+ * rows the page already has, no query.
+ */
+export interface FoldedGrant {
+  grant: GrantWithSource;
+  /** Set only on the covering row's own line, when it folds an active `'position'` row into
+   *  itself. Null on every uncovered row (every `'position'` line still shown is, by definition,
+   *  uncovered — a covered one never gets its own `FoldedGrant`). */
+  alsoVia: PositionDefaultSource | null;
+}
+
+export function foldActiveGrants(grants: readonly GrantWithSource[]): FoldedGrant[] {
+  const positions = grants.filter((g) => g.grantSource === 'position');
+  const others = grants.filter((g) => g.grantSource !== 'position');
+
+  const alsoViaByOtherId = new Map<string, PositionDefaultSource | null>();
+  const coveredPositionIds = new Set<string>();
+  for (const position of positions) {
+    const cover = others.find(
+      (g) =>
+        g.grantName === position.grantName &&
+        (g.grantSource === 'grant' || g.grantSource === 'owner') &&
+        (g.storeId === position.storeId || g.storeId === null),
+    );
+    if (cover) {
+      coveredPositionIds.add(position.id);
+      if (!alsoViaByOtherId.has(cover.id)) alsoViaByOtherId.set(cover.id, position.positionSource);
+    }
+  }
+
+  const otherLines = others.map((g) => ({ grant: g, alsoVia: alsoViaByOtherId.get(g.id) ?? null }));
+  const uncoveredPositionLines = positions
+    .filter((p) => !coveredPositionIds.has(p.id))
+    .map((p) => ({ grant: p, alsoVia: null }));
+
+  return [...otherLines, ...uncoveredPositionLines];
+}
+
+/**
  * T-256 / DEF-247 — mirrors `unlinkCredential`'s own check (`packages/auth/src/credentials-admin.ts`)
  * so the two revoke forms on this page read as one system. Grant writes are gated in THIS file's
  * layer, not `packages/auth` — see this module's own actions.ts header for why.

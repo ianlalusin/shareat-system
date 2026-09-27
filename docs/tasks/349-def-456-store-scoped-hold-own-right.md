@@ -117,6 +117,15 @@ classify or register.
    only its own store. A NULL-store row matches every store. **The query does not change.**
 7. **`packages/auth/src/authorize.ts:31-32`, comment only.** The axis-2 paragraph says the same thing: "a store-carrying
    row (`'position'`, or a T-349 `'grant'` hold) is honoured only at its own store". No code change.
+9. **Added 2026-09-27 (orchestrator, from the S2 pre-commit review), binding on S2: org-scoped capabilities.**
+   17 position-defaultable capabilities are org-scoped (`CAPABILITY_SCOPE[c] !== 'store'`, e.g. `post_journal_entry`);
+   `authorize` never applies a store filter to them, so a store-scoped hold would be honoured everywhere while the
+   banner says "at SmokeStore". Ruling: when the capability is not store-scoped, hold-own-right writes the existing
+   **person-level** `'grant'` row (store NULL) — exactly the authority the position row already gives org-wide, so
+   nothing widens and T-291 decision 5's intent is kept — and the banner omits the store ("…is now held in their own
+   right." / "…was already held in their own right everywhere."). Store-scoped capabilities keep the §3.2 store-grant
+   branch. Test **H9**: hold on an org-scoped capability writes a NULL-store `'grant'` row, the banner names no store,
+   and a second click writes nothing.
 8. **Added 2026-09-27 (orchestrator, from the S1 post-commit review of `3d601ab`), binding on S2:**
    - **`source_ref` is always NULL on a store-scoped `'grant'` row.** 0165's header says the composite
      `(source_ref, store_id)` FK "does not apply" to the new rows; that is only true because S2 writes `source_ref NULL`.

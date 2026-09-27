@@ -19,6 +19,7 @@ import { personGrants, personRoles, personStoreScope } from '../../schema/access
 import { positions } from '../../schema/employment';
 import { positionCapabilityDefaults } from '../../schema/position-capability-defaults';
 import { recordGone } from './record-gone';
+import { refuse } from '../refusal';
 // ⚠️ Tables outside the access axis this file touches: `personCredentials` for
 // `hasOtherActiveAdminWhoCanSignIn`, `persons` for `revokeElevationGrantsForOrg`'s org scoping
 // (`person_grants` carries no `org_id` of its own — same reason its RLS policy derives org
@@ -490,8 +491,9 @@ export interface GrantRow {
    *  `grantSource === 'position'`; may survive as history on a `'grant'` row (§C3); null for
    *  every other source. See `schema/access.ts`'s own comment on the column. */
   sourceRef: string | null;
-  /** T-341 / DEF-414. The store a `'position'`-sourced row is honoured at; null for every other
-   *  source. See `schema/access.ts`'s own comment on the column. */
+  /** T-341 / DEF-414. The store a `'position'`-sourced row is honoured at, ALWAYS set. T-349 /
+   *  DEF-456: a `'grant'` row MAY also carry one (a hold in their own right, at the position row's
+   *  own store) — null for every other source. See `schema/access.ts`'s own comment on the column. */
   storeId: string | null;
   revokeReason: string | null;
 }
@@ -521,10 +523,17 @@ type GrantBase = { personId: string; grantName: string; grantedBy: string | null
  * pre-T-289 production call sites (`packages/auth/src/roles.ts:111,576,605`,
  * `packages/domain/src/organizations/index.ts:281`) pass no `sourceRef` and keep compiling
  * unchanged against the second arm.
+ *
+ * T-349 / DEF-456, S2 — a third arm: a store-scoped hold "in their own right"
+ * (`grantSource: 'grant'`, `atStoreId` required). Discriminated from arm 2's plain,
+ * org-wide `'grant'` (the ordinary hand-grant the picker still writes) by `atStoreId`'s
+ * PRESENCE, not by narrowing `grantSource` out of arm 2 — a person-level `'grant'` call must stay
+ * valid through arm 2 unchanged (orchestrator ruling, 2026-09-27).
  */
 export type GrantCapabilityInput =
   | (GrantBase & { grantSource: 'position'; sourceRef: string })
-  | (GrantBase & { grantSource: Exclude<GrantSource, 'position'>; sourceRef?: never });
+  | (GrantBase & { grantSource: Exclude<GrantSource, 'position'>; sourceRef?: never })
+  | (GrantBase & { grantSource: 'grant'; atStoreId: string; sourceRef?: never });
 
 /**
  * ⭐ **T-248 follow-up — lane D's read-only review, finding #1, confirmed real by the
@@ -593,7 +602,10 @@ export function grantSourceRank(source: GrantSource | null): number {
  * already holds it as `'elevation'`. Before that fix, the hand-grant vanished into the
  * idempotent branch leaving `grantSource` at `'elevation'`, and the next admin arrival swept
  * it exactly as if the deliberate act had never happened. */
-export async function grantCapability(tx: Tx, input: GrantCapabilityInput): Promise<{ id: string }> {
+export async function grantCapability(
+  tx: Tx,
+  input: GrantCapabilityInput,
+): Promise<{ id: string; wrote: boolean; heldEverywhere: boolean }> {
   if (input.grantSource === 'position') {
     const [existing] = await tx
       .select({ id: personGrants.id })
@@ -618,7 +630,7 @@ export async function grantCapability(tx: Tx, input: GrantCapabilityInput): Prom
         ),
       )
       .limit(1);
-    if (existing) return { id: existing.id };
+    if (existing) return { id: existing.id, wrote: false, heldEverywhere: false };
 
     const [row] = await tx
       .insert(personGrants)
@@ -631,7 +643,80 @@ export async function grantCapability(tx: Tx, input: GrantCapabilityInput): Prom
       })
       .returning({ id: personGrants.id });
     if (!row) throw new Error('grantCapability: insert returned no row');
-    return row;
+    return { id: row.id, wrote: true, heldEverywhere: false };
+  }
+
+  // T-349 / DEF-456, S2. A hold "in their own right" AT A STORE — a THIRD branch, kept separate
+  // from both the position and person-level branches below (the T-341 rule, extended: no branch
+  // ever reads or rewrites another's rows). Discriminated by `atStoreId`'s presence, not by
+  // `grantSource` alone, because arm 2 below still legitimately carries `grantSource: 'grant'`
+  // for a person-level (org-wide) hand-grant — that arm must stay reachable unchanged.
+  if ('atStoreId' in input) {
+    // "Already held in their own right at S": an ACTIVE row for (personId, grantName) with
+    // grant_source IN ('grant','owner') and (store_id = S OR store_id IS NULL). 'elevation' and a
+    // NULL-source person-level row do NOT count — they can be swept, and holding at S must outlive
+    // that sweep.
+    const [covering] = await tx
+      .select({ id: personGrants.id, storeId: personGrants.storeId })
+      .from(personGrants)
+      .where(
+        and(
+          eq(personGrants.personId, input.personId),
+          eq(personGrants.grantName, input.grantName),
+          isNull(personGrants.revokedAt),
+          inArray(personGrants.grantSource, ['grant', 'owner']),
+          or(eq(personGrants.storeId, input.atStoreId), isNull(personGrants.storeId)),
+        ),
+      )
+      .limit(1);
+    if (covering) {
+      return { id: covering.id, wrote: false, heldEverywhere: covering.storeId === null };
+    }
+
+    // `source_ref` is always NULL here (T-349 §3.2 item 8) — a store-scoped hold never carries the
+    // position row's own ref, so the composite `(source_ref, store_id)` FK (0159 step 8, MATCH
+    // SIMPLE) never fires against it.
+    const inserted = await tx
+      .insert(personGrants)
+      .values({
+        personId: input.personId,
+        grantName: input.grantName,
+        grantedBy: input.grantedBy,
+        grantSource: 'grant',
+        sourceRef: null,
+        storeId: input.atStoreId,
+      })
+      .onConflictDoNothing({
+        target: [personGrants.personId, personGrants.grantName, personGrants.storeId],
+        where: sql`${personGrants.revokedAt} is null and ${personGrants.storeId} is not null and ${personGrants.grantSource} = 'grant'`,
+      })
+      .returning({ id: personGrants.id });
+    if (inserted[0]) return { id: inserted[0].id, wrote: true, heldEverywhere: false };
+
+    // Lost the race — never a raw 23505. The winner's row is the one the conflict just proved exists.
+    const [winner] = await tx
+      .select({ id: personGrants.id })
+      .from(personGrants)
+      .where(
+        and(
+          eq(personGrants.personId, input.personId),
+          eq(personGrants.grantName, input.grantName),
+          eq(personGrants.storeId, input.atStoreId),
+          eq(personGrants.grantSource, 'grant'),
+          isNull(personGrants.revokedAt),
+        ),
+      )
+      .limit(1);
+    // T-343 R1.2 — `refuse`, never a raw Error throw: this directory's ratchet ceiling only falls,
+    // and this case is exactly as "should never happen" as the two existing `if (!row) throw` sites
+    // above, which the ceiling already counts.
+    if (!winner) {
+      throw refuse(
+        'grantCapability: lost the race but the winning row is not visible',
+        'That could not be completed — please try again.',
+      );
+    }
+    return { id: winner.id, wrote: false, heldEverywhere: false };
   }
 
   const [existing] = await tx
@@ -651,7 +736,7 @@ export async function grantCapability(tx: Tx, input: GrantCapabilityInput): Prom
     if (grantSourceRank(input.grantSource) > grantSourceRank(existingSource)) {
       await tx.update(personGrants).set({ grantSource: input.grantSource }).where(eq(personGrants.id, existing.id));
     }
-    return { id: existing.id };
+    return { id: existing.id, wrote: false, heldEverywhere: true };
   }
 
   const [row] = await tx
@@ -665,7 +750,7 @@ export async function grantCapability(tx: Tx, input: GrantCapabilityInput): Prom
     })
     .returning({ id: personGrants.id });
   if (!row) throw new Error('grantCapability: insert returned no row');
-  return row;
+  return { id: row.id, wrote: true, heldEverywhere: true };
 }
 
 /** Revokes one grant by id. Throws if it does not exist or is already revoked, for the
@@ -724,9 +809,12 @@ export async function revokeElevationGrantsForOrg(
 /**
  * T-341 / DEF-414. `atStoreId` omitted (every pre-T-341 caller: `roles.ts:214`, org-scoped
  * checks, the two integration-test callers) keeps today's semantics — any active row, whatever
- * its store. Given, a `'position'`-sourced row matches only its OWN store; a person-level row
- * (`storeId IS NULL`, every other source) matches every store, same as before this column
- * existed — that is what "coexist" (`grantCapability`) means for a read.
+ * its store. Given, any row carrying a store (a `'position'`-sourced row, or since T-349 / DEF-456
+ * a `'grant'` row held in their own right at that store) matches only its OWN store; a
+ * person-level row (`storeId IS NULL`, every other source) matches every store, same as before
+ * this column existed — that is what "coexist" (`grantCapability`) means for a read. The query
+ * itself does not change: `or(isNull(storeId), eq(storeId, atStoreId))` already reads a
+ * store-scoped `'grant'` row correctly, whatever its source.
  */
 export async function personHasActiveGrant(
   tx: Tx,
@@ -744,6 +832,41 @@ export async function personHasActiveGrant(
     .where(and(...filters))
     .limit(1);
   return row !== undefined;
+}
+
+/**
+ * T-349 / DEF-456, S2. Reads back ONE `'position'`-sourced grant row by id, for
+ * `grantCapabilityAsActor`'s "hold in their own right" gate (§3.3) — the store a hold lands at
+ * comes ONLY from here, never the form (§7.1). Returns a row only if it is ACTIVE,
+ * `grant_source = 'position'` and belongs to `personId`; a stale, revoked, wrong-person or
+ * wrong-source id all resolve to `null`, the same refusal shape either way. RLS stays in force —
+ * the `persons`-derived policy on `person_grants` is the org boundary (`roles.ts:560-566`'s
+ * ruling); this makes no separate org check.
+ */
+export async function activePositionGrantForPerson(
+  tx: Tx,
+  input: { personId: string; grantId: string },
+): Promise<{ id: string; grantName: string; storeId: string; storeName: string } | null> {
+  const [row] = await tx
+    .select({
+      id: personGrants.id,
+      grantName: personGrants.grantName,
+      storeId: personGrants.storeId,
+      storeName: stores.name,
+    })
+    .from(personGrants)
+    .innerJoin(stores, eq(stores.id, personGrants.storeId))
+    .where(
+      and(
+        eq(personGrants.id, input.grantId),
+        eq(personGrants.personId, input.personId),
+        eq(personGrants.grantSource, 'position'),
+        isNull(personGrants.revokedAt),
+      ),
+    )
+    .limit(1);
+  if (!row || row.storeId === null) return null;
+  return { id: row.id, grantName: row.grantName, storeId: row.storeId, storeName: row.storeName };
 }
 
 /** T-343 S2b (DEF-430). Structurally equal to `refusal-text.ts`'s `JobElsewhere` — imports
