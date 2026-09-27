@@ -141,6 +141,11 @@ export interface TradeLineDraft {
    * line — a later price-list edit never reaches back and changes it.
    */
   rate?: string | null;
+  /** S7 / S5.3b R3 — the operator's own VISIBLE form row (1-based), assigned by the caller BEFORE
+   *  it drops any empty rows. Falls back to the post-filter array position when a caller omits it
+   *  (existing callers, tests), so "Line n" still names something rather than nothing. Not
+   *  persisted — `tradeRepo.insertLines` and the `lines.push` shape below are unchanged. */
+  readonly lineNo?: number;
 }
 
 export interface CreateTradeOrderInput {
@@ -218,10 +223,14 @@ export async function createTradeOrder(
     let total = 0;
 
     for (const [i, draft] of input.lines.entries()) {
+      // S7 / S5.3b R3 — `lineNo` is the operator's own VISIBLE form row, assigned by the caller
+      // before it drops empty rows; the post-filter array index (`i + 1`) is only a fallback for
+      // callers that never numbered their rows (existing callers, tests).
+      const n = draft.lineNo ?? i + 1;
       const item = await itemsRepo.getItemById(trx, actor.orgId, draft.itemId);
-      if (!item) throw new Error(`createTradeOrder: line ${i + 1} names an item that does not exist.`);
+      if (!item) throw new Error(`createTradeOrder: line ${n} names an item that does not exist.`);
       if (item.status !== 'active') {
-        throw new Error(`createTradeOrder: line ${i + 1} names ${item.name}, which is ${item.status}.`);
+        throw new Error(`createTradeOrder: line ${n} names ${item.name}, which is ${item.status}.`);
       }
 
       // ⭐ Resolved AT THE SELLING STORE, not org-wide. Ian's bulgogi case, read from the selling
@@ -235,7 +244,7 @@ export async function createTradeOrder(
         const sellability = await itemsRepo.sellabilityAt(trx, actor.orgId, draft.itemId, input.storeId);
         if (!sellability?.sellableWholesale) {
           throw new Error(
-            `createTradeOrder: line ${i + 1} names ${item.name}, which this store does not sell ` +
+            `createTradeOrder: line ${n} names ${item.name}, which this store does not sell ` +
               'wholesale. A bento box is sold à la carte and not to a franchisee — mark it sellable ' +
               'wholesale here first if that is genuinely what you mean.',
           );
@@ -257,10 +266,10 @@ export async function createTradeOrder(
       if (rawRate === undefined || rawRate === null) {
         throw new Error(
           treatment === 'internal'
-            ? `createTradeOrder: line ${i + 1} names ${item.name}, and nothing can price it — it ` +
+            ? `createTradeOrder: line ${n} names ${item.name}, and nothing can price it — it ` +
               'has no branch price rule, or no purchase history to base one on. Set a pricing ' +
               'rule, or state a rate on the line.'
-            : `createTradeOrder: line ${i + 1} names ${item.name}, and ${customer.name}'s price ` +
+            : `createTradeOrder: line ${n} names ${item.name}, and ${customer.name}'s price ` +
               'list does not quote it. Add a rate to the price list, or state one on the line.',
         );
       }
@@ -271,11 +280,11 @@ export async function createTradeOrder(
       // N's total" on whichever box the operator actually mistyped. `rate` is `numeric(14,2)`
       // (packages/db/schema/trade.ts:201), the same shape `parseMoneyInput` enforces; `quantity`
       // is `numeric(14,3)`, a different axis (`parseQuantityInput`, defined above).
-      const rate = parseMoneyInput(rawRate, `createTradeOrder: line ${i + 1}'s rate`, "A line's rate");
-      if (Number(rate) < 0) throw new Error(`createTradeOrder: line ${i + 1} has a negative rate.`);
-      const parsedQuantity = parseQuantityInput(draft.quantity, `createTradeOrder: line ${i + 1}'s quantity`);
+      const rate = parseMoneyInput(rawRate, `createTradeOrder: line ${n}'s rate`, `Line ${n}'s rate`);
+      if (Number(rate) < 0) throw new Error(`createTradeOrder: line ${n} has a negative rate.`);
+      const parsedQuantity = parseQuantityInput(draft.quantity, `createTradeOrder: line ${n}'s quantity`);
       if (Number(parsedQuantity) <= 0) {
-        throw new Error(`createTradeOrder: line ${i + 1} has a quantity of ${draft.quantity}.`);
+        throw new Error(`createTradeOrder: line ${n} has a quantity of ${draft.quantity}.`);
       }
 
       // T-328/DEF-272 — this call now STANDS BETWEEN a non-finite `quantity`/`rate` pair and two
@@ -286,11 +295,11 @@ export async function createTradeOrder(
       // guards above and this one are not redundant with each other.
       const lineTotal = parseMoneyInput(
         (Number(parsedQuantity) * Number(rate)).toFixed(2),
-        `createTradeOrder: line ${i + 1}'s total`,
-        "A line's total",
+        `createTradeOrder: line ${n}'s total`,
+        `Line ${n}'s total`,
       );
       if (Number(lineTotal) <= 0) {
-        throw new Error(`createTradeOrder: line ${i + 1} comes to zero, so it bills nothing.`);
+        throw new Error(`createTradeOrder: line ${n} comes to zero, so it bills nothing.`);
       }
       total += Number(lineTotal);
       lines.push({

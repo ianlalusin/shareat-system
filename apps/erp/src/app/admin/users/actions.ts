@@ -29,81 +29,25 @@ import {
 import { requireRevokeReason, withOrgPrincipal } from './lib';
 import { clearSessionCookie, requireActor } from '../../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
+import { isPresentable } from '../../../lib/error-shape';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
 }
 
-/** Same shape as the staff actions': turn a known refusal into a readable sentence rather than
- *  leaking a function name or a raw Postgres message at the presentation edge. */
+/** A presentable error (every `authorize()` denial and every `roles.ts`/`recordGone` throw among
+ *  them) already carries its own sentence — S2/S2b's, or the better ones S7 moved into `roles.ts`
+ *  — and wins first. Otherwise, turn a known refusal into a readable sentence rather than leaking
+ *  a function name or a raw Postgres message at the presentation edge. */
 function errorMessage(err: unknown): string {
+  if (isPresentable(err)) return sharedErrorMessage(err);
   const raw = err instanceof Error ? err.message : String(err);
-  if (/may not change their own role/.test(raw)) {
-    return 'You cannot change your own role. Ask another admin — this is what stops one mis-click locking the org out.';
-  }
-  // DEF-223. ⚠️ The sentence names the RISK, which is the opposite of the one above: changing your
-  // own role can lock the org out, granting yourself a capability lifts you out of the chain.
-  if (/may not grant themselves a capability/.test(raw)) {
-    return 'You cannot give yourself a capability. Ask another admin — otherwise anyone holding this screen could widen their own authority, and nobody would have approved it.';
-  }
-  // ⛔ T-242 / DEF-234 — BEFORE the appointment case below, and the order is not cosmetic. Both
-  // sentences are about super-admins and a reader skimming would merge them, but one answers
-  // "why can't I APPOINT this person" and the other "why can't I REMOVE that person". Getting them
-  // the wrong way round is a refusal that sends someone off to do work that cannot help.
-  // ⚠️ The `/outranks you/` match is the contract with `assignRoleAsActor`'s message, which
-  // deliberately avoids the phrase `requires super_admin` for exactly this reason (DEF-177's shape);
-  // `roles.test.ts` case 6 asserts both halves of that.
-  if (/outranks you/.test(raw)) {
-    return (
-      'You cannot change the role of somebody senior to you. An admin may change an admin, a ' +
-      'manager or a staff member; only a super-admin may change a super-admin. If this ' +
-      'organisation has no super-admin left, ask the system owner.'
-    );
-  }
-  if (/requires super_admin/.test(raw)) {
-    return 'Only a super-admin can appoint an admin. An admin may appoint managers and staff (bible row 116).';
-  }
-  // ⚠️ T-238 widened the rule behind this sentence: the guard now counts only administrators who
-  // hold a live credential, so "appoint a second admin" alone can send someone round the same loop —
-  // they appoint one, retry, and are refused again because the new admin has no way to sign in.
-  // The sentence names both halves for that reason. ⛔ The `/only active admin/` match is the
-  // contract with `assignRoleAsActor`'s message: extending around that phrase is safe, removing it
-  // drops the mapping with a green build (the DEF-177 shape).
-  if (/only active admin/.test(raw)) {
-    return (
-      "This is the org's only active admin who can sign in. Appoint another admin or super-admin " +
-      'and give them a PIN or an email account first — otherwise nobody is left who can manage users.'
-    );
-  }
-  // DEF-183 — only reachable by a crafted POST, since the screen never offers another org's
-  // person. Mapped anyway: a refusal a user cannot act on is worse than no refusal at all.
-  if (/does not exist in org/.test(raw)) {
-    return 'That person is not part of this organisation.';
-  }
-  if (/may not 'manage_users'/.test(raw)) {
-    // ⚠️ Names both things this capability gates on this screen. T-237 added the second, and a
-    // refusal that describes the wrong action is a refusal nobody can act on.
-    return 'Only an admin or super-admin can change roles or sign-in accounts.';
-  }
-  if (/may not 'grant_capability'/.test(raw)) {
-    return 'Only an admin or super-admin can grant or revoke a capability.';
-  }
   // T-237 — the unique index is GLOBAL, not per-organisation, so this also fires when the uid is
   // live in another org. ⛔ The sentence stays vague on purpose: naming the person, or even the
   // organisation, would disclose another franchise's staff to an administrator who cannot see them.
   if (/person_credentials_external_id_unique/.test(raw)) {
     return 'That Firebase account is already linked to somebody. Unlink it there first, then link it here.';
-  }
-  // ⚠️ BEFORE the grant case below, which matches the same tail. `revokeCredential` and
-  // `revokeGrantById` both say "does not exist or is already revoked", and telling someone their
-  // GRANT was revoked when they unlinked an ACCOUNT sends them to the wrong part of the screen.
-  // Only reachable in a race: `unlinkCredential` checks the credential is live before revoking it.
-  if (/^revokeCredential:/.test(raw)) {
-    return 'That sign-in account was already unlinked — reload the page to see the current state.';
-  }
-  if (/does not exist or is already revoked/.test(raw)) {
-    return 'That grant was already revoked — reload the page to see the current state.';
   }
   return sharedErrorMessage(err);
 }

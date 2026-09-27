@@ -24,6 +24,7 @@ import { employmentRepo } from '@shareat/db';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
+import { isPresentable } from '../../lib/error-shape';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -39,6 +40,7 @@ function strs(fd: FormData, key: string): string[] {
  *  invariant 1: "the form surfaces createEmployment's refusal as a readable error, not a raw
  *  exception." */
 function errorMessage(err: unknown): string {
+  if (isPresentable(err)) return sharedErrorMessage(err);
   const raw = err instanceof Error ? err.message : String(err);
   if (/already has an open employment/.test(raw)) return raw;
   if (/needs a terminal status/.test(raw)) return raw;
@@ -47,9 +49,6 @@ function errorMessage(err: unknown): string {
   if (/is a canonical position/.test(raw)) return raw;
   if (/A person needs a name/.test(raw)) return raw;
   if (/store scope, so you may not search/.test(raw)) return raw;
-  if (/may not 'enrol_staff'/.test(raw)) {
-    return 'Only a manager or admin scoped to this store can hire, end an employment, change positions, or issue a sign-in PIN.';
-  }
   if (/must be exactly 6 digits/.test(raw)) return raw;
   // ⭐ T-302 — the sentence `setPin` throws dropped "at this store" when the lookup key became
   // org-scoped. ⛔ This regex had to change WITH it: a mapping that still matched the old wording
@@ -72,9 +71,6 @@ function errorMessage(err: unknown): string {
     // ⭐ T-302 — no longer "at this store": the index is org-wide now, so the race is two admins
     // issuing the same digits to two different people anywhere in the business, in the same moment.
     return 'That PIN was just taken — try another.';
-  }
-  if (/may not 'manage_store_settings'/.test(raw)) {
-    return 'Only a manager or admin scoped to this store can add a position.';
   }
   return sharedErrorMessage(err);
 }

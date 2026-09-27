@@ -11,19 +11,11 @@ import { revalidatePath } from 'next/cache';
 import { decideMapRequest, upsertPosItemMap } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
-import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
+import { errorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function errorMessage(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err);
-  if (/may not 'manage_pos_map'/.test(raw)) return 'Mapping a POS item needs manager access to this store.';
-  if (/may not 'request_pos_map'/.test(raw)) return 'Flagging an unmappable item needs at least staff access to this store.';
-  if (/may not 'decide_pos_map_request'/.test(raw)) return 'Deciding a mapping request needs manager access to this store.';
-  return sharedErrorMessage(err);
 }
 
 function back(storeId: string, params: Record<string, string>): never {

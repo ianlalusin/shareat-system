@@ -17,6 +17,7 @@ import {
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
+import { isPresentable } from '../../../lib/error-shape';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -29,11 +30,8 @@ function strs(fd: FormData, key: string): string[] {
 /** Maps the handful of known refusals onto a sentence a floor worker or manager can act on —
  *  same convention as `inventory/usage/actions.ts`'s `errorMessage`. */
 function errorMessage(err: unknown): string {
+  if (isPresentable(err)) return sharedErrorMessage(err);
   const raw = err instanceof Error ? err.message : String(err);
-  if (/may not 'record_stock_movement'/.test(raw)) return 'Recording a production run needs at least staff access to this store.';
-  if (/may not 'post_production'/.test(raw)) return 'Only a manager or admin can post — posting is what moves stock and the books.';
-  if (/may not 'edit_posted_production'/.test(raw)) return 'Only a manager or admin can edit a posted record.';
-  if (/may not 'void_production'/.test(raw)) return 'Only a manager or admin can void a posted record.';
   if (/live slicer payment/.test(raw)) return raw;
   // ⚠️ A frozen-room or closed-period refusal was listed here purely to strip its prefix. The
   // shared fallback does precisely that, so both fall through to it now — same sentence, one

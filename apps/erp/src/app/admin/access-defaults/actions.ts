@@ -23,6 +23,7 @@ import { type Capability } from '@shareat/auth';
 import { requireActor } from '../../../lib/session';
 import { activeDefaultsAtStore, bannerMessage, bulkBannerMessage, copyableDefaults, withOrgPrincipal } from './lib';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
+import { isPresentable } from '../../../lib/error-shape';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -30,19 +31,15 @@ function str(fd: FormData, key: string): string {
 }
 
 /**
- * Same shape as `admin/users/actions.ts`'s own mapper: turn a known refusal into a sentence a
- * human can act on rather than leaking a function name or a raw Postgres message. Most of
- * `setPositionDefault` / `retireStorePosition`'s own messages (`packages/domain/src/people/
- * position-defaults.ts`) are already written for exactly this screen and pass through unchanged.
+ * A presentable error (every `authorize()` denial among them) already carries its own sentence —
+ * S2/S2b's — and wins first. Otherwise, turn a known refusal into a sentence a human can act on
+ * rather than leaking a function name or a raw Postgres message. Most of `setPositionDefault` /
+ * `retireStorePosition`'s own messages (`packages/domain/src/people/position-defaults.ts`) are
+ * already written for exactly this screen and pass through unchanged.
  */
 function errorMessage(err: unknown): string {
+  if (isPresentable(err)) return sharedErrorMessage(err);
   const raw = err instanceof Error ? err.message : String(err);
-  if (/may not 'grant_capability'/.test(raw)) {
-    return 'Only an admin or super-admin can grant or revoke a capability.';
-  }
-  if (/has no active role/.test(raw)) {
-    return 'Your account has no active role, so nothing here can be granted or changed.';
-  }
   if (/does not belong to this organisation/.test(raw)) {
     return 'That store does not belong to this organisation.';
   }

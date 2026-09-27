@@ -14,23 +14,11 @@ import { revalidatePath } from 'next/cache';
 import { removeMap, upsertCommissaryLink, upsertMap, upsertOffering } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
-import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
+import { errorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-/** Strips the throwing function's name — right for a log, useless on screen. */
-function errorMessage(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err);
-  if (/may not 'manage_commissary_offerings'/.test(raw)) {
-    return 'Only a manager or admin scoped to THIS commissary can edit its links and offerings.';
-  }
-  if (/may not 'manage_commissary_map'/.test(raw)) {
-    return 'Only a manager or admin scoped to THIS branch can edit its item map.';
-  }
-  return sharedErrorMessage(err);
 }
 
 function back(commissaryStoreId: string, extra: Record<string, string>): never {

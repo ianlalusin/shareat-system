@@ -28,6 +28,7 @@ import {
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
+import { isPresentable } from '../../../lib/error-shape';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -39,21 +40,14 @@ function list(fd: FormData, key: string): string[] {
 }
 
 /**
- * Turns an `authorize()` denial or a DB trigger's own message into one readable sentence — the
- * same local, non-shared mapping `commissary/catalogue/actions.ts` keeps for its own triggers
+ * A presentable error (an `authorize()` denial among them) already carries its own sentence and
+ * wins first. Otherwise, turns a DB trigger's own message into one readable sentence — the same
+ * local, non-shared mapping `commissary/catalogue/actions.ts` keeps for its own triggers
  * (bible: `constraint-messages.ts` is shared and off-limits; each screen keeps its own).
  */
 function errorMessage(err: unknown): string {
+  if (isPresentable(err)) return sharedErrorMessage(err);
   const raw = err instanceof Error ? err.message : String(err);
-  if (/may not 'open_count_session'/.test(raw)) {
-    return 'Only a manager or admin may open or advance a count — opening freezes the room for every other stock writer.';
-  }
-  if (/may not 'commit_count'/.test(raw)) {
-    return 'Only a manager or admin may commit or cancel a count — committing posts the variance to the books.';
-  }
-  if (/may not 'record_stock_movement'/.test(raw)) {
-    return 'You do not have access to record a count in this store.';
-  }
   if (/already in active count session/.test(raw)) {
     return 'One of those rooms is already frozen by another active count — finish or cancel that one first.';
   }

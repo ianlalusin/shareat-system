@@ -22,24 +22,13 @@ import { createFirestoreTerminalDriver } from '@shareat/sync-firestore';
 import { mintTerminalToken, provisionTerminal, revokeTerminal } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
-import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
+import { errorMessage } from '@/lib/constraint-messages';
 
 const RETURN_TO = '/attendance/terminals';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function errorMessage(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err);
-  if (/may not 'provision_clock_terminal'/.test(raw)) {
-    return 'Only an admin or super-admin scoped to this store may provision, re-pair or revoke a clock terminal.';
-  }
-  if (/may not 'manage_attendance'/.test(raw)) {
-    return 'Only a manager, admin or super-admin scoped to this store may view its terminals.';
-  }
-  return sharedErrorMessage(err);
 }
 
 function back(storeId: string, extra: Record<string, string>): never {

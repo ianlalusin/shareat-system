@@ -356,6 +356,42 @@ describe('changing a credential invalidates what it minted', () => {
   });
 });
 
+/**
+ * T-343 S7 — P5 (DEF-452). `docs/tasks/343-def-417-human-readable-refusals.md` §S7 change 4.
+ *
+ * ⛔ TESTER, not BUILDER. `sessionsRepo.revokeCredential`'s own `recordGone` call
+ * (`packages/db/src/repo/sessions.ts:196` at `5fe72a6`) still passes `'credential'` as the kind —
+ * red until change 4 makes it `'sign-in account'`. The raw first argument (`revokeCredential:
+ * credential <id> does not exist or is already revoked`) is byte-identical either way (Invariant 1).
+ * This is the tester's chosen home for P5, over a new `packages/db/tests/integration/
+ * t343-s7-credential-gone.test.ts` file — `sessionsRepo.revokeCredential` is already exercised at
+ * `:310-325` above, with the exact fixture (`setup`/`asOrg`) this needs.
+ */
+describe('T-343 S7 — P5: revoking an already-revoked credential names a "sign-in account", not a "credential"', () => {
+  it('a second revokeCredential on the same id: userMessage is goneSentence(\'sign-in account\'), .message unchanged', async () => {
+    const { goneSentence } = await import('../../../db/src/refusal');
+    const f = await setup('s7-p5-gone');
+    const { credentialId } = await asOrg(f.orgId, (tx) =>
+      setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '171717' }),
+    );
+    await asOrg(f.orgId, (tx) =>
+      sessionsRepo.revokeCredential(tx, { id: credentialId, by: f.otherPersonId, reason: 'First revoke.' }),
+    );
+
+    const caught = await asOrg(f.orgId, (tx) =>
+      sessionsRepo.revokeCredential(tx, { id: credentialId, by: f.otherPersonId, reason: 'Second revoke.' }),
+    ).then(
+      () => null,
+      (e: unknown) => e as Error & { userMessage?: string },
+    );
+
+    expect(caught, 'revoking an already-revoked credential was not refused at all').not.toBeNull();
+    // Invariant 1 — byte-identical whether or not S7 has landed.
+    expect(caught!.message).toBe(`revokeCredential: credential ${credentialId} does not exist or is already revoked`);
+    expect(caught!.userMessage).toBe(goneSentence('sign-in account'));
+  });
+});
+
 describe('listLiveForPerson — T-217 / DEF-174', () => {
   it('a person with no credential returns nothing', async () => {
     const f = await setup('live-none');

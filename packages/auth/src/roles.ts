@@ -347,7 +347,7 @@ export async function assignRoleAsActor(
     throw new AuthorizationError(
       'assignRoleAsActor: an actor may not change their own role — ask another admin, so a mistake here cannot lock the org out',
       'manage_users',
-      'An actor may not change their own role — ask another admin, so a mistake here cannot lock the org out.',
+      'You cannot change your own role. Ask another admin — this is what stops one mis-click locking the org out.',
     );
   }
 
@@ -445,10 +445,11 @@ export async function assignRoleAsActor(
     //    middle of the one function where every read must be the locked transaction's own.
     const rankOfActor = await actorRank(tx, actor, actorRole?.role);
     if (rankOfActor < ROLE_RANK[targetRole.role]) {
-      // ⛔ The phrase `requires super_admin` must NEVER appear here. `apps/erp/src/app/admin/users/
-      //    actions.ts` matches it and answers with "Only a super-admin can APPOINT an admin" — a
-      //    sentence about appointment, in reply to a removal. Green build, green tests, wrong
-      //    sentence (the DEF-177 shape). `roles.test.ts` case 6 asserts the absence.
+      // ⛔ The phrase `requires super_admin` must NEVER appear here. Before T-343 S7,
+      //    `apps/erp/src/app/admin/users/actions.ts` matched it and answered with "Only a
+      //    super-admin can APPOINT an admin" — a sentence about appointment, in reply to a removal.
+      //    Green build, green tests, wrong sentence (the DEF-177 shape). S7 removed that app
+      //    matcher (presentable wins first now); `roles.test.ts` case 6 still asserts the absence.
       throw new AuthorizationError(
         `assignRoleAsActor: refusing to change this person's role — they hold ` +
           `'${targetRole.role}', which outranks you. This change needs somebody who is at least a ` +
@@ -494,17 +495,18 @@ export async function assignRoleAsActor(
       input.personId,
     );
     if (!anotherWayIn) {
-      // ⚠️ The phrase "only active admin" is load-bearing: `apps/erp/src/app/admin/users/actions.ts`
-      // matches it to turn this into a sentence on the screen. Extending around it is safe; removing
-      // it would drop the mapping with a green build and green tests (the DEF-177 shape).
+      // ⚠️ The phrase "only active admin" is load-bearing — not for an app matcher any more (T-343
+      // S7 deleted `admin/users/actions.ts`'s copy; presentable wins first there now), but for the
+      // raw-message pins that still read it: `packages/auth/tests/integration/roles.test.ts:393,1046`
+      // and `t343-s7-roles-sentences.test.ts`'s full raw string. Extending around it is safe;
+      // removing it would drop those pins with a green build and green tests (the DEF-177 shape).
       throw new AuthorizationError(
         "assignRoleAsActor: refusing to demote this org's only active admin who can sign in — " +
           'appoint another admin or super_admin who holds a credential first, or the org is left ' +
           'with nobody able to manage users',
         'manage_users',
-        "Refusing to demote this org's only active admin who can sign in — appoint another admin " +
-          'or super admin who holds a credential first, or the org is left with nobody able to ' +
-          'manage users.',
+        "This is the org's only active admin who can sign in. Appoint another admin or super admin " +
+          'and give them a PIN or an email account first — otherwise nobody is left who can manage users.',
       );
     }
   }
@@ -579,7 +581,7 @@ export async function grantCapabilityAsActor(
     throw new AuthorizationError(
       'grantCapabilityAsActor: an actor may not grant themselves a capability — ask another admin, so nobody can widen their own authority',
       'grant_capability',
-      'An actor may not grant themselves a capability — ask another admin, so nobody can widen their own authority.',
+      'You cannot give yourself a capability. Ask another admin, so nobody can widen their own authority without someone else approving it.',
     );
   }
 

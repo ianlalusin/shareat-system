@@ -8,7 +8,7 @@ import { revalidatePath } from 'next/cache';
 import { finalizeSections, requestMap } from '@shareat/domain';
 import { buildPlanForDay, withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
-import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
+import { errorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -17,14 +17,6 @@ function str(fd: FormData, key: string): string {
 
 function strs(fd: FormData, key: string): string[] {
   return fd.getAll(key).map((v) => (typeof v === 'string' ? v.trim() : '')).filter(Boolean);
-}
-
-function errorMessage(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err);
-  if (/may not 'record_stock_movement'/.test(raw)) return 'Building a plan needs at least staff access to this store.';
-  if (/may not 'finalize_pos_usage_pull'/.test(raw)) return 'Finalizing a section needs manager access to this store.';
-  if (/may not 'request_pos_map'/.test(raw)) return 'Flagging an unmappable item needs at least staff access to this store.';
-  return sharedErrorMessage(err);
 }
 
 function back(storeId: string, params: Record<string, string>): never {

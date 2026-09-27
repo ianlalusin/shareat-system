@@ -193,7 +193,7 @@ export async function revokeCredential(tx: Tx, input: RevokeCredentialInput): Pr
     .where(and(eq(personCredentials.id, input.id), isNull(personCredentials.revokedAt)))
     .returning({ id: personCredentials.id });
   if (updated.length === 0) {
-    throw recordGone(`revokeCredential: credential ${input.id} does not exist or is already revoked`, 'credential');
+    throw recordGone(`revokeCredential: credential ${input.id} does not exist or is already revoked`, 'sign-in account');
   }
 }
 

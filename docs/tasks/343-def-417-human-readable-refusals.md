@@ -1576,6 +1576,38 @@ it does, STOP.
 **Order:** S5.5m, then S7. S5.5m shares no file with S6a–S6c or S5.4, so it may run beside S6 in another lane at the
 orchestrator's choice. It shares `packages/domain/src/trade/index.ts` with S7, so S7 starts from S5.5m's commit.
 
+### S5.5n: follow-ups from the S5.5m post-commit review (DEF-457, DEF-458, DEF-459)
+**Status:** APPROVED 2026-09-27 (orchestrator; findings verified by the auditor against source). **Model:** Sonnet,
+tester then builder. **Migration:** none. Runs after S7 and S6d commit (S7 edits neither file below except as noted).
+
+1. **DEF-457 (money):** `apps/erp/src/app/customers/actions.ts` — the `creditApplied` spread (`…Number(creditApplied) > 0 …`,
+   find by text) sends the field whenever the trimmed text is non-empty, so `'1,000'` reaches `parseMoneyInput` and
+   refuses with "The store credit applied — …". An empty box still omits it (domain defaults `'0'`). A typed `'0'` is sent
+   and parses to zero, which the domain already accepts. Same pattern as the allocation fix documented at `:170-173`.
+2. **DEF-458:** `packages/domain/src/shared/money-input.ts` — distinguish the two `money()` failures. A `RangeError` gets
+   `<label> — "<raw>" is too large. The most an amount can be is 999,999,999,999.99.` (raw and human forms, same shape as
+   today's); every other failure keeps today's sentence byte-identical. Stays import-free except `@shareat/core/money`.
+   Check the real ceiling in `packages/core/src/money.ts` and quote it exactly.
+3. **DEF-459:** at the four id-carrying sites (`packages/domain/src/ap/index.ts` allocation-for-expense,
+   `packages/domain/src/ar/index.ts` allocation-for-charge, `apps/erp/src/app/ap/actions.ts` and
+   `apps/erp/src/app/customers/actions.ts` typed-for-expense/charge; find by raw label text) wrap the `parseMoneyInput` call
+   in `try { … } catch (err) { logger.info({ err }, '<site>: malformed allocation amount'); throw err; }` using each
+   file's existing logger import (if a file has none, use `@shareat/core`'s `logger` — check what the file already
+   imports; if that would add an import to a `'use client'` path, STOP and report). The thrown error is unchanged.
+- **BUILDER paths:** `packages/domain/src/shared/money-input.ts`, `packages/domain/src/ap/index.ts`,
+  `packages/domain/src/ar/index.ts`, `apps/erp/src/app/ap/actions.ts`, `apps/erp/src/app/customers/actions.ts` (5).
+- **TESTER paths:** `apps/erp/tests/integration/t343-s5-5n-followups.test.ts` (new) and
+  `packages/domain/src/shared/money-input.test.ts` (new `describe` only).
+  - C1 (DEF-457): collect with `creditApplied='1,000'` → refusal naming "The store credit applied", and NO journal entry /
+    collection row written (red: succeeds, money account debited the full net). C1n: empty box → collection succeeds,
+    credit 0 (green now).
+  - R1 (DEF-458): `parseMoneyInput('99999999999999', 'x', 'The amount')` → `userMessage` contains "too large" and not
+    "decimal places" (red now); R1n: `'1.234'` → today's sentence byte-identical (green now).
+  - L1 (DEF-459): one site (ap allocation) with a malformed amount → the logger receives one `info` call carrying the
+    raw (spy the logger module); the thrown `userMessage` unchanged (red: zero calls).
+- Done when: reds red→green, negatives green unedited, typecheck clean, `money-input.ts` import set unchanged, screen
+  check of the customer collection with `1,000` in the credit box.
+
 ---
 
 ## S7: app wrappers stop pre-empting refusals, and trade lines are numbered (DEF-452; the "≈40 app regexes")

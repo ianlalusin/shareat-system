@@ -15,7 +15,7 @@ import { createTradeOrder, dispatchTradeOrder, receiveTradeOrder, voidTradeOrder
 import { SHORTAGE_REASONS, type ShortageReason } from '@shareat/db/schema';
 import { peso, withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
-import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
+import { errorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -25,15 +25,6 @@ function str(fd: FormData, key: string): string {
 /** Repeated fields — one per line row. Parallel arrays, in document order. */
 function strs(fd: FormData, key: string): string[] {
   return fd.getAll(key).map((v) => (typeof v === 'string' ? v.trim() : ''));
-}
-
-/** Strips the throwing function's name — right for a log, useless on screen. */
-function errorMessage(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err);
-  if (/may not 'approve_buyer'/.test(raw)) {
-    return 'Only a manager or admin scoped to the selling store can create, dispatch, receive or void a trade order.';
-  }
-  return sharedErrorMessage(err);
 }
 
 function back(path: string, params: Record<string, string>): never {
@@ -50,7 +41,7 @@ export async function createOrderAction(fd: FormData): Promise<void> {
   // A row whose item was never picked is an empty row, not an error — skipped. A row WITH an
   // item and no quantity is a real mistake, and the domain says so.
   const lines = itemIds
-    .map((itemId, i) => ({ itemId, quantity: quantities[i] ?? '', rate: rates[i] || null }))
+    .map((itemId, i) => ({ itemId, quantity: quantities[i] ?? '', rate: rates[i] || null, lineNo: i + 1 }))
     .filter((l) => l.itemId);
 
   let orderId = '';

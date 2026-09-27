@@ -13,19 +13,11 @@ import { revalidatePath } from 'next/cache';
 import { enrolCard, enrolFingerprint, revokeCredential } from '@shareat/domain';
 import { withOrgPrincipal } from '../../../expenses/lib';
 import { requireActor } from '../../../../lib/session';
-import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
+import { errorMessage } from '@/lib/constraint-messages';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function errorMessage(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err);
-  if (/may not 'manage_attendance'/.test(raw)) {
-    return 'Only a manager, admin or super-admin scoped to this store may manage credentials here.';
-  }
-  return sharedErrorMessage(err);
 }
 
 function back(employmentId: string, extra: Record<string, string>): never {

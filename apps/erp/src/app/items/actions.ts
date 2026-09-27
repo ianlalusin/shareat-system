@@ -28,6 +28,7 @@ import type { BaseUnit, ItemKind } from '@shareat/db';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
+import { isPresentable } from '../../lib/error-shape';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -51,6 +52,7 @@ function tri(fd: FormData, key: string): boolean | null {
 }
 
 function errorMessage(err: unknown): string {
+  if (isPresentable(err)) return sharedErrorMessage(err);
   const raw = err instanceof Error ? err.message : String(err);
   // The duplicate-name violation is the one people will actually hit, and Postgres's own wording
   // is unreadable. Say what happened and why it is refused.
@@ -58,12 +60,6 @@ function errorMessage(err: unknown): string {
     return 'An item with that name already exists — names are one per organisation, ignoring case.';
   }
   if (/items_org_code_key/.test(raw)) return 'That item code is already in use.';
-  if (/may not 'approve_item'/.test(raw)) {
-    return 'Only a super-admin can approve, create or merge items. Submit a request instead.';
-  }
-  if (/may not 'manage_items'/.test(raw)) {
-    return 'Only a manager or admin can change what an item is bought and sold as.';
-  }
   return sharedErrorMessage(err);
 }
 

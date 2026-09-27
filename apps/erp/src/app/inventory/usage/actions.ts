@@ -24,6 +24,7 @@ import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { peso } from '../../../lib/format';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
+import { isPresentable } from '../../../lib/error-shape';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -35,24 +36,14 @@ function strs(fd: FormData, key: string): string[] {
   return fd.getAll(key).map((v) => (typeof v === 'string' ? v.trim() : ''));
 }
 
-/** Strips the throwing function's name — right for a log, useless on screen. Maps the handful of
- *  known refusals (authorize denials, T-168's DB triggers) onto a sentence a floor worker or
- *  manager can act on; anything else falls back to the raw message with its prefix trimmed. */
+/** A presentable error (authorize denials among them) already carries its own sentence and wins
+ *  first. Otherwise, maps the handful of known refusals (T-168's DB triggers) onto a sentence a
+ *  floor worker or manager can act on; anything else falls back to the raw message with its
+ *  prefix trimmed. */
 function errorMessage(err: unknown): string {
+  if (isPresentable(err)) return sharedErrorMessage(err);
   const raw = err instanceof Error ? err.message : String(err);
 
-  if (/may not 'record_stock_movement'/.test(raw)) {
-    return 'Recording a usage needs at least staff access to this store.';
-  }
-  if (/may not 'record_wastage'/.test(raw)) {
-    return 'Recording a wastage needs at least staff access to this store.';
-  }
-  if (/may not 'post_usage'/.test(raw)) {
-    return 'Only a manager or admin can post — a floor worker can draft, but posting is what moves stock and the books.';
-  }
-  if (/may not 'void_usage_record'/.test(raw)) {
-    return 'Only a manager or admin can void a posted record.';
-  }
   if (/is a parking spot/.test(raw)) {
     return 'The Receiving room is a parking spot for new deliveries — it cannot be a usage source.';
   }

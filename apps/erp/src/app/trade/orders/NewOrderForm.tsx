@@ -158,7 +158,7 @@ export function NewOrderForm({
             + Add line
           </button>
         </div>
-        {lines.map((l) => {
+        {lines.map((l, idx) => {
           const item = itemById.get(l.itemId);
           const dflt = defaultRate(l.itemId);
           return (
@@ -166,6 +166,9 @@ export function NewOrderForm({
               key={l.key}
               className="grid grid-cols-2 gap-2 rounded-md border border-neutral-200 p-2 sm:grid-cols-[1fr_7rem_9rem_auto] sm:items-end dark:border-neutral-800"
             >
+              <span className="col-span-2 text-xs font-medium text-neutral-600 dark:text-neutral-400 sm:col-span-4">
+                Line {idx + 1}
+              </span>
               <label className={`${label} col-span-2 sm:col-span-1`}>
                 Item
                 <select
