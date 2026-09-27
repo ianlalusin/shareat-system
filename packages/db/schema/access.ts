@@ -188,16 +188,24 @@ export const personGrants = pgTable(
     sourceRef: uuid('source_ref').references(() => positionCapabilityDefaults.id, { onDelete: 'restrict' }),
     /**
      * T-341 / DEF-414, migration 0159. Which store a `'position'`-sourced grant is honoured at —
-     * the store `sourceRef`'s default belongs to, ALWAYS set for `grant_source = 'position'` and
-     * NEVER set for any other source (`person_grants_store_shape_check` below). A raw insert that
-     * omits it is filled by a hand-added trigger (migration 0159 — `packages/db/migrations/
-     * README.md` §3: what Drizzle cannot express, a trigger cannot be declared here).
+     * the store `sourceRef`'s default belongs to, ALWAYS set for `grant_source = 'position'`. A
+     * raw insert that omits it is filled by a hand-added trigger (migration 0159 —
+     * `packages/db/migrations/README.md` §3: what Drizzle cannot express, a trigger cannot be
+     * declared here).
      *
-     * ⛔ A position-sourced row and a person-level row (`storeId IS NULL`, every other source) now
-     * COEXIST for the same `(personId, grantName)` — neither ever rewrites the other
-     * (`repo/access.ts`'s `grantCapability`). Before 0159 there was exactly one active slot per
+     * T-349 / DEF-456, migration 0165. MAY also be set for `grant_source = 'grant'` — a capability
+     * held in their own right, at the position row's own store it was made from
+     * (`packages/db/src/repo/access.ts`'s store-grant branch sets it; never a trigger). NEVER set
+     * for any other source — `'elevation'`, `'owner'` and NULL always carry `store_id IS NULL`
+     * (`person_grants_store_shape_check` below).
+     *
+     * ⛔ A position-sourced row, a store-scoped grant row and a person-level row (`storeId IS
+     * NULL`) now COEXIST for the same `(personId, grantName)` — no branch of `grantCapability`
+     * ever rewrites another's rows. Before 0159 there was exactly one active slot per
      * `(personId, grantName)`; DEF-414 is that a store-scoped position grant authorised at every
-     * store the person had SCOPE at, not only the store whose default produced it.
+     * store the person had SCOPE at, not only the store whose default produced it. DEF-456 is the
+     * same shape one level up: a hand-grant made from a store-scoped position row had nowhere to
+     * carry that store before 0165, so it authorised at every store too.
      */
     storeId: uuid('store_id').references(() => stores.id, { onDelete: 'restrict' }),
     /**
@@ -218,9 +226,15 @@ export const personGrants = pgTable(
     uniqueIndex('person_grants_active_person_level_unique')
       .on(t.personId, t.grantName)
       .where(sql`${t.revokedAt} is null and ${t.storeId} is null`),
+    // T-349 / DEF-456, migration 0165 — split by source: a 'position' row and a 'grant' row
+    // (a hold in their own right, at the position row's own store) each get their own active
+    // slot at the same store, and neither collides with the other.
     uniqueIndex('person_grants_active_position_store_unique')
       .on(t.personId, t.grantName, t.storeId)
-      .where(sql`${t.revokedAt} is null and ${t.storeId} is not null`),
+      .where(sql`${t.revokedAt} is null and ${t.storeId} is not null and ${t.grantSource} = 'position'`),
+    uniqueIndex('person_grants_active_grant_store_unique')
+      .on(t.personId, t.grantName, t.storeId)
+      .where(sql`${t.revokedAt} is null and ${t.storeId} is not null and ${t.grantSource} = 'grant'`),
     index('person_grants_source_ref_idx').on(t.sourceRef),
     check(
       'person_grants_source_check',
@@ -249,13 +263,18 @@ export const personGrants = pgTable(
           or (${t.revokedAt} is not null and ${t.revokeReason} is not null
               and btrim(${t.revokeReason}) <> '')`,
     ),
-    // T-341, migration 0159. Every row's shape, from here on: a 'position' row ALWAYS carries a
-    // store; every other source NEVER does. `IS DISTINCT FROM` for the same null-blind reason as
-    // `person_grants_position_source_ref_check` above.
+    // T-341, migration 0159; replaced by T-349 / DEF-456, migration 0165. Every row's shape, from
+    // here on: a 'position' row ALWAYS carries a store; a 'grant' row MAY (a hold in their own
+    // right, at the position row's own store — T-349); every other source NEVER does.
+    // `IS NOT DISTINCT FROM` / `IS DISTINCT FROM` throughout — the 0159 version used a bare `=`
+    // on its first branch, which is NULL (not FALSE) for a NULL grant_source with a store set, and
+    // a CHECK accepts a NULL result. No NULL-source row has ever carried a store (live data,
+    // 2026-09-27), but the hole was real; 0165 closes it.
     check(
       'person_grants_store_shape_check',
-      sql`(${t.grantSource} = 'position' and ${t.storeId} is not null)
-          or (${t.grantSource} is distinct from 'position' and ${t.storeId} is null)`,
+      sql`(${t.grantSource} is not distinct from 'position' and ${t.storeId} is not null)
+          or (${t.grantSource} is not distinct from 'grant')
+          or (${t.grantSource} is distinct from 'position' and ${t.grantSource} is distinct from 'grant' and ${t.storeId} is null)`,
     ),
     // T-341, migration 0159. A position row's store must be the store its OWN default belongs to
     // — MATCH SIMPLE (Drizzle's default, unwritten): a 'grant' row that keeps a history ref but no

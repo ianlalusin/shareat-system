@@ -438,11 +438,14 @@ describe('T-341 / DEF-414 M1-M4 — the person_grants store backfill migration',
       ),
     ).rejects.toMatchObject({ code: '23503' });
 
-    // 'grant' with a store -> 23514 (shape CHECK).
+    // T-349 S1 (DEF-456) ruled edit, orchestrator 2026-09-27: 0165 widens the shape CHECK so
+    // 'grant' MAY carry a store (a T-349 "hold in their own right" at that store) — this row now
+    // succeeds instead of throwing, and is covered by T-349's own M1. 'elevation' with a store is
+    // the sibling case the CHECK still refuses.
     await expect(
       asApp(ids.orgId, (tx) =>
         tx`insert into person_grants (person_id, grant_name, grant_source, source_ref, store_id, granted_by)
-           values (${fresh}, 'manage_items', 'grant', null, ${ids.storeA}, ${ids.adminId})`,
+           values (${fresh}, 'manage_items', 'elevation', null, ${ids.storeA}, ${ids.adminId})`,
       ),
     ).rejects.toMatchObject({ code: '23514' });
 
