@@ -282,6 +282,15 @@ const CLASSIFIED_ENTRIES: {
     checkFunctions: ['recordOrderWastage'],
     checkIdentifiers: ['amount'],
   },
+  {
+    file: 'channel-settlements/index.ts',
+    comparison: 'Number(amount) < 0',
+    reason:
+      'routed — assertSettlementFigures, `amount = parseMoneyInput(input.loan.amount, ...)` above ' +
+      '(T-343 S5.5s, DEF-470 item 8: the loan amount docked)',
+    checkFunctions: ['assertSettlementFigures'],
+    checkIdentifiers: ['amount'],
+  },
 
   // ---- derived: a ledger-summed or computed value, never a raw string a person typed ----
   {
@@ -451,6 +460,15 @@ const CLASSIFIED_ENTRIES: {
     file: 'trade/index.ts',
     comparison: 'Number(rate) < 0',
     reason: 'rate — negative-only check on a numeric(14,4) rate, not a money positivity check',
+  },
+
+  // ---- percentage: numeric(6,3), its own range check — not money, not the 2dp money() scale ----
+  {
+    file: 'owners/index.ts',
+    comparison: '!(Number(t) > 0)',
+    reason:
+      'percentage, numeric(6,3) — own regex+range check inside createOwner, S5.5s item 3; not money',
+    checkFunctions: ['createOwner'],
   },
 
   // ---- type-enforced: the function's own signature requires an already-parsed Money, not a string ----

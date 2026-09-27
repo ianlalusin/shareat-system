@@ -282,9 +282,7 @@ export default async function OwnerPage({
               >
                 <input
                   name="acknowledgedAmount"
-                  type="number"
-                  step="0.01"
-                  min="0"
+                  inputMode="decimal"
                   defaultValue={owner.closableAmount}
                   className={INPUT}
                 />

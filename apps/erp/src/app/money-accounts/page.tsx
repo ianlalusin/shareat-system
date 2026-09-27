@@ -159,9 +159,7 @@ export default async function MoneyAccountsPage({
                         {a.custodian === 'cashier' && (
                           <input
                             name="overdraftLimit"
-                            type="number"
-                            step="0.01"
-                            min="0"
+                            inputMode="decimal"
                             defaultValue={a.overdraftLimit}
                             title="How far below zero this drawer may go before a draw is refused. Entered positive; 0 means never."
                             className="w-24 rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"

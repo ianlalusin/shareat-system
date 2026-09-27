@@ -30,6 +30,8 @@ import {
   type MoneyInstrument,
   type Tx,
 } from '@shareat/db';
+import { parseMoneyInput } from '../shared/money-input';
+import { refuse } from '../shared/refusal';
 
 export interface CreateMoneyAccountInput {
   storeId: string;
@@ -228,18 +230,24 @@ export async function renameMoneyAccount(
     // ⛔ Stored positive, and zero is meaningful — it means this drawer may never go below zero at
     // all. A negative value would invert the comparison silently, so it is refused here as well as
     // by the CHECK.
-    const limit = input.overdraftLimit?.trim();
-    if (limit !== undefined && limit !== '' && Number(limit) < 0) {
-      throw new Error(
+    const limitRaw = input.overdraftLimit?.trim();
+    const limit =
+      limitRaw !== undefined && limitRaw !== ''
+        ? parseMoneyInput(limitRaw, 'renameMoneyAccount: the overdraft limit', 'The overdraft limit')
+        : undefined;
+    if (limit !== undefined && Number(limit) < 0) {
+      throw refuse(
         'renameMoneyAccount: an overdraft limit is how far BELOW zero the drawer may go, so it is ' +
           'entered as a positive number. Zero means it may never go below zero at all.',
+        'An overdraft limit is how far below zero the drawer may go, so enter it as a positive number. ' +
+          'Zero means it may never go below zero at all.',
       );
     }
 
     await moneyAccountsRepo.renameMoneyAccount(trx, actor.orgId, account.id, {
       name,
       notes: input.notes?.trim() || null,
-      ...(limit !== undefined && limit !== '' ? { overdraftLimit: limit } : {}),
+      ...(limit !== undefined ? { overdraftLimit: limit } : {}),
     });
   };
   if (tx) return run(tx);

@@ -339,9 +339,6 @@ export default async function RemittancePage({
                   <Field label={a.name} hint={`Holds ${peso(a.balance)}`}>
                     <input
                       name={`lineAmount_${i}`}
-                      type="number"
-                      step="0.01"
-                      min="0"
                       inputMode="decimal"
                       placeholder="0.00"
                       className={INPUT}
@@ -353,9 +350,6 @@ export default async function RemittancePage({
                   >
                     <input
                       name={`lineOverage_${i}`}
-                      type="number"
-                      step="0.01"
-                      min="0"
                       inputMode="decimal"
                       placeholder="0.00"
                       className={INPUT}

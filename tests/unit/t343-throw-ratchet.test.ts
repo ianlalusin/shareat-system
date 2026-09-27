@@ -84,10 +84,10 @@ const CEILINGS: Record<string, number> = {
   'packages/domain/src/liabilities': 16,
   'packages/domain/src/loans': 13,
   'packages/domain/src/missed-months': 13,
-  'packages/domain/src/money-accounts': 10,
+  'packages/domain/src/money-accounts': 9, // T-343 S5.5s: 10 -> 9, renameMoneyAccount's overdraftLimit converted to parseMoneyInput
   'packages/domain/src/money-transfers': 11,
   'packages/domain/src/organizations': 12,
-  'packages/domain/src/owners': 29,
+  'packages/domain/src/owners': 27, // T-343 S5.5s: 29 -> 27, createOwner's drawing-limit-zero guard and closeDrawingMonth's acknowledgedAmount (parse + negative guard) converted to refuse(...)
   'packages/domain/src/payroll': 34,
   'packages/domain/src/people': 0,
   'packages/domain/src/pos': 7,

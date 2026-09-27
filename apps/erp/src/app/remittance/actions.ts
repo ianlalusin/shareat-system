@@ -9,6 +9,7 @@
 import { redirect } from 'next/navigation';
 import {
   createRemittance,
+  refuse,
   resolveRemittanceVariance,
   reverseRemittance,
   setStoreCashPolicy,
@@ -87,6 +88,14 @@ export async function createRemittanceAction(formData: FormData): Promise<void> 
     const isHandedOver = (amount: string): boolean => {
       if (!amount) return false;
       const parsed = parseMoneyInput(amount, 'createRemittanceAction: the amount handed over', 'The amount handed over');
+      // T-343 S5.5s / DEF-470 item 7 — backs the dropped `min="0"`: without it, a negative line was
+      // silently dropped by the `> 0` filter below rather than refused.
+      if (Number(parsed) < 0) {
+        throw refuse(
+          'createRemittanceAction: the amount handed over cannot be negative.',
+          'The amount handed over cannot be negative.',
+        );
+      }
       return Number(parsed) > 0;
     };
 

@@ -79,9 +79,6 @@ export function RecordTransferForm({
         <Field label="Amount that arrived" hint="Leave blank if nothing was deducted — the usual case">
           <input
             name="amountIn"
-            type="number"
-            step="0.01"
-            min="0.01"
             inputMode="decimal"
             placeholder="Same as above"
             className={INPUT}

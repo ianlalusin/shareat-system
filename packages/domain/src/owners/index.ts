@@ -20,6 +20,7 @@ import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { checkDraw } from '../money-accounts/overdraft';
 import { parseMoneyInput } from '../shared/money-input';
+import { refuse } from '../shared/refusal';
 
 export const CAPITAL_CODE = '3100';
 export const DRAWINGS_CODE = '3200';
@@ -86,7 +87,22 @@ export async function createOwner(
       );
     }
     if (limit !== null && Number(limit) <= 0) {
-      throw new Error('createOwner: a drawing limit has to be greater than zero.');
+      throw refuse('createOwner: a drawing limit has to be greater than zero.', 'A drawing limit has to be greater than zero.');
+    }
+
+    // T-343 S5.5s / DEF-470 item 3 — no parse existed at all: a raw comma-typed or out-of-range
+    // string reached `numeric(6,3)` and the unmapped `owners_ownership_percentage_range_check`.
+    let ownershipPercentage: string | null = null;
+    if (input.ownershipPercentage != null) {
+      const raw = input.ownershipPercentage;
+      const t = raw.trim();
+      if (!/^\d{1,3}(\.\d{1,3})?$/.test(t) || !(Number(t) > 0) || Number(t) > 100) {
+        throw refuse(
+          `createOwner: ownershipPercentage must be above 0 and at most 100 with at most three decimal places, got ${JSON.stringify(raw)}.`,
+          `The ownership percentage — "${raw}" is not a percentage. Use a number above 0 and up to 100, with at most three decimal places.`,
+        );
+      }
+      ownershipPercentage = t;
     }
 
     return ownersRepo.insertOwner(trx, {
@@ -94,7 +110,7 @@ export async function createOwner(
       storeId: input.storeId,
       personId: input.personId,
       role: input.role?.trim() || null,
-      ownershipPercentage: input.ownershipPercentage ?? null,
+      ownershipPercentage,
       drawingLimit: limit,
       drawingLimitPeriod: period,
       personalExpenseTreatment: input.personalExpenseTreatment ?? 'repayable',
@@ -628,9 +644,11 @@ export async function closeDrawingMonth(
       }),
     );
     const acknowledged =
-      input.acknowledgedAmount === undefined ? ledger : Number(input.acknowledgedAmount);
+      input.acknowledgedAmount === undefined
+        ? ledger
+        : Number(parseMoneyInput(input.acknowledgedAmount, 'closeDrawingMonth: the agreed amount', 'The agreed amount'));
     if (acknowledged < 0) {
-      throw new Error('closeDrawingMonth: an agreed amount cannot be negative.');
+      throw refuse('closeDrawingMonth: an agreed amount cannot be negative.', 'The agreed amount cannot be negative.');
     }
 
     const difference = Number((acknowledged - ledger).toFixed(2));

@@ -22,6 +22,7 @@ import { cashRequestsRepo, moneyAccountsRepo, transaction, type Tx } from '@shar
 import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry } from '../ledger/post-entry';
 import { parseMoneyInput } from '../shared/money-input';
+import { refuse } from '../shared/refusal';
 
 export const STAFF_FLOAT_CODE = '1120';
 /**
@@ -309,8 +310,22 @@ export async function settleCashRequest(
     }
 
     const before = await cashRequestsRepo.floatPositionOf(trx, actor.orgId, req.id);
-    const returned = Number(input.returnedAmount ?? 0);
-    const short = Number(input.shortAmount ?? 0);
+    const returned =
+      input.returnedAmount === undefined
+        ? 0
+        : Number(parseMoneyInput(input.returnedAmount, 'settleCashRequest: the returned amount', 'The returned amount'));
+    const short =
+      input.shortAmount === undefined
+        ? 0
+        : Number(parseMoneyInput(input.shortAmount, 'settleCashRequest: the short amount', 'The short amount'));
+    // T-343 S5.5s / DEF-470 item 6 — before "nothing to settle": a lone negative return used to read
+    // as "nothing to settle", the wrong reason (an order bug, not a missing check).
+    if (returned < 0 || short < 0) {
+      throw refuse(
+        'settleCashRequest: a returned or short amount cannot be negative.',
+        'A returned or short amount cannot be negative.',
+      );
+    }
     if (returned <= 0 && short <= 0) {
       throw new Error('settleCashRequest: nothing to settle — give a return, a shortage, or both.');
     }

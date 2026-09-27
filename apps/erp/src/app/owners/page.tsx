@@ -190,10 +190,10 @@ export default async function OwnersPage({
               label="Ownership %"
               hint="Indicative only — nothing checks that these add to 100, because a store mid-restructure legitimately does not."
             >
-              <input name="ownershipPercentage" type="number" step="0.001" min="0.001" max="100" className={INPUT} />
+              <input name="ownershipPercentage" inputMode="decimal" className={INPUT} />
             </Field>
             <Field label="Drawing limit" hint="Leave both blank for no limit.">
-              <input name="drawingLimit" type="number" step="0.01" min="0.01" className={INPUT} />
+              <input name="drawingLimit" inputMode="decimal" className={INPUT} />
             </Field>
             <Field label="Limit period">
               <select name="drawingLimitPeriod" defaultValue="" className={INPUT}>

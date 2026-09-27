@@ -20,6 +20,8 @@ import {
 import { authorize, type Actor } from '@shareat/auth';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
+import { parseMoneyInput } from '../shared/money-input';
+import { refuse } from '../shared/refusal';
 
 const R = channelSettlementsRepo;
 
@@ -119,6 +121,51 @@ interface ComputedSettlement {
   tolerance: number;
   blockers: string[];
   needsGainAcknowledgement: boolean;
+}
+
+/**
+ * T-343 S5.5s / DEF-470 item 8 — every figure below reached bare `Number()` in `computeSettlement`
+ * with no parse at all: a comma-typed value became `NaN`, `NaN`-blind comparisons let it slip past
+ * every guard, and the write itself hit a raw, unmapped `_finite_check`/`_identity_check` CHECK
+ * violation. Throw-only: the existing `Number()` arithmetic in `computeSettlement` is unchanged —
+ * this only confirms every typed string parses before that arithmetic ever runs.
+ */
+const DEDUCTION_LABELS: Record<keyof SettlementDeductions, string> = {
+  commission: 'The commission',
+  platformFee: 'The platform fee',
+  vatOnFees: 'The VAT on fees',
+  marketing: 'The channel marketing',
+  withholdingTax: 'The withholding tax',
+  penalty: 'The penalty',
+};
+
+/** Lowercases just the leading word, so a human label reads naturally as a raw's trailing clause
+ *  ("The commission" → "the commission"). */
+function lead(label: string): string {
+  return label.charAt(0).toLowerCase() + label.slice(1);
+}
+
+/** `fn` is the caller's own name (`previewChannelSettlement`/`recordChannelSettlement`), so the raw
+ *  names which one actually refused. */
+function assertSettlementFigures(
+  fn: string,
+  input: Pick<RecordSettlementInput, 'grossAmount' | 'netDeposited' | 'deductions' | 'loan'>,
+): void {
+  parseMoneyInput(input.grossAmount, `${fn}: the gross amount`, 'The gross settled');
+  parseMoneyInput(input.netDeposited, `${fn}: the net deposited`, 'The net deposited');
+  const d = input.deductions ?? {};
+  for (const key of Object.keys(DEDUCTION_LABELS) as (keyof SettlementDeductions)[]) {
+    const v = d[key];
+    if (v !== undefined) {
+      parseMoneyInput(v, `${fn}: ${lead(DEDUCTION_LABELS[key])}`, DEDUCTION_LABELS[key]);
+    }
+  }
+  if (input.loan) {
+    const amount = parseMoneyInput(input.loan.amount, `${fn}: the loan amount docked`, 'The amount docked');
+    if (Number(amount) < 0) {
+      throw refuse(`${fn}: the loan amount docked cannot be negative.`, 'The amount docked cannot be negative.');
+    }
+  }
 }
 
 /**
@@ -274,6 +321,7 @@ export async function previewChannelSettlement(
 ): Promise<SettlementPreview> {
   const run = async (trx: Tx): Promise<SettlementPreview> => {
     const ctx = await gatherSettlementContext(trx, actor, input);
+    assertSettlementFigures('previewChannelSettlement', input);
     const c = computeSettlement(input, ctx.outstanding, ctx.config.name);
     return {
       channelName: ctx.config.name,
@@ -311,6 +359,7 @@ export async function recordChannelSettlement(
     // unique index refuses a duplicate too — this says WHY, and it is the same context the
     // preview reads, so a screen cannot show a green light this then refuses.
     const ctx = await gatherSettlementContext(trx, actor, input);
+    assertSettlementFigures('recordChannelSettlement', input);
     const config = ctx.config;
     const c = computeSettlement(input, ctx.outstanding, config.name);
 

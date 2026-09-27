@@ -88,6 +88,10 @@ export async function updateOwner(
   id: string,
   values: Partial<{
     role: string | null;
+    /** ⚠️ T-343 S5.5s — this repo write is unvalidated; `ownershipPercentage` must already have
+     *  passed `createOwner`'s regex+range guard (`packages/domain/src/owners/index.ts`) before it
+     *  reaches here. No caller writes it today — a future one must parse first, not assume this
+     *  layer checks anything. */
     ownershipPercentage: string | null;
     drawingLimit: string | null;
     drawingLimitPeriod: 'monthly' | 'total' | null;

@@ -342,8 +342,6 @@ export function SettlementForm({
                 name={d.name}
                 value={deductions[d.name]}
                 onChange={(e) => setDeductions((prev) => ({ ...prev, [d.name]: e.target.value }))}
-                type="number"
-                step="0.01"
                 inputMode="decimal"
                 placeholder="0.00"
                 className={INPUT}
@@ -387,9 +385,6 @@ export function SettlementForm({
               name="loanAmount"
               value={loanAmount}
               onChange={(e) => setLoanAmount(e.target.value)}
-              type="number"
-              step="0.01"
-              min="0"
               inputMode="decimal"
               placeholder="0.00"
               disabled={loanId === ''}

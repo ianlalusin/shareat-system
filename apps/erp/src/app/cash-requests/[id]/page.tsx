@@ -227,7 +227,7 @@ export default async function CashRequestPage({
             <input type="hidden" name="requestId" value={req.id} />
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Returned" hint="Cash physically handed back. Leave blank if none.">
-                <input name="returnedAmount" type="number" step="0.01" min="0" className={INPUT} />
+                <input name="returnedAmount" inputMode="decimal" className={INPUT} />
               </Field>
               <Field label="Into" hint="Where the returned cash landed.">
                 <select name="toMoneyAccountId" defaultValue="" className={INPUT}>
@@ -243,7 +243,7 @@ export default async function CashRequestPage({
                 label="Short"
                 hint="Unaccounted-for. Becomes a receivable from the holder, not a write-off."
               >
-                <input name="shortAmount" type="number" step="0.01" min="0" className={INPUT} />
+                <input name="shortAmount" inputMode="decimal" className={INPUT} />
               </Field>
               <Field label="Short because" hint="Required if anything is short.">
                 <input name="shortReason" className={INPUT} />

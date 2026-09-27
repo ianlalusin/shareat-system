@@ -165,7 +165,7 @@ export default async function SeparationsPage({
                 </label>
                 <label className="flex flex-col gap-1">
                   <span className={LABEL}>Separation pay (₱)</span>
-                  <input name="separationPayAmount" type="number" step="0.01" min="0" defaultValue="0" className={FIELD} />
+                  <input name="separationPayAmount" inputMode="decimal" defaultValue="0" className={FIELD} />
                   <span className="text-[11px] text-neutral-500">A decision, not a calculation — see above.</span>
                 </label>
                 <label className="flex flex-col gap-1">
