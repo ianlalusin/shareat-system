@@ -1,6 +1,6 @@
 # T-343: DEF-417 (part 2) — user-visible refusals name things in human terms, never raw ids or keys
 
-**Status:** S1–S4 DONE 2026-09-25. S5.0–S5.1 DONE 2026-09-26. **S5.1b, S2b, S5a, S5.2 (+follow-up), S5.3, S5.1c, S5.1d, S5.3b DONE 2026-09-27** (each: tester red, builder, Opus audit, full gates; committed locally, push pending Ian). Refusal banners screen-tested on 9008 for S5.1b/S5.1c. Open: S5.4 (after S6), S5.5+, S6/S6b, S7 (DEF-452), S8, S9.
+**Status:** S1–S4 DONE 2026-09-25. S5.0–S5.1 DONE 2026-09-26. **S5.1b, S2b, S5a, S5.2 (+follow-up), S5.3, S5.1c, S5.1d, S5.3b DONE 2026-09-27** (each: tester red, builder, Opus audit, full gates; committed locally, push pending Ian). Refusal banners screen-tested on 9008 for S5.1b/S5.1c. **S6a/S6b/S6c specced and APPROVED 2026-09-27 (§S6), serial S6a → S6b → S6c.** Open: S6a–S6c, S5.4 (after S6c), S5.5+, S7 (DEF-452), S8, S9.
 **Orchestrator defaults (Ian may override any time):** fallback wording as proposed in S1.3; the 96 capability labels
 are Sonnet-drafted from CAPABILITY-MATRIX.md notes and fixed later if Ian wants; staging S1 = fail closed on
 IDENTIFIERS, strict flip at S9; S3 names the record's KIND, not its number; cross-org refusals never name the other
@@ -202,12 +202,9 @@ with `U` in subject and reason → rendered text has no UUID (red: contains `U`)
 - **S5** domain tail (rows 7–16) per module group: `packages/domain/src/shared/refusal.ts` `RefusalError` +
   `refuse(raw, sentence)`; name records by human key; id-free sentences convert too (lowers the ratchet). **S5a**
   `roles.ts`, `credentials-admin.ts` (row 15).
-- **S6** labels for dispositions and item kinds (rows 10, 11) beside the enums in `packages/db/schema/*`; also the raw
-  keys already on screen (`admin/access-defaults/grid.tsx:211,319` → `CAPABILITY_LABEL`; `admin/users/*` →
-  `ROLE_LABEL`; `items/page.tsx` kind; `inventory/usage` reason codes).
-- **S6b (DEF-431, folded in by Ian 2026-09-25)** `/admin/users/[id]` "Extra capability grants": show `CAPABILITY_LABEL`
-  for held rows and the grant grid, with the key as secondary text at most. Show "…now held in their own right" only
-  AFTER "Hold in their own right" succeeds, not beside every row beforehand. Evidence: `~/.claude/skills/orchestrator/tools/t341-admin-users-page.png`.
+- **S6 / S6b — now specced in full at §S6 below (APPROVED 2026-09-27), split into S6a (label sources, S5.4's
+  precondition), S6b (DEF-431 + every `admin/users` raw key) and S6c (the other screens).** The one-liners are
+  superseded; `admin/users/*` → `ROLE_LABEL` moved from S6 to S6b so no two slices edit the same file.
 - **S2b (DEF-430, folded in by Ian 2026-09-25; lands after T-341) — now specced in full at §S2b (APPROVED 2026-09-26).** A store-scoped refusal from axis 3b where the person
   holds the capability via a position at OTHER stores must not blame the role. Name the store and where the job is, e.g.
   "…can't submit a sales day at SmokeStore Two — their Cashier job is at SmokeStore." Needs a refusal-only lookup,
@@ -394,7 +391,7 @@ argument with the same classifier.
 | S5a | auth roles + credentials | 15 | 7 raw + 11 two-arg | admin-only traffic; serial after S2b |
 | S5.2 | AP + customers + repo `ap.ts` | 9, 14b, new | 39 + 11 + 3 | weekly supplier and customer work |
 | S5.3 | deliveries + catalogue + opening | 13, 14a, 16 | 10 + 16 + 9 | low traffic; `run_cutover` is once per org |
-| S6 / S6b | labels; DEF-431, listed above | 10, 11 | — | S6b is UI-only and may run beside any S5 group; S6's kind and disposition labels are S5.4's precondition |
+| S6a / S6b / S6c | labels; DEF-431 — specced at **§S6** (APPROVED) | 10, 11 | — | strictly serial S6a → S6b → S6c (one tester, one builder); S6a is S5.4's precondition |
 | S5.4 | commissary `Outcome` reasons | 10, 11 | ≈16 reasons | needs S6 labels and an app edit that overlaps S8 |
 | S5.5+ | the ≈180 unowned sites (stock, production, …) | — | — | specced later; ledger, fixed-assets, stores and scheduler after T-346 |
 
@@ -1027,3 +1024,306 @@ amendment, before S2b's review fold shifted them.
 - **Line numbering:** "Line n" names the operator's VISIBLE form row. `apps/erp/src/app/inventory/deliveries/actions.ts` numbers rows before it drops empty ones and passes `lineNo` on each line; the domain uses `line.lineNo ?? i + 1`.
 - **Proof photo:** the better local sentence moves into the domain (`refuse(raw, "That photo could not be found — try attaching it again.")` at `documents.ts:115`), and the now-dead local branch in `inventory/deliveries/actions.ts` is deleted.
 - **S5.1d X1** (raw-text source scan) is dropped: it pinned spelling, not behaviour, and shaped comments. The behavioural W/S/D/L legs are the guard.
+
+---
+
+## S6: every enum key a person can see is shown as a label (rows 10, 11 precondition; DEF-431)
+
+**Status:** APPROVED 2026-09-27 (orchestrator, after independent Opus spec audit; S6 amendments folded). Replaces the S6/S6b one-liners under "Later slices". **Model:** Sonnet, tester
+then builder, per slice. **Migration:** none (constants and pure functions beside existing enums; no column, check,
+index or policy changes, so the ADR-012 checklist is not triggered).
+
+**Goal.** No screen shows an internal key (`record_sale`, `meat_slab`, `late_receipt`, `damage_storage`,
+`super_admin`) or its underscore-stripped form as visible text. Each is shown as a human label from one static map
+beside its enum. S5.4 can then name item kinds and dispositions in refusals from the same maps.
+
+### S6 evidence (planner, HEAD `567a564`, every line re-read)
+- **Labels that already exist:** `ROLE_LABEL` (`packages/auth/src/capabilities.ts:1039`) and `CAPABILITY_LABEL`
+  (`:1054`, all 96, lower-case "you can't …" phrases), both exported from `@shareat/auth` (`packages/auth/src/index.ts:19-20`).
+  Their only readers are `refusal-text.ts` and `roles.ts`. **No app file imports either.** `capabilities.ts` has no imports.
+- **Enums with no label:** `ITEM_KINDS` (`packages/db/schema/items.ts:47`), `DISCREPANCY_DISPOSITIONS`
+  (`packages/db/schema/trade-discrepancies.ts:37`), `ORDER_WASTAGE_DISPOSITIONS` (`packages/db/schema/order-wastage.ts:60`),
+  `WASTAGE_REASONS` (`packages/domain/src/stock/wastage-reasons.ts:18`, a leaf with no imports).
+  `@shareat/db` exports `ITEM_KINDS` (`packages/db/src/index.ts:246`) and `ORDER_WASTAGE_DISPOSITIONS` (`:271`), but not
+  `DISCREPANCY_DISPOSITIONS`. `packages/domain/src/index.ts:58` re-exports `wastage-reasons` whole.
+- **S5.4's inputs:** `commissary/transfer.ts:118` types `itemKind` as `string`, and `:160-166` refuses exactly when the
+  kind has no account. `INVENTORY_ACCOUNT_BY_ITEM_KIND` (`stock/receipt-posting.ts:63-71`) also maps `prepped`, which is
+  **not** in `ITEM_KINDS`. So an item-kind label lookup must take a `string` and must not fail on a value outside the
+  enum. `commissary/discrepancy.ts:36` declares its own `Disposition` union, equal to `DISCREPANCY_DISPOSITIONS`.
+- **Raw keys on screen today** (the one-liner named the first four; the planner found the rest):
+
+  | Site | Shows |
+  |---|---|
+  | `apps/erp/src/app/admin/access-defaults/grid.tsx:211`, `:319` | `{cell.capability}` in `font-mono` (desktop, mobile) |
+  | `admin/users/page.tsx:75`; `admin/users/[personId]/page.tsx:78`, `:118` | `role.replace(/_/g, ' ')` |
+  | `admin/users/[personId]/page.tsx:190` (held), `:266` (revoked), `:448` (picker) | `g.grantName` / `c` in `font-mono` (DEF-431) |
+  | `admin/users/actions.ts:241-243` | ok banner `Granted ${capabilities[0]}.` / `…: ${capabilities.join(', ')}.` (raw keys) |
+  | `admin/users/[personId]/page.tsx:242-245` | "Already held … — now held in their own right." before anyone clicks (DEF-431) |
+  | `items/page.tsx:130`, `:181`, `:217` (+ local `KINDS` copy at `:19`); `items/[id]/page.tsx:62` | `kind.replace(/_/g, ' ')` |
+  | `inventory/usage/page.tsx:139`; `inventory/usage/[id]/page.tsx:54`; `inventory/usage/NewUsageForm.tsx:119` | `reasonCode.replace(/_/g, ' ')` |
+  | `commissary/discrepancies/page.tsx:137`, `:151` | `{row.disposition}` raw (e.g. `late_receipt`) |
+  | `wastage/page.tsx:289`; `:196` | `{w.disposition}` raw (`platform_paid`); prose `<code>charged</code>` |
+- **The client boundary.** Of these files only `inventory/usage/NewUsageForm.tsx` is `'use client'`. It gets `reasons` as a
+  prop from `inventory/usage/page.tsx:105`. `tests/unit/client-bundle-boundary.test.ts` (T-266) forbids `@shareat/db` and
+  the bare `@shareat/domain` barrel in a client file. **It does not cover the `@shareat/auth` barrel**, which reaches
+  `@shareat/db` through `authorize.ts`'s repo imports. A client file importing `ROLE_LABEL` from `@shareat/auth` would pass
+  every fast gate and fail only at `next build`. This is a gap in the guard; S6a closes it.
+- **DEF-431's success signal.** `setCapabilityGrantAction` (`admin/users/actions.ts:180-248`) runs every grant in one
+  tx and redirects with `ok`/`error` (`backToUser`, `:110`). The "Hold in their own right" form (`[personId]/page.tsx:235-246`)
+  posts the same action with one hidden `capability`. Today the action cannot tell that submission apart from a picker grant.
+  The row's provenance (`positionProvenanceLine`, `:192`) is already shown beside the capability name, so the pre-click
+  sentence adds no information.
+- **Existing guards these slices must keep green:** `apps/erp/tests/t337-access-defaults-grid-render.test.ts` (form
+  multiset oracle: hidden `capability` values), `access-defaults-lib.test.ts`, `admin-users-lib.test.ts`,
+  `local-errormessage-convergence.test.ts`, `action-link-sweep.test.ts` (holds the touch-target check against the
+  multiset `touch-target-baseline.json`; no control enters or leaves), `packages/auth/tests/t343-refusal-text.test.ts` (T1: labels lower-case,
+  no `_`), `tests/unit/production-caller-ratchet.test.ts`.
+
+### S6 design (decided here)
+1. **Where labels live: beside their enum, as an exhaustive `Readonly<Record<Enum, string>>` plus a total lookup
+   function.** A new enum value with no label then fails typecheck. The files: `ITEM_KIND_LABEL` in `schema/items.ts`,
+   `DISCREPANCY_DISPOSITION_LABEL` in `schema/trade-discrepancies.ts`, `ORDER_WASTAGE_DISPOSITION_LABEL` in
+   `schema/order-wastage.ts` (all exported from `@shareat/db`), and `WASTAGE_REASON_LABEL` in `domain/src/stock/wastage-reasons.ts`.
+   Capability and role labels stay where S2 put them. Precedent: `BRANCH_ORDER_STAGE_LABEL` (`commissary/orders.ts:65`).
+2. **Lookup functions take `string`, never throw, and never echo an underscore.** `itemKindLabel`,
+   `discrepancyDispositionLabel`, `orderWastageDispositionLabel` and `wastageReasonLabel` are each
+   `Object.hasOwn(MAP, v) ? MAP[v] : humanise(v)`, where `humanise` replaces `_` with a space and upper-cases the first
+   character. A value outside the enum (`prepped`, a v1 code the ETL carried) renders as today's screens render it,
+   capitalised. `Object.hasOwn` is used so `'constructor'` never returns a prototype member. **`humanise` is never
+   exported**: each file that needs it (the three schema files, `wastage-reasons.ts`, `capabilities.ts`) keeps its own
+   private two-line copy. No shared helper file is added.
+   `capabilityTitle(name: string)` has its own rule: when `name` is a known capability (`Object.hasOwn(CAPABILITY_LABEL,
+   name)`), it is `CAPABILITY_LABEL[name]` with its first character upper-cased (`record a sale` → `Record a sale`);
+   otherwise it is `humanise(name)` (`retired_power` → `Retired power`).
+3. **Label form.** A sentence-case noun phrase for a cell, badge or option. In a sentence the caller lower-cases it,
+   as `commissary/orders.ts:422` does with `BRANCH_ORDER_STAGE_LABEL[stage].toLowerCase()`. That is how S5.4 will use
+   `itemKindLabel` and `discrepancyDispositionLabel`. `CAPABILITY_LABEL` stays lower-case, because S2's `roleMayNot`
+   completes "you can't …" with it. `capabilityTitle` (rule 2) is the capitalised form, for lists and banners.
+4. **Client components never import a label module.** The server page resolves the label strings and passes them as
+   props. `NewUsageForm` gets `readonly { value: string; label: string }[]`. S6a adds the missing `@shareat/auth` barrel
+   rule to the T-266 guard, so a future client import fails the fast gate, not the build.
+5. **The key stays the contract; only the visible text changes.** Hidden inputs, `<option value>`, URL params (`cap=`)
+   and every write keep the raw key. **Capability screens only** (`/admin/access-defaults`, `/admin/users/[personId]`
+   held rows, revoked rows and the grant picker): the label is primary text, and the raw key is shown under it as small
+   muted grey text (`block font-mono text-[11px] text-neutral-500 dark:text-neutral-400`), so an admin can match it to
+   `CAPABILITY-MATRIX.md` (Ian, 2026-09-27; DEF-431 "key as secondary text at most"). Nowhere else is a key visible:
+   roles, item kinds, dispositions and wastage reasons show the label only.
+6. **Scanner:** S6 does **not** extend `tests/unit/lib/throw-census.ts`. S6 changes no throw and no `reason:`. The keys it
+   fixes are JSX text, and the S5.3b ruling on X1 rejects raw-text source scans as the guard. S6's guards are rendered-markup
+   legs. S5.4's `reason:`-mode census is where the `key` classifier bites next.
+7. **DEF-453's rule.** A refusal or label lookup may name only records the actor is entitled to see at this store. S6 adds
+   **no** record lookup on any path. Every label is a static map. The only record names S6b shows (position and store
+   in `positionProvenanceLine`) are already on the screen today, from `userDetail(actor.orgId, …)`. The new success
+   banner names only the capability label, and nothing from the target person's rows.
+
+### Order
+**Strictly serial: S6a → S6b → S6c → S5.4, one tester and one builder** (orchestrator ruling, 2026-09-27). S6a is the only
+slice that edits packages. It also touches the shared `@shareat/db` barrel, so if another lane's hunk is in
+`packages/db/src/index.ts` the orchestrator adds S6a's export lines (the S5.0 precedent, R2 rulings). S6b edits only
+`apps/erp/src/app/admin/users/**`; S6c only the other screens. S6b's `admin/users/actions.ts` is also DEF-452's (S7's)
+file: S6b edits only the success banner there, never the local `errorMessage`, and S6b and S7 never run at the same time.
+**Caller baseline (every slice):** immediately before each slice's commit, **the orchestrator** regenerates
+`docs/production-caller-baseline.txt` from HEAD plus that slice only, with the sanctioned command
+`node scripts/production-caller-census.mjs --names > docs/production-caller-baseline.txt`
+(`tests/unit/production-caller-ratchet.test.ts` header), reviews the diff, and commits it with the slice. S6a adds
+exactly its five function names; S6b removes `capabilityTitle`; S6c removes the other four. No builder or tester
+edits the file.
+
+### Invariants (S6, in addition to 1–15)
+S6 touches no `Error.message` (Invariant 1), no refusal recording (2), no `errorMessage` branch (4, 11), and no `errors.ts`
+(7). It adds no local `errorMessage` (8), makes no app→app import (9), and no label is ever persisted, parsed back, put in
+a form value, URL param or refusal record (10).
+16. Every label map is an exhaustive `Record` over its enum, defined in the enum's own file. Every lookup function is
+    pure and total, and its result has no `_`. `humanise` is private to each file and never exported.
+17. No `'use client'` file imports `@shareat/db`, the `@shareat/domain` barrel, or the `@shareat/auth` barrel. Labels
+    reach client components as props.
+18. Form values, `<option value>`s, hidden inputs and URL params carry the raw key, byte-identical to today. The only
+    visible raw key is the muted secondary line under a capability label (design rule 5).
+19. S6 adds no record lookup. Labels are static, so nothing S6 renders can name another store's or org's record
+    (Invariant 6, DEF-453).
+
+---
+
+### S6a: label sources (the S5.4 precondition)
+**Status:** APPROVED 2026-09-27 (orchestrator, after independent Opus spec audit; S6 amendments folded). **Model:** Sonnet, tester then builder. **Migration:** none.
+
+**Contract (BUILDER).** The wording is fixed here. Changing it is a spec change.
+
+| Map (file) | Entries |
+|---|---|
+| `ITEM_KIND_LABEL` (`packages/db/schema/items.ts`, beside `:47`) | `raw_material: 'Raw material'`, `supply: 'Supply'`, `retail: 'Retail item'`, `meat_slab: 'Meat (slab)'`, `meat_sliced: 'Meat (sliced)'` |
+| `DISCREPANCY_DISPOSITION_LABEL` (`schema/trade-discrepancies.ts`, beside `:37`) | `audit: 'Audit only'`, `loss: 'Loss'`, `charge: 'Charged to a person'`, `late_receipt: 'Late receipt'` |
+| `ORDER_WASTAGE_DISPOSITION_LABEL` (`schema/order-wastage.ts`, beside `:60`) | `platform_paid: 'Platform paid'`, `absorbed: 'Store absorbed'`, `charged: 'Charged'` |
+| `WASTAGE_REASON_LABEL` (`packages/domain/src/stock/wastage-reasons.ts`, beside `:18`) | `spoilage: 'Spoilage'`, `expiry: 'Expired'`, `damage_storage: 'Damaged in storage'`, `damage_handling: 'Damaged in handling'`, `prep_loss: 'Prep loss (trim, peel, bone)'`, `overproduction: 'Overproduction'`, `theft: 'Theft or unexplained loss'`, `quality_reject: 'Failed quality check'`, `customer_return_unsellable: 'Customer return, not resellable'`, `other: 'Other'` |
+
+Functions (design rule 2): `itemKindLabel`, `discrepancyDispositionLabel`, `orderWastageDispositionLabel` (beside their
+maps, exported from `@shareat/db`); `wastageReasonLabel` (reaches `@shareat/domain` through the existing `export *`);
+`capabilityTitle(name: string)` in `packages/auth/src/capabilities.ts` (stays import-free; its own rule in design
+rule 2), exported from `packages/auth/src/index.ts`. Each file's `humanise` is a private, unexported copy. `packages/db/src/index.ts`: extend the `:246` and `:271` export lines, and add one line
+for the trade-discrepancies label and function. `CAPABILITY_LABEL` and `ROLE_LABEL` values are **not** changed.
+- **BUILDER paths:** `packages/db/schema/items.ts`, `packages/db/schema/trade-discrepancies.ts`,
+  `packages/db/schema/order-wastage.ts`, `packages/db/src/index.ts`, `packages/domain/src/stock/wastage-reasons.ts`,
+  `packages/auth/src/capabilities.ts`, `packages/auth/src/index.ts` (7). Source only.
+- **TESTER paths (disjoint):** `packages/db/tests/t343-s6a-enum-labels.test.ts` (new; the **three** db maps and
+  functions), `packages/domain/tests/t343-s6a-wastage-reason-labels.test.ts` (new; the **one** domain map and function),
+  `packages/auth/tests/t343-s6a-capability-title.test.ts` (new), `tests/unit/client-bundle-boundary.test.ts` (one new `it`
+  plus its negative half only). **Imports come from the defining files, not the barrels:** `packages/db/schema/items.ts`,
+  `…/trade-discrepancies.ts`, `…/order-wastage.ts`, `packages/domain/src/stock/wastage-reasons.ts`,
+  `packages/auth/src/capabilities.ts` (so a missing barrel line cannot mask or fake a red). Pure unit tests only: no
+  Postgres. The caller baseline is the orchestrator's (see Order), with S6a's five names added (the S5.0
+  `humanDate`/`internalFault` precedent, R2 rulings).
+
+| Id | Leg | Asserts | Red for the right reason |
+|---|---|---|---|
+| L1 | + | each map `toEqual`s the table above exactly (three in the db test, one in the domain test); `Object.keys(MAP).sort()` equals its enum tuple sorted (no extra, none missing) | an **assertion** failure: the imported map is `undefined` (not yet exported). The only leg that fails on an assertion. A module-resolution or DB error is **not** a valid red |
+| L2 | + | for every enum value `v`: `xLabel(v) === MAP[v]` (all four functions) | `TypeError: … is not a function` (accepted for a new pure function) |
+| L3 | ⛔ | totality: `itemKindLabel('prepped') === 'Prepped'`; `wastageReasonLabel('some_old_code') === 'Some old code'`; `discrepancyDispositionLabel('constructor') === 'Constructor'` (no prototype member); no result of any function over enum values plus these three contains `_` or `\n` | `… is not a function` (accepted) |
+| L4 | + | for every `Capability` `c`: `capabilityTitle(c) === CAPABILITY_LABEL[c][0].toUpperCase() + CAPABILITY_LABEL[c].slice(1)`; `capabilityTitle('record_sale') === 'Record a sale'`; `capabilityTitle('retired_power') === 'Retired power'` | `… is not a function` (accepted) |
+| L5 | ⛔ | every value in all four maps and every `capabilityTitle(c)` is one line, starts upper-case, has no `_`, and no map has two equal values | green once L1 is green (it pins the form rule, not the words) |
+| B1 | ⛔ guard | `client-bundle-boundary`: no `'use client'` file imports the bare `'@shareat/auth'` specifier (the `'@shareat/auth/errors'` leaf stays allowed) | green on arrival (no client imports it today). Record that |
+| B1n | ⛔ | B1's matcher, fed the fixture source `"'use client';\nimport {\n  ROLE_LABEL,\n} from '@shareat/auth';"`, reports exactly 1 hit. Fed `from '@shareat/auth/errors'`, it reports 0. A matcher that matches nothing fails (DEF-179) | green on arrival |
+
+**Negative halves (unedited, must stay green):** `packages/auth/tests/t343-refusal-text.test.ts` (T1: `CAPABILITY_LABEL`
+lower-case, no duplicates), `packages/auth/tests/errors-leaf.test.ts`, `super-admin-capability-set.test.ts`,
+`packages/domain/tests/integration/consumption-posting.test.ts` and `usage-records.test.ts` (they read
+`WASTAGE_REASONS`, which is unchanged), and the existing `client-bundle-boundary` `it`s.
+**Smoketest:** none (no screen changes). **Done when:** "Done when (per slice)", with L1–L4 red→green and the raw red
+recorded (L1 an assertion, L2–L4 "is not a function"), and the orchestrator's baseline regeneration adding exactly the
+five names, each cited in the commit message.
+
+---
+
+### S6b: `/admin/users` shows labels, and says "now held in their own right" only after it is (DEF-431)
+**Status:** APPROVED 2026-09-27 (orchestrator, after independent Opus spec audit; S6 amendments folded). **Model:** Sonnet, tester then builder. **Migration:** none. **Needs S6a**
+(`capabilityTitle`); lands before S6c. It is serial with S7 too (both edit `admin/users/actions.ts`).
+Evidence: `~/.claude/skills/orchestrator/tools/t341-admin-users-page.png`.
+
+**Change (BUILDER).**
+1. **Roles.** `admin/users/page.tsx:75`, `[personId]/page.tsx:78` → `ROLE_LABEL[role]`. `[personId]/page.tsx:118` option
+   text → `ROLE_LABEL[r]`, with `value={r}` unchanged.
+2. **Capabilities.** Held rows (`:190`), revoked rows (`:266`) and the picker (`:448`) render `capabilityTitle(name)` as
+   sans primary text, with the raw key under it as the muted secondary line of design rule 5. The picker's checkbox
+   `value={c}` is unchanged.
+   `grantName` is a `string` (`packages/db/src/repo/access.ts:484`), and a retired capability can still sit on an old
+   row, which is why this uses `capabilityTitle` (total), not `CAPABILITY_LABEL[…]`.
+3. **DEF-431 second half.** Delete the pre-click `<span>` at `:242-245`. The row's provenance is already shown at `:192`.
+   Add `<input type="hidden" name="intent" value="hold_own_right" />` to the "Hold in their own right" form (`:235-246`).
+4. **Banners (`actions.ts:240-247`), success path only, after the tx commits:**
+   - `intent === 'hold_own_right'` and exactly one capability → `${capabilityTitle(cap)} is now held in their own right.`
+   - one capability otherwise → `Granted: ${capabilityTitle(cap)}.`
+   - several → `Granted ${n} capabilities: ${titles.join('; ')}.` (`;` because a label may contain a comma)
+   - revoke → `Grant revoked.`, unchanged.
+
+   `intent` only picks the wording. It never skips or changes a gate: every grant still runs `grantCapabilityAsActor` once
+   per capability. A forged `intent` on a real grant can only change the banner's wording. The local `errorMessage`
+   (`:40-108`) is **not** touched (S7, DEF-452).
+- **BUILDER paths:** `apps/erp/src/app/admin/users/page.tsx`, `apps/erp/src/app/admin/users/[personId]/page.tsx`,
+  `apps/erp/src/app/admin/users/actions.ts` (3).
+- **TESTER paths (disjoint):** `apps/erp/tests/t343-s6b-admin-users-labels.test.ts` (new). Harness:
+  `renderToStaticMarkup(await UserAccessPage({ params: Promise.resolve({ personId }), searchParams: Promise.resolve({}) }))`
+  (`.test.ts` + `createElement`, per the `t337-access-defaults-grid-render.test.ts` header). Mock `requirePageAccess`
+  (actor ≠ person, unless the leg says self), `userDetail`, and `../actions` (as t337 mocks its actions). **Two target
+  fixtures:** a **`staff`** target for U1–U4 (active grants `record_sale` with source `'grant'` and `submit_sales_day`
+  with source `'position'` via "Cashier at SmokeStore"; one revoked `void_sales_day`; the picker offers the rest of
+  `grantableCapabilitiesFor('staff')`), and a separate **`super_admin`** target for U5. Keep the real `lib.ts` helpers
+  where importable, and mock only what reaches `@shareat/db` at module scope. The action legs use the t337-actions
+  harness (`RedirectSignal`, mocked `next/navigation`, session, `withOrgPrincipal`), with **exactly this partial mock**:
+  `vi.mock('@shareat/auth', async (orig) => ({ ...(await orig()), grantCapabilityAsActor: vi.fn() }))`. **Expected
+  labels are imported from `packages/auth/src/capabilities.ts` directly** (`capabilityTitle`, `ROLE_LABEL`), never typed
+  in and never read through the mocked barrel. **Visible text** = the markup with every tag removed (attribute values
+  go with the tags) and entities decoded.
+
+| Id | Leg | Asserts | Red for the right reason |
+|---|---|---|---|
+| U1 | + | (`staff` target) visible text contains `capabilityTitle` of `record_sale`, `submit_sales_day`, `void_sales_day` and of one picker capability; each capability's raw key appears **only** inside its muted secondary element (the design-rule-5 class), directly after its label, and no snake-case token (`/\b[a-z]+(?:_[a-z]+)+\b/`) appears in visible text outside those elements | the label is absent; the key is the primary `font-mono` text |
+| U2 | + | (`staff` target) the `'position'` row renders the "Hold in their own right" form with hidden `intent=hold_own_right`, and visible text does **not** contain `now held in their own right` | visible text contains it, and no `intent` field exists |
+| U3 | ⛔ | (`staff` target) self page (actor = person): no "Hold in their own right" form (unchanged, `isSelf`) | green now |
+| U4 | ⛔ | (`staff` target) every picker checkbox `value` and the hold form's hidden `capability` are raw keys; the set of picker values equals `grantableCapabilitiesFor('staff')` minus held (form contract, Invariant 18) | green now |
+| U5 | + | (`super_admin` target) detail page visible text contains `Super admin` (exact case), and the role `<select>` options have `value`s = `ROLES` and texts = `ROLE_LABEL`; list page (`admin/users/page.tsx`, its data function mocked) shows `Super admin` for a super-admin row | visible `super admin` (lower case, from `replace`) |
+| A1 | + | `setCapabilityGrantAction`, granted, one capability `record_sale` → `ok === 'Granted: Record a sale.'` | `Granted record_sale.` |
+| A2 | + | same with `intent=hold_own_right` → `ok === 'Record a sale is now held in their own right.'` | `Granted record_sale.` |
+| A3 | + | two capabilities → `ok` names both titles joined by `; `, with no `_` | contains `record_sale, submit_sales_day` |
+| A4 | ⛔ | `intent=hold_own_right` with two capabilities → the A3 banner (the own-right sentence is for exactly one) | green after the change (write it with A2; it is the ⛔ half) |
+| A5 | ⛔ | `grantCapabilityAsActor` throws `AuthorizationError(…, S)` with `intent=hold_own_right` → an `error` param, no `ok`, and nothing says `now held`; `grantCapabilityAsActor` is called once per capability in every granted leg | green now for the call count; the `ok` absence must hold after |
+| A6 | ⛔ | revoke → `ok === 'Grant revoked.'` | green now |
+
+**Negative halves (unedited, must stay green):** `apps/erp/tests/admin-users-lib.test.ts`,
+`local-errormessage-convergence.test.ts` (`admin/users/actions.ts` still declares its local `errorMessage`),
+`tests/unit/route-capability-coverage.test.ts`, `apps/erp/tests/action-link-sweep.test.ts` (it holds the touch-target
+check against `touch-target-baseline.json`; no control enters or leaves), and the grant integration files
+`packages/auth/tests/integration/roles.test.ts`, `packages/domain/tests/integration/position-defaults.test.ts`,
+`packages/domain/tests/integration/t341-position-grants-per-store.test.ts`.
+**Smoketest (9008, screenshots, desktop and phone width, both themes).** (a) `/admin/users`: roles read `Super admin` /
+`Manager`. (b) `/admin/users/<staff person>`: held and revoked rows and the picker show labels, each with its key in
+muted grey under it. (c) On a position-held row: no "now held" text before the click. Click "Hold in their
+own right" → the banner "<Label> is now held in their own right.", and the row now shows its grant provenance.
+**Done when:** as per slice; U1, U2, U5, A1–A3 red→green with the raw red recorded; the orchestrator's baseline
+regeneration removes `capabilityTitle`.
+
+---
+
+### S6c: the other screens show labels (access defaults, items, usage, discrepancies, order wastage)
+**Status:** APPROVED 2026-09-27 (orchestrator, after independent Opus spec audit; S6 amendments folded). **Model:** Sonnet, tester then builder. **Migration:** none. **After S6b**
+(strictly serial; no shared path, but one tester and one builder).
+
+**Change (BUILDER).**
+
+| File | Change |
+|---|---|
+| `admin/access-defaults/grid.tsx:211`, `:319` | render `capabilityTitle(cell.capability)` directly as sans primary text, with `cell.capability` under it as the muted secondary line (design rule 5); hidden inputs (`:38`) unchanged. `GridCapability` and `lib.ts` are **not** changed |
+| `items/page.tsx:19`, `:130`, `:181`, `:217` | delete the local `KINDS` copy and use `ITEM_KINDS` from `@shareat/db` (server file; precedent `wastage/page.tsx:2`); `:130`/`:181` → `itemKindLabel(kind)`; `:217` option text → `ITEM_KIND_LABEL[k]`, `value={k}` |
+| `items/[id]/page.tsx:62` | `itemKindLabel(item.kind)` |
+| `inventory/usage/page.tsx:105`, `:139` | pass `reasons={WASTAGE_REASONS.map((value) => ({ value, label: WASTAGE_REASON_LABEL[value] }))}`; `:139` → `wastageReasonLabel(r.reasonCode)` (the `'—'` null arm kept) |
+| `inventory/usage/NewUsageForm.tsx:48`, `:117-120` | prop type `readonly { value: string; label: string }[]`; `<option value={r.value}>{r.label}</option>`. **No import added** (Invariant 17) |
+| `inventory/usage/[id]/page.tsx:54` | `wastageReasonLabel(record.reasonCode)` |
+| `commissary/discrepancies/page.tsx:137`, `:151` | `discrepancyDispositionLabel(row.disposition)` (null arms kept); the `<select>` at `:162-169` is unchanged |
+| `wastage/page.tsx:289`, `:196` | `orderWastageDispositionLabel(w.disposition)` when non-null (today's empty render for null kept); `:196` prose `<code>charged</code>` → `“${ORDER_WASTAGE_DISPOSITION_LABEL.charged}”` |
+
+- **BUILDER paths:** `apps/erp/src/app/admin/access-defaults/grid.tsx`, `apps/erp/src/app/items/page.tsx`,
+  `apps/erp/src/app/items/[id]/page.tsx`, `apps/erp/src/app/inventory/usage/{page.tsx,NewUsageForm.tsx}`,
+  `apps/erp/src/app/inventory/usage/[id]/page.tsx`, `apps/erp/src/app/commissary/discrepancies/page.tsx`,
+  `apps/erp/src/app/wastage/page.tsx` (8).
+- **TESTER paths (disjoint):** `apps/erp/tests/t343-s6c-screen-labels.test.ts` (new). Grid legs reuse the
+  `t337-access-defaults-grid-render.test.ts` fixture approach (actions mocked, `gridCapabilityGroups()` called live).
+  Page legs render `await <Page>({ params?, searchParams })` with the page's own data functions mocked at their import
+  specifiers (session, the page's `./lib`, and `withOrgPrincipal` returning the fixture without calling its callback).
+  **If a page cannot be rendered in roughly 40 lines of mocks, STOP and report QUESTION. Do not substitute a source scan
+  (S5.3b ruling on X1).** Visible text is defined as in S6b.
+
+| Id | Leg | Asserts | Red for the right reason |
+|---|---|---|---|
+| G1 | + | `DesktopGrid` and `MobileSections`: for every offerable capability, visible text contains `capabilityTitle(c)` (imported from `packages/auth/src/capabilities.ts`), and `c` appears only inside the muted secondary element directly after it; no snake-case token (`/\b[a-z]+(?:_[a-z]+)+\b/`) appears in visible text outside those elements | the label is absent; the key is the primary `font-mono` text |
+| G3 | ⛔ | the rendered forms' hidden `capability` values equal the offerable set (t337 R2, green unedited, is the full oracle; this leg re-asserts it on G1's fixture) | green now |
+| I1 | + | items list page: a `meat_slab` item row and a `meat_sliced` pending request show `Meat (slab)` / `Meat (sliced)`; visible text has no `meat slab` and no snake-case token; the kind `<select>`'s option `value`s are exactly `ITEM_KINDS` | visible `meat slab` |
+| I2 | + | item detail page for a `raw_material` item shows `Raw material` (exact case) and no `raw material` | `raw material` (lower case) |
+| R1 | + | usage list page: a wastage row with `damage_storage` shows `Damaged in storage`; `NewUsageForm` (mocked to capture props) receives `reasons` whose `value`s are exactly `WASTAGE_REASONS` and whose `label`s are `WASTAGE_REASON_LABEL[value]`; and the source of `inventory/usage/NewUsageForm.tsx` (read from disk) has no `import` of any `@shareat/` specifier (Invariant 17 for this file) | visible `damage storage`; the prop is a `string[]` (the import check is green now and must stay green) |
+| R2 | + | usage detail page with `prep_loss` → `Prep loss (trim, peel, bone)` | `prep loss` |
+| R3 | ⛔ | a row whose `reasonCode` is outside the enum (`'legacy_code'`) renders `Legacy code`, not a blank and not `legacy_code` | the red is `legacy code` (lower case); write it with R1 |
+| D1 | + | discrepancies page: a resolved `late_receipt` row shows `Late receipt` in both the status line (`:137`) and the resolved sentence (`:151`); the `<select name="disposition">` option `value`s are unchanged | visible `late_receipt` |
+| OW1 | + | wastage page: a recent `platform_paid` row shows `Platform paid`; a row with `disposition: null` renders no disposition text (unchanged) | visible `platform_paid` |
+
+(The `NewUsageForm` reason `<select>` renders only after the client flips `kind` to `wastage`, so its option text is
+proven by R1's prop contract plus the smoketest, not by static markup.)
+
+**Negative halves (unedited, must stay green):** `t337-access-defaults-grid-render.test.ts`, `t337-access-defaults-actions.test.ts`,
+`apps/erp/tests/access-defaults-lib.test.ts` (unedited: `lib.ts` does not change), `action-link-sweep.test.ts` (the
+touch-target check), `tests/unit/client-bundle-boundary.test.ts` (its rules, incl. S6a's B1, hold for every client file;
+R1 carries the file-specific `NewUsageForm.tsx` check), and `packages/domain/tests/integration/usage-records.test.ts`.
+**Smoketest (9008, screenshots, desktop and phone width, both themes).** `/admin/access-defaults` (a store area open:
+labels, each with its key in muted grey under it); `/items` (kind column, New item kind select); `/inventory/usage` (switch to Wastage: the reason
+select shows labels; the list shows a label); `/commissary/discrepancies` (a resolved row); `/wastage` (recent list).
+**Done when:** as per slice; G1, I1, I2, R1, R2, D1, OW1 red→green with the raw red recorded; the orchestrator's baseline
+regeneration removes the remaining four S6a names, so none of the five is left. After S6a+S6b+S6c, stamp DEF-431 FIXED,
+and S5.4 is unblocked.
+
+### S6 out of scope
+Refusal text for kinds and dispositions (S5.4). The app regex wrappers, including `admin/users/actions.ts:40-108` and
+`admin/access-defaults/actions.ts:57` (S7/S8, DEF-452). Labels for enums not on screen raw today (`DELIVERY_KINDS`,
+`STOCK_MOVEMENT_KINDS`, …). Screens that already map their own labels (`inventory/production/page.tsx:22`,
+`commissary/discrepancies/page.tsx:21` `STATUS_LABEL`), which are not re-homed. The discrepancy and wastage `<select>`
+option texts, which carry account hints (`Loss — Dr 5300`). Rewording `CAPABILITY_LABEL`'s 96 phrases. POS, CUSTOMER and Website.
+
+### Ian's answers (2026-09-27), folded above
+1. **The key on admin capability screens:** shown as small muted grey text under the label, not hover-only (design
+   rule 5; S6b U1, S6c G1).
+2. **Label wording:** the S6a table is approved as drafted.
