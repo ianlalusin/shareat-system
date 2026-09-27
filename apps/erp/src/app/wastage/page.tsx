@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { orderWastageRepo, salesDaysRepo, schema, storesRepo } from '@shareat/db';
+import { ORDER_WASTAGE_DISPOSITION_LABEL, orderWastageDispositionLabel, orderWastageRepo, salesDaysRepo, schema, storesRepo } from '@shareat/db';
 import { listPostedSettlementsForStore, matchWastagesToSettlement, type SettleableOrderWastage } from '@shareat/domain';
 import { inArray } from 'drizzle-orm';
 import { toBusinessDate } from '@shareat/core/datetime';
@@ -193,7 +193,7 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
                 recovered and nothing errors.{' '}
               </>
             )}
-            A <code>charged</code> disposition needs an allocation, which this quick form does not
+            A &ldquo;{ORDER_WASTAGE_DISPOSITION_LABEL.charged}&rdquo; disposition needs an allocation, which this quick form does not
             offer; record it and use the detail page.{' '}
             <a href="/settings/wastage-monitor" className="underline underline-offset-2">
               {monitor ? 'Change the Monitor' : 'Name a Monitor'}
@@ -286,7 +286,8 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
                     <td className="px-3 py-2">{w.channel}</td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(w.amount)}</td>
                     <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">
-                      {w.disposition}{w.autoCharged ? ' (15-day backstop)' : ''}
+                      {w.disposition ? orderWastageDispositionLabel(w.disposition) : ''}
+                      {w.autoCharged ? ' (15-day backstop)' : ''}
                     </td>
                   </tr>
                 ))}

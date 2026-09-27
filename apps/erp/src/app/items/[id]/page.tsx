@@ -3,6 +3,7 @@ import { requireSession } from '../../../lib/session';
 import { getItem, itemPrices, peso, sellabilityByStore, soldAsLabel } from '../lib';
 import { whoSells } from '../../ap/lib';
 import { clearStoreSellabilityAction, setStoreSellabilityAction, updateItemFlagsAction } from '../actions';
+import { itemKindLabel } from '@shareat/db';
 import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Item — Shareat System' };
@@ -59,7 +60,7 @@ export default async function ItemDetailPage({
         </a>
         <h1 className="mt-1 text-2xl font-semibold">{item.name}</h1>
         <p className="text-sm text-neutral-500 dark:text-neutral-400">
-          <span className="font-mono text-xs">{item.code}</span> · {item.kind.replace(/_/g, ' ')} ·
+          <span className="font-mono text-xs">{item.code}</span> · {itemKindLabel(item.kind)} ·
           priced per {item.baseUnit} · {soldAsLabel(item)}
         </p>
       </div>

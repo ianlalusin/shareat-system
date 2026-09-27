@@ -212,7 +212,9 @@ function stripTags(html: string): string {
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
+    .replace(/&#x22;/gi, '"')
     .replace(/&#39;/g, "'")
+    .replace(/&#x27;/gi, "'")
     .replace(/&rsquo;/g, '’')
     .replace(/&ldquo;/g, '“')
     .replace(/&rdquo;/g, '”')
@@ -330,28 +332,44 @@ describe('U1 — held/revoked/picker capabilities show the label; the raw key li
     // one revoked grant, so it legitimately renders TWICE — once in the revoked list, once in the
     // picker — and each occurrence must still be exactly one muted element within ITS OWN section.
     const heldNames = new Set(['record_sale', 'submit_sales_day']);
-    const pickerCap = lib.grantableCapabilitiesFor('staff' as Role).filter((c) => !heldNames.has(c))[0]!;
+    // Audit follow-up, 2026-09-27: every offerable capability, not just the first — sampling one
+    // (`[0]`) left the picker's other ~97 rows unasserted, including the four whose labels contain
+    // an apostrophe (manage_locations, book_missed_month, set_cash_policy,
+    // finalize_pos_usage_pull), which is exactly the shape `stripTags` missing `&#x27;` decoding
+    // would silently pass on (a bare `render()` never decodes it, only the string this test builds
+    // by hand does).
+    const offerableCaps = lib.grantableCapabilitiesFor('staff' as Role).filter((c) => !heldNames.has(c));
+    // void_sales_day is both revoked AND still offerable (the picker excludes ACTIVE grants only)
+    // — asserted separately below since it alone needs a revoked-section check too.
+    const pureOfferable = offerableCaps.filter((c) => c !== 'void_sales_day');
 
     const rawKeysToLabels: [string, string][] = [
       ['record_sale', capabilityTitle('record_sale')],
       ['submit_sales_day', capabilityTitle('submit_sales_day')],
       ['void_sales_day', capabilityTitle('void_sales_day')],
-      [pickerCap, capabilityTitle(pickerCap)],
     ];
 
-    for (const [, label] of rawKeysToLabels) {
-      expect(visibleText, `expected label "${label}" in visible text`).toContain(label);
-    }
-
-    // Every raw key found anywhere in visible text must be one of the expected ones, and must
-    // live inside a muted-secondary element — never as primary text.
-    const mutedTexts = mutedSecondaryTexts(html);
-    const foundRawKeys = [...visibleText.matchAll(SNAKE_CASE_RE)].map((m) => m[0]);
-    for (const key of foundRawKeys) {
-      expect(mutedTexts, `raw key "${key}" appeared in visible text outside any muted secondary element`).toContain(
-        key,
+    const allKeys = [...new Set(['record_sale', 'submit_sales_day', ...offerableCaps])];
+    for (const key of allKeys) {
+      expect(visibleText, `expected label "${capabilityTitle(key)}" (${key}) in visible text`).toContain(
+        capabilityTitle(key),
       );
     }
+
+    // Audit follow-up, 2026-09-27: the old check swept `visibleText` for snake_case tokens and
+    // asked whether each one was a MEMBER of `mutedSecondaryTexts(html)` — set membership, blind
+    // to how many times or WHERE a key occurred. A key rendered as primary `font-mono` text right
+    // beside its own legitimate muted copy (the exact pre-S6b shape) still passed, because the
+    // same string is also a muted text somewhere on the page. Fixed to answer the real question
+    // directly: strip every muted-secondary element out of the HTML first, then sweep what is
+    // LEFT for snake_case tokens — anything still there is outside a muted element, by
+    // construction, and the raw key lives ONLY inside one iff this is empty.
+    const withoutMutedElements = html.replace(/<(\w+)\s+class="([^"]*)">([^<]*)<\/\1>/g, (match, _tag, classAttr) => {
+      const classes = (classAttr as string).split(/\s+/);
+      return MUTED_TOKENS.every((t) => classes.includes(t)) ? '' : match;
+    });
+    const strayKeys = [...stripTags(withoutMutedElements).matchAll(SNAKE_CASE_RE)].map((m) => m[0]);
+    expect(strayKeys, `raw key(s) found outside any muted secondary element: ${strayKeys.join(', ')}`).toEqual([]);
 
     // Per-section count: the held-grants list, the picker, and the revoked list are three
     // disjoint regions of the page (in render order), so a key's muted occurrences are counted
@@ -376,16 +394,19 @@ describe('U1 — held/revoked/picker capabilities show the label; the raw key li
     expect(mutedCountIn(heldSection, 'void_sales_day'), 'void_sales_day: held section').toBe(0);
     expect(mutedCountIn(pickerSection, 'void_sales_day'), 'void_sales_day: picker').toBe(1);
     expect(mutedCountIn(revokedSection, 'void_sales_day'), 'void_sales_day: revoked section').toBe(1);
-    // pickerCap: offerable and never held or revoked — one muted element, picker only.
-    expect(mutedCountIn(heldSection, pickerCap), `${pickerCap}: held section`).toBe(0);
-    expect(mutedCountIn(pickerSection, pickerCap), `${pickerCap}: picker`).toBe(1);
-    expect(mutedCountIn(revokedSection, pickerCap), `${pickerCap}: revoked section`).toBe(0);
+    // Every OTHER offerable capability — never held, never revoked — one muted element, picker
+    // only. Every one of the ~97 rows, not a single sample.
+    for (const c of pureOfferable) {
+      expect(mutedCountIn(heldSection, c), `${c}: held section`).toBe(0);
+      expect(mutedCountIn(pickerSection, c), `${c}: picker`).toBe(1);
+      expect(mutedCountIn(revokedSection, c), `${c}: revoked section`).toBe(0);
+    }
 
     // "directly after its label" — within the SAME <li> row, the label precedes the muted key.
     // (record_sale/submit_sales_day/void_sales_day only: each has exactly one <li> row carrying
     // it. The picker's own items live in <label> elements, not <li>, and are covered by the
     // per-section counts above.)
-    for (const [rawKey, label] of rawKeysToLabels.slice(0, 3)) {
+    for (const [rawKey, label] of rawKeysToLabels) {
       const row = liBlocks(html).find((li) => mutedSecondaryTexts(li).includes(rawKey));
       expect(row, `no <li> row found carrying "${rawKey}" as a muted secondary element`).toBeTruthy();
       const rowText = stripTags(row!);

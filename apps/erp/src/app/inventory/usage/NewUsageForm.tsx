@@ -45,7 +45,7 @@ export function NewUsageForm({
   locations: readonly LocationOption[];
   departments: readonly DepartmentOption[];
   items: readonly ItemOption[];
-  reasons: readonly string[];
+  reasons: readonly { value: string; label: string }[];
   today: string;
 }) {
   const [kind, setKind] = useState<'usage' | 'wastage'>('usage');
@@ -115,8 +115,8 @@ export function NewUsageForm({
                 Choose a reason
               </option>
               {reasons.map((r) => (
-                <option key={r} value={r}>
-                  {r.replace(/_/g, ' ')}
+                <option key={r.value} value={r.value}>
+                  {r.label}
                 </option>
               ))}
             </select>

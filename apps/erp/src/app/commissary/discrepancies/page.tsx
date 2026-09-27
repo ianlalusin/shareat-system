@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { asc, eq } from 'drizzle-orm';
-import { lowStockRepo, schema } from '@shareat/db';
+import { discrepancyDispositionLabel, lowStockRepo, schema } from '@shareat/db';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { listStores } from '../../inventory/lib';
 import { deferDiscrepancyAction, resolveDiscrepancyAction } from './actions';
@@ -134,7 +134,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
                 </h2>
                 <span className="text-xs text-neutral-500">
                   {STATUS_LABEL[row.status] ?? row.status}
-                  {row.disposition ? ` · ${row.disposition}` : ''}
+                  {row.disposition ? ` · ${discrepancyDispositionLabel(row.disposition)}` : ''}
                   {row.deferredTo ? ` until ${row.deferredTo}` : ''}
                 </span>
               </div>
@@ -148,7 +148,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
 
               {row.status === 'resolved' ? (
                 <p className="mt-3 text-sm text-neutral-500">
-                  ⛔ Resolved as <strong>{row.disposition}</strong>. Correcting this is a reversal
+                  ⛔ Resolved as <strong>{row.disposition ? discrepancyDispositionLabel(row.disposition) : ''}</strong>. Correcting this is a reversal
                   plus a new resolution, never an edit.
                 </p>
               ) : (

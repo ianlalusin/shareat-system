@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { requireSession } from '../../../../lib/session';
 import { deleteUsageDraftAction, postUsageAction, voidUsageAction } from '../actions';
 import { usageRecordDetail } from '../lib';
+import { wastageReasonLabel } from '@shareat/domain';
 import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Usage record — Shareat System' };
@@ -51,7 +52,7 @@ export default async function UsageRecordPage({
         </h1>
         <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
           {record.usedOn} · <strong>{STATUS_LABEL[record.status] ?? record.status}</strong>
-          {record.reasonCode && <> · {record.reasonCode.replace(/_/g, ' ')}</>}
+          {record.reasonCode && <> · {wastageReasonLabel(record.reasonCode)}</>}
         </p>
       </div>
 

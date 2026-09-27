@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { WASTAGE_REASONS } from '@shareat/domain';
+import { WASTAGE_REASONS, WASTAGE_REASON_LABEL, wastageReasonLabel } from '@shareat/domain';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { requireSession } from '../../../lib/session';
 import { saveUsageDraftAction } from './actions';
@@ -102,7 +102,7 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
             locations={locations}
             departments={departments}
             items={items}
-            reasons={WASTAGE_REASONS}
+            reasons={WASTAGE_REASONS.map((value) => ({ value, label: WASTAGE_REASON_LABEL[value] }))}
             today={toBusinessDate()}
           />
         </section>
@@ -136,7 +136,7 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
                     <td className="px-3 py-2">{KIND_LABEL[r.kind] ?? r.kind}</td>
                     <td className="px-3 py-2">{r.locationName}</td>
                     <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">
-                      {r.reasonCode ? r.reasonCode.replace(/_/g, ' ') : '—'}
+                      {r.reasonCode ? wastageReasonLabel(r.reasonCode) : '—'}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">{r.lineCount}</td>
                     <td className={`px-3 py-2 font-medium ${STATUS_TONE[r.status] ?? ''}`}>

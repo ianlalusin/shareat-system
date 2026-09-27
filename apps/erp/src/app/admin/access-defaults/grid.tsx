@@ -8,7 +8,7 @@ import {
   type GridScopeGroup,
   type OverlapCountsByPosition,
 } from './lib';
-import { type Capability } from '@shareat/auth';
+import { capabilityTitle, type Capability } from '@shareat/auth';
 
 // T-334 slice 3 names `page.tsx` (`:281`) for its local BTN/INPUT sweep — this is this file's own
 // local copy, not a shared export, exactly that slice's one-constant-per-file shape. `page.tsx`
@@ -207,8 +207,11 @@ export function DesktopGrid({
                     <tbody>
                       {area.capabilities.map((cell) => (
                         <tr key={cell.capability} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
-                          <td className="px-3 py-2 font-mono text-xs">
-                            {cell.capability}
+                          <td className="px-3 py-2 text-xs">
+                            <span>{capabilityTitle(cell.capability)}</span>
+                            <span className="block font-mono text-[11px] text-neutral-500 dark:text-neutral-400">
+                              {cell.capability}
+                            </span>
                             {cell.inherited && (
                               <span className="ml-2 rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-sans text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
                                 inherited
@@ -315,13 +318,16 @@ export function MobileSections({
                                 return (
                                   <div key={cell.capability} className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
                                     <div className="flex items-center justify-between gap-3">
-                                      <span className="min-w-0 font-mono text-xs">
-                                        {cell.capability}
+                                      <span className="min-w-0 text-xs">
+                                        <span>{capabilityTitle(cell.capability)}</span>
                                         {cell.inherited && (
                                           <span className="ml-2 block font-sans text-[11px] text-neutral-500 dark:text-neutral-400">
                                             Every staff member already has this through the role matrix.
                                           </span>
                                         )}
+                                        <span className="block font-mono text-[11px] text-neutral-500 dark:text-neutral-400">
+                                          {cell.capability}
+                                        </span>
                                       </span>
                                       <div className="w-24 shrink-0">
                                         {cell.inherited ? (

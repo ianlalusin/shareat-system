@@ -227,7 +227,10 @@ export default async function UserAccessPage({
                         .
                       </span>
                       {/* T-291 §C3 — Ian's decision 5: a hand-grant of a capability already held
-                          via a position upgrades its provenance to `'grant'`, one submission of
+                          via a position creates a SECOND, org-wide (store-NULL) person-level grant
+                          row alongside it — the position-sourced (store-scoped) row is untouched
+                          (migration 0159; `access.ts:637-655` only matches/upgrades an existing
+                          store-NULL row, so a position row never qualifies). One submission of
                           `setCapabilityGrantAction` the picker cannot reach on its own, because
                           `grantableCapabilitiesFor` already removed every held capability from it
                           (page.tsx `offerable`, `lib.ts`'s own comment on that function). Not
