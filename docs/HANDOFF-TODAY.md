@@ -38,6 +38,7 @@ integration **3416/3416, 174 files** · build 0.
   455, 466, 468, 471, 472, 473.
 
 ## Pick up here
+0. **Post-commit `/code-review` still owed** for `33dbd3f` (S5.5s) and `8d14e7a` (T-349 S2b) — every other slice today had one.
 1. **T-343 S5.5t** — approved (§S5.5t). Tester's R-legs exist in `apps/erp/tests/t343-s5-5t-number-boxes.test.ts`
    (6 red, uncommitted); the action-level file `apps/erp/tests/integration/t343-s5-5t-followups.test.ts` is not started.
    Note: attendance minute columns are `integer`, so the NaN mechanism differs from money — probe before asserting.
