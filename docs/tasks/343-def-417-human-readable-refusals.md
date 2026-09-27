@@ -2295,7 +2295,7 @@ a hidden field (`:144`); nothing is written from what was typed. Harmless.
    **Blank (Ian, Q2):** `int()` stops returning its fallback — `''` or spaces → `refuse(\`updateAttendanceConfigAction:
    ${key} is blank\`, \`${label} — enter a whole number from ${min} to ${max}.\`)` (no `max` → `…, ${min} or more.`);
    the `fallback` parameter goes. `intOrNull()` (auto clock-out hour only) keeps blank = `null` — the page's own hint
-   "Blank = this store never auto-clears". **Order is load-bearing for `1,5`:** `Number('1,5')` is `NaN`, so S5.5q's
+   "Blank = this store never auto-clears". **Ian confirmed 2026-09-28: blank auto clock-out stays "never".** **Order is load-bearing for `1,5`:** `Number('1,5')` is `NaN`, so S5.5q's
    finiteness refusal fires first and `1,5` gets `${label} — "1,5" is not a number.`, never the whole-number sentence;
    the whole-number/range sentence is reached only by finite non-whole or out-of-range text (`1.5`, `-1`, `70`). A new
    `dec2(fd, key, label, min)` for the nine `numeric(4,2)` fields: `''` → `${label} — enter a number.`; not
