@@ -343,6 +343,110 @@ describe('P4 — grantSummaryLine over the folded list', () => {
   );
 });
 
+describe('P5 (S2b item 2) — one NULL-store grant covering TWO position rows at two stores shows BOTH jobs', () => {
+  it(
+    'wanted: "also via Cashier at SmokeStore" AND "also via Supervisor at B Store" both appear — was red before S2b: lib.ts:230 `alsoViaByOtherId.set` only runs `if (!alsoViaByOtherId.has(cover.id))`, so the SECOND covered position\'s job is silently dropped (alsoVia is typed as one PositionDefaultGrant, not an array)',
+    async () => {
+      userDetailMock.mockResolvedValueOnce(
+        baseDetail(
+          [
+            // A NULL-store hand grant — "covers every store" per foldActiveGrants' own cover
+            // predicate (`cover.storeId === position.storeId || cover.storeId === null`).
+            handGrant({ id: 'grant-hand-orgwide', storeId: null }),
+            positionGrant({ id: 'grant-position-a', storeId: STORE_A.id, sourceRef: 'posdefault-a' }),
+            positionGrant({
+              id: 'grant-position-b',
+              storeId: STORE_B.id,
+              sourceRef: 'posdefault-b',
+              positionSource: { id: 'posdefault-b', positionId: 'pos-supervisor', positionName: 'Supervisor', storeId: STORE_B.id, storeName: STORE_B.name, revokedAt: null },
+            }),
+          ],
+          [STORE_A, STORE_B],
+        ),
+      );
+      const html = await renderUserAccessPage(STAFF_PERSON_ID);
+      const visibleText = stripTags(html);
+
+      // Both positions are covered — only one line for the capability, not three.
+      expect(rowsCarryingCapability(html), 'wanted: one line — the org-wide grant folds both position rows').toHaveLength(1);
+      expect(visibleText, 'wanted: the first covered job\'s provenance').toContain('via Cashier at SmokeStore');
+      expect(visibleText, 'wanted: the SECOND covered job\'s provenance too — was red before S2b: dropped').toContain('via Supervisor at B Store');
+    },
+    30000,
+  );
+});
+
+describe('P6 (S2b item 3) — the picker excludes only an ORG-WIDE hold, not a store-scoped one or a bare position row', () => {
+  // ⚠️ Parses the whole tag rather than assuming attribute order (React renders `class` before
+  // `value` here) — same approach as t343-s6b's own `checkboxValuesOf`. A hold/revoke form's
+  // hidden field never carries `type="checkbox"`, so this can only match the picker.
+  function pickerOffersCapability(html: string): boolean {
+    const inputRe = /<input\b[^>]*>/g;
+    let m: RegExpExecArray | null;
+    while ((m = inputRe.exec(html))) {
+      const tag = m[0];
+      if (!/type="checkbox"/.test(tag)) continue;
+      if (!/name="capability"/.test(tag)) continue;
+      if (new RegExp(`value="${CAP}"`).test(tag)) return true;
+    }
+    return false;
+  }
+
+  it(
+    'wanted: a store-scoped hand grant leaves the capability offerable org-wide in the picker — was red before S2b: [personId]/page.tsx:66 excluded it for ANY active row, store-scoped or not',
+    async () => {
+      userDetailMock.mockResolvedValueOnce(baseDetail([handGrant({ id: 'grant-hand-a', storeId: STORE_A.id })]));
+      const html = await renderUserAccessPage(STAFF_PERSON_ID);
+      expect(
+        pickerOffersCapability(html),
+        'wanted: the capability is still offerable org-wide via the picker (a store-scoped hold does not exhaust it) — was red before S2b: excluded',
+      ).toBe(true);
+    },
+    30000,
+  );
+
+  it(
+    'wanted: a bare (uncovered) position row also leaves the capability offerable in the picker', async () => {
+      userDetailMock.mockResolvedValueOnce(baseDetail([positionGrant()]));
+      const html = await renderUserAccessPage(STAFF_PERSON_ID);
+      expect(pickerOffersCapability(html), 'a position row alone must not exhaust the org-wide picker slot').toBe(true);
+    },
+    30000,
+  );
+
+  it(
+    'wanted: an ORG-WIDE (NULL-store) hold DOES exclude the capability from the picker — unchanged, a control for the two legs above',
+    async () => {
+      userDetailMock.mockResolvedValueOnce(baseDetail([handGrant({ id: 'grant-hand-orgwide', storeId: null })]));
+      const html = await renderUserAccessPage(STAFF_PERSON_ID);
+      expect(pickerOffersCapability(html), 'an org-wide hold must still exhaust the picker').toBe(false);
+    },
+    30000,
+  );
+});
+
+describe('P7 (S2b item 4) — the revoked list names the store for a store-scoped hand grant', () => {
+  it(
+    'wanted: "hand-granted at SmokeStore" in the revoked list — was red before S2b: [personId]/page.tsx:307-310 read the bare grantSourceLabel, no store name',
+    async () => {
+      userDetailMock.mockResolvedValueOnce(
+        baseDetail([
+          handGrant({
+            id: 'grant-hand-revoked',
+            storeId: STORE_A.id,
+            revokedAt: new Date('2026-01-05T00:00:00Z'),
+            revokeReason: 'test revoke',
+          }),
+        ]),
+      );
+      const html = await renderUserAccessPage(STAFF_PERSON_ID);
+      const visibleText = stripTags(html);
+      expect(visibleText, 'wanted: the revoked row names its store too').toContain('hand-granted at SmokeStore');
+    },
+    30000,
+  );
+});
+
 // =================================================================================================
 // A1-A4, A2e — setCapabilityGrantAction banners
 // =================================================================================================

@@ -62,7 +62,10 @@ export default async function UserAccessPage({
   const isSelf = actor.personId === personId;
   const activeGrants = grants.filter((g) => g.revokedAt === null);
   const revokedGrants = grants.filter((g) => g.revokedAt !== null);
-  const heldNames = new Set(activeGrants.map((g) => g.grantName));
+  // T-349 §4b item 3 (S2b) — excludes only an ORG-WIDE hold (an active row with `storeId === null`).
+  // A store-scoped hold or a bare 'position' row does not exhaust the org-wide picker slot; the
+  // picker still lets an admin grant the capability org-wide on top of it.
+  const heldNames = new Set(activeGrants.filter((g) => g.storeId === null).map((g) => g.grantName));
   const offerable = grantableCapabilitiesFor(person.role).filter((c) => !heldNames.has(c));
   const scopedCount = stores.filter((s) => s.inScope).length;
   // T-349 / DEF-456 §3.4 — one line per capability and store; a covered 'position' row folds into
@@ -203,11 +206,11 @@ export default async function UserAccessPage({
                   <span>
                     <span>{capabilityTitle(g.grantName)}</span>
                     <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">{provenance}</span>
-                    {alsoVia && (
-                      <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">
-                        also {positionProvenanceLine(alsoVia)}
+                    {alsoVia.map((source) => (
+                      <span key={source.id} className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">
+                        also {positionProvenanceLine(source)}
                       </span>
-                    )}
+                    ))}
                     <span className="block font-mono text-[11px] text-neutral-500 dark:text-neutral-400">
                       {g.grantName}
                     </span>
@@ -307,7 +310,9 @@ export default async function UserAccessPage({
                   <span className="block text-neutral-500 dark:text-neutral-400">
                     {g.grantSource === 'position'
                       ? positionProvenanceLine(g.positionSource)
-                      : grantSourceLabel(g.grantSource)}{' '}
+                      : g.grantSource === 'grant' && g.storeId
+                        ? `hand-granted at ${storeNameById.get(g.storeId) ?? 'an unknown store'}`
+                        : grantSourceLabel(g.grantSource)}{' '}
                     · {g.revokeReason}
                   </span>
                 </li>

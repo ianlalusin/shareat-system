@@ -127,7 +127,10 @@ describe('H1 — widening: a hold via positionGrantId must not authorise outside
 
 describe('H2 — row shape after a hold: exactly one new active row, "grant", store A, source_ref NULL', () => {
   it(
-    'no active NULL-store row for the capability remains',
+    // S2b item 7 — honest title: the describe already states everything this leg checks; the it()
+    // title used to name only the LAST assertion (no lingering NULL-store row), understating the
+    // other four (exactly-one row, store A, source_ref null, granted_by) the body actually pins.
+    'exactly one new "grant" row at store A, source_ref NULL, granted_by the actor, and no lingering NULL-store row',
     async () => {
       const f = await fixture('h2');
       await asOrg(f.orgId, (tx) => holdOwnRight(tx, f.admin, { personId: f.staffId, capability: CAP, positionGrantId: f.positionGrantId }));
@@ -348,7 +351,11 @@ describe('H7 (repo, §3.2 item 8) — the store-scoped "grant" row\'s source_ref
   );
 });
 
-describe('H8 — the store comes only from the position row; a forged store writes nothing and refuses', () => {
+describe('H8 — structural: the input has no store field at all; a row is always written at the POSITION row\'s own store, never a forged one', () => {
+  // S2b item 7 — honest title: the old describe said "writes nothing and refuses", but neither
+  // happens — the leg below writes a row (at store A) and never throws. What it actually proves is
+  // structural: `GrantCapabilityAsActorInput` carries no `storeId` field for a caller to forge in
+  // the first place, so a forged one is silently unreachable, not refused.
   it(
     'a positionGrantId whose own store is A, but a forged storeId argument naming B, still resolves to A\'s store — never B',
     async () => {
@@ -428,6 +435,67 @@ describe('H9 — a hold on an org-scoped (not store-scoped) capability writes NU
       );
       expect(second.wrote, 'a second hold must write nothing').toBe(false);
       expect(second.heldEverywhere, 'wanted: heldEverywhere true (a NULL-store row covers every store)').toBe(true);
+    },
+    30000,
+  );
+});
+
+describe('H11 (S2b item 6) — deterministic cover: a store-scoped row and a NULL-store row both existing, the NULL-store row must win', () => {
+  it(
+    'heldEverywhere:true regardless of which row was inserted first — was red before S2b: measured (zzprobe11, created then deleted) — with the store-scoped row inserted BEFORE the NULL-store row, repo/access.ts ~:659 has no ORDER BY on the `.limit(1)` cover query, and returns the store-scoped row, reporting heldEverywhere:false even though a NULL-store row (covers everywhere) exists',
+    async () => {
+      const f = await fixture('h11');
+      // Order matters for the current (unordered) query — inserted in the sequence measured to
+      // reproduce the bug: store-scoped row FIRST, then the NULL-store row.
+      await sql`insert into person_grants (person_id, grant_name, grant_source, source_ref, granted_by, store_id) values (${f.staffId}, ${CAP}, 'grant', null, ${f.adminId}, ${f.storeAId})`;
+      await sql`insert into person_grants (person_id, grant_name, grant_source, source_ref, granted_by, store_id) values (${f.staffId}, ${CAP}, 'grant', null, ${f.adminId}, null)`;
+
+      const result = await asOrg(f.orgId, (tx) => holdOwnRight(tx, f.admin, { personId: f.staffId, capability: CAP, positionGrantId: f.positionGrantId }));
+      expect(result.wrote, 'nothing new should be written — both rows already cover').toBe(false);
+      expect(result.heldEverywhere, 'wanted: true — a NULL-store row exists, so everywhere is covered regardless of query row order').toBe(true);
+    },
+    30000,
+  );
+});
+
+describe('H10 (S2b item 1) — org-scoped hold over an existing NULL-store "elevation" row: the rank-upgrade IS a write', () => {
+  const ORG_CAP = 'manage_fixed_assets' as const;
+
+  async function orgCapFixture(hint: string) {
+    const f = await fixture(hint);
+    await asOrg(f.orgId, (tx) =>
+      setPositionDefault(tx, f.admin, { positionId: f.cashierId, storeId: f.storeAId, capability: ORG_CAP, on: true }),
+    );
+    const [row] = await sql<{ id: string }[]>`
+      select id from person_grants
+      where person_id = ${f.staffId} and grant_name = ${ORG_CAP} and grant_source = 'position' and revoked_at is null`;
+    return { ...f, orgCapPositionGrantId: row!.id };
+  }
+
+  it(
+    'the "elevation" row upgrades in place to "grant" — wrote:true (was red before S2b: unconditional wrote:false on the existing-row arm)',
+    async () => {
+      const f = await orgCapFixture('h10');
+      // ⚠️ repo/access.ts ~:721-739 — the person-level (org-scoped) "existing" arm: when a lower-
+      // ranked NULL-store row already exists, it upgrades `grantSource` in place (the UPDATE
+      // genuinely runs — `grantSourceRank('grant')=2 > grantSourceRank('elevation')=0`) but returns
+      // `{ wrote: false, heldEverywhere: true }` UNCONDITIONALLY, regardless of whether that UPDATE
+      // fired. The banner (`admin/users/actions.ts`) reads `wrote` to choose "…is now held…" vs
+      // "…was already held…" — so a real rank upgrade is reported as a no-op today.
+      await sql`insert into person_grants (person_id, grant_name, grant_source, source_ref, granted_by) values (${f.staffId}, ${ORG_CAP}, 'elevation', null, ${f.adminId})`;
+
+      const before = await activeGrantRows(f.staffId, ORG_CAP);
+      expect(before.find((r) => r.store_id === null)?.grant_source, 'setup: the pre-existing row is elevation').toBe('elevation');
+
+      const result = await asOrg(f.orgId, (tx) =>
+        holdOwnRight(tx, f.admin, { personId: f.staffId, capability: ORG_CAP, positionGrantId: f.orgCapPositionGrantId }),
+      );
+
+      const after = await activeGrantRows(f.staffId, ORG_CAP);
+      expect(after.length, 'no new row — the existing NULL-store row is upgraded in place, not duplicated').toBe(before.length);
+      const row = after.find((r) => r.store_id === null);
+      expect(row?.grant_source, 'the row rank-upgraded to grant').toBe('grant');
+      expect(result.wrote, 'wanted: true — the upgrade IS a write').toBe(true);
     },
     30000,
   );

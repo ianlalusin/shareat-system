@@ -206,17 +206,18 @@ export function grantSummaryLine(grants: Pick<GrantRow, 'grantSource'>[]): strin
  */
 export interface FoldedGrant {
   grant: GrantWithSource;
-  /** Set only on the covering row's own line, when it folds an active `'position'` row into
-   *  itself. Null on every uncovered row (every `'position'` line still shown is, by definition,
-   *  uncovered — a covered one never gets its own `FoldedGrant`). */
-  alsoVia: PositionDefaultSource | null;
+  /** Every active `'position'` row this line's cover folds in — T-349 §4b item 2 (S2b): an
+   *  org-wide (NULL-store) cover can fold MORE than one job (one per store), and every one of them
+   *  must appear, not just the first. Empty on every uncovered row (every `'position'` line still
+   *  shown is, by definition, uncovered — a covered one never gets its own `FoldedGrant`). */
+  alsoVia: PositionDefaultSource[];
 }
 
 export function foldActiveGrants(grants: readonly GrantWithSource[]): FoldedGrant[] {
   const positions = grants.filter((g) => g.grantSource === 'position');
   const others = grants.filter((g) => g.grantSource !== 'position');
 
-  const alsoViaByOtherId = new Map<string, PositionDefaultSource | null>();
+  const alsoViaByOtherId = new Map<string, PositionDefaultSource[]>();
   const coveredPositionIds = new Set<string>();
   for (const position of positions) {
     const cover = others.find(
@@ -227,14 +228,18 @@ export function foldActiveGrants(grants: readonly GrantWithSource[]): FoldedGran
     );
     if (cover) {
       coveredPositionIds.add(position.id);
-      if (!alsoViaByOtherId.has(cover.id)) alsoViaByOtherId.set(cover.id, position.positionSource);
+      if (position.positionSource) {
+        const list = alsoViaByOtherId.get(cover.id) ?? [];
+        list.push(position.positionSource);
+        alsoViaByOtherId.set(cover.id, list);
+      }
     }
   }
 
-  const otherLines = others.map((g) => ({ grant: g, alsoVia: alsoViaByOtherId.get(g.id) ?? null }));
+  const otherLines = others.map((g) => ({ grant: g, alsoVia: alsoViaByOtherId.get(g.id) ?? [] }));
   const uncoveredPositionLines = positions
     .filter((p) => !coveredPositionIds.has(p.id))
-    .map((p) => ({ grant: p, alsoVia: null }));
+    .map((p) => ({ grant: p, alsoVia: [] }));
 
   return [...otherLines, ...uncoveredPositionLines];
 }

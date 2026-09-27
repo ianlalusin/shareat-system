@@ -331,7 +331,13 @@ describe('U1 — held/revoked/picker capabilities show the label; the raw key li
     // capability is not "held" and the picker still offers it. `void_sales_day` is this fixture's
     // one revoked grant, so it legitimately renders TWICE — once in the revoked list, once in the
     // picker — and each occurrence must still be exactly one muted element within ITS OWN section.
-    const heldNames = new Set(['record_sale', 'submit_sales_day']);
+    //
+    // S2b item 3 (same ruling as U4): `heldNames` excludes only an ORG-WIDE (NULL-store) active
+    // row. `record_sale` (grant, storeId:null) stays excluded. `submit_sales_day` (position,
+    // storeId:'store-1') is store-scoped, so it is no longer excluded either — it now renders in
+    // BOTH the held-grants list AND the picker, the same "held AND still offerable" shape
+    // `void_sales_day` has, just for a different reason (store scope vs. revocation).
+    const heldNames = new Set(['record_sale']);
     // Audit follow-up, 2026-09-27: every offerable capability, not just the first — sampling one
     // (`[0]`) left the picker's other ~97 rows unasserted, including the four whose labels contain
     // an apostrophe (manage_locations, book_missed_month, set_cash_policy,
@@ -339,9 +345,11 @@ describe('U1 — held/revoked/picker capabilities show the label; the raw key li
     // would silently pass on (a bare `render()` never decodes it, only the string this test builds
     // by hand does).
     const offerableCaps = lib.grantableCapabilitiesFor('staff' as Role).filter((c) => !heldNames.has(c));
-    // void_sales_day is both revoked AND still offerable (the picker excludes ACTIVE grants only)
-    // — asserted separately below since it alone needs a revoked-section check too.
-    const pureOfferable = offerableCaps.filter((c) => c !== 'void_sales_day');
+    // void_sales_day is both revoked AND still offerable (the picker excludes ACTIVE grants only);
+    // submit_sales_day is both held (a store-scoped position row) AND still offerable (S2b item 3
+    // — the picker excludes only an org-wide hold) — both asserted separately below, each needing
+    // a shape the generic "never held, never revoked" loop does not cover.
+    const pureOfferable = offerableCaps.filter((c) => c !== 'void_sales_day' && c !== 'submit_sales_day');
 
     const rawKeysToLabels: [string, string][] = [
       ['record_sale', capabilityTitle('record_sale')],
@@ -384,9 +392,9 @@ describe('U1 — held/revoked/picker capabilities show the label; the raw key li
     const mutedCountIn = (section: string, key: string) =>
       mutedSecondaryTexts(section).filter((t) => t === key).length;
 
-    for (const activeKey of ['record_sale', 'submit_sales_day']) {
+    for (const activeKey of ['record_sale']) {
       expect(mutedCountIn(heldSection, activeKey), `${activeKey}: held section`).toBe(1);
-      expect(mutedCountIn(pickerSection, activeKey), `${activeKey}: picker (must not offer a held capability)`).toBe(0);
+      expect(mutedCountIn(pickerSection, activeKey), `${activeKey}: picker (must not offer an org-wide-held capability)`).toBe(0);
       expect(mutedCountIn(revokedSection, activeKey), `${activeKey}: revoked section`).toBe(0);
     }
     // void_sales_day: revoked AND still picker-offerable — one muted element in each of those two
@@ -394,6 +402,11 @@ describe('U1 — held/revoked/picker capabilities show the label; the raw key li
     expect(mutedCountIn(heldSection, 'void_sales_day'), 'void_sales_day: held section').toBe(0);
     expect(mutedCountIn(pickerSection, 'void_sales_day'), 'void_sales_day: picker').toBe(1);
     expect(mutedCountIn(revokedSection, 'void_sales_day'), 'void_sales_day: revoked section').toBe(1);
+    // submit_sales_day (S2b item 3): held (a store-scoped position row) AND still picker-offerable
+    // — one muted element in each of those two sections, none in the revoked list.
+    expect(mutedCountIn(heldSection, 'submit_sales_day'), 'submit_sales_day: held section').toBe(1);
+    expect(mutedCountIn(pickerSection, 'submit_sales_day'), 'submit_sales_day: picker').toBe(1);
+    expect(mutedCountIn(revokedSection, 'submit_sales_day'), 'submit_sales_day: revoked section').toBe(0);
     // Every OTHER offerable capability — never held, never revoked — one muted element, picker
     // only. Every one of the ~97 rows, not a single sample.
     for (const c of pureOfferable) {
@@ -467,7 +480,12 @@ describe('U4 — form contract unchanged: picker checkboxes and the hold form\'s
     userDetailMock.mockResolvedValueOnce(staffDetail());
     const html = await renderUserAccessPage(STAFF_PERSON_ID);
 
-    const heldNames = new Set(['record_sale', 'submit_sales_day']);
+    // S2b item 3 (TESTER-ruled edit): `heldNames` excludes only an ORG-WIDE (NULL-store) active
+    // row — a store-scoped hold or a bare position row no longer exhausts the picker's org-wide
+    // slot. `staffDetail()`'s `record_sale` is grantSource:'grant', storeId:null — still excluded.
+    // `submit_sales_day` is grantSource:'position', storeId:'store-1' — a store-scoped row, so it
+    // is now offerable in the picker too (it still gets its own hold form below, unaffected).
+    const heldNames = new Set(['record_sale']);
     const expectedOfferable = new Set(lib.grantableCapabilitiesFor('staff' as Role).filter((c) => !heldNames.has(c)));
 
     const pickerForm = formsIn(html).find(

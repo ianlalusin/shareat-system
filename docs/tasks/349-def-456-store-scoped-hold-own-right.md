@@ -1,6 +1,6 @@
 # T-349: "Hold in their own right" keeps the grant at that store (DEF-456)
 
-**Status:** APPROVED 2026-09-27 (orchestrator, after independent Opus spec audit; S3 awaits Ian's Q1)
+**Status:** S1 DONE 2026-09-27 (`3d601ab`, migration 0165), S2 DONE (`ea0ccb4`), S2b DONE 2026-09-27 (post-commit follow-ups, §4b). **S3 (repair of already-widened rows, migration 0166 reserved) awaits Ian's Q1** (§9).
 **Closes:** DEF-456 (`docs/DEFECTS-REGISTER.md:663`). **Ian's ruling, 2026-09-27:** *"keep it at that store."*
 **Migrations:** S1 `0165_t349_person_grants_store_grant.sql`, journal `when` = `1800329507084` (0164's `1800243107084` +
 86 400 000; it must exceed the previous entry, ADR-012 §5.5). S2 none. **S3 `0166_t349_def456_repair.sql` is reserved

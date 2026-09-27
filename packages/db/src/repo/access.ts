@@ -656,6 +656,9 @@ export async function grantCapability(
     // grant_source IN ('grant','owner') and (store_id = S OR store_id IS NULL). 'elevation' and a
     // NULL-source person-level row do NOT count — they can be swept, and holding at S must outlive
     // that sweep.
+    // T-349 §4b item 6 (S2b) — `ORDER BY store_id NULLS FIRST` so a NULL-store (org-wide) row wins
+    // the `.limit(1)` whenever one exists alongside a store-scoped row, regardless of insert order:
+    // without it, "heldEverywhere" depended on which row happened to sort first.
     const [covering] = await tx
       .select({ id: personGrants.id, storeId: personGrants.storeId })
       .from(personGrants)
@@ -668,6 +671,7 @@ export async function grantCapability(
           or(eq(personGrants.storeId, input.atStoreId), isNull(personGrants.storeId)),
         ),
       )
+      .orderBy(sql`${personGrants.storeId} asc nulls first`)
       .limit(1);
     if (covering) {
       return { id: covering.id, wrote: false, heldEverywhere: covering.storeId === null };
@@ -733,10 +737,14 @@ export async function grantCapability(
     .limit(1);
   if (existing) {
     const existingSource = existing.grantSource as GrantSource | null;
-    if (grantSourceRank(input.grantSource) > grantSourceRank(existingSource)) {
+    // T-349 §4b item 1 (S2b) — the rank-upgrade (e.g. 'elevation' → 'grant') IS the intended effect
+    // of "hold in their own right": it must outlive `revokeElevationGrantsForOrg`. That is a write,
+    // and the banner (`wrote` ? "now held" : "already held") must say so.
+    const upgraded = grantSourceRank(input.grantSource) > grantSourceRank(existingSource);
+    if (upgraded) {
       await tx.update(personGrants).set({ grantSource: input.grantSource }).where(eq(personGrants.id, existing.id));
     }
-    return { id: existing.id, wrote: false, heldEverywhere: true };
+    return { id: existing.id, wrote: upgraded, heldEverywhere: true };
   }
 
   const [row] = await tx

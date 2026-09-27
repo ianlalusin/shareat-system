@@ -149,7 +149,9 @@ export async function setCapabilityGrantAction(formData: FormData): Promise<void
    *  there is no such field to forge). */
   const positionGrantId = str(formData, 'positionGrantId');
 
-  let holdResult: { wrote: boolean; heldEverywhere: boolean; storeName: string | null } | undefined;
+  // T-349 §4b item 5 (S2b) — computed inside the branch that holds the result, never through a
+  // `holdResult!` non-null assertion (RULES: prefer a guard to `!`).
+  let ok = 'Grant revoked.';
   try {
     await withOrgPrincipal(actor.orgId, async (tx) => {
       if (granted) {
@@ -164,11 +166,18 @@ export async function setCapabilityGrantAction(formData: FormData): Promise<void
           if (capabilities.length !== 1 || !positionGrantId) {
             throw new Error('Reload the page and try again.');
           }
-          holdResult = await grantCapabilityAsActor(tx, actor, {
+          const holdResult = await grantCapabilityAsActor(tx, actor, {
             personId,
             capability: capabilities[0]!,
             positionGrantId,
           });
+          ok = holdResult.wrote
+            ? holdResult.storeName === null
+              ? `${capabilityTitle(capabilities[0]!)} is now held in their own right.`
+              : `${capabilityTitle(capabilities[0]!)} is now held in their own right at ${holdResult.storeName}.`
+            : holdResult.heldEverywhere
+              ? `${capabilityTitle(capabilities[0]!)} was already held in their own right everywhere.`
+              : `${capabilityTitle(capabilities[0]!)} was already held in their own right at ${holdResult.storeName}.`;
           return;
         }
         // ⭐ DEF-223 — the GRANT goes through `grantCapabilityAsActor`, which owns the
@@ -190,6 +199,10 @@ export async function setCapabilityGrantAction(formData: FormData): Promise<void
         for (const capability of capabilities) {
           await grantCapabilityAsActor(tx, actor, { personId, capability });
         }
+        ok =
+          capabilities.length === 1
+            ? `Granted: ${capabilityTitle(capabilities[0]!)}.`
+            : `Granted ${capabilities.length} capabilities: ${capabilities.map((c) => capabilityTitle(c)).join('; ')}.`;
       } else {
         // ⚠️ The revoke branch keeps its own `authorize()` and is deliberately NOT self-checked:
         // revoking your own grant NARROWS your authority, so it cannot escalate, and refusing it
@@ -200,26 +213,13 @@ export async function setCapabilityGrantAction(formData: FormData): Promise<void
         // instead of a fixed, fabricated sentence.
         const reason = requireRevokeReason(str(formData, 'reason'));
         await accessRepo.revokeGrantById(tx, grantId, reason);
+        ok = 'Grant revoked.';
       }
     });
   } catch (err) {
     backToUser(personId, { error: errorMessage(err) });
   }
-  backToUser(personId, {
-    ok: granted
-      ? intent === 'hold_own_right'
-        ? holdResult!.wrote
-          ? holdResult!.storeName === null
-            ? `${capabilityTitle(capabilities[0]!)} is now held in their own right.`
-            : `${capabilityTitle(capabilities[0]!)} is now held in their own right at ${holdResult!.storeName}.`
-          : holdResult!.heldEverywhere
-            ? `${capabilityTitle(capabilities[0]!)} was already held in their own right everywhere.`
-            : `${capabilityTitle(capabilities[0]!)} was already held in their own right at ${holdResult!.storeName}.`
-        : capabilities.length === 1
-          ? `Granted: ${capabilityTitle(capabilities[0]!)}.`
-          : `Granted ${capabilities.length} capabilities: ${capabilities.map((c) => capabilityTitle(c)).join('; ')}.`
-      : 'Grant revoked.',
-  });
+  backToUser(personId, { ok });
 }
 
 /**
