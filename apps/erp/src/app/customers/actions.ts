@@ -8,6 +8,7 @@
 import { redirect } from 'next/navigation';
 import { arRepo } from '@shareat/db';
 import { parseMoneyInput } from '@shareat/domain/money-input';
+import { logger } from '@shareat/core/logger';
 import {
   createCustomer,
   createPriceList,
@@ -143,10 +144,19 @@ export async function autoAllocateCollectionAction(
         req.amount,
         open,
         keys,
-        req.typed.map((t) => ({
-          id: t.chargeId,
-          amount: parseMoneyInput(t.amount, `suggestCollectionAllocation: the amount typed for charge ${t.chargeId}`, 'An amount you typed against a charge'),
-        })),
+        req.typed.map((t) => {
+          // T-343 S5.5n / DEF-459 — logged before rethrowing: a malformed allocation amount is a
+          // real-world typo worth seeing in the logs, not only on the screen the throw already
+          // reaches.
+          let amount: ReturnType<typeof parseMoneyInput>;
+          try {
+            amount = parseMoneyInput(t.amount, `suggestCollectionAllocation: the amount typed for charge ${t.chargeId}`, 'An amount you typed against a charge');
+          } catch (err) {
+            logger.info({ err }, 'suggestCollectionAllocation: malformed allocation amount');
+            throw err;
+          }
+          return { id: t.chargeId, amount };
+        }),
       );
     });
     return { ok: true, allocations: result.allocations, surplus: result.surplus };
@@ -208,7 +218,13 @@ export async function recordCollectionAction(formData: FormData): Promise<void> 
         referenceNo: str(formData, 'referenceNo') || null,
         notes: str(formData, 'notes') || null,
         receiptFileId,
-        ...(creditApplied && Number(creditApplied) > 0 ? { creditApplied } : {}),
+        // T-343 S5.5n / DEF-457 — was `creditApplied && Number(creditApplied) > 0`. `Number('1,000')`
+        // is `NaN`, so a comma-typed credit was silently DROPPED rather than reaching
+        // `recordCollection`'s own `parseMoneyInput`, and the collection posted as if no credit had
+        // been applied at all. Blank stays omitted (the domain defaults to '0'); anything else,
+        // '0' included, is left for `recordCollection` to accept or refuse with a readable sentence
+        // — same fix shape as `allocations` above.
+        ...(creditApplied ? { creditApplied } : {}),
         allocations,
       });
     });

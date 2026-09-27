@@ -33,7 +33,26 @@ import { money, type Money } from '@shareat/core/money';
 export function parseMoneyInput(raw: string, rawLabel: string, humanLabel: string): Money {
   try {
     return money(raw);
-  } catch {
+  } catch (e) {
+    // T-343 S5.5n / DEF-458 — `money()`'s two failures need different advice: a malformed STRING
+    // (`TypeError`) is fixed by retyping it; an out-of-range VALUE (`RangeError`,
+    // `packages/core/src/money.ts`'s `MAX_ABS`, numeric(14,2)'s 12-integer-digit ceiling) is not
+    // fixed by any number of decimal places. Scientific notation (`1e+21`, the shape a computed
+    // huge number can take) never matches `money()`'s plain-decimal regex, so it throws the
+    // ordinary TypeError — but ONLY when it names a value actually over the ceiling does it get
+    // the "too large" sentence too; a small one ("1e-5", "3.5e1") is still just a malformed
+    // STRING for this two-decimal-place field, and keeps the decimal-places advice.
+    const trimmed = raw.trim();
+    const asNumber = Number(trimmed);
+    const hugeExponent =
+      /^[+-]?\d+(\.\d+)?e[+-]?\d+$/i.test(trimmed) && Number.isFinite(asNumber) && Math.abs(asNumber) > 999999999999.99;
+    if (e instanceof RangeError || hugeExponent) {
+      const rawMessage = `${rawLabel} — "${raw}" is too large. The most an amount can be is 999,999,999,999.99.`;
+      const err = new Error(rawMessage);
+      throw Object.assign(err, {
+        userMessage: `${humanLabel} — "${raw}" is too large. The most an amount can be is 999,999,999,999.99.`,
+      });
+    }
     const rawMessage = `${rawLabel} — "${raw}" is not a valid amount. Use at most two decimal places.`;
     const err = new Error(rawMessage);
     throw Object.assign(err, { userMessage: `${humanLabel} — "${raw}" is not a valid amount. Use at most two decimal places.` });

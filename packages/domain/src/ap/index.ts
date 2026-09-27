@@ -46,6 +46,7 @@ import type {
 import { authorize, type Actor } from '@shareat/auth';
 import { money } from '@shareat/core/money';
 import { parseBusinessDate } from '@shareat/core/datetime';
+import { logger } from '@shareat/core/logger';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { checkDraw } from '../money-accounts/overdraft';
@@ -771,14 +772,22 @@ export async function recordPayment(
 
     // DEF-272: parsed here, once, so every downstream use — the balance check and the row this
     // payment writes — sees the same validated value, never the raw form.
-    const allocations = input.allocations.map((a) => ({
-      expenseId: a.expenseId,
-      amountApplied: parseMoneyInput(
-        a.amountApplied,
-        `recordPayment: the allocation for expense ${a.expenseId}`,
-        'An amount applied to an invoice',
-      ),
-    }));
+    const allocations = input.allocations.map((a) => {
+      // T-343 S5.5n / DEF-459 — logged before rethrowing: a malformed allocation amount is a
+      // real-world typo worth seeing in the logs, not only on the screen the throw already reaches.
+      let amountApplied: ReturnType<typeof parseMoneyInput>;
+      try {
+        amountApplied = parseMoneyInput(
+          a.amountApplied,
+          `recordPayment: the allocation for expense ${a.expenseId}`,
+          'An amount applied to an invoice',
+        );
+      } catch (err) {
+        logger.info({ err }, 'recordPayment: malformed allocation amount');
+        throw err;
+      }
+      return { expenseId: a.expenseId, amountApplied };
+    });
 
     // ⛔ Lock the named expenses BEFORE reading their balances. `openItems` then decide then
     // write is check-then-act: without this, two payments naming the same open item both read it

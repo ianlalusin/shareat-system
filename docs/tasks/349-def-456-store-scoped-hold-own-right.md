@@ -117,6 +117,21 @@ classify or register.
    only its own store. A NULL-store row matches every store. **The query does not change.**
 7. **`packages/auth/src/authorize.ts:31-32`, comment only.** The axis-2 paragraph says the same thing: "a store-carrying
    row (`'position'`, or a T-349 `'grant'` hold) is honoured only at its own store". No code change.
+8. **Added 2026-09-27 (orchestrator, from the S1 post-commit review of `3d601ab`), binding on S2:**
+   - **`source_ref` is always NULL on a store-scoped `'grant'` row.** 0165's header says the composite
+     `(source_ref, store_id)` FK "does not apply" to the new rows; that is only true because S2 writes `source_ref NULL`.
+     `person_grants_position_source_ref_check` still lets a `'grant'` row keep a ref, so `'grant'` + ref + store is a
+     legal shape since 0165, and with both columns set the MATCH SIMPLE FK fires and pins the store to the history
+     default's store (a bare 23503). 0165 is applied locally and its checksum is recorded, so its header is NOT edited;
+     this note is the correction. Test **H7**: after a hold, the new row's `source_ref IS NULL` (read back from the DB).
+   - **The store comes only from the position row, never from input.** Nothing in the DB ties a `'grant'` row's
+     `store_id` to the person's org or scope (FK checks bypass RLS; the policy keys on `persons.org_id`), so S2's
+     "the store is taken from the job's grant row" (§3.4) is the sole guard. Test **H8**: a forged `atStoreId`/store field
+     in the form for another org's store (or any store other than the position row's) writes nothing and refuses.
+   - Items 5 and 6 are also where `schema/access.ts:197`'s present-tense "the store-grant branch sets it" becomes true;
+     S2's builder re-reads all three comments (`repo/access.ts:493`, `:727`, `schema/access.ts:197`) against the code.
+   - Page fold (§3.4) must label a store-scoped `'grant'` row with its store, so no hand grant reads as org-wide
+     (`admin/users/lib.ts:137,189` today render "hand-granted" with no store).
 
 ### 3.3 S2: gate, `packages/auth/src/roles.ts`
 

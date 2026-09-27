@@ -520,13 +520,7 @@ function statusSpanOf(articleHtml: string): string {
   return stripTags(m![1]!);
 }
 
-/** The row's own "⛔ Resolved as …" paragraph, present only when `status === 'resolved'`. */
-function resolvedSentenceOf(articleHtml: string): string | undefined {
-  const m = /<p class="mt-3 text-sm text-neutral-500">([\s\S]*?)<\/p>/.exec(articleHtml);
-  return m ? stripTags(m[1]!) : undefined;
-}
-
-describe('D1 — a resolved late_receipt row shows "Late receipt" in the status line and the resolved sentence; an open row offers every disposition; a null disposition renders no label at either site', () => {
+describe('D1 — a resolved late_receipt row shows "Late receipt" in the status line and the resolved sentence; an open, undecided row offers every disposition and shows no disposition suffix', () => {
   it('renders the label in both places, the select carries every DISCREPANCY_DISPOSITIONS value, and null stays empty', async () => {
     withOrgPrincipalMock.mockResolvedValueOnce({
       rows: [
@@ -561,22 +555,6 @@ describe('D1 — a resolved late_receipt row shows "Late receipt" in the status 
           branchName: 'SmokeStore Two',
           note: null,
         },
-        // T-343 S6d — a RESOLVED row with no disposition on record: :151's null arm (defensive —
-        // the ternary the source already has, pinned rather than left unexercised).
-        {
-          id: 'disc-3',
-          status: 'resolved',
-          disposition: null,
-          quantity: '1',
-          value: '10.00',
-          deferredTo: null,
-          itemName: 'Pork belly',
-          unit: 'kg',
-          orderId: 'order-3',
-          orderDate: '2026-01-03',
-          branchName: 'SmokeStore Two',
-          note: null,
-        },
       ],
       people: [],
     });
@@ -593,10 +571,10 @@ describe('D1 — a resolved late_receipt row shows "Late receipt" in the status 
     // " · …" suffix leaking a raw key or an empty separator.
     expect(statusSpanOf(articleAt(html, 1))).toBe('Open');
 
-    // :151's null arm — disc-3 (resolved, no disposition): the sentence's <strong> is empty.
-    expect(resolvedSentenceOf(articleAt(html, 2))).toBe(
-      '⛔ Resolved as . Correcting this is a reversal plus a new resolution, never an edit.',
-    );
+    // T-343 S5.5n audit — a RESOLVED row with a NULL disposition is unreachable in practice
+    // (`trade_discrepancies_resolved_shape_check`, `packages/db/schema/trade-discrepancies.ts:117`
+    // requires a resolved row to carry one), so :151's null-disposition arm was pinning a state
+    // the real domain can never produce. Dropped rather than fixtured against an impossible state.
 
     // The select now renders (disc-2 is open) — its option set is exactly DISCREPANCY_DISPOSITIONS,
     // as a SET: the screen orders them by frequency of use (loss, charge, audit, late_receipt),

@@ -8,6 +8,7 @@
 import { redirect } from 'next/navigation';
 import { apRepo } from '@shareat/db';
 import { parseMoneyInput } from '@shareat/domain/money-input';
+import { logger } from '@shareat/core/logger';
 import {
   createSupplier,
   editSupplier,
@@ -264,10 +265,19 @@ export async function autoAllocatePaymentAction(req: AutoAllocateRequest): Promi
         req.amount,
         open,
         keys,
-        req.typed.map((t) => ({
-          id: t.expenseId,
-          amount: parseMoneyInput(t.amount, `suggestPaymentAllocation: the amount typed for expense ${t.expenseId}`, 'An amount you typed against an invoice'),
-        })),
+        req.typed.map((t) => {
+          // T-343 S5.5n / DEF-459 — logged before rethrowing: a malformed allocation amount is a
+          // real-world typo worth seeing in the logs, not only on the screen the throw already
+          // reaches.
+          let amount: ReturnType<typeof parseMoneyInput>;
+          try {
+            amount = parseMoneyInput(t.amount, `suggestPaymentAllocation: the amount typed for expense ${t.expenseId}`, 'An amount you typed against an invoice');
+          } catch (err) {
+            logger.info({ err }, 'suggestPaymentAllocation: malformed allocation amount');
+            throw err;
+          }
+          return { id: t.expenseId, amount };
+        }),
       );
     });
     return { ok: true, allocations: result.allocations, unallocated: result.unallocated };

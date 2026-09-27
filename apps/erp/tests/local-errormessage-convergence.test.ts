@@ -64,8 +64,11 @@ const FILES = tsFilesUnder(srcRoot).map((absolute) => ({
  * that close a block comment, and pasting one here silently truncated this comment and broke the
  * parse the first time round.
  *
- * ⚠️ It deliberately does NOT match `/^revokeCredential:/` (`admin/users/actions.ts`): that is a
- * `.test()` guard choosing a branch, not a strip, and it must survive this task.
+ * ⚠️ It deliberately does not match a bare `.test()` guard choosing a branch (as opposed to a
+ * strip) — `admin/users/actions.ts`'s own `/^revokeCredential:/` branch was exactly that shape,
+ * until T-343 S7 deleted it (presentable-first now wins, so the local branch was dead weight).
+ * PREFIX_STRIP's own exclusion of `.test()` guards no longer depends on that specific branch
+ * still existing; it is a general property of what this regex is written to match.
  */
 const PREFIX_STRIP = /\.replace\(\s*\/\^[^/\n]*:\\s\*\//;
 

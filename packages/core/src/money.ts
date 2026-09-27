@@ -61,7 +61,11 @@ export function toCentavos(value: Money): bigint {
 }
 
 export function fromCentavos(centavos: bigint): Money {
-  if (centavos > MAX_ABS || centavos < -MAX_ABS) {
+  // T-343 S5.5n / DEF-458 — was `>`/`<`, which let ±1,000,000,000,000.00 through: MAX_ABS is
+  // 10^12 * 100 centavos, an EXCLUSIVE bound (13 integer digits), but numeric(14,2) allows only 12
+  // integer digits — true max 999,999,999,999.99 (`10n ** 14n - 1n` centavos). `>=`/`<=` makes
+  // MAX_ABS itself the first REFUSED value, matching the column.
+  if (centavos >= MAX_ABS || centavos <= -MAX_ABS) {
     throw new RangeError(`Money out of range for numeric(14,2): ${centavos} centavos`);
   }
   const negative = centavos < 0n;

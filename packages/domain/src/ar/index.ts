@@ -11,6 +11,7 @@
 import { arRepo, customersRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
 import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
 import { money } from '@shareat/core/money';
+import { logger } from '@shareat/core/logger';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { parseMoneyInput } from '../shared/money-input';
@@ -267,14 +268,22 @@ export async function recordCollection(
     // T-328/DEF-382 — parsed here, once, before any lock or read, same pattern `recordPayment`
     // already uses for its own allocations: every downstream use sees the same validated value,
     // never the raw form, and a malformed one throws before a lock is even taken.
-    const allocations = input.allocations.map((a) => ({
-      chargeId: a.chargeId,
-      amountApplied: parseMoneyInput(
-        a.amountApplied,
-        `recordCollection: the allocation for charge ${a.chargeId}`,
-        'An amount applied to a charge',
-      ),
-    }));
+    const allocations = input.allocations.map((a) => {
+      // T-343 S5.5n / DEF-459 — logged before rethrowing: a malformed allocation amount is a
+      // real-world typo worth seeing in the logs, not only on the screen the throw already reaches.
+      let amountApplied: ReturnType<typeof parseMoneyInput>;
+      try {
+        amountApplied = parseMoneyInput(
+          a.amountApplied,
+          `recordCollection: the allocation for charge ${a.chargeId}`,
+          'An amount applied to a charge',
+        );
+      } catch (err) {
+        logger.info({ err }, 'recordCollection: malformed allocation amount');
+        throw err;
+      }
+      return { chargeId: a.chargeId, amountApplied };
+    });
 
     // ⛔ Lock before reading. AP's equivalent test passed on timing alone before its lock existed.
     await arRepo.lockChargesForAllocation(trx, actor.orgId, allocations.map((a) => a.chargeId));

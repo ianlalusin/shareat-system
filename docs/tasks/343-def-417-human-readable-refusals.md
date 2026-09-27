@@ -1588,6 +1588,15 @@ tester then builder. **Migration:** none. Runs after S7 and S6d commit (S7 edits
    `<label> — "<raw>" is too large. The most an amount can be is 999,999,999,999.99.` (raw and human forms, same shape as
    today's); every other failure keeps today's sentence byte-identical. Stays import-free except `@shareat/core/money`.
    Check the real ceiling in `packages/core/src/money.ts` and quote it exactly.
+   **Amended 2026-09-27 (orchestrator, auditor QUESTION):** `money.ts`'s guard is `centavos > MAX_ABS` with
+   `MAX_ABS = 10^12 × 100`, so exactly ±1,000,000,000,000.00 passes in-process and Postgres `numeric(14,2)` refuses it
+   — off by one against the file's own comment. Fix it in this slice: `packages/core/src/money.ts` joins the BUILDER
+   paths and the guard becomes `>=` (or `MAX_ABS = 10n ** 14n - 1n`), so 999,999,999,999.99 is the true maximum.
+   Also: a raw in exponent notation (e.g. `"1e+21"`, which `trade/index.ts`'s computed line total produces via
+   `toFixed(2)` on a huge product) fails the GRAMMAR, not the range — it also gets the "too large" sentence (match
+   `/e[+-]?\d/i` on the raw before choosing the sentence). Tester legs added: **M1** `money('1000000000000.00')` throws
+   `RangeError` (red: accepted) and `money('999999999999.99')` passes (green), in `packages/core`'s existing money test
+   file (new `describe`); **R2** `parseMoneyInput('1e+21', 'x', 'A line\'s total')` says "too large" (red now).
 3. **DEF-459:** at the four id-carrying sites (`packages/domain/src/ap/index.ts` allocation-for-expense,
    `packages/domain/src/ar/index.ts` allocation-for-charge, `apps/erp/src/app/ap/actions.ts` and
    `apps/erp/src/app/customers/actions.ts` typed-for-expense/charge; find by raw label text) wrap the `parseMoneyInput` call

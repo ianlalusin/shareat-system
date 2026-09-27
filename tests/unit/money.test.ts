@@ -162,3 +162,31 @@ describe('money — allocate never loses or invents a centavo', () => {
     expect(() => allocate(money('1.00'), 1.5)).toThrow();
   });
 });
+
+/**
+ * T-343 S5.5n amendment — DEF-458. `MAX_ABS` (`packages/core/src/money.ts:26`) is
+ * `10n ** 12n * FACTOR` = 10^14 centavos = exactly 1,000,000,000,000.00 pesos — a 13-digit integer
+ * part. `numeric(14,2)` (bible §6) holds 14 total digits, 2 after the decimal, so its true integer
+ * capacity is 12 digits: 999,999,999,999.99 is the largest value it can store, one centavo below
+ * `MAX_ABS`. `fromCentavos`'s guard is `> MAX_ABS`, not `>=`, so `MAX_ABS` itself is currently
+ * ACCEPTED — an off-by-one that lets `money()` mint a value the database it feeds cannot hold.
+ */
+describe('T-343 S5.5n — M1: the numeric(14,2) ceiling is 999,999,999,999.99, not 1,000,000,000,000.00', () => {
+  it('1,000,000,000,000.00 (13 integer digits) is refused — red: accepted today', () => {
+    expect(() => money('1000000000000.00')).toThrow(RangeError);
+  });
+
+  it('999,999,999,999.99 (12 integer digits, the true ceiling) is accepted — green now', () => {
+    expect(money('999999999999.99')).toBe('999999999999.99');
+  });
+
+  // Orchestrator amendment — the guard is `Math.abs(centavos) > MAX_ABS` (`fromCentavos`), so the
+  // off-by-one is symmetric: the negative side needs its own pair, not assumed from the positive one.
+  it('-1,000,000,000,000.00 (13 integer digits, negative) is refused — red: accepted today', () => {
+    expect(() => money('-1000000000000.00')).toThrow(RangeError);
+  });
+
+  it('-999,999,999,999.99 (12 integer digits, negative, the true ceiling) is accepted — green now', () => {
+    expect(money('-999999999999.99')).toBe('-999999999999.99');
+  });
+});
