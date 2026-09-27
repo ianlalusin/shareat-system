@@ -126,9 +126,13 @@ export async function writeOffAction(formData: FormData): Promise<void> {
         prepaidItemId: id,
         writtenOffOn: str(formData, 'writtenOffOn'),
         reason: str(formData, 'reason'),
-        ...(refund && Number(refund) > 0
-          ? { refundAmount: refund, refundAccountCode: str(formData, 'refundAccountCode') }
-          : {}),
+        // T-343 S5.5p / DEF-460 — was `refund && Number(refund) > 0`. `Number('1,000')` is `NaN`, so
+        // a comma-typed refund was silently DROPPED rather than reaching `writeOffPrepaidItem`'s own
+        // `parseMoneyInput`, and the write-off proceeded as if no refund had been typed at all — the
+        // whole remaining balance expensed. Blank stays omitted (the domain defaults to '0');
+        // anything else, '0' included, is left for `writeOffPrepaidItem` to accept or refuse with a
+        // readable sentence — same fix shape as `customers/actions.ts`'s `creditApplied`.
+        ...(refund ? { refundAmount: refund, refundAccountCode: str(formData, 'refundAccountCode') } : {}),
       }),
     );
     summary =

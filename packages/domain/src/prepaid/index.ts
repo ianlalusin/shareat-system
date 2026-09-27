@@ -37,6 +37,7 @@ import { money, subtract, type Money } from '@shareat/core/money';
 import { parseMoneyInput } from '../shared/money-input';
 import { buildStraightLine, periodsThroughOf, type SchedulePeriod } from '../shared/straight-line';
 import { readPolicyOrRefuse } from '../fixed-assets/policy';
+import { refuse } from '../shared/refusal';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 
@@ -418,18 +419,27 @@ async function runWriteOff(
   // DEF-272: was a raw `money()` call — well-formed already, but its TypeError is a developer
   // message, not a written sentence. `parseMoneyInput` is the shared entry point that fixes that.
   const refunded = parseMoneyInput(input.refundAmount ?? '0', 'writeOffPrepaidItem: the refund amount', 'The refund amount');
+  // T-343 S5.5p / DEF-460 — these three arms were plain, developer-worded `Error`s. The app-layer
+  // gate above used to keep the negative and no-account cases unreachable (it only ever forwarded a
+  // refund that already passed `Number(x) > 0`); fixing that gate exposes them for real, and the
+  // exceeds-remaining arm was already reachable. Raw text stays byte-identical; only `userMessage`
+  // is added (Invariant 1).
   if (Number(refunded) < 0) {
-    throw new Error('writeOffPrepaidItem: a refund cannot be negative.');
+    throw refuse('writeOffPrepaidItem: a refund cannot be negative.', 'The refund amount cannot be negative.');
   }
   // Invariant 6 — write-off plus refund can never exceed what is left.
   if (Number(refunded) > Number(remaining)) {
-    throw new Error(
+    throw refuse(
       `writeOffPrepaidItem: the refund ${refunded} is more than the ${remaining} still unused. ` +
         'Money coming back beyond what was prepaid is income, not a refund.',
+      `The refund can't be more than what's left on this item. ₱${remaining} remains.`,
     );
   }
   if (Number(refunded) > 0 && !input.refundAccountCode) {
-    throw new Error('writeOffPrepaidItem: a refund has to say which account it landed in.');
+    throw refuse(
+      'writeOffPrepaidItem: a refund has to say which account it landed in.',
+      'Say which account the refund landed in.',
+    );
   }
 
   const expensed: Money = subtract(remaining, refunded);

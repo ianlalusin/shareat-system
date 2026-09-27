@@ -15,6 +15,7 @@ import { logger } from '@shareat/core/logger';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { parseMoneyInput } from '../shared/money-input';
+import { refuse } from '../shared/refusal';
 import { allocateOldestFirst, type AllocationItem, type TypedAmount } from '../shared/allocate-oldest-first';
 
 export const AR_CONTROL_CODE = arRepo.AR_CONTROL_CODE;
@@ -246,7 +247,12 @@ export async function recordCollection(
     const creditApplied = Number(
       parseMoneyInput(input.creditApplied ?? '0', 'recordCollection: creditApplied', 'The store credit applied'),
     );
-    if (creditApplied < 0) throw new Error('recordCollection: creditApplied cannot be negative.');
+    // T-343 S5.5p / DEF-461 — was a plain, developer-worded Error. DEF-457/S5.5n's app-layer fix
+    // (`customers/actions.ts`'s `creditApplied ? { creditApplied } : {}`, no positivity test) forwards
+    // a negative credit for real now, so this needed a presentable sentence too. Raw byte-identical.
+    if (creditApplied < 0) {
+      throw refuse('recordCollection: creditApplied cannot be negative.', 'The store credit applied cannot be negative.');
+    }
     if (creditApplied > 0) {
       const balance = Number(await arRepo.creditBalanceOf(trx, actor.orgId, input.customerId));
       if (creditApplied > balance + 0.005) {

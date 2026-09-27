@@ -9,16 +9,18 @@ import { sql as dsql } from 'drizzle-orm';
  * `docs/tasks/343-def-417-human-readable-refusals.md` §S5.5n.
  *
  * ⛔ TESTER, not BUILDER.
- * - C1/C1n (DEF-457): `apps/erp/src/app/customers/actions.ts`'s `recordCollectionAction` still
- *   spreads `creditApplied` only when `Number(creditApplied) > 0` — `Number('1,000')` is `NaN`, so
- *   a comma-typed credit is silently DROPPED (never reaches the domain's own already-correct
- *   `parseMoneyInput` call at `packages/domain/src/ar/index.ts:245-247`), and the collection
- *   proceeds as if no credit was applied at all: it succeeds, and the money account is debited the
- *   full (un-netted) amount. Verified directly (`Number('1,000') > 0` is `false` in Node) before
- *   writing this file. Real Postgres throughout (bible §9 rule 3) — the app action itself, not the
- *   domain function, is what's red: the domain's own parse is already correct.
- * - L1 (DEF-459): `packages/domain/src/ap/index.ts`'s allocation-for-expense `parseMoneyInput`
- *   call has no logger wrap yet — expected zero `logger.info` calls today.
+ * - C1/C1n (DEF-457): before eb40f35, `apps/erp/src/app/customers/actions.ts`'s
+ *   `recordCollectionAction` spread `creditApplied` only when `Number(creditApplied) > 0` —
+ *   `Number('1,000')` is `NaN`, so a comma-typed credit was silently DROPPED (never reached the
+ *   domain's own already-correct `parseMoneyInput` call at `packages/domain/src/ar/index.ts:245-247`),
+ *   and the collection proceeded as if no credit was applied at all: it succeeded, and the money
+ *   account was debited the full (un-netted) amount. Verified directly (`Number('1,000') > 0` is
+ *   `false` in Node) before writing this file. Real Postgres throughout (bible §9 rule 3) — the app
+ *   action itself, not the domain function, was red: the domain's own parse was already correct.
+ *   eb40f35 fixed the app-layer gate; both legs below are green now.
+ * - L1 (DEF-459): before eb40f35, `packages/domain/src/ap/index.ts`'s allocation-for-expense
+ *   `parseMoneyInput` call had no logger wrap — zero `logger.info` calls. eb40f35 wired it; green
+ *   now.
  */
 config({ path: '.env.local' });
 
@@ -138,7 +140,7 @@ async function collectionCountFor(customerId: string): Promise<number> {
 
 describe('C1 (DEF-457) — a comma-typed store credit is silently dropped, never reaches parseMoneyInput', () => {
   it(
-    'creditApplied "1,000": red today — the collection SUCCEEDS, full amount debited, no refusal naming the credit',
+    'creditApplied "1,000": was red before eb40f35 — the collection used to SUCCEED, full amount debited, no refusal naming the credit',
     async () => {
       const f = await arFixture('c1');
       ACTOR_HOLDER.actor = f.admin;
@@ -148,9 +150,8 @@ describe('C1 (DEF-457) — a comma-typed store credit is silently dropped, never
       const to = await expectRedirectTo(() => recordCollectionAction(collectionFormData(f, '1,000')));
       const params = new URL(to, 'http://localhost').searchParams;
 
-      // Desired (post-fix) behaviour — asserted directly, so this fails for the documented reason
-      // today: no `error` param exists (the action redirects with `ok` instead), and a collection
-      // row WAS written.
+      // Was asserted directly against the pre-fix behaviour (no `error` param — the action
+      // redirected with `ok` instead — and a collection row was written); green since eb40f35.
       expect(params.get('error'), `redirect URL was: ${to}`).toBe(
         'The store credit applied — "1,000" is not a valid amount. Use at most two decimal places.',
       );
@@ -185,7 +186,7 @@ describe('L1 (DEF-459) — the AP allocation-for-expense site logs a malformed a
   });
 
   it(
-    'red today: zero logger.info calls (no wrap yet); the thrown userMessage is already correct and unchanged',
+    'was red before eb40f35 (zero logger.info calls, no wrap); the thrown userMessage was already correct and unchanged. S5.5p strengthening: the logged err.message names the expense id',
     async () => {
       const { logger } = await import('@shareat/core');
       const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger as never);
@@ -216,8 +217,15 @@ describe('L1 (DEF-459) — the AP allocation-for-expense site logs a malformed a
         'An amount applied to an invoice — "abc" is not a valid amount. Use at most two decimal places.',
       );
 
-      // Red for the stated reason: nothing logs this yet.
-      expect(infoSpy, 'expected the (not-yet-wired) DEF-459 log line').toHaveBeenCalledTimes(1);
+      // Was red before eb40f35: nothing logged this. Green since.
+      expect(infoSpy, 'expected the DEF-459 log line').toHaveBeenCalledTimes(1);
+
+      // S5.5p strengthening — not just A call, but one whose logged error actually names THIS
+      // expense (`rawLabel` embeds `a.expenseId` at the parseMoneyInput call site,
+      // packages/domain/src/ap/index.ts:782), so a reader of the log can tell which allocation
+      // failed without cross-referencing a separate id.
+      const loggedErr = (infoSpy.mock.calls[0]?.[0] as { err?: Error } | undefined)?.err;
+      expect(loggedErr?.message, 'the logged error should name the expense id').toContain(fakeExpenseId);
     },
     30000,
   );

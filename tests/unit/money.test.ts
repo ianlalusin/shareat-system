@@ -172,7 +172,7 @@ describe('money — allocate never loses or invents a centavo', () => {
  * ACCEPTED — an off-by-one that lets `money()` mint a value the database it feeds cannot hold.
  */
 describe('T-343 S5.5n — M1: the numeric(14,2) ceiling is 999,999,999,999.99, not 1,000,000,000,000.00', () => {
-  it('1,000,000,000,000.00 (13 integer digits) is refused — red: accepted today', () => {
+  it('1,000,000,000,000.00 (13 integer digits) is refused — was accepted before eb40f35', () => {
     expect(() => money('1000000000000.00')).toThrow(RangeError);
   });
 
@@ -182,7 +182,7 @@ describe('T-343 S5.5n — M1: the numeric(14,2) ceiling is 999,999,999,999.99, n
 
   // Orchestrator amendment — the guard is `Math.abs(centavos) > MAX_ABS` (`fromCentavos`), so the
   // off-by-one is symmetric: the negative side needs its own pair, not assumed from the positive one.
-  it('-1,000,000,000,000.00 (13 integer digits, negative) is refused — red: accepted today', () => {
+  it('-1,000,000,000,000.00 (13 integer digits, negative) is refused — was accepted before eb40f35', () => {
     expect(() => money('-1000000000000.00')).toThrow(RangeError);
   });
 

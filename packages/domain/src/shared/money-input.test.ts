@@ -93,8 +93,9 @@ describe('resolves via its own package subpath — DEF-379', () => {
  * an out-of-range VALUE (`RangeError`, `packages/core/src/money.ts`'s `MAX_ABS`) — both land in
  * `parseMoneyInput`'s one bare `catch`, so an out-of-range amount gets the SAME "Use at most two
  * decimal places" sentence as a malformed one, which is wrong advice: no number of decimal places
- * fixes a value that is simply too big. Red until the builder branches on the caught error's
- * constructor and gives `RangeError` its own "too large" sentence, quoting `money.ts`'s own ceiling.
+ * fixes a value that is simply too big. Was red until eb40f35 (S5.5n) branched on the caught
+ * error's constructor and gave `RangeError` its own "too large" sentence, quoting `money.ts`'s own
+ * ceiling.
  */
 describe('T-343 S5.5n — R1: an out-of-range amount gets its own "too large" sentence, not the decimal-places one', () => {
   it('R1: 14 nines (RangeError — out of range for numeric(14,2)) says "too large", not "decimal places"', () => {
@@ -137,5 +138,100 @@ describe('T-343 S5.5n — R1: an out-of-range amount gets its own "too large" se
     expect(userMessage, 'must carry a userMessage').toBeDefined();
     expect(userMessage).toContain('too large');
     expect(userMessage).not.toContain('decimal places');
+  });
+});
+
+/**
+ * T-343 S5.5p — DEF-460 item 4. `hugeExponent`'s `Number.isFinite(asNumber)` conjunct excludes
+ * OVERFLOW, not just non-numbers — the anchored regex already excludes NaN on its own. `'1e+21'`
+ * (R2, above) is still a finite double and passes the conjunct; `'1e+400'` overflows to `Infinity`,
+ * `Number.isFinite(Infinity)` is `false`, and the whole `hugeExponent` test goes false — exactly the
+ * shape a genuinely too-large scientific-notation value takes, wrongly routed to the
+ * decimal-places sentence. Also: `raw.trim()` assumes `raw` really is a string; a caller that lets
+ * a non-string cross the `string` boundary (a bug upstream, not this function's business to rule
+ * out) hits `raw.trim is not a function` — a bare `TypeError` with no `userMessage` at all, escaping
+ * before this function's own presentable-error construction ever runs.
+ */
+describe('T-343 S5.5p — R3: an overflowing exponent still says "too large"; a non-string crossing the boundary still yields a presentable sentence', () => {
+  it('"1e+400" (overflows to Infinity) says "too large", not "decimal places"', () => {
+    let caught: unknown;
+    try {
+      parseMoneyInput('1e+400', 'x', 'The amount');
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught, 'expected "1e+400" to be refused at all').toBeInstanceOf(Error);
+    const userMessage = (caught as Error & { userMessage?: string }).userMessage;
+    expect(userMessage, 'must carry a userMessage').toBeDefined();
+    expect(userMessage).toContain('too large');
+    expect(userMessage).not.toContain('decimal places');
+  });
+
+  it('"-1e+400" (overflows to -Infinity) says "too large" too', () => {
+    let caught: unknown;
+    try {
+      parseMoneyInput('-1e+400', 'x', 'The amount');
+    } catch (err) {
+      caught = err;
+    }
+    const userMessage = (caught as Error & { userMessage?: string }).userMessage;
+    expect(userMessage, 'must carry a userMessage').toBeDefined();
+    expect(userMessage).toContain('too large');
+    expect(userMessage).not.toContain('decimal places');
+  });
+
+  it('a number crossing the string boundary still throws WITH a string userMessage — was a bare TypeError before this fix', () => {
+    let caught: unknown;
+    try {
+      parseMoneyInput(3.456 as unknown as string, 'x', 'The amount');
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught, 'expected a throw at all').toBeInstanceOf(Error);
+    const err = caught as Error & { userMessage?: string };
+    expect(typeof err.userMessage, `got a bare ${err.constructor.name}: ${err.message}, with no userMessage`).toBe(
+      'string',
+    );
+  });
+
+  it('null crossing the string boundary — same', () => {
+    let caught: unknown;
+    try {
+      parseMoneyInput(null as unknown as string, 'x', 'The amount');
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught, 'expected a throw at all').toBeInstanceOf(Error);
+    const err = caught as Error & { userMessage?: string };
+    expect(typeof err.userMessage, `got a bare ${err.constructor.name}: ${err.message}, with no userMessage`).toBe(
+      'string',
+    );
+  });
+
+  /**
+   * R4 — `money()` throws `RangeError` for two different reasons: out-of-range
+   * (`fromCentavos`'s "out of range for numeric(14,2)") and a NUMBER input that loses precision
+   * (`money(3.456)`'s "lost precision"). Only the first is "too large"; a number crossing the
+   * `string` boundary that merely lost precision is a malformed NUMBER for a two-decimal-place
+   * field, the same bucket as a malformed string — never "too large".
+   *
+   * ✅ Already green against HEAD's working tree, measured directly before writing this: the
+   * current `outOfRange` guard (`e instanceof RangeError && /out of range/.test(e.message)`)
+   * already excludes a "lost precision" RangeError, so both legs pass today. Kept as a named,
+   * asserted case rather than left implicit — this is exactly the distinction R3's own fix could
+   * have gotten wrong (routing every RangeError to "too large"), and it did not.
+   */
+  it('a number crossing the boundary that only lost precision (3.456, 0.005) says "decimal places", not "too large"', () => {
+    for (const value of [3.456, 0.005]) {
+      let caught: unknown;
+      try {
+        parseMoneyInput(value as unknown as string, 'x', 'The amount');
+      } catch (err) {
+        caught = err;
+      }
+      const userMessage = (caught as Error & { userMessage?: string })?.userMessage;
+      expect(userMessage, `${value}: must carry a userMessage`).toContain('decimal places');
+      expect(userMessage, `${value}: a lost-precision NUMBER is not an out-of-range VALUE`).not.toContain('too large');
+    }
   });
 });

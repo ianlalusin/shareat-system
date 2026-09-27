@@ -81,7 +81,10 @@ export function toThousandths(value: Quantity): bigint {
 }
 
 export function fromThousandths(units: bigint): Quantity {
-  if (units > MAX_ABS || units < -MAX_ABS) {
+  // T-343 S5.5p / DEF-462 — the same off-by-one `money.ts`'s MAX_ABS had (S5.5n): `>`/`<` let
+  // ±100,000,000,000.000 through, which numeric(14,3) refuses (11 integer digits, true max
+  // 99,999,999,999.999). `>=`/`<=` makes MAX_ABS itself the first REFUSED value.
+  if (units >= MAX_ABS || units <= -MAX_ABS) {
     throw new RangeError(`Quantity out of range for numeric(14,3): ${units} thousandths`);
   }
   const negative = units < 0n;

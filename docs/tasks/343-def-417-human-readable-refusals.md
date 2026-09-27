@@ -1593,8 +1593,10 @@ tester then builder. **Migration:** none. Runs after S7 and S6d commit (S7 edits
    — off by one against the file's own comment. Fix it in this slice: `packages/core/src/money.ts` joins the BUILDER
    paths and the guard becomes `>=` (or `MAX_ABS = 10n ** 14n - 1n`), so 999,999,999,999.99 is the true maximum.
    Also: a raw in exponent notation (e.g. `"1e+21"`, which `trade/index.ts`'s computed line total produces via
-   `toFixed(2)` on a huge product) fails the GRAMMAR, not the range — it also gets the "too large" sentence (match
-   `/e[+-]?\d/i` on the raw before choosing the sentence). Tester legs added: **M1** `money('1000000000000.00')` throws
+   `toFixed(2)` on a huge product) fails the GRAMMAR, not the range — it also gets the "too large" sentence. The predicate AS BUILT (after
+   pre-commit review; the first loose `/e[+-]?\d/i` wrongly called "1e-5" and "note5" too large): the TRIMMED raw fully
+   matches `/^[+-]?\d+(\.\d+)?e[+-]?\d+$/i` and `Math.abs(Number(trimmed)) > 999999999999.99` (S5.5p drops an
+   `isFinite` conjunct that excluded overflowed values like `"1e+400"`). Tester legs added: **M1** `money('1000000000000.00')` throws
    `RangeError` (red: accepted) and `money('999999999999.99')` passes (green), in `packages/core`'s existing money test
    file (new `describe`); **R2** `parseMoneyInput('1e+21', 'x', 'A line\'s total')` says "too large" (red now).
 3. **DEF-459:** at the four id-carrying sites (`packages/domain/src/ap/index.ts` allocation-for-expense,
@@ -1616,6 +1618,46 @@ tester then builder. **Migration:** none. Runs after S7 and S6d commit (S7 edits
     raw (spy the logger module); the thrown `userMessage` unchanged (red: zero calls).
 - Done when: reds red→green, negatives green unedited, typecheck clean, `money-input.ts` import set unchanged, screen
   check of the customer collection with `1,000` in the credit box.
+
+### S5.5p: follow-ups from the S5.5n post-commit review (DEF-460, DEF-461, DEF-462)
+**Status:** APPROVED 2026-09-27 (orchestrator; each finding measured by the auditor). **Model:** Sonnet, tester then
+builder. **Migration:** none.
+1. **DEF-460 (money):** `apps/erp/src/app/prepaid/actions.ts` — the refund spread (`…refund && Number(refund) > 0 ? {
+   refundAmount: refund, refundAccountCode: … } : {}`, multiline; find by text) sends both keys whenever the trimmed refund
+   text is non-empty; `writeOffPrepaidItem`'s `parseMoneyInput` refuses `'1,000'` by name ("The refund amount — …"). Read
+   what `writeOffPrepaidItem` does with a `'0'` or negative refund and with a refund but no account BEFORE changing the
+   gate (DEF-461's lesson: removing an over-strict gate exposes the code behind it); if any reachable arm throws a
+   developer-worded plain `Error`, convert it with `refuse(raw, <human sentence>)` in the same edit and name it in READY.
+2. **DEF-461:** `packages/domain/src/ar/index.ts` — `throw new Error('recordCollection: creditApplied cannot be negative.')`
+   → `refuse('recordCollection: creditApplied cannot be negative.', 'The store credit applied cannot be negative.')`
+   (raw byte-identical; import `refuse` as the file's sibling refusals do).
+3. **DEF-462:** `packages/domain/src/stock/quantity.ts` — `fromThousandths`'s guard `>`/`<` → `>=`/`<=` so
+   99,999,999,999.999 is the true maximum for `numeric(14,3)`. Check whether `quantity()`'s refusal wording names the
+   ceiling; if it does, make the number true.
+4. `packages/domain/src/shared/money-input.ts`: drop the `Number.isFinite(asNumber)` conjunct (the anchored regex already
+   excludes NaN; the conjunct only excluded overflow, so `"1e+400"` got the decimals sentence); and `raw.trim()` →
+   `String(raw).trim()` so a non-string crossing the boundary still yields a presentable sentence.
+- **BUILDER paths:** `apps/erp/src/app/prepaid/actions.ts`, `packages/domain/src/prepaid/index.ts` (only if item 1 finds a
+  developer-worded arm), `packages/domain/src/ar/index.ts`, `packages/domain/src/stock/quantity.ts`,
+  `packages/domain/src/shared/money-input.ts`.
+- **TESTER paths:** `apps/erp/tests/integration/t343-s5-5p-followups.test.ts` (new); new `describe`s in
+  `packages/domain/src/shared/money-input.test.ts` and the existing quantity unit test (find it); edits to
+  `apps/erp/tests/integration/t343-s5-5n-followups.test.ts` (L1 only).
+  - P1 (DEF-460): write-off with refund `'1,000'` → refusal naming the refund amount, NO journal entry, item unchanged
+    (red: succeeds, whole balance expensed). P1n: empty refund → write-off succeeds with no refund leg (green now).
+  - P2–P4 (orchestrator ruling on the builder's read of `writeOffPrepaidItem`): all three reachable refund arms are
+    converted with `refuse(raw, …)` — negative → "The refund amount cannot be negative."; refund without an account →
+    "Say which account the refund landed in."; more than what's left → "The refund can't be more than what's left on
+    this item." Each leg: nothing written; red was the developer-worded plain `Error` on screen.
+  - N1 (DEF-461): collection with credit `'-5'` → error is "The store credit applied cannot be negative." (red: shows
+    "creditApplied cannot be negative.").
+  - Q1 (DEF-462): `quantity('100000000000')` throws (red: accepted); `'99999999999.999'` passes; both signs.
+  - R3: `'1e+400'` and `'-1e+400'` → "too large" (red now); `parseMoneyInput(3.456 as unknown as string, …)` and `null`
+    → a thrown error WITH a string `userMessage` (red: bare TypeError).
+  - L1 strengthened: the logged object's `err.message` contains the expense id (not just one call).
+  - Stale "red today" wording in `tests/unit/money.test.ts`, `money-input.test.ts` and the s5-5n integration titles
+    rewritten in the past tense (tester paths: those files, wording only).
+- Done when: reds red→green, negatives green, typecheck clean, `money-input.ts` import set unchanged.
 
 ---
 

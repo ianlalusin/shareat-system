@@ -42,11 +42,21 @@ export function parseMoneyInput(raw: string, rawLabel: string, humanLabel: strin
     // ordinary TypeError — but ONLY when it names a value actually over the ceiling does it get
     // the "too large" sentence too; a small one ("1e-5", "3.5e1") is still just a malformed
     // STRING for this two-decimal-place field, and keeps the decimal-places advice.
-    const trimmed = raw.trim();
+    // T-343 S5.5p / DEF-458 follow-up — `String(raw).trim()`, not `raw.trim()`: a non-string
+    // crossing the `string` boundary (a bug upstream, not this function's business to rule out)
+    // must still yield a presentable sentence, not a bare `TypeError` from this catch block itself.
+    // And no `Number.isFinite` conjunct: the anchored regex already excludes NaN on its own, so the
+    // conjunct only ever excluded OVERFLOW ("1e+400" → `Infinity`) — exactly the shape a genuinely
+    // too-large scientific-notation value takes, wrongly routed to the decimal-places sentence.
+    const trimmed = String(raw).trim();
     const asNumber = Number(trimmed);
-    const hugeExponent =
-      /^[+-]?\d+(\.\d+)?e[+-]?\d+$/i.test(trimmed) && Number.isFinite(asNumber) && Math.abs(asNumber) > 999999999999.99;
-    if (e instanceof RangeError || hugeExponent) {
+    const hugeExponent = /^[+-]?\d+(\.\d+)?e[+-]?\d+$/i.test(trimmed) && Math.abs(asNumber) > 999999999999.99;
+    // T-343 S5.5p follow-up — `money()` throws RangeError for TWO different reasons: out-of-range
+    // (`fromCentavos`'s "out of range for numeric(14,2)") and a NUMBER input that loses precision
+    // (`money(3.456)`'s "lost precision"). Only the first is "too large"; the second is a malformed
+    // NUMBER for a two-decimal-place field, same bucket as a malformed string.
+    const outOfRange = e instanceof RangeError && /out of range/.test(e.message);
+    if (outOfRange || hugeExponent) {
       const rawMessage = `${rawLabel} — "${raw}" is too large. The most an amount can be is 999,999,999,999.99.`;
       const err = new Error(rawMessage);
       throw Object.assign(err, {
