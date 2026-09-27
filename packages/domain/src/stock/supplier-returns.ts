@@ -366,7 +366,7 @@ export async function refundSupplierCredit(tx: Tx, input: RefundCreditInput): Pr
   await authorize(tx, input.actor, 'apply_supplier_credit', { storeId: input.storeId });
   const orgId = input.actor.orgId; // T-231/DEF-210 — see recordReturn.
 
-  const amount = parseMoneyInput(input.amount, 'refundSupplierCredit: the amount');
+  const amount = parseMoneyInput(input.amount, 'refundSupplierCredit: the amount', 'The refund amount');
   if (compare(amount, ZERO) <= 0) {
     return { ok: false, reason: 'a refund must be for a positive amount' };
   }

@@ -131,6 +131,7 @@ export async function postSeparation(
     const separationPay = parseMoneyInput(
       input.separationPayAmount || '0',
       'postSeparation: the separation pay',
+      'The separation pay',
     );
     if (compare(separationPay, ZERO) < 0) {
       throw new Error('postSeparation: separation pay cannot be negative.');

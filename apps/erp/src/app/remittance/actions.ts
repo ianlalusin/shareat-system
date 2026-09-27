@@ -86,7 +86,7 @@ export async function createRemittanceAction(formData: FormData): Promise<void> 
     // else — so it stays a single, direct, independently-testable decision.
     const isHandedOver = (amount: string): boolean => {
       if (!amount) return false;
-      const parsed = parseMoneyInput(amount, 'createRemittanceAction: the amount handed over');
+      const parsed = parseMoneyInput(amount, 'createRemittanceAction: the amount handed over', 'The amount handed over');
       return Number(parsed) > 0;
     };
 
@@ -97,9 +97,14 @@ export async function createRemittanceAction(formData: FormData): Promise<void> 
       try {
         return isHandedOver(line.amount);
       } catch (err) {
-        throw new Error(
-          `"${accountName(line.fromMoneyAccountId)}": ${err instanceof Error ? err.message : String(err)}`,
-        );
+        const account = accountName(line.fromMoneyAccountId);
+        const raw = `"${account}": ${err instanceof Error ? err.message : String(err)}`;
+        if (err instanceof Error && 'userMessage' in err && typeof err.userMessage === 'string') {
+          const human = err.userMessage;
+          const lowered = human.charAt(0).toLowerCase() + human.slice(1);
+          throw Object.assign(new Error(raw), { userMessage: `"${account}": ${lowered}` });
+        }
+        throw new Error(raw);
       }
     };
 
@@ -143,7 +148,7 @@ export async function createRemittanceAction(formData: FormData): Promise<void> 
     const declaredTotal = lines.reduce(
       (sum, l) =>
         l.declaredOverage
-          ? add(sum, parseMoneyInput(l.declaredOverage, 'createRemittance: the declared overage'))
+          ? add(sum, parseMoneyInput(l.declaredOverage, 'createRemittance: the declared overage', 'A declared overage'))
           : sum,
       money('0'),
     );

@@ -43,7 +43,7 @@ export async function payReimbursement(
     // liability, gated the same way every other outgoing payment in this codebase is.
     await authorize(trx, actor, 'record_ap_payment', { storeId: input.storeId });
 
-    const amount = parseMoneyInput(input.amount, 'payReimbursement: the amount');
+    const amount = parseMoneyInput(input.amount, 'payReimbursement: the amount', 'The reimbursement amount');
     if (Number(amount) <= 0) {
       throw refuse('payReimbursement: the amount has to be greater than zero.', 'The amount has to be greater than zero.');
     }

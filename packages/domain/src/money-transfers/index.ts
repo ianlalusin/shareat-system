@@ -151,8 +151,8 @@ async function runCreate(
     await authorize(tx, actor, 'transfer_funds', { storeId: to.storeId });
   }
 
-  const amountOut = parseMoneyInput(input.amountOut, 'createMoneyTransfer: amountOut');
-  const amountIn = parseMoneyInput(input.amountIn, 'createMoneyTransfer: amountIn');
+  const amountOut = parseMoneyInput(input.amountOut, 'createMoneyTransfer: amountOut', 'The amount sent');
+  const amountIn = parseMoneyInput(input.amountIn, 'createMoneyTransfer: amountIn', 'The amount received');
   const out = Number(amountOut);
   const inn = Number(amountIn);
   if (!(out > 0) || !(inn > 0)) {

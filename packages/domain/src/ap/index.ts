@@ -758,7 +758,7 @@ export async function recordPayment(
     const supplier = await apRepo.getSupplierById(trx, actor.orgId, input.supplierId);
     if (!supplier) throw gone(`recordPayment: supplier ${input.supplierId} does not exist.`, 'supplier');
 
-    const parsedAmount = parseMoneyInput(input.amount, 'recordPayment: the amount');
+    const parsedAmount = parseMoneyInput(input.amount, 'recordPayment: the amount', 'The payment amount');
     const amount = Number(parsedAmount);
     if (amount <= 0) throw refuse('recordPayment: a payment has to be greater than zero.', 'A payment has to be greater than zero.');
     if (input.allocations.length === 0) {
@@ -776,6 +776,7 @@ export async function recordPayment(
       amountApplied: parseMoneyInput(
         a.amountApplied,
         `recordPayment: the allocation for expense ${a.expenseId}`,
+        'An amount applied to an invoice',
       ),
     }));
 
@@ -1111,7 +1112,7 @@ export async function suggestPaymentAllocation(
       };
     });
 
-    const plan = allocateOldestFirst(items, parseMoneyInput(amount, 'suggestPaymentAllocation: the amount'), typed);
+    const plan = allocateOldestFirst(items, parseMoneyInput(amount, 'suggestPaymentAllocation: the amount', 'The payment amount'), typed);
     return {
       allocations: plan.allocations.map((a) => ({ expenseId: a.id, amountApplied: a.amount })),
       unallocated: plan.remainder,

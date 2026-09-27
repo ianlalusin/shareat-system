@@ -82,7 +82,7 @@ async function runCreateAsset(
 ): Promise<{ id: string }> {
   await authorize(tx, actor, 'manage_fixed_assets', {});
 
-  const cost = parseMoneyInput(input.cost, 'createAsset: the cost');
+  const cost = parseMoneyInput(input.cost, 'createAsset: the cost', "The asset's cost");
   if (compare(cost, money('0')) <= 0) {
     throw new Error('createAsset: cost must be greater than zero.');
   }
@@ -100,7 +100,7 @@ async function runCreateAsset(
   // input, not already-computed or configured values).
   const salvage =
     input.salvageValue != null
-      ? parseMoneyInput(input.salvageValue, 'createAsset: the salvage value')
+      ? parseMoneyInput(input.salvageValue, 'createAsset: the salvage value', 'The salvage value')
       : money(policy.defaultSalvageValue);
 
   // ⚠️ Checked here as well as by the CHECK constraint. The constraint is the guarantee; this is

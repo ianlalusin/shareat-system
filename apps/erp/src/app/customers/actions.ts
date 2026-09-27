@@ -145,7 +145,7 @@ export async function autoAllocateCollectionAction(
         keys,
         req.typed.map((t) => ({
           id: t.chargeId,
-          amount: parseMoneyInput(t.amount, `suggestCollectionAllocation: the amount typed for charge ${t.chargeId}`),
+          amount: parseMoneyInput(t.amount, `suggestCollectionAllocation: the amount typed for charge ${t.chargeId}`, 'An amount you typed against a charge'),
         })),
       );
     });

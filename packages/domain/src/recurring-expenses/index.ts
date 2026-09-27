@@ -88,7 +88,7 @@ export async function createRecurringTemplate(
 
     const name = input.name.trim();
     if (!name) throw new Error('give the template a name — "Lipa branch rent", not "expense 3".');
-    const defaultAmount = parseMoneyInput(input.defaultAmount, 'createRecurringTemplate: the default amount');
+    const defaultAmount = parseMoneyInput(input.defaultAmount, 'createRecurringTemplate: the default amount', 'The default amount');
     if (Number(defaultAmount) <= 0) {
       throw new Error('a default amount has to be greater than zero. ⚠️ It is a DEFAULT — the drafted expense is edited against the real bill.');
     }
@@ -168,7 +168,7 @@ export async function updateRecurringTemplate(
     }
     const defaultAmount =
       input.defaultAmount !== undefined
-        ? parseMoneyInput(input.defaultAmount, 'updateRecurringTemplate: the default amount')
+        ? parseMoneyInput(input.defaultAmount, 'updateRecurringTemplate: the default amount', 'The default amount')
         : undefined;
     if (defaultAmount !== undefined && Number(defaultAmount) <= 0) {
       throw new Error('a default amount has to be greater than zero.');

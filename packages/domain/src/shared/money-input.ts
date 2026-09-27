@@ -18,9 +18,8 @@ import { money, type Money } from '@shareat/core/money';
  * "an unparsed string reaches the database" gap.
  *
  * `humanLabel` (S5.3b — the same raw/human split `commissary/catalogue.ts`'s
- * `parseFourDecimalCost` uses) is OPTIONAL: this function has ~20 callers across the domain, most
- * still unconverted, and every one of them must keep compiling and behaving exactly as before.
- * Omit it and the raw `Error` is unchanged; pass it and the throw becomes presentable, with
+ * `parseFourDecimalCost` uses) is REQUIRED (S5.5m, DEF-454): every caller passes a capitalised
+ * noun phrase that names no id, key or function, and the throw is always presentable, with
  * `humanLabel` in place of `rawLabel` in the sentence a screen shows.
  *
  * ⚠️ **No `refuse`/`RefusalError` import here, on purpose.** This file must stay a clean leaf —
@@ -31,13 +30,12 @@ import { money, type Money } from '@shareat/core/money';
  * (`apps/erp/src/lib/error-shape.ts`) duck-types `userMessage`, so a plain `Error` with the field
  * assigned renders identically to a real `RefusalError`, with no import needed to produce one.
  */
-export function parseMoneyInput(raw: string, rawLabel: string, humanLabel?: string): Money {
+export function parseMoneyInput(raw: string, rawLabel: string, humanLabel: string): Money {
   try {
     return money(raw);
   } catch {
     const rawMessage = `${rawLabel} — "${raw}" is not a valid amount. Use at most two decimal places.`;
     const err = new Error(rawMessage);
-    if (humanLabel === undefined) throw err;
     throw Object.assign(err, { userMessage: `${humanLabel} — "${raw}" is not a valid amount. Use at most two decimal places.` });
   }
 }

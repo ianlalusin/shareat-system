@@ -417,7 +417,7 @@ async function runWriteOff(
 
   // DEF-272: was a raw `money()` call — well-formed already, but its TypeError is a developer
   // message, not a written sentence. `parseMoneyInput` is the shared entry point that fixes that.
-  const refunded = parseMoneyInput(input.refundAmount ?? '0', 'writeOffPrepaidItem: the refund amount');
+  const refunded = parseMoneyInput(input.refundAmount ?? '0', 'writeOffPrepaidItem: the refund amount', 'The refund amount');
   if (Number(refunded) < 0) {
     throw new Error('writeOffPrepaidItem: a refund cannot be negative.');
   }

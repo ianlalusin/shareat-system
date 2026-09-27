@@ -271,7 +271,7 @@ export async function createTradeOrder(
       // N's total" on whichever box the operator actually mistyped. `rate` is `numeric(14,2)`
       // (packages/db/schema/trade.ts:201), the same shape `parseMoneyInput` enforces; `quantity`
       // is `numeric(14,3)`, a different axis (`parseQuantityInput`, defined above).
-      const rate = parseMoneyInput(rawRate, `createTradeOrder: line ${i + 1}'s rate`);
+      const rate = parseMoneyInput(rawRate, `createTradeOrder: line ${i + 1}'s rate`, "A line's rate");
       if (Number(rate) < 0) throw new Error(`createTradeOrder: line ${i + 1} has a negative rate.`);
       const parsedQuantity = parseQuantityInput(draft.quantity, `createTradeOrder: line ${i + 1}'s quantity`);
       if (Number(parsedQuantity) <= 0) {
@@ -287,6 +287,7 @@ export async function createTradeOrder(
       const lineTotal = parseMoneyInput(
         (Number(parsedQuantity) * Number(rate)).toFixed(2),
         `createTradeOrder: line ${i + 1}'s total`,
+        "A line's total",
       );
       if (Number(lineTotal) <= 0) {
         throw new Error(`createTradeOrder: line ${i + 1} comes to zero, so it bills nothing.`);
@@ -301,8 +302,8 @@ export async function createTradeOrder(
       });
     }
 
-    const deliveryFee = Number(parseMoneyInput(input.deliveryFee ?? '0', 'createTradeOrder: the delivery fee'));
-    const otherFees = Number(parseMoneyInput(input.otherFees ?? '0', 'createTradeOrder: other fees'));
+    const deliveryFee = Number(parseMoneyInput(input.deliveryFee ?? '0', 'createTradeOrder: the delivery fee', 'The delivery fee'));
+    const otherFees = Number(parseMoneyInput(input.otherFees ?? '0', 'createTradeOrder: other fees', 'The other fees'));
     if (deliveryFee < 0 || otherFees < 0) {
       throw new Error('createTradeOrder: a fee cannot be negative.');
     }
@@ -311,7 +312,7 @@ export async function createTradeOrder(
 
     const totalAmount = total.toFixed(2);
     if (input.totalAmount != null) {
-      const statedTotal = Number(parseMoneyInput(input.totalAmount, 'createTradeOrder: the total'));
+      const statedTotal = Number(parseMoneyInput(input.totalAmount, 'createTradeOrder: the total', 'The stated total'));
       // T-328 Contract §4b — delegates to the extracted, independently-testable guard. Its own
       // message (either refusal reason) is not what the operator sees here: this call site keeps
       // its pre-existing, figure-quoting message on an ORDINARY MISMATCH, unchanged (a regression

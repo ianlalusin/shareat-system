@@ -69,7 +69,7 @@ export async function setPayRate(
 ): Promise<{ id: string }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'set_pay_rate', { storeId: input.storeId });
-    const amount = parseMoneyInput(input.amount, 'setPayRate: the amount');
+    const amount = parseMoneyInput(input.amount, 'setPayRate: the amount', 'The pay rate');
     if (compare(amount, ZERO) <= 0) {
       throw new Error('setPayRate: a pay rate has to be more than zero.');
     }

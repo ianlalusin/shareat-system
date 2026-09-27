@@ -266,7 +266,7 @@ export async function autoAllocatePaymentAction(req: AutoAllocateRequest): Promi
         keys,
         req.typed.map((t) => ({
           id: t.expenseId,
-          amount: parseMoneyInput(t.amount, `suggestPaymentAllocation: the amount typed for expense ${t.expenseId}`),
+          amount: parseMoneyInput(t.amount, `suggestPaymentAllocation: the amount typed for expense ${t.expenseId}`, 'An amount you typed against an invoice'),
         })),
       );
     });

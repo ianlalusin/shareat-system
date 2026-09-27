@@ -1335,6 +1335,29 @@ option texts, which carry account hints (`Loss — Dr 5300`). Rewording `CAPABIL
    rule 5; S6b U1, S6c G1).
 2. **Label wording:** the S6a table is approved as drafted.
 
+### S6d: follow-ups from the S6c post-commit review (`f9cdeac`)
+**Status:** APPROVED 2026-09-27 (orchestrator; findings verified by the auditor against source). **Model:** Sonnet,
+tester then builder. **Migration:** none. Runs after S5.5m commits, before S7.
+
+Goal: the S6 guards pin what their names promise, and the one raw disposition S6c's own prose points at is labelled.
+- **BUILDER paths (2):** `apps/erp/src/app/wastage/[id]/page.tsx` (`:108` `Resolved as ${row.disposition}` →
+  `orderWastageDispositionLabel(row.disposition)`, null arm unchanged; the `<select>` at `:145` and every option
+  `value` untouched); `apps/erp/src/app/admin/users/[personId]/page.tsx` (comment at `:229-236` only: add that the
+  org-wide second row is DEF-456, which Ian ruled 2026-09-27 must stay store-scoped — the comment describes today's
+  defect, not the intent). No behaviour change in either.
+- **TESTER paths (disjoint):** `apps/erp/tests/t343-s6c-screen-labels.test.ts` (existing) and
+  `apps/erp/tests/t343-s6d-wastage-detail-label.test.ts` (new).
+  - G1: replace token-membership with U1's strip-then-sweep (remove every muted-secondary element, sweep the rest for
+    snake_case → `[]`). Red for the right reason = planting `{capabilityTitle(c)} {c}` as primary text in a scratch copy.
+  - D1: add an OPEN discrepancy fixture so the `<select name="disposition">` renders; pin its option `value`s exactly
+    (`DISCREPANCY_DISPOSITIONS` order). Add null-disposition fixtures for `:137` and `:151` and pin their rendered text.
+  - OW1: pin the `ow-2` (null) row's disposition cell as empty; also pin the `/wastage` `<select>` option values.
+  - Usage list: a null `reasonCode` row renders `—`.
+  - New W2 (s6d file): `/wastage/[id]` for a resolved `platform_paid` row shows `Resolved as Platform paid` (red:
+    `platform_paid`); a null-disposition row unchanged; option values pinned.
+- Done when: G1/D1/OW1 strengthened legs green on HEAD and each proved red against its plant (reasoned or scratch copy,
+  never a source edit); W2 red→green; typecheck clean; screen check of `/wastage/<id>`.
+
 ---
 
 ## S5.5m: every malformed money amount refuses in human words (DEF-454)

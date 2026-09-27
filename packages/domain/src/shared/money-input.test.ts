@@ -10,20 +10,20 @@ import { parseMoneyInput } from './money-input';
  */
 describe('parseMoneyInput', () => {
   it('refuses a sub-centavo amount with a written sentence, not a TypeError', () => {
-    expect(() => parseMoneyInput('0.004', 'createCashRequest: the amount')).toThrow(
+    expect(() => parseMoneyInput('0.004', 'createCashRequest: the amount', 'The amount')).toThrow(
       /createCashRequest: the amount.*"0\.004"/,
     );
     // ⚠️ Not the developer-facing message money() itself throws.
-    expect(() => parseMoneyInput('0.004', 'x')).not.toThrow(/expected up to/);
+    expect(() => parseMoneyInput('0.004', 'x', 'The amount')).not.toThrow(/expected up to/);
   });
 
   it('refuses a value with more than two decimal places (the "1.234" case)', () => {
-    expect(() => parseMoneyInput('1.234', 'x')).toThrow(/"1\.234"/);
+    expect(() => parseMoneyInput('1.234', 'x', 'The amount')).toThrow(/"1\.234"/);
   });
 
   it('refuses other unparseable strings the same way — empty, NaN-shaped, exponential', () => {
     for (const bad of ['', 'abc', '1e-7', '.004', 'NaN']) {
-      expect(() => parseMoneyInput(bad, 'x')).toThrow();
+      expect(() => parseMoneyInput(bad, 'x', 'The amount')).toThrow();
     }
   });
 
@@ -35,17 +35,17 @@ describe('parseMoneyInput', () => {
   // leftover from the narrower (rejected) remedy. Following the explicitly-argued design, not the
   // checklist line that contradicts it — reported to the orchestrator as a spec defect.
   it('0.005 is refused too — three decimal places into a two-decimal field, same as 1.234', () => {
-    expect(() => parseMoneyInput('0.005', 'x')).toThrow(/"0\.005"/);
+    expect(() => parseMoneyInput('0.005', 'x', 'The amount')).toThrow(/"0\.005"/);
   });
 
   it('accepts ordinary exact amounts unchanged in value', () => {
-    expect(parseMoneyInput('0.01', 'x')).toBe('0.01');
-    expect(parseMoneyInput('12.50', 'x')).toBe('12.50');
-    expect(parseMoneyInput('0', 'x')).toBe('0.00');
+    expect(parseMoneyInput('0.01', 'x', 'The amount')).toBe('0.01');
+    expect(parseMoneyInput('12.50', 'x', 'The amount')).toBe('12.50');
+    expect(parseMoneyInput('0', 'x', 'The amount')).toBe('0.00');
   });
 
   it('every message names the label, so a person can tell which field is wrong', () => {
-    expect(() => parseMoneyInput('1.234', 'disburseLoan: the amount')).toThrow(
+    expect(() => parseMoneyInput('1.234', 'disburseLoan: the amount', 'The amount')).toThrow(
       /disburseLoan: the amount/,
     );
   });

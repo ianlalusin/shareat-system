@@ -289,7 +289,7 @@ export async function recordOrderWastage(
     if (!reason) throw new Error('recordOrderWastage: say why this wastage happened.');
     // DEF-272: was a raw `money()` call — well-formed already, but its TypeError is a developer
     // message, not a written sentence. `parseMoneyInput` is the shared entry point that fixes that.
-    const amount = parseMoneyInput(input.amount, 'recordOrderWastage: the amount');
+    const amount = parseMoneyInput(input.amount, 'recordOrderWastage: the amount', 'The wastage amount');
     if (Number(amount) <= 0) throw new Error('recordOrderWastage: amount must be greater than zero.');
 
     const { id } = await orderWastageRepo.create(trx, {

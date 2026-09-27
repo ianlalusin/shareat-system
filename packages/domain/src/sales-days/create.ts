@@ -339,7 +339,7 @@ async function writeTenders(
     seen.add(t.moneyAccountId);
     // DEF-272: was a raw `money()` call — well-formed already, but its TypeError is a developer
     // message, not a written sentence. `parseMoneyInput` is the shared entry point that fixes that.
-    const amount = parseMoneyInput(t.amount, `sales day tenders: "${cfg.name}"'s amount`);
+    const amount = parseMoneyInput(t.amount, `sales day tenders: "${cfg.name}"'s amount`, `The amount for "${cfg.name}"`);
     if (Number(amount) <= 0) {
       throw refuse(
         `sales day tenders: "${cfg.name}" carries ${amount} — a tender row of zero says money ` +

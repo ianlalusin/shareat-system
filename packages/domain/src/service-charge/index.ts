@@ -47,7 +47,7 @@ export async function distributeServiceCharge(
     // numeric(14,2) column lets Postgres round it AFTER the cap and checkDraw already compared
     // against the un-rounded figure. `parsedAmount` is what every check below runs against AND
     // what actually gets posted, so the value validated and the value written are the same value.
-    const parsedAmount = parseMoneyInput(input.amount, 'distributeServiceCharge: the amount');
+    const parsedAmount = parseMoneyInput(input.amount, 'distributeServiceCharge: the amount', 'The amount to distribute');
     const amount = Number(parsedAmount);
     if (amount <= 0) {
       throw new Error('distributeServiceCharge: a distribution has to be greater than zero.');

@@ -203,7 +203,7 @@ async function runCreate(
     const isAbsent = raw == null || raw.trim() === '';
     const declared: Money = isAbsent
       ? money('0')
-      : parseMoneyInput(raw, 'createRemittance: the declared overage');
+      : parseMoneyInput(raw, 'createRemittance: the declared overage', 'A declared overage');
     if (compare(declared, money('0')) < 0) {
       throw new Error(`createRemittance: a declared overage cannot be negative — "${raw}" is.`);
     }

@@ -75,7 +75,7 @@ export async function createOwner(
 
     const limit =
       input.drawingLimit != null
-        ? parseMoneyInput(input.drawingLimit, 'createOwner: the drawing limit')
+        ? parseMoneyInput(input.drawingLimit, 'createOwner: the drawing limit', 'The drawing limit')
         : null;
     const period = input.drawingLimitPeriod ?? null;
     // ⛔ Half a rule is not a rule — DEF-071 is what the second half looks like in production.
@@ -120,7 +120,7 @@ export async function recordContribution(
     if (!owner) throw new Error(`recordContribution: owner ${input.ownerId} does not exist.`);
     await authorize(trx, actor, 'transfer_funds', { storeId: owner.storeId });
 
-    const amount = parseMoneyInput(input.amount, 'recordContribution: the amount');
+    const amount = parseMoneyInput(input.amount, 'recordContribution: the amount', 'The contribution amount');
     if (Number(amount) <= 0) {
       throw new Error('recordContribution: a contribution has to be greater than zero.');
     }

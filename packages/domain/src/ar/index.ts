@@ -61,7 +61,7 @@ export async function recordCharge(
     if (customer.status !== 'active') {
       throw new Error(`recordCharge: ${customer.name} is ${customer.status}, not active.`);
     }
-    const totalAmount = parseMoneyInput(input.totalAmount, 'recordCharge: the charge amount');
+    const totalAmount = parseMoneyInput(input.totalAmount, 'recordCharge: the charge amount', 'The charge amount');
     if (Number(totalAmount) <= 0) {
       throw new Error('recordCharge: a charge has to be greater than zero.');
     }
@@ -222,8 +222,8 @@ export async function recordCollection(
     // `platformFee` and `creditApplied` were bare `Number()`, and `Number('abc') <= 0` is `false`,
     // so a mistyped figure passed every guard below silently. Parsing first turns that into the
     // parser's own readable refusal, same as every other converted site in this task.
-    const amount = Number(parseMoneyInput(input.amount, 'recordCollection: the amount'));
-    const fee = Number(parseMoneyInput(input.platformFee ?? '0', 'recordCollection: the platform fee'));
+    const amount = Number(parseMoneyInput(input.amount, 'recordCollection: the amount', 'The amount collected'));
+    const fee = Number(parseMoneyInput(input.platformFee ?? '0', 'recordCollection: the platform fee', 'The platform fee'));
     if (amount <= 0) throw new Error('recordCollection: a collection has to be greater than zero.');
     if (fee < 0) throw new Error('recordCollection: a platform fee cannot be negative.');
     if (fee > amount) {
@@ -243,7 +243,7 @@ export async function recordCollection(
     if (!account) throw new Error('recordCollection: that money account does not exist.');
 
     const creditApplied = Number(
-      parseMoneyInput(input.creditApplied ?? '0', 'recordCollection: creditApplied'),
+      parseMoneyInput(input.creditApplied ?? '0', 'recordCollection: creditApplied', 'The store credit applied'),
     );
     if (creditApplied < 0) throw new Error('recordCollection: creditApplied cannot be negative.');
     if (creditApplied > 0) {
@@ -272,6 +272,7 @@ export async function recordCollection(
       amountApplied: parseMoneyInput(
         a.amountApplied,
         `recordCollection: the allocation for charge ${a.chargeId}`,
+        'An amount applied to a charge',
       ),
     }));
 
@@ -630,7 +631,7 @@ export async function suggestCollectionAllocation(
       };
     });
 
-    const plan = allocateOldestFirst(items, parseMoneyInput(amount, 'suggestCollectionAllocation: the amount'), typed);
+    const plan = allocateOldestFirst(items, parseMoneyInput(amount, 'suggestCollectionAllocation: the amount', 'The amount collected'), typed);
     return {
       allocations: plan.allocations.map((a) => ({ chargeId: a.id, amountApplied: a.amount })),
       surplus: plan.remainder,

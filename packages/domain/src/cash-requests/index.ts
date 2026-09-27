@@ -50,7 +50,7 @@ export async function createCashRequest(
     await authorize(trx, actor, 'create_expense', { storeId: input.storeId });
     const purpose = input.purpose.trim();
     if (!purpose) throw new Error('createCashRequest: say what the money is for.');
-    const amount = parseMoneyInput(input.amount, 'createCashRequest: the amount');
+    const amount = parseMoneyInput(input.amount, 'createCashRequest: the amount', 'The amount requested');
     if (Number(amount) <= 0) {
       throw new Error('createCashRequest: the amount has to be greater than zero.');
     }
@@ -106,7 +106,7 @@ export async function decideCashRequest(
       return;
     }
 
-    const approvedAmount = parseMoneyInput(input.amount, 'decideCashRequest: the approved amount');
+    const approvedAmount = parseMoneyInput(input.amount, 'decideCashRequest: the approved amount', 'The approved amount');
     if (Number(approvedAmount) <= 0) {
       throw new Error('decideCashRequest: an approved amount has to be greater than zero.');
     }
@@ -184,7 +184,7 @@ export async function releaseCashRequest(
         `releaseCashRequest: this request is ${req.status} — only an approved one can be released.`,
       );
     }
-    const amount = parseMoneyInput(input.amount, 'releaseCashRequest: the amount');
+    const amount = parseMoneyInput(input.amount, 'releaseCashRequest: the amount', 'The amount released');
     // ⛔ The approval is the authority for the amount. Releasing more would make the approval
     // decorative.
     if (Number(amount) > Number(req.approvedAmount ?? 0)) {

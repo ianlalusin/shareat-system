@@ -23,7 +23,7 @@ import { errorMessage } from '../src/lib/constraint-messages';
 describe('T6 / Contract §1 — parseMoneyInput resolves from apps/erp by package name', () => {
   it('imports through @shareat/domain/money-input and behaves like the domain function', async () => {
     const { parseMoneyInput } = await import('@shareat/domain/money-input');
-    expect(parseMoneyInput('12.50', 'x')).toBe('12.50');
+    expect(parseMoneyInput('12.50', 'x', 'The amount')).toBe('12.50');
   });
 
   // ⛔ The test above resolves through VITEST'S OWN alias map (vitest.config.mts), not through
@@ -44,7 +44,7 @@ describe('T7 — a bad money string from the app layer produces a cashier-readab
 
     let caught: unknown;
     try {
-      parseMoneyInput('abc', 'createCashRequest: the amount');
+      parseMoneyInput('abc', 'createCashRequest: the amount', 'The amount');
     } catch (err) {
       caught = err;
     }

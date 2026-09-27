@@ -89,7 +89,7 @@ export async function disburseLoan(
     if (!loan) throw new Error(`disburseLoan: loan ${input.loanId} does not exist.`);
     await authorize(trx, actor, 'record_ap_payment', { storeId: loan.storeId });
 
-    const amount = parseMoneyInput(input.amount, 'disburseLoan: the amount');
+    const amount = parseMoneyInput(input.amount, 'disburseLoan: the amount', 'The loan amount');
     if (Number(amount) <= 0) {
       throw new Error('disburseLoan: the amount has to be greater than zero.');
     }
@@ -164,7 +164,7 @@ export async function recordLoanPayment(
     if (!loan) throw new Error(`recordLoanPayment: loan ${input.loanId} does not exist.`);
     await authorize(trx, actor, 'record_ap_payment', { storeId: loan.storeId });
 
-    const amount = parseMoneyInput(input.amount, 'recordLoanPayment: the amount');
+    const amount = parseMoneyInput(input.amount, 'recordLoanPayment: the amount', 'The payment amount');
     if (Number(amount) <= 0) {
       throw new Error('recordLoanPayment: the amount has to be greater than zero.');
     }
