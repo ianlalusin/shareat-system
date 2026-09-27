@@ -12,7 +12,6 @@ assertUsageSource
 assetsMissingCapitalisation
 branchOrderDetail
 buildCoverageReport
-capabilityTitle
 capitalizeFromExpense
 checkValuesMatch
 childLogger

@@ -19,6 +19,7 @@ import { accessRepo } from '@shareat/db';
 import {
   assignRoleAsActor,
   authorize,
+  capabilityTitle,
   grantCapabilityAsActor,
   linkFirebaseCredential,
   unlinkCredential,
@@ -196,6 +197,9 @@ export async function setCapabilityGrantAction(formData: FormData): Promise<void
     .filter((v) => v !== '') as Capability[];
   const grantId = str(formData, 'grantId');
   const granted = str(formData, 'granted') === 'true';
+  /** T-343 S6b / DEF-431 — only picks the banner's WORDING, never a gate: every grant still runs
+   *  `grantCapabilityAsActor` once per capability regardless of what a forged `intent` says. */
+  const intent = str(formData, 'intent');
 
   try {
     await withOrgPrincipal(actor.orgId, async (tx) => {
@@ -239,9 +243,11 @@ export async function setCapabilityGrantAction(formData: FormData): Promise<void
   }
   backToUser(personId, {
     ok: granted
-      ? capabilities.length === 1
-        ? `Granted ${capabilities[0]}.`
-        : `Granted ${capabilities.length} capabilities: ${capabilities.join(', ')}.`
+      ? intent === 'hold_own_right' && capabilities.length === 1
+        ? `${capabilityTitle(capabilities[0]!)} is now held in their own right.`
+        : capabilities.length === 1
+          ? `Granted: ${capabilityTitle(capabilities[0]!)}.`
+          : `Granted ${capabilities.length} capabilities: ${capabilities.map((c) => capabilityTitle(c)).join('; ')}.`
       : 'Grant revoked.',
   });
 }

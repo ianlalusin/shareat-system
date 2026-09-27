@@ -1,5 +1,6 @@
 import { requirePageAccess } from '../../../lib/page-access';
 import { listUsers } from './lib';
+import { ROLE_LABEL } from '@shareat/auth';
 import { Page } from '@/components/shell/Page';
 
 export const metadata = { title: 'Users and roles — Shareat System' };
@@ -72,7 +73,7 @@ export default async function UsersPage() {
                 <td className="px-4 py-2">
                   {u.role ? (
                     <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs dark:bg-neutral-800">
-                      {u.role.replace(/_/g, ' ')}
+                      {ROLE_LABEL[u.role]}
                     </span>
                   ) : (
                     <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-300">

@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { CAPABILITY_SCOPE, ROLES, type Capability } from '@shareat/auth';
+import { CAPABILITY_SCOPE, ROLES, ROLE_LABEL, capabilityTitle, type Capability } from '@shareat/auth';
 import { requirePageAccess } from '../../../../lib/page-access';
 import {
   assignRoleAction,
@@ -75,7 +75,7 @@ export default async function UserAccessPage({
         <p className="text-sm text-neutral-500 dark:text-neutral-400">
           {person.role ? (
             <>
-              {person.role.replace(/_/g, ' ')}
+              {ROLE_LABEL[person.role]}
               {person.grantedAt && ` since ${person.grantedAt.toLocaleDateString('en-PH', MANILA)}`}
             </>
           ) : (
@@ -115,7 +115,7 @@ export default async function UserAccessPage({
                   </option>
                   {ROLES.map((r) => (
                     <option key={r} value={r}>
-                      {r.replace(/_/g, ' ')}
+                      {ROLE_LABEL[r]}
                     </option>
                   ))}
                 </select>
@@ -187,9 +187,12 @@ export default async function UserAccessPage({
               return (
                 <li key={g.id} className="flex flex-wrap items-start justify-between gap-3 text-sm">
                   <span>
-                    <span className="font-mono text-xs">{g.grantName}</span>
+                    <span>{capabilityTitle(g.grantName)}</span>
                     <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">
                       {revocable ? grantSourceLabel(g.grantSource) : positionProvenanceLine(g.positionSource)}
+                    </span>
+                    <span className="block font-mono text-[11px] text-neutral-500 dark:text-neutral-400">
+                      {g.grantName}
                     </span>
                   </span>
                   {revocable ? (
@@ -236,13 +239,10 @@ export default async function UserAccessPage({
                           <input type="hidden" name="personId" value={personId} />
                           <input type="hidden" name="granted" value="true" />
                           <input type="hidden" name="capability" value={g.grantName} />
+                          <input type="hidden" name="intent" value="hold_own_right" />
                           <button type="submit" className={LINK_BTN}>
                             Hold in their own right
                           </button>
-                          <span>
-                            Already held {positionProvenanceLine(g.positionSource)} — now held in their
-                            own right.
-                          </span>
                         </form>
                       )}
                     </div>
@@ -263,8 +263,13 @@ export default async function UserAccessPage({
             <ul className="mt-2 space-y-1">
               {revokedGrants.map((g) => (
                 <li key={g.id}>
-                  <span className="font-mono">{g.grantName}</span> — revoked{' '}
-                  {g.revokedAt?.toLocaleDateString('en-PH', MANILA)}
+                  <span>
+                    {capabilityTitle(g.grantName)} — revoked{' '}
+                    {g.revokedAt?.toLocaleDateString('en-PH', MANILA)}
+                  </span>
+                  <span className="block font-mono text-[11px] text-neutral-500 dark:text-neutral-400">
+                    {g.grantName}
+                  </span>
                   <span className="block text-neutral-500 dark:text-neutral-400">
                     {g.grantSource === 'position'
                       ? positionProvenanceLine(g.positionSource)
@@ -445,7 +450,10 @@ function GrantPicker({ personId, offerable }: { personId: string; offerable: rea
                 className="flex cursor-pointer items-start gap-2 rounded border border-neutral-200 p-2 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-900"
               >
                 <input type="checkbox" name="capability" value={c} className="mt-0.5" />
-                <span className="font-mono text-xs">{c}</span>
+                <span>
+                  <span>{capabilityTitle(c)}</span>
+                  <span className="block font-mono text-[11px] text-neutral-500 dark:text-neutral-400">{c}</span>
+                </span>
               </label>
             ))}
           </div>
