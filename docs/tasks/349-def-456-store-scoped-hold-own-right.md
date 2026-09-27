@@ -268,6 +268,31 @@ ruled, not a weakening**:
 `'grant'` insert stays legal), `apps/erp/tests/admin-users-lib.test.ts`, `tests/unit/migration-journal.test.ts`, the
 classification/RLS registry guards, `route-capability-coverage`, `action-link-sweep` (the hold control keeps its size).
 
+## 4b. S2b: follow-ups from the S2 post-commit review of `ea0ccb4` (APPROVED 2026-09-27, orchestrator)
+Model Sonnet, tester then builder; no migration. Rulings are the orchestrator's; each finding was verified by the auditor.
+1. **Org-scoped hold over an `'elevation'` row** (`repo/access.ts` person-level arm, ~:728-745): the rank-upgrade to
+   `'grant'` is the intended effect of "hold in their own right" (it must outlive `revokeElevationGrantsForOrg`), but it
+   is a write — return `wrote: true` when the arm upgraded a lower-ranked row, so the banner says "…is now held in their
+   own right." Leg **H10**: elevation row exists → hold → row is `'grant'`, `wrote: true`, banner "now held".
+2. **Fold loses provenance** (`admin/users/lib.ts` ~:230): `alsoViaByOtherId` becomes `Map<string, PositionDefaultSource[]>`
+   so every covered position row's job appears under its cover ("also via Cashier at StoreA; Supervisor at StoreB"), and
+   `grantSummaryLine` still counts correctly. Leg **P5**: one NULL-store grant covering two position rows at two stores
+   shows both jobs.
+3. **Picker store dimension** (`[personId]/page.tsx` ~:66): the picker excludes only capabilities held ORG-WIDE (an active
+   row with `store_id` NULL); a store-scoped hold or a position row no longer removes the capability from the picker, so
+   an admin can still grant it org-wide. `t343-s6b` U4's expected set changes accordingly (TESTER-ruled edit). Leg **P6**.
+4. **Revoked list** (`[personId]/page.tsx` ~:307-310): a store-scoped hand grant reads "hand-granted at <store>" there
+   too. Leg **P7**.
+5. **No `holdResult!`** (`actions.ts` ~:211-217): compute the ok sentence inside the branch that holds the result
+   (`let ok: string`), removing all five assertions (RULES: prefer a guard to `!`). Behaviour unchanged; A-legs pin it.
+6. **Deterministic cover** (`repo/access.ts` ~:659): `ORDER BY store_id NULLS FIRST` before `limit(1)`, so an org-wide
+   cover wins and "everywhere" is reported when true.
+7. **Honest titles:** H8's describe says what it proves (structural: the input has no store field; a row is written at
+   the position's store), H2's title matches what it checks.
+- **BUILDER paths:** `packages/db/src/repo/access.ts`, `apps/erp/src/app/admin/users/{lib.ts,[personId]/page.tsx,actions.ts}`.
+- **TESTER paths:** `packages/auth/tests/integration/t349-hold-own-right.test.ts`, `apps/erp/tests/t349-hold-own-right-page.test.ts`,
+  `apps/erp/tests/t343-s6b-admin-users-labels.test.ts` (U4 only).
+
 ## 5. Paths (disjoint per slice; S2 after S1 lands; S3 only after Ian's Q1, after S1)
 
 **S1 BUILDER:** `packages/db/migrations/0165_t349_person_grants_store_grant.sql` (new), `packages/db/migrations/meta/_journal.json`,

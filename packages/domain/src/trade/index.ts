@@ -39,6 +39,7 @@ import {
 import { authorize, AuthorizationError, type Actor, type Capability } from '@shareat/auth';
 import { parseMoneyInput } from '../shared/money-input';
 import { assertFiguresReconcile } from '../shared/reconcile';
+import { refuse } from '../shared/refusal';
 import { quantity as parseQuantity } from '../stock/quantity';
 import { recordCharge, voidCharge } from '../ar';
 import { branchPriceFor } from '../items';
@@ -107,11 +108,24 @@ const EPSILON = 0.005;
  * never a sentence a cashier can act on. This is that wrapper, local to this file rather than a
  * new shared module: only this file currently needs a readable refusal for a typed quantity.
  */
-function parseQuantityInput(raw: string, label: string): string {
+function parseQuantityInput(raw: string, rawLabel: string, humanLabel: string): string {
   try {
     return parseQuantity(raw);
-  } catch {
-    throw new Error(`${label} — "${raw}" is not a valid quantity. Use at most three decimal places.`);
+  } catch (err) {
+    // T-343 S5.5r / DEF-469 — `fromThousandths`'s ceiling (`stock/quantity.ts`) throws a RangeError
+    // distinct from every other malformed-string failure; collapsing both into one "not a valid
+    // quantity... at most three decimal places" sentence told an operator whose number was too big
+    // that their DECIMAL PLACES were wrong.
+    if (err instanceof RangeError && /out of range/.test(err.message)) {
+      throw refuse(
+        `${rawLabel} — "${raw}" is too large. The most a quantity can be is 99,999,999,999.999.`,
+        `${humanLabel} — "${raw}" is too large. The most a quantity can be is 99,999,999,999.999.`,
+      );
+    }
+    throw refuse(
+      `${rawLabel} — "${raw}" is not a valid quantity. Use at most three decimal places.`,
+      `${humanLabel} — "${raw}" is not a valid quantity. Use at most three decimal places.`,
+    );
   }
 }
 
@@ -282,7 +296,11 @@ export async function createTradeOrder(
       // is `numeric(14,3)`, a different axis (`parseQuantityInput`, defined above).
       const rate = parseMoneyInput(rawRate, `createTradeOrder: line ${n}'s rate`, `Line ${n}'s rate`);
       if (Number(rate) < 0) throw new Error(`createTradeOrder: line ${n} has a negative rate.`);
-      const parsedQuantity = parseQuantityInput(draft.quantity, `createTradeOrder: line ${n}'s quantity`);
+      const parsedQuantity = parseQuantityInput(
+        draft.quantity,
+        `createTradeOrder: line ${n}'s quantity`,
+        `Line ${n}'s quantity`,
+      );
       if (Number(parsedQuantity) <= 0) {
         throw new Error(`createTradeOrder: line ${n} has a quantity of ${draft.quantity}.`);
       }

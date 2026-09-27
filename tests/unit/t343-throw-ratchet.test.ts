@@ -65,7 +65,7 @@ const DB_SRC_OUTSIDE_REPO = 'packages/db/src/*';
  */
 const CEILINGS: Record<string, number> = {
   'packages/domain/src/ap': 0, // T-343 S5.2: 39 -> 0, all converted to refuse/gone/internalFault
-  'packages/domain/src/ar': 35,
+  'packages/domain/src/ar': 34, // T-343 S5.5p: 35 -> 34, recordCollection's negative-credit throw converted to refuse(...)
   'packages/domain/src/attendance': 1,
   'packages/domain/src/budgets': 4,
   'packages/domain/src/cash-requests': 21,
@@ -91,7 +91,7 @@ const CEILINGS: Record<string, number> = {
   'packages/domain/src/payroll': 34,
   'packages/domain/src/people': 0,
   'packages/domain/src/pos': 7,
-  'packages/domain/src/prepaid': 20,
+  'packages/domain/src/prepaid': 17, // T-343 S5.5p: 20 -> 17, writeOffPrepaidItem's negative/no-account/over-refund throws converted to refuse(...)
   'packages/domain/src/production': 7,
   'packages/domain/src/recurring-expenses': 13,
   'packages/domain/src/remittance': 17,
@@ -107,7 +107,7 @@ const CEILINGS: Record<string, number> = {
   'packages/domain/src/stores': 12,
   'packages/domain/src/sync': 0,
   'packages/domain/src/till': 18,
-  'packages/domain/src/trade': 53,
+  'packages/domain/src/trade': 52, // T-343 S5.5r: 53 -> 52, parseQuantityInput converted to refuse(...)
   'packages/domain/src/wastage': 11,
   'packages/auth/src': 0, // T-343 S5a: 7 -> 0, all converted to refuse/gone/AuthorizationError(...,userMessage)
   'packages/db/src/repo': 17, // T-343 S5.2: 20 -> 17, the 3 ap.ts sites converted to refuse(...)

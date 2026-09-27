@@ -5,22 +5,24 @@ import { sql as dsql } from 'drizzle-orm';
 
 /**
  * T-343 S5.5p — follow-ups from the S5.5n post-commit review (DEF-460, DEF-461).
- * `docs/tasks/343-def-417-human-readable-refusals.md` §S5.5p.
+ * `docs/tasks/343-def-417-human-readable-refusals.md` §S5.5p. Committed as `d072356`; every leg
+ * below is green, and each "was red before d072356" note records the pre-fix failure it pinned.
  *
  * ⛔ TESTER, not BUILDER.
- * - P1/P1n/P2/P3/P4 (DEF-460): `apps/erp/src/app/prepaid/actions.ts`'s `writeOffAction` spreads
- *   `refundAmount`/`refundAccountCode` only when `refund && Number(refund) > 0`. `Number('1,000')`
- *   is `NaN` (comma), so a comma-typed refund is silently DROPPED and the write-off proceeds with
- *   no refund at all — the whole remaining balance is expensed, no refusal naming the refund (P1).
- *   An empty refund box stays green (P1n). P2-P4 drive the SAME gate with values that already pass
- *   `Number(x) > 0` (so they DO reach `writeOffPrepaidItem` today) to pin the three plain,
- *   `writeOffPrepaidItem:`-prefixed `Error`s `errorMessage`'s fall-through strips to a lowercase
- *   sentence — the developer-worded text DEF-460 item 1 asks the builder to convert with `refuse()`.
- * - N1 (DEF-461): `packages/domain/src/ar/index.ts`'s `recordCollection` throws a plain
- *   `Error('recordCollection: creditApplied cannot be negative.')` for a negative credit. Reaches
- *   the domain unfiltered today — DEF-457/S5.5n already fixed the app-layer gate that used to drop
- *   it (`customers/actions.ts:227`, `creditApplied ? { creditApplied } : {}` — no `Number(...) > 0`
- *   test left to intercept a negative value).
+ * - P1/P1n/P2/P3/P4 (DEF-460): before `d072356`, `apps/erp/src/app/prepaid/actions.ts`'s
+ *   `writeOffAction` spread `refundAmount`/`refundAccountCode` only when `refund && Number(refund) >
+ *   0`. `Number('1,000')` is `NaN` (comma), so a comma-typed refund was silently DROPPED and the
+ *   write-off proceeded with no refund at all — the whole remaining balance expensed, no refusal
+ *   naming the refund (P1). An empty refund box stayed green (P1n). P2-P4 drive the SAME gate with
+ *   values that already pass `Number(x) > 0` (so they DID reach `writeOffPrepaidItem` before the
+ *   fix) to pin the three plain, `writeOffPrepaidItem:`-prefixed `Error`s `errorMessage`'s
+ *   fall-through stripped to a lowercase sentence — the developer-worded text DEF-460 item 1 asked
+ *   the builder to convert with `refuse()`.
+ * - N1 (DEF-461): `packages/domain/src/ar/index.ts`'s `recordCollection` threw a plain
+ *   `Error('recordCollection: creditApplied cannot be negative.')` for a negative credit. Reached
+ *   the domain unfiltered before this fix — DEF-457/S5.5n already fixed the app-layer gate that used
+ *   to drop it (`customers/actions.ts:227`, `creditApplied ? { creditApplied } : {}` — no
+ *   `Number(...) > 0` test left to intercept a negative value).
  */
 config({ path: '.env.local' });
 
@@ -110,6 +112,16 @@ async function prepaidStatus(itemId: string): Promise<string> {
   return row!.status;
 }
 
+/** P-file hygiene (S5.5r) — a "nothing was written" leg should prove no JOURNAL ENTRY posted for
+ *  this item, not merely that `prepaid_items.status` didn't flip; `postEntry`'s own `sourceId` is
+ *  the write-off's real footprint (`prepaid/index.ts`'s `runWriteOff`, `sourceType:
+ *  'prepaid_write_off'`). */
+async function journalEntryCountFor(itemId: string): Promise<number> {
+  const [row] = await sql<{ count: string }[]>`
+    select count(*)::text as count from journal_entries where source_type = 'prepaid_write_off' and source_id = ${itemId}`;
+  return Number(row!.count);
+}
+
 function writeOffFormData(f: { itemId: string }, overrides: { refundAmount?: string; refundAccountCode?: string } = {}): FormData {
   const fd = new FormData();
   fd.set('prepaidItemId', f.itemId);
@@ -136,7 +148,7 @@ afterAll(async () => {
 
 describe('P1 (DEF-460) — a comma-typed refund is silently dropped, never reaches parseMoneyInput', () => {
   it(
-    'refundAmount "1,000": red today — the write-off SUCCEEDS, whole balance expensed, no refusal naming the refund',
+    'refundAmount "1,000": was red before d072356 — the write-off used to SUCCEED, whole balance expensed, no refusal naming the refund',
     async () => {
       const f = await prepaidFixture('p1');
       ACTOR_HOLDER.actor = f.admin;
@@ -147,11 +159,10 @@ describe('P1 (DEF-460) — a comma-typed refund is silently dropped, never reach
       );
       const params = new URL(to, 'http://localhost').searchParams;
 
-      // Desired (post-fix) — asserted directly: a refusal naming the refund amount, nothing written.
       expect(params.get('error'), `redirect URL was: ${to}`).toBe(
         'The refund amount — "1,000" is not a valid amount. Use at most two decimal places.',
       );
-      expect(await prepaidStatus(f.itemId), 'the item must still be active — nothing written').toBe('active');
+      expect(await journalEntryCountFor(f.itemId), 'no journal entry should have been posted').toBe(0);
     },
     30000,
   );
@@ -175,15 +186,14 @@ describe('P1 (DEF-460) — a comma-typed refund is silently dropped, never reach
 
 describe('P2 (DEF-460) — a negative refund, at the DOMAIN layer, is still a plain, developer-worded Error', () => {
   /**
-   * ⚠️ Measured, not assumed: `-5` fails the SAME `Number(refund) > 0` app-layer gate P1 exploits
-   * — `Number('-5') > 0` is `false` — so `writeOffAction` silently drops it too, and a form-level
+   * ⚠️ Measured, not assumed: `-5` fails the SAME `Number(refund) > 0` app-layer gate P1 exploited
+   * — `Number('-5') > 0` is `false` — so `writeOffAction` silently dropped it too, and a form-level
    * P2 would only re-prove P1 (succeeds, no refund leg), never reach this sentence at all. Calling
-   * `writeOffPrepaidItem` directly is the only way to observe today's actual text; item 1's
-   * `refuse()` conversion (once the gate is fixed to forward every non-empty refund) is what this
-   * pins as still-plain-`Error`-worded today.
+   * `writeOffPrepaidItem` directly was the only way to observe the pre-fix text; item 1's `refuse()`
+   * conversion is what turned it from a plain `Error` into a `RefusalError`.
    */
   it(
-    'refundAmount "-5": wanted — a RefusalError whose raw message stays byte-identical and whose userMessage is "The refund amount cannot be negative." — red today: no userMessage at all (a plain Error)',
+    'refundAmount "-5": wanted — a RefusalError whose raw message stays byte-identical and whose userMessage is "The refund amount cannot be negative." — was red before d072356: no userMessage at all (a plain Error)',
     async () => {
       const f = await prepaidFixture('p2');
       let caught: unknown;
@@ -205,18 +215,18 @@ describe('P2 (DEF-460) — a negative refund, at the DOMAIN layer, is still a pl
       // `refuse(raw, sentence)`'s own Invariant 1 — `message` stays `raw`, byte-identical, whether
       // or not the conversion has landed yet.
       expect(err.message).toBe('writeOffPrepaidItem: a refund cannot be negative.');
-      expect(err.userMessage, 'red today: no userMessage — this is a plain Error, not yet a RefusalError').toBe(
+      expect(err.userMessage, 'was red before d072356: no userMessage — a plain Error, not yet a RefusalError').toBe(
         'The refund amount cannot be negative.',
       );
-      expect(await prepaidStatus(f.itemId), 'nothing should have been written').toBe('active');
+      expect(await journalEntryCountFor(f.itemId), 'no journal entry should have been posted').toBe(0);
     },
     30000,
   );
 });
 
-describe('P3 (DEF-460) — a positive refund with no account reaches the domain today, plain-Error worded', () => {
+describe('P3 (DEF-460) — a positive refund with no account refuses by name', () => {
   it(
-    'refundAmount "100", no refundAccountCode: red today — "Say which account the refund landed in." is not shown',
+    'refundAmount "100", no refundAccountCode: wanted "Say which account the refund landed in." — was red before d072356: it was not shown',
     async () => {
       const f = await prepaidFixture('p3');
       ACTOR_HOLDER.actor = f.admin;
@@ -225,15 +235,15 @@ describe('P3 (DEF-460) — a positive refund with no account reaches the domain 
       const to = await expectRedirectTo(() => writeOffAction(writeOffFormData(f, { refundAmount: '100' })));
       const params = new URL(to, 'http://localhost').searchParams;
       expect(params.get('error'), `redirect URL was: ${to}`).toBe('Say which account the refund landed in.');
-      expect(await prepaidStatus(f.itemId), 'nothing should have been written').toBe('active');
+      expect(await journalEntryCountFor(f.itemId), 'no journal entry should have been posted').toBe(0);
     },
     30000,
   );
 });
 
-describe('P4 (DEF-460) — a refund above what is left reaches the domain today, plain-Error worded', () => {
+describe('P4 (DEF-460) — a refund above what is left refuses by name', () => {
   it(
-    'refundAmount above the ₱24,000 remaining: red today — the sentence does not start "The refund can\'t be more than what\'s left on this item."',
+    'refundAmount above the ₱24,000 remaining: wanted the sentence starting "The refund can\'t be more than what\'s left on this item." — was red before d072356: it did not',
     async () => {
       const f = await prepaidFixture('p4');
       ACTOR_HOLDER.actor = f.admin;
@@ -246,7 +256,7 @@ describe('P4 (DEF-460) — a refund above what is left reaches the domain today,
       expect(params.get('error'), `redirect URL was: ${to}`).toMatch(
         /^The refund can.t be more than what.s left on this item\./,
       );
-      expect(await prepaidStatus(f.itemId), 'nothing should have been written').toBe('active');
+      expect(await journalEntryCountFor(f.itemId), 'no journal entry should have been posted').toBe(0);
     },
     30000,
   );
@@ -294,9 +304,9 @@ async function collectionCountFor(customerId: string): Promise<number> {
   return Number(row!.count);
 }
 
-describe('N1 (DEF-461) — a negative store credit reaches the domain today, plain-Error worded', () => {
+describe('N1 (DEF-461) — a negative store credit refuses by name', () => {
   it(
-    'creditApplied "-5": red today — the screen shows "creditApplied cannot be negative.", not "The store credit applied cannot be negative."',
+    'creditApplied "-5": wanted "The store credit applied cannot be negative." — was red before d072356: the screen showed "creditApplied cannot be negative." instead',
     async () => {
       const f = await arFixture('n1');
       ACTOR_HOLDER.actor = f.admin;
