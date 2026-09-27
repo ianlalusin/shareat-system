@@ -344,6 +344,17 @@ Re-click from a stale tab → "was already held…". Revoke → the position lin
 **S3** (only if Q1 = yes): M6 red then green, plus scratch-DB proof. On dev, afterwards, Dev Cashier's `confirm_receipt`
 reads "hand-granted at SmokeStore", and the store-less row appears in the revoked list with the DEF-456 reason.
 
+## 8b. S2c — findings from the S2b post-commit /code-review (`8d14e7a`), 2026-09-28 — NOT YET SPECCED (planner)
+1. `packages/db/src/repo/access.ts:746` — the upgrade UPDATE sets `grantSource` only; `grantedBy` stays the writer of
+   the `'elevation'` row, so a row reading "hand-granted" names someone who did not grant it (rule:
+   `packages/auth/src/roles.ts:656`, `granted_by` is the ACTOR). Also check it against T-349's coexist-not-upgrade design.
+2. `apps/erp/src/app/admin/users/lib.ts:223` — `others.find` picks the cover row by array order; `grantsForPerson` has
+   no `orderBy`, so the "also via …" annotation is nondeterministic and hops after an upgrade.
+3. `apps/erp/src/app/admin/users/[personId]/page.tsx:68` — intended (§4b item 3), but the `Granted: X.` banner
+   (`actions.ts:204`) does not say the grant is org-wide. Banner should name the scope.
+4. `8d14e7a`'s message claims the S5.5s full-suite run covered it; that run predates the commit. The next full gates
+   (at the S5.5t commit) are the first real run over it.
+
 ## 9. Open for Ian
 
 **Q1. Re-scope the rows DEF-456 already widened?** (dev: 1 row; production: count at cutover.) Slice S3 (§3.5) revokes

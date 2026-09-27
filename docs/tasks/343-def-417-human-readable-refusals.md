@@ -2271,6 +2271,21 @@ a hidden field (`:144`); nothing is written from what was typed. Harmless.
 - Done when: reds red→green, blanks green unedited, four ratchet ceilings equal measured counts, typecheck clean,
   neither `'use client'` file gains an import, one screen check of the loan form refusing `1,5` in the rate.
 
+
+**S5.5v Amendment A1 — from the S5.5s post-commit /code-review (`33dbd3f`), 2026-09-28, binding.** Folded here because
+S5.5v already owns the neighbouring files; all disjoint from S5.5t/S5.5u.
+1. **Builder, +2 paths:** `packages/domain/src/channel-settlements/index.ts` — `previewChannelSettlement` keeps its
+   docstring's promise ("returns every refusal it would hit rather than throwing the first one"): `assertSettlementFigures`
+   (`:324`) refusals are COLLECTED with `ctx.configBlockers` (`:323`) and returned together, never thrown from preview. The
+   post path still throws. `apps/erp/src/app/remittance/actions.ts:81-87` — comment-only: make the T-328 comment describe
+   the code at `:90-96` (a negative amount now refuses; two decisions, not one).
+2. **Tester, +2 ruled edits:** `apps/erp/tests/t343-s5-5s-number-boxes.test.ts:46` — slice each tag to its real end
+   (anchor on `/>`, not the first `>`), so an `onChange={(e) => …}` cannot truncate the slice and make the negatives pass
+   vacuously; `packages/domain/src/shared/money-positivity-guard.test.ts:57-64` — blind-spot (2) no longer says
+   `settleCashRequest` is unfixed (S5.5s routed `returned`/`short` through `parseMoneyInput`; DEF-277 PARTLY FIXED).
+   New leg P1: preview with a comma-typed penalty AND an unconfigured channel returns BOTH refusals (red: only the
+   figures refusal, thrown).
+
 **S5.5w — build (after S5.5t and S5.5u commit; 8 elements, 28 fields, 12 files).**
 1. **Boxes.** `ap/invoices/[id]/page.tsx:167,190` (`decimal`), `cutover/count/page.tsx:140` (`decimal`),
    `prepaid/page.tsx:205` (`decimal`), `:223` and `prepaid/[id]/page.tsx:121` (`numeric`),
