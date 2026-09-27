@@ -1,6 +1,6 @@
 # T-349: "Hold in their own right" keeps the grant at that store (DEF-456)
 
-**Status:** S1 DONE 2026-09-27 (`3d601ab`, migration 0165), S2 DONE (`ea0ccb4`), S2b DONE 2026-09-27 (post-commit follow-ups, §4b). **S3 (repair of already-widened rows, migration 0166 reserved) awaits Ian's Q1** (§9).
+**Status:** S1 DONE 2026-09-27 (`3d601ab`, migration 0165), S2 DONE (`ea0ccb4`), S2b DONE 2026-09-27 (post-commit follow-ups, §4b). **S3 (repair of already-widened rows, migration 0166 reserved) APPROVED — Ian answered Q1 YES 2026-09-27** (§9).
 **Closes:** DEF-456 (`docs/DEFECTS-REGISTER.md:663`). **Ian's ruling, 2026-09-27:** *"keep it at that store."*
 **Migrations:** S1 `0165_t349_person_grants_store_grant.sql`, journal `when` = `1800329507084` (0164's `1800243107084` +
 86 400 000; it must exceed the previous entry, ADR-012 §5.5). S2 none. **S3 `0166_t349_def456_repair.sql` is reserved
@@ -353,3 +353,5 @@ button did not record which job row it came from, so the repair cannot tell. **T
 store**, which someone may have used since the click. Planner proposes **yes**: your ruling says the click was meant to
 stay at that store, and nobody chose the wider reach. If no, S3 is never built, and those rows stay org-wide until an
 administrator revokes them by hand. S1 and S2 ship either way.
+
+**Answer (Ian, 2026-09-27): YES — re-scope.** S3 is built as §3.5 specifies.

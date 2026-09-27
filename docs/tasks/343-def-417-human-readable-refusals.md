@@ -1,6 +1,6 @@
 # T-343: DEF-417 (part 2) — user-visible refusals name things in human terms, never raw ids or keys
 
-**Status:** S1–S4 DONE 2026-09-25. S5.0–S5.1 DONE 2026-09-26. S5.1b, S2b, S5a, S5.2 (+follow-up), S5.3, S5.1c, S5.1d, S5.3b DONE 2026-09-27 (morning). **S6a, S6b, S6c, S6d, S5.5m, S5.5n, S5.5p, S5.5q, S5.5r, S5.5s, S7 DONE 2026-09-27** (each: tester red, builder, Opus pre-commit read, gates, Opus post-commit /code-review in a worktree). **Open:** S5.5t (APPROVED; red tests half-written, R-legs in `apps/erp/tests/t343-s5-5t-number-boxes.test.ts`, uncommitted), S5.5u (APPROVED, DEF-473), S5.4 (after S6 — now unblocked), S8, S9; DEF-472's app-wide number-box census is unspecced.
+**Status:** S1–S4 DONE 2026-09-25. S5.0–S5.1 DONE 2026-09-26. S5.1b, S2b, S5a, S5.2 (+follow-up), S5.3, S5.1c, S5.1d, S5.3b DONE 2026-09-27 (morning). **S6a, S6b, S6c, S6d, S5.5m, S5.5n, S5.5p, S5.5q, S5.5r, S5.5s, S7 DONE 2026-09-27** (each: tester red, builder, Opus pre-commit read, gates, Opus post-commit /code-review in a worktree). **Open:** S5.5t (APPROVED; red tests half-written, R-legs in `apps/erp/tests/t343-s5-5t-number-boxes.test.ts`, uncommitted), S5.5u (APPROVED, DEF-473), S5.4 (after S6 — now unblocked), S8, S9; **S5.5v (APPROVED, DEF-472 census part 1, 21 files) and S5.5w (APPROVED, part 2, after S5.5t+S5.5u commit)**.
 **Orchestrator defaults (Ian may override any time):** fallback wording as proposed in S1.3; the 96 capability labels
 are Sonnet-drafted from CAPABILITY-MATRIX.md notes and fixed later if Ian wants; staging S1 = fail closed on
 IDENTIFIERS, strict flip at S9; S3 names the record's KIND, not its number; cross-org refusals never name the other
@@ -2012,6 +2012,16 @@ Seven inputs in five files, all server components.
   class; a blank cutover cost clearing an existing cost (upsert, today's behaviour).
 - Done when: reds red→green, blanks green unedited, ratchet unchanged, typecheck clean.
 
+**S5.5t Amendment A1 — Ian ruled DEF-471, 2026-09-27 (binding; supersedes the blank legs and out-of-scope line above
+for the three minutes boxes).** Ian: *a blank overtime box means "not decided"*, not "approve 0". `wholeMinutes`
+therefore REFUSES a blank (or spaces-only) value instead of returning `0`: `refuse(`${fn}: ${key} is blank`,
+`${label} — enter a whole number of minutes (0 to 99999).`)`; nothing is recorded, the overtime stays pending, and the
+page shows the refusal. A typed `0` is still a real decision. The orchestrator extends the same rule to
+`chosenAnchorMinute` and `effectiveOutMinute` (same class: a blank paid the day from/until midnight) — siding with the
+project, reported to Ian. Blank legs for the three minutes boxes become REFUSAL legs (red: a 0-minute row recorded);
+`'30'`, `'0'` record as typed. Cutover `unitCost` and till blanks are unchanged. The docstring at
+`actions.ts:67-69` becomes true; the `|| '0'` goes.
+
 ### S5.5u: follow-ups from the S5.5r post-commit review (DEF-473)
 **Status:** APPROVED 2026-09-27 (orchestrator; findings verified by the auditor). **Model:** Sonnet, tester then builder.
 **Migration:** none.
@@ -2034,6 +2044,291 @@ Seven inputs in five files, all server components.
   - P-legs: keep the journal-entry count AND restore the status assertion; P1n asserts the count is exactly 1.
   - K1: after a refusal the form re-renders with the typed Reason/Refunded/account as default values.
 - Done when: reds red→green, typecheck clean, screen check of the refusal keeping typed values.
+
+### S5.5v: the rest of the number boxes (DEF-472 census)
+**Status:** APPROVED 2026-09-27 (orchestrator, after independent Opus spec audit; Ian's Q1/Q2 folded). **Model:** Sonnet, tester then builder. **Migration:** none.
+**Split:** the census is 31 `<input type="number">` elements (51 fields, since two `settings/attendance` helpers render
+22 of them); converting them all is 33 builder files, so it splits in two. **S5.5v** (22 boxes, 21 files) touches no
+S5.5t or S5.5u path and may run now. **S5.5w** (8 elements / 28 fields, 12 files) touches `ap/invoices/[id]/page.tsx`,
+`cutover/count/page.tsx`, `packages/domain/src/cutover/index.ts` (S5.5t's), and `prepaid/*` +
+`packages/domain/src/prepaid/index.ts` + `packages/domain/src/trade/index.ts` (S5.5u's), so it **starts only after
+both S5.5t and S5.5u are committed**. One box stays `type="number"` (below). Line numbers are HEAD `0fcd7b1`.
+
+**The premise** is S5.5s's measurement (Chrome 152): `1,5` → `15` silently; non-numeric entry → `''`. Once a box is
+text, `1,5` reaches the server as `1,5`, and the server must refuse it BY NAME (DEF-472's reduction). Every field's
+blank keeps today's meaning except the two Ian ruled (Q1, Q2 — see Ian's rulings at the end).
+
+**Census (every `type="number"` in `apps/erp/src`; S5.5s's 17 are gone; S5.5t's 7 excluded — `attendance/[dayId]`
+×3, `cutover/count` `unitCost`, `till` `count:<id>`, `ap/invoices/[id]` `conversionFactor`; the grep for
+`type: 'number'` / `type={'number'}` / a computed `'number'` finds nothing else):**
+
+*S5.5v — money (M), integer count (I), rate (R):*
+- M `channel-settlements/SettlementForm.tsx:300,317` `grossAmount`/`netDeposited` — **SAFE.** Server parses by name
+  (`packages/domain/src/channel-settlements/index.ts:154-155`, S5.5s item 8). Blank → `'0'` (`actions.ts:31-34`), only
+  reachable by a forged post (`required`). **Ian ruled (Q1): refuse a blank**, save and preview — item 1a.
+- M `cash-requests/page.tsx:203` `amount` — **SAFE.** `parseMoneyInput` at `packages/domain/src/cash-requests/index.ts:54`;
+  `<= 0` is a plain `Error` (`:55-57`, readable after prefix-strip).
+- M `cash-requests/[id]/page.tsx:128` approve `amount` — **SAFE** (`:110`; plain `<= 0` guard `:111-113`).
+- M `cash-requests/[id]/page.tsx:178` release `amount` — **TIER 2.** Parsed (`:188`) but **no `> 0` guard**: only
+  `amount > approved` (`:191`). With `min="0.01"` gone, `0` or `-5` would reach `checkDraw` and `postEntry`.
+- M `money-transfers/RecordTransferForm.tsx:70` `amountOut` — **SAFE.** Blank refused in the app
+  (`money-transfers/actions.ts:30`); parsed by name (`packages/domain/src/money-transfers/index.ts:154`); `> 0` guard
+  `:157-159`. Input change only.
+- M `cutover/opening/page.tsx:178` `amount` — **SAFE.** `parseMoneyInput` + `refuse` guard,
+  `packages/domain/src/cutover/opening.ts:72-75`. Input change only.
+- I `fixed-assets/new/page.tsx:140`, `fixed-assets/[id]/page.tsx:244` `usefulLifeMonths` — **TIER 1 in the browser**
+  (new: `''` → category default, `fixed-assets/actions.ts:69`, so pasted text silently takes the default; `1,5` → 15
+  months of depreciation). Server already refuses text/fractions by name (S5.5q/DEF-464, DEF-467:
+  `packages/domain/src/fixed-assets/capitalize.ts:120-125`, `fixed-assets/actions.ts:104-111`). Input change only.
+  Not harmless: it sets the depreciation charge.
+- M `loans/[id]/page.tsx:99` disburse `amount`, `:166` payment `amount` — **SAFE** (`packages/domain/src/loans/index.ts:92,167`;
+  plain `<= 0` guards `:93-95`, `:168-170`).
+- M `loans/page.tsx:143` `principalAmount` — **TIER 2, NO server parse.** Raw to `numeric(14,2)`
+  (`loans/index.ts:61`): text → Postgres syntax error → the database fallback; `1.234` rounds silently; `0` hits the
+  UNMAPPED `loans_principal_positive_check`.
+- R `loans/page.tsx:156` `interestRate` — **TIER 2, NO server parse**, raw to `numeric(8,4)` (`:62`). `1,5` → 15 % is
+  the worst silent case in this slice: it drives every interest split.
+- I `loans/page.tsx:198` `termPeriods` — **TIER 2.** `Number(str())` in the app (`loans/actions.ts:45`): `''` → `0` →
+  unmapped `loans_term_positive_check`; text → `NaN` → integer syntax error.
+- M `liabilities/[id]/page.tsx:110` charge, `:157` pay `amount` — **TIER 2, NO server parse.**
+  `packages/domain/src/liabilities/index.ts:80,158` `Number(input.amount)`: `'1,000'`/`'abc'` → `NaN`, which passes
+  `amount <= 0`, so the RAW string reaches `postEntry` (`:97,102`, `:191,198`) → numeric syntax error → fallback;
+  `1.234` posts rounded.
+- M `customers/price-lists/[id]/page.tsx:120` `rate` — **TIER 2, NO server parse.**
+  `packages/domain/src/customers/index.ts:205` `Number(input.rate) < 0`; raw to `numeric(14,2)` (`:213`). `''` →
+  `Number('')` is 0, passes, then `''` fails in Postgres.
+- M `payroll/page.tsx:373` pay rate `amount` — **SAFE** (`packages/domain/src/payroll/index.ts:72-75`). Input only.
+- M `owners/[id]/page.tsx:139` settle `amount` — **TIER 2, NO server parse** on all three routes:
+  `repayFromOwner`/`recoverFromPay`/`writeOffReceivable` pass `Number(input.amount)` to `assertWithinReceivable`
+  (`packages/domain/src/owners/index.ts:360`, `:428`, `:517`); `NaN` passes both `<= 0` (`:335`) and `> outstanding`
+  (`:337`), so the raw string reaches `postEntry` and the idempotency key becomes `…:NaN`.
+- M `owners/[id]/page.tsx:185` contribution `amount` — **SAFE** (`:139`; plain `<= 0` `:140-142`).
+- M `owners/[id]/page.tsx:228` drawing `amount` — **TIER 2, NO server parse.** `:273` `Number(input.amount)`; `NaN`
+  passes `:274`; raw string posts (`:303,310`).
+- M `service-charge/page.tsx:118` distribute `amount` — **SAFE.** Parsed (`packages/domain/src/service-charge/index.ts:50`),
+  `<= 0` plain (`:52-54`), and the dropped `max={balance}` is backed by the server cap (`:82-83`). Input only.
+
+*S5.5w — quantity (Q), money, integer count, policy number (P):*
+- Q `ap/invoices/[id]/page.tsx:167` `line{i}_quantity` — **refuses, badly.** `packages/domain/src/items/index.ts:181`
+  `Number(l.quantity)`: `1,5` → `NaN` → "needs a quantity above zero" (true-ish but wrong advice); `1.2345` rounds to
+  `numeric(…,3)`. A blank drops the row (`ap/actions.ts:186`) but the lines-vs-goods-total reconciliation
+  (`packages/domain/src/ap/index.ts:430-433`) catches a dropped row — not silent.
+- M `ap/invoices/[id]/page.tsx:190` `line{i}_unitPrice` — **SAFE** (`items/index.ts:188-190` names the price). Input only.
+- Q `cutover/count/page.tsx:140` `quantity` — **TIER 2, NO server parse.** Raw to the count
+  (`packages/domain/src/cutover/index.ts:223-227`); only `Number(q) < 0` (plain) is checked; `NaN` passes.
+- M `prepaid/page.tsx:205` `totalCost` — **TIER 2, NO server parse.** `packages/domain/src/prepaid/index.ts:113`
+  `Number(totalCost) < threshold`: `NaN` passes, raw text reaches the insert (`:128`) → syntax error → fallback.
+- I `prepaid/page.tsx:223`, `prepaid/[id]/page.tsx:121` `coverageMonths` — **TIER 2.** `Number(str())` in the app
+  (`prepaid/actions.ts:45,90`); create has NO range guard (unmapped `prepaid_items_coverage_months_check`, 1..120),
+  confirm has a plain one (`prepaid/index.ts:153-155`).
+- P `settings/attendance/page.tsx:282` `NumField` (11 fields: `requiredHoursPerShift`, `halfDayHours`,
+  `defaultWorkHours`, `defaultBreakHours`, `overtimeMultiplier`, `overtimeFixedHourly`, `nightDiffMultiplier`, the
+  three holiday multipliers, `lateChargePerMinute`) — **TIER 2, NO parse.** Raw strings to `numeric(4,2)` /
+  `numeric(14,2)` (`settings/attendance/actions.ts:79-105`): text → syntax error → fallback; `''` in a `numeric(4,2)`
+  field → the same fallback (a refusal, ugly). `1,5` → 15× overtime is silent.
+- P `settings/attendance/page.tsx:304` `IntField` (11 fields: anchor window, night start/end hours, infraction points,
+  three graces, cutoff day, payout lag, auto clock-out hour, max shift hours) — **TIER 1 twice.** S5.5q's
+  `int()`/`intOrNull()` (`actions.ts:28-53`) refuse non-numeric text by name, but `Math.trunc` turns `1.5` into `1`
+  silently once the box is text, and a blank saves the FALLBACK default (`:81-117`) — **Ian ruled (Q2): refuse a blank.** Dropped
+  `min`/`max`: `payout_lag`, `auto_clock_out_hour`, `max_shift_hours` checks are UNMAPPED in
+  `apps/erp/src/lib/constraint-messages.ts`.
+
+*Stays `type="number"`:* `payroll/thirteenth-month/page.tsx:80` `year` — a GET preview parameter. `1,5` → year 15
+previews an empty year, the heading prints the year computed (`:94`), and the post form carries that displayed year as
+a hidden field (`:144`); nothing is written from what was typed. Harmless.
+
+**S5.5v — build (22 boxes, 14 page files, 7 server files).** All page files are server components except
+`SettlementForm.tsx` and `RecordTransferForm.tsx` (`'use client'`, attributes only, no import).
+
+1. **The boxes.** Each drops `type="number"`, `step`, `min`, `max`; adds (or keeps) `inputMode="decimal"` for money and
+   the rate, `inputMode="numeric"` for `usefulLifeMonths` ×2 and `termPeriods`. `name`, `value`/`onChange`,
+   `defaultValue`, `placeholder`, `required`, `disabled`, `className` byte-identical (S5.5s item 1 rule). Sites: the 22
+   listed under S5.5v above.
+1a. **Blank gross/net refuses (Ian, Q1) — `apps/erp/src/app/channel-settlements/actions.ts`.** `grossAmount` and
+   `netDeposited` stop defaulting blank to `'0'` on BOTH paths: `previewSettlementAction` (`:72-73`, `req.grossAmount ||
+   '0'`) and `recordSettlementAction` (`:125-126`, the blank-is-zero `money()` helper `:31-34`, which stays for the six
+   deductions). A module-private `figure(raw, key, label, fn)`: `raw.trim() === ''` → `throw refuse(\`${fn}: ${key} is
+   blank\`, \`${label} — enter the figure from the payout statement.\`)`, else the trimmed raw. Labels "The gross
+   settled" / "The net deposited" (the domain's, `packages/domain/src/channel-settlements/index.ts:154-155`). Both calls
+   sit inside each action's existing `try`, so the preview returns `{ ok: false, error }` (`:93-95`) and the save
+   reaches `back(... { error })`; nothing is written. Add `refuse` to the `@shareat/domain` import.
+2. **Cash release — `packages/domain/src/cash-requests/index.ts` `releaseCashRequest`.** After the parse (`:188`),
+   before the over-approval guard: `Number(amount) <= 0` → `throw refuse('releaseCashRequest: the amount released has
+   to be greater than zero.', 'The amount released has to be greater than zero.')` (backs the dropped `min`). Convert
+   the two existing `<= 0` guards (`:55-57`, `:111-113`) to `refuse(<raw byte-identical>, 'The amount requested has to
+   be greater than zero.' | 'The approved amount has to be greater than zero.')`.
+3. **Loan terms — `packages/domain/src/loans/index.ts` `createLoan`.** After the name check:
+   `principal = parseMoneyInput(input.principalAmount, 'createLoan: the amount agreed', 'The amount agreed')`;
+   `Number(principal) <= 0` → `refuse('createLoan: the amount agreed has to be greater than zero.', 'The amount agreed
+   has to be greater than zero.')`. Rate: `t = input.interestRate.trim()`; `!/^\d{1,4}(\.\d{1,4})?$/.test(t)` →
+   `refuse(\`createLoan: the interest rate — "${input.interestRate}" is not a valid rate. Use a number from 0 to
+   9999.9999 with up to four decimal places.\`, \`The interest rate — "${input.interestRate}" is not a valid rate. Use
+   a number from 0 to 9999.9999 with up to four decimal places.\`)` — raw message in `parseFourDecimalCost`'s
+   `${rawLabel} — "${raw}" …` shape (`packages/domain/src/commissary/catalogue.ts:54`); the regex backs `min="0"` and
+   `numeric(8,4)`'s ceiling, and the sentence names that ceiling. The principal guard's comparison is written exactly
+   `Number(principal) <= 0` (the positivity scanner's key, classified by the tester). Insert `principal` and `t`. Convert disburse/payment `<= 0` guards
+   (`:93-95`, `:168-170`) to `refuse(<raw>, 'The loan amount has to be greater than zero.' | 'The payment amount has to
+   be greater than zero.')`. Import `refuse` from `'../shared/refusal'`.
+4. **Loan term count — `apps/erp/src/app/loans/actions.ts`.** A module-private `wholePayments(raw)` (S5.5t A1's
+   `wholeMinutes` shape): `raw = str(formData, 'termPeriods')`; `''` → `refuse('createLoanAction: termPeriods is
+   blank', 'The number of payments — enter a whole number from 1 to 99999.')`; `!/^\d{1,5}$/.test(raw) || Number(raw)
+   < 1` → `refuse(\`createLoanAction: termPeriods is not a whole number from 1 to 99999: ${JSON.stringify(raw)}\`,
+   \`The number of payments — "${raw}" is not a whole number from 1 to 99999.\`)`. Called inside the existing `try`
+   (`:32`) BEFORE the transaction. Blank was already a refusal (the unmapped check); now it is a named one. Add `refuse`
+   to the `@shareat/domain` import (`:9-14`).
+5. **Liabilities — `packages/domain/src/liabilities/index.ts` `chargeLiability` / `payLiability`.** Replace
+   `Number(input.amount)` (`:80`, `:158`) with `parsed = parseMoneyInput(input.amount, 'chargeLiability: the amount' |
+   'payLiability: the amount', 'The charge amount' | 'The payment amount')`, `amount = Number(parsed)`; the `<= 0`
+   guards become `refuse(<raw byte-identical>, 'A charge has to be greater than zero.' | 'A payment has to be greater
+   than zero.')`; every later `input.amount` in the posting lines becomes `parsed`. The idempotency key keeps
+   `amount.toFixed(2)`. Import `parseMoneyInput` from `'../shared/money-input'`, `refuse` from `'../shared/refusal'`.
+6. **Price-list rate — `packages/domain/src/customers/index.ts` `setPrice`.** Before the negative guard (`:205`):
+   `rate = parseMoneyInput(input.rate, 'setPrice: the rate', 'The rate')`; the guard tests `Number(rate) < 0`
+   (sentence unchanged); upsert `rate`. Zero stays allowed. Import `parseMoneyInput`. Two decimals is right: the column
+   is `numeric(14,2)` (`packages/db/schema/customers.ts:91`); the positivity test's "numeric(14,4)" reason at
+   `money-positivity-guard.test.ts:452` is stale and is replaced by the tester (below).
+7. **Owners — `packages/domain/src/owners/index.ts`.** Every parse below sits AFTER that function's `authorize` (as
+   `recordContribution` does, `:139`), never before it. `recordDrawing` (`:273`, after `authorize` `:270`): `parsed =
+   parseMoneyInput(input.amount, 'recordDrawing: the amount', 'The drawing amount')`; guard → `refuse(<raw>, 'A drawing
+   has to be greater than zero.')`; lines use `parsed`. `repayFromOwner`, `recoverFromPay`, `writeOffReceivable`:
+   immediately after `authorize` and before `assertWithinReceivable`, `parsed = parseMoneyInput(input.amount, '<fn>: the amount', 'The amount settled')` (one label: the
+   page has ONE "Amount" box for all three routes); pass `Number(parsed)` to `assertWithinReceivable`, and use `parsed`
+   in lines and `Number(parsed).toFixed(2)` in keys. `assertWithinReceivable`'s `<= 0` (`:335`) → `refuse(<raw
+   byte-identical>, 'The amount settled has to be greater than zero.')`. `recordContribution`'s guard (`:140-142`) →
+   `refuse(<raw>, 'A contribution has to be greater than zero.')`.
+8. **Ratchet.** No new `throw new Error(`. Items 2, 3, 5, 7 convert 2 + 2 + 2 + 3 = 9 existing ones; the TESTER lowers
+   `cash-requests`, `loans`, `liabilities`, `owners` in `tests/unit/t343-throw-ratchet.test.ts` to the measured counts.
+
+- **BUILDER paths (21):** `apps/erp/src/app/channel-settlements/SettlementForm.tsx`,
+  `apps/erp/src/app/channel-settlements/actions.ts`,
+  `apps/erp/src/app/cash-requests/page.tsx`, `apps/erp/src/app/cash-requests/[id]/page.tsx`,
+  `apps/erp/src/app/money-transfers/RecordTransferForm.tsx`, `apps/erp/src/app/cutover/opening/page.tsx`,
+  `apps/erp/src/app/fixed-assets/new/page.tsx`, `apps/erp/src/app/fixed-assets/[id]/page.tsx`,
+  `apps/erp/src/app/loans/page.tsx`, `apps/erp/src/app/loans/[id]/page.tsx`, `apps/erp/src/app/loans/actions.ts`,
+  `apps/erp/src/app/liabilities/[id]/page.tsx`, `apps/erp/src/app/customers/price-lists/[id]/page.tsx`,
+  `apps/erp/src/app/payroll/page.tsx`, `apps/erp/src/app/owners/[id]/page.tsx`, `apps/erp/src/app/service-charge/page.tsx`,
+  `packages/domain/src/cash-requests/index.ts`, `packages/domain/src/loans/index.ts`,
+  `packages/domain/src/liabilities/index.ts`, `packages/domain/src/customers/index.ts`,
+  `packages/domain/src/owners/index.ts`. Disjoint from S5.5t's 7 and S5.5u's 4.
+- **TESTER paths:** `apps/erp/tests/t343-s5-5v-number-boxes.test.ts` (new, render/source legs),
+  `apps/erp/tests/integration/t343-s5-5v-followups.test.ts` (new, action level). ⚠️ **Four existing files take RULED
+  edits, not only new ones** — say so in READY:
+  (a) `tests/unit/t343-throw-ratchet.test.ts` — four ceilings only.
+  (b) `apps/erp/tests/t343-s5-5s-number-boxes.test.ts:117-121` and `:174-177` PIN `amountOut` and
+  `grossAmount`/`netDeposited` as `type="number"`; flip those two legs to this slice's R-leg assertion.
+  (c) `packages/domain/src/shared/money-positivity-guard.test.ts` — classification only. **T7/T8:** the
+  `customers/index.ts` / `Number(input.rate) < 0` entry (`:449-453`) becomes `Number(rate) < 0`, reason "routed —
+  setPrice, `rate = parseMoneyInput(...)` above; column numeric(14,2)", `checkFunctions: ['setPrice']`,
+  `checkIdentifiers: ['rate']`; add `loans/index.ts` / `Number(principal) <= 0`, routed, `['createLoan']`,
+  `['principal']`. **T12:** the `cash-requests/index.ts` / `Number(amount) <= 0` entry (`:168-174`) becomes MERGED
+  (Contract §4, as `loans/index.ts` at `:200-208`) with `checkFunctions: ['createCashRequest', 'releaseCashRequest']`,
+  and `EXPECTED_SITE_COUNT` (`:522-526`) gains `[censusKey('cash-requests/index.ts', 'Number(amount) <= 0')]: 2`.
+  **T9:** the positive control (`:556`) loses its target; re-point it to another deliberately-unrouted rate site as a
+  hand-written literal — `'pos/plan.ts::Number(s) > 0'` (classified `:455-457`); confirm it is unique in that file and
+  update the test title/comment to match. Items 5 and 7 add no key (their comparisons, `amount <= 0`, carry no
+  `Number(`), and `recordContribution`'s `Number(amount) <= 0` text is unchanged.
+  (d) `apps/erp/tests/integration/t327-operator-sentence-two-paths.test.ts:204-275` drives `setPrice({ rate: 'NaN' })`
+  to reach `price_list_items_*_finite_check` (`:218`, `:259`); after item 6 `parseMoneyInput` refuses first. Re-point
+  both legs to `customersRepo.upsertPriceListItem(tx, { …, rate: 'NaN' })` (`packages/db/src/repo/customers.ts:248`,
+  the repo path that still reaches the column without the domain) in the same `asOrg` transaction, keeping the
+  constraint-name assertions; the leg's comment states the `setPrice` path is now closed by the parser. Domain tests pass valid values (grep before building; none asserts `type="number"` elsewhere;
+  `touch-target-baseline.json` is class-keyed).
+  - **R-legs (22):** each (file, `name`) — no `type="number"`, `step=`, `min=`, `max=`; the assigned `inputMode`. Red:
+    `type="number"` on all 22.
+  - **Comma legs — `'1,5'` refuses by name, nothing written** (money sentence = `<label> — "1,5" is not a valid amount.
+    Use at most two decimal places.`): the amount requested / approved / released, the amount sent, "This amount"
+    (opening figure), the loan amount, the payment amount (loan), the amount agreed, the charge amount, the payment
+    amount (liability), the rate, the pay rate, the amount settled ×3 routes (`it.each` over `how`), the contribution
+    amount, the drawing amount, the amount to distribute, the gross settled, the net deposited. Green-before for the
+    SAFE sites (pin the server half); red for principal, liability ×2, rate, settle ×3, drawing (the tester records
+    each observed red: a numeric syntax fallback, or a posted entry).
+  - **Other sentences:** L1 `interestRate='1,5'` → `The interest rate — "1,5" is not a valid rate. Use a number from 0
+    to 9999.9999 with up to four decimal places.`, no loan row (red: numeric fallback). L2 `'-1'` and `'12345'` → same
+    sentence (the named ceiling explains `12345`). L3 `termPeriods='1,5'` → `The number of payments — "1,5" is not a whole number from 1 to 99999.`; L4
+    `'0'` → same; L5 `''` → `The number of payments — enter a whole number from 1 to 99999.` (red: unmapped check
+    fallback). U1 `usefulLifeMonths='1,5'` on new and on edit → `The useful life must be a whole number of months, 1
+    or more.` (green-before; pins S5.5q). U2 new with `''` → the category default (blank, green unedited).
+  - **The silent reds:** O1 drawing `'1,000'` → the drawing sentence, no entry (red: raw string to `postEntry`). O2
+    settle-cash `'abc'` → `The amount settled — "abc" is not a valid amount. Use at most two decimal places.`, no
+    entry. O3 liability charge `'1.234'` → the charge sentence (red: posted 1.23). C1 release `'0'` → `The amount
+    released has to be greater than zero.`, no entry, request still approved; C2 release `'-5'` → same (red: whatever
+    was observed). P1 principal `'0'` → `The amount agreed has to be greater than zero.` (red: unmapped check).
+  - **Converted guards:** amount requested / approved `'0'`, loan/payment `'0'`, charge/payment `'0'`, drawing /
+    contribution / settled `'0'` → their new sentences (red: today's prefix-stripped `Error` text — tester records it).
+  - **Blank legs (green, unedited):** `amountOut=''` → "Enter the amount that left the source account."; payroll
+    `amount=''` → the pay-rate sentence with `""`; rate `''` → `The rate — "" is not a valid amount…` (red: fallback —
+    a named refusal replaces an ugly one, meaning unchanged).
+  - **G-legs (Ian, Q1) — REFUSAL legs, save AND preview:** G1 `grossAmount=''` → `The gross settled — enter the figure
+    from the payout statement.`, no settlement row, no entry (red: recorded with gross `'0'`); G2 `netDeposited=''` →
+    `The net deposited — enter the figure from the payout statement.` (red: recorded with net `'0'`); G3
+    `grossAmount='   '` → the gross sentence (spaces-only = blank); G4/G5 the same two blanks through
+    `previewSettlementAction` → `{ ok: false, error: <sentence> }` (red: a preview computed on 0). A blank deduction
+    still saves `'0'` (green, unedited).
+    **Spaces-only = blank:** repeat `termPeriods` and `amountOut` with `'   '`.
+- Out of scope: S5.5w's sites; the SAFE sites' existing sentences; `parseMoneyInput`'s "two decimal places" advice for
+  a comma (S5.5s's note, every caller); `usefulLifeMonths='1e1'` is accepted as 10 by `Number()` (harmless: 10 is what
+  it says).
+- Done when: reds red→green, blanks green unedited, four ratchet ceilings equal measured counts, typecheck clean,
+  neither `'use client'` file gains an import, one screen check of the loan form refusing `1,5` in the rate.
+
+**S5.5w — build (after S5.5t and S5.5u commit; 8 elements, 28 fields, 12 files).**
+1. **Boxes.** `ap/invoices/[id]/page.tsx:167,190` (`decimal`), `cutover/count/page.tsx:140` (`decimal`),
+   `prepaid/page.tsx:205` (`decimal`), `:223` and `prepaid/[id]/page.tsx:121` (`numeric`),
+   `settings/attendance/page.tsx` `NumField` (`decimal`, drop `step`/`min` from its props and call sites) and
+   `IntField` (`numeric`, drop `min`/`max` likewise — the ranges move to item 5).
+2. **Shared quantity parser.** Move `parseQuantityInput` (S5.5u's final version) from `packages/domain/src/trade/index.ts`
+   to new `packages/domain/src/shared/quantity-input.ts`, exported; `trade` imports it (sentences byte-identical).
+3. **Quantities.** `packages/domain/src/items/index.ts` `validateInvoiceLines` (`:181`): `qty =
+   Number(parseQuantityInput(l.quantity, \`validateInvoiceLines: line ${i + 1}'s quantity\`, \`Line ${i + 1}'s
+   quantity\`))` before the `> 0` check. `packages/domain/src/cutover/index.ts` `recordOpeningCount`: parse
+   `input.quantity` with label `'The count'`; its `< 0` guard → `refuse(<raw>, 'A count cannot be negative.')`; upsert
+   the parsed value.
+4. **Prepaid.** `packages/domain/src/prepaid/index.ts` `createPrepaidItem`: `cost = parseMoneyInput(input.totalCost,
+   'createPrepaidItem: the total cost', 'The total cost')` before the threshold; compare and insert `cost`.
+   `apps/erp/src/app/prepaid/actions.ts`: a `wholeMonths` helper for both `coverageMonths` reads — blank → `The
+   coverage — enter a whole number of months from 1 to 120.`; `!/^\d{1,3}$/` or outside 1..120 → `The coverage —
+   "${raw}" is not a whole number of months from 1 to 120.`
+5. **Attendance settings — `apps/erp/src/app/settings/attendance/actions.ts`.** `int`/`intOrNull` gain `(min, max)`
+   from the page's current attributes; after S5.5q's `Number.isFinite` refusal (sentence unchanged — pinned by
+   `t343-s5-5q-followups.test.ts:167,187`): `!/^\d{1,5}$/.test(v) || n < min || n > max` → `${label} — "${v}" is not a
+   whole number from ${min} to ${max}.` (no `max` → `…is not a whole number, ${min} or more.`); `Math.trunc` goes.
+   **Blank (Ian, Q2):** `int()` stops returning its fallback — `''` or spaces → `refuse(\`updateAttendanceConfigAction:
+   ${key} is blank\`, \`${label} — enter a whole number from ${min} to ${max}.\`)` (no `max` → `…, ${min} or more.`);
+   the `fallback` parameter goes. `intOrNull()` (auto clock-out hour only) keeps blank = `null` — the page's own hint
+   "Blank = this store never auto-clears". **Order is load-bearing for `1,5`:** `Number('1,5')` is `NaN`, so S5.5q's
+   finiteness refusal fires first and `1,5` gets `${label} — "1,5" is not a number.`, never the whole-number sentence;
+   the whole-number/range sentence is reached only by finite non-whole or out-of-range text (`1.5`, `-1`, `70`). A new
+   `dec2(fd, key, label, min)` for the nine `numeric(4,2)` fields: `''` → `${label} — enter a number.`; not
+   `/^\d{1,2}(\.\d{1,2})?$/` → `${label} — "${v}" is not a valid number. Use at most two decimal places.`; `< min` →
+   `${label} has to be at least ${min}.` `overtimeFixedHourly` / `lateChargePerMinute` use `parseMoneyInput` (from
+   `@shareat/domain/money-input`) when non-blank; their blanks keep `null` / `'0'`.
+- **BUILDER paths (12):** `apps/erp/src/app/ap/invoices/[id]/page.tsx`, `apps/erp/src/app/cutover/count/page.tsx`,
+  `apps/erp/src/app/prepaid/page.tsx`, `apps/erp/src/app/prepaid/[id]/page.tsx`, `apps/erp/src/app/prepaid/actions.ts`,
+  `apps/erp/src/app/settings/attendance/page.tsx`, `apps/erp/src/app/settings/attendance/actions.ts`,
+  `packages/domain/src/shared/quantity-input.ts` (new), `packages/domain/src/trade/index.ts`,
+  `packages/domain/src/items/index.ts`, `packages/domain/src/cutover/index.ts`, `packages/domain/src/prepaid/index.ts`.
+
+- **TESTER paths:** `apps/erp/tests/t343-s5-5w-number-boxes.test.ts`, `apps/erp/tests/integration/t343-s5-5w-followups.test.ts`
+  (new); ⚠️ ruled edits: `apps/erp/tests/t343-s5-5t-number-boxes.test.ts:81-95` pins cutover `quantity` and AP
+  `quantity`/`unitPrice` as `type="number"` — flip those three legs; ratchet ceilings for `items`, `cutover`;
+  `money-positivity-guard.test.ts` — the `cutover/index.ts` / `Number(input.quantity) < 0` entry (`:399-400`)
+  re-keys to whatever comparison item 3 leaves (planner: `Number(quantity) < 0` on the parsed value) and the
+  `prepaid/index.ts` threshold comparison is re-classified if its text changes (tester runs T7/T8 and records).
+  Legs as S5.5v: R-legs ×8 elements (NumField/IntField asserted on the helper element); `1,5` per field (quantity
+  sentence `Line 1's quantity — "1,5" is not a valid quantity. Use at most three decimal places.`); **IntField `'1,5'`
+  → `<label> — "1,5" is not a number.`** (S5.5q's sentence — assert exactly that, and that nothing saved; red: saved 15);
+  `'1.5'` in an IntField → the whole-number sentence (red: saved as 1); `'70'` anchor window → `from 0 to 60`
+  sentence. **Blank (Ian, Q2) — REFUSAL legs:** each IntField except `autoClockOutHour` with `''` and one with `'   '`
+  → `<label> — enter a whole number from <min> to <max>.` (or `…, <min> or more.`), no new config row (red: saved
+  the fallback default); `autoClockOutHour=''` → saved `null` (green, unedited). Other blanks: AP blank row skipped;
+  cutover `''` quantity → `The count — "" is not a valid quantity…` (was the fallback).
+- Done when: as S5.5v, plus S5.5u's sentences in `trade` byte-identical after the move.
+
+**Ian's rulings, 2026-09-27 (binding):**
+- **Q1 → REFUSE (S5.5v item 1a).** A blank or spaces-only Gross or Net on a channel settlement no longer becomes `'0'`
+  (`channel-settlements/actions.ts:31-34,72-73,125-126`), on the save AND the preview path.
+- **Q2 → REFUSE (S5.5w item 5).** A blank whole-number attendance setting no longer saves the built-in default
+  (`settings/attendance/actions.ts:81-117`); auto clock-out hour keeps blank = "never".
 
 ---
 
