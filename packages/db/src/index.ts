@@ -243,8 +243,12 @@ export type {
   PriceMonth,
   SupplierPrice,
 } from './repo/items';
-export { ITEM_KINDS, BASE_UNITS, PURCHASE_UNITS, ITEM_STATUSES } from '../schema/items';
+export { ITEM_KINDS, BASE_UNITS, PURCHASE_UNITS, ITEM_STATUSES, ITEM_KIND_LABEL, itemKindLabel } from '../schema/items';
 export type { ItemKind, BaseUnit, PurchaseUnit, ItemStatus } from '../schema/items';
+
+// T-343 S6a — presentation label beside DISCREPANCY_DISPOSITIONS.
+export { DISCREPANCY_DISPOSITION_LABEL, discrepancyDispositionLabel } from '../schema/trade-discrepancies';
+
 // Re-exported so a caller establishing a principal around an authorize() call (T-121) does
 // not need to reach into packages/db/src/rls/registry.ts directly.
 export { APP_ROLE } from './rls/registry';
@@ -268,7 +272,13 @@ export type { GrantRow, ActiveRoleRow, RoleName } from './repo/access';
 // T-178 — order/channel wastage disposition.
 export * as orderWastageRepo from './repo/order-wastage';
 export type { OrderWastageRow, AllocationRow as OrderWastageAllocationRow } from './repo/order-wastage';
-export { ORDER_WASTAGE_TYPE_MODES, ORDER_WASTAGE_STATUSES, ORDER_WASTAGE_DISPOSITIONS } from '../schema/order-wastage';
+export {
+  ORDER_WASTAGE_TYPE_MODES,
+  ORDER_WASTAGE_STATUSES,
+  ORDER_WASTAGE_DISPOSITIONS,
+  ORDER_WASTAGE_DISPOSITION_LABEL,
+  orderWastageDispositionLabel,
+} from '../schema/order-wastage';
 export type { OrderWastageTypeMode, OrderWastageStatus, OrderWastageDisposition } from '../schema/order-wastage';
 // T-176 — production: slab -> slice, recipe -> batch. Recipes and records, plus a narrow
 // production-only item projection that carries parent_slab_item_id.

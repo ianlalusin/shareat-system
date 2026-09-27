@@ -18,6 +18,7 @@ export {
   // `errors-leaf.test.ts` already uses for a file this package keeps out of the barrel.
   ROLE_LABEL,
   CAPABILITY_LABEL,
+  capabilityTitle,
 } from './capabilities';
 export type { Role, Capability, CapabilityScope, CapabilityArea } from './capabilities';
 

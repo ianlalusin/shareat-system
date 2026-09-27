@@ -12,6 +12,7 @@ assertUsageSource
 assetsMissingCapitalisation
 branchOrderDetail
 buildCoverageReport
+capabilityTitle
 capitalizeFromExpense
 checkValuesMatch
 childLogger
@@ -26,6 +27,7 @@ deactivateItem
 declareSupplierItem
 depreciateAsset
 depreciationDrift
+discrepancyDispositionLabel
 editPostedProductionAction
 elevateManager
 endShift
@@ -43,6 +45,7 @@ hasOtherActiveAdmin
 isConvertibleUnit
 isHeaderCode
 isStartDecisionMaterial
+itemKindLabel
 jobResult
 linkInvoiceToReceipt
 listAdjustments
@@ -59,6 +62,7 @@ listWriteOffsForCharge
 markReviewed
 mintUniqueToken
 newCorrelationId
+orderWastageDispositionLabel
 payReimbursement
 pendingItemRequests
 periodForDate
@@ -111,4 +115,5 @@ validateFingerprintTemplates
 valuateShell
 voidPaymentAction
 voidShift
+wastageReasonLabel
 withPrincipal

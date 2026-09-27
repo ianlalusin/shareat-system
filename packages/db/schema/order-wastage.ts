@@ -60,6 +60,25 @@ export type OrderWastageStatus = (typeof ORDER_WASTAGE_STATUSES)[number];
 export const ORDER_WASTAGE_DISPOSITIONS = ['platform_paid', 'absorbed', 'charged'] as const;
 export type OrderWastageDisposition = (typeof ORDER_WASTAGE_DISPOSITIONS)[number];
 
+/** T-343 S6a — presentation label, exhaustive over `ORDER_WASTAGE_DISPOSITIONS`. */
+export const ORDER_WASTAGE_DISPOSITION_LABEL: Readonly<Record<OrderWastageDisposition, string>> = {
+  platform_paid: 'Platform paid',
+  absorbed: 'Store absorbed',
+  charged: 'Charged',
+};
+
+function humanise(value: string): string {
+  const spaced = value.replace(/_/g, ' ');
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** Total: a value outside the enum humanises instead of throwing. */
+export function orderWastageDispositionLabel(value: string): string {
+  return Object.hasOwn(ORDER_WASTAGE_DISPOSITION_LABEL, value)
+    ? ORDER_WASTAGE_DISPOSITION_LABEL[value as OrderWastageDisposition]
+    : humanise(value);
+}
+
 export const orderWastages = pgTable(
   'order_wastages',
   {

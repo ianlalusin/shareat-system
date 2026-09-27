@@ -37,6 +37,30 @@ export const WASTAGE_REASONS = [
 
 export type WastageReason = (typeof WASTAGE_REASONS)[number];
 
+/** T-343 S6a — presentation label, exhaustive over `WASTAGE_REASONS`. */
+export const WASTAGE_REASON_LABEL: Readonly<Record<WastageReason, string>> = {
+  spoilage: 'Spoilage',
+  expiry: 'Expired',
+  damage_storage: 'Damaged in storage',
+  damage_handling: 'Damaged in handling',
+  prep_loss: 'Prep loss (trim, peel, bone)',
+  overproduction: 'Overproduction',
+  theft: 'Theft or unexplained loss',
+  quality_reject: 'Failed quality check',
+  customer_return_unsellable: 'Customer return, not resellable',
+  other: 'Other',
+};
+
+function humanise(value: string): string {
+  const spaced = value.replace(/_/g, ' ');
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** Total: an out-of-enum code (a v1 leftover) humanises instead of throwing. */
+export function wastageReasonLabel(value: string): string {
+  return Object.hasOwn(WASTAGE_REASON_LABEL, value) ? WASTAGE_REASON_LABEL[value as WastageReason] : humanise(value);
+}
+
 export function isWastageReason(value: string): value is WastageReason {
   return (WASTAGE_REASONS as readonly string[]).includes(value);
 }

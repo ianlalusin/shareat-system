@@ -1151,3 +1151,21 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   cross_org_access: 'access another organisation (break-glass)',
   view_franchise_sales: 'view franchise sales',
 };
+
+function humanise(value: string): string {
+  const spaced = value.replace(/_/g, ' ');
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/**
+ * T-343 S6a — the capitalised form of `CAPABILITY_LABEL`, for lists and banners (S6 design
+ * rule 2). An unrecognised name (never a real `Capability`) humanises instead of throwing, the
+ * same totality rule as the label lookups beside every other enum.
+ */
+export function capabilityTitle(name: string): string {
+  if (Object.hasOwn(CAPABILITY_LABEL, name)) {
+    const label = CAPABILITY_LABEL[name as Capability];
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  }
+  return humanise(name);
+}

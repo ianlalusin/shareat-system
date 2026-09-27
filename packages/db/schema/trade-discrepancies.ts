@@ -37,6 +37,26 @@ export type DiscrepancyStatus = (typeof DISCREPANCY_STATUSES)[number];
 export const DISCREPANCY_DISPOSITIONS = ['audit', 'loss', 'charge', 'late_receipt'] as const;
 export type DiscrepancyDisposition = (typeof DISCREPANCY_DISPOSITIONS)[number];
 
+/** T-343 S6a — presentation label, exhaustive over `DISCREPANCY_DISPOSITIONS`. */
+export const DISCREPANCY_DISPOSITION_LABEL: Readonly<Record<DiscrepancyDisposition, string>> = {
+  audit: 'Audit only',
+  loss: 'Loss',
+  charge: 'Charged to a person',
+  late_receipt: 'Late receipt',
+};
+
+function humanise(value: string): string {
+  const spaced = value.replace(/_/g, ' ');
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** Total: `Object.hasOwn` so `'constructor'` never returns a prototype member. */
+export function discrepancyDispositionLabel(value: string): string {
+  return Object.hasOwn(DISCREPANCY_DISPOSITION_LABEL, value)
+    ? DISCREPANCY_DISPOSITION_LABEL[value as DiscrepancyDisposition]
+    : humanise(value);
+}
+
 export const tradeDiscrepancies = pgTable(
   'trade_discrepancies',
   {

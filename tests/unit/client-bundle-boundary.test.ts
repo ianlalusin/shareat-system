@@ -199,4 +199,36 @@ describe("T-266 — a 'use client' file may not reach the database driver", () =
     }
     expect(offenders).toEqual([]);
   });
+
+  /**
+   * T-343 S6a — closes the gap named in the S6 evidence: `@shareat/auth`'s barrel reaches
+   * `@shareat/db` through `authorize.ts`'s repo imports, but this test file (T-266) never checked
+   * it. A client file importing `ROLE_LABEL`/`ORDER_WASTAGE_DISPOSITION_LABEL`-shaped names from
+   * the bare `'@shareat/auth'` specifier would pass every fast gate and fail only at `next build`.
+   * The `'@shareat/auth/errors'` leaf (error classes only, no `@shareat/db` behind it — T-237)
+   * stays allowed.
+   */
+  it("⛔ none imports the bare @shareat/auth barrel — it reaches @shareat/db through authorize.ts's repo imports (S6a)", () => {
+    const offenders = clientFiles
+      .filter((f) => importsOf(read(f)).includes('@shareat/auth'))
+      .map(
+        (f) =>
+          `${f} imports the '@shareat/auth' BARREL. It reaches @shareat/db through authorize.ts's ` +
+          `repo imports, so this pulls the postgres driver into the browser bundle. Import ` +
+          `'@shareat/auth/errors' instead, or have the server page resolve the label and pass it as a prop.`,
+      );
+    expect(offenders).toEqual([]);
+  });
+
+  /**
+   * DEF-179's lesson, applied to the previous `it`'s own matcher: a scan that cannot see a
+   * multi-line import passes on the exact defect it exists to catch. Fed a fixture, not a real
+   * file, so this is provable without waiting for anyone to write the bad import for real.
+   */
+  it("⭐ the @shareat/auth matcher sees a multi-line import and does not confuse it with the '/errors' leaf (DEF-179)", () => {
+    const multiLineImport = "'use client';\nimport {\n  ROLE_LABEL,\n} from '@shareat/auth';";
+    const errorsLeafImport = "'use client';\nimport { AuthenticationError } from '@shareat/auth/errors';";
+    expect(importsOf(multiLineImport).filter((s) => s === '@shareat/auth').length).toBe(1);
+    expect(importsOf(errorsLeafImport).filter((s) => s === '@shareat/auth').length).toBe(0);
+  });
 });

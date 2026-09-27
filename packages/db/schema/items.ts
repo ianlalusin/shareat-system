@@ -47,6 +47,25 @@ import { supplierInvoices } from './suppliers';
 export const ITEM_KINDS = ['raw_material', 'supply', 'retail', 'meat_slab', 'meat_sliced'] as const;
 export type ItemKind = (typeof ITEM_KINDS)[number];
 
+/** T-343 S6a — presentation label, exhaustive over `ITEM_KINDS`. */
+export const ITEM_KIND_LABEL: Readonly<Record<ItemKind, string>> = {
+  raw_material: 'Raw material',
+  supply: 'Supply',
+  retail: 'Retail item',
+  meat_slab: 'Meat (slab)',
+  meat_sliced: 'Meat (sliced)',
+};
+
+function humanise(value: string): string {
+  const spaced = value.replace(/_/g, ' ');
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** Total: a value outside `ITEM_KINDS` (`prepped`, a v1 code) humanises instead of throwing. */
+export function itemKindLabel(value: string): string {
+  return Object.hasOwn(ITEM_KIND_LABEL, value) ? ITEM_KIND_LABEL[value as ItemKind] : humanise(value);
+}
+
 /**
  * ⛔ **Units of measure only — never containers.** v1 has 33 items whose `baseUnit` is `box` or
  * `pack`, which is a modelling error: a box is a quantity of something, not a way of measuring it.
