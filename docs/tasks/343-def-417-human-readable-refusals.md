@@ -1,6 +1,6 @@
 # T-343: DEF-417 (part 2) — user-visible refusals name things in human terms, never raw ids or keys
 
-**Status:** S1–S4 DONE 2026-09-25. S5.0–S5.1 DONE 2026-09-26. **S5.1b, S2b, S5a, S5.2 (+follow-up), S5.3, S5.1c, S5.1d, S5.3b DONE 2026-09-27** (each: tester red, builder, Opus audit, full gates; committed locally, push pending Ian). Refusal banners screen-tested on 9008 for S5.1b/S5.1c. **S6a/S6b/S6c specced and APPROVED 2026-09-27 (§S6), serial S6a → S6b → S6c.** **S5.5m (DEF-454) and S7 (DEF-452 + trade line numbers) specced and APPROVED 2026-09-27 (§S5.5m, §S7); S7 strictly after S6c and S5.5m.** Open: S6a–S6c, S5.4 (after S6c), S5.5m, S5.5+, S7, S8, S9.
+**Status:** S1–S4 DONE 2026-09-25. S5.0–S5.1 DONE 2026-09-26. S5.1b, S2b, S5a, S5.2 (+follow-up), S5.3, S5.1c, S5.1d, S5.3b DONE 2026-09-27 (morning). **S6a, S6b, S6c, S6d, S5.5m, S5.5n, S5.5p, S5.5q, S5.5r, S5.5s, S7 DONE 2026-09-27** (each: tester red, builder, Opus pre-commit read, gates, Opus post-commit /code-review in a worktree). **Open:** S5.5t (APPROVED; red tests half-written, R-legs in `apps/erp/tests/t343-s5-5t-number-boxes.test.ts`, uncommitted), S5.5u (APPROVED, DEF-473), S5.4 (after S6 — now unblocked), S8, S9; DEF-472's app-wide number-box census is unspecced.
 **Orchestrator defaults (Ian may override any time):** fallback wording as proposed in S1.3; the 96 capability labels
 are Sonnet-drafted from CAPABILITY-MATRIX.md notes and fixed later if Ian wants; staging S1 = fail closed on
 IDENTIFIERS, strict flip at S9; S3 names the record's KIND, not its number; cross-org refusals never name the other
@@ -2011,6 +2011,29 @@ Seven inputs in five files, all server components.
   (`attendance/[dayId]/actions.ts:67-69`) — pending Ian; a blank anchor/early-out box recording minute 0 is the same
   class; a blank cutover cost clearing an existing cost (upsert, today's behaviour).
 - Done when: reds red→green, blanks green unedited, ratchet unchanged, typecheck clean.
+
+### S5.5u: follow-ups from the S5.5r post-commit review (DEF-473)
+**Status:** APPROVED 2026-09-27 (orchestrator; findings verified by the auditor). **Model:** Sonnet, tester then builder.
+**Migration:** none.
+1. `apps/erp/src/app/prepaid/actions.ts`: send `refundAmount` and `refundAccountCode` each on its own non-empty text
+   (not both inside `refund ?`). `packages/domain/src/prepaid/index.ts` `writeOffPrepaidItem`: a refund account with no
+   (or zero) refund refuses — `refuse(<raw>, 'Enter the refund amount, or clear the refund account.')`.
+2. `packages/domain/src/trade/index.ts` `parseQuantityInput`: add money-input's huge-exponent arm (trimmed raw fully
+   matches `/^[+-]?\d+(\.\d+)?e[+-]?\d+$/i` and `Math.abs(Number(t)) > 99999999999.999` → the "too large" sentence).
+3. `apps/erp/src/app/prepaid/[id]/page.tsx`: the write-off form keeps what was typed after a refusal — pass Reason,
+   Refunded and Refund-account back through the redirect (as the file already does for `writtenOffOn`) and render them as
+   `defaultValue`s. Follow the repo's existing precedent for re-filling a form after a refusal (grep `defaultValue` with
+   `searchParams` in `apps/erp/src/app`); if the precedent avoids putting typed amounts in the URL, use that mechanism
+   instead and say which in READY.
+- **BUILDER paths:** `apps/erp/src/app/prepaid/actions.ts`, `apps/erp/src/app/prepaid/[id]/page.tsx`,
+  `packages/domain/src/prepaid/index.ts`, `packages/domain/src/trade/index.ts`.
+- **TESTER paths:** `apps/erp/tests/integration/t343-s5-5p-followups.test.ts`, `packages/domain/tests/integration/t343-s5-5r-quantity-sentence.test.ts`,
+  `apps/erp/tests/t343-s5-5r-prepaid-refund-render.test.ts`.
+  - A1: refund account "1110" with a blank refund → refusal, nothing written (red was: whole balance expensed, banner ok).
+  - Q3: quantity "1e15" → "too large" (red was the decimals sentence). Q2 also pins "Line 1's quantity", not "createTradeOrder".
+  - P-legs: keep the journal-entry count AND restore the status assertion; P1n asserts the count is exactly 1.
+  - K1: after a refusal the form re-renders with the typed Reason/Refunded/account as default values.
+- Done when: reds red→green, typecheck clean, screen check of the refusal keeping typed values.
 
 ---
 
