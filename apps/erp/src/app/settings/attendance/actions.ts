@@ -11,7 +11,7 @@
  * because the row itself is the unit `supersedeConfig` writes. See the task spec §2.2.
  */
 import { redirect } from 'next/navigation';
-import { supersedeConfig, parseShiftDay, type ConfigChanges } from '@shareat/domain';
+import { supersedeConfig, parseShiftDay, refuse, type ConfigChanges } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { withOrgPrincipal, parseIntList } from './lib';
@@ -25,19 +25,31 @@ function bool(fd: FormData, key: string): boolean {
   return fd.get(key) === 'on';
 }
 
-function int(fd: FormData, key: string, fallback: number): number {
+function int(fd: FormData, key: string, fallback: number, label: string): number {
   const v = str(fd, key);
   if (v === '') return fallback;
   const n = Number(v);
-  return Number.isFinite(n) ? Math.trunc(n) : fallback;
+  if (!Number.isFinite(n)) {
+    throw refuse(
+      `updateAttendanceConfigAction: ${key} is not a number: ${JSON.stringify(v)}`,
+      `${label} — "${v}" is not a number.`,
+    );
+  }
+  return Math.trunc(n);
 }
 
 /** Blank means "not set", never `0` — `Number('')` is `0`, DEF-087's exact failure shape. */
-function intOrNull(fd: FormData, key: string): number | null {
+function intOrNull(fd: FormData, key: string, label: string): number | null {
   const v = str(fd, key);
   if (v === '') return null;
   const n = Number(v);
-  return Number.isFinite(n) ? Math.trunc(n) : null;
+  if (!Number.isFinite(n)) {
+    throw refuse(
+      `updateAttendanceConfigAction: ${key} is not a number: ${JSON.stringify(v)}`,
+      `${label} — "${v}" is not a number.`,
+    );
+  }
+  return Math.trunc(n);
 }
 
 function back(store: string, params: Record<string, string>): never {
@@ -61,52 +73,52 @@ export async function updateAttendanceConfigAction(formData: FormData): Promise<
   const payoutMode = (str(formData, 'payoutMode') || 'lag') as 'lag' | 'fixed_days';
   const timeMode = (str(formData, 'timeMode') || 'open') as 'open' | 'fixed';
 
-  const changes: ConfigChanges = {
-    requiredHoursPerShift: str(formData, 'requiredHoursPerShift'),
-    halfDayHours: str(formData, 'halfDayHours'),
-    allowedShiftStartHours: parseIntList(str(formData, 'allowedShiftStartHours')),
-    anchorWindowMinutes: int(formData, 'anchorWindowMinutes', 30),
-    timeMode,
-    defaultWorkHours: str(formData, 'defaultWorkHours'),
-    defaultBreakHours: str(formData, 'defaultBreakHours'),
-    breakEnabled: bool(formData, 'breakEnabled'),
-    halfDayOnMissingTap: bool(formData, 'halfDayOnMissingTap'),
-
-    credentialNfc: bool(formData, 'credentialNfc'),
-    credentialFingerprint: bool(formData, 'credentialFingerprint'),
-    credentialFace: bool(formData, 'credentialFace'),
-
-    shortShiftHalfDayOt: bool(formData, 'shortShiftHalfDayOt'),
-    nightDiffEnabled: bool(formData, 'nightDiffEnabled'),
-    nightDiffStartHour: int(formData, 'nightDiffStartHour', 22),
-    nightDiffEndHour: int(formData, 'nightDiffEndHour', 6),
-    nightDiffMultiplier: str(formData, 'nightDiffMultiplier'),
-    overtimeMode,
-    overtimeMultiplier: str(formData, 'overtimeMultiplier'),
-    overtimeFixedHourly: overtimeMode === 'fixed' ? str(formData, 'overtimeFixedHourly') || null : null,
-
-    holidayRegularMultiplier: str(formData, 'holidayRegularMultiplier'),
-    holidaySpecialNonWorkingMultiplier: str(formData, 'holidaySpecialNonWorkingMultiplier'),
-    holidaySpecialWorkingMultiplier: str(formData, 'holidaySpecialWorkingMultiplier'),
-
-    latePolicy,
-    lateChargePerMinute: str(formData, 'lateChargePerMinute') || '0',
-    lateInfractionPoints: int(formData, 'lateInfractionPoints', 1),
-    lateGraceMinutes: int(formData, 'lateGraceMinutes', 0),
-    earlyOutGraceMinutes: int(formData, 'earlyOutGraceMinutes', 0),
-    undertimeGraceMinutes: int(formData, 'undertimeGraceMinutes', 0),
-
-    payrollPeriodType,
-    semiMonthlyCutoffDay: int(formData, 'semiMonthlyCutoffDay', 15),
-    payoutMode,
-    payoutLagDays: int(formData, 'payoutLagDays', 0),
-    payoutDays: parseIntList(str(formData, 'payoutDays')),
-
-    autoClockOutHour: intOrNull(formData, 'autoClockOutHour'),
-    maxShiftHours: int(formData, 'maxShiftHours', 16),
-  };
-
   try {
+    const changes: ConfigChanges = {
+      requiredHoursPerShift: str(formData, 'requiredHoursPerShift'),
+      halfDayHours: str(formData, 'halfDayHours'),
+      allowedShiftStartHours: parseIntList(str(formData, 'allowedShiftStartHours')),
+      anchorWindowMinutes: int(formData, 'anchorWindowMinutes', 30, 'The anchor window'),
+      timeMode,
+      defaultWorkHours: str(formData, 'defaultWorkHours'),
+      defaultBreakHours: str(formData, 'defaultBreakHours'),
+      breakEnabled: bool(formData, 'breakEnabled'),
+      halfDayOnMissingTap: bool(formData, 'halfDayOnMissingTap'),
+
+      credentialNfc: bool(formData, 'credentialNfc'),
+      credentialFingerprint: bool(formData, 'credentialFingerprint'),
+      credentialFace: bool(formData, 'credentialFace'),
+
+      shortShiftHalfDayOt: bool(formData, 'shortShiftHalfDayOt'),
+      nightDiffEnabled: bool(formData, 'nightDiffEnabled'),
+      nightDiffStartHour: int(formData, 'nightDiffStartHour', 22, 'The night diff start hour'),
+      nightDiffEndHour: int(formData, 'nightDiffEndHour', 6, 'The night diff end hour'),
+      nightDiffMultiplier: str(formData, 'nightDiffMultiplier'),
+      overtimeMode,
+      overtimeMultiplier: str(formData, 'overtimeMultiplier'),
+      overtimeFixedHourly: overtimeMode === 'fixed' ? str(formData, 'overtimeFixedHourly') || null : null,
+
+      holidayRegularMultiplier: str(formData, 'holidayRegularMultiplier'),
+      holidaySpecialNonWorkingMultiplier: str(formData, 'holidaySpecialNonWorkingMultiplier'),
+      holidaySpecialWorkingMultiplier: str(formData, 'holidaySpecialWorkingMultiplier'),
+
+      latePolicy,
+      lateChargePerMinute: str(formData, 'lateChargePerMinute') || '0',
+      lateInfractionPoints: int(formData, 'lateInfractionPoints', 1, 'The late infraction points'),
+      lateGraceMinutes: int(formData, 'lateGraceMinutes', 0, 'The late grace minutes'),
+      earlyOutGraceMinutes: int(formData, 'earlyOutGraceMinutes', 0, 'The early-out grace minutes'),
+      undertimeGraceMinutes: int(formData, 'undertimeGraceMinutes', 0, 'The undertime grace minutes'),
+
+      payrollPeriodType,
+      semiMonthlyCutoffDay: int(formData, 'semiMonthlyCutoffDay', 15, 'The semi-monthly cutoff day'),
+      payoutMode,
+      payoutLagDays: int(formData, 'payoutLagDays', 0, 'The payout lag days'),
+      payoutDays: parseIntList(str(formData, 'payoutDays')),
+
+      autoClockOutHour: intOrNull(formData, 'autoClockOutHour', 'The auto clock-out hour'),
+      maxShiftHours: int(formData, 'maxShiftHours', 16, 'The max shift hours'),
+    };
+
     await withOrgPrincipal(actor.orgId, (tx) =>
       supersedeConfig(tx, actor, {
         storeId: store,

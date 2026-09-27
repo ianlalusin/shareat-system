@@ -16,6 +16,7 @@ import { redirect } from 'next/navigation';
 import {
   createAsset,
   disposeAsset,
+  refuse,
   runDepreciation,
   setAssetInService,
   type DepreciationInterval,
@@ -99,10 +100,20 @@ export async function updateTermsAction(formData: FormData): Promise<void> {
       // the repo directly, so it authorizes here. Same capability, same scope.
       const { authorize } = await import('@shareat/auth');
       await authorize(tx, actor, 'manage_fixed_assets', {});
+
+      const lifeRaw = str(formData, 'usefulLifeMonths');
+      const life = Number(lifeRaw);
+      if (lifeRaw === '' || !Number.isInteger(life) || life < 1) {
+        throw refuse(
+          `updateTermsAction: useful life must be a whole number of months greater than zero, got ${JSON.stringify(lifeRaw)}.`,
+          'The useful life must be a whole number of months, 1 or more.',
+        );
+      }
+
       await fixedAssetsRepo.updateTerms(tx, actor.orgId, assetId, {
         name: str(formData, 'name'),
         category: str(formData, 'category') as AssetCategory,
-        usefulLifeMonths: Number(str(formData, 'usefulLifeMonths')),
+        usefulLifeMonths: life,
         interval: str(formData, 'interval') as fixedAssetsRepo.DepreciationIntervalValue,
         salvageValue: str(formData, 'salvageValue') || null,
         notes: str(formData, 'notes') || null,

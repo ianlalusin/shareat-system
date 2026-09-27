@@ -37,6 +37,7 @@ import type { DepreciationInterval } from './schedule';
 import { readPolicyOrRefuse, resolveUsefulLifeMonths } from './policy';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { parseMoneyInput } from '../shared/money-input';
+import { refuse } from '../shared/refusal';
 
 export interface CreateAssetInput {
   storeId: string;
@@ -109,6 +110,17 @@ async function runCreateAsset(
   if (compare(salvage, cost) >= 0) {
     throw new Error(
       `createAsset: salvage value ${salvage} must be below cost ${cost}, or the asset never depreciates.`,
+    );
+  }
+
+  // T-343 S5.5q / DEF-464 — a TYPED value (`input.usefulLifeMonths != null`) refuses by name, never
+  // printing the value (`NaN` from a malformed screen input must never reach the sentence). A value
+  // that came from `resolveUsefulLifeMonths` (org policy, not typed) keeps its plain `Error` below,
+  // unchanged: blaming the operator for a config value is T-326 fix 3's exact mistake (comment above).
+  if (input.usefulLifeMonths != null && (!Number.isInteger(input.usefulLifeMonths) || input.usefulLifeMonths < 1)) {
+    throw refuse(
+      `createAsset: useful life must be a whole number of months greater than zero, got ${input.usefulLifeMonths}.`,
+      'The useful life must be a whole number of months, 1 or more.',
     );
   }
 

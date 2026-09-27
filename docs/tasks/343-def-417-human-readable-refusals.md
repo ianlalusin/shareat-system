@@ -1810,7 +1810,7 @@ so the typed text reaches the server unaltered, and a server that refuses unpars
   insert use bare `Number()`, `packages/domain/src/channel-settlements/index.ts:138-148,326-333`, so text becomes `NaN`
   and `Number('1,000') !== 0` even makes `hasLoan` true, `actions.ts:117`).
 
-**Sixteen money inputs in nine files** (the six deductions are one element rendered from `DEDUCTIONS`). Two are
+**Seventeen money inputs in eight files** (corrected by the orchestrator from the itemized list, 2026-09-27) (the six deductions are one element rendered from `DEDUCTIONS`). Two are
 `'use client'`: `RecordTransferForm.tsx` and `SettlementForm.tsx` — both change attributes only, no import.
 
 1. **The boxes.** Each drops `type="number"`, `step`, `min` and `max`, and gains (or keeps) `inputMode="decimal"` — the

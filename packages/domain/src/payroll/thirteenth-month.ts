@@ -18,11 +18,26 @@ import { thirteenthMonthRepo, payrollRepo, moneyAccountsRepo, transaction, type 
 import { authorize, type Actor } from '@shareat/auth';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
+import { refuse } from '../shared/refusal';
 import { advanceToRecover } from './compute';
 import { outstandingAdvance, PAYROLL_ADVANCE_ACCOUNT } from './index';
 
 /** `6140 13th month pay` — provisioned in Phase 1, unused until now. */
 export const THIRTEENTH_MONTH_ACCOUNT = '6140';
+
+/**
+ * T-343 S5.5q / DEF-465 — the range is the one the system already enforces:
+ * `thirteenth_month_runs_year_check` (`packages/db/schema/thirteenth-month.ts`, migration 0115). No
+ * other year validation exists in `packages/` to reuse.
+ */
+function assertRunYear(fn: string, year: number): void {
+  if (!Number.isInteger(year) || year < 2020 || year > 2100) {
+    throw refuse(
+      `${fn}: year must be a whole number from 2020 to 2100, got ${year}.`,
+      'The year must be a whole number from 2020 to 2100.',
+    );
+  }
+}
 
 export interface ThirteenthMonthPayoutDraft {
   employmentId: string;
@@ -54,6 +69,7 @@ export async function preview13thMonthRun(
   input: { storeId: string; year: number },
 ): Promise<ThirteenthMonthPreview> {
   await authorize(tx, actor, 'run_payroll', { storeId: input.storeId });
+  assertRunYear('preview13thMonthRun', input.year);
 
   const roster = await payrollRepo.employmentsForStore(tx, actor.orgId, input.storeId);
   const payouts: ThirteenthMonthPayoutDraft[] = [];
@@ -119,6 +135,7 @@ export async function post13thMonthRun(
 ): Promise<{ runId: string; payouts: number; totalNet: string }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'run_payroll', { storeId: input.storeId });
+    assertRunYear('post13thMonthRun', input.year);
 
     const preview = await preview13thMonthRun(trx, actor, { storeId: input.storeId, year: input.year });
     if (preview.payouts.length === 0) {
