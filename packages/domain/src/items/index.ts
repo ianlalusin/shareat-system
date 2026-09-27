@@ -22,6 +22,7 @@ import type { BaseUnit, ItemKind, PurchaseUnit } from '@shareat/db/schema';
 import { computeBranchPrice, type BranchPrice } from './branch-price';
 import { authorize, type Actor } from '@shareat/auth';
 import { assertFiguresReconcile } from '../shared/reconcile';
+import { refuse } from '../shared/refusal';
 
 export interface CreateItemInput {
   code: string;
@@ -183,6 +184,31 @@ export async function validateInvoiceLines(
 
     if (!(qty > 0)) throw new Error(`validateInvoiceLines: line ${i + 1} (${item.name}) needs a quantity above zero.`);
     if (!(factor > 0)) throw new Error(`validateInvoiceLines: line ${i + 1} (${item.name}) needs a conversion factor above zero.`);
+    // S5.5t Amendment A2 (revision 1b, auditor edit) — the `factor > 0` guard above still runs
+    // first, so a blank or zero value never reaches this check. The format check must not narrow
+    // what was already accepted (".5", "1." stay valid) — only the fraction length and
+    // non-plain-decimal shapes (exponent notation, or no digit at all) are refused. Magnitude is
+    // checked on the parsed VALUE, never the digit run, so a zero-padded "000000001" still saves as 1.
+    const raw = l.conversionFactor.trim();
+    const formatMatch = raw.match(/^(?=.*\d)(\d*)(?:\.(\d*))?$/);
+    if (!formatMatch) {
+      throw refuse(
+        `validateInvoiceLines: line ${i + 1} conversion factor ${JSON.stringify(raw)} is not a plain decimal`,
+        `Line ${i + 1} (${item.name}) — "${raw}" is not a valid conversion factor. Use a number above zero with up to six decimal places.`,
+      );
+    }
+    if ((formatMatch[2] ?? '').length > 6) {
+      throw refuse(
+        `validateInvoiceLines: line ${i + 1} conversion factor ${JSON.stringify(raw)} has more than six decimal places`,
+        `Line ${i + 1} (${item.name}) — "${raw}" is not a valid conversion factor. Use a number above zero with up to six decimal places.`,
+      );
+    }
+    if (factor >= 100000000) {
+      throw refuse(
+        `validateInvoiceLines: line ${i + 1} conversion factor ${JSON.stringify(raw)} is too large: ${factor}`,
+        `Line ${i + 1} (${item.name}) — "${raw}" is too large for a conversion factor. Use a number below 100000000.`,
+      );
+    }
     // T-340/DEF-393 — price checked before total, so a typed `abc` unit price is what the app
     // path quotes, not the `NaN` computed from it (T-328 §4c). `Number.isFinite`, not a `>= 0`
     // comparison — that would add an out-of-scope negativity rule (money-positivity-guard shape).

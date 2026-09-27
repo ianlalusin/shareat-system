@@ -206,9 +206,6 @@ function OpenShift({
               </span>
               <input
                 name={`count:${a.id}`}
-                type="number"
-                step="0.01"
-                min="0"
                 inputMode="decimal"
                 placeholder="0.00"
                 className={`${INPUT} w-40`}

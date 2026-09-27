@@ -252,9 +252,7 @@ function Overtime({ day, locked }: { day: Day; locked: boolean }) {
           Minutes to pay
           <input
             name="approvedOtMinutes"
-            type="number"
-            min={0}
-            max={day.pendingOtMinutes}
+            inputMode="numeric"
             defaultValue={day.approvedOtMinutes ?? day.pendingOtMinutes}
             className={FIELD + ' w-32'}
           />
@@ -288,8 +286,7 @@ function StartAnchor({ day, locked }: { day: Day; locked: boolean }) {
           Minute of shift day
           <input
             name="chosenAnchorMinute"
-            type="number"
-            min={0}
+            inputMode="numeric"
             defaultValue={day.anchorMinute ?? 0}
             className={FIELD + ' w-32'}
           />
@@ -323,8 +320,7 @@ function EarlyOut({ day, locked }: { day: Day; locked: boolean }) {
           Minute of shift day
           <input
             name="effectiveOutMinute"
-            type="number"
-            min={0}
+            inputMode="numeric"
             defaultValue={day.endMinute ?? 0}
             className={FIELD + ' w-32'}
           />

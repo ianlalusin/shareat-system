@@ -22,6 +22,8 @@ import { money, compare, ZERO, type Money } from '@shareat/core/money';
 import { authorize, type Actor } from '@shareat/auth';
 import { moneyAccountsRepo, tillShiftsRepo, transaction, type Tx } from '@shareat/db';
 import { postEntry } from '../ledger/post-entry';
+import { parseMoneyInput } from '../shared/money-input';
+import { refuse } from '../shared/refusal';
 
 /** `1230 Advances to employees` — a receivable from the staffer, ⛔ never a P&L account. The same
  *  account `commissary/discrepancy.ts` and `cash-requests` already charge a person to. */
@@ -162,6 +164,18 @@ export async function recordTillCount(
         );
       }
 
+      const counted = parseMoneyInput(
+        line.counted,
+        `recordTillCount: the count for account ${account.id}`,
+        `The count for ${account.name}`,
+      );
+      if (compare(counted, ZERO) < 0) {
+        throw refuse(
+          `recordTillCount: the count for account ${account.id} cannot be negative, got ${JSON.stringify(line.counted)}.`,
+          `The count for ${account.name} cannot be negative.`,
+        );
+      }
+
       // ⭐ The ledger's answer, frozen at the moment of counting. See the docblock.
       const expected = await moneyAccountsRepo.balanceOf(trx, actor.orgId, {
         id: account.id,
@@ -173,7 +187,7 @@ export async function recordTillCount(
         shiftId: input.shiftId,
         moment: input.moment,
         moneyAccountId: line.moneyAccountId,
-        counted: money(line.counted).toString(),
+        counted: counted.toString(),
         expected: money(expected).toString(),
         countedBy: actor.personId,
         notes: line.notes ?? null,

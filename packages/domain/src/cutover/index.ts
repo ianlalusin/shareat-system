@@ -23,6 +23,7 @@
 import { cutoverRepo, transaction, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { CUTOVER_STEPS, gatesBefore, stepDef, type StepDef } from './steps';
+import { parseFourDecimalCost } from '../commissary/catalogue';
 
 export * from './steps';
 export * from './opening';
@@ -219,12 +220,16 @@ export async function recordOpeningCount(
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'run_cutover', { storeId: input.storeId });
     if (Number(input.quantity) < 0) throw new Error('recordOpeningCount: a count cannot be negative.');
+    const unitCost =
+      input.unitCost != null
+        ? parseFourDecimalCost(input.unitCost, 'recordOpeningCount: the unit cost', 'The cost per unit')
+        : null;
     await cutoverRepo.upsertOpeningCount(trx, {
       orgId: actor.orgId,
       storeId: input.storeId,
       itemId: input.itemId,
       quantity: input.quantity,
-      unitCost: input.unitCost ?? null,
+      unitCost,
       note: input.note?.trim() || null,
       countedBy: actor.personId,
     });

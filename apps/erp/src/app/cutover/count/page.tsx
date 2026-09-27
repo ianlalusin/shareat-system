@@ -151,10 +151,7 @@ export default async function CountPage({
               <label className="block">
                 <span className="sr-only">Cost per {r.baseUnit}</span>
                 <input
-                  type="number"
                   name="unitCost"
-                  step="0.0001"
-                  min="0"
                   defaultValue={r.unitCost ?? ''}
                   placeholder={`Cost per ${r.baseUnit}`}
                   inputMode="decimal"

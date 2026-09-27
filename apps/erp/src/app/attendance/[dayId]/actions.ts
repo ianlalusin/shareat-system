@@ -18,7 +18,7 @@
  * codebase has already paid for once.
  */
 import { redirect } from 'next/navigation';
-import { recordAdjustment } from '@shareat/domain';
+import { recordAdjustment, refuse } from '@shareat/domain';
 import { requireSession } from '../../../lib/session';
 import { withOrgPrincipal } from '../lib';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -26,6 +26,24 @@ import { errorMessage } from '@/lib/constraint-messages';
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
+}
+
+/**
+ * T-343 S5.5t item 2, Amendment A1 (DEF-471). A blank or spaces-only box means "not decided", so it
+ * REFUSES rather than defaulting to 0 — a typed `0` is still a real decision.
+ */
+function wholeMinutes(fd: FormData, key: string, label: string, fn: string): number {
+  const raw = str(fd, key);
+  if (raw === '') {
+    throw refuse(`${fn}: ${key} is blank`, `${label} — enter a whole number of minutes (0 to 99999).`);
+  }
+  if (!/^\d{1,5}$/.test(raw)) {
+    throw refuse(
+      `${fn}: ${key} is not a whole number of minutes: ${JSON.stringify(raw)}`,
+      `${label} — "${raw}" is not a whole number of minutes from 0 to 99999.`,
+    );
+  }
+  return Number(raw);
 }
 
 function back(dayId: string, params: Record<string, string>): never {
@@ -49,12 +67,13 @@ async function decide(
   const employmentId = str(formData, 'employmentId');
   const shiftDay = str(formData, 'shiftDay');
   try {
+    const payload = build(formData);
     await withOrgPrincipal(actor.orgId, (tx) =>
       recordAdjustment(tx, actor, {
         employmentId,
         shiftDay,
         sessionId,
-        ...build(formData),
+        ...payload,
       } as Parameters<typeof recordAdjustment>[2]),
     );
   } catch (err) {
@@ -71,7 +90,10 @@ async function decide(
 export async function approveOvertimeAction(formData: FormData): Promise<void> {
   await decide(
     formData,
-    (fd) => ({ kind: 'overtime_approved', approvedOtMinutes: Number(str(fd, 'approvedOtMinutes') || '0') }),
+    (fd) => ({
+      kind: 'overtime_approved',
+      approvedOtMinutes: wholeMinutes(fd, 'approvedOtMinutes', 'The minutes to pay', 'approveOvertimeAction'),
+    }),
     'Overtime decided. ⭐ It is paid by the next run — approved minutes only, capped at what was worked.',
   );
 }
@@ -79,7 +101,10 @@ export async function approveOvertimeAction(formData: FormData): Promise<void> {
 export async function setStartAnchorAction(formData: FormData): Promise<void> {
   await decide(
     formData,
-    (fd) => ({ kind: 'start_anchor', chosenAnchorMinute: Number(str(fd, 'chosenAnchorMinute')) }),
+    (fd) => ({
+      kind: 'start_anchor',
+      chosenAnchorMinute: wholeMinutes(fd, 'chosenAnchorMinute', 'The paid-from minute', 'setStartAnchorAction'),
+    }),
     'Start recorded. ⚠️ The original tap is unchanged — this is the start the day is PAID from.',
   );
 }
@@ -87,7 +112,10 @@ export async function setStartAnchorAction(formData: FormData): Promise<void> {
 export async function approveEarlyOutAction(formData: FormData): Promise<void> {
   await decide(
     formData,
-    (fd) => ({ kind: 'early_out_approved', effectiveOutMinute: Number(str(fd, 'effectiveOutMinute')) }),
+    (fd) => ({
+      kind: 'early_out_approved',
+      effectiveOutMinute: wholeMinutes(fd, 'effectiveOutMinute', 'The paid-until minute', 'approveEarlyOutAction'),
+    }),
     'Early out approved. The day is paid to that time rather than to the actual tap.',
   );
 }

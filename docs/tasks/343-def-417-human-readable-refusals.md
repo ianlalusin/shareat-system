@@ -1,6 +1,6 @@
 # T-343: DEF-417 (part 2) — user-visible refusals name things in human terms, never raw ids or keys
 
-**Status:** S1–S4 DONE 2026-09-25. S5.0–S5.1 DONE 2026-09-26. S5.1b, S2b, S5a, S5.2 (+follow-up), S5.3, S5.1c, S5.1d, S5.3b DONE 2026-09-27 (morning). **S6a, S6b, S6c, S6d, S5.5m, S5.5n, S5.5p, S5.5q, S5.5r, S5.5s, S7 DONE 2026-09-27** (each: tester red, builder, Opus pre-commit read, gates, Opus post-commit /code-review in a worktree). **Open:** S5.5t (APPROVED; red tests half-written, R-legs in `apps/erp/tests/t343-s5-5t-number-boxes.test.ts`, uncommitted), S5.5u (APPROVED, DEF-473), S5.4 (after S6 — now unblocked), S8, S9; **S5.5v (APPROVED, DEF-472 census part 1, 21 files) and S5.5w (APPROVED, part 2, after S5.5t+S5.5u commit)**.
+**Status:** S1–S4 DONE 2026-09-25. S5.0–S5.1 DONE 2026-09-26. S5.1b, S2b, S5a, S5.2 (+follow-up), S5.3, S5.1c, S5.1d, S5.3b DONE 2026-09-27 (morning). **S6a, S6b, S6c, S6d, S5.5m, S5.5n, S5.5p, S5.5q, S5.5r, S5.5s, S7 DONE 2026-09-27** (each: tester red, builder, Opus pre-commit read, gates, Opus post-commit /code-review in a worktree). **S5.5t (+A1, A2) DONE 2026-09-28.** **Open:** S5.5u (APPROVED, DEF-473), S5.4 (after S6 — now unblocked), S8, S9; **S5.5v (APPROVED, DEF-472 census part 1, 21 files) and S5.5w (APPROVED, part 2, after S5.5t+S5.5u commit)**.
 **Orchestrator defaults (Ian may override any time):** fallback wording as proposed in S1.3; the 96 capability labels
 are Sonnet-drafted from CAPABILITY-MATRIX.md notes and fixed later if Ian wants; staging S1 = fail closed on
 IDENTIFIERS, strict flip at S9; S3 names the record's KIND, not its number; cross-org refusals never name the other
@@ -2021,6 +2021,30 @@ page shows the refusal. A typed `0` is still a real decision. The orchestrator e
 project, reported to Ian. Blank legs for the three minutes boxes become REFUSAL legs (red: a 0-minute row recorded);
 `'30'`, `'0'` record as typed. Cutover `unitCost` and till blanks are unchanged. The docstring at
 `actions.ts:67-69` becomes true; the `|| '0'` goes.
+
+**S5.5t Amendment A2 — from the S5.5t pre-commit diff read, 2026-09-28, binding.**
+1. **Conversion factor precision.** Dropping `step="0.000001"` removed the only guard on precision: `1.2345678` passes
+   `!(factor > 0)` (`packages/domain/src/items/index.ts:185`) and `numeric(14,6)` silently rounds it, shifting
+   `base_quantity`/`base_price` (`packages/db/src/repo/items.ts:166-167`). **Builder, +1 path**
+   `packages/domain/src/items/index.ts` `validateInvoiceLines`: after the `> 0` check, the trimmed raw must match
+   `/^\d+(\.\d{1,6})?$/` or `throw refuse(`validateInvoiceLines: line ${i + 1} conversion factor ${JSON.stringify(raw)} has
+   more than six decimal places`, `Line ${i + 1} (${item.name}) — "${raw}" is not a valid conversion factor. Use a number
+   above zero with up to six decimal places.`)`. No new `throw new Error(`. **Tester leg F2** in the followups file:
+   `line1_conversionFactor='1.2345678'` → that sentence, no lines saved (red: saved, rounded). `'1.234567'` saves.
+1b. **A2 revision (auditor's A2 delta read, binding).** The regex must not narrow what was accepted: `.5` and `1.` were
+   stored before and still are. Use `/^(\d*)(?:\.(\d*))?$/` on the trimmed raw: refuse with the six-decimal sentence
+   above when the fraction group has more than 6 digits (or the raw does not match, e.g. `1e3`); then, when the integer
+   group has more than 8 digits (`numeric(14,6)`), `throw refuse(<dev text>, `Line ${i + 1} (${item.name}) — "${raw}" is
+   too large for a conversion factor. Use a number below 100000000.`)` — replacing the raw numeric-overflow driver
+   text. `factor > 0` still carries zero. Tester legs: **F3** `'.5'` saves 0.5 (green before A2, red on the first A2
+   build); **F4** `'123456789'` → the too-large sentence, nothing saved (red: driver overflow text).
+   **Ruled (orchestrator):** exponent notation (`1e3`) is REFUSED — deliberate, a factor is typed, not computed. Too-large
+   tests the VALUE (`factor >= 100000000`), never the digit run, so `000000001` saves 1. Green legs: `000000001` saves 1,
+   `99999999.999999` saves; `100000000` refuses (F4 boundary).
+2. **Dismissed (orchestrator):** the dropped `max={day.pendingOtMinutes}` gets no server replacement — ruled in §S5.5t
+   item 2; payroll pays `min(approved, pending)` (`payroll/index.ts:243`), so money is safe. Recorded, not fixed.
+3. The `tagEnd` truncation in `apps/erp/tests/t343-s5-5t-number-boxes.test.ts:45` is fixed with its S5.5s twin under
+   S5.5v Amendment A1 item 2 (both copies).
 
 ### S5.5u: follow-ups from the S5.5r post-commit review (DEF-473)
 **Status:** APPROVED 2026-09-27 (orchestrator; findings verified by the auditor). **Model:** Sonnet, tester then builder.

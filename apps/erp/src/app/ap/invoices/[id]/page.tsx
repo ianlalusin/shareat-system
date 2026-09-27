@@ -178,9 +178,7 @@ return (
                   </select>
                   <input
                     name={`line${i}_conversionFactor`}
-                    type="number"
-                    step="0.000001"
-                    min="0"
+                    inputMode="decimal"
                     placeholder="per unit"
                     defaultValue={prior?.conversionFactor ?? '1'}
                     className={INPUT}
