@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { asc, eq } from 'drizzle-orm';
-import { orderWastageRepo, schema } from '@shareat/db';
+import { orderWastageDispositionLabel, orderWastageRepo, schema } from '@shareat/db';
 import { listPostedSettlementsForStore, matchWastagesToSettlement, type SettleableOrderWastage } from '@shareat/domain';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { peso } from '../../../lib/format';
@@ -105,7 +105,7 @@ export default async function WastageDetailPage({
         <h2 className="font-medium">Status</h2>
         <p className="mt-1">
           {row.status === 'resolved'
-            ? `Resolved as ${row.disposition}${row.autoCharged ? ' — by the 15-day backstop' : ''}.`
+            ? `Resolved as ${row.disposition ? orderWastageDispositionLabel(row.disposition) : ''}${row.autoCharged ? ' — by the 15-day backstop' : ''}.`
             : row.status === 'disputed'
               ? 'Disputed — the 15-day clock is unaffected (it runs from opened_at, uniformly).'
               : 'Open, awaiting a disposition.'}

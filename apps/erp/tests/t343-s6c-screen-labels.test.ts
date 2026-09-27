@@ -22,7 +22,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { capabilityTitle } from '../../../packages/auth/src/capabilities';
 import { ITEM_KINDS, ITEM_KIND_LABEL } from '../../../packages/db/schema/items';
-import { DISCREPANCY_DISPOSITION_LABEL } from '../../../packages/db/schema/trade-discrepancies';
+import { DISCREPANCY_DISPOSITIONS, DISCREPANCY_DISPOSITION_LABEL } from '../../../packages/db/schema/trade-discrepancies';
 import { ORDER_WASTAGE_DISPOSITION_LABEL } from '../../../packages/db/schema/order-wastage';
 import { WASTAGE_REASONS, WASTAGE_REASON_LABEL } from '../../../packages/domain/src/stock/wastage-reasons';
 import { OFFERABLE_TO_POSITIONS } from '@shareat/domain';
@@ -163,13 +163,17 @@ function assertG1(html: string): void {
   }
 
   const occurrences = mutedSecondaryOccurrences(html);
-  const foundRawKeys = [...new Set([...visibleText.matchAll(SNAKE_CASE_RE)].map((m) => m[0]))];
-  for (const key of foundRawKeys) {
-    expect(
-      occurrences.some((o) => o.text === key),
-      `raw key "${key}" appeared in visible text outside any muted secondary element`,
-    ).toBe(true);
-  }
+  // T-343 S6d — strengthened from set membership (S6b U1's own finding): a raw key rendered as
+  // BOTH primary text AND inside a muted element passed the old "does some muted element have this
+  // text" check regardless of the primary-text leak. Strip every muted-secondary element out of the
+  // html first, then sweep what remains for a stray raw key — the same "strip-then-sweep" shape
+  // `t343-s6b-admin-users-labels.test.ts`'s U1 uses.
+  const withoutMutedElements = html.replace(/<(\w+)\s+class="([^"]*)">([^<]*)<\/\1>/g, (match, _tag, classAttr) => {
+    const classes = (classAttr as string).split(/\s+/);
+    return MUTED_TOKENS.every((t) => classes.includes(t)) ? '' : match;
+  });
+  const strayKeys = [...stripTags(withoutMutedElements).matchAll(SNAKE_CASE_RE)].map((m) => m[0]);
+  expect(strayKeys, `raw key(s) found outside any muted secondary element: ${strayKeys.join(', ')}`).toEqual([]);
 
   // Spot-check ordering (label precedes its muted key) on a sample: the first, a middle, and the
   // last offerable capability — full coverage is proven by the "only inside a muted element" check
@@ -381,6 +385,18 @@ describe('R1 — usage list: a damage_storage row shows its label; NewUsageForm 
           reasonCode: 'damage_storage',
           lineCount: 1,
         },
+        // T-343 S6d — a null reasonCode (a plain usage record, not wastage — reasonCode is
+        // wastage-only) renders the em dash the source already falls back to, pinned exactly
+        // rather than left unexercised.
+        {
+          id: 'rec-2',
+          kind: 'usage',
+          status: 'posted',
+          usedOn: '2026-01-02',
+          locationName: 'Main room',
+          reasonCode: null,
+          lineCount: 1,
+        },
       ],
     });
 
@@ -389,6 +405,14 @@ describe('R1 — usage list: a damage_storage row shows its label; NewUsageForm 
     const visibleText = stripTags(html);
     expect(visibleText).toContain(WASTAGE_REASON_LABEL.damage_storage);
     expect(visibleText).not.toContain('damage storage');
+
+    // Only this page's Reason column shares this exact class string.
+    const reasonCells = [...html.matchAll(/<td class="px-3 py-2 text-neutral-600 dark:text-neutral-400">([\s\S]*?)<\/td>/g)].map(
+      (m) => stripTags(m[1]!),
+    );
+    expect(reasonCells, 'expected one Reason cell per record').toHaveLength(2);
+    expect(reasonCells[0]).toBe(WASTAGE_REASON_LABEL.damage_storage);
+    expect(reasonCells[1]).toBe('—');
 
     expect(capturedNewUsageFormProps).toBeTruthy();
     const reasons = capturedNewUsageFormProps!.reasons ?? [];
@@ -481,8 +505,29 @@ vi.mock('../src/app/commissary/discrepancies/actions', () => ({
   resolveDiscrepancyAction: vi.fn(),
 }));
 
-describe('D1 — a resolved late_receipt row shows "Late receipt" in the status line and the resolved sentence; the disposition <select> is unchanged', () => {
-  it('renders the label in both places', async () => {
+/** The Nth `<article>` block (0-indexed), matching `rows[N]`'s render order. */
+function articleAt(html: string, n: number): string {
+  const parts = html.split('<article');
+  const part = parts[n + 1];
+  expect(part, `expected an <article> at index ${n}`).toBeTruthy();
+  return '<article' + part!;
+}
+
+/** The row's own status `<span className="text-xs text-neutral-500">`. */
+function statusSpanOf(articleHtml: string): string {
+  const m = /<span class="text-xs text-neutral-500">([\s\S]*?)<\/span>/.exec(articleHtml);
+  expect(m, 'expected the status span').toBeTruthy();
+  return stripTags(m![1]!);
+}
+
+/** The row's own "⛔ Resolved as …" paragraph, present only when `status === 'resolved'`. */
+function resolvedSentenceOf(articleHtml: string): string | undefined {
+  const m = /<p class="mt-3 text-sm text-neutral-500">([\s\S]*?)<\/p>/.exec(articleHtml);
+  return m ? stripTags(m[1]!) : undefined;
+}
+
+describe('D1 — a resolved late_receipt row shows "Late receipt" in the status line and the resolved sentence; an open row offers every disposition; a null disposition renders no label at either site', () => {
+  it('renders the label in both places, the select carries every DISCREPANCY_DISPOSITIONS value, and null stays empty', async () => {
     withOrgPrincipalMock.mockResolvedValueOnce({
       rows: [
         {
@@ -499,6 +544,39 @@ describe('D1 — a resolved late_receipt row shows "Late receipt" in the status 
           branchName: 'SmokeStore Two',
           note: null,
         },
+        // T-343 S6d — an OPEN, undecided row: makes the disposition <select> render at all (D1
+        // used to fixture only a resolved row, where the select never appears), and its own
+        // status line is :137's null arm — no " · …" suffix.
+        {
+          id: 'disc-2',
+          status: 'open',
+          disposition: null,
+          quantity: '2',
+          value: '40.00',
+          deferredTo: null,
+          itemName: 'Pork belly',
+          unit: 'kg',
+          orderId: 'order-2',
+          orderDate: '2026-01-02',
+          branchName: 'SmokeStore Two',
+          note: null,
+        },
+        // T-343 S6d — a RESOLVED row with no disposition on record: :151's null arm (defensive —
+        // the ternary the source already has, pinned rather than left unexercised).
+        {
+          id: 'disc-3',
+          status: 'resolved',
+          disposition: null,
+          quantity: '1',
+          value: '10.00',
+          deferredTo: null,
+          itemName: 'Pork belly',
+          unit: 'kg',
+          orderId: 'order-3',
+          orderDate: '2026-01-03',
+          branchName: 'SmokeStore Two',
+          note: null,
+        },
       ],
       people: [],
     });
@@ -511,8 +589,22 @@ describe('D1 — a resolved late_receipt row shows "Late receipt" in the status 
     expect(occurrences, 'expected the label in both the status line and the resolved sentence').toBeGreaterThanOrEqual(2);
     expect(visibleText).not.toContain('late_receipt');
 
+    // :137's null arm — disc-2 (open, no disposition): the status span is exactly "Open", no
+    // " · …" suffix leaking a raw key or an empty separator.
+    expect(statusSpanOf(articleAt(html, 1))).toBe('Open');
+
+    // :151's null arm — disc-3 (resolved, no disposition): the sentence's <strong> is empty.
+    expect(resolvedSentenceOf(articleAt(html, 2))).toBe(
+      '⛔ Resolved as . Correcting this is a reversal plus a new resolution, never an edit.',
+    );
+
+    // The select now renders (disc-2 is open) — its option set is exactly DISCREPANCY_DISPOSITIONS,
+    // as a SET: the screen orders them by frequency of use (loss, charge, audit, late_receipt),
+    // not the const's own declaration order, and this pins membership, not that ordering.
     const selectBlock = /<select\s+name="disposition"[^>]*>([\s\S]*?)<\/select>/.exec(html)?.[1];
-    expect(selectBlock, 'no unresolved rows in this fixture — expected 0 disposition <select>s').toBeUndefined();
+    expect(selectBlock, 'expected the disposition <select> now that disc-2 is open').toBeTruthy();
+    const optionValues = [...selectBlock!.matchAll(/<option[^>]*value="([^"]*)"/g)].map((m) => m[1]!);
+    expect(new Set(optionValues)).toEqual(new Set(DISCREPANCY_DISPOSITIONS));
   });
 });
 
@@ -584,7 +676,25 @@ describe('OW1 — a recent platform_paid row shows "Platform paid"; a null-dispo
     expect(visibleText).toContain(ORDER_WASTAGE_DISPOSITION_LABEL.platform_paid);
     expect(visibleText).not.toContain('platform_paid');
 
-    // The null-disposition row's own cell renders empty — no crash, no "null" text.
-    expect(visibleText).not.toContain('null');
+    // T-343 S6d — pin the exact cell, not just "the word null is absent": "not.toContain('null')"
+    // alone cannot tell an empty cell apart from a stray leaked character. Both `recent` rows are
+    // resolved, so both land in "Recent history" — its Disposition <td> is the only column on this
+    // page sharing this exact class string (the OPEN table's Order-ref column shares it too, but
+    // this fixture's `open: []` keeps that table off the page).
+    const dispositionCells = [...html.matchAll(/<td class="px-3 py-2 text-neutral-600 dark:text-neutral-400">([\s\S]*?)<\/td>/g)].map(
+      (m) => stripTags(m[1]!),
+    );
+    expect(dispositionCells, 'expected one Disposition cell per recent row').toHaveLength(2);
+    expect(dispositionCells[0]).toBe(ORDER_WASTAGE_DISPOSITION_LABEL.platform_paid);
+    expect(dispositionCells[1]).toBe('');
+
+    // T-343 S6d — the "Record a wastage" form's own disposition <select> deliberately excludes
+    // `charged` (the comment above it: charging a person needs an allocation, offered only on the
+    // detail page) and adds a blank "leave blank" option, so this is an exact array, not a
+    // DISCREPANCY_DISPOSITIONS-style set-of-the-full-enum check.
+    const recordSelectBlock = /<select name="disposition"[^>]*>([\s\S]*?)<\/select>/.exec(html)?.[1];
+    expect(recordSelectBlock, 'expected the "Record a wastage" disposition <select>').toBeTruthy();
+    const recordOptionValues = [...recordSelectBlock!.matchAll(/<option[^>]*value="([^"]*)"/g)].map((m) => m[1]!);
+    expect(recordOptionValues).toEqual(['', 'platform_paid', 'absorbed']);
   });
 });

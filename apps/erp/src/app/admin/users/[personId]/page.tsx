@@ -230,7 +230,12 @@ export default async function UserAccessPage({
                           via a position creates a SECOND, org-wide (store-NULL) person-level grant
                           row alongside it — the position-sourced (store-scoped) row is untouched
                           (migration 0159; `access.ts:637-655` only matches/upgrades an existing
-                          store-NULL row, so a position row never qualifies). One submission of
+                          store-NULL row, so a position row never qualifies).
+                          ⛔ DEF-456 — this describes TODAY'S DEFECT, not the intent. Ian ruled
+                          2026-09-27 that this second row must stay STORE-scoped (to the position's
+                          own store), not org-wide; `access.ts` widening it to every store is the
+                          bug DEF-456 tracks, still open.
+                          One submission of
                           `setCapabilityGrantAction` the picker cannot reach on its own, because
                           `grantableCapabilitiesFor` already removed every held capability from it
                           (page.tsx `offerable`, `lib.ts`'s own comment on that function). Not
